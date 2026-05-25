@@ -1,19 +1,22 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import Link from 'next/link';
-import { ArrowLeft, Save, ShieldCheck, Users } from 'lucide-react';
-import {
-  AdminRoutePanel,
-  AdminRouteSectionHeader,
-  AdminRouteWorkspace,
-} from '@/components/domain/admin-route-surface';
+import { Save, ShieldCheck, Users } from 'lucide-react';
+import { AdminSettingsLayout, SettingsSection } from '@/components/admin/layout/admin-settings-layout';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/admin/ui/card';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/admin/ui/badge';
+import { Button } from '@/components/admin/ui/button';
 import { Checkbox } from '@/components/ui/form-controls';
-import { Skeleton } from '@/components/ui/skeleton';
+import { Skeleton } from '@/components/admin/ui/skeleton';
+import { KpiTile } from '@/components/admin/ui/kpi-tile';
 import { Toast } from '@/components/ui/alert';
+
+const BREADCRUMBS = [
+  { label: 'Admin', href: '/admin' },
+  { label: 'Experts', href: '/admin/users?tab=tutors' },
+  { label: 'Specialties' },
+];
 import { AdminPermission, hasPermission } from '@/lib/admin-permissions';
 import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
 import { useCurrentUser } from '@/lib/hooks/use-current-user';
@@ -126,41 +129,33 @@ export default function ExpertSpecialtiesPage() {
 
   if (!isAuthenticated || role !== 'admin') {
     return (
-      <AdminRouteWorkspace>
-        <p className="text-sm text-muted">Admin access required.</p>
-      </AdminRouteWorkspace>
+      <AdminSettingsLayout title="Expert specialties" breadcrumbs={BREADCRUMBS}>
+        <p className="text-sm text-admin-fg-muted">Admin access required.</p>
+      </AdminSettingsLayout>
     );
   }
 
   return (
-    <AdminRouteWorkspace role="main" aria-label="Expert specialties">
-      <AdminRouteSectionHeader
-        icon={<ShieldCheck className="w-6 h-6" />}
-        title="Expert specialties"
-        description="Curate per-expert profession lists. The auto-assigner uses these to route writing reviews to a competent reviewer. An empty list means 'generalist' — the expert is eligible for every profession."
-      />
-
-      <AdminRoutePanel>
-        <Link
-          href="/admin/users?tab=tutors"
-          className="inline-flex items-center gap-1 text-sm font-semibold text-muted hover:text-navy"
-        >
-          <ArrowLeft className="w-4 h-4" /> Back to tutors
-        </Link>
-      </AdminRoutePanel>
-
-      <AdminRoutePanel title="Coverage">
+    <AdminSettingsLayout
+      title="Expert specialties"
+      description="Curate per-expert profession lists. The auto-assigner uses these to route writing reviews to a competent reviewer. An empty list means 'generalist' — the expert is eligible for every profession."
+      breadcrumbs={BREADCRUMBS}
+      eyebrow="Experts"
+      icon={<ShieldCheck className="h-5 w-5" />}
+      backHref="/admin/users?tab=tutors"
+    >
+      <SettingsSection title="Coverage">
         <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-          <StatTile label="Total experts" value={summary.total} icon={<Users className="w-4 h-4" />} />
-          <StatTile label="With specialties" value={summary.withSpecialties} tone="success" />
-          <StatTile label="Generalists (no list)" value={summary.generalists} tone="warning" />
+          <KpiTile label="Total experts" value={summary.total} icon={<Users className="h-4 w-4" />} />
+          <KpiTile label="With specialties" value={summary.withSpecialties} tone="success" />
+          <KpiTile label="Generalists (no list)" value={summary.generalists} tone="warning" />
         </div>
-      </AdminRoutePanel>
+      </SettingsSection>
 
       {status === 'loading' && (
-        <AdminRoutePanel>
-          <Skeleton className="h-44 rounded-2xl" />
-        </AdminRoutePanel>
+        <SettingsSection title="Experts">
+          <Skeleton className="h-44 rounded-admin-lg" />
+        </SettingsSection>
       )}
 
       <AsyncStateWrapper status={status}>
@@ -168,69 +163,59 @@ export default function ExpertSpecialtiesPage() {
           const draft = drafts[row.id] ?? new Set<string>();
           const dirty = isDirty(row.id);
           return (
-            <AdminRoutePanel key={row.id}>
-              <div className="flex flex-col gap-3">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <div className="text-sm font-semibold text-navy">{row.displayName}</div>
-                    <div className="text-xs text-muted">{row.email}</div>
+            <Card key={row.id}>
+              <CardHeader>
+                <CardTitle className="text-sm">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <div className="text-sm font-semibold text-admin-fg-strong">{row.displayName}</div>
+                      <div className="text-xs text-admin-fg-muted">{row.email}</div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {row.isActive ? <Badge variant="success">Active</Badge> : <Badge variant="default">Inactive</Badge>}
+                      {draft.size === 0 ? (
+                        <Badge variant="warning">Generalist</Badge>
+                      ) : (
+                        <Badge variant="info">{draft.size} profession{draft.size === 1 ? '' : 's'}</Badge>
+                      )}
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    {row.isActive ? <Badge variant="success">Active</Badge> : <Badge variant="muted">Inactive</Badge>}
-                    {draft.size === 0 ? (
-                      <Badge variant="warning">Generalist</Badge>
-                    ) : (
-                      <Badge variant="info">{draft.size} profession{draft.size === 1 ? '' : 's'}</Badge>
-                    )}
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="flex flex-col gap-3">
+                  <div className="grid grid-cols-2 gap-2 md:grid-cols-3 lg:grid-cols-4">
+                    {KNOWN_PROFESSIONS.map((p) => (
+                      <Checkbox
+                        key={`${row.id}-${p}`}
+                        checked={draft.has(p)}
+                        disabled={!canWrite || saving === row.id}
+                        onChange={() => toggleSpecialty(row.id, p)}
+                        label={professionLabel(p)}
+                      />
+                    ))}
                   </div>
+                  {canWrite && (
+                    <div className="flex items-center justify-end gap-2">
+                      {dirty && <span className="text-xs text-admin-warning">Unsaved changes</span>}
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        disabled={!dirty || saving === row.id}
+                        onClick={() => void save(row.id)}
+                      >
+                        <Save className="mr-1 h-4 w-4" /> Save
+                      </Button>
+                    </div>
+                  )}
                 </div>
-                <div className="grid grid-cols-2 gap-2 md:grid-cols-3 lg:grid-cols-4">
-                  {KNOWN_PROFESSIONS.map((p) => (
-                    <Checkbox
-                      key={`${row.id}-${p}`}
-                      checked={draft.has(p)}
-                      disabled={!canWrite || saving === row.id}
-                      onChange={() => toggleSpecialty(row.id, p)}
-                      label={professionLabel(p)}
-                    />
-                  ))}
-                </div>
-                {canWrite && (
-                  <div className="flex items-center justify-end gap-2">
-                    {dirty && <span className="text-xs text-warning">Unsaved changes</span>}
-                    <Button
-                      variant="primary"
-                      size="sm"
-                      disabled={!dirty || saving === row.id}
-                      onClick={() => void save(row.id)}
-                    >
-                      <Save className="mr-1 h-4 w-4" /> Save
-                    </Button>
-                  </div>
-                )}
-              </div>
-            </AdminRoutePanel>
+              </CardContent>
+            </Card>
           );
         })}
       </AsyncStateWrapper>
 
       {toast && <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} />}
-    </AdminRouteWorkspace>
-  );
-}
-
-function StatTile({ label, value, tone, icon }: { label: string; value: number; tone?: 'success' | 'warning' | 'danger'; icon?: React.ReactNode }) {
-  const toneClass =
-    tone === 'success' ? 'text-success'
-      : tone === 'warning' ? 'text-warning'
-      : tone === 'danger' ? 'text-danger'
-      : 'text-navy';
-  return (
-    <div className="rounded-2xl border border-border bg-background-light p-4">
-      <div className="flex items-center gap-1 text-xs font-semibold uppercase tracking-[0.14em] text-muted">
-        {icon}<span>{label}</span>
-      </div>
-      <div className={`mt-1 text-2xl font-bold ${toneClass}`}>{value}</div>
-    </div>
+    </AdminSettingsLayout>
   );
 }

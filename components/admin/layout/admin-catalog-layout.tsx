@@ -109,6 +109,14 @@ export interface AdminCatalogLayoutProps
   itemsClassName?: string;
   /** Cards / rows rendered inside the items area. */
   children: React.ReactNode;
+
+  /**
+   * Backward-compat: decorative icon shown next to the page title. Accepted
+   * here so legacy call sites compile but currently rendered as a no-op.
+   */
+  icon?: React.ReactNode;
+  /** Backward-compat: optional href for a "back" affordance in the header. */
+  backHref?: string;
 }
 
 const GRID_CLASSES = [
@@ -138,6 +146,9 @@ const AdminCatalogLayout = React.forwardRef<
       itemsClassName,
       className,
       children,
+      // Accepted for backward-compat; see prop docs.
+      icon: _icon,
+      backHref: _backHref,
       ...shellProps
     },
     ref,

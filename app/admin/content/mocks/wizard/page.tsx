@@ -4,11 +4,9 @@ import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Loader2, Plus, Sparkles } from 'lucide-react';
-import {
-  AdminRoutePanel,
-  AdminRouteSectionHeader,
-  AdminRouteWorkspace,
-} from '@/components/domain/admin-route-surface';
+import { AdminOperationsLayout } from '@/components/admin/layout/admin-operations-layout';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/admin/ui/card';
+import { EmptyState } from '@/components/admin/ui/empty-state';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { InlineAlert } from '@/components/ui/alert';
@@ -77,51 +75,54 @@ export default function MockWizardLandingPage() {
   }
 
   return (
-    <AdminRouteWorkspace>
-      <AdminRoutePanel>
-        <AdminRouteSectionHeader
-          eyebrow="Content"
-          title="Mock Builder Wizard"
-          description="Build one OET mock end-to-end — bundle metadata, then Listening, Reading, Writing, Speaking, then publish."
-          icon={Sparkles}
-          actions={
-            <Button variant="primary" onClick={handleStart} disabled={creating}>
-              {creating ? (
-                <Loader2 className="mr-1 h-4 w-4 animate-spin" />
-              ) : (
-                <Plus className="mr-1 h-4 w-4" />
-              )}
-              Start new mock
-            </Button>
-          }
-        />
+    <AdminOperationsLayout
+      eyebrow="Content"
+      title="Mock Builder Wizard"
+      description="Build one OET mock end-to-end — bundle metadata, then Listening, Reading, Writing, Speaking, then publish."
+      breadcrumbs={[
+        { label: 'Admin', href: '/admin' },
+        { label: 'Content', href: '/admin/content' },
+        { label: 'Mocks', href: '/admin/content/mocks' },
+        { label: 'Wizard' },
+      ]}
+      actions={
+        <Button variant="primary" onClick={handleStart} disabled={creating}>
+          {creating ? (
+            <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+          ) : (
+            <Plus className="mr-1 h-4 w-4" />
+          )}
+          Start new mock
+        </Button>
+      }
+    >
+      {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
 
-        {error ? (
-          <div className="mt-4">
-            <InlineAlert variant="error">{error}</InlineAlert>
-          </div>
-        ) : null}
-
-        <section className="mt-6">
-          <h2 className="text-sm font-bold uppercase tracking-wider text-admin-text-muted">Resume drafts</h2>
+      <Card>
+        <CardHeader>
+          <CardTitle>Resume drafts</CardTitle>
+        </CardHeader>
+        <CardContent>
           {loading ? (
-            <p className="mt-3 inline-flex items-center gap-2 text-sm text-admin-text-muted">
+            <p className="inline-flex items-center gap-2 text-sm text-admin-fg-muted">
               <Loader2 className="h-4 w-4 animate-spin" /> Loading…
             </p>
           ) : drafts.length === 0 ? (
-            <p className="mt-3 rounded-2xl border border-dashed border-border bg-background-light p-6 text-center text-sm text-muted">
-              No draft mocks yet. Click <strong>Start new mock</strong> above.
-            </p>
+            <EmptyState
+              icon={<Sparkles className="h-6 w-6" />}
+              title="No draft mocks yet"
+              description="Click Start new mock above to create your first draft."
+            />
           ) : (
-            <ul className="mt-3 space-y-2">
+            <ul className="space-y-2">
               {drafts.map((d) => (
                 <li
                   key={d.id}
-                  className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-surface px-4 py-3"
+                  className="flex flex-wrap items-center justify-between gap-3 rounded-admin border border-admin-border bg-admin-bg-surface px-4 py-3"
                 >
                   <div>
-                    <p className="text-sm font-bold text-navy">{d.title}</p>
-                    <p className="text-xs text-muted">
+                    <p className="text-sm font-bold text-admin-fg-strong">{d.title}</p>
+                    <p className="text-xs text-admin-fg-muted">
                       {d.mockType ?? 'full'} · {d.sections?.length ?? 0} sections
                     </p>
                   </div>
@@ -129,7 +130,7 @@ export default function MockWizardLandingPage() {
                     <Badge variant="muted">{d.status}</Badge>
                     <Link
                       href={`/admin/content/mocks/wizard/${d.id}/bundle`}
-                      className="inline-flex items-center rounded-xl border border-border bg-surface px-3 py-1.5 text-xs font-bold text-navy hover:bg-background-light"
+                      className="inline-flex items-center rounded-admin border border-admin-border bg-admin-bg-surface px-3 py-1.5 text-xs font-bold text-admin-fg-strong hover:bg-admin-bg-subtle"
                     >
                       Resume
                     </Link>
@@ -138,8 +139,8 @@ export default function MockWizardLandingPage() {
               ))}
             </ul>
           )}
-        </section>
-      </AdminRoutePanel>
-    </AdminRouteWorkspace>
+        </CardContent>
+      </Card>
+    </AdminOperationsLayout>
   );
 }

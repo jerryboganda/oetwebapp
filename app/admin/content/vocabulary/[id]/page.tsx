@@ -7,7 +7,7 @@ import {
   fetchAdminVocabularyItem,
   updateAdminVocabularyItem,
 } from '@/lib/api';
-import { Skeleton } from '@/components/ui/skeleton';
+import { Skeleton } from '@/components/admin/ui/skeleton';
 
 type Detail = {
   id: string;
@@ -64,8 +64,8 @@ export default function AdminVocabularyEditPage() {
   if (loading) {
     return (
       <>
-        <Skeleton className="h-8 w-48 rounded" />
-        <Skeleton className="mt-4 h-96 rounded-3xl" />
+        <Skeleton className="h-8 w-48 rounded-admin-sm" />
+        <Skeleton className="mt-4 h-96 rounded-admin-lg" />
       </>
     );
   }
@@ -73,7 +73,7 @@ export default function AdminVocabularyEditPage() {
   if (!detail) {
     return (
       <>
-        <div className="p-8 text-center text-muted">Term not found.</div>
+        <div className="p-8 text-center text-admin-fg-muted">Term not found.</div>
       </>
     );
   }

@@ -7,17 +7,15 @@
  *  - GET /v1/expert/speaking/analytics/class
  *  - GET /v1/expert/speaking/analytics/tutor-consistency
  *  - GET /v1/admin/speaking/analytics/content-difficulty
- *
- * Uses defensive typing (`unknown` → narrow on render) so the page
- * compiles even before the analytics contracts are finalised on the
- * backend; each row is rendered through a tolerant projector.
  */
 import { useCallback, useEffect, useState } from 'react';
-import { AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
-import { Card } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
+import { Activity, BarChart3, Filter, Users } from 'lucide-react';
+import { AdminOperationsLayout, KpiStrip, BentoGrid, BentoCell } from '@/components/admin/layout/admin-operations-layout';
+import { Button } from '@/components/admin/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/admin/ui/card';
+import { KpiTile } from '@/components/admin/ui/kpi-tile';
+import { Skeleton } from '@/components/admin/ui/skeleton';
 import { Input } from '@/components/ui/form-controls';
-import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
 import {
   fetchSpeakingAnalyticsClass,
@@ -53,7 +51,7 @@ function summarise(payload: Json, fallback = 'No data.'): string {
 function RowsTable({ payload, emptyLabel }: { payload: Json; emptyLabel: string }) {
   const rows = toRows(payload);
   if (rows.length === 0) {
-    return <div className="p-4 text-sm text-muted-foreground">{emptyLabel}</div>;
+    return <div className="p-4 text-sm text-admin-fg-muted">{emptyLabel}</div>;
   }
   const columns = Array.from(
     rows.reduce<Set<string>>((acc, row) => {
@@ -64,30 +62,25 @@ function RowsTable({ payload, emptyLabel }: { payload: Json; emptyLabel: string 
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-sm">
-        <thead className="bg-muted text-left text-xs uppercase tracking-wide text-muted-foreground">
+        <thead className="bg-admin-bg-subtle text-left text-xs uppercase tracking-wide text-admin-fg-muted">
           <tr>
             {columns.map((c) => (
-              <th key={c} className="p-2">
-                {c}
-              </th>
+              <th key={c} className="p-2">{c}</th>
             ))}
           </tr>
         </thead>
         <tbody>
           {rows.map((row, idx) => (
-            <tr key={idx} className="border-t border-border">
+            <tr key={idx} className="border-t border-admin-border">
               {columns.map((c) => {
                 const v = row[c];
                 let display: string;
                 if (v === null || v === undefined) display = '—';
                 else if (typeof v === 'object') display = JSON.stringify(v);
-                else if (typeof v === 'number')
-                  display = Number.isInteger(v) ? String(v) : v.toFixed(2);
+                else if (typeof v === 'number') display = Number.isInteger(v) ? String(v) : v.toFixed(2);
                 else display = String(v);
                 return (
-                  <td key={c} className="p-2 align-top text-foreground">
-                    {display}
-                  </td>
+                  <td key={c} className="p-2 align-top text-admin-fg-default">{display}</td>
                 );
               })}
             </tr>
@@ -133,83 +126,106 @@ export default function AdminSpeakingAnalyticsPage() {
     reload();
   }, [reload]);
 
+  const breadcrumbs = [
+    { label: 'Admin', href: '/admin' },
+    { label: 'Analytics', href: '/admin' },
+    { label: 'Speaking' },
+  ];
+
   return (
-    <AdminRouteWorkspace role="main" aria-label="Speaking analytics">
-      <div className="space-y-6">
-        <header className="space-y-2">
-          <h1 className="text-2xl font-semibold text-foreground">Speaking · analytics console</h1>
-          <p className="text-muted-foreground">
-            Aggregated cohort, tutor-consistency, and content-difficulty metrics. All data is
-            sourced from server-authoritative endpoints; no client-side scoring is performed.
-          </p>
-        </header>
+    <AdminOperationsLayout
+      title="Speaking · analytics console"
+      description="Aggregated cohort, tutor-consistency, and content-difficulty metrics. All data is sourced from server-authoritative endpoints; no client-side scoring is performed."
+      eyebrow="Analytics"
+      breadcrumbs={breadcrumbs}
+      actions={
+        <Button onClick={reload} disabled={loading} size="sm">
+          {loading ? 'Loading…' : 'Refresh'}
+        </Button>
+      }
+      kpis={
+        <KpiStrip>
+          <KpiTile label="Cohort rows" value={toRows(classData).length} icon={<Users className="h-4 w-4" />} tone="primary" />
+          <KpiTile label="Tutor rows" value={toRows(tutorData).length} icon={<Activity className="h-4 w-4" />} tone="info" />
+          <KpiTile label="Content rows" value={toRows(contentData).length} icon={<BarChart3 className="h-4 w-4" />} tone="success" />
+          <KpiTile label="Filters active" value={[cohortId, professionId, tutorId].filter(Boolean).length} icon={<Filter className="h-4 w-4" />} tone="default" />
+        </KpiStrip>
+      }
+      primaryGrid={
+        <div className="space-y-6">
+          <Card>
+            <CardHeader><CardTitle>Filters</CardTitle></CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid gap-3 sm:grid-cols-3">
+                <Input placeholder="Cohort ID (optional)" value={cohortId} onChange={(e) => setCohortId(e.target.value)} />
+                <Input placeholder="Profession (e.g. doctor)" value={professionId} onChange={(e) => setProfessionId(e.target.value)} />
+                <Input placeholder="Tutor ID (optional)" value={tutorId} onChange={(e) => setTutorId(e.target.value)} />
+              </div>
+            </CardContent>
+          </Card>
 
-        <Card className="space-y-4 p-4">
-          <div className="grid gap-3 sm:grid-cols-3">
-            <Input
-              placeholder="Cohort ID (optional)"
-              value={cohortId}
-              onChange={(e) => setCohortId(e.target.value)}
-            />
-            <Input
-              placeholder="Profession (e.g. doctor)"
-              value={professionId}
-              onChange={(e) => setProfessionId(e.target.value)}
-            />
-            <Input
-              placeholder="Tutor ID (optional)"
-              value={tutorId}
-              onChange={(e) => setTutorId(e.target.value)}
-            />
-          </div>
-          <div className="flex justify-end">
-            <Button onClick={reload} disabled={loading}>
-              {loading ? 'Loading…' : 'Refresh'}
-            </Button>
-          </div>
-        </Card>
+          {error && <InlineAlert variant="error">{error}</InlineAlert>}
 
-        {error && <InlineAlert variant="error">{error}</InlineAlert>}
+          <BentoGrid>
+            <BentoCell span={12}>
+              <Card>
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <CardTitle>Cohort performance</CardTitle>
+                    <span className="text-xs text-admin-fg-muted">{summarise(classData)}</span>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  {loading && !classData ? (
+                    <Skeleton className="h-32 w-full rounded-admin" />
+                  ) : (
+                    <RowsTable payload={classData} emptyLabel="No cohort rows for the current filter." />
+                  )}
+                </CardContent>
+              </Card>
+            </BentoCell>
 
-        <Card>
-          <header className="flex items-center justify-between border-b border-border p-4">
-            <h2 className="font-semibold text-foreground">Cohort performance</h2>
-            <span className="text-xs text-muted-foreground">{summarise(classData)}</span>
-          </header>
-          {loading && !classData ? (
-            <Skeleton className="m-4 h-32 w-[calc(100%-2rem)]" />
-          ) : (
-            <RowsTable payload={classData} emptyLabel="No cohort rows for the current filter." />
-          )}
-        </Card>
+            <BentoCell span={{ default: 12, xl: 6 }}>
+              <Card>
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <CardTitle>Tutor consistency</CardTitle>
+                    <span className="text-xs text-admin-fg-muted">{summarise(tutorData)}</span>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  {loading && !tutorData ? (
+                    <Skeleton className="h-32 w-full rounded-admin" />
+                  ) : (
+                    <RowsTable payload={tutorData} emptyLabel="No tutor drift detected for the filter." />
+                  )}
+                </CardContent>
+              </Card>
+            </BentoCell>
 
-        <Card>
-          <header className="flex items-center justify-between border-b border-border p-4">
-            <h2 className="font-semibold text-foreground">Tutor consistency</h2>
-            <span className="text-xs text-muted-foreground">{summarise(tutorData)}</span>
-          </header>
-          {loading && !tutorData ? (
-            <Skeleton className="m-4 h-32 w-[calc(100%-2rem)]" />
-          ) : (
-            <RowsTable payload={tutorData} emptyLabel="No tutor drift detected for the filter." />
-          )}
-        </Card>
-
-        <Card>
-          <header className="flex items-center justify-between border-b border-border p-4">
-            <h2 className="font-semibold text-foreground">Content difficulty</h2>
-            <span className="text-xs text-muted-foreground">{summarise(contentData)}</span>
-          </header>
-          {loading && !contentData ? (
-            <Skeleton className="m-4 h-32 w-[calc(100%-2rem)]" />
-          ) : (
-            <RowsTable
-              payload={contentData}
-              emptyLabel="No content-difficulty signal yet — need more attempts per card."
-            />
-          )}
-        </Card>
-      </div>
-    </AdminRouteWorkspace>
+            <BentoCell span={{ default: 12, xl: 6 }}>
+              <Card>
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <CardTitle>Content difficulty</CardTitle>
+                    <span className="text-xs text-admin-fg-muted">{summarise(contentData)}</span>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  {loading && !contentData ? (
+                    <Skeleton className="h-32 w-full rounded-admin" />
+                  ) : (
+                    <RowsTable
+                      payload={contentData}
+                      emptyLabel="No content-difficulty signal yet — need more attempts per card."
+                    />
+                  )}
+                </CardContent>
+              </Card>
+            </BentoCell>
+          </BentoGrid>
+        </div>
+      }
+    />
   );
 }

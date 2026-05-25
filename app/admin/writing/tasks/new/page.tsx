@@ -1,17 +1,19 @@
 'use client';
 
 import { useCallback, useMemo, useState } from 'react';
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, ShieldCheck } from 'lucide-react';
-import {
-  AdminRoutePanel,
-  AdminRouteSectionHeader,
-  AdminRouteWorkspace,
-} from '@/components/domain/admin-route-surface';
-import { Button } from '@/components/ui/button';
+import { ShieldCheck } from 'lucide-react';
+import { AdminSettingsLayout, SettingsSection } from '@/components/admin/layout/admin-settings-layout';
+import { Button } from '@/components/admin/ui/button';
 import { Checkbox, Input, Select, Textarea } from '@/components/ui/form-controls';
 import { Toast } from '@/components/ui/alert';
+
+const BREADCRUMBS = [
+  { label: 'Admin', href: '/admin' },
+  { label: 'Writing', href: '/admin/writing' },
+  { label: 'Tasks', href: '/admin/content/writing' },
+  { label: 'New' },
+];
 import { AdminPermission, hasPermission } from '@/lib/admin-permissions';
 import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
 import { useCurrentUser } from '@/lib/hooks/use-current-user';
@@ -176,38 +178,30 @@ export default function NewWritingTaskPage() {
 
   if (!isAuthenticated || role !== 'admin') {
     return (
-      <AdminRouteWorkspace>
-        <p className="text-sm text-muted">Admin access required.</p>
-      </AdminRouteWorkspace>
+      <AdminSettingsLayout title="Create Writing task" breadcrumbs={BREADCRUMBS}>
+        <p className="text-sm text-admin-fg-muted">Admin access required.</p>
+      </AdminSettingsLayout>
     );
   }
 
   if (!canWriteContent) {
     return (
-      <AdminRouteWorkspace>
-        <p className="text-sm text-muted">You do not have the ContentWrite permission required to author writing tasks.</p>
-      </AdminRouteWorkspace>
+      <AdminSettingsLayout title="Create Writing task" breadcrumbs={BREADCRUMBS}>
+        <p className="text-sm text-admin-fg-muted">You do not have the ContentWrite permission required to author writing tasks.</p>
+      </AdminSettingsLayout>
     );
   }
 
   return (
-    <AdminRouteWorkspace role="main" aria-label="New Writing Task">
-      <AdminRouteSectionHeader
-        icon={<ShieldCheck className="w-6 h-6" />}
-        title="Create Writing task"
-        description="Author an original OET Writing task. All content must be original or properly licensed — no recalled or leaked exam material."
-      />
-
-      <AdminRoutePanel>
-        <Link
-          href="/admin/content/writing"
-          className="inline-flex items-center gap-1 text-sm font-semibold text-muted hover:text-navy"
-        >
-          <ArrowLeft className="w-4 h-4" /> Back to writing tasks
-        </Link>
-      </AdminRoutePanel>
-
-      <AdminRoutePanel title="Task metadata">
+    <AdminSettingsLayout
+      title="Create Writing task"
+      description="Author an original OET Writing task. All content must be original or properly licensed — no recalled or leaked exam material."
+      breadcrumbs={BREADCRUMBS}
+      eyebrow="Writing"
+      icon={<ShieldCheck className="h-5 w-5" />}
+      backHref="/admin/content/writing"
+    >
+      <SettingsSection title="Task metadata">
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <Input
             label="Title *"
@@ -253,9 +247,9 @@ export default function NewWritingTaskPage() {
             className="md:col-span-2"
           />
         </div>
-      </AdminRoutePanel>
+      </SettingsSection>
 
-      <AdminRoutePanel title="Task prompt">
+      <SettingsSection title="Task prompt">
         <Textarea
           label="Task prompt *"
           value={form.taskPrompt}
@@ -264,9 +258,9 @@ export default function NewWritingTaskPage() {
           maxLength={1000}
           placeholder="Using the case notes, write a [letter type] to [recipient]. The body of your letter should be approximately 180–200 words."
         />
-      </AdminRoutePanel>
+      </SettingsSection>
 
-      <AdminRoutePanel title="Case notes (learner stimulus)">
+      <SettingsSection title="Case notes (learner stimulus)">
         <Textarea
           label="Case notes *"
           value={form.caseNotesText}
@@ -275,9 +269,9 @@ export default function NewWritingTaskPage() {
           placeholder="Patient details, social/medical history, presenting problem, examination findings, management plan, writing task instruction…"
           hint="Plain text. Use blank lines between sections."
         />
-      </AdminRoutePanel>
+      </SettingsSection>
 
-      <AdminRoutePanel title="Model answer (reference letter)">
+      <SettingsSection title="Model answer (reference letter)">
         <Textarea
           label="Model answer *"
           value={form.modelAnswerText}
@@ -286,10 +280,10 @@ export default function NewWritingTaskPage() {
           placeholder="Dear [Recipient], …"
           hint="Reference 180–200 word body. Shown to learners only after they submit their attempt."
         />
-      </AdminRoutePanel>
+      </SettingsSection>
 
-      <AdminRoutePanel title="Content integrity acknowledgement">
-        <p className="mb-3 text-sm text-muted">
+      <SettingsSection title="Content integrity acknowledgement">
+        <p className="mb-3 text-sm text-admin-fg-muted">
           OET prohibits the use of recalled or leaked exam content. Please confirm before saving:
         </p>
         <Checkbox
@@ -297,9 +291,9 @@ export default function NewWritingTaskPage() {
           onChange={(e) => update('integrityAcknowledged', e.target.checked)}
           label="I confirm this content is original or properly licensed and is not derived from any recalled or leaked OET exam paper. I accept responsibility for the audit trail recorded with my admin id."
         />
-      </AdminRoutePanel>
+      </SettingsSection>
 
-      <AdminRoutePanel>
+      <SettingsSection title="Actions">
         <div className="flex flex-wrap items-center gap-3">
           <Button
             variant="secondary"
@@ -316,12 +310,12 @@ export default function NewWritingTaskPage() {
             Save and submit for review
           </Button>
           {validationError && (
-            <p className="text-xs text-danger" role="status">{validationError}</p>
+            <p className="text-xs text-admin-danger" role="status">{validationError}</p>
           )}
         </div>
-      </AdminRoutePanel>
+      </SettingsSection>
 
       {toast && <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} />}
-    </AdminRouteWorkspace>
+    </AdminSettingsLayout>
   );
 }

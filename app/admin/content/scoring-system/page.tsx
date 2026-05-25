@@ -1,18 +1,14 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { Calculator, CheckCircle2, History, Save } from 'lucide-react';
-import {
-  AdminRouteHero,
-  AdminRoutePanel,
-  AdminRouteWorkspace,
-} from '@/components/domain/admin-route-surface';
-import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
+import { CheckCircle2, History, Save } from 'lucide-react';
+import { AdminSettingsLayout, SettingsSection } from '@/components/admin/layout/admin-settings-layout';
+import { Button } from '@/components/admin/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/admin/ui/card';
+import { Badge } from '@/components/admin/ui/badge';
 import { Textarea } from '@/components/ui/form-controls';
 import { Toast } from '@/components/ui/alert';
-import { Skeleton } from '@/components/ui/skeleton';
+import { Skeleton } from '@/components/admin/ui/skeleton';
 import {
   adminGetScoringPolicy,
   adminUpdateScoringPolicy,
@@ -122,29 +118,27 @@ export default function AdminScoringSystemPage() {
   }
 
   return (
-    <AdminRouteWorkspace role="main" aria-label="Scoring System">
-      <AdminRouteHero
-        eyebrow="CMS"
-        icon={Calculator}
-        accent="navy"
-        title="Scoring System"
-        description="Edit the 'How am I graded?' reference shown on every learner dashboard. Markdown body + structured passing thresholds."
-        aside={(
-          <div className="rounded-2xl border border-border bg-background-light p-4 shadow-sm">
-            <div className="flex gap-2">
-              <Button variant="outline" onClick={() => void openHistory()}>
-                <History className="h-4 w-4 mr-1" /> History
-              </Button>
-              <Button onClick={() => void save()} disabled={saving}>
-                <Save className="h-4 w-4 mr-1" />
-                {saving ? 'Saving...' : 'Save & Publish'}
-              </Button>
-            </div>
-          </div>
-        )}
-      />
-
-      <AdminRoutePanel>
+    <AdminSettingsLayout
+      title="Scoring System"
+      description="Edit the 'How am I graded?' reference shown on every learner dashboard. Markdown body + structured passing thresholds."
+      eyebrow="CMS"
+      breadcrumbs={[
+        { label: 'Admin', href: '/admin' },
+        { label: 'Content', href: '/admin/content' },
+        { label: 'Scoring System' },
+      ]}
+      actions={
+        <>
+          <Button variant="outline" onClick={() => void openHistory()} startIcon={<History className="h-4 w-4" />}>
+            History
+          </Button>
+          <Button onClick={() => void save()} disabled={saving} loading={saving} startIcon={!saving ? <Save className="h-4 w-4" /> : undefined}>
+            {saving ? 'Saving...' : 'Save & Publish'}
+          </Button>
+        </>
+      }
+    >
+      <SettingsSection title="Policy editor" description="Markdown body + structured passing thresholds JSON.">
         {loading ? (
           <Skeleton className="h-40" />
         ) : (
@@ -161,7 +155,7 @@ export default function AdminScoringSystemPage() {
             <div>
               <div className="flex items-center justify-between mb-2">
                 <h2 className="text-sm font-semibold">Policy JSON (structured thresholds)</h2>
-                {jsonError ? <Badge variant="outline">invalid JSON</Badge> : <Badge variant="outline">valid</Badge>}
+                {jsonError ? <Badge variant="danger">invalid JSON</Badge> : <Badge variant="success">valid</Badge>}
               </div>
               <Textarea
                 value={policyJson}
@@ -170,43 +164,46 @@ export default function AdminScoringSystemPage() {
                 aria-label="Scoring policy JSON"
               />
               {jsonError ? (
-                <p className="text-xs text-danger mt-1">{jsonError}</p>
+                <p className="text-xs text-[var(--admin-danger)] mt-1">{jsonError}</p>
               ) : (
-                <p className="text-xs text-admin-text-muted mt-1">Used by the dashboard to render per-country passing thresholds.</p>
+                <p className="text-xs text-admin-fg-muted mt-1">Used by the dashboard to render per-country passing thresholds.</p>
               )}
             </div>
           </div>
         )}
 
         {current ? (
-          <p className="text-xs text-admin-text-muted mt-3">
+          <p className="text-xs text-admin-fg-muted mt-3">
             Active version <code>{current.id.slice(0, 12)}...</code>
             {' - '}updated {new Date(current.updatedAt).toLocaleString()}
             {current.updatedByUserId ? ` by ${current.updatedByUserId.slice(0, 12)}...` : ''}
           </p>
         ) : (
-          <p className="text-xs text-admin-text-muted mt-3">No scoring policy has been saved yet - defaults shown above; click Save & Publish to create the first version.</p>
+          <p className="text-xs text-admin-fg-muted mt-3">No scoring policy has been saved yet - defaults shown above; click Save &amp; Publish to create the first version.</p>
         )}
-      </AdminRoutePanel>
+      </SettingsSection>
 
       {showHistory ? (
-        <Card className="p-4 space-y-2">
-          <div className="flex items-center justify-between">
-            <h2 className="font-semibold">Recent versions</h2>
-            <Button size="sm" variant="ghost" onClick={() => setShowHistory(false)}>Close</Button>
-          </div>
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Recent versions</CardTitle>
+            <div className="ml-auto">
+              <Button size="sm" variant="ghost" onClick={() => setShowHistory(false)}>Close</Button>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-2">
           {history.length === 0 ? (
-            <p className="text-sm text-muted">No previous versions.</p>
+            <p className="text-sm text-admin-fg-muted">No previous versions.</p>
           ) : (
             <ul className="space-y-2">
               {history.map((row) => (
                 <li key={row.id} className="text-sm flex items-center justify-between">
                   <span><code className="font-mono">{row.id.slice(0, 12)}...</code> - updated {new Date(row.updatedAt).toLocaleString()}</span>
                   <div className="flex items-center gap-2">
-                    {row.isActive ? <Badge variant="success">active</Badge> : <Badge variant="outline">draft</Badge>}
+                    {row.isActive ? <Badge variant="success">active</Badge> : <Badge variant="default">draft</Badge>}
                     {!row.isActive ? (
-                      <Button size="sm" variant="outline" onClick={() => void activateHistoryRow(row.id)} disabled={saving}>
-                        <CheckCircle2 className="mr-1 h-3.5 w-3.5" /> Activate
+                      <Button size="sm" variant="outline" onClick={() => void activateHistoryRow(row.id)} disabled={saving} startIcon={<CheckCircle2 className="h-3.5 w-3.5" />}>
+                        Activate
                       </Button>
                     ) : null}
                   </div>
@@ -214,10 +211,11 @@ export default function AdminScoringSystemPage() {
               ))}
             </ul>
           )}
+          </CardContent>
         </Card>
       ) : null}
 
       {toast ? <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} /> : null}
-    </AdminRouteWorkspace>
+    </AdminSettingsLayout>
   );
 }

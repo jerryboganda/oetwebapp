@@ -37,6 +37,12 @@ export type KpiTileProps = {
   loading?: boolean;
   size?: KpiSize;
   className?: string;
+  /**
+   * Optional short subtitle / footnote rendered below the value (e.g.
+   * "vs last week", "across all cohorts"). Backward-compat for the
+   * pre-migration KpiTile that exposed a `hint` slot.
+   */
+  hint?: React.ReactNode;
 };
 
 const toneIconStyles: Record<KpiTone, string> = {
@@ -98,7 +104,7 @@ function KpiSkeleton({ size }: { size: KpiSize }) {
 
 export const KpiTile = React.forwardRef<HTMLDivElement, KpiTileProps>(
   (
-    { label, value, trend, icon, tone = 'default', sparkline, href, loading, size = 'md', className },
+    { label, value, trend, icon, tone = 'default', sparkline, href, loading, size = 'md', className, hint },
     ref,
   ) => {
     const body = (
@@ -134,6 +140,12 @@ export const KpiTile = React.forwardRef<HTMLDivElement, KpiTileProps>(
             </p>
 
             {trend ? <TrendBadge trend={trend} /> : null}
+
+            {hint ? (
+              <p className="mt-2 text-xs text-admin-fg-muted leading-snug">
+                {hint}
+              </p>
+            ) : null}
 
             {sparkline ? (
               <div className="mt-2 h-8" aria-hidden="true">

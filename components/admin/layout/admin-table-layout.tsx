@@ -46,6 +46,14 @@ export interface AdminTableLayoutProps
 
   /** The DataTable (or other table-shaped child) to render inside the card. */
   children: React.ReactNode;
+
+  /**
+   * Backward-compat: decorative icon shown next to the page title. Accepted
+   * here so legacy call sites compile but currently rendered as a no-op.
+   */
+  icon?: React.ReactNode;
+  /** Backward-compat: optional href for a "back" affordance in the header. */
+  backHref?: string;
 }
 
 const AdminTableLayout = React.forwardRef<
@@ -65,6 +73,9 @@ const AdminTableLayout = React.forwardRef<
       contentClassName,
       className,
       children,
+      // Accepted for backward-compat; see prop docs.
+      icon: _icon,
+      backHref: _backHref,
       ...shellProps
     },
     ref,

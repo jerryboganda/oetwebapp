@@ -1,13 +1,14 @@
 'use client';
 
 import { useEffect, useState, useRef, useCallback } from 'react';
-import { AdminRouteSectionHeader, AdminRoutePanel, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
+import { AdminTableLayout } from '@/components/admin/layout/admin-table-layout';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
 import { DataTable, type Column } from '@/components/ui/data-table';
-import { EmptyState } from '@/components/ui/empty-error';
+import { EmptyState } from '@/components/admin/ui/empty-state';
 import { InlineAlert, Toast } from '@/components/ui/alert';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/admin/ui/badge';
+import { Button } from '@/components/admin/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/admin/ui/card';
 import { Pagination } from '@/components/ui/pagination';
 import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
 import { fetchAdminMediaAssets, fetchAdminMediaAudit, adminProcessMediaAsset, uploadMedia, deleteMedia } from '@/lib/api';
@@ -148,22 +149,22 @@ export default function AdminMediaPage() {
   const columns: Column<MediaAsset>[] = [
     {
       key: 'thumbnail', header: '', render: (r) => (
-        <div className="w-10 h-10 rounded flex items-center justify-center bg-surface-alt shrink-0">
+        <div className="w-10 h-10 rounded-admin-sm flex items-center justify-center bg-admin-bg-subtle shrink-0">
           {isImage(r.mimeType) ? (
-            <FileImage className="w-5 h-5 text-muted" />
+            <FileImage className="w-5 h-5 text-admin-fg-muted" />
           ) : (
-            <FileText className="w-5 h-5 text-muted" />
+            <FileText className="w-5 h-5 text-admin-fg-muted" />
           )}
         </div>
       ),
     },
-    { key: 'originalFilename', header: 'Filename', render: (r) => <span className="font-medium text-sm truncate max-w-[200px] block">{r.originalFilename}</span> },
-    { key: 'mimeType', header: 'Type', render: (r) => <Badge variant="muted" className="text-[10px]">{r.mimeType}</Badge> },
+    { key: 'originalFilename', header: 'Filename', render: (r) => <span className="font-medium text-sm truncate max-w-[200px] block text-admin-fg-strong">{r.originalFilename}</span> },
+    { key: 'mimeType', header: 'Type', render: (r) => <Badge variant="default" size="sm">{r.mimeType}</Badge> },
     { key: 'format', header: 'Format', render: (r) => <span className="text-xs">{r.format}</span> },
     { key: 'sizeBytes', header: 'Size', render: (r) => <span className="text-xs">{formatFileSize(r.sizeBytes)}</span> },
     {
       key: 'status', header: 'Status', render: (r) => (
-        <Badge variant={r.status === 'Ready' ? 'default' : r.status === 'Processing' ? 'muted' : 'danger'}>
+        <Badge variant={r.status === 'Ready' ? 'success' : r.status === 'Processing' ? 'default' : 'danger'}>
           {r.status}
         </Badge>
       ),
@@ -198,116 +199,128 @@ export default function AdminMediaPage() {
   if (!isAuthenticated) return null;
 
   return (
-    <AdminRouteWorkspace>
-      <AdminRouteSectionHeader
+    <>
+      <AdminTableLayout
         title="Media Asset Manager"
         description="Upload, view, audit, and manage media assets across the content library."
-      />
-
-      {/* Upload Drop Zone */}
-      <AdminRoutePanel title="Upload Media">
-        <div
-          className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
-            dragOver ? 'border-primary bg-primary/5' : 'border-border'
-          }`}
-          onDrop={handleDrop}
-          onDragOver={handleDragOver}
-          onDragLeave={handleDragLeave}
-        >
-          <Upload className="w-8 h-8 text-muted mx-auto mb-2" />
-          <p className="text-sm text-muted mb-2">
-            Drag & drop files here, or click to select
-          </p>
-          <p className="text-xs text-muted mb-3">
-            Allowed: JPG, PNG, GIF, WebP, PDF — Max 10 MB per file
-          </p>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".jpg,.jpeg,.png,.gif,.webp,.pdf"
-            multiple
-            className="hidden"
-            onChange={(e) => {
-              if (e.target.files) handleUploadFiles(e.target.files);
-              e.target.value = '';
-            }}
-          />
-          <Button
-            variant="primary"
-            size="sm"
-            disabled={uploading}
-            onClick={() => fileInputRef.current?.click()}
-          >
-            {uploading ? 'Uploading…' : 'Select Files'}
-          </Button>
-        </div>
-      </AdminRoutePanel>
-
-      <AdminRoutePanel title="Media Assets">
-        <div className="flex items-center justify-between mb-4">
+        breadcrumbs={[
+          { label: 'Admin', href: '/admin' },
+          { label: 'Content', href: '/admin/content' },
+          { label: 'Media' },
+        ]}
+        actions={
           <div className="flex items-center gap-2">
-            <Button variant="primary" size="sm" onClick={handleAudit}>
-              <AlertTriangle className="w-4 h-4 mr-1" /> Run Audit
+            <Button variant="primary" size="sm" onClick={handleAudit} startIcon={<AlertTriangle className="w-4 h-4" />}>
+              Run Audit
             </Button>
-            <Button variant="outline" size="sm" onClick={() => setReloadNonce(n => n + 1)}>
-              <RefreshCw className="w-4 h-4 mr-1" /> Refresh
+            <Button variant="outline" size="sm" onClick={() => setReloadNonce(n => n + 1)} startIcon={<RefreshCw className="w-4 h-4" />}>
+              Refresh
             </Button>
           </div>
-          <span className="text-xs text-admin-text-muted">{total} asset{total !== 1 ? 's' : ''}</span>
-        </div>
+        }
+        banner={
+          <div className="space-y-4">
+            <Card>
+              <CardHeader><CardTitle>Upload Media</CardTitle></CardHeader>
+              <CardContent>
+                <div
+                  className={`border-2 border-dashed rounded-admin-lg p-8 text-center transition-colors ${
+                    dragOver ? 'border-[var(--admin-primary)] bg-[var(--admin-primary-tint)]' : 'border-admin-border'
+                  }`}
+                  onDrop={handleDrop}
+                  onDragOver={handleDragOver}
+                  onDragLeave={handleDragLeave}
+                >
+                  <Upload className="w-8 h-8 text-admin-fg-muted mx-auto mb-2" />
+                  <p className="text-sm text-admin-fg-default mb-2">
+                    Drag &amp; drop files here, or click to select
+                  </p>
+                  <p className="text-xs text-admin-fg-muted mb-3">
+                    Allowed: JPG, PNG, GIF, WebP, PDF — Max 10 MB per file
+                  </p>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".jpg,.jpeg,.png,.gif,.webp,.pdf"
+                    multiple
+                    className="hidden"
+                    onChange={(e) => {
+                      if (e.target.files) handleUploadFiles(e.target.files);
+                      e.target.value = '';
+                    }}
+                  />
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    disabled={uploading}
+                    loading={uploading}
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    {uploading ? 'Uploading…' : 'Select Files'}
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
 
-        {audit && (
-          <InlineAlert
-            variant={audit.failedCount > 0 ? 'warning' : 'info'}
-            title="Media inventory snapshot"
-            className="mb-4"
-          >
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-              <div><strong>Total:</strong> {audit.totalAssets}</div>
-              <div><strong>Ready:</strong> {audit.readyCount}</div>
-              <div><strong>Processing:</strong> {audit.processingCount}</div>
-              <div className="text-danger"><strong>Failed:</strong> {audit.failedCount}</div>
-            </div>
-            {audit.missingThumbnails.length > 0 && (
-              <div className="mt-2 text-xs text-warning">⚠ {audit.missingThumbnails.length} missing thumbnails</div>
+            {audit && (
+              <InlineAlert
+                variant={audit.failedCount > 0 ? 'warning' : 'info'}
+                title="Media inventory snapshot"
+              >
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                  <div><strong>Total:</strong> {audit.totalAssets}</div>
+                  <div><strong>Ready:</strong> {audit.readyCount}</div>
+                  <div><strong>Processing:</strong> {audit.processingCount}</div>
+                  <div className="text-danger"><strong>Failed:</strong> {audit.failedCount}</div>
+                </div>
+                {audit.missingThumbnails.length > 0 && (
+                  <div className="mt-2 text-xs text-warning">⚠ {audit.missingThumbnails.length} missing thumbnails</div>
+                )}
+                {audit.missingTranscripts.length > 0 && (
+                  <div className="mt-1 text-xs text-warning">⚠ {audit.missingTranscripts.length} missing transcripts</div>
+                )}
+              </InlineAlert>
             )}
-            {audit.missingTranscripts.length > 0 && (
-              <div className="mt-1 text-xs text-warning">⚠ {audit.missingTranscripts.length} missing transcripts</div>
-            )}
-          </InlineAlert>
-        )}
+          </div>
+        }
+      >
+        <div className="p-4 sm:p-5">
+          <div className="flex items-center justify-end mb-4">
+            <span className="text-xs text-admin-fg-muted">{total} asset{total !== 1 ? 's' : ''}</span>
+          </div>
 
-        <AsyncStateWrapper status={pageStatus} errorMessage="Failed to load media assets.">
-          {pageStatus === 'empty' ? (
-            <EmptyState icon={<Film className="w-8 h-8 text-admin-text-muted" />} title="No media assets" description="Upload files or import content to see media assets here." />
-          ) : (
-            <>
-            <DataTable columns={columns} data={assets} keyExtractor={(r) => r.id} selectable selectedKeys={selectedKeys} onSelectionChange={setSelectedKeys} />
-            <BulkActionBar
-              selectedCount={selectedKeys.size}
-              onClearSelection={() => setSelectedKeys(new Set())}
-              actions={[
-                { key: 'delete', label: 'Delete selected', variant: 'danger', onClick: () => setToast({ variant: 'error', message: 'Bulk delete coming soon.' }) },
-              ]}
+          <AsyncStateWrapper status={pageStatus} errorMessage="Failed to load media assets.">
+            {pageStatus === 'empty' ? (
+              <EmptyState icon={<Film className="w-8 h-8 text-admin-fg-muted" />} title="No media assets" description="Upload files or import content to see media assets here." />
+            ) : (
+              <>
+                <DataTable columns={columns} data={assets} keyExtractor={(r) => r.id} selectable selectedKeys={selectedKeys} onSelectionChange={setSelectedKeys} />
+                <BulkActionBar
+                  selectedCount={selectedKeys.size}
+                  onClearSelection={() => setSelectedKeys(new Set())}
+                  actions={[
+                    { key: 'delete', label: 'Delete selected', variant: 'danger', onClick: () => setToast({ variant: 'error', message: 'Bulk delete coming soon.' }) },
+                  ]}
+                />
+              </>
+            )}
+          </AsyncStateWrapper>
+
+          <div className="mt-4">
+            <Pagination
+              page={page}
+              pageSize={pageSize}
+              total={total}
+              onPageChange={setPage}
+              onPageSizeChange={setPageSize}
+              itemLabel="asset"
+              itemLabelPlural="assets"
             />
-            </>
-          )}
-        </AsyncStateWrapper>
-
-        <div className="mt-4">
-          <Pagination
-            page={page}
-            pageSize={pageSize}
-            total={total}
-            onPageChange={setPage}
-            onPageSizeChange={setPageSize}
-            itemLabel="asset"
-            itemLabelPlural="assets"
-          />
+          </div>
         </div>
-      </AdminRoutePanel>
+      </AdminTableLayout>
 
       {toast && <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} />}
-    </AdminRouteWorkspace>
+    </>
   );
 }

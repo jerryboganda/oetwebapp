@@ -13,11 +13,9 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { ArrowLeft, ListChecks } from 'lucide-react';
 
-import {
-  AdminRoutePanel,
-  AdminRouteSectionHeader,
-  AdminRouteWorkspace,
-} from '@/components/domain/admin-route-surface';
+import { AdminOperationsLayout } from '@/components/admin/layout/admin-operations-layout';
+import { Card, CardContent } from '@/components/admin/ui/card';
+import { Button } from '@/components/admin/ui/button';
 import { MockReviewStageRail } from '@/components/domain/admin/MockReviewStageRail';
 
 export default function MockBundleReviewPipelinePage() {
@@ -25,41 +23,43 @@ export default function MockBundleReviewPipelinePage() {
   const bundleId = params?.bundleId ?? '';
 
   return (
-    <AdminRouteWorkspace>
-      <AdminRoutePanel>
-        <AdminRouteSectionHeader
-          eyebrow="Mock bundle"
-          title="Editorial review pipeline"
-          description="Walk a bundle from academic review through to published. Stage transitions are monotonic — the backend rejects regressions."
-          icon={ListChecks}
-          actions={
-            <div className="flex items-center gap-2">
-              <Link
-                href={`/admin/content/mocks/${encodeURIComponent(bundleId)}/item-analysis`}
-                className="inline-flex items-center gap-1 text-sm text-muted hover:text-primary"
-              >
-                Item analysis
-              </Link>
-              <Link
-                href="/admin/content/mocks"
-                className="inline-flex items-center gap-1 text-sm text-muted hover:text-primary"
-              >
-                <ArrowLeft className="h-3.5 w-3.5" aria-hidden /> Back to bundles
-              </Link>
-            </div>
-          }
-        />
-
-        <div className="mb-4 text-xs text-muted">
-          Bundle ID: <span className="font-mono text-navy">{bundleId || '—'}</span>
+    <AdminOperationsLayout
+      eyebrow="Mock bundle"
+      title="Editorial review pipeline"
+      description="Walk a bundle from academic review through to published. Stage transitions are monotonic — the backend rejects regressions."
+      breadcrumbs={[
+        { label: 'Admin', href: '/admin' },
+        { label: 'Content', href: '/admin/content' },
+        { label: 'Mocks', href: '/admin/content/mocks' },
+        { label: 'Review pipeline' },
+      ]}
+      actions={
+        <div className="flex items-center gap-2">
+          <Button asChild variant="ghost" size="sm">
+            <Link href={`/admin/content/mocks/${encodeURIComponent(bundleId)}/item-analysis`}>
+              <ListChecks className="mr-1 h-3.5 w-3.5" aria-hidden /> Item analysis
+            </Link>
+          </Button>
+          <Button asChild variant="outline" size="sm">
+            <Link href="/admin/content/mocks">
+              <ArrowLeft className="mr-1 h-3.5 w-3.5" aria-hidden /> Back to bundles
+            </Link>
+          </Button>
         </div>
-
-        {bundleId ? (
-          <MockReviewStageRail bundleId={bundleId} />
-        ) : (
-          <p className="text-sm text-muted">Missing bundle id in the route.</p>
-        )}
-      </AdminRoutePanel>
-    </AdminRouteWorkspace>
+      }
+    >
+      <Card>
+        <CardContent className="p-5">
+          <div className="mb-4 text-xs text-admin-fg-muted">
+            Bundle ID: <span className="font-mono text-admin-fg-strong">{bundleId || '—'}</span>
+          </div>
+          {bundleId ? (
+            <MockReviewStageRail bundleId={bundleId} />
+          ) : (
+            <p className="text-sm text-admin-fg-muted">Missing bundle id in the route.</p>
+          )}
+        </CardContent>
+      </Card>
+    </AdminOperationsLayout>
   );
 }

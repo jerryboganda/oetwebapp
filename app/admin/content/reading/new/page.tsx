@@ -3,15 +3,11 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Save, BookOpen } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { Save } from 'lucide-react';
+import { AdminSettingsLayout, SettingsSection } from '@/components/admin/layout/admin-settings-layout';
+import { Button } from '@/components/admin/ui/button';
 import { Input, Select, Textarea } from '@/components/ui/form-controls';
 import { Toast } from '@/components/ui/alert';
-import {
-  AdminRouteWorkspace,
-  AdminRoutePanel,
-  AdminRouteSectionHeader,
-} from '@/components/domain/admin-route-surface';
 import { apiClient } from '@/lib/api';
 import { ensureCanonicalParts } from '@/lib/reading-authoring-api';
 
@@ -86,73 +82,79 @@ export default function AdminCreateReadingPaperPage() {
   };
 
   return (
-    <AdminRouteWorkspace>
-      <div className="mb-4">
-        <Link
-          href="/admin/content/reading"
-          className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          Back to Reading
-        </Link>
-      </div>
-
-      <AdminRouteSectionHeader
+    <>
+      <AdminSettingsLayout
         title="Create New Reading Paper"
-        icon={BookOpen}
         description="Set up a new Reading subtest paper. After creating, you'll add passage texts and author questions."
-      />
+        eyebrow="CMS"
+        breadcrumbs={[
+          { label: 'Admin', href: '/admin' },
+          { label: 'Content', href: '/admin/content' },
+          { label: 'Reading', href: '/admin/content/reading' },
+          { label: 'New' },
+        ]}
+        actions={
+          <Button asChild variant="ghost" size="sm">
+            <Link href="/admin/content/reading">Cancel</Link>
+          </Button>
+        }
+      >
+        <form onSubmit={handleSubmit}>
+          <SettingsSection
+            title="Paper details"
+            description="Required metadata. Source provenance is recorded for audit traceability."
+            actions={
+              <Button type="submit" variant="primary" size="sm" disabled={saving} startIcon={<Save className="h-4 w-4" />}>
+                {saving ? 'Creating…' : 'Create Paper'}
+              </Button>
+            }
+          >
+            <div className="space-y-6">
+              <Input
+                label="Title"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder="e.g. OET Reading Practice Test — Nursing 2024"
+                required
+              />
 
-      <AdminRoutePanel className="mt-6">
-        <form onSubmit={handleSubmit} className="space-y-6">
-          <Input
-            label="Title"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="e.g. OET Reading Practice Test — Nursing 2024"
-            required
-          />
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Select
+                  label="Profession"
+                  value={profession}
+                  onChange={(e) => setProfession(e.target.value)}
+                  options={professionOptions}
+                />
 
-          <Select
-            label="Profession"
-            value={profession}
-            onChange={(e) => setProfession(e.target.value)}
-            options={professionOptions}
-          />
+                <Select
+                  label="Difficulty"
+                  value={difficulty}
+                  onChange={(e) => setDifficulty(e.target.value)}
+                  options={difficultyOptions}
+                />
+              </div>
 
-          <Select
-            label="Difficulty"
-            value={difficulty}
-            onChange={(e) => setDifficulty(e.target.value)}
-            options={difficultyOptions}
-          />
+              <Textarea
+                label="Source Provenance"
+                value={sourceProvenance}
+                onChange={(e) => setSourceProvenance(e.target.value)}
+                placeholder="e.g. OET Official Practice Test 2024, Cambridge Box Hill"
+                hint="Describe where this content originates for audit traceability."
+                required
+              />
 
-          <Textarea
-            label="Source Provenance"
-            value={sourceProvenance}
-            onChange={(e) => setSourceProvenance(e.target.value)}
-            placeholder="e.g. OET Official Practice Test 2024, Cambridge Box Hill"
-            hint="Describe where this content originates for audit traceability."
-            required
-          />
-
-          <Input
-            label="Estimated Duration (minutes)"
-            type="number"
-            min={1}
-            max={180}
-            value={estimatedDuration}
-            onChange={(e) => setEstimatedDuration(Number(e.target.value))}
-          />
-
-          <div className="flex justify-end pt-2">
-            <Button type="submit" variant="primary" disabled={saving}>
-              <Save className="h-4 w-4 mr-2" />
-              {saving ? 'Creating…' : 'Create Paper'}
-            </Button>
-          </div>
+              <Input
+                label="Estimated Duration (minutes)"
+                type="number"
+                min={1}
+                max={180}
+                value={estimatedDuration}
+                onChange={(e) => setEstimatedDuration(Number(e.target.value))}
+              />
+            </div>
+          </SettingsSection>
         </form>
-      </AdminRoutePanel>
+      </AdminSettingsLayout>
 
       {toast && (
         <Toast
@@ -161,6 +163,6 @@ export default function AdminCreateReadingPaperPage() {
           onClose={() => setToast(null)}
         />
       )}
-    </AdminRouteWorkspace>
+    </>
   );
 }

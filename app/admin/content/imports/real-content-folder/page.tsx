@@ -1,17 +1,13 @@
 'use client';
 
 import { useCallback, useMemo, useRef, useState } from 'react';
-import { FolderUp, CheckCircle2, AlertTriangle, Upload as UploadIcon, ArrowRight } from 'lucide-react';
-import {
-  AdminRouteHero,
-  AdminRoutePanel,
-  AdminRouteWorkspace,
-} from '@/components/domain/admin-route-surface';
-import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
+import { CheckCircle2, AlertTriangle, Upload as UploadIcon, ArrowRight } from 'lucide-react';
+import { AdminSettingsLayout, SettingsSection } from '@/components/admin/layout/admin-settings-layout';
+import { Button } from '@/components/admin/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/admin/ui/card';
+import { Badge } from '@/components/admin/ui/badge';
 import { Toast } from '@/components/ui/alert';
-import { Skeleton } from '@/components/ui/skeleton';
+import { Skeleton } from '@/components/admin/ui/skeleton';
 import {
   adminStageRealContentFolder,
   adminCommitRealContentFolder,
@@ -102,43 +98,41 @@ export default function AdminRealContentFolderImportPage() {
   }, [stageResult]);
 
   return (
-    <AdminRouteWorkspace role="main" aria-label="Real Content folder import">
-      <AdminRouteHero
-        eyebrow="CMS"
-        icon={FolderUp}
-        accent="navy"
-        title="Real Content folder importer"
-        description="Drop the zipped Project Real Content folder. The system parses Listening/Reading/Writing/Speaking samples, result-table images, rulebook PDFs, and the Scoring System file — then lets you review + commit them all as Drafts."
-        aside={null}
-      />
-
-      <AdminRoutePanel>
+    <AdminSettingsLayout
+      title="Real Content folder importer"
+      description="Drop the zipped Project Real Content folder. The system parses Listening/Reading/Writing/Speaking samples, result-table images, rulebook PDFs, and the Scoring System file — then lets you review + commit them all as Drafts."
+      eyebrow="CMS"
+      breadcrumbs={[
+        { label: 'Admin', href: '/admin' },
+        { label: 'Content', href: '/admin/content' },
+        { label: 'Imports' },
+        { label: 'Real Content Folder' },
+      ]}
+    >
+      <SettingsSection title="Step 1 — Upload ZIP" description="Zip up your Project Real Content folder, upload it here, review the parsed proposals, then commit. Nothing is auto-published.">
         <div className="space-y-3">
-          <p className="text-sm text-admin-text-muted">
-            Step 1 — zip up your <code>Project Real Content</code> folder, upload it here, review the parsed proposals, then commit. Nothing is auto-published.
-          </p>
           <div className="flex flex-col sm:flex-row sm:items-end gap-3">
             <div className="flex-1">
-              <label className="block text-sm font-medium mb-1">ZIP file (max 1 GB)</label>
+              <label className="block text-sm font-medium mb-1 text-admin-fg-default">ZIP file (max 1 GB)</label>
               <input
                 ref={fileRef}
                 type="file"
                 accept=".zip,application/zip,application/x-zip-compressed"
                 onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-                className="w-full text-sm"
+                className="w-full text-sm text-admin-fg-default"
               />
               {file ? (
-                <p className="text-xs text-admin-text-muted mt-1">
+                <p className="text-xs text-admin-fg-muted mt-1">
                   {file.name} - {(file.size / 1024 / 1024).toFixed(2)} MB
                 </p>
               ) : null}
             </div>
-            <Button onClick={() => void handleStage()} disabled={!file || staging}>
+            <Button onClick={() => void handleStage()} disabled={!file || staging} loading={staging}>
               {staging ? 'Staging...' : (<><UploadIcon className="h-4 w-4 mr-1" />Stage proposals</>)}
             </Button>
           </div>
         </div>
-      </AdminRoutePanel>
+      </SettingsSection>
 
       {staging ? (
         <div className="space-y-3">
@@ -147,7 +141,8 @@ export default function AdminRealContentFolderImportPage() {
       ) : null}
 
       {stageResult ? (
-        <Card className="p-4 space-y-4">
+        <Card>
+          <CardContent className="space-y-4 pt-5">
           <div className="flex items-center justify-between flex-wrap gap-3">
             <div>
               <h2 className="text-lg font-semibold">Proposals ({stageResult.proposals.length})</h2>
@@ -218,11 +213,13 @@ export default function AdminRealContentFolderImportPage() {
               </section>
             ))}
           </div>
+          </CardContent>
         </Card>
       ) : null}
 
       {commitResult ? (
-        <Card className="p-4 space-y-3">
+        <Card>
+          <CardContent className="space-y-3 pt-5">
           <h2 className="text-lg font-semibold flex items-center gap-2">
             <CheckCircle2 className="h-5 w-5 text-success" />
             Commit complete
@@ -245,13 +242,14 @@ export default function AdminRealContentFolderImportPage() {
               {commitResult.errors.map((e, i) => <div key={i}>{e}</div>)}
             </div>
           ) : null}
-          <p className="text-xs text-muted">
+          <p className="text-xs text-admin-fg-muted">
             Drafts are now in each respective admin page. Open Result Templates, Speaking Shared Resources, Scoring System, and the per-paper admin pages to publish them.
           </p>
+          </CardContent>
         </Card>
       ) : null}
 
       {toast ? <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} /> : null}
-    </AdminRouteWorkspace>
+    </AdminSettingsLayout>
   );
 }

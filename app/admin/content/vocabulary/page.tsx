@@ -4,14 +4,16 @@ import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { BookOpen, Plus, Upload, Sparkles, Trash2, Edit3, Volume2, Crown } from 'lucide-react';
-import { AdminRouteWorkspace, AdminRoutePanel, AdminRouteSectionHeader } from '@/components/domain/admin-route-surface';
+import { AdminCatalogLayout } from '@/components/admin/layout/admin-catalog-layout';
+import { Button } from '@/components/admin/ui/button';
+import { Card, CardContent } from '@/components/admin/ui/card';
+import { Badge } from '@/components/admin/ui/badge';
+import { Input } from '@/components/admin/ui/input';
+import { EmptyState } from '@/components/admin/ui/empty-state';
+import { Skeleton } from '@/components/admin/ui/skeleton';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
 import { DataTable, type Column } from '@/components/ui/data-table';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/form-controls';
 import { Toast } from '@/components/ui/alert';
-import { EmptyState } from '@/components/ui/empty-error';
 import { Pagination } from '@/components/ui/pagination';
 import { BulkActionBar } from '@/components/ui/bulk-action-bar';
 import { BulkActionConfirmModal } from '@/components/ui/bulk-action-confirm-modal';
@@ -143,8 +145,8 @@ export default function AdminVocabularyPage() {
       header: 'Term',
       render: (row) => (
         <div className="flex flex-col">
-          <span className="font-semibold text-navy">{row.term}</span>
-          <span className="text-xs text-muted line-clamp-1">{row.definition}</span>
+          <span className="font-semibold text-admin-fg-strong">{row.term}</span>
+          <span className="text-xs text-admin-fg-muted line-clamp-1">{row.definition}</span>
         </div>
       ),
     },
@@ -154,7 +156,7 @@ export default function AdminVocabularyPage() {
       key: 'status',
       header: 'Status',
       render: (row) => (
-        <Badge variant={row.status === 'active' ? 'success' : row.status === 'draft' ? 'warning' : 'muted'}>
+        <Badge variant={row.status === 'active' ? 'success' : row.status === 'draft' ? 'warning' : 'secondary'} size="sm">
           {row.status}
         </Badge>
       ),
@@ -165,10 +167,10 @@ export default function AdminVocabularyPage() {
       render: (row) => (
         <div className="flex items-center justify-end gap-2">
           <Link href={`/admin/content/vocabulary/${row.id}`} aria-label={`Edit ${row.term}`}>
-            <Edit3 className="h-4 w-4 text-muted hover:text-primary" />
+            <Edit3 className="h-4 w-4 text-admin-fg-muted hover:text-[var(--admin-primary)]" />
           </Link>
           <button onClick={() => handleDelete(row.id, row.term)} aria-label={`Delete ${row.term}`}>
-            <Trash2 className="h-4 w-4 text-muted hover:text-danger" />
+            <Trash2 className="h-4 w-4 text-admin-fg-muted hover:text-[var(--admin-danger)]" />
           </button>
         </div>
       ),
@@ -181,6 +183,49 @@ export default function AdminVocabularyPage() {
   );
 
   const pageStatus = loading ? 'loading' : rows.length === 0 ? 'empty' : 'success';
+
+  const filters = (
+    <div className="grid gap-3 sm:grid-cols-4 w-full">
+      <Input
+        placeholder="Search term or definition…"
+        value={search}
+        onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+      />
+      <select
+        value={category}
+        onChange={(e) => { setCategory(e.target.value); setPage(1); }}
+        className="h-10 rounded-[var(--admin-radius-lg)] border border-[var(--admin-border)] bg-[var(--admin-bg-surface)] px-3 text-sm text-[var(--admin-fg-default)]"
+      >
+        <option value="">All categories ({total})</option>
+        {categories.map(c => (
+          <option key={c.category} value={c.category}>
+            {c.category.replace(/_/g, ' ')} ({c.total})
+          </option>
+        ))}
+      </select>
+      <select
+        value={profession}
+        onChange={(e) => { setProfession(e.target.value); setPage(1); }}
+        className="h-10 rounded-[var(--admin-radius-lg)] border border-[var(--admin-border)] bg-[var(--admin-bg-surface)] px-3 text-sm text-[var(--admin-fg-default)]"
+      >
+        <option value="">All professions</option>
+        <option value="medicine">Medicine</option>
+        <option value="nursing">Nursing</option>
+        <option value="dentistry">Dentistry</option>
+        <option value="pharmacy">Pharmacy</option>
+      </select>
+      <select
+        value={status}
+        onChange={(e) => { setStatus(e.target.value); setPage(1); }}
+        className="h-10 rounded-[var(--admin-radius-lg)] border border-[var(--admin-border)] bg-[var(--admin-bg-surface)] px-3 text-sm text-[var(--admin-fg-default)]"
+      >
+        <option value="">All statuses</option>
+        <option value="active">Active</option>
+        <option value="draft">Draft</option>
+        <option value="archived">Archived</option>
+      </select>
+    </div>
+  );
 
   return (
     <>
@@ -197,174 +242,153 @@ export default function AdminVocabularyPage() {
         onConfirm={handleBulkDelete}
         onClose={() => setConfirmBulkDelete(false)}
       />
-      <AdminRouteWorkspace>
-        <AdminRouteSectionHeader
-          eyebrow="CMS"
-          title="Vocabulary"
-          description="Create, edit, import, and AI-draft OET vocabulary terms. All mutations are audit-logged."
-          icon={BookOpen}
-          actions={
-            <div className="flex flex-wrap gap-2">
-              <Button variant="secondary" size="sm" asChild>
-<Link href="/admin/content/vocabulary/import"><Upload className="mr-1.5 h-4 w-4" />Import CSV</Link>
-</Button>
-              <Button variant="secondary" size="sm" asChild>
-<Link href="/admin/content/vocabulary/ai-draft"><Sparkles className="mr-1.5 h-4 w-4" />AI draft</Link>
-</Button>
-              <Button variant="primary" size="sm" asChild>
-<Link href="/admin/content/vocabulary/new"><Plus className="mr-1.5 h-4 w-4" />New term</Link>
-</Button>
-            </div>
-          }
-        />
-
+      <AdminCatalogLayout
+        eyebrow="CMS"
+        title="Vocabulary"
+        description="Create, edit, import, and AI-draft OET vocabulary terms. All mutations are audit-logged."
+        breadcrumbs={[
+          { label: 'Admin', href: '/admin' },
+          { label: 'Content', href: '/admin/content' },
+          { label: 'Vocabulary' },
+        ]}
+        actions={
+          <>
+            <Button variant="secondary" size="sm" asChild>
+              <Link href="/admin/content/vocabulary/import"><Upload className="mr-1.5 h-4 w-4" />Import CSV</Link>
+            </Button>
+            <Button variant="secondary" size="sm" asChild>
+              <Link href="/admin/content/vocabulary/ai-draft"><Sparkles className="mr-1.5 h-4 w-4" />AI draft</Link>
+            </Button>
+            <Button variant="primary" size="sm" asChild>
+              <Link href="/admin/content/vocabulary/new"><Plus className="mr-1.5 h-4 w-4" />New term</Link>
+            </Button>
+          </>
+        }
+        filters={filters}
+        hideViewModeToggle
+        itemsClassName="flex flex-col gap-4"
+      >
         {/* TTS Configuration Info */}
-        <div className="rounded-xl border border-border bg-surface/50 p-4 mb-1">
-          <h3 className="flex items-center gap-2 text-sm font-semibold text-navy mb-2">
-            <Volume2 className="h-4 w-4 text-primary" />
-            Vocabulary Audio (TTS Configuration)
-          </h3>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div className="flex items-start gap-3 rounded-lg border border-success/30 bg-success/5 p-3">
-              <Volume2 className="mt-0.5 h-4 w-4 shrink-0 text-success" />
-              <div>
-                <p className="text-sm font-medium text-navy">Browser TTS</p>
-                <p className="text-xs text-muted mt-0.5">Free-tier fallback via Web Speech API. Works offline, instant playback. Active for all learners by default.</p>
+        <Card>
+          <CardContent className="p-4 pt-4">
+            <h3 className="flex items-center gap-2 text-sm font-semibold text-admin-fg-strong mb-2">
+              <Volume2 className="h-4 w-4 text-[var(--admin-primary)]" />
+              Vocabulary Audio (TTS Configuration)
+            </h3>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="flex items-start gap-3 rounded-admin-lg border border-[var(--admin-success-tint-strong)] bg-[var(--admin-success-tint)] p-3">
+                <Volume2 className="mt-0.5 h-4 w-4 shrink-0 text-[var(--admin-success)]" />
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-admin-fg-strong">Browser TTS</p>
+                  <p className="text-xs text-admin-fg-muted mt-0.5">Free-tier fallback via Web Speech API. Works offline, instant playback. Active for all learners by default.</p>
+                </div>
+                <Badge variant="success" size="sm">Active</Badge>
               </div>
-              <Badge variant="success">Active</Badge>
-            </div>
-            <div className="flex items-start gap-3 rounded-lg border border-warning/30 bg-warning/5 p-3">
-              <Crown className="mt-0.5 h-4 w-4 shrink-0 text-warning" />
-              <div>
-                <p className="text-sm font-medium text-navy">Premium TTS (ElevenLabs)</p>
-                <p className="text-xs text-muted mt-0.5">British clinical pronunciation via AI. Requires active subscription. Managed in AI Providers settings.</p>
+              <div className="flex items-start gap-3 rounded-admin-lg border border-[var(--admin-warning-tint-strong)] bg-[var(--admin-warning-tint)] p-3">
+                <Crown className="mt-0.5 h-4 w-4 shrink-0 text-[var(--admin-warning)]" />
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-admin-fg-strong">Premium TTS (ElevenLabs)</p>
+                  <p className="text-xs text-admin-fg-muted mt-0.5">British clinical pronunciation via AI. Requires active subscription. Managed in AI Providers settings.</p>
+                </div>
+                <Badge variant="warning" size="sm">Premium</Badge>
               </div>
-              <Badge variant="warning">Premium</Badge>
             </div>
-          </div>
-        </div>
+          </CardContent>
+        </Card>
 
-        <AdminRoutePanel>
-          <div className="mb-4 grid gap-3 sm:grid-cols-4">
-            <Input
-              placeholder="Search term or definition…"
-              value={search}
-              onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-            />
-            <select
-              value={category}
-              onChange={(e) => { setCategory(e.target.value); setPage(1); }}
-              className="rounded-xl border border-border bg-surface px-3 py-2 text-sm"
-            >
-              <option value="">All categories ({total})</option>
-              {categories.map(c => (
-                <option key={c.category} value={c.category}>
-                  {c.category.replace(/_/g, ' ')} ({c.total})
-                </option>
-              ))}
-            </select>
-            <select
-              value={profession}
-              onChange={(e) => { setProfession(e.target.value); setPage(1); }}
-              className="rounded-xl border border-border bg-surface px-3 py-2 text-sm"
-            >
-              <option value="">All professions</option>
-              <option value="medicine">Medicine</option>
-              <option value="nursing">Nursing</option>
-              <option value="dentistry">Dentistry</option>
-              <option value="pharmacy">Pharmacy</option>
-            </select>
-            <select
-              value={status}
-              onChange={(e) => { setStatus(e.target.value); setPage(1); }}
-              className="rounded-xl border border-border bg-surface px-3 py-2 text-sm"
-            >
-              <option value="">All statuses</option>
-              <option value="active">Active</option>
-              <option value="draft">Draft</option>
-              <option value="archived">Archived</option>
-            </select>
-          </div>
-
-          {recallSets.length > 0 && (
-            <div className="mb-4 flex flex-wrap items-center gap-2">
-              <span className="text-xs font-semibold uppercase tracking-wide text-muted">Recall set:</span>
-              <button
-                type="button"
-                onClick={() => { setRecallSet(''); setPage(1); }}
-                className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
-                  recallSet === ''
-                    ? 'border-primary bg-primary/10 text-primary'
-                    : 'border-border bg-surface text-muted hover:border-border-hover hover:text-navy'
-                }`}
-              >
-                All
-              </button>
-              {recallSets.map((s) => (
+        {recallSets.length > 0 && (
+          <Card>
+            <CardContent className="p-4 pt-4">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-xs font-semibold uppercase tracking-wide text-admin-fg-muted">Recall set:</span>
                 <button
-                  key={s.code}
                   type="button"
-                  onClick={() => { setRecallSet(s.code); setPage(1); }}
-                  title={`${s.description} — active ${s.active}, draft ${s.draft}, archived ${s.archived}`}
+                  onClick={() => { setRecallSet(''); setPage(1); }}
                   className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
-                    recallSet === s.code
-                      ? 'border-primary bg-primary/10 text-primary'
-                      : 'border-border bg-surface text-muted hover:border-border-hover hover:text-navy'
+                    recallSet === ''
+                      ? 'border-[var(--admin-primary)] bg-[var(--admin-primary-tint)] text-[var(--admin-primary)]'
+                      : 'border-admin-border bg-admin-bg-surface text-admin-fg-muted hover:border-admin-border-strong hover:text-admin-fg-strong'
                   }`}
                 >
-                  {s.shortLabel} ({s.total})
+                  All
                 </button>
-              ))}
-            </div>
-          )}
+                {recallSets.map((s) => (
+                  <button
+                    key={s.code}
+                    type="button"
+                    onClick={() => { setRecallSet(s.code); setPage(1); }}
+                    title={`${s.description} — active ${s.active}, draft ${s.draft}, archived ${s.archived}`}
+                    className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
+                      recallSet === s.code
+                        ? 'border-[var(--admin-primary)] bg-[var(--admin-primary-tint)] text-[var(--admin-primary)]'
+                        : 'border-admin-border bg-admin-bg-surface text-admin-fg-muted hover:border-admin-border-strong hover:text-admin-fg-strong'
+                    }`}
+                  >
+                    {s.shortLabel} ({s.total})
+                  </button>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
-          <AsyncStateWrapper status={pageStatus}>
-            <DataTable
-              columns={columns}
-              data={rows}
-              keyExtractor={(r) => r.id}
-              selectable
-              selectedKeys={selectedKeys}
-              onSelectionChange={setSelectedKeys}
-            />
-            <BulkActionBar
-              selectedCount={selectedKeys.size}
-              totalCount={rows.length}
-              onClearSelection={() => setSelectedKeys(new Set())}
-              actions={[
-                {
-                  key: 'delete',
-                  label: 'Delete selected',
-                  icon: <Trash2 className="h-4 w-4" aria-hidden="true" />,
-                  variant: 'danger',
-                  disabled: selectedRows.length === 0,
-                  loading: bulkDeleting,
-                  onClick: () => setConfirmBulkDelete(true),
-                },
-              ]}
-            />
-            <Pagination
-              page={page}
-              pageSize={pageSize}
-              total={total}
-              onPageChange={setPage}
-              onPageSizeChange={setPageSize}
-              pageSizeOptions={[10, 25, 50, 100, 500]}
-              itemLabel="term"
-              itemLabelPlural="terms"
-            />
-          </AsyncStateWrapper>
+        <Card>
+          <CardContent className="p-0 pt-0">
+            <AsyncStateWrapper status={pageStatus}>
+              <DataTable
+                columns={columns}
+                data={rows}
+                keyExtractor={(r) => r.id}
+                selectable
+                selectedKeys={selectedKeys}
+                onSelectionChange={setSelectedKeys}
+              />
+              <BulkActionBar
+                selectedCount={selectedKeys.size}
+                totalCount={rows.length}
+                onClearSelection={() => setSelectedKeys(new Set())}
+                actions={[
+                  {
+                    key: 'delete',
+                    label: 'Delete selected',
+                    icon: <Trash2 className="h-4 w-4" aria-hidden="true" />,
+                    variant: 'danger',
+                    disabled: selectedRows.length === 0,
+                    loading: bulkDeleting,
+                    onClick: () => setConfirmBulkDelete(true),
+                  },
+                ]}
+              />
+              <div className="p-4">
+                <Pagination
+                  page={page}
+                  pageSize={pageSize}
+                  total={total}
+                  onPageChange={setPage}
+                  onPageSizeChange={setPageSize}
+                  pageSizeOptions={[10, 25, 50, 100, 500]}
+                  itemLabel="term"
+                  itemLabelPlural="terms"
+                />
+              </div>
+            </AsyncStateWrapper>
 
-          {pageStatus === 'empty' && (
-            <EmptyState
-              icon={<BookOpen className="h-6 w-6" />}
-              title="No vocabulary terms yet"
-              description="Start by adding a term, importing a CSV, or generating AI drafts for admin review."
-              action={{ label: 'New term', onClick: () => router.push('/admin/content/vocabulary/new') }}
-            />
-          )}
-        </AdminRoutePanel>
-      </AdminRouteWorkspace>
+            {pageStatus === 'empty' && (
+              <EmptyState
+                illustration={<BookOpen />}
+                title="No vocabulary terms yet"
+                description="Start by adding a term, importing a CSV, or generating AI drafts for admin review."
+                primaryAction={{ label: 'New term', onClick: () => router.push('/admin/content/vocabulary/new') }}
+              />
+            )}
+            {pageStatus === 'loading' && (
+              <div className="space-y-3 p-4">
+                {Array.from({ length: 5 }).map((_, i) => (<Skeleton key={i} className="h-12 rounded-admin-lg" />))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </AdminCatalogLayout>
     </>
   );
 }

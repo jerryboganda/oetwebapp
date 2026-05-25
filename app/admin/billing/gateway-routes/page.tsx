@@ -1,12 +1,25 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { Trash2, Plus } from 'lucide-react';
-import { AdminRouteWorkspace, AdminRoutePanel, AdminRouteSectionHeader } from '@/components/domain/admin-route-surface';
-import { DataTable, type Column } from '@/components/ui/data-table';
-import { Button } from '@/components/ui/button';
-import { Input, Select, Checkbox } from '@/components/ui/form-controls';
-import { InlineAlert, Toast } from '@/components/ui/alert';
+import type { ColumnDef } from '@tanstack/react-table';
+import { Plus, Trash2 } from 'lucide-react';
+
+import { AdminTableLayout } from '@/components/admin/layout/admin-table-layout';
+import { Button } from '@/components/admin/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/admin/ui/card';
+import { DataTable } from '@/components/admin/ui/data-table';
+import { Input } from '@/components/admin/ui/input';
+import { Label } from '@/components/admin/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/admin/ui/select';
+import { Switch } from '@/components/admin/ui/switch';
+import { toast } from '@/components/admin/ui/toaster';
+import { InlineAlert } from '@/components/ui/alert';
 import {
   listGatewayRoutes,
   upsertGatewayRoute,
@@ -14,9 +27,9 @@ import {
   type GatewayRouteDto,
 } from '@/lib/api';
 
-const REGIONS = ['UK', 'GULF', 'EGYPT', 'PK', 'ROW'].map((r) => ({ value: r, label: r }));
-const PRODUCT_TYPES = ['*', 'subscription', 'addon', 'wallet_topup', 'manual'].map((p) => ({ value: p, label: p }));
-const GATEWAYS = ['stripe', 'paypal', 'paytabs', 'paymob', 'checkoutcom'].map((g) => ({ value: g, label: g }));
+const REGIONS = ['UK', 'GULF', 'EGYPT', 'PK', 'ROW'];
+const PRODUCT_TYPES = ['*', 'subscription', 'addon', 'wallet_topup', 'manual'];
+const GATEWAYS = ['stripe', 'paypal', 'paytabs', 'paymob', 'checkoutcom'];
 
 interface FormState {
   region: string;
@@ -42,12 +55,12 @@ export default function AdminGatewayRoutesPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [toast, setToast] = useState<{ variant: 'success' | 'error'; message: string } | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
       setRows(await listGatewayRoutes());
+      setError(null);
     } catch (err: any) {
       setError(err?.userMessage ?? err?.message ?? 'Failed to load gateway routes.');
     } finally {
@@ -67,7 +80,7 @@ export default function AdminGatewayRoutesPage() {
     setError(null);
     try {
       await upsertGatewayRoute({ ...form, priority });
-      setToast({ variant: 'success', message: 'Route saved.' });
+      toast.success('Route saved.');
       setForm(EMPTY);
       await load();
     } catch (err: any) {
@@ -81,25 +94,35 @@ export default function AdminGatewayRoutesPage() {
     if (!confirm('Delete this gateway route?')) return;
     try {
       await deleteGatewayRoute(id);
-      setToast({ variant: 'success', message: 'Route deleted.' });
+      toast.success('Route deleted.');
       await load();
     } catch (err: any) {
-      setToast({ variant: 'error', message: err?.userMessage ?? err?.message ?? 'Delete failed.' });
+      toast.error(err?.userMessage ?? err?.message ?? 'Delete failed.');
     }
   }
 
-  const columns: Column<GatewayRouteDto>[] = [
-    { key: 'region', header: 'Region', render: (r) => r.region },
-    { key: 'currency', header: 'Currency', render: (r) => r.currency },
-    { key: 'productType', header: 'Product', render: (r) => r.productType },
-    { key: 'gateway', header: 'Gateway', render: (r) => r.gatewayName },
-    { key: 'priority', header: 'Priority', render: (r) => r.priority.toString() },
-    { key: 'enabled', header: 'Enabled', render: (r) => (r.isEnabled ? 'Yes' : 'No') },
+  const columns: ColumnDef<GatewayRouteDto>[] = [
+    { id: 'region', accessorKey: 'region', header: 'Region' },
+    { id: 'currency', accessorKey: 'currency', header: 'Currency' },
+    { id: 'productType', accessorKey: 'productType', header: 'Product' },
+    { id: 'gateway', accessorKey: 'gatewayName', header: 'Gateway' },
     {
-      key: 'actions',
+      id: 'priority',
+      header: 'Priority',
+      cell: ({ row }) => row.original.priority.toString(),
+    },
+    {
+      id: 'enabled',
+      header: 'Enabled',
+      cell: ({ row }) => (row.original.isEnabled ? 'Yes' : 'No'),
+    },
+    {
+      id: 'actions',
       header: '',
-      render: (r) => (
-        <Button variant="ghost" onClick={() => handleDelete(r.id)} aria-label="Delete">
+      enableSorting: false,
+      enableHiding: false,
+      cell: ({ row }) => (
+        <Button variant="ghost" size="sm" onClick={() => handleDelete(row.original.id)} aria-label="Delete">
           <Trash2 className="h-4 w-4" />
         </Button>
       ),
@@ -107,41 +130,109 @@ export default function AdminGatewayRoutesPage() {
   ];
 
   return (
-    <AdminRouteWorkspace>
-      <AdminRouteSectionHeader title="Gateway routes" description="(region, currency, productType) → payment gateway routing with priority." />
-
-      {toast && <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} />}
-
-      <AdminRoutePanel>
-        {error && <InlineAlert variant="error">{error}</InlineAlert>}
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-6">
-          <Select label="Region" value={form.region} options={REGIONS} onChange={(e) => setForm({ ...form, region: e.target.value })} />
-          <Input label="Currency or *" value={form.currency} onChange={(e) => setForm({ ...form, currency: e.target.value.toUpperCase() })} />
-          <Select label="Product" value={form.productType} options={PRODUCT_TYPES} onChange={(e) => setForm({ ...form, productType: e.target.value })} />
-          <Select label="Gateway" value={form.gatewayName} options={GATEWAYS} onChange={(e) => setForm({ ...form, gatewayName: e.target.value })} />
-          <Input label="Priority" type="number" value={form.priority} onChange={(e) => setForm({ ...form, priority: e.target.value })} />
-          <Checkbox label="Enabled" checked={form.isEnabled} onChange={(e) => setForm({ ...form, isEnabled: e.target.checked })} />
-        </div>
-        <div className="mt-3 flex justify-end">
-          <Button onClick={handleAdd} disabled={saving}>
-            <Plus className="mr-2 h-4 w-4" />
-            {saving ? 'Saving…' : 'Add / update route'}
-          </Button>
-        </div>
-      </AdminRoutePanel>
-
-      <AdminRoutePanel>
-        {loading ? (
-          <p className="text-sm text-muted-foreground">Loading…</p>
-        ) : (
-          <DataTable
-            data={rows}
-            columns={columns}
-            keyExtractor={(r) => r.id}
-            emptyMessage="No gateway routes configured."
-          />
-        )}
-      </AdminRoutePanel>
-    </AdminRouteWorkspace>
+    <AdminTableLayout
+      title="Gateway routes"
+      description="(region, currency, productType) → payment gateway routing with priority."
+      breadcrumbs={[
+        { label: 'Admin', href: '/admin' },
+        { label: 'Billing', href: '/admin/billing' },
+        { label: 'Gateway routes' },
+      ]}
+      banner={
+        <Card>
+          <CardHeader>
+            <CardTitle>Add or update route</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4 pt-0">
+            {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="route-region">Region</Label>
+                <Select value={form.region} onValueChange={(v) => setForm({ ...form, region: v })}>
+                  <SelectTrigger id="route-region">
+                    <SelectValue placeholder="Region" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {REGIONS.map((r) => (
+                      <SelectItem key={r} value={r}>
+                        {r}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <Input
+                label="Currency or *"
+                value={form.currency}
+                onChange={(e) => setForm({ ...form, currency: e.target.value.toUpperCase() })}
+              />
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="route-product">Product</Label>
+                <Select
+                  value={form.productType}
+                  onValueChange={(v) => setForm({ ...form, productType: v })}
+                >
+                  <SelectTrigger id="route-product">
+                    <SelectValue placeholder="Product" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {PRODUCT_TYPES.map((p) => (
+                      <SelectItem key={p} value={p}>
+                        {p}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="route-gateway">Gateway</Label>
+                <Select
+                  value={form.gatewayName}
+                  onValueChange={(v) => setForm({ ...form, gatewayName: v })}
+                >
+                  <SelectTrigger id="route-gateway">
+                    <SelectValue placeholder="Gateway" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {GATEWAYS.map((g) => (
+                      <SelectItem key={g} value={g}>
+                        {g}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <Input
+                label="Priority"
+                type="number"
+                value={form.priority}
+                onChange={(e) => setForm({ ...form, priority: e.target.value })}
+              />
+              <div className="flex items-end gap-2">
+                <Switch
+                  id="route-enabled"
+                  checked={form.isEnabled}
+                  onCheckedChange={(c) => setForm({ ...form, isEnabled: c })}
+                />
+                <Label htmlFor="route-enabled">Enabled</Label>
+              </div>
+            </div>
+            <div className="flex justify-end">
+              <Button onClick={handleAdd} disabled={saving} loading={saving} startIcon={<Plus className="h-4 w-4" />}>
+                Add / update route
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      }
+    >
+      <DataTable
+        columns={columns}
+        data={rows}
+        loading={loading}
+        emptyMessage="No gateway routes configured."
+        searchPlaceholder="Search routes…"
+      />
+    </AdminTableLayout>
   );
 }

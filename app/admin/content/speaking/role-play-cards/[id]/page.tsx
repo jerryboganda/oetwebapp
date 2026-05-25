@@ -12,17 +12,15 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, ClipboardList, Copy, Eye, ShieldAlert } from 'lucide-react';
-import {
-  AdminRouteHero,
-  AdminRoutePanel,
-  AdminRouteWorkspace,
-} from '@/components/domain/admin-route-surface';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
+import { ArrowLeft, Copy, Eye, ShieldAlert } from 'lucide-react';
+
+import { AdminCatalogLayout } from '@/components/admin/layout/admin-catalog-layout';
+import { Badge } from '@/components/admin/ui/badge';
+import { Button } from '@/components/admin/ui/button';
+import { Card, CardContent } from '@/components/admin/ui/card';
+import { Skeleton } from '@/components/admin/ui/skeleton';
+
 import { Toast } from '@/components/ui/alert';
-import { Skeleton } from '@/components/ui/skeleton';
 import { RolePlayCardEditor, type RolePlayCardEditorValue } from '@/components/domain/speaking/RolePlayCardEditor';
 import {
   adminArchiveRolePlayCard,
@@ -34,6 +32,13 @@ import {
 } from '@/lib/api/speaking-role-play-cards';
 
 type ToastState = { variant: 'success' | 'error'; message: string } | null;
+
+const BREADCRUMBS_BASE = [
+  { label: 'Admin', href: '/admin' },
+  { label: 'Content', href: '/admin/content' },
+  { label: 'Speaking', href: '/admin/content/speaking' },
+  { label: 'Role-play cards', href: '/admin/content/speaking/role-play-cards' },
+];
 
 export default function EditSpeakingRolePlayCardPage() {
   const params = useParams<{ id: string }>();
@@ -122,112 +127,122 @@ export default function EditSpeakingRolePlayCardPage() {
   const isArchived = card?.status?.toLowerCase() === 'archived';
   const isPublished = card?.status?.toLowerCase() === 'published';
 
-  return (
-    <AdminRouteWorkspace role="main" aria-label="Edit speaking role-play card">
-      <AdminRouteHero
-        eyebrow="CMS"
-        icon={ClipboardList}
-        accent="navy"
-        title={card?.scenarioTitle ?? 'Edit role-play card'}
-        description="Edit the candidate-facing card. The hidden interlocutor script lives on its own side page."
-        aside={
-          <div className="flex flex-col gap-2 rounded-2xl border border-border bg-background-light p-4 shadow-sm">
-            <Button
-              variant="outline"
-              onClick={() => router.push('/admin/content/speaking/role-play-cards')}
-            >
-              <ArrowLeft className="mr-1 h-4 w-4" /> Back to list
-            </Button>
-            {card ? (
-              <>
-                <Link
-                  href={`/admin/content/speaking/role-play-cards/${encodeURIComponent(card.cardId)}/interlocutor`}
-                  className="inline-flex items-center justify-center rounded-2xl border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-bold uppercase tracking-wider text-amber-800 hover:bg-amber-100 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-100"
-                >
-                  <ShieldAlert className="mr-1 h-3.5 w-3.5" />
-                  {card.hasInterlocutorScript
-                    ? 'Edit interlocutor script'
-                    : 'Add interlocutor script'}
-                </Link>
-                <Link
-                  href={`/admin/content/speaking/role-play-cards/${encodeURIComponent(card.cardId)}/preview`}
-                  className="inline-flex items-center justify-center rounded-2xl border border-border bg-surface px-3 py-2 text-xs font-bold uppercase tracking-wider hover:border-primary"
-                >
-                  <Eye className="mr-1 h-3.5 w-3.5" /> Preview
-                </Link>
-              </>
-            ) : null}
-          </div>
-        }
-      />
+  const breadcrumbs = [
+    ...BREADCRUMBS_BASE,
+    { label: card?.scenarioTitle ?? 'Edit role-play card' },
+  ];
 
+  return (
+    <AdminCatalogLayout
+      title={card?.scenarioTitle ?? 'Edit role-play card'}
+      description="Edit the candidate-facing card. The hidden interlocutor script lives on its own side page."
+      breadcrumbs={breadcrumbs}
+      eyebrow="CMS"
+      backHref="/admin/content/speaking/role-play-cards"
+      hideViewModeToggle
+      actions={
+        <div className="flex flex-wrap gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => router.push('/admin/content/speaking/role-play-cards')}
+          >
+            <ArrowLeft className="mr-1 h-4 w-4" /> Back to list
+          </Button>
+          {card ? (
+            <>
+              <Link
+                href={`/admin/content/speaking/role-play-cards/${encodeURIComponent(card.cardId)}/interlocutor`}
+                className="inline-flex h-8 items-center justify-center rounded-admin border border-admin-warning bg-admin-bg-surface px-3 text-xs font-semibold text-admin-warning hover:bg-admin-state-hover"
+              >
+                <ShieldAlert className="mr-1 h-3.5 w-3.5" />
+                {card.hasInterlocutorScript
+                  ? 'Edit interlocutor script'
+                  : 'Add interlocutor script'}
+              </Link>
+              <Link
+                href={`/admin/content/speaking/role-play-cards/${encodeURIComponent(card.cardId)}/preview`}
+                className="inline-flex h-8 items-center justify-center rounded-admin border border-admin-border bg-admin-bg-surface px-3 text-xs font-semibold text-admin-fg-default hover:border-admin-primary"
+              >
+                <Eye className="mr-1 h-3.5 w-3.5" /> Preview
+              </Link>
+            </>
+          ) : null}
+        </div>
+      }
+    >
       {loading ? (
-        <div className="space-y-3">
+        <div className="col-span-full space-y-3">
           <Skeleton className="h-12" />
           <Skeleton className="h-64" />
         </div>
       ) : card ? (
         <>
-          <AdminRoutePanel>
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="flex flex-wrap items-center gap-2 text-sm">
-                <Badge
-                  variant={
-                    isPublished ? 'success' : isArchived ? 'outline' : 'muted'
-                  }
-                >
-                  {card.status}
-                </Badge>
-                <span className="text-admin-text-muted">
-                  Created {new Date(card.createdAt).toLocaleDateString()} - Updated{' '}
-                  {new Date(card.updatedAt).toLocaleDateString()}
-                  {card.publishedAt
-                    ? ` - Published ${new Date(card.publishedAt).toLocaleDateString()}`
-                    : ''}
-                </span>
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
-                {!isPublished && !isArchived ? (
-                  <Button
-                    onClick={() => void handlePublish()}
-                    disabled={busy || !card.hasInterlocutorScript}
-                    title={
-                      card.hasInterlocutorScript
-                        ? 'Publish card'
-                        : 'Add an interlocutor script before publishing'
-                    }
+          <Card className="col-span-full">
+            <CardContent className="p-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex flex-wrap items-center gap-2 text-sm">
+                  <Badge
+                    variant={isPublished ? 'success' : isArchived ? 'warning' : 'default'}
+                    intensity="tinted"
                   >
-                    Publish
+                    {card.status}
+                  </Badge>
+                  <span className="text-admin-fg-muted">
+                    Created {new Date(card.createdAt).toLocaleDateString()} - Updated{' '}
+                    {new Date(card.updatedAt).toLocaleDateString()}
+                    {card.publishedAt
+                      ? ` - Published ${new Date(card.publishedAt).toLocaleDateString()}`
+                      : ''}
+                  </span>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  {!isPublished && !isArchived ? (
+                    <Button
+                      onClick={() => void handlePublish()}
+                      disabled={busy || !card.hasInterlocutorScript}
+                      title={
+                        card.hasInterlocutorScript
+                          ? 'Publish card'
+                          : 'Add an interlocutor script before publishing'
+                      }
+                    >
+                      Publish
+                    </Button>
+                  ) : null}
+                  {isPublished ? (
+                    <Button variant="outline" onClick={() => void handleArchive()} disabled={busy}>
+                      Archive
+                    </Button>
+                  ) : null}
+                  <Button variant="ghost" onClick={() => void handleDuplicate()} disabled={busy}>
+                    <Copy className="mr-1 h-4 w-4" /> Duplicate
                   </Button>
-                ) : null}
-                {isPublished ? (
-                  <Button variant="outline" onClick={() => void handleArchive()} disabled={busy}>
-                    Archive
-                  </Button>
-                ) : null}
-                <Button variant="ghost" onClick={() => void handleDuplicate()} disabled={busy}>
-                  <Copy className="mr-1 h-4 w-4" /> Duplicate
-                </Button>
+                </div>
               </div>
-            </div>
-          </AdminRoutePanel>
+            </CardContent>
+          </Card>
 
-          <Card className="p-6">
-            <RolePlayCardEditor
-              mode="edit"
-              initial={card}
-              submitting={busy}
-              onSubmit={handleSubmit}
-            />
+          <Card className="col-span-full">
+            <CardContent className="p-6">
+              <RolePlayCardEditor
+                mode="edit"
+                initial={card}
+                submitting={busy}
+                onSubmit={handleSubmit}
+              />
+            </CardContent>
           </Card>
         </>
       ) : (
-        <Card className="p-8 text-center text-muted">Card not found.</Card>
+        <Card className="col-span-full">
+          <CardContent className="p-8 text-center text-admin-fg-muted">Card not found.</CardContent>
+        </Card>
       )}
 
       {toast ? (
         <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} />
       ) : null}
-    </AdminRouteWorkspace>
+    </AdminCatalogLayout>
   );
 }

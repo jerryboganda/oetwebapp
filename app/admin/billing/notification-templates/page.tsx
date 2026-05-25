@@ -1,14 +1,33 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import type { ColumnDef } from '@tanstack/react-table';
 import { Plus, Save, Trash2 } from 'lucide-react';
-import { AdminRouteWorkspace, AdminRoutePanel, AdminRouteSectionHeader } from '@/components/domain/admin-route-surface';
-import { DataTable, type Column } from '@/components/ui/data-table';
-import { Button } from '@/components/ui/button';
-import { Input, Select, Checkbox, Textarea } from '@/components/ui/form-controls';
-import { Badge } from '@/components/ui/badge';
-import { InlineAlert, Toast } from '@/components/ui/alert';
-import { Modal } from '@/components/ui/modal';
+
+import { AdminTableLayout } from '@/components/admin/layout/admin-table-layout';
+import { Badge } from '@/components/admin/ui/badge';
+import { Button } from '@/components/admin/ui/button';
+import { DataTable } from '@/components/admin/ui/data-table';
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/admin/ui/dialog';
+import { Input } from '@/components/admin/ui/input';
+import { Label } from '@/components/admin/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/admin/ui/select';
+import { Switch } from '@/components/admin/ui/switch';
+import { Textarea } from '@/components/admin/ui/textarea';
+import { toast } from '@/components/admin/ui/toaster';
+import { InlineAlert } from '@/components/ui/alert';
 import { apiClient } from '@/lib/api';
 
 interface BillingNotificationTemplateDto {
@@ -25,7 +44,7 @@ interface BillingNotificationTemplateDto {
   updatedAt: string;
 }
 
-const CHANNELS = ['email', 'sms', 'whatsapp', 'inapp'].map((c) => ({ value: c, label: c }));
+const CHANNELS = ['email', 'sms', 'whatsapp', 'inapp'];
 
 const EMPTY = {
   code: '',
@@ -41,13 +60,13 @@ export default function AdminNotificationTemplatesPage() {
   const [rows, setRows] = useState<BillingNotificationTemplateDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [toast, setToast] = useState<{ variant: 'success' | 'error'; message: string } | null>(null);
   const [editing, setEditing] = useState<typeof EMPTY | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
       setRows(await apiClient.get<BillingNotificationTemplateDto[]>('/v1/admin/billing/notification-templates'));
+      setError(null);
     } catch (err: any) {
       setError(err?.userMessage ?? err?.message ?? 'Failed to load.');
     } finally {
@@ -65,7 +84,7 @@ export default function AdminNotificationTemplatesPage() {
     }
     try {
       await apiClient.post('/v1/admin/billing/notification-templates', editing);
-      setToast({ variant: 'success', message: 'Template saved.' });
+      toast.success('Template saved.');
       setEditing(null);
       await load();
     } catch (err: any) {
@@ -77,10 +96,10 @@ export default function AdminNotificationTemplatesPage() {
     if (!confirm('Delete this template?')) return;
     try {
       await apiClient.delete(`/v1/admin/billing/notification-templates/${id}`);
-      setToast({ variant: 'success', message: 'Deleted.' });
+      toast.success('Deleted.');
       await load();
     } catch (err: any) {
-      setToast({ variant: 'error', message: err?.userMessage ?? err?.message ?? 'Delete failed.' });
+      toast.error(err?.userMessage ?? err?.message ?? 'Delete failed.');
     }
   }
 
@@ -89,81 +108,157 @@ export default function AdminNotificationTemplatesPage() {
     setEditing({ ...editing, [key]: value });
   }
 
-  const columns: Column<BillingNotificationTemplateDto>[] = [
-    { key: 'code', header: 'Event code', render: (t) => t.code },
-    { key: 'channel', header: 'Channel', render: (t) => t.channel },
-    { key: 'locale', header: 'Locale', render: (t) => t.localeTag },
-    { key: 'version', header: 'v', render: (t) => `v${t.version}` },
-    { key: 'active', header: 'Active', render: (t) => <Badge variant={t.isActive ? 'success' : 'muted'}>{t.isActive ? 'on' : 'off'}</Badge> },
+  const columns: ColumnDef<BillingNotificationTemplateDto>[] = [
+    { id: 'code', accessorKey: 'code', header: 'Event code' },
+    { id: 'channel', accessorKey: 'channel', header: 'Channel' },
+    { id: 'locale', accessorKey: 'localeTag', header: 'Locale' },
     {
-      key: 'actions',
-      header: '',
-      render: (t) => (
-        <div className="flex gap-1">
-          <Button variant="ghost" size="sm" onClick={() => setEditing({
-            code: t.code,
-            channel: t.channel,
-            localeTag: t.localeTag,
-            subject: t.subject ?? '',
-            bodyTemplate: t.bodyTemplate,
-            variablesJson: t.variablesJson,
-            isActive: t.isActive,
-          })}>Edit</Button>
-          <Button variant="ghost" size="sm" onClick={() => handleDelete(t.id)}>
-            <Trash2 className="h-4 w-4" />
-          </Button>
-        </div>
+      id: 'version',
+      header: 'v',
+      cell: ({ row }) => `v${row.original.version}`,
+    },
+    {
+      id: 'active',
+      header: 'Active',
+      cell: ({ row }) => (
+        <Badge variant={row.original.isActive ? 'success' : 'default'}>
+          {row.original.isActive ? 'on' : 'off'}
+        </Badge>
       ),
+    },
+    {
+      id: 'actions',
+      header: '',
+      enableSorting: false,
+      enableHiding: false,
+      cell: ({ row }) => {
+        const t = row.original;
+        return (
+          <div className="flex gap-1">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() =>
+                setEditing({
+                  code: t.code,
+                  channel: t.channel,
+                  localeTag: t.localeTag,
+                  subject: t.subject ?? '',
+                  bodyTemplate: t.bodyTemplate,
+                  variablesJson: t.variablesJson,
+                  isActive: t.isActive,
+                })
+              }
+            >
+              Edit
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => handleDelete(t.id)} aria-label="Delete">
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          </div>
+        );
+      },
     },
   ];
 
   return (
-    <AdminRouteWorkspace>
-      <AdminRouteSectionHeader title="Notification templates" description="Email / SMS / WhatsApp templates rendered for billing-domain events." />
+    <AdminTableLayout
+      title="Notification templates"
+      description="Email / SMS / WhatsApp templates rendered for billing-domain events."
+      breadcrumbs={[
+        { label: 'Admin', href: '/admin' },
+        { label: 'Billing', href: '/admin/billing' },
+        { label: 'Notification templates' },
+      ]}
+      actions={
+        <Button onClick={() => setEditing({ ...EMPTY })} startIcon={<Plus className="h-4 w-4" />}>
+          New template
+        </Button>
+      }
+      banner={error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
+    >
+      <DataTable
+        columns={columns}
+        data={rows}
+        loading={loading}
+        emptyMessage="No templates yet."
+        searchPlaceholder="Search templates…"
+      />
 
-      {toast && <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} />}
-
-      <AdminRoutePanel>
-        {error && <InlineAlert variant="error">{error}</InlineAlert>}
-        <div className="mb-4 flex justify-end">
-          <Button onClick={() => setEditing({ ...EMPTY })}>
-            <Plus className="mr-2 h-4 w-4" />
-            New template
-          </Button>
-        </div>
-        {loading ? (
-          <p className="text-sm text-muted-foreground">Loading…</p>
-        ) : (
-          <DataTable data={rows} columns={columns} keyExtractor={(r) => r.id} emptyMessage="No templates yet." />
-        )}
-      </AdminRoutePanel>
-
-      {editing && (
-        <Modal open onClose={() => setEditing(null)} title="Edit notification template" size="lg">
-          <div className="space-y-3 p-4">
-            <div className="grid grid-cols-3 gap-3">
-              <Input label="Event code" value={editing.code} onChange={(e) => update('code', e.target.value)} placeholder="payment_failed" />
-              <Select label="Channel" value={editing.channel} options={CHANNELS} onChange={(e) => update('channel', e.target.value)} />
-              <Input label="Locale" value={editing.localeTag} onChange={(e) => update('localeTag', e.target.value)} maxLength={5} />
+      <Dialog open={editing !== null} onOpenChange={(open) => !open && setEditing(null)}>
+        <DialogContent size="lg">
+          <DialogHeader>
+            <DialogTitle>Edit notification template</DialogTitle>
+          </DialogHeader>
+          {editing && (
+            <div className="space-y-3">
+              <div className="grid grid-cols-3 gap-3">
+                <Input
+                  label="Event code"
+                  value={editing.code}
+                  onChange={(e) => update('code', e.target.value)}
+                  placeholder="payment_failed"
+                />
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="tmpl-channel">Channel</Label>
+                  <Select value={editing.channel} onValueChange={(v) => update('channel', v)}>
+                    <SelectTrigger id="tmpl-channel">
+                      <SelectValue placeholder="Channel" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {CHANNELS.map((c) => (
+                        <SelectItem key={c} value={c}>
+                          {c}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <Input
+                  label="Locale"
+                  value={editing.localeTag}
+                  onChange={(e) => update('localeTag', e.target.value)}
+                  maxLength={5}
+                />
+              </div>
+              <Input
+                label="Subject"
+                value={editing.subject}
+                onChange={(e) => update('subject', e.target.value)}
+              />
+              <Textarea
+                label="Body template"
+                value={editing.bodyTemplate}
+                onChange={(e) => update('bodyTemplate', e.target.value)}
+                placeholder="Body — use {{variableName}} for substitutions"
+                rows={6}
+              />
+              <Input
+                label="Variables JSON"
+                value={editing.variablesJson}
+                onChange={(e) => update('variablesJson', e.target.value)}
+                placeholder='["amount","currency"]'
+              />
+              <div className="flex items-center gap-2">
+                <Switch
+                  id="tmpl-active"
+                  checked={editing.isActive}
+                  onCheckedChange={(c) => update('isActive', c)}
+                />
+                <Label htmlFor="tmpl-active">Active</Label>
+              </div>
             </div>
-            <Input label="Subject" value={editing.subject} onChange={(e) => update('subject', e.target.value)} />
-            <Textarea
-              value={editing.bodyTemplate}
-              onChange={(e) => update('bodyTemplate', e.target.value)}
-              placeholder="Body — use {{variableName}} for substitutions"
-            />
-            <Input label="Variables JSON" value={editing.variablesJson} onChange={(e) => update('variablesJson', e.target.value)} placeholder='["amount","currency"]' />
-            <Checkbox label="Active" checked={editing.isActive} onChange={(e) => update('isActive', e.target.checked)} />
-            <div className="flex justify-end gap-2">
-              <Button variant="ghost" onClick={() => setEditing(null)}>Cancel</Button>
-              <Button onClick={handleSave}>
-                <Save className="mr-2 h-4 w-4" />
-                Save
-              </Button>
-            </div>
-          </div>
-        </Modal>
-      )}
-    </AdminRouteWorkspace>
+          )}
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setEditing(null)}>
+              Cancel
+            </Button>
+            <Button onClick={handleSave} startIcon={<Save className="h-4 w-4" />}>
+              Save
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </AdminTableLayout>
   );
 }

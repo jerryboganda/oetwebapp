@@ -4,15 +4,12 @@ import { useCallback, useEffect, useMemo, useState, type KeyboardEvent } from 'r
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { ArrowLeft, Plus, Save, Trash2, X } from 'lucide-react';
-import {
-  AdminRoutePanel,
-  AdminRouteSectionHeader,
-  AdminRouteWorkspace,
-} from '@/components/domain/admin-route-surface';
+import { AdminSettingsLayout } from '@/components/admin/layout/admin-settings-layout';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/admin/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
+import { Button } from '@/components/admin/ui/button';
 import { Input, Select, Textarea } from '@/components/ui/form-controls';
-import { Skeleton } from '@/components/ui/skeleton';
+import { Skeleton } from '@/components/admin/ui/skeleton';
 import { InlineAlert, Toast } from '@/components/ui/alert';
 import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
 import {
@@ -262,31 +259,40 @@ export default function AdminListeningQuestionEditorPage() {
     }
   }, [addVariant]);
 
+  const breadcrumbs = [
+    { label: 'Admin', href: '/admin' },
+    { label: 'Content', href: '/admin/content' },
+    { label: 'Listening', href: '/admin/content/listening' },
+    { label: 'Question editor' },
+  ];
+
   if (!isAuthenticated || role !== 'admin') {
     return (
-      <AdminRouteWorkspace>
-        <p className="text-sm text-muted">Admin access required.</p>
-      </AdminRouteWorkspace>
+      <AdminSettingsLayout title="Listening — question editor" breadcrumbs={breadcrumbs}>
+        <Card><CardContent className="p-6"><p className="text-sm text-admin-fg-muted">Admin access required.</p></CardContent></Card>
+      </AdminSettingsLayout>
     );
   }
 
   return (
-    <AdminRouteWorkspace role="main" aria-label="Listening question editor">
-      <AdminRouteSectionHeader
-        icon={<Save className="w-6 h-6" />}
-        title="Listening — question editor"
-        description={target
-          ? `Paper ${paperId}. Editing Q${target.number} (${target.partCode}).`
-          : 'Loading question…'}
-      />
-
-      <div className="flex flex-wrap items-center gap-3">
-        <Button variant="ghost" asChild>
-          <Link href={`/admin/content/listening/${paperId}/structure`} className="gap-2">
-            <ArrowLeft className="h-4 w-4" />
+    <AdminSettingsLayout
+      eyebrow="Authoring"
+      icon={<Save className="w-5 h-5" />}
+      title="Listening — question editor"
+      description={target
+        ? `Paper ${paperId}. Editing Q${target.number} (${target.partCode}).`
+        : 'Loading question…'}
+      breadcrumbs={breadcrumbs}
+      actions={
+        <Button variant="ghost" size="sm" asChild>
+          <Link href={`/admin/content/listening/${paperId}/structure`}>
+            <ArrowLeft className="h-4 w-4 mr-1.5" />
             Back to structure
           </Link>
         </Button>
+      }
+    >
+      <div className="flex flex-wrap items-center gap-3">
         {target && (
           <>
             <Badge variant="info">Q{target.number}</Badge>
@@ -296,7 +302,7 @@ export default function AdminListeningQuestionEditorPage() {
         )}
       </div>
 
-      {load === 'loading' && <Skeleton className="h-96 rounded-2xl" />}
+      {load === 'loading' && <Skeleton className="h-96 rounded-admin" />}
       {load === 'error' && error && <InlineAlert variant="error">{error}</InlineAlert>}
       {load === 'ready' && !target && (
         <InlineAlert variant="error">
@@ -305,8 +311,10 @@ export default function AdminListeningQuestionEditorPage() {
       )}
 
       {load === 'ready' && target && form && (
-        <>
-          <AdminRoutePanel title="Stem + answer">
+        <div className="space-y-6">
+          <Card>
+            <CardHeader><CardTitle>Stem + answer</CardTitle></CardHeader>
+            <CardContent>
             <div className="grid gap-4">
               <Textarea
                 label="Stem"
@@ -342,15 +350,15 @@ export default function AdminListeningQuestionEditorPage() {
               </div>
 
               {isMcq ? (
-                <div className="rounded-2xl border border-border bg-background-light p-4">
-                  <p className="text-xs font-black uppercase tracking-widest text-muted">Options</p>
-                  <p className="mt-1 text-xs text-muted">{"Authors mark the correct option via the radio. The correct option's text is mirrored into `correctAnswer`."}</p>
+                <div className="rounded-admin border border-admin-border bg-admin-bg-subtle p-4">
+                  <p className="text-xs font-black uppercase tracking-widest text-admin-fg-muted">Options</p>
+                  <p className="mt-1 text-xs text-admin-fg-muted">{"Authors mark the correct option via the radio. The correct option's text is mirrored into `correctAnswer`."}</p>
                   <div className="mt-3 grid gap-3">
                     {form.options.map((option, index) => {
                       const letter = String.fromCharCode(65 + index);
                       const isCorrect = form.correctAnswer === option && option !== '';
                       return (
-                        <div key={index} className="grid gap-2 rounded-xl border border-border bg-surface p-3">
+                        <div key={index} className="grid gap-2 rounded-admin border border-admin-border bg-admin-bg-surface p-3">
                           <div className="flex items-start gap-3">
                             <label className="flex items-center gap-2 pt-2">
                               <input
@@ -403,18 +411,18 @@ export default function AdminListeningQuestionEditorPage() {
               )}
 
               {isPartA && (
-                <div className="rounded-2xl border border-border bg-background-light p-4">
-                  <p className="text-xs font-black uppercase tracking-widest text-muted">Accepted variants</p>
-                  <p className="mt-1 text-xs text-muted">UK/US spelling, abbreviations, plurals. Keep tight — OET expects exact wording.</p>
+                <div className="rounded-admin border border-admin-border bg-admin-bg-subtle p-4">
+                  <p className="text-xs font-black uppercase tracking-widest text-admin-fg-muted">Accepted variants</p>
+                  <p className="mt-1 text-xs text-admin-fg-muted">UK/US spelling, abbreviations, plurals. Keep tight — OET expects exact wording.</p>
                   <div className="mt-3 flex flex-wrap gap-2">
                     {form.acceptedAnswers.map((v) => (
-                      <span key={v} className="inline-flex items-center gap-1 rounded-full bg-info/10 px-3 py-1 text-sm text-info">
+                      <span key={v} className="inline-flex items-center gap-1 rounded-full bg-[var(--admin-primary)]/10 px-3 py-1 text-sm text-[var(--admin-primary)]">
                         {v}
                         <button
                           type="button"
                           aria-label={`Remove variant ${v}`}
                           onClick={() => removeVariant(v)}
-                          className="rounded-full p-0.5 hover:bg-info/20"
+                          className="rounded-full p-0.5 hover:bg-[var(--admin-primary)]/20"
                         >
                           <X className="h-3 w-3" aria-hidden="true" />
                         </button>
@@ -429,16 +437,19 @@ export default function AdminListeningQuestionEditorPage() {
                       onKeyDown={onVariantKey}
                     />
                     <Button type="button" variant="outline" onClick={addVariant} disabled={!variantDraft.trim()}>
-                      <Plus className="h-4 w-4" />
+                      <Plus className="h-4 w-4 mr-1.5" />
                       Add
                     </Button>
                   </div>
                 </div>
               )}
             </div>
-          </AdminRoutePanel>
+            </CardContent>
+          </Card>
 
-          <AdminRoutePanel title="Transcript evidence + explanation">
+          <Card>
+            <CardHeader><CardTitle>Transcript evidence + explanation</CardTitle></CardHeader>
+            <CardContent>
             <div className="grid gap-4">
               <Textarea
                 label="Transcript excerpt (verbatim)"
@@ -481,10 +492,11 @@ export default function AdminListeningQuestionEditorPage() {
                 onChange={(e) => setField('distractorExplanation', e.target.value)}
               />
             </div>
-          </AdminRoutePanel>
+            </CardContent>
+          </Card>
 
-          <div className="flex items-center justify-between gap-3 rounded-2xl border border-border bg-surface p-4">
-            <div className="text-sm text-muted">
+          <div className="flex items-center justify-between gap-3 rounded-admin border border-admin-border bg-admin-bg-surface p-4">
+            <div className="text-sm text-admin-fg-muted">
               {hasChanges ? `${Object.keys(patch).length} unsaved field(s).` : 'No unsaved changes.'}
               {save === 'saving' && ' Saving…'}
               {save === 'saved' && !hasChanges && ' Saved.'}
@@ -498,16 +510,16 @@ export default function AdminListeningQuestionEditorPage() {
                 }}
                 disabled={!hasChanges || save === 'saving'}
               >
-                <Trash2 className="h-4 w-4" />
+                <Trash2 className="h-4 w-4 mr-1.5" />
                 Discard
               </Button>
-              <Button onClick={onSave} disabled={!hasChanges || save === 'saving'} loading={save === 'saving'}>
-                <Save className="h-4 w-4" />
+              <Button variant="primary" onClick={onSave} disabled={!hasChanges} loading={save === 'saving'} loadingText="Saving…">
+                <Save className="h-4 w-4 mr-1.5" />
                 Save changes
               </Button>
             </div>
           </div>
-        </>
+        </div>
       )}
 
       {toast && (
@@ -517,6 +529,6 @@ export default function AdminListeningQuestionEditorPage() {
           onClose={() => setToast(null)}
         />
       )}
-    </AdminRouteWorkspace>
+    </AdminSettingsLayout>
   );
 }

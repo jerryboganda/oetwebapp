@@ -3,7 +3,9 @@
 import { use, useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
-import { AdminRoutePanel, AdminRouteSectionHeader, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
+import { AdminSettingsLayout } from '@/components/admin/layout/admin-settings-layout';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/admin/ui/card';
+import { Button } from '@/components/admin/ui/button';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
 import { InlineAlert } from '@/components/ui/alert';
 import { AdminPermission, hasPermission } from '@/lib/admin-permissions';
@@ -44,30 +46,36 @@ export default function ReadingPaperPreviewPage({ params }: { params: Promise<{ 
     queueMicrotask(() => { void load(); });
   }, [canViewContent, load]);
 
+  const breadcrumbs = [
+    { label: 'Admin', href: '/admin' },
+    { label: 'Content', href: '/admin/content' },
+    { label: 'Papers', href: '/admin/content/papers' },
+    { label: 'Preview' },
+  ];
+
   if (isAdminLoading || isUserLoading) return null;
   if (!isAuthenticated || role !== 'admin') return null;
   if (!canViewContent) return (
-    <AdminRouteWorkspace role="main">
+    <AdminSettingsLayout title="Paper Preview" breadcrumbs={breadcrumbs}>
       <InlineAlert variant="error">You do not have permission to view paper content.</InlineAlert>
-    </AdminRouteWorkspace>
+    </AdminSettingsLayout>
   );
 
   return (
-    <AdminRouteWorkspace role="main" aria-label="Reading paper preview">
-      <AdminRouteSectionHeader
-        title="Paper Preview"
-        description="Read-only view — this is how learners see the paper."
-        actions={
-          <Link
-            href={`/admin/content/papers/${paperId}`}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-admin-border bg-admin-surface px-3 py-1.5 text-sm font-semibold text-admin-text hover:bg-admin-surface-raised transition-colors"
-          >
-            <ArrowLeft className="w-4 h-4" />
+    <AdminSettingsLayout
+      eyebrow="CMS"
+      title="Paper Preview"
+      description="Read-only view — this is how learners see the paper."
+      breadcrumbs={breadcrumbs}
+      actions={
+        <Button variant="ghost" size="sm" asChild>
+          <Link href={`/admin/content/papers/${paperId}`}>
+            <ArrowLeft className="w-4 h-4 mr-1.5" />
             Back to Editor
           </Link>
-        }
-      />
-
+        </Button>
+      }
+    >
       <InlineAlert variant="warning">
         Admin Preview — This is how learners see the paper. Not scored.
       </InlineAlert>
@@ -76,21 +84,22 @@ export default function ReadingPaperPreviewPage({ params }: { params: Promise<{ 
         {structure && (
           <div className="space-y-6">
             {structure.parts.map((part) => (
-              <AdminRoutePanel
-                key={part.partCode}
-                title={`Part ${part.partCode}`}
-                description={part.instructions ?? undefined}
-              >
+              <Card key={part.partCode}>
+                <CardHeader>
+                  <CardTitle>Part {part.partCode}</CardTitle>
+                  {part.instructions ? <p className="text-sm text-admin-fg-muted">{part.instructions}</p> : null}
+                </CardHeader>
+                <CardContent>
                 <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
                   {/* Left: passages */}
                   <div className="space-y-6">
-                    <h3 className="text-xs font-black uppercase tracking-[0.18em] text-muted">Passages</h3>
+                    <h3 className="text-xs font-black uppercase tracking-[0.18em] text-admin-fg-muted">Passages</h3>
                     {part.texts.map((text) => (
                       <article key={text.id} className="space-y-2">
-                        <h4 className="text-base font-bold text-navy">{text.title}</h4>
-                        {text.source ? <p className="text-xs text-muted">Source: {text.source}</p> : null}
+                        <h4 className="text-base font-bold text-admin-fg-strong">{text.title}</h4>
+                        {text.source ? <p className="text-xs text-admin-fg-muted">Source: {text.source}</p> : null}
                         <div
-                          className="prose prose-sm max-w-none rounded-xl border border-border bg-background-light p-4 text-navy"
+                          className="prose prose-sm max-w-none rounded-admin border border-admin-border bg-admin-bg-subtle p-4 text-admin-fg-strong"
                           dangerouslySetInnerHTML={{ __html: sanitizeBodyHtml(text.bodyHtml) }}
                         />
                       </article>
@@ -99,7 +108,7 @@ export default function ReadingPaperPreviewPage({ params }: { params: Promise<{ 
 
                   {/* Right: questions */}
                   <div className="space-y-4">
-                    <h3 className="text-xs font-black uppercase tracking-[0.18em] text-muted">Questions (answers highlighted)</h3>
+                    <h3 className="text-xs font-black uppercase tracking-[0.18em] text-admin-fg-muted">Questions (answers highlighted)</h3>
                     {[...part.questions].sort((a, b) => a.displayOrder - b.displayOrder).map((question) => {
                       let options: { key: string; label: string }[] = [];
                       let correctKeys: string[] = [];
@@ -110,8 +119,8 @@ export default function ReadingPaperPreviewPage({ params }: { params: Promise<{ 
                       } catch { /* ignore */ }
 
                       return (
-                        <div key={question.id} className="rounded-xl border border-border bg-surface p-4 space-y-3">
-                          <p className="text-sm font-semibold text-navy">{question.displayOrder}. {question.stem}</p>
+                        <div key={question.id} className="rounded-admin border border-admin-border bg-admin-bg-surface p-4 space-y-3">
+                          <p className="text-sm font-semibold text-admin-fg-strong">{question.displayOrder}. {question.stem}</p>
 
                           {(question.questionType === 'MultipleChoice3' || question.questionType === 'MultipleChoice4') && (
                             <div className="space-y-1.5">
@@ -120,8 +129,8 @@ export default function ReadingPaperPreviewPage({ params }: { params: Promise<{ 
                                 return (
                                   <div
                                     key={opt.key}
-                                    className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-sm ${
-                                      isCorrect ? 'border-emerald-500/50 bg-emerald-50 text-emerald-800' : 'border-border bg-background-light text-navy'
+                                    className={`flex items-center gap-2 rounded-admin border px-3 py-2 text-sm ${
+                                      isCorrect ? 'border-emerald-500/50 bg-emerald-50 text-emerald-800' : 'border-admin-border bg-admin-bg-subtle text-admin-fg-strong'
                                     }`}
                                     aria-disabled="true"
                                   >
@@ -141,7 +150,7 @@ export default function ReadingPaperPreviewPage({ params }: { params: Promise<{ 
                                 disabled
                                 aria-disabled="true"
                                 placeholder="Learner types answer here"
-                                className="w-full rounded-lg border border-border bg-background-light px-3 py-2 text-sm text-muted cursor-not-allowed"
+                                className="w-full rounded-admin border border-admin-border bg-admin-bg-subtle px-3 py-2 text-sm text-admin-fg-muted cursor-not-allowed"
                               />
                               {correctKeys.length > 0 && (
                                 <p className="text-sm font-semibold text-emerald-700">&#x2713; Correct: {correctKeys.join(' / ')}</p>
@@ -159,8 +168,8 @@ export default function ReadingPaperPreviewPage({ params }: { params: Promise<{ 
                                     disabled
                                     aria-disabled="true"
                                     type="button"
-                                    className={`w-full rounded-lg border px-3 py-2 text-left text-sm cursor-not-allowed ${
-                                      isCorrect ? 'border-emerald-500/50 bg-emerald-50 text-emerald-800' : 'border-border bg-background-light text-navy opacity-70'
+                                    className={`w-full rounded-admin border px-3 py-2 text-left text-sm cursor-not-allowed ${
+                                      isCorrect ? 'border-emerald-500/50 bg-emerald-50 text-emerald-800' : 'border-admin-border bg-admin-bg-subtle text-admin-fg-strong opacity-70'
                                     }`}
                                   >
                                     <span className="font-bold">{opt.key}.</span> {opt.label}
@@ -175,11 +184,12 @@ export default function ReadingPaperPreviewPage({ params }: { params: Promise<{ 
                     })}
                   </div>
                 </div>
-              </AdminRoutePanel>
+                </CardContent>
+              </Card>
             ))}
           </div>
         )}
       </AsyncStateWrapper>
-    </AdminRouteWorkspace>
+    </AdminSettingsLayout>
   );
 }

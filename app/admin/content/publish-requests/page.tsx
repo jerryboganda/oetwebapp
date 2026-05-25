@@ -2,16 +2,19 @@
 
 import { useEffect, useState } from 'react';
 import { FileCheck2, Check, X } from 'lucide-react';
-import { AdminRoutePanel, AdminRouteSectionHeader, AdminRouteSummaryCard, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
+import { AdminTableLayout } from '@/components/admin/layout/admin-table-layout';
+import { KpiStrip } from '@/components/admin/layout/admin-operations-layout';
+import { KpiTile } from '@/components/admin/ui/kpi-tile';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
 import { DataTable, type Column } from '@/components/ui/data-table';
-import { EmptyState } from '@/components/ui/empty-error';
+import { EmptyState } from '@/components/admin/ui/empty-state';
 import { FilterBar, type FilterGroup } from '@/components/ui/filter-bar';
 import { Toast } from '@/components/ui/alert';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/admin/ui/badge';
+import { Button } from '@/components/admin/ui/button';
 import { Input, Textarea } from '@/components/ui/form-controls';
 import { Modal } from '@/components/ui/modal';
+import { AdminPageShell } from '@/components/admin/layout/admin-page-shell';
 import { approvePublishRequest, rejectPublishRequest, editorApproveContent, editorRejectContent, publisherApproveContent, publisherRejectContent } from '@/lib/api';
 import { getAdminPublishRequestsData } from '@/lib/admin';
 import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
@@ -23,7 +26,7 @@ import { BulkActionBar } from '@/components/ui/bulk-action-bar';
 type PageStatus = 'loading' | 'success' | 'empty' | 'error';
 type ToastState = { variant: 'success' | 'error'; message: string } | null;
 
-const stageBadge: Record<string, { label: string; variant: 'default' | 'info' }> = {
+const stageBadge: Record<string, { label: string; variant: 'default' | 'info' | 'warning' | 'success' }> = {
   editor_review: { label: 'Editor Review', variant: 'info' },
   publisher_approval: { label: 'Publisher Approval', variant: 'default' },
 };
@@ -286,32 +289,43 @@ export default function PublishRequestsPage() {
   if (!isAuthenticated || role !== 'admin') return null;
 
   if (!canReadPublishQueue) {
-    return <AdminRouteWorkspace><p className="text-sm text-muted">Publish workflow permission is required.</p></AdminRouteWorkspace>;
+    return (
+      <AdminPageShell>
+        <p className="text-sm text-admin-fg-muted">Publish workflow permission is required.</p>
+      </AdminPageShell>
+    );
   }
 
   return (
-    <AdminRouteWorkspace>
+    <>
       {toast && <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} />}
-      <AdminRouteSectionHeader
+      <AdminTableLayout
         title="Publish Requests"
         description="Multi-stage content approval: Editor Review → Publisher Approval → Published."
-      />
+        breadcrumbs={[
+          { label: 'Admin', href: '/admin' },
+          { label: 'Content', href: '/admin/content' },
+          { label: 'Publish Requests' },
+        ]}
+        banner={
+          <div className="space-y-4">
+            <KpiStrip>
+              <KpiTile label="Total Requests" value={total} />
+              <KpiTile label="Editor Review" value={editorReviewCount} tone={editorReviewCount > 0 ? 'warning' : 'default'} />
+              <KpiTile label="Publisher Approval" value={publisherApprovalCount} tone={publisherApprovalCount > 0 ? 'warning' : 'default'} />
+              <KpiTile label="Published" value={requests.filter((r) => r.status === 'approved').length} tone="success" />
+            </KpiStrip>
 
-      <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 mb-6">
-        <AdminRouteSummaryCard label="Total Requests" value={total} />
-        <AdminRouteSummaryCard label="Editor Review" value={editorReviewCount} tone={editorReviewCount > 0 ? 'warning' : 'default'} />
-        <AdminRouteSummaryCard label="Publisher Approval" value={publisherApprovalCount} tone={publisherApprovalCount > 0 ? 'warning' : 'default'} />
-        <AdminRouteSummaryCard label="Published" value={requests.filter((r) => r.status === 'approved').length} tone="success" />
-      </div>
-
-      <FilterBar groups={filterGroups} selected={filters} onChange={(groupId, optionId) => setFilters(prev => { const arr = [...(prev[groupId] || [])]; const i = arr.indexOf(optionId); if (i >= 0) arr.splice(i, 1); else arr.push(optionId); return { ...prev, [groupId]: arr }; })} />
-
-      <AsyncStateWrapper
-        status={pageStatus}
-        emptyContent={<EmptyState icon={<FileCheck2 className="w-12 h-12" />} title="No publish requests" description="No content publish requests found." />}
-        errorMessage="Unable to load publish requests."
+            <FilterBar groups={filterGroups} selected={filters} onChange={(groupId, optionId) => setFilters(prev => { const arr = [...(prev[groupId] || [])]; const i = arr.indexOf(optionId); if (i >= 0) arr.splice(i, 1); else arr.push(optionId); return { ...prev, [groupId]: arr }; })} />
+          </div>
+        }
       >
-        <AdminRoutePanel>
+        <div className="p-4 sm:p-5">
+        <AsyncStateWrapper
+          status={pageStatus}
+          emptyContent={<EmptyState icon={<FileCheck2 className="w-12 h-12" />} title="No publish requests" description="No content publish requests found." />}
+          errorMessage="Unable to load publish requests."
+        >
           <DataTable
             columns={columns}
             data={requests}
@@ -336,8 +350,9 @@ export default function PublishRequestsPage() {
               { key: 'reject', label: 'Reject selected', variant: 'danger', onClick: () => setToast({ variant: 'error', message: 'Bulk reject coming soon.' }) },
             ]}
           />
-        </AdminRoutePanel>
-      </AsyncStateWrapper>
+        </AsyncStateWrapper>
+        </div>
+      </AdminTableLayout>
 
       {reviewTarget && (
         <Modal
@@ -431,6 +446,6 @@ export default function PublishRequestsPage() {
           </div>
         </Modal>
       )}
-    </AdminRouteWorkspace>
+    </>
   );
 }

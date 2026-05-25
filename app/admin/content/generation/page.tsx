@@ -4,11 +4,8 @@ import { useEffect, useState } from 'react';
 import { MotionItem } from '@/components/ui/motion-primitives';
 import { Wand2, Loader2, CheckCircle2, AlertCircle, Copy, RefreshCw, Clock3, FileJson2 } from 'lucide-react';
 import { InlineAlert } from '@/components/ui/alert';
-import {
-  AdminRouteHero,
-  AdminRoutePanel,
-  AdminRouteWorkspace,
-} from '@/components/domain/admin-route-surface';
+import { AdminOperationsLayout } from '@/components/admin/layout/admin-operations-layout';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/admin/ui/card';
 import { fetchContentGenerationJob, fetchContentGenerationJobs, queueContentGeneration } from '@/lib/api';
 
 type GenerationRequest = {
@@ -197,20 +194,23 @@ export default function AdminContentGenerationPage() {
 
   return (
     <>
-      <AdminRouteWorkspace role="main" aria-label="AI content generation">
-        <AdminRouteHero
-          eyebrow="AI tooling"
-          icon={Wand2}
-          accent="navy"
-          title="AI content generation"
-          description="Generate learning content using AI for the OET platform."
-        />
-
+      <AdminOperationsLayout
+        title="AI content generation"
+        description="Generate learning content using AI for the OET platform."
+        eyebrow="AI tooling"
+        breadcrumbs={[
+          { label: 'Admin', href: '/admin' },
+          { label: 'Content', href: '/admin/content' },
+          { label: 'Generation' },
+        ]}
+      >
         {error && <InlineAlert variant="warning">{error}</InlineAlert>}
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Form */}
-          <AdminRoutePanel title="Generation parameters">
+          <Card>
+            <CardHeader><CardTitle>Generation parameters</CardTitle></CardHeader>
+            <CardContent>
             <form onSubmit={handleGenerate} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-admin-text dark:text-admin-text mb-1.5">Content Type</label>
@@ -300,7 +300,8 @@ export default function AdminContentGenerationPage() {
                 )}
               </button>
             </form>
-          </AdminRoutePanel>
+            </CardContent>
+          </Card>
 
           {/* Results */}
           <div>
@@ -381,7 +382,7 @@ export default function AdminContentGenerationPage() {
             )}
           </div>
         </div>
-      </AdminRouteWorkspace>
+      </AdminOperationsLayout>
     </>
   );
 }

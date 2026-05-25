@@ -2,11 +2,20 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import Link from 'next/link';
+import { FilePlus2 } from 'lucide-react';
+import { AdminSettingsLayout, SettingsSection } from '@/components/admin/layout/admin-settings-layout';
+import { Button } from '@/components/admin/ui/button';
+import { Card, CardContent } from '@/components/admin/ui/card';
 import {
   createStudyPlanTemplate,
   emptyTemplateBody,
 } from '@/lib/study-plan-admin-api';
+
+const BREADCRUMBS = [
+  { label: 'Admin', href: '/admin' },
+  { label: 'Study plan templates', href: '/admin/study-plan-templates' },
+  { label: 'New' },
+];
 
 export default function NewStudyPlanTemplatePage() {
   const router = useRouter();
@@ -56,84 +65,86 @@ export default function NewStudyPlanTemplatePage() {
     }
   };
 
-  return (
-    <div className="p-6 max-w-3xl mx-auto">
-      <div className="mb-6">
-        <Link href="/admin/study-plan-templates" className="text-blue-600 hover:underline text-sm">
-          ← Back to templates
-        </Link>
-        <h1 className="text-2xl font-bold mt-2">New Study Plan Template</h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          Create a skeleton plan. After this step you can edit week structure, day slots, and
-          checkpoints in the full editor.
-        </p>
-      </div>
+  const inputCls = 'mt-1 w-full rounded-admin border border-admin-border bg-admin-bg-surface px-3 py-2 text-sm text-admin-fg-strong focus:outline-none focus:ring-2 focus:ring-[var(--admin-primary)]';
+  const labelCls = 'block text-sm font-medium text-admin-fg-strong';
 
+  return (
+    <AdminSettingsLayout
+      title="New Study Plan Template"
+      description="Create a skeleton plan. After this step you can edit week structure, day slots, and checkpoints in the full editor."
+      breadcrumbs={BREADCRUMBS}
+      eyebrow="Study planning"
+      icon={<FilePlus2 className="h-5 w-5" />}
+      backHref="/admin/study-plan-templates"
+    >
       {error && (
-        <div className="bg-red-50 border border-red-200 text-red-800 rounded p-3 mb-4">{error}</div>
+        <Card surface="tinted-danger">
+          <CardContent className="p-3 text-sm text-admin-danger">{error}</CardContent>
+        </Card>
       )}
 
-      <div className="space-y-4">
-        <div>
-          <label className="block text-sm font-medium mb-1">Name *</label>
-          <input
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="e.g. 8-Week Standard for B-Band"
-            className="w-full border rounded px-3 py-2"
-          />
-        </div>
+      <SettingsSection title="Identity">
+        <div className="space-y-4">
+          <div>
+            <label className={labelCls}>Name *</label>
+            <input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="e.g. 8-Week Standard for B-Band"
+              className={inputCls}
+            />
+          </div>
 
-        <div>
-          <label className="block text-sm font-medium mb-1">Slug * (lowercase, hyphenated)</label>
-          <input
-            value={slug}
-            onChange={(e) => setSlug(e.target.value.toLowerCase().replace(/\s+/g, '-'))}
-            placeholder="8-week-standard"
-            className="w-full border rounded px-3 py-2 font-mono text-sm"
-          />
-        </div>
+          <div>
+            <label className={labelCls}>Slug * (lowercase, hyphenated)</label>
+            <input
+              value={slug}
+              onChange={(e) => setSlug(e.target.value.toLowerCase().replace(/\s+/g, '-'))}
+              placeholder="8-week-standard"
+              className={`${inputCls} font-mono`}
+            />
+          </div>
 
-        <div>
-          <label className="block text-sm font-medium mb-1">Description</label>
-          <textarea
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            rows={3}
-            className="w-full border rounded px-3 py-2"
-          />
+          <div>
+            <label className={labelCls}>Description</label>
+            <textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              rows={3}
+              className={inputCls}
+            />
+          </div>
         </div>
+      </SettingsSection>
 
+      <SettingsSection title="Plan shape">
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm font-medium mb-1">Min Weeks</label>
+            <label className={labelCls}>Min Weeks</label>
             <input
               type="number"
               min={1}
               value={minWeeks}
               onChange={(e) => setMinWeeks(parseInt(e.target.value) || 1)}
-              className="w-full border rounded px-3 py-2"
+              className={inputCls}
             />
           </div>
           <div>
-            <label className="block text-sm font-medium mb-1">Max Weeks</label>
+            <label className={labelCls}>Max Weeks</label>
             <input
               type="number"
               min={1}
               value={maxWeeks}
               onChange={(e) => setMaxWeeks(parseInt(e.target.value) || 1)}
-              className="w-full border rounded px-3 py-2"
+              className={inputCls}
             />
           </div>
-        </div>
-
-        <div className="grid grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm font-medium mb-1">Target Band (optional)</label>
+            <label className={labelCls}>Target Band (optional)</label>
             <select
               value={targetBand}
               onChange={(e) => setTargetBand(e.target.value)}
-              className="w-full border rounded px-3 py-2"
+              className={inputCls}
             >
               <option value="">Any</option>
               <option value="A">A</option>
@@ -143,60 +154,53 @@ export default function NewStudyPlanTemplatePage() {
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium mb-1">Profession (optional)</label>
+            <label className={labelCls}>Profession (optional)</label>
             <input
               value={professionId}
               onChange={(e) => setProfessionId(e.target.value)}
               placeholder="e.g. nurse, doctor"
-              className="w-full border rounded px-3 py-2"
+              className={inputCls}
+            />
+          </div>
+          <div>
+            <label className={labelCls}>Default Minutes per Day</label>
+            <input
+              type="number"
+              min={5}
+              max={480}
+              value={defaultMinutesPerDay}
+              onChange={(e) => setDefaultMinutesPerDay(parseInt(e.target.value) || 60)}
+              className={`${inputCls} w-32`}
             />
           </div>
         </div>
+      </SettingsSection>
 
-        <div>
-          <label className="block text-sm font-medium mb-1">Default Minutes per Day</label>
-          <input
-            type="number"
-            min={5}
-            max={480}
-            value={defaultMinutesPerDay}
-            onChange={(e) => setDefaultMinutesPerDay(parseInt(e.target.value) || 60)}
-            className="w-32 border rounded px-3 py-2"
-          />
+      <SettingsSection title="Available to tiers">
+        <div className="flex gap-4">
+          {['free', 'premium', 'elite'].map((t) => (
+            <label key={t} className="flex items-center gap-2 text-sm text-admin-fg-strong">
+              <input
+                type="checkbox"
+                checked={tierCodes.includes(t)}
+                onChange={() => toggleTier(t)}
+              />
+              <span className="capitalize">{t}</span>
+            </label>
+          ))}
         </div>
+      </SettingsSection>
 
-        <div>
-          <label className="block text-sm font-medium mb-2">Available to Tiers</label>
-          <div className="flex gap-4">
-            {['free', 'premium', 'elite'].map((t) => (
-              <label key={t} className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={tierCodes.includes(t)}
-                  onChange={() => toggleTier(t)}
-                />
-                <span className="capitalize">{t}</span>
-              </label>
-            ))}
-          </div>
-        </div>
-
-        <div className="flex gap-3 pt-4 border-t">
-          <button
-            onClick={submit}
-            disabled={submitting}
-            className="px-6 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
-          >
+      <SettingsSection title="Actions">
+        <div className="flex gap-3">
+          <Button onClick={submit} disabled={submitting} loading={submitting}>
             {submitting ? 'Creating...' : 'Create & Edit Structure'}
-          </button>
-          <Link
-            href="/admin/study-plan-templates"
-            className="px-6 py-2 border rounded hover:bg-muted"
-          >
+          </Button>
+          <Button variant="outline" onClick={() => router.push('/admin/study-plan-templates')}>
             Cancel
-          </Link>
+          </Button>
         </div>
-      </div>
-    </div>
+      </SettingsSection>
+    </AdminSettingsLayout>
   );
 }

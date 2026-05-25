@@ -3,10 +3,10 @@
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { ArrowLeft, BookOpen, Headphones, Megaphone, Plus, Trash2 } from 'lucide-react';
-import { AdminRouteSectionHeader, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
+import { AdminSettingsLayout, SettingsSection } from '@/components/admin/layout/admin-settings-layout';
 import { InlineAlert } from '@/components/ui/alert';
-import { Button } from '@/components/ui/button';
-import { Skeleton } from '@/components/ui/skeleton';
+import { Button } from '@/components/admin/ui/button';
+import { Skeleton } from '@/components/admin/ui/skeleton';
 import { NoBillingPermission } from '@/components/admin/billing/no-billing-permission';
 import {
   adminListTutorBookUpdates,
@@ -154,49 +154,45 @@ export default function AdminTutorBookPage() {
   };
 
   return (
-    <AdminRouteWorkspace>
-      <AdminRouteSectionHeader
-        eyebrow="Content"
-        title="The Tutor Book — Admin"
-        description="Manage recall updates + audio scripts surfaced inside the /learner/tutor-book reader. Telegram invite URL is configured via TutorBook:TelegramInviteUrl in appsettings."
-        icon={<BookOpen aria-hidden className="h-5 w-5" />}
-        actions={
-          <Button asChild variant="ghost" size="sm">
-            <Link href="/admin">
-              <ArrowLeft className="mr-1.5 h-4 w-4" /> Back to Admin
-            </Link>
-          </Button>
-        }
-      />
-
+    <AdminSettingsLayout
+      title="The Tutor Book — Admin"
+      description="Manage recall updates + audio scripts surfaced inside the /learner/tutor-book reader. Telegram invite URL is configured via TutorBook:TelegramInviteUrl in appsettings."
+      eyebrow="Content"
+      breadcrumbs={[
+        { label: 'Admin', href: '/admin' },
+        { label: 'Content', href: '/admin/content' },
+        { label: 'Tutor Book' },
+      ]}
+      icon={<BookOpen aria-hidden className="h-5 w-5" />}
+      actions={
+        <Button asChild variant="ghost" size="sm" startIcon={<ArrowLeft className="h-4 w-4" />}>
+          <Link href="/admin">Back to Admin</Link>
+        </Button>
+      }
+    >
       {errorMessage && <InlineAlert variant="error">{errorMessage}</InlineAlert>}
       {saveMessage && <InlineAlert variant="success">{saveMessage}</InlineAlert>}
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-950">
-        <header className="flex items-center gap-2">
-          <Megaphone className="h-4 w-4 text-[#996F1F]" />
-          <h3 className="text-base font-bold">Updates feed</h3>
-        </header>
-        <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
-          Recall amendments, errata, new card additions. Audience = <code>all</code>, <code>medicine</code>, <code>nursing</code>, <code>pharmacy</code>.
-        </p>
-
-        <div className="mt-4 grid gap-4 md:grid-cols-2">
-          <input className="w-full rounded-md border border-border px-3 py-2 text-sm" placeholder="Title" value={updateDraft.title} onChange={(e) => setUpdateDraft({ ...updateDraft, title: e.target.value })} />
-          <select className="w-full rounded-md border border-border px-3 py-2 text-sm" value={updateDraft.audience} onChange={(e) => setUpdateDraft({ ...updateDraft, audience: e.target.value })}>
+      <SettingsSection
+        title={<span className="inline-flex items-center gap-2"><Megaphone className="h-4 w-4 text-[var(--admin-warning)]" /> Updates feed</span>}
+        description={<>Recall amendments, errata, new card additions. Audience = <code>all</code>, <code>medicine</code>, <code>nursing</code>, <code>pharmacy</code>.</>}
+      >
+        <div className="grid gap-4 md:grid-cols-2">
+          <input className="w-full rounded-admin border border-admin-border bg-admin-bg-surface px-3 py-2 text-sm text-admin-fg-default" placeholder="Title" value={updateDraft.title} onChange={(e) => setUpdateDraft({ ...updateDraft, title: e.target.value })} />
+          <select className="w-full rounded-admin border border-admin-border bg-admin-bg-surface px-3 py-2 text-sm text-admin-fg-default" value={updateDraft.audience} onChange={(e) => setUpdateDraft({ ...updateDraft, audience: e.target.value })}>
             <option value="all">All disciplines</option>
             <option value="medicine">Medicine</option>
             <option value="nursing">Nursing</option>
             <option value="pharmacy">Pharmacy</option>
           </select>
         </div>
-        <textarea className="mt-3 w-full rounded-md border border-border px-3 py-2 text-sm font-mono" rows={5} placeholder="Body (Markdown)" value={updateDraft.bodyMarkdown} onChange={(e) => setUpdateDraft({ ...updateDraft, bodyMarkdown: e.target.value })} />
-        <label className="mt-3 flex items-center gap-2 text-sm">
+        <textarea className="mt-3 w-full rounded-admin border border-admin-border bg-admin-bg-surface px-3 py-2 text-sm font-mono text-admin-fg-default" rows={5} placeholder="Body (Markdown)" value={updateDraft.bodyMarkdown} onChange={(e) => setUpdateDraft({ ...updateDraft, bodyMarkdown: e.target.value })} />
+        <label className="mt-3 flex items-center gap-2 text-sm text-admin-fg-default">
           <input type="checkbox" checked={updateDraft.isPublished} onChange={(e) => setUpdateDraft({ ...updateDraft, isPublished: e.target.checked })} /> Published
         </label>
         <div className="mt-4 flex gap-2">
-          <Button onClick={handleSaveUpdate}>
-            <Plus className="mr-1 h-4 w-4" /> {updateDraft.id ? 'Update' : 'Create'}
+          <Button onClick={handleSaveUpdate} startIcon={<Plus className="h-4 w-4" />}>
+            {updateDraft.id ? 'Update' : 'Create'}
           </Button>
           {updateDraft.id && (
             <Button variant="outline" onClick={() => setUpdateDraft({ id: '', title: '', bodyMarkdown: '', audience: 'all', isPublished: true })}>
@@ -208,16 +204,16 @@ export default function AdminTutorBookPage() {
         {status === 'loading' ? (
           <Skeleton className="mt-6 h-32 w-full" />
         ) : (
-          <ul className="mt-6 divide-y divide-slate-200 dark:divide-slate-800">
+          <ul className="mt-6 divide-y divide-admin-border">
             {updates.length === 0 ? (
-              <li className="py-6 text-center text-sm text-muted-foreground">No updates yet.</li>
+              <li className="py-6 text-center text-sm text-admin-fg-muted">No updates yet.</li>
             ) : (
               updates.map((row) => (
                 <li key={row.id} className="flex items-start justify-between gap-3 py-3">
                   <div>
-                    <div className="font-semibold">{row.title}</div>
-                    <div className="text-xs text-muted-foreground">{new Date(row.publishedAt).toLocaleString()} · {row.audience} · {row.isPublished ? 'published' : 'draft'}</div>
-                    <p className="mt-1 text-sm text-slate-700 line-clamp-2 dark:text-slate-300">{row.bodyMarkdown}</p>
+                    <div className="font-semibold text-admin-fg-strong">{row.title}</div>
+                    <div className="text-xs text-admin-fg-muted">{new Date(row.publishedAt).toLocaleString()} · {row.audience} · {row.isPublished ? 'published' : 'draft'}</div>
+                    <p className="mt-1 text-sm text-admin-fg-default line-clamp-2">{row.bodyMarkdown}</p>
                   </div>
                   <div className="flex flex-none gap-2">
                     <Button size="sm" variant="outline" onClick={() => handleEditUpdate(row)}>Edit</Button>
@@ -230,30 +226,25 @@ export default function AdminTutorBookPage() {
             )}
           </ul>
         )}
-      </section>
+      </SettingsSection>
 
-      <section className="mt-8 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-950">
-        <header className="flex items-center gap-2">
-          <Headphones className="h-4 w-4 text-[#996F1F]" />
-          <h3 className="text-base font-bold">Audio scripts</h3>
-        </header>
-        <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
-          Per-chapter MP3 + optional transcript URLs. Surfaced inside the reader&apos;s Audio Scripts tab.
-        </p>
-
-        <div className="mt-4 grid gap-3 md:grid-cols-2">
-          <input className="w-full rounded-md border border-border px-3 py-2 text-sm" placeholder="Chapter (e.g. Listening 1)" value={scriptDraft.chapter} onChange={(e) => setScriptDraft({ ...scriptDraft, chapter: e.target.value })} />
-          <input className="w-full rounded-md border border-border px-3 py-2 text-sm" placeholder="Title" value={scriptDraft.title} onChange={(e) => setScriptDraft({ ...scriptDraft, title: e.target.value })} />
-          <input className="w-full rounded-md border border-border px-3 py-2 text-sm" placeholder="Audio URL" value={scriptDraft.audioUrl} onChange={(e) => setScriptDraft({ ...scriptDraft, audioUrl: e.target.value })} />
-          <input className="w-full rounded-md border border-border px-3 py-2 text-sm" placeholder="Transcript URL (optional)" value={scriptDraft.transcriptUrl} onChange={(e) => setScriptDraft({ ...scriptDraft, transcriptUrl: e.target.value })} />
-          <input type="number" min={0} className="w-full rounded-md border border-border px-3 py-2 text-sm" placeholder="Display order" value={scriptDraft.displayOrder} onChange={(e) => setScriptDraft({ ...scriptDraft, displayOrder: Number(e.target.value) || 0 })} />
+      <SettingsSection
+        title={<span className="inline-flex items-center gap-2"><Headphones className="h-4 w-4 text-[var(--admin-warning)]" /> Audio scripts</span>}
+        description={<>Per-chapter MP3 + optional transcript URLs. Surfaced inside the reader&apos;s Audio Scripts tab.</>}
+      >
+        <div className="grid gap-3 md:grid-cols-2">
+          <input className="w-full rounded-admin border border-admin-border bg-admin-bg-surface px-3 py-2 text-sm text-admin-fg-default" placeholder="Chapter (e.g. Listening 1)" value={scriptDraft.chapter} onChange={(e) => setScriptDraft({ ...scriptDraft, chapter: e.target.value })} />
+          <input className="w-full rounded-admin border border-admin-border bg-admin-bg-surface px-3 py-2 text-sm text-admin-fg-default" placeholder="Title" value={scriptDraft.title} onChange={(e) => setScriptDraft({ ...scriptDraft, title: e.target.value })} />
+          <input className="w-full rounded-admin border border-admin-border bg-admin-bg-surface px-3 py-2 text-sm text-admin-fg-default" placeholder="Audio URL" value={scriptDraft.audioUrl} onChange={(e) => setScriptDraft({ ...scriptDraft, audioUrl: e.target.value })} />
+          <input className="w-full rounded-admin border border-admin-border bg-admin-bg-surface px-3 py-2 text-sm text-admin-fg-default" placeholder="Transcript URL (optional)" value={scriptDraft.transcriptUrl} onChange={(e) => setScriptDraft({ ...scriptDraft, transcriptUrl: e.target.value })} />
+          <input type="number" min={0} className="w-full rounded-admin border border-admin-border bg-admin-bg-surface px-3 py-2 text-sm text-admin-fg-default" placeholder="Display order" value={scriptDraft.displayOrder} onChange={(e) => setScriptDraft({ ...scriptDraft, displayOrder: Number(e.target.value) || 0 })} />
         </div>
-        <label className="mt-3 flex items-center gap-2 text-sm">
+        <label className="mt-3 flex items-center gap-2 text-sm text-admin-fg-default">
           <input type="checkbox" checked={scriptDraft.isPublished} onChange={(e) => setScriptDraft({ ...scriptDraft, isPublished: e.target.checked })} /> Published
         </label>
         <div className="mt-4 flex gap-2">
-          <Button onClick={handleSaveScript}>
-            <Plus className="mr-1 h-4 w-4" /> {scriptDraft.id ? 'Update' : 'Create'}
+          <Button onClick={handleSaveScript} startIcon={<Plus className="h-4 w-4" />}>
+            {scriptDraft.id ? 'Update' : 'Create'}
           </Button>
           {scriptDraft.id && (
             <Button variant="outline" onClick={() => setScriptDraft({ id: '', chapter: '', title: '', audioUrl: '', transcriptUrl: '', displayOrder: 0, isPublished: true })}>
@@ -265,16 +256,16 @@ export default function AdminTutorBookPage() {
         {status === 'loading' ? (
           <Skeleton className="mt-6 h-32 w-full" />
         ) : (
-          <ul className="mt-6 divide-y divide-slate-200 dark:divide-slate-800">
+          <ul className="mt-6 divide-y divide-admin-border">
             {scripts.length === 0 ? (
-              <li className="py-6 text-center text-sm text-muted-foreground">No audio scripts yet.</li>
+              <li className="py-6 text-center text-sm text-admin-fg-muted">No audio scripts yet.</li>
             ) : (
               scripts.map((row) => (
                 <li key={row.id} className="flex items-start justify-between gap-3 py-3">
                   <div className="min-w-0 flex-1">
-                    <div className="font-semibold">{row.chapter} — {row.title}</div>
-                    <div className="truncate text-xs text-muted-foreground">{row.audioUrl}</div>
-                    <div className="text-xs text-muted-foreground">order #{row.displayOrder} · {row.isPublished ? 'published' : 'draft'}</div>
+                    <div className="font-semibold text-admin-fg-strong">{row.chapter} — {row.title}</div>
+                    <div className="truncate text-xs text-admin-fg-muted">{row.audioUrl}</div>
+                    <div className="text-xs text-admin-fg-muted">order #{row.displayOrder} · {row.isPublished ? 'published' : 'draft'}</div>
                   </div>
                   <div className="flex flex-none gap-2">
                     <Button size="sm" variant="outline" onClick={() => handleEditScript(row)}>Edit</Button>
@@ -287,7 +278,7 @@ export default function AdminTutorBookPage() {
             )}
           </ul>
         )}
-      </section>
-    </AdminRouteWorkspace>
+      </SettingsSection>
+    </AdminSettingsLayout>
   );
 }

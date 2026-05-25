@@ -4,14 +4,11 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { ArrowLeft, Radio } from 'lucide-react';
-import {
-  AdminRouteWorkspace,
-  AdminRoutePanel,
-  AdminRouteSectionHeader,
-} from '@/components/domain/admin-route-surface';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Skeleton } from '@/components/ui/skeleton';
+import { AdminSettingsLayout, SettingsSection } from '@/components/admin/layout/admin-settings-layout';
+import { Button } from '@/components/admin/ui/button';
+import { Card, CardContent } from '@/components/admin/ui/card';
+import { Badge } from '@/components/admin/ui/badge';
+import { Skeleton } from '@/components/admin/ui/skeleton';
 import { fetchAdminConversationSessionDetail } from '@/lib/api';
 
 interface SessionDetail {
@@ -95,30 +92,40 @@ export default function AdminSessionDetailPage() {
     })();
   }, [id]);
 
+  const breadcrumbs = [
+    { label: 'Admin', href: '/admin' },
+    { label: 'Content', href: '/admin/content' },
+    { label: 'Conversation', href: '/admin/content/conversation' },
+    { label: 'Sessions', href: '/admin/content/conversation/sessions' },
+    { label: id ?? 'Session' },
+  ];
+
   if (loading) {
     return (
-      <>
-        <AdminRouteWorkspace>
-          <AdminRoutePanel>
-            <Skeleton className="h-48 rounded-2xl" />
-          </AdminRoutePanel>
-        </AdminRouteWorkspace>
-      </>
+      <AdminSettingsLayout
+        title="Loading session…"
+        breadcrumbs={breadcrumbs}
+      >
+        <Skeleton className="h-48 rounded-admin-lg" />
+      </AdminSettingsLayout>
     );
   }
 
   if (error || !detail) {
     return (
-      <>
-        <AdminRouteWorkspace>
-          <AdminRoutePanel>
-            <p className="text-sm text-admin-text-muted">{error ?? 'Session not found.'}</p>
-            <Link href="/admin/content/conversation/sessions" className="mt-3 inline-flex items-center gap-1 text-sm text-primary">
+      <AdminSettingsLayout
+        title="Session not found"
+        breadcrumbs={breadcrumbs}
+      >
+        <Card>
+          <CardContent className="p-6 pt-6">
+            <p className="text-sm text-admin-fg-muted">{error ?? 'Session not found.'}</p>
+            <Link href="/admin/content/conversation/sessions" className="mt-3 inline-flex items-center gap-1 text-sm text-[var(--admin-primary)]">
               <ArrowLeft className="h-4 w-4" /> Back to sessions
             </Link>
-          </AdminRoutePanel>
-        </AdminRouteWorkspace>
-      </>
+          </CardContent>
+        </Card>
+      </AdminSettingsLayout>
     );
   }
 
@@ -131,95 +138,85 @@ export default function AdminSessionDetailPage() {
   const appliedRules = detail.evaluation ? safeParse<string[]>(detail.evaluation.appliedRuleIdsJson, []) : [];
 
   return (
-    <>
-      <AdminRouteWorkspace>
-        <AdminRoutePanel>
-          <AdminRouteSectionHeader
-            eyebrow="Session"
-            title={s.id}
-            description={`User ${s.userId} · ${s.taskTypeCode} · ${s.profession}`}
-            icon={Radio}
-            actions={
-              <Button variant="secondary" onClick={() => router.push('/admin/content/conversation/sessions')}>
-                <ArrowLeft className="mr-1 h-4 w-4" /> Back
-              </Button>
-            }
-          />
+    <AdminSettingsLayout
+      eyebrow="Session"
+      title={s.id}
+      description={`User ${s.userId} · ${s.taskTypeCode} · ${s.profession}`}
+      breadcrumbs={breadcrumbs}
+      actions={
+        <Button variant="secondary" onClick={() => router.push('/admin/content/conversation/sessions')}>
+          <ArrowLeft className="mr-1 h-4 w-4" /> Back
+        </Button>
+      }
+    >
+      <SettingsSection title="Session">
+        <div className="grid grid-cols-2 gap-2 text-sm md:grid-cols-4">
+          <div><span className="text-admin-fg-muted">State:</span> <Badge variant={s.state === 'evaluated' ? 'success' : s.state === 'failed' ? 'danger' : 'info'} size="sm">{s.state}</Badge></div>
+          <div><span className="text-admin-fg-muted">Turns:</span> {s.turnCount}</div>
+          <div><span className="text-admin-fg-muted">Duration:</span> {s.durationSeconds}s</div>
+          <div><span className="text-admin-fg-muted">Template:</span> {s.templateId ?? '—'}</div>
+          <div><span className="text-admin-fg-muted">Created:</span> {new Date(s.createdAt).toLocaleString()}</div>
+          <div><span className="text-admin-fg-muted">Started:</span> {s.startedAt ? new Date(s.startedAt).toLocaleString() : '—'}</div>
+          <div><span className="text-admin-fg-muted">Completed:</span> {s.completedAt ? new Date(s.completedAt).toLocaleString() : '—'}</div>
+          <div><span className="text-admin-fg-muted">Last error:</span> {s.lastErrorCode ?? '—'}</div>
+        </div>
+      </SettingsSection>
 
-          <section className="mb-6 rounded-2xl border border-border bg-surface p-4">
-            <h3 className="mb-2 text-xs font-bold uppercase tracking-wider text-muted">Session</h3>
-            <div className="grid grid-cols-2 gap-2 text-sm md:grid-cols-4">
-              <div><span className="text-muted">State:</span> <Badge variant={s.state === 'evaluated' ? 'success' : s.state === 'failed' ? 'danger' : 'info'} size="sm">{s.state}</Badge></div>
-              <div><span className="text-muted">Turns:</span> {s.turnCount}</div>
-              <div><span className="text-muted">Duration:</span> {s.durationSeconds}s</div>
-              <div><span className="text-muted">Template:</span> {s.templateId ?? '—'}</div>
-              <div><span className="text-muted">Created:</span> {new Date(s.createdAt).toLocaleString()}</div>
-              <div><span className="text-muted">Started:</span> {s.startedAt ? new Date(s.startedAt).toLocaleString() : '—'}</div>
-              <div><span className="text-muted">Completed:</span> {s.completedAt ? new Date(s.completedAt).toLocaleString() : '—'}</div>
-              <div><span className="text-muted">Last error:</span> {s.lastErrorCode ?? '—'}</div>
-            </div>
-          </section>
-
-          {detail.evaluation && (
-            <section className="mb-6 rounded-2xl border border-border bg-surface p-4">
-              <h3 className="mb-2 text-xs font-bold uppercase tracking-wider text-muted">Evaluation</h3>
-              <div className="mb-2 text-sm">
-                <strong>Scaled:</strong> {detail.evaluation.overallScaled}/500 ·{' '}
-                <strong>Grade:</strong> {detail.evaluation.overallGrade} ·{' '}
-                <Badge variant={detail.evaluation.passed ? 'success' : 'warning'} size="sm">
-                  {detail.evaluation.passed ? 'PASSED' : 'below pass'}
-                </Badge>
-                {' '}· Rulebook v{detail.evaluation.rulebookVersion}
+      {detail.evaluation && (
+        <SettingsSection title="Evaluation">
+          <div className="mb-2 text-sm text-admin-fg-default">
+            <strong>Scaled:</strong> {detail.evaluation.overallScaled}/500 ·{' '}
+            <strong>Grade:</strong> {detail.evaluation.overallGrade} ·{' '}
+            <Badge variant={detail.evaluation.passed ? 'success' : 'warning'} size="sm">
+              {detail.evaluation.passed ? 'PASSED' : 'below pass'}
+            </Badge>
+            {' '}· Rulebook v{detail.evaluation.rulebookVersion}
+          </div>
+          {detail.evaluation.advisory && <p className="mb-2 text-xs text-admin-fg-muted">{detail.evaluation.advisory}</p>}
+          <div className="mb-3 space-y-1">
+            {criteria.map((c) => (
+              <div key={c.id} className="text-xs">
+                <span className="font-semibold text-admin-fg-strong">{c.id}:</span> {c.score06}/{c.maxScore} — {c.evidence}
               </div>
-              {detail.evaluation.advisory && <p className="mb-2 text-xs text-muted">{detail.evaluation.advisory}</p>}
-              <div className="mb-3 space-y-1">
-                {criteria.map((c) => (
-                  <div key={c.id} className="text-xs">
-                    <span className="font-semibold text-navy">{c.id}:</span> {c.score06}/{c.maxScore} — {c.evidence}
+            ))}
+          </div>
+          {strengths.length > 0 && (<div className="mb-2 text-xs"><strong>Strengths:</strong> {strengths.join(' | ')}</div>)}
+          {improvements.length > 0 && (<div className="mb-2 text-xs"><strong>Improvements:</strong> {improvements.join(' | ')}</div>)}
+          {suggestedPractice.length > 0 && (<div className="mb-2 text-xs"><strong>Practice:</strong> {suggestedPractice.join(' | ')}</div>)}
+          {appliedRules.length > 0 && (<div className="text-[10px] text-admin-fg-muted">Rules applied: {appliedRules.join(', ')}</div>)}
+        </SettingsSection>
+      )}
+
+      <SettingsSection title="Scenario">
+        <pre className="overflow-x-auto rounded-admin-lg border border-admin-border bg-[var(--admin-bg-subtle)] p-3 text-[11px] text-admin-fg-default">{JSON.stringify(scenario, null, 2)}</pre>
+      </SettingsSection>
+
+      <SettingsSection title="Transcript">
+        <div className="space-y-3">
+          {detail.turns.map((t) => {
+            const anns = detail.annotations.filter((a) => a.turnNumber === t.turnNumber);
+            return (
+              <div key={t.turnNumber} className="rounded-admin-lg border border-admin-border p-3">
+                <div className="mb-1 text-[10px] font-semibold uppercase text-admin-fg-muted">
+                  Turn {t.turnNumber} · {t.role} · {t.durationMs}ms{t.confidenceScore != null ? ` · conf ${(t.confidenceScore * 100).toFixed(0)}%` : ''}
+                  {t.aiFeatureCode && ` · ${t.aiFeatureCode}`}
+                </div>
+                <p className="text-sm text-admin-fg-strong">{t.content}</p>
+                {anns.map((a, i) => (
+                  <div key={i} className="mt-2 flex items-start gap-2 text-xs">
+                    <Badge variant={a.type === 'strength' ? 'success' : a.type === 'error' ? 'danger' : 'warning'} size="sm">{a.type}</Badge>
+                    <div className="flex-1">
+                      {a.evidence}
+                      {a.ruleId && (<span className="ml-2 font-mono text-[10px] text-[var(--admin-primary)]">{a.ruleId}</span>)}
+                      {a.suggestion && (<div className="mt-0.5 text-[11px] text-[var(--admin-primary)]">{a.suggestion}</div>)}
+                    </div>
                   </div>
                 ))}
               </div>
-              {strengths.length > 0 && (<div className="mb-2 text-xs"><strong>Strengths:</strong> {strengths.join(' | ')}</div>)}
-              {improvements.length > 0 && (<div className="mb-2 text-xs"><strong>Improvements:</strong> {improvements.join(' | ')}</div>)}
-              {suggestedPractice.length > 0 && (<div className="mb-2 text-xs"><strong>Practice:</strong> {suggestedPractice.join(' | ')}</div>)}
-              {appliedRules.length > 0 && (<div className="text-[10px] text-muted">Rules applied: {appliedRules.join(', ')}</div>)}
-            </section>
-          )}
-
-          <section className="mb-6 rounded-2xl border border-border bg-surface p-4">
-            <h3 className="mb-2 text-xs font-bold uppercase tracking-wider text-muted">Scenario</h3>
-            <pre className="overflow-x-auto rounded-lg bg-background-light p-3 text-[11px]">{JSON.stringify(scenario, null, 2)}</pre>
-          </section>
-
-          <section className="rounded-2xl border border-border bg-surface p-4">
-            <h3 className="mb-2 text-xs font-bold uppercase tracking-wider text-muted">Transcript</h3>
-            <div className="space-y-3">
-              {detail.turns.map((t) => {
-                const anns = detail.annotations.filter((a) => a.turnNumber === t.turnNumber);
-                return (
-                  <div key={t.turnNumber} className="rounded-xl border border-border/50 p-3">
-                    <div className="mb-1 text-[10px] font-semibold uppercase text-muted">
-                      Turn {t.turnNumber} · {t.role} · {t.durationMs}ms{t.confidenceScore != null ? ` · conf ${(t.confidenceScore * 100).toFixed(0)}%` : ''}
-                      {t.aiFeatureCode && ` · ${t.aiFeatureCode}`}
-                    </div>
-                    <p className="text-sm text-navy">{t.content}</p>
-                    {anns.map((a, i) => (
-                      <div key={i} className="mt-2 flex items-start gap-2 text-xs">
-                        <Badge variant={a.type === 'strength' ? 'success' : a.type === 'error' ? 'danger' : 'warning'} size="sm">{a.type}</Badge>
-                        <div className="flex-1">
-                          {a.evidence}
-                          {a.ruleId && (<span className="ml-2 font-mono text-[10px] text-primary">{a.ruleId}</span>)}
-                          {a.suggestion && (<div className="mt-0.5 text-[11px] text-primary">💡 {a.suggestion}</div>)}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                );
-              })}
-            </div>
-          </section>
-        </AdminRoutePanel>
-      </AdminRouteWorkspace>
-    </>
+            );
+          })}
+        </div>
+      </SettingsSection>
+    </AdminSettingsLayout>
   );
 }

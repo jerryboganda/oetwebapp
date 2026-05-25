@@ -77,6 +77,17 @@ export type DataTableProps<TData, TValue> = {
   toolbarActions?: React.ReactNode;
   bulkActions?: (selectedRows: TData[]) => React.ReactNode;
   className?: string;
+  /**
+   * Optional ARIA label for the table region. Improves SR experience when
+   * the surrounding heading does not already describe the table.
+   */
+  'aria-label'?: string;
+  /**
+   * Backward-compat row key extractor. The DataTable already keys rows via
+   * the TanStack row id, but historical call sites pass `keyExtractor` so
+   * we accept (and ignore) it without breaking compilation.
+   */
+  keyExtractor?: (row: TData) => string | number;
 };
 
 function DataTableInner<TData, TValue>({
@@ -482,3 +493,8 @@ function DataTable<TData, TValue>(props: DataTableProps<TData, TValue>) {
 DataTable.displayName = 'DataTable';
 
 export { DataTable };
+// Re-export TanStack types so callers can write `import { ColumnDef } from
+// '@/components/admin/ui/data-table'` without pulling the upstream package
+// in directly. Backward-compat for migrations that referenced the local
+// barrel export.
+export type { ColumnDef } from '@tanstack/react-table';

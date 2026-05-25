@@ -7,16 +7,13 @@ import {
   fetchAdminPronunciationDrills,
   archiveAdminPronunciationDrill,
 } from '@/lib/api';
-import {
-  AdminRouteHero,
-  AdminRoutePanel,
-  AdminRouteWorkspace,
-} from '@/components/domain/admin-route-surface';
-import { Card } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
+import { AdminTableLayout } from '@/components/admin/layout/admin-table-layout';
+import { Card } from '@/components/admin/ui/card';
+import { Button } from '@/components/admin/ui/button';
+import { Badge, statusToTone } from '@/components/admin/ui/badge';
 import { Toast } from '@/components/ui/alert';
-import { Skeleton } from '@/components/ui/skeleton';
+import { Skeleton } from '@/components/admin/ui/skeleton';
+import { EmptyState } from '@/components/admin/ui/empty-state';
 
 type DrillRow = {
   id: string;
@@ -40,6 +37,12 @@ type ListResponse = {
 };
 
 type ToastState = { variant: 'success' | 'error'; message: string } | null;
+
+const BREADCRUMBS = [
+  { label: 'Admin', href: '/admin' },
+  { label: 'Content', href: '/admin/content' },
+  { label: 'Pronunciation' },
+];
 
 export default function AdminPronunciationDashboard() {
   const [rows, setRows] = useState<DrillRow[]>([]);
@@ -84,37 +87,29 @@ export default function AdminPronunciationDashboard() {
   }, [load]);
 
   return (
-    <AdminRouteWorkspace role="main" aria-label="Pronunciation CMS">
-      <AdminRouteHero
-        eyebrow="CMS"
-        icon={Mic}
-        accent="navy"
+    <>
+      <AdminTableLayout
         title="Pronunciation CMS"
         description="Manage pronunciation drills. Each drill is grounded in the pronunciation rulebook; publishing requires phoneme, tips, and at least 3 example words plus 1 sentence."
-        aside={(
-          <div className="rounded-2xl border border-border bg-background-light p-4 shadow-sm">
-            <div className="flex flex-wrap gap-2">
-              <Button variant="secondary" className="gap-2" asChild>
-<Link href="/admin/content/pronunciation/ai-draft">
-                  <Sparkles className="h-4 w-4" /> AI draft
-                </Link>
-</Button>
-              <Button variant="primary" className="gap-2" asChild>
-<Link href="/admin/content/pronunciation/new">
-                  <Plus className="h-4 w-4" /> New drill
-                </Link>
-</Button>
-            </div>
+        eyebrow="CMS"
+        breadcrumbs={BREADCRUMBS}
+        actions={
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" size="sm" asChild>
+              <Link href="/admin/content/pronunciation/ai-draft">
+                <Sparkles className="mr-2 h-4 w-4" /> AI draft
+              </Link>
+            </Button>
+            <Button size="sm" asChild>
+              <Link href="/admin/content/pronunciation/new">
+                <Plus className="mr-2 h-4 w-4" /> New drill
+              </Link>
+            </Button>
           </div>
-        )}
-      />
-
-      <div className="space-y-4">
-        <div className="text-sm text-muted">{total} drill{total === 1 ? '' : 's'}</div>
-
-        <AdminRoutePanel>
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
-            <label className="flex flex-col text-xs uppercase tracking-[0.15em] text-admin-text-muted">
+        }
+        banner={
+          <div className="grid grid-cols-1 gap-3 rounded-admin-lg border border-admin-border bg-admin-bg-surface p-4 shadow-admin-sm md:grid-cols-4">
+            <label className="flex flex-col text-xs uppercase tracking-[0.15em] text-admin-fg-muted">
               Search
               <div className="relative mt-1">
                 <input
@@ -123,18 +118,18 @@ export default function AdminPronunciationDashboard() {
                   onChange={(e) => setSearch(e.target.value)}
                   placeholder="Label or phoneme…"
                   aria-label="Search drills by label or phoneme"
-                  className="w-full rounded-xl border border-border bg-surface pl-9 pr-3 py-2 text-sm text-navy focus:outline-none focus:ring-2 focus:ring-primary dark:text-white"
+                  className="w-full rounded-admin border border-admin-border bg-admin-bg-surface pl-9 pr-3 py-2 text-sm text-admin-fg-strong focus:outline-none focus:ring-2 focus:ring-[var(--admin-primary)]"
                 />
-                <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-muted" aria-hidden />
+                <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-admin-fg-muted" aria-hidden />
               </div>
             </label>
-            <label className="flex flex-col text-xs uppercase tracking-[0.15em] text-admin-text-muted">
+            <label className="flex flex-col text-xs uppercase tracking-[0.15em] text-admin-fg-muted">
               Profession
               <select
                 value={profession}
                 onChange={(e) => setProfession(e.target.value)}
                 aria-label="Filter by profession"
-                className="mt-1 rounded-xl border border-border bg-surface px-3 py-2 text-sm text-navy focus:outline-none focus:ring-2 focus:ring-primary dark:text-white"
+                className="mt-1 rounded-admin border border-admin-border bg-admin-bg-surface px-3 py-2 text-sm text-admin-fg-strong focus:outline-none focus:ring-2 focus:ring-[var(--admin-primary)]"
               >
                 <option value="">All</option>
                 <option value="all">All / generic</option>
@@ -147,13 +142,13 @@ export default function AdminPronunciationDashboard() {
                 <option value="speech-pathology">Speech pathology</option>
               </select>
             </label>
-            <label className="flex flex-col text-xs uppercase tracking-[0.15em] text-admin-text-muted">
+            <label className="flex flex-col text-xs uppercase tracking-[0.15em] text-admin-fg-muted">
               Difficulty
               <select
                 value={difficulty}
                 onChange={(e) => setDifficulty(e.target.value)}
                 aria-label="Filter by difficulty"
-                className="mt-1 rounded-xl border border-border bg-surface px-3 py-2 text-sm text-navy focus:outline-none focus:ring-2 focus:ring-primary dark:text-white"
+                className="mt-1 rounded-admin border border-admin-border bg-admin-bg-surface px-3 py-2 text-sm text-admin-fg-strong focus:outline-none focus:ring-2 focus:ring-[var(--admin-primary)]"
               >
                 <option value="">All</option>
                 <option value="easy">Easy</option>
@@ -161,13 +156,13 @@ export default function AdminPronunciationDashboard() {
                 <option value="hard">Hard</option>
               </select>
             </label>
-            <label className="flex flex-col text-xs uppercase tracking-[0.15em] text-admin-text-muted">
+            <label className="flex flex-col text-xs uppercase tracking-[0.15em] text-admin-fg-muted">
               Status
               <select
                 value={status}
                 onChange={(e) => setStatus(e.target.value)}
                 aria-label="Filter by status"
-                className="mt-1 rounded-xl border border-border bg-surface px-3 py-2 text-sm text-navy focus:outline-none focus:ring-2 focus:ring-primary dark:text-white"
+                className="mt-1 rounded-admin border border-admin-border bg-admin-bg-surface px-3 py-2 text-sm text-admin-fg-strong focus:outline-none focus:ring-2 focus:ring-[var(--admin-primary)]"
               >
                 <option value="">All</option>
                 <option value="draft">Draft</option>
@@ -176,98 +171,102 @@ export default function AdminPronunciationDashboard() {
               </select>
             </label>
           </div>
-        </AdminRoutePanel>
+        }
+      >
+        <div className="p-4 sm:p-5">
+          <div className="mb-3 text-sm text-admin-fg-muted">{total} drill{total === 1 ? '' : 's'}</div>
 
-        {loading ? (
-          <div className="space-y-2">
-            {Array.from({ length: 5 }).map((_, i) => (
-              <Skeleton key={i} className="h-14 rounded-xl" />
-            ))}
-          </div>
-        ) : rows.length === 0 ? (
-          <Card className="p-8 text-center text-sm text-muted">
-            No drills match these filters.
-          </Card>
-        ) : (
-          <Card className="overflow-hidden">
-            <table className="min-w-full text-sm">
-              <thead className="bg-background-light text-left text-xs uppercase tracking-[0.15em] text-muted">
-                <tr>
-                  <th className="px-4 py-2">Label</th>
-                  <th className="px-4 py-2">Phoneme</th>
-                  <th className="px-4 py-2">Rule</th>
-                  <th className="px-4 py-2">Focus</th>
-                  <th className="px-4 py-2">Profession</th>
-                  <th className="px-4 py-2">Difficulty</th>
-                  <th className="px-4 py-2">Status</th>
-                  <th className="px-4 py-2">Audio</th>
-                  <th className="px-4 py-2 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((r) => (
-                  <tr key={r.id} className="border-t border-border hover:bg-background-light/40">
-                    <td className="px-4 py-2">
-                      <Link
-                        href={`/admin/content/pronunciation/${r.id}`}
-                        className="font-medium text-primary hover:underline"
-                      >
-                        {r.label}
-                      </Link>
-                    </td>
-                    <td className="px-4 py-2 font-mono text-xs">/{r.targetPhoneme}/</td>
-                    <td className="px-4 py-2 font-mono text-xs text-muted">{r.primaryRuleId ?? '—'}</td>
-                    <td className="px-4 py-2 text-xs capitalize">{r.focus}</td>
-                    <td className="px-4 py-2 text-xs capitalize">{r.profession.replace('-', ' ')}</td>
-                    <td className="px-4 py-2 text-xs capitalize">{r.difficulty}</td>
-                    <td className="px-4 py-2">
-                      <Badge
-                        variant={r.status === 'active' ? 'success' : r.status === 'archived' ? 'muted' : 'warning'}
-                      >
-                        {r.status}
-                      </Badge>
-                    </td>
-                    <td className="px-4 py-2">
-                      {r.audioModelUrl ? (
-                        <span className="text-xs text-success">✓</span>
-                      ) : (
-                        <span className="text-xs text-muted">—</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-2 text-right">
-                      <div className="flex justify-end gap-1">
-                        <Button variant="ghost" size="sm" aria-label={`Edit ${r.label}`} asChild>
-<Link href={`/admin/content/pronunciation/${r.id}`}>
-                            <Mic className="h-3.5 w-3.5" />
-                          </Link>
-</Button>
-                        {r.status !== 'archived' && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleArchive(r.id)}
-                            aria-label={`Archive ${r.label}`}
-                          >
-                            <Archive className="h-3.5 w-3.5" />
-                          </Button>
-                        )}
-                      </div>
-                    </td>
+          {loading ? (
+            <div className="space-y-2">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <Skeleton key={i} className="h-14 rounded-admin" />
+              ))}
+            </div>
+          ) : rows.length === 0 ? (
+            <EmptyState
+              title="No drills match these filters"
+              description="Adjust the filters or create a new drill to populate the library."
+              primaryAction={{ label: 'New drill', href: '/admin/content/pronunciation/new' }}
+            />
+          ) : (
+            <Card className="overflow-hidden">
+              <table className="min-w-full text-sm">
+                <thead className="bg-admin-bg-subtle text-left text-xs uppercase tracking-[0.15em] text-admin-fg-muted">
+                  <tr>
+                    <th className="px-4 py-2">Label</th>
+                    <th className="px-4 py-2">Phoneme</th>
+                    <th className="px-4 py-2">Rule</th>
+                    <th className="px-4 py-2">Focus</th>
+                    <th className="px-4 py-2">Profession</th>
+                    <th className="px-4 py-2">Difficulty</th>
+                    <th className="px-4 py-2">Status</th>
+                    <th className="px-4 py-2">Audio</th>
+                    <th className="px-4 py-2 text-right">Actions</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </Card>
-        )}
+                </thead>
+                <tbody>
+                  {rows.map((r) => (
+                    <tr key={r.id} className="border-t border-admin-border hover:bg-admin-bg-subtle/40">
+                      <td className="px-4 py-2">
+                        <Link
+                          href={`/admin/content/pronunciation/${r.id}`}
+                          className="font-medium text-[var(--admin-primary)] hover:underline"
+                        >
+                          {r.label}
+                        </Link>
+                      </td>
+                      <td className="px-4 py-2 font-mono text-xs">/{r.targetPhoneme}/</td>
+                      <td className="px-4 py-2 font-mono text-xs text-admin-fg-muted">{r.primaryRuleId ?? '—'}</td>
+                      <td className="px-4 py-2 text-xs capitalize">{r.focus}</td>
+                      <td className="px-4 py-2 text-xs capitalize">{r.profession.replace('-', ' ')}</td>
+                      <td className="px-4 py-2 text-xs capitalize">{r.difficulty}</td>
+                      <td className="px-4 py-2">
+                        <Badge variant={statusToTone(r.status)}>
+                          {r.status}
+                        </Badge>
+                      </td>
+                      <td className="px-4 py-2">
+                        {r.audioModelUrl ? (
+                          <span className="text-xs text-[var(--admin-success)]">ok</span>
+                        ) : (
+                          <span className="text-xs text-admin-fg-muted">—</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-2 text-right">
+                        <div className="flex justify-end gap-1">
+                          <Button variant="ghost" size="sm" aria-label={`Edit ${r.label}`} asChild>
+                            <Link href={`/admin/content/pronunciation/${r.id}`}>
+                              <Mic className="h-3.5 w-3.5" />
+                            </Link>
+                          </Button>
+                          {r.status !== 'archived' && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleArchive(r.id)}
+                              aria-label={`Archive ${r.label}`}
+                            >
+                              <Archive className="h-3.5 w-3.5" />
+                            </Button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </Card>
+          )}
+        </div>
+      </AdminTableLayout>
 
-        {toast && (
-          <Toast
-            variant={toast.variant === 'error' ? 'error' : 'success'}
-            message={toast.message}
-            onClose={() => setToast(null)}
-          />
-        )}
-      </div>
-    </AdminRouteWorkspace>
+      {toast && (
+        <Toast
+          variant={toast.variant === 'error' ? 'error' : 'success'}
+          message={toast.message}
+          onClose={() => setToast(null)}
+        />
+      )}
+    </>
   );
 }

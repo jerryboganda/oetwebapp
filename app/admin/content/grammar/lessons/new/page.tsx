@@ -3,13 +3,11 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, FilePlus } from 'lucide-react';
 import { adminCreateGrammarLessonV2, adminListGrammarTopics } from '@/lib/api';
 import { AdminPermission, hasPermission } from '@/lib/admin-permissions';
-import {
-  AdminRouteHero,
-  AdminRouteWorkspace,
-} from '@/components/domain/admin-route-surface';
+import { AdminSettingsLayout } from '@/components/admin/layout/admin-settings-layout';
+import { Card, CardContent } from '@/components/admin/ui/card';
+import { Button } from '@/components/admin/ui/button';
 import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
 import { useCurrentUser } from '@/lib/hooks/use-current-user';
 import { Toast } from '@/components/ui/alert';
@@ -17,6 +15,13 @@ import { GrammarLessonEditor, emptyDraft, draftToApi, type LessonDraft } from '@
 import type { AdminGrammarTopic } from '@/lib/grammar/types';
 
 type ToastState = { variant: 'success' | 'error'; message: string } | null;
+
+const BREADCRUMBS = [
+  { label: 'Admin', href: '/admin' },
+  { label: 'Content', href: '/admin/content' },
+  { label: 'Grammar', href: '/admin/content/grammar' },
+  { label: 'New lesson' },
+];
 
 export default function NewGrammarLessonPage() {
   const router = useRouter();
@@ -55,39 +60,47 @@ export default function NewGrammarLessonPage() {
   }, [canWriteContent, router]);
 
   if (isLoading) return null;
-
   if (!isAuthenticated || role !== 'admin') return null;
 
   if (!canWriteContent) {
     return (
-      <AdminRouteWorkspace role="main" aria-label="New grammar lesson">
-        <p className="text-sm text-muted">Content write permission is required.</p>
-      </AdminRouteWorkspace>
+      <AdminSettingsLayout
+        title="New grammar lesson"
+        description="Content write permission is required."
+        eyebrow="CMS"
+        breadcrumbs={BREADCRUMBS}
+      >
+        <Card>
+          <CardContent className="py-8 text-sm text-admin-fg-muted">
+            You do not have permission to author lessons.
+          </CardContent>
+        </Card>
+      </AdminSettingsLayout>
     );
   }
 
   return (
-    <AdminRouteWorkspace role="main" aria-label="New grammar lesson">
-      <Link href="/admin/content/grammar" className="inline-flex items-center gap-1 text-sm text-muted hover:text-navy" aria-label="Back">
-        <ArrowLeft className="h-4 w-4" /> Back to Grammar CMS
-      </Link>
-
-      <AdminRouteHero
-        eyebrow="CMS"
-        icon={FilePlus}
-        accent="navy"
+    <>
+      <AdminSettingsLayout
         title="New grammar lesson"
         description="Author a new grammar lesson with content blocks and exercises before publishing."
-      />
-
-      <GrammarLessonEditor
-        initial={emptyDraft()}
-        topics={topics.map((t) => ({ id: t.id, name: t.name, slug: t.slug }))}
-        onSave={onSave}
-        saving={saving}
-      />
+        eyebrow="CMS"
+        breadcrumbs={BREADCRUMBS}
+        actions={
+          <Button variant="outline" size="sm" asChild>
+            <Link href="/admin/content/grammar">Back to Grammar CMS</Link>
+          </Button>
+        }
+      >
+        <GrammarLessonEditor
+          initial={emptyDraft()}
+          topics={topics.map((t) => ({ id: t.id, name: t.name, slug: t.slug }))}
+          onSave={onSave}
+          saving={saving}
+        />
+      </AdminSettingsLayout>
 
       {toast ? <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} /> : null}
-    </AdminRouteWorkspace>
+    </>
   );
 }

@@ -7,13 +7,21 @@
  * `/v1/admin/speaking/recordings/audit` for compliance review.
  */
 import { useCallback, useEffect, useState } from 'react';
-import { AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
-import { Card } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
+import { Shield } from 'lucide-react';
+import { AdminTableLayout } from '@/components/admin/layout/admin-table-layout';
+import { Card, CardContent } from '@/components/admin/ui/card';
+import { Button } from '@/components/admin/ui/button';
 import { Input } from '@/components/ui/form-controls';
-import { Badge } from '@/components/ui/badge';
-import { Skeleton } from '@/components/ui/skeleton';
+import { Badge } from '@/components/admin/ui/badge';
+import { Skeleton } from '@/components/admin/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
+
+const BREADCRUMBS = [
+  { label: 'Admin', href: '/admin' },
+  { label: 'Speaking', href: '/admin/speaking' },
+  { label: 'Recordings', href: '/admin/speaking/recordings' },
+  { label: 'Access audit' },
+];
 import {
   fetchSpeakingAccessAudit,
   type SpeakingAccessAuditFilter,
@@ -60,117 +68,115 @@ export default function AdminSpeakingRecordingsAuditPage() {
   }
 
   return (
-    <AdminRouteWorkspace role="main" aria-label="Speaking recording access audit">
-      <div className="space-y-6">
-        <header className="space-y-2">
-          <h1 className="text-2xl font-semibold text-foreground">
-            Speaking recordings · access audit
-          </h1>
-          <p className="text-muted-foreground">
-            Every read of a learner&apos;s speaking recording is logged here. Each row maps to one
-            <code className="mx-1 rounded bg-muted px-1 py-0.5 text-xs">AuditEvent</code> row.
-          </p>
-        </header>
-
-        <Card className="space-y-4 p-4">
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <Input
-              placeholder="Recording ID"
-              value={filter.recordingId ?? ''}
-              onChange={(e) => update('recordingId', e.target.value)}
-            />
-            <Input
-              placeholder="Learner email or ID"
-              value={filter.learnerEmailOrId ?? ''}
-              onChange={(e) => update('learnerEmailOrId', e.target.value)}
-            />
-            <Input
-              placeholder="Tutor / actor email or ID"
-              value={filter.tutorEmailOrId ?? ''}
-              onChange={(e) => update('tutorEmailOrId', e.target.value)}
-            />
-            <Input
-              type="number"
-              min={1}
-              max={500}
-              placeholder="Limit (max 500)"
-              value={filter.limit ?? 100}
-              onChange={(e) => update('limit', Number(e.target.value) || undefined)}
-            />
-            <Input
-              type="datetime-local"
-              value={filter.from ?? ''}
-              onChange={(e) => update('from', e.target.value)}
-            />
-            <Input
-              type="datetime-local"
-              value={filter.to ?? ''}
-              onChange={(e) => update('to', e.target.value)}
-            />
-          </div>
-          <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={() => setFilter({ limit: 100 })} disabled={loading}>
-              Reset
-            </Button>
-            <Button onClick={reload} disabled={loading}>
-              {loading ? 'Loading…' : 'Apply filters'}
-            </Button>
-          </div>
+    <AdminTableLayout
+      title="Speaking recordings · access audit"
+      description="Every read of a learner's speaking recording is logged here. Each row maps to one AuditEvent."
+      breadcrumbs={BREADCRUMBS}
+      eyebrow="Compliance"
+      icon={<Shield className="h-5 w-5" />}
+      banner={(
+        <Card>
+          <CardContent className="space-y-4 p-4">
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <Input
+                placeholder="Recording ID"
+                value={filter.recordingId ?? ''}
+                onChange={(e) => update('recordingId', e.target.value)}
+              />
+              <Input
+                placeholder="Learner email or ID"
+                value={filter.learnerEmailOrId ?? ''}
+                onChange={(e) => update('learnerEmailOrId', e.target.value)}
+              />
+              <Input
+                placeholder="Tutor / actor email or ID"
+                value={filter.tutorEmailOrId ?? ''}
+                onChange={(e) => update('tutorEmailOrId', e.target.value)}
+              />
+              <Input
+                type="number"
+                min={1}
+                max={500}
+                placeholder="Limit (max 500)"
+                value={filter.limit ?? 100}
+                onChange={(e) => update('limit', Number(e.target.value) || undefined)}
+              />
+              <Input
+                type="datetime-local"
+                value={filter.from ?? ''}
+                onChange={(e) => update('from', e.target.value)}
+              />
+              <Input
+                type="datetime-local"
+                value={filter.to ?? ''}
+                onChange={(e) => update('to', e.target.value)}
+              />
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setFilter({ limit: 100 })} disabled={loading}>
+                Reset
+              </Button>
+              <Button onClick={reload} disabled={loading}>
+                {loading ? 'Loading…' : 'Apply filters'}
+              </Button>
+            </div>
+            {error && <InlineAlert variant="error">{error}</InlineAlert>}
+          </CardContent>
         </Card>
-
-        {error && <InlineAlert variant="error">{error}</InlineAlert>}
-
-        {!rows ? (
-          <Skeleton className="h-64 w-full rounded-xl" />
-        ) : rows.length === 0 ? (
-          <Card className="p-8 text-center text-muted-foreground">No audit entries match the filter.</Card>
-        ) : (
-          <Card className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-muted text-left text-xs uppercase tracking-wide text-muted-foreground">
-                <tr>
-                  <th className="p-3">When</th>
-                  <th className="p-3">Action</th>
-                  <th className="p-3">Recording</th>
-                  <th className="p-3">Learner</th>
-                  <th className="p-3">Actor</th>
-                  <th className="p-3">Purpose / reason</th>
+      )}
+    >
+      {!rows ? (
+        <div className="p-6">
+          <Skeleton className="h-64 w-full rounded-admin-lg" />
+        </div>
+      ) : rows.length === 0 ? (
+        <div className="p-8 text-center text-admin-fg-muted">No audit entries match the filter.</div>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-admin-bg-subtle text-left text-xs uppercase tracking-wide text-admin-fg-muted">
+              <tr>
+                <th className="p-3">When</th>
+                <th className="p-3">Action</th>
+                <th className="p-3">Recording</th>
+                <th className="p-3">Learner</th>
+                <th className="p-3">Actor</th>
+                <th className="p-3">Purpose / reason</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row) => (
+                <tr key={row.auditEventId} className="border-t border-admin-border align-top">
+                  <td className="p-3 text-xs font-mono text-admin-fg-muted">
+                    {formatDate(row.occurredAt)}
+                  </td>
+                  <td className="p-3">
+                    <Badge variant={row.action.endsWith('Deleted') ? 'danger' : 'info'}>
+                      {row.action}
+                    </Badge>
+                  </td>
+                  <td className="p-3 text-xs font-mono">
+                    {row.recordingId ?? '—'}
+                    {row.sessionId && (
+                      <div className="text-[10px] text-admin-fg-muted">session {row.sessionId}</div>
+                    )}
+                  </td>
+                  <td className="p-3 text-xs font-mono">{row.learnerUserId ?? '—'}</td>
+                  <td className="p-3">
+                    <div className="text-sm text-admin-fg-strong">{row.actorName}</div>
+                    <div className="text-[10px] text-admin-fg-muted">
+                      {row.actorRole ?? 'unknown role'}
+                    </div>
+                  </td>
+                  <td className="p-3 text-xs text-admin-fg-muted">
+                    {row.purpose || row.reason || '—'}
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                {rows.map((row) => (
-                  <tr key={row.auditEventId} className="border-t border-slate-100 align-top">
-                    <td className="p-3 text-xs font-mono text-muted-foreground">
-                      {formatDate(row.occurredAt)}
-                    </td>
-                    <td className="p-3">
-                      <Badge variant={row.action.endsWith('Deleted') ? 'danger' : 'info'}>
-                        {row.action}
-                      </Badge>
-                    </td>
-                    <td className="p-3 text-xs font-mono">
-                      {row.recordingId ?? '—'}
-                      {row.sessionId && (
-                        <div className="text-[10px] text-slate-400">session {row.sessionId}</div>
-                      )}
-                    </td>
-                    <td className="p-3 text-xs font-mono">{row.learnerUserId ?? '—'}</td>
-                    <td className="p-3">
-                      <div className="text-sm text-foreground">{row.actorName}</div>
-                      <div className="text-[10px] text-muted-foreground">
-                        {row.actorRole ?? 'unknown role'}
-                      </div>
-                    </td>
-                    <td className="p-3 text-xs text-muted-foreground">
-                      {row.purpose || row.reason || '—'}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </Card>
-        )}
-      </div>
-    </AdminRouteWorkspace>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </AdminTableLayout>
   );
 }

@@ -3,15 +3,13 @@
 import { useEffect, useState } from 'react';
 import { BarChart3, TrendingUp, Users, Clock } from 'lucide-react';
 import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
-import { Card } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Skeleton } from '@/components/ui/skeleton';
-import {
-  AdminRouteHero,
-  AdminRoutePanel,
-  AdminRouteSummaryCard,
-  AdminRouteWorkspace,
-} from '@/components/domain/admin-route-surface';
+import { AdminOperationsLayout, KpiStrip } from '@/components/admin/layout/admin-operations-layout';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/admin/ui/card';
+import { Badge } from '@/components/admin/ui/badge';
+import { Skeleton } from '@/components/admin/ui/skeleton';
+import { KpiTile } from '@/components/admin/ui/kpi-tile';
+import { Button } from '@/components/admin/ui/button';
+import { Input } from '@/components/admin/ui/input';
 import { AdminPermission, hasPermission } from '@/lib/admin-permissions';
 import { analytics } from '@/lib/analytics';
 import { apiClient } from '@/lib/api';
@@ -49,76 +47,94 @@ export default function ContentAnalyticsPage() {
   };
 
   if (isLoading) return null;
-
   if (!isAuthenticated || role !== 'admin') return null;
+
+  const breadcrumbs = [
+    { label: 'Admin', href: '/admin' },
+    { label: 'Content', href: '/admin/content' },
+    { label: 'Analytics' },
+  ];
 
   if (!canViewAnalytics) {
     return (
-      <AdminRouteWorkspace role="main" aria-label="Content Analytics">
-        <p className="text-sm text-muted">Content read permission is required.</p>
-      </AdminRouteWorkspace>
+      <AdminOperationsLayout title="Content Item Analytics" breadcrumbs={breadcrumbs} eyebrow="Analytics">
+        <Card><CardContent className="pt-6"><p className="text-sm text-admin-fg-muted">Content read permission is required.</p></CardContent></Card>
+      </AdminOperationsLayout>
     );
   }
 
   return (
-    <AdminRouteWorkspace role="main" aria-label="Content Analytics">
-      <AdminRouteHero
-        eyebrow="Analytics"
-        icon={BarChart3}
-        accent="navy"
-        title="Content Item Analytics"
-        description="Deep-dive into per-item usage, completion rates, and learner outcomes."
-      />
-
-      <AdminRoutePanel>
-        <div className="flex gap-3 items-end">
-          <div className="flex-1"><label className="text-sm font-medium text-admin-text-muted mb-1 block">Content ID</label><input className="w-full border border-admin-border bg-admin-surface-raised text-admin-text placeholder:text-admin-text-muted rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary" placeholder="Enter content ID..." value={contentId} onChange={e => setContentId(e.target.value)} /></div>
-          <button onClick={load} disabled={loading} className="px-4 py-2 bg-primary text-white dark:bg-violet-700 dark:hover:bg-violet-600 rounded-lg text-sm font-medium hover:bg-primary/90 disabled:opacity-50">{loading ? 'Loading...' : 'Analyze'}</button>
-        </div>
-      </AdminRoutePanel>
+    <AdminOperationsLayout
+      title="Content Item Analytics"
+      description="Deep-dive into per-item usage, completion rates, and learner outcomes."
+      breadcrumbs={breadcrumbs}
+      eyebrow="Analytics"
+      kpis={data ? (
+        <KpiStrip>
+          <KpiTile label="Total Attempts" value={data.metrics.totalAttempts} />
+          <KpiTile label="Completion Rate" value={`${data.metrics.completionRate}%`} tone="success" />
+          <KpiTile label="Unique Learners" value={data.metrics.uniqueLearners} />
+          <KpiTile label="Avg Time" value={`${data.metrics.averageTimeMinutes}m`} tone="warning" />
+        </KpiStrip>
+      ) : null}
+    >
+      <Card>
+        <CardHeader><CardTitle>Lookup</CardTitle></CardHeader>
+        <CardContent>
+          <div className="flex flex-col sm:flex-row gap-3 sm:items-end">
+            <div className="flex-1">
+              <label className="text-sm font-medium text-admin-fg-default mb-1 block">Content ID</label>
+              <Input placeholder="Enter content ID..." value={contentId} onChange={e => setContentId(e.target.value)} />
+            </div>
+            <Button onClick={load} disabled={loading} loading={loading}>
+              {loading ? 'Loading...' : 'Analyze'}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
 
       {loading ? (
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">{Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-24 rounded-xl" />)}</div>
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">{Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-24 rounded-admin-lg" />)}</div>
       ) : data ? (
         <MotionSection className="space-y-6">
           <MotionItem>
-            <AdminRoutePanel>
-              <h2 className="text-lg font-semibold text-admin-text">{data.title}</h2>
-              <div className="flex gap-2 mt-1">
-                <Badge variant="outline" className="capitalize">{data.subtestCode}</Badge>
-                <Badge variant="outline">{data.status}</Badge>
-              </div>
-            </AdminRoutePanel>
+            <Card>
+              <CardHeader>
+                <CardTitle>{data.title}</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="flex gap-2">
+                  <Badge variant="info" className="capitalize">{data.subtestCode}</Badge>
+                  <Badge variant="default">{data.status}</Badge>
+                </div>
+              </CardContent>
+            </Card>
           </MotionItem>
-
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-            <MotionItem><AdminRouteSummaryCard label="Total Attempts" value={data.metrics.totalAttempts} icon={<BarChart3 className="h-5 w-5" />} /></MotionItem>
-            <MotionItem><AdminRouteSummaryCard label="Completion Rate" value={`${data.metrics.completionRate}%`} icon={<TrendingUp className="h-5 w-5" />} tone="success" /></MotionItem>
-            <MotionItem><AdminRouteSummaryCard label="Unique Learners" value={data.metrics.uniqueLearners} icon={<Users className="h-5 w-5" />} /></MotionItem>
-            <MotionItem><AdminRouteSummaryCard label="Avg Time" value={`${data.metrics.averageTimeMinutes}m`} icon={<Clock className="h-5 w-5" />} tone="warning" /></MotionItem>
-          </div>
 
           {data.metrics.averageScore !== null && (
             <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-              <AdminRouteSummaryCard label="Avg Score" value={data.metrics.averageScore} />
-              <AdminRouteSummaryCard label="Median Score" value={data.metrics.medianScore ?? '--'} />
-              <AdminRouteSummaryCard label="Std Deviation" value={data.metrics.scoreStdDev ?? '--'} />
+              <KpiTile label="Avg Score" value={data.metrics.averageScore} />
+              <KpiTile label="Median Score" value={data.metrics.medianScore ?? '--'} />
+              <KpiTile label="Std Deviation" value={data.metrics.scoreStdDev ?? '--'} />
             </div>
           )}
 
           {data.monthlyTrend.length > 0 && (
-            <AdminRoutePanel title="Monthly Usage Trend">
-              <div className="space-y-2">{data.monthlyTrend.map(m => (
-                <div key={m.month} className="flex items-center gap-3">
-                  <span className="text-xs font-mono w-20 text-admin-text-muted">{m.month}</span>
-                  <div className="flex-1 h-4 rounded-full bg-muted overflow-hidden"><div className="h-full rounded-full bg-primary" style={{ width: `${Math.min(100, m.attempts * 10)}%` }} /></div>
-                  <span className="text-xs text-admin-text-muted w-16 text-right">{m.attempts} / {m.completed}</span>
-                </div>
-              ))}</div>
-            </AdminRoutePanel>
+            <Card>
+              <CardHeader><CardTitle>Monthly Usage Trend</CardTitle></CardHeader>
+              <CardContent>
+                <div className="space-y-2">{data.monthlyTrend.map(m => (
+                  <div key={m.month} className="flex items-center gap-3">
+                    <span className="text-xs font-mono w-20 text-admin-fg-muted">{m.month}</span>
+                    <div className="flex-1 h-4 rounded-full bg-admin-bg-subtle overflow-hidden"><div className="h-full rounded-full bg-[var(--admin-primary)]" style={{ width: `${Math.min(100, m.attempts * 10)}%` }} /></div>
+                    <span className="text-xs text-admin-fg-muted w-16 text-right">{m.attempts} / {m.completed}</span>
+                  </div>
+                ))}</div>
+              </CardContent>
+            </Card>
           )}
         </MotionSection>
       ) : null}
-    </AdminRouteWorkspace>
+    </AdminOperationsLayout>
   );
 }

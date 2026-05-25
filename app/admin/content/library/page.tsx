@@ -3,16 +3,17 @@
 import { useDeferredValue, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { FileText, History, Plus, Search } from 'lucide-react';
-import { AdminRouteSectionHeader, AdminRoutePanel, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
+import { AdminTableLayout } from '@/components/admin/layout/admin-table-layout';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
 import { DataTable, type Column } from '@/components/ui/data-table';
-import { EmptyState } from '@/components/ui/empty-error';
+import { EmptyState } from '@/components/admin/ui/empty-state';
 import { FilterBar, type FilterGroup } from '@/components/ui/filter-bar';
 import { Toast } from '@/components/ui/alert';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/admin/ui/badge';
+import { Button } from '@/components/admin/ui/button';
 import { Pagination } from '@/components/ui/pagination';
-import { Input } from '@/components/ui/form-controls';
+import { Input } from '@/components/admin/ui/input';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/admin/ui/card';
 import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
 import { getAdminContentLibraryData } from '@/lib/admin';
 import type { AdminContentRow } from '@/lib/types/admin';
@@ -115,19 +116,19 @@ export default function AdminContentLibraryPage() {
       key: 'title',
       header: 'Title',
       render: (row) => (
-        <button className="text-left font-medium text-primary hover:underline" onClick={() => router.push(`/admin/content/${row.id}`)}>
+        <button className="text-left font-medium text-[var(--admin-primary)] hover:underline" onClick={() => router.push(`/admin/content/${row.id}`)}>
           {row.title}
         </button>
       ),
     },
     { key: 'type', header: 'Type', render: (row) => <span className="capitalize">{row.type.replace('_', ' ')}</span> },
     { key: 'profession', header: 'Profession', render: (row) => <span className="capitalize">{row.profession || 'All'}</span> },
-    { key: 'author', header: 'Author', render: (row) => <span className="text-muted">{row.author}</span> },
+    { key: 'author', header: 'Author', render: (row) => <span className="text-admin-fg-muted">{row.author}</span> },
     {
       key: 'status',
       header: 'Status',
       render: (row) => (
-        <Badge variant={row.status === 'published' ? 'success' : row.status === 'archived' ? 'muted' : 'warning'}>
+        <Badge variant={row.status === 'published' ? 'success' : row.status === 'archived' ? 'default' : 'warning'}>
           {row.status}
         </Badge>
       ),
@@ -137,7 +138,7 @@ export default function AdminContentLibraryPage() {
       header: 'Revisions',
       render: (row) => (
         <button
-          className="flex items-center gap-1 text-xs text-muted hover:text-navy"
+          className="flex items-center gap-1 text-xs text-admin-fg-muted hover:text-admin-fg-strong"
           onClick={() => router.push(`/admin/content/${row.id}/revisions`)}
         >
           <History className="h-3.5 w-3.5" />
@@ -145,39 +146,39 @@ export default function AdminContentLibraryPage() {
         </button>
       ),
     },
-    { key: 'updatedAt', header: 'Updated', render: (row) => <span className="text-xs text-muted">{new Date(row.updatedAt).toLocaleString()}</span> },
+    { key: 'updatedAt', header: 'Updated', render: (row) => <span className="text-xs text-admin-fg-muted">{new Date(row.updatedAt).toLocaleString()}</span> },
   ];
 
   const mobileCardRender = (row: AdminContentRow) => (
     <div className="space-y-3">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="truncate text-xs uppercase tracking-[0.12em] text-muted">{row.id}</p>
-          <button className="truncate text-left font-semibold text-primary hover:underline" onClick={() => router.push(`/admin/content/${row.id}`)}>
+          <p className="truncate text-xs uppercase tracking-[0.12em] text-admin-fg-muted">{row.id}</p>
+          <button className="truncate text-left font-semibold text-[var(--admin-primary)] hover:underline" onClick={() => router.push(`/admin/content/${row.id}`)}>
             {row.title}
           </button>
         </div>
-        <Badge variant={row.status === 'published' ? 'success' : row.status === 'archived' ? 'muted' : 'warning'}>
+        <Badge variant={row.status === 'published' ? 'success' : row.status === 'archived' ? 'default' : 'warning'}>
           {row.status}
         </Badge>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
-        <div className="rounded-2xl bg-background-light px-3 py-2">
-          <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Type</p>
-          <p className="mt-1 font-medium capitalize text-navy">{row.type.replace('_', ' ')}</p>
+        <div className="rounded-admin bg-admin-bg-subtle px-3 py-2">
+          <p className="text-[11px] uppercase tracking-[0.12em] text-admin-fg-muted">Type</p>
+          <p className="mt-1 font-medium capitalize text-admin-fg-strong">{row.type.replace('_', ' ')}</p>
         </div>
-        <div className="rounded-2xl bg-background-light px-3 py-2">
-          <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Profession</p>
-          <p className="mt-1 font-medium capitalize text-navy">{row.profession || 'All'}</p>
+        <div className="rounded-admin bg-admin-bg-subtle px-3 py-2">
+          <p className="text-[11px] uppercase tracking-[0.12em] text-admin-fg-muted">Profession</p>
+          <p className="mt-1 font-medium capitalize text-admin-fg-strong">{row.profession || 'All'}</p>
         </div>
-        <div className="rounded-2xl bg-background-light px-3 py-2">
-          <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Author</p>
-          <p className="mt-1 font-medium text-navy">{row.author}</p>
+        <div className="rounded-admin bg-admin-bg-subtle px-3 py-2">
+          <p className="text-[11px] uppercase tracking-[0.12em] text-admin-fg-muted">Author</p>
+          <p className="mt-1 font-medium text-admin-fg-strong">{row.author}</p>
         </div>
-        <div className="rounded-2xl bg-background-light px-3 py-2">
-          <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Updated</p>
-          <p className="mt-1 font-medium text-navy">{new Date(row.updatedAt).toLocaleString()}</p>
+        <div className="rounded-admin bg-admin-bg-subtle px-3 py-2">
+          <p className="text-[11px] uppercase tracking-[0.12em] text-admin-fg-muted">Updated</p>
+          <p className="mt-1 font-medium text-admin-fg-strong">{new Date(row.updatedAt).toLocaleString()}</p>
         </div>
       </div>
 
@@ -185,8 +186,7 @@ export default function AdminContentLibraryPage() {
         <Button variant="outline" size="sm" className="w-full sm:flex-1" onClick={() => router.push(`/admin/content/${row.id}`)}>
           Open
         </Button>
-        <Button variant="outline" size="sm" className="w-full sm:flex-1" onClick={() => router.push(`/admin/content/${row.id}/revisions`)}>
-          <History className="h-4 w-4" />
+        <Button variant="outline" size="sm" className="w-full sm:flex-1" onClick={() => router.push(`/admin/content/${row.id}/revisions`)} startIcon={<History className="h-4 w-4" />}>
           Revisions ({row.revisionCount})
         </Button>
       </div>
@@ -207,101 +207,112 @@ export default function AdminContentLibraryPage() {
   if (!isAuthenticated || role !== 'admin') return null;
 
   return (
-    <AdminRouteWorkspace role="main" aria-label="Content library">
+    <>
       {toast ? <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} /> : null}
 
-      <AdminRouteSectionHeader
+      <AdminTableLayout
         title="Content Library"
         description="Manage the live OET content catalog, editorial revisions, and publish-ready practice material."
+        breadcrumbs={[
+          { label: 'Admin', href: '/admin' },
+          { label: 'Content', href: '/admin/content' },
+          { label: 'Library' },
+        ]}
         actions={
-          <Button onClick={() => router.push('/admin/content/new')} className="gap-2">
-            <Plus className="h-4 w-4" /> New Content
+          <Button onClick={() => router.push('/admin/content/new')} startIcon={<Plus className="h-4 w-4" />}>
+            New Content
           </Button>
         }
-      />
-
-      <AsyncStateWrapper
-        status={pageStatus}
-        onRetry={() => setReloadNonce((current) => current + 1)}
-        emptyContent={
-          <EmptyState
-            icon={<FileText className="h-10 w-10 text-muted" />}
-            title="No content items yet"
-            description="Create the first publishable content item to start the library."
-            action={{ label: 'Create Content', onClick: () => router.push('/admin/content/new') }}
-          />
+        banner={
+          <Card>
+            <CardHeader>
+              <CardTitle>Filters</CardTitle>
+              <CardDescription>Filter by subtest, profession, or publication state.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                <div className="max-w-sm">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-admin-fg-muted" />
+                    <Input
+                      placeholder="Search title, ID, or author"
+                      value={searchQuery}
+                      onChange={(event) => {
+                        setSearchQuery(event.target.value);
+                        setPage(1);
+                      }}
+                      className="pl-9"
+                    />
+                  </div>
+                </div>
+                <FilterBar
+                  groups={filterGroups}
+                  selected={filters}
+                  onChange={handleFilterChange}
+                  onClear={() => {
+                    setFilters({});
+                    setSearchQuery('');
+                    setPage(1);
+                  }}
+                />
+              </div>
+            </CardContent>
+          </Card>
         }
       >
-        <AdminRoutePanel title="Filters" description="Filter by subtest, profession, or publication state.">
-          <div className="max-w-sm">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-admin-text-muted" />
-              <Input
-                placeholder="Search title, ID, or author"
-                value={searchQuery}
-                onChange={(event) => {
-                  setSearchQuery(event.target.value);
-                  setPage(1);
-                }}
-                className="pl-9"
-              />
-            </div>
-          </div>
-          <FilterBar
-            groups={filterGroups}
-            selected={filters}
-            onChange={handleFilterChange}
-            onClear={() => {
-              setFilters({});
-              setSearchQuery('');
-              setPage(1);
-            }}
-          />
-        </AdminRoutePanel>
-
-        <AdminRoutePanel
-          title="Content Items"
-          description="Every visible row is backed by the live admin content endpoint."
-        >
-          {rows.length === 0 ? (
+        <AsyncStateWrapper
+          status={pageStatus}
+          onRetry={() => setReloadNonce((current) => current + 1)}
+          emptyContent={
             <EmptyState
-              icon={<Search className="h-10 w-10 text-admin-text-muted" />}
-              title="No matching content"
-              description="Adjust your search or filters to find a content item."
-              action={{
-                label: 'Clear Filters',
-                onClick: () => {
-                  setFilters({});
-                  setSearchQuery('');
-                  setPage(1);
-                },
-              }}
+              icon={<FileText className="h-10 w-10 text-admin-fg-muted" />}
+              title="No content items yet"
+              description="Create the first publishable content item to start the library."
+              primaryAction={{ label: 'Create Content', onClick: () => router.push('/admin/content/new') }}
             />
-          ) : (
-            <div className="space-y-4">
-              <DataTable columns={columns} data={rows} keyExtractor={(row) => row.id} mobileCardRender={mobileCardRender} selectable selectedKeys={selectedKeys} onSelectionChange={setSelectedKeys} />
-              <BulkActionBar
-                selectedCount={selectedKeys.size}
-                onClearSelection={() => setSelectedKeys(new Set())}
-                actions={[
-                  { key: 'delete', label: 'Delete selected', variant: 'danger', onClick: () => setToast({ variant: 'error', message: 'Bulk delete coming soon.' }) },
-                  { key: 'archive', label: 'Archive selected', onClick: () => setToast({ variant: 'error', message: 'Bulk archive coming soon.' }) },
-                  { key: 'publish', label: 'Publish selected', onClick: () => setToast({ variant: 'error', message: 'Bulk publish coming soon.' }) },
-                ]}
+          }
+        >
+          <div className="p-4 sm:p-5">
+            {rows.length === 0 ? (
+              <EmptyState
+                icon={<Search className="h-10 w-10 text-admin-fg-muted" />}
+                title="No matching content"
+                description="Adjust your search or filters to find a content item."
+                primaryAction={{
+                  label: 'Clear Filters',
+                  onClick: () => {
+                    setFilters({});
+                    setSearchQuery('');
+                    setPage(1);
+                  },
+                }}
               />
-              <Pagination
-                page={page}
-                pageSize={pageSize}
-                total={total}
-                onPageChange={setPage}
-                onPageSizeChange={setPageSize}
-                itemLabel="item"
-                itemLabelPlural="items"
-              />
-            </div>
-          )}
-        </AdminRoutePanel>
-      </AsyncStateWrapper>
-    </AdminRouteWorkspace>
+            ) : (
+              <div className="space-y-4">
+                <DataTable columns={columns} data={rows} keyExtractor={(row) => row.id} mobileCardRender={mobileCardRender} selectable selectedKeys={selectedKeys} onSelectionChange={setSelectedKeys} />
+                <BulkActionBar
+                  selectedCount={selectedKeys.size}
+                  onClearSelection={() => setSelectedKeys(new Set())}
+                  actions={[
+                    { key: 'delete', label: 'Delete selected', variant: 'danger', onClick: () => setToast({ variant: 'error', message: 'Bulk delete coming soon.' }) },
+                    { key: 'archive', label: 'Archive selected', onClick: () => setToast({ variant: 'error', message: 'Bulk archive coming soon.' }) },
+                    { key: 'publish', label: 'Publish selected', onClick: () => setToast({ variant: 'error', message: 'Bulk publish coming soon.' }) },
+                  ]}
+                />
+                <Pagination
+                  page={page}
+                  pageSize={pageSize}
+                  total={total}
+                  onPageChange={setPage}
+                  onPageSizeChange={setPageSize}
+                  itemLabel="item"
+                  itemLabelPlural="items"
+                />
+              </div>
+            )}
+          </div>
+        </AsyncStateWrapper>
+      </AdminTableLayout>
+    </>
   );
 }

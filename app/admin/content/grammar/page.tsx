@@ -2,12 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { BookMarked, Plus, Library, Wand2 } from 'lucide-react';
-import {
-  AdminRouteHero,
-  AdminRoutePanel,
-  AdminRouteWorkspace,
-} from '@/components/domain/admin-route-surface';
+import { BookMarked, Plus, Wand2 } from 'lucide-react';
+import { AdminCatalogLayout } from '@/components/admin/layout/admin-catalog-layout';
 import {
   adminListGrammarTopics,
   adminListGrammarLessonsV2,
@@ -15,12 +11,13 @@ import {
   adminPublishGrammarLessonV2,
   adminUnpublishGrammarLessonV2,
 } from '@/lib/api';
-import { Card } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/admin/ui/card';
+import { Button } from '@/components/admin/ui/button';
+import { Badge } from '@/components/admin/ui/badge';
 import { Input, Select } from '@/components/ui/form-controls';
 import { Toast } from '@/components/ui/alert';
-import { Skeleton } from '@/components/ui/skeleton';
+import { Skeleton } from '@/components/admin/ui/skeleton';
+import { EmptyState } from '@/components/admin/ui/empty-state';
 import { AdminPermission, hasPermission } from '@/lib/admin-permissions';
 import { useCurrentUser } from '@/lib/hooks/use-current-user';
 import type { AdminGrammarLessonRow, AdminGrammarTopic } from '@/lib/grammar/types';
@@ -28,6 +25,12 @@ import type { AdminGrammarLessonRow, AdminGrammarTopic } from '@/lib/grammar/typ
 type ToastState = { variant: 'success' | 'error'; message: string } | null;
 
 type AdminLessonRow = AdminGrammarLessonRow;
+
+const BREADCRUMBS = [
+  { label: 'Admin', href: '/admin' },
+  { label: 'Content', href: '/admin/content' },
+  { label: 'Grammar' },
+];
 
 export default function AdminGrammarDashboard() {
   const { user } = useCurrentUser();
@@ -109,191 +112,191 @@ export default function AdminGrammarDashboard() {
     }
   }
 
+  const filtersNode = (
+    <div className="grid w-full gap-3 sm:grid-cols-4">
+      <Select
+        value={filterExam}
+        onChange={(e) => setFilterExam(e.target.value)}
+        label="Exam"
+        options={[
+          { value: 'oet', label: 'OET' },
+          { value: 'ielts', label: 'IELTS' },
+          { value: 'pte', label: 'PTE' },
+        ]}
+      />
+      <Select
+        value={filterTopic}
+        onChange={(e) => setFilterTopic(e.target.value)}
+        label="Topic"
+        options={[{ value: '', label: 'Any topic' }, ...topics.map((t) => ({ value: t.id, label: t.name }))]}
+      />
+      <Select
+        value={filterStatus}
+        onChange={(e) => setFilterStatus(e.target.value)}
+        label="Publish state"
+        options={[
+          { value: '', label: 'Any' },
+          { value: 'draft', label: 'Draft' },
+          { value: 'review', label: 'In review' },
+          { value: 'published', label: 'Published' },
+          { value: 'archived', label: 'Archived' },
+        ]}
+      />
+      <Input
+        value={search}
+        onChange={(e) => setSearch(e.target.value)}
+        label="Search"
+        placeholder="title or description"
+      />
+    </div>
+  );
+
   return (
-    <AdminRouteWorkspace role="main" aria-label="Grammar CMS">
-      <AdminRouteHero
-        eyebrow="CMS"
-        icon={Library}
-        accent="navy"
+    <>
+      <AdminCatalogLayout
         title="Grammar CMS"
         description="Manage grammar topics, authored lessons, and AI drafts."
-        aside={canWriteContent ? (
-          <div className="rounded-2xl border border-border bg-background-light p-4 shadow-sm">
-            <div className="flex flex-wrap gap-2">
-              <Button variant="outline" className="inline-flex items-center gap-2" asChild>
-<Link href="/admin/content/grammar/topics">
-                  <BookMarked className="h-4 w-4" /> Topics
-                </Link>
-</Button>
-              <Button variant="outline" className="inline-flex items-center gap-2" asChild>
-<Link href="/admin/content/grammar/ai-draft">
-                  <Wand2 className="h-4 w-4" /> AI draft
-                </Link>
-</Button>
-              <Button className="inline-flex items-center gap-2" asChild>
-<Link href="/admin/content/grammar/lessons/new">
-                  <Plus className="h-4 w-4" /> New lesson
-                </Link>
-</Button>
-            </div>
+        eyebrow="CMS"
+        breadcrumbs={BREADCRUMBS}
+        hideViewModeToggle
+        filters={filtersNode}
+        actions={canWriteContent ? (
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" size="sm" asChild>
+              <Link href="/admin/content/grammar/topics">
+                <BookMarked className="mr-2 h-4 w-4" /> Topics
+              </Link>
+            </Button>
+            <Button variant="outline" size="sm" asChild>
+              <Link href="/admin/content/grammar/ai-draft">
+                <Wand2 className="mr-2 h-4 w-4" /> AI draft
+              </Link>
+            </Button>
+            <Button size="sm" asChild>
+              <Link href="/admin/content/grammar/lessons/new">
+                <Plus className="mr-2 h-4 w-4" /> New lesson
+              </Link>
+            </Button>
           </div>
         ) : undefined}
-      />
-
-      <AdminRoutePanel>
-        <div className="grid gap-3 sm:grid-cols-4">
-          <Select
-            value={filterExam}
-            onChange={(e) => setFilterExam(e.target.value)}
-            label="Exam"
-            options={[
-              { value: 'oet', label: 'OET' },
-              { value: 'ielts', label: 'IELTS' },
-              { value: 'pte', label: 'PTE' },
-            ]}
-          />
-          <Select
-            value={filterTopic}
-            onChange={(e) => setFilterTopic(e.target.value)}
-            label="Topic"
-            options={[{ value: '', label: 'Any topic' }, ...topics.map((t) => ({ value: t.id, label: t.name }))]}
-          />
-          <Select
-            value={filterStatus}
-            onChange={(e) => setFilterStatus(e.target.value)}
-            label="Publish state"
-            options={[
-              { value: '', label: 'Any' },
-              { value: 'draft', label: 'Draft' },
-              { value: 'review', label: 'In review' },
-              { value: 'published', label: 'Published' },
-              { value: 'archived', label: 'Archived' },
-            ]}
-          />
-          <Input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            label="Search"
-            placeholder="title or description"
-          />
-        </div>
-      </AdminRoutePanel>
-
-      <section>
-        <h2 className="mb-3 text-sm font-semibold uppercase tracking-[0.18em] text-muted">Topics ({topics.length})</h2>
-        {loading ? (
-          <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-            {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-24 rounded-2xl" />)}
-          </div>
-        ) : topics.length === 0 ? (
-          <Card className="border-dashed p-6 text-sm text-muted">
-            No topics yet.{canWriteContent ? (
-              <>
-                {' '}
-                <Link href="/admin/content/grammar/topics" className="text-primary hover:underline">Create the first one →</Link>
-              </>
-            ) : null}
-          </Card>
-        ) : (
-          <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-            {topics.map((t) => (
-              <Card key={t.id} className="p-4">
-                <div className="flex items-center gap-2">
-                  <span className="text-xl">{t.iconEmoji ?? '📘'}</span>
-                  <h3 className="text-sm font-semibold text-navy">{t.name}</h3>
-                  <Badge className="ml-auto text-[10px]">{t.status}</Badge>
-                </div>
-                {t.description ? <p className="mt-2 line-clamp-2 text-xs text-muted">{t.description}</p> : null}
-                <div className="mt-3 flex items-center justify-between text-xs text-muted">
-                  <span>{t.slug}</span>
-                  {canWriteContent ? (
-                    <Link href={`/admin/content/grammar/topics?id=${encodeURIComponent(t.id)}`} className="font-semibold text-primary hover:underline">
-                      Manage
-                    </Link>
-                  ) : null}
-                </div>
-              </Card>
-            ))}
-          </div>
-        )}
-      </section>
-
-      <section>
-        <h2 className="mb-3 text-sm font-semibold uppercase tracking-[0.18em] text-muted">Lessons ({lessons.length})</h2>
-        {loading ? (
-          <Skeleton className="h-64 rounded-2xl" />
-        ) : lessons.length === 0 ? (
-          <Card className="border-dashed p-6 text-sm text-muted">
-            No lessons yet.{canWriteContent ? (
-              <>
-                {' '}
-                <Link href="/admin/content/grammar/lessons/new" className="text-primary hover:underline">Author the first one →</Link>
-              </>
-            ) : null}
-          </Card>
-        ) : (
-          <Card className="overflow-x-auto p-0">
-            <table className="w-full text-sm">
-              <thead className="bg-background-light text-left text-xs uppercase tracking-[0.12em] text-muted">
-                <tr>
-                  <th className="p-3">Title</th>
-                  <th className="p-3">Topic</th>
-                  <th className="p-3">Level</th>
-                  <th className="p-3">Mins</th>
-                  <th className="p-3">State</th>
-                  <th className="p-3">Updated</th>
-                  {hasLessonActions ? <th className="p-3">Actions</th> : null}
-                </tr>
-              </thead>
-              <tbody>
-                {lessons.map((l) => (
-                  <tr key={l.id} className="border-t border-border">
-                    <td className="p-3 font-medium text-navy">{l.title}</td>
-                    <td className="p-3 text-muted">{l.topicId ? (topicMap.get(l.topicId)?.name ?? '—') : '—'}</td>
-                    <td className="p-3 text-muted">{l.level}</td>
-                    <td className="p-3 text-muted">{l.estimatedMinutes}</td>
-                    <td className="p-3">
-                      <Badge className={stateColor(l.publishState)}>{l.publishState}</Badge>
-                    </td>
-                    <td className="p-3 text-xs text-muted">{new Date(l.updatedAt).toLocaleDateString()}</td>
-                    {hasLessonActions ? (
-                      <td className="p-3">
-                        <div className="flex flex-wrap gap-2">
-                          {canWriteContent ? (
-                            <Button variant="outline" size="sm" asChild>
-<Link href={`/admin/content/grammar/lessons/${encodeURIComponent(l.id)}`}>Edit</Link>
-</Button>
-                          ) : null}
-                          {canPublishContent ? (
-                            l.publishState === 'published' ? (
-                              <Button variant="outline" size="sm" onClick={() => unpublish(l.id)}>Unpublish</Button>
-                            ) : (
-                              <Button size="sm" onClick={() => publish(l.id)}>Publish</Button>
-                            )
-                          ) : null}
-                          {canWriteContent ? <Button variant="outline" size="sm" onClick={() => archive(l.id)}>Archive</Button> : null}
-                        </div>
-                      </td>
-                    ) : null}
-                  </tr>
+      >
+        <Card className="col-span-full">
+          <CardHeader>
+            <CardTitle>Topics ({topics.length})</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {loading ? (
+              <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+                {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-24 rounded-admin" />)}
+              </div>
+            ) : topics.length === 0 ? (
+              <EmptyState
+                title="No topics yet"
+                description={canWriteContent ? 'Create the first topic to start organizing lessons.' : 'Topics will appear here once created.'}
+                primaryAction={canWriteContent ? { label: 'Create topic', href: '/admin/content/grammar/topics' } : undefined}
+              />
+            ) : (
+              <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+                {topics.map((t) => (
+                  <Card key={t.id} className="p-4">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xl">{t.iconEmoji ?? '\u{1F4D8}'}</span>
+                      <h3 className="text-sm font-semibold text-admin-fg-strong">{t.name}</h3>
+                      <Badge variant={t.status === 'published' ? 'success' : 'default'} className="ml-auto">{t.status}</Badge>
+                    </div>
+                    {t.description ? <p className="mt-2 line-clamp-2 text-xs text-admin-fg-muted">{t.description}</p> : null}
+                    <div className="mt-3 flex items-center justify-between text-xs text-admin-fg-muted">
+                      <span>{t.slug}</span>
+                      {canWriteContent ? (
+                        <Link href={`/admin/content/grammar/topics?id=${encodeURIComponent(t.id)}`} className="font-semibold text-[var(--admin-primary)] hover:underline">
+                          Manage
+                        </Link>
+                      ) : null}
+                    </div>
+                  </Card>
                 ))}
-              </tbody>
-            </table>
-          </Card>
-        )}
-      </section>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card className="col-span-full">
+          <CardHeader>
+            <CardTitle>Lessons ({lessons.length})</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {loading ? (
+              <Skeleton className="h-64 rounded-admin" />
+            ) : lessons.length === 0 ? (
+              <EmptyState
+                title="No lessons yet"
+                description={canWriteContent ? 'Author your first lesson to populate the library.' : 'Lessons will appear here once created.'}
+                primaryAction={canWriteContent ? { label: 'Author lesson', href: '/admin/content/grammar/lessons/new' } : undefined}
+              />
+            ) : (
+              <div className="overflow-x-auto rounded-admin border border-admin-border">
+                <table className="w-full text-sm">
+                  <thead className="bg-admin-bg-subtle text-left text-xs uppercase tracking-[0.12em] text-admin-fg-muted">
+                    <tr>
+                      <th className="p-3">Title</th>
+                      <th className="p-3">Topic</th>
+                      <th className="p-3">Level</th>
+                      <th className="p-3">Mins</th>
+                      <th className="p-3">State</th>
+                      <th className="p-3">Updated</th>
+                      {hasLessonActions ? <th className="p-3">Actions</th> : null}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {lessons.map((l) => (
+                      <tr key={l.id} className="border-t border-admin-border">
+                        <td className="p-3 font-medium text-admin-fg-strong">{l.title}</td>
+                        <td className="p-3 text-admin-fg-muted">{l.topicId ? (topicMap.get(l.topicId)?.name ?? '—') : '—'}</td>
+                        <td className="p-3 text-admin-fg-muted">{l.level}</td>
+                        <td className="p-3 text-admin-fg-muted">{l.estimatedMinutes}</td>
+                        <td className="p-3">
+                          <Badge variant={stateToVariant(l.publishState)}>{l.publishState}</Badge>
+                        </td>
+                        <td className="p-3 text-xs text-admin-fg-muted">{new Date(l.updatedAt).toLocaleDateString()}</td>
+                        {hasLessonActions ? (
+                          <td className="p-3">
+                            <div className="flex flex-wrap gap-2">
+                              {canWriteContent ? (
+                                <Button variant="outline" size="sm" asChild>
+                                  <Link href={`/admin/content/grammar/lessons/${encodeURIComponent(l.id)}`}>Edit</Link>
+                                </Button>
+                              ) : null}
+                              {canPublishContent ? (
+                                l.publishState === 'published' ? (
+                                  <Button variant="outline" size="sm" onClick={() => unpublish(l.id)}>Unpublish</Button>
+                                ) : (
+                                  <Button size="sm" onClick={() => publish(l.id)}>Publish</Button>
+                                )
+                              ) : null}
+                              {canWriteContent ? <Button variant="outline" size="sm" onClick={() => archive(l.id)}>Archive</Button> : null}
+                            </div>
+                          </td>
+                        ) : null}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </AdminCatalogLayout>
 
       {toast ? <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} /> : null}
-    </AdminRouteWorkspace>
+    </>
   );
 }
 
-function stateColor(state: string) {
+function stateToVariant(state: string): 'success' | 'warning' | 'danger' | 'default' {
   switch (state) {
-    case 'published': return 'bg-success/10 text-success';
-    case 'draft': return 'bg-surface text-navy';
-    case 'review': return 'bg-warning/10 text-warning';
-    case 'archived': return 'bg-danger/10 text-danger';
-    default: return 'bg-surface text-navy';
+    case 'published': return 'success';
+    case 'review': return 'warning';
+    case 'archived': return 'danger';
+    default: return 'default';
   }
 }

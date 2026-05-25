@@ -1,8 +1,9 @@
 ﻿'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { BarChart3, RefreshCw } from 'lucide-react';
-import { AdminRoutePanel, AdminRouteSectionHeader, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
+import { RefreshCw } from 'lucide-react';
+import { AdminOperationsLayout } from '@/components/admin/layout/admin-operations-layout';
+import { Card, CardContent } from '@/components/admin/ui/card';
 import { MockItemAnalysisActions } from '@/components/domain/admin/MockItemAnalysisActions';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -81,73 +82,78 @@ export default function AdminMockItemAnalysisPage() {
   }, []);
 
   return (
-    <AdminRouteWorkspace>
-      <AdminRoutePanel>
-        <AdminRouteSectionHeader
-          eyebrow="Mocks V2 QA"
-          title="Item analysis dashboard"
-          description="Review p-values, sample sizes, and distractor flags before publishing or retiring mock content."
-          icon={BarChart3}
-        />
-
-        <div className="mb-6 grid gap-3 rounded-2xl border border-border bg-background-light p-4 md:grid-cols-[1fr_1fr_auto]">
-          <Input label="Bundle ID filter" value={bundleId} onChange={(event) => setBundleId(event.target.value)} placeholder="mock-bundle-..." />
-          <Input label="Paper ID filter" value={paperId} onChange={(event) => setPaperId(event.target.value)} placeholder="content-paper-..." />
-          <Button className="self-end" onClick={() => void load({ bundleId, paperId })}>
-            <RefreshCw className="mr-2 h-4 w-4" /> Refresh
-          </Button>
-        </div>
-
-        {generatedAt ? <p className="mb-4 text-xs text-muted">Last generated: {new Date(generatedAt).toLocaleString()}</p> : null}
-        {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
-        {loading ? (
-          <div className="space-y-3">{Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-20 rounded-2xl" />)}</div>
-        ) : (
-          <div className="overflow-hidden rounded-2xl border border-border bg-surface">
-            <table className="w-full text-left text-sm">
-              <thead className="bg-background-light text-xs uppercase tracking-widest text-muted">
-                <tr>
-                  <th className="px-4 py-3">Item</th>
-                  <th className="px-4 py-3">Subtest</th>
-                  <th className="px-4 py-3">N</th>
-                  <th className="px-4 py-3">Correct</th>
-                  <th className="px-4 py-3">Difficulty</th>
-                  <th className="px-4 py-3">Discrimination</th>
-                  <th className="px-4 py-3">Flag</th>
-                  <th className="px-4 py-3">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {items.map((item) => (
-                  <tr key={`${item.bundleId ?? ''}-${item.id}`} className="border-t border-border">
-                    <td className="px-4 py-3 font-semibold text-navy">{item.label ?? item.id}</td>
-                    <td className="px-4 py-3 text-muted">{item.subtest}</td>
-                    <td className="px-4 py-3 text-muted">{item.totalAttempts}</td>
-                    <td className="px-4 py-3 text-muted">{item.correctCount}</td>
-                    <td className="px-4 py-3 text-muted">{Math.round(item.difficulty * 100)}%</td>
-                    <td className="px-4 py-3 text-muted">{typeof item.discriminationIndex === 'number' ? item.discriminationIndex.toFixed(2) : '—'}</td>
-                    <td className="px-4 py-3">{item.flag ? <Badge variant="warning">{item.flag}</Badge> : <Badge variant="success">ok</Badge>}</td>
-                    <td className="px-4 py-3">
-                      <MockItemAnalysisActions
-                        itemId={item.id}
-                        itemLabel={item.label}
-                        bundleId={item.bundleId ?? null}
-                        retiredAt={item.retiredAt ?? null}
-                        retiredReason={item.retiredReason ?? null}
-                        retiredByAdminId={item.retiredByAdminId ?? null}
-                        onRetired={(response) => handleRetired(item.id, response)}
-                      />
-                    </td>
-                  </tr>
-                ))}
-                {items.length === 0 ? (
-                  <tr><td colSpan={8} className="px-4 py-8 text-center text-muted">No item-analysis rows yet. Recompute from a bundle dashboard after attempts exist.</td></tr>
-                ) : null}
-              </tbody>
-            </table>
+    <AdminOperationsLayout
+      eyebrow="Mocks V2 QA"
+      title="Item analysis dashboard"
+      description="Review p-values, sample sizes, and distractor flags before publishing or retiring mock content."
+      breadcrumbs={[
+        { label: 'Admin', href: '/admin' },
+        { label: 'Content', href: '/admin/content' },
+        { label: 'Mocks', href: '/admin/content/mocks' },
+        { label: 'Item analysis' },
+      ]}
+    >
+      <Card>
+        <CardContent className="p-5 space-y-4">
+          <div className="grid gap-3 rounded-admin border border-admin-border bg-admin-bg-subtle p-4 md:grid-cols-[1fr_1fr_auto]">
+            <Input label="Bundle ID filter" value={bundleId} onChange={(event) => setBundleId(event.target.value)} placeholder="mock-bundle-..." />
+            <Input label="Paper ID filter" value={paperId} onChange={(event) => setPaperId(event.target.value)} placeholder="content-paper-..." />
+            <Button className="self-end" onClick={() => void load({ bundleId, paperId })}>
+              <RefreshCw className="mr-2 h-4 w-4" /> Refresh
+            </Button>
           </div>
-        )}
-      </AdminRoutePanel>
-    </AdminRouteWorkspace>
+
+          {generatedAt ? <p className="text-xs text-admin-fg-muted">Last generated: {new Date(generatedAt).toLocaleString()}</p> : null}
+          {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
+          {loading ? (
+            <div className="space-y-3">{Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-20 rounded-admin" />)}</div>
+          ) : (
+            <div className="overflow-hidden rounded-admin border border-admin-border bg-admin-bg-surface">
+              <table className="w-full text-left text-sm">
+                <thead className="bg-admin-bg-subtle text-xs uppercase tracking-widest text-admin-fg-muted">
+                  <tr>
+                    <th className="px-4 py-3">Item</th>
+                    <th className="px-4 py-3">Subtest</th>
+                    <th className="px-4 py-3">N</th>
+                    <th className="px-4 py-3">Correct</th>
+                    <th className="px-4 py-3">Difficulty</th>
+                    <th className="px-4 py-3">Discrimination</th>
+                    <th className="px-4 py-3">Flag</th>
+                    <th className="px-4 py-3">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {items.map((item) => (
+                    <tr key={`${item.bundleId ?? ''}-${item.id}`} className="border-t border-admin-border">
+                      <td className="px-4 py-3 font-semibold text-admin-fg-strong">{item.label ?? item.id}</td>
+                      <td className="px-4 py-3 text-admin-fg-muted">{item.subtest}</td>
+                      <td className="px-4 py-3 text-admin-fg-muted">{item.totalAttempts}</td>
+                      <td className="px-4 py-3 text-admin-fg-muted">{item.correctCount}</td>
+                      <td className="px-4 py-3 text-admin-fg-muted">{Math.round(item.difficulty * 100)}%</td>
+                      <td className="px-4 py-3 text-admin-fg-muted">{typeof item.discriminationIndex === 'number' ? item.discriminationIndex.toFixed(2) : '—'}</td>
+                      <td className="px-4 py-3">{item.flag ? <Badge variant="warning">{item.flag}</Badge> : <Badge variant="success">ok</Badge>}</td>
+                      <td className="px-4 py-3">
+                        <MockItemAnalysisActions
+                          itemId={item.id}
+                          itemLabel={item.label}
+                          bundleId={item.bundleId ?? null}
+                          retiredAt={item.retiredAt ?? null}
+                          retiredReason={item.retiredReason ?? null}
+                          retiredByAdminId={item.retiredByAdminId ?? null}
+                          onRetired={(response) => handleRetired(item.id, response)}
+                        />
+                      </td>
+                    </tr>
+                  ))}
+                  {items.length === 0 ? (
+                    <tr><td colSpan={8} className="px-4 py-8 text-center text-admin-fg-muted">No item-analysis rows yet. Recompute from a bundle dashboard after attempts exist.</td></tr>
+                  ) : null}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </AdminOperationsLayout>
   );
 }

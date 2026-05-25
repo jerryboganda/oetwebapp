@@ -56,6 +56,8 @@ export type EmptyStateProps = {
   variant?: 'default' | 'error' | 'onboarding';
   size?: 'sm' | 'md' | 'lg';
   illustration?: React.ReactNode;
+  /** Backward-compat alias for `illustration`. */
+  icon?: React.ReactNode;
   title: string;
   description?: string;
   primaryAction?: EmptyStateAction;
@@ -191,6 +193,7 @@ const EmptyState = React.forwardRef<HTMLDivElement, EmptyStateProps>(
       variant = 'default',
       size = 'md',
       illustration,
+      icon,
       title,
       description,
       primaryAction,
@@ -210,6 +213,9 @@ const EmptyState = React.forwardRef<HTMLDivElement, EmptyStateProps>(
       headingLevel ?? (size === 'lg' ? 'h2' : 'h3');
     const Heading = resolvedHeading as React.ElementType;
 
+    // Backward-compat: accept `icon` as an alias for `illustration`.
+    const resolvedIllustration = illustration ?? icon;
+
     const hasActions = Boolean(primaryAction || secondaryAction);
     const hasFooterLinks = Boolean(helpLink || supportLink);
     const hasSteps = variant === 'onboarding' && (steps?.length ?? 0) > 0;
@@ -224,12 +230,12 @@ const EmptyState = React.forwardRef<HTMLDivElement, EmptyStateProps>(
         data-size={size}
         {...rest}
       >
-        {illustration ? (
+        {resolvedIllustration ? (
           <div
             aria-hidden="true"
             className={illustrationWrapperVariants({ variant, size })}
           >
-            {illustration}
+            {resolvedIllustration}
           </div>
         ) : null}
 

@@ -10,8 +10,8 @@ import {
   AdminStrategyGuideEditor,
   emptyStrategyGuideDraft,
 } from '@/components/domain/strategies/admin-strategy-guide-editor';
-import { AdminRoutePanel, AdminRouteSectionHeader, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
-import { Button } from '@/components/ui/button';
+import { AdminSettingsLayout, SettingsSection } from '@/components/admin/layout/admin-settings-layout';
+import { Button } from '@/components/admin/ui/button';
 import { Toast } from '@/components/ui/alert';
 import type { StrategyGuideUpsertPayload } from '@/lib/types/strategies';
 
@@ -39,31 +39,34 @@ export default function NewAdminStrategyPage() {
   if (!isAuthenticated || role !== 'admin') return null;
 
   return (
-    <AdminRouteWorkspace role="main" aria-label="New strategy guide">
+    <>
       {toast ? <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} /> : null}
 
-      <AdminRouteSectionHeader
+      <AdminSettingsLayout
         title="New Strategy Guide"
         description="Author a guided article for authenticated learners."
-        icon={BookOpenText}
+        breadcrumbs={[
+          { label: 'Admin', href: '/admin' },
+          { label: 'Content', href: '/admin/content' },
+          { label: 'Strategies', href: '/admin/content/strategies' },
+          { label: 'New' },
+        ]}
+        icon={<BookOpenText className="h-5 w-5" />}
         actions={
-          <Button variant="outline" className="gap-2" asChild>
-<Link href="/admin/content/strategies">
-              <ArrowLeft className="h-4 w-4" />
-              Back
-            </Link>
-</Button>
+          <Button variant="outline" asChild startIcon={<ArrowLeft className="h-4 w-4" />}>
+            <Link href="/admin/content/strategies">Back</Link>
+          </Button>
         }
-      />
-
-      <AdminRoutePanel>
-        <AdminStrategyGuideEditor
-          initial={emptyStrategyGuideDraft()}
-          saving={saving}
-          submitLabel="Create guide"
-          onSave={saveGuide}
-        />
-      </AdminRoutePanel>
-    </AdminRouteWorkspace>
+      >
+        <SettingsSection title="Guide editor" description="Required fields must be completed before the guide can be published.">
+          <AdminStrategyGuideEditor
+            initial={emptyStrategyGuideDraft()}
+            saving={saving}
+            submitLabel="Create guide"
+            onSave={saveGuide}
+          />
+        </SettingsSection>
+      </AdminSettingsLayout>
+    </>
   );
 }

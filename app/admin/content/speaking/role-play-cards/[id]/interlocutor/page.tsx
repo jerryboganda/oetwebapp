@@ -11,15 +11,14 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { ArrowLeft, ShieldAlert } from 'lucide-react';
-import {
-  AdminRouteHero,
-  AdminRouteWorkspace,
-} from '@/components/domain/admin-route-surface';
-import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
+import { ArrowLeft } from 'lucide-react';
+
+import { AdminCatalogLayout } from '@/components/admin/layout/admin-catalog-layout';
+import { Button } from '@/components/admin/ui/button';
+import { Card, CardContent } from '@/components/admin/ui/card';
+import { Skeleton } from '@/components/admin/ui/skeleton';
+
 import { Toast } from '@/components/ui/alert';
-import { Skeleton } from '@/components/ui/skeleton';
 import { InterlocutorScriptEditor } from '@/components/domain/speaking/InterlocutorScriptEditor';
 import {
   adminGetInterlocutorScript,
@@ -31,6 +30,13 @@ import {
 } from '@/lib/api/speaking-role-play-cards';
 
 type ToastState = { variant: 'success' | 'error'; message: string } | null;
+
+const BREADCRUMBS_BASE = [
+  { label: 'Admin', href: '/admin' },
+  { label: 'Content', href: '/admin/content' },
+  { label: 'Speaking', href: '/admin/content/speaking' },
+  { label: 'Role-play cards', href: '/admin/content/speaking/role-play-cards' },
+];
 
 export default function EditInterlocutorScriptPage() {
   const params = useParams<{ id: string }>();
@@ -77,52 +83,55 @@ export default function EditInterlocutorScriptPage() {
     }
   }
 
-  return (
-    <AdminRouteWorkspace role="main" aria-label="Edit interlocutor script">
-      <AdminRouteHero
-        eyebrow="CMS"
-        icon={ShieldAlert}
-        accent="amber"
-        title={
-          card ? `Interlocutor script — ${card.scenarioTitle}` : 'Interlocutor script'
-        }
-        description="Hidden card never shown to learners. Drives the AI patient persona and the tutor cue panel."
-        aside={
-          <div className="rounded-2xl border border-border bg-background-light p-4 shadow-sm">
-            <Button
-              variant="outline"
-              onClick={() =>
-                router.push(
-                  `/admin/content/speaking/role-play-cards/${encodeURIComponent(cardId)}`,
-                )
-              }
-            >
-              <ArrowLeft className="mr-1 h-4 w-4" /> Back to card
-            </Button>
-          </div>
-        }
-      />
+  const breadcrumbs = [
+    ...BREADCRUMBS_BASE,
+    { label: card?.scenarioTitle ?? 'Card', href: `/admin/content/speaking/role-play-cards/${encodeURIComponent(cardId)}` },
+    { label: 'Interlocutor script' },
+  ];
 
+  return (
+    <AdminCatalogLayout
+      title={card ? `Interlocutor script — ${card.scenarioTitle}` : 'Interlocutor script'}
+      description="Hidden card never shown to learners. Drives the AI patient persona and the tutor cue panel."
+      breadcrumbs={breadcrumbs}
+      eyebrow="CMS · Hidden"
+      backHref={`/admin/content/speaking/role-play-cards/${encodeURIComponent(cardId)}`}
+      hideViewModeToggle
+      actions={
+        <Button
+          variant="outline"
+          onClick={() =>
+            router.push(
+              `/admin/content/speaking/role-play-cards/${encodeURIComponent(cardId)}`,
+            )
+          }
+        >
+          <ArrowLeft className="mr-1 h-4 w-4" /> Back to card
+        </Button>
+      }
+    >
       {loading ? (
-        <div className="space-y-3">
+        <div className="col-span-full space-y-3">
           <Skeleton className="h-16" />
           <Skeleton className="h-64" />
         </div>
       ) : (
-        <Card className="p-6">
-          <InterlocutorScriptEditor
-            cardId={cardId}
-            value={script}
-            mode={script ? 'edit' : 'create'}
-            submitting={submitting}
-            onSubmit={handleSubmit}
-          />
+        <Card className="col-span-full">
+          <CardContent className="p-6">
+            <InterlocutorScriptEditor
+              cardId={cardId}
+              value={script}
+              mode={script ? 'edit' : 'create'}
+              submitting={submitting}
+              onSubmit={handleSubmit}
+            />
+          </CardContent>
         </Card>
       )}
 
       {toast ? (
         <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} />
       ) : null}
-    </AdminRouteWorkspace>
+    </AdminCatalogLayout>
   );
 }

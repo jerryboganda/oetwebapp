@@ -5,14 +5,17 @@
  */
 import { useCallback, useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import Link from 'next/link';
-import { AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
-import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
-import { Skeleton } from '@/components/ui/skeleton';
+
+import { AdminCatalogLayout } from '@/components/admin/layout/admin-catalog-layout';
+import { Button } from '@/components/admin/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/admin/ui/card';
+import { Badge } from '@/components/admin/ui/badge';
+import { Skeleton } from '@/components/admin/ui/skeleton';
+import { Input } from '@/components/admin/ui/input';
+import { Textarea } from '@/components/admin/ui/textarea';
+
 import { InlineAlert } from '@/components/ui/alert';
-import { Badge } from '@/components/ui/badge';
-import { Input, Select } from '@/components/ui/form-controls';
+import { Select } from '@/components/ui/form-controls';
 import {
   archiveAdminDrill,
   deleteAdminDrill,
@@ -24,6 +27,13 @@ import {
   type AdminDrillUpdateInput,
   type SpeakingDrillKind,
 } from '@/lib/api/speaking-drills';
+
+const BREADCRUMBS_BASE = [
+  { label: 'Admin', href: '/admin' },
+  { label: 'Content', href: '/admin/content' },
+  { label: 'Speaking', href: '/admin/content/speaking' },
+  { label: 'Drill bank', href: '/admin/content/speaking/drills' },
+];
 
 export default function AdminSpeakingDrillEditPage() {
   const params = useParams();
@@ -125,34 +135,68 @@ export default function AdminSpeakingDrillEditPage() {
     }
   }
 
+  const breadcrumbs = [...BREADCRUMBS_BASE, { label: detail?.title ?? 'Drill detail' }];
+
   return (
-    <AdminRouteWorkspace role="main" aria-label="Edit speaking drill">
-      <div className="space-y-6">
-        <header className="flex flex-wrap items-center justify-between gap-3">
-          <div className="space-y-1">
-            <Link href="/admin/content/speaking/drills" className="text-sm text-muted-foreground hover:underline">
-              ← Back to drill bank
-            </Link>
-            <h1 className="text-2xl font-semibold text-foreground">
-              {detail?.title ?? 'Drill detail'}
-            </h1>
-            {detail && (
-              <div className="flex flex-wrap gap-2">
-                <Badge variant={detail.status === 'published' ? 'success' : 'muted'}>{detail.status}</Badge>
-                <Badge variant="outline">{String(detail.drillKind)}</Badge>
-                {detail.professionId && <Badge variant="muted">{detail.professionId}</Badge>}
-              </div>
-            )}
+    <AdminCatalogLayout
+      title={detail?.title ?? 'Drill detail'}
+      description="Edit drill metadata, instruction text, and recommendation rules."
+      breadcrumbs={breadcrumbs}
+      eyebrow="Content"
+      backHref="/admin/content/speaking/drills"
+      hideViewModeToggle
+      actions={
+        detail && (
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" size="sm" onClick={destroy} disabled={saving}>
+              Delete
+            </Button>
+            <Button variant="outline" size="sm" onClick={archive} disabled={saving || detail.status === 'archived'}>
+              Archive
+            </Button>
+            <Button variant="outline" size="sm" onClick={publish} disabled={saving || detail.status === 'published'}>
+              Publish
+            </Button>
+            <Button size="sm" onClick={save} disabled={saving}>
+              {saving ? 'Saving…' : 'Save changes'}
+            </Button>
           </div>
-        </header>
+        )
+      }
+    >
+      {detail && (
+        <div className="col-span-full flex flex-wrap gap-2">
+          <Badge variant={detail.status === 'published' ? 'success' : 'default'} intensity="tinted">
+            {detail.status}
+          </Badge>
+          <Badge variant="default" intensity="tinted">{String(detail.drillKind)}</Badge>
+          {detail.professionId && (
+            <Badge variant="default" intensity="tinted">{detail.professionId}</Badge>
+          )}
+        </div>
+      )}
 
-        {error && <InlineAlert variant="error">{error}</InlineAlert>}
-        {info && <InlineAlert variant="success">{info}</InlineAlert>}
+      {error && (
+        <div className="col-span-full">
+          <InlineAlert variant="error">{error}</InlineAlert>
+        </div>
+      )}
+      {info && (
+        <div className="col-span-full">
+          <InlineAlert variant="success">{info}</InlineAlert>
+        </div>
+      )}
 
-        {loading || !detail ? (
+      {loading || !detail ? (
+        <div className="col-span-full">
           <Skeleton className="h-64 w-full" />
-        ) : (
-          <Card className="space-y-4 p-4">
+        </div>
+      ) : (
+        <Card className="col-span-full">
+          <CardHeader>
+            <CardTitle>Drill content</CardTitle>
+          </CardHeader>
+          <CardContent>
             <div className="grid gap-3 sm:grid-cols-2">
               <Input
                 placeholder="Title"
@@ -187,7 +231,7 @@ export default function AdminSpeakingDrillEditPage() {
                 }
               />
               <Input
-                className="sm:col-span-2"
+                wrapperClassName="sm:col-span-2"
                 placeholder="Target criteria (comma-separated)"
                 value={(edit.targetCriteria ?? []).join(', ')}
                 onChange={(e) =>
@@ -197,32 +241,17 @@ export default function AdminSpeakingDrillEditPage() {
                   })
                 }
               />
-              <textarea
-                className="rounded border border-border p-2 text-sm sm:col-span-2"
+              <Textarea
+                wrapperClassName="sm:col-span-2"
                 rows={5}
                 placeholder="Instruction text"
                 value={edit.instructionText ?? ''}
                 onChange={(e) => setEdit({ ...edit, instructionText: e.target.value })}
               />
             </div>
-
-            <div className="flex flex-wrap gap-2 justify-end">
-              <Button variant="outline" onClick={destroy} disabled={saving}>
-                Delete
-              </Button>
-              <Button variant="outline" onClick={archive} disabled={saving || detail.status === 'archived'}>
-                Archive
-              </Button>
-              <Button variant="outline" onClick={publish} disabled={saving || detail.status === 'published'}>
-                Publish
-              </Button>
-              <Button onClick={save} disabled={saving}>
-                {saving ? 'Saving…' : 'Save changes'}
-              </Button>
-            </div>
-          </Card>
-        )}
-      </div>
-    </AdminRouteWorkspace>
+          </CardContent>
+        </Card>
+      )}
+    </AdminCatalogLayout>
   );
 }

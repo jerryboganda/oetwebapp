@@ -2,20 +2,25 @@
 
 import Link from 'next/link';
 import { Upload } from 'lucide-react';
-import { AdminRouteSectionHeader, AdminRoutePanel, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
-import { Button } from '@/components/ui/button';
+import { AdminSettingsLayout, SettingsSection } from '@/components/admin/layout/admin-settings-layout';
+import { Button } from '@/components/admin/ui/button';
 import { InlineAlert } from '@/components/ui/alert';
+
+const BREADCRUMBS = [
+  { label: 'Admin', href: '/admin' },
+  { label: 'Recalls', href: '/admin/recalls' },
+  { label: 'Bulk upload' },
+];
 
 export default function AdminRecallsBulkUploadPage() {
   return (
-    <AdminRouteWorkspace>
-      <AdminRouteSectionHeader
-        title="Recalls - Bulk upload"
-        description="Legacy Recalls bulk upload is disabled for production safety."
-        icon={Upload}
-      />
-
-      <AdminRoutePanel
+    <AdminSettingsLayout
+      title="Recalls — Bulk upload"
+      description="Legacy Recalls bulk upload is disabled for production safety."
+      breadcrumbs={BREADCRUMBS}
+      icon={<Upload className="h-5 w-5" />}
+    >
+      <SettingsSection
         title="Use the controlled Vocabulary importer"
         description="Recalls vocabulary rows are managed as VocabularyTerm records. Production imports must use preview, dry run, draft import, batch export, and reconciliation."
       >
@@ -24,10 +29,10 @@ export default function AdminRecallsBulkUploadPage() {
             This route previously inserted active rows and could overwrite existing terms. It is now blocked. Use the safe importer for every Recalls batch.
           </InlineAlert>
           <Button variant="primary" asChild>
-<Link href="/admin/content/vocabulary/import">Open safe Vocabulary import</Link>
-</Button>
+            <Link href="/admin/content/vocabulary/import">Open safe Vocabulary import</Link>
+          </Button>
         </div>
-      </AdminRoutePanel>
-    </AdminRouteWorkspace>
+      </SettingsSection>
+    </AdminSettingsLayout>
   );
 }

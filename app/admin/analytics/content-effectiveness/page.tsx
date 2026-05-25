@@ -2,17 +2,13 @@
 
 import { useEffect, useState } from 'react';
 import { Download, BarChart3 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
 import { exportToCsv, formatDateForExport } from '@/lib/csv-export';
-import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
-import { Card } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Skeleton } from '@/components/ui/skeleton';
-import {
-  AdminRouteHero,
-  AdminRoutePanel,
-  AdminRouteWorkspace,
-} from '@/components/domain/admin-route-surface';
+import { AdminOperationsLayout, KpiStrip, BentoGrid, BentoCell } from '@/components/admin/layout/admin-operations-layout';
+import { Badge } from '@/components/admin/ui/badge';
+import { Button } from '@/components/admin/ui/button';
+import { Card, CardContent } from '@/components/admin/ui/card';
+import { KpiTile } from '@/components/admin/ui/kpi-tile';
+import { Skeleton } from '@/components/admin/ui/skeleton';
 import { analytics } from '@/lib/analytics';
 import { apiClient } from '@/lib/api';
 
@@ -32,20 +28,32 @@ export default function ContentEffectivenessPage() {
     apiRequest<EffectivenessData>(`/v1/admin/analytics/content-effectiveness${q}`).then(setData).catch(() => {}).finally(() => setLoading(false));
   };
 
-  // eslint-disable-next-line react-hooks/set-state-in-effect -- data-fetch on mount: setState from API response is the correct pattern
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- data-fetch on mount
   useEffect(() => { analytics.track('admin_content_effectiveness_viewed'); load(''); }, []);
 
+  const breadcrumbs = [
+    { label: 'Admin', href: '/admin' },
+    { label: 'Analytics', href: '/admin' },
+    { label: 'Content effectiveness' },
+  ];
+
+  const totalAttempts = data?.items.reduce((acc, item) => acc + item.totalAttempts, 0) ?? 0;
+  const avgCompletion = data && data.items.length > 0
+    ? Math.round(data.items.reduce((acc, item) => acc + item.completionRate, 0) / data.items.length)
+    : 0;
+
   return (
-    <AdminRouteWorkspace role="main" aria-label="Content effectiveness">
-      <AdminRouteHero
-        eyebrow="Analytics"
-        icon={BarChart3}
-        accent="navy"
-        title="Content effectiveness"
-        description="Which content produces the most improvement and engagement?"
-        aside={data && data.items.length > 0 ? (
-          <div className="rounded-2xl border border-border bg-background-light p-4 shadow-sm">
-            <Button variant="outline" size="sm" className="gap-2" onClick={() => {
+    <AdminOperationsLayout
+      title="Content effectiveness"
+      description="Which content produces the most improvement and engagement?"
+      eyebrow="Analytics"
+      breadcrumbs={breadcrumbs}
+      actions={
+        data && data.items.length > 0 ? (
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => {
               const rows = data.items.map(item => ({
                 title: item.title,
                 subtest: item.subtestCode,
@@ -57,43 +65,85 @@ export default function ContentEffectivenessPage() {
                 effectivenessScore: item.effectivenessScore,
               }));
               exportToCsv(rows, `content-effectiveness-${formatDateForExport(new Date())}.csv`);
-            }}>
-              <Download className="w-4 h-4" />
-              Export CSV
-            </Button>
+            }}
+          >
+            <Download className="h-4 w-4" />
+            Export CSV
+          </Button>
+        ) : null
+      }
+      kpis={
+        data ? (
+          <KpiStrip>
+            <KpiTile label="Total items" value={data.items.length} icon={<BarChart3 className="h-4 w-4" />} tone="primary" />
+            <KpiTile label="Total attempts" value={totalAttempts.toLocaleString()} tone="info" />
+            <KpiTile label="Avg completion" value={`${avgCompletion}%`} tone="success" />
+            <KpiTile label="Filter" value={subtest || 'All'} tone="default" />
+          </KpiStrip>
+        ) : null
+      }
+      primaryGrid={
+        <div className="space-y-6">
+          <div className="flex flex-wrap gap-2">
+            {['', 'writing', 'speaking', 'reading', 'listening'].map(s => (
+              <Button
+                key={s}
+                size="sm"
+                variant={subtest === s ? 'primary' : 'secondary'}
+                onClick={() => load(s)}
+                className="capitalize"
+              >
+                {s || 'All'}
+              </Button>
+            ))}
           </div>
-        ) : undefined}
-      />
 
-      <div className="flex gap-2 flex-wrap">
-        {['', 'writing', 'speaking', 'reading', 'listening'].map(s => (
-          <button key={s} onClick={() => load(s)} className={`px-4 py-2 rounded-lg text-sm font-medium capitalize ${subtest === s ? 'bg-primary text-primary-foreground' : 'bg-muted'}`}>{s || 'All'}</button>
-        ))}
-      </div>
-
-      {loading ? <div className="space-y-3">{Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-20 rounded-xl" />)}</div> : data ? (
-        <MotionSection className="space-y-3">
-          {data.items.map((item, idx) => (
-            <MotionItem key={item.contentId}>
-              <Card className="p-4">
-                <div className="flex items-start gap-3">
-                  <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center text-sm font-bold flex-shrink-0">{idx + 1}</div>
-                  <div className="flex-1 min-w-0">
-                    <h3 className="text-sm font-semibold truncate">{item.title}</h3>
-                    <div className="flex gap-2 mt-1 flex-wrap"><Badge variant="outline" className="capitalize text-[10px]">{item.subtestCode}</Badge><Badge variant="outline" className="text-[10px]">{item.difficulty}</Badge></div>
-                  </div>
-                  <div className="grid grid-cols-4 gap-4 text-center flex-shrink-0">
-                    <div><p className="text-sm font-bold">{item.totalAttempts}</p><p className="text-[10px] text-muted">Attempts</p></div>
-                    <div><p className="text-sm font-bold">{item.completionRate}%</p><p className="text-[10px] text-muted">Complete</p></div>
-                    <div><p className="text-sm font-bold">{item.averageScore ?? '--'}</p><p className="text-[10px] text-muted">Avg Score</p></div>
-                    <div><p className="text-sm font-bold">{item.effectivenessScore ?? '--'}</p><p className="text-[10px] text-muted">Score</p></div>
-                  </div>
-                </div>
-              </Card>
-            </MotionItem>
-          ))}
-        </MotionSection>
-      ) : <AdminRoutePanel><p className="text-center text-admin-text-muted">No data available.</p></AdminRoutePanel>}
-    </AdminRouteWorkspace>
+          {loading ? (
+            <div className="space-y-3">{Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-20 rounded-admin" />)}</div>
+          ) : data ? (
+            <BentoGrid>
+              {data.items.map((item, idx) => (
+                <BentoCell key={item.contentId} span={{ default: 12, md: 6 }}>
+                  <Card>
+                    <CardContent className="p-4">
+                      <div className="flex items-start gap-3">
+                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-admin-bg-subtle text-sm font-bold text-admin-fg-strong">{idx + 1}</div>
+                        <div className="min-w-0 flex-1">
+                          <h3 className="truncate text-sm font-semibold text-admin-fg-strong">{item.title}</h3>
+                          <div className="mt-1 flex flex-wrap gap-2">
+                            <Badge variant="primary" intensity="tinted" size="sm" className="capitalize">{item.subtestCode}</Badge>
+                            <Badge variant="default" intensity="tinted" size="sm">{item.difficulty}</Badge>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="mt-3 grid grid-cols-4 gap-2 text-center">
+                        <div>
+                          <p className="text-sm font-bold tabular-nums text-admin-fg-strong">{item.totalAttempts}</p>
+                          <p className="text-[10px] text-admin-fg-muted">Attempts</p>
+                        </div>
+                        <div>
+                          <p className="text-sm font-bold tabular-nums text-admin-fg-strong">{item.completionRate}%</p>
+                          <p className="text-[10px] text-admin-fg-muted">Complete</p>
+                        </div>
+                        <div>
+                          <p className="text-sm font-bold tabular-nums text-admin-fg-strong">{item.averageScore ?? '--'}</p>
+                          <p className="text-[10px] text-admin-fg-muted">Avg Score</p>
+                        </div>
+                        <div>
+                          <p className="text-sm font-bold tabular-nums text-admin-fg-strong">{item.effectivenessScore ?? '--'}</p>
+                          <p className="text-[10px] text-admin-fg-muted">Score</p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </BentoCell>
+              ))}
+            </BentoGrid>
+          ) : (
+            <Card><CardContent><p className="py-8 text-center text-sm text-admin-fg-muted">No data available.</p></CardContent></Card>
+          )}
+        </div>
+      }
+    />
   );
 }

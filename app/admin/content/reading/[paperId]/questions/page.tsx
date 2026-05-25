@@ -5,11 +5,13 @@ import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft, ArrowRight, Plus, Trash2, Save, Code, FormInput, ArrowUp, ArrowDown } from 'lucide-react';
 
-import { AdminRouteWorkspace, AdminRoutePanel, AdminRouteSectionHeader } from '@/components/domain/admin-route-surface';
-import { Button } from '@/components/ui/button';
+import { AdminTableLayout } from '@/components/admin/layout/admin-table-layout';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/admin/ui/card';
+import { Button } from '@/components/admin/ui/button';
+import { Badge } from '@/components/admin/ui/badge';
+import { Skeleton } from '@/components/admin/ui/skeleton';
 import { Input, Textarea, Select, Checkbox } from '@/components/ui/form-controls';
 import { Toast } from '@/components/ui/alert';
-import { Badge } from '@/components/ui/badge';
 import { ReadingWizardSteps } from '@/components/domain/admin/reading/ReadingWizardSteps';
 import { ReadingPartTabs } from '@/components/domain/admin/reading/ReadingPartTabs';
 import {
@@ -364,13 +366,13 @@ export default function ReadingQuestionsEditorPage() {
   // ── Render Helpers ───────────────────────────────────────────────────
 
   function renderQuestionList() {
-    if (!activePart) return <p className="text-admin-text-muted text-sm">No part data found.</p>;
+    if (!activePart) return <p className="text-admin-fg-muted text-sm">No part data found.</p>;
     const questions = activePart.questions;
 
     if (questions.length === 0) {
       return (
         <div className="text-center py-8">
-          <p className="text-admin-text-muted text-sm mb-3">No questions yet for Part {activeTab}.</p>
+          <p className="text-admin-fg-muted text-sm mb-3">No questions yet for Part {activeTab}.</p>
           <Button variant="primary" size="sm" onClick={startAdd}>
             <Plus className="h-4 w-4 mr-1" />
             Add First Question
@@ -384,9 +386,9 @@ export default function ReadingQuestionsEditorPage() {
         {questions.map((q, idx) => (
           <div
             key={q.id}
-            className="flex items-center gap-3 rounded-lg border border-admin-border bg-admin-surface-raised/30 px-3 py-2"
+            className="flex items-center gap-3 rounded-lg border border-admin-border bg-admin-bg-subtle px-3 py-2"
           >
-            <div className="flex flex-col items-center gap-0.5 text-admin-text-muted shrink-0">
+            <div className="flex flex-col items-center gap-0.5 text-admin-fg-muted shrink-0">
               <button
                 type="button"
                 onClick={() => handleQuestionMoveUp(idx)}
@@ -406,16 +408,16 @@ export default function ReadingQuestionsEditorPage() {
                 <ArrowDown className="h-3 w-3" />
               </button>
             </div>
-            <span className="text-xs font-mono text-admin-text-muted w-6 text-center shrink-0">
+            <span className="text-xs font-mono text-admin-fg-muted w-6 text-center shrink-0">
               {q.displayOrder}
             </span>
             <div className="flex-1 min-w-0">
-              <p className="text-sm text-admin-text truncate">{q.stem}</p>
+              <p className="text-sm text-admin-fg-strong truncate">{q.stem}</p>
             </div>
-            <Badge variant="default" className="shrink-0 text-xs">
+            <Badge variant="primary" className="shrink-0 text-xs">
               {TYPE_LABELS[q.questionType] ?? q.questionType}
             </Badge>
-            <span className="text-xs text-admin-text-muted shrink-0">{q.points}pt</span>
+            <span className="text-xs text-admin-fg-muted shrink-0">{q.points}pt</span>
             <div className="flex gap-1 shrink-0">
               <Button variant="ghost" size="sm" onClick={() => startEdit(q)} aria-label="Edit question">
                 <FormInput className="h-3.5 w-3.5" />
@@ -504,7 +506,7 @@ export default function ReadingQuestionsEditorPage() {
         {/* Multiple Choice Options */}
         {isMultiChoice && (
           <div className="space-y-2">
-            <p className="text-xs font-medium text-admin-text-muted uppercase tracking-wide">Options</p>
+            <p className="text-xs font-medium text-admin-fg-muted uppercase tracking-wide">Options</p>
             {form.options.map((opt, idx) => (
               <Input
                 key={idx}
@@ -628,7 +630,93 @@ export default function ReadingQuestionsEditorPage() {
   // ── Main Render ──────────────────────────────────────────────────────
 
   return (
-    <AdminRouteWorkspace>
+    <>
+      <AdminTableLayout
+        title="Reading Questions Editor"
+        description="Add, edit, and manage questions for each reading part."
+        eyebrow="Reading authoring"
+        breadcrumbs={[
+          { label: 'Admin', href: '/admin' },
+          { label: 'Content', href: '/admin/content' },
+          { label: 'Reading', href: '/admin/content/reading' },
+          { label: 'Paper', href: `/admin/content/reading/${paperId}` },
+          { label: 'Questions' },
+        ]}
+        banner={<ReadingWizardSteps paperId={paperId} currentStep="questions" />}
+        footer={
+          <div className="flex items-center justify-between pt-2">
+            <Button asChild variant="ghost" size="sm" startIcon={<ArrowLeft className="h-4 w-4" />}>
+              <Link href={`/admin/content/reading/${paperId}/texts`}>Back to Texts</Link>
+            </Button>
+            <Button asChild variant="primary" size="sm" endIcon={<ArrowRight className="h-4 w-4" />}>
+              <Link href={`/admin/content/reading/${paperId}/validate`}>Next: Validate</Link>
+            </Button>
+          </div>
+        }
+      >
+        <div className="p-4 sm:p-5 space-y-4">
+          <div>
+            <h2 className="text-base font-semibold text-admin-fg-strong">Questions</h2>
+            <p className="mt-0.5 text-sm text-admin-fg-muted">Manage questions per reading part</p>
+          </div>
+
+          {loading && (
+            <div className="space-y-3">
+              <Skeleton variant="text" className="h-8 w-1/2" />
+              <Skeleton variant="card" />
+              <Skeleton variant="card" />
+            </div>
+          )}
+
+          {error && (
+            <p className="text-sm text-[var(--admin-danger)] py-4">{error}</p>
+          )}
+
+          {!loading && !error && (
+            <div className="space-y-4">
+              <ReadingPartTabs activeTab={activeTab} onTabChange={setActiveTab} counts={counts} />
+
+              {!editing && renderQuestionList()}
+
+              {editing && (
+                <Card surface="tinted-primary">
+                  <CardHeader>
+                    <div className="min-w-0">
+                      <CardTitle className="text-sm">
+                        {form?.id ? 'Edit Question' : 'New Question'}
+                      </CardTitle>
+                      <CardDescription>Switch between form and JSON editing modes.</CardDescription>
+                    </div>
+                    <div className="ml-auto flex gap-1">
+                      <Button
+                        variant={editorMode === 'form' ? 'primary' : 'ghost'}
+                        size="sm"
+                        onClick={() => setEditorMode('form')}
+                        startIcon={<FormInput className="h-3.5 w-3.5" />}
+                      >
+                        Form
+                      </Button>
+                      <Button
+                        variant={editorMode === 'json' ? 'primary' : 'ghost'}
+                        size="sm"
+                        onClick={() => setEditorMode('json')}
+                        startIcon={<Code className="h-3.5 w-3.5" />}
+                      >
+                        JSON
+                      </Button>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    {editorMode === 'form' && renderFormEditor()}
+                    {editorMode === 'json' && renderJsonEditor()}
+                  </CardContent>
+                </Card>
+              )}
+            </div>
+          )}
+        </div>
+      </AdminTableLayout>
+
       {toast && (
         <div className="fixed top-4 right-4 z-50">
           <Toast
@@ -638,83 +726,6 @@ export default function ReadingQuestionsEditorPage() {
           />
         </div>
       )}
-
-      <AdminRouteSectionHeader
-        title="Reading Questions Editor"
-        description="Add, edit, and manage questions for each reading part."
-        eyebrow="Reading Authoring"
-        accent="blue"
-      />
-
-      <ReadingWizardSteps paperId={paperId} currentStep="questions" />
-
-      <AdminRoutePanel title="Questions" description="Manage questions per reading part">
-        {loading && (
-          <div className="flex items-center justify-center py-12">
-            <div className="animate-spin h-6 w-6 border-2 border-primary border-t-transparent rounded-full" />
-          </div>
-        )}
-
-        {error && (
-          <div className="text-red-400 text-sm py-4">{error}</div>
-        )}
-
-        {!loading && !error && (
-          <div className="space-y-4">
-            <ReadingPartTabs activeTab={activeTab} onTabChange={setActiveTab} counts={counts} />
-
-            {!editing && renderQuestionList()}
-
-            {editing && (
-              <div className="border border-admin-border rounded-xl bg-admin-surface-raised/20 p-4 space-y-4">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-sm font-semibold text-admin-text">
-                    {form?.id ? 'Edit Question' : 'New Question'}
-                  </h3>
-                  <div className="flex gap-1">
-                    <Button
-                      variant={editorMode === 'form' ? 'primary' : 'ghost'}
-                      size="sm"
-                      onClick={() => setEditorMode('form')}
-                    >
-                      <FormInput className="h-3.5 w-3.5 mr-1" />
-                      Form
-                    </Button>
-                    <Button
-                      variant={editorMode === 'json' ? 'primary' : 'ghost'}
-                      size="sm"
-                      onClick={() => setEditorMode('json')}
-                    >
-                      <Code className="h-3.5 w-3.5 mr-1" />
-                      JSON
-                    </Button>
-                  </div>
-                </div>
-
-                {editorMode === 'form' && renderFormEditor()}
-                {editorMode === 'json' && renderJsonEditor()}
-              </div>
-            )}
-          </div>
-        )}
-      </AdminRoutePanel>
-
-      {/* Navigation */}
-      <div className="flex items-center justify-between pt-2">
-        <Link
-          href={`/admin/content/reading/${paperId}/texts`}
-          className="inline-flex items-center gap-1 text-sm text-admin-text-muted hover:text-admin-text transition-colors"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          Back to Texts
-        </Link>
-        <Link href={`/admin/content/reading/${paperId}/validate`}>
-          <Button variant="primary" size="sm">
-            Next: Validate
-            <ArrowRight className="h-4 w-4 ml-1" />
-          </Button>
-        </Link>
-      </div>
-    </AdminRouteWorkspace>
+    </>
   );
 }

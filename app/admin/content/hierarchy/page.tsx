@@ -1,7 +1,9 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { AdminRouteSectionHeader, AdminRoutePanel, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
+import { AdminRoutePanel } from '@/components/domain/admin-route-surface';
+import { AdminPageShell } from '@/components/admin/layout/admin-page-shell';
+import { PageHeader } from '@/components/admin/ui/page-header';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
 import { DataTable, type Column } from '@/components/ui/data-table';
 import { EmptyState } from '@/components/ui/empty-error';
@@ -699,13 +701,18 @@ export default function AdminContentHierarchyPage() {
   if (!isAuthenticated || role !== 'admin') return null;
 
   return (
-    <AdminRouteWorkspace role="main" aria-label="Content hierarchy management">
+    <AdminPageShell>
       {toast ? <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} /> : null}
 
-      <AdminRouteSectionHeader
+      <PageHeader
         title="Content Hierarchy"
         description="Manage programs, tracks, modules, lessons, and packages"
-        icon={GitBranch}
+        breadcrumbs={[
+          { label: 'Admin', href: '/admin' },
+          { label: 'Content', href: '/admin/content' },
+          { label: 'Hierarchy' },
+        ]}
+        icon={<GitBranch className="h-5 w-5" />}
         actions={
           <div className="flex gap-2">
             <Button onClick={() => tab === 'programs' ? openProgramEditor() : openPackageEditor()} className="gap-2">
@@ -714,7 +721,7 @@ export default function AdminContentHierarchyPage() {
             </Button>
             <button
               onClick={() => setReloadNonce((n) => n + 1)}
-              className="inline-flex items-center gap-2 rounded-md border px-3 py-1.5 text-sm hover:bg-muted"
+              className="inline-flex items-center gap-2 rounded-admin border border-admin-border px-3 py-1.5 text-sm hover:bg-admin-bg-subtle text-admin-fg-default"
             >
               <RefreshCw className="w-4 h-4" /> Refresh
             </button>
@@ -1015,6 +1022,6 @@ export default function AdminContentHierarchyPage() {
           </div>
         </div>
       </Modal>
-    </AdminRouteWorkspace>
+    </AdminPageShell>
   );
 }

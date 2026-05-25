@@ -3,15 +3,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { AlertTriangle, Save, Volume2, Settings as SettingsIcon, ArrowLeft, RefreshCw, Sparkles, Mic2 } from 'lucide-react';
-import {
-  AdminRouteWorkspace,
-  AdminRoutePanel,
-  AdminRouteSectionHeader,
-} from '@/components/domain/admin-route-surface';
-import { Button } from '@/components/ui/button';
+import { AdminSettingsLayout } from '@/components/admin/layout/admin-settings-layout';
+import { Button } from '@/components/admin/ui/button';
 import { Input } from '@/components/ui/form-controls';
 import { Toast } from '@/components/ui/alert';
-import { Badge } from '@/components/ui/badge';
+import { Badge } from '@/components/admin/ui/badge';
 import { Modal } from '@/components/ui/modal';
 import {
   fetchAdminConversationSettings,
@@ -177,30 +173,32 @@ export default function AdminConversationSettingsPage() {
 
   return (
     <>
-      <AdminRouteWorkspace>
-        <AdminRoutePanel>
-          <AdminRouteSectionHeader
-            eyebrow="Content"
-            title="AI Conversation — Runtime Settings"
-            description="Admin-editable overrides for the AI Conversation subsystem. Saved values override env defaults and take effect within 30 seconds of save. API keys are encrypted via Data Protection; leave blank to keep the current key."
-            icon={SettingsIcon}
-            actions={
-              <div className="flex items-center gap-2">
-                <Button variant="secondary" onClick={() => router.push('/admin/content/conversation')}>
-                  <ArrowLeft className="mr-1 h-4 w-4" /> Back
-                </Button>
-                <Button variant="secondary" onClick={handlePreview}>
-                  <Volume2 className="mr-1 h-4 w-4" /> TTS Preview
-                </Button>
-                <Button variant="primary" onClick={handleSave} disabled={saving}>
-                  <Save className="mr-1 h-4 w-4" /> {saving ? 'Saving…' : 'Save'}
-                </Button>
-              </div>
-            }
-          />
-
-          {loading || !settings ? (
-            <p className="text-sm text-admin-text-muted">Loading…</p>
+      <AdminSettingsLayout
+        eyebrow="Content"
+        title="AI Conversation — Runtime Settings"
+        description="Admin-editable overrides for the AI Conversation subsystem. Saved values override env defaults and take effect within 30 seconds of save. API keys are encrypted via Data Protection; leave blank to keep the current key."
+        breadcrumbs={[
+          { label: 'Admin', href: '/admin' },
+          { label: 'Content', href: '/admin/content' },
+          { label: 'Conversation', href: '/admin/content/conversation' },
+          { label: 'Settings' },
+        ]}
+        actions={
+          <>
+            <Button variant="secondary" onClick={() => router.push('/admin/content/conversation')}>
+              <ArrowLeft className="mr-1 h-4 w-4" /> Back
+            </Button>
+            <Button variant="secondary" onClick={handlePreview}>
+              <Volume2 className="mr-1 h-4 w-4" /> TTS Preview
+            </Button>
+            <Button variant="primary" onClick={handleSave} disabled={saving}>
+              <Save className="mr-1 h-4 w-4" /> {saving ? 'Saving…' : 'Save'}
+            </Button>
+          </>
+        }
+      >
+        {loading || !settings ? (
+            <p className="text-sm text-admin-fg-muted">Loading…</p>
           ) : (
             <div className="space-y-8">
               <Section title="Feature">
@@ -268,11 +266,11 @@ export default function AdminConversationSettingsPage() {
 
               <Section title="ASR (Speech → Text)">
                 <label className="block">
-                  <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-admin-text-muted">ASR Provider</span>
+                  <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-admin-fg-muted">ASR Provider</span>
                   <select
                     value={String(v('asrProvider') ?? 'auto')}
                     onChange={(e) => setField('asrProvider', e.target.value)}
-                    className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm"
+                    className="w-full rounded-lg border border-admin-border bg-admin-bg-surface px-3 py-2 text-sm"
                   >
                     <option value="auto">auto (prefer azure → whisper → deepgram → mock)</option>
                     <option value="azure">Azure Speech</option>
@@ -318,11 +316,11 @@ export default function AdminConversationSettingsPage() {
                   </label>
                 </div>
                 <label className="block">
-                  <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-muted">Realtime ASR Provider</span>
+                  <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-admin-fg-muted">Realtime ASR Provider</span>
                   <select
                     value={String(v('realtimeAsrProvider') ?? 'mock')}
                     onChange={(e) => setField('realtimeAsrProvider', e.target.value)}
-                    className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm"
+                    className="w-full rounded-lg border border-admin-border bg-admin-bg-surface px-3 py-2 text-sm"
                   >
                     <option value="mock">Mock (testing only)</option>
                     <option value="elevenlabs-stt">ElevenLabs Scribe realtime</option>
@@ -400,11 +398,11 @@ export default function AdminConversationSettingsPage() {
 
               <Section title="TTS (Text → Speech)">
                 <label className="block">
-                  <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-admin-text-muted">TTS Provider</span>
+                  <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-admin-fg-muted">TTS Provider</span>
                   <select
                     value={String(v('ttsProvider') ?? 'auto')}
                     onChange={(e) => setField('ttsProvider', e.target.value)}
-                    className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm"
+                    className="w-full rounded-lg border border-admin-border bg-admin-bg-surface px-3 py-2 text-sm"
                   >
                     <option value="auto">auto</option>
                     <option value="azure">Azure Speech</option>
@@ -456,8 +454,7 @@ export default function AdminConversationSettingsPage() {
               />
             </div>
           )}
-        </AdminRoutePanel>
-      </AdminRouteWorkspace>
+      </AdminSettingsLayout>
 
       {toast && (<Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} />)}
     </>
@@ -467,7 +464,7 @@ export default function AdminConversationSettingsPage() {
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section>
-      <h3 className="mb-3 text-xs font-bold uppercase tracking-[0.2em] text-muted">{title}</h3>
+      <h3 className="mb-3 text-xs font-bold uppercase tracking-[0.2em] text-admin-fg-muted">{title}</h3>
       <div className="space-y-3">{children}</div>
     </section>
   );
@@ -493,7 +490,7 @@ function KeyInput({
   return (
     <div>
       <div className="mb-1 flex items-center justify-between">
-        <span className="text-xs font-medium uppercase tracking-wide text-muted">{label}</span>
+        <span className="text-xs font-medium uppercase tracking-wide text-admin-fg-muted">{label}</span>
         {present ? <Badge variant="success" size="sm">set</Badge> : <Badge variant="muted" size="sm">not set</Badge>}
       </div>
       <input
@@ -501,7 +498,7 @@ function KeyInput({
         placeholder="Leave blank to keep current"
         value={(draft[draftKey] as string) ?? ''}
         onChange={(e) => set(draftKey, e.target.value)}
-        className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm"
+        className="w-full rounded-lg border border-admin-border bg-admin-bg-surface px-3 py-2 text-sm"
       />
     </div>
   );
@@ -595,7 +592,7 @@ function Qwen3VoiceStudio({
 
   return (
     <section>
-      <h3 className="mb-3 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.2em] text-muted">
+      <h3 className="mb-3 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.2em] text-admin-fg-muted">
         <Mic2 className="h-3.5 w-3.5" /> Qwen3 Voice Studio
       </h3>
       <div className="space-y-3">
@@ -606,11 +603,11 @@ function Qwen3VoiceStudio({
           </span>
         </div>
         <label className="block">
-          <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-muted">Model Variant</span>
+          <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-admin-fg-muted">Model Variant</span>
           <select
             value={normalisedVariant}
             onChange={(e) => onChangeVariant(e.target.value as 'flash' | 'voicedesign')}
-            className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm"
+            className="w-full rounded-lg border border-admin-border bg-admin-bg-surface px-3 py-2 text-sm"
           >
             <option value="flash">flash (preset voices — consistent)</option>
             <option value="voicedesign">voicedesign (instructions — variable)</option>
@@ -625,7 +622,7 @@ function Qwen3VoiceStudio({
                 {probing ? 'Probing 46 voices…' : 'Fetch Voices'}
               </Button>
               {voiceId && (
-                <span className="text-xs text-muted">
+                <span className="text-xs text-admin-fg-muted">
                   Current: <code className="rounded bg-surface px-1.5 py-0.5">{voiceId}</code>
                 </span>
               )}
@@ -638,13 +635,13 @@ function Qwen3VoiceStudio({
                     <div
                       key={vc.id}
                       className={`rounded-xl border p-3 ${
-                        isSelected ? 'border-primary bg-primary/5' : 'border-border bg-surface'
+                        isSelected ? 'border-primary bg-primary/5' : 'border-admin-border bg-admin-bg-surface'
                       } ${!vc.available ? 'opacity-60' : ''}`}
                     >
                       <div className="flex items-center justify-between">
                         <div>
                           <div className="text-sm font-medium">{vc.label}</div>
-                          <div className="text-xs text-muted">
+                          <div className="text-xs text-admin-fg-muted">
                             {vc.id} · {vc.gender}
                           </div>
                         </div>
@@ -684,7 +681,7 @@ function Qwen3VoiceStudio({
               </div>
             )}
             {voices && voices.length === 0 && (
-              <p className="text-sm text-muted">No voices returned by the probe.</p>
+              <p className="text-sm text-admin-fg-muted">No voices returned by the probe.</p>
             )}
           </>
         )}
@@ -692,7 +689,7 @@ function Qwen3VoiceStudio({
         {normalisedVariant === 'voicedesign' && (
           <div className="space-y-2">
             <label className="block">
-              <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-muted">
+              <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-admin-fg-muted">
                 Voice Instructions (≤ 1000 chars; spec recommends ≤ 100)
               </span>
               <textarea
@@ -700,9 +697,9 @@ function Qwen3VoiceStudio({
                 onChange={(e) => onChangeInstructions(e.target.value.slice(0, 1000))}
                 rows={4}
                 placeholder="A warm, calm British nurse in her 30s speaking gently and clearly."
-                className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm"
+                className="w-full rounded-lg border border-admin-border bg-admin-bg-surface px-3 py-2 text-sm"
               />
-              <span className="mt-1 block text-right text-xs text-muted">{instructions.length} / 1000</span>
+              <span className="mt-1 block text-right text-xs text-admin-fg-muted">{instructions.length} / 1000</span>
             </label>
             <Button variant="secondary" onClick={handleVoicedesignPreview} disabled={previewing === '__voicedesign__'}>
               <Volume2 className="mr-1 h-4 w-4" />
@@ -787,7 +784,7 @@ function RegenerateVocabularyAudioPanel({
 
   return (
     <section>
-      <h3 className="mb-3 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.2em] text-muted">
+      <h3 className="mb-3 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.2em] text-admin-fg-muted">
         <RefreshCw className="h-3.5 w-3.5" /> Regenerate Vocabulary Audio
       </h3>
       <div className="space-y-3">
@@ -798,7 +795,7 @@ function RegenerateVocabularyAudioPanel({
           </span>
         </div>
         <fieldset className="space-y-1">
-          <legend className="mb-1 text-xs font-medium uppercase tracking-wide text-muted">Scope</legend>
+          <legend className="mb-1 text-xs font-medium uppercase tracking-wide text-admin-fg-muted">Scope</legend>
           {([
             ['missing', 'Only terms with NO audio'],
             ['different-voice', 'Terms whose current voice ≠ selected voice'],
@@ -833,7 +830,7 @@ function RegenerateVocabularyAudioPanel({
               )}
               .
             </p>
-            <p className="text-xs text-muted">
+            <p className="text-xs text-admin-fg-muted">
               Worker drains the queue in the background (1 in-flight, 8 retries, 429 cooldown). Old audio remains audible to learners until the new audio is committed for each term.
             </p>
             <div className="flex items-center justify-end gap-2 pt-2">

@@ -16,14 +16,12 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, ArrowRight, ClipboardList } from 'lucide-react';
-import {
-  AdminRouteHero,
-  AdminRoutePanel,
-  AdminRouteWorkspace,
-} from '@/components/domain/admin-route-surface';
-import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
+import { ArrowLeft, ArrowRight } from 'lucide-react';
+
+import { AdminCatalogLayout } from '@/components/admin/layout/admin-catalog-layout';
+import { Button } from '@/components/admin/ui/button';
+import { Card, CardContent } from '@/components/admin/ui/card';
+
 import { Toast } from '@/components/ui/alert';
 import { Stepper } from '@/components/ui/stepper';
 import { RolePlayCardEditor, type RolePlayCardEditorValue } from '@/components/domain/speaking/RolePlayCardEditor';
@@ -36,6 +34,14 @@ import {
 } from '@/lib/api/speaking-role-play-cards';
 
 type ToastState = { variant: 'success' | 'error'; message: string } | null;
+
+const BREADCRUMBS = [
+  { label: 'Admin', href: '/admin' },
+  { label: 'Content', href: '/admin/content' },
+  { label: 'Speaking', href: '/admin/content/speaking' },
+  { label: 'Role-play cards', href: '/admin/content/speaking/role-play-cards' },
+  { label: 'New' },
+];
 
 export default function NewSpeakingRolePlayCardPage() {
   const router = useRouter();
@@ -72,26 +78,20 @@ export default function NewSpeakingRolePlayCardPage() {
   }
 
   return (
-    <AdminRouteWorkspace role="main" aria-label="New speaking role-play card">
-      <AdminRouteHero
-        eyebrow="CMS"
-        icon={ClipboardList}
-        accent="navy"
-        title="New role-play card"
-        description="Two steps: write the candidate card, then the hidden interlocutor script. You can return to step 2 later if needed."
-        aside={
-          <div className="rounded-2xl border border-border bg-background-light p-4 shadow-sm">
-            <Button
-              variant="outline"
-              onClick={() => router.push('/admin/content/speaking/role-play-cards')}
-            >
-              <ArrowLeft className="mr-1 h-4 w-4" /> Back to list
-            </Button>
-          </div>
-        }
-      />
-
-      <AdminRoutePanel>
+    <AdminCatalogLayout
+      title="New role-play card"
+      description="Two steps: write the candidate card, then the hidden interlocutor script. You can return to step 2 later if needed."
+      breadcrumbs={BREADCRUMBS}
+      eyebrow="CMS"
+      backHref="/admin/content/speaking/role-play-cards"
+      hideViewModeToggle
+      actions={
+        <Button variant="outline" onClick={() => router.push('/admin/content/speaking/role-play-cards')}>
+          <ArrowLeft className="mr-1 h-4 w-4" /> Back to list
+        </Button>
+      }
+    >
+      <div className="col-span-full">
         <Stepper
           steps={[
             { id: 'candidate', label: 'Candidate card' },
@@ -99,44 +99,48 @@ export default function NewSpeakingRolePlayCardPage() {
           ]}
           currentStep={step - 1}
         />
-      </AdminRoutePanel>
+      </div>
 
       {step === 1 ? (
-        <Card className="p-6">
-          <RolePlayCardEditor
-            mode="create"
-            submitting={submitting}
-            onSubmit={handleCardSubmit}
-          />
+        <Card className="col-span-full">
+          <CardContent className="p-6">
+            <RolePlayCardEditor
+              mode="create"
+              submitting={submitting}
+              onSubmit={handleCardSubmit}
+            />
+          </CardContent>
         </Card>
       ) : savedCard ? (
-        <Card className="p-6">
-          <InterlocutorScriptEditor
-            cardId={savedCard.cardId}
-            value={null}
-            mode="create"
-            submitting={submitting}
-            onSubmit={handleInterlocutorSubmit}
-            secondaryAction={
-              <Button
-                type="button"
-                variant="ghost"
-                onClick={() =>
-                  router.push(
-                    `/admin/content/speaking/role-play-cards/${encodeURIComponent(savedCard.cardId)}`,
-                  )
-                }
-              >
-                Skip for now <ArrowRight className="ml-1 h-4 w-4" />
-              </Button>
-            }
-          />
+        <Card className="col-span-full">
+          <CardContent className="p-6">
+            <InterlocutorScriptEditor
+              cardId={savedCard.cardId}
+              value={null}
+              mode="create"
+              submitting={submitting}
+              onSubmit={handleInterlocutorSubmit}
+              secondaryAction={
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() =>
+                    router.push(
+                      `/admin/content/speaking/role-play-cards/${encodeURIComponent(savedCard.cardId)}`,
+                    )
+                  }
+                >
+                  Skip for now <ArrowRight className="ml-1 h-4 w-4" />
+                </Button>
+              }
+            />
+          </CardContent>
         </Card>
       ) : null}
 
       {toast ? (
         <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} />
       ) : null}
-    </AdminRouteWorkspace>
+    </AdminCatalogLayout>
   );
 }

@@ -1,16 +1,32 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { AlertTriangle, RefreshCw } from 'lucide-react';
-import { AdminRouteWorkspace, AdminRoutePanel, AdminRouteSectionHeader } from '@/components/domain/admin-route-surface';
-import { DataTable, type Column } from '@/components/ui/data-table';
-import { Button } from '@/components/ui/button';
-import { Select } from '@/components/ui/form-controls';
-import { Badge } from '@/components/ui/badge';
+import type { ColumnDef } from '@tanstack/react-table';
+import { CheckCircle2, RefreshCw } from 'lucide-react';
+
+import { AdminTableLayout } from '@/components/admin/layout/admin-table-layout';
+import { Badge } from '@/components/admin/ui/badge';
+import { Button } from '@/components/admin/ui/button';
+import { DataTable } from '@/components/admin/ui/data-table';
+import { EmptyState } from '@/components/admin/ui/empty-state';
+import { Label } from '@/components/admin/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/admin/ui/select';
 import { InlineAlert } from '@/components/ui/alert';
 import { listDunningCampaigns, type DunningCampaignDto } from '@/lib/api';
 
-const STATUS_OPTIONS = ['', 'active', 'paused', 'recovered', 'cancelled'].map((s) => ({ value: s, label: s || 'all' }));
+const STATUS_OPTIONS = [
+  { value: '__all', label: 'All' },
+  { value: 'active', label: 'Active' },
+  { value: 'paused', label: 'Paused' },
+  { value: 'recovered', label: 'Recovered' },
+  { value: 'cancelled', label: 'Cancelled' },
+];
 
 function statusVariant(status: string) {
   if (status === 'recovered') return 'success' as const;
@@ -28,7 +44,9 @@ export default function AdminDunningPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      setRows(await listDunningCampaigns(status || undefined));
+      const filter = status === '__all' ? undefined : status;
+      setRows(await listDunningCampaigns(filter));
+      setError(null);
     } catch (err: any) {
       setError(err?.userMessage ?? err?.message ?? 'Failed to load.');
     } finally {
@@ -38,40 +56,104 @@ export default function AdminDunningPage() {
 
   useEffect(() => { void load(); }, [load]);
 
-  const columns: Column<DunningCampaignDto>[] = [
-    { key: 'started', header: 'Started', render: (c) => new Date(c.startedAt).toLocaleString() },
-    { key: 'sub', header: 'Subscription', render: (c) => c.subscriptionId.slice(0, 12) + '…' },
-    { key: 'user', header: 'User', render: (c) => c.userId },
-    { key: 'attempts', header: 'Attempts', render: (c) => c.attemptCount.toString() },
-    { key: 'next', header: 'Next attempt', render: (c) => new Date(c.nextAttemptAt).toLocaleString() },
-    { key: 'failure', header: 'Last failure', render: (c) => c.lastFailureCode ?? c.lastFailureReason ?? '—' },
-    { key: 'steps', header: 'Steps done', render: (c) => c.stepsCompletedCsv.split(',').filter(Boolean).length.toString() },
-    { key: 'status', header: 'Status', render: (c) => <Badge variant={statusVariant(c.status)}>{c.status}</Badge> },
+  const columns: ColumnDef<DunningCampaignDto>[] = [
+    {
+      id: 'started',
+      header: 'Started',
+      cell: ({ row }) => new Date(row.original.startedAt).toLocaleString(),
+    },
+    {
+      id: 'sub',
+      header: 'Subscription',
+      cell: ({ row }) => row.original.subscriptionId.slice(0, 12) + '…',
+    },
+    { id: 'user', accessorKey: 'userId', header: 'User' },
+    {
+      id: 'attempts',
+      header: 'Attempts',
+      cell: ({ row }) => row.original.attemptCount.toString(),
+    },
+    {
+      id: 'next',
+      header: 'Next attempt',
+      cell: ({ row }) => new Date(row.original.nextAttemptAt).toLocaleString(),
+    },
+    {
+      id: 'failure',
+      header: 'Last failure',
+      cell: ({ row }) => row.original.lastFailureCode ?? row.original.lastFailureReason ?? '—',
+    },
+    {
+      id: 'steps',
+      header: 'Steps done',
+      cell: ({ row }) =>
+        row.original.stepsCompletedCsv.split(',').filter(Boolean).length.toString(),
+    },
+    {
+      id: 'status',
+      header: 'Status',
+      cell: ({ row }) => (
+        <Badge variant={statusVariant(row.original.status)}>{row.original.status}</Badge>
+      ),
+    },
   ];
 
   return (
-    <AdminRouteWorkspace>
-      <AdminRouteSectionHeader title="Dunning campaigns" description="Failed renewal recovery — Day 0→21 retry schedule + access state." />
-
-      <AdminRoutePanel>
-        {error && <InlineAlert variant="error">{error}</InlineAlert>}
-        <div className="mb-4 flex items-center gap-3">
-          <Select label="Status" value={status} options={STATUS_OPTIONS} onChange={(e) => setStatus(e.target.value)} />
-          <Button variant="ghost" onClick={() => void load()}>
-            <RefreshCw className="h-4 w-4" />
-          </Button>
-        </div>
-        {loading ? (
-          <p className="text-sm text-muted-foreground">Loading…</p>
-        ) : rows.length === 0 ? (
-          <div className="flex items-center gap-2 rounded-lg bg-emerald-50 p-4 text-sm text-emerald-900 dark:bg-emerald-950 dark:text-emerald-100">
-            <AlertTriangle className="h-4 w-4" />
-            No active dunning campaigns. 🎉
+    <AdminTableLayout
+      title="Dunning campaigns"
+      description="Failed renewal recovery — Day 0→21 retry schedule + access state."
+      breadcrumbs={[
+        { label: 'Admin', href: '/admin' },
+        { label: 'Billing', href: '/admin/billing' },
+        { label: 'Dunning' },
+      ]}
+      actions={
+        <Button variant="ghost" onClick={() => void load()} startIcon={<RefreshCw className="h-4 w-4" />}>
+          Refresh
+        </Button>
+      }
+      banner={
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:gap-4">
+          {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
+          <div className="flex items-end gap-2">
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="dunning-status" className="text-xs text-admin-fg-muted">
+                Status
+              </Label>
+              <Select value={status} onValueChange={setStatus}>
+                <SelectTrigger id="dunning-status" className="w-[180px]">
+                  <SelectValue placeholder="Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  {STATUS_OPTIONS.map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
-        ) : (
-          <DataTable data={rows} columns={columns} keyExtractor={(r) => r.id} emptyMessage="No campaigns." />
-        )}
-      </AdminRoutePanel>
-    </AdminRouteWorkspace>
+        </div>
+      }
+    >
+      {!loading && rows.length === 0 ? (
+        <div className="px-6 py-12">
+          <EmptyState
+            illustration={<CheckCircle2 />}
+            title="No active dunning campaigns"
+            description="Nothing to recover right now — all renewals are healthy."
+          />
+        </div>
+      ) : (
+        <DataTable
+          columns={columns}
+          data={rows}
+          loading={loading}
+          emptyMessage="No campaigns match this filter."
+          searchPlaceholder="Search campaigns…"
+        />
+      )}
+    </AdminTableLayout>
   );
 }

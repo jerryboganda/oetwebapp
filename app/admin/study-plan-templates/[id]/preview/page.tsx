@@ -1,9 +1,12 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, RefreshCw, BookOpen } from 'lucide-react';
+import { RefreshCw, BookOpen, Eye } from 'lucide-react';
+import { AdminSettingsLayout, SettingsSection } from '@/components/admin/layout/admin-settings-layout';
+import { Button } from '@/components/admin/ui/button';
+import { Card, CardContent } from '@/components/admin/ui/card';
 import {
   getStudyPlanTemplate,
   previewStudyPlanTemplate,
@@ -37,7 +40,6 @@ const KIND_LABELS: Record<string, string> = {
 export default function StudyPlanTemplatePreviewPage() {
   const params = useParams();
   const id = params && typeof params.id === 'string' ? params.id : Array.isArray(params?.id) ? params.id[0] : '';
-  const router = useRouter();
 
   const [template, setTemplate] = useState<StudyPlanTemplateDetail | null>(null);
   const [preview, setPreview] = useState<StudyPlanTemplatePreview | null>(null);
@@ -84,13 +86,17 @@ export default function StudyPlanTemplatePreviewPage() {
 
   if (loading) {
     return (
-      <div className="p-8 text-center text-muted-foreground">Loading template…</div>
+      <AdminSettingsLayout title="Preview template" breadcrumbs={[{ label: 'Admin', href: '/admin' }, { label: 'Study plan templates', href: '/admin/study-plan-templates' }, { label: 'Preview' }]}>
+        <div className="p-8 text-center text-admin-fg-muted">Loading template…</div>
+      </AdminSettingsLayout>
     );
   }
 
   if (!template) {
     return (
-      <div className="p-8 text-center text-danger">Template not found.</div>
+      <AdminSettingsLayout title="Preview template" breadcrumbs={[{ label: 'Admin', href: '/admin' }, { label: 'Study plan templates', href: '/admin/study-plan-templates' }, { label: 'Preview' }]}>
+        <div className="p-8 text-center text-admin-danger">Template not found.</div>
+      </AdminSettingsLayout>
     );
   }
 
@@ -98,36 +104,32 @@ export default function StudyPlanTemplatePreviewPage() {
     ? Array.from(new Set(preview.days.map((d) => d.weekIndex))).sort((a, b) => a - b)
     : [];
 
-  return (
-    <div className="max-w-5xl mx-auto p-6 space-y-6">
-      {/* Header */}
-      <div className="flex items-center gap-3">
-        <button
-          onClick={() => router.push(`/admin/study-plan-templates/${id}`)}
-          className="p-2 rounded-lg hover:bg-muted transition-colors"
-        >
-          <ArrowLeft className="w-5 h-5" />
-        </button>
-        <div>
-          <h1 className="text-2xl font-bold">{template.name}</h1>
-          <p className="text-sm text-muted-foreground">
-            Preview — dry-run of the plan materialisation for a hypothetical learner
-          </p>
-        </div>
-      </div>
+  const breadcrumbs = [
+    { label: 'Admin', href: '/admin' },
+    { label: 'Study plan templates', href: '/admin/study-plan-templates' },
+    { label: template.name, href: `/admin/study-plan-templates/${id}` },
+    { label: 'Preview' },
+  ];
 
-      {/* Controls */}
-      <div className="bg-muted/30 border rounded-xl p-4 space-y-4">
-        <h2 className="font-semibold text-sm uppercase tracking-wide text-muted-foreground">
-          Preview Parameters
-        </h2>
+  const inputCls = 'w-full rounded-admin border border-admin-border bg-admin-bg-surface px-3 py-2 text-sm text-admin-fg-strong';
+
+  return (
+    <AdminSettingsLayout
+      title={template.name}
+      description="Preview — dry-run of the plan materialisation for a hypothetical learner"
+      breadcrumbs={breadcrumbs}
+      eyebrow="Study planning"
+      icon={<Eye className="h-5 w-5" />}
+      backHref={`/admin/study-plan-templates/${id}`}
+    >
+      <SettingsSection title="Preview parameters">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="space-y-1">
-            <label className="text-sm font-medium">Target OET Band</label>
+            <label className="text-sm font-medium text-admin-fg-strong">Target OET Band</label>
             <select
               value={targetBand}
               onChange={(e) => setTargetBand(e.target.value)}
-              className="w-full border rounded-lg px-3 py-2 text-sm bg-background"
+              className={inputCls}
             >
               <option value="">Any</option>
               <option value="A">A</option>
@@ -138,17 +140,17 @@ export default function StudyPlanTemplatePreviewPage() {
             </select>
           </div>
           <div className="space-y-1">
-            <label className="text-sm font-medium">Profession ID</label>
+            <label className="text-sm font-medium text-admin-fg-strong">Profession ID</label>
             <input
               type="text"
               value={professionId}
               onChange={(e) => setProfessionId(e.target.value)}
               placeholder="e.g. nursing (optional)"
-              className="w-full border rounded-lg px-3 py-2 text-sm bg-background"
+              className={inputCls}
             />
           </div>
           <div className="space-y-1">
-            <label className="text-sm font-medium">
+            <label className="text-sm font-medium text-admin-fg-strong">
               Weeks to Preview ({template.minWeeks}–{template.maxWeeks})
             </label>
             <input
@@ -157,27 +159,23 @@ export default function StudyPlanTemplatePreviewPage() {
               min={1}
               max={template.maxWeeks}
               onChange={(e) => setWeeksToPreview(Number(e.target.value))}
-              className="w-full border rounded-lg px-3 py-2 text-sm bg-background"
+              className={inputCls}
             />
           </div>
         </div>
-        <button
-          onClick={runPreview}
-          disabled={previewLoading}
-          className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-50 transition-colors"
-        >
-          <RefreshCw className={`w-4 h-4 ${previewLoading ? 'animate-spin' : ''}`} />
+        <Button onClick={runPreview} disabled={previewLoading} loading={previewLoading} className="mt-4">
+          <RefreshCw className="w-4 h-4 mr-1" />
           {previewLoading ? 'Running preview…' : 'Run Preview'}
-        </button>
+        </Button>
         {error && (
-          <p className="text-sm text-danger">{error}</p>
+          <p className="mt-2 text-sm text-admin-danger">{error}</p>
         )}
-      </div>
+      </SettingsSection>
 
       {/* Preview results */}
       {preview && (
-        <div className="space-y-6">
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+        <SettingsSection title="Preview output">
+          <div className="flex items-center gap-2 text-sm text-admin-fg-muted mb-4">
             <BookOpen className="w-4 h-4" />
             <span>
               Showing {preview.days.length} days across {weekGroups.length} week(s) for template{' '}
@@ -188,73 +186,74 @@ export default function StudyPlanTemplatePreviewPage() {
           {weekGroups.map((weekIndex) => {
             const days = preview.days.filter((d) => d.weekIndex === weekIndex);
             return (
-              <div key={weekIndex} className="space-y-3">
-                <h3 className="text-base font-semibold">Week {weekIndex + 1}</h3>
+              <div key={weekIndex} className="space-y-3 mb-6">
+                <h3 className="text-base font-semibold text-admin-fg-strong">Week {weekIndex + 1}</h3>
                 <div className="grid gap-3">
                   {days.map((day) => (
-                    <div
-                      key={`${weekIndex}-${day.dayOfWeek}`}
-                      className="border rounded-xl overflow-hidden"
-                    >
-                      <div className="px-4 py-2 bg-muted/50 flex items-center justify-between">
-                        <span className="font-medium capitalize text-sm">{day.dayOfWeek}</span>
-                        <span className="text-xs text-muted-foreground">
-                          {day.slots.reduce((sum, s) => sum + s.minutes, 0)} min total
-                        </span>
-                      </div>
-                      <div className="divide-y">
-                        {day.slots.map((slot, i) => (
-                          <div
-                            key={i}
-                            className="px-4 py-3 flex items-center justify-between gap-4"
-                          >
-                            <div className="flex items-center gap-3 min-w-0">
-                              <span
-                                className={`text-xs px-2 py-0.5 rounded-full font-medium shrink-0 ${
-                                  SUBTEST_COLORS[slot.subtest] ?? 'bg-muted text-muted-foreground'
-                                }`}
-                              >
-                                {slot.subtest}
-                              </span>
-                              <div className="min-w-0">
-                                <p className="text-sm font-medium truncate">{slot.title}</p>
-                                <p className="text-xs text-muted-foreground">
-                                  {KIND_LABELS[slot.kind] ?? slot.kind}
-                                  {slot.route && (
-                                    <>
-                                      {' · '}
-                                      <Link
-                                        href={slot.route}
-                                        className="underline hover:no-underline"
-                                        target="_blank"
-                                      >
-                                        {slot.route}
-                                      </Link>
-                                    </>
-                                  )}
-                                </p>
+                    <Card key={`${weekIndex}-${day.dayOfWeek}`}>
+                      <CardContent className="p-0 overflow-hidden">
+                        <div className="px-4 py-2 bg-admin-bg-subtle flex items-center justify-between border-b border-admin-border">
+                          <span className="font-medium capitalize text-sm text-admin-fg-strong">{day.dayOfWeek}</span>
+                          <span className="text-xs text-admin-fg-muted">
+                            {day.slots.reduce((sum, s) => sum + s.minutes, 0)} min total
+                          </span>
+                        </div>
+                        <div className="divide-y divide-admin-border">
+                          {day.slots.map((slot, i) => (
+                            <div
+                              key={i}
+                              className="px-4 py-3 flex items-center justify-between gap-4"
+                            >
+                              <div className="flex items-center gap-3 min-w-0">
+                                <span
+                                  className={`text-xs px-2 py-0.5 rounded-full font-medium shrink-0 ${
+                                    SUBTEST_COLORS[slot.subtest] ?? 'bg-admin-bg-subtle text-admin-fg-muted'
+                                  }`}
+                                >
+                                  {slot.subtest}
+                                </span>
+                                <div className="min-w-0">
+                                  <p className="text-sm font-medium truncate text-admin-fg-strong">{slot.title}</p>
+                                  <p className="text-xs text-admin-fg-muted">
+                                    {KIND_LABELS[slot.kind] ?? slot.kind}
+                                    {slot.route && (
+                                      <>
+                                        {' · '}
+                                        <Link
+                                          href={slot.route}
+                                          className="underline hover:no-underline text-[var(--admin-primary)]"
+                                          target="_blank"
+                                        >
+                                          {slot.route}
+                                        </Link>
+                                      </>
+                                    )}
+                                  </p>
+                                </div>
                               </div>
+                              <span className="text-xs text-admin-fg-muted shrink-0">
+                                {slot.minutes} min
+                              </span>
                             </div>
-                            <span className="text-xs text-muted-foreground shrink-0">
-                              {slot.minutes} min
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
+                          ))}
+                        </div>
+                      </CardContent>
+                    </Card>
                   ))}
                 </div>
               </div>
             );
           })}
-        </div>
+        </SettingsSection>
       )}
 
       {!preview && !previewLoading && (
-        <div className="text-center py-12 text-muted-foreground text-sm">
-          Set parameters above and click <strong>Run Preview</strong> to see how this template materialises.
-        </div>
+        <Card>
+          <CardContent className="p-12 text-center text-admin-fg-muted text-sm">
+            Set parameters above and click <strong>Run Preview</strong> to see how this template materialises.
+          </CardContent>
+        </Card>
       )}
-    </div>
+    </AdminSettingsLayout>
   );
 }

@@ -1,12 +1,15 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { ArrowLeft, RefreshCcw, AlertTriangle, TrendingUp } from 'lucide-react';
+import { RefreshCcw, AlertTriangle, TrendingUp, Gauge } from 'lucide-react';
 import { fetchAdminReadinessLearner, recomputeAdminReadiness } from '@/lib/api';
 import { InlineAlert } from '@/components/ui/alert';
-import { Skeleton } from '@/components/ui/skeleton';
+import { AdminOperationsLayout, KpiStrip } from '@/components/admin/layout/admin-operations-layout';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/admin/ui/card';
+import { Skeleton } from '@/components/admin/ui/skeleton';
+import { Button } from '@/components/admin/ui/button';
+import { KpiTile } from '@/components/admin/ui/kpi-tile';
 import { ReadinessTrendChart } from '@/components/domain/readiness-trend-chart';
 import type { ReadinessHistoryPoint } from '@/lib/mock-data';
 
@@ -17,6 +20,12 @@ export default function AdminReadinessLearnerDetailPage() {
   const [history, setHistory] = useState<ReadinessHistoryPoint[]>([]);
   const [recomputing, setRecomputing] = useState(false);
   const [error, setError] = useState('');
+
+  const breadcrumbs = [
+    { label: 'Admin', href: '/admin' },
+    { label: 'Readiness', href: '/admin/readiness' },
+    { label: userId },
+  ];
 
   const load = useCallback(async () => {
     setError('');
@@ -45,12 +54,18 @@ export default function AdminReadinessLearnerDetailPage() {
 
   if (!data) {
     return (
-      <div className="space-y-6">
+      <AdminOperationsLayout
+        title="Learner readiness"
+        breadcrumbs={breadcrumbs}
+        eyebrow="Readiness"
+        icon={<Gauge className="h-5 w-5" />}
+        backHref="/admin/readiness"
+      >
         {error && <InlineAlert variant="error">{error}</InlineAlert>}
-        <Skeleton className="h-12 rounded-xl" />
-        <Skeleton className="h-40 rounded-xl" />
-        <Skeleton className="h-56 rounded-xl" />
-      </div>
+        <Skeleton className="h-12 rounded-admin-lg" />
+        <Skeleton className="h-40 rounded-admin-lg" />
+        <Skeleton className="h-56 rounded-admin-lg" />
+      </AdminOperationsLayout>
     );
   }
 
@@ -64,89 +79,101 @@ export default function AdminReadinessLearnerDetailPage() {
   const subTests = Array.isArray(snapshot.subTests) ? snapshot.subTests as Record<string, unknown>[] : [];
   const blockers = Array.isArray(snapshot.blockers) ? snapshot.blockers as Record<string, unknown>[] : [];
 
+  const riskTone: 'danger' | 'warning' | 'success' | 'default' =
+    risk === 'High' ? 'danger' : risk === 'Moderate' ? 'warning' : risk === 'Low' ? 'success' : 'default';
+
   return (
-    <div className="space-y-6">
-      <header className="flex items-center justify-between gap-3 flex-wrap">
-        <div>
-          <Link href="/admin/readiness" className="inline-flex items-center gap-1 text-xs font-bold text-primary hover:underline mb-2">
-            <ArrowLeft className="w-3.5 h-3.5" /> Back to learners
-          </Link>
-          <h1 className="text-2xl font-bold text-navy">{data.displayName ?? data.userId}</h1>
-          <p className="text-sm text-muted">Target date: {data.targetExamDate ?? '—'}</p>
-        </div>
-        <button
-          onClick={handleRecompute}
-          disabled={recomputing}
-          className="inline-flex items-center gap-1.5 text-sm font-bold text-primary hover:underline disabled:opacity-50"
-        >
-          <RefreshCcw className={`w-4 h-4 ${recomputing ? 'animate-spin' : ''}`} />
+    <AdminOperationsLayout
+      title={data.displayName ?? data.userId}
+      description={`Target date: ${data.targetExamDate ?? '—'}`}
+      breadcrumbs={breadcrumbs}
+      eyebrow="Readiness"
+      icon={<Gauge className="h-5 w-5" />}
+      backHref="/admin/readiness"
+      actions={(
+        <Button onClick={handleRecompute} disabled={recomputing} variant="outline">
+          <RefreshCcw className={`mr-2 w-4 h-4 ${recomputing ? 'animate-spin' : ''}`} />
           {recomputing ? 'Recomputing…' : 'Force recompute'}
-        </button>
-      </header>
+        </Button>
+      )}
+      kpis={(
+        <KpiStrip>
+          <KpiTile label="Overall" value={`${Math.round(overall)}`} tone="primary" />
+          <KpiTile label="Risk" value={risk} tone={riskTone} />
+          <KpiTile label="Target-date probability" value={probability != null ? `${Math.round(probability)}%` : '—'} />
+          <KpiTile label="Confidence" value={`${confidence} · ${dataPoints} pts`} />
+        </KpiStrip>
+      )}
+      primaryGrid={(
+        <div className="space-y-6">
+          {error && <InlineAlert variant="error">{error}</InlineAlert>}
 
-      {error && <InlineAlert variant="error">{error}</InlineAlert>}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-sm flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 text-admin-warning" /> Reasoning trace
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-admin-fg-muted">{data.reasoningTrace}</p>
+              {weakest && <p className="text-xs text-admin-fg-muted mt-2">Weakest sub-test: <strong>{weakest}</strong></p>}
+            </CardContent>
+          </Card>
 
-      <section className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-        <Stat label="Overall" value={`${Math.round(overall)}`} accent="text-navy" />
-        <Stat label="Risk" value={risk} accent={risk === 'High' ? 'text-danger' : risk === 'Moderate' ? 'text-warning' : risk === 'Low' ? 'text-success' : 'text-muted'} />
-        <Stat label="Target-date probability" value={probability != null ? `${Math.round(probability)}%` : '—'} accent="text-navy" />
-        <Stat label="Confidence" value={`${confidence} · ${dataPoints} pts`} accent="text-navy" />
-      </section>
-
-      <section className="rounded-2xl border border-border bg-surface p-4">
-        <h2 className="text-sm font-bold text-navy mb-2 flex items-center gap-2">
-          <AlertTriangle className="w-4 h-4 text-warning" /> Reasoning trace
-        </h2>
-        <p className="text-sm text-muted">{data.reasoningTrace}</p>
-        {weakest && <p className="text-xs text-muted mt-2">Weakest sub-test: <strong>{weakest}</strong></p>}
-      </section>
-
-      <section className="rounded-2xl border border-border bg-surface p-4">
-        <h2 className="text-sm font-bold text-navy mb-3 flex items-center gap-2">
-          <TrendingUp className="w-4 h-4 text-primary" /> History (12 weeks)
-        </h2>
-        <ReadinessTrendChart data={history} series="overall" target={70} />
-      </section>
-
-      <section className="rounded-2xl border border-border bg-surface p-4">
-        <h2 className="text-sm font-bold text-navy mb-3">Sub-test readiness</h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          {subTests.map((t) => (
-            <div key={String(t.code ?? t.id)} className="border border-border rounded-xl p-3">
-              <div className="flex items-center justify-between mb-1">
-                <span className="text-sm font-bold text-navy">{String(t.name ?? t.code)}</span>
-                <span className="text-sm font-bold text-navy">{Math.round(Number(t.readiness ?? 0))}</span>
-              </div>
-              <p className="text-[11px] text-muted">{String(t.status ?? '')} · target {Number(t.target ?? 70)}</p>
-            </div>
-          ))}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-sm flex items-center gap-2">
+                <TrendingUp className="w-4 h-4 text-[var(--admin-primary)]" /> History (12 weeks)
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ReadinessTrendChart data={history} series="overall" target={70} />
+            </CardContent>
+          </Card>
         </div>
-      </section>
+      )}
+      secondaryGrid={(
+        <div className="grid gap-6 lg:grid-cols-2">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-sm">Sub-test readiness</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {subTests.map((t) => (
+                  <div key={String(t.code ?? t.id)} className="border border-admin-border rounded-admin p-3">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-sm font-bold text-admin-fg-strong">{String(t.name ?? t.code)}</span>
+                      <span className="text-sm font-bold text-admin-fg-strong">{Math.round(Number(t.readiness ?? 0))}</span>
+                    </div>
+                    <p className="text-[11px] text-admin-fg-muted">{String(t.status ?? '')} · target {Number(t.target ?? 70)}</p>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
 
-      <section className="rounded-2xl border border-border bg-surface p-4">
-        <h2 className="text-sm font-bold text-navy mb-3">Blockers ({blockers.length})</h2>
-        {blockers.length === 0 ? (
-          <p className="text-sm text-muted">No active blockers.</p>
-        ) : (
-          <ul className="space-y-2 text-sm">
-            {blockers.map((b, i) => (
-              <li key={String(b.id ?? i)} className="border border-border rounded-xl p-3">
-                <p className="font-semibold text-navy">{String(b.title ?? '')}</p>
-                <p className="text-xs text-muted">{String(b.description ?? '')}</p>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-    </div>
-  );
-}
-
-function Stat({ label, value, accent }: { label: string; value: string; accent: string }) {
-  return (
-    <div className="rounded-2xl border border-border bg-surface p-4">
-      <p className="text-[10px] uppercase tracking-widest font-bold text-muted">{label}</p>
-      <p className={`text-2xl font-bold mt-1 ${accent}`}>{value}</p>
-    </div>
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-sm">Blockers ({blockers.length})</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {blockers.length === 0 ? (
+                <p className="text-sm text-admin-fg-muted">No active blockers.</p>
+              ) : (
+                <ul className="space-y-2 text-sm">
+                  {blockers.map((b, i) => (
+                    <li key={String(b.id ?? i)} className="border border-admin-border rounded-admin p-3">
+                      <p className="font-semibold text-admin-fg-strong">{String(b.title ?? '')}</p>
+                      <p className="text-xs text-admin-fg-muted">{String(b.description ?? '')}</p>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      )}
+    />
   );
 }

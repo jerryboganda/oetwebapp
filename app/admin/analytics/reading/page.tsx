@@ -1,18 +1,13 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, BarChart3, CheckCircle2, Download, FileText, Gauge, ListChecks, Target } from 'lucide-react';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { Skeleton } from '@/components/ui/skeleton';
-import { MotionSection } from '@/components/ui/motion-primitives';
-import {
-  AdminRouteFreshnessBadge,
-  AdminRouteHero,
-  AdminRoutePanel,
-  AdminRouteSummaryCard,
-  AdminRouteWorkspace,
-} from '@/components/domain/admin-route-surface';
+import { AlertTriangle, CheckCircle2, Download, FileText, Gauge, ListChecks, Target } from 'lucide-react';
+import { Badge } from '@/components/admin/ui/badge';
+import { Button } from '@/components/admin/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/admin/ui/card';
+import { KpiTile } from '@/components/admin/ui/kpi-tile';
+import { Skeleton } from '@/components/admin/ui/skeleton';
+import { AdminOperationsLayout, KpiStrip, BentoGrid, BentoCell } from '@/components/admin/layout/admin-operations-layout';
 import { exportToCsv, formatDateForExport } from '@/lib/csv-export';
 import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
 import { getReadingAdminAnalytics, type ReadingAdminAnalyticsDto } from '@/lib/reading-authoring-api';
@@ -36,20 +31,20 @@ function formatMinutes(seconds: number | null | undefined) {
   return `${Math.round(seconds / 60)}m`;
 }
 
-function toneVariant(tone: string): 'outline' | 'danger' | 'warning' | 'success' {
-  if (tone === 'danger') return 'danger';
-  if (tone === 'success') return 'success';
-  if (tone === 'warning') return 'warning';
-  return 'outline';
-}
-
 function AccuracyBar({ value }: { value: number | null }) {
   const width = value == null ? 0 : Math.max(0, Math.min(100, value));
   return (
-    <div className="h-2 w-full overflow-hidden rounded-full bg-muted" aria-hidden="true">
-      <div className="h-full rounded-full bg-primary" style={{ width: `${width}%` }} />
+    <div className="h-2 w-full overflow-hidden rounded-full bg-admin-bg-subtle" aria-hidden="true">
+      <div className="h-full rounded-full bg-[var(--admin-primary)]" style={{ width: `${width}%` }} />
     </div>
   );
+}
+
+function toneToVariant(tone: 'default' | 'success' | 'warning' | 'danger' | undefined): 'primary' | 'success' | 'warning' | 'danger' {
+  if (tone === 'success') return 'success';
+  if (tone === 'warning') return 'warning';
+  if (tone === 'danger') return 'danger';
+  return 'primary';
 }
 
 function MetricRow({
@@ -64,16 +59,16 @@ function MetricRow({
   opportunities: number;
 }) {
   return (
-    <div className="grid gap-3 rounded-lg border border-border bg-background-light p-3 sm:grid-cols-[minmax(0,1fr)_9rem] sm:items-center">
+    <div className="grid gap-3 rounded-admin border border-admin-border bg-admin-bg-surface p-3 sm:grid-cols-[minmax(0,1fr)_9rem] sm:items-center">
       <div className="min-w-0 space-y-1">
         <div className="flex flex-wrap items-center gap-2">
-          <p className="font-semibold text-navy">{label}</p>
-          <Badge variant="outline" className="text-[10px]">{opportunities} signals</Badge>
+          <p className="font-semibold text-admin-fg-strong">{label}</p>
+          <Badge variant="default" intensity="tinted" size="sm">{opportunities} signals</Badge>
         </div>
-        <p className="text-sm text-muted">{meta}</p>
+        <p className="text-sm text-admin-fg-muted">{meta}</p>
       </div>
       <div className="space-y-1.5">
-        <div className="text-right text-sm font-semibold text-navy">{formatPercent(value)}</div>
+        <div className="text-right text-sm font-semibold text-admin-fg-strong">{formatPercent(value)}</div>
         <AccuracyBar value={value} />
       </div>
     </div>
@@ -131,163 +126,197 @@ export default function ReadingAnalyticsPage() {
 
   if (!isAuthenticated || role !== 'admin') return null;
 
+  const breadcrumbs = [
+    { label: 'Admin', href: '/admin' },
+    { label: 'Analytics', href: '/admin' },
+    { label: 'Reading' },
+  ];
+
   return (
-    <AdminRouteWorkspace role="main" aria-label="Reading analytics">
-      <AdminRouteHero
-        eyebrow="Analytics"
-        icon={BarChart3}
-        accent="navy"
-        title="Reading Analytics"
-        description="Monitor paper readiness, score outcomes, weakest skills, and item-level quality signals from submitted Reading attempts."
-        aside={(
-          <div className="rounded-2xl border border-border bg-background-light p-4 shadow-sm">
-            <div className="flex flex-wrap items-center gap-2">
-              {windowOptions.map((option) => (
-                <Button
-                  key={option}
-                  type="button"
-                  size="sm"
-                  variant={days === option ? 'primary' : 'outline'}
-                  aria-pressed={days === option}
-                  onClick={() => setDays(option)}
-                >
-                  {option}d
-                </Button>
-              ))}
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                className="gap-2"
-                disabled={!analytics || exportRows.length === 0}
-                onClick={() => exportToCsv(exportRows, `reading-analytics-${days}d-${formatDateForExport(new Date())}.csv`)}
-              >
-                <Download className="h-4 w-4" />
-                Export CSV
-              </Button>
-            </div>
-            <div className="mt-3">
-              <AdminRouteFreshnessBadge value={analytics?.generatedAt} />
-            </div>
-          </div>
-        )}
-      />
+    <AdminOperationsLayout
+      title="Reading Analytics"
+      description="Monitor paper readiness, score outcomes, weakest skills, and item-level quality signals from submitted Reading attempts."
+      eyebrow="Analytics"
+      breadcrumbs={breadcrumbs}
+      actions={
+        <div className="flex flex-wrap items-center gap-2">
+          {windowOptions.map((option) => (
+            <Button
+              key={option}
+              type="button"
+              size="sm"
+              variant={days === option ? 'primary' : 'secondary'}
+              aria-pressed={days === option}
+              onClick={() => setDays(option)}
+            >
+              {option}d
+            </Button>
+          ))}
+          <Button
+            type="button"
+            size="sm"
+            variant="secondary"
+            disabled={!analytics || exportRows.length === 0}
+            onClick={() => exportToCsv(exportRows, `reading-analytics-${days}d-${formatDateForExport(new Date())}.csv`)}
+          >
+            <Download className="h-4 w-4" />
+            Export CSV
+          </Button>
+        </div>
+      }
+      kpis={
+        status === 'success' && analytics ? (
+          <KpiStrip>
+            <KpiTile label="Exam-ready Papers" value={`${analytics.summary.examReadyPapers}/${analytics.summary.totalPapers}`} icon={<FileText className="h-4 w-4" />} tone={analytics.summary.examReadyPapers === analytics.summary.totalPapers ? 'success' : 'warning'} />
+            <KpiTile label="Submitted Attempts" value={analytics.summary.submittedAttempts} icon={<ListChecks className="h-4 w-4" />} tone="info" />
+            <KpiTile label="Average Scaled" value={formatNumber(analytics.summary.averageScaledScore)} icon={<Gauge className="h-4 w-4" />} tone="primary" />
+            <KpiTile label="Pass Rate" value={formatPercent(analytics.summary.passRatePercent)} icon={<Target className="h-4 w-4" />} tone={(analytics.summary.passRatePercent ?? 100) >= 70 ? 'success' : 'warning'} />
+          </KpiStrip>
+        ) : null
+      }
+      primaryGrid={
+        <div className="space-y-8">
+          {/* legacy body */}
 
       {status === 'loading' ? (
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          {Array.from({ length: 4 }).map((_, index) => <Skeleton key={index} className="h-32 rounded-xl" />)}
+          {Array.from({ length: 4 }).map((_, index) => <Skeleton key={index} className="h-32 rounded-admin" />)}
         </div>
       ) : null}
 
       {status === 'error' ? (
-        <AdminRoutePanel title="Reading analytics unavailable">
-          <p className="text-sm text-admin-text-muted">The analytics service could not be loaded. Try again after the API is available.</p>
-        </AdminRoutePanel>
+        <Card>
+          <CardHeader><CardTitle>Reading analytics unavailable</CardTitle></CardHeader>
+          <CardContent>
+            <p className="text-sm text-admin-fg-muted">The analytics service could not be loaded. Try again after the API is available.</p>
+          </CardContent>
+        </Card>
       ) : null}
 
       {status === 'empty' ? (
-        <AdminRoutePanel title="No Reading analytics yet">
-          <p className="text-sm text-admin-text-muted">Create and publish Reading papers, then learner submissions will populate this dashboard.</p>
-        </AdminRoutePanel>
+        <Card>
+          <CardHeader><CardTitle>No Reading analytics yet</CardTitle></CardHeader>
+          <CardContent>
+            <p className="text-sm text-admin-fg-muted">Create and publish Reading papers, then learner submissions will populate this dashboard.</p>
+          </CardContent>
+        </Card>
       ) : null}
 
       {status === 'success' && analytics ? (
-        <div className="space-y-8">
-          <MotionSection delayIndex={0}>
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-              <AdminRouteSummaryCard label="Exam-ready Papers" value={`${analytics.summary.examReadyPapers}/${analytics.summary.totalPapers}`} hint={`${analytics.summary.publishedPapers} published`} icon={<FileText className="h-5 w-5" />} tone={analytics.summary.examReadyPapers === analytics.summary.totalPapers ? 'success' : 'warning'} />
-              <AdminRouteSummaryCard label="Submitted Attempts" value={analytics.summary.submittedAttempts} hint={`${analytics.summary.activeAttempts} active in window`} icon={<ListChecks className="h-5 w-5" />} />
-              <AdminRouteSummaryCard label="Average Scaled" value={formatNumber(analytics.summary.averageScaledScore)} hint={`Raw ${formatNumber(analytics.summary.averageRawScore)}/42`} icon={<Gauge className="h-5 w-5" />} />
-              <AdminRouteSummaryCard label="Pass Rate" value={formatPercent(analytics.summary.passRatePercent)} hint={`${formatPercent(analytics.summary.unansweredRatePercent)} unanswered rate`} icon={<Target className="h-5 w-5" />} tone={(analytics.summary.passRatePercent ?? 100) >= 70 ? 'success' : 'warning'} />
-            </div>
-          </MotionSection>
+        <>
+          <BentoGrid>
+            <BentoCell span={{ default: 12, xl: 6 }}>
+              <Card>
+                <CardHeader>
+                  <CardTitle>Part Performance</CardTitle>
+                  <CardDescription>Accuracy treats unanswered submitted items as missed opportunities, which keeps the signal honest for exam-style attempts.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-3">
+                    {analytics.partBreakdown.map((part) => (
+                      <MetricRow
+                        key={part.partCode}
+                        label={`Part ${part.partCode}`}
+                        meta={`${part.questionCount} authored items, ${part.correctCount} correct, ${part.unansweredCount} unanswered`}
+                        value={part.accuracyPercent}
+                        opportunities={part.opportunities}
+                      />
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            </BentoCell>
+            <BentoCell span={{ default: 12, xl: 6 }}>
+              <Card>
+                <CardHeader>
+                  <CardTitle>Skill Breakdown</CardTitle>
+                  <CardDescription>Lowest-accuracy tags rise to the top so content editors can target remediation and question QA.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-3">
+                    {analytics.skillBreakdown.slice(0, 6).map((skill) => (
+                      <MetricRow
+                        key={skill.label}
+                        label={skill.label}
+                        meta={`${skill.questionCount} items, ${skill.correctCount} correct, ${skill.unansweredCount} unanswered`}
+                        value={skill.accuracyPercent}
+                        opportunities={skill.opportunities}
+                      />
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            </BentoCell>
+          </BentoGrid>
 
-          <MotionSection delayIndex={1}>
-            <div className="grid gap-6 xl:grid-cols-2">
-              <AdminRoutePanel title="Part Performance" description="Accuracy treats unanswered submitted items as missed opportunities, which keeps the signal honest for exam-style attempts.">
-                <div className="space-y-3">
-                  {analytics.partBreakdown.map((part) => (
-                    <MetricRow
-                      key={part.partCode}
-                      label={`Part ${part.partCode}`}
-                      meta={`${part.questionCount} authored items, ${part.correctCount} correct, ${part.unansweredCount} unanswered`}
-                      value={part.accuracyPercent}
-                      opportunities={part.opportunities}
-                    />
-                  ))}
-                </div>
-              </AdminRoutePanel>
-
-              <AdminRoutePanel title="Skill Breakdown" description="Lowest-accuracy tags rise to the top so content editors can target remediation and question QA.">
-                <div className="space-y-3">
-                  {analytics.skillBreakdown.slice(0, 6).map((skill) => (
-                    <MetricRow
-                      key={skill.label}
-                      label={skill.label}
-                      meta={`${skill.questionCount} items, ${skill.correctCount} correct, ${skill.unansweredCount} unanswered`}
-                      value={skill.accuracyPercent}
-                      opportunities={skill.opportunities}
-                    />
-                  ))}
-                </div>
-              </AdminRoutePanel>
-            </div>
-          </MotionSection>
-
-          <MotionSection delayIndex={2}>
-            <div className="grid gap-6 xl:grid-cols-[1.25fr_0.75fr]">
-              <AdminRoutePanel title="Hardest Questions" description="Items are ranked by lowest accuracy, with answered evidence preferred over untouched items.">
-                <div className="space-y-3">
-                  {analytics.hardestQuestions.length > 0 ? analytics.hardestQuestions.slice(0, 8).map((question) => (
-                    <div key={question.questionId} className="rounded-lg border border-border bg-background-light p-3">
-                      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                        <div className="min-w-0 space-y-1">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <p className="font-semibold text-navy">{question.label}</p>
-                            <Badge variant="outline" className="text-[10px]">{question.skillTag}</Badge>
-                            <Badge variant="outline" className="text-[10px]">{question.questionType}</Badge>
+          <BentoGrid>
+            <BentoCell span={{ default: 12, xl: 8 }}>
+              <Card>
+                <CardHeader>
+                  <CardTitle>Hardest Questions</CardTitle>
+                  <CardDescription>Items are ranked by lowest accuracy, with answered evidence preferred over untouched items.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-3">
+                    {analytics.hardestQuestions.length > 0 ? analytics.hardestQuestions.slice(0, 8).map((question) => (
+                      <div key={question.questionId} className="rounded-admin border border-admin-border bg-admin-bg-surface p-3">
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                          <div className="min-w-0 space-y-1">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <p className="font-semibold text-admin-fg-strong">{question.label}</p>
+                              <Badge variant="default" intensity="tinted" size="sm">{question.skillTag}</Badge>
+                              <Badge variant="default" intensity="tinted" size="sm">{question.questionType}</Badge>
+                            </div>
+                            <p className="text-sm text-admin-fg-muted">{question.paperTitle}</p>
+                            <p className="line-clamp-2 text-sm text-admin-fg-default">{question.stem}</p>
                           </div>
-                          <p className="text-sm text-muted">{question.paperTitle}</p>
-                          <p className="line-clamp-2 text-sm text-foreground">{question.stem}</p>
-                        </div>
-                        <div className="min-w-32 space-y-1 text-right">
-                          <p className="text-sm font-semibold text-navy">{formatPercent(question.accuracyPercent)}</p>
-                          <p className="text-xs text-muted">{question.correctCount}/{question.opportunities} correct</p>
+                          <div className="min-w-32 space-y-1 text-right">
+                            <p className="text-sm font-semibold text-admin-fg-strong">{formatPercent(question.accuracyPercent)}</p>
+                            <p className="text-xs text-admin-fg-muted">{question.correctCount}/{question.opportunities} correct</p>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  )) : <p className="text-sm text-admin-text-muted">No submitted question evidence in this window.</p>}
-                </div>
-              </AdminRoutePanel>
-
-              <AdminRoutePanel title="Action Insights" description="Operational cues generated from the current Reading evidence window.">
-                <div className="space-y-3">
-                  {analytics.actionInsights.map((insight) => (
-                    <div key={insight.id} className="rounded-lg border border-border bg-background-light p-3">
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="space-y-1">
-                          <p className="font-semibold text-navy">{insight.title}</p>
-                          <p className="text-sm text-muted">{insight.description}</p>
+                    )) : <p className="text-sm text-admin-fg-muted">No submitted question evidence in this window.</p>}
+                  </div>
+                </CardContent>
+              </Card>
+            </BentoCell>
+            <BentoCell span={{ default: 12, xl: 4 }}>
+              <Card>
+                <CardHeader>
+                  <CardTitle>Action Insights</CardTitle>
+                  <CardDescription>Operational cues generated from the current Reading evidence window.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-3">
+                    {analytics.actionInsights.map((insight) => (
+                      <div key={insight.id} className="rounded-admin border border-admin-border bg-admin-bg-surface p-3">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="space-y-1">
+                            <p className="font-semibold text-admin-fg-strong">{insight.title}</p>
+                            <p className="text-sm text-admin-fg-muted">{insight.description}</p>
+                          </div>
+                          <Badge variant={toneToVariant(insight.tone as any)} intensity="tinted" size="sm" className="capitalize">{insight.tone}</Badge>
                         </div>
-                        <Badge variant={toneVariant(insight.tone)} className="text-[10px] capitalize">{insight.tone}</Badge>
                       </div>
-                    </div>
-                  ))}
-                </div>
-              </AdminRoutePanel>
-            </div>
-          </MotionSection>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            </BentoCell>
+          </BentoGrid>
 
           {analytics.distractorTraps.length > 0 ? (
-            <MotionSection delayIndex={3}>
-              <AdminRoutePanel
-                title="Distractor Traps"
-                description="Wrong options ranked by how often the cohort fell for them. Categories (Opposite, TooBroad, etc.) come from each option's authored distractor metadata."
-              >
+            <Card>
+              <CardHeader>
+                <CardTitle>Distractor Traps</CardTitle>
+                <CardDescription>Wrong options ranked by how often the cohort fell for them. Categories (Opposite, TooBroad, etc.) come from each option&apos;s authored distractor metadata.</CardDescription>
+              </CardHeader>
+              <CardContent>
                 <div className="overflow-x-auto">
-                  <table className="min-w-full divide-y divide-border text-sm">
+                  <table className="min-w-full divide-y divide-admin-border text-sm">
                     <thead>
-                      <tr className="text-left text-xs font-semibold uppercase tracking-[0.12em] text-muted">
+                      <tr className="text-left text-xs font-semibold uppercase tracking-[0.12em] text-admin-fg-muted">
                         <th className="py-3 pr-4">Paper / question</th>
                         <th className="px-4 py-3">Part</th>
                         <th className="px-4 py-3">Option</th>
@@ -296,33 +325,31 @@ export default function ReadingAnalyticsPage() {
                         <th className="px-4 py-3">Trap rate</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-border" data-testid="distractor-traps-rows">
+                    <tbody className="divide-y divide-admin-border" data-testid="distractor-traps-rows">
                       {analytics.distractorTraps.slice(0, 10).map((trap) => (
                         <tr key={`${trap.questionId}-${trap.category}-${trap.optionKey}`}>
                           <td className="py-3 pr-4 align-top">
-                            <p className="font-semibold text-navy">{trap.paperTitle || 'Unknown paper'}</p>
-                            <p className="line-clamp-2 text-xs text-muted">{trap.stem}</p>
+                            <p className="font-semibold text-admin-fg-strong">{trap.paperTitle || 'Unknown paper'}</p>
+                            <p className="line-clamp-2 text-xs text-admin-fg-muted">{trap.stem}</p>
                           </td>
                           <td className="px-4 py-3 align-top">
-                            <Badge variant="outline" className="text-[10px]">Part {trap.partCode}</Badge>
+                            <Badge variant="default" intensity="tinted" size="sm">Part {trap.partCode}</Badge>
                           </td>
-                          <td className="px-4 py-3 align-top font-mono text-xs text-navy">{trap.optionKey}</td>
+                          <td className="px-4 py-3 align-top font-mono text-xs text-admin-fg-strong">{trap.optionKey}</td>
                           <td className="px-4 py-3 align-top">
-                            <Badge variant="warning" className="text-[10px]">{trap.category}</Badge>
+                            <Badge variant="warning" intensity="tinted" size="sm">{trap.category}</Badge>
                           </td>
-                          <td className="px-4 py-3 align-top text-navy">
+                          <td className="px-4 py-3 align-top text-admin-fg-strong">
                             {trap.selectedCount}
-                            {trap.opportunities > 0 ? <span className="text-xs text-muted"> / {trap.opportunities}</span> : null}
+                            {trap.opportunities > 0 ? <span className="text-xs text-admin-fg-muted"> / {trap.opportunities}</span> : null}
                           </td>
-                          <td className="px-4 py-3 align-top text-navy">
+                          <td className="px-4 py-3 align-top text-admin-fg-strong">
                             <div className="flex items-center justify-end gap-2">
                               <span className="font-semibold">{formatPercent(trap.selectionRatePercent)}</span>
-                              <div className="h-2 w-16 overflow-hidden rounded-full bg-muted" aria-hidden="true">
+                              <div className="h-2 w-16 overflow-hidden rounded-full bg-admin-bg-subtle" aria-hidden="true">
                                 <div
-                                  className="h-full rounded-full bg-amber-500"
-                                  style={{
-                                    width: `${Math.min(100, Math.max(0, trap.selectionRatePercent ?? 0))}%`,
-                                  }}
+                                  className="h-full rounded-full bg-[var(--admin-warning)]"
+                                  style={{ width: `${Math.min(100, Math.max(0, trap.selectionRatePercent ?? 0))}%` }}
                                 />
                               </div>
                             </div>
@@ -332,16 +359,20 @@ export default function ReadingAnalyticsPage() {
                     </tbody>
                   </table>
                 </div>
-              </AdminRoutePanel>
-            </MotionSection>
+              </CardContent>
+            </Card>
           ) : null}
 
-          <MotionSection delayIndex={4}>
-            <AdminRoutePanel title="Paper Quality" description="Per-paper readiness and outcome signals for authoring QA and content operations.">
+          <Card>
+            <CardHeader>
+              <CardTitle>Paper Quality</CardTitle>
+              <CardDescription>Per-paper readiness and outcome signals for authoring QA and content operations.</CardDescription>
+            </CardHeader>
+            <CardContent>
               <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-border text-sm">
+                <table className="min-w-full divide-y divide-admin-border text-sm">
                   <thead>
-                    <tr className="text-left text-xs font-semibold uppercase tracking-[0.12em] text-admin-text-muted">
+                    <tr className="text-left text-xs font-semibold uppercase tracking-[0.12em] text-admin-fg-muted">
                       <th className="py-3 pr-4">Paper</th>
                       <th className="px-4 py-3">Shape</th>
                       <th className="px-4 py-3">Attempts</th>
@@ -350,50 +381,56 @@ export default function ReadingAnalyticsPage() {
                       <th className="px-4 py-3">Avg time</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-border">
+                  <tbody className="divide-y divide-admin-border">
                     {analytics.papers.map((paper) => (
                       <tr key={paper.paperId}>
                         <td className="py-3 pr-4">
-                          <p className="font-semibold text-admin-text">{paper.title}</p>
-                          <p className="text-xs text-admin-text-muted">{paper.status} · {paper.difficulty}</p>
+                          <p className="font-semibold text-admin-fg-strong">{paper.title}</p>
+                          <p className="text-xs text-admin-fg-muted">{paper.status} · {paper.difficulty}</p>
                         </td>
                         <td className="px-4 py-3">
-                          <Badge variant={paper.isExamReady ? 'success' : 'warning'} className="text-[10px]">
+                          <Badge variant={paper.isExamReady ? 'success' : 'warning'} intensity="tinted" size="sm">
                             {paper.partACount}+{paper.partBCount}+{paper.partCCount}
                           </Badge>
                         </td>
-                        <td className="px-4 py-3 text-admin-text">{paper.submittedCount}/{paper.attemptCount}</td>
-                        <td className="px-4 py-3 text-admin-text">{formatNumber(paper.averageScaledScore)}</td>
-                        <td className="px-4 py-3 text-admin-text">{formatPercent(paper.passRatePercent)}</td>
-                        <td className="px-4 py-3 text-admin-text">{formatMinutes(paper.averageCompletionSeconds)}</td>
+                        <td className="px-4 py-3 text-admin-fg-strong">{paper.submittedCount}/{paper.attemptCount}</td>
+                        <td className="px-4 py-3 text-admin-fg-strong">{formatNumber(paper.averageScaledScore)}</td>
+                        <td className="px-4 py-3 text-admin-fg-strong">{formatPercent(paper.passRatePercent)}</td>
+                        <td className="px-4 py-3 text-admin-fg-strong">{formatMinutes(paper.averageCompletionSeconds)}</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
-            </AdminRoutePanel>
-          </MotionSection>
+            </CardContent>
+          </Card>
 
           {analytics.modeBreakdown.length > 0 ? (
-            <MotionSection delayIndex={4}>
-              <AdminRoutePanel title="Attempt Modes" description="Exam, learning, drill, mini-test, and error-bank activity in the selected window.">
+            <Card>
+              <CardHeader>
+                <CardTitle>Attempt Modes</CardTitle>
+                <CardDescription>Exam, learning, drill, mini-test, and error-bank activity in the selected window.</CardDescription>
+              </CardHeader>
+              <CardContent>
                 <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
                   {analytics.modeBreakdown.map((mode) => (
-                    <div key={mode.mode} className="rounded-lg border border-border bg-background-light p-3">
+                    <div key={mode.mode} className="rounded-admin border border-admin-border bg-admin-bg-surface p-3">
                       <div className="flex items-center justify-between gap-2">
-                        <p className="font-semibold text-navy">{mode.mode}</p>
-                        {mode.passRatePercent != null && (mode.passRatePercent >= 70 ? <CheckCircle2 className="h-4 w-4 text-success" /> : <AlertTriangle className="h-4 w-4 text-warning" />)}
+                        <p className="font-semibold text-admin-fg-strong">{mode.mode}</p>
+                        {mode.passRatePercent != null && (mode.passRatePercent >= 70 ? <CheckCircle2 className="h-4 w-4 text-[var(--admin-success)]" /> : <AlertTriangle className="h-4 w-4 text-[var(--admin-warning)]" />)}
                       </div>
-                      <p className="mt-2 text-sm text-muted">{mode.submittedCount}/{mode.attemptCount} submitted</p>
-                      <p className="mt-1 text-sm font-semibold text-navy">{formatPercent(mode.passRatePercent)} pass</p>
+                      <p className="mt-2 text-sm text-admin-fg-muted">{mode.submittedCount}/{mode.attemptCount} submitted</p>
+                      <p className="mt-1 text-sm font-semibold text-admin-fg-strong">{formatPercent(mode.passRatePercent)} pass</p>
                     </div>
                   ))}
                 </div>
-              </AdminRoutePanel>
-            </MotionSection>
+              </CardContent>
+            </Card>
           ) : null}
-        </div>
+        </>
       ) : null}
-    </AdminRouteWorkspace>
+        </div>
+      }
+    />
   );
 }

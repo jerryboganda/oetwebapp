@@ -2,12 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { AlertTriangle, ArrowLeft, ShieldAlert } from 'lucide-react';
-import {
-  AdminRoutePanel,
-  AdminRouteSectionHeader,
-  AdminRouteWorkspace,
-} from '@/components/domain/admin-route-surface';
+import { AlertTriangle, ArrowLeft } from 'lucide-react';
+import { AdminOperationsLayout } from '@/components/admin/layout/admin-operations-layout';
+import { Card, CardContent } from '@/components/admin/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/form-controls';
@@ -136,26 +133,29 @@ export default function AdminMockLeakReportsPage() {
 
   return (
     <>
-      <AdminRouteWorkspace>
-        <AdminRoutePanel>
-          <AdminRouteSectionHeader
-            eyebrow="Content integrity"
-            title="Mock leak-report queue"
-            description="Triage learner-submitted leak reports against published mock bundles. Every status change is recorded in the audit log."
-            icon={ShieldAlert}
-          />
-
-          <div className="mb-4">
-            <Link
-              href="/admin/content/mocks"
-              className="inline-flex items-center text-sm font-bold text-primary hover:underline"
-            >
-              <ArrowLeft className="mr-1 h-4 w-4" /> Back to Mock Bundles
-            </Link>
-          </div>
-
+      <AdminOperationsLayout
+        eyebrow="Content integrity"
+        title="Mock leak-report queue"
+        description="Triage learner-submitted leak reports against published mock bundles. Every status change is recorded in the audit log."
+        breadcrumbs={[
+          { label: 'Admin', href: '/admin' },
+          { label: 'Content', href: '/admin/content' },
+          { label: 'Mocks', href: '/admin/content/mocks' },
+          { label: 'Leak reports' },
+        ]}
+        actions={
+          <Link
+            href="/admin/content/mocks"
+            className="inline-flex items-center text-sm font-bold text-[var(--admin-primary)] hover:underline"
+          >
+            <ArrowLeft className="mr-1 h-4 w-4" /> Back to Mock Bundles
+          </Link>
+        }
+      >
+        <Card>
+          <CardContent className="p-5 space-y-4">
           <div
-            className="mb-6 flex flex-wrap gap-2"
+            className="flex flex-wrap gap-2"
             role="toolbar"
             aria-label="Filter leak reports by status"
           >
@@ -211,16 +211,16 @@ export default function AdminMockLeakReportsPage() {
               icon={<AlertTriangle className="h-8 w-8" />}
             />
           ) : (
-            <div className="overflow-x-auto rounded-2xl border border-border">
+            <div className="overflow-x-auto rounded-admin border border-admin-border">
               <table
-                className="min-w-full divide-y divide-border text-sm"
+                className="min-w-full divide-y divide-admin-border text-sm"
                 aria-label="Mock leak reports queue"
               >
                 <caption className="sr-only">
                   Mock leak reports queue. Each row is one learner-submitted report; columns include bundle, severity, reason, reporter, creation timestamp, status, and triage actions.
                 </caption>
-                <thead className="bg-background-light">
-                  <tr className="text-left text-xs font-black uppercase tracking-widest text-muted">
+                <thead className="bg-admin-bg-subtle">
+                  <tr className="text-left text-xs font-black uppercase tracking-widest text-admin-fg-muted">
                     <th className="px-4 py-3">Bundle</th>
                     <th className="px-4 py-3">Severity</th>
                     <th className="px-4 py-3">Reason</th>
@@ -230,7 +230,7 @@ export default function AdminMockLeakReportsPage() {
                     <th className="px-4 py-3">Actions</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-border bg-surface">
+                <tbody className="divide-y divide-admin-border bg-admin-bg-surface">
                   {rows.map((row) => {
                     const isTerminal = row.status === 'resolved' || row.status === 'dismissed';
                     const statusBadge = STATUS_BADGE[row.status];
@@ -240,15 +240,15 @@ export default function AdminMockLeakReportsPage() {
                           {row.bundleId ? (
                             <Link
                               href={`/admin/content/mocks/${encodeURIComponent(row.bundleId)}/item-analysis`}
-                              className="font-bold text-primary hover:underline"
+                              className="font-bold text-[var(--admin-primary)] hover:underline"
                             >
                               {row.bundleTitle ?? row.bundleId}
                             </Link>
                           ) : (
-                            <span className="text-muted">—</span>
+                            <span className="text-admin-fg-muted">—</span>
                           )}
                           {row.attemptId ? (
-                            <p className="text-xs text-muted">Attempt: {row.attemptId}</p>
+                            <p className="text-xs text-admin-fg-muted">Attempt: {row.attemptId}</p>
                           ) : null}
                         </td>
                         <td className="px-4 py-3">
@@ -257,29 +257,29 @@ export default function AdminMockLeakReportsPage() {
                           </Badge>
                         </td>
                         <td className="px-4 py-3">
-                          <p className="font-medium text-admin-text">{row.reasonCode ?? '—'}</p>
+                          <p className="font-medium text-admin-fg-strong">{row.reasonCode ?? '—'}</p>
                           {row.pageOrQuestion ? (
-                            <p className="text-xs text-admin-text-muted">@ {row.pageOrQuestion}</p>
+                            <p className="text-xs text-admin-fg-muted">@ {row.pageOrQuestion}</p>
                           ) : null}
                           {row.evidenceUrl ? (
                             <a
                               href={row.evidenceUrl}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="text-xs text-primary hover:underline"
+                              className="text-xs text-[var(--admin-primary)] hover:underline"
                             >
                               Evidence link
                             </a>
                           ) : null}
                         </td>
-                        <td className="px-4 py-3 text-admin-text">
+                        <td className="px-4 py-3 text-admin-fg-strong">
                           {row.reportedByUserDisplayName ?? row.reportedByUserId ?? '—'}
                         </td>
-                        <td className="px-4 py-3 text-admin-text-muted">{formatDateTime(row.createdAt)}</td>
+                        <td className="px-4 py-3 text-admin-fg-muted">{formatDateTime(row.createdAt)}</td>
                         <td className="px-4 py-3">
                           <Badge variant={statusBadge.variant}>{statusBadge.label}</Badge>
                           {row.resolvedAt ? (
-                            <p className="mt-1 text-xs text-admin-text-muted">
+                            <p className="mt-1 text-xs text-admin-fg-muted">
                               {formatDateTime(row.resolvedAt)}
                             </p>
                           ) : null}
@@ -323,8 +323,9 @@ export default function AdminMockLeakReportsPage() {
               </table>
             </div>
           )}
-        </AdminRoutePanel>
-      </AdminRouteWorkspace>
+          </CardContent>
+        </Card>
+      </AdminOperationsLayout>
 
       <Modal
         open={actionTarget !== null && actionMode !== null}
@@ -333,11 +334,11 @@ export default function AdminMockLeakReportsPage() {
       >
         <div className="space-y-4">
           {actionTarget ? (
-            <div className="rounded-xl border border-border bg-background-light p-3 text-sm">
-              <p className="font-bold text-navy">
+            <div className="rounded-admin border border-admin-border bg-admin-bg-subtle p-3 text-sm">
+              <p className="font-bold text-admin-fg-strong">
                 {actionTarget.bundleTitle ?? actionTarget.bundleId ?? '—'}
               </p>
-              <p className="text-xs text-muted">Reported by {actionTarget.reportedByUserDisplayName ?? actionTarget.reportedByUserId ?? 'unknown'}</p>
+              <p className="text-xs text-admin-fg-muted">Reported by {actionTarget.reportedByUserDisplayName ?? actionTarget.reportedByUserId ?? 'unknown'}</p>
               {actionTarget.reasonCode ? (
                 <p className="mt-1 text-xs">Reason: {actionTarget.reasonCode}</p>
               ) : null}

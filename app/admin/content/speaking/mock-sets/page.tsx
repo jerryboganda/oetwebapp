@@ -7,7 +7,8 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { Plus, Sparkles, Archive, CheckCircle2, Pencil } from 'lucide-react';
-import { AdminRouteWorkspace, AdminRoutePanel, AdminRouteSectionHeader } from '@/components/domain/admin-route-surface';
+import { AdminCatalogLayout } from '@/components/admin/layout/admin-catalog-layout';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/admin/ui/card';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
 import { DataTable, type Column } from '@/components/ui/data-table';
 import { Badge } from '@/components/ui/badge';
@@ -270,39 +271,48 @@ export default function AdminSpeakingMockSetsPage() {
     },
   ], []);
 
+  const filtersNode = (
+    <div className="w-48">
+      <Select
+        label="Status"
+        value={statusFilter}
+        onChange={(e) => setStatusFilter(e.target.value)}
+        options={[
+          { value: '', label: 'All' },
+          { value: 'draft', label: 'Draft' },
+          { value: 'published', label: 'Published' },
+          { value: 'archived', label: 'Archived' },
+        ]}
+      />
+    </div>
+  );
+
   return (
-    <AdminRouteWorkspace role="main" aria-label="Speaking mock sets">
+    <AdminCatalogLayout
+      title="Speaking mock sets"
+      description="Each mock set bundles two speaking role-plays into one OET-shape sub-test for learners."
+      breadcrumbs={[
+        { label: 'Admin', href: '/admin' },
+        { label: 'Content', href: '/admin/content' },
+        { label: 'Speaking', href: '/admin/content/speaking' },
+        { label: 'Mock sets' },
+      ]}
+      eyebrow="Content"
+      hideViewModeToggle
+      filters={filtersNode}
+      actions={
+        <Button onClick={() => setCreateOpen(true)} className="gap-2">
+          <Plus className="h-4 w-4" /> New mock set
+        </Button>
+      }
+    >
       {toast ? <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} /> : null}
 
-      <AdminRouteSectionHeader
-        title="Speaking mock sets"
-        description="Each mock set bundles two speaking role-plays into one OET-shape sub-test for learners."
-        actions={
-          <Button onClick={() => setCreateOpen(true)} className="gap-2">
-            <Plus className="h-4 w-4" /> New mock set
-          </Button>
-        }
-      />
-
-      <AdminRoutePanel title="Filter" description="Narrow the list by lifecycle status.">
-        <div className="flex flex-wrap items-end gap-3">
-          <div className="w-48">
-            <Select
-              label="Status"
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              options={[
-                { value: '', label: 'All' },
-                { value: 'draft', label: 'Draft' },
-                { value: 'published', label: 'Published' },
-                { value: 'archived', label: 'Archived' },
-              ]}
-            />
-          </div>
-        </div>
-      </AdminRoutePanel>
-
-      <AdminRoutePanel title="Mock sets" description="Curatorial pairings of speaking role-plays.">
+      <Card className="col-span-full">
+        <CardHeader>
+          <CardTitle>Mock sets</CardTitle>
+        </CardHeader>
+        <CardContent>
         <AsyncStateWrapper
           status={status}
           onRetry={() => setReloadNonce((n) => n + 1)}
@@ -327,11 +337,12 @@ export default function AdminSpeakingMockSetsPage() {
             selectedCount={selectedKeys.size}
             onClearSelection={() => setSelectedKeys(new Set())}
             actions={[
-              { key: 'archive', label: 'Archive selected', variant: 'danger', onClick: () => {} },
+              { key: 'archive', label: 'Archive selected', variant: 'danger' as const, onClick: () => {} },
             ]}
           />
         </AsyncStateWrapper>
-      </AdminRoutePanel>
+        </CardContent>
+      </Card>
 
       <Modal open={createOpen} onClose={() => setCreateOpen(false)} title="Create speaking mock set" size="lg">
         <form onSubmit={submitCreate} className="space-y-4">
@@ -505,7 +516,7 @@ export default function AdminSpeakingMockSetsPage() {
             value={String(form.sortOrder)}
             onChange={(e) => setForm({ ...form, sortOrder: Number(e.target.value) || 0 })}
           />
-          <div className="rounded-2xl border border-border bg-background-light p-3 text-xs text-muted">
+          <div className="rounded-admin border border-admin-border bg-admin-bg-surface p-3 text-xs text-admin-fg-muted">
             Published mock sets can be edited, but learner sessions already started from an older version keep their saved attempt history.
           </div>
           <div className="flex justify-end gap-2 pt-2">
@@ -518,6 +529,6 @@ export default function AdminSpeakingMockSetsPage() {
           </div>
         </form>
       </Modal>
-    </AdminRouteWorkspace>
+    </AdminCatalogLayout>
   );
 }

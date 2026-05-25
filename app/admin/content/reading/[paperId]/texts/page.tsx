@@ -5,8 +5,10 @@ import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft, ArrowRight, Plus, Trash2, ArrowUp, ArrowDown, Save } from 'lucide-react';
 
-import { AdminRouteWorkspace, AdminRoutePanel, AdminRouteSectionHeader } from '@/components/domain/admin-route-surface';
-import { Button } from '@/components/ui/button';
+import { AdminSettingsLayout, SettingsSection } from '@/components/admin/layout/admin-settings-layout';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardAction } from '@/components/admin/ui/card';
+import { Button } from '@/components/admin/ui/button';
+import { Skeleton } from '@/components/admin/ui/skeleton';
 import { Input, Textarea } from '@/components/ui/form-controls';
 import { Toast } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
@@ -202,47 +204,72 @@ export default function ReadingTextsEditorPage() {
 
   if (!paperId) {
     return (
-      <AdminRouteWorkspace>
-        <AdminRoutePanel>
-          <p className="text-sm text-admin-text-muted">No paper ID provided.</p>
-        </AdminRoutePanel>
-      </AdminRouteWorkspace>
+      <AdminSettingsLayout
+        title="Reading Texts Editor"
+        breadcrumbs={[
+          { label: 'Admin', href: '/admin' },
+          { label: 'Content', href: '/admin/content' },
+          { label: 'Reading', href: '/admin/content/reading' },
+          { label: 'Texts' },
+        ]}
+      >
+        <SettingsSection title="Missing paper">
+          <p className="text-sm text-admin-fg-muted">No paper ID provided.</p>
+        </SettingsSection>
+      </AdminSettingsLayout>
     );
   }
 
   return (
-    <AdminRouteWorkspace>
-      <AdminRouteSectionHeader
-        title="Reading Texts Editor"
-        description="Add and manage reading passages for each part of the paper."
-        eyebrow="Reading Authoring"
-      />
-
+    <AdminSettingsLayout
+      title="Reading Texts Editor"
+      description="Add and manage reading passages for each part of the paper."
+      eyebrow="Reading authoring"
+      breadcrumbs={[
+        { label: 'Admin', href: '/admin' },
+        { label: 'Content', href: '/admin/content' },
+        { label: 'Reading', href: '/admin/content/reading' },
+        { label: 'Paper', href: `/admin/content/reading/${paperId}` },
+        { label: 'Texts' },
+      ]}
+    >
       <ReadingWizardSteps paperId={paperId} currentStep="texts" />
 
       <ReadingPartTabs activeTab={activeTab} onTabChange={setActiveTab} counts={textCounts} context="texts" />
 
       {loading ? (
-        <AdminRoutePanel>
-          <div className="flex items-center justify-center py-12">
-            <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-            <span className="ml-3 text-sm text-admin-text-muted">Loading texts…</span>
-          </div>
-        </AdminRoutePanel>
+        <Card>
+          <CardContent className="space-y-3 py-6">
+            <Skeleton variant="text" className="h-5 w-1/3" />
+            <Skeleton variant="card" />
+            <Skeleton variant="card" />
+          </CardContent>
+        </Card>
       ) : (
-        <AdminRoutePanel
-          title={`Part ${activeTab} Texts`}
-          description={`${activeTexts.length} passage${activeTexts.length !== 1 ? 's' : ''} added`}
-          actions={
-            <Button variant="primary" size="sm" onClick={handleAddText} disabled={!!editingForm}>
-              <Plus className="h-4 w-4 mr-1" />
-              Add Text
-            </Button>
-          }
-        >
+        <Card>
+          <CardHeader>
+            <div className="min-w-0">
+              <CardTitle>{`Part ${activeTab} Texts`}</CardTitle>
+              <CardDescription>
+                {`${activeTexts.length} passage${activeTexts.length !== 1 ? 's' : ''} added`}
+              </CardDescription>
+            </div>
+            <CardAction>
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={handleAddText}
+                disabled={!!editingForm}
+                startIcon={<Plus className="h-4 w-4" />}
+              >
+                Add Text
+              </Button>
+            </CardAction>
+          </CardHeader>
+          <CardContent>
           {activeTexts.length === 0 && !editingForm && (
             <div className="flex flex-col items-center justify-center py-12 text-center">
-              <p className="text-sm text-admin-text-muted mb-3">
+              <p className="text-sm text-admin-fg-muted mb-3">
                 No texts have been added to Part {activeTab} yet.
               </p>
               <Button variant="primary" size="sm" onClick={handleAddText}>
@@ -257,9 +284,9 @@ export default function ReadingTextsEditorPage() {
               {activeTexts.map((text, idx) => (
                 <div
                   key={text.id}
-                  className="flex items-center gap-3 rounded-xl border border-admin-border bg-admin-surface-raised/40 px-4 py-3 transition-colors hover:bg-admin-surface-raised/70"
+                  className="flex items-center gap-3 rounded-xl border border-admin-border bg-admin-bg-subtle px-4 py-3 transition-colors hover:bg-[var(--admin-state-hover)]"
                 >
-                  <div className="flex flex-col items-center gap-0.5 text-admin-text-muted">
+                  <div className="flex flex-col items-center gap-0.5 text-admin-fg-muted">
                     <button
                       type="button"
                       onClick={() => handleMoveUp(idx)}
@@ -285,9 +312,9 @@ export default function ReadingTextsEditorPage() {
                   </div>
 
                   <div className="min-w-0 flex-1">
-                    <p className="text-sm font-semibold text-admin-text truncate">{text.title}</p>
+                    <p className="text-sm font-semibold text-admin-fg-strong truncate">{text.title}</p>
                     {text.source && (
-                      <p className="text-xs text-admin-text-muted truncate mt-0.5">{text.source}</p>
+                      <p className="text-xs text-admin-fg-muted truncate mt-0.5">{text.source}</p>
                     )}
                   </div>
 
@@ -325,14 +352,14 @@ export default function ReadingTextsEditorPage() {
           )}
 
           {editingForm && (
-            <div className="mt-4 rounded-xl border border-primary/30 bg-admin-surface-raised/60 p-4 space-y-4">
-              <h3 className="text-sm font-bold text-admin-text">
+            <div className="mt-4 rounded-xl border border-primary/30 bg-admin-bg-subtle p-4 space-y-4">
+              <h3 className="text-sm font-bold text-admin-fg-strong">
                 {editingForm.id ? 'Edit Text Passage' : 'Add New Text Passage'}
               </h3>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-1.5">
-                  <label htmlFor="text-title" className="text-xs font-medium text-admin-text-muted">
+                  <label htmlFor="text-title" className="text-xs font-medium text-admin-fg-muted">
                     Title <span className="text-rose-400">*</span>
                   </label>
                   <Input
@@ -344,7 +371,7 @@ export default function ReadingTextsEditorPage() {
                 </div>
 
                 <div className="space-y-1.5">
-                  <label htmlFor="text-source" className="text-xs font-medium text-admin-text-muted">
+                  <label htmlFor="text-source" className="text-xs font-medium text-admin-fg-muted">
                     Source
                   </label>
                   <Input
@@ -357,7 +384,7 @@ export default function ReadingTextsEditorPage() {
               </div>
 
               <div className="space-y-1.5">
-                <label htmlFor="text-body" className="text-xs font-medium text-admin-text-muted">
+                <label htmlFor="text-body" className="text-xs font-medium text-admin-fg-muted">
                   Body HTML <span className="text-rose-400">*</span>
                 </label>
                 <Textarea
@@ -372,7 +399,7 @@ export default function ReadingTextsEditorPage() {
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-1.5">
-                  <label htmlFor="text-wordcount" className="text-xs font-medium text-admin-text-muted">
+                  <label htmlFor="text-wordcount" className="text-xs font-medium text-admin-fg-muted">
                     Word Count
                   </label>
                   <Input
@@ -382,11 +409,11 @@ export default function ReadingTextsEditorPage() {
                     value={editingForm.wordCount}
                     onChange={(e) => setEditingForm({ ...editingForm, wordCount: parseInt(e.target.value, 10) || 0 })}
                   />
-                  <p className="text-xs text-admin-text-muted">Auto-calculated from body. Override if needed.</p>
+                  <p className="text-xs text-admin-fg-muted">Auto-calculated from body. Override if needed.</p>
                 </div>
 
                 <div className="space-y-1.5">
-                  <label htmlFor="text-topic" className="text-xs font-medium text-admin-text-muted">
+                  <label htmlFor="text-topic" className="text-xs font-medium text-admin-fg-muted">
                     Topic Tag
                   </label>
                   <Input
@@ -409,24 +436,18 @@ export default function ReadingTextsEditorPage() {
               </div>
             </div>
           )}
-        </AdminRoutePanel>
+          </CardContent>
+        </Card>
       )}
 
       <div className="flex items-center justify-between pt-2">
-        <Link
-          href={`/admin/content/reading/${paperId}`}
-          className="inline-flex items-center gap-1.5 text-sm font-medium text-admin-text-muted hover:text-admin-text transition-colors"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          Back to Overview
-        </Link>
+        <Button asChild variant="ghost" size="sm" startIcon={<ArrowLeft className="h-4 w-4" />}>
+          <Link href={`/admin/content/reading/${paperId}`}>Back to Overview</Link>
+        </Button>
 
-        <Link href={`/admin/content/reading/${paperId}/questions`}>
-          <Button variant="primary" size="sm">
-            Next: Questions
-            <ArrowRight className="h-4 w-4 ml-1" />
-          </Button>
-        </Link>
+        <Button asChild variant="primary" size="sm" endIcon={<ArrowRight className="h-4 w-4" />}>
+          <Link href={`/admin/content/reading/${paperId}/questions`}>Next: Questions</Link>
+        </Button>
       </div>
 
       {toast && (
@@ -436,6 +457,6 @@ export default function ReadingTextsEditorPage() {
           onClose={() => setToast(null)}
         />
       )}
-    </AdminRouteWorkspace>
+    </AdminSettingsLayout>
   );
 }

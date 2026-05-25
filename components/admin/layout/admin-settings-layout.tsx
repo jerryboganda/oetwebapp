@@ -294,6 +294,15 @@ export interface AdminSettingsLayoutProps
 
   /** Sections — typically a stack of <SettingsSection /> cards. */
   children: React.ReactNode;
+
+  /**
+   * Backward-compat: decorative icon shown next to the page title. Accepted
+   * here so legacy call sites compile but currently rendered as a no-op —
+   * the PageHeader eyebrow carries the same semantic meaning in the new DS.
+   */
+  icon?: React.ReactNode;
+  /** Backward-compat: optional href for a "back" affordance in the header. */
+  backHref?: string;
 }
 
 const AdminSettingsLayout = React.forwardRef<
@@ -313,6 +322,9 @@ const AdminSettingsLayout = React.forwardRef<
       contentClassName,
       className,
       children,
+      // Accepted for backward-compat; see prop docs.
+      icon: _icon,
+      backHref: _backHref,
       ...shellProps
     },
     ref,

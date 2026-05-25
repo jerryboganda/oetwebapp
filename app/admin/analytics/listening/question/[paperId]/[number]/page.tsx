@@ -1,26 +1,18 @@
 'use client';
 
 // Phase 7 follow-up: per-question deep-dive analytics page.
-// Drills into a single (paperId, questionNumber) tuple. Filters the
-// existing /v1/admin/listening/analytics response client-side — no new
-// backend endpoint required. Linked from the hardest-questions table on
-// the main listening analytics page.
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { AlertTriangle, ArrowLeft, BarChart3, ListChecks, Target, Headphones } from 'lucide-react';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
+import { AdminOperationsLayout, KpiStrip, BentoGrid, BentoCell } from '@/components/admin/layout/admin-operations-layout';
+import { Badge } from '@/components/admin/ui/badge';
+import { Button } from '@/components/admin/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/admin/ui/card';
+import { KpiTile } from '@/components/admin/ui/kpi-tile';
+import { Skeleton } from '@/components/admin/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
-import { Skeleton } from '@/components/ui/skeleton';
-import { MotionSection } from '@/components/ui/motion-primitives';
-import {
-  AdminRouteHero,
-  AdminRoutePanel,
-  AdminRouteSummaryCard,
-  AdminRouteWorkspace,
-} from '@/components/domain/admin-route-surface';
 import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
 import {
   getListeningAdminAnalytics,
@@ -77,9 +69,7 @@ export default function ListeningQuestionDeepDivePage() {
         if (!cancelled) setStatus('error');
       }
     })();
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [days, isAuthenticated, role, routeIsValid]);
 
   const filtered = useMemo(() => {
@@ -87,22 +77,12 @@ export default function ListeningQuestionDeepDivePage() {
       return { hardest: null, distractor: null, misspellings: [] as ListeningCommonMisspelling[] };
     }
     const hardest: ListeningHardestQuestion | null =
-      analytics.hardestQuestions.find(
-        (q) => q.paperId === drill.paperId && q.questionNumber === drill.questionNumber,
-      ) ?? null;
+      analytics.hardestQuestions.find((q) => q.paperId === drill.paperId && q.questionNumber === drill.questionNumber) ?? null;
     const distractor: ListeningDistractorHeat | null =
-      analytics.distractorHeat.find(
-        (d) => d.paperId === drill.paperId && d.questionNumber === drill.questionNumber,
-      ) ?? null;
-    // Misspellings are not keyed by question id in the analytics DTO — they
-    // are aggregated class-wide by correctAnswer. We surface only the
-    // distractor.correctAnswer's misspelling row so the page is still
-    // contextual when the question is a Part A gap-fill.
+      analytics.distractorHeat.find((d) => d.paperId === drill.paperId && d.questionNumber === drill.questionNumber) ?? null;
     const correctAnswer = distractor?.correctAnswer?.toLowerCase().trim() ?? '';
     const misspellings = correctAnswer
-      ? analytics.commonMisspellings.filter(
-          (m) => m.correctAnswer.toLowerCase().trim() === correctAnswer,
-        )
+      ? analytics.commonMisspellings.filter((m) => m.correctAnswer.toLowerCase().trim() === correctAnswer)
       : [];
     return { hardest, distractor, misspellings };
   }, [analytics, drill]);
@@ -111,20 +91,21 @@ export default function ListeningQuestionDeepDivePage() {
 
   if (!drill) {
     return (
-      <AdminRouteWorkspace role="main" aria-label="Listening question deep dive">
-        <AdminRouteHero
-          eyebrow="Analytics"
-          icon={Target}
-          accent="navy"
-          title="Question deep-dive"
-          description="Drill into a single Listening question to see accuracy, distractor heat, and common misspellings."
-        />
-        <MotionSection delayIndex={0}>
+      <AdminOperationsLayout
+        title="Question deep-dive"
+        description="Drill into a single Listening question to see accuracy, distractor heat, and common misspellings."
+        eyebrow="Analytics"
+        breadcrumbs={[
+          { label: 'Admin', href: '/admin' },
+          { label: 'Listening', href: '/admin/analytics/listening' },
+          { label: 'Question' },
+        ]}
+        primaryGrid={
           <InlineAlert variant="warning">
             Invalid question route — provide both paperId and a numeric question number.
           </InlineAlert>
-        </MotionSection>
-      </AdminRouteWorkspace>
+        }
+      />
     );
   }
 
@@ -133,135 +114,117 @@ export default function ListeningQuestionDeepDivePage() {
     ? Object.entries(distractor.wrongAnswerHistogram).sort((a, b) => b[1] - a[1])
     : [];
 
+  const breadcrumbs = [
+    { label: 'Admin', href: '/admin' },
+    { label: 'Listening', href: '/admin/analytics/listening' },
+    { label: `Q${drill.questionNumber}` },
+  ];
+
   return (
-    <AdminRouteWorkspace role="main" aria-label="Listening question deep dive">
-      <AdminRouteHero
-        eyebrow="Analytics"
-        icon={Target}
-        accent="navy"
-        title={`Q${drill.questionNumber} · ${hardest?.paperTitle ?? 'Listening question'}`}
-        description={`Per-question deep-dive over the last ${days} days. Class-wide signal filtered to this single item.`}
-        aside={
-          <div className="rounded-2xl border border-border bg-background-light p-4 shadow-sm">
-            <div className="flex flex-wrap items-center gap-2">
-              {windowOptions.map((option) => (
-                <Button
-                  key={option}
-                  type="button"
-                  size="sm"
-                  variant={days === option ? 'primary' : 'outline'}
-                  aria-pressed={days === option}
-                  onClick={() => setDays(option)}
-                >
-                  {option}d
-                </Button>
-              ))}
-            </div>
-            <p className="mt-3 text-xs text-muted">paperId · {drill.paperId}</p>
-          </div>
-        }
-      />
-
-      <MotionSection delayIndex={0}>
-        <div className="flex items-center gap-3">
-          <Button variant="ghost" size="sm" className="gap-1" asChild>
-<Link href="/admin/analytics/listening">
-              <ArrowLeft className="h-4 w-4" /> Back to Listening analytics
-            </Link>
-</Button>
+    <AdminOperationsLayout
+      title={`Q${drill.questionNumber} · ${hardest?.paperTitle ?? 'Listening question'}`}
+      description={`Per-question deep-dive over the last ${days} days. Class-wide signal filtered to this single item.`}
+      eyebrow="Analytics"
+      breadcrumbs={breadcrumbs}
+      actions={
+        <div className="flex flex-wrap items-center gap-2">
+          {windowOptions.map((option) => (
+            <Button
+              key={option}
+              type="button"
+              size="sm"
+              variant={days === option ? 'primary' : 'secondary'}
+              aria-pressed={days === option}
+              onClick={() => setDays(option)}
+            >
+              {option}d
+            </Button>
+          ))}
         </div>
-      </MotionSection>
-
-      {status === 'loading' ? (
-        <MotionSection delayIndex={1}>
-          <div className="grid gap-4 md:grid-cols-3">
-            <Skeleton className="h-24" />
-            <Skeleton className="h-24" />
-            <Skeleton className="h-24" />
-          </div>
-        </MotionSection>
-      ) : status === 'error' ? (
-        <MotionSection delayIndex={1}>
-          <InlineAlert variant="error">Could not load Listening analytics.</InlineAlert>
-        </MotionSection>
-      ) : status === 'empty' || (!hardest && !distractor && misspellings.length === 0) ? (
-        <MotionSection delayIndex={1}>
-          <InlineAlert variant="info">
-            No class data for this question in the last {days} days. Try a longer window, or confirm the question id is correct.
-          </InlineAlert>
-        </MotionSection>
-      ) : (
+      }
+      kpis={
+        status === 'success' && (hardest || distractor) ? (
+          <KpiStrip>
+            <KpiTile label="Accuracy" value={formatPercent(hardest?.accuracyPercent ?? null)} icon={<BarChart3 className="h-4 w-4" />} tone="primary" />
+            <KpiTile label="Part" value={hardest?.partCode ?? '—'} icon={<Headphones className="h-4 w-4" />} tone="info" />
+            <KpiTile label="Correct answer" value={distractor?.correctAnswer ?? '—'} icon={<ListChecks className="h-4 w-4" />} tone="success" />
+            <KpiTile label="Attempts" value={hardest ? hardest.attemptCount : 0} icon={<Target className="h-4 w-4" />} tone="default" />
+          </KpiStrip>
+        ) : null
+      }
+      primaryGrid={
         <div className="space-y-6" data-testid="listening-question-deep-dive">
-          <MotionSection delayIndex={1}>
+          <div className="flex items-center gap-3">
+            <Button variant="ghost" size="sm" asChild>
+              <Link href="/admin/analytics/listening">
+                <ArrowLeft className="h-4 w-4" /> Back to Listening analytics
+              </Link>
+            </Button>
+            <p className="text-xs text-admin-fg-muted">paperId · {drill.paperId}</p>
+          </div>
+
+          {status === 'loading' ? (
             <div className="grid gap-4 md:grid-cols-3">
-              <AdminRouteSummaryCard
-                label="Accuracy"
-                value={formatPercent(hardest?.accuracyPercent ?? null)}
-                hint={hardest ? `${hardest.attemptCount} attempts` : 'Not yet flagged hard'}
-                icon={<BarChart3 className="h-5 w-5" />}
-              />
-              <AdminRouteSummaryCard
-                label="Part"
-                value={hardest?.partCode ?? '—'}
-                hint={hardest?.partCode === 'A' ? '24 gap-fill' : hardest?.partCode === 'B' ? '6 MCQs' : '12 MCQs'}
-                icon={<Headphones className="h-5 w-5" />}
-              />
-              <AdminRouteSummaryCard
-                label="Correct answer"
-                value={distractor?.correctAnswer ?? '—'}
-                hint={wrongHistogramRows.length > 0 ? `${wrongHistogramRows.length} wrong-answer buckets` : 'No wrong-answer signal'}
-                icon={<ListChecks className="h-5 w-5" />}
-              />
+              <Skeleton className="h-24 rounded-admin" />
+              <Skeleton className="h-24 rounded-admin" />
+              <Skeleton className="h-24 rounded-admin" />
             </div>
-          </MotionSection>
-
-          <MotionSection delayIndex={2}>
-            <AdminRoutePanel title="Wrong-answer histogram">
-              {wrongHistogramRows.length === 0 ? (
-                <p className="text-sm text-admin-text-muted">No wrong answers recorded for this question in the window.</p>
-              ) : (
-                <div className="space-y-2" data-testid="listening-question-distractor-list">
-                  {wrongHistogramRows.map(([wrong, count]) => (
-                    <div
-                      key={wrong}
-                      className="flex items-center justify-between rounded-lg border border-border bg-background-light p-3"
-                    >
-                      <span className="truncate text-sm font-semibold text-navy">{wrong || '(blank)'}</span>
-                      <Badge variant="muted">×{count}</Badge>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </AdminRoutePanel>
-          </MotionSection>
-
-          <MotionSection delayIndex={3}>
-            <AdminRoutePanel title="Common misspellings of the correct answer">
-              {misspellings.length === 0 ? (
-                <p className="text-sm text-admin-text-muted">
-                  <AlertTriangle className="mr-1 inline h-4 w-4" /> No spelling-near-miss patterns detected for &ldquo;
-                  {distractor?.correctAnswer ?? '—'}&rdquo; in the last {days} days.
-                </p>
-              ) : (
-                <div className="grid gap-2 md:grid-cols-2" data-testid="listening-question-misspellings">
-                  {misspellings.map((s, i) => (
-                    <div
-                      key={`${s.correctAnswer}-${s.wrongSpelling}-${i}`}
-                      className="flex items-center justify-between rounded-lg border border-border bg-background-light p-3"
-                    >
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-semibold text-navy">{s.correctAnswer}</p>
-                        <p className="truncate text-xs text-muted">→ {s.wrongSpelling}</p>
+          ) : status === 'error' ? (
+            <InlineAlert variant="error">Could not load Listening analytics.</InlineAlert>
+          ) : status === 'empty' || (!hardest && !distractor && misspellings.length === 0) ? (
+            <InlineAlert variant="info">
+              No class data for this question in the last {days} days. Try a longer window, or confirm the question id is correct.
+            </InlineAlert>
+          ) : (
+            <BentoGrid>
+              <BentoCell span={{ default: 12, xl: 6 }}>
+                <Card>
+                  <CardHeader><CardTitle>Wrong-answer histogram</CardTitle></CardHeader>
+                  <CardContent>
+                    {wrongHistogramRows.length === 0 ? (
+                      <p className="text-sm text-admin-fg-muted">No wrong answers recorded for this question in the window.</p>
+                    ) : (
+                      <div className="space-y-2" data-testid="listening-question-distractor-list">
+                        {wrongHistogramRows.map(([wrong, count]) => (
+                          <div key={wrong} className="flex items-center justify-between rounded-admin border border-admin-border bg-admin-bg-surface p-3">
+                            <span className="truncate text-sm font-semibold text-admin-fg-strong">{wrong || '(blank)'}</span>
+                            <Badge variant="default" intensity="tinted">×{count}</Badge>
+                          </div>
+                        ))}
                       </div>
-                      <Badge variant="muted">×{s.count}</Badge>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </AdminRoutePanel>
-          </MotionSection>
+                    )}
+                  </CardContent>
+                </Card>
+              </BentoCell>
+
+              <BentoCell span={{ default: 12, xl: 6 }}>
+                <Card>
+                  <CardHeader><CardTitle>Common misspellings of the correct answer</CardTitle></CardHeader>
+                  <CardContent>
+                    {misspellings.length === 0 ? (
+                      <p className="text-sm text-admin-fg-muted">
+                        <AlertTriangle className="mr-1 inline h-4 w-4" /> No spelling-near-miss patterns detected for &ldquo;{distractor?.correctAnswer ?? '—'}&rdquo; in the last {days} days.
+                      </p>
+                    ) : (
+                      <div className="grid gap-2 md:grid-cols-2" data-testid="listening-question-misspellings">
+                        {misspellings.map((s, i) => (
+                          <div key={`${s.correctAnswer}-${s.wrongSpelling}-${i}`} className="flex items-center justify-between rounded-admin border border-admin-border bg-admin-bg-surface p-3">
+                            <div className="min-w-0">
+                              <p className="truncate text-sm font-semibold text-admin-fg-strong">{s.correctAnswer}</p>
+                              <p className="truncate text-xs text-admin-fg-muted">→ {s.wrongSpelling}</p>
+                            </div>
+                            <Badge variant="default" intensity="tinted">×{s.count}</Badge>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </BentoCell>
+            </BentoGrid>
+          )}
         </div>
-      )}
-    </AdminRouteWorkspace>
+      }
+    />
   );
 }

@@ -2,13 +2,13 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
-import Link from 'next/link';
-import { ArrowLeft, Archive, Download, Bot, User, Wrench, ShieldCheck } from 'lucide-react';
-import { AdminRoutePanel, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
+import { Archive, Download, Bot, User, Wrench, ShieldCheck } from 'lucide-react';
+import { AdminOperationsLayout, BentoGrid, BentoCell } from '@/components/admin/layout/admin-operations-layout';
+import { Badge } from '@/components/admin/ui/badge';
+import { Button } from '@/components/admin/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/admin/ui/card';
+import { EmptyState } from '@/components/admin/ui/empty-state';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { EmptyState } from '@/components/ui/empty-error';
 import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
 import { apiClient } from '@/lib/api';
 
@@ -56,30 +56,26 @@ function MessageBubble({ message }: { message: ThreadMessage }) {
   return (
     <div className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
       <div
-        className={`max-w-[80%] rounded-xl px-4 py-3 ${
+        className={`max-w-[80%] rounded-admin px-4 py-3 ${
           isUser
-            ? 'bg-violet-500/20 text-admin-text'
+            ? 'bg-[var(--admin-primary-tint)] text-admin-fg-strong'
             : isTool
-              ? 'border border-amber-500/30 bg-amber-500/10 text-admin-text'
+              ? 'border border-[var(--admin-warning)] bg-[var(--admin-warning-tint)] text-admin-fg-strong'
               : isSystem
-                ? 'border border-admin-border bg-admin-surface-raised text-admin-text-muted italic'
-                : 'border border-admin-border bg-admin-surface-raised text-admin-text'
+                ? 'border border-admin-border bg-admin-bg-subtle italic text-admin-fg-muted'
+                : 'border border-admin-border bg-admin-bg-surface text-admin-fg-strong'
         }`}
       >
         <div className="mb-1 flex items-center gap-2">
           {isUser ? (
-            <User className="h-3.5 w-3.5 text-violet-400" />
+            <User className="h-3.5 w-3.5 text-[var(--admin-primary)]" />
           ) : isTool ? (
-            <Wrench className="h-3.5 w-3.5 text-amber-400" />
+            <Wrench className="h-3.5 w-3.5 text-[var(--admin-warning)]" />
           ) : (
-            <Bot className="h-3.5 w-3.5 text-blue-400" />
+            <Bot className="h-3.5 w-3.5 text-[var(--admin-info)]" />
           )}
-          <span className="text-xs font-bold uppercase tracking-wide text-admin-text-muted">
-            {message.role}
-          </span>
-          <span className="text-xs text-admin-text-muted">
-            {new Date(message.createdAt).toLocaleTimeString()}
-          </span>
+          <span className="text-xs font-bold uppercase tracking-wide text-admin-fg-muted">{message.role}</span>
+          <span className="text-xs text-admin-fg-muted">{new Date(message.createdAt).toLocaleTimeString()}</span>
         </div>
 
         <div className="whitespace-pre-wrap text-sm leading-relaxed">{message.content}</div>
@@ -87,24 +83,24 @@ function MessageBubble({ message }: { message: ThreadMessage }) {
         {message.toolCalls && message.toolCalls.length > 0 && (
           <div className="mt-2 space-y-1">
             {message.toolCalls.map((tc) => (
-              <div key={tc.id} className="rounded-lg border border-admin-border bg-admin-surface p-2">
-                <p className="text-xs font-bold text-amber-400">
+              <div key={tc.id} className="rounded-admin border border-admin-border bg-admin-bg-surface p-2">
+                <p className="text-xs font-bold text-[var(--admin-warning)]">
                   <Wrench className="mr-1 inline-block h-3 w-3" />
                   Tool Call: {tc.name}
                 </p>
-                <pre className="mt-1 overflow-x-auto text-xs text-admin-text-muted">{tc.arguments}</pre>
+                <pre className="mt-1 overflow-x-auto text-xs text-admin-fg-muted">{tc.arguments}</pre>
               </div>
             ))}
           </div>
         )}
 
         {message.toolResult && (
-          <div className="mt-2 rounded-lg border border-admin-border bg-admin-surface p-2">
-            <p className="text-xs font-bold text-emerald-400">
+          <div className="mt-2 rounded-admin border border-admin-border bg-admin-bg-surface p-2">
+            <p className="text-xs font-bold text-[var(--admin-success)]">
               <Wrench className="mr-1 inline-block h-3 w-3" />
               Result: {message.toolResult.name}
             </p>
-            <pre className="mt-1 max-h-40 overflow-auto text-xs text-admin-text-muted">{message.toolResult.result}</pre>
+            <pre className="mt-1 max-h-40 overflow-auto text-xs text-admin-fg-muted">{message.toolResult.result}</pre>
           </div>
         )}
       </div>
@@ -150,7 +146,7 @@ export default function AiAssistantThreadDetailPage() {
       await apiClient.delete(`/v1/admin/ai-assistant/threads/${thread.id}`);
       loadThread();
     } catch {
-      // Could add toast here
+      // silent
     } finally {
       setArchiving(false);
     }
@@ -177,111 +173,129 @@ export default function AiAssistantThreadDetailPage() {
     URL.revokeObjectURL(url);
   }, [messages, thread]);
 
+  const breadcrumbs = [
+    { label: 'Admin', href: '/admin' },
+    { label: 'AI Assistant', href: '/admin' },
+    { label: 'Threads', href: '/admin/ai-assistant/threads' },
+    { label: thread?.title || 'Thread' },
+  ];
+
   if (!isAuthenticated || role !== 'admin') {
     return (
-      <AdminRouteWorkspace>
-        <EmptyState icon={<ShieldCheck className="w-8 h-8" />} title="Admin access required" description="Sign in with an admin account to view this page." />
-      </AdminRouteWorkspace>
+      <AdminOperationsLayout title="Thread Detail" eyebrow="AI Assistant" breadcrumbs={breadcrumbs}
+        primaryGrid={
+          <EmptyState
+            title="Admin access required"
+            description="Sign in with an admin account to view this page."
+            illustration={<ShieldCheck className="h-8 w-8" />}
+          />
+        }
+      />
     );
   }
 
   return (
-    <AdminRouteWorkspace>
-      {/* Breadcrumb */}
-      <div className="flex items-center gap-2 text-sm">
-        <Link href="/admin/ai-assistant/threads" className="flex items-center gap-1 text-admin-text-muted hover:text-admin-text transition-colors">
-          <ArrowLeft className="h-3.5 w-3.5" />
-          Back to Threads
-        </Link>
-      </div>
+    <AdminOperationsLayout
+      title={thread?.title || 'Untitled Thread'}
+      description={thread ? `Conversation transcript for ${thread.userName}` : 'Loading thread…'}
+      eyebrow="AI Assistant"
+      breadcrumbs={breadcrumbs}
+      actions={
+        thread ? (
+          <>
+            <Button variant="secondary" size="sm" onClick={handleExport}>
+              <Download className="h-4 w-4" />
+              Export
+            </Button>
+            {thread.status === 'active' && (
+              <Button variant="destructive" size="sm" onClick={handleArchive} disabled={archiving}>
+                <Archive className="h-4 w-4" />
+                {archiving ? 'Archiving…' : 'Archive'}
+              </Button>
+            )}
+          </>
+        ) : null
+      }
+      primaryGrid={
+        <AsyncStateWrapper status={status} onRetry={loadThread}>
+          {thread && (
+            <BentoGrid>
+              <BentoCell span={{ default: 12, lg: 8 }}>
+                <Card>
+                  <CardHeader><CardTitle>Conversation</CardTitle></CardHeader>
+                  <CardContent>
+                    <div className="space-y-3">
+                      {messages.length === 0 ? (
+                        <p className="py-8 text-center text-sm text-admin-fg-muted">No messages in this thread.</p>
+                      ) : (
+                        messages.map((msg) => <MessageBubble key={msg.id} message={msg} />)
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              </BentoCell>
 
-      <AsyncStateWrapper status={status} onRetry={loadThread}>
-        {thread && (
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_280px]">
-            {/* Messages panel */}
-            <AdminRoutePanel>
-              <div className="p-4">
-                <div className="mb-4 flex items-center justify-between">
-                  <h2 className="text-sm font-bold text-admin-text">{thread.title || 'Untitled Thread'}</h2>
-                  <div className="flex items-center gap-2">
-                    <Button variant="ghost" onClick={handleExport} className="h-7 gap-1.5 px-2 text-xs">
-                      <Download className="h-3.5 w-3.5" />
-                      Export
-                    </Button>
-                    {thread.status === 'active' && (
-                      <Button variant="destructive" onClick={handleArchive} disabled={archiving} className="h-7 gap-1.5 px-2 text-xs">
-                        <Archive className="h-3.5 w-3.5" />
-                        {archiving ? 'Archiving…' : 'Archive'}
-                      </Button>
-                    )}
-                  </div>
-                </div>
+              <BentoCell span={{ default: 12, lg: 4 }}>
+                <div className="space-y-4">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-xs uppercase tracking-wider text-admin-fg-muted">User Info</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-2">
+                        <div>
+                          <p className="text-xs text-admin-fg-muted">Name</p>
+                          <p className="text-sm font-medium text-admin-fg-strong">{thread.userName}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-admin-fg-muted">Email</p>
+                          <p className="text-sm text-admin-fg-strong">{thread.userEmail}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-admin-fg-muted">Role</p>
+                          <Badge variant="primary" intensity="tinted" size="sm">{thread.userRole}</Badge>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
 
-                <div className="space-y-3">
-                  {messages.length === 0 ? (
-                    <p className="py-8 text-center text-sm text-admin-text-muted">No messages in this thread.</p>
-                  ) : (
-                    messages.map((msg) => <MessageBubble key={msg.id} message={msg} />)
-                  )}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-xs uppercase tracking-wider text-admin-fg-muted">Thread Info</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-2">
+                        <div>
+                          <p className="text-xs text-admin-fg-muted">Status</p>
+                          <Badge variant={thread.status === 'active' ? 'success' : thread.status === 'archived' ? 'default' : 'danger'} intensity="tinted" size="sm">
+                            {thread.status}
+                          </Badge>
+                        </div>
+                        <div>
+                          <p className="text-xs text-admin-fg-muted">Messages</p>
+                          <p className="text-sm font-medium text-admin-fg-strong">{thread.messageCount}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-admin-fg-muted">Created</p>
+                          <p className="text-sm text-admin-fg-strong">{new Date(thread.createdAt).toLocaleString()}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-admin-fg-muted">Last Active</p>
+                          <p className="text-sm text-admin-fg-strong">{new Date(thread.lastActiveAt).toLocaleString()}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-admin-fg-muted">Thread ID</p>
+                          <p className="truncate font-mono text-xs text-admin-fg-muted">{thread.id}</p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
                 </div>
-              </div>
-            </AdminRoutePanel>
-
-            {/* User info sidebar */}
-            <div className="flex flex-col gap-3">
-              <AdminRoutePanel>
-                <div className="p-4">
-                  <h3 className="text-xs font-bold uppercase tracking-wide text-admin-text-muted">User Info</h3>
-                  <div className="mt-3 space-y-2">
-                    <div>
-                      <p className="text-xs text-admin-text-muted">Name</p>
-                      <p className="text-sm font-medium text-admin-text">{thread.userName}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-admin-text-muted">Email</p>
-                      <p className="text-sm text-admin-text">{thread.userEmail}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-admin-text-muted">Role</p>
-                      <Badge variant="info">{thread.userRole}</Badge>
-                    </div>
-                  </div>
-                </div>
-              </AdminRoutePanel>
-
-              <AdminRoutePanel>
-                <div className="p-4">
-                  <h3 className="text-xs font-bold uppercase tracking-wide text-admin-text-muted">Thread Info</h3>
-                  <div className="mt-3 space-y-2">
-                    <div>
-                      <p className="text-xs text-admin-text-muted">Status</p>
-                      <Badge variant={thread.status === 'active' ? 'success' : thread.status === 'archived' ? 'default' : 'danger'}>
-                        {thread.status}
-                      </Badge>
-                    </div>
-                    <div>
-                      <p className="text-xs text-admin-text-muted">Messages</p>
-                      <p className="text-sm font-medium text-admin-text">{thread.messageCount}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-admin-text-muted">Created</p>
-                      <p className="text-sm text-admin-text">{new Date(thread.createdAt).toLocaleString()}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-admin-text-muted">Last Active</p>
-                      <p className="text-sm text-admin-text">{new Date(thread.lastActiveAt).toLocaleString()}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-admin-text-muted">Thread ID</p>
-                      <p className="truncate text-xs font-mono text-admin-text-muted">{thread.id}</p>
-                    </div>
-                  </div>
-                </div>
-              </AdminRoutePanel>
-            </div>
-          </div>
-        )}
-      </AsyncStateWrapper>
-    </AdminRouteWorkspace>
+              </BentoCell>
+            </BentoGrid>
+          )}
+        </AsyncStateWrapper>
+      }
+    />
   );
 }

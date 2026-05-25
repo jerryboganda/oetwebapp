@@ -1,12 +1,25 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { Trash2, Plus } from 'lucide-react';
-import { AdminRouteWorkspace, AdminRoutePanel, AdminRouteSectionHeader } from '@/components/domain/admin-route-surface';
-import { DataTable, type Column } from '@/components/ui/data-table';
-import { Button } from '@/components/ui/button';
-import { Input, Select, Checkbox } from '@/components/ui/form-controls';
-import { InlineAlert, Toast } from '@/components/ui/alert';
+import type { ColumnDef } from '@tanstack/react-table';
+import { Plus, Trash2 } from 'lucide-react';
+
+import { AdminTableLayout } from '@/components/admin/layout/admin-table-layout';
+import { Button } from '@/components/admin/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/admin/ui/card';
+import { DataTable } from '@/components/admin/ui/data-table';
+import { Input } from '@/components/admin/ui/input';
+import { Label } from '@/components/admin/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/admin/ui/select';
+import { Switch } from '@/components/admin/ui/switch';
+import { toast } from '@/components/admin/ui/toaster';
+import { InlineAlert } from '@/components/ui/alert';
 import {
   listRegionPricings,
   upsertRegionPricing,
@@ -14,12 +27,8 @@ import {
   type RegionPricingDto,
 } from '@/lib/api';
 
-const REGIONS = ['UK', 'GULF', 'EGYPT', 'PK', 'ROW'].map((r) => ({ value: r, label: r }));
-const TARGET_TYPES = [
-  { value: 'plan', label: 'plan' },
-  { value: 'addon', label: 'addon' },
-  { value: 'wallet_topup_tier', label: 'wallet_topup_tier' },
-];
+const REGIONS = ['UK', 'GULF', 'EGYPT', 'PK', 'ROW'];
+const TARGET_TYPES = ['plan', 'addon', 'wallet_topup_tier'];
 
 interface FormState {
   targetType: string;
@@ -45,12 +54,12 @@ export default function AdminRegionPricingPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [toast, setToast] = useState<{ variant: 'success' | 'error'; message: string } | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
       setRows(await listRegionPricings());
+      setError(null);
     } catch (err: any) {
       setError(err?.userMessage ?? err?.message ?? 'Failed to load region pricings.');
     } finally {
@@ -77,7 +86,7 @@ export default function AdminRegionPricingPage() {
         priceAmount,
         isActive: form.isActive,
       });
-      setToast({ variant: 'success', message: 'Region price saved.' });
+      toast.success('Region price saved.');
       setForm(EMPTY);
       await load();
     } catch (err: any) {
@@ -91,24 +100,38 @@ export default function AdminRegionPricingPage() {
     if (!confirm('Delete this region-pricing row?')) return;
     try {
       await deleteRegionPricing(id);
-      setToast({ variant: 'success', message: 'Row deleted.' });
+      toast.success('Row deleted.');
       await load();
     } catch (err: any) {
-      setToast({ variant: 'error', message: err?.userMessage ?? err?.message ?? 'Delete failed.' });
+      toast.error(err?.userMessage ?? err?.message ?? 'Delete failed.');
     }
   }
 
-  const columns: Column<RegionPricingDto>[] = [
-    { key: 'target', header: 'Target', render: (r) => `${r.targetType}:${r.targetId}` },
-    { key: 'region', header: 'Region', render: (r) => r.region },
-    { key: 'currency', header: 'Currency', render: (r) => r.currency },
-    { key: 'price', header: 'Price', render: (r) => r.priceAmount.toString() },
-    { key: 'active', header: 'Active', render: (r) => (r.isActive ? 'Yes' : 'No') },
+  const columns: ColumnDef<RegionPricingDto>[] = [
     {
-      key: 'actions',
+      id: 'target',
+      header: 'Target',
+      cell: ({ row }) => `${row.original.targetType}:${row.original.targetId}`,
+    },
+    { id: 'region', accessorKey: 'region', header: 'Region' },
+    { id: 'currency', accessorKey: 'currency', header: 'Currency' },
+    {
+      id: 'price',
+      header: 'Price',
+      cell: ({ row }) => row.original.priceAmount.toString(),
+    },
+    {
+      id: 'active',
+      header: 'Active',
+      cell: ({ row }) => (row.original.isActive ? 'Yes' : 'No'),
+    },
+    {
+      id: 'actions',
       header: '',
-      render: (r) => (
-        <Button variant="ghost" onClick={() => handleDelete(r.id)} aria-label="Delete">
+      enableSorting: false,
+      enableHiding: false,
+      cell: ({ row }) => (
+        <Button variant="ghost" size="sm" onClick={() => handleDelete(row.original.id)} aria-label="Delete">
           <Trash2 className="h-4 w-4" />
         </Button>
       ),
@@ -116,42 +139,96 @@ export default function AdminRegionPricingPage() {
   ];
 
   return (
-    <AdminRouteWorkspace>
-      <AdminRouteSectionHeader title="Region pricing" description="Per-region price overrides for plans, add-ons, and wallet top-up tiers." />
-
-      {toast && <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} />}
-
-      <AdminRoutePanel>
-        {error && <InlineAlert variant="error">{error}</InlineAlert>}
-
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-6">
-          <Select label="Target" value={form.targetType} options={TARGET_TYPES} onChange={(e) => setForm({ ...form, targetType: e.target.value })} />
-          <Input label="Target id" value={form.targetId} onChange={(e) => setForm({ ...form, targetId: e.target.value })} />
-          <Select label="Region" value={form.region} options={REGIONS} onChange={(e) => setForm({ ...form, region: e.target.value })} />
-          <Input label="Currency" value={form.currency} onChange={(e) => setForm({ ...form, currency: e.target.value.toUpperCase() })} />
-          <Input label="Price" type="number" value={form.priceAmount} onChange={(e) => setForm({ ...form, priceAmount: e.target.value })} />
-          <Checkbox label="Active" checked={form.isActive} onChange={(e) => setForm({ ...form, isActive: e.target.checked })} />
-        </div>
-        <div className="mt-3 flex justify-end">
-          <Button onClick={handleAdd} disabled={saving}>
-            <Plus className="mr-2 h-4 w-4" />
-            {saving ? 'Saving…' : 'Add / update row'}
-          </Button>
-        </div>
-      </AdminRoutePanel>
-
-      <AdminRoutePanel>
-        {loading ? (
-          <p className="text-sm text-muted-foreground">Loading…</p>
-        ) : (
-          <DataTable
-            data={rows}
-            columns={columns}
-            keyExtractor={(r) => r.id}
-            emptyMessage="No region pricing rows yet."
-          />
-        )}
-      </AdminRoutePanel>
-    </AdminRouteWorkspace>
+    <AdminTableLayout
+      title="Region pricing"
+      description="Per-region price overrides for plans, add-ons, and wallet top-up tiers."
+      breadcrumbs={[
+        { label: 'Admin', href: '/admin' },
+        { label: 'Billing', href: '/admin/billing' },
+        { label: 'Region pricing' },
+      ]}
+      banner={
+        <Card>
+          <CardHeader>
+            <CardTitle>Add or update row</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4 pt-0">
+            {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="rp-target">Target</Label>
+                <Select
+                  value={form.targetType}
+                  onValueChange={(v) => setForm({ ...form, targetType: v })}
+                >
+                  <SelectTrigger id="rp-target">
+                    <SelectValue placeholder="Target" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {TARGET_TYPES.map((t) => (
+                      <SelectItem key={t} value={t}>
+                        {t}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <Input
+                label="Target id"
+                value={form.targetId}
+                onChange={(e) => setForm({ ...form, targetId: e.target.value })}
+              />
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="rp-region">Region</Label>
+                <Select value={form.region} onValueChange={(v) => setForm({ ...form, region: v })}>
+                  <SelectTrigger id="rp-region">
+                    <SelectValue placeholder="Region" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {REGIONS.map((r) => (
+                      <SelectItem key={r} value={r}>
+                        {r}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <Input
+                label="Currency"
+                value={form.currency}
+                onChange={(e) => setForm({ ...form, currency: e.target.value.toUpperCase() })}
+              />
+              <Input
+                label="Price"
+                type="number"
+                value={form.priceAmount}
+                onChange={(e) => setForm({ ...form, priceAmount: e.target.value })}
+              />
+              <div className="flex items-end gap-2">
+                <Switch
+                  id="rp-active"
+                  checked={form.isActive}
+                  onCheckedChange={(c) => setForm({ ...form, isActive: c })}
+                />
+                <Label htmlFor="rp-active">Active</Label>
+              </div>
+            </div>
+            <div className="flex justify-end">
+              <Button onClick={handleAdd} loading={saving} startIcon={<Plus className="h-4 w-4" />}>
+                Add / update row
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      }
+    >
+      <DataTable
+        columns={columns}
+        data={rows}
+        loading={loading}
+        emptyMessage="No region pricing rows yet."
+        searchPlaceholder="Search rows…"
+      />
+    </AdminTableLayout>
   );
 }

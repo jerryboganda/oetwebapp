@@ -3,17 +3,20 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { CheckCircle2, ClipboardList, GraduationCap, UserMinus, UserPlus } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { Badge } from '@/components/ui/badge';
-import { Skeleton } from '@/components/ui/skeleton';
+import { AdminOperationsLayout, KpiStrip } from '@/components/admin/layout/admin-operations-layout';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/admin/ui/card';
+import { Badge } from '@/components/admin/ui/badge';
+import { Skeleton } from '@/components/admin/ui/skeleton';
+import { Button } from '@/components/admin/ui/button';
+import { KpiTile } from '@/components/admin/ui/kpi-tile';
 import { InlineAlert } from '@/components/ui/alert';
-import { Button } from '@/components/ui/button';
 import { MotionSection } from '@/components/ui/motion-primitives';
-import {
-  AdminRouteHero,
-  AdminRoutePanel,
-  AdminRouteSummaryCard,
-  AdminRouteWorkspace,
-} from '@/components/domain/admin-route-surface';
+
+const BREADCRUMBS = [
+  { label: 'Admin', href: '/admin' },
+  { label: 'Onboarding', href: '/admin/onboarding' },
+  { label: 'Interlocutor' },
+];
 import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
 import {
   fetchInterlocutorPracticeQueue,
@@ -189,87 +192,83 @@ export default function AdminInterlocutorOnboardingPage() {
   if (!isAuthenticated || role !== 'admin') return null;
 
   return (
-    <AdminRouteWorkspace role="main" aria-label="Interlocutor onboarding">
-      <AdminRouteHero
-        eyebrow="Onboarding"
-        icon={GraduationCap}
-        accent="indigo"
-        title="Interlocutor onboarding"
-        description="Track tutors moving through the calibration pipeline. Start a practice role-play with any trainee or fast-track them to Trained once their drift falls within policy."
-      />
-
-      {status === 'loading' ? (
-        <>
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {Array.from({ length: 3 }).map((_, index) => (
-              <Skeleton key={index} className="h-24 rounded-2xl" />
-            ))}
-          </div>
-          <Skeleton className="h-72 rounded-2xl" />
-          <Skeleton className="h-48 rounded-2xl" />
-        </>
-      ) : null}
-
-      {status === 'error' ? (
-        <InlineAlert variant="error" title="Onboarding data unavailable">
-          {errorMessage ?? 'The training service could not be reached. Please retry shortly.'}
-        </InlineAlert>
-      ) : null}
-
-      {toast ? (
-        <InlineAlert variant={toast.variant} dismissible>
-          {toast.message}
-        </InlineAlert>
-      ) : null}
-
-      {status === 'empty' ? (
-        <AdminRoutePanel title="No trainees in onboarding">
-          <p className="text-sm text-admin-text-muted">
-            Onboarding metrics populate as new tutors begin submitting calibration rubrics.
-          </p>
-        </AdminRoutePanel>
-      ) : null}
-
-      {status === 'success' && data ? (
+    <AdminOperationsLayout
+      title="Interlocutor onboarding"
+      description="Track tutors moving through the calibration pipeline. Start a practice role-play with any trainee or fast-track them to Trained once their drift falls within policy."
+      breadcrumbs={BREADCRUMBS}
+      eyebrow="Onboarding"
+      icon={<GraduationCap className="h-5 w-5" />}
+      kpis={status === 'success' && data ? (
+        <KpiStrip className="lg:grid-cols-4">
+          <KpiTile
+            label="In onboarding"
+            value={summary.inOnboarding}
+            tone={summary.inOnboarding > 0 ? 'primary' : 'success'}
+            icon={<UserPlus className="h-4 w-4" />}
+          />
+          <KpiTile
+            label="Trained"
+            value={summary.trained}
+            tone={summary.trained > 0 ? 'success' : 'default'}
+            icon={<CheckCircle2 className="h-4 w-4" />}
+          />
+          <KpiTile
+            label="Dropped off"
+            value={summary.droppedOff}
+            tone={summary.droppedOff > 0 ? 'danger' : 'success'}
+            icon={<UserMinus className="h-4 w-4" />}
+          />
+          <KpiTile
+            label="Recordings under review"
+            value={practicePending}
+            tone={practicePending > 0 ? 'warning' : 'default'}
+            icon={<ClipboardList className="h-4 w-4" />}
+          />
+        </KpiStrip>
+      ) : undefined}
+      primaryGrid={(
         <div className="space-y-6">
-          <MotionSection delayIndex={0}>
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-              <AdminRouteSummaryCard
-                label="In onboarding"
-                value={summary.inOnboarding}
-                hint="Active in the queue"
-                icon={<UserPlus className="h-5 w-5" />}
-                tone={summary.inOnboarding > 0 ? 'default' : 'success'}
-              />
-              <AdminRouteSummaryCard
-                label="Trained"
-                value={summary.trained}
-                hint="Cleared the calibration bar"
-                icon={<CheckCircle2 className="h-5 w-5" />}
-                tone={summary.trained > 0 ? 'success' : 'default'}
-              />
-              <AdminRouteSummaryCard
-                label="Dropped off"
-                value={summary.droppedOff}
-                hint="Failed to converge"
-                icon={<UserMinus className="h-5 w-5" />}
-                tone={summary.droppedOff > 0 ? 'danger' : 'success'}
-              />
-              <AdminRouteSummaryCard
-                label="Recordings under review"
-                value={practicePending}
-                hint={`${practiceQueue?.recordings.length ?? 0} in queue`}
-                icon={<ClipboardList className="h-5 w-5" />}
-                tone={practicePending > 0 ? 'warning' : 'default'}
-              />
-            </div>
-          </MotionSection>
+          {status === 'loading' ? (
+            <>
+              <Skeleton className="h-72 rounded-admin-lg" />
+              <Skeleton className="h-48 rounded-admin-lg" />
+            </>
+          ) : null}
 
-          <MotionSection delayIndex={1}>
-            <AdminRoutePanel
-              title="Trainees"
-              description="Per-trainee calibration progress derived from the drift report. Start a practice session, or mark a trainee Trained once σ falls below the policy threshold."
-            >
+          {status === 'error' ? (
+            <InlineAlert variant="error" title="Onboarding data unavailable">
+              {errorMessage ?? 'The training service could not be reached. Please retry shortly.'}
+            </InlineAlert>
+          ) : null}
+
+          {toast ? (
+            <InlineAlert variant={toast.variant} dismissible>
+              {toast.message}
+            </InlineAlert>
+          ) : null}
+
+          {status === 'empty' ? (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-sm">No trainees in onboarding</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm text-admin-fg-muted">
+                  Onboarding metrics populate as new tutors begin submitting calibration rubrics.
+                </p>
+              </CardContent>
+            </Card>
+          ) : null}
+
+          {status === 'success' && data ? (
+            <>
+              <MotionSection delayIndex={1}>
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-sm">Trainees</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-xs text-admin-fg-muted mb-3">Per-trainee calibration progress derived from the drift report. Start a practice session, or mark a trainee Trained once σ falls below the policy threshold.</p>
               <div className="overflow-x-auto">
                 <table className="min-w-full divide-y divide-admin-border text-sm">
                   <thead>
@@ -333,20 +332,26 @@ export default function AdminInterlocutorOnboardingPage() {
                   </tbody>
                 </table>
               </div>
-            </AdminRoutePanel>
-          </MotionSection>
+                  </CardContent>
+                </Card>
+              </MotionSection>
 
-          <MotionSection delayIndex={2}>
-            <AdminRoutePanel
-              title="Practice queue"
-              description="Pending interlocutor practice recordings awaiting calibration team review. The dedicated backend endpoint lands in a follow-up; until then this panel renders any rows the API surfaces and otherwise stays empty."
-            >
-              <PracticeQueueList rows={practiceQueue?.recordings ?? []} />
-            </AdminRoutePanel>
-          </MotionSection>
+              <MotionSection delayIndex={2}>
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-sm">Practice queue</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-xs text-admin-fg-muted mb-3">Pending interlocutor practice recordings awaiting calibration team review. The dedicated backend endpoint lands in a follow-up; until then this panel renders any rows the API surfaces and otherwise stays empty.</p>
+                    <PracticeQueueList rows={practiceQueue?.recordings ?? []} />
+                  </CardContent>
+                </Card>
+              </MotionSection>
+            </>
+          ) : null}
         </div>
-      ) : null}
-    </AdminRouteWorkspace>
+      )}
+    />
   );
 }
 
@@ -391,13 +396,13 @@ function PracticeQueueList({ rows }: { rows: InterlocutorPracticeQueueRow[] }) {
               </td>
               <td className="px-4 py-3">
                 <Badge
-                  variant={
+                  variant={(
                     row.status === 'UnderReview'
                       ? 'warning'
                       : row.status === 'Returned'
                         ? 'danger'
-                        : 'outline'
-                  }
+                        : 'info'
+                  ) as any}
                   className="text-[10px]"
                 >
                   {row.status}

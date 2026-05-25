@@ -21,15 +21,12 @@ import {
   AdminStrategyGuideEditor,
   strategyGuideToDraft,
 } from '@/components/domain/strategies/admin-strategy-guide-editor';
-import {
-  AdminRoutePanel,
-  AdminRouteSectionHeader,
-  AdminRouteSummaryCard,
-  AdminRouteWorkspace,
-} from '@/components/domain/admin-route-surface';
+import { AdminSettingsLayout, SettingsSection } from '@/components/admin/layout/admin-settings-layout';
+import { KpiStrip } from '@/components/admin/layout/admin-operations-layout';
+import { KpiTile } from '@/components/admin/ui/kpi-tile';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
-import { Badge, type BadgeProps } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
+import { Badge, type BadgeProps } from '@/components/admin/ui/badge';
+import { Button } from '@/components/admin/ui/button';
 import { InlineAlert, Toast } from '@/components/ui/alert';
 
 type ToastState = { variant: 'success' | 'error'; message: string } | null;
@@ -128,91 +125,92 @@ export default function AdminStrategyDetailPage() {
   if (!isAuthenticated || role !== 'admin') return null;
 
   return (
-    <AdminRouteWorkspace role="main" aria-label="Strategy guide editor">
+    <>
       {toast ? <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} /> : null}
 
-      <AdminRouteSectionHeader
+      <AdminSettingsLayout
         title={guide?.title ?? 'Strategy Guide'}
         description={guide?.summary ?? 'Edit strategy guide content and publish readiness.'}
-        icon={BookOpenText}
+        breadcrumbs={[
+          { label: 'Admin', href: '/admin' },
+          { label: 'Content', href: '/admin/content' },
+          { label: 'Strategies', href: '/admin/content/strategies' },
+          { label: guide?.title ?? 'Guide' },
+        ]}
+        icon={<BookOpenText className="h-5 w-5" />}
         actions={
           <>
-            <Button variant="outline" className="gap-2" asChild>
-<Link href="/admin/content/strategies">
-                <ArrowLeft className="h-4 w-4" />
-                Back
-              </Link>
-</Button>
+            <Button variant="outline" asChild startIcon={<ArrowLeft className="h-4 w-4" />}>
+              <Link href="/admin/content/strategies">Back</Link>
+            </Button>
             <Button
               type="button"
-              className="gap-2"
               loading={publishing}
               disabled={!guide || guide.status === 'active' || guide.status === 'archived'}
               onClick={() => void publishGuide()}
+              startIcon={!publishing ? <Rocket className="h-4 w-4" /> : undefined}
             >
-              <Rocket className="h-4 w-4" />
               Publish
             </Button>
             <Button
               type="button"
               variant="outline"
-              className="gap-2"
               loading={archiving}
               disabled={!guide || guide.status === 'archived'}
               onClick={() => void archiveGuide()}
+              startIcon={!archiving ? <Archive className="h-4 w-4" /> : undefined}
             >
-              <Archive className="h-4 w-4" />
               Archive
             </Button>
           </>
         }
-      />
-
-      <AsyncStateWrapper
-        status={pageStatus}
-        onRetry={() => void loadGuide()}
-        errorMessage="Could not load this strategy guide."
-        emptyContent={
-          <InlineAlert variant="warning">
-            Strategy guide route parameters are missing.
-          </InlineAlert>
-        }
       >
-        {guide ? (
-          <div className="space-y-6">
-            <div className="grid gap-4 md:grid-cols-4">
-              <AdminRouteSummaryCard label="State" value={statusLabel(guide.status)} tone={statusTone(guide.status) === 'success' ? 'success' : guide.status === 'archived' ? 'danger' : 'warning'} />
-              <AdminRouteSummaryCard label="Subtest" value={guide.subtestCode ?? 'All'} />
-              <AdminRouteSummaryCard label="Read Time" value={`${guide.readingTimeMinutes} min`} />
-              <AdminRouteSummaryCard label="Preview" value={guide.isPreviewEligible ? 'Eligible' : 'Locked'} />
+        <AsyncStateWrapper
+          status={pageStatus}
+          onRetry={() => void loadGuide()}
+          errorMessage="Could not load this strategy guide."
+          emptyContent={
+            <InlineAlert variant="warning">
+              Strategy guide route parameters are missing.
+            </InlineAlert>
+          }
+        >
+          {guide ? (
+            <div className="space-y-6">
+              <KpiStrip>
+                <KpiTile label="State" value={statusLabel(guide.status)} tone={statusTone(guide.status) === 'success' ? 'success' : guide.status === 'archived' ? 'danger' : 'warning'} />
+                <KpiTile label="Subtest" value={guide.subtestCode ?? 'All'} />
+                <KpiTile label="Read Time" value={`${guide.readingTimeMinutes} min`} />
+                <KpiTile label="Preview" value={guide.isPreviewEligible ? 'Eligible' : 'Locked'} />
+              </KpiStrip>
+
+              {validation?.canPublish ? (
+                <InlineAlert variant="success" title="Ready to publish">
+                  <span className="inline-flex items-center gap-2">
+                    <CheckCircle2 className="h-4 w-4" />
+                    Required fields are complete.
+                  </span>
+                </InlineAlert>
+              ) : null}
+
+              <SettingsSection
+                title="Guide Editor"
+                description="Updates save as draft metadata until the guide is published."
+                actions={<Badge variant={statusTone(guide.status)}>{statusLabel(guide.status)}</Badge>}
+              >
+                <AdminStrategyGuideEditor
+                  key={`${guide.id}-${guide.updatedAt}`}
+                  initial={strategyGuideToDraft(guide)}
+                  saving={saving}
+                  validation={validation}
+                  onSave={saveGuide}
+                />
+              </SettingsSection>
             </div>
-
-            {validation?.canPublish ? (
-              <InlineAlert variant="success" title="Ready to publish">
-                <span className="inline-flex items-center gap-2">
-                  <CheckCircle2 className="h-4 w-4" />
-                  Required fields are complete.
-                </span>
-              </InlineAlert>
-            ) : null}
-
-            <AdminRoutePanel
-              title="Guide Editor"
-              description="Updates save as draft metadata until the guide is published."
-              actions={<Badge variant={statusTone(guide.status)}>{statusLabel(guide.status)}</Badge>}
-            >
-              <AdminStrategyGuideEditor
-                key={`${guide.id}-${guide.updatedAt}`}
-                initial={strategyGuideToDraft(guide)}
-                saving={saving}
-                validation={validation}
-                onSave={saveGuide}
-              />
-            </AdminRoutePanel>
-          </div>
-        ) : null}
-      </AsyncStateWrapper>
-    </AdminRouteWorkspace>
+          ) : null}
+        </AsyncStateWrapper>
+      </AdminSettingsLayout>
+    </>
   );
 }
 

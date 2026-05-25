@@ -18,12 +18,9 @@ import {
   ChevronRight,
   RefreshCw,
 } from 'lucide-react';
-import {
-  AdminRouteHero,
-  AdminRoutePanel,
-  AdminRouteSummaryCard,
-  AdminRouteWorkspace,
-} from '@/components/domain/admin-route-surface';
+import { AdminOperationsLayout } from '@/components/admin/layout/admin-operations-layout';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/admin/ui/card';
+import { KpiTile } from '@/components/admin/ui/kpi-tile';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -242,26 +239,26 @@ export default function AdminMockBookingsCalendarPage() {
   if (!isAuthenticated || role !== 'admin') return null;
 
   return (
-    <AdminRouteWorkspace role="main" aria-label="Mock bookings calendar">
-      <AdminRouteHero
-        eyebrow="Mock Operations"
-        icon={CalendarRange}
-        accent="indigo"
-        title="Mock booking calendar"
-        description="Week view of every learner-booked mock. Click a chip to assign a tutor or interlocutor."
-        highlights={[
-          { icon: CalendarRange, label: 'Week', value: `${startLabel} → ${endLabel}` },
-          { icon: AlertTriangle, label: 'Unassigned', value: `${unassignedCount}` },
-        ]}
-      />
-
-      <div className="flex flex-wrap items-center gap-2">
+    <AdminOperationsLayout
+      eyebrow="Mock Operations"
+      title="Mock booking calendar"
+      description="Week view of every learner-booked mock. Click a chip to assign a tutor or interlocutor."
+      breadcrumbs={[
+        { label: 'Admin', href: '/admin' },
+        { label: 'Content', href: '/admin/content' },
+        { label: 'Mocks', href: '/admin/content/mocks' },
+        { label: 'Bookings' },
+      ]}
+      actions={
         <Link
           href="/admin/content/mocks"
-          className="inline-flex items-center text-sm font-bold text-admin-text-muted hover:text-admin-text"
+          className="inline-flex items-center text-sm font-bold text-admin-fg-muted hover:text-admin-fg-strong"
         >
           <ArrowLeft className="mr-1 h-4 w-4" /> Back to Mock Bundles
         </Link>
+      }
+    >
+      <div className="flex flex-wrap items-center gap-2">
         <div className="ml-auto flex flex-wrap items-center gap-2">
           <Button variant="secondary" onClick={() => handleShiftWeek(-1)} disabled={loading}>
             <ChevronLeft className="h-4 w-4" /> Prev week
@@ -279,13 +276,13 @@ export default function AdminMockBookingsCalendarPage() {
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        <AdminRouteSummaryCard
+        <KpiTile
           label="Bookings this week"
           value={totalBookings}
           hint={`${startLabel} → ${endLabel}`}
           icon={<CalendarRange className="h-5 w-5" />}
         />
-        <AdminRouteSummaryCard
+        <KpiTile
           label="Unassigned"
           value={unassignedCount}
           hint="No tutor selected yet"
@@ -296,10 +293,14 @@ export default function AdminMockBookingsCalendarPage() {
 
       {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
 
-      <AdminRoutePanel
-        title="Week view"
-        description="Rows are 30-minute slots from 08:00 to 22:00 in the operator's local timezone."
-      >
+      <Card>
+        <CardHeader>
+          <div>
+            <CardTitle>Week view</CardTitle>
+            <p className="mt-1 text-sm text-admin-fg-muted">Rows are 30-minute slots from 08:00 to 22:00 in the operator's local timezone.</p>
+          </div>
+        </CardHeader>
+        <CardContent>
         {loading ? (
           <div className="space-y-2">
             <Skeleton className="h-10 w-full rounded-xl" />
@@ -320,7 +321,7 @@ export default function AdminMockBookingsCalendarPage() {
             <table className="min-w-full border-collapse text-xs" aria-label="Mock booking calendar grid">
               <thead>
                 <tr>
-                  <th className="sticky left-0 z-10 w-20 border-b border-admin-border bg-admin-surface px-2 py-2 text-left text-[10px] font-black uppercase tracking-widest text-admin-text-muted">
+                  <th className="sticky left-0 z-10 w-20 border-b border-admin-border bg-admin-bg-surface px-2 py-2 text-left text-[10px] font-black uppercase tracking-widest text-admin-fg-muted">
                     Time
                   </th>
                   {weekDays.map((day) => {
@@ -330,10 +331,10 @@ export default function AdminMockBookingsCalendarPage() {
                         key={day.toISOString()}
                         className="min-w-[140px] border-b border-admin-border px-2 py-2 text-left"
                       >
-                        <p className="text-[10px] font-black uppercase tracking-widest text-admin-text-muted">
+                        <p className="text-[10px] font-black uppercase tracking-widest text-admin-fg-muted">
                           {header.weekday}
                         </p>
-                        <p className="text-xs font-bold text-admin-text">{header.date}</p>
+                        <p className="text-xs font-bold text-admin-fg-strong">{header.date}</p>
                       </th>
                     );
                   })}
@@ -344,7 +345,7 @@ export default function AdminMockBookingsCalendarPage() {
                   <tr key={`${row.hour}-${row.minute}`} className="align-top">
                     <th
                       scope="row"
-                      className="sticky left-0 z-10 w-20 border-b border-admin-border/60 bg-admin-surface px-2 py-1 text-left text-[11px] font-bold text-admin-text-muted"
+                      className="sticky left-0 z-10 w-20 border-b border-admin-border/60 bg-admin-surface px-2 py-1 text-left text-[11px] font-bold text-admin-fg-muted"
                     >
                       {row.label}
                     </th>
@@ -368,14 +369,14 @@ export default function AdminMockBookingsCalendarPage() {
                                   className={`group flex flex-col rounded-lg border px-2 py-1 text-left text-[11px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400 ${
                                     tutorMissing
                                       ? 'border-amber-500/40 bg-amber-500/10 hover:bg-amber-500/20'
-                                      : 'border-admin-border bg-admin-surface-raised hover:bg-admin-surface-raised/60'
+                                      : 'border-admin-border bg-admin-bg-surface-raised hover:bg-admin-bg-elevated/60'
                                   }`}
                                   aria-label={`Open booking ${booking.bookingId || booking.id}`}
                                 >
-                                  <span className="font-bold text-admin-text">
+                                  <span className="font-bold text-admin-fg-strong">
                                     {booking.learnerDisplayName ?? booking.learnerEmail ?? 'Learner'}
                                   </span>
-                                  <span className="truncate text-admin-text-muted">
+                                  <span className="truncate text-admin-fg-muted">
                                     {booking.mockBundleTitle ?? booking.title ?? booking.mockBundleId}
                                   </span>
                                   <div className="mt-1 flex flex-wrap items-center gap-1">
@@ -399,7 +400,8 @@ export default function AdminMockBookingsCalendarPage() {
             </table>
           </div>
         )}
-      </AdminRoutePanel>
+        </CardContent>
+      </Card>
 
       <Modal
         open={activeBooking !== null}
@@ -516,6 +518,6 @@ export default function AdminMockBookingsCalendarPage() {
           onClose={() => setToast(null)}
         />
       ) : null}
-    </AdminRouteWorkspace>
+    </AdminOperationsLayout>
   );
 }

@@ -13,15 +13,11 @@ import {
   Target,
   Users,
 } from 'lucide-react';
-import { Badge } from '@/components/ui/badge';
-import { Skeleton } from '@/components/ui/skeleton';
-import { MotionSection } from '@/components/ui/motion-primitives';
-import {
-  AdminRouteHero,
-  AdminRoutePanel,
-  AdminRouteSummaryCard,
-  AdminRouteWorkspace,
-} from '@/components/domain/admin-route-surface';
+import { Badge } from '@/components/admin/ui/badge';
+import { Skeleton } from '@/components/admin/ui/skeleton';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/admin/ui/card';
+import { KpiTile } from '@/components/admin/ui/kpi-tile';
+import { AdminOperationsLayout, KpiStrip, BentoGrid, BentoCell } from '@/components/admin/layout/admin-operations-layout';
 import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
 import {
   fetchAdminMocksAnalytics,
@@ -481,223 +477,255 @@ export default function AdminMocksAnalyticsPage() {
   const workloadSummary = analytics ? sumWorkload(analytics.tutorWorkload) : { pending: 0, completed: 0 };
   const lowQualityCount = analytics?.lowQualityFlags.length ?? 0;
 
+  const breadcrumbs = [
+    { label: 'Admin', href: '/admin' },
+    { label: 'Analytics', href: '/admin' },
+    { label: 'Mocks' },
+  ];
+
   return (
-    <AdminRouteWorkspace role="main" aria-label="Mocks analytics">
-      <AdminRouteHero
-        eyebrow="Analytics"
-        icon={BarChart3}
-        accent="indigo"
-        title="Mocks Analytics"
-        description="Revenue by mock package, tutor workload, item-analysis flags, completion rate, readiness, pass-rate, and tutor marking turnaround."
-      />
-
-      {status === 'loading' ? (
-        <>
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {Array.from({ length: 3 }).map((_, index) => (
-              <Skeleton key={index} className="h-24 rounded-2xl" />
-            ))}
-          </div>
-          <div className="grid gap-6 xl:grid-cols-2">
-            <Skeleton className="h-64 rounded-2xl" />
-            <Skeleton className="h-64 rounded-2xl" />
-          </div>
-          <Skeleton className="h-48 rounded-2xl" />
-        </>
-      ) : null}
-
-      {status === 'error' ? (
-        <AdminRoutePanel title="Mocks analytics unavailable">
-          <p className="text-sm text-admin-text-muted">
-            The mocks analytics service could not be loaded. Try again after the API is available.
-          </p>
-        </AdminRoutePanel>
-      ) : null}
-
-      {status === 'empty' && analytics ? (
-        <AdminRoutePanel title="No mocks analytics yet">
-          <p className="text-sm text-admin-text-muted">
-            Mock revenue, tutor workload, and low-quality flags will populate once mock bundles see traffic.
-          </p>
-        </AdminRoutePanel>
-      ) : null}
-
-      {status === 'success' && analytics ? (
+    <AdminOperationsLayout
+      title="Mocks Analytics"
+      description="Revenue by mock package, tutor workload, item-analysis flags, completion rate, readiness, pass-rate, and tutor marking turnaround."
+      eyebrow="Analytics"
+      breadcrumbs={breadcrumbs}
+      kpis={
+        status === 'success' && analytics ? (
+          <KpiStrip>
+            <KpiTile
+              label="Total mock revenue"
+              value={formatRevenue(revenueSummary.total, revenueSummary.currency)}
+              icon={<DollarSign className="h-4 w-4" />}
+              tone={revenueSummary.total > 0 ? 'success' : 'default'}
+            />
+            <KpiTile
+              label="Tutor workload"
+              value={workloadSummary.pending}
+              icon={<Users className="h-4 w-4" />}
+              tone={workloadSummary.pending > 20 ? 'warning' : 'default'}
+            />
+            <KpiTile
+              label="Flagged bundles"
+              value={lowQualityCount}
+              icon={<AlertTriangle className="h-4 w-4" />}
+              tone={lowQualityCount > 0 ? 'warning' : 'success'}
+            />
+            <KpiTile
+              label="Completion rate (30d)"
+              value={formatPercent(analytics.attemptsCompletion.completionRate)}
+              icon={<CheckCircle2 className="h-4 w-4" />}
+              tone={analytics.attemptsCompletion.completionRate < 0.6 ? 'warning' : 'success'}
+            />
+          </KpiStrip>
+        ) : null
+      }
+      primaryGrid={
         <div className="space-y-6">
-          <MotionSection delayIndex={0}>
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-              <AdminRouteSummaryCard
-                label="Total mock revenue"
-                value={formatRevenue(revenueSummary.total, revenueSummary.currency)}
-                hint={`${analytics.revenueByPackage.length} package${analytics.revenueByPackage.length === 1 ? '' : 's'}`}
-                icon={<DollarSign className="h-5 w-5" />}
-                tone={revenueSummary.total > 0 ? 'success' : 'default'}
-              />
-              <AdminRouteSummaryCard
-                label="Tutor workload"
-                value={workloadSummary.pending}
-                hint={`${workloadSummary.completed} completed last 7 days`}
-                icon={<Users className="h-5 w-5" />}
-                tone={workloadSummary.pending > 20 ? 'warning' : 'default'}
-              />
-              <AdminRouteSummaryCard
-                label="Flagged bundles"
-                value={lowQualityCount}
-                hint="Item-analysis driven"
-                icon={<AlertTriangle className="h-5 w-5" />}
-                tone={lowQualityCount > 0 ? 'warning' : 'success'}
-              />
-            </div>
-          </MotionSection>
+          {status === 'loading' ? (
+            <>
+              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                {Array.from({ length: 3 }).map((_, index) => (
+                  <Skeleton key={index} className="h-24 rounded-admin" />
+                ))}
+              </div>
+              <div className="grid gap-6 xl:grid-cols-2">
+                <Skeleton className="h-64 rounded-admin" />
+                <Skeleton className="h-64 rounded-admin" />
+              </div>
+              <Skeleton className="h-48 rounded-admin" />
+            </>
+          ) : null}
 
-          <MotionSection delayIndex={1}>
-            <div className="grid gap-6 xl:grid-cols-2">
-              <AdminRoutePanel
-                title="Revenue by package"
-                description="Totals are aggregated from BillingAddOn purchases tied to mock entitlement codes."
-              >
-                <RevenuePanel rows={analytics.revenueByPackage} />
-              </AdminRoutePanel>
+          {status === 'error' ? (
+            <Card>
+              <CardHeader>
+                <CardTitle>Mocks analytics unavailable</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm text-admin-fg-muted">
+                  The mocks analytics service could not be loaded. Try again after the API is available.
+                </p>
+              </CardContent>
+            </Card>
+          ) : null}
 
-              <AdminRoutePanel
-                title="Tutor workload"
-                description="Pending Speaking bookings and completed sessions in the last seven days."
-              >
-                <WorkloadPanel rows={analytics.tutorWorkload} />
-              </AdminRoutePanel>
-            </div>
-          </MotionSection>
+          {status === 'empty' && analytics ? (
+            <Card>
+              <CardHeader>
+                <CardTitle>No mocks analytics yet</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm text-admin-fg-muted">
+                  Mock revenue, tutor workload, and low-quality flags will populate once mock bundles see traffic.
+                </p>
+              </CardContent>
+            </Card>
+          ) : null}
 
-          <MotionSection delayIndex={2}>
-            <AdminRoutePanel
-              title="Low-quality flagged bundles"
-              description="Bundles whose item analysis surfaced low discrimination, weak distractors, or other quality signals."
-              actions={
-                <span className="inline-flex items-center gap-1 text-xs text-admin-text-muted">
-                  <FileWarning className="h-3.5 w-3.5" />
-                  Drives off MockItemAnalysisSnapshot.Flag
-                </span>
-              }
-            >
-              <LowQualityPanel rows={analytics.lowQualityFlags} />
-            </AdminRoutePanel>
-          </MotionSection>
+          {status === 'success' && analytics ? (
+            <>
+              <BentoGrid>
+                <BentoCell span={{ default: 12, xl: 6 }}>
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Revenue by package</CardTitle>
+                      <CardDescription>Totals are aggregated from BillingAddOn purchases tied to mock entitlement codes.</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <RevenuePanel rows={analytics.revenueByPackage} />
+                    </CardContent>
+                  </Card>
+                </BentoCell>
+                <BentoCell span={{ default: 12, xl: 6 }}>
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Tutor workload</CardTitle>
+                      <CardDescription>Pending Speaking bookings and completed sessions in the last seven days.</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <WorkloadPanel rows={analytics.tutorWorkload} />
+                    </CardContent>
+                  </Card>
+                </BentoCell>
+              </BentoGrid>
 
-          <MotionSection delayIndex={3}>
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-              <AdminRouteSummaryCard
-                label="Completion rate (30d)"
-                value={formatPercent(analytics.attemptsCompletion.completionRate)}
-                hint={`${analytics.attemptsCompletion.completed} of ${analytics.attemptsCompletion.started} sub-tests`}
-                icon={<CheckCircle2 className="h-5 w-5" />}
-                tone={analytics.attemptsCompletion.completionRate < 0.6 ? 'warning' : 'success'}
-              />
-              <AdminRouteSummaryCard
-                label="Avg readiness (30d)"
-                value={
-                  analytics.averageReadiness.averageScore !== null
-                    ? analytics.averageReadiness.averageScore.toFixed(0)
-                    : '—'
-                }
-                hint={`n=${analytics.averageReadiness.sampleSize} reports`}
-                icon={<Gauge className="h-5 w-5" />}
-                tone={
-                  analytics.averageReadiness.averageScore !== null && analytics.averageReadiness.averageScore < 350
-                    ? 'warning'
-                    : 'default'
-                }
-              />
-              <AdminRouteSummaryCard
-                label="Predicted pass rate (30d)"
-                value={formatPercent(analytics.passPrediction.predictedPassRate)}
-                hint={`n=${analytics.passPrediction.sampleSize} reports`}
-                icon={<Target className="h-5 w-5" />}
-                tone={
-                  analytics.passPrediction.predictedPassRate !== null
-                  && analytics.passPrediction.predictedPassRate < 0.5
-                    ? 'warning'
-                    : 'success'
-                }
-              />
-              <AdminRouteSummaryCard
-                label="Marking turnaround (avg)"
-                value={
-                  analytics.markingDelay.perSubtest.length > 0
-                    ? formatHours(
-                        analytics.markingDelay.perSubtest.reduce(
-                          (acc, row) => acc + row.avgDelayHours * row.sampleSize,
-                          0,
-                        ) /
-                          Math.max(
-                            1,
-                            analytics.markingDelay.perSubtest.reduce((acc, row) => acc + row.sampleSize, 0),
-                          ),
-                      )
-                    : '—'
-                }
-                hint={`${analytics.markingDelay.perSubtest.length} sub-test${analytics.markingDelay.perSubtest.length === 1 ? '' : 's'} tracked`}
-                icon={<Clock className="h-5 w-5" />}
-                tone={
-                  analytics.markingDelay.perSubtest.some((row) => row.p95DelayHours > 48)
-                    ? 'warning'
-                    : 'default'
-                }
-              />
-            </div>
-          </MotionSection>
+              <Card>
+                <CardHeader>
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <CardTitle>Low-quality flagged bundles</CardTitle>
+                      <CardDescription>Bundles whose item analysis surfaced low discrimination, weak distractors, or other quality signals.</CardDescription>
+                    </div>
+                    <span className="inline-flex items-center gap-1 text-xs text-admin-fg-muted">
+                      <FileWarning className="h-3.5 w-3.5" />
+                      MockItemAnalysisSnapshot.Flag
+                    </span>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <LowQualityPanel rows={analytics.lowQualityFlags} />
+                </CardContent>
+              </Card>
 
-          <MotionSection delayIndex={4}>
-            <div className="grid gap-6 xl:grid-cols-2">
-              <AdminRoutePanel
-                title="Attempts completion"
-                description="Sub-test attempts started vs. submitted/completed within the 30-day window."
-              >
-                <AttemptsCompletionPanel data={analytics.attemptsCompletion} />
-              </AdminRoutePanel>
+              <KpiStrip>
+                <KpiTile
+                  label="Avg readiness (30d)"
+                  value={
+                    analytics.averageReadiness.averageScore !== null
+                      ? analytics.averageReadiness.averageScore.toFixed(0)
+                      : '—'
+                  }
+                  icon={<Gauge className="h-4 w-4" />}
+                  tone={
+                    analytics.averageReadiness.averageScore !== null && analytics.averageReadiness.averageScore < 350
+                      ? 'warning'
+                      : 'default'
+                  }
+                />
+                <KpiTile
+                  label="Predicted pass rate (30d)"
+                  value={formatPercent(analytics.passPrediction.predictedPassRate)}
+                  icon={<Target className="h-4 w-4" />}
+                  tone={
+                    analytics.passPrediction.predictedPassRate !== null
+                    && analytics.passPrediction.predictedPassRate < 0.5
+                      ? 'warning'
+                      : 'success'
+                  }
+                />
+                <KpiTile
+                  label="Marking turnaround (avg)"
+                  value={
+                    analytics.markingDelay.perSubtest.length > 0
+                      ? formatHours(
+                          analytics.markingDelay.perSubtest.reduce(
+                            (acc, row) => acc + row.avgDelayHours * row.sampleSize,
+                            0,
+                          ) /
+                            Math.max(
+                              1,
+                              analytics.markingDelay.perSubtest.reduce((acc, row) => acc + row.sampleSize, 0),
+                            ),
+                        )
+                      : '—'
+                  }
+                  icon={<Clock className="h-4 w-4" />}
+                  tone={
+                    analytics.markingDelay.perSubtest.some((row) => row.p95DelayHours > 48)
+                      ? 'warning'
+                      : 'default'
+                  }
+                />
+              </KpiStrip>
 
-              <AdminRoutePanel
-                title="Average readiness"
-                description="Distribution of overallScore across mock reports generated in the last 30 days."
-              >
-                <AverageReadinessPanel data={analytics.averageReadiness} />
-              </AdminRoutePanel>
-            </div>
-          </MotionSection>
+              <BentoGrid>
+                <BentoCell span={{ default: 12, xl: 6 }}>
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Attempts completion</CardTitle>
+                      <CardDescription>Sub-test attempts started vs. submitted/completed within the 30-day window.</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <AttemptsCompletionPanel data={analytics.attemptsCompletion} />
+                    </CardContent>
+                  </Card>
+                </BentoCell>
+                <BentoCell span={{ default: 12, xl: 6 }}>
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Average readiness</CardTitle>
+                      <CardDescription>Distribution of overallScore across mock reports generated in the last 30 days.</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <AverageReadinessPanel data={analytics.averageReadiness} />
+                    </CardContent>
+                  </Card>
+                </BentoCell>
+                <BentoCell span={{ default: 12, xl: 6 }}>
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Pass prediction by profession</CardTitle>
+                      <CardDescription>Reports with overall ≥ 350 (OET Grade-B anchor) counted as predicted pass.</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <PassPredictionPanel data={analytics.passPrediction} />
+                    </CardContent>
+                  </Card>
+                </BentoCell>
+                <BentoCell span={{ default: 12, xl: 6 }}>
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Tutor marking delay</CardTitle>
+                      <CardDescription>Hours from review reservation to marker consumption, per sub-test.</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <MarkingDelayPanel data={analytics.markingDelay} />
+                    </CardContent>
+                  </Card>
+                </BentoCell>
+              </BentoGrid>
 
-          <MotionSection delayIndex={5}>
-            <div className="grid gap-6 xl:grid-cols-2">
-              <AdminRoutePanel
-                title="Pass prediction by profession"
-                description="Reports with overall ≥ 350 (OET Grade-B anchor) counted as predicted pass."
-              >
-                <PassPredictionPanel data={analytics.passPrediction} />
-              </AdminRoutePanel>
-
-              <AdminRoutePanel
-                title="Tutor marking delay"
-                description="Hours from review reservation to marker consumption, per sub-test."
-              >
-                <MarkingDelayPanel data={analytics.markingDelay} />
-              </AdminRoutePanel>
-            </div>
-          </MotionSection>
-
-          <MotionSection delayIndex={6}>
-            <AdminRoutePanel
-              title="Reading inside mocks"
-              description="Reading subtest performance across all mock sessions. Cross-reference of MockSectionAttempt rows where subtest code is reading."
-              actions={
-                <span className="inline-flex items-center gap-1 text-xs text-admin-text-muted">
-                  <BookOpen className="h-3.5 w-3.5" />
-                  See /admin/analytics/reading for per-paper detail
-                </span>
-              }
-            >
-              <ReadingSectionPanel data={analytics.readingSection} />
-            </AdminRoutePanel>
-          </MotionSection>
+              <Card>
+                <CardHeader>
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <CardTitle>Reading inside mocks</CardTitle>
+                      <CardDescription>Reading subtest performance across all mock sessions. Cross-reference of MockSectionAttempt rows where subtest code is reading.</CardDescription>
+                    </div>
+                    <span className="inline-flex items-center gap-1 text-xs text-admin-fg-muted">
+                      <BookOpen className="h-3.5 w-3.5" />
+                      /admin/analytics/reading
+                    </span>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <ReadingSectionPanel data={analytics.readingSection} />
+                </CardContent>
+              </Card>
+            </>
+          ) : null}
         </div>
-      ) : null}
-    </AdminRouteWorkspace>
+      }
+    />
   );
 }

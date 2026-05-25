@@ -83,6 +83,8 @@ BentoGrid.displayName = 'BentoGrid';
 
 type BentoSpan = {
   default?: number;
+  /** Backward-compat alias for `default` (Tailwind "base" breakpoint). */
+  base?: number;
   sm?: number;
   md?: number;
   lg?: number;
@@ -132,9 +134,15 @@ function resolveSpanClasses(span: BentoSpan | number | undefined): string {
   if (typeof span === 'number') {
     return SPAN_TO_CLASS.default[span] ?? 'col-span-12';
   }
+  // `base` aliases `default` — pages migrated from Tailwind-style
+  // breakpoint maps use `{ base, lg }`; the renderer here uses `default`.
+  const normalized: BentoSpan = { ...span };
+  if (normalized.default == null && normalized.base != null) {
+    normalized.default = normalized.base;
+  }
   const out: string[] = [];
   (['default', 'sm', 'md', 'lg', 'xl'] as const).forEach((bp) => {
-    const v = span[bp];
+    const v = normalized[bp];
     if (v && SPAN_TO_CLASS[bp][v]) out.push(SPAN_TO_CLASS[bp][v]);
   });
   if (out.length === 0) out.push('col-span-12');
@@ -190,6 +198,22 @@ export interface AdminOperationsLayoutProps
 
   /** Optional extra slot rendered after the secondary grid (escape hatch). */
   footer?: React.ReactNode;
+
+  /**
+   * Backward-compat: pages migrated from the legacy layout pass `children`
+   * as the main slot. When provided, renders after the secondary grid and
+   * before the footer (acts as a free-form primary content escape hatch).
+   */
+  children?: React.ReactNode;
+  /**
+   * Backward-compat: decorative icon shown next to the page title. The new
+   * design system relegates this to the PageHeader eyebrow; accepted here
+   * so legacy call sites compile but currently rendered as a no-op (the
+   * eyebrow already carries the same semantic meaning).
+   */
+  icon?: React.ReactNode;
+  /** Backward-compat: optional href for a "back" affordance in the header. */
+  backHref?: string;
 }
 
 const AdminOperationsLayout = React.forwardRef<
@@ -207,6 +231,12 @@ const AdminOperationsLayout = React.forwardRef<
       primaryGrid,
       secondaryGrid,
       footer,
+      children,
+      // Accepted for backward-compat (see prop docs); intentionally unused
+      // — the redesign no longer renders an icon next to the title nor a
+      // distinct back-link inside the layout (handled by breadcrumbs).
+      icon: _icon,
+      backHref: _backHref,
       className,
       ...shellProps
     },
@@ -236,6 +266,14 @@ const AdminOperationsLayout = React.forwardRef<
             data-slot="operations-secondary"
           >
             {secondaryGrid}
+          </section>
+        ) : null}
+        {children ? (
+          <section
+            aria-label="Page content"
+            data-slot="operations-children"
+          >
+            {children}
           </section>
         ) : null}
         {footer ? <footer data-slot="operations-footer">{footer}</footer> : null}

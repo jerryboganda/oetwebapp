@@ -3,17 +3,20 @@
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
-import { ArrowLeft, CheckCircle2, ShieldAlert, XCircle } from 'lucide-react';
-import {
-  AdminRoutePanel,
-  AdminRouteSectionHeader,
-  AdminRouteWorkspace,
-} from '@/components/domain/admin-route-surface';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { Skeleton } from '@/components/ui/skeleton';
+import { CheckCircle2, ShieldAlert, XCircle } from 'lucide-react';
+import { AdminSettingsLayout, SettingsSection } from '@/components/admin/layout/admin-settings-layout';
+import { Badge } from '@/components/admin/ui/badge';
+import { Button } from '@/components/admin/ui/button';
+import { Skeleton } from '@/components/admin/ui/skeleton';
 import { Toast } from '@/components/ui/alert';
 import { Modal } from '@/components/ui/modal';
+
+const BREADCRUMBS = [
+  { label: 'Admin', href: '/admin' },
+  { label: 'Writing', href: '/admin/writing' },
+  { label: 'Tasks', href: '/admin/content/writing' },
+  { label: 'Review' },
+];
 import { AdminPermission, hasPermission } from '@/lib/admin-permissions';
 import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
 import { useCurrentUser } from '@/lib/hooks/use-current-user';
@@ -129,65 +132,55 @@ export default function AdminWritingReviewPage() {
 
   if (!isAuthenticated || role !== 'admin') {
     return (
-      <AdminRouteWorkspace>
-        <p className="text-sm text-muted">Admin access required.</p>
-      </AdminRouteWorkspace>
+      <AdminSettingsLayout title="Writing task review" breadcrumbs={BREADCRUMBS}>
+        <p className="text-sm text-admin-fg-muted">Admin access required.</p>
+      </AdminSettingsLayout>
     );
   }
 
   return (
-    <AdminRouteWorkspace role="main" aria-label="Writing task review">
-      <AdminRouteSectionHeader
-        icon={<ShieldAlert className="w-6 h-6" />}
-        title="Writing task review"
-        description="Read the task end-to-end, confirm the integrity acknowledgement metadata, and either approve & publish or reject with a documented reason."
-      />
-
-      <AdminRoutePanel>
-        <Link
-          href="/admin/content/writing"
-          className="inline-flex items-center gap-1 text-sm font-semibold text-muted hover:text-navy"
-        >
-          <ArrowLeft className="w-4 h-4" /> Back to writing tasks
-        </Link>
-      </AdminRoutePanel>
-
+    <AdminSettingsLayout
+      title="Writing task review"
+      description="Read the task end-to-end, confirm the integrity acknowledgement metadata, and either approve & publish or reject with a documented reason."
+      breadcrumbs={BREADCRUMBS}
+      eyebrow="Writing"
+      icon={<ShieldAlert className="h-5 w-5" />}
+      backHref="/admin/content/writing"
+    >
       {status === 'loading' && (
-        <AdminRoutePanel>
-          <Skeleton className="h-44 rounded-2xl" />
-        </AdminRoutePanel>
+        <Skeleton className="h-44 w-full rounded-admin-lg" />
       )}
 
       {status === 'success' && paper && (
         <>
-          <AdminRoutePanel title="Task metadata">
+          <SettingsSection title="Task metadata">
             <dl className="grid grid-cols-1 gap-3 text-sm md:grid-cols-2">
               <MetadataRow label="Title" value={paper.title} />
               <MetadataRow label="Slug" value={paper.slug} />
               <MetadataRow label="Profession" value={professionLabel(paper.professionId)} />
               <MetadataRow label="Letter type" value={letterTypeLabel(paper.letterType)} />
               <MetadataRow label="Status" value={
-                <Badge variant={
+                <Badge variant={(
                   paper.status === 'Published' ? 'success'
                     : paper.status === 'InReview' ? 'warning'
                     : paper.status === 'Rejected' ? 'danger' : 'default'
-                }>{paper.status}</Badge>
+                ) as any}>{paper.status}</Badge>
               } />
               <MetadataRow label="Duration" value={`${paper.estimatedDurationMinutes} min`} />
               <MetadataRow label="Source provenance" value={paper.sourceProvenance ?? '—'} />
               <MetadataRow label="Created" value={new Date(paper.createdAt).toLocaleString()} />
             </dl>
-          </AdminRoutePanel>
+          </SettingsSection>
 
-          <AdminRoutePanel title="Integrity acknowledgement">
+          <SettingsSection title="Integrity acknowledgement">
             {paper.integrityAcknowledgedByAdminId ? (
-              <div className="flex items-start gap-3 rounded-2xl border border-success/30 bg-success/5 p-4 text-sm">
-                <CheckCircle2 className="mt-0.5 h-5 w-5 text-success" />
+              <div className="flex items-start gap-3 rounded-admin border border-admin-success-tint-strong bg-admin-success-tint p-4 text-sm">
+                <CheckCircle2 className="mt-0.5 h-5 w-5 text-admin-success" />
                 <div>
-                  <div className="font-semibold text-success">
+                  <div className="font-semibold text-admin-success">
                     Acknowledged by {paper.integrityAcknowledgedByAdminId}
                   </div>
-                  <div className="text-xs text-muted">
+                  <div className="text-xs text-admin-fg-muted">
                     {paper.integrityAcknowledgedAt
                       ? new Date(paper.integrityAcknowledgedAt).toLocaleString()
                       : '—'}
@@ -195,44 +188,44 @@ export default function AdminWritingReviewPage() {
                 </div>
               </div>
             ) : (
-              <div className="flex items-start gap-3 rounded-2xl border border-warning/30 bg-warning/5 p-4 text-sm">
-                <ShieldAlert className="mt-0.5 h-5 w-5 text-warning" />
+              <div className="flex items-start gap-3 rounded-admin border border-admin-warning-tint-strong bg-admin-warning-tint p-4 text-sm">
+                <ShieldAlert className="mt-0.5 h-5 w-5 text-admin-warning" />
                 <div>
-                  <div className="font-semibold text-warning">Integrity acknowledgement missing</div>
-                  <div className="text-xs text-muted">
+                  <div className="font-semibold text-admin-warning">Integrity acknowledgement missing</div>
+                  <div className="text-xs text-admin-fg-muted">
                     This task was created before the integrity gate or via an automated import path. Review the source provenance carefully before approving.
                   </div>
                 </div>
               </div>
             )}
-          </AdminRoutePanel>
+          </SettingsSection>
 
           {structure && (
             <>
               {structure.taskPrompt && (
-                <AdminRoutePanel title="Task prompt">
-                  <p className="whitespace-pre-wrap text-sm text-navy">{structure.taskPrompt}</p>
-                </AdminRoutePanel>
+                <SettingsSection title="Task prompt">
+                  <p className="whitespace-pre-wrap text-sm text-admin-fg-strong">{structure.taskPrompt}</p>
+                </SettingsSection>
               )}
               {structure.caseNotes && (
-                <AdminRoutePanel title="Case notes">
-                  <pre className="whitespace-pre-wrap rounded-xl bg-background-light p-4 text-sm leading-6 text-navy">
+                <SettingsSection title="Case notes">
+                  <pre className="whitespace-pre-wrap rounded-admin bg-admin-bg-subtle p-4 text-sm leading-6 text-admin-fg-strong">
                     {structure.caseNotes}
                   </pre>
-                </AdminRoutePanel>
+                </SettingsSection>
               )}
               {structure.modelAnswerText && (
-                <AdminRoutePanel title="Model answer">
-                  <pre className="whitespace-pre-wrap rounded-xl bg-background-light p-4 text-sm leading-6 text-navy">
+                <SettingsSection title="Model answer">
+                  <pre className="whitespace-pre-wrap rounded-admin bg-admin-bg-subtle p-4 text-sm leading-6 text-admin-fg-strong">
                     {structure.modelAnswerText}
                   </pre>
-                </AdminRoutePanel>
+                </SettingsSection>
               )}
             </>
           )}
 
           {paper.status === 'InReview' && canApprove && (
-            <AdminRoutePanel title="Actions">
+            <SettingsSection title="Actions">
               <div className="flex flex-wrap items-center gap-3">
                 <Button variant="primary" disabled={pending} onClick={() => void approve()}>
                   <CheckCircle2 className="mr-1 h-4 w-4" /> Approve &amp; publish
@@ -241,12 +234,12 @@ export default function AdminWritingReviewPage() {
                   <XCircle className="mr-1 h-4 w-4" /> Reject
                 </Button>
               </div>
-            </AdminRoutePanel>
+            </SettingsSection>
           )}
 
           {paper.status !== 'InReview' && (
-            <AdminRoutePanel>
-              <p className="text-sm text-muted">
+            <SettingsSection title="Status">
+              <p className="text-sm text-admin-fg-muted">
                 {paper.status === 'Draft'
                   ? 'This task is still a Draft. Use the listing page to submit it for review first.'
                   : paper.status === 'Published'
@@ -256,12 +249,12 @@ export default function AdminWritingReviewPage() {
               {paper.status === 'Draft' && canWriteContent && (
                 <Link
                   href="/admin/content/writing"
-                  className="mt-3 inline-flex min-h-9 items-center rounded-md bg-primary px-3 py-2 text-sm font-semibold text-white hover:bg-primary/90"
+                  className="mt-3 inline-flex min-h-9 items-center rounded-admin bg-[var(--admin-primary)] px-3 py-2 text-sm font-semibold text-white hover:bg-[var(--admin-primary-hover)]"
                 >
                   Back to listing
                 </Link>
               )}
-            </AdminRoutePanel>
+            </SettingsSection>
           )}
         </>
       )}
@@ -288,15 +281,15 @@ export default function AdminWritingReviewPage() {
       </Modal>
 
       {toast && <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} />}
-    </AdminRouteWorkspace>
+    </AdminSettingsLayout>
   );
 }
 
 function MetadataRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
-    <div className="flex flex-col gap-1 rounded-xl border border-border bg-background-light p-3">
-      <dt className="text-[10px] font-bold uppercase tracking-[0.14em] text-muted">{label}</dt>
-      <dd className="text-sm text-navy">{value}</dd>
+    <div className="flex flex-col gap-1 rounded-admin border border-admin-border bg-admin-bg-subtle p-3">
+      <dt className="text-[10px] font-bold uppercase tracking-[0.14em] text-admin-fg-muted">{label}</dt>
+      <dd className="text-sm text-admin-fg-strong">{value}</dd>
     </div>
   );
 }

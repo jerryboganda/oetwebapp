@@ -190,32 +190,33 @@ function qualityRows(d: AdminDashboardData): QualityRow[] {
 
 const reviewOpsColumns: ColumnDef<ReviewOpsRow>[] = [
   {
-    key: 'workstream',
+    id: 'workstream',
     header: 'Workstream',
-    cell: (row) => <span className="font-medium text-admin-fg-strong">{row.workstream}</span>,
+    cell: ({ row }) => (
+      <span className="font-medium text-admin-fg-strong">{row.original.workstream}</span>
+    ),
   },
   {
-    key: 'status',
+    id: 'status',
     header: 'Status',
-    cell: (row) => (
-      <Badge variant={row.badge.tone} intensity="tinted" size="sm">
-        {row.badge.label}
+    cell: ({ row }) => (
+      <Badge variant={row.original.badge.tone} intensity="tinted" size="sm">
+        {row.original.badge.label}
       </Badge>
     ),
   },
   {
-    key: 'count',
-    header: 'Count',
-    align: 'right',
-    cell: (row) => (
+    id: 'count',
+    header: () => <span className="block text-right">Count</span>,
+    cell: ({ row }) => (
       <span
         className={
-          row.emphasize
-            ? 'font-mono font-semibold tabular-nums text-admin-fg-strong'
-            : 'font-mono tabular-nums text-admin-fg-muted'
+          row.original.emphasize
+            ? 'block text-right font-mono font-semibold tabular-nums text-admin-fg-strong'
+            : 'block text-right font-mono tabular-nums text-admin-fg-muted'
         }
       >
-        {row.count.toLocaleString()}
+        {row.original.count.toLocaleString()}
       </span>
     ),
   },
@@ -223,25 +224,28 @@ const reviewOpsColumns: ColumnDef<ReviewOpsRow>[] = [
 
 const billingColumns: ColumnDef<BillingRow>[] = [
   {
-    key: 'category',
+    id: 'category',
     header: 'Category',
-    cell: (row) => <span className="font-medium text-admin-fg-strong">{row.category}</span>,
+    cell: ({ row }) => (
+      <span className="font-medium text-admin-fg-strong">{row.original.category}</span>
+    ),
   },
   {
-    key: 'status',
+    id: 'status',
     header: 'Status',
-    cell: (row) => (
-      <Badge variant={row.badge.tone} intensity="tinted" size="sm">
-        {row.badge.label}
+    cell: ({ row }) => (
+      <Badge variant={row.original.badge.tone} intensity="tinted" size="sm">
+        {row.original.badge.label}
       </Badge>
     ),
   },
   {
-    key: 'count',
-    header: 'Count',
-    align: 'right',
-    cell: (row) => (
-      <span className="font-mono tabular-nums text-admin-fg-default">{row.count}</span>
+    id: 'count',
+    header: () => <span className="block text-right">Count</span>,
+    cell: ({ row }) => (
+      <span className="block text-right font-mono tabular-nums text-admin-fg-default">
+        {row.original.count}
+      </span>
     ),
   },
 ];

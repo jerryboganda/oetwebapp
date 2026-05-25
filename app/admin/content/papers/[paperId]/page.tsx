@@ -3,10 +3,11 @@
 import { use, useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { ArrowLeft, CloudUpload, Eye, Loader2, Trash2 } from 'lucide-react';
-import { AdminRoutePanel, AdminRouteSectionHeader, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
+import { AdminSettingsLayout } from '@/components/admin/layout/admin-settings-layout';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/admin/ui/card';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
+import { Button } from '@/components/admin/ui/button';
 import { Input, Select } from '@/components/ui/form-controls';
 import { InlineAlert, Toast } from '@/components/ui/alert';
 import { AdminPermission, hasPermission } from '@/lib/admin-permissions';
@@ -195,14 +196,29 @@ export default function ContentPaperEditorPage({ params }: { params: Promise<{ p
     } finally { setPublishing(false); }
   };
 
+  const breadcrumbs = [
+    { label: 'Admin', href: '/admin' },
+    { label: 'Content', href: '/admin/content' },
+    { label: 'Papers', href: '/admin/content/papers' },
+    { label: paper?.title ?? 'Paper' },
+  ];
+
   if (isAdminLoading || isUserLoading) return null;
 
   if (!isAuthenticated || role !== 'admin') {
-    return <AdminRouteWorkspace><p className="text-sm text-muted">Admin access required.</p></AdminRouteWorkspace>;
+    return (
+      <AdminSettingsLayout title="Paper editor" breadcrumbs={breadcrumbs}>
+        <Card><CardContent className="p-6"><p className="text-sm text-admin-fg-muted">Admin access required.</p></CardContent></Card>
+      </AdminSettingsLayout>
+    );
   }
 
   if (!canViewContent) {
-    return <AdminRouteWorkspace><p className="text-sm text-muted">Content read, write, or publish permission is required.</p></AdminRouteWorkspace>;
+    return (
+      <AdminSettingsLayout title="Paper editor" breadcrumbs={breadcrumbs}>
+        <Card><CardContent className="p-6"><p className="text-sm text-admin-fg-muted">Content read, write, or publish permission is required.</p></CardContent></Card>
+      </AdminSettingsLayout>
+    );
   }
 
   const missingRoles = paper
@@ -210,36 +226,39 @@ export default function ContentPaperEditorPage({ params }: { params: Promise<{ p
     : [];
 
   return (
-    <AdminRouteWorkspace>
-      <Link href="/admin/content/papers" className="inline-flex items-center gap-2 text-sm text-muted hover:text-navy">
-        <ArrowLeft className="w-4 h-4" /> Back to papers
-      </Link>
-
+    <AdminSettingsLayout
+      eyebrow="CMS"
+      icon={<CloudUpload className="w-5 h-5" />}
+      title={paper?.title ?? 'Paper editor'}
+      description={paper ? `${paper.subtestCode.toUpperCase()} · ${paper.appliesToAllProfessions ? 'All professions' : (paper.professionId ?? '—')} · ${paper.status}` : undefined}
+      breadcrumbs={breadcrumbs}
+      actions={
+        <div className="flex flex-wrap items-center gap-2">
+          <Button variant="ghost" size="sm" asChild>
+            <Link href="/admin/content/papers"><ArrowLeft className="w-4 h-4 mr-1.5" /> Back</Link>
+          </Button>
+          {paper?.subtestCode === 'reading' && (
+            <Button variant="outline" size="sm" asChild>
+              <Link href={`/admin/content/papers/${paperId}/preview`}>
+                <Eye className="w-4 h-4 mr-1.5" /> Preview
+              </Link>
+            </Button>
+          )}
+        </div>
+      }
+    >
       <AsyncStateWrapper status={status}>
         {paper && (
-          <>
-            <AdminRouteSectionHeader
-              icon={<CloudUpload className="w-6 h-6" />}
-              title={paper.title}
-              description={`${paper.subtestCode.toUpperCase()} · ${paper.appliesToAllProfessions ? 'All professions' : (paper.professionId ?? '—')} · ${paper.status}`}
-              actions={paper.subtestCode === 'reading' ? (
-                <Link
-                  href={`/admin/content/papers/${paperId}/preview`}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-admin-border bg-admin-surface px-3 py-1.5 text-sm font-semibold text-admin-text hover:bg-admin-surface-raised transition-colors"
-                >
-                  <Eye className="w-4 h-4" />
-                  Preview
-                </Link>
-              ) : undefined}
-            />
-
+          <div className="space-y-6">
             {missingRoles.length > 0 && paper.status !== 'Published' && (
               <InlineAlert variant="warning">
                 Missing required roles for {paper.subtestCode}: {missingRoles.join(', ')}. Publish is blocked until all required roles have a primary asset.
               </InlineAlert>
             )}
 
-            <AdminRoutePanel title="Metadata">
+            <Card>
+              <CardHeader><CardTitle>Metadata</CardTitle></CardHeader>
+              <CardContent>
               <div className="grid grid-cols-2 gap-4">
                 <Input label="Title" value={paper.title} onChange={(e) => setPaper({ ...paper, title: e.target.value })} disabled={!canWriteContent} />
                 <Input label="Difficulty" value={paper.difficulty} onChange={(e) => setPaper({ ...paper, difficulty: e.target.value })} disabled={!canWriteContent} />
@@ -292,17 +311,20 @@ export default function ContentPaperEditorPage({ params }: { params: Promise<{ p
                   disabled={!canWriteContent} />
               </div>
               <div className="flex gap-3 mt-4">
-                {canWriteContent ? <Button variant="primary" onClick={saveMetadata} loading={saving}>Save metadata</Button> : null}
+                {canWriteContent ? <Button variant="primary" onClick={saveMetadata} loading={saving} loadingText="Saving…">Save metadata</Button> : null}
                 {canPublishContent ? (
-                  <Button variant="secondary" onClick={publish} loading={publishing}
+                  <Button variant="outline" onClick={publish} loading={publishing} loadingText="Publishing…"
                     disabled={missingRoles.length > 0 || !paper.sourceProvenance || paper.status === 'Published'}>
                     Publish
                   </Button>
                 ) : null}
               </div>
-            </AdminRoutePanel>
+              </CardContent>
+            </Card>
 
-            <AdminRoutePanel title="Assets">
+            <Card>
+              <CardHeader><CardTitle>Assets</CardTitle></CardHeader>
+              <CardContent>
               {canWriteContent ? (
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-4 items-end">
                   <Select
@@ -336,7 +358,8 @@ export default function ContentPaperEditorPage({ params }: { params: Promise<{ p
               ) : null}
 
               <AssetList assets={paper.assets ?? []} onRemove={removeAsset} canRemove={canWriteContent} />
-            </AdminRoutePanel>
+              </CardContent>
+            </Card>
 
             {canWriteContent && paper.subtestCode === 'reading' && (
               <>
@@ -366,12 +389,12 @@ export default function ContentPaperEditorPage({ params }: { params: Promise<{ p
             {canWriteContent && paper.subtestCode === 'writing' && (
               <WritingStructureEditor paperId={paper.id} />
             )}
-          </>
+          </div>
         )}
       </AsyncStateWrapper>
 
       {toast && <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} />}
-    </AdminRouteWorkspace>
+    </AdminSettingsLayout>
   );
 }
 

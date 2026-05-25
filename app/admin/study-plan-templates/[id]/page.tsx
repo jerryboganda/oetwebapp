@@ -2,7 +2,11 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import Link from 'next/link';
+import { Edit3 } from 'lucide-react';
+import { AdminSettingsLayout, SettingsSection } from '@/components/admin/layout/admin-settings-layout';
+import { Button } from '@/components/admin/ui/button';
+import { Card, CardContent } from '@/components/admin/ui/card';
+import { Badge } from '@/components/admin/ui/badge';
 import {
   getStudyPlanTemplate,
   updateStudyPlanTemplate,
@@ -10,7 +14,6 @@ import {
   duplicateStudyPlanTemplate,
   validateStudyPlanTemplate,
   previewStudyPlanTemplate,
-  setStudyPlanTemplateTiers,
   type StudyPlanTemplateDetail,
   type StudyPlanTemplateBody,
   type StudyPlanTemplateWeek,
@@ -254,70 +257,68 @@ export default function StudyPlanTemplateEditorPage() {
     setTierCodes((prev) => (prev.includes(t) ? prev.filter((x) => x !== t) : [...prev, t]));
 
   if (!template) {
-    return <div className="p-6">{error ? <div className="text-red-700">{error}</div> : 'Loading...'}</div>;
+    return (
+      <AdminSettingsLayout title="Study plan template" breadcrumbs={[{ label: 'Admin', href: '/admin' }, { label: 'Study plan templates', href: '/admin/study-plan-templates' }, { label: 'Editor' }]}>
+        {error ? <div className="text-admin-danger">{error}</div> : 'Loading...'}
+      </AdminSettingsLayout>
+    );
   }
 
-  return (
-    <div className="p-6 max-w-7xl mx-auto">
-      <div className="flex items-start justify-between mb-6">
-        <div>
-          <Link href="/admin/study-plan-templates" className="text-blue-600 hover:underline text-sm">
-            ← Back
-          </Link>
-          <h1 className="text-2xl font-bold mt-2">{name || template.slug}</h1>
-          <div className="text-sm text-muted-foreground mt-1">
-            <span className="font-mono">{template.slug}</span> · v{template.version} ·{' '}
-            {isActive ? (
-              <span className="text-green-700">Active</span>
-            ) : (
-              <span className="text-muted-foreground">Inactive</span>
-            )}
-          </div>
-        </div>
-        <div className="flex gap-2">
-          <button onClick={onValidate} className="px-3 py-2 border rounded text-sm">
-            Validate
-          </button>
-          <button onClick={onPreview} disabled={previewLoading} className="px-3 py-2 border rounded text-sm">
-            {previewLoading ? 'Loading…' : 'Preview'}
-          </button>
-          <button onClick={onDuplicate} className="px-3 py-2 border rounded text-sm">
-            Duplicate
-          </button>
-          <button onClick={onSoftDelete} className="px-3 py-2 border border-red-300 text-red-700 rounded text-sm">
-            Soft-delete
-          </button>
-          <button
-            onClick={saveAll}
-            disabled={saving}
-            className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
-          >
-            {saving ? 'Saving…' : 'Save'}
-          </button>
-        </div>
-      </div>
+  const breadcrumbs = [
+    { label: 'Admin', href: '/admin' },
+    { label: 'Study plan templates', href: '/admin/study-plan-templates' },
+    { label: name || template.slug },
+  ];
 
+  return (
+    <AdminSettingsLayout
+      title={name || template.slug}
+      description={`${template.slug} · v${template.version}`}
+      breadcrumbs={breadcrumbs}
+      eyebrow="Study planning"
+      icon={<Edit3 className="h-5 w-5" />}
+      backHref="/admin/study-plan-templates"
+      actions={(
+        <div className="flex gap-2 items-center">
+          {isActive ? <Badge variant="success">Active</Badge> : <Badge variant="default">Inactive</Badge>}
+          <Button variant="outline" size="sm" onClick={onValidate}>Validate</Button>
+          <Button variant="outline" size="sm" onClick={onPreview} disabled={previewLoading} loading={previewLoading}>
+            Preview
+          </Button>
+          <Button variant="outline" size="sm" onClick={onDuplicate}>Duplicate</Button>
+          <Button variant="destructive" size="sm" onClick={onSoftDelete}>Soft-delete</Button>
+          <Button onClick={saveAll} disabled={saving} loading={saving}>Save</Button>
+        </div>
+      )}
+    >
       {toast && (
-        <div className="bg-green-50 border border-green-200 text-green-800 rounded p-3 mb-4">{toast}</div>
+        <Card surface="tinted-success">
+          <CardContent className="p-3 text-sm text-admin-success">{toast}</CardContent>
+        </Card>
       )}
       {error && (
-        <div className="bg-red-50 border border-red-200 text-red-800 rounded p-3 mb-4">{error}</div>
+        <Card surface="tinted-danger">
+          <CardContent className="p-3 text-sm text-admin-danger">{error}</CardContent>
+        </Card>
       )}
 
       {/* Tabs */}
-      <div className="border-b mb-4 flex gap-1">
-        {(['metadata', 'tiers', 'weeks', 'checkpoints', 'validation', 'preview'] as Tab[]).map((t) => (
-          <button
-            key={t}
-            onClick={() => setTab(t)}
-            className={`px-4 py-2 text-sm capitalize border-b-2 ${
-              tab === t ? 'border-blue-600 text-blue-600' : 'border-transparent text-muted-foreground'
-            }`}
-          >
-            {t}
-          </button>
-        ))}
-      </div>
+      <Card>
+        <CardContent className="p-0">
+          <div className="border-b border-admin-border flex gap-1 px-4">
+            {(['metadata', 'tiers', 'weeks', 'checkpoints', 'validation', 'preview'] as Tab[]).map((t) => (
+              <button
+                key={t}
+                onClick={() => setTab(t)}
+                className={`px-4 py-2 text-sm capitalize border-b-2 ${
+                  tab === t ? 'border-[var(--admin-primary)] text-[var(--admin-primary)]' : 'border-transparent text-admin-fg-muted hover:text-admin-fg-strong'
+                }`}
+              >
+                {t}
+              </button>
+            ))}
+          </div>
+          <div className="p-4">
 
       {/* Metadata tab */}
       {tab === 'metadata' && (
@@ -739,6 +740,9 @@ export default function StudyPlanTemplateEditorPage() {
           )}
         </div>
       )}
-    </div>
+          </div>
+        </CardContent>
+      </Card>
+    </AdminSettingsLayout>
   );
 }

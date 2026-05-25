@@ -2,18 +2,15 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Image as ImageIcon, Plus, RotateCcw, Upload as UploadIcon } from 'lucide-react';
-import {
-  AdminRouteHero,
-  AdminRoutePanel,
-  AdminRouteWorkspace,
-} from '@/components/domain/admin-route-surface';
-import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
+import { AdminCatalogLayout } from '@/components/admin/layout/admin-catalog-layout';
+import { Button } from '@/components/admin/ui/button';
+import { Card, CardContent } from '@/components/admin/ui/card';
+import { Badge } from '@/components/admin/ui/badge';
 import { Modal } from '@/components/ui/modal';
 import { Input, Textarea } from '@/components/ui/form-controls';
 import { Toast } from '@/components/ui/alert';
-import { Skeleton } from '@/components/ui/skeleton';
+import { Skeleton } from '@/components/admin/ui/skeleton';
+import { EmptyState } from '@/components/admin/ui/empty-state';
 import {
   adminListResultTemplates,
   adminUploadResultTemplate,
@@ -153,72 +150,77 @@ export default function AdminResultTemplatesPage() {
   }
 
   return (
-    <AdminRouteWorkspace role="main" aria-label="Result-table templates">
-      <AdminRouteHero
-        eyebrow="CMS"
-        icon={ImageIcon}
-        accent="navy"
-        title="Result Templates"
-        description="Manage the score-report visual templates shown on learner mock-result pages. Upload JPG/PNG, activate the ones you want learners to see."
-        aside={(
-          <div className="rounded-2xl border border-border bg-background-light p-4 shadow-sm">
-            <Button onClick={() => setUploadOpen(true)}>
-              <Plus className="h-4 w-4 mr-1" /> Upload image
-            </Button>
+    <AdminCatalogLayout
+      title="Result Templates"
+      description="Manage the score-report visual templates shown on learner mock-result pages. Upload JPG/PNG, activate the ones you want learners to see."
+      eyebrow="CMS"
+      breadcrumbs={[
+        { label: 'Admin', href: '/admin' },
+        { label: 'Content', href: '/admin/content' },
+        { label: 'Result Templates' },
+      ]}
+      actions={
+        <Button onClick={() => setUploadOpen(true)} startIcon={<Plus className="h-4 w-4" />}>
+          Upload image
+        </Button>
+      }
+      filters={
+        <div className="flex items-end gap-3 w-full">
+          <div className="flex-1 max-w-xs">
+            <Input
+              label="Profession filter (optional)"
+              value={filterProfession}
+              onChange={(e) => setFilterProfession(e.target.value)}
+              placeholder="e.g. medicine; blank = all"
+            />
           </div>
-        )}
-      />
-
-      <AdminRoutePanel>
-        <div className="flex items-end gap-3">
-          <Input
-            label="Profession filter (optional)"
-            value={filterProfession}
-            onChange={(e) => setFilterProfession(e.target.value)}
-            placeholder="e.g. medicine; blank = all"
-          />
-          <Button variant="outline" onClick={() => void reload()}>
-            <RotateCcw className="h-4 w-4 mr-1" /> Refresh
+          <Button variant="outline" onClick={() => void reload()} startIcon={<RotateCcw className="h-4 w-4" />}>
+            Refresh
           </Button>
-          <div className="ml-auto text-xs text-admin-text-muted">{items.length} template(s)</div>
+          <div className="ml-auto text-xs text-admin-fg-muted">{items.length} template(s)</div>
         </div>
-      </AdminRoutePanel>
-
+      }
+      hideViewModeToggle
+      itemsClassName="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4"
+    >
       {loading ? (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          {[1, 2, 3, 4, 5, 6].map((i) => <Skeleton key={i} className="h-56" />)}
-        </div>
+        <>{[1, 2, 3, 4, 5, 6].map((i) => <Skeleton key={i} className="h-56 rounded-admin-lg" />)}</>
       ) : items.length === 0 ? (
-        <Card className="p-8 text-center text-muted">
-          No templates yet. Click <strong>Upload image</strong> to add the first one.
-        </Card>
+        <div className="col-span-full">
+          <EmptyState
+            icon={<ImageIcon className="h-10 w-10 text-admin-fg-muted" />}
+            title="No templates yet"
+            description="Click Upload image to add the first one."
+            primaryAction={{ label: 'Upload image', onClick: () => setUploadOpen(true) }}
+          />
+        </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+        <>
           {items.map((row) => {
             return (
               <Card key={row.id} className="overflow-hidden">
-                <div className="aspect-[4/3] bg-surface flex items-center justify-center overflow-hidden">
+                <div className="aspect-[4/3] bg-admin-bg-subtle flex items-center justify-center overflow-hidden">
                   {row.media?.id ? (
                     <AuthorizedTemplateImage mediaId={row.media.id} title={row.title} />
                   ) : (
                     <ImageIcon className="h-10 w-10 opacity-30" />
                   )}
                 </div>
-                <div className="p-3 space-y-2">
+                <CardContent className="space-y-2 pt-3">
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
-                      <h3 className="font-semibold truncate">{row.title}</h3>
-                      <p className="text-xs text-muted truncate">key: <code>{row.templateKey}</code></p>
+                      <h3 className="font-semibold truncate text-admin-fg-strong">{row.title}</h3>
+                      <p className="text-xs text-admin-fg-muted truncate">key: <code>{row.templateKey}</code></p>
                     </div>
-                    <Badge variant={row.isActive ? 'success' : 'outline'}>
+                    <Badge variant={row.isActive ? 'success' : 'default'}>
                       {row.isActive ? 'active' : 'inactive'}
                     </Badge>
                   </div>
                   {row.description ? (
-                    <p className="text-xs text-muted line-clamp-2">{row.description}</p>
+                    <p className="text-xs text-admin-fg-muted line-clamp-2">{row.description}</p>
                   ) : null}
                   <div className="flex items-center justify-between flex-wrap gap-2 pt-1">
-                    <span className="text-xs text-muted">
+                    <span className="text-xs text-admin-fg-muted">
                       {row.professionId ?? 'all'} · order {row.sortOrder}
                     </span>
                     <div className="flex gap-1">
@@ -228,11 +230,11 @@ export default function AdminResultTemplatesPage() {
                       <Button size="sm" variant="ghost" disabled={busyId === row.id} onClick={() => void handleDelete(row)}>Delete</Button>
                     </div>
                   </div>
-                </div>
+                </CardContent>
               </Card>
             );
           })}
-        </div>
+        </>
       )}
 
       {uploadOpen ? (
@@ -296,6 +298,6 @@ export default function AdminResultTemplatesPage() {
       ) : null}
 
       {toast ? <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} /> : null}
-    </AdminRouteWorkspace>
+    </AdminCatalogLayout>
   );
 }

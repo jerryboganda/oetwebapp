@@ -1,18 +1,23 @@
-'use client';
+﻿'use client';
 
 import { Sliders } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import {
-  AdminRouteHero,
-  AdminRoutePanel,
-  AdminRouteWorkspace,
-} from '@/components/domain/admin-route-surface';
+  AdminSettingsLayout,
+  SettingsSection,
+} from '@/components/admin/layout/admin-settings-layout';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
-import { Button } from '@/components/ui/button';
+import { Button } from '@/components/admin/ui/button';
 import { Input } from '@/components/ui/form-controls';
 import { Toast } from '@/components/ui/alert';
 import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
 import { getReadingPolicy, updateReadingPolicy, type ReadingPolicyDto } from '@/lib/reading-authoring-api';
+
+const BREADCRUMBS = [
+  { label: 'Admin', href: '/admin' },
+  { label: 'Policies', href: '/admin/policies' },
+  { label: 'Reading' },
+];
 
 type PageStatus = 'loading' | 'success' | 'error';
 type ToastState = { variant: 'success' | 'error'; message: string } | null;
@@ -64,20 +69,18 @@ export default function AdminReadingGlobalPolicyPage() {
   if (!isAuthenticated || role !== 'admin') return null;
 
   return (
-    <AdminRouteWorkspace role="main" aria-label="Reading global policy">
-      <AdminRouteHero
-        eyebrow="Policies"
-        icon={Sliders}
-        accent="amber"
-        title="Reading — global policy"
-        description="These settings apply to all learners unless overridden per-user. Changes take effect immediately."
-      />
-
+    <AdminSettingsLayout
+      title="Reading — global policy"
+      description="These settings apply to all learners unless overridden per-user. Changes take effect immediately."
+      breadcrumbs={BREADCRUMBS}
+      eyebrow="Policies"
+      icon={<Sliders className="h-5 w-5" />}
+    >
       <AsyncStateWrapper status={status} onRetry={load}>
         {formData && (
           <div className="space-y-6">
             {/* Attempt Limits */}
-            <AdminRoutePanel title="Attempt Limits" description="Control how many times learners can attempt each paper.">
+            <SettingsSection title="Attempt Limits" description="Control how many times learners can attempt each paper.">
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <Input
                   type="number"
@@ -119,10 +122,10 @@ export default function AdminReadingGlobalPolicyPage() {
                   Allow resume after expiry
                 </label>
               </div>
-            </AdminRoutePanel>
+            </SettingsSection>
 
             {/* Timer Settings */}
-            <AdminRoutePanel title="Timer Settings" description="Part A and B/C timer durations and expiry behaviour.">
+            <SettingsSection title="Timer Settings" description="Part A and B/C timer durations and expiry behaviour.">
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <Input
                   type="number"
@@ -158,10 +161,10 @@ export default function AdminReadingGlobalPolicyPage() {
                   Auto-expire worker enabled
                 </label>
               </div>
-            </AdminRoutePanel>
+            </SettingsSection>
 
             {/* Grading */}
-            <AdminRoutePanel title="Grading" description="Answer matching and scoring rules.">
+            <SettingsSection title="Grading" description="Answer matching and scoring rules.">
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <Input
                   label="Short answer normalisation"
@@ -192,10 +195,10 @@ export default function AdminReadingGlobalPolicyPage() {
                   Allow partial credit for matching questions
                 </label>
               </div>
-            </AdminRoutePanel>
+            </SettingsSection>
 
             {/* Review & Explanations */}
-            <AdminRoutePanel title="Review & Explanations" description="What learners see after submitting.">
+            <SettingsSection title="Review & Explanations" description="What learners see after submitting.">
               <div className="grid grid-cols-1 gap-4">
                 <label className="flex items-center gap-2 text-sm">
                   <input
@@ -243,10 +246,10 @@ export default function AdminReadingGlobalPolicyPage() {
                   Show past attempts to learner
                 </label>
               </div>
-            </AdminRoutePanel>
+            </SettingsSection>
 
             {/* Accessibility */}
-            <AdminRoutePanel title="Accessibility & Display" description="Learner-facing accessibility controls.">
+            <SettingsSection title="Accessibility & Display" description="Learner-facing accessibility controls.">
               <div className="grid grid-cols-1 gap-4">
                 <label className="flex items-center gap-2 text-sm">
                   <input
@@ -294,10 +297,10 @@ export default function AdminReadingGlobalPolicyPage() {
                   Extra time approval workflow enabled
                 </label>
               </div>
-            </AdminRoutePanel>
+            </SettingsSection>
 
             {/* Practice & Learning */}
-            <AdminRoutePanel title="Practice & Learning Mode" description="Enable or disable practice features.">
+            <SettingsSection title="Practice & Learning Mode" description="Enable or disable practice features.">
               <div className="grid grid-cols-1 gap-4">
                 <label className="flex items-center gap-2 text-sm">
                   <input
@@ -318,10 +321,10 @@ export default function AdminReadingGlobalPolicyPage() {
                   Allow learner to randomise question order
                 </label>
               </div>
-            </AdminRoutePanel>
+            </SettingsSection>
 
             {/* Security */}
-            <AdminRoutePanel title="Security & Rate Limits" description="Submission and session security controls.">
+            <SettingsSection title="Security & Rate Limits" description="Submission and session security controls.">
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <Input
                   type="number"
@@ -363,7 +366,7 @@ export default function AdminReadingGlobalPolicyPage() {
                   Prevent multiple tabs
                 </label>
               </div>
-            </AdminRoutePanel>
+            </SettingsSection>
 
             {/* Save footer */}
             <div className="flex items-center justify-between rounded-xl border border-border bg-surface p-4">
@@ -379,6 +382,7 @@ export default function AdminReadingGlobalPolicyPage() {
       {toast && (
         <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} />
       )}
-    </AdminRouteWorkspace>
+    </AdminSettingsLayout>
   );
 }
+

@@ -3,13 +3,20 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Activity, RefreshCw } from 'lucide-react';
 
-import { AdminRouteHero, AdminRoutePanel, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
+import { AdminOperationsLayout } from '@/components/admin/layout/admin-operations-layout';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/admin/ui/card';
+import { Badge } from '@/components/admin/ui/badge';
+import { Button } from '@/components/admin/ui/button';
 import { DataTable, type Column } from '@/components/ui/data-table';
 import { Input } from '@/components/ui/form-controls';
-import { Skeleton } from '@/components/ui/skeleton';
+import { Skeleton } from '@/components/admin/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
+
+const BREADCRUMBS = [
+  { label: 'Admin', href: '/admin' },
+  { label: 'Private Speaking', href: '/admin/private-speaking' },
+  { label: 'Calibration' },
+];
 import {
   fetchAdminSpeakingCalibrationDrift,
   fetchAdminSpeakingCalibrationSamples,
@@ -92,87 +99,99 @@ export default function AdminSpeakingCalibrationPage() {
   ], []);
 
   return (
-    <AdminRouteWorkspace>
-      <AdminRouteHero
-        eyebrow="Quality control"
-        title="Speaking calibration drift"
-        description="Per-tutor mean absolute error against the gold rubric for every published calibration sample."
-        icon={Activity}
-      />
-
-      <AdminRoutePanel
-        title="Filters"
-        description="Hide tutors with too few submissions to compute a stable MAE."
-      >
-        <div className="flex flex-wrap items-end gap-3">
-          <div className="flex flex-col gap-1">
-            <label className="text-xs uppercase tracking-widest text-admin-text-muted" htmlFor="minSubmissions">
-              Min submissions
-            </label>
-            <Input
-              id="minSubmissions"
-              type="number"
-              min={1}
-              max={50}
-              value={minSubmissions}
-              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setMinSubmissions(Math.max(1, Number(e.target.value) || 1))}
-              className="w-32"
-            />
-          </div>
-          <Button variant="outline" onClick={() => void load()}>
-            <RefreshCw className="h-3.5 w-3.5" /> Refresh
-          </Button>
-          {report && (
-            <span className="text-xs text-admin-text-muted">
-              {report.tutors.length} tutors · {report.sampleSize} score rows · {report.samplesPublished} published samples
-            </span>
-          )}
-        </div>
-      </AdminRoutePanel>
-
-      {error && <InlineAlert variant="error">{error}</InlineAlert>}
-
-      <AdminRoutePanel title="Tutor drift table">
-        {loading ? (
-          <Skeleton className="h-48 w-full" />
-        ) : report && report.tutors.length > 0 ? (
-          <DataTable<AdminSpeakingCalibrationDriftRow>
-            columns={driftColumns}
-            data={report.tutors}
-            keyExtractor={(row) => row.tutorId}
-          />
-        ) : (
-          <p className="text-sm text-admin-text-muted">No tutors meet the minimum submission threshold.</p>
-        )}
-      </AdminRoutePanel>
-
-      <AdminRoutePanel
-        title="Calibration samples"
-        description="Gold-marked recordings tutors calibrate against."
-      >
-        {samples.length === 0 ? (
-          <p className="text-sm text-admin-text-muted">No samples yet — create one in the speaking content workspace.</p>
-        ) : (
-          <ul className="flex flex-col gap-2">
-            {samples.map((s) => (
-              <li
-                key={s.sampleId}
-                className="flex items-center justify-between rounded border border-border bg-surface px-3 py-2"
-              >
-                <div className="flex flex-col">
-                  <span className="font-bold">{s.title}</span>
-                  <span className="text-xs text-muted">
-                    source attempt {s.sourceAttemptId} · {s.tutorSubmissionCount} tutor submissions
-                  </span>
+    <AdminOperationsLayout
+      title="Speaking calibration drift"
+      description="Per-tutor mean absolute error against the gold rubric for every published calibration sample."
+      breadcrumbs={BREADCRUMBS}
+      eyebrow="Quality control"
+      icon={<Activity className="h-5 w-5" />}
+      primaryGrid={(
+        <div className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-sm">Filters</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex flex-wrap items-end gap-3">
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs uppercase tracking-widest text-admin-fg-muted" htmlFor="minSubmissions">
+                    Min submissions
+                  </label>
+                  <Input
+                    id="minSubmissions"
+                    type="number"
+                    min={1}
+                    max={50}
+                    value={minSubmissions}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setMinSubmissions(Math.max(1, Number(e.target.value) || 1))}
+                    className="w-32"
+                  />
                 </div>
-                <Badge variant={s.status === 'published' ? 'success' : s.status === 'archived' ? 'muted' : 'info'}>
-                  {s.status}
-                </Badge>
-              </li>
-            ))}
-          </ul>
-        )}
-      </AdminRoutePanel>
-    </AdminRouteWorkspace>
+                <Button variant="outline" onClick={() => void load()}>
+                  <RefreshCw className="h-3.5 w-3.5" /> Refresh
+                </Button>
+                {report && (
+                  <span className="text-xs text-admin-fg-muted">
+                    {report.tutors.length} tutors · {report.sampleSize} score rows · {report.samplesPublished} published samples
+                  </span>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+
+          {error && <InlineAlert variant="error">{error}</InlineAlert>}
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-sm">Tutor drift table</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {loading ? (
+                <Skeleton className="h-48 w-full" />
+              ) : report && report.tutors.length > 0 ? (
+                <DataTable<AdminSpeakingCalibrationDriftRow>
+                  columns={driftColumns}
+                  data={report.tutors}
+                  keyExtractor={(row) => row.tutorId}
+                />
+              ) : (
+                <p className="text-sm text-admin-fg-muted">No tutors meet the minimum submission threshold.</p>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      )}
+      secondaryGrid={(
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm">Calibration samples</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {samples.length === 0 ? (
+              <p className="text-sm text-admin-fg-muted">No samples yet — create one in the speaking content workspace.</p>
+            ) : (
+              <ul className="flex flex-col gap-2">
+                {samples.map((s) => (
+                  <li
+                    key={s.sampleId}
+                    className="flex items-center justify-between rounded-admin border border-admin-border bg-admin-bg-surface px-3 py-2"
+                  >
+                    <div className="flex flex-col">
+                      <span className="font-bold text-admin-fg-strong">{s.title}</span>
+                      <span className="text-xs text-admin-fg-muted">
+                        source attempt {s.sourceAttemptId} · {s.tutorSubmissionCount} tutor submissions
+                      </span>
+                    </div>
+                    <Badge variant={(s.status === 'published' ? 'success' : s.status === 'archived' ? 'default' : 'info') as any}>
+                      {s.status}
+                    </Badge>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </CardContent>
+        </Card>
+      )}
+    />
   );
 }

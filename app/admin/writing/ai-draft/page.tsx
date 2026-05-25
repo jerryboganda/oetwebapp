@@ -4,12 +4,19 @@ import { useState, type FormEvent } from 'react';
 import Link from 'next/link';
 import { Wand2, AlertTriangle, CheckCircle2, ExternalLink } from 'lucide-react';
 import { adminGenerateWritingAiDraft, isApiError } from '@/lib/api';
-import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
+import { AdminSettingsLayout, SettingsSection } from '@/components/admin/layout/admin-settings-layout';
+import { Button } from '@/components/admin/ui/button';
+import { Card, CardContent } from '@/components/admin/ui/card';
+import { Badge } from '@/components/admin/ui/badge';
 import { Input, Select, Textarea } from '@/components/ui/form-controls';
 import { InlineAlert } from '@/components/ui/alert';
-import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
+import { MotionItem } from '@/components/ui/motion-primitives';
+
+const BREADCRUMBS = [
+  { label: 'Admin', href: '/admin' },
+  { label: 'Writing', href: '/admin/writing' },
+  { label: 'AI Draft' },
+];
 
 const PROFESSIONS: { value: string; label: string }[] = [
   { value: 'medicine', label: 'Medicine' },
@@ -122,23 +129,14 @@ export default function AdminWritingAiDraftPage() {
   };
 
   return (
-    <main className="mx-auto max-w-4xl px-6 py-10">
-      <MotionSection className="mb-8">
-        <div className="flex items-start gap-4">
-          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-            <Wand2 className="h-6 w-6" aria-hidden="true" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight text-navy">Writing AI Draft</h1>
-            <p className="mt-1 text-sm text-muted">
-              Generate a grounded Writing case-note paper through the AI gateway. The backend embeds the
-              Writing rulebook and refuses ungrounded prompts.
-            </p>
-          </div>
-        </div>
-      </MotionSection>
-
-      <Card className="p-6">
+    <AdminSettingsLayout
+      title="Writing AI Draft"
+      description="Generate a grounded Writing case-note paper through the AI gateway. The backend embeds the Writing rulebook and refuses ungrounded prompts."
+      breadcrumbs={BREADCRUMBS}
+      eyebrow="Writing"
+      icon={<Wand2 className="h-5 w-5" />}
+    >
+      <SettingsSection title="Draft parameters">
         <form onSubmit={handleSubmit} className="flex flex-col gap-5">
           <div className="grid gap-5 md:grid-cols-2">
             <Select
@@ -229,93 +227,90 @@ export default function AdminWritingAiDraftPage() {
             </Button>
           </div>
         </form>
-      </Card>
+      </SettingsSection>
 
       {quotaExceeded && (
-        <div className="mt-6">
-          <InlineAlert variant="error" title="AI quota exceeded">
-            AI quota exceeded — try again later.
-          </InlineAlert>
-        </div>
+        <InlineAlert variant="error" title="AI quota exceeded">
+          AI quota exceeded — try again later.
+        </InlineAlert>
       )}
 
       {error && !quotaExceeded && (
-        <div className="mt-6">
-          <InlineAlert variant="error" title="Draft generation failed">
-            {error}
-          </InlineAlert>
-        </div>
+        <InlineAlert variant="error" title="Draft generation failed">
+          {error}
+        </InlineAlert>
       )}
 
       {result && (
-        <MotionSection className="mt-8">
-          <Card className="p-6">
+        <SettingsSection title={result.title} description={`Generated draft — contentId ${result.contentId}`}>
+          <MotionItem>
+            <div className="mb-4 flex items-start gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-admin-lg bg-admin-success-tint text-admin-success">
+                <CheckCircle2 className="h-5 w-5" aria-hidden="true" />
+              </div>
+              <div className="flex-1">
+                <p className="text-xs text-admin-fg-muted">
+                  Content ID:{' '}
+                  <Link
+                    href={`/admin/content/writing/${result.contentId}`}
+                    className="inline-flex items-center gap-1 font-mono text-[var(--admin-primary)] hover:underline"
+                  >
+                    {result.contentId}
+                    <ExternalLink className="h-3 w-3" aria-hidden="true" />
+                  </Link>
+                </p>
+              </div>
+            </div>
+          </MotionItem>
+
+          <MotionItem>
+            <dl className="grid gap-4 border-t border-admin-border pt-4 sm:grid-cols-3">
+              <div>
+                <dt className="text-xs uppercase tracking-wide text-admin-fg-muted">Case notes</dt>
+                <dd className="mt-1 text-xl font-bold text-admin-fg-strong">{result.caseNoteCount}</dd>
+              </div>
+              <div>
+                <dt className="text-xs uppercase tracking-wide text-admin-fg-muted">Model letter words</dt>
+                <dd className="mt-1 text-xl font-bold text-admin-fg-strong">{result.modelLetterWordCount}</dd>
+              </div>
+              <div>
+                <dt className="text-xs uppercase tracking-wide text-admin-fg-muted">Rulebook version</dt>
+                <dd className="mt-1 text-xl font-bold text-admin-fg-strong">{result.rulebookVersion}</dd>
+              </div>
+            </dl>
+          </MotionItem>
+
+          {result.appliedRuleIds.length > 0 && (
             <MotionItem>
-              <div className="mb-4 flex items-start gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600">
-                  <CheckCircle2 className="h-5 w-5" aria-hidden="true" />
-                </div>
-                <div className="flex-1">
-                  <h2 className="text-lg font-bold tracking-tight text-navy">{result.title}</h2>
-                  <p className="mt-0.5 text-xs text-muted">
-                    Content ID:{' '}
-                    <Link
-                      href={`/admin/content/writing/${result.contentId}`}
-                      className="inline-flex items-center gap-1 font-mono text-primary hover:underline"
-                    >
-                      {result.contentId}
-                      <ExternalLink className="h-3 w-3" aria-hidden="true" />
-                    </Link>
-                  </p>
+              <div className="mt-5 border-t border-admin-border pt-4">
+                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-admin-fg-muted">
+                  Applied rules
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {result.appliedRuleIds.map((id) => (
+                    <Badge key={id} variant="info">
+                      {id}
+                    </Badge>
+                  ))}
                 </div>
               </div>
             </MotionItem>
+          )}
 
+          {result.warning && (
             <MotionItem>
-              <dl className="grid gap-4 border-t border-border pt-4 sm:grid-cols-3">
-                <div>
-                  <dt className="text-xs uppercase tracking-wide text-muted">Case notes</dt>
-                  <dd className="mt-1 text-xl font-bold text-navy">{result.caseNoteCount}</dd>
-                </div>
-                <div>
-                  <dt className="text-xs uppercase tracking-wide text-muted">Model letter words</dt>
-                  <dd className="mt-1 text-xl font-bold text-navy">{result.modelLetterWordCount}</dd>
-                </div>
-                <div>
-                  <dt className="text-xs uppercase tracking-wide text-muted">Rulebook version</dt>
-                  <dd className="mt-1 text-xl font-bold text-navy">{result.rulebookVersion}</dd>
-                </div>
-              </dl>
-            </MotionItem>
-
-            {result.appliedRuleIds.length > 0 && (
-              <MotionItem>
-                <div className="mt-5 border-t border-border pt-4">
-                  <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">
-                    Applied rules
-                  </p>
-                  <div className="flex flex-wrap gap-2">
-                    {result.appliedRuleIds.map((id) => (
-                      <Badge key={id} variant="info">
-                        {id}
-                      </Badge>
-                    ))}
+              <Card surface="tinted-warning" className="mt-5">
+                <CardContent className="p-4">
+                  <div className="flex items-start gap-3">
+                    <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-admin-warning" aria-hidden="true" />
+                    <p className="text-sm leading-6 text-admin-fg-strong">{result.warning}</p>
                   </div>
-                </div>
-              </MotionItem>
-            )}
-
-            {result.warning && (
-              <MotionItem>
-                <div className="mt-5 flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4">
-                  <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" aria-hidden="true" />
-                  <p className="text-sm leading-6 text-amber-800">{result.warning}</p>
-                </div>
-              </MotionItem>
-            )}
-          </Card>
-        </MotionSection>
+                </CardContent>
+              </Card>
+            </MotionItem>
+          )}
+        </SettingsSection>
       )}
-    </main>
+    </AdminSettingsLayout>
   );
 }

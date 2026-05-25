@@ -3,15 +3,13 @@
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
-import { ArrowLeft, Save, Archive, Rocket, Undo2, Mic } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
+import { Save, Archive, Rocket, Undo2 } from 'lucide-react';
+import { Button } from '@/components/admin/ui/button';
+import { Badge, statusToTone } from '@/components/admin/ui/badge';
 import { Toast } from '@/components/ui/alert';
-import { Skeleton } from '@/components/ui/skeleton';
-import {
-  AdminRouteHero,
-  AdminRouteWorkspace,
-} from '@/components/domain/admin-route-surface';
+import { Skeleton } from '@/components/admin/ui/skeleton';
+import { Card, CardContent } from '@/components/admin/ui/card';
+import { AdminSettingsLayout } from '@/components/admin/layout/admin-settings-layout';
 import {
   fetchAdminPronunciationDrill,
   updateAdminPronunciationDrill,
@@ -37,6 +35,12 @@ type FullDrill = {
   difficulty: string;
   status: string;
 };
+
+const BASE_BREADCRUMBS = [
+  { label: 'Admin', href: '/admin' },
+  { label: 'Content', href: '/admin/content' },
+  { label: 'Pronunciation', href: '/admin/content/pronunciation' },
+];
 
 export default function EditPronunciationDrillPage() {
   const params = useParams<{ drillId: string }>();
@@ -118,72 +122,84 @@ export default function EditPronunciationDrillPage() {
 
   if (loading) {
     return (
-      <AdminRouteWorkspace role="main" aria-label="Edit pronunciation drill">
-        <Skeleton className="h-8 w-64" />
-        <Skeleton className="h-96 rounded-2xl" />
-      </AdminRouteWorkspace>
+      <AdminSettingsLayout
+        title="Loading drill…"
+        eyebrow="CMS"
+        breadcrumbs={[...BASE_BREADCRUMBS, { label: 'Edit drill' }]}
+      >
+        <Skeleton className="h-8 w-64 rounded-admin" />
+        <Skeleton className="h-96 rounded-admin" />
+      </AdminSettingsLayout>
     );
   }
 
   if (!drill) {
     return (
-      <AdminRouteWorkspace role="main" aria-label="Edit pronunciation drill">
-        <Link href="/admin/content/pronunciation" className="text-sm text-primary hover:underline">← Back</Link>
-        <p className="text-muted">Drill not found.</p>
-      </AdminRouteWorkspace>
+      <AdminSettingsLayout
+        title="Drill not found"
+        eyebrow="CMS"
+        breadcrumbs={[...BASE_BREADCRUMBS, { label: 'Edit drill' }]}
+        actions={
+          <Button variant="outline" size="sm" asChild>
+            <Link href="/admin/content/pronunciation">Back to drills</Link>
+          </Button>
+        }
+      >
+        <Card>
+          <CardContent className="py-8 text-sm text-admin-fg-muted">
+            This drill could not be loaded. It may have been removed.
+          </CardContent>
+        </Card>
+      </AdminSettingsLayout>
     );
   }
 
   return (
-    <AdminRouteWorkspace role="main" aria-label="Edit pronunciation drill">
-      <Link href="/admin/content/pronunciation" className="inline-flex items-center gap-1 text-sm text-muted hover:text-navy" aria-label="Back to pronunciation drills">
-        <ArrowLeft className="h-4 w-4" /> Back to pronunciation drills
-      </Link>
-
-      <AdminRouteHero
-        eyebrow="CMS"
-        icon={Mic}
-        accent="navy"
+    <>
+      <AdminSettingsLayout
         title={drill.label}
         description={`Phoneme /${drill.targetPhoneme}/${drill.primaryRuleId ? ` • Rule ${drill.primaryRuleId}` : ''} • Status ${drill.status}`}
-        aside={(
-          <div className="rounded-2xl border border-border bg-background-light p-4 shadow-sm">
-            <div className="flex flex-wrap items-center gap-2">
-              <Badge variant={drill.status === 'active' ? 'success' : drill.status === 'archived' ? 'muted' : 'warning'}>
-                {drill.status}
-              </Badge>
-              <Button
-                variant="secondary"
-                onClick={() => doSave()}
-                loading={saving}
-                className="gap-2"
-              >
-                <Save className="h-4 w-4" /> Save
+        eyebrow="CMS"
+        breadcrumbs={[...BASE_BREADCRUMBS, { label: drill.label }]}
+        actions={
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge variant={statusToTone(drill.status)}>
+              {drill.status}
+            </Badge>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => doSave()}
+              disabled={saving}
+            >
+              <Save className="mr-2 h-4 w-4" /> Save
+            </Button>
+            {drill.status === 'active' ? (
+              <Button variant="secondary" size="sm" onClick={() => doSave('draft')} disabled={saving}>
+                <Undo2 className="mr-2 h-4 w-4" /> Unpublish
               </Button>
-              {drill.status === 'active' ? (
-                <Button variant="secondary" onClick={() => doSave('draft')} loading={saving} className="gap-2">
-                  <Undo2 className="h-4 w-4" /> Unpublish
-                </Button>
-              ) : drill.status !== 'archived' ? (
-                <Button variant="primary" onClick={() => doSave('active')} loading={saving} className="gap-2">
-                  <Rocket className="h-4 w-4" /> Publish
-                </Button>
-              ) : null}
-              {drill.status !== 'archived' && (
-                <Button variant="destructive" onClick={doArchive} className="gap-2">
-                  <Archive className="h-4 w-4" /> Archive
-                </Button>
-              )}
-            </div>
+            ) : drill.status !== 'archived' ? (
+              <Button size="sm" onClick={() => doSave('active')} disabled={saving}>
+                <Rocket className="mr-2 h-4 w-4" /> Publish
+              </Button>
+            ) : null}
+            {drill.status !== 'archived' && (
+              <Button variant="destructive" size="sm" onClick={doArchive}>
+                <Archive className="mr-2 h-4 w-4" /> Archive
+              </Button>
+            )}
+            <Button variant="outline" size="sm" asChild>
+              <Link href="/admin/content/pronunciation">Back</Link>
+            </Button>
           </div>
-        )}
-      />
-
-      <PronunciationDrillForm form={form} onChange={setForm} />
+        }
+      >
+        <PronunciationDrillForm form={form} onChange={setForm} />
+      </AdminSettingsLayout>
 
       {toast && (
         <Toast variant={toast.variant === 'error' ? 'error' : 'success'} message={toast.message} onClose={() => setToast(null)} />
       )}
-    </AdminRouteWorkspace>
+    </>
   );
 }

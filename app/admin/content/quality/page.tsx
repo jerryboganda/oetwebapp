@@ -2,12 +2,15 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { FileSearch, RefreshCw } from 'lucide-react';
-import { AdminRoutePanel, AdminRouteSectionHeader, AdminRouteSummaryCard, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
+import { AdminTableLayout } from '@/components/admin/layout/admin-table-layout';
+import { KpiStrip } from '@/components/admin/layout/admin-operations-layout';
+import { KpiTile } from '@/components/admin/ui/kpi-tile';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
 import { DataTable, type Column } from '@/components/ui/data-table';
 import { Toast } from '@/components/ui/alert';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/admin/ui/badge';
+import { Button } from '@/components/admin/ui/button';
+import { Card, CardContent } from '@/components/admin/ui/card';
 import { AdminPermission, hasPermission } from '@/lib/admin-permissions';
 import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
 import { useCurrentUser } from '@/lib/hooks/use-current-user';
@@ -33,9 +36,9 @@ interface ContentQualityItem {
   updatedAt: string;
 }
 
-const QA_BADGE: Record<string, { label: string; variant: 'default' | 'success' | 'danger' | 'outline' }> = {
+const QA_BADGE: Record<string, { label: string; variant: 'default' | 'success' | 'danger' | 'warning' }> = {
   approved: { label: 'Approved', variant: 'success' },
-  needs_review: { label: 'Needs Review', variant: 'default' },
+  needs_review: { label: 'Needs Review', variant: 'warning' },
   rejected: { label: 'Rejected', variant: 'danger' },
 };
 
@@ -92,20 +95,20 @@ export default function ContentQualityPage() {
   }
 
   const columns: Column<ContentQualityItem>[] = [
-    { key: 'title', header: 'Title', render: (r) => <span className="font-medium text-sm">{r.title}</span> },
+    { key: 'title', header: 'Title', render: (r) => <span className="font-medium text-sm text-admin-fg-strong">{r.title}</span> },
     { key: 'subtestCode', header: 'Subtest', render: (r) => <span className="capitalize">{r.subtestCode}</span> },
-    { key: 'qaStatus', header: 'QA Status', render: (r) => { const b = QA_BADGE[r.qaStatus] ?? { label: r.qaStatus, variant: 'outline' as const }; return <Badge variant={b.variant}>{b.label}</Badge>; } },
+    { key: 'qaStatus', header: 'QA Status', render: (r) => { const b = QA_BADGE[r.qaStatus] ?? { label: r.qaStatus, variant: 'default' as const }; return <Badge variant={b.variant}>{b.label}</Badge>; } },
     { key: 'sourceType', header: 'Source', render: (r) => <span className="capitalize text-sm">{r.sourceType}</span> },
     {
       key: 'score',
       header: 'Quality Score',
       render: (r) => {
-        if (!r.performanceMetrics) return <span className="text-muted">—</span>;
+        if (!r.performanceMetrics) return <span className="text-admin-fg-muted">—</span>;
         try {
           const pm = JSON.parse(r.performanceMetrics);
           return <span className="font-mono text-sm">{pm.qualityScore}/100</span>;
         } catch {
-          return <span className="text-muted">—</span>;
+          return <span className="text-admin-fg-muted">—</span>;
         }
       },
     },
@@ -113,11 +116,10 @@ export default function ContentQualityPage() {
       key: 'actions',
       header: '',
       render: (r) => canScoreQuality ? (
-        <Button size="sm" variant="outline" onClick={() => handleScore(r.id)} disabled={scoring === r.id}>
-          <RefreshCw className={`w-3.5 h-3.5 mr-1 ${scoring === r.id ? 'animate-spin' : ''}`} />
+        <Button size="sm" variant="outline" onClick={() => handleScore(r.id)} disabled={scoring === r.id} loading={scoring === r.id} startIcon={scoring !== r.id ? <RefreshCw className="w-3.5 h-3.5" /> : undefined}>
           Score
         </Button>
-      ) : <span className="text-xs text-muted">Read only</span>,
+      ) : <span className="text-xs text-admin-fg-muted">Read only</span>,
     },
   ];
 
@@ -128,42 +130,50 @@ export default function ContentQualityPage() {
 
   if (!isAuthenticated || role !== 'admin') return null;
 
+  const breadcrumbs = [
+    { label: 'Admin', href: '/admin' },
+    { label: 'Content', href: '/admin/content' },
+    { label: 'Quality' },
+  ];
+
   if (!canViewQuality) {
     return (
-      <AdminRouteWorkspace>
-        <p className="text-sm text-muted">Content read permission is required.</p>
-      </AdminRouteWorkspace>
+      <AdminTableLayout title="Content quality scoring" breadcrumbs={breadcrumbs}>
+        <Card><CardContent className="pt-6"><p className="text-sm text-admin-fg-muted">Content read permission is required.</p></CardContent></Card>
+      </AdminTableLayout>
     );
   }
 
   return (
-    <AdminRouteWorkspace>
+    <>
       {toast && <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} />}
 
-      <AdminRouteSectionHeader
+      <AdminTableLayout
         title="Content quality scoring"
         description="Run automated QA scoring across recent content and surface items that still need review."
-        icon={FileSearch}
-      />
-
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <AdminRouteSummaryCard label="Total content" value={total} hint="All items in QA pipeline" />
-        <AdminRouteSummaryCard label="Approved" value={approvedCount} hint="Passed automated QA" tone="success" />
-        <AdminRouteSummaryCard label="Needs review" value={needsReviewCount} hint="Awaiting human reviewer" tone={needsReviewCount > 0 ? 'warning' : 'default'} />
-      </div>
-
-      <AsyncStateWrapper status={status} errorMessage="Failed to load content quality data." onRetry={loadData}>
-        <AdminRoutePanel>
-          <DataTable columns={columns} data={items} keyExtractor={(row) => row.id} selectable selectedKeys={selectedKeys} onSelectionChange={setSelectedKeys} />
-          <BulkActionBar
-            selectedCount={selectedKeys.size}
-            onClearSelection={() => setSelectedKeys(new Set())}
-            actions={[
-              { key: 'delete', label: 'Delete selected', variant: 'danger', onClick: () => {} },
-            ]}
-          />
-        </AdminRoutePanel>
-      </AsyncStateWrapper>
-    </AdminRouteWorkspace>
+        breadcrumbs={breadcrumbs}
+        icon={<FileSearch className="h-5 w-5" />}
+        banner={
+          <KpiStrip>
+            <KpiTile label="Total content" value={total} />
+            <KpiTile label="Approved" value={approvedCount} tone="success" />
+            <KpiTile label="Needs review" value={needsReviewCount} tone={needsReviewCount > 0 ? 'warning' : 'default'} />
+          </KpiStrip>
+        }
+      >
+        <div className="p-4 sm:p-5">
+          <AsyncStateWrapper status={status} errorMessage="Failed to load content quality data." onRetry={loadData}>
+            <DataTable columns={columns} data={items} keyExtractor={(row) => row.id} selectable selectedKeys={selectedKeys} onSelectionChange={setSelectedKeys} />
+            <BulkActionBar
+              selectedCount={selectedKeys.size}
+              onClearSelection={() => setSelectedKeys(new Set())}
+              actions={[
+                { key: 'delete', label: 'Delete selected', variant: 'danger', onClick: () => { } },
+              ]}
+            />
+          </AsyncStateWrapper>
+        </div>
+      </AdminTableLayout>
+    </>
   );
 }

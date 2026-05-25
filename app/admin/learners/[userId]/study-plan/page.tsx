@@ -1,11 +1,16 @@
 'use client';
 
 import { useEffect, useState, type ReactNode } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, RefreshCw, CheckCircle2, Clock, AlertTriangle, Calendar } from 'lucide-react';
+import { RefreshCw, CheckCircle2, Clock, AlertTriangle, Calendar } from 'lucide-react';
 import { apiClient } from '@/lib/api';
 import { forceRegenerateLearnerStudyPlan } from '@/lib/study-plan-admin-api';
+import { AdminOperationsLayout, KpiStrip } from '@/components/admin/layout/admin-operations-layout';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/admin/ui/card';
+import { Button } from '@/components/admin/ui/button';
+import { Badge } from '@/components/admin/ui/badge';
+import { KpiTile } from '@/components/admin/ui/kpi-tile';
 
 interface AdminStudyPlanItem {
   id: string;
@@ -69,7 +74,6 @@ export default function AdminLearnerStudyPlanPage() {
       : Array.isArray(params?.userId)
       ? params.userId[0]
       : '';
-  const router = useRouter();
 
   const [plan, setPlan] = useState<AdminStudyPlan | null>(null);
   const [loading, setLoading] = useState(true);
@@ -134,101 +138,87 @@ export default function AdminLearnerStudyPlanPage() {
       }
     : null;
 
-  return (
-    <div className="max-w-6xl mx-auto p-6 space-y-6">
-      {/* Header */}
-      <div className="flex items-start justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => router.back()}
-            className="p-2 rounded-lg hover:bg-muted transition-colors"
-          >
-            <ArrowLeft className="w-5 h-5" />
-          </button>
-          <div>
-            <h1 className="text-2xl font-bold">Learner Study Plan</h1>
-            <p className="text-sm text-muted-foreground font-mono">{userId}</p>
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={load}
-            disabled={loading}
-            className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border text-sm hover:bg-muted transition-colors disabled:opacity-50"
-          >
-            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-            Refresh
-          </button>
-          <button
-            onClick={handleForceRegen}
-            disabled={regenLoading || loading}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-50 transition-colors"
-          >
-            <RefreshCw className={`w-4 h-4 ${regenLoading ? 'animate-spin' : ''}`} />
-            {regenLoading ? 'Queuing…' : 'Force Regenerate'}
-          </button>
-        </div>
-      </div>
+  const breadcrumbs = [
+    { label: 'Admin', href: '/admin' },
+    { label: 'Learners', href: '/admin/users' },
+    { label: userId },
+    { label: 'Study plan' },
+  ];
 
+  return (
+    <AdminOperationsLayout
+      title="Learner Study Plan"
+      description={userId}
+      breadcrumbs={breadcrumbs}
+      eyebrow="Learners"
+      icon={<Calendar className="h-5 w-5" />}
+      actions={(
+        <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={load} disabled={loading}>
+            <RefreshCw className={`w-4 h-4 mr-1 ${loading ? 'animate-spin' : ''}`} />
+            Refresh
+          </Button>
+          <Button onClick={handleForceRegen} disabled={regenLoading || loading} loading={regenLoading}>
+            <RefreshCw className="w-4 h-4 mr-1" />
+            {regenLoading ? 'Queuing…' : 'Force Regenerate'}
+          </Button>
+        </div>
+      )}
+      kpis={plan && stats ? (
+        <KpiStrip className="lg:grid-cols-4">
+          <KpiTile label="Plan Version" value={`v${plan.version}`} tone="primary" />
+          <KpiTile label="Tier" value={plan.entitlementTierAtGeneration} />
+          <KpiTile label="Week" value={`${plan.weekNumber} / ${plan.totalWeeks}`} />
+          <KpiTile label="Total tasks" value={stats.total} />
+        </KpiStrip>
+      ) : undefined}
+    >
       {regenError && (
-        <div className="p-3 rounded-lg bg-danger/10 text-danger text-sm">{regenError}</div>
+        <Card surface="tinted-danger">
+          <CardContent className="p-3 text-sm text-admin-danger">{regenError}</CardContent>
+        </Card>
       )}
       {regenSuccess && (
-        <div className="p-3 rounded-lg bg-success/10 text-success text-sm flex items-center gap-2">
-          <CheckCircle2 className="w-4 h-4" />
-          Regeneration job queued — plan will refresh shortly.
-        </div>
+        <Card surface="tinted-success">
+          <CardContent className="p-3 text-sm text-admin-success flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4" />
+            Regeneration job queued — plan will refresh shortly.
+          </CardContent>
+        </Card>
       )}
 
       {loading && (
-        <div className="text-center py-12 text-muted-foreground">Loading plan…</div>
+        <div className="text-center py-12 text-admin-fg-muted">Loading plan…</div>
       )}
 
       {error && !loading && (
-        <div className="text-center py-12 text-danger">{error}</div>
+        <div className="text-center py-12 text-admin-danger">{error}</div>
       )}
 
       {!loading && !error && !plan && (
-        <div className="text-center py-12 text-muted-foreground">
+        <div className="text-center py-12 text-admin-fg-muted">
           <Calendar className="w-8 h-8 mx-auto mb-3 opacity-50" />
           <p>No active study plan for this learner.</p>
-          <button
-            onClick={handleForceRegen}
-            disabled={regenLoading}
-            className="mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-50"
-          >
-            <RefreshCw className={`w-4 h-4 ${regenLoading ? 'animate-spin' : ''}`} />
+          <Button className="mt-4" onClick={handleForceRegen} disabled={regenLoading} loading={regenLoading}>
+            <RefreshCw className="w-4 h-4 mr-1" />
             Generate Plan
-          </button>
+          </Button>
         </div>
       )}
 
       {plan && !loading && (
         <>
-          {/* Plan metadata */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <MetaCard label="Plan Version" value={`v${plan.version}`} />
-            <MetaCard label="Tier" value={plan.entitlementTierAtGeneration} />
-            <MetaCard label="Week" value={`${plan.weekNumber} / ${plan.totalWeeks}`} />
-            <MetaCard
-              label="Window"
-              value={`${plan.planWindowStart} → ${plan.planWindowEnd}`}
-            />
-          </div>
-
           {plan.templateId && (
-            <div className="text-sm text-muted-foreground">
+            <div className="text-sm text-admin-fg-muted">
               Template:{' '}
               <Link
                 href={`/admin/study-plan-templates/${plan.templateId}`}
-                className="underline hover:no-underline font-mono"
+                className="underline hover:no-underline font-mono text-[var(--admin-primary)]"
               >
                 {plan.templateId}
               </Link>
               {plan.isPremiumPersonalized && (
-                <span className="ml-2 px-2 py-0.5 rounded-full bg-primary/10 text-primary text-xs font-medium">
-                  AI Personalized
-                </span>
+                <Badge variant="primary" className="ml-2">AI Personalized</Badge>
               )}
             </div>
           )}
@@ -240,48 +230,55 @@ export default function AdminLearnerStudyPlanPage() {
                 icon={<CheckCircle2 className="w-4 h-4" />}
                 label="Completed"
                 value={stats.completed}
-                color="text-success"
+                color="text-admin-success"
               />
               <StatChip
                 icon={<Clock className="w-4 h-4" />}
                 label="In Progress"
                 value={stats.inProgress}
-                color="text-primary"
+                color="text-[var(--admin-primary)]"
               />
               <StatChip
                 icon={<AlertTriangle className="w-4 h-4" />}
                 label="Overdue"
                 value={stats.overdue}
-                color="text-danger"
+                color="text-admin-danger"
               />
               <StatChip
                 icon={<Calendar className="w-4 h-4" />}
                 label="Total"
                 value={stats.total}
-                color="text-muted-foreground"
+                color="text-admin-fg-muted"
               />
             </div>
           )}
 
           {/* Filter tabs */}
-          <div className="flex gap-1 border-b">
-            {(['all', 'today', 'overdue', 'completed'] as const).map((f) => (
-              <button
-                key={f}
-                onClick={() => setFilter(f)}
-                className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors capitalize ${
-                  filter === f
-                    ? 'border-primary text-primary'
-                    : 'border-transparent text-muted-foreground hover:text-foreground'
-                }`}
-              >
-                {f}
-              </button>
-            ))}
-          </div>
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-sm">Filter</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex gap-1 border-b border-admin-border">
+                {(['all', 'today', 'overdue', 'completed'] as const).map((f) => (
+                  <button
+                    key={f}
+                    onClick={() => setFilter(f)}
+                    className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors capitalize ${
+                      filter === f
+                        ? 'border-[var(--admin-primary)] text-[var(--admin-primary)]'
+                        : 'border-transparent text-admin-fg-muted hover:text-admin-fg-strong'
+                    }`}
+                  >
+                    {f}
+                  </button>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
 
           {/* Items table */}
-          <div className="overflow-x-auto rounded-xl border">
+          <div className="overflow-x-auto rounded-admin-lg border border-admin-border bg-admin-bg-surface">
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-muted/50 text-left">
@@ -370,16 +367,7 @@ export default function AdminLearnerStudyPlanPage() {
           </div>
         </>
       )}
-    </div>
-  );
-}
-
-function MetaCard({ label, value }: { label: string; value: string | number }) {
-  return (
-    <div className="border rounded-xl p-4">
-      <p className="text-xs text-muted-foreground uppercase tracking-wide">{label}</p>
-      <p className="font-semibold mt-1">{value}</p>
-    </div>
+    </AdminOperationsLayout>
   );
 }
 
@@ -398,7 +386,7 @@ function StatChip({
     <div className={`flex items-center gap-1.5 text-sm ${color}`}>
       {icon}
       <span className="font-medium">{value}</span>
-      <span className="text-muted-foreground">{label}</span>
+      <span className="text-admin-fg-muted">{label}</span>
     </div>
   );
 }

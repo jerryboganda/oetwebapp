@@ -1,19 +1,18 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { MessageSquare, Plus, RotateCcw, Upload as UploadIcon } from 'lucide-react';
-import {
-  AdminRouteHero,
-  AdminRoutePanel,
-  AdminRouteWorkspace,
-} from '@/components/domain/admin-route-surface';
-import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
+import { Plus, RotateCcw, Sparkles, Upload as UploadIcon } from 'lucide-react';
+
+import { AdminCatalogLayout } from '@/components/admin/layout/admin-catalog-layout';
+import { Button } from '@/components/admin/ui/button';
+import { Card, CardContent } from '@/components/admin/ui/card';
+import { Badge } from '@/components/admin/ui/badge';
+import { Skeleton } from '@/components/admin/ui/skeleton';
+import { EmptyState } from '@/components/admin/ui/empty-state';
+
 import { Modal } from '@/components/ui/modal';
 import { Input, Select } from '@/components/ui/form-controls';
 import { Toast } from '@/components/ui/alert';
-import { Skeleton } from '@/components/ui/skeleton';
 import {
   adminListSpeakingSharedResources,
   adminUploadSpeakingSharedResource,
@@ -29,6 +28,13 @@ type ToastState = { variant: 'success' | 'error'; message: string } | null;
 const KIND_OPTIONS: { value: SpeakingSharedResourceKind; label: string }[] = [
   { value: 'WarmUpQuestions', label: 'Warm-up questions' },
   { value: 'AssessmentCriteria', label: 'Assessment criteria' },
+];
+
+const BREADCRUMBS = [
+  { label: 'Admin', href: '/admin' },
+  { label: 'Content', href: '/admin/content' },
+  { label: 'Speaking', href: '/admin/content/speaking' },
+  { label: 'Shared resources' },
 ];
 
 export default function AdminSpeakingSharedResourcesPage() {
@@ -136,84 +142,87 @@ export default function AdminSpeakingSharedResourcesPage() {
     }
   }
 
-  return (
-    <AdminRouteWorkspace role="main" aria-label="Speaking shared resources">
-      <AdminRouteHero
-        eyebrow="CMS"
-        icon={MessageSquare}
-        accent="navy"
-        title="Speaking shared resources"
-        description="Manage Warm-up Questions and Assessment Criteria PDFs that apply to every Speaking practice session for a profession."
-        aside={(
-          <div className="rounded-2xl border border-border bg-background-light p-4 shadow-sm">
-            <Button onClick={() => setUploadOpen(true)}>
-              <Plus className="h-4 w-4 mr-1" /> Upload PDF
-            </Button>
-          </div>
-        )}
+  const filtersNode = (
+    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      <Select
+        label="Kind"
+        value={filterKind}
+        onChange={(e) => setFilterKind(e.target.value)}
+        options={[{ value: '', label: 'All kinds' }, ...KIND_OPTIONS]}
       />
+      <div className="flex items-end">
+        <Button variant="outline" onClick={() => void reload()}>
+          <RotateCcw className="h-4 w-4 mr-1" /> Refresh
+        </Button>
+      </div>
+      <div className="flex items-end justify-end text-xs text-admin-fg-muted">
+        {items.length} resource(s)
+      </div>
+    </div>
+  );
 
-      <AdminRoutePanel>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <Select
-            label="Kind"
-            value={filterKind}
-            onChange={(e) => setFilterKind(e.target.value)}
-            options={[{ value: '', label: 'All kinds' }, ...KIND_OPTIONS]}
-          />
-          <div className="flex items-end">
-            <Button variant="outline" onClick={() => void reload()}>
-              <RotateCcw className="h-4 w-4 mr-1" /> Refresh
-            </Button>
-          </div>
-          <div className="flex items-end justify-end text-xs text-admin-text-muted">
-            {items.length} resource(s)
-          </div>
-        </div>
-      </AdminRoutePanel>
-
+  return (
+    <AdminCatalogLayout
+      title="Speaking shared resources"
+      description="Manage Warm-up Questions and Assessment Criteria PDFs that apply to every Speaking practice session for a profession."
+      breadcrumbs={BREADCRUMBS}
+      eyebrow="CMS"
+      hideViewModeToggle
+      filters={filtersNode}
+      actions={
+        <Button onClick={() => setUploadOpen(true)}>
+          <Plus className="h-4 w-4 mr-1" /> Upload PDF
+        </Button>
+      }
+    >
       {loading ? (
-        <div className="space-y-3">
+        <div className="col-span-full space-y-3">
           {[1, 2, 3].map((i) => <Skeleton key={i} className="h-20" />)}
         </div>
       ) : items.length === 0 ? (
-        <Card className="p-8 text-center text-muted">
-          No shared resources yet. Click <strong>Upload PDF</strong> to add Warm-up Questions or Assessment Criteria.
-        </Card>
+        <div className="col-span-full">
+          <EmptyState
+            illustration={<Sparkles />}
+            title="No shared resources yet"
+            description="Click 'Upload PDF' to add Warm-up Questions or Assessment Criteria."
+          />
+        </div>
       ) : (
-        <div className="space-y-3">
+        <div className="col-span-full space-y-3">
           {items.map((row) => (
-            <Card key={row.id} className="p-4">
-              <div className="flex items-start justify-between flex-wrap gap-3">
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2 flex-wrap mb-1">
-                    <h3 className="font-semibold truncate">{row.title}</h3>
-                    <Badge variant={
-                      row.status === 'Published' ? 'success'
-                        : row.status === 'Draft' ? 'muted'
-                        : row.status === 'Archived' ? 'outline' : 'outline'
-                    }>{row.status}</Badge>
-                    <Badge variant="outline">{row.kind}</Badge>
-                    {row.professionId
-                      ? <Badge variant="outline">{row.professionId}</Badge>
-                      : <Badge variant="outline">all professions</Badge>}
+            <Card key={row.id}>
+              <CardContent className="p-4">
+                <div className="flex items-start justify-between flex-wrap gap-3">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2 flex-wrap mb-1">
+                      <h3 className="font-semibold truncate text-admin-fg-strong">{row.title}</h3>
+                      <Badge variant={
+                        row.status === 'Published' ? 'success'
+                          : row.status === 'Draft' ? 'default'
+                          : row.status === 'Archived' ? 'warning' : 'default'
+                      } intensity="tinted">{row.status}</Badge>
+                      <Badge variant="default" intensity="tinted">{row.kind}</Badge>
+                      {row.professionId
+                        ? <Badge variant="default" intensity="tinted">{row.professionId}</Badge>
+                        : <Badge variant="default" intensity="tinted">all professions</Badge>}
+                    </div>
+                    <p className="text-xs text-admin-fg-muted mt-1">
+                      {row.media?.originalFilename ?? 'no file'}
+                      {row.media?.sizeBytes ? ` - ${(row.media.sizeBytes / 1024 / 1024).toFixed(2)} MB` : ''}
+                      {' - '}Updated {new Date(row.updatedAt).toLocaleDateString()}
+                    </p>
                   </div>
-                  <p className="text-xs text-muted mt-1">
-                    {row.media?.originalFilename ?? 'no file'}
-                    {row.media?.sizeBytes ? ` - ${(row.media.sizeBytes / 1024 / 1024).toFixed(2)} MB` : ''}
-                    {' - '}Updated {new Date(row.updatedAt).toLocaleDateString()}
-                  </p>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {row.status !== 'Published' && row.status !== 'Archived' ? (
+                      <Button size="sm" onClick={() => void handlePublish(row)} disabled={busyId === row.id}>Publish</Button>
+                    ) : null}
+                    {row.status === 'Published' ? (
+                      <Button size="sm" variant="outline" onClick={() => void handleArchive(row)} disabled={busyId === row.id}>Archive</Button>
+                    ) : null}
+                    <Button size="sm" variant="ghost" onClick={() => void handleDelete(row)} disabled={busyId === row.id}>Delete</Button>
+                  </div>
                 </div>
-                <div className="flex items-center gap-2 flex-wrap">
-                  {row.status !== 'Published' && row.status !== 'Archived' ? (
-                    <Button size="sm" onClick={() => void handlePublish(row)} disabled={busyId === row.id}>Publish</Button>
-                  ) : null}
-                  {row.status === 'Published' ? (
-                    <Button size="sm" variant="outline" onClick={() => void handleArchive(row)} disabled={busyId === row.id}>Archive</Button>
-                  ) : null}
-                  <Button size="sm" variant="ghost" onClick={() => void handleDelete(row)} disabled={busyId === row.id}>Delete</Button>
-                </div>
-              </div>
+              </CardContent>
             </Card>
           ))}
         </div>
@@ -223,7 +232,7 @@ export default function AdminSpeakingSharedResourcesPage() {
         <Modal open={uploadOpen} onClose={() => setUploadOpen(false)} title="Upload Speaking shared resource">
           <form className="space-y-3" onSubmit={(e) => void handleUpload(e)}>
             <div>
-              <label className="block text-sm font-medium mb-1">PDF file (max 50 MB)</label>
+              <label className="block text-sm font-medium mb-1 text-admin-fg-strong">PDF file (max 50 MB)</label>
               <input
                 ref={fileRef}
                 type="file"
@@ -232,7 +241,7 @@ export default function AdminSpeakingSharedResourcesPage() {
                 className="w-full text-sm"
               />
               {uploadFile ? (
-                <p className="text-xs text-muted mt-1">
+                <p className="text-xs text-admin-fg-muted mt-1">
                   {uploadFile.name} - {(uploadFile.size / 1024 / 1024).toFixed(2)} MB
                 </p>
               ) : null}
@@ -267,6 +276,6 @@ export default function AdminSpeakingSharedResourcesPage() {
       ) : null}
 
       {toast ? <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} /> : null}
-    </AdminRouteWorkspace>
+    </AdminCatalogLayout>
   );
 }

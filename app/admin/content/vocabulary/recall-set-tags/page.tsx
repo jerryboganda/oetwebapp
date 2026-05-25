@@ -3,18 +3,23 @@
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { ArrowLeft, BookOpen, Plus, Save, Trash2, X, RefreshCw } from 'lucide-react';
+import { AdminCatalogLayout } from '@/components/admin/layout/admin-catalog-layout';
+import { Button } from '@/components/admin/ui/button';
+import { Card, CardContent } from '@/components/admin/ui/card';
+import { Badge } from '@/components/admin/ui/badge';
+import { Input } from '@/components/admin/ui/input';
+import { Textarea } from '@/components/admin/ui/textarea';
+import { Checkbox } from '@/components/admin/ui/checkbox';
+import { Skeleton } from '@/components/admin/ui/skeleton';
+import { EmptyState } from '@/components/admin/ui/empty-state';
 import {
-  AdminRouteWorkspace,
-  AdminRoutePanel,
-  AdminRouteSectionHeader,
-} from '@/components/domain/admin-route-surface';
-import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Modal } from '@/components/ui/modal';
-import { Input, Textarea } from '@/components/ui/form-controls';
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/admin/ui/dialog';
 import { Toast } from '@/components/ui/alert';
-import { Skeleton } from '@/components/ui/skeleton';
 import {
   adminListRecallSetTags,
   adminCreateRecallSetTag,
@@ -150,85 +155,98 @@ export default function AdminRecallSetTagsPage() {
     }
   }
 
+  const filters = (
+    <div className="flex items-center justify-between w-full gap-3">
+      <label className="inline-flex items-center gap-2 text-sm text-admin-fg-muted">
+        <Checkbox
+          checked={includeArchived}
+          onCheckedChange={(v) => setIncludeArchived(v === true)}
+        />
+        Include archived
+      </label>
+      <Button size="sm" variant="ghost" onClick={() => void reload()}>
+        <RefreshCw className="h-4 w-4 mr-1" /> Refresh
+      </Button>
+    </div>
+  );
+
   return (
-    <AdminRouteWorkspace>
-      <AdminRouteSectionHeader
+    <>
+      <AdminCatalogLayout
         eyebrow="CMS"
         title="Recall practice collection labels"
         description="Manage the categorisation labels admins pick when bulk-uploading vocabulary recalls. Canonical codes (old / 2023-2025 / 2026) are protected from hard delete."
-        icon={BookOpen}
+        breadcrumbs={[
+          { label: 'Admin', href: '/admin' },
+          { label: 'Content', href: '/admin/content' },
+          { label: 'Vocabulary', href: '/admin/content/vocabulary' },
+          { label: 'Recall set tags' },
+        ]}
         actions={(
           <>
             <Button variant="secondary" size="sm" asChild>
               <Link href="/admin/content/vocabulary"><ArrowLeft className="mr-1.5 h-4 w-4" />Back to vocab</Link>
             </Button>
-            <Button onClick={openCreate}><Plus className="mr-1.5 h-4 w-4" />New tag</Button>
+            <Button variant="primary" size="sm" onClick={openCreate}><Plus className="mr-1.5 h-4 w-4" />New tag</Button>
           </>
         )}
-      />
-
-      <AdminRoutePanel>
-        <div className="flex items-center justify-between">
-          <label className="inline-flex items-center gap-2 text-sm text-admin-text-muted">
-            <input
-              type="checkbox"
-              checked={includeArchived}
-              onChange={(e) => setIncludeArchived(e.target.checked)}
-            />
-            Include archived
-          </label>
-          <Button size="sm" variant="outline" onClick={() => void reload()}>
-            <RefreshCw className="h-4 w-4 mr-1" /> Refresh
-          </Button>
-        </div>
-      </AdminRoutePanel>
-
-      {loading ? (
-        <div className="space-y-3">
-          {[1, 2, 3].map((i) => <Skeleton key={i} className="h-20" />)}
-        </div>
-      ) : items.length === 0 ? (
-        <Card className="p-8 text-center text-muted">
-          No recall set tags yet. Click <strong>New tag</strong> to add the first one.
-        </Card>
-      ) : (
-        <div className="space-y-3">
-          {items.map((row) => (
-            <Card key={row.code} className="p-4">
-              <div className="flex items-start justify-between flex-wrap gap-3">
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2 flex-wrap mb-1">
-                    <h3 className="font-semibold truncate">{row.displayName}</h3>
-                    {row.canonical ? <Badge variant="info">canonical</Badge> : null}
-                    {!row.isActive ? <Badge variant="outline">archived</Badge> : <Badge variant="success">active</Badge>}
-                    {row.shortLabel ? <Badge variant="outline">{row.shortLabel}</Badge> : null}
-                    <code className="text-xs text-muted">{row.code}</code>
-                    {row.examTypeCode ? <Badge variant="outline">{row.examTypeCode}</Badge> : null}
+        filters={filters}
+        hideViewModeToggle
+        itemsClassName="flex flex-col gap-3"
+      >
+        {loading ? (
+          <div className="space-y-3">
+            {[1, 2, 3].map((i) => <Skeleton key={i} className="h-20 rounded-admin-lg" />)}
+          </div>
+        ) : items.length === 0 ? (
+          <EmptyState
+            illustration={<BookOpen />}
+            title="No recall set tags yet"
+            description='Click "New tag" to add the first one.'
+            primaryAction={{ label: 'New tag', onClick: openCreate }}
+          />
+        ) : (
+          items.map((row) => (
+            <Card key={row.code}>
+              <CardContent className="p-4 pt-4">
+                <div className="flex items-start justify-between flex-wrap gap-3">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2 flex-wrap mb-1">
+                      <h3 className="font-semibold text-admin-fg-strong truncate">{row.displayName}</h3>
+                      {row.canonical ? <Badge variant="info" size="sm">canonical</Badge> : null}
+                      {!row.isActive ? <Badge variant="secondary" size="sm">archived</Badge> : <Badge variant="success" size="sm">active</Badge>}
+                      {row.shortLabel ? <Badge variant="default" size="sm">{row.shortLabel}</Badge> : null}
+                      <code className="text-xs text-admin-fg-muted">{row.code}</code>
+                      {row.examTypeCode ? <Badge variant="default" size="sm">{row.examTypeCode}</Badge> : null}
+                    </div>
+                    {row.description ? (
+                      <p className="text-sm text-admin-fg-muted line-clamp-2">{row.description}</p>
+                    ) : null}
+                    <p className="text-xs text-admin-fg-muted mt-1">
+                      sort {row.sortOrder} · updated {new Date(row.updatedAt).toLocaleDateString()}
+                    </p>
                   </div>
-                  {row.description ? (
-                    <p className="text-sm text-muted line-clamp-2">{row.description}</p>
-                  ) : null}
-                  <p className="text-xs text-muted mt-1">
-                    sort {row.sortOrder} · updated {new Date(row.updatedAt).toLocaleDateString()}
-                  </p>
+                  <div className="flex items-center gap-1 flex-wrap">
+                    <Button size="sm" variant="secondary" onClick={() => openEdit(row)} disabled={busyCode === row.code}>Edit</Button>
+                    <Button size="sm" variant="secondary" onClick={() => void handleArchiveToggle(row)} disabled={busyCode === row.code}>
+                      {row.isActive ? 'Archive' : 'Unarchive'}
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={() => void handleDelete(row)} disabled={busyCode === row.code}>
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
                 </div>
-                <div className="flex items-center gap-1 flex-wrap">
-                  <Button size="sm" variant="outline" onClick={() => openEdit(row)} disabled={busyCode === row.code}>Edit</Button>
-                  <Button size="sm" variant="outline" onClick={() => void handleArchiveToggle(row)} disabled={busyCode === row.code}>
-                    {row.isActive ? 'Archive' : 'Unarchive'}
-                  </Button>
-                  <Button size="sm" variant="ghost" onClick={() => void handleDelete(row)} disabled={busyCode === row.code}>
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </div>
-              </div>
+              </CardContent>
             </Card>
-          ))}
-        </div>
-      )}
+          ))
+        )}
+      </AdminCatalogLayout>
 
-      {editOpen ? (
-        <Modal open={editOpen} onClose={() => setEditOpen(false)} title={editing ? `Edit "${editing.code}"` : 'New recall set tag'}>
+      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{editing ? `Edit "${editing.code}"` : 'New recall set tag'}</DialogTitle>
+          </DialogHeader>
           <form className="space-y-3" onSubmit={(e) => void handleSave(e)}>
             <Input
               label="Code (lowercase, a-z 0-9 -)"
@@ -275,27 +293,26 @@ export default function AdminRecallSetTagsPage() {
                 maxLength={16}
               />
             </div>
-            <label className="inline-flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
+            <label className="inline-flex items-center gap-2 text-sm text-admin-fg-default">
+              <Checkbox
                 checked={form.isActive}
-                onChange={(e) => setForm({ ...form, isActive: e.target.checked })}
+                onCheckedChange={(v) => setForm({ ...form, isActive: v === true })}
               />
               Active (appears in the recall set picker)
             </label>
-            <div className="flex justify-end gap-2 pt-2">
-              <Button type="button" variant="outline" onClick={() => setEditOpen(false)} disabled={saving}>
+            <DialogFooter>
+              <Button type="button" variant="secondary" onClick={() => setEditOpen(false)} disabled={saving}>
                 <X className="h-4 w-4 mr-1" /> Cancel
               </Button>
-              <Button type="submit" disabled={saving}>
+              <Button type="submit" variant="primary" disabled={saving}>
                 <Save className="h-4 w-4 mr-1" /> {saving ? 'Saving…' : (editing ? 'Update' : 'Create')}
               </Button>
-            </div>
+            </DialogFooter>
           </form>
-        </Modal>
-      ) : null}
+        </DialogContent>
+      </Dialog>
 
       {toast ? <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} /> : null}
-    </AdminRouteWorkspace>
+    </>
   );
 }

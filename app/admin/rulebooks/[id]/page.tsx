@@ -2,8 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import Link from 'next/link';
-import { ArrowLeft, BookOpen, Plus, Trash2, Edit3, CheckCircle2, X, Copy, Download, Undo2, Upload } from 'lucide-react';
+import { BookOpen, Plus, Trash2, Edit3, CheckCircle2, X, Copy, Download, Undo2, Upload } from 'lucide-react';
 import {
   adminGetRulebook,
   adminUpdateRulebookMeta,
@@ -25,17 +24,13 @@ import {
   type AdminRulebookRule,
   type AdminRulebookSection,
 } from '@/lib/api';
-import { Card } from '@/components/ui/card';
-import {
-  AdminRouteHero,
-  AdminRoutePanel,
-  AdminRouteWorkspace,
-} from '@/components/domain/admin-route-surface';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
+import { AdminSettingsLayout, SettingsSection } from '@/components/admin/layout/admin-settings-layout';
+import { Card, CardContent } from '@/components/admin/ui/card';
+import { Button } from '@/components/admin/ui/button';
+import { Badge } from '@/components/admin/ui/badge';
 import { Input, Textarea, Select } from '@/components/ui/form-controls';
 import { Toast } from '@/components/ui/alert';
-import { Skeleton } from '@/components/ui/skeleton';
+import { Skeleton } from '@/components/admin/ui/skeleton';
 
 const SEVERITIES = ['critical', 'major', 'minor', 'info'];
 
@@ -344,57 +339,62 @@ export default function AdminRulebookDetailPage() {
   }
 
   if (loading) {
-    return <div className="p-6 space-y-3">{[1, 2, 3].map((i) => <Skeleton key={i} className="h-24" />)}</div>;
+    return (
+      <AdminSettingsLayout title="Rulebook editor" breadcrumbs={[{ label: 'Admin', href: '/admin' }, { label: 'Rulebooks', href: '/admin/rulebooks' }, { label: 'Editor' }]}>
+        <div className="space-y-3">{[1, 2, 3].map((i) => <Skeleton key={i} className="h-24" />)}</div>
+      </AdminSettingsLayout>
+    );
   }
   if (!data) {
-    return <div className="p-6"><Card className="p-6">Rulebook not found.</Card></div>;
+    return (
+      <AdminSettingsLayout title="Rulebook editor" breadcrumbs={[{ label: 'Admin', href: '/admin' }, { label: 'Rulebooks', href: '/admin/rulebooks' }, { label: 'Editor' }]}>
+        <Card><CardContent className="p-6">Rulebook not found.</CardContent></Card>
+      </AdminSettingsLayout>
+    );
   }
 
+  const breadcrumbs = [
+    { label: 'Admin', href: '/admin' },
+    { label: 'Rulebooks', href: '/admin/rulebooks' },
+    { label: `${data.kind} · ${data.profession}` },
+  ];
+
   return (
-    <AdminRouteWorkspace role="main" aria-label="Rulebook editor">
-      <Link href="/admin/rulebooks" className="inline-flex items-center gap-1 text-sm text-muted hover:text-navy">
-        <ArrowLeft className="h-4 w-4" /> Back to rulebooks
-      </Link>
-
-      <AdminRouteHero
-        eyebrow="CMS"
-        icon={BookOpen}
-        accent="navy"
-        title={`${data.kind} · ${data.profession}`}
-        description={`Authority source: ${data.authoritySource || 'unspecified'}.`}
-        aside={(
-          <div className="rounded-2xl border border-border bg-background-light p-4 shadow-sm">
-            <div className="flex flex-wrap items-center gap-2">
-              <button onClick={handleVersionEdit} className="font-mono text-sm hover:underline">v{data.version}</button>
-              <Badge variant={data.status === 'Published' ? 'success' : 'muted'}>{data.status}</Badge>
-            </div>
-            <div className="mt-3 flex flex-wrap gap-2">
-              <Button variant="outline" onClick={handleExport}>
-                <Download className="h-4 w-4 mr-1" /> Export
-              </Button>
-              <Button variant="outline" onClick={handleClone}>
-                <Copy className="h-4 w-4 mr-1" /> Clone
-              </Button>
-              {data.status === 'Published' ? (
-                <Button variant="outline" onClick={handleUnpublish}>
-                  <Undo2 className="h-4 w-4 mr-1" /> Unpublish
-                </Button>
-              ) : (
-                <Button onClick={handlePublish}>
-                  <CheckCircle2 className="h-4 w-4 mr-1" /> Publish
-                </Button>
-              )}
-              {data.status !== 'Published' && (
-                <Button variant="outline" onClick={handleDelete}>
-                  <Trash2 className="h-4 w-4 mr-1" /> Delete
-                </Button>
-              )}
-            </div>
-          </div>
-        )}
-      />
-
-      <AdminRoutePanel title="Reference PDF">
+    <AdminSettingsLayout
+      title={`${data.kind} · ${data.profession}`}
+      description={`Authority source: ${data.authoritySource || 'unspecified'}.`}
+      breadcrumbs={breadcrumbs}
+      eyebrow="CMS"
+      icon={<BookOpen className="h-5 w-5" />}
+      backHref="/admin/rulebooks"
+      actions={(
+        <div className="flex flex-wrap items-center gap-2">
+          <button onClick={handleVersionEdit} className="font-mono text-sm text-admin-fg-strong hover:underline">v{data.version}</button>
+          <Badge variant={data.status === 'Published' ? 'success' : 'default'}>{data.status}</Badge>
+          <Button variant="outline" size="sm" onClick={handleExport}>
+            <Download className="h-4 w-4 mr-1" /> Export
+          </Button>
+          <Button variant="outline" size="sm" onClick={handleClone}>
+            <Copy className="h-4 w-4 mr-1" /> Clone
+          </Button>
+          {data.status === 'Published' ? (
+            <Button variant="outline" size="sm" onClick={handleUnpublish}>
+              <Undo2 className="h-4 w-4 mr-1" /> Unpublish
+            </Button>
+          ) : (
+            <Button size="sm" onClick={handlePublish}>
+              <CheckCircle2 className="h-4 w-4 mr-1" /> Publish
+            </Button>
+          )}
+          {data.status !== 'Published' && (
+            <Button variant="destructive" size="sm" onClick={handleDelete}>
+              <Trash2 className="h-4 w-4 mr-1" /> Delete
+            </Button>
+          )}
+        </div>
+      )}
+    >
+      <SettingsSection title="Reference PDF">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2 text-sm">
             <Badge variant={data.referencePdfAssetId ? 'success' : 'muted'}>
@@ -427,10 +427,10 @@ export default function AdminRulebookDetailPage() {
             ) : null}
           </div>
         </div>
-      </AdminRoutePanel>
+      </SettingsSection>
 
       {/* Sections */}
-      <AdminRoutePanel title={`Sections (${data.sections.length})`}>
+      <SettingsSection title={`Sections (${data.sections.length})`}>
         <div className="space-y-2 mb-4">
           {data.sections.map((s) => (
             <div key={s.id} className="flex items-center gap-2 p-2 rounded border">
@@ -448,7 +448,7 @@ export default function AdminRulebookDetailPage() {
                   <span className="flex-1 font-medium">{s.title}</span>
                   <span className="text-xs text-admin-text-muted">#{s.orderIndex}</span>
                   <Button size="sm" variant="ghost" onClick={() => setEditingSection(s)}><Edit3 className="h-4 w-4" /></Button>
-                  <Button size="sm" variant="ghost" onClick={() => handleDeleteSection(s)}><Trash2 className="h-4 w-4 text-danger" /></Button>
+                  <Button size="sm" variant="ghost" onClick={() => handleDeleteSection(s)}><Trash2 className="h-4 w-4 text-admin-danger" /></Button>
                 </>
               )}
             </div>
@@ -459,10 +459,10 @@ export default function AdminRulebookDetailPage() {
           <Input label="Title" placeholder="e.g. Opening behaviours" value={newSection.title} onChange={(e) => setNewSection({ ...newSection, title: e.target.value })} className="flex-1" />
           <Button onClick={handleCreateSection}><Plus className="h-4 w-4 mr-1" /> Add Section</Button>
         </div>
-      </AdminRoutePanel>
+      </SettingsSection>
 
       {/* Rules */}
-      <AdminRoutePanel
+      <SettingsSection
         title={`Rules (${filteredRules.length}${filterSection ? ` of ${data.rules.length}` : ''})`}
         actions={(
           <div className="flex items-center gap-2">
@@ -484,7 +484,7 @@ export default function AdminRulebookDetailPage() {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="font-mono text-xs px-2 py-0.5 bg-surface rounded">{r.code}</span>
-                    <Badge variant={r.severity === 'critical' ? 'danger' : r.severity === 'major' ? 'warning' : 'muted'}>
+                    <Badge variant={(r.severity === 'critical' ? 'danger' : r.severity === 'major' ? 'warning' : 'default') as any}>
                       {r.severity}
                     </Badge>
                     <span className="text-xs text-muted">{r.sectionCode}</span>
@@ -494,16 +494,16 @@ export default function AdminRulebookDetailPage() {
                 </div>
                 <div className="flex gap-1">
                   <Button size="sm" variant="ghost" onClick={() => openRuleEditor(r)}><Edit3 className="h-4 w-4" /></Button>
-                  <Button size="sm" variant="ghost" onClick={() => handleDeleteRule(r)}><Trash2 className="h-4 w-4 text-danger" /></Button>
+                  <Button size="sm" variant="ghost" onClick={() => handleDeleteRule(r)}><Trash2 className="h-4 w-4 text-admin-danger" /></Button>
                 </div>
               </div>
             </div>
           ))}
           {filteredRules.length === 0 && (
-            <p className="text-sm text-muted text-center py-6">No rules{filterSection ? ' in this section' : ''} yet.</p>
+            <p className="text-sm text-admin-fg-muted text-center py-6">No rules{filterSection ? ' in this section' : ''} yet.</p>
           )}
         </div>
-      </AdminRoutePanel>
+      </SettingsSection>
 
       {/* Rule Editor Modal */}
       {ruleForm && (
@@ -561,6 +561,6 @@ export default function AdminRulebookDetailPage() {
       )}
 
       {toast && <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} />}
-    </AdminRouteWorkspace>
+    </AdminSettingsLayout>
   );
 }

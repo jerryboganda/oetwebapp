@@ -6,16 +6,13 @@ import { useRouter } from 'next/navigation';
 import { ArrowLeft, Wand2 } from 'lucide-react';
 import { adminGenerateWritingAiDraft } from '@/lib/api';
 import { AdminPermission, hasPermission } from '@/lib/admin-permissions';
-import {
-  AdminRouteHero,
-  AdminRoutePanel,
-  AdminRouteWorkspace,
-} from '@/components/domain/admin-route-surface';
+import { AdminSettingsLayout, SettingsSection } from '@/components/admin/layout/admin-settings-layout';
 import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
 import { useCurrentUser } from '@/lib/hooks/use-current-user';
-import { Button } from '@/components/ui/button';
+import { Button } from '@/components/admin/ui/button';
 import { Input, Select, Textarea } from '@/components/ui/form-controls';
 import { Toast } from '@/components/ui/alert';
+import { Card, CardContent } from '@/components/admin/ui/card';
 
 type ToastState = { variant: 'success' | 'error'; message: string } | null;
 
@@ -93,34 +90,36 @@ export default function WritingAiDraftPage() {
 
   if (!isAuthenticated || role !== 'admin') return null;
 
+  const breadcrumbs = [
+    { label: 'Admin', href: '/admin' },
+    { label: 'Content', href: '/admin/content' },
+    { label: 'Writing', href: '/admin/content/writing' },
+    { label: 'AI Draft' },
+  ];
+
   if (!canWriteContent) {
     return (
-      <AdminRouteWorkspace role="main" aria-label="AI writing draft">
-        <p className="text-sm text-muted">Content write permission is required.</p>
-      </AdminRouteWorkspace>
+      <AdminSettingsLayout title="AI writing draft" breadcrumbs={breadcrumbs} eyebrow="CMS">
+        <Card><CardContent className="pt-6"><p className="text-sm text-admin-fg-muted">Content write permission is required.</p></CardContent></Card>
+      </AdminSettingsLayout>
     );
   }
 
   return (
-    <AdminRouteWorkspace role="main" aria-label="AI writing draft">
-      <Link
-        href="/admin/content/writing"
-        className="inline-flex items-center gap-1 text-sm text-muted hover:text-navy"
-        aria-label="Back"
-      >
-        <ArrowLeft className="h-4 w-4" /> Back to Writing CMS
-      </Link>
-
-      <AdminRouteHero
-        eyebrow="CMS"
-        icon={Wand2}
-        accent="navy"
-        title="AI writing draft"
-        description="Generate a draft Writing task (case notes + model letter) via the grounded AI gateway. Drafts are always stored as draft and must be reviewed before publishing."
-      />
-
-      <AdminRoutePanel>
-        <p className="text-sm leading-6 text-admin-text-muted">
+    <AdminSettingsLayout
+      title="AI writing draft"
+      description="Generate a draft Writing task (case notes + model letter) via the grounded AI gateway. Drafts are always stored as draft and must be reviewed before publishing."
+      eyebrow="CMS"
+      breadcrumbs={breadcrumbs}
+      icon={<Wand2 className="h-5 w-5" />}
+      actions={
+        <Button asChild variant="outline" startIcon={<ArrowLeft className="h-4 w-4" />}>
+          <Link href="/admin/content/writing">Back to Writing CMS</Link>
+        </Button>
+      }
+    >
+      <SettingsSection title="Draft generator" description="The grounded AI gateway physically refuses ungrounded prompts. Drafts are always stored as Draft and must be reviewed before publishing.">
+        <p className="text-sm leading-6 text-admin-fg-muted">
           This generates a draft Writing task via the grounded AI gateway. Drafts are always stored
           as <strong>draft</strong> — review and edit before publishing. The gateway physically refuses
           ungrounded prompts.
@@ -172,15 +171,15 @@ export default function WritingAiDraftPage() {
         />
 
         <div className="flex justify-end">
-          <Button disabled={submitting} onClick={onGenerate}>
+          <Button disabled={submitting} loading={submitting} onClick={onGenerate}>
             {submitting ? 'Generating…' : 'Generate draft'}
           </Button>
         </div>
-      </AdminRoutePanel>
+      </SettingsSection>
 
       {toast ? (
         <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} />
       ) : null}
-    </AdminRouteWorkspace>
+    </AdminSettingsLayout>
   );
 }

@@ -3,10 +3,12 @@
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { FileText, Wallet } from 'lucide-react';
-import { AdminRouteSectionHeader, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
+
+import { AdminPageShell } from '@/components/admin/layout/admin-page-shell';
+import { Button } from '@/components/admin/ui/button';
+import { PageHeader } from '@/components/admin/ui/page-header';
+import { Skeleton } from '@/components/admin/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
-import { Button } from '@/components/ui/button';
-import { Skeleton } from '@/components/ui/skeleton';
 import { WalletTiersEditor } from '@/components/admin/billing/wallet-tiers-editor';
 import { NoBillingPermission } from '@/components/admin/billing/no-billing-permission';
 import {
@@ -82,34 +84,44 @@ export default function AdminWalletTiersPage() {
     setSaveMessage('Wallet top-up tiers saved.');
   }, []);
 
-  return (
-    <AdminRouteWorkspace>
-      {!canReadBilling ? (
+  if (!canReadBilling) {
+    return (
+      <AdminPageShell>
         <NoBillingPermission requiredPermission={AdminPermission.BillingRead} />
-      ) : (
-        <>
-      <AdminRouteSectionHeader
+      </AdminPageShell>
+    );
+  }
+
+  return (
+    <AdminPageShell>
+      <PageHeader
         eyebrow="Billing"
-        icon={Wallet}
-        accent="navy"
+        icon={<Wallet className="h-5 w-5" aria-hidden />}
         title="Wallet top-up tiers"
         description="Configure the wallet top-up tiers learners see during checkout. Saving replaces the entire active set."
+        breadcrumbs={[
+          { label: 'Admin', href: '/admin' },
+          { label: 'Billing', href: '/admin/billing' },
+          { label: 'Wallet tiers' },
+        ]}
         actions={
           <div className="flex flex-wrap gap-2">
-            <Link
-              href="/admin/audit-logs?search=wallet_tier"
-              className="inline-flex items-center gap-2 rounded-md border border-border bg-surface px-3 py-2 text-sm font-medium text-navy hover:bg-background-light"
-              data-testid="wallet-tiers-audit-log-link"
-            >
-              <FileText className="h-4 w-4" />
-              Audit log
-            </Link>
+            <Button asChild variant="secondary">
+              <Link
+                href="/admin/audit-logs?search=wallet_tier"
+                data-testid="wallet-tiers-audit-log-link"
+              >
+                <FileText className="mr-2 h-4 w-4" />
+                Audit log
+              </Link>
+            </Button>
             <Button
               variant="secondary"
               onClick={handleRefresh}
               disabled={status === 'loading'}
+              loading={status === 'loading'}
             >
-              {status === 'loading' ? 'Refreshing…' : 'Refresh'}
+              Refresh
             </Button>
           </div>
         }
@@ -117,8 +129,10 @@ export default function AdminWalletTiersPage() {
 
       {status === 'loading' ? (
         <div className="space-y-3" data-testid="wallet-tiers-loading">
-          <Skeleton height={24} width="40%" />
-          <Skeleton height={16} lines={5} />
+          <Skeleton className="h-6 w-2/5" />
+          <Skeleton className="h-4 w-full" />
+          <Skeleton className="h-4 w-full" />
+          <Skeleton className="h-4 w-3/4" />
         </div>
       ) : status === 'error' ? (
         <InlineAlert variant="error" title="Couldn’t load wallet tiers">
@@ -126,23 +140,26 @@ export default function AdminWalletTiersPage() {
         </InlineAlert>
       ) : data ? (
         <>
-        {saveMessage ? (
-          <InlineAlert variant="success" title="Saved">
-            {saveMessage}
-          </InlineAlert>
-        ) : null}
-        <WalletTiersEditor
-          key={`${data.source}:${data.tiers.map((tier) => `${tier.id ?? 'new'}:${tier.amount}:${tier.credits}:${tier.bonus}:${tier.currency}:${tier.label}:${tier.displayOrder}:${tier.isPopular}:${tier.isActive}`).join('|')}`}
-          initialTiers={data.tiers}
-          defaultCurrency={data.currency || 'AUD'}
-          source={data.source}
-          onSave={handleSave}
-          canWrite={canWriteCatalog}
-        />
+          {saveMessage ? (
+            <InlineAlert variant="success" title="Saved">
+              {saveMessage}
+            </InlineAlert>
+          ) : null}
+          <WalletTiersEditor
+            key={`${data.source}:${data.tiers
+              .map(
+                (tier) =>
+                  `${tier.id ?? 'new'}:${tier.amount}:${tier.credits}:${tier.bonus}:${tier.currency}:${tier.label}:${tier.displayOrder}:${tier.isPopular}:${tier.isActive}`,
+              )
+              .join('|')}`}
+            initialTiers={data.tiers}
+            defaultCurrency={data.currency || 'AUD'}
+            source={data.source}
+            onSave={handleSave}
+            canWrite={canWriteCatalog}
+          />
         </>
       ) : null}
-        </>
-      )}
-    </AdminRouteWorkspace>
+    </AdminPageShell>
   );
 }

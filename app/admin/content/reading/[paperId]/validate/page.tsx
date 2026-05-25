@@ -4,14 +4,13 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft, CheckCircle2, XCircle, AlertTriangle, RefreshCw, Rocket } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
+import { AdminOperationsLayout, KpiStrip } from '@/components/admin/layout/admin-operations-layout';
+import { Button } from '@/components/admin/ui/button';
+import { Badge } from '@/components/admin/ui/badge';
+import { KpiTile } from '@/components/admin/ui/kpi-tile';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/admin/ui/card';
+import { Skeleton } from '@/components/admin/ui/skeleton';
 import { Toast } from '@/components/ui/alert';
-import {
-  AdminRouteWorkspace,
-  AdminRoutePanel,
-  AdminRouteSectionHeader,
-} from '@/components/domain/admin-route-surface';
 import { ReadingWizardSteps } from '@/components/domain/admin/reading/ReadingWizardSteps';
 import {
   validateReadingPaper,
@@ -34,7 +33,7 @@ export default function ReadingValidatePublishPage() {
   const [validating, setValidating] = useState(false);
   const [publishState, setPublishState] = useState<PublishState>('idle');
   const [unpublishState, setUnpublishState] = useState<UnpublishState>('idle');
-  const [paperStatus, setPaperStatus] = useState<string>('');
+  const [, setPaperStatus] = useState<string>('');
   const [toast, setToast] = useState<{ message: string; variant: 'success' | 'error' } | null>(null);
 
   const fetchData = async () => {
@@ -126,191 +125,223 @@ export default function ReadingValidatePublishPage() {
   const totalQuestions = partACounts + partBCounts + partCCounts;
   const totalPoints = report?.counts.totalPoints ?? 0;
 
-  const countStatus = (actual: number, expected: number) =>
-    actual === expected ? 'text-emerald-400' : 'text-red-400';
+  const toneFor = (actual: number, expected: number): 'success' | 'danger' =>
+    actual === expected ? 'success' : 'danger';
 
   return (
-    <AdminRouteWorkspace>
-      <AdminRoutePanel>
-        {/* Toast */}
-        {toast && (
-          <Toast
-            message={toast.message}
-            variant={toast.variant}
-            onClose={() => setToast(null)}
-          />
-        )}
-
-        {/* Wizard Steps */}
-        <ReadingWizardSteps paperId={paperId} currentStep="validate" />
-
-        <AdminRouteSectionHeader
-          title="Validate & Publish"
-          description="Check that this paper meets the 20+6+16 = 42 question structure before publishing."
-        />
-
-        {/* Navigation Links */}
-        <div className="flex items-center gap-4 mb-6">
-          <Link
-            href={`/admin/content/reading/${paperId}/questions`}
-            className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Back to Questions
-          </Link>
-          <Link
-            href="/admin/content/reading"
-            className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Back to Reading Papers
-          </Link>
-        </div>
-
-        {loading ? (
-          <div className="space-y-4">
-            <div className="h-8 w-48 rounded bg-muted animate-pulse" />
-            <div className="h-32 w-full rounded bg-muted animate-pulse" />
-          </div>
+    <AdminOperationsLayout
+      title="Validate & Publish"
+      description="Check that this paper meets the 20+6+16 = 42 question structure before publishing."
+      eyebrow="Reading authoring"
+      breadcrumbs={[
+        { label: 'Admin', href: '/admin' },
+        { label: 'Content', href: '/admin/content' },
+        { label: 'Reading', href: '/admin/content/reading' },
+        { label: 'Paper', href: `/admin/content/reading/${paperId}` },
+        { label: 'Validate' },
+      ]}
+      actions={
+        <Button asChild variant="ghost" size="sm" startIcon={<ArrowLeft className="h-4 w-4" />}>
+          <Link href={`/admin/content/reading/${paperId}/questions`}>Back to Questions</Link>
+        </Button>
+      }
+      kpis={
+        loading ? (
+          <KpiStrip>
+            {[0, 1, 2, 3, 4].map((i) => (
+              <KpiTile key={i} label="…" value="" loading size="sm" />
+            ))}
+          </KpiStrip>
         ) : (
-          <div className="space-y-6">
-            {/* Summary Panel */}
-            <div className="rounded-lg border border-border bg-card p-6">
-              <h3 className="text-lg font-semibold text-foreground mb-4">Question Counts</h3>
-              <div className="grid grid-cols-2 gap-4 sm:grid-cols-5">
-                <div className="text-center">
-                  <p className="text-xs text-muted-foreground uppercase tracking-wider">Part A</p>
-                  <p className={`text-2xl font-bold ${countStatus(partACounts, 20)}`}>
-                    {partACounts}<span className="text-sm text-muted-foreground">/20</span>
-                  </p>
-                </div>
-                <div className="text-center">
-                  <p className="text-xs text-muted-foreground uppercase tracking-wider">Part B</p>
-                  <p className={`text-2xl font-bold ${countStatus(partBCounts, 6)}`}>
-                    {partBCounts}<span className="text-sm text-muted-foreground">/6</span>
-                  </p>
-                </div>
-                <div className="text-center">
-                  <p className="text-xs text-muted-foreground uppercase tracking-wider">Part C</p>
-                  <p className={`text-2xl font-bold ${countStatus(partCCounts, 16)}`}>
-                    {partCCounts}<span className="text-sm text-muted-foreground">/16</span>
-                  </p>
-                </div>
-                <div className="text-center">
-                  <p className="text-xs text-muted-foreground uppercase tracking-wider">Total</p>
-                  <p className={`text-2xl font-bold ${countStatus(totalQuestions, 42)}`}>
-                    {totalQuestions}<span className="text-sm text-muted-foreground">/42</span>
-                  </p>
-                </div>
-                <div className="text-center">
-                  <p className="text-xs text-muted-foreground uppercase tracking-wider">Points</p>
-                  <p className="text-2xl font-bold text-foreground">{totalPoints}</p>
-                </div>
-              </div>
+          <KpiStrip className="lg:grid-cols-5">
+            <KpiTile
+              label="Part A"
+              value={`${partACounts} / 20`}
+              tone={toneFor(partACounts, 20)}
+              size="sm"
+            />
+            <KpiTile
+              label="Part B"
+              value={`${partBCounts} / 6`}
+              tone={toneFor(partBCounts, 6)}
+              size="sm"
+            />
+            <KpiTile
+              label="Part C"
+              value={`${partCCounts} / 16`}
+              tone={toneFor(partCCounts, 16)}
+              size="sm"
+            />
+            <KpiTile
+              label="Total"
+              value={`${totalQuestions} / 42`}
+              tone={toneFor(totalQuestions, 42)}
+              size="sm"
+            />
+            <KpiTile
+              label="Points"
+              value={totalPoints}
+              tone="info"
+              size="sm"
+            />
+          </KpiStrip>
+        )
+      }
+      primaryGrid={
+        <div className="space-y-6">
+          <ReadingWizardSteps paperId={paperId} currentStep="validate" />
+
+          {loading ? (
+            <div className="space-y-4">
+              <Skeleton variant="card" />
+              <Skeleton variant="card" />
             </div>
-
-            {/* Validation Status */}
-            <div className="rounded-lg border border-border bg-card p-6">
-              <h3 className="text-lg font-semibold text-foreground mb-4">Validation Status</h3>
-              {report?.isPublishReady ? (
-                <div className="flex items-center gap-3">
-                  <CheckCircle2 className="h-8 w-8 text-emerald-500" />
-                  <Badge variant="emerald" className="text-base px-4 py-1">
-                    Ready to Publish
-                  </Badge>
-                </div>
-              ) : (
-                <div className="flex items-center gap-3">
-                  <XCircle className="h-8 w-8 text-red-500" />
-                  <Badge variant="danger" className="text-base px-4 py-1">
-                    Not Ready — {report?.issues.length ?? 0} issue{(report?.issues.length ?? 0) !== 1 ? 's' : ''}
-                  </Badge>
-                </div>
-              )}
-            </div>
-
-            {/* Issues List */}
-            {report && report.issues.length > 0 && (
-              <div className="rounded-lg border border-border bg-card p-6">
-                <h3 className="text-lg font-semibold text-foreground mb-4">Issues</h3>
-                <ul className="space-y-2">
-                  {report.issues.map((issue, idx) => (
-                    <li key={idx} className="flex items-start gap-3 p-3 rounded-md bg-muted/50">
-                      {issue.severity === 'error' ? (
-                        <XCircle className="h-5 w-5 text-red-500 shrink-0 mt-0.5" />
-                      ) : (
-                        <AlertTriangle className="h-5 w-5 text-yellow-500 shrink-0 mt-0.5" />
-                      )}
-                      <div className="min-w-0">
-                        <span className="text-xs font-mono text-muted-foreground">{issue.code}</span>
-                        <p className="text-sm text-foreground">{issue.message}</p>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-
-            {/* Action Buttons */}
-            <div className="flex items-center gap-3 flex-wrap">
-              <Button
-                variant="primary"
-                onClick={handleRevalidate}
-                disabled={validating}
-              >
-                <RefreshCw className={`h-4 w-4 mr-2 ${validating ? 'animate-spin' : ''}`} />
-                {validating ? 'Validating…' : 'Re-validate'}
-              </Button>
-
-              {publishState === 'published' ? (
-                <div className="flex items-center gap-3">
-                  <Badge variant="emerald" className="text-base px-4 py-2">
-                    <CheckCircle2 className="h-4 w-4 mr-2" />
-                    Published!
-                  </Badge>
-                  {unpublishState === 'confirming' ? (
-                    <div className="flex items-center gap-2">
-                      <Button variant="destructive" size="sm" onClick={handleUnpublish}>
-                        Confirm Unpublish
-                      </Button>
-                      <Button variant="ghost" size="sm" onClick={() => setUnpublishState('idle')}>
-                        Cancel
-                      </Button>
+          ) : (
+            <>
+              {/* Validation Status */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Validation status</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {report?.isPublishReady ? (
+                    <div className="flex items-center gap-3">
+                      <CheckCircle2 className="h-8 w-8 text-[var(--admin-success)]" />
+                      <Badge variant="success" size="lg">Ready to Publish</Badge>
                     </div>
                   ) : (
-                    <Button variant="outline" size="sm" onClick={handleUnpublish} disabled={unpublishState === 'unpublishing'}>
-                      {unpublishState === 'unpublishing' ? 'Reverting…' : 'Unpublish'}
-                    </Button>
+                    <div className="flex items-center gap-3">
+                      <XCircle className="h-8 w-8 text-[var(--admin-danger)]" />
+                      <Badge variant="danger" size="lg">
+                        Not Ready — {report?.issues.length ?? 0} issue
+                        {(report?.issues.length ?? 0) !== 1 ? 's' : ''}
+                      </Badge>
+                    </div>
                   )}
-                </div>
-              ) : (
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="primary"
-                    onClick={handlePublishClick}
-                    disabled={!report?.isPublishReady || publishState === 'publishing'}
-                  >
-                    <Rocket className="h-4 w-4 mr-2" />
-                    {publishState === 'confirming'
-                      ? 'Click again to confirm'
-                      : publishState === 'publishing'
-                        ? 'Publishing…'
-                        : 'Publish Paper'}
-                  </Button>
-                  {publishState === 'confirming' && (
-                    <Button variant="ghost" onClick={cancelPublish}>
-                      Cancel
-                    </Button>
-                  )}
-                  {publishState === 'error' && (
-                    <span className="text-sm text-red-400">Publish failed — click Publish to retry.</span>
-                  )}
-                </div>
+                </CardContent>
+              </Card>
+
+              {/* Issues */}
+              {report && report.issues.length > 0 && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Issues</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <ul className="space-y-2">
+                      {report.issues.map((issue, idx) => (
+                        <li
+                          key={idx}
+                          className="flex items-start gap-3 rounded-admin border border-admin-border bg-admin-bg-subtle/50 p-3"
+                        >
+                          {issue.severity === 'error' ? (
+                            <XCircle className="h-5 w-5 shrink-0 mt-0.5 text-[var(--admin-danger)]" />
+                          ) : (
+                            <AlertTriangle className="h-5 w-5 shrink-0 mt-0.5 text-[var(--admin-warning)]" />
+                          )}
+                          <div className="min-w-0">
+                            <span className="text-xs font-mono text-admin-fg-muted">
+                              {issue.code}
+                            </span>
+                            <p className="text-sm text-admin-fg-strong">{issue.message}</p>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  </CardContent>
+                </Card>
               )}
-            </div>
-          </div>
-        )}
-      </AdminRoutePanel>
-    </AdminRouteWorkspace>
+
+              {/* Actions */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Actions</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex flex-wrap items-center gap-3">
+                    <Button
+                      variant="secondary"
+                      size="md"
+                      onClick={handleRevalidate}
+                      disabled={validating}
+                      startIcon={
+                        <RefreshCw className={`h-4 w-4 ${validating ? 'animate-spin' : ''}`} />
+                      }
+                    >
+                      {validating ? 'Validating…' : 'Re-validate'}
+                    </Button>
+
+                    {publishState === 'published' ? (
+                      <div className="flex items-center gap-3">
+                        <Badge variant="success" size="lg" startIcon={<CheckCircle2 className="h-4 w-4" />}>
+                          Published!
+                        </Badge>
+                        {unpublishState === 'confirming' ? (
+                          <div className="flex items-center gap-2">
+                            <Button variant="destructive" size="sm" onClick={handleUnpublish}>
+                              Confirm Unpublish
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setUnpublishState('idle')}
+                            >
+                              Cancel
+                            </Button>
+                          </div>
+                        ) : (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={handleUnpublish}
+                            disabled={unpublishState === 'unpublishing'}
+                          >
+                            {unpublishState === 'unpublishing' ? 'Reverting…' : 'Unpublish'}
+                          </Button>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="primary"
+                          size="md"
+                          onClick={handlePublishClick}
+                          disabled={!report?.isPublishReady || publishState === 'publishing'}
+                          startIcon={<Rocket className="h-4 w-4" />}
+                        >
+                          {publishState === 'confirming'
+                            ? 'Click again to confirm'
+                            : publishState === 'publishing'
+                              ? 'Publishing…'
+                              : 'Publish Paper'}
+                        </Button>
+                        {publishState === 'confirming' && (
+                          <Button variant="ghost" size="md" onClick={cancelPublish}>
+                            Cancel
+                          </Button>
+                        )}
+                        {publishState === 'error' && (
+                          <span className="text-sm text-[var(--admin-danger)]">
+                            Publish failed — click Publish to retry.
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            </>
+          )}
+
+          {toast && (
+            <Toast
+              message={toast.message}
+              variant={toast.variant}
+              onClose={() => setToast(null)}
+            />
+          )}
+        </div>
+      }
+    />
   );
 }

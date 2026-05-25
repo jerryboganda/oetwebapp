@@ -2,10 +2,13 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { BarChart3, Clock, AlertTriangle, DollarSign, Users, Wrench, ShieldCheck } from 'lucide-react';
-import { AdminRoutePanel, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
+import { AdminOperationsLayout, KpiStrip, BentoGrid, BentoCell } from '@/components/admin/layout/admin-operations-layout';
+import { Badge } from '@/components/admin/ui/badge';
+import { Button } from '@/components/admin/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/admin/ui/card';
+import { EmptyState } from '@/components/admin/ui/empty-state';
+import { KpiTile } from '@/components/admin/ui/kpi-tile';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
-import { Badge } from '@/components/ui/badge';
-import { EmptyState } from '@/components/ui/empty-error';
 import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
 import { apiClient } from '@/lib/api';
 
@@ -45,10 +48,10 @@ function BarChart({ data, maxValue }: { data: DailyMessageCount[]; maxValue: num
         return (
           <div key={d.date} className="group relative flex flex-1 flex-col items-center justify-end">
             <div
-              className="w-full min-w-[4px] rounded-t bg-violet-500/70 transition-colors group-hover:bg-violet-400"
+              className="w-full min-w-[4px] rounded-t bg-[var(--admin-primary)] opacity-70 transition-opacity group-hover:opacity-100"
               style={{ height: `${Math.max(height, 2)}%` }}
             />
-            <div className="absolute -top-8 hidden rounded bg-admin-surface-raised px-2 py-1 text-xs text-admin-text shadow-lg group-hover:block">
+            <div className="absolute -top-8 hidden rounded bg-admin-bg-elevated px-2 py-1 text-xs text-admin-fg-strong shadow-lg group-hover:block">
               {d.count} msgs
               <br />
               {new Date(d.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
@@ -56,19 +59,6 @@ function BarChart({ data, maxValue }: { data: DailyMessageCount[]; maxValue: num
           </div>
         );
       })}
-    </div>
-  );
-}
-
-function MetricCard({ icon: Icon, label, value, subtext }: { icon: React.ElementType; label: string; value: string; subtext?: string }) {
-  return (
-    <div className="rounded-xl border border-admin-border bg-admin-surface p-4">
-      <div className="flex items-center gap-2">
-        <Icon className="h-4 w-4 text-admin-text-muted" />
-        <span className="text-xs font-bold uppercase tracking-wide text-admin-text-muted">{label}</span>
-      </div>
-      <p className="mt-2 text-2xl font-bold text-admin-text">{value}</p>
-      {subtext && <p className="mt-0.5 text-xs text-admin-text-muted">{subtext}</p>}
     </div>
   );
 }
@@ -91,147 +81,155 @@ export default function AiAssistantAnalyticsPage() {
 
   useEffect(() => {
     if (isAuthenticated && role === 'admin') {
-      // Data fetch on mount — setState inside async callback is fine
       // eslint-disable-next-line react-hooks/set-state-in-effect
       loadAnalytics();
     }
   }, [isAuthenticated, role, loadAnalytics]);
 
+  const breadcrumbs = [
+    { label: 'Admin', href: '/admin' },
+    { label: 'AI Assistant', href: '/admin' },
+    { label: 'Analytics' },
+  ];
+
   if (!isAuthenticated || role !== 'admin') {
     return (
-      <AdminRouteWorkspace>
-        <EmptyState icon={<ShieldCheck className="w-8 h-8" />} title="Admin access required" description="Sign in with an admin account to view this page." />
-      </AdminRouteWorkspace>
+      <AdminOperationsLayout
+        title="AI Assistant Analytics"
+        eyebrow="AI Assistant"
+        breadcrumbs={breadcrumbs}
+        primaryGrid={
+          <EmptyState
+            title="Admin access required"
+            description="Sign in with an admin account to view this page."
+            illustration={<ShieldCheck className="h-8 w-8" />}
+          />
+        }
+      />
     );
   }
 
   return (
-    <AdminRouteWorkspace>
-      <AsyncStateWrapper status={status} onRetry={loadAnalytics}>
-        {analytics && (
-          <>
-            {/* Key metrics */}
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              <MetricCard
-                icon={Clock}
-                label="Avg Response Time"
-                value={`${analytics.avgResponseTimeMs}ms`}
-                subtext="Mean time to first token"
-              />
-              <MetricCard
-                icon={AlertTriangle}
-                label="Error Rate"
-                value={`${(analytics.errorRate * 100).toFixed(2)}%`}
-                subtext={`${analytics.totalErrors} errors / ${analytics.totalRequests} requests`}
-              />
-              <MetricCard
-                icon={DollarSign}
-                label="Token Cost (30d)"
-                value={`$${analytics.tokenCostEstimate.toFixed(2)}`}
-                subtext="Estimated spend"
-              />
-              <MetricCard
-                icon={Users}
-                label="Active Users (7d)"
-                value={String(analytics.activeUsers7d)}
-                subtext={`of ${analytics.totalUsers} total`}
-              />
+    <AdminOperationsLayout
+      title="AI Assistant Analytics"
+      description="Latency, error rate, cost, tool usage, and user engagement signal for the in-app AI assistant."
+      eyebrow="AI Assistant"
+      breadcrumbs={breadcrumbs}
+      actions={
+        <Button variant="secondary" size="sm" onClick={loadAnalytics}>
+          Refresh
+        </Button>
+      }
+      kpis={
+        analytics ? (
+          <KpiStrip>
+            <KpiTile label="Avg Response Time" value={`${analytics.avgResponseTimeMs}ms`} icon={<Clock className="h-4 w-4" />} tone="primary" />
+            <KpiTile label="Error Rate" value={`${(analytics.errorRate * 100).toFixed(2)}%`} icon={<AlertTriangle className="h-4 w-4" />} tone={analytics.errorRate > 0.05 ? 'danger' : 'success'} />
+            <KpiTile label="Token Cost (30d)" value={`$${analytics.tokenCostEstimate.toFixed(2)}`} icon={<DollarSign className="h-4 w-4" />} tone="warning" />
+            <KpiTile label="Active Users (7d)" value={analytics.activeUsers7d} icon={<Users className="h-4 w-4" />} tone="info" />
+          </KpiStrip>
+        ) : null
+      }
+      primaryGrid={
+        <AsyncStateWrapper status={status} onRetry={loadAnalytics}>
+          {analytics && (
+            <div className="space-y-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <BarChart3 className="h-4 w-4 text-admin-fg-muted" />
+                    Messages per Day (Last 30 Days)
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {analytics.messagesPerDay.length > 0 ? (
+                    <>
+                      <BarChart data={analytics.messagesPerDay} maxValue={Math.max(...analytics.messagesPerDay.map((d) => d.count))} />
+                      <div className="mt-2 flex justify-between text-xs text-admin-fg-muted">
+                        <span>{new Date(analytics.messagesPerDay[0].date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>
+                        <span>{new Date(analytics.messagesPerDay[analytics.messagesPerDay.length - 1].date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>
+                      </div>
+                    </>
+                  ) : (
+                    <p className="py-8 text-center text-sm text-admin-fg-muted">No message data available</p>
+                  )}
+                </CardContent>
+              </Card>
+
+              <BentoGrid>
+                <BentoCell span={{ default: 12, xl: 8 }}>
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <Wrench className="h-4 w-4 text-admin-fg-muted" />
+                        Tool Usage Breakdown
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      {analytics.toolUsage.length > 0 ? (
+                        <div className="space-y-2">
+                          {analytics.toolUsage
+                            .sort((a, b) => b.callCount - a.callCount)
+                            .map((tool) => {
+                              const maxCalls = analytics.toolUsage[0]?.callCount || 1;
+                              const pct = (tool.callCount / maxCalls) * 100;
+                              return (
+                                <div key={tool.tool} className="flex items-center gap-3">
+                                  <span className="w-36 truncate text-xs font-medium text-admin-fg-strong">{tool.tool}</span>
+                                  <div className="flex-1">
+                                    <div className="h-5 w-full overflow-hidden rounded bg-admin-bg-subtle">
+                                      <div className="h-full rounded bg-[var(--admin-primary)] opacity-60" style={{ width: `${pct}%` }} />
+                                    </div>
+                                  </div>
+                                  <span className="w-16 text-right text-xs tabular-nums text-admin-fg-muted">{tool.callCount} calls</span>
+                                  <span className="w-16 text-right text-xs tabular-nums text-admin-fg-muted">{tool.avgDurationMs}ms</span>
+                                  {tool.errorCount > 0 && (
+                                    <Badge variant="danger" intensity="tinted" size="sm">{tool.errorCount} err</Badge>
+                                  )}
+                                </div>
+                              );
+                            })}
+                        </div>
+                      ) : (
+                        <p className="py-8 text-center text-sm text-admin-fg-muted">No tool usage data</p>
+                      )}
+                    </CardContent>
+                  </Card>
+                </BentoCell>
+
+                <BentoCell span={{ default: 12, xl: 4 }}>
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <Users className="h-4 w-4 text-admin-fg-muted" />
+                        User Engagement
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-3">
+                        <div className="rounded-admin bg-admin-bg-subtle p-3">
+                          <p className="text-xs text-admin-fg-muted">Avg Threads per User</p>
+                          <p className="mt-1 text-xl font-bold tabular-nums text-admin-fg-strong">{analytics.threadsPerUser.toFixed(1)}</p>
+                        </div>
+                        <div className="rounded-admin bg-admin-bg-subtle p-3">
+                          <p className="text-xs text-admin-fg-muted">Avg Messages per Thread</p>
+                          <p className="mt-1 text-xl font-bold tabular-nums text-admin-fg-strong">{analytics.messagesPerThread.toFixed(1)}</p>
+                        </div>
+                        <div className="rounded-admin bg-admin-bg-subtle p-3">
+                          <p className="text-xs text-admin-fg-muted">7-Day Retention</p>
+                          <p className="mt-1 text-xl font-bold tabular-nums text-admin-fg-strong">
+                            {analytics.totalUsers > 0 ? `${((analytics.activeUsers7d / analytics.totalUsers) * 100).toFixed(1)}%` : '—'}
+                          </p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </BentoCell>
+              </BentoGrid>
             </div>
-
-            {/* Messages per day chart */}
-            <AdminRoutePanel>
-              <div className="p-4">
-                <div className="mb-4 flex items-center gap-2">
-                  <BarChart3 className="h-4 w-4 text-admin-text-muted" />
-                  <h3 className="text-sm font-bold text-admin-text">Messages per Day (Last 30 Days)</h3>
-                </div>
-                {analytics.messagesPerDay.length > 0 ? (
-                  <>
-                    <BarChart
-                      data={analytics.messagesPerDay}
-                      maxValue={Math.max(...analytics.messagesPerDay.map((d) => d.count))}
-                    />
-                    <div className="mt-2 flex justify-between text-xs text-admin-text-muted">
-                      <span>{new Date(analytics.messagesPerDay[0].date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>
-                      <span>{new Date(analytics.messagesPerDay[analytics.messagesPerDay.length - 1].date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>
-                    </div>
-                  </>
-                ) : (
-                  <p className="py-8 text-center text-sm text-admin-text-muted">No message data available</p>
-                )}
-              </div>
-            </AdminRoutePanel>
-
-            {/* Tool usage breakdown */}
-            <AdminRoutePanel>
-              <div className="p-4">
-                <div className="mb-4 flex items-center gap-2">
-                  <Wrench className="h-4 w-4 text-admin-text-muted" />
-                  <h3 className="text-sm font-bold text-admin-text">Tool Usage Breakdown</h3>
-                </div>
-                {analytics.toolUsage.length > 0 ? (
-                  <div className="space-y-2">
-                    {analytics.toolUsage
-                      .sort((a, b) => b.callCount - a.callCount)
-                      .map((tool) => {
-                        const maxCalls = analytics.toolUsage[0]?.callCount || 1;
-                        const pct = (tool.callCount / maxCalls) * 100;
-                        return (
-                          <div key={tool.tool} className="flex items-center gap-3">
-                            <span className="w-36 truncate text-xs font-medium text-admin-text">{tool.tool}</span>
-                            <div className="flex-1">
-                              <div className="h-5 w-full overflow-hidden rounded-md bg-admin-surface-raised">
-                                <div
-                                  className="h-full rounded-md bg-violet-500/50"
-                                  style={{ width: `${pct}%` }}
-                                />
-                              </div>
-                            </div>
-                            <span className="w-16 text-right text-xs tabular-nums text-admin-text-muted">{tool.callCount} calls</span>
-                            <span className="w-16 text-right text-xs tabular-nums text-admin-text-muted">{tool.avgDurationMs}ms</span>
-                            {tool.errorCount > 0 && (
-                              <Badge variant="danger">{tool.errorCount} err</Badge>
-                            )}
-                          </div>
-                        );
-                      })}
-                  </div>
-                ) : (
-                  <p className="py-8 text-center text-sm text-admin-text-muted">No tool usage data</p>
-                )}
-              </div>
-            </AdminRoutePanel>
-
-            {/* User engagement */}
-            <AdminRoutePanel>
-              <div className="p-4">
-                <div className="mb-4 flex items-center gap-2">
-                  <Users className="h-4 w-4 text-admin-text-muted" />
-                  <h3 className="text-sm font-bold text-admin-text">User Engagement</h3>
-                </div>
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                  <div className="rounded-lg bg-admin-surface-raised p-3">
-                    <p className="text-xs text-admin-text-muted">Avg Threads per User</p>
-                    <p className="mt-1 text-xl font-bold text-admin-text">{analytics.threadsPerUser.toFixed(1)}</p>
-                  </div>
-                  <div className="rounded-lg bg-admin-surface-raised p-3">
-                    <p className="text-xs text-admin-text-muted">Avg Messages per Thread</p>
-                    <p className="mt-1 text-xl font-bold text-admin-text">{analytics.messagesPerThread.toFixed(1)}</p>
-                  </div>
-                  <div className="rounded-lg bg-admin-surface-raised p-3">
-                    <p className="text-xs text-admin-text-muted">7-Day Retention</p>
-                    <p className="mt-1 text-xl font-bold text-admin-text">
-                      {analytics.totalUsers > 0
-                        ? `${((analytics.activeUsers7d / analytics.totalUsers) * 100).toFixed(1)}%`
-                        : '—'}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </AdminRoutePanel>
-          </>
-        )}
-      </AsyncStateWrapper>
-    </AdminRouteWorkspace>
+          )}
+        </AsyncStateWrapper>
+      }
+    />
   );
 }

@@ -3,16 +3,19 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { Activity, AlertTriangle, CheckCircle2, Users } from 'lucide-react';
-import { Badge } from '@/components/ui/badge';
-import { Skeleton } from '@/components/ui/skeleton';
+import { AdminOperationsLayout, KpiStrip } from '@/components/admin/layout/admin-operations-layout';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/admin/ui/card';
+import { Badge } from '@/components/admin/ui/badge';
+import { Skeleton } from '@/components/admin/ui/skeleton';
+import { KpiTile } from '@/components/admin/ui/kpi-tile';
 import { InlineAlert } from '@/components/ui/alert';
 import { MotionSection } from '@/components/ui/motion-primitives';
-import {
-  AdminRouteHero,
-  AdminRoutePanel,
-  AdminRouteSummaryCard,
-  AdminRouteWorkspace,
-} from '@/components/domain/admin-route-surface';
+
+const BREADCRUMBS = [
+  { label: 'Admin', href: '/admin' },
+  { label: 'Calibration', href: '/admin/calibration' },
+  { label: 'Speaking' },
+];
 import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
 import {
   fetchSpeakingCalibrationSets,
@@ -187,13 +190,13 @@ function SetsTable({
                 </td>
                 <td className="px-4 py-3">
                   <Badge
-                    variant={
+                    variant={(
                       set.status === 'published'
                         ? 'success'
                         : set.status === 'archived'
-                          ? 'muted'
-                          : 'outline'
-                    }
+                          ? 'default'
+                          : 'info'
+                    ) as any}
                     className="text-[10px] uppercase"
                   >
                     {set.status}
@@ -278,96 +281,95 @@ export default function AdminSpeakingCalibrationPage() {
 
   if (!isAuthenticated || role !== 'admin') return null;
 
+  const driftTone: 'danger' | 'warning' | 'success' = summary.driftPercent > 50 ? 'danger' : summary.driftPercent > 20 ? 'warning' : 'success';
+
   return (
-    <AdminRouteWorkspace role="main" aria-label="Speaking calibration">
-      <AdminRouteHero
-        eyebrow="Calibration"
-        icon={Activity}
-        accent="indigo"
-        title="Speaking calibration"
-        description="Tutor-vs-gold drift across published calibration samples. Lower σ = closer to the gold rubric; tutors over the retrain threshold should be reseated."
-      />
-
-      {status === 'loading' ? (
-        <>
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {Array.from({ length: 3 }).map((_, index) => (
-              <Skeleton key={index} className="h-24 rounded-2xl" />
-            ))}
-          </div>
-          <Skeleton className="h-64 rounded-2xl" />
-          <Skeleton className="h-64 rounded-2xl" />
-        </>
-      ) : null}
-
-      {status === 'error' ? (
-        <InlineAlert variant="error" title="Calibration data unavailable">
-          {errorMessage ?? 'The calibration service could not be reached. Please retry shortly.'}
-        </InlineAlert>
-      ) : null}
-
-      {status === 'empty' ? (
-        <AdminRoutePanel title="No calibration data yet">
-          <p className="text-sm text-admin-text-muted">
-            Calibration metrics will appear once admins publish gold samples and tutors submit their
-            rubric scores.
-          </p>
-        </AdminRoutePanel>
-      ) : null}
-
-      {status === 'success' && drift ? (
+    <AdminOperationsLayout
+      title="Speaking calibration"
+      description="Tutor-vs-gold drift across published calibration samples. Lower σ = closer to the gold rubric; tutors over the retrain threshold should be reseated."
+      breadcrumbs={BREADCRUMBS}
+      eyebrow="Calibration"
+      icon={<Activity className="h-5 w-5" />}
+      kpis={status === 'success' && drift ? (
+        <KpiStrip className="lg:grid-cols-3">
+          <KpiTile
+            label="Calibration sets"
+            value={summary.totalSets}
+            tone={summary.totalSets > 0 ? 'success' : 'default'}
+            icon={<CheckCircle2 className="h-4 w-4" />}
+          />
+          <KpiTile
+            label="Active tutors"
+            value={summary.activeTutors}
+            tone={summary.activeTutors > 0 ? 'primary' : 'warning'}
+            icon={<Users className="h-4 w-4" />}
+          />
+          <KpiTile
+            label="% drift over threshold"
+            value={`${summary.driftPercent}%`}
+            tone={driftTone}
+            icon={<AlertTriangle className="h-4 w-4" />}
+          />
+        </KpiStrip>
+      ) : undefined}
+      primaryGrid={(
         <div className="space-y-6">
-          <MotionSection delayIndex={0}>
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-              <AdminRouteSummaryCard
-                label="Calibration sets"
-                value={summary.totalSets}
-                hint={`${drift.samplesPublished} published`}
-                icon={<CheckCircle2 className="h-5 w-5" />}
-                tone={summary.totalSets > 0 ? 'success' : 'default'}
-              />
-              <AdminRouteSummaryCard
-                label="Active tutors"
-                value={summary.activeTutors}
-                hint={`${drift.sampleSize} submissions on record`}
-                icon={<Users className="h-5 w-5" />}
-                tone={summary.activeTutors > 0 ? 'default' : 'warning'}
-              />
-              <AdminRouteSummaryCard
-                label="% drift over threshold"
-                value={`${summary.driftPercent}%`}
-                hint={`${summary.overThreshold} of ${summary.activeTutors} tutors`}
-                icon={<AlertTriangle className="h-5 w-5" />}
-                tone={
-                  summary.driftPercent > 50
-                    ? 'danger'
-                    : summary.driftPercent > 20
-                      ? 'warning'
-                      : 'success'
-                }
-              />
-            </div>
-          </MotionSection>
+          {status === 'loading' ? (
+            <>
+              <Skeleton className="h-64 rounded-admin-lg" />
+              <Skeleton className="h-64 rounded-admin-lg" />
+            </>
+          ) : null}
 
-          <MotionSection delayIndex={1}>
-            <AdminRoutePanel
-              title="Per-tutor agreement"
-              description="Mean absolute error vs the gold rubric across all 9 OET Speaking criteria. Trained < 0.5, Drifting 0.5–1.0, Retrain > 1.0."
-            >
-              <TutorTable tutors={bucketedTutors} />
-            </AdminRoutePanel>
-          </MotionSection>
+          {status === 'error' ? (
+            <InlineAlert variant="error" title="Calibration data unavailable">
+              {errorMessage ?? 'The calibration service could not be reached. Please retry shortly.'}
+            </InlineAlert>
+          ) : null}
 
-          <MotionSection delayIndex={2}>
-            <AdminRoutePanel
-              title="Calibration sets"
-              description="Curated gold-marked recordings. The mean σ column shows the average tutor drift across submissions on each set."
-            >
-              <SetsTable sets={sets} tutors={drift.tutors} />
-            </AdminRoutePanel>
-          </MotionSection>
+          {status === 'empty' ? (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-sm">No calibration data yet</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm text-admin-fg-muted">
+                  Calibration metrics will appear once admins publish gold samples and tutors submit their
+                  rubric scores.
+                </p>
+              </CardContent>
+            </Card>
+          ) : null}
+
+          {status === 'success' && drift ? (
+            <>
+              <MotionSection delayIndex={1}>
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-sm">Per-tutor agreement</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-xs text-admin-fg-muted mb-3">Mean absolute error vs the gold rubric across all 9 OET Speaking criteria. Trained &lt; 0.5, Drifting 0.5–1.0, Retrain &gt; 1.0.</p>
+                    <TutorTable tutors={bucketedTutors} />
+                  </CardContent>
+                </Card>
+              </MotionSection>
+
+              <MotionSection delayIndex={2}>
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-sm">Calibration sets</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-xs text-admin-fg-muted mb-3">Curated gold-marked recordings. The mean σ column shows the average tutor drift across submissions on each set.</p>
+                    <SetsTable sets={sets} tutors={drift.tutors} />
+                  </CardContent>
+                </Card>
+              </MotionSection>
+            </>
+          ) : null}
         </div>
-      ) : null}
-    </AdminRouteWorkspace>
+      )}
+    />
   );
 }

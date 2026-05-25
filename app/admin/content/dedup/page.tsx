@@ -1,12 +1,13 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { AdminRouteSectionHeader, AdminRoutePanel, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
+import { AdminTableLayout } from '@/components/admin/layout/admin-table-layout';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
-import { EmptyState } from '@/components/ui/empty-error';
+import { EmptyState } from '@/components/admin/ui/empty-state';
 import { Toast } from '@/components/ui/alert';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/admin/ui/badge';
+import { Button } from '@/components/admin/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/admin/ui/card';
 import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
 import { fetchAdminDedupGroups, adminDedupScan, adminDesignateCanonical } from '@/lib/api';
 import type { DuplicateGroupSummary, PaginatedResponse } from '@/lib/types/content-hierarchy';
@@ -68,66 +69,77 @@ export default function AdminDedupPage() {
   if (!isAuthenticated) return null;
 
   return (
-    <AdminRouteWorkspace>
-      <AdminRouteSectionHeader
+    <>
+      <AdminTableLayout
         title="Deduplication Review"
         description="Scan for duplicate content and designate canonical versions."
-      />
-
-      <AdminRoutePanel title="Duplicate Groups">
-        <div className="flex items-center justify-between mb-4">
-          <Button variant="primary" size="sm" onClick={handleScan} disabled={scanning}>
-            <RefreshCw className={`w-4 h-4 mr-1 ${scanning ? 'animate-spin' : ''}`} />
+        breadcrumbs={[
+          { label: 'Admin', href: '/admin' },
+          { label: 'Content', href: '/admin/content' },
+          { label: 'Deduplication' },
+        ]}
+        actions={
+          <Button variant="primary" size="sm" onClick={handleScan} disabled={scanning} loading={scanning} startIcon={!scanning ? <RefreshCw className="w-4 h-4" /> : undefined}>
             {scanning ? 'Scanning…' : 'Run Dedup Scan'}
           </Button>
-          <span className="text-xs text-admin-text-muted">{total} duplicate group{total !== 1 ? 's' : ''}</span>
-        </div>
+        }
+      >
+        <div className="p-4 sm:p-5">
+          <div className="flex items-center justify-end mb-4">
+            <span className="text-xs text-admin-fg-muted">{total} duplicate group{total !== 1 ? 's' : ''}</span>
+          </div>
 
-        <AsyncStateWrapper status={pageStatus} errorMessage="Failed to load duplicate groups.">
-          {pageStatus === 'empty' ? (
-            <EmptyState icon={<Copy className="w-8 h-8 text-admin-text-muted" />} title="No duplicates found" description="Run a scan to detect duplicate content items." />
-          ) : (
-            <div className="space-y-4">
-              {groups.map((group) => (
-                <div key={group.duplicateGroupId} className="rounded-lg border p-4">
-                  <div className="flex items-center gap-2 mb-3">
-                    <Copy className="w-4 h-4 text-admin-text-muted" />
-                    <span className="text-sm font-medium">Group: {group.duplicateGroupId}</span>
-                    <Badge variant="muted">{group.count} items</Badge>
-                  </div>
-                  <div className="space-y-2">
-                    {group.items.map((item) => (
-                      <div key={item.id} className="flex items-center justify-between rounded-md border p-2 text-sm">
-                        <div className="flex-1">
-                          <span className="font-medium">{item.title}</span>
-                          <div className="flex gap-2 mt-0.5 text-xs text-admin-text-muted">
-                            <span>{item.subtestCode}</span>
-                            <span>·</span>
-                            <span>{item.sourceProvenance}</span>
-                            <span>·</span>
-                            <span>Q: {item.qualityScore}</span>
-                            <span>·</span>
-                            <Badge variant="muted" className="text-[10px]">{item.status}</Badge>
+          <AsyncStateWrapper status={pageStatus} errorMessage="Failed to load duplicate groups.">
+            {pageStatus === 'empty' ? (
+              <EmptyState icon={<Copy className="w-8 h-8 text-admin-fg-muted" />} title="No duplicates found" description="Run a scan to detect duplicate content items." />
+            ) : (
+              <div className="space-y-4">
+                {groups.map((group) => (
+                  <Card key={group.duplicateGroupId}>
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2 text-base">
+                        <Copy className="w-4 h-4 text-admin-fg-muted" />
+                        <span>Group: {group.duplicateGroupId}</span>
+                        <Badge variant="default">{group.count} items</Badge>
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-2">
+                        {group.items.map((item) => (
+                          <div key={item.id} className="flex items-center justify-between rounded-admin border border-admin-border p-2 text-sm">
+                            <div className="flex-1">
+                              <span className="font-medium text-admin-fg-strong">{item.title}</span>
+                              <div className="flex gap-2 mt-0.5 text-xs text-admin-fg-muted">
+                                <span>{item.subtestCode}</span>
+                                <span>·</span>
+                                <span>{item.sourceProvenance}</span>
+                                <span>·</span>
+                                <span>Q: {item.qualityScore}</span>
+                                <span>·</span>
+                                <Badge variant="default" size="sm">{item.status}</Badge>
+                              </div>
+                            </div>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleDesignate(group.duplicateGroupId, item.id)}
+                              startIcon={<CheckCircle2 className="w-3 h-3" />}
+                            >
+                              Make Canonical
+                            </Button>
                           </div>
-                        </div>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleDesignate(group.duplicateGroupId, item.id)}
-                        >
-                          <CheckCircle2 className="w-3 h-3 mr-1" /> Make Canonical
-                        </Button>
+                        ))}
                       </div>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </AsyncStateWrapper>
-      </AdminRoutePanel>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </AsyncStateWrapper>
+        </div>
+      </AdminTableLayout>
 
       {toast && <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} />}
-    </AdminRouteWorkspace>
+    </>
   );
 }

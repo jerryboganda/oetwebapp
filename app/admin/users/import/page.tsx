@@ -1,13 +1,20 @@
 'use client';
 
-import Link from 'next/link';
 import { useCallback, useRef, useState } from 'react';
-import { ArrowLeft, Download, Upload, FileSpreadsheet, AlertCircle, CheckCircle2, Users, FileText, SkipForward } from 'lucide-react';
-import { AdminRoutePanel, AdminRouteSectionHeader, AdminRouteSummaryCard, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
+import { Download, Upload, FileSpreadsheet, AlertCircle, CheckCircle2, Users, FileText, SkipForward } from 'lucide-react';
+import { AdminSettingsLayout, SettingsSection } from '@/components/admin/layout/admin-settings-layout';
+import { Card, CardContent } from '@/components/admin/ui/card';
 import { Toast } from '@/components/ui/alert';
-import { Button } from '@/components/ui/button';
+import { Button } from '@/components/admin/ui/button';
+import { KpiTile } from '@/components/admin/ui/kpi-tile';
 import { bulkImportUsers } from '@/lib/api';
 import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
+
+const BREADCRUMBS = [
+  { label: 'Admin', href: '/admin' },
+  { label: 'Users', href: '/admin/users' },
+  { label: 'Bulk import' },
+];
 
 interface ImportError {
   row: number;
@@ -98,49 +105,46 @@ export default function BulkImportUsersPage() {
   if (!isAuthenticated) return null;
 
   return (
-    <AdminRouteWorkspace>
+    <AdminSettingsLayout
+      title="Bulk Import Users"
+      description="Upload a CSV file to create multiple user accounts at once."
+      breadcrumbs={BREADCRUMBS}
+      eyebrow="Users"
+      icon={<Upload className="h-5 w-5" />}
+      backHref="/admin/users"
+    >
       {toast && (
         <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} />
       )}
 
-      <div className="mb-6 flex items-center gap-3">
-        <Link
-          href="/admin/users"
-          className="inline-flex items-center gap-1 text-sm font-medium text-muted hover:text-primary"
-        >
-          <ArrowLeft size={16} /> Back to Users
-        </Link>
-      </div>
-
-      <AdminRouteSectionHeader
-        title="Bulk Import Users"
-        description="Upload a CSV file to create multiple user accounts at once."
-      />
-
-      <AdminRoutePanel>
+      <SettingsSection title="Upload CSV">
         <div className="space-y-6">
           {/* Template download */}
-          <div className="flex items-center justify-between rounded-2xl border border-border/40 bg-background-light px-4 py-3">
-            <div className="flex items-center gap-3">
-              <FileSpreadsheet size={20} className="text-muted" />
-              <div>
-                <p className="text-sm font-medium text-navy">CSV Template</p>
-                <p className="text-xs text-muted">Download the template with required headers</p>
+          <Card surface="tinted-primary">
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <FileSpreadsheet size={20} className="text-admin-fg-muted" />
+                  <div>
+                    <p className="text-sm font-medium text-admin-fg-strong">CSV Template</p>
+                    <p className="text-xs text-admin-fg-muted">Download the template with required headers</p>
+                  </div>
+                </div>
+                <Button variant="outline" size="sm" onClick={handleDownloadTemplate}>
+                  <Download size={14} className="mr-1.5" /> Download
+                </Button>
               </div>
-            </div>
-            <Button variant="outline" size="sm" onClick={handleDownloadTemplate}>
-              <Download size={14} className="mr-1.5" /> Download
-            </Button>
-          </div>
+            </CardContent>
+          </Card>
 
           {/* Drop zone */}
           <div
-            className={`flex cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed px-6 py-12 text-center transition-colors ${
+            className={`flex cursor-pointer flex-col items-center justify-center rounded-admin-lg border-2 border-dashed px-6 py-12 text-center transition-colors ${
               isDragging
-                ? 'border-primary bg-primary/5'
+                ? 'border-[var(--admin-primary)] bg-admin-primary-tint'
                 : selectedFile
-                  ? 'border-success bg-success/10'
-                  : 'border-border/60 hover:border-primary/40 hover:bg-background-light'
+                  ? 'border-admin-success bg-admin-success-tint'
+                  : 'border-admin-border hover:border-admin-border-strong hover:bg-admin-bg-subtle'
             }`}
             onDrop={handleDrop}
             onDragOver={handleDragOver}
@@ -157,17 +161,17 @@ export default function BulkImportUsersPage() {
               className="hidden"
               onChange={(e) => handleFileSelect(e.target.files?.[0])}
             />
-            <Upload size={32} className={selectedFile ? 'text-success' : 'text-muted'} />
+            <Upload size={32} className={selectedFile ? 'text-admin-success' : 'text-admin-fg-muted'} />
             {selectedFile ? (
               <div className="mt-3">
-                <p className="text-sm font-semibold text-navy">{selectedFile.name}</p>
-                <p className="mt-1 text-xs text-muted">{(selectedFile.size / 1024).toFixed(1)} KB</p>
-                <p className="mt-2 text-xs text-primary">Click or drop to replace</p>
+                <p className="text-sm font-semibold text-admin-fg-strong">{selectedFile.name}</p>
+                <p className="mt-1 text-xs text-admin-fg-muted">{(selectedFile.size / 1024).toFixed(1)} KB</p>
+                <p className="mt-2 text-xs text-[var(--admin-primary)]">Click or drop to replace</p>
               </div>
             ) : (
               <div className="mt-3">
-                <p className="text-sm font-medium text-admin-text">Drop your CSV file here</p>
-                <p className="mt-1 text-xs text-admin-text-muted">or click to browse — max 5 MB, up to 1,000 rows</p>
+                <p className="text-sm font-medium text-admin-fg-strong">Drop your CSV file here</p>
+                <p className="mt-1 text-xs text-admin-fg-muted">or click to browse — max 5 MB, up to 1,000 rows</p>
               </div>
             )}
           </div>
@@ -177,76 +181,70 @@ export default function BulkImportUsersPage() {
             <Button
               variant="primary"
               disabled={!selectedFile || isUploading}
+              loading={isUploading}
               onClick={handleUpload}
             >
-              {isUploading ? (
-                <>
-                  <span className="mr-2 inline-block h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
-                  Importing…
-                </>
-              ) : (
-                <>
-                  <Upload size={14} className="mr-1.5" /> Import Users
-                </>
-              )}
+              <Upload size={14} className="mr-1.5" /> {isUploading ? 'Importing…' : 'Import Users'}
             </Button>
           </div>
 
           {/* Format guide */}
-          <div className="rounded-2xl border border-border/40 bg-background-light px-4 py-3">
-            <p className="text-xs font-semibold uppercase tracking-wider text-muted">CSV Format</p>
-            <p className="mt-1 text-xs text-muted">
-              Headers: <code className="rounded bg-surface px-1 py-0.5 font-mono text-navy">email,firstName,lastName,role,profession</code>
-            </p>
-            <p className="mt-1 text-xs text-muted">
-              Roles: <code className="rounded bg-surface px-1 py-0.5 font-mono text-navy">learner</code>,{' '}
-              <code className="rounded bg-surface px-1 py-0.5 font-mono text-navy">expert</code>,{' '}
-              <code className="rounded bg-surface px-1 py-0.5 font-mono text-navy">admin</code>
-            </p>
-            <p className="mt-1 text-xs text-muted">Duplicate emails are skipped. Invalid rows are reported in the results.</p>
-          </div>
+          <Card>
+            <CardContent className="p-4">
+              <p className="text-xs font-semibold uppercase tracking-wider text-admin-fg-muted">CSV Format</p>
+              <p className="mt-1 text-xs text-admin-fg-muted">
+                Headers: <code className="rounded bg-admin-bg-subtle px-1 py-0.5 font-mono text-admin-fg-strong">email,firstName,lastName,role,profession</code>
+              </p>
+              <p className="mt-1 text-xs text-admin-fg-muted">
+                Roles: <code className="rounded bg-admin-bg-subtle px-1 py-0.5 font-mono text-admin-fg-strong">learner</code>,{' '}
+                <code className="rounded bg-admin-bg-subtle px-1 py-0.5 font-mono text-admin-fg-strong">expert</code>,{' '}
+                <code className="rounded bg-admin-bg-subtle px-1 py-0.5 font-mono text-admin-fg-strong">admin</code>
+              </p>
+              <p className="mt-1 text-xs text-admin-fg-muted">Duplicate emails are skipped. Invalid rows are reported in the results.</p>
+            </CardContent>
+          </Card>
         </div>
-      </AdminRoutePanel>
+      </SettingsSection>
 
       {/* Results */}
       {result && (
-        <AdminRoutePanel className="mt-6">
-          <AdminRouteSectionHeader title="Import Results" />
-
-          <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
-            <AdminRouteSummaryCard label="Total rows" value={result.total} icon={<FileText className="h-5 w-5" />} />
-            <AdminRouteSummaryCard label="Created" value={result.created} icon={<Users className="h-5 w-5" />} tone="success" />
-            <AdminRouteSummaryCard label="Skipped" value={result.skipped} icon={<SkipForward className="h-5 w-5" />} tone={result.skipped > 0 ? 'warning' : 'default'} />
+        <SettingsSection title="Import Results">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            <KpiTile label="Total rows" value={result.total} icon={<FileText className="h-4 w-4" />} />
+            <KpiTile label="Created" value={result.created} icon={<Users className="h-4 w-4" />} tone="success" />
+            <KpiTile label="Skipped" value={result.skipped} icon={<SkipForward className="h-4 w-4" />} tone={result.skipped > 0 ? 'warning' : 'default'} />
           </div>
 
           {result.created > 0 && result.errors.length === 0 && (
-            <div className="mt-4 flex items-center gap-2 rounded-2xl border border-success bg-success/10 px-4 py-3 text-sm text-success">
-              <CheckCircle2 size={16} />
-              All users imported successfully.
-            </div>
+            <Card surface="tinted-success" className="mt-4">
+              <CardContent className="p-3 flex items-center gap-2 text-sm text-admin-success">
+                <CheckCircle2 size={16} />
+                All users imported successfully.
+              </CardContent>
+            </Card>
           )}
 
           {result.errors.length > 0 && (
             <div className="mt-4">
-              <div className="mb-2 flex items-center gap-2 text-sm font-medium text-danger">
+              <div className="mb-2 flex items-center gap-2 text-sm font-medium text-admin-danger">
                 <AlertCircle size={16} />
                 {result.errors.length} row(s) had errors
               </div>
-              <div className="overflow-hidden rounded-2xl border border-border/40">
+              <div className="overflow-hidden rounded-admin-lg border border-admin-border">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="border-b border-border/40 bg-background-light">
-                      <th className="px-4 py-2 text-left font-semibold text-navy">Row</th>
-                      <th className="px-4 py-2 text-left font-semibold text-navy">Email</th>
-                      <th className="px-4 py-2 text-left font-semibold text-navy">Error</th>
+                    <tr className="border-b border-admin-border bg-admin-bg-subtle">
+                      <th className="px-4 py-2 text-left font-semibold text-admin-fg-strong">Row</th>
+                      <th className="px-4 py-2 text-left font-semibold text-admin-fg-strong">Email</th>
+                      <th className="px-4 py-2 text-left font-semibold text-admin-fg-strong">Error</th>
                     </tr>
                   </thead>
                   <tbody>
                     {result.errors.map((err, i) => (
-                      <tr key={i} className="border-b border-border/20 last:border-b-0">
-                        <td className="px-4 py-2 text-muted">{err.row}</td>
-                        <td className="px-4 py-2 font-mono text-xs text-navy">{err.email || '—'}</td>
-                        <td className="px-4 py-2 text-danger">{err.error}</td>
+                      <tr key={i} className="border-b border-admin-border last:border-b-0">
+                        <td className="px-4 py-2 text-admin-fg-muted">{err.row}</td>
+                        <td className="px-4 py-2 font-mono text-xs text-admin-fg-strong">{err.email || '—'}</td>
+                        <td className="px-4 py-2 text-admin-danger">{err.error}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -254,8 +252,8 @@ export default function BulkImportUsersPage() {
               </div>
             </div>
           )}
-        </AdminRoutePanel>
+        </SettingsSection>
       )}
-    </AdminRouteWorkspace>
+    </AdminSettingsLayout>
   );
 }

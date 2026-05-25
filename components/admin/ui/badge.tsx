@@ -20,6 +20,9 @@ const badgeVariants = cva(
         warning: '',
         danger: '',
         info: '',
+        // Backward-compat aliases (mapped via compoundVariants below).
+        muted: '',
+        outline: '',
       },
       intensity: {
         solid: '',
@@ -103,6 +106,31 @@ const badgeVariants = cva(
         variant: 'info',
         intensity: 'solid',
         class: 'bg-[var(--admin-info)] text-[var(--admin-info-fg)]',
+      },
+      // ── Backward-compat aliases ──
+      // `muted` → render like the default tinted look.
+      {
+        variant: 'muted',
+        intensity: 'tinted',
+        class: 'bg-[var(--admin-bg-subtle)] text-[var(--admin-fg-muted)]',
+      },
+      {
+        variant: 'muted',
+        intensity: 'solid',
+        class: 'bg-[var(--admin-fg-muted)] text-[var(--admin-bg-surface)]',
+      },
+      // `outline` → bordered chip with no fill, neutral foreground.
+      {
+        variant: 'outline',
+        intensity: 'tinted',
+        class:
+          'border border-[var(--admin-border)] bg-transparent text-[var(--admin-fg-default)]',
+      },
+      {
+        variant: 'outline',
+        intensity: 'solid',
+        class:
+          'border border-[var(--admin-fg-default)] bg-transparent text-[var(--admin-fg-default)]',
       },
     ],
     defaultVariants: {

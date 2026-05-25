@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, FileEdit } from 'lucide-react';
 import {
   adminGetGrammarLessonV2,
   adminUpdateGrammarLessonV2,
@@ -14,17 +13,14 @@ import {
   adminArchiveGrammarLessonV2,
 } from '@/lib/api';
 import { AdminPermission, hasPermission } from '@/lib/admin-permissions';
-import {
-  AdminRouteHero,
-  AdminRoutePanel,
-  AdminRouteWorkspace,
-} from '@/components/domain/admin-route-surface';
+import { AdminSettingsLayout } from '@/components/admin/layout/admin-settings-layout';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/admin/ui/card';
 import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
 import { useCurrentUser } from '@/lib/hooks/use-current-user';
 import { Toast } from '@/components/ui/alert';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Skeleton } from '@/components/ui/skeleton';
+import { Button } from '@/components/admin/ui/button';
+import { Badge, statusToTone } from '@/components/admin/ui/badge';
+import { Skeleton } from '@/components/admin/ui/skeleton';
 import {
   GrammarLessonEditor,
   draftToApi,
@@ -35,6 +31,12 @@ import {
 import type { AdminGrammarLessonFull, AdminGrammarTopic, GrammarExerciseType } from '@/lib/grammar/types';
 
 type ToastState = { variant: 'success' | 'error'; message: string } | null;
+
+const BASE_BREADCRUMBS = [
+  { label: 'Admin', href: '/admin' },
+  { label: 'Content', href: '/admin/content' },
+  { label: 'Grammar', href: '/admin/content/grammar' },
+];
 
 export default function EditGrammarLessonPage() {
   const params = useParams<{ lessonId: string }>();
@@ -129,23 +131,35 @@ export default function EditGrammarLessonPage() {
   }, [canWriteContent, lessonId, router]);
 
   if (isLoading) return null;
-
   if (!isAuthenticated || role !== 'admin') return null;
 
   if (!canWriteContent) {
     return (
-      <AdminRouteWorkspace role="main" aria-label="Edit grammar lesson">
-        <p className="text-sm text-muted">Content write permission is required.</p>
-      </AdminRouteWorkspace>
+      <AdminSettingsLayout
+        title="Edit grammar lesson"
+        description="Content write permission is required."
+        eyebrow="CMS"
+        breadcrumbs={[...BASE_BREADCRUMBS, { label: 'Edit lesson' }]}
+      >
+        <Card>
+          <CardContent className="py-8 text-sm text-admin-fg-muted">
+            You do not have permission to edit lessons.
+          </CardContent>
+        </Card>
+      </AdminSettingsLayout>
     );
   }
 
   if (loading || !lesson) {
     return (
-      <AdminRouteWorkspace role="main" aria-label="Edit grammar lesson">
-        <Skeleton className="h-8 w-64 rounded" />
-        <Skeleton className="h-64 rounded-2xl" />
-      </AdminRouteWorkspace>
+      <AdminSettingsLayout
+        title="Loading lesson…"
+        eyebrow="CMS"
+        breadcrumbs={[...BASE_BREADCRUMBS, { label: 'Edit lesson' }]}
+      >
+        <Skeleton className="h-8 w-64 rounded-admin" />
+        <Skeleton className="h-64 rounded-admin" />
+      </AdminSettingsLayout>
     );
   }
 
@@ -183,59 +197,60 @@ export default function EditGrammarLessonPage() {
   };
 
   return (
-    <AdminRouteWorkspace role="main" aria-label="Edit grammar lesson">
-      <Link href="/admin/content/grammar" className="inline-flex items-center gap-1 text-sm text-muted hover:text-navy" aria-label="Back">
-        <ArrowLeft className="h-4 w-4" /> Back to Grammar CMS
-      </Link>
-
-      <AdminRouteHero
-        eyebrow="CMS"
-        icon={FileEdit}
-        accent="navy"
+    <>
+      <AdminSettingsLayout
         title={`Edit: ${lesson.title}`}
         description={`State: ${lesson.publishState} · v${lesson.version}`}
-        aside={(
-          <div className="rounded-2xl border border-border bg-background-light p-4 shadow-sm">
-            <Badge className={lesson.publishState === 'published' ? 'bg-success/10 text-success' : 'bg-surface text-navy'}>
+        eyebrow="CMS"
+        breadcrumbs={[...BASE_BREADCRUMBS, { label: lesson.title }]}
+        actions={
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge variant={statusToTone(lesson.publishState) as 'success' | 'default'}>
               {lesson.publishState} · v{lesson.version}
             </Badge>
-            <div className="mt-3 flex flex-wrap gap-2">
-              {canPublishContent && lesson.publishState === 'published' ? (
-                <Button variant="outline" size="sm" onClick={onUnpublish}>Unpublish</Button>
-              ) : null}
-              <Button variant="outline" size="sm" onClick={onArchive}>Archive</Button>
-            </div>
+            {canPublishContent && lesson.publishState === 'published' ? (
+              <Button variant="outline" size="sm" onClick={onUnpublish}>Unpublish</Button>
+            ) : null}
+            <Button variant="outline" size="sm" onClick={onArchive}>Archive</Button>
+            <Button variant="outline" size="sm" asChild>
+              <Link href="/admin/content/grammar">Back to CMS</Link>
+            </Button>
           </div>
-        )}
-      />
+        }
+      >
+        <Card>
+          <CardHeader>
+            <CardTitle>Publish gate</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            <p className="text-sm text-admin-fg-muted">
+              Publish gate:{' '}
+              {publishGate === null
+                ? 'checking…'
+                : publishGate.canPublish
+                  ? <span className="font-semibold text-[var(--admin-success)]">Pass</span>
+                  : <span className="font-semibold text-[var(--admin-danger)]">Fail ({publishGate.errors.length} issue{publishGate.errors.length === 1 ? '' : 's'})</span>}
+            </p>
+            {publishGate && !publishGate.canPublish ? (
+              <ul className="list-disc pl-5 text-sm text-[var(--admin-danger)]">
+                {publishGate.errors.map((e, i) => <li key={i}>{e}</li>)}
+              </ul>
+            ) : null}
+          </CardContent>
+        </Card>
 
-      <AdminRoutePanel title="Publish gate">
-        <p className="text-sm text-admin-text-muted">
-          Publish gate:{' '}
-          {publishGate === null
-            ? 'checking…'
-            : publishGate.canPublish
-              ? <span className="font-semibold text-success">Pass</span>
-              : <span className="font-semibold text-danger">Fail ({publishGate.errors.length} issue{publishGate.errors.length === 1 ? '' : 's'})</span>}
-        </p>
-        {publishGate && !publishGate.canPublish ? (
-          <ul className="mt-2 list-disc pl-5 text-sm text-danger">
-            {publishGate.errors.map((e, i) => <li key={i}>{e}</li>)}
-          </ul>
-        ) : null}
-      </AdminRoutePanel>
-
-      <GrammarLessonEditor
-        initial={initial}
-        topics={topics.map((t) => ({ id: t.id, name: t.name, slug: t.slug }))}
-        onSave={onSave}
-        onPublish={canPublishContent && publishGate?.canPublish ? onPublish : undefined}
-        publishable={publishGate?.canPublish}
-        publishErrors={publishGate && !publishGate.canPublish ? publishGate.errors : null}
-        saving={saving}
-      />
+        <GrammarLessonEditor
+          initial={initial}
+          topics={topics.map((t) => ({ id: t.id, name: t.name, slug: t.slug }))}
+          onSave={onSave}
+          onPublish={canPublishContent && publishGate?.canPublish ? onPublish : undefined}
+          publishable={publishGate?.canPublish}
+          publishErrors={publishGate && !publishGate.canPublish ? publishGate.errors : null}
+          saving={saving}
+        />
+      </AdminSettingsLayout>
 
       {toast ? <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} /> : null}
-    </AdminRouteWorkspace>
+    </>
   );
 }

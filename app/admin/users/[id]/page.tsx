@@ -4,7 +4,6 @@ import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams } from 'next/navigation';
 import {
-  ArrowLeft,
   Coins,
   KeyRound,
   Lock,
@@ -17,15 +16,13 @@ import {
   User as UserIcon,
   UserLock,
 } from 'lucide-react';
-import {
-  AdminRoutePanel,
-  AdminRouteWorkspace,
-} from '@/components/domain/admin-route-surface';
+import { AdminSettingsLayout, SettingsSection } from '@/components/admin/layout/admin-settings-layout';
+import { Card, CardContent } from '@/components/admin/ui/card';
 import { AdminQuickAction } from '@/components/domain/admin-quick-action';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
 import { Toast } from '@/components/ui/alert';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/admin/ui/badge';
+import { Button } from '@/components/admin/ui/button';
 import { Input } from '@/components/ui/form-controls';
 import { Modal } from '@/components/ui/modal';
 import {
@@ -287,29 +284,35 @@ export default function UserDetailPage() {
 
   if (!isAuthenticated || role !== 'admin') return null;
 
-  return (
-    <AdminRouteWorkspace role="main" aria-label="User operations detail">
-      {toast ? <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} /> : null}
+  const breadcrumbs = [
+    { label: 'Admin', href: '/admin' },
+    { label: 'Users', href: '/admin/users' },
+    { label: user?.name ?? userId },
+  ];
 
-      <Link href="/admin/users" className="inline-flex items-center gap-2 text-sm text-muted hover:text-primary">
-        <ArrowLeft className="h-4 w-4" />
-        Back to users
-      </Link>
+  return (
+    <AdminSettingsLayout
+      title={user?.name ?? 'User profile'}
+      description={user?.id}
+      breadcrumbs={breadcrumbs}
+      eyebrow="User profile"
+      icon={<UserIcon className="h-5 w-5" />}
+      backHref="/admin/users"
+    >
+      {toast ? <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} /> : null}
 
       <AsyncStateWrapper status={pageStatus} onRetry={() => window.location.reload()}>
         {user ? (
           <>
-            <header className="flex flex-col gap-3 border-b border-border/60 pb-4 md:flex-row md:items-end md:justify-between">
+            <div className="flex flex-col gap-3 border-b border-admin-border pb-4 md:flex-row md:items-end md:justify-between">
               <div className="space-y-1">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted">User profile</p>
-                <h1 className="text-2xl font-semibold text-navy">{user.name}</h1>
-                <p className="font-mono text-xs text-muted">{user.id}</p>
+                <p className="font-mono text-xs text-admin-fg-muted">{user.id}</p>
                 <div className="flex flex-wrap items-center gap-2 pt-1">
-                  <Badge variant={user.role === 'admin' ? 'danger' : user.role === 'expert' ? 'warning' : 'default'}>{uiRoleLabel(user.role)}</Badge>
-                  <Badge variant={user.status === 'active' ? 'success' : user.status === 'deleted' ? 'danger' : 'muted'}>{user.status}</Badge>
+                  <Badge variant={(user.role === 'admin' ? 'danger' : user.role === 'expert' ? 'warning' : 'default') as any}>{uiRoleLabel(user.role)}</Badge>
+                  <Badge variant={(user.status === 'active' ? 'success' : user.status === 'deleted' ? 'danger' : 'default') as any}>{user.status}</Badge>
                   {user.security?.lockedOut ? <Badge variant="danger">Locked</Badge> : null}
                   {user.security?.mfaEnabled ? <Badge variant="success">MFA</Badge> : null}
-                  {user.security?.emailVerifiedAt ? <Badge variant="info">Email verified</Badge> : <Badge variant="muted">Email unverified</Badge>}
+                  {user.security?.emailVerifiedAt ? <Badge variant="info">Email verified</Badge> : <Badge variant="default">Email unverified</Badge>}
                 </div>
               </div>
               <div className="flex flex-wrap gap-2">
@@ -365,10 +368,10 @@ export default function UserDetailPage() {
                   <Button onClick={() => openLifecycleModal('restore')} loading={isMutating}>Restore</Button>
                 ) : null}
               </div>
-            </header>
+            </div>
 
             <div className="grid gap-6 lg:grid-cols-[280px,1fr]">
-              <AdminRoutePanel title="Identity" description="Primary account identity and role context.">
+              <SettingsSection title="Identity" description="Primary account identity and role context.">
                 <div className="flex flex-col items-center gap-4 text-center">
                   <div className="flex h-20 w-20 items-center justify-center rounded-full bg-lavender text-primary">
                     <UserIcon className="h-8 w-8" />
@@ -401,7 +404,7 @@ export default function UserDetailPage() {
                     ) : null}
                   </div>
                 </div>
-              </AdminRoutePanel>
+              </SettingsSection>
 
               <div className="space-y-6">
                 <div className="grid gap-4 md:grid-cols-3">
@@ -420,7 +423,7 @@ export default function UserDetailPage() {
                 </div>
 
                 {user.role === 'admin' ? (
-                  <AdminRoutePanel
+                  <SettingsSection
                     title="Permissions"
                     description="Granular admin permissions for this account. Edit in the Admins & Permissions tab."
                   >
@@ -455,11 +458,11 @@ export default function UserDetailPage() {
                         </Link>
                       </div>
                     )}
-                  </AdminRoutePanel>
+                  </SettingsSection>
                 ) : null}
 
                 {user.role === 'expert' ? (
-                  <AdminRoutePanel
+                  <SettingsSection
                     title="Tutor profile"
                     description="Tutor-specific tools: Private Speaking onboarding, calibration, and scheduling."
                   >
@@ -479,10 +482,10 @@ export default function UserDetailPage() {
                         Review Ops
                       </Link>
                     </div>
-                  </AdminRoutePanel>
+                  </SettingsSection>
                 ) : null}
 
-                <AdminRoutePanel title="Security" description="MFA, lockout, and active sessions for this account.">
+                <SettingsSection title="Security" description="MFA, lockout, and active sessions for this account.">
                   {user.security ? (
                     <div className="grid gap-3 md:grid-cols-2">
                       <div className="rounded-2xl border border-border/60 bg-background-light p-4">
@@ -517,10 +520,10 @@ export default function UserDetailPage() {
                   ) : (
                     <p className="text-sm text-muted">No authentication account is linked to this user.</p>
                   )}
-                </AdminRoutePanel>
+                </SettingsSection>
 
                 {user.subscription ? (
-                  <AdminRoutePanel title="Subscription" description="Current billing relationship for this learner.">
+                  <SettingsSection title="Subscription" description="Current billing relationship for this learner.">
                     <div className="grid gap-3 md:grid-cols-2">
                       <div className="rounded-2xl border border-border/60 bg-background-light p-4">
                         <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">Plan</p>
@@ -539,14 +542,14 @@ export default function UserDetailPage() {
                         <p className="mt-1 text-sm font-medium text-navy">{formatDate(user.subscription.nextRenewalAt)}</p>
                       </div>
                     </div>
-                  </AdminRoutePanel>
+                  </SettingsSection>
                 ) : user.role === 'learner' ? (
-                  <AdminRoutePanel title="Subscription" description="No active subscription found for this learner.">
+                  <SettingsSection title="Subscription" description="No active subscription found for this learner.">
                     <p className="text-sm text-admin-text-muted">This learner has not subscribed to a paid plan yet.</p>
-                  </AdminRoutePanel>
+                  </SettingsSection>
                 ) : null}
 
-                <AdminRoutePanel title="Recent activity" description="Last 20 audit events touching this account.">
+                <SettingsSection title="Recent activity" description="Last 20 audit events touching this account.">
                   {user.recentActivity && user.recentActivity.length > 0 ? (
                     <ol className="space-y-2">
                       {user.recentActivity.map((event) => (
@@ -563,7 +566,7 @@ export default function UserDetailPage() {
                   ) : (
                     <p className="text-sm text-muted">No audit events yet for this account.</p>
                   )}
-                </AdminRoutePanel>
+                </SettingsSection>
               </div>
             </div>
           </>
@@ -618,6 +621,6 @@ export default function UserDetailPage() {
           </div>
         </div>
       </Modal>
-    </AdminRouteWorkspace>
+    </AdminSettingsLayout>
   );
 }

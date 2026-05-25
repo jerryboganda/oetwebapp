@@ -2,18 +2,13 @@
 
 import { useEffect, useState } from 'react';
 import { Download, Users } from 'lucide-react';
-import { Button } from '@/components/ui/button';
 import { exportToCsv, formatDateForExport } from '@/lib/csv-export';
-import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
-import { Card } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Skeleton } from '@/components/ui/skeleton';
-import {
-  AdminRouteHero,
-  AdminRoutePanel,
-  AdminRouteSummaryCard,
-  AdminRouteWorkspace,
-} from '@/components/domain/admin-route-surface';
+import { AdminOperationsLayout, KpiStrip, BentoGrid, BentoCell } from '@/components/admin/layout/admin-operations-layout';
+import { Badge } from '@/components/admin/ui/badge';
+import { Button } from '@/components/admin/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/admin/ui/card';
+import { KpiTile } from '@/components/admin/ui/kpi-tile';
+import { Skeleton } from '@/components/admin/ui/skeleton';
 import { analytics } from '@/lib/analytics';
 import { apiClient } from '@/lib/api';
 
@@ -32,20 +27,27 @@ export default function CohortAnalysisPage() {
     apiRequest<CohortData>(`/v1/admin/analytics/cohort?groupBy=${g}`).then(setData).catch(() => {}).finally(() => setLoading(false));
   };
 
-  // eslint-disable-next-line react-hooks/set-state-in-effect -- data-fetch on mount: setState from API response is the correct pattern
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- data-fetch on mount
   useEffect(() => { analytics.track('admin_cohort_analysis_viewed'); load('profession'); }, []);
 
+  const breadcrumbs = [
+    { label: 'Admin', href: '/admin' },
+    { label: 'Analytics', href: '/admin' },
+    { label: 'Cohort' },
+  ];
+
   return (
-    <AdminRouteWorkspace role="main" aria-label="Cohort analysis">
-      <AdminRouteHero
-        eyebrow="Analytics"
-        icon={Users}
-        accent="navy"
-        title="Learner cohort analysis"
-        description="Compare outcomes across professions and subscription tiers."
-        aside={data && data.cohorts.length > 0 ? (
-          <div className="rounded-2xl border border-border bg-background-light p-4 shadow-sm">
-            <Button variant="outline" size="sm" className="gap-2" onClick={() => {
+    <AdminOperationsLayout
+      title="Learner cohort analysis"
+      description="Compare outcomes across professions and subscription tiers."
+      eyebrow="Analytics"
+      breadcrumbs={breadcrumbs}
+      actions={
+        data && data.cohorts.length > 0 ? (
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => {
               const rows = data.cohorts.map(c => ({
                 cohort: c.cohortName,
                 learnerCount: c.learnerCount,
@@ -54,40 +56,71 @@ export default function CohortAnalysisPage() {
                 activeLastMonth: c.activeLastMonth,
               }));
               exportToCsv(rows, `cohort-analysis-${data.groupBy}-${formatDateForExport(new Date())}.csv`);
-            }}>
-              <Download className="w-4 h-4" />
-              Export CSV
-            </Button>
+            }}
+          >
+            <Download className="h-4 w-4" />
+            Export CSV
+          </Button>
+        ) : null
+      }
+      kpis={
+        data ? (
+          <KpiStrip>
+            <KpiTile label="Total learners" value={data.totalLearners} icon={<Users className="h-4 w-4" />} tone="primary" />
+            <KpiTile label="Cohorts" value={data.cohorts.length} tone="info" />
+            <KpiTile label="Grouped by" value={data.groupBy} tone="default" />
+          </KpiStrip>
+        ) : null
+      }
+      primaryGrid={
+        <div className="space-y-6">
+          <div className="flex gap-2">
+            <Button variant={groupBy === 'profession' ? 'primary' : 'secondary'} size="sm" onClick={() => load('profession')}>By Profession</Button>
+            <Button variant={groupBy === 'plan' ? 'primary' : 'secondary'} size="sm" onClick={() => load('plan')}>By Plan</Button>
           </div>
-        ) : undefined}
-      />
 
-      <div className="flex gap-2">
-        <button onClick={() => load('profession')} className={`px-4 py-2 rounded-lg text-sm font-medium ${groupBy === 'profession' ? 'bg-primary text-primary-foreground' : 'bg-muted'}`}>By Profession</button>
-        <button onClick={() => load('plan')} className={`px-4 py-2 rounded-lg text-sm font-medium ${groupBy === 'plan' ? 'bg-primary text-primary-foreground' : 'bg-muted'}`}>By Plan</button>
-      </div>
-
-      {loading ? <div className="space-y-3">{Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-20 rounded-xl" />)}</div> : data ? (
-        <MotionSection className="space-y-4">
-          <AdminRoutePanel>
-            <p className="text-sm text-admin-text-muted">Total learners: <strong>{data.totalLearners}</strong> • Grouped by: <strong className="capitalize">{data.groupBy}</strong></p>
-          </AdminRoutePanel>
-          {data.cohorts.map(c => (
-            <MotionItem key={c.cohortKey}>
-              <AdminRoutePanel
-                title={c.cohortName}
-                actions={<Badge variant="outline">{c.learnerCount} learners</Badge>}
-              >
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                  <AdminRouteSummaryCard label="Avg score" value={c.averageScore ?? '—'} hint="Across recent evaluations" />
-                  <AdminRouteSummaryCard label="Evaluations" value={c.evaluationCount} hint="Lifetime total" />
-                  <AdminRouteSummaryCard label="Active (30d)" value={c.activeLastMonth} hint="Logged in last 30 days" />
-                </div>
-              </AdminRoutePanel>
-            </MotionItem>
-          ))}
-        </MotionSection>
-      ) : <AdminRoutePanel><p className="text-center text-admin-text-muted">No data available.</p></AdminRoutePanel>}
-    </AdminRouteWorkspace>
+          {loading ? (
+            <div className="space-y-3">{Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-20 rounded-admin" />)}</div>
+          ) : data ? (
+            <BentoGrid>
+              {data.cohorts.map(c => (
+                <BentoCell key={c.cohortKey} span={{ default: 12, md: 6 }}>
+                  <Card>
+                    <CardHeader>
+                      <div className="flex items-center justify-between">
+                        <CardTitle>{c.cohortName}</CardTitle>
+                        <Badge variant="primary" intensity="tinted">{c.learnerCount} learners</Badge>
+                      </div>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                        <div>
+                          <p className="text-xs uppercase tracking-wider text-admin-fg-muted">Avg score</p>
+                          <p className="mt-1 text-xl font-bold tabular-nums text-admin-fg-strong">{c.averageScore ?? '—'}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs uppercase tracking-wider text-admin-fg-muted">Evaluations</p>
+                          <p className="mt-1 text-xl font-bold tabular-nums text-admin-fg-strong">{c.evaluationCount}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs uppercase tracking-wider text-admin-fg-muted">Active (30d)</p>
+                          <p className="mt-1 text-xl font-bold tabular-nums text-admin-fg-strong">{c.activeLastMonth}</p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </BentoCell>
+              ))}
+            </BentoGrid>
+          ) : (
+            <Card>
+              <CardContent>
+                <p className="py-8 text-center text-sm text-admin-fg-muted">No data available.</p>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      }
+    />
   );
 }

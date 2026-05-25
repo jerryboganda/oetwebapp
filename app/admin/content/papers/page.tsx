@@ -4,10 +4,11 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { FileText, Plus, Archive as ArchiveIcon } from 'lucide-react';
-import { AdminRoutePanel, AdminRouteSectionHeader, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
+import { AdminTableLayout } from '@/components/admin/layout/admin-table-layout';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/admin/ui/card';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
+import { Button } from '@/components/admin/ui/button';
 import { DataTable, type Column } from '@/components/ui/data-table';
 import { Input, Select } from '@/components/ui/form-controls';
 import { Modal } from '@/components/ui/modal';
@@ -199,49 +200,56 @@ export default function ContentPapersListPage() {
     },
   ], [archive, canWriteContent]);
 
+  const breadcrumbs = [
+    { label: 'Admin', href: '/admin' },
+    { label: 'Content', href: '/admin/content' },
+    { label: 'Papers' },
+  ];
+
   if (!isAuthenticated || role !== 'admin') {
     return (
-      <AdminRouteWorkspace>
-        <p className="text-sm text-muted">Admin access required.</p>
-      </AdminRouteWorkspace>
+      <AdminTableLayout title="Content Papers" breadcrumbs={breadcrumbs}>
+        <p className="p-6 text-sm text-admin-fg-muted">Admin access required.</p>
+      </AdminTableLayout>
     );
   }
 
   return (
-    <AdminRouteWorkspace>
-      <AdminRouteSectionHeader
-        icon={<FileText className="w-6 h-6" />}
-        title="Content Papers"
-        description="Author and publish Listening, Reading, Writing, and Speaking papers. Uploaded files are stored content-addressed and dedup automatically."
-      />
-
-      <AdminRoutePanel title="Filters">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-          <Select label="Subtest" value={filterSubtest} onChange={(e) => setFilterSubtest(e.target.value)} options={SUBTESTS} />
-          <Select label="Status" value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} options={STATUSES} />
-          <Input label="Search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Title or slug" />
-          {canWriteContent ? (
-            <div className="flex items-end gap-2">
-              <Button variant="primary" onClick={() => {
-                setNewProvenance(DEFAULT_CONTENT_SOURCE_PROVENANCE);
-                setShowCreate(true);
-              }}>
-                <Plus className="w-4 h-4 mr-1" /> New paper
-              </Button>
-              <Link
-                href="/admin/content/papers/import"
-                className="inline-flex min-h-11 items-center justify-center rounded-lg border border-border px-4 py-2 text-sm font-semibold text-navy transition hover:bg-background-light"
-              >
-                Bulk import
-              </Link>
-            </div>
-          ) : null}
+    <AdminTableLayout
+      eyebrow="CMS"
+      icon={<FileText className="w-5 h-5" />}
+      title="Content Papers"
+      description="Author and publish Listening, Reading, Writing, and Speaking papers. Uploaded files are stored content-addressed and dedup automatically."
+      breadcrumbs={breadcrumbs}
+      actions={canWriteContent ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <Button variant="primary" size="sm" onClick={() => {
+            setNewProvenance(DEFAULT_CONTENT_SOURCE_PROVENANCE);
+            setShowCreate(true);
+          }}>
+            <Plus className="w-4 h-4 mr-1.5" /> New paper
+          </Button>
+          <Button variant="outline" size="sm" asChild>
+            <Link href="/admin/content/papers/import">Bulk import</Link>
+          </Button>
         </div>
-      </AdminRoutePanel>
-
+      ) : undefined}
+      banner={
+        <Card>
+          <CardHeader><CardTitle>Filters</CardTitle></CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <Select label="Subtest" value={filterSubtest} onChange={(e) => setFilterSubtest(e.target.value)} options={SUBTESTS} />
+              <Select label="Status" value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} options={STATUSES} />
+              <Input label="Search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Title or slug" />
+            </div>
+          </CardContent>
+        </Card>
+      }
+    >
       <AsyncStateWrapper status={status}>
-        <AdminRoutePanel title={`Papers (${rows.length})`}>
-          <DataTable data={rows} columns={columns} keyExtractor={(p) => p.id} selectable selectedKeys={selectedKeys} onSelectionChange={setSelectedKeys} />
+        <DataTable data={rows} columns={columns} keyExtractor={(p) => p.id} selectable selectedKeys={selectedKeys} onSelectionChange={setSelectedKeys} />
+        <div className="p-4">
           <BulkActionBar
             selectedCount={selectedKeys.size}
             onClearSelection={() => setSelectedKeys(new Set())}
@@ -250,7 +258,7 @@ export default function ContentPapersListPage() {
               { key: 'publish', label: 'Publish selected', onClick: () => {} },
             ]}
           />
-        </AdminRoutePanel>
+        </div>
       </AsyncStateWrapper>
 
       <Modal open={showCreate && canWriteContent} onClose={() => setShowCreate(false)} title="Create paper">
@@ -285,11 +293,11 @@ export default function ContentPapersListPage() {
         </div>
         <div className="flex gap-3 mt-4 justify-end">
           <Button variant="ghost" onClick={() => setShowCreate(false)}>Cancel</Button>
-          <Button variant="primary" onClick={() => void createNow()} loading={saving} disabled={!newTitle.trim()}>Create</Button>
+          <Button variant="primary" onClick={() => void createNow()} loading={saving} loadingText="Creating…" disabled={!newTitle.trim()}>Create</Button>
         </div>
       </Modal>
 
       {toast && <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} />}
-    </AdminRouteWorkspace>
+    </AdminTableLayout>
   );
 }

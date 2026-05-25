@@ -1,13 +1,13 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { AdminRouteSectionHeader, AdminRoutePanel, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
+import { AdminTableLayout } from '@/components/admin/layout/admin-table-layout';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
 import { DataTable, type Column } from '@/components/ui/data-table';
-import { EmptyState } from '@/components/ui/empty-error';
+import { EmptyState } from '@/components/admin/ui/empty-state';
 import { InlineAlert, Toast } from '@/components/ui/alert';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/admin/ui/badge';
+import { Button } from '@/components/admin/ui/button';
 import { Pagination } from '@/components/ui/pagination';
 import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
 import {
@@ -75,18 +75,18 @@ export default function AdminContentImportPage() {
   }
 
   const columns: Column<ContentInventoryItem>[] = [
-    { key: 'title', header: 'Title', render: (r) => <span className="font-medium text-sm">{r.title}</span> },
-    { key: 'subtestCode', header: 'Subtest', render: (r) => <Badge variant="muted">{r.subtestCode}</Badge> },
-    { key: 'difficulty', header: 'Difficulty', render: (r) => <Badge variant="muted">{r.difficulty}</Badge> },
-    { key: 'sourceProvenance', header: 'Source', render: (r) => <span className="text-xs text-muted">{r.sourceProvenance}</span> },
-    { key: 'status', header: 'Status', render: (r) => <Badge variant={r.status === 'Published' ? 'default' : 'muted'}>{r.status}</Badge> },
+    { key: 'title', header: 'Title', render: (r) => <span className="font-medium text-sm text-admin-fg-strong">{r.title}</span> },
+    { key: 'subtestCode', header: 'Subtest', render: (r) => <Badge variant="default">{r.subtestCode}</Badge> },
+    { key: 'difficulty', header: 'Difficulty', render: (r) => <Badge variant="default">{r.difficulty}</Badge> },
+    { key: 'sourceProvenance', header: 'Source', render: (r) => <span className="text-xs text-admin-fg-muted">{r.sourceProvenance}</span> },
+    { key: 'status', header: 'Status', render: (r) => <Badge variant={r.status === 'Published' ? 'success' : 'default'}>{r.status}</Badge> },
     { key: 'qualityScore', header: 'Quality', render: (r) => <span className="text-xs">{r.qualityScore}</span> },
     {
       key: 'flags', header: 'Flags', render: (r) => (
         <div className="flex gap-1">
-          {r.isMockEligible && <Badge variant="muted" className="text-[10px]">Mock</Badge>}
-          {r.isDiagnosticEligible && <Badge variant="muted" className="text-[10px]">Diag</Badge>}
-          {r.isPreviewEligible && <Badge variant="muted" className="text-[10px]">Preview</Badge>}
+          {r.isMockEligible && <Badge variant="default" size="sm">Mock</Badge>}
+          {r.isDiagnosticEligible && <Badge variant="default" size="sm">Diag</Badge>}
+          {r.isPreviewEligible && <Badge variant="default" size="sm">Preview</Badge>}
         </div>
       ),
     },
@@ -95,33 +95,32 @@ export default function AdminContentImportPage() {
   if (!isAuthenticated) return null;
 
   return (
-    <AdminRouteWorkspace>
-      <AdminRouteSectionHeader
+    <>
+      <AdminTableLayout
         title="Content Import & Inventory"
         description="Bulk import content and manage the content inventory."
-      />
-
-      <AdminRoutePanel title="Content Inventory">
-        <div className="flex items-center justify-between mb-4">
+        breadcrumbs={[
+          { label: 'Admin', href: '/admin' },
+          { label: 'Content', href: '/admin/content' },
+          { label: 'Import' },
+        ]}
+        actions={
           <div className="flex items-center gap-2">
             <label className="cursor-pointer">
               <input type="file" accept=".json" className="hidden" onChange={handleFileImport} disabled={importing} />
-              <Button variant="primary" size="sm" disabled={importing}>
-                <Upload className="w-4 h-4 mr-1" /> {importing ? 'Importing…' : 'Import JSON'}
+              <Button variant="primary" size="sm" disabled={importing} loading={importing} startIcon={!importing ? <Upload className="w-4 h-4" /> : undefined}>
+                {importing ? 'Importing…' : 'Import JSON'}
               </Button>
             </label>
-            <Button variant="outline" size="sm" onClick={() => setReloadNonce(n => n + 1)}>
-              <RefreshCw className="w-4 h-4 mr-1" /> Refresh
+            <Button variant="outline" size="sm" onClick={() => setReloadNonce(n => n + 1)} startIcon={<RefreshCw className="w-4 h-4" />}>
+              Refresh
             </Button>
           </div>
-          <span className="text-xs text-admin-text-muted">{total} item{total !== 1 ? 's' : ''}</span>
-        </div>
-
-        {importResult && (
+        }
+        banner={importResult ? (
           <InlineAlert
             variant={importResult.failed > 0 ? 'warning' : 'success'}
             title={`Last import — batch ${importResult.batchId}`}
-            className="mb-4"
           >
             <div>
               Created: {importResult.created} · Failed: {importResult.failed}
@@ -135,39 +134,45 @@ export default function AdminContentImportPage() {
               )}
             </div>
           </InlineAlert>
-        )}
+        ) : undefined}
+      >
+        <div className="p-4 sm:p-5">
+          <div className="flex items-center justify-end mb-4">
+            <span className="text-xs text-admin-fg-muted">{total} item{total !== 1 ? 's' : ''}</span>
+          </div>
 
-        <AsyncStateWrapper status={pageStatus} errorMessage="Failed to load inventory.">
-          {pageStatus === 'empty' ? (
-            <EmptyState icon={<Package className="w-8 h-8 text-admin-text-muted" />} title="No content items yet" description="Import content using the button above." />
-          ) : (
-            <>
-            <DataTable columns={columns} data={items} keyExtractor={(r) => r.id} onRowClick={(r) => window.open(`/admin/content?id=${r.id}`, '_self')} selectable selectedKeys={selectedKeys} onSelectionChange={setSelectedKeys} />
-            <BulkActionBar
-              selectedCount={selectedKeys.size}
-              onClearSelection={() => setSelectedKeys(new Set())}
-              actions={[
-                { key: 'delete', label: 'Delete selected', variant: 'danger', onClick: () => {} },
-              ]}
+          <AsyncStateWrapper status={pageStatus} errorMessage="Failed to load inventory.">
+            {pageStatus === 'empty' ? (
+              <EmptyState icon={<Package className="w-8 h-8 text-admin-fg-muted" />} title="No content items yet" description="Import content using the button above." />
+            ) : (
+              <>
+                <DataTable columns={columns} data={items} keyExtractor={(r) => r.id} onRowClick={(r) => window.open(`/admin/content?id=${r.id}`, '_self')} selectable selectedKeys={selectedKeys} onSelectionChange={setSelectedKeys} />
+                <BulkActionBar
+                  selectedCount={selectedKeys.size}
+                  onClearSelection={() => setSelectedKeys(new Set())}
+                  actions={[
+                    { key: 'delete', label: 'Delete selected', variant: 'danger', onClick: () => { } },
+                  ]}
+                />
+              </>
+            )}
+          </AsyncStateWrapper>
+
+          <div className="mt-4">
+            <Pagination
+              page={page}
+              pageSize={pageSize}
+              total={total}
+              onPageChange={setPage}
+              onPageSizeChange={setPageSize}
+              itemLabel="item"
+              itemLabelPlural="items"
             />
-            </>
-          )}
-        </AsyncStateWrapper>
-
-        <div className="mt-4">
-          <Pagination
-            page={page}
-            pageSize={pageSize}
-            total={total}
-            onPageChange={setPage}
-            onPageSizeChange={setPageSize}
-            itemLabel="item"
-            itemLabelPlural="items"
-          />
+          </div>
         </div>
-      </AdminRoutePanel>
+      </AdminTableLayout>
 
       {toast && <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} />}
-    </AdminRouteWorkspace>
+    </>
   );
 }

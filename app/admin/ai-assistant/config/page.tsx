@@ -1,12 +1,13 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { Save, ShieldCheck, Plus, Trash2 } from 'lucide-react';
-import { AdminRoutePanel, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
+import { Save, ShieldCheck } from 'lucide-react';
+import { AdminSettingsLayout, SettingsSection } from '@/components/admin/layout/admin-settings-layout';
+import { Badge } from '@/components/admin/ui/badge';
+import { Button } from '@/components/admin/ui/button';
+import { Card, CardContent } from '@/components/admin/ui/card';
+import { EmptyState } from '@/components/admin/ui/empty-state';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { EmptyState } from '@/components/ui/empty-error';
 import { Input, Select } from '@/components/ui/form-controls';
 import { Toast } from '@/components/ui/alert';
 import { Tabs } from '@/components/ui/tabs';
@@ -34,7 +35,6 @@ interface AssistantConfig {
 type PageStatus = 'loading' | 'success' | 'error';
 type ToastState = { variant: 'success' | 'error'; message: string } | null;
 
-const DEFAULT_ROLES = ['learner', 'expert', 'admin'];
 const TABS = [
   { id: 'models', label: 'Models & Limits' },
   { id: 'tools', label: 'Tool Access' },
@@ -106,41 +106,58 @@ export default function AiAssistantConfigPage() {
     });
   }, []);
 
+  const breadcrumbs = [
+    { label: 'Admin', href: '/admin' },
+    { label: 'AI Assistant', href: '/admin' },
+    { label: 'Configuration' },
+  ];
+
   if (!isAuthenticated || role !== 'admin') {
     return (
-      <AdminRouteWorkspace>
-        <EmptyState icon={<ShieldCheck className="w-8 h-8" />} title="Admin access required" description="Sign in with an admin account to view this page." />
-      </AdminRouteWorkspace>
+      <AdminSettingsLayout title="AI Assistant Configuration" eyebrow="AI Assistant" breadcrumbs={breadcrumbs}>
+        <EmptyState
+          title="Admin access required"
+          description="Sign in with an admin account to view this page."
+          illustration={<ShieldCheck className="h-8 w-8" />}
+        />
+      </AdminSettingsLayout>
     );
   }
 
   return (
-    <AdminRouteWorkspace>
+    <AdminSettingsLayout
+      title="AI Assistant Configuration"
+      description="Configure per-role model selection, token limits, tool access, system prompts, and rate limiting."
+      eyebrow="AI Assistant"
+      breadcrumbs={breadcrumbs}
+      actions={
+        <Button variant="primary" onClick={handleSave} disabled={saving} size="sm">
+          <Save className="h-4 w-4" />
+          {saving ? 'Saving…' : 'Save Configuration'}
+        </Button>
+      }
+    >
       {toast && <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} />}
 
       <AsyncStateWrapper status={status} onRetry={loadConfig}>
         {config && (
           <>
-            <div className="flex items-center justify-between">
+            <SettingsSection title="Section" description="Choose what to configure.">
               <Tabs tabs={TABS} activeTab={activeTab} onChange={setActiveTab} />
-              <Button variant="primary" onClick={handleSave} disabled={saving} className="gap-1.5">
-                <Save className="h-4 w-4" />
-                {saving ? 'Saving…' : 'Save Configuration'}
-              </Button>
-            </div>
+            </SettingsSection>
 
             {activeTab === 'models' && (
-              <div className="space-y-3">
+              <div className="space-y-4">
                 {config.roles.map((rc) => (
-                  <AdminRoutePanel key={rc.role}>
-                    <div className="p-4">
+                  <Card key={rc.role}>
+                    <CardContent className="p-4">
                       <div className="mb-3 flex items-center gap-2">
-                        <Badge variant="info">{rc.role}</Badge>
-                        <span className="text-sm font-bold text-admin-text">Model & Token Limits</span>
+                        <Badge variant="primary" intensity="tinted">{rc.role}</Badge>
+                        <span className="text-sm font-bold text-admin-fg-strong">Model & Token Limits</span>
                       </div>
                       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
                         <div>
-                          <label className="mb-1 block text-xs font-medium text-admin-text-muted">Model</label>
+                          <label className="mb-1 block text-xs font-medium text-admin-fg-muted">Model</label>
                           <Select
                             value={rc.model}
                             onChange={(e) => updateRoleConfig(rc.role, { model: e.target.value })}
@@ -149,7 +166,7 @@ export default function AiAssistantConfigPage() {
                           />
                         </div>
                         <div>
-                          <label className="mb-1 block text-xs font-medium text-admin-text-muted">Max Tokens/Request</label>
+                          <label className="mb-1 block text-xs font-medium text-admin-fg-muted">Max Tokens/Request</label>
                           <Input
                             type="number"
                             value={rc.maxTokensPerRequest}
@@ -158,7 +175,7 @@ export default function AiAssistantConfigPage() {
                           />
                         </div>
                         <div>
-                          <label className="mb-1 block text-xs font-medium text-admin-text-muted">Max Tokens/Day</label>
+                          <label className="mb-1 block text-xs font-medium text-admin-fg-muted">Max Tokens/Day</label>
                           <Input
                             type="number"
                             value={rc.maxTokensPerDay}
@@ -167,7 +184,7 @@ export default function AiAssistantConfigPage() {
                           />
                         </div>
                         <div>
-                          <label className="mb-1 block text-xs font-medium text-admin-text-muted">Max Iterations</label>
+                          <label className="mb-1 block text-xs font-medium text-admin-fg-muted">Max Iterations</label>
                           <Input
                             type="number"
                             value={rc.maxIterations}
@@ -176,20 +193,20 @@ export default function AiAssistantConfigPage() {
                           />
                         </div>
                       </div>
-                    </div>
-                  </AdminRoutePanel>
+                    </CardContent>
+                  </Card>
                 ))}
               </div>
             )}
 
             {activeTab === 'tools' && (
-              <div className="space-y-3">
+              <div className="space-y-4">
                 {config.roles.map((rc) => (
-                  <AdminRoutePanel key={rc.role}>
-                    <div className="p-4">
+                  <Card key={rc.role}>
+                    <CardContent className="p-4">
                       <div className="mb-3 flex items-center gap-2">
-                        <Badge variant="info">{rc.role}</Badge>
-                        <span className="text-sm font-bold text-admin-text">Available Tools</span>
+                        <Badge variant="primary" intensity="tinted">{rc.role}</Badge>
+                        <span className="text-sm font-bold text-admin-fg-strong">Available Tools</span>
                       </div>
                       <div className="flex flex-wrap gap-2">
                         {config.availableTools.map((tool) => {
@@ -198,10 +215,10 @@ export default function AiAssistantConfigPage() {
                             <button
                               key={tool}
                               onClick={() => toggleTool(rc.role, tool)}
-                              className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors ${
+                              className={`rounded-admin border px-3 py-1.5 text-xs font-medium transition-colors ${
                                 enabled
-                                  ? 'border-emerald-500/40 bg-emerald-500/15 text-emerald-300'
-                                  : 'border-admin-border bg-admin-surface-raised text-admin-text-muted hover:border-admin-text-muted'
+                                  ? 'border-[var(--admin-success)] bg-[var(--admin-success-tint)] text-[var(--admin-success)]'
+                                  : 'border-admin-border bg-admin-bg-subtle text-admin-fg-muted hover:border-admin-fg-muted'
                               }`}
                             >
                               {tool}
@@ -209,49 +226,47 @@ export default function AiAssistantConfigPage() {
                           );
                         })}
                       </div>
-                    </div>
-                  </AdminRoutePanel>
+                    </CardContent>
+                  </Card>
                 ))}
               </div>
             )}
 
             {activeTab === 'prompts' && (
-              <div className="space-y-3">
+              <div className="space-y-4">
                 {config.roles.map((rc) => (
-                  <AdminRoutePanel key={rc.role}>
-                    <div className="p-4">
+                  <Card key={rc.role}>
+                    <CardContent className="p-4">
                       <div className="mb-3 flex items-center gap-2">
-                        <Badge variant="info">{rc.role}</Badge>
-                        <span className="text-sm font-bold text-admin-text">System Prompt</span>
+                        <Badge variant="primary" intensity="tinted">{rc.role}</Badge>
+                        <span className="text-sm font-bold text-admin-fg-strong">System Prompt</span>
                       </div>
                       <textarea
                         value={rc.systemPrompt}
                         onChange={(e) => updateRoleConfig(rc.role, { systemPrompt: e.target.value })}
                         rows={8}
-                        className="w-full rounded-lg border border-admin-border bg-admin-surface-raised p-3 text-sm text-admin-text placeholder:text-admin-text-muted focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
+                        className="w-full rounded-admin border border-admin-border bg-admin-bg-surface p-3 text-sm text-admin-fg-strong placeholder:text-admin-fg-muted focus:border-[var(--admin-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--admin-primary)]"
                         placeholder={`System prompt for ${rc.role} role…`}
                       />
-                      <p className="mt-1 text-xs text-admin-text-muted">
-                        {rc.systemPrompt.length} characters
-                      </p>
-                    </div>
-                  </AdminRoutePanel>
+                      <p className="mt-1 text-xs text-admin-fg-muted">{rc.systemPrompt.length} characters</p>
+                    </CardContent>
+                  </Card>
                 ))}
               </div>
             )}
 
             {activeTab === 'rate-limits' && (
-              <div className="space-y-3">
+              <div className="space-y-4">
                 {config.roles.map((rc) => (
-                  <AdminRoutePanel key={rc.role}>
-                    <div className="p-4">
+                  <Card key={rc.role}>
+                    <CardContent className="p-4">
                       <div className="mb-3 flex items-center gap-2">
-                        <Badge variant="info">{rc.role}</Badge>
-                        <span className="text-sm font-bold text-admin-text">Rate Limiting</span>
+                        <Badge variant="primary" intensity="tinted">{rc.role}</Badge>
+                        <span className="text-sm font-bold text-admin-fg-strong">Rate Limiting</span>
                       </div>
                       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                         <div>
-                          <label className="mb-1 block text-xs font-medium text-admin-text-muted">Requests per Minute</label>
+                          <label className="mb-1 block text-xs font-medium text-admin-fg-muted">Requests per Minute</label>
                           <Input
                             type="number"
                             value={rc.rateLimitPerMinute}
@@ -260,7 +275,7 @@ export default function AiAssistantConfigPage() {
                           />
                         </div>
                         <div>
-                          <label className="mb-1 block text-xs font-medium text-admin-text-muted">Requests per Hour</label>
+                          <label className="mb-1 block text-xs font-medium text-admin-fg-muted">Requests per Hour</label>
                           <Input
                             type="number"
                             value={rc.rateLimitPerHour}
@@ -269,14 +284,14 @@ export default function AiAssistantConfigPage() {
                           />
                         </div>
                       </div>
-                    </div>
-                  </AdminRoutePanel>
+                    </CardContent>
+                  </Card>
                 ))}
               </div>
             )}
           </>
         )}
       </AsyncStateWrapper>
-    </AdminRouteWorkspace>
+    </AdminSettingsLayout>
   );
 }

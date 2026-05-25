@@ -3,9 +3,11 @@
 import { useRef, useState } from 'react';
 import Link from 'next/link';
 import { ArrowLeft, CloudUpload, Loader2 } from 'lucide-react';
-import { AdminRoutePanel, AdminRouteSectionHeader, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
+import { AdminSettingsLayout } from '@/components/admin/layout/admin-settings-layout';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/admin/ui/card';
+import { Input } from '@/components/admin/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
+import { Button } from '@/components/admin/ui/button';
 import { DataTable, type Column } from '@/components/ui/data-table';
 import { InlineAlert, Toast } from '@/components/ui/alert';
 import { AdminPermission, hasPermission } from '@/lib/admin-permissions';
@@ -56,14 +58,29 @@ export default function BulkImportPage() {
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
   const fileRef = useRef<HTMLInputElement>(null);
 
+  const breadcrumbs = [
+    { label: 'Admin', href: '/admin' },
+    { label: 'Content', href: '/admin/content' },
+    { label: 'Papers', href: '/admin/content/papers' },
+    { label: 'Bulk import' },
+  ];
+
   if (isLoading) return null;
 
   if (!isAuthenticated || role !== 'admin') {
-    return <AdminRouteWorkspace><p className="text-sm text-muted">Admin access required.</p></AdminRouteWorkspace>;
+    return (
+      <AdminSettingsLayout title="Bulk import" breadcrumbs={breadcrumbs}>
+        <Card><CardContent className="p-6"><p className="text-sm text-admin-fg-muted">Admin access required.</p></CardContent></Card>
+      </AdminSettingsLayout>
+    );
   }
 
   if (!canWriteContent) {
-    return <AdminRouteWorkspace><p className="text-sm text-muted">Content write permission is required.</p></AdminRouteWorkspace>;
+    return (
+      <AdminSettingsLayout title="Bulk import" breadcrumbs={breadcrumbs}>
+        <Card><CardContent className="p-6"><p className="text-sm text-admin-fg-muted">Content write permission is required.</p></CardContent></Card>
+      </AdminSettingsLayout>
+    );
   }
 
   const doUpload = async (file: File) => {
@@ -142,73 +159,88 @@ export default function BulkImportPage() {
   ];
 
   return (
-    <AdminRouteWorkspace>
-      <Link href="/admin/content/papers" className="inline-flex items-center gap-2 text-sm text-muted hover:text-navy">
-        <ArrowLeft className="w-4 h-4" /> Back to papers
-      </Link>
-
-      <AdminRouteSectionHeader
-        icon={<CloudUpload className="w-6 h-6" />}
-        title="Bulk import"
-        description="Upload a ZIP matching the Project Real Content folder structure. The system proposes papers, you approve, and assets are stored content-addressed with SHA-256 dedup."
-      />
-
-      <AdminRoutePanel title="Upload ZIP">
-        <div className="flex items-center gap-4">
-          <input
-            ref={fileRef}
-            type="file"
-            accept=".zip,application/zip"
-            disabled={uploading}
-            onChange={(e) => { const f = e.target.files?.[0]; if (f) void doUpload(f); }}
-          />
-          {uploading && <span className="text-sm text-admin-text-muted flex items-center gap-2"><Loader2 className="w-4 h-4 animate-spin" /> Staging…</span>}
-        </div>
-      </AdminRoutePanel>
-
-      {staged && (
-        <>
-          {staged.issues.length > 0 && (
-            <InlineAlert variant="warning">
-              {staged.issues.length} files were not auto-classified. Edit each paper post-import to add them manually.
-            </InlineAlert>
-          )}
-
-          <AdminRoutePanel title="Source provenance (required before commit)">
-            <input
-              type="text"
-              className="w-full border rounded-lg p-2"
-              value={provenance}
-              onChange={(e) => setProvenance(e.target.value)}
-              placeholder={DEFAULT_CONTENT_SOURCE_PROVENANCE}
-            />
-          </AdminRoutePanel>
-
-          <AdminRoutePanel title={`Proposed papers (${staged.papers.length})`}>
-            <DataTable data={staged.papers} columns={columns} keyExtractor={(p) => p.proposalId} selectable selectedKeys={selectedKeys} onSelectionChange={setSelectedKeys} />
-          <BulkActionBar
-            selectedCount={selectedKeys.size}
-            onClearSelection={() => setSelectedKeys(new Set())}
-            actions={[
-              { key: 'discard', label: 'Discard selected', variant: 'danger', onClick: () => setToast({ variant: 'error', message: 'Bulk discard coming soon.' }) },
-            ]}
-          />
-            <div className="flex gap-3 mt-4 justify-end">
-              <Button variant="ghost" onClick={() => { setStaged(null); setApproved({}); }}>Discard</Button>
-              <Button
-                variant="primary"
-                onClick={() => void doCommit()}
-                loading={committing}
-                disabled={!provenance.trim() || Object.values(approved).every((v) => !v)}
-              >
-                Approve selected &amp; commit
-              </Button>
+    <AdminSettingsLayout
+      eyebrow="CMS"
+      icon={<CloudUpload className="w-5 h-5" />}
+      title="Bulk import"
+      description="Upload a ZIP matching the Project Real Content folder structure. The system proposes papers, you approve, and assets are stored content-addressed with SHA-256 dedup."
+      breadcrumbs={breadcrumbs}
+      actions={
+        <Button variant="ghost" size="sm" asChild>
+          <Link href="/admin/content/papers">
+            <ArrowLeft className="w-4 h-4 mr-1.5" /> Back to papers
+          </Link>
+        </Button>
+      }
+    >
+      <div className="space-y-6">
+        <Card>
+          <CardHeader><CardTitle>Upload ZIP</CardTitle></CardHeader>
+          <CardContent>
+            <div className="flex items-center gap-4">
+              <input
+                ref={fileRef}
+                type="file"
+                accept=".zip,application/zip"
+                disabled={uploading}
+                onChange={(e) => { const f = e.target.files?.[0]; if (f) void doUpload(f); }}
+                className="block text-sm text-admin-fg-strong file:mr-3 file:rounded-admin file:border-0 file:bg-[var(--admin-primary)] file:px-3 file:py-2 file:text-sm file:font-semibold file:text-white"
+              />
+              {uploading && <span className="text-sm text-admin-fg-muted flex items-center gap-2"><Loader2 className="w-4 h-4 animate-spin" /> Staging…</span>}
             </div>
-          </AdminRoutePanel>
-        </>
-      )}
+          </CardContent>
+        </Card>
+
+        {staged && (
+          <>
+            {staged.issues.length > 0 && (
+              <InlineAlert variant="warning">
+                {staged.issues.length} files were not auto-classified. Edit each paper post-import to add them manually.
+              </InlineAlert>
+            )}
+
+            <Card>
+              <CardHeader><CardTitle>Source provenance (required before commit)</CardTitle></CardHeader>
+              <CardContent>
+                <Input
+                  type="text"
+                  value={provenance}
+                  onChange={(e) => setProvenance(e.target.value)}
+                  placeholder={DEFAULT_CONTENT_SOURCE_PROVENANCE}
+                />
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader><CardTitle>Proposed papers ({staged.papers.length})</CardTitle></CardHeader>
+              <CardContent>
+                <DataTable data={staged.papers} columns={columns} keyExtractor={(p) => p.proposalId} selectable selectedKeys={selectedKeys} onSelectionChange={setSelectedKeys} />
+                <BulkActionBar
+                  selectedCount={selectedKeys.size}
+                  onClearSelection={() => setSelectedKeys(new Set())}
+                  actions={[
+                    { key: 'discard', label: 'Discard selected', variant: 'danger', onClick: () => setToast({ variant: 'error', message: 'Bulk discard coming soon.' }) },
+                  ]}
+                />
+                <div className="flex gap-3 mt-4 justify-end">
+                  <Button variant="ghost" onClick={() => { setStaged(null); setApproved({}); }}>Discard</Button>
+                  <Button
+                    variant="primary"
+                    onClick={() => void doCommit()}
+                    loading={committing}
+                    loadingText="Committing…"
+                    disabled={!provenance.trim() || Object.values(approved).every((v) => !v)}
+                  >
+                    Approve selected &amp; commit
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </>
+        )}
+      </div>
 
       {toast && <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} />}
-    </AdminRouteWorkspace>
+    </AdminSettingsLayout>
   );
 }
