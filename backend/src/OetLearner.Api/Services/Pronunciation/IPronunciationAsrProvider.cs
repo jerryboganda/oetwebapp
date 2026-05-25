@@ -31,6 +31,7 @@ public interface IPronunciationAsrProvider
 }
 
 public sealed record AsrRequest(
+    string UserId,
     Stream Audio,
     string AudioMimeType,
     string ReferenceText,
@@ -68,3 +69,9 @@ public sealed record FluencyMarkers(
     double SpeechRateWpm,
     int PauseCount,
     int AveragePauseDurationMs);
+
+public sealed class PronunciationAsrUnavailableException(string code, string message)
+    : InvalidOperationException(message)
+{
+    public string Code { get; } = code;
+}

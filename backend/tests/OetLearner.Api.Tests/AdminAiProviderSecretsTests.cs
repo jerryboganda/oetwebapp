@@ -1,10 +1,14 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services.Pronunciation;
 using OetLearner.Api.Tests.Infrastructure;
 
 namespace OetLearner.Api.Tests;
@@ -44,6 +48,66 @@ public sealed class AdminAiProviderSecretsTests
         // longer would mean we are echoing more of the secret than the
         // contract permits.
         Assert.Equal("…" + SyntheticProviderKey[^4..], hint.GetString());
+    }
+
+    [Fact]
+    public async Task ProviderAndAccountMutations_InvalidatePronunciationCredentialCache()
+    {
+        using var env = DevAuthEnv.Enable();
+        var resolver = new CountingPronunciationCredentialResolver();
+        using var baseFactory = new TestWebApplicationFactory();
+        using var factory = baseFactory.WithWebHostBuilder(builder =>
+        {
+            builder.ConfigureTestServices(services =>
+            {
+                services.RemoveAll<IPronunciationCredentialResolver>();
+                services.AddSingleton<IPronunciationCredentialResolver>(resolver);
+            });
+        });
+        using var client = CreateAiConfigAdminClient(factory);
+
+        var createProvider = await client.PostAsJsonAsync("/v1/admin/ai/providers", BuildProviderUpsert(SyntheticProviderKey));
+        createProvider.EnsureSuccessStatusCode();
+        using var providerDoc = JsonDocument.Parse(await createProvider.Content.ReadAsStringAsync());
+        var providerId = providerDoc.RootElement.GetProperty("id").GetString();
+        Assert.False(string.IsNullOrWhiteSpace(providerId));
+
+        var updateProvider = await client.PutAsJsonAsync($"/v1/admin/ai/providers/{providerId}", BuildProviderUpsert(SyntheticProviderKey));
+        updateProvider.EnsureSuccessStatusCode();
+
+        var createAccount = await client.PostAsJsonAsync($"/v1/admin/ai/providers/{providerId}/accounts", new
+        {
+            label = "pronunciation cache probe",
+            apiKey = SyntheticAccountKey,
+            monthlyRequestCap = (int?)null,
+            priority = 0,
+            isActive = true,
+        });
+        createAccount.EnsureSuccessStatusCode();
+        using var accountDoc = JsonDocument.Parse(await createAccount.Content.ReadAsStringAsync());
+        var accountId = accountDoc.RootElement.GetProperty("id").GetString();
+        Assert.False(string.IsNullOrWhiteSpace(accountId));
+
+        var updateAccount = await client.PutAsJsonAsync($"/v1/admin/ai/providers/{providerId}/accounts/{accountId}", new
+        {
+            label = "pronunciation cache probe updated",
+            apiKey = SyntheticAccountKey,
+            monthlyRequestCap = (int?)null,
+            priority = 1,
+            isActive = true,
+        });
+        updateAccount.EnsureSuccessStatusCode();
+
+        var resetAccount = await client.PostAsJsonAsync($"/v1/admin/ai/providers/{providerId}/accounts/{accountId}/reset", new { });
+        resetAccount.EnsureSuccessStatusCode();
+
+        var deleteAccount = await client.DeleteAsync($"/v1/admin/ai/providers/{providerId}/accounts/{accountId}");
+        deleteAccount.EnsureSuccessStatusCode();
+
+        var deleteProvider = await client.DeleteAsync($"/v1/admin/ai/providers/{providerId}");
+        deleteProvider.EnsureSuccessStatusCode();
+
+        Assert.Equal(7, resolver.InvalidateCount);
     }
 
     [Fact]
@@ -298,7 +362,7 @@ public sealed class AdminAiProviderSecretsTests
         public void Dispose() => Environment.SetEnvironmentVariable(Key, _previous);
     }
 
-    private static HttpClient CreateAiConfigAdminClient(TestWebApplicationFactory factory)
+    private static HttpClient CreateAiConfigAdminClient(WebApplicationFactory<Program> factory)
     {
         var client = factory.CreateClient();
         client.DefaultRequestHeaders.Add("X-Debug-Role", "admin");
@@ -338,4 +402,16 @@ public sealed class AdminAiProviderSecretsTests
 
     private static bool HasProperty(JsonElement element, string name)
         => element.ValueKind == JsonValueKind.Object && element.TryGetProperty(name, out _);
+
+    private sealed class CountingPronunciationCredentialResolver : IPronunciationCredentialResolver
+    {
+        public int InvalidateCount { get; private set; }
+
+        public Task<PronunciationCredentials?> ResolveAsync(string providerCode, CancellationToken ct) =>
+            Task.FromResult<PronunciationCredentials?>(null);
+
+        public bool IsRegistryConfigured(string providerCode) => false;
+
+        public void Invalidate() => InvalidateCount++;
+    }
 }

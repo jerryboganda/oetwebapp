@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services.AiManagement;
+using OetLearner.Api.Services.Pronunciation;
 using OetLearner.Api.Services.Rulebook;
 
 namespace OetLearner.Api.Endpoints;
@@ -418,6 +419,7 @@ public static class AiUsageAdminEndpoints
             LearnerDbContext db,
             IDataProtectionProvider dpProvider,
             HttpContext http,
+            IPronunciationCredentialResolver pronunciationCredentials,
             CancellationToken ct) =>
         {
             if (string.IsNullOrWhiteSpace(dto.Code) || string.IsNullOrWhiteSpace(dto.Name))
@@ -462,6 +464,7 @@ public static class AiUsageAdminEndpoints
             };
             db.AiProviders.Add(row);
             await SaveWithAuditAsync(db, http, "AiProviderCreated", row.Id, row.Code, ct);
+            pronunciationCredentials.Invalidate();
             return Results.Created($"/v1/admin/ai/providers/{row.Id}",
                 new { row.Id, row.Code, row.ApiKeyHint });
         }).RequireRateLimiting("PerUserWrite");
@@ -472,6 +475,7 @@ public static class AiUsageAdminEndpoints
             LearnerDbContext db,
             IDataProtectionProvider dpProvider,
             HttpContext http,
+            IPronunciationCredentialResolver pronunciationCredentials,
             CancellationToken ct) =>
         {
             var row = await db.AiProviders.FirstOrDefaultAsync(p => p.Id == id, ct);
@@ -514,16 +518,23 @@ public static class AiUsageAdminEndpoints
             row.UpdatedAt = DateTimeOffset.UtcNow;
             row.UpdatedByAdminId = http.User.FindFirstValue(ClaimTypes.NameIdentifier);
             await SaveWithAuditAsync(db, http, "AiProviderUpdated", row.Id, row.Code, ct);
+            pronunciationCredentials.Invalidate();
             return Results.Ok(new { row.Id, row.Code, row.ApiKeyHint });
         }).RequireRateLimiting("PerUserWrite");
 
-        group.MapDelete("/providers/{id}", async (string id, LearnerDbContext db, HttpContext http, CancellationToken ct) =>
+        group.MapDelete("/providers/{id}", async (
+            string id,
+            LearnerDbContext db,
+            HttpContext http,
+            IPronunciationCredentialResolver pronunciationCredentials,
+            CancellationToken ct) =>
         {
             var row = await db.AiProviders.FirstOrDefaultAsync(p => p.Id == id, ct);
             if (row is null) return Results.NotFound();
             row.IsActive = false;
             row.UpdatedAt = DateTimeOffset.UtcNow;
             await SaveWithAuditAsync(db, http, "AiProviderDeactivated", row.Id, row.Code, ct);
+            pronunciationCredentials.Invalidate();
             return Results.NoContent();
         }).RequireRateLimiting("PerUserWrite");
 
@@ -607,9 +618,10 @@ public static class AiUsageAdminEndpoints
                 var body = await resp.Content.ReadAsStringAsync(ct);
                 if (!resp.IsSuccessStatusCode)
                 {
+                    var redactedBody = AiProviderConnectionTester.RedactSecrets(body, apiKey) ?? string.Empty;
                     return Results.Problem(
                         title: $"Provider /models call failed ({(int)resp.StatusCode})",
-                        detail: body.Length > 500 ? body[..500] : body,
+                        detail: redactedBody.Length > 500 ? redactedBody[..500] : redactedBody,
                         statusCode: StatusCodes.Status502BadGateway);
                 }
                 var models = new List<string>();
@@ -647,7 +659,7 @@ public static class AiUsageAdminEndpoints
             {
                 return Results.Problem(
                     title: "Provider /models call failed",
-                    detail: ex.Message,
+                    detail: AiProviderConnectionTester.RedactSecrets(ex.Message, apiKey),
                     statusCode: StatusCodes.Status502BadGateway);
             }
         }).RequireRateLimiting("PerUserWrite");
@@ -688,6 +700,7 @@ public static class AiUsageAdminEndpoints
             LearnerDbContext db,
             IDataProtectionProvider dpProvider,
             HttpContext http,
+            IPronunciationCredentialResolver pronunciationCredentials,
             CancellationToken ct) =>
         {
             if (string.IsNullOrWhiteSpace(dto.Label))
@@ -723,6 +736,7 @@ public static class AiUsageAdminEndpoints
             db.AiProviderAccounts.Add(row);
             await SaveWithAuditAsync(db, http, "AiProviderAccountCreated", row.Id,
                 $"provider={providerId} label={row.Label}", ct);
+            pronunciationCredentials.Invalidate();
             return Results.Created(
                 $"/v1/admin/ai/providers/{providerId}/accounts/{row.Id}",
                 new { row.Id, row.Label, row.ApiKeyHint });
@@ -735,6 +749,7 @@ public static class AiUsageAdminEndpoints
             LearnerDbContext db,
             IDataProtectionProvider dpProvider,
             HttpContext http,
+            IPronunciationCredentialResolver pronunciationCredentials,
             CancellationToken ct) =>
         {
             var row = await db.AiProviderAccounts
@@ -760,6 +775,7 @@ public static class AiUsageAdminEndpoints
 
             await SaveWithAuditAsync(db, http, "AiProviderAccountUpdated", row.Id,
                 $"provider={providerId} label={row.Label}", ct);
+            pronunciationCredentials.Invalidate();
             return Results.Ok(new { row.Id, row.Label, row.ApiKeyHint });
         }).RequireRateLimiting("PerUserWrite");
 
@@ -768,6 +784,7 @@ public static class AiUsageAdminEndpoints
             string accountId,
             LearnerDbContext db,
             HttpContext http,
+            IPronunciationCredentialResolver pronunciationCredentials,
             CancellationToken ct) =>
         {
             var row = await db.AiProviderAccounts
@@ -778,6 +795,7 @@ public static class AiUsageAdminEndpoints
             row.UpdatedByAdminId = http.User.FindFirstValue(ClaimTypes.NameIdentifier);
             await SaveWithAuditAsync(db, http, "AiProviderAccountDeactivated", row.Id,
                 $"provider={providerId} label={row.Label}", ct);
+            pronunciationCredentials.Invalidate();
             return Results.NoContent();
         }).RequireRateLimiting("PerUserWrite");
 
@@ -788,6 +806,7 @@ public static class AiUsageAdminEndpoints
             string accountId,
             LearnerDbContext db,
             HttpContext http,
+            IPronunciationCredentialResolver pronunciationCredentials,
             CancellationToken ct) =>
         {
             var row = await db.AiProviderAccounts
@@ -801,6 +820,7 @@ public static class AiUsageAdminEndpoints
             row.UpdatedByAdminId = http.User.FindFirstValue(ClaimTypes.NameIdentifier);
             await SaveWithAuditAsync(db, http, "AiProviderAccountReset", row.Id,
                 $"provider={providerId} label={row.Label}", ct);
+            pronunciationCredentials.Invalidate();
             return Results.Ok(new { row.Id, row.RequestsUsedThisMonth, row.ExhaustedUntil });
         }).RequireRateLimiting("PerUserWrite");
 
@@ -861,47 +881,51 @@ public static class AiUsageAdminEndpoints
             HttpContext http,
             CancellationToken ct) =>
         {
-            if (string.IsNullOrWhiteSpace(dto.FeatureCode) || !resolver.IsKnownFeatureCode(dto.FeatureCode))
+            var featureCode = AiFeatureRouteResolver.CanonicalFeatureCode(dto.FeatureCode);
+            if (featureCode is null || !resolver.IsKnownFeatureCode(featureCode))
                 return Results.BadRequest(new { error = "Unknown feature code." });
             if (string.IsNullOrWhiteSpace(dto.ProviderCode))
                 return Results.BadRequest(new { error = "ProviderCode is required." });
+            var providerCode = dto.ProviderCode.Trim().ToLowerInvariant();
 
             var providerExists = await db.AiProviders.AsNoTracking()
-                .AnyAsync(p => p.Code == dto.ProviderCode && p.IsActive, ct);
+                .AnyAsync(p => p.Code == providerCode && p.IsActive, ct);
             if (!providerExists)
-                return Results.BadRequest(new { error = $"Provider '{dto.ProviderCode}' is not registered or not active." });
+                return Results.BadRequest(new { error = $"Provider '{providerCode}' is not registered or not active." });
 
             var now = DateTimeOffset.UtcNow;
-            var row = await db.AiFeatureRoutes.FirstOrDefaultAsync(r => r.FeatureCode == dto.FeatureCode, ct);
+            var row = await db.AiFeatureRoutes.FirstOrDefaultAsync(r => r.FeatureCode == featureCode, ct);
             var auditEvent = row is null ? "AiFeatureRouteCreated" : "AiFeatureRouteUpdated";
             if (row is null)
             {
                 row = new AiFeatureRoute
                 {
                     Id = Guid.NewGuid().ToString("N"),
-                    FeatureCode = dto.FeatureCode,
+                    FeatureCode = featureCode,
                     CreatedAt = now,
                 };
                 db.AiFeatureRoutes.Add(row);
             }
-            row.ProviderCode = dto.ProviderCode;
+            row.ProviderCode = providerCode;
             row.Model = string.IsNullOrWhiteSpace(dto.Model) ? null : dto.Model.Trim();
             row.IsActive = dto.IsActive;
             row.UpdatedAt = now;
             row.UpdatedByAdminId = http.User.FindFirstValue(ClaimTypes.NameIdentifier);
             await SaveWithAuditAsync(db, http, auditEvent, row.Id,
-                $"feature={dto.FeatureCode} provider={dto.ProviderCode} active={dto.IsActive}", ct);
+                $"feature={featureCode} provider={providerCode} active={dto.IsActive}", ct);
             return Results.Ok(new { row.Id, row.FeatureCode, row.ProviderCode, row.Model, row.IsActive });
         }).RequireRateLimiting("PerUserWrite");
 
         group.MapDelete("/feature-routes/{featureCode}", async (
             string featureCode, LearnerDbContext db, HttpContext http, CancellationToken ct) =>
         {
-            var row = await db.AiFeatureRoutes.FirstOrDefaultAsync(r => r.FeatureCode == featureCode, ct);
+            var canonicalFeatureCode = AiFeatureRouteResolver.CanonicalFeatureCode(featureCode);
+            if (canonicalFeatureCode is null) return Results.NotFound();
+            var row = await db.AiFeatureRoutes.FirstOrDefaultAsync(r => r.FeatureCode == canonicalFeatureCode, ct);
             if (row is null) return Results.NotFound();
             db.AiFeatureRoutes.Remove(row);
             await SaveWithAuditAsync(db, http, "AiFeatureRouteDeleted", row.Id,
-                $"feature={featureCode}", ct);
+                $"feature={canonicalFeatureCode}", ct);
             return Results.NoContent();
         }).RequireRateLimiting("PerUserWrite");
 

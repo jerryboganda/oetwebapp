@@ -24,6 +24,11 @@ public enum AiProviderDialect
     /// BaseUrl default: <c>https://models.github.ai/inference</c>.
     /// </summary>
     Copilot = 3,
+    /// <summary>
+    /// Google Gemini native GenerateContent API. Supports multimodal request
+    /// parts, including inline audio used by pronunciation linguistic scoring.
+    /// </summary>
+    GeminiNative = 4,
     /// <summary>Azure Cognitive Services Speech — TTS.</summary>
     AzureTts = 10,
     /// <summary>ElevenLabs synthesis API.</summary>

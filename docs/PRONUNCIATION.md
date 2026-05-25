@@ -54,11 +54,35 @@ Every grounded AI pronunciation call must use:
 Configured in `PronunciationOptions.Provider`:
 
 - `azure`
+- `gemini`
 - `whisper`
 - `mock`
 - `auto`
 
-`auto` prefers Azure, then Whisper, then Mock.
+`auto` prefers Azure, then Gemini native audio, then Whisper. Mock fallback is allowed only outside production; production fails closed with `PRONUNCIATION_ASR_UNAVAILABLE` when no real provider is configured.
+
+Credential resolution is registry-first for these provider codes:
+
+- `azure-phoneme`
+- `gemini-pronunciation-audio`
+- `whisper-asr`
+
+`IPronunciationCredentialResolver` caches the registry snapshot for 30 seconds. Admin provider/account create, update, reset, and deactivate operations invalidate the cache immediately so the next learner attempt sees the new credentials.
+
+Gemini native-audio scoring uses:
+
+- `PronunciationOptions.GeminiApiKey`
+- `PronunciationOptions.GeminiBaseUrl`
+- `PronunciationOptions.GeminiModel`
+- AI provider row code `gemini-pronunciation-audio` when managed through the registry
+
+Gemini requests still go through `IAiGatewayService.BuildGroundedPrompt()` and `CompleteAsync()` with inline audio attachments. UI and endpoint code must not call Gemini directly.
+
+## Audio upload constraints
+
+Learner audio uploads are accepted only when the `Content-Type` is in `PronunciationOptions.AllowedMimeTypes` and the stored blob length is at or below `PronunciationOptions.MaxAudioBytes`.
+
+Provider selection happens before blob persistence. If no configured provider is available, the attempt remains `awaiting_upload` and no audio key is stored. Size validation happens after storage length is known; oversized blobs are deleted before the attempt is marked `refused`.
 
 ## Scoring contract
 
@@ -94,6 +118,7 @@ All pronunciation AI calls go through the grounded gateway and produce one `AiUs
 Feature codes:
 
 - `pronunciation.score`
+- `pronunciation.linguistic.score.v1`
 - `pronunciation.feedback`
 - `pronunciation.tip`
 - `admin.pronunciation_draft`

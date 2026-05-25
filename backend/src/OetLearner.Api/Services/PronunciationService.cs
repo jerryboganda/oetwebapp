@@ -4,6 +4,7 @@ using Microsoft.Extensions.Options;
 using OetLearner.Api.Configuration;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services.AiManagement;
 using OetLearner.Api.Services.Content;
 using OetLearner.Api.Services.Pronunciation;
 
@@ -17,7 +18,7 @@ namespace OetLearner.Api.Services;
 ///
 /// Invariants (enforced by code, tests, and the grounded AI gateway):
 ///   1. Scoring NEVER bypasses <see cref="IPronunciationAsrProviderSelector"/>.
-///      The selector ensures Azure → Whisper → Mock falls through correctly.
+///      The selector ensures Azure → Gemini → Whisper → Mock falls through correctly.
 ///      There is NO RNG scoring in this file.
 ///   2. All grade projections use <c>OetScoring.PronunciationProjectedScaled</c> /
 ///      <c>PronunciationProjectedBand</c>. Never a free-form 350 comparison.
@@ -247,6 +248,19 @@ public class PronunciationService(
         var drill = await db.PronunciationDrills.FindAsync([drillId], ct)
             ?? throw ApiException.NotFound("DRILL_NOT_FOUND", "Pronunciation drill not found.");
 
+        IPronunciationAsrProvider provider;
+        try
+        {
+            provider = await asrSelector.SelectAsync(ct);
+        }
+        catch (InvalidOperationException ex)
+        {
+            logger.LogWarning(ex, "Pronunciation ASR provider selection failed for attempt {AttemptId}.", attemptId);
+            throw ApiException.ServiceUnavailable(
+                "PRONUNCIATION_ASR_UNAVAILABLE",
+                "Pronunciation scoring is temporarily unavailable because no configured ASR provider is ready.");
+        }
+
         // ── Persist the blob ──────────────────────────────────────────────
         var extension = MimeToExtension(mimeType);
         var storageKey = $"pronunciation/{userId[..Math.Min(userId.Length, 16)]}/{attemptId}.{extension}";
@@ -285,13 +299,13 @@ public class PronunciationService(
         await db.SaveChangesAsync(ct);
 
         // ── Run ASR ───────────────────────────────────────────────────────
-        var provider = asrSelector.Select();
         AsrResult asrResult;
         try
         {
             await using var audioStream = await storage.OpenReadAsync(storageKey, ct);
             var referenceText = BuildReferenceText(drill);
             asrResult = await provider.AnalyzeAsync(new AsrRequest(
+                UserId: userId,
                 Audio: audioStream,
                 AudioMimeType: mimeType,
                 ReferenceText: referenceText,
@@ -301,6 +315,29 @@ public class PronunciationService(
                 RulebookProfession: drill.Profession == "all" ? "medicine" : drill.Profession,
                 AudioBytes: bytes
             ), ct);
+        }
+        catch (AiQuotaDeniedException ex)
+        {
+            logger.LogWarning(ex, "Pronunciation scoring denied by AI quota for attempt {AttemptId} ({Code}).", attemptId, ex.ErrorCode);
+            attempt.Status = "refused";
+            attempt.ErrorCode = ex.ErrorCode;
+            attempt.ErrorMessage = ex.Message;
+            attempt.Provider = provider.Name;
+            await db.SaveChangesAsync(ct);
+
+            throw string.Equals(ex.ErrorCode, "ai_credits_insufficient", StringComparison.OrdinalIgnoreCase)
+                ? ApiException.PaymentRequired(ex.ErrorCode, ex.Message)
+                : ApiException.TooManyRequests(ex.ErrorCode, ex.Message);
+        }
+        catch (PronunciationAsrUnavailableException ex)
+        {
+            logger.LogWarning(ex, "ASR provider '{Provider}' unavailable {Code}: {Message}", provider.Name, ex.Code, ex.Message);
+            attempt.Status = "failed";
+            attempt.ErrorCode = ex.Code;
+            attempt.ErrorMessage = ex.Message;
+            attempt.Provider = provider.Name;
+            await db.SaveChangesAsync(ct);
+            throw ApiException.ServiceUnavailable("PRONUNCIATION_ASR_UNAVAILABLE", ex.Message);
         }
         catch (PronunciationAsrException ex)
         {

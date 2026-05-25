@@ -20,6 +20,7 @@ namespace OetLearner.Api.Services.Pronunciation;
 /// <list type="bullet">
 ///   <item><c>azure-phoneme</c> — Azure Pronunciation Assessment.</item>
 ///   <item><c>whisper-asr</c> — Whisper ASR (key + base URL + model).</item>
+///   <item><c>gemini-pronunciation-audio</c> — Gemini native-audio scoring.</item>
 /// </list>
 /// When a row is active and has a non-empty <c>EncryptedApiKey</c>, the
 /// decrypted key wins; the row's <c>BaseUrl</c> /<c>DefaultModel</c>
@@ -60,7 +61,7 @@ public sealed class PronunciationCredentialResolver(
 {
     private const string CacheKey = "pronunciation:registry-snapshot:v1";
     private static readonly TimeSpan CacheTtl = TimeSpan.FromSeconds(30);
-    private static readonly string[] KnownCodes = ["azure-phoneme", "whisper-asr"];
+    private static readonly string[] KnownCodes = ["azure-phoneme", "whisper-asr", "gemini-pronunciation-audio"];
 
     public async Task<PronunciationCredentials?> ResolveAsync(string providerCode, CancellationToken ct)
     {

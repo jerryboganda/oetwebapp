@@ -541,6 +541,7 @@ public sealed class AiAssistantGateway(
         AiProviderDialect.Cloudflare => "cloudflare",
         AiProviderDialect.Anthropic => "anthropic",
         AiProviderDialect.Copilot => "copilot",
+        AiProviderDialect.GeminiNative => "gemini-pronunciation-audio",
         AiProviderDialect.OpenAiCompatible => "registry",
         _ => null,
     };

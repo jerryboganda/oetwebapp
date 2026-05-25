@@ -192,6 +192,24 @@ public class AiQuotaServiceTests
     }
 
     [Fact]
+    public async Task AllowsFreePlanPronunciationLinguisticScore_WhenAllowListIncludesIt()
+    {
+        var (db, quota) = Build(
+            planCode: "free",
+            allowedFeatures: string.Join(",",
+                AiFeatureCodes.ConversationReply,
+                AiFeatureCodes.PronunciationScore,
+                AiFeatureCodes.PronunciationLinguisticScore,
+                AiFeatureCodes.PronunciationFeedback));
+
+        var decision = await quota.TryReserveAsync("user-001", AiFeatureCodes.PronunciationLinguisticScore, AiKeySource.Platform, default);
+
+        Assert.True(decision.Allowed);
+        Assert.Equal("free", decision.Plan?.Code);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
     public async Task DeniesQuotaExhausted_WhenMonthlyCapReached_DenyPolicy()
     {
         var (db, quota) = Build(monthlyCap: 100, dailyCap: 0, overage: AiOveragePolicy.Deny);
@@ -968,7 +986,7 @@ public class AiGatewayQuotaIntegrationTests
     }
 
     [Fact]
-    public async Task Gateway_ReturnsCompletion_WhenPostCallCreditDebitFails()
+    public async Task Gateway_Throws_WhenPostCallCreditDebitFails()
     {
         var options = new DbContextOptionsBuilder<LearnerDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString("N"))
@@ -1002,15 +1020,15 @@ public class AiGatewayQuotaIntegrationTests
             Kind = RuleKind.Writing, Profession = ExamProfession.Medicine, Task = AiTaskMode.Score, LetterType = "routine_referral",
         });
 
-        var result = await gateway.CompleteAsync(new AiGatewayRequest
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => gateway.CompleteAsync(new AiGatewayRequest
         {
             Prompt = prompt,
             Provider = "fake-usage",
             UserId = "u",
             FeatureCode = AiFeatureCodes.WritingGrade,
-        });
+        }));
 
-        Assert.False(string.IsNullOrWhiteSpace(result.Completion));
+        Assert.Contains("AI credit debit", ex.Message, StringComparison.OrdinalIgnoreCase);
         Assert.True(provider.WasCalled);
         Assert.True(credits.DebitAttempted);
         Assert.Equal(AiCallOutcome.Success, (await db.AiUsageRecords.SingleAsync()).Outcome);
@@ -1018,7 +1036,7 @@ public class AiGatewayQuotaIntegrationTests
     }
 
     [Fact]
-    public async Task Gateway_DoesNotDebit_WhenUsageRecorderReturnsNull()
+    public async Task Gateway_Throws_WhenUsageRecorderReturnsNullForPaidFeature()
     {
         var provider = new FakeUsageProvider(promptTokens: 120, completionTokens: 80);
         var recorder = new NullReturningUsageRecorder();
@@ -1030,15 +1048,15 @@ public class AiGatewayQuotaIntegrationTests
             Kind = RuleKind.Writing, Profession = ExamProfession.Medicine, Task = AiTaskMode.Score, LetterType = "routine_referral",
         });
 
-        var result = await gateway.CompleteAsync(new AiGatewayRequest
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => gateway.CompleteAsync(new AiGatewayRequest
         {
             Prompt = prompt,
             Provider = "fake-usage",
             UserId = "u",
             FeatureCode = AiFeatureCodes.WritingGrade,
-        });
+        }));
 
-        Assert.False(string.IsNullOrWhiteSpace(result.Completion));
+        Assert.Contains("usage accounting", ex.Message, StringComparison.OrdinalIgnoreCase);
         Assert.True(provider.WasCalled);
         Assert.True(recorder.SuccessAttempted);
         Assert.False(credits.DebitAttempted);

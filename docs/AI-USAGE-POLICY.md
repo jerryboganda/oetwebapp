@@ -84,7 +84,7 @@ rather than period counters. Available when you're ready for that complexity.
 |---|---|---|---|
 | `OveragePolicy` (per plan) | What happens when quota is exhausted | `deny` | `allow_with_charge`, `auto_upgrade`, `degrade_to_smaller_model` |
 | `DenyMessage` (per plan) | Copy shown to learner on `deny` | localised default | any string |
-| `OverageRatePerCredit` (per plan) | Price per credit when `allow_with_charge` | `null` | decimal ≥ 0 |
+| `OverageRatePer1kTokens` (per plan) | Price per 1k tokens when `allow_with_charge` | `null` | decimal ≥ 0 |
 | `AutoUpgradeTargetPlan` (per plan) | Which plan to auto-bump to | `null` | any higher plan code |
 | `DegradeModel` (per plan) | Which cheaper model to use on degrade | `null` | any allow-listed model |
 
@@ -112,6 +112,7 @@ Every feature the gateway serves is classified. Defaults:
 | `conversation.evaluation` | ✅ | ❌ | ✅ | Post-session scoring + rubric (scoring-critical) |
 | `pronunciation.tip` | ❌ | ✅ | ✅ | Pronunciation feedback |
 | `pronunciation.score` | ✅ | ❌ | ✅ | Pronunciation attempt scoring / phoneme analysis |
+| `pronunciation.linguistic.score.v1` | ✅ | ❌ | ✅ | Gemini native-audio linguistic pronunciation scoring through provider code `gemini-pronunciation-audio` |
 | `pronunciation.feedback` | ❌ | ❌ | ✅ | Grounded learner-facing pronunciation coaching |
 | `summarise.passage` | ❌ | ✅ | ✅ | Study-notes summarisation |
 | `vocabulary.gloss` | ❌ | ✅ | ✅ | Word gloss |
@@ -268,7 +269,10 @@ existing `IAiGatewayService` like any other provider; no policy bypass.
 - Text completions only. **Voice** (TTS / ASR) stays on
   `IConversationTtsProviderSelector`, `IConversationAsrProviderSelector`,
   and `IPronunciationAsrProviderSelector` (ElevenLabs / Azure / Whisper /
-  Deepgram). ElevenLabs config remains at
+  Deepgram / Gemini native audio). Pronunciation provider credentials are
+  registry-first for `azure-phoneme`, `whisper-asr`, and
+  `gemini-pronunciation-audio`, with a 30-second cache invalidated by admin
+  provider/account mutations. ElevenLabs config remains at
   `/admin/content/conversation/settings`.
 - **Streaming and tool calling are disabled** for phase 1. Both would
   break the "exactly one `AiUsageRecord` per `CompleteAsync`" invariant.

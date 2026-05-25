@@ -43,6 +43,7 @@ public sealed class AiCredentialResolver(
         AiFeatureCodes.WritingSampleScore,
         AiFeatureCodes.SpeakingGrade,
         AiFeatureCodes.MockFullGrade,
+        AiFeatureCodes.PronunciationLinguisticScore,
     };
 
     /// <summary>Admin-only features that must never use BYOK. Mirrors
@@ -62,6 +63,7 @@ public sealed class AiCredentialResolver(
         AiFeatureCodes.AdminListeningTranscriptSegment,
         AiFeatureCodes.AdminWritingDraft,
         AiFeatureCodes.PronunciationScore,
+        AiFeatureCodes.PronunciationLinguisticScore,
         AiFeatureCodes.PronunciationFeedback,
         AiFeatureCodes.ConversationEvaluation,
     };

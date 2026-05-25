@@ -917,6 +917,10 @@ builder.Services.AddHttpClient("PronunciationWhisperClient", c =>
 {
     c.Timeout = TimeSpan.FromMinutes(3);
 });
+builder.Services.AddHttpClient("GeminiNativeClient", c =>
+{
+    c.Timeout = TimeSpan.FromMinutes(5);
+}).ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
 builder.Services.AddScoped<OetLearner.Api.Services.Pronunciation.IPronunciationAsrProvider,
     OetLearner.Api.Services.Pronunciation.MockPronunciationAsrProvider>();
 builder.Services.AddScoped<OetLearner.Api.Services.Pronunciation.IPronunciationAsrProvider,
@@ -926,6 +930,8 @@ builder.Services.AddScoped<OetLearner.Api.Services.Pronunciation.IPronunciationA
 builder.Services.AddScoped<OetLearner.Api.Services.Pronunciation.AzurePronunciationAsrProvider>();
 builder.Services.AddScoped<OetLearner.Api.Services.Pronunciation.IPronunciationAsrProvider,
     OetLearner.Api.Services.Pronunciation.WhisperPronunciationAsrProvider>();
+builder.Services.AddScoped<OetLearner.Api.Services.Pronunciation.IPronunciationAsrProvider,
+    OetLearner.Api.Services.Pronunciation.GeminiPronunciationAsrProvider>();
 builder.Services.AddScoped<OetLearner.Api.Services.Pronunciation.IPronunciationAsrProviderSelector,
     OetLearner.Api.Services.Pronunciation.PronunciationAsrProviderSelector>();
 // Phase 6c: registry-first credential resolver (singleton, 30s cache) +
@@ -1055,6 +1061,10 @@ builder.Services.AddScoped<OetLearner.Api.Services.Rulebook.IAiModelProvider,
     OetLearner.Api.Services.Rulebook.RegistryBackedProvider>();
 builder.Services.AddScoped<OetLearner.Api.Services.Rulebook.IAiModelProvider,
     OetLearner.Api.Services.Rulebook.AnthropicProvider>();
+builder.Services.AddScoped<OetLearner.Api.Services.Rulebook.IAiModelProvider,
+    OetLearner.Api.Services.Rulebook.GeminiNativeProvider>();
+builder.Services.AddScoped<OetLearner.Api.Services.Rulebook.IAiModelProvider,
+    OetLearner.Api.Services.Rulebook.CloudflareWorkersAiProvider>();
 // GitHub Copilot / Models adapter — uses the official `Azure.AI.Inference`
 // typed SDK (ChatCompletionsClient + AzureKeyCredential) against the
 // chat-completions endpoint at the registered base URL (default

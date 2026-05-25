@@ -39,7 +39,7 @@ public sealed class AiVoiceProviderSeederTests : IAsyncDisposable
     // ─── BuildSeeds (pure) ────────────────────────────────────────────────
 
     [Fact]
-    public void BuildSeeds_AllConfigured_EmitsSixRows()
+    public void BuildSeeds_AllConfigured_EmitsSevenRows()
     {
         var conv = new ConversationOptions
         {
@@ -51,17 +51,19 @@ public sealed class AiVoiceProviderSeederTests : IAsyncDisposable
         var pron = new PronunciationOptions
         {
             AzureSpeechKey = "pk", AzureSpeechRegion = "uksouth", AzureLocale = "en-GB",
+            GeminiApiKey = "gk", GeminiModel = "gemini-3.5-flash",
         };
 
         var seeds = AiVoiceProviderSeeder.BuildSeeds(conv, pron);
 
-        Assert.Equal(6, seeds.Count);
+        Assert.Equal(7, seeds.Count);
         Assert.Contains(seeds, s => s.Code == "azure-tts" && s.Category == AiProviderCategory.Tts);
         Assert.Contains(seeds, s => s.Code == "elevenlabs-tts" && s.Category == AiProviderCategory.Tts);
         Assert.Contains(seeds, s => s.Code == "azure-asr" && s.Category == AiProviderCategory.Asr);
         Assert.Contains(seeds, s => s.Code == "elevenlabs-stt" && s.Category == AiProviderCategory.Asr && s.Dialect == AiProviderDialect.ElevenLabsStt);
         Assert.Contains(seeds, s => s.Code == "whisper-asr" && s.Category == AiProviderCategory.Asr);
         Assert.Contains(seeds, s => s.Code == "azure-phoneme" && s.Category == AiProviderCategory.Phoneme);
+        Assert.Contains(seeds, s => s.Code == "gemini-pronunciation-audio" && s.Category == AiProviderCategory.Phoneme && s.Dialect == AiProviderDialect.GeminiNative);
     }
 
     [Fact]
@@ -107,6 +109,24 @@ public sealed class AiVoiceProviderSeederTests : IAsyncDisposable
         Assert.Equal(AiProviderCategory.Asr, row.Category);
         Assert.Equal(AiProviderDialect.ElevenLabsStt, row.Dialect);
         Assert.Equal("scribe_v2_realtime", row.DefaultModel);
+    }
+
+    [Fact]
+    public void BuildSeeds_OnlyGeminiPronunciation_EmitsPhonemeRow()
+    {
+        var pron = new PronunciationOptions
+        {
+            GeminiApiKey = "gk",
+            GeminiModel = "gemini-3.5-flash",
+        };
+
+        var seeds = AiVoiceProviderSeeder.BuildSeeds(new ConversationOptions(), pron);
+
+        var row = Assert.Single(seeds);
+        Assert.Equal("gemini-pronunciation-audio", row.Code);
+        Assert.Equal(AiProviderCategory.Phoneme, row.Category);
+        Assert.Equal(AiProviderDialect.GeminiNative, row.Dialect);
+        Assert.Equal("gemini-3.5-flash", row.DefaultModel);
     }
 
     // ─── Seeder hosted service ────────────────────────────────────────────

@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using OetLearner.Api.Configuration;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services.AiManagement;
 using OetLearner.Api.Services.Rulebook;
 
 namespace OetLearner.Api.Services.Pronunciation;
@@ -206,7 +207,7 @@ public sealed class WhisperPronunciationAsrProvider(
                 Model = "auto",
                 Temperature = 0.2,
                 MaxTokens = 900,
-                UserId = null,
+                UserId = request.UserId,
                 FeatureCode = AiFeatureCodes.PronunciationScore,
                 PromptTemplateId = "pronunciation.whisper.score.v1",
             }, ct);
@@ -218,6 +219,10 @@ public sealed class WhisperPronunciationAsrProvider(
         catch (PromptNotGroundedException)
         {
             // Propagate — this indicates a coding bug that must surface.
+            throw;
+        }
+        catch (AiQuotaDeniedException)
+        {
             throw;
         }
         catch (Exception ex)

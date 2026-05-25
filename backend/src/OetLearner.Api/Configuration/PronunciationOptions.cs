@@ -12,10 +12,11 @@ public class PronunciationOptions
     /// Which ASR provider services pronunciation scoring. Valid values:
     /// - "azure"   : Azure Speech SDK Pronunciation Assessment (best phoneme detail)
     /// - "whisper" : OpenAI/Groq Whisper word-level transcript + grounded AI phoneme scoring
+    /// - "gemini"  : Gemini native-audio linguistic scoring through the grounded AI gateway
     /// - "mock"    : deterministic stub that returns plausible scores from reference text
-    ///               density. Used when no real provider is configured.
-    /// - "auto"    : try azure first, fall back to whisper if azure credentials missing
-    ///               or azure returns an error.
+    ///               density. Non-production only.
+    /// - "auto"    : prefer azure, then gemini, then whisper. Falls back to mock only
+    ///               outside production; production fails closed when no real provider is configured.
     /// </summary>
     public string Provider { get; set; } = "auto";
 
@@ -38,6 +39,15 @@ public class PronunciationOptions
 
     /// <summary>Whisper model name (e.g. "whisper-1", "whisper-large-v3").</summary>
     public string WhisperModel { get; set; } = "whisper-1";
+
+    /// <summary>Gemini native-audio API key (blank = disabled).</summary>
+    public string GeminiApiKey { get; set; } = string.Empty;
+
+    /// <summary>Gemini GenerateContent base URL.</summary>
+    public string GeminiBaseUrl { get; set; } = "https://generativelanguage.googleapis.com/v1beta";
+
+    /// <summary>Gemini native-audio model used for linguistic pronunciation scoring.</summary>
+    public string GeminiModel { get; set; } = "gemini-3.5-flash";
 
     /// <summary>Maximum allowed audio upload size per attempt, in bytes. Default 15 MB.</summary>
     public long MaxAudioBytes { get; set; } = 15 * 1024 * 1024;

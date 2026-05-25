@@ -187,6 +187,7 @@ public class PronunciationAiGroundingTests
     public void AiFeatureCodes_Include_Pronunciation_Codes()
     {
         Assert.Equal("pronunciation.score", AiFeatureCodes.PronunciationScore);
+        Assert.Equal("pronunciation.linguistic.score.v1", AiFeatureCodes.PronunciationLinguisticScore);
         Assert.Equal("pronunciation.feedback", AiFeatureCodes.PronunciationFeedback);
         Assert.Equal("pronunciation.tip", AiFeatureCodes.PronunciationTip);
         Assert.Equal("admin.pronunciation_draft", AiFeatureCodes.AdminPronunciationDraft);

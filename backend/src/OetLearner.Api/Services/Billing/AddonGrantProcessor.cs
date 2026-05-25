@@ -247,10 +247,12 @@ public sealed class AddonGrantProcessor(LearnerDbContext db, ILogger<AddonGrantP
                                    && entry.Source == AiCreditSource.AdminAdjustment
                                    && entry.ReferenceId == reversalReferenceId,
                     ct);
-            if (!alreadyReversed)
+            if (alreadyReversed)
             {
-                return new(reversalReferenceId, purchase.TokensDelta, true);
+                continue;
             }
+
+            return new(reversalReferenceId, purchase.TokensDelta, true);
         }
 
         return new(null, 0, matchingPurchases.Count > 0);

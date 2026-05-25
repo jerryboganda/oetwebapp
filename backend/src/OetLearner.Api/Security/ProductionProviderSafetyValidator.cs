@@ -79,11 +79,13 @@ public static class ProductionProviderSafetyValidator
             throw MockNotAllowed("Pronunciation ASR", "Pronunciation:Provider");
 
         var hasAzure = HasAzureSpeech(options.AzureSpeechKey, options.AzureSpeechRegion);
+        var hasGemini = HasPair(options.GeminiBaseUrl, options.GeminiApiKey);
         var hasWhisper = HasPair(options.WhisperBaseUrl, options.WhisperApiKey);
         var configured = requested switch
         {
-            "auto" => hasAzure || hasWhisper,
+            "auto" => hasAzure || hasGemini || hasWhisper,
             "azure" => hasAzure,
+            "gemini" => hasGemini,
             "whisper" => hasWhisper,
             _ => throw new InvalidOperationException($"Unsupported Pronunciation:Provider value '{options.Provider}'.")
         };

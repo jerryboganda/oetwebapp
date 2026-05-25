@@ -441,6 +441,7 @@ public sealed class AiGatewayService(
                     MaxTokens = request.MaxTokens,
                     ApiKeyOverride = resolution?.ApiKeyPlaintext,
                     BaseUrlOverride = resolution?.BaseUrlOverride,
+                    AudioAttachments = request.AudioAttachments,
                     Messages = messages,
                     Tools = tools.Count == 0 ? null : tools,
                     ToolChoice = tools.Count == 0 ? null : "auto",
@@ -666,6 +667,7 @@ public sealed class AiGatewayService(
             if (persistedUsageRecordId is null && shouldDebitLearnerCredit)
             {
                 logger?.LogWarning("AI usage accounting failed before learner credit debit could be posted for user {UserId}, feature {FeatureCode}, usage record {UsageRecordId}.", request.UserId, featureCode, aiUsageRecordIdForTools);
+                throw new InvalidOperationException("AI usage accounting failed for this paid feature call.");
             }
 
             if (persistedUsageRecordId is not null)
@@ -711,12 +713,14 @@ public sealed class AiGatewayService(
             if (string.IsNullOrWhiteSpace(debitUsageRecordId))
             {
                 logger?.LogWarning("AI usage accounting failed before learner credit debit could be posted for user {UserId}, feature {FeatureCode}, usage record {UsageRecordId}.", request.UserId, featureCode, usageRecordId);
+                throw new InvalidOperationException("AI credit debit could not be posted because usage accounting did not return a persisted record.");
             }
             else
             {
+                bool debited;
                 try
                 {
-                    var debited = await creditService!.DebitUsageAsync(
+                    debited = await creditService!.DebitUsageAsync(
                         new AiCreditUsageDebitRequest(
                             UserId: request.UserId!,
                             UsageRecordId: debitUsageRecordId,
@@ -725,14 +729,17 @@ public sealed class AiGatewayService(
                             CostUsd: costEstimate,
                             OccurredAt: startedAt),
                         CancellationToken.None);
-                    if (!debited)
-                    {
-                        logger?.LogWarning("AI credit debit was not posted for user {UserId}, feature {FeatureCode}, usage record {UsageRecordId}.", request.UserId, featureCode, debitUsageRecordId);
-                    }
                 }
                 catch (Exception ex)
                 {
                     logger?.LogWarning(ex, "Failed to debit AI credit for user {UserId}, feature {FeatureCode}, usage record {UsageRecordId}.", request.UserId, featureCode, debitUsageRecordId);
+                    throw new InvalidOperationException("AI credit debit failed for this paid feature call.", ex);
+                }
+
+                if (!debited)
+                {
+                    logger?.LogWarning("AI credit debit was not posted for user {UserId}, feature {FeatureCode}, usage record {UsageRecordId}.", request.UserId, featureCode, debitUsageRecordId);
+                    throw new InvalidOperationException("AI credit debit was not posted for this paid feature call.");
                 }
             }
         }
@@ -812,6 +819,7 @@ public sealed class AiGatewayService(
         AiProviderDialect.Cloudflare => "cloudflare",
         AiProviderDialect.Anthropic => "anthropic",
         AiProviderDialect.Copilot => "copilot",
+        AiProviderDialect.GeminiNative => "gemini-pronunciation-audio",
         AiProviderDialect.OpenAiCompatible => "registry",
         _ => null,
     };
@@ -846,6 +854,7 @@ public sealed class AiGatewayService(
            || string.Equals(featureCode, AiFeatureCodes.SpeakingGrade, StringComparison.OrdinalIgnoreCase)
            || string.Equals(featureCode, AiFeatureCodes.MockFullGrade, StringComparison.OrdinalIgnoreCase)
            || string.Equals(featureCode, AiFeatureCodes.PronunciationScore, StringComparison.OrdinalIgnoreCase)
+           || string.Equals(featureCode, AiFeatureCodes.PronunciationLinguisticScore, StringComparison.OrdinalIgnoreCase)
            || string.Equals(featureCode, AiFeatureCodes.PronunciationFeedback, StringComparison.OrdinalIgnoreCase)
            || string.Equals(featureCode, AiFeatureCodes.ConversationEvaluation, StringComparison.OrdinalIgnoreCase)
            || string.Equals(featureCode, SpeakingAiFeatureCodes.SpeakingScoreV2, StringComparison.OrdinalIgnoreCase);
@@ -1530,6 +1539,7 @@ public sealed class AiGatewayRequest
     public string Model { get; init; } = "";
     public double Temperature { get; init; } = 0.2;
     public int? MaxTokens { get; init; }
+    public IReadOnlyList<AiProviderAudioAttachment>? AudioAttachments { get; init; }
 
     // --- Slice 1 additions: usage accounting context ---
     // These are optional for backward compatibility. Call sites are expected
@@ -1620,6 +1630,17 @@ public sealed class AiProviderRequest
     /// tool code. Providers MAY ignore this if their backing API does not
     /// support tool_choice; the gateway only sets <c>"auto"</c>.</summary>
     public string? ToolChoice { get; init; }
+
+    /// <summary>Inline binary media for providers with native multimodal
+    /// request parts. Text-only providers ignore this. Current production
+    /// use is Gemini native-audio pronunciation scoring.</summary>
+    public IReadOnlyList<AiProviderAudioAttachment>? AudioAttachments { get; init; }
+}
+
+public sealed class AiProviderAudioAttachment
+{
+    public required string MimeType { get; init; }
+    public required byte[] Data { get; init; }
 }
 
 public sealed class AiProviderCompletion

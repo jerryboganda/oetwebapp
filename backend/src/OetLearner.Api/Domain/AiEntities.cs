@@ -239,6 +239,7 @@ public static class AiFeatureCodes
 
     // Pronunciation analysis (platform-only by default — scoring-critical)
     public const string PronunciationScore = "pronunciation.score";
+    public const string PronunciationLinguisticScore = "pronunciation.linguistic.score.v1";
     public const string PronunciationFeedback = "pronunciation.feedback";
 
     // Conversation evaluation (platform-only — scoring-critical)

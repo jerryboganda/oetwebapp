@@ -76,6 +76,24 @@ public sealed class PronunciationCredentialResolverTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task ResolveAsync_ActiveGeminiRow_ReturnsKeyBaseUrlAndModel()
+    {
+        await SeedRowAsync("gemini-pronunciation-audio", AiProviderCategory.Phoneme, AiProviderDialect.GeminiNative,
+            baseUrl: "https://generativelanguage.googleapis.com/v1beta",
+            plaintextKey: "gemini-key-12345",
+            defaultModel: "gemini-3.5-flash");
+
+        var resolver = BuildResolver();
+        var creds = await resolver.ResolveAsync("gemini-pronunciation-audio", default);
+
+        Assert.NotNull(creds);
+        Assert.Equal("gemini-key-12345", creds!.ApiKey);
+        Assert.Equal("https://generativelanguage.googleapis.com/v1beta", creds.BaseUrl);
+        Assert.Equal("gemini-3.5-flash", creds.DefaultModel);
+        Assert.Null(creds.AzureRegion);
+    }
+
+    [Fact]
     public async Task ResolveAsync_InactiveRow_ReturnsNull()
     {
         await SeedRowAsync("azure-phoneme", AiProviderCategory.Phoneme, AiProviderDialect.AzurePhoneme,
@@ -137,6 +155,7 @@ public sealed class PronunciationCredentialResolverTests : IAsyncDisposable
 
         Assert.True(resolver.IsRegistryConfigured("whisper-asr"));
         Assert.False(resolver.IsRegistryConfigured("azure-phoneme")); // not seeded
+        Assert.False(resolver.IsRegistryConfigured("gemini-pronunciation-audio")); // not seeded
     }
 
     [Fact]

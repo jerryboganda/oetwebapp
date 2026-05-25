@@ -141,6 +141,7 @@ public class AiCredentialResolverTests
 
     [Theory]
     [InlineData(AiFeatureCodes.PronunciationScore)]
+    [InlineData(AiFeatureCodes.PronunciationLinguisticScore)]
     [InlineData(AiFeatureCodes.PronunciationFeedback)]
     [InlineData(AiFeatureCodes.ConversationEvaluation)]
     public async Task Resolves_Platform_ForPlatformOnlyEvaluationFeatures_RegardlessOfKey(string featureCode)

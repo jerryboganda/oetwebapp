@@ -92,6 +92,8 @@ public class ProfileAccessGuardTests
         var selector = new OetLearner.Api.Services.Pronunciation.PronunciationAsrProviderSelector(
             new OetLearner.Api.Services.Pronunciation.IPronunciationAsrProvider[] { mockProvider },
             pronOpts,
+            new NullPronunciationCredentialResolver(),
+            new TestHostEnvironment(storageRoot),
             NullLogger<OetLearner.Api.Services.Pronunciation.PronunciationAsrProviderSelector>.Instance);
         var nullFeedback = new StubPronunciationFeedbackService();
         var scheduler = new OetLearner.Api.Services.Pronunciation.PronunciationSchedulerService(db);
@@ -115,6 +117,18 @@ public class ProfileAccessGuardTests
                 "", Array.Empty<string>(),
                 Array.Empty<OetLearner.Api.Services.Pronunciation.PronunciationImprovement>(),
                 Array.Empty<string>(), null));
+    }
+
+    private sealed class NullPronunciationCredentialResolver : OetLearner.Api.Services.Pronunciation.IPronunciationCredentialResolver
+    {
+        public Task<OetLearner.Api.Services.Pronunciation.PronunciationCredentials?> ResolveAsync(string providerCode, CancellationToken ct) =>
+            Task.FromResult<OetLearner.Api.Services.Pronunciation.PronunciationCredentials?>(null);
+
+        public bool IsRegistryConfigured(string providerCode) => false;
+
+        public void Invalidate()
+        {
+        }
     }
 
     private static PaymentGatewayService CreatePaymentGatewayService(IOptions<BillingOptions> billingOptions)

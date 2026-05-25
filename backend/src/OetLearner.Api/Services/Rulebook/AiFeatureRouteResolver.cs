@@ -132,6 +132,14 @@ public static class AiFeatureRouteDefaults
             FallbackModel: "gpt-4o",
             PromptCachingEnabled: true,
             Description: "Conversation rubric evaluation (scoring-critical)."),
+        new SpeakingAiRouteDefault(
+            FeatureCode: AiFeatureCodes.PronunciationLinguisticScore,
+            PrimaryProviderCode: "gemini-pronunciation-audio",
+            PrimaryModel: "gemini-3.5-flash",
+            FallbackProviderCode: "azure-phoneme",
+            FallbackModel: null,
+            PromptCachingEnabled: false,
+            Description: "Gemini native-audio pronunciation linguistic scoring."),
     };
 }
 
@@ -175,6 +183,7 @@ public sealed class AiFeatureRouteResolver(LearnerDbContext db) : IAiFeatureRout
         AiFeatureCodes.ConversationEvaluation,
         AiFeatureCodes.PronunciationTip,
         AiFeatureCodes.PronunciationScore,
+        AiFeatureCodes.PronunciationLinguisticScore,
         AiFeatureCodes.PronunciationFeedback,
         AiFeatureCodes.SummarisePassage,
         AiFeatureCodes.VocabularyGloss,
@@ -215,9 +224,10 @@ public sealed class AiFeatureRouteResolver(LearnerDbContext db) : IAiFeatureRout
 
     public async Task<AiFeatureRouteResolution?> ResolveAsync(string featureCode, CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(featureCode)) return null;
+        var canonicalFeatureCode = CanonicalFeatureCode(featureCode);
+        if (canonicalFeatureCode is null) return null;
         var row = await db.AiFeatureRoutes.AsNoTracking()
-            .FirstOrDefaultAsync(r => r.FeatureCode == featureCode && r.IsActive, ct);
+            .FirstOrDefaultAsync(r => r.FeatureCode == canonicalFeatureCode && r.IsActive, ct);
         if (row is not null)
         {
             return new AiFeatureRouteResolution(row.ProviderCode, row.Model);
@@ -229,7 +239,7 @@ public sealed class AiFeatureRouteResolver(LearnerDbContext db) : IAiFeatureRout
         // null behaviour — the gateway falls through to the global default
         // provider.
         var staticDefault = AiFeatureRouteDefaults.Defaults
-            .FirstOrDefault(d => string.Equals(d.FeatureCode, featureCode, StringComparison.OrdinalIgnoreCase));
+            .FirstOrDefault(d => string.Equals(d.FeatureCode, canonicalFeatureCode, StringComparison.OrdinalIgnoreCase));
         if (staticDefault is not null)
         {
             return new AiFeatureRouteResolution(staticDefault.PrimaryProviderCode, staticDefault.PrimaryModel);
@@ -239,6 +249,11 @@ public sealed class AiFeatureRouteResolver(LearnerDbContext db) : IAiFeatureRout
     }
 
     public bool IsKnownFeatureCode(string featureCode) =>
-        !string.IsNullOrWhiteSpace(featureCode)
-        && KnownFeatureCodes.Contains(featureCode, StringComparer.OrdinalIgnoreCase);
+        CanonicalFeatureCode(featureCode) is not null;
+
+    public static string? CanonicalFeatureCode(string? featureCode) =>
+        string.IsNullOrWhiteSpace(featureCode)
+            ? null
+            : KnownFeatureCodes.FirstOrDefault(code =>
+                string.Equals(code, featureCode.Trim(), StringComparison.OrdinalIgnoreCase));
 }

@@ -13,6 +13,7 @@ public class MockPronunciationAsrProviderTests
 {
     private static AsrRequest BuildRequest(string reference, byte[] audio) =>
         new(
+            UserId: "user-pronunciation-test",
             Audio: new MemoryStream(audio),
             AudioMimeType: "audio/webm",
             ReferenceText: reference,

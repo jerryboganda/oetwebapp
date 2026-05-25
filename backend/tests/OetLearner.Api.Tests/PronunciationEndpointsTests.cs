@@ -3,7 +3,14 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
+using Microsoft.AspNetCore.TestHost;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using OetLearner.Api.Data;
 using OetLearner.Api.Services;
+using OetLearner.Api.Services.AiManagement;
+using OetLearner.Api.Services.Pronunciation;
 using OetLearner.Api.Tests.Infrastructure;
 
 namespace OetLearner.Api.Tests;
@@ -185,6 +192,107 @@ public class PronunciationEndpointsTests : IClassFixture<TestWebApplicationFacto
     }
 
     [Fact]
+    public async Task UploadAndScore_PassesLearnerId_To_Selected_AsrProvider()
+    {
+        using var factory = _factory.WithWebHostBuilder(builder =>
+        {
+            builder.ConfigureTestServices(services =>
+            {
+                services.RemoveAll<IPronunciationAsrProvider>();
+                services.AddSingleton<CapturingPronunciationAsrProvider>();
+                services.AddSingleton<IPronunciationAsrProvider>(sp =>
+                    sp.GetRequiredService<CapturingPronunciationAsrProvider>());
+            });
+        });
+        using var client = factory.CreateClient();
+
+        var initResponse = await client.PostAsJsonAsync(
+            "/v1/pronunciation/drills/pd-003/attempt/init", new { });
+        initResponse.EnsureSuccessStatusCode();
+        using var initJson = JsonDocument.Parse(await initResponse.Content.ReadAsStringAsync());
+        var attemptId = initJson.RootElement.GetProperty("attemptId").GetString();
+
+        using var audioContent = new ByteArrayContent(Encoding.UTF8.GetBytes("fake-audio-bytes"));
+        audioContent.Headers.ContentType = new MediaTypeHeaderValue("audio/webm");
+        var uploadResponse = await client.PostAsync(
+            $"/v1/pronunciation/drills/pd-003/attempt/{attemptId}/audio",
+            audioContent);
+
+        uploadResponse.EnsureSuccessStatusCode();
+        var provider = factory.Services.GetRequiredService<CapturingPronunciationAsrProvider>();
+        Assert.Equal("mock-user-001", provider.LastRequest?.UserId);
+    }
+
+    [Fact]
+    public async Task UploadAndScore_MapsAiCreditDenial_ToPaymentRequired()
+    {
+        using var factory = _factory.WithWebHostBuilder(builder =>
+        {
+            builder.ConfigureTestServices(services =>
+            {
+                services.RemoveAll<IPronunciationAsrProvider>();
+                services.AddSingleton<IPronunciationAsrProvider>(new QuotaDeniedPronunciationAsrProvider(
+                    "ai_credits_insufficient",
+                    "AI grading credits are exhausted."));
+            });
+        });
+        using var client = factory.CreateClient();
+
+        var initResponse = await client.PostAsJsonAsync(
+            "/v1/pronunciation/drills/pd-003/attempt/init", new { });
+        initResponse.EnsureSuccessStatusCode();
+        using var initJson = JsonDocument.Parse(await initResponse.Content.ReadAsStringAsync());
+        var attemptId = initJson.RootElement.GetProperty("attemptId").GetString();
+
+        using var audioContent = new ByteArrayContent(Encoding.UTF8.GetBytes("fake-audio-bytes"));
+        audioContent.Headers.ContentType = new MediaTypeHeaderValue("audio/webm");
+        var uploadResponse = await client.PostAsync(
+            $"/v1/pronunciation/drills/pd-003/attempt/{attemptId}/audio",
+            audioContent);
+
+        Assert.Equal(HttpStatusCode.PaymentRequired, uploadResponse.StatusCode);
+        using var json = JsonDocument.Parse(await uploadResponse.Content.ReadAsStringAsync());
+        Assert.Equal("ai_credits_insufficient", json.RootElement.GetProperty("code").GetString());
+    }
+
+    [Fact]
+    public async Task UploadAndScore_ReturnsServiceUnavailable_WhenNoAsrProviderIsConfigured()
+    {
+        using var factory = _factory.WithWebHostBuilder(builder =>
+        {
+            builder.ConfigureTestServices(services =>
+            {
+                services.RemoveAll<IPronunciationAsrProvider>();
+                services.AddSingleton<IPronunciationAsrProvider>(new UnconfiguredPronunciationAsrProvider("azure"));
+            });
+        });
+        using var client = factory.CreateClient();
+
+        var initResponse = await client.PostAsJsonAsync(
+            "/v1/pronunciation/drills/pd-003/attempt/init", new { });
+        initResponse.EnsureSuccessStatusCode();
+        using var initJson = JsonDocument.Parse(await initResponse.Content.ReadAsStringAsync());
+        var attemptId = initJson.RootElement.GetProperty("attemptId").GetString();
+
+        using var audioContent = new ByteArrayContent(Encoding.UTF8.GetBytes("fake-audio-bytes"));
+        audioContent.Headers.ContentType = new MediaTypeHeaderValue("audio/webm");
+        var uploadResponse = await client.PostAsync(
+            $"/v1/pronunciation/drills/pd-003/attempt/{attemptId}/audio",
+            audioContent);
+
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, uploadResponse.StatusCode);
+        using var json = JsonDocument.Parse(await uploadResponse.Content.ReadAsStringAsync());
+        Assert.Equal("PRONUNCIATION_ASR_UNAVAILABLE", json.RootElement.GetProperty("code").GetString());
+        Assert.True(json.RootElement.GetProperty("retryable").GetBoolean());
+
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        var attempt = await db.PronunciationAttempts.SingleAsync(a => a.Id == attemptId);
+        Assert.Equal("awaiting_upload", attempt.Status);
+        Assert.Null(attempt.AudioStorageKey);
+    }
+
+    [Fact]
     public async Task UploadAndScore_RequiresAuthenticatedLearner()
     {
         using var firstPartyFactory = new FirstPartyAuthTestWebApplicationFactory();
@@ -254,5 +362,54 @@ public class PronunciationEndpointsTests : IClassFixture<TestWebApplicationFacto
             "/v1/pronunciation/drills/pd-001/discrimination",
             new { roundsTotal = 0, roundsCorrect = 0 });
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    private sealed class CapturingPronunciationAsrProvider : IPronunciationAsrProvider
+    {
+        public string Name => "azure";
+
+        public bool IsConfigured => true;
+
+        public AsrRequest? LastRequest { get; private set; }
+
+        public Task<AsrResult> AnalyzeAsync(AsrRequest request, CancellationToken ct)
+        {
+            LastRequest = request;
+            return Task.FromResult(new AsrResult(
+                AccuracyScore: 82,
+                FluencyScore: 80,
+                CompletenessScore: 84,
+                ProsodyScore: 78,
+                OverallScore: 81,
+                WordScores: new[]
+                {
+                    new WordScore("test", 82, "None")
+                },
+                ProblematicPhonemes: new[]
+                {
+                    new PhonemeScore(request.TargetPhoneme, 82, 1, request.TargetRuleId)
+                },
+                FluencyMarkers: new FluencyMarkers(118, 1, 220),
+                ProviderName: "capturing",
+                ProviderResponseSummary: "Captured request for learner attribution regression coverage."));
+        }
+    }
+
+    private sealed class QuotaDeniedPronunciationAsrProvider(string errorCode, string message) : IPronunciationAsrProvider
+    {
+        public string Name => "azure";
+
+        public bool IsConfigured => true;
+
+        public Task<AsrResult> AnalyzeAsync(AsrRequest request, CancellationToken ct) =>
+            throw new AiQuotaDeniedException(errorCode, message);
+    }
+
+    private sealed class UnconfiguredPronunciationAsrProvider(string name) : IPronunciationAsrProvider
+    {
+        public string Name { get; } = name;
+        public bool IsConfigured => false;
+        public Task<AsrResult> AnalyzeAsync(AsrRequest request, CancellationToken ct) =>
+            throw new NotImplementedException();
     }
 }

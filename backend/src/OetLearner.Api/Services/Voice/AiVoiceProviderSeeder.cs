@@ -208,6 +208,23 @@ public sealed class AiVoiceProviderSeeder(
                 FailoverPriority: 0));
         }
 
+        // Pronunciation — Gemini native audio linguistic scoring. These rows
+        // are live registry inputs for the pronunciation selector/credential
+        // resolver; blank-key rows remain admin UI scaffolding only.
+        if (!string.IsNullOrWhiteSpace(pronunciation.GeminiApiKey))
+        {
+            seeds.Add(new VoiceProviderSeed(
+                Code: "gemini-pronunciation-audio",
+                Name: "Gemini Native Audio Pronunciation",
+                Category: AiProviderCategory.Phoneme,
+                Dialect: AiProviderDialect.GeminiNative,
+                BaseUrl: string.IsNullOrWhiteSpace(pronunciation.GeminiBaseUrl)
+                    ? "https://generativelanguage.googleapis.com/v1beta"
+                    : pronunciation.GeminiBaseUrl,
+                DefaultModel: pronunciation.GeminiModel,
+                FailoverPriority: 1));
+        }
+
         return seeds;
     }
 }

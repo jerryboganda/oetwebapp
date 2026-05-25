@@ -299,6 +299,179 @@ public sealed class AnthropicProvider(
 }
 
 /// <summary>
+/// Google Gemini native GenerateContent adapter used for pronunciation
+/// linguistic scoring where the model must inspect the raw learner audio.
+/// Text-only providers stay on the existing chat-completions path; this
+/// adapter consumes <see cref="AiProviderRequest.AudioAttachments"/>.
+/// </summary>
+public sealed class GeminiNativeProvider(
+    IHttpClientFactory httpClientFactory,
+    IAiProviderRegistry registry,
+    Microsoft.Extensions.Options.IOptions<OetLearner.Api.Configuration.PronunciationOptions> options) : IAiModelProvider
+{
+    private const string DefaultProviderCode = "gemini-pronunciation-audio";
+    private const string DefaultBaseUrl = "https://generativelanguage.googleapis.com/v1beta";
+
+    public string Name => DefaultProviderCode;
+
+    public async Task<AiProviderCompletion> CompleteAsync(AiProviderRequest request, CancellationToken ct)
+    {
+        var (baseUrl, apiKey, model) = await ResolveCredentialsAsync(request, ct);
+
+        if (request.AudioAttachments is not { Count: > 0 })
+            throw new InvalidOperationException("Gemini native-audio provider requires at least one audio attachment.");
+
+        var unsafeBaseUrlReason = AiProviderConnectionTester.GetUnsafeBaseUrlReason(baseUrl);
+        if (unsafeBaseUrlReason is not null)
+            throw new InvalidOperationException(unsafeBaseUrlReason);
+
+        var client = httpClientFactory.CreateClient("GeminiNativeClient");
+        client.BaseAddress = new Uri(baseUrl.TrimEnd('/') + "/");
+
+        var textPrompt = string.Join("\n\n", new[] { request.SystemPrompt, request.UserPrompt }
+            .Where(part => !string.IsNullOrWhiteSpace(part)));
+        var parts = new List<Dictionary<string, object?>>
+        {
+            new() { ["text"] = textPrompt },
+        };
+        var attachedAudioParts = 0;
+        foreach (var audio in request.AudioAttachments)
+        {
+            if (audio.Data.Length == 0) continue;
+            parts.Add(new Dictionary<string, object?>
+            {
+                ["inline_data"] = new Dictionary<string, object?>
+                {
+                    ["mime_type"] = string.IsNullOrWhiteSpace(audio.MimeType) ? "audio/webm" : audio.MimeType,
+                    ["data"] = Convert.ToBase64String(audio.Data),
+                },
+            });
+            attachedAudioParts++;
+        }
+        if (attachedAudioParts == 0)
+            throw new InvalidOperationException("Gemini native-audio provider requires at least one non-empty audio attachment.");
+
+        var payload = new Dictionary<string, object?>
+        {
+            ["contents"] = new object[]
+            {
+                new Dictionary<string, object?>
+                {
+                    ["role"] = "user",
+                    ["parts"] = parts,
+                },
+            },
+            ["generationConfig"] = new Dictionary<string, object?>
+            {
+                ["temperature"] = request.Temperature,
+                ["maxOutputTokens"] = request.MaxTokens ?? 1024,
+            },
+        };
+
+        var endpoint = $"{ToGeminiModelPath(model)}:generateContent";
+        using var requestMessage = new HttpRequestMessage(HttpMethod.Post, endpoint)
+        {
+            Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json"),
+        };
+        requestMessage.Headers.TryAddWithoutValidation("x-goog-api-key", apiKey);
+        using var response = await client.SendAsync(requestMessage, ct);
+
+        var body = await response.Content.ReadAsStringAsync(ct);
+        if (!response.IsSuccessStatusCode)
+            throw new InvalidOperationException(AiProviderErrorMessages.HttpFailure("Gemini", (int)response.StatusCode, response.ReasonPhrase));
+
+        using var doc = JsonDocument.Parse(body);
+        var root = doc.RootElement;
+        var text = ReadGeminiText(root);
+        var usage = ReadGeminiUsage(root);
+        var finishReason = root.TryGetProperty("candidates", out var candidates)
+                           && candidates.ValueKind == JsonValueKind.Array
+                           && candidates.GetArrayLength() > 0
+                           && candidates[0].TryGetProperty("finishReason", out var finish)
+            ? finish.GetString()
+            : null;
+        return new AiProviderCompletion { Text = text, Usage = usage, FinishReason = finishReason };
+    }
+
+    private async Task<(string baseUrl, string apiKey, string model)> ResolveCredentialsAsync(AiProviderRequest request, CancellationToken ct)
+    {
+        var configured = options.Value;
+        var providerCode = string.IsNullOrWhiteSpace(request.ProviderCode)
+            ? DefaultProviderCode
+            : request.ProviderCode.Trim().ToLowerInvariant();
+        var row = await registry.FindByCodeAsync(providerCode, ct);
+        if (row is not null && row.Dialect != AiProviderDialect.GeminiNative)
+            throw new InvalidOperationException($"Provider {providerCode} is not a Gemini native provider.");
+
+        var baseUrl = request.BaseUrlOverride ?? row?.BaseUrl;
+        if (string.IsNullOrWhiteSpace(baseUrl)) baseUrl = configured.GeminiBaseUrl;
+        if (string.IsNullOrWhiteSpace(baseUrl)) baseUrl = DefaultBaseUrl;
+
+        var apiKey = request.ApiKeyOverride;
+        if (string.IsNullOrWhiteSpace(apiKey) && row is not null)
+        {
+            apiKey = await registry.GetPlatformKeyAsync(row.Code, ct);
+        }
+        if (string.IsNullOrWhiteSpace(apiKey)) apiKey = configured.GeminiApiKey;
+        if (string.IsNullOrWhiteSpace(apiKey))
+            throw new InvalidOperationException($"Platform API key missing for Gemini provider {providerCode}.");
+
+        var model = request.Model;
+        if (string.IsNullOrWhiteSpace(model)) model = row?.DefaultModel;
+        if (string.IsNullOrWhiteSpace(model)) model = configured.GeminiModel;
+        if (string.IsNullOrWhiteSpace(model)) model = "gemini-3.5-flash";
+
+        return (baseUrl!, apiKey!, model!);
+    }
+
+    private static string ToGeminiModelPath(string model)
+    {
+        var trimmed = model.Trim().Trim('/');
+        return trimmed.StartsWith("models/", StringComparison.OrdinalIgnoreCase)
+            ? trimmed
+            : $"models/{trimmed}";
+    }
+
+    private static string ReadGeminiText(JsonElement root)
+    {
+        if (!root.TryGetProperty("candidates", out var candidates)
+            || candidates.ValueKind != JsonValueKind.Array
+            || candidates.GetArrayLength() == 0)
+        {
+            throw new InvalidOperationException(AiProviderErrorMessages.InvalidResponse("Gemini", "missing candidates[0]"));
+        }
+
+        var first = candidates[0];
+        if (!first.TryGetProperty("content", out var content)
+            || !content.TryGetProperty("parts", out var parts)
+            || parts.ValueKind != JsonValueKind.Array)
+        {
+            throw new InvalidOperationException(AiProviderErrorMessages.InvalidResponse("Gemini", "missing candidates[0].content.parts"));
+        }
+
+        var output = new StringBuilder();
+        foreach (var part in parts.EnumerateArray())
+        {
+            if (part.TryGetProperty("text", out var text) && text.ValueKind == JsonValueKind.String)
+            {
+                output.Append(text.GetString());
+            }
+        }
+        return output.ToString();
+    }
+
+    private static AiUsage? ReadGeminiUsage(JsonElement root)
+    {
+        if (!root.TryGetProperty("usageMetadata", out var usage)) return null;
+        return new AiUsage
+        {
+            PromptTokens = usage.TryGetProperty("promptTokenCount", out var prompt) ? prompt.GetInt32() : 0,
+            CompletionTokens = usage.TryGetProperty("candidatesTokenCount", out var completion) ? completion.GetInt32() : 0,
+        };
+    }
+}
+
+/// <summary>
 /// Cloudflare Workers AI native API adapter.
 /// <para>
 /// Calls <c>POST {BaseUrl}/run/{model}</c> where <c>BaseUrl</c> is stored as

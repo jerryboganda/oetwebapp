@@ -171,6 +171,20 @@ public sealed class ProductionProviderSafetyValidatorTests
             ValidAiProvider());
     }
 
+    [Fact]
+    public void ValidateOptions_AllowsProductionGeminiPronunciationProvider()
+    {
+        ProductionProviderSafetyValidator.ValidateOptions(
+            new PronunciationOptions
+            {
+                Provider = "gemini",
+                GeminiBaseUrl = "https://generativelanguage.googleapis.com/v1beta",
+                GeminiApiKey = "gemini-key",
+            },
+            ValidConversation(),
+            ValidAiProvider());
+    }
+
     [Theory]
     [InlineData("single-instance")]
     [InlineData("single-region-sticky")]

@@ -40,6 +40,7 @@ public sealed class AiFeatureRouteResolverTests : IAsyncDisposable
     [InlineData(AiFeatureCodes.ConversationOpening, "anthropic", "claude-sonnet-4-6")]
     [InlineData(AiFeatureCodes.ConversationReply, "anthropic", "claude-haiku-4-5")]
     [InlineData(AiFeatureCodes.ConversationEvaluation, "anthropic", "claude-sonnet-4-6")]
+    [InlineData(AiFeatureCodes.PronunciationLinguisticScore, "gemini-pronunciation-audio", "gemini-3.5-flash")]
     public async Task ResolveAsync_ConversationNoRow_ReturnsStaticDefault(string featureCode, string provider, string model)
     {
         await using var db = new LearnerDbContext(_options);
@@ -92,6 +93,7 @@ public sealed class AiFeatureRouteResolverTests : IAsyncDisposable
         Assert.True(resolver.IsKnownFeatureCode(AiFeatureCodes.VocabularyGloss));
         Assert.True(resolver.IsKnownFeatureCode(AiFeatureCodes.WritingCoachSuggest));
         Assert.True(resolver.IsKnownFeatureCode(AiFeatureCodes.AdminGrammarDraft));
+        Assert.True(resolver.IsKnownFeatureCode(AiFeatureCodes.PronunciationLinguisticScore));
         // Case-insensitive on input.
         Assert.True(resolver.IsKnownFeatureCode("VOCABULARY.GLOSS"));
         // Unclassified is intentionally NOT routable.

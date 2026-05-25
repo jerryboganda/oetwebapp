@@ -298,7 +298,7 @@ public sealed class AddonGrantProcessorTests
     }
 
     [Fact]
-    public async Task ReverseAsync_DoesNotMutateSubscription_WhenAiPurchaseAlreadyReversedByAnotherEvent()
+    public async Task ReverseAsync_SkipsAlreadyReversedPurchase_AndReversesLaterMatchingPurchase()
     {
         var options = new DbContextOptionsBuilder<LearnerDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString("N"))
@@ -358,8 +358,8 @@ public sealed class AddonGrantProcessorTests
                 TokensDelta = 30,
                 CostDeltaUsd = 0m,
                 Source = AiCreditSource.Purchase,
-                Description = "Other AI grading credits",
-                ReferenceId = "addon:sub-other:pkg_other:evt-purchase-other",
+                Description = "Later OET Mastery AI grading credits",
+                ReferenceId = "addon:sub-mastery:pkg_oet_mastery:evt-purchase-2",
                 CreatedAt = now.AddMinutes(2),
             });
         await db.SaveChangesAsync();
@@ -368,10 +368,103 @@ public sealed class AddonGrantProcessorTests
         var result = await processor.ReverseAsync("evt-refund-2", "sub-mastery", "pkg_oet_mastery");
 
         var subscription = await db.Subscriptions.SingleAsync();
+        Assert.True(result.Applied);
+        Assert.Null(result.Reason);
+        Assert.Equal(0, subscription.AiCreditsRemaining);
+        Assert.Equal(2, await db.AiCreditLedger.CountAsync(entry => entry.Source == AiCreditSource.AdminAdjustment));
+        Assert.True(await db.AiCreditLedger.AnyAsync(entry =>
+            entry.Source == AiCreditSource.AdminAdjustment &&
+            entry.ReferenceId == "addon-refund:sub-mastery:pkg_oet_mastery:evt-purchase-2"));
+        Assert.True(await db.IdempotencyRecords.AnyAsync(record => record.Scope == "addon_refund" && record.Key.Contains("evt-refund-2")));
+    }
+
+    [Fact]
+    public async Task ReverseAsync_DoesNotMutateSubscription_WhenAiPurchaseLedgerIsMissing()
+    {
+        var options = new DbContextOptionsBuilder<LearnerDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString("N"))
+            .Options;
+        await using var db = new LearnerDbContext(options);
+        var now = DateTimeOffset.UtcNow;
+        db.Subscriptions.Add(new Subscription
+        {
+            Id = "sub-mastery",
+            UserId = "user-mastery",
+            PlanId = "plan-basic",
+            Status = SubscriptionStatus.Active,
+            StartedAt = now,
+            ChangedAt = now,
+            NextRenewalAt = now.AddMonths(1),
+            AiCreditsRemaining = 30,
+        });
+        db.BillingAddOns.Add(new BillingAddOn
+        {
+            Id = "addon_pkg_oet_mastery",
+            Code = "pkg_oet_mastery",
+            Name = "OET Mastery",
+            Status = BillingAddOnStatus.Active,
+            GrantCredits = 30,
+            GrantEntitlementsJson = "{\"ai_credits\":30}",
+            DurationDays = 180,
+            CreatedAt = now,
+            UpdatedAt = now,
+        });
+        await db.SaveChangesAsync();
+
+        var processor = new AddonGrantProcessor(db, NullLogger<AddonGrantProcessor>.Instance);
+        var result = await processor.ReverseAsync("evt-refund-missing", "sub-mastery", "pkg_oet_mastery");
+
+        var subscription = await db.Subscriptions.SingleAsync();
         Assert.False(result.Applied);
-        Assert.Equal("ai_credit_purchase_already_reversed", result.Reason);
+        Assert.Equal("ai_credit_purchase_missing", result.Reason);
         Assert.Equal(30, subscription.AiCreditsRemaining);
-        Assert.Equal(1, await db.AiCreditLedger.CountAsync(entry => entry.Source == AiCreditSource.AdminAdjustment));
-        Assert.False(await db.IdempotencyRecords.AnyAsync(record => record.Scope == "addon_refund" && record.Key.Contains("evt-refund-2")));
+        Assert.Empty(await db.AiCreditLedger.ToListAsync());
+        Assert.False(await db.IdempotencyRecords.AnyAsync(record => record.Scope == "addon_refund" && record.Key.Contains("evt-refund-missing")));
+    }
+
+    [Fact]
+    public async Task ReverseAsync_ReversesNonAiAddOnWithoutAiPurchaseLedger()
+    {
+        var options = new DbContextOptionsBuilder<LearnerDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString("N"))
+            .Options;
+        await using var db = new LearnerDbContext(options);
+        var now = DateTimeOffset.UtcNow;
+        db.Subscriptions.Add(new Subscription
+        {
+            Id = "sub-writing-pack",
+            UserId = "user-writing-pack",
+            PlanId = "plan-basic",
+            Status = SubscriptionStatus.Active,
+            StartedAt = now,
+            ChangedAt = now,
+            NextRenewalAt = now.AddMonths(1),
+            WritingAssessmentsRemaining = 4,
+            SpeakingSessionsRemaining = 2,
+        });
+        db.BillingAddOns.Add(new BillingAddOn
+        {
+            Id = "addon_pkg_writing_pack",
+            Code = "pkg_writing_pack",
+            Name = "Writing Pack",
+            Status = BillingAddOnStatus.Active,
+            LettersGranted = 2,
+            SessionsGranted = 1,
+            GrantCredits = 0,
+            GrantEntitlementsJson = "{}",
+            CreatedAt = now,
+            UpdatedAt = now,
+        });
+        await db.SaveChangesAsync();
+
+        var processor = new AddonGrantProcessor(db, NullLogger<AddonGrantProcessor>.Instance);
+        var result = await processor.ReverseAsync("evt-refund-writing", "sub-writing-pack", "pkg_writing_pack");
+
+        var subscription = await db.Subscriptions.SingleAsync();
+        Assert.True(result.Applied);
+        Assert.Equal(2, subscription.WritingAssessmentsRemaining);
+        Assert.Equal(1, subscription.SpeakingSessionsRemaining);
+        Assert.Empty(await db.AiCreditLedger.ToListAsync());
+        Assert.True(await db.IdempotencyRecords.AnyAsync(record => record.Scope == "addon_refund" && record.Key.Contains("evt-refund-writing")));
     }
 }
