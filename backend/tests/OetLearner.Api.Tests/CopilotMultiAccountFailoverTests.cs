@@ -161,6 +161,36 @@ public sealed class CopilotMultiAccountFailoverTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task ExplicitProviderCode_UsesThatProviderAccountPool()
+    {
+        await using var db = new LearnerDbContext(_options);
+        await SeedProviderAsync(db, providerCode: "github-models-prod");
+        var id = await SeedAccountAsync(db, "primary", "pat-prod", priority: 0, providerCode: "github-models-prod");
+
+        string? keySeen = null;
+        var stub = new StubHandler(req =>
+        {
+            var auth = req.Headers.Authorization?.ToString()
+                ?? (req.Headers.TryGetValues("api-key", out var ak) ? string.Join(",", ak) : null) ?? "";
+            keySeen = ExtractKey(auth);
+            return Task.FromResult(BuildResponse(HttpStatusCode.OK));
+        });
+
+        var provider = NewProvider(db, stub);
+        var completion = await provider.CompleteAsync(new AiProviderRequest
+        {
+            ProviderCode = "github-models-prod",
+            Model = "openai/gpt-4o-mini",
+            SystemPrompt = "s",
+            UserPrompt = "u",
+        }, default);
+
+        Assert.Contains("ok", completion.Text);
+        Assert.Equal(id, completion.AccountId);
+        Assert.Equal("pat-prod", keySeen);
+    }
+
+    [Fact]
     public async Task EmptyPool_FallsBackToSingleRowAiProviderRow()
     {
         // No AiProviderAccount rows at all → the failover loop returns null
@@ -202,14 +232,17 @@ public sealed class CopilotMultiAccountFailoverTests : IAsyncDisposable
         return new CopilotAiModelProvider(registry, clientOptions, accountRegistry);
     }
 
-    private async Task SeedProviderAsync(LearnerDbContext db, string? withSingleRowKey = null)
+    private async Task SeedProviderAsync(
+        LearnerDbContext db,
+        string? withSingleRowKey = null,
+        string providerCode = "copilot")
     {
-        if (await db.AiProviders.AnyAsync(p => p.Code == "copilot")) return;
+        if (await db.AiProviders.AnyAsync(p => p.Code == providerCode)) return;
         var protector = _dpProvider.CreateProtector("AiProvider.PlatformKey.v1");
         db.AiProviders.Add(new AiProvider
         {
             Id = Guid.NewGuid().ToString("N"),
-            Code = "copilot",
+            Code = providerCode,
             Name = "GitHub Copilot",
             Dialect = AiProviderDialect.Copilot,
             BaseUrl = "https://models.github.ai/inference",
@@ -223,10 +256,15 @@ public sealed class CopilotMultiAccountFailoverTests : IAsyncDisposable
         await db.SaveChangesAsync();
     }
 
-    private async Task<string> SeedAccountAsync(LearnerDbContext db, string label, string pat, int priority)
+    private async Task<string> SeedAccountAsync(
+        LearnerDbContext db,
+        string label,
+        string pat,
+        int priority,
+        string providerCode = "copilot")
     {
         var providerId = await db.AiProviders.AsNoTracking()
-            .Where(p => p.Code == "copilot").Select(p => p.Id).FirstAsync();
+            .Where(p => p.Code == providerCode).Select(p => p.Id).FirstAsync();
         var protector = _dpProvider.CreateProtector("AiProvider.PlatformKey.v1");
         var acc = new AiProviderAccount
         {

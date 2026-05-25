@@ -309,6 +309,9 @@ public class ListeningAuthoringServiceTests
             return Task.FromResult(new ListeningBackfillReport(paperId, true, 1, 1, 1, 0, null));
         }
 
+        public Task<ListeningBackfillReport> BackfillPaperAsync(string paperId, string adminId, bool bypassAttemptsGuard, CancellationToken ct)
+            => BackfillPaperAsync(paperId, adminId, ct);
+
         public Task<IReadOnlyList<ListeningBackfillReport>> BackfillAllAsync(string adminId, CancellationToken ct)
             => Task.FromResult<IReadOnlyList<ListeningBackfillReport>>([]);
     }

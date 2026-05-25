@@ -105,7 +105,7 @@ public sealed class GrammarDraftService(
             {
                 Prompt = prompt,
                 UserInput = userMessage,
-                Model = "anthropic-claude-opus-4.7",
+                Model = "claude-sonnet-4-6",
                 Temperature = 0.3,
                 FeatureCode = AiFeatureCodes.AdminGrammarDraft,
                 UserId = adminId,

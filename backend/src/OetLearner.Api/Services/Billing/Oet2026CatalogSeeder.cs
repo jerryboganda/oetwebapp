@@ -164,7 +164,7 @@ public sealed class Oet2026CatalogSeeder(
         plan.IsRenewable = false;
         plan.TrialDays = 0;
         plan.DisplayOrder = dto.DisplayOrder;
-        plan.IncludedCredits = dto.Bundled?.AiCredits ?? 0;
+        plan.IncludedCredits = 0;
         plan.Status = BillingPlanStatus.Active;
         plan.UpdatedAt = now;
 
@@ -276,7 +276,7 @@ public sealed class Oet2026CatalogSeeder(
         addon.Interval = "one_time";
         addon.Status = BillingAddOnStatus.Active;
         addon.IsRecurring = false;
-        addon.DurationDays = 180;
+        addon.DurationDays = dto.DurationDays;
         addon.GrantCredits = dto.GrantCredits;
         addon.GrantEntitlementsJson = BuildGrantEntitlementsJson(dto);
         addon.AppliesToAllPlans = false;
@@ -324,6 +324,9 @@ public sealed class Oet2026CatalogSeeder(
         var grants = new Dictionary<string, object>();
         if (dto.LettersGranted > 0) grants["writing_assessments"] = dto.LettersGranted;
         if (dto.SessionsGranted > 0) grants["speaking_sessions"] = dto.SessionsGranted;
+        if (dto.GrantCredits > 0) grants["ai_credits"] = dto.GrantCredits;
+        if (dto.MockEntitlements > 0) grants["mockFull"] = dto.MockEntitlements;
+        if (dto.PriorityQueue) grants["priority_queue"] = true;
         if (dto.AddonKind == "tutor_book") grants["tutor_book"] = true;
         return JsonSerializer.Serialize(grants);
     }
@@ -500,7 +503,10 @@ public sealed class Oet2026CatalogSeeder(
         public int LettersGranted { get; set; }
         public int SessionsGranted { get; set; }
         public int GrantCredits { get; set; }
+        public int MockEntitlements { get; set; }
+        public bool PriorityQueue { get; set; }
         public bool IsStackable { get; set; } = true;
+        public int DurationDays { get; set; } = 180;
         public int DisplayOrder { get; set; }
     }
 

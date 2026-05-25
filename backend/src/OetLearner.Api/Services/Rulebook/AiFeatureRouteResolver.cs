@@ -76,15 +76,12 @@ public static class SpeakingAiFeatureCodes
 }
 
 /// <summary>
-/// Default provider routes for the Speaking-module AI features. Acts as
+/// Default provider routes for route-backed AI features. Acts as
 /// the static fallback list for <see cref="AiFeatureRouteResolver"/> when
-/// no DB row exists for a given feature code. The seeder copies these into
-/// the <c>AiFeatureRoutes</c> table on startup so admins can edit them via
-/// the standard route-editor UI.
+/// no DB row exists for a given feature code.
 /// </summary>
-public static class SpeakingAiRouteDefaults
+public static class AiFeatureRouteDefaults
 {
-    /// <summary>Per-feature default routing for the Speaking module.</summary>
     public static readonly IReadOnlyList<SpeakingAiRouteDefault> Defaults = new[]
     {
         new SpeakingAiRouteDefault(
@@ -111,7 +108,38 @@ public static class SpeakingAiRouteDefaults
             FallbackModel: null,
             PromptCachingEnabled: true,
             Description: "Admin role-play card AI draft tool."),
+        new SpeakingAiRouteDefault(
+            FeatureCode: AiFeatureCodes.ConversationOpening,
+            PrimaryProviderCode: "anthropic",
+            PrimaryModel: "claude-sonnet-4-6",
+            FallbackProviderCode: "openai",
+            FallbackModel: "gpt-4o",
+            PromptCachingEnabled: true,
+            Description: "Conversation opening turn (scenario-setting quality)."),
+        new SpeakingAiRouteDefault(
+            FeatureCode: AiFeatureCodes.ConversationReply,
+            PrimaryProviderCode: "anthropic",
+            PrimaryModel: "claude-haiku-4-5",
+            FallbackProviderCode: "openai",
+            FallbackModel: "gpt-4o-mini",
+            PromptCachingEnabled: true,
+            Description: "Conversation live reply turn (cheap, low-latency)."),
+        new SpeakingAiRouteDefault(
+            FeatureCode: AiFeatureCodes.ConversationEvaluation,
+            PrimaryProviderCode: "anthropic",
+            PrimaryModel: "claude-sonnet-4-6",
+            FallbackProviderCode: "openai",
+            FallbackModel: "gpt-4o",
+            PromptCachingEnabled: true,
+            Description: "Conversation rubric evaluation (scoring-critical)."),
     };
+}
+
+public static class SpeakingAiRouteDefaults
+{
+    public static readonly IReadOnlyList<SpeakingAiRouteDefault> Defaults = AiFeatureRouteDefaults.Defaults
+        .Where(d => SpeakingAiFeatureCodes.All.Contains(d.FeatureCode, StringComparer.OrdinalIgnoreCase))
+        .ToList();
 }
 
 /// <summary>
@@ -195,12 +223,12 @@ public sealed class AiFeatureRouteResolver(LearnerDbContext db) : IAiFeatureRout
             return new AiFeatureRouteResolution(row.ProviderCode, row.Model);
         }
 
-        // Speaking-module fallback: if no DB row exists, return the static
+        // Static fallback: if no DB row exists, return the known route default
         // default so the gateway has a route even before the seeder has run
         // (CI tests, fresh DBs, etc.). Other feature codes keep the existing
         // null behaviour — the gateway falls through to the global default
         // provider.
-        var staticDefault = SpeakingAiRouteDefaults.Defaults
+        var staticDefault = AiFeatureRouteDefaults.Defaults
             .FirstOrDefault(d => string.Equals(d.FeatureCode, featureCode, StringComparison.OrdinalIgnoreCase));
         if (staticDefault is not null)
         {

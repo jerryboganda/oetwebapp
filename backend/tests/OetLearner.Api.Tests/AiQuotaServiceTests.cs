@@ -644,7 +644,8 @@ public class AiGatewayQuotaIntegrationTests
         var recorder = new AiUsageRecorder(db, NullLogger<AiUsageRecorder>.Instance);
         var quota = new AiQuotaService(db, new MemoryCache(new MemoryCacheOptions()), NullLogger<AiQuotaService>.Instance, new EffectiveEntitlementResolver(db));
         var resolver = new AiCredentialResolver(db, quota, vault);
-        var gateway = new AiGatewayService(_loader, new[] { (IAiModelProvider)provider }, recorder, quota, resolver);
+        var credits = new AiCreditService(db);
+        var gateway = new AiGatewayService(_loader, new[] { (IAiModelProvider)provider }, recorder, quota, resolver, creditService: credits);
 
         var prompt = gateway.BuildGroundedPrompt(new AiGroundingContext
         {
@@ -668,6 +669,7 @@ public class AiGatewayQuotaIntegrationTests
         // But usage record should still exist with KeySource=Byok.
         var record = await db.AiUsageRecords.SingleAsync();
         Assert.Equal(AiKeySource.Byok, record.KeySource);
+        Assert.Empty(await db.AiCreditLedger.Where(entry => entry.Source == AiCreditSource.UsageDebit).ToListAsync());
         await db.DisposeAsync();
     }
 
@@ -753,13 +755,25 @@ public class AiGatewayQuotaIntegrationTests
             Status = SubscriptionStatus.Active,
             StartedAt = DateTimeOffset.UtcNow, ChangedAt = DateTimeOffset.UtcNow,
         });
+        db.AiCreditLedger.Add(new AiCreditLedgerEntry
+        {
+            Id = Guid.NewGuid().ToString("N"),
+            UserId = "u",
+            TokensDelta = 5,
+            CostDeltaUsd = 0m,
+            Source = AiCreditSource.Purchase,
+            Description = "test credits",
+            ReferenceId = "addon:test-credits",
+            CreatedAt = DateTimeOffset.UtcNow,
+        });
         await db.SaveChangesAsync();
 
         // Provider that reports actual usage so Commit has something to add.
         var provider = new FakeUsageProvider(promptTokens: 120, completionTokens: 80);
         var recorder = new AiUsageRecorder(db, NullLogger<AiUsageRecorder>.Instance);
         var quota = new AiQuotaService(db, new MemoryCache(new MemoryCacheOptions()), NullLogger<AiQuotaService>.Instance, new EffectiveEntitlementResolver(db));
-        var gateway = new AiGatewayService(_loader, new[] { (IAiModelProvider)provider }, recorder, quota);
+        var credits = new AiCreditService(db);
+        var gateway = new AiGatewayService(_loader, new[] { (IAiModelProvider)provider }, recorder, quota, creditService: credits);
 
         var prompt = gateway.BuildGroundedPrompt(new AiGroundingContext
         {
@@ -779,18 +793,332 @@ public class AiGatewayQuotaIntegrationTests
         var counters = await db.AiQuotaCounters.Where(c => c.UserId == "u").ToListAsync();
         Assert.Equal(2, counters.Count);
         Assert.All(counters, c => Assert.Equal(200, c.TokensUsed));
+        var usage = await db.AiUsageRecords.SingleAsync();
+        var debit = await db.AiCreditLedger.SingleAsync(entry => entry.Source == AiCreditSource.UsageDebit);
+        Assert.Equal(-1, debit.TokensDelta);
+        Assert.Equal($"usage:{usage.Id}", debit.ReferenceId);
         await db.DisposeAsync();
     }
 
-    private sealed class FakeUsageProvider(int promptTokens, int completionTokens) : IAiModelProvider
+    [Fact]
+    public async Task Gateway_RefusesCreditPricedFeature_WhenAiCreditsExhausted()
     {
+        var options = new DbContextOptionsBuilder<LearnerDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString("N"))
+            .Options;
+        var db = new LearnerDbContext(options);
+
+        db.AiQuotaPlans.Add(new AiQuotaPlan
+        {
+            Id = Guid.NewGuid().ToString("N"),
+            Code = "pro", Name = "pro",
+            MonthlyTokenCap = 1_000_000,
+            IsActive = true,
+        });
+        db.BillingPlans.Add(new BillingPlan { Id = "p", Code = "pro", Name = "Pro" });
+        db.Subscriptions.Add(new Subscription
+        {
+            Id = "s", UserId = "u", PlanId = "p",
+            Status = SubscriptionStatus.Active,
+            StartedAt = DateTimeOffset.UtcNow, ChangedAt = DateTimeOffset.UtcNow,
+        });
+        await db.SaveChangesAsync();
+
+        var provider = new FakeUsageProvider(promptTokens: 120, completionTokens: 80);
+        var recorder = new AiUsageRecorder(db, NullLogger<AiUsageRecorder>.Instance);
+        var quota = new AiQuotaService(db, new MemoryCache(new MemoryCacheOptions()), NullLogger<AiQuotaService>.Instance, new EffectiveEntitlementResolver(db));
+        var credits = new AiCreditService(db);
+        var gateway = new AiGatewayService(_loader, new[] { (IAiModelProvider)provider }, recorder, quota, creditService: credits);
+
+        var prompt = gateway.BuildGroundedPrompt(new AiGroundingContext
+        {
+            Kind = RuleKind.Writing, Profession = ExamProfession.Medicine, Task = AiTaskMode.Score, LetterType = "routine_referral",
+        });
+
+        var ex = await Assert.ThrowsAsync<AiQuotaDeniedException>(() =>
+            gateway.CompleteAsync(new AiGatewayRequest
+            {
+                Prompt = prompt,
+                Provider = "fake-usage",
+                UserId = "u",
+                FeatureCode = AiFeatureCodes.WritingGrade,
+            }));
+
+        Assert.Equal("ai_credits_insufficient", ex.ErrorCode);
+        Assert.False(provider.WasCalled);
+        var row = await db.AiUsageRecords.SingleAsync();
+        Assert.Equal(AiCallOutcome.GatewayRefused, row.Outcome);
+        Assert.Equal("ai_credits_insufficient", row.ErrorCode);
+        Assert.Empty(await db.AiCreditLedger.ToListAsync());
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Gateway_RefusesCreditPricedFeature_WhenCreditServiceMissing()
+    {
+        var options = new DbContextOptionsBuilder<LearnerDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString("N"))
+            .Options;
+        var db = new LearnerDbContext(options);
+
+        db.AiQuotaPlans.Add(new AiQuotaPlan
+        {
+            Id = Guid.NewGuid().ToString("N"),
+            Code = "pro", Name = "pro",
+            MonthlyTokenCap = 1_000_000,
+            IsActive = true,
+        });
+        db.BillingPlans.Add(new BillingPlan { Id = "p", Code = "pro", Name = "Pro" });
+        db.Subscriptions.Add(new Subscription
+        {
+            Id = "s", UserId = "u", PlanId = "p",
+            Status = SubscriptionStatus.Active,
+            StartedAt = DateTimeOffset.UtcNow, ChangedAt = DateTimeOffset.UtcNow,
+        });
+        await db.SaveChangesAsync();
+
+        var provider = new FakeUsageProvider(promptTokens: 120, completionTokens: 80);
+        var recorder = new AiUsageRecorder(db, NullLogger<AiUsageRecorder>.Instance);
+        var quota = new AiQuotaService(db, new MemoryCache(new MemoryCacheOptions()), NullLogger<AiQuotaService>.Instance, new EffectiveEntitlementResolver(db));
+        var gateway = new AiGatewayService(_loader, new[] { (IAiModelProvider)provider }, recorder, quota);
+
+        var prompt = gateway.BuildGroundedPrompt(new AiGroundingContext
+        {
+            Kind = RuleKind.Writing, Profession = ExamProfession.Medicine, Task = AiTaskMode.Score, LetterType = "routine_referral",
+        });
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            gateway.CompleteAsync(new AiGatewayRequest
+            {
+                Prompt = prompt,
+                Provider = "fake-usage",
+                UserId = "u",
+                FeatureCode = AiFeatureCodes.WritingGrade,
+            }));
+
+        Assert.Contains("AI credit accounting is not configured", ex.Message);
+        Assert.False(provider.WasCalled);
+        var row = await db.AiUsageRecords.SingleAsync();
+        Assert.Equal(AiCallOutcome.GatewayRefused, row.Outcome);
+        Assert.Equal("ai_credit_accounting_unavailable", row.ErrorCode);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Gateway_DebitsAiCredit_WhenProviderOmitsUsage()
+    {
+        var options = new DbContextOptionsBuilder<LearnerDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString("N"))
+            .Options;
+        var db = new LearnerDbContext(options);
+
+        db.AiQuotaPlans.Add(new AiQuotaPlan
+        {
+            Id = Guid.NewGuid().ToString("N"),
+            Code = "pro", Name = "pro",
+            MonthlyTokenCap = 1_000_000,
+            IsActive = true,
+        });
+        db.BillingPlans.Add(new BillingPlan { Id = "p", Code = "pro", Name = "Pro" });
+        db.Subscriptions.Add(new Subscription
+        {
+            Id = "s", UserId = "u", PlanId = "p",
+            Status = SubscriptionStatus.Active,
+            StartedAt = DateTimeOffset.UtcNow, ChangedAt = DateTimeOffset.UtcNow,
+        });
+        db.AiCreditLedger.Add(new AiCreditLedgerEntry
+        {
+            Id = Guid.NewGuid().ToString("N"),
+            UserId = "u",
+            TokensDelta = 1,
+            CostDeltaUsd = 0m,
+            Source = AiCreditSource.Purchase,
+            Description = "test credit",
+            ReferenceId = "addon:null-usage-test",
+            CreatedAt = DateTimeOffset.UtcNow,
+        });
+        await db.SaveChangesAsync();
+
+        var provider = new FakeUsageProvider(promptTokens: null, completionTokens: null);
+        var recorder = new AiUsageRecorder(db, NullLogger<AiUsageRecorder>.Instance);
+        var quota = new AiQuotaService(db, new MemoryCache(new MemoryCacheOptions()), NullLogger<AiQuotaService>.Instance, new EffectiveEntitlementResolver(db));
+        var credits = new AiCreditService(db);
+        var gateway = new AiGatewayService(_loader, new[] { (IAiModelProvider)provider }, recorder, quota, creditService: credits);
+
+        var prompt = gateway.BuildGroundedPrompt(new AiGroundingContext
+        {
+            Kind = RuleKind.Writing, Profession = ExamProfession.Medicine, Task = AiTaskMode.Score, LetterType = "routine_referral",
+        });
+
+        await gateway.CompleteAsync(new AiGatewayRequest
+        {
+            Prompt = prompt,
+            Provider = "fake-usage",
+            UserId = "u",
+            FeatureCode = AiFeatureCodes.WritingGrade,
+        });
+
+        var usage = await db.AiUsageRecords.SingleAsync();
+        Assert.Equal(0, usage.PromptTokens);
+        Assert.Equal(0, usage.CompletionTokens);
+        var debit = await db.AiCreditLedger.SingleAsync(entry => entry.Source == AiCreditSource.UsageDebit);
+        Assert.Equal(-1, debit.TokensDelta);
+        Assert.Equal($"usage:{usage.Id}", debit.ReferenceId);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Gateway_ReturnsCompletion_WhenPostCallCreditDebitFails()
+    {
+        var options = new DbContextOptionsBuilder<LearnerDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString("N"))
+            .Options;
+        var db = new LearnerDbContext(options);
+
+        db.AiQuotaPlans.Add(new AiQuotaPlan
+        {
+            Id = Guid.NewGuid().ToString("N"),
+            Code = "pro", Name = "pro",
+            MonthlyTokenCap = 1_000_000,
+            IsActive = true,
+        });
+        db.BillingPlans.Add(new BillingPlan { Id = "p", Code = "pro", Name = "Pro" });
+        db.Subscriptions.Add(new Subscription
+        {
+            Id = "s", UserId = "u", PlanId = "p",
+            Status = SubscriptionStatus.Active,
+            StartedAt = DateTimeOffset.UtcNow, ChangedAt = DateTimeOffset.UtcNow,
+        });
+        await db.SaveChangesAsync();
+
+        var provider = new FakeUsageProvider(promptTokens: 120, completionTokens: 80);
+        var recorder = new AiUsageRecorder(db, NullLogger<AiUsageRecorder>.Instance);
+        var quota = new AiQuotaService(db, new MemoryCache(new MemoryCacheOptions()), NullLogger<AiQuotaService>.Instance, new EffectiveEntitlementResolver(db));
+        var credits = new RejectingCreditService();
+        var gateway = new AiGatewayService(_loader, new[] { (IAiModelProvider)provider }, recorder, quota, creditService: credits);
+
+        var prompt = gateway.BuildGroundedPrompt(new AiGroundingContext
+        {
+            Kind = RuleKind.Writing, Profession = ExamProfession.Medicine, Task = AiTaskMode.Score, LetterType = "routine_referral",
+        });
+
+        var result = await gateway.CompleteAsync(new AiGatewayRequest
+        {
+            Prompt = prompt,
+            Provider = "fake-usage",
+            UserId = "u",
+            FeatureCode = AiFeatureCodes.WritingGrade,
+        });
+
+        Assert.False(string.IsNullOrWhiteSpace(result.Completion));
+        Assert.True(provider.WasCalled);
+        Assert.True(credits.DebitAttempted);
+        Assert.Equal(AiCallOutcome.Success, (await db.AiUsageRecords.SingleAsync()).Outcome);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Gateway_DoesNotDebit_WhenUsageRecorderReturnsNull()
+    {
+        var provider = new FakeUsageProvider(promptTokens: 120, completionTokens: 80);
+        var recorder = new NullReturningUsageRecorder();
+        var credits = new TrackingCreditService();
+        var gateway = new AiGatewayService(_loader, new[] { (IAiModelProvider)provider }, recorder, creditService: credits);
+
+        var prompt = gateway.BuildGroundedPrompt(new AiGroundingContext
+        {
+            Kind = RuleKind.Writing, Profession = ExamProfession.Medicine, Task = AiTaskMode.Score, LetterType = "routine_referral",
+        });
+
+        var result = await gateway.CompleteAsync(new AiGatewayRequest
+        {
+            Prompt = prompt,
+            Provider = "fake-usage",
+            UserId = "u",
+            FeatureCode = AiFeatureCodes.WritingGrade,
+        });
+
+        Assert.False(string.IsNullOrWhiteSpace(result.Completion));
+        Assert.True(provider.WasCalled);
+        Assert.True(recorder.SuccessAttempted);
+        Assert.False(credits.DebitAttempted);
+    }
+
+    private sealed class FakeUsageProvider(int? promptTokens, int? completionTokens) : IAiModelProvider
+    {
+        public bool WasCalled { get; private set; }
         public string Name => "fake-usage";
         public Task<AiProviderCompletion> CompleteAsync(AiProviderRequest request, CancellationToken ct)
-            => Task.FromResult(new AiProviderCompletion
+        {
+            WasCalled = true;
+            return Task.FromResult(new AiProviderCompletion
             {
                 Text = "{}",
-                Usage = new AiUsage { PromptTokens = promptTokens, CompletionTokens = completionTokens },
+                Usage = promptTokens.HasValue || completionTokens.HasValue
+                    ? new AiUsage { PromptTokens = promptTokens ?? 0, CompletionTokens = completionTokens ?? 0 }
+                    : null,
             });
+        }
+    }
+
+    private sealed class RejectingCreditService : IAiCreditService
+    {
+        public bool DebitAttempted { get; private set; }
+
+        public Task<AiCreditBalance> GetBalanceAsync(string userId, CancellationToken ct)
+            => Task.FromResult(new AiCreditBalance(1, 0m, 1, 0));
+
+        public Task<AiCreditLedgerEntry> GrantAsync(string userId, int tokens, decimal costUsd, AiCreditSource source, string? description, string? referenceId, DateTimeOffset? expiresAt, string? adminId, CancellationToken ct)
+            => throw new NotSupportedException();
+
+        public Task<bool> DebitUsageAsync(AiCreditUsageDebitRequest request, CancellationToken ct)
+        {
+            DebitAttempted = true;
+            return Task.FromResult(false);
+        }
+
+        public Task<IReadOnlyList<AiCreditLedgerEntry>> ListAsync(string userId, int page, int pageSize, CancellationToken ct)
+            => throw new NotSupportedException();
+
+        public Task<int> SweepExpiredAsync(DateTimeOffset asOf, CancellationToken ct)
+            => throw new NotSupportedException();
+    }
+
+    private sealed class TrackingCreditService : IAiCreditService
+    {
+        public bool DebitAttempted { get; private set; }
+
+        public Task<AiCreditBalance> GetBalanceAsync(string userId, CancellationToken ct)
+            => Task.FromResult(new AiCreditBalance(1, 0m, 1, 0));
+
+        public Task<AiCreditLedgerEntry> GrantAsync(string userId, int tokens, decimal costUsd, AiCreditSource source, string? description, string? referenceId, DateTimeOffset? expiresAt, string? adminId, CancellationToken ct)
+            => throw new NotSupportedException();
+
+        public Task<bool> DebitUsageAsync(AiCreditUsageDebitRequest request, CancellationToken ct)
+        {
+            DebitAttempted = true;
+            return Task.FromResult(true);
+        }
+
+        public Task<IReadOnlyList<AiCreditLedgerEntry>> ListAsync(string userId, int page, int pageSize, CancellationToken ct)
+            => throw new NotSupportedException();
+
+        public Task<int> SweepExpiredAsync(DateTimeOffset asOf, CancellationToken ct)
+            => throw new NotSupportedException();
+    }
+
+    private sealed class NullReturningUsageRecorder : IAiUsageRecorder
+    {
+        public bool SuccessAttempted { get; private set; }
+
+        public Task<string?> RecordSuccessAsync(AiUsageContext context, string providerId, string model, AiKeySource keySource, AiUsage? usage, int latencyMs, int retryCount, string? policyTrace, CancellationToken ct, string? accountId = null, string? failoverTrace = null, decimal costEstimateUsd = 0, string? usageRecordId = null)
+        {
+            SuccessAttempted = true;
+            return Task.FromResult<string?>(null);
+        }
+
+        public Task RecordFailureAsync(AiUsageContext context, string? providerId, string? model, AiKeySource keySource, AiCallOutcome outcome, string errorCode, string? errorMessage, int latencyMs, int retryCount, string? policyTrace, CancellationToken ct, string? accountId = null, string? failoverTrace = null, AiUsage? usage = null, decimal costEstimateUsd = 0, string? usageRecordId = null)
+            => Task.CompletedTask;
     }
 
     private sealed class TokenReportingProvider(int prompt, int completion) : IAiModelProvider

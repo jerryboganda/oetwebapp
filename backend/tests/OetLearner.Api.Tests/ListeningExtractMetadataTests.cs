@@ -27,6 +27,9 @@ public class ListeningExtractMetadataTests
         public Task<ListeningBackfillReport> BackfillPaperAsync(string paperId, string adminId, CancellationToken ct)
             => Task.FromResult(new ListeningBackfillReport(paperId, true, 0, 0, 0, 0, null));
 
+        public Task<ListeningBackfillReport> BackfillPaperAsync(string paperId, string adminId, bool bypassAttemptsGuard, CancellationToken ct)
+            => BackfillPaperAsync(paperId, adminId, ct);
+
         public Task<IReadOnlyList<ListeningBackfillReport>> BackfillAllAsync(string adminId, CancellationToken ct)
             => Task.FromResult<IReadOnlyList<ListeningBackfillReport>>([]);
     }

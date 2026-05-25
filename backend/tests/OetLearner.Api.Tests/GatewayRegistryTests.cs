@@ -158,7 +158,7 @@ public class GatewayRegistryTests
         public Task<WebhookProcessResult> HandleWebhookAsync(string payload, IReadOnlyDictionary<string, string> headers, CancellationToken ct)
             => throw new NotSupportedException();
 
-        public Task<RefundResult> ProcessRefundAsync(string transactionId, decimal amount, string currency, string reason, CancellationToken ct)
+        public Task<RefundResult> ProcessRefundAsync(string transactionId, decimal amount, string currency, string reason, string idempotencyKey, CancellationToken ct)
             => throw new NotSupportedException();
     }
 }

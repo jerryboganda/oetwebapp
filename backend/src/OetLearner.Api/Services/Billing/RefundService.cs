@@ -1,3 +1,4 @@
+using System.Data;
 using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
@@ -69,6 +70,10 @@ public sealed class RefundService
                 Idempotent: true);
         }
 
+        await using var reservationTransaction = IsInMemoryProvider(_db)
+            ? null
+            : await _db.Database.BeginTransactionAsync(IsolationLevel.Serializable, ct);
+
         var transaction = await _db.PaymentTransactions
             .FirstOrDefaultAsync(t => t.GatewayTransactionId == request.PaymentTransactionId, ct)
             ?? throw new InvalidOperationException($"Payment transaction '{request.PaymentTransactionId}' was not found.");
@@ -100,27 +105,18 @@ public sealed class RefundService
             await EnsureWalletCreditsCanBeReversedAsync(transaction, ct);
         }
 
-        var gateway = _gateways.GetGateway(transaction.Gateway);
-        var providerResult = await gateway.ProcessRefundAsync(
-            transaction.GatewayTransactionId,
-            request.Amount,
-            transaction.Currency,
-            request.Reason ?? "requested_by_customer",
-            ct);
-        var providerSucceeded = string.Equals(providerResult.Status, "succeeded", StringComparison.OrdinalIgnoreCase);
-
         var refund = new OrderRefund
         {
             Id = Guid.NewGuid(),
             PaymentTransactionId = transaction.GatewayTransactionId,
             LearnerUserId = transaction.LearnerUserId,
             Gateway = transaction.Gateway,
-            GatewayRefundId = providerResult.RefundId,
+            GatewayRefundId = $"pending:{request.IdempotencyKey}",
             IdempotencyKey = request.IdempotencyKey,
             RefundType = isFull ? "full" : "partial",
             Amount = request.Amount,
             Currency = transaction.Currency,
-            Status = providerSucceeded ? "succeeded" : "pending",
+            Status = "pending",
             Reason = Truncate(request.Reason, 64),
             AdminNote = Truncate(request.AdminNote, 1024),
             RequestedByAdminId = Truncate(request.AdminId, 64),
@@ -129,15 +125,50 @@ public sealed class RefundService
             UpdatedAt = now
         };
 
+        _db.Set<OrderRefund>().Add(refund);
+        await _db.SaveChangesAsync(ct);
+        if (reservationTransaction is not null)
+        {
+            await reservationTransaction.CommitAsync(ct);
+        }
+
+        var gateway = _gateways.GetGateway(transaction.Gateway);
+        RefundResult providerResult;
+        try
+        {
+            providerResult = await gateway.ProcessRefundAsync(
+                transaction.GatewayTransactionId,
+                request.Amount,
+                transaction.Currency,
+                request.Reason ?? "requested_by_customer",
+                request.IdempotencyKey,
+                ct);
+        }
+        catch
+        {
+            refund.Status = "failed";
+            refund.UpdatedAt = DateTimeOffset.UtcNow;
+            await _db.SaveChangesAsync(ct);
+            throw;
+        }
+        var providerSucceeded = string.Equals(providerResult.Status, "succeeded", StringComparison.OrdinalIgnoreCase);
+
+        refund.GatewayRefundId = providerResult.RefundId;
+        refund.Status = providerSucceeded ? "succeeded" : "pending";
+        refund.UpdatedAt = DateTimeOffset.UtcNow;
+
+        // By design, partial refunds are monetary adjustments only; AI credits
+        // and other entitlements are revoked when the purchase is fully refunded.
         if (isFull && providerSucceeded)
         {
             refund.ReversedWalletCredits = await ReverseWalletCreditsAsync(transaction, ct);
-            refund.ReversedEntitlements = await ReverseEntitlementsAsync(transaction, ct);
+            var reversedEntitlements = await ReverseEntitlementsAsync(transaction, ct);
+            var reversedAiCredits = await ReverseAiPackageCreditsAsync(transaction, refund.Id.ToString("N"), ct);
+            refund.ReversedEntitlements = reversedEntitlements || reversedAiCredits;
             transaction.Status = "refunded";
             transaction.UpdatedAt = now;
         }
 
-        _db.Set<OrderRefund>().Add(refund);
         _db.BillingEvents.Add(new BillingEvent
         {
             Id = $"bill-evt-refund-{Guid.NewGuid():N}",
@@ -253,8 +284,9 @@ public sealed class RefundService
 
         // End any subscription items that were activated by this transaction.
         var items = await _db.SubscriptionItems
-            .Where(i => i.CheckoutSessionId == transaction.GatewayTransactionId
-                        && i.Status == SubscriptionItemStatus.Active)
+            .Where(i => i.Status == SubscriptionItemStatus.Active
+                        && (i.CheckoutSessionId == transaction.GatewayTransactionId
+                            || (transaction.QuoteId != null && i.QuoteId == transaction.QuoteId)))
             .ToListAsync(ct);
         foreach (var item in items)
         {
@@ -278,9 +310,94 @@ public sealed class RefundService
         return changed;
     }
 
+    private async Task<bool> ReverseAiPackageCreditsAsync(PaymentTransaction transaction, string refundId, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(transaction.QuoteId)) return false;
+
+        var subscription = await _db.Subscriptions.FirstOrDefaultAsync(s => s.UserId == transaction.LearnerUserId, ct);
+        if (subscription is null) return false;
+
+        var purchaseEntries = await _db.AiCreditLedger.AsNoTracking()
+            .Where(entry => entry.UserId == transaction.LearnerUserId
+                            && entry.Source == AiCreditSource.Purchase
+                            && entry.TokensDelta > 0
+                            && entry.ReferenceId != null
+                            && (entry.ReferenceId.StartsWith("addon:" + transaction.QuoteId + ":")
+                                || entry.ReferenceId.StartsWith("plan:" + transaction.QuoteId + ":")))
+            .ToListAsync(ct);
+        var changed = false;
+        var reversedTotal = 0;
+        foreach (var purchase in purchaseEntries)
+        {
+            var reversalReferenceId = BuildAiCreditRefundReference(purchase.ReferenceId!);
+            if (reversalReferenceId is null) continue;
+            var alreadyReversed = await _db.AiCreditLedger.AsNoTracking()
+                .AnyAsync(entry => entry.UserId == transaction.LearnerUserId
+                                   && entry.Source == AiCreditSource.AdminAdjustment
+                                   && entry.ReferenceId == reversalReferenceId,
+                    ct);
+            if (alreadyReversed) continue;
+
+            subscription.AiCreditsRemaining = Math.Max(0, subscription.AiCreditsRemaining - purchase.TokensDelta);
+            _db.AiCreditLedger.Add(new AiCreditLedgerEntry
+            {
+                Id = Guid.NewGuid().ToString("N"),
+                UserId = transaction.LearnerUserId,
+                TokensDelta = -purchase.TokensDelta,
+                CostDeltaUsd = 0m,
+                Source = AiCreditSource.AdminAdjustment,
+                Description = "Refund reversal for AI package credits",
+                ReferenceId = reversalReferenceId,
+                CreatedAt = DateTimeOffset.UtcNow,
+            });
+            reversedTotal += purchase.TokensDelta;
+            changed = true;
+        }
+
+        if (changed)
+        {
+            _db.BillingEvents.Add(new BillingEvent
+            {
+                Id = $"bill-evt-ai-refund-{Guid.NewGuid():N}",
+                UserId = transaction.LearnerUserId,
+                SubscriptionId = subscription.Id,
+                QuoteId = transaction.QuoteId,
+                EventType = "ai_package_credits_refunded",
+                EntityType = nameof(OrderRefund),
+                EntityId = refundId,
+                PayloadJson = System.Text.Json.JsonSerializer.Serialize(new
+                {
+                    paymentTransactionId = transaction.GatewayTransactionId,
+                    creditsReversed = reversedTotal,
+                }),
+                OccurredAt = DateTimeOffset.UtcNow,
+            });
+        }
+
+        return changed;
+    }
+
     private static string? Truncate(string? value, int max)
     {
         if (string.IsNullOrEmpty(value)) return value;
         return value.Length <= max ? value : value[..max];
     }
+
+    private static string? BuildAiCreditRefundReference(string purchaseReferenceId)
+    {
+        if (purchaseReferenceId.StartsWith("addon:", StringComparison.Ordinal))
+        {
+            return "addon-refund:" + purchaseReferenceId["addon:".Length..];
+        }
+
+        if (purchaseReferenceId.StartsWith("plan:", StringComparison.Ordinal))
+        {
+            return "plan-refund:" + purchaseReferenceId["plan:".Length..];
+        }
+
+        return null;
+    }
+
+    private static bool IsInMemoryProvider(LearnerDbContext context)
+        => context.Database.ProviderName?.Contains("InMemory", StringComparison.OrdinalIgnoreCase) == true;
 }

@@ -36,6 +36,22 @@ public sealed class AiFeatureRouteResolverTests : IAsyncDisposable
         Assert.Null(result);
     }
 
+    [Theory]
+    [InlineData(AiFeatureCodes.ConversationOpening, "anthropic", "claude-sonnet-4-6")]
+    [InlineData(AiFeatureCodes.ConversationReply, "anthropic", "claude-haiku-4-5")]
+    [InlineData(AiFeatureCodes.ConversationEvaluation, "anthropic", "claude-sonnet-4-6")]
+    public async Task ResolveAsync_ConversationNoRow_ReturnsStaticDefault(string featureCode, string provider, string model)
+    {
+        await using var db = new LearnerDbContext(_options);
+        var resolver = new AiFeatureRouteResolver(db);
+
+        var result = await resolver.ResolveAsync(featureCode, default);
+
+        Assert.NotNull(result);
+        Assert.Equal(provider, result!.ProviderCode);
+        Assert.Equal(model, result.Model);
+    }
+
     [Fact]
     public async Task ResolveAsync_InactiveRow_ReturnsNull()
     {

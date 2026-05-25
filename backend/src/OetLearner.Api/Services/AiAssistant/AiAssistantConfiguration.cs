@@ -9,9 +9,9 @@ public static class AiAssistantConfiguration
 {
     public static readonly Dictionary<string, RoleConfig> RoleDefaults = new()
     {
-        ["admin"] = new("gpt-4o", 4096, 10, true),
-        ["expert"] = new("gpt-4o-mini", 2048, 5, false),
-        ["learner"] = new("gpt-4o-mini", 1024, 3, false),
+        ["admin"] = new("glm-5", 4096, 10, true),
+        ["expert"] = new("glm-5", 2048, 5, false),
+        ["learner"] = new("glm-5", 1024, 3, false),
     };
 
     /// <summary>

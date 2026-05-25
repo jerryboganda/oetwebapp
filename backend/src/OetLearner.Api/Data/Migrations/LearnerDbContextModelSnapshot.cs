@@ -904,6 +904,26 @@ namespace OetLearner.Api.Data.Migrations
                         .HasDatabaseName("UX_AiCreditLedger_PlanRenewal_ReferenceId")
                         .HasFilter("\"ReferenceId\" IS NOT NULL AND \"Source\" = 0");
 
+                    b.HasIndex("ReferenceId", "Source")
+                        .IsUnique()
+                        .HasDatabaseName("UX_AiCreditLedger_UsageDebit_ReferenceId")
+                        .HasFilter("\"ReferenceId\" IS NOT NULL AND \"Source\" = 4");
+
+                    b.HasIndex("UserId", "ReferenceId", "Source")
+                        .IsUnique()
+                        .HasDatabaseName("UX_AiCreditLedger_Purchase_ReferenceId")
+                        .HasFilter("\"ReferenceId\" IS NOT NULL AND \"Source\" = 2");
+
+                    b.HasIndex("Source", "ReferenceId")
+                        .IsUnique()
+                        .HasDatabaseName("UX_AiCreditLedger_Expiration_ReferenceId")
+                        .HasFilter("\"ReferenceId\" IS NOT NULL AND \"Source\" = 5");
+
+                    b.HasIndex("Source", "UserId", "ReferenceId")
+                        .IsUnique()
+                        .HasDatabaseName("UX_AiCreditLedger_RefundAdjustment_ReferenceId")
+                        .HasFilter("\"ReferenceId\" IS NOT NULL AND \"Source\" = 3 AND (\"ReferenceId\" LIKE 'addon-refund:%' OR \"ReferenceId\" LIKE 'plan-refund:%')");
+
                     b.HasIndex("UserId", "CreatedAt");
 
                     b.ToTable("AiCreditLedger");

@@ -163,6 +163,11 @@ public sealed class AiProviderAccountRegistry(
             var row = await db.AiProviderAccounts.AsNoTracking()
                 .FirstOrDefaultAsync(a => a.Id == c.Id, ct);
             if (row is null) continue; // race with deletion; vanishingly rare
+            if (row.ExhaustedUntil is not null && row.ExhaustedUntil > now)
+            {
+                await RollBackReservationAsync(c.Id, now, ct);
+                continue;
+            }
 
             string? apiKey = null;
             if (!string.IsNullOrEmpty(row.EncryptedApiKey))
@@ -170,7 +175,11 @@ public sealed class AiProviderAccountRegistry(
                 try { apiKey = _protector.Unprotect(row.EncryptedApiKey); }
                 catch { apiKey = null; }
             }
-            if (string.IsNullOrEmpty(apiKey)) continue; // unusable; try next
+            if (string.IsNullOrEmpty(apiKey))
+            {
+                await MarkUnusableAccountAsync(c.Id, now, ct);
+                continue;
+            }
 
             return new AiProviderAccountSlot(
                 AccountId: row.Id,
@@ -182,6 +191,29 @@ public sealed class AiProviderAccountRegistry(
 
         return null;
     }
+
+    private Task<int> RollBackReservationAsync(
+        string accountId,
+        DateTimeOffset now,
+        CancellationToken ct)
+        => db.AiProviderAccounts
+            .Where(a => a.Id == accountId && a.RequestsUsedThisMonth > 0)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(a => a.RequestsUsedThisMonth, a => a.RequestsUsedThisMonth - 1)
+                .SetProperty(a => a.UpdatedAt, _ => now), ct);
+
+    private Task<int> MarkUnusableAccountAsync(
+        string accountId,
+        DateTimeOffset now,
+        CancellationToken ct)
+        => db.AiProviderAccounts
+            .Where(a => a.Id == accountId)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(a => a.RequestsUsedThisMonth, a => a.RequestsUsedThisMonth > 0 ? a.RequestsUsedThisMonth - 1 : 0)
+                .SetProperty(a => a.IsActive, _ => false)
+                .SetProperty(a => a.LastTestStatus, _ => "auth")
+                .SetProperty(a => a.LastTestError, _ => "Missing or invalid platform API key.")
+                .SetProperty(a => a.UpdatedAt, _ => now), ct);
 
     public async Task RecordOutcomeAsync(
         string accountId,

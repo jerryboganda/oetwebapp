@@ -920,6 +920,34 @@ public partial class LearnerDbContext(DbContextOptions<LearnerDbContext> options
             .HasDatabaseName("UX_AiCreditLedger_PlanRenewal_ReferenceId")
             .HasFilter("\"ReferenceId\" IS NOT NULL AND \"Source\" = 0");
 
+        // AI usage idempotence: one debit entry per persisted usage row.
+        modelBuilder.Entity<AiCreditLedgerEntry>()
+            .HasIndex(x => new { x.ReferenceId, x.Source })
+            .IsUnique()
+            .HasDatabaseName("UX_AiCreditLedger_UsageDebit_ReferenceId")
+            .HasFilter("\"ReferenceId\" IS NOT NULL AND \"Source\" = 4");
+
+        // AI purchase idempotence: one paid credit grant per checkout / grant reference.
+        modelBuilder.Entity<AiCreditLedgerEntry>()
+            .HasIndex(x => new { x.UserId, x.ReferenceId, x.Source })
+            .IsUnique()
+            .HasDatabaseName("UX_AiCreditLedger_Purchase_ReferenceId")
+            .HasFilter("\"ReferenceId\" IS NOT NULL AND \"Source\" = 2");
+
+        // AI expiration idempotence: one expiration row per original grant.
+        modelBuilder.Entity<AiCreditLedgerEntry>()
+            .HasIndex(x => new { x.Source, x.ReferenceId })
+            .IsUnique()
+            .HasDatabaseName("UX_AiCreditLedger_Expiration_ReferenceId")
+            .HasFilter("\"ReferenceId\" IS NOT NULL AND \"Source\" = 5");
+
+        // AI refund reversal idempotence: one admin-adjustment reversal per purchase reference.
+        modelBuilder.Entity<AiCreditLedgerEntry>()
+            .HasIndex(x => new { x.Source, x.UserId, x.ReferenceId })
+            .IsUnique()
+            .HasDatabaseName("UX_AiCreditLedger_RefundAdjustment_ReferenceId")
+            .HasFilter("\"ReferenceId\" IS NOT NULL AND \"Source\" = 3 AND (\"ReferenceId\" LIKE 'addon-refund:%' OR \"ReferenceId\" LIKE 'plan-refund:%')");
+
         // Payment indexes
         modelBuilder.Entity<PaymentTransaction>().HasIndex(x => new { x.LearnerUserId, x.CreatedAt });
         modelBuilder.Entity<PaymentTransaction>().HasIndex(x => new { x.Status, x.CreatedAt });

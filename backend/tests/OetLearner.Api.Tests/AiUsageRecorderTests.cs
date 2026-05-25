@@ -45,7 +45,7 @@ public class AiUsageRecorderTests
             UserPrompt: "Please grade this letter.",
             StartedAt: startedAt);
 
-        await recorder.RecordSuccessAsync(
+        var usageId = await recorder.RecordSuccessAsync(
             context,
             providerId: "digitalocean-serverless",
             model: "gpt-4o",
@@ -54,9 +54,11 @@ public class AiUsageRecorderTests
             latencyMs: 412,
             retryCount: 0,
             policyTrace: "scoring-critical → platform-only",
-            ct: CancellationToken.None);
+            ct: CancellationToken.None,
+            costEstimateUsd: 0.0123m);
 
         var row = Assert.Single(await db.AiUsageRecords.ToListAsync());
+        Assert.Equal(usageId, row.Id);
         Assert.Equal("user-001", row.UserId);
         Assert.Equal("auth-001", row.AuthAccountId);
         Assert.Equal(AiFeatureCodes.WritingGrade, row.FeatureCode);
@@ -68,6 +70,7 @@ public class AiUsageRecorderTests
         Assert.Equal(120, row.PromptTokens);
         Assert.Equal(80, row.CompletionTokens);
         Assert.Equal(200, row.TotalTokens);
+        Assert.Equal(0.0123m, row.CostEstimateUsd);
         Assert.Equal(AiCallOutcome.Success, row.Outcome);
         Assert.Null(row.ErrorCode);
         Assert.Equal(412, row.LatencyMs);

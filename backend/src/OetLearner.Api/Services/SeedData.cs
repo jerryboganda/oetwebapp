@@ -1838,8 +1838,8 @@ public static partial class SeedData
         );
 
         db.AIConfigVersions.AddRange(
-            new AIConfigVersion { Id = "aic-001", Model = "anthropic-claude-opus-4.7", Provider = "DigitalOcean Serverless (Anthropic)", TaskType = "writing", Status = AIConfigStatus.Active, Accuracy = 94.2, ConfidenceThreshold = 0.85, RoutingRule = "default", PromptLabel = "Writing Eval v3.2", CreatedBy = "Admin", CreatedAt = now.AddDays(-30) },
-            new AIConfigVersion { Id = "aic-002", Model = "anthropic-claude-opus-4.7", Provider = "DigitalOcean Serverless (Anthropic)", TaskType = "speaking", Status = AIConfigStatus.Active, Accuracy = 91.8, ConfidenceThreshold = 0.80, RoutingRule = "default", PromptLabel = "Speaking Eval v2.1", CreatedBy = "Admin", CreatedAt = now.AddDays(-25) },
+            new AIConfigVersion { Id = "aic-001", Model = "claude-sonnet-4-6", Provider = "DigitalOcean Serverless (Anthropic)", TaskType = "writing", Status = AIConfigStatus.Active, Accuracy = 94.2, ConfidenceThreshold = 0.85, RoutingRule = "default", PromptLabel = "Writing Eval v3.2", CreatedBy = "Admin", CreatedAt = now.AddDays(-30) },
+            new AIConfigVersion { Id = "aic-002", Model = "claude-sonnet-4-6", Provider = "DigitalOcean Serverless (Anthropic)", TaskType = "speaking", Status = AIConfigStatus.Active, Accuracy = 91.8, ConfidenceThreshold = 0.80, RoutingRule = "default", PromptLabel = "Speaking Eval v2.1", CreatedBy = "Admin", CreatedAt = now.AddDays(-25) },
             new AIConfigVersion { Id = "aic-003", Model = "claude-3.5-sonnet", Provider = "Anthropic", TaskType = "writing", Status = AIConfigStatus.Testing, Accuracy = 95.1, ConfidenceThreshold = 0.88, RoutingRule = "experiment:claude_writing", ExperimentFlag = "claude_writing_test", PromptLabel = "Writing Eval v4.0-beta", CreatedBy = "Admin", CreatedAt = now.AddDays(-7) },
             new AIConfigVersion { Id = "aic-004", Model = "gpt-3.5-turbo", Provider = "OpenAI", TaskType = "reading", Status = AIConfigStatus.Deprecated, Accuracy = 88.5, ConfidenceThreshold = 0.75, RoutingRule = "legacy", PromptLabel = "Reading Eval v1.0", CreatedBy = "Admin", CreatedAt = now.AddDays(-120) }
         );
@@ -1894,8 +1894,8 @@ public static partial class SeedData
         db.BillingAddOns.AddRange(
             // Unified credit-economy pricing (~$3/credit anchor).  Eliminates the old
             // 16× gap between wallet ($0.63/credit) and add-on ($9–$10/credit) pricing.
-            new BillingAddOn { Id = "addon-credits-3", Code = "credits-3", Name = "3 Review Credits", Description = "Pack of 3 tutor review credits.", Price = 9.99m, Currency = "AUD", Interval = "one_time", Status = BillingAddOnStatus.Active, IsRecurring = false, DurationDays = 0, GrantCredits = 3, GrantEntitlementsJson = JsonSupport.Serialize(new { reviewCredits = 3 }), CompatiblePlanCodesJson = JsonSupport.Serialize(new[] { "basic-monthly", "premium-monthly", "premium-yearly", "intensive-monthly" }), AppliesToAllPlans = true, IsStackable = true, QuantityStep = 1, MaxQuantity = 5, DisplayOrder = 10, CreatedAt = now.AddMonths(-8), UpdatedAt = now },
-            new BillingAddOn { Id = "addon-credits-5", Code = "credits-5", Name = "5 Review Credits", Description = "Pack of 5 tutor review credits.", Price = 14.99m, Currency = "AUD", Interval = "one_time", Status = BillingAddOnStatus.Active, IsRecurring = false, DurationDays = 0, GrantCredits = 5, GrantEntitlementsJson = JsonSupport.Serialize(new { reviewCredits = 5 }), CompatiblePlanCodesJson = JsonSupport.Serialize(new[] { "basic-monthly", "premium-monthly", "premium-yearly", "intensive-monthly" }), AppliesToAllPlans = true, IsStackable = true, QuantityStep = 1, MaxQuantity = 5, DisplayOrder = 20, CreatedAt = now.AddMonths(-8), UpdatedAt = now },
+            new BillingAddOn { Id = "addon-credits-3", Code = "credits-3", Name = "3 Review Credits", Description = "Pack of 3 tutor review credits.", Price = 9.99m, Currency = "AUD", Interval = "one_time", Status = BillingAddOnStatus.Active, IsRecurring = false, DurationDays = 0, GrantCredits = 3, GrantEntitlementsJson = JsonSupport.Serialize(new { ai_credits = 3 }), CompatiblePlanCodesJson = JsonSupport.Serialize(new[] { "basic-monthly", "premium-monthly", "premium-yearly", "intensive-monthly" }), AppliesToAllPlans = true, IsStackable = true, QuantityStep = 1, MaxQuantity = 5, DisplayOrder = 10, CreatedAt = now.AddMonths(-8), UpdatedAt = now },
+            new BillingAddOn { Id = "addon-credits-5", Code = "credits-5", Name = "5 Review Credits", Description = "Pack of 5 tutor review credits.", Price = 14.99m, Currency = "AUD", Interval = "one_time", Status = BillingAddOnStatus.Active, IsRecurring = false, DurationDays = 0, GrantCredits = 5, GrantEntitlementsJson = JsonSupport.Serialize(new { ai_credits = 5 }), CompatiblePlanCodesJson = JsonSupport.Serialize(new[] { "basic-monthly", "premium-monthly", "premium-yearly", "intensive-monthly" }), AppliesToAllPlans = true, IsStackable = true, QuantityStep = 1, MaxQuantity = 5, DisplayOrder = 20, CreatedAt = now.AddMonths(-8), UpdatedAt = now },
             new BillingAddOn { Id = "addon-priority-review", Code = "priority-review", Name = "Priority Review Pack", Description = "Temporary priority review handling for one request.", Price = 4.99m, Currency = "AUD", Interval = "one_time", Status = BillingAddOnStatus.Active, IsRecurring = false, DurationDays = 30, GrantCredits = 0, GrantEntitlementsJson = JsonSupport.Serialize(new { priorityReview = true }), CompatiblePlanCodesJson = JsonSupport.Serialize(new[] { "premium-monthly", "premium-yearly", "intensive-monthly" }), AppliesToAllPlans = false, IsStackable = true, QuantityStep = 1, MaxQuantity = 1, DisplayOrder = 30, CreatedAt = now.AddMonths(-6), UpdatedAt = now }
         );
 
@@ -3674,8 +3674,8 @@ public static partial class SeedData
 
     private static void SeedAiProviderStub(LearnerDbContext db)
     {
-        // Production default: DigitalOcean Serverless Inference with
-        // Anthropic Claude Opus 4.7 (high reasoning effort). The API key is
+        // Production default: DigitalOcean Serverless Inference with the
+        // project-standard GLM-5 text model. The API key is
         // supplied via AI__ApiKey env var and synchronised into this row at
         // boot (DatabaseBootstrapper) — never committed to source.
         var now = DateTimeOffset.UtcNow;
@@ -3683,14 +3683,14 @@ public static partial class SeedData
         {
             Id = Guid.NewGuid().ToString("N"),
             Code = "digitalocean-serverless",
-            Name = "DigitalOcean Serverless Inference (Claude Opus 4.7)",
+            Name = "DigitalOcean Serverless Inference (GLM-5)",
             Dialect = AiProviderDialect.OpenAiCompatible,
             BaseUrl = "https://inference.do-ai.run/v1",
             EncryptedApiKey = string.Empty,  // synchronised from AI__ApiKey at boot
             ApiKeyHint = "pending",
-            DefaultModel = "anthropic-claude-opus-4.7",
-            PricePer1kPromptTokens = 0.0150m,     // Claude Opus 4.x input rate
-            PricePer1kCompletionTokens = 0.0750m, // Claude Opus 4.x output rate
+            DefaultModel = "glm-5",
+            PricePer1kPromptTokens = 0.0006m,
+            PricePer1kCompletionTokens = 0.0020m,
             RetryCount = 2,
             CircuitBreakerThreshold = 5,
             CircuitBreakerWindowSeconds = 30,

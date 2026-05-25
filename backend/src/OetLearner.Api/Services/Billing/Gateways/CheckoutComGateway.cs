@@ -125,7 +125,7 @@ public sealed class CheckoutComGateway : IPaymentGateway
             GatewayObjectId: paymentId));
     }
 
-    public async Task<RefundResult> ProcessRefundAsync(string transactionId, decimal amount, string currency, string reason, CancellationToken ct)
+    public async Task<RefundResult> ProcessRefundAsync(string transactionId, decimal amount, string currency, string reason, string idempotencyKey, CancellationToken ct)
     {
         var opts = _billing.Value.CheckoutCom;
         if (string.IsNullOrWhiteSpace(opts.SecretKey))
@@ -142,6 +142,10 @@ public sealed class CheckoutComGateway : IPaymentGateway
             HttpMethod.Post,
             new Uri(new Uri(EnsureTrailingSlash(opts.ApiBaseUrl)), $"payments/{transactionId}/refunds"));
         message.Headers.Authorization = new AuthenticationHeaderValue("Bearer", opts.SecretKey);
+        if (!string.IsNullOrWhiteSpace(idempotencyKey))
+        {
+            message.Headers.TryAddWithoutValidation("Cko-Idempotency-Key", idempotencyKey);
+        }
         message.Content = JsonContent.Create(new
         {
             amount = minorUnits,

@@ -6652,12 +6652,18 @@ public partial class LearnerService(
 
       private static bool IsAddOnCompatibleWithPlan(BillingAddOn addOn, BillingPlan? plan)
       {
+          var compatiblePlanCodes = JsonSupport.Deserialize<List<string>>(addOn.CompatiblePlanCodesJson, []);
+
           if (addOn.AppliesToAllPlans)
           {
               return true;
           }
 
-          var compatiblePlanCodes = JsonSupport.Deserialize<List<string>>(addOn.CompatiblePlanCodesJson, []);
+          if (!addOn.RequiresEligibleParent && compatiblePlanCodes.Count == 0)
+          {
+              return true;
+          }
+
           if (compatiblePlanCodes.Count == 0 || plan is null)
           {
               return false;
@@ -6872,6 +6878,7 @@ public partial class LearnerService(
         public string Interval { get; set; } = "month";
         public int DurationMonths { get; set; }
         public int IncludedCredits { get; set; }
+        public int BundledAiCredits { get; set; }
     }
 
     private sealed class BillingQuoteAddOnSnapshot
@@ -6886,6 +6893,7 @@ public partial class LearnerService(
         public bool IsRecurring { get; set; }
         public int DurationDays { get; set; }
         public int GrantCredits { get; set; }
+        public string GrantEntitlementsJson { get; set; } = "{}";
     }
 
     private sealed class BillingQuoteCouponSnapshot
@@ -6925,7 +6933,8 @@ public partial class LearnerService(
                     Currency = plan.Currency,
                     Interval = plan.Interval,
                     DurationMonths = plan.DurationMonths,
-                    IncludedCredits = plan.IncludedCredits
+                    IncludedCredits = plan.IncludedCredits,
+                    BundledAiCredits = plan.BundledAiCredits
                 },
             AddOns = addOns.Select(addOn => new BillingQuoteAddOnSnapshot
             {
@@ -6938,7 +6947,8 @@ public partial class LearnerService(
                 Interval = addOn.Interval,
                 IsRecurring = addOn.IsRecurring,
                 DurationDays = addOn.DurationDays,
-                GrantCredits = addOn.GrantCredits
+                GrantCredits = addOn.GrantCredits,
+                GrantEntitlementsJson = addOn.GrantEntitlementsJson
             }).ToList(),
             Coupon = coupon is null
                 ? null
@@ -8289,7 +8299,10 @@ public partial class LearnerService(
         if (!string.Equals(evt.NormalizedStatus, "completed", StringComparison.OrdinalIgnoreCase)
             && !string.Equals(evt.NormalizedStatus, "failed", StringComparison.OrdinalIgnoreCase))
         {
-            return "Only completed or failed payment status webhooks can be retried by admin.";
+            if (!string.Equals(evt.NormalizedStatus, "refunded", StringComparison.OrdinalIgnoreCase))
+            {
+                return "Only completed, failed, or refunded payment status webhooks can be retried by admin.";
+            }
         }
 
         return null;
@@ -8535,6 +8548,29 @@ public partial class LearnerService(
                 ? paymentTransaction.Status
                 : normalizedStatus.Trim().ToLowerInvariant();
 
+            if (string.Equals(eventCategory, PaymentWebhookCategories.Refund, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(targetStatus, "refunded", StringComparison.OrdinalIgnoreCase))
+            {
+                if (string.Equals(targetStatus, "refunded", StringComparison.OrdinalIgnoreCase)
+                    && IsFullRefundWebhook(webhookEvent.PayloadJson, paymentTransaction.Amount))
+                {
+                    await ApplyCheckoutRefundAsync(paymentTransaction, webhookEvent.Id.ToString("N"), ct);
+                    paymentTransaction.Status = "refunded";
+                    paymentTransaction.UpdatedAt = now;
+                }
+                else
+                {
+                    await ApplyPartialCheckoutRefundAsync(paymentTransaction, webhookEvent, gatewayObjectId, ct);
+                }
+
+                webhookEvent.ProcessingStatus = "completed";
+                webhookEvent.ErrorMessage = null;
+                webhookEvent.ProcessedAt = now;
+                await db.SaveChangesAsync(ct);
+                await CommitIfOwnedAsync(tx, ct);
+                return MapWebhookRetryResult(webhookEvent);
+            }
+
             if (string.Equals(eventCategory, PaymentWebhookCategories.Dispute, StringComparison.OrdinalIgnoreCase)
                 && disputeService is not null
                 && targetStatus.StartsWith("dispute_", StringComparison.OrdinalIgnoreCase))
@@ -8767,7 +8803,8 @@ public partial class LearnerService(
                         Currency = livePlan.Currency,
                         Interval = livePlan.Interval,
                         DurationMonths = livePlan.DurationMonths,
-                        IncludedCredits = livePlan.IncludedCredits
+                        IncludedCredits = livePlan.IncludedCredits,
+                        BundledAiCredits = livePlan.BundledAiCredits
                     };
                 }
             }
@@ -8804,6 +8841,21 @@ public partial class LearnerService(
                         $"Included credits for {targetPlan.Name}",
                         ct);
                 }
+
+                if (targetPlan.BundledAiCredits > 0)
+                {
+                    var inserted = await CreditAiLedgerForPlanPaymentAsync(
+                        transaction.LearnerUserId,
+                        targetPlan,
+                        targetPlan.BundledAiCredits,
+                        quote.Id,
+                        now,
+                        ct);
+                    if (inserted)
+                    {
+                        subscription.AiCreditsRemaining = checked(subscription.AiCreditsRemaining + targetPlan.BundledAiCredits);
+                    }
+                }
             }
         }
 
@@ -8827,7 +8879,8 @@ public partial class LearnerService(
                     Interval = liveAddOn.Interval,
                     IsRecurring = liveAddOn.IsRecurring,
                     DurationDays = liveAddOn.DurationDays,
-                    GrantCredits = liveAddOn.GrantCredits
+                    GrantCredits = liveAddOn.GrantCredits,
+                    GrantEntitlementsJson = liveAddOn.GrantEntitlementsJson
                 };
             }
 
@@ -8880,14 +8933,32 @@ public partial class LearnerService(
             if (addOn.GrantCredits > 0)
             {
                 var creditAmount = addOn.GrantCredits * Math.Max(1, item.Quantity);
-                await CreditWalletForPaymentAsync(
-                    transaction.LearnerUserId,
-                    creditAmount,
-                    "credit_purchase",
-                    "addon",
-                    $"{quote.Id}:{addOn.Code}",
-                    $"{addOn.Name} credits",
-                    ct);
+                if (AddOnGrantsAiCredits(addOn.GrantEntitlementsJson))
+                {
+                    if (existingItem is null)
+                    {
+                        subscription.AiCreditsRemaining = checked(subscription.AiCreditsRemaining + creditAmount);
+                    }
+
+                    await CreditAiLedgerForAddOnPaymentAsync(
+                        transaction.LearnerUserId,
+                        addOn,
+                        creditAmount,
+                        quote.Id,
+                        now,
+                        ct);
+                }
+                else
+                {
+                    await CreditWalletForPaymentAsync(
+                        transaction.LearnerUserId,
+                        creditAmount,
+                        "credit_purchase",
+                        "addon",
+                        $"{quote.Id}:{addOn.Code}",
+                        $"{addOn.Name} credits",
+                        ct);
+                }
             }
         }
 
@@ -9088,6 +9159,289 @@ public partial class LearnerService(
             ct);
     }
 
+    private async Task ApplyCheckoutRefundAsync(PaymentTransaction transaction, string refundEventId, CancellationToken ct)
+    {
+        var quote = await GetQuoteForTransactionAsync(transaction, ct);
+        if (quote is null)
+        {
+            return;
+        }
+
+        var refundIdempotencyKey = $"webhook-refund:{refundEventId}";
+        var existingRefund = await db.Set<OrderRefund>().AsNoTracking()
+            .AnyAsync(refund => refund.IdempotencyKey == refundIdempotencyKey
+                                || (refund.Gateway == transaction.Gateway
+                                    && refund.GatewayRefundId == refundEventId)
+                                || (refund.PaymentTransactionId == transaction.GatewayTransactionId
+                                    && refund.Status == "succeeded"
+                                    && refund.RefundType == "full"),
+                ct);
+        if (existingRefund)
+        {
+            return;
+        }
+
+        var reversedWalletCredits = await ReverseCheckoutWalletCreditsAsync(transaction, ct);
+        var reversedEntitlements = await ReverseCheckoutEntitlementsAsync(transaction, ct);
+
+        var subscription = await db.Subscriptions.FirstOrDefaultAsync(x => x.UserId == transaction.LearnerUserId, ct);
+        var reversedAiCredits = false;
+
+        if (subscription is not null)
+        {
+            var purchaseEntries = await db.AiCreditLedger.AsNoTracking()
+                .Where(entry => entry.UserId == transaction.LearnerUserId
+                                && entry.Source == AiCreditSource.Purchase
+                                && entry.TokensDelta > 0
+                                && entry.ReferenceId != null
+                                && (entry.ReferenceId.StartsWith("addon:" + quote.Id + ":")
+                                    || entry.ReferenceId.StartsWith("plan:" + quote.Id + ":")))
+                .ToListAsync(ct);
+
+            foreach (var purchase in purchaseEntries)
+            {
+                var reversalReferenceId = BuildAiCreditRefundReference(purchase.ReferenceId!);
+                if (reversalReferenceId is null) continue;
+                var alreadyReversed = await db.AiCreditLedger.AsNoTracking()
+                    .AnyAsync(entry => entry.UserId == transaction.LearnerUserId
+                                       && entry.Source == AiCreditSource.AdminAdjustment
+                                       && entry.ReferenceId == reversalReferenceId,
+                        ct);
+                if (alreadyReversed) continue;
+
+                subscription.AiCreditsRemaining = Math.Max(0, subscription.AiCreditsRemaining - purchase.TokensDelta);
+                db.AiCreditLedger.Add(new AiCreditLedgerEntry
+                {
+                    Id = Guid.NewGuid().ToString("N"),
+                    UserId = transaction.LearnerUserId,
+                    TokensDelta = -purchase.TokensDelta,
+                    CostDeltaUsd = 0m,
+                    Source = AiCreditSource.AdminAdjustment,
+                    Description = "Refund reversal for AI grading credits",
+                    ReferenceId = reversalReferenceId,
+                    CreatedAt = DateTimeOffset.UtcNow,
+                });
+                reversedAiCredits = true;
+
+                await AddBillingEventIfMissingAsync(new BillingEvent
+                {
+                    Id = $"bill-evt-{Guid.NewGuid():N}",
+                    UserId = transaction.LearnerUserId,
+                    SubscriptionId = subscription.Id,
+                    QuoteId = quote.Id,
+                    EventType = "ai_package_credits_refunded",
+                    EntityType = "PaymentWebhookEvent",
+                    EntityId = $"{refundEventId}:{reversalReferenceId}",
+                    PayloadJson = JsonSupport.Serialize(new
+                    {
+                        paymentTransactionId = transaction.GatewayTransactionId,
+                        sourceReferenceId = purchase.ReferenceId,
+                        creditsReversed = purchase.TokensDelta,
+                        referenceId = reversalReferenceId
+                    }),
+                    OccurredAt = DateTimeOffset.UtcNow,
+                }, ct);
+            }
+        }
+
+        db.Set<OrderRefund>().Add(new OrderRefund
+        {
+            Id = Guid.NewGuid(),
+            PaymentTransactionId = transaction.GatewayTransactionId,
+            LearnerUserId = transaction.LearnerUserId,
+            Gateway = transaction.Gateway,
+            GatewayRefundId = refundEventId,
+            IdempotencyKey = refundIdempotencyKey,
+            RefundType = "full",
+            Amount = transaction.Amount,
+            Currency = transaction.Currency,
+            Status = "succeeded",
+            Reason = "gateway_webhook",
+            RequestedByAdminId = null,
+            RequestedByAdminName = null,
+            ReversedWalletCredits = reversedWalletCredits,
+            ReversedEntitlements = reversedEntitlements || reversedAiCredits,
+            CreatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow,
+        });
+
+        await AddBillingEventIfMissingAsync(new BillingEvent
+        {
+            Id = $"bill-evt-refund-{Guid.NewGuid():N}",
+            UserId = transaction.LearnerUserId,
+            SubscriptionId = subscription?.Id,
+            QuoteId = quote.Id,
+            EventType = "refund_full_received",
+            EntityType = nameof(OrderRefund),
+            EntityId = refundIdempotencyKey,
+            PayloadJson = JsonSupport.Serialize(new
+            {
+                paymentTransactionId = transaction.GatewayTransactionId,
+                amount = transaction.Amount,
+                currency = transaction.Currency,
+                reversedWalletCredits,
+                reversedEntitlements,
+                reversedAiCredits
+            }),
+            OccurredAt = DateTimeOffset.UtcNow,
+        }, ct);
+    }
+
+    private async Task ApplyPartialCheckoutRefundAsync(PaymentTransaction transaction, PaymentWebhookEvent webhookEvent, string? gatewayObjectId, CancellationToken ct)
+    {
+        var parsedAmount = ReadRefundAmountFromWebhook(webhookEvent.PayloadJson);
+        if (parsedAmount is null || parsedAmount.Value.Amount <= 0m || parsedAmount.Value.Amount >= transaction.Amount)
+        {
+            return;
+        }
+
+        var refundIdempotencyKey = $"webhook-refund:{webhookEvent.Id:N}";
+        var gatewayRefundId = webhookEvent.GatewayEventId;
+
+        var existingRefund = await db.Set<OrderRefund>().AsNoTracking()
+            .AnyAsync(refund => refund.IdempotencyKey == refundIdempotencyKey
+                                || (refund.Gateway == transaction.Gateway && refund.GatewayRefundId == gatewayRefundId),
+                ct);
+        if (existingRefund)
+        {
+            return;
+        }
+
+        var alreadyRefunded = await db.Set<OrderRefund>().AsNoTracking()
+            .Where(refund => refund.PaymentTransactionId == transaction.GatewayTransactionId
+                             && refund.Status != "failed"
+                             && refund.Status != "reversed")
+            .SumAsync(refund => (decimal?)refund.Amount, ct) ?? 0m;
+        var remaining = Math.Max(0m, transaction.Amount - alreadyRefunded);
+        var refundAmount = parsedAmount.Value.IsCumulative
+            ? parsedAmount.Value.Amount - alreadyRefunded
+            : parsedAmount.Value.Amount;
+        refundAmount = Math.Min(refundAmount, remaining);
+        if (refundAmount <= 0m)
+        {
+            return;
+        }
+
+        db.Set<OrderRefund>().Add(new OrderRefund
+        {
+            Id = Guid.NewGuid(),
+            PaymentTransactionId = transaction.GatewayTransactionId,
+            LearnerUserId = transaction.LearnerUserId,
+            Gateway = transaction.Gateway,
+            GatewayRefundId = gatewayRefundId,
+            IdempotencyKey = refundIdempotencyKey,
+            RefundType = "partial",
+            Amount = refundAmount,
+            Currency = transaction.Currency,
+            Status = "succeeded",
+            Reason = "gateway_webhook",
+            CreatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow,
+        });
+
+        await AddBillingEventIfMissingAsync(new BillingEvent
+        {
+            Id = $"bill-evt-refund-partial-{Guid.NewGuid():N}",
+            UserId = transaction.LearnerUserId,
+            QuoteId = transaction.QuoteId,
+            EventType = "refund_partial_received",
+            EntityType = nameof(OrderRefund),
+            EntityId = refundIdempotencyKey,
+            PayloadJson = JsonSupport.Serialize(new
+            {
+                paymentTransactionId = transaction.GatewayTransactionId,
+                amount = refundAmount,
+                currency = transaction.Currency,
+                gatewayRefundId
+            }),
+            OccurredAt = DateTimeOffset.UtcNow,
+        }, ct);
+    }
+
+    private async Task<bool> ReverseCheckoutWalletCreditsAsync(PaymentTransaction transaction, CancellationToken ct)
+    {
+        var entries = await db.WalletTransactions
+            .Where(w => w.Amount > 0
+                        && ((w.ReferenceType == "payment" && w.ReferenceId == transaction.GatewayTransactionId)
+                            || (transaction.QuoteId != null
+                                && ((w.ReferenceType == "subscription" && w.ReferenceId == transaction.QuoteId)
+                                    || (w.ReferenceType == "addon" && w.ReferenceId != null && w.ReferenceId.StartsWith(transaction.QuoteId + ":"))))))
+            .ToListAsync(ct);
+        if (entries.Count == 0) return false;
+
+        var wallet = await db.Wallets.FirstOrDefaultAsync(w => w.UserId == transaction.LearnerUserId, ct);
+        if (wallet is null) return false;
+
+        var totalReverse = entries.Sum(e => e.Amount);
+        if (totalReverse <= 0) return false;
+        if (wallet.CreditBalance < totalReverse)
+        {
+            throw new InvalidOperationException(
+                $"Cannot reverse {totalReverse} wallet credits because only {wallet.CreditBalance} credits remain.");
+        }
+
+        wallet.CreditBalance -= totalReverse;
+        wallet.LastUpdatedAt = DateTimeOffset.UtcNow;
+        db.WalletTransactions.Add(new WalletTransaction
+        {
+            Id = Guid.NewGuid(),
+            WalletId = wallet.Id,
+            TransactionType = "refund",
+            Amount = -totalReverse,
+            BalanceAfter = wallet.CreditBalance,
+            ReferenceType = "payment",
+            ReferenceId = transaction.GatewayTransactionId,
+            Description = $"Reversed by refund of payment {transaction.GatewayTransactionId}",
+            CreatedBy = "system",
+            CreatedAt = DateTimeOffset.UtcNow
+        });
+        return true;
+    }
+
+    private async Task<bool> ReverseCheckoutEntitlementsAsync(PaymentTransaction transaction, CancellationToken ct)
+    {
+        var changed = false;
+        var items = await db.SubscriptionItems
+            .Where(i => i.Status == SubscriptionItemStatus.Active
+                        && (i.CheckoutSessionId == transaction.GatewayTransactionId
+                            || (transaction.QuoteId != null && i.QuoteId == transaction.QuoteId)))
+            .ToListAsync(ct);
+        foreach (var item in items)
+        {
+            item.Status = SubscriptionItemStatus.Cancelled;
+            item.EndsAt = DateTimeOffset.UtcNow;
+            item.UpdatedAt = DateTimeOffset.UtcNow;
+            changed = true;
+        }
+
+        if (string.Equals(transaction.TransactionType, "subscription_payment", StringComparison.OrdinalIgnoreCase))
+        {
+            var sub = await db.Subscriptions.FirstOrDefaultAsync(s => s.UserId == transaction.LearnerUserId, ct);
+            if (sub is not null && sub.Status == SubscriptionStatus.Active)
+            {
+                SubscriptionStateMachine.Transition(sub, SubscriptionStatus.Cancelled, "payment_refund_full");
+                changed = true;
+            }
+        }
+
+        return changed;
+    }
+
+    private static string? BuildAiCreditRefundReference(string purchaseReferenceId)
+    {
+        if (purchaseReferenceId.StartsWith("addon:", StringComparison.Ordinal))
+        {
+            return "addon-refund:" + purchaseReferenceId["addon:".Length..];
+        }
+
+        if (purchaseReferenceId.StartsWith("plan:", StringComparison.Ordinal))
+        {
+            return "plan-refund:" + purchaseReferenceId["plan:".Length..];
+        }
+
+        return null;
+    }
+
     /// <summary>
     /// Mocks Module Phase 8b — when a paid <see cref="BillingAddOn"/> grants
     /// per-mock-type credits via its <see cref="BillingAddOn.GrantEntitlementsJson"/>
@@ -9286,6 +9640,227 @@ public partial class LearnerService(
             CreatedBy = "system",
             CreatedAt = wallet.LastUpdatedAt
         });
+    }
+
+    private async Task CreditAiLedgerForAddOnPaymentAsync(
+        string userId,
+        BillingQuoteAddOnSnapshot addOn,
+        int amount,
+        string quoteId,
+        DateTimeOffset now,
+        CancellationToken ct)
+    {
+        if (amount <= 0 || !AddOnGrantsAiCredits(addOn.GrantEntitlementsJson))
+        {
+            return;
+        }
+
+        var referenceId = $"addon:{quoteId}:{addOn.Code}";
+        var existing = await db.AiCreditLedger.AsNoTracking().AnyAsync(
+            entry => entry.UserId == userId
+                     && entry.Source == AiCreditSource.Purchase
+                     && entry.ReferenceId == referenceId,
+            ct);
+        if (existing)
+        {
+            return;
+        }
+
+        db.AiCreditLedger.Add(new AiCreditLedgerEntry
+        {
+            Id = Guid.NewGuid().ToString("N"),
+            UserId = userId,
+            TokensDelta = amount,
+            CostDeltaUsd = 0m,
+            Source = AiCreditSource.Purchase,
+            Description = $"{addOn.Name} AI grading credits",
+            ReferenceId = referenceId,
+            ExpiresAt = addOn.DurationDays > 0 ? now.AddDays(addOn.DurationDays) : null,
+            CreatedAt = now,
+        });
+    }
+
+    private async Task<bool> CreditAiLedgerForPlanPaymentAsync(
+        string userId,
+        BillingQuotePlanSnapshot plan,
+        int amount,
+        string quoteId,
+        DateTimeOffset now,
+        CancellationToken ct)
+    {
+        if (amount <= 0) return false;
+
+        var referenceId = $"plan:{quoteId}:{plan.Code}";
+        var existing = await db.AiCreditLedger.AsNoTracking().AnyAsync(
+            entry => entry.UserId == userId
+                     && entry.Source == AiCreditSource.Purchase
+                     && entry.ReferenceId == referenceId,
+            ct);
+        if (existing) return false;
+
+        db.AiCreditLedger.Add(new AiCreditLedgerEntry
+        {
+            Id = Guid.NewGuid().ToString("N"),
+            UserId = userId,
+            TokensDelta = amount,
+            CostDeltaUsd = 0m,
+            Source = AiCreditSource.Purchase,
+            Description = $"{plan.Name} bundled AI grading credits",
+            ReferenceId = referenceId,
+            ExpiresAt = plan.DurationMonths > 0 ? now.AddMonths(plan.DurationMonths) : null,
+            CreatedAt = now,
+        });
+
+        return true;
+    }
+
+    private static bool IsFullRefundWebhook(string? safePayloadJson, decimal transactionAmount)
+    {
+        if (transactionAmount <= 0m || string.IsNullOrWhiteSpace(safePayloadJson)) return false;
+        try
+        {
+            using var doc = JsonDocument.Parse(safePayloadJson);
+            var root = doc.RootElement;
+            if (root.TryGetProperty("data", out var data)
+                && data.ValueKind == JsonValueKind.Object
+                && data.TryGetProperty("object", out var obj)
+                && obj.ValueKind == JsonValueKind.Object)
+            {
+                var refundedMinor = ReadLong(obj, "amount_refunded");
+                var amountMinor = ReadLong(obj, "amount") ?? ReadLong(obj, "amount_total");
+                if (refundedMinor is not null && amountMinor is not null && amountMinor > 0)
+                {
+                    return refundedMinor >= amountMinor;
+                }
+            }
+
+            if (root.TryGetProperty("resource", out var resource)
+                && resource.ValueKind == JsonValueKind.Object
+                && resource.TryGetProperty("amount", out var amount)
+                && amount.ValueKind == JsonValueKind.Object
+                && amount.TryGetProperty("value", out var valueElement)
+                && decimal.TryParse(valueElement.GetString(), System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out var refundedMajor))
+            {
+                return refundedMajor >= transactionAmount;
+            }
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+
+        return false;
+
+        static long? ReadLong(JsonElement obj, string propertyName)
+            => obj.TryGetProperty(propertyName, out var value)
+               && value.ValueKind == JsonValueKind.Number
+               && value.TryGetInt64(out var number)
+                ? number
+                : null;
+    }
+
+    private static RefundWebhookAmount? ReadRefundAmountFromWebhook(string? safePayloadJson)
+    {
+        if (string.IsNullOrWhiteSpace(safePayloadJson)) return null;
+        try
+        {
+            using var doc = JsonDocument.Parse(safePayloadJson);
+            var root = doc.RootElement;
+            if (root.TryGetProperty("data", out var data)
+                && data.ValueKind == JsonValueKind.Object
+                && data.TryGetProperty("object", out var obj)
+                && obj.ValueKind == JsonValueKind.Object)
+            {
+                var minorAmount = ReadLong(obj, "amount_refunded") ?? ReadLong(obj, "amount");
+                if (minorAmount is not null)
+                {
+                    return new RefundWebhookAmount(
+                        decimal.Round(minorAmount.Value / 100m, 2, MidpointRounding.AwayFromZero),
+                        obj.TryGetProperty("amount_refunded", out _));
+                }
+            }
+
+            if (root.TryGetProperty("resource", out var resource)
+                && resource.ValueKind == JsonValueKind.Object
+                && resource.TryGetProperty("amount", out var amount)
+                && amount.ValueKind == JsonValueKind.Object
+                && amount.TryGetProperty("value", out var valueElement)
+                && decimal.TryParse(valueElement.GetString(), System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out var majorAmount))
+            {
+                return new RefundWebhookAmount(majorAmount, IsCumulative: false);
+            }
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+
+        return null;
+
+        static long? ReadLong(JsonElement obj, string propertyName)
+            => obj.TryGetProperty(propertyName, out var value)
+               && value.ValueKind == JsonValueKind.Number
+               && value.TryGetInt64(out var number)
+                ? number
+                : null;
+    }
+
+    private readonly record struct RefundWebhookAmount(decimal Amount, bool IsCumulative);
+
+    private static bool AddOnGrantsAiCredits(string? grantEntitlementsJson)
+    {
+        if (string.IsNullOrWhiteSpace(grantEntitlementsJson)) return false;
+        try
+        {
+            using var doc = JsonDocument.Parse(grantEntitlementsJson);
+                 return doc.RootElement.ValueKind == JsonValueKind.Object
+                     && TryReadAiCreditGrantValue(doc.RootElement, out var value)
+                     && value > 0;
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+    }
+
+    private static int ResolveAiCreditGrant(string? grantEntitlementsJson, int fallbackGrantCredits)
+    {
+        if (!string.IsNullOrWhiteSpace(grantEntitlementsJson))
+        {
+            try
+            {
+                using var doc = JsonDocument.Parse(grantEntitlementsJson);
+                if (doc.RootElement.ValueKind == JsonValueKind.Object
+                    && TryReadAiCreditGrantValue(doc.RootElement, out var value))
+                {
+                    return Math.Max(0, value);
+                }
+            }
+            catch (JsonException)
+            {
+                return 0;
+            }
+        }
+
+        return fallbackGrantCredits > 0 && string.IsNullOrWhiteSpace(grantEntitlementsJson)
+            ? fallbackGrantCredits
+            : 0;
+    }
+
+    private static bool TryReadAiCreditGrantValue(JsonElement root, out int value)
+    {
+        if (root.TryGetProperty("ai_credits", out var aiCredits) && aiCredits.TryGetInt32(out value))
+        {
+            return true;
+        }
+
+        if (root.TryGetProperty("reviewCredits", out var reviewCredits) && reviewCredits.TryGetInt32(out value))
+        {
+            return true;
+        }
+
+        value = 0;
+        return false;
     }
 
     private async Task<BillingQuote?> GetQuoteForTransactionAsync(PaymentTransaction transaction, CancellationToken ct)

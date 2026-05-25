@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using System.Text.Json;
 
 namespace OetLearner.Api.Services.Billing;
 
@@ -51,6 +52,33 @@ public sealed class AddonGrantProcessor(LearnerDbContext db, ILogger<AddonGrantP
 
         SubscriptionBundleInitializer.ApplyAddOnGrant(subscription, addOn);
 
+        var aiCreditGrant = ResolveAiCreditGrant(addOn.GrantEntitlementsJson, addOn.GrantCredits);
+        if (aiCreditGrant > 0)
+        {
+            var creditReferenceId = $"addon:{idemKey}";
+            var creditAlreadyGranted = await db.AiCreditLedger.AsNoTracking()
+                .AnyAsync(entry => entry.UserId == subscription.UserId
+                                   && entry.Source == AiCreditSource.Purchase
+                                   && entry.ReferenceId == creditReferenceId,
+                    ct);
+            if (!creditAlreadyGranted)
+            {
+                var now = DateTimeOffset.UtcNow;
+                db.AiCreditLedger.Add(new AiCreditLedgerEntry
+                {
+                    Id = Guid.NewGuid().ToString("N"),
+                    UserId = subscription.UserId,
+                    TokensDelta = aiCreditGrant,
+                    CostDeltaUsd = 0m,
+                    Source = AiCreditSource.Purchase,
+                    Description = $"{addOn.Name} AI grading credits",
+                    ReferenceId = creditReferenceId,
+                    ExpiresAt = addOn.DurationDays > 0 ? now.AddDays(addOn.DurationDays) : null,
+                    CreatedAt = now,
+                });
+            }
+        }
+
         db.IdempotencyRecords.Add(new IdempotencyRecord
         {
             Id = $"idem_{Guid.NewGuid():N}"[..Math.Min(128, 37)],
@@ -66,7 +94,22 @@ public sealed class AddonGrantProcessor(LearnerDbContext db, ILogger<AddonGrantP
             CreatedAt = DateTimeOffset.UtcNow,
         });
 
-        await db.SaveChangesAsync(ct);
+        try
+        {
+            await db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException)
+        {
+            var insertedByRace = await db.IdempotencyRecords.AsNoTracking()
+                .AnyAsync(r => r.Scope == GrantScope && r.Key == idemKey, ct);
+            if (insertedByRace)
+            {
+                logger.LogInformation("AddonGrantProcessor — duplicate webhook delivery {EventId} skipped after database idempotency race.", eventId);
+                return new(false, true, "duplicate");
+            }
+
+            throw;
+        }
         logger.LogInformation("AddonGrantProcessor — applied {AddOn} to {Subscription} (event {EventId}).", addOnCode, subscriptionId, eventId);
         return new(true, false, null);
     }
@@ -87,7 +130,25 @@ public sealed class AddonGrantProcessor(LearnerDbContext db, ILogger<AddonGrantP
             .FirstOrDefaultAsync(a => a.Code == addOnCode || a.Id == addOnCode, ct);
         if (addOn is null) return new(false, false, "addon_missing");
 
-        // Use BillingAddOn (live) — the granted counters mirror the live grant amounts.
+        var aiCreditGrant = ResolveAiCreditGrant(addOn.GrantEntitlementsJson, addOn.GrantCredits);
+        var aiCreditReversal = await ResolveUnreversedPurchaseRefundReferenceAsync(
+            subscription.UserId,
+            subscriptionId,
+            addOnCode,
+            addOn.Code,
+            ct);
+        if (aiCreditGrant > 0 && !aiCreditReversal.FoundMatchingPurchase)
+        {
+            return new(false, false, "ai_credit_purchase_missing");
+        }
+
+        if (aiCreditReversal.FoundMatchingPurchase && aiCreditReversal.ReversalReferenceId is null)
+        {
+            return new(false, false, "ai_credit_purchase_already_reversed");
+        }
+
+        // Use BillingAddOn (live) for non-ledger counters — the granted counters
+        // mirror the live grant amounts. AI credits reverse by purchase ledger row.
         // Counters clamp at zero inside the helper.
         if (addOn.LettersGranted > 0)
         {
@@ -97,9 +158,20 @@ public sealed class AddonGrantProcessor(LearnerDbContext db, ILogger<AddonGrantP
         {
             subscription.SpeakingSessionsRemaining = Math.Max(0, subscription.SpeakingSessionsRemaining - addOn.SessionsGranted);
         }
-        if (addOn.GrantCredits > 0)
+        if (aiCreditReversal.ReversalReferenceId is not null && aiCreditReversal.Credits > 0)
         {
-            subscription.AiCreditsRemaining = Math.Max(0, subscription.AiCreditsRemaining - addOn.GrantCredits);
+            subscription.AiCreditsRemaining = Math.Max(0, subscription.AiCreditsRemaining - aiCreditReversal.Credits);
+            db.AiCreditLedger.Add(new AiCreditLedgerEntry
+            {
+                Id = Guid.NewGuid().ToString("N"),
+                UserId = subscription.UserId,
+                TokensDelta = -aiCreditReversal.Credits,
+                CostDeltaUsd = 0m,
+                Source = AiCreditSource.AdminAdjustment,
+                Description = $"Refund reversal for {addOn.Name} AI grading credits",
+                ReferenceId = aiCreditReversal.ReversalReferenceId,
+                CreatedAt = DateTimeOffset.UtcNow,
+            });
         }
 
         db.IdempotencyRecords.Add(new IdempotencyRecord
@@ -117,8 +189,122 @@ public sealed class AddonGrantProcessor(LearnerDbContext db, ILogger<AddonGrantP
             CreatedAt = DateTimeOffset.UtcNow,
         });
 
-        await db.SaveChangesAsync(ct);
+        try
+        {
+            await db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException)
+        {
+            var insertedByRace = await db.IdempotencyRecords.AsNoTracking()
+                .AnyAsync(r => r.Scope == RefundScope && r.Key == idemKey, ct);
+            if (insertedByRace)
+            {
+                logger.LogInformation("AddonGrantProcessor — duplicate refund webhook delivery {EventId} skipped after database idempotency race.", eventId);
+                return new(false, true, "duplicate");
+            }
+
+            throw;
+        }
         logger.LogInformation("AddonGrantProcessor — reversed {AddOn} on {Subscription} (event {EventId}).", addOnCode, subscriptionId, eventId);
         return new(true, false, null);
+    }
+
+    private async Task<AiCreditReversalResolution> ResolveUnreversedPurchaseRefundReferenceAsync(
+        string userId,
+        string subscriptionId,
+        string requestedAddOnCode,
+        string canonicalAddOnCode,
+        CancellationToken ct)
+    {
+        var prefixes = new[]
+            {
+                $"addon:{subscriptionId}:{requestedAddOnCode}:",
+                $"addon:{subscriptionId}:{canonicalAddOnCode}:",
+            }
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+
+        var purchases = await db.AiCreditLedger.AsNoTracking()
+            .Where(entry => entry.UserId == userId
+                            && entry.Source == AiCreditSource.Purchase
+                            && entry.TokensDelta > 0
+                            && entry.ReferenceId != null)
+            .OrderBy(entry => entry.CreatedAt)
+            .ThenBy(entry => entry.Id)
+            .ToListAsync(ct);
+
+        var matchingPurchases = purchases
+            .Where(entry => prefixes.Any(prefix => entry.ReferenceId!.StartsWith(prefix, StringComparison.Ordinal)))
+            .ToList();
+
+        foreach (var purchase in matchingPurchases)
+        {
+            var reversalReferenceId = BuildAiCreditRefundReference(purchase.ReferenceId!);
+            if (reversalReferenceId is null) continue;
+
+            var alreadyReversed = await db.AiCreditLedger.AsNoTracking()
+                .AnyAsync(entry => entry.UserId == userId
+                                   && entry.Source == AiCreditSource.AdminAdjustment
+                                   && entry.ReferenceId == reversalReferenceId,
+                    ct);
+            if (!alreadyReversed)
+            {
+                return new(reversalReferenceId, purchase.TokensDelta, true);
+            }
+        }
+
+        return new(null, 0, matchingPurchases.Count > 0);
+    }
+
+    private sealed record AiCreditReversalResolution(string? ReversalReferenceId, int Credits, bool FoundMatchingPurchase);
+
+    private static string? BuildAiCreditRefundReference(string purchaseReferenceId)
+    {
+        if (purchaseReferenceId.StartsWith("addon:", StringComparison.Ordinal))
+        {
+            return "addon-refund:" + purchaseReferenceId["addon:".Length..];
+        }
+
+        return null;
+    }
+
+    private static int ResolveAiCreditGrant(string? grantEntitlementsJson, int fallbackGrantCredits)
+    {
+        if (!string.IsNullOrWhiteSpace(grantEntitlementsJson))
+        {
+            try
+            {
+                using var doc = JsonDocument.Parse(grantEntitlementsJson);
+                if (doc.RootElement.ValueKind == JsonValueKind.Object
+                    && TryReadCreditValue(doc.RootElement, out var value))
+                {
+                    return Math.Max(0, value);
+                }
+            }
+            catch (JsonException)
+            {
+                return 0;
+            }
+        }
+
+        return fallbackGrantCredits > 0 && string.IsNullOrWhiteSpace(grantEntitlementsJson)
+            ? fallbackGrantCredits
+            : 0;
+    }
+
+    private static bool TryReadCreditValue(JsonElement root, out int value)
+    {
+        if (root.TryGetProperty("ai_credits", out var aiCredits) && aiCredits.TryGetInt32(out value))
+        {
+            return true;
+        }
+
+        if (root.TryGetProperty("reviewCredits", out var reviewCredits) && reviewCredits.TryGetInt32(out value))
+        {
+            return true;
+        }
+
+        value = 0;
+        return false;
     }
 }

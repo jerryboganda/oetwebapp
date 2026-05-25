@@ -159,7 +159,7 @@ public sealed class PaymobGateway : IPaymentGateway
             GatewayObjectId: orderId));
     }
 
-    public async Task<RefundResult> ProcessRefundAsync(string transactionId, decimal amount, string currency, string reason, CancellationToken ct)
+    public async Task<RefundResult> ProcessRefundAsync(string transactionId, decimal amount, string currency, string reason, string idempotencyKey, CancellationToken ct)
     {
         var opts = _billing.Value.Paymob;
         if (string.IsNullOrWhiteSpace(opts.ApiKey))
@@ -187,6 +187,10 @@ public sealed class PaymobGateway : IPaymentGateway
         //    { auth_token, transaction_id, amount_cents }.
         int amountCents = (int)Math.Round(amount * 100m, MidpointRounding.AwayFromZero);
         using var refundMsg = new HttpRequestMessage(HttpMethod.Post, new Uri(new Uri(EnsureTrailingSlash(opts.ApiBaseUrl)), "api/acceptance/void_refund/refund"));
+        if (!string.IsNullOrWhiteSpace(idempotencyKey))
+        {
+            refundMsg.Headers.TryAddWithoutValidation("Idempotency-Key", idempotencyKey);
+        }
         refundMsg.Content = JsonContent.Create(new
         {
             auth_token = authToken,

@@ -64,6 +64,7 @@ public sealed class ConversationAiOrchestrator(
             ConversationElapsedSeconds = ctx.ElapsedSeconds,
             ConversationRemainingSeconds = ctx.RemainingSeconds,
         });
+        var options = await OptionsAsync(ct);
         var result = await gateway.CompleteAsync(new AiGatewayRequest
         {
             Prompt = prompt,
@@ -74,8 +75,8 @@ public sealed class ConversationAiOrchestrator(
             AuthAccountId = ctx.AuthAccountId,
             TenantId = ctx.TenantId,
             FeatureCode = featureCode,
-            Model = string.IsNullOrWhiteSpace((await OptionsAsync(ct)).ReplyModel) ? "anthropic-claude-opus-4.7" : (await OptionsAsync(ct)).ReplyModel,
-            Temperature = (await OptionsAsync(ct)).ReplyTemperature,
+            Model = ResolveReplyModel(task, options),
+            Temperature = options.ReplyTemperature,
             MaxTokens = 600,
             PromptTemplateId = task.ToString(),
         }, ct);
@@ -102,6 +103,7 @@ public sealed class ConversationAiOrchestrator(
             ConversationTurnIndex = ctx.TurnIndex,
             ConversationElapsedSeconds = ctx.ElapsedSeconds,
         });
+        var options = await OptionsAsync(ct);
         var result = await gateway.CompleteAsync(new AiGatewayRequest
         {
             Prompt = prompt,
@@ -110,13 +112,21 @@ public sealed class ConversationAiOrchestrator(
             AuthAccountId = ctx.AuthAccountId,
             TenantId = ctx.TenantId,
             FeatureCode = AiFeatureCodes.ConversationEvaluation,
-            Model = string.IsNullOrWhiteSpace((await OptionsAsync(ct)).EvaluationModel) ? "anthropic-claude-opus-4.7" : (await OptionsAsync(ct)).EvaluationModel,
-            Temperature = (await OptionsAsync(ct)).EvaluationTemperature,
+            Model = string.IsNullOrWhiteSpace(options.EvaluationModel) ? "claude-sonnet-4-6" : options.EvaluationModel,
+            Temperature = options.EvaluationTemperature,
             MaxTokens = 4096,
             PromptTemplateId = "EvaluateConversation",
         }, ct);
 
         return ParseEvaluation(result.Completion, prompt.Metadata.AppliedRuleIds, result.RulebookVersion);
+    }
+
+    private static string ResolveReplyModel(AiTaskMode task, ConversationOptions options)
+    {
+        if (!string.IsNullOrWhiteSpace(options.ReplyModel)) return options.ReplyModel;
+        return task == AiTaskMode.GenerateConversationOpening
+            ? "claude-sonnet-4-6"
+            : "claude-haiku-4-5";
     }
 
     private (string text, string? emotion, bool shouldEnd, IReadOnlyList<string> rules) ParseReply(

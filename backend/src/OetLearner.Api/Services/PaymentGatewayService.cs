@@ -18,7 +18,7 @@ public interface IPaymentGateway
     string GatewayName { get; }
     Task<PaymentIntentResult> CreatePaymentIntentAsync(CreatePaymentIntentRequest request, CancellationToken ct);
     Task<WebhookProcessResult> HandleWebhookAsync(string payload, IReadOnlyDictionary<string, string> headers, CancellationToken ct);
-    Task<RefundResult> ProcessRefundAsync(string transactionId, decimal amount, string currency, string reason, CancellationToken ct);
+    Task<RefundResult> ProcessRefundAsync(string transactionId, decimal amount, string currency, string reason, string idempotencyKey, CancellationToken ct);
 }
 
 public record CreatePaymentIntentRequest(
@@ -144,7 +144,7 @@ public sealed class StripeGateway(HttpClient httpClient, IOptions<BillingOptions
             CheckoutUrl: GetString(root, "url") ?? string.Empty);
     }
 
-    async Task<RefundResult> IPaymentGateway.ProcessRefundAsync(string transactionId, decimal amount, string currency, string reason, CancellationToken ct)
+    async Task<RefundResult> IPaymentGateway.ProcessRefundAsync(string transactionId, decimal amount, string currency, string reason, string idempotencyKey, CancellationToken ct)
     {
         var billingOptionsSnapshot = _billingOptions.Value;
         var stripeOptions = billingOptionsSnapshot.Stripe;
@@ -178,6 +178,10 @@ public sealed class StripeGateway(HttpClient httpClient, IOptions<BillingOptions
             HttpMethod.Post,
             new Uri(new Uri(EnsureTrailingSlash(stripeOptions.ApiBaseUrl)), "v1/refunds"));
         message.Headers.Authorization = new AuthenticationHeaderValue("Bearer", runtimeBilling.StripeSecretKey);
+        if (!string.IsNullOrWhiteSpace(idempotencyKey))
+        {
+            message.Headers.TryAddWithoutValidation("Idempotency-Key", idempotencyKey);
+        }
 
         var form = new Dictionary<string, string>
         {
@@ -447,7 +451,7 @@ public sealed class PayPalGateway(
             CheckoutUrl: checkoutUrl);
     }
 
-    async Task<RefundResult> IPaymentGateway.ProcessRefundAsync(string transactionId, decimal amount, string currency, string reason, CancellationToken ct)
+    async Task<RefundResult> IPaymentGateway.ProcessRefundAsync(string transactionId, decimal amount, string currency, string reason, string idempotencyKey, CancellationToken ct)
     {
         var options = await GetEffectivePayPalOptionsAsync(ct);
         if (string.IsNullOrWhiteSpace(options.ClientId) || string.IsNullOrWhiteSpace(options.ClientSecret))
@@ -481,6 +485,10 @@ public sealed class PayPalGateway(
             new Uri(new Uri(EnsureTrailingSlash(GetPayPalApiBaseUrl(options))), $"v2/payments/captures/{Uri.EscapeDataString(captureId)}/refund"));
         message.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
         message.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+        if (!string.IsNullOrWhiteSpace(idempotencyKey))
+        {
+            message.Headers.TryAddWithoutValidation("PayPal-Request-Id", idempotencyKey);
+        }
         message.Content = new StringContent(JsonSerializer.Serialize(new
         {
             amount = new

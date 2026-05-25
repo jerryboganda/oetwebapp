@@ -27,7 +27,7 @@ public interface IAiUsageRecorder
     /// <summary>Record a successful call. <paramref name="usage"/> may be null
     /// if the provider did not report token counts; in that case zeros are
     /// persisted and the caller is expected to log a warning.</summary>
-    Task RecordSuccessAsync(
+    Task<string?> RecordSuccessAsync(
         AiUsageContext context,
         string providerId,
         string model,
@@ -38,7 +38,9 @@ public interface IAiUsageRecorder
         string? policyTrace,
         CancellationToken ct,
         string? accountId = null,
-        string? failoverTrace = null);
+        string? failoverTrace = null,
+        decimal costEstimateUsd = 0m,
+        string? usageRecordId = null);
 
     /// <summary>Record a call that did not succeed. <paramref name="outcome"/>
     /// must not be <see cref="AiCallOutcome.Success"/>.</summary>
@@ -55,7 +57,10 @@ public interface IAiUsageRecorder
         string? policyTrace,
         CancellationToken ct,
         string? accountId = null,
-        string? failoverTrace = null);
+        string? failoverTrace = null,
+        AiUsage? usage = null,
+        decimal costEstimateUsd = 0m,
+        string? usageRecordId = null);
 }
 
 /// <summary>
@@ -77,7 +82,7 @@ public readonly record struct AiUsageContext(
 
 public sealed class AiUsageRecorder(LearnerDbContext db, ILogger<AiUsageRecorder> logger) : IAiUsageRecorder
 {
-    public Task RecordSuccessAsync(
+    public Task<string?> RecordSuccessAsync(
         AiUsageContext context,
         string providerId,
         string model,
@@ -88,7 +93,9 @@ public sealed class AiUsageRecorder(LearnerDbContext db, ILogger<AiUsageRecorder
         string? policyTrace,
         CancellationToken ct,
         string? accountId = null,
-        string? failoverTrace = null)
+        string? failoverTrace = null,
+        decimal costEstimateUsd = 0m,
+        string? usageRecordId = null)
         => PersistAsync(
             context,
             providerId,
@@ -103,7 +110,9 @@ public sealed class AiUsageRecorder(LearnerDbContext db, ILogger<AiUsageRecorder
             policyTrace: policyTrace,
             accountId: accountId,
             failoverTrace: failoverTrace,
-            ct);
+            costEstimateUsd: costEstimateUsd,
+            usageRecordId: usageRecordId,
+            ct: ct);
 
     public Task RecordFailureAsync(
         AiUsageContext context,
@@ -118,14 +127,17 @@ public sealed class AiUsageRecorder(LearnerDbContext db, ILogger<AiUsageRecorder
         string? policyTrace,
         CancellationToken ct,
         string? accountId = null,
-        string? failoverTrace = null)
+        string? failoverTrace = null,
+        AiUsage? usage = null,
+        decimal costEstimateUsd = 0m,
+        string? usageRecordId = null)
     {
         if (outcome == AiCallOutcome.Success)
         {
             throw new ArgumentException("RecordFailureAsync must not be used for successful calls.", nameof(outcome));
         }
 
-        return PersistAsync(
+        return PersistFailureAsync(
             context,
             providerId,
             model,
@@ -133,16 +145,18 @@ public sealed class AiUsageRecorder(LearnerDbContext db, ILogger<AiUsageRecorder
             outcome,
             errorCode,
             errorMessage,
-            usage: null,
+            usage: usage,
             latencyMs: latencyMs,
             retryCount: retryCount,
             policyTrace: policyTrace,
             accountId: accountId,
             failoverTrace: failoverTrace,
-            ct);
+            costEstimateUsd: costEstimateUsd,
+            usageRecordId: usageRecordId,
+            ct: ct);
     }
 
-    private async Task PersistAsync(
+    private async Task PersistFailureAsync(
         AiUsageContext context,
         string? providerId,
         string? model,
@@ -156,6 +170,43 @@ public sealed class AiUsageRecorder(LearnerDbContext db, ILogger<AiUsageRecorder
         string? policyTrace,
         string? accountId,
         string? failoverTrace,
+        decimal costEstimateUsd,
+        string? usageRecordId,
+        CancellationToken ct)
+        => await PersistAsync(
+            context,
+            providerId,
+            model,
+            keySource,
+            outcome,
+            errorCode,
+            errorMessage,
+            usage,
+            latencyMs,
+            retryCount,
+            policyTrace,
+            accountId,
+            failoverTrace,
+            costEstimateUsd: costEstimateUsd,
+            usageRecordId: usageRecordId,
+            ct: ct);
+
+    private async Task<string?> PersistAsync(
+        AiUsageContext context,
+        string? providerId,
+        string? model,
+        AiKeySource keySource,
+        AiCallOutcome outcome,
+        string? errorCode,
+        string? errorMessage,
+        AiUsage? usage,
+        int latencyMs,
+        int retryCount,
+        string? policyTrace,
+        string? accountId,
+        string? failoverTrace,
+        decimal costEstimateUsd,
+        string? usageRecordId,
         CancellationToken ct)
     {
         try
@@ -164,7 +215,7 @@ public sealed class AiUsageRecorder(LearnerDbContext db, ILogger<AiUsageRecorder
 
             var record = new AiUsageRecord
             {
-                Id = Guid.NewGuid().ToString("N"),
+                Id = string.IsNullOrWhiteSpace(usageRecordId) ? Guid.NewGuid().ToString("N") : usageRecordId,
                 UserId = context.UserId,
                 AuthAccountId = context.AuthAccountId,
                 TenantId = context.TenantId,
@@ -180,10 +231,7 @@ public sealed class AiUsageRecorder(LearnerDbContext db, ILogger<AiUsageRecorder
                 UserPromptHash = HashOrNull(context.UserPrompt),
                 PromptTokens = usage?.PromptTokens ?? 0,
                 CompletionTokens = usage?.CompletionTokens ?? 0,
-                // CostEstimateUsd is wired in Slice 5 when the provider registry
-                // carries a rate card. Until then we persist 0 and rely on
-                // token counts for admin analytics.
-                CostEstimateUsd = 0m,
+                CostEstimateUsd = Math.Max(0m, costEstimateUsd),
                 Outcome = outcome,
                 ErrorCode = Truncate(errorCode, 64),
                 ErrorMessage = Truncate(errorMessage, 512),
@@ -199,6 +247,7 @@ public sealed class AiUsageRecorder(LearnerDbContext db, ILogger<AiUsageRecorder
 
             db.AiUsageRecords.Add(record);
             await db.SaveChangesAsync(ct);
+            return record.Id;
         }
         catch (Exception ex) when (!ct.IsCancellationRequested)
         {
@@ -210,6 +259,7 @@ public sealed class AiUsageRecorder(LearnerDbContext db, ILogger<AiUsageRecorder
                 context.FeatureCode,
                 providerId,
                 outcome);
+            return null;
         }
     }
 

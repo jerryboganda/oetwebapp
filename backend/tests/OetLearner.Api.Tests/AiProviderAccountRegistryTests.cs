@@ -140,6 +140,28 @@ public sealed class AiProviderAccountRegistryTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task PickAndReserve_InvalidEncryptedKey_RollsBackCounterAndDeactivatesAccount()
+    {
+        await using var db = new LearnerDbContext(_options);
+        await SeedProviderAsync(db, "copilot");
+        var id = await SeedAccountAsync(db, "copilot", label: "bad-key", apiKey: "pat-X", priority: 0,
+            cap: 5, used: 4);
+        await db.AiProviderAccounts
+            .Where(a => a.Id == id)
+            .ExecuteUpdateAsync(s => s.SetProperty(a => a.EncryptedApiKey, _ => "not-a-valid-protected-key"));
+
+        var registry = new AiProviderAccountRegistry(db, _dpProvider, _clock);
+        var slot = await registry.PickAndReserveAsync("copilot", null, default);
+
+        Assert.Null(slot);
+        var stored = await db.AiProviderAccounts.AsNoTracking().FirstAsync(a => a.Id == id);
+        Assert.Equal(4, stored.RequestsUsedThisMonth);
+        Assert.False(stored.IsActive);
+        Assert.Equal("auth", stored.LastTestStatus);
+        Assert.Equal("Missing or invalid platform API key.", stored.LastTestError);
+    }
+
+    [Fact]
     public async Task PickAndReserve_NoProviderRegistered_ReturnsNull()
     {
         await using var db = new LearnerDbContext(_options);

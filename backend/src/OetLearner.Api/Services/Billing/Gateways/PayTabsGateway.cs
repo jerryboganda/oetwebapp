@@ -115,7 +115,7 @@ public sealed class PayTabsGateway : IPaymentGateway
             GatewayObjectId: tranRef));
     }
 
-    public async Task<RefundResult> ProcessRefundAsync(string transactionId, decimal amount, string currency, string reason, CancellationToken ct)
+    public async Task<RefundResult> ProcessRefundAsync(string transactionId, decimal amount, string currency, string reason, string idempotencyKey, CancellationToken ct)
     {
         var opts = _billing.Value.PayTabs;
         if (string.IsNullOrWhiteSpace(opts.ServerKey))
@@ -143,6 +143,10 @@ public sealed class PayTabsGateway : IPaymentGateway
             HttpMethod.Post,
             new Uri(new Uri(EnsureTrailingSlash(opts.ApiBaseUrl)), "payment/request"));
         message.Headers.TryAddWithoutValidation("Authorization", opts.ServerKey);
+        if (!string.IsNullOrWhiteSpace(idempotencyKey))
+        {
+            message.Headers.TryAddWithoutValidation("Idempotency-Key", idempotencyKey);
+        }
         message.Content = JsonContent.Create(payload);
 
         using var response = await _http.SendAsync(message, ct);

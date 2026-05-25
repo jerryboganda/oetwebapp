@@ -96,10 +96,14 @@ public sealed class RegistryBackedProvider(
         var providers = (await registry.ListActiveAsync(ct))
             .Where(p => p.Dialect == AiProviderDialect.OpenAiCompatible)
             .ToList();
-        var first = !string.IsNullOrWhiteSpace(request.ProviderCode)
+        var explicitProviderCode = !string.IsNullOrWhiteSpace(request.ProviderCode);
+        var first = explicitProviderCode
             ? providers.FirstOrDefault(p => string.Equals(p.Code, request.ProviderCode, StringComparison.OrdinalIgnoreCase))
             : providers.FirstOrDefault();
-        first ??= providers.FirstOrDefault();
+        if (explicitProviderCode && first is null)
+        {
+            throw new InvalidOperationException($"Requested OpenAI-compatible AI provider '{request.ProviderCode}' is not active or is not OpenAI-compatible.");
+        }
         if (first is not null)
         {
             // Per-provider ReasoningEffort overrides env default when set.
@@ -135,32 +139,24 @@ public sealed class RegistryBackedProvider(
         var effort = string.IsNullOrWhiteSpace(reasoningEffort) ? "high" : reasoningEffort!.ToLowerInvariant();
         var sendReasoning = IsReasoningCapable(model);
 
-        object payload = sendReasoning
-            ? new
-            {
-                model,
-                messages = new object[]
-                {
-                    new { role = "system", content = request.SystemPrompt },
-                    new { role = "user", content = request.UserPrompt },
-                },
-                temperature = request.Temperature,
-                max_tokens = maxTokens,
-                reasoning_effort = effort,
-                stream = false,
-            }
-            : new
-            {
-                model,
-                messages = new object[]
-                {
-                    new { role = "system", content = request.SystemPrompt },
-                    new { role = "user", content = request.UserPrompt },
-                },
-                temperature = request.Temperature,
-                max_tokens = maxTokens,
-                stream = false,
-            };
+        var payload = new Dictionary<string, object?>
+        {
+            ["model"] = model,
+            ["messages"] = AiProviderPayloadBuilder.BuildOpenAiMessages(request),
+            ["temperature"] = request.Temperature,
+            ["max_tokens"] = maxTokens,
+            ["stream"] = false,
+        };
+        if (sendReasoning)
+        {
+            payload["reasoning_effort"] = effort;
+        }
+        var tools = AiProviderPayloadBuilder.BuildOpenAiTools(request.Tools);
+        if (tools.Count > 0)
+        {
+            payload["tools"] = tools;
+            if (!string.IsNullOrWhiteSpace(request.ToolChoice)) payload["tool_choice"] = request.ToolChoice;
+        }
 
         using var response = await client.PostAsync(
             "chat/completions",
@@ -173,7 +169,9 @@ public sealed class RegistryBackedProvider(
 
         using var doc = JsonDocument.Parse(body);
         var root = doc.RootElement;
-        var text = root.GetProperty("choices")[0].GetProperty("message").GetProperty("content").GetString() ?? "";
+        AiProviderPayloadBuilder.ReadOpenAiChoiceMessage(root, "AI provider", out var choice, out var message);
+        var text = AiProviderPayloadBuilder.ReadOpenAiMessageContent(message);
+        var toolCalls = AiProviderPayloadBuilder.ReadOpenAiToolCalls(message);
         var usage = root.TryGetProperty("usage", out var usageEl)
             ? new AiUsage
             {
@@ -182,7 +180,8 @@ public sealed class RegistryBackedProvider(
             }
             : null;
 
-        return new AiProviderCompletion { Text = text, Usage = usage };
+        var finishReason = choice.TryGetProperty("finish_reason", out var finish) ? finish.GetString() : null;
+        return new AiProviderCompletion { Text = text, Usage = usage, ToolCalls = toolCalls, FinishReason = finishReason };
     }
 
     private static bool IsReasoningCapable(string model)
@@ -216,12 +215,13 @@ public sealed class AnthropicProvider(
         var apiKey = request.ApiKeyOverride;
         if (string.IsNullOrWhiteSpace(baseUrl) || string.IsNullOrWhiteSpace(apiKey))
         {
-            var registered = await registry.FindByCodeAsync("anthropic", ct);
+            var providerCode = string.IsNullOrWhiteSpace(request.ProviderCode) ? "anthropic" : request.ProviderCode.Trim().ToLowerInvariant();
+            var registered = await registry.FindByCodeAsync(providerCode, ct);
             if (registered is null)
-                throw new InvalidOperationException("Anthropic provider is not registered.");
+                throw new InvalidOperationException($"Anthropic provider {providerCode} is not registered.");
             baseUrl ??= registered.BaseUrl;
-            apiKey ??= await registry.GetPlatformKeyAsync("anthropic", ct)
-                ?? throw new InvalidOperationException("Platform API key missing for Anthropic.");
+            apiKey ??= await registry.GetPlatformKeyAsync(providerCode, ct)
+                ?? throw new InvalidOperationException($"Platform API key missing for Anthropic provider {providerCode}.");
         }
 
         var unsafeBaseUrlReason = AiProviderConnectionTester.GetUnsafeBaseUrlReason(baseUrl);
@@ -234,18 +234,34 @@ public sealed class AnthropicProvider(
         client.DefaultRequestHeaders.Add("x-api-key", apiKey);
         client.DefaultRequestHeaders.Remove("anthropic-version");
         client.DefaultRequestHeaders.Add("anthropic-version", "2023-06-01");
+        client.DefaultRequestHeaders.Remove("anthropic-beta");
+        client.DefaultRequestHeaders.Add("anthropic-beta", "prompt-caching-2024-07-31");
 
-        var payload = new
+        var payload = new Dictionary<string, object?>
         {
-            model = request.Model,
-            system = request.SystemPrompt,
-            messages = new object[]
-            {
-                new { role = "user", content = request.UserPrompt },
-            },
-            temperature = request.Temperature,
-            max_tokens = request.MaxTokens ?? 1024,
+            ["model"] = request.Model,
+            ["messages"] = AiProviderPayloadBuilder.BuildAnthropicMessages(request),
+            ["temperature"] = request.Temperature,
+            ["max_tokens"] = request.MaxTokens ?? 1024,
         };
+        if (!string.IsNullOrWhiteSpace(request.SystemPrompt))
+        {
+            payload["system"] = new object[]
+            {
+                new Dictionary<string, object?>
+                {
+                    ["type"] = "text",
+                    ["text"] = request.SystemPrompt,
+                    ["cache_control"] = new Dictionary<string, object?> { ["type"] = "ephemeral" },
+                },
+            };
+        }
+        var anthropicTools = AiProviderPayloadBuilder.BuildAnthropicTools(request.Tools);
+        if (anthropicTools.Count > 0)
+        {
+            payload["tools"] = anthropicTools;
+            payload["tool_choice"] = new Dictionary<string, object?> { ["type"] = "auto" };
+        }
 
         using var response = await client.PostAsync(
             "messages",
@@ -265,6 +281,7 @@ public sealed class AnthropicProvider(
             if (part.TryGetProperty("text", out var t))
                 sb.Append(t.GetString());
         }
+        var toolCalls = AiProviderPayloadBuilder.ReadAnthropicToolCalls(contentParts);
 
         AiUsage? usage = null;
         if (root.TryGetProperty("usage", out var usageEl))
@@ -276,7 +293,8 @@ public sealed class AnthropicProvider(
             };
         }
 
-        return new AiProviderCompletion { Text = sb.ToString(), Usage = usage };
+        var finishReason = root.TryGetProperty("stop_reason", out var stopReason) ? stopReason.GetString() : null;
+        return new AiProviderCompletion { Text = sb.ToString(), Usage = usage, ToolCalls = toolCalls, FinishReason = finishReason };
     }
 }
 

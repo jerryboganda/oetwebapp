@@ -1,4 +1,5 @@
 using System.Linq;
+using System.Text.Json;
 using Azure;
 using Azure.AI.Inference;
 using Azure.Core.Pipeline;
@@ -65,10 +66,14 @@ public sealed class CopilotAiModelProvider : IAiModelProvider
         if (_accountRegistry is not null
             && string.IsNullOrWhiteSpace(request.ApiKeyOverride))
         {
-            var failover = await TryCompleteWithAccountFailoverAsync(request, ct);
-            if (failover is not null) return failover;
-            // No account in the pool — drop through to single-row mode so
-            // existing single-PAT setups continue to work unchanged.
+            var accountProvider = await ResolveRegisteredProviderAsync(request, ct, requireRegistered: false);
+            if (accountProvider is not null)
+            {
+                var failover = await TryCompleteWithAccountFailoverAsync(request, accountProvider, ct);
+                if (failover is not null) return failover;
+                // No account in the pool — drop through to single-row mode so
+                // existing single-PAT setups continue to work unchanged.
+            }
         }
 
         var (baseUrl, apiKey, defaultModel) = await ResolveCredentialsAsync(request, ct);
@@ -85,7 +90,7 @@ public sealed class CopilotAiModelProvider : IAiModelProvider
     /// the chain).
     /// </summary>
     private async Task<AiProviderCompletion?> TryCompleteWithAccountFailoverAsync(
-        AiProviderRequest request, CancellationToken ct)
+        AiProviderRequest request, AiProvider accountProvider, CancellationToken ct)
     {
         var skip = new HashSet<string>(StringComparer.Ordinal);
         var trail = new List<string>();
@@ -95,14 +100,19 @@ public sealed class CopilotAiModelProvider : IAiModelProvider
         // Hard ceiling — protects against pathological pool sizes.
         for (var attempt = 0; attempt < 8; attempt++)
         {
-            var slot = await _accountRegistry!.PickAndReserveAsync("copilot", skip, ct);
+            var slot = await _accountRegistry!.PickAndReserveAsync(accountProvider.Code, skip, ct);
             if (slot is null)
             {
-                if (attempt == 0) return null; // pool empty → fall back
+                if (attempt == 0)
+                {
+                    var configuredAccounts = await _accountRegistry.ListByProviderCodeAsync(accountProvider.Code, ct);
+                    if (configuredAccounts.Count == 0) return null; // pool empty → fall back
+                    break; // pool configured, but currently exhausted/quarantined
+                }
                 break; // pool exhausted mid-failover
             }
 
-            var (baseUrl, defaultModel) = await ResolveMetadataAsync(request, ct);
+            var (baseUrl, defaultModel) = ResolveMetadata(request, accountProvider);
 
             try
             {
@@ -198,8 +208,7 @@ public sealed class CopilotAiModelProvider : IAiModelProvider
         {
             foreach (var t in tools)
             {
-                using var schemaDoc = System.Text.Json.JsonDocument.Parse(
-                    string.IsNullOrWhiteSpace(t.JsonSchemaArgs) ? "{}" : t.JsonSchemaArgs);
+                using var schemaDoc = ParseToolSchema(t);
                 var fn = new FunctionDefinition(t.Code)
                 {
                     Description = string.IsNullOrWhiteSpace(t.Description) ? t.Name : t.Description,
@@ -265,6 +274,25 @@ public sealed class CopilotAiModelProvider : IAiModelProvider
         }
     }
 
+    private static JsonDocument ParseToolSchema(AiTools.AiToolDefinition tool)
+    {
+        try
+        {
+            var doc = JsonDocument.Parse(string.IsNullOrWhiteSpace(tool.JsonSchemaArgs) ? "{}" : tool.JsonSchemaArgs);
+            if (doc.RootElement.ValueKind == JsonValueKind.Object)
+            {
+                return doc;
+            }
+
+            doc.Dispose();
+            throw new InvalidOperationException($"Invalid AI tool schema for {tool.Code}: expected a JSON object.");
+        }
+        catch (JsonException ex)
+        {
+            throw new InvalidOperationException($"Invalid AI tool schema for {tool.Code}: expected a JSON object.", ex);
+        }
+    }
+
     /// <summary>
     /// Project an <see cref="AiChatMessage"/> into the Azure SDK's typed
     /// chat-message hierarchy. <c>"tool"</c> role uses
@@ -308,20 +336,14 @@ public sealed class CopilotAiModelProvider : IAiModelProvider
     /// per-account PAT atomically and must not also require the legacy
     /// single-row key on the AiProvider record.
     /// </summary>
-    private async Task<(string baseUrl, string defaultModel)> ResolveMetadataAsync(
-        AiProviderRequest request, CancellationToken ct)
+    private static (string baseUrl, string defaultModel) ResolveMetadata(
+        AiProviderRequest request, AiProvider registered)
     {
-        var registered = (await _registry.ListActiveAsync(ct))
-            .FirstOrDefault(p => p.Dialect == AiProviderDialect.Copilot);
-
         var baseUrl = !string.IsNullOrWhiteSpace(request.BaseUrlOverride)
             ? request.BaseUrlOverride!
-            : registered?.BaseUrl
-              ?? throw new InvalidOperationException(
-                  "GitHub Copilot provider is not registered. " +
-                  "Add a row in /admin/ai-providers with Code=\"copilot\" and Dialect=Copilot.");
+            : registered.BaseUrl;
 
-        return (baseUrl, registered?.DefaultModel ?? string.Empty);
+        return (baseUrl, registered.DefaultModel ?? string.Empty);
     }
 
     /// <summary>
@@ -339,8 +361,7 @@ public sealed class CopilotAiModelProvider : IAiModelProvider
     private async Task<(string baseUrl, string apiKey, string defaultModel)> ResolveCredentialsAsync(
         AiProviderRequest request, CancellationToken ct, bool ignoreRequestKeyOverride = false)
     {
-        var registered = (await _registry.ListActiveAsync(ct))
-            .FirstOrDefault(p => p.Dialect == AiProviderDialect.Copilot);
+        var registered = await ResolveRegisteredProviderAsync(request, ct, requireRegistered: false);
 
         var baseUrl = !string.IsNullOrWhiteSpace(request.BaseUrlOverride)
             ? request.BaseUrlOverride!
@@ -362,5 +383,36 @@ public sealed class CopilotAiModelProvider : IAiModelProvider
 
         var defaultModel = registered?.DefaultModel ?? string.Empty;
         return (baseUrl, apiKey, defaultModel);
+    }
+
+    private async Task<AiProvider?> ResolveRegisteredProviderAsync(
+        AiProviderRequest request,
+        CancellationToken ct,
+        bool requireRegistered)
+    {
+        if (!string.IsNullOrWhiteSpace(request.ProviderCode))
+        {
+            var providerCode = request.ProviderCode.Trim().ToLowerInvariant();
+            var provider = await _registry.FindByCodeAsync(providerCode, ct);
+            if (provider is null || provider.Dialect != AiProviderDialect.Copilot)
+            {
+                throw new InvalidOperationException(
+                    $"GitHub Copilot provider '{providerCode}' is not active or is not Copilot-compatible.");
+            }
+
+            return provider;
+        }
+
+        var registered = (await _registry.ListActiveAsync(ct))
+            .FirstOrDefault(p => p.Dialect == AiProviderDialect.Copilot);
+
+        if (registered is null && requireRegistered)
+        {
+            throw new InvalidOperationException(
+                "GitHub Copilot provider is not registered. " +
+                "Add a row in /admin/ai-providers with Dialect=Copilot.");
+        }
+
+        return registered;
     }
 }

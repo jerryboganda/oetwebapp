@@ -52,7 +52,9 @@ public sealed class AiGatewayService(
     IAiToolRegistry? toolRegistry = null,
     IAiToolInvoker? toolInvoker = null,
     Microsoft.Extensions.Options.IOptions<AiToolOptions>? toolOptions = null,
-    Microsoft.Extensions.Hosting.IHostEnvironment? hostEnvironment = null)
+    Microsoft.Extensions.Hosting.IHostEnvironment? hostEnvironment = null,
+    IAiCreditService? creditService = null,
+    ILogger<AiGatewayService>? logger = null)
     : IAiGatewayService
 {
     private readonly RulebookPromptBuilder _promptBuilder = new(loader);
@@ -109,12 +111,38 @@ public sealed class AiGatewayService(
         {
             provider = providers.FirstOrDefault(p => string.Equals(p.Name, request.Provider, StringComparison.OrdinalIgnoreCase));
             selectedProviderCode = request.Provider;
+            if (provider is not null && providerRegistry is not null)
+            {
+                var directProviderRow = await providerRegistry.FindByCodeAsync(request.Provider, ct);
+                if (directProviderRow is not null)
+                {
+                    selectedProviderCode = directProviderRow.Code;
+                    selectedProviderDefaultModel = directProviderRow.DefaultModel;
+                }
+            }
+            if (provider is null && providerRegistry is not null)
+            {
+                var providerRow = await providerRegistry.FindByCodeAsync(request.Provider, ct);
+                if (providerRow is not null)
+                {
+                    var preferredName = ProviderNameForDialect(providerRow.Dialect);
+                    if (preferredName is not null)
+                    {
+                        provider = providers.FirstOrDefault(p => string.Equals(p.Name, preferredName, StringComparison.OrdinalIgnoreCase));
+                        if (provider is not null)
+                        {
+                            selectedProviderCode = providerRow.Code;
+                            selectedProviderDefaultModel = providerRow.DefaultModel;
+                        }
+                    }
+                }
+            }
         }
 
         // Phase 7: per-feature override. Consulted only when the caller did
         // not pin a provider — explicit pins always win so feature codes can
         // still be routed ad-hoc from tests and ops.
-        if (provider is null && featureRouteResolver is not null && providerRegistry is not null)
+        if (provider is null && string.IsNullOrWhiteSpace(request.Provider) && featureRouteResolver is not null && providerRegistry is not null)
         {
             try
             {
@@ -155,7 +183,7 @@ public sealed class AiGatewayService(
         // No explicit pin → consult the text-chat provider registry to honor
         // the active highest-priority row's dialect. Voice/OCR rows share the
         // registry but cannot service grounded chat completions.
-        if (provider is null && providerRegistry is not null)
+        if (provider is null && string.IsNullOrWhiteSpace(request.Provider) && providerRegistry is not null)
         {
             try
             {
@@ -189,6 +217,15 @@ public sealed class AiGatewayService(
                     throw new InvalidOperationException("AI provider registry resolution failed.", ex);
                 }
             }
+        }
+
+        if (provider is null && !string.IsNullOrWhiteSpace(request.Provider))
+        {
+            await RecordRefusalAsync(request, featureCode, stopwatch, startedAt,
+                errorCode: "provider_not_configured",
+                errorMessage: "The requested AI provider is not configured.",
+                ct);
+            throw new InvalidOperationException($"AI provider '{request.Provider}' is not configured.");
         }
 
         // If no credentialed registry row exists (local dev / smoke tests),
@@ -294,6 +331,72 @@ public sealed class AiGatewayService(
             }
         }
 
+        var shouldDebitLearnerCredit = ShouldDebitAiCredit(featureCode)
+            && !string.IsNullOrWhiteSpace(request.UserId)
+            && prospectiveKeySource != AiKeySource.Byok
+            && prospectiveKeySource != AiKeySource.None;
+        if (shouldDebitLearnerCredit)
+        {
+            if (usageRecorder is null)
+            {
+                throw new InvalidOperationException("AI usage accounting is not configured for this paid feature call.");
+            }
+
+            if (creditService is null)
+            {
+                stopwatch.Stop();
+                var ctx = BuildUsageContext(request, featureCode, startedAt, systemPrompt: null, userPrompt: null);
+                try
+                {
+                    await usageRecorder.RecordFailureAsync(
+                        ctx,
+                        providerId: null,
+                        model: null,
+                        keySource: prospectiveKeySource,
+                        outcome: AiCallOutcome.GatewayRefused,
+                        errorCode: "ai_credit_accounting_unavailable",
+                        errorMessage: "AI credit accounting is not configured.",
+                        latencyMs: (int)stopwatch.ElapsedMilliseconds,
+                        retryCount: 0,
+                        policyTrace: quotaDecision?.PolicyTrace,
+                        ct: CancellationToken.None);
+                }
+                catch { /* fail-soft */ }
+
+                throw new InvalidOperationException("AI credit accounting is not configured for this paid feature call.");
+            }
+
+            var balance = await creditService!.GetBalanceAsync(request.UserId!, ct);
+            if (balance.TokensAvailable < 1)
+            {
+                stopwatch.Stop();
+                if (usageRecorder is not null)
+                {
+                    var ctx = BuildUsageContext(request, featureCode, startedAt, systemPrompt: null, userPrompt: null);
+                    try
+                    {
+                        await usageRecorder.RecordFailureAsync(
+                            ctx,
+                            providerId: null,
+                            model: null,
+                            keySource: prospectiveKeySource,
+                            outcome: AiCallOutcome.GatewayRefused,
+                            errorCode: "ai_credits_insufficient",
+                            errorMessage: "AI grading credits are exhausted.",
+                            latencyMs: (int)stopwatch.ElapsedMilliseconds,
+                            retryCount: 0,
+                            policyTrace: quotaDecision?.PolicyTrace,
+                            ct: CancellationToken.None);
+                    }
+                    catch { /* fail-soft */ }
+                }
+
+                throw new AiQuotaDeniedException(
+                    "ai_credits_insufficient",
+                    "AI grading credits are exhausted. Purchase an AI package or upgrade your plan to continue.");
+            }
+        }
+
         // ── Provider call + outcome recording ────────────────────────────────
         var userPrompt = BuildUserMessage(request);
         var context = BuildUsageContext(request, featureCode, startedAt, request.Prompt.SystemPrompt, userPrompt);
@@ -322,7 +425,7 @@ public sealed class AiGatewayService(
         var aggregatePromptTokens = 0;
         var aggregateCompletionTokens = 0;
         string? loopTrace = null;
-        var aiUsageRecordIdForTools = Guid.NewGuid().ToString("N"); // placeholder; tools record their own row
+        var aiUsageRecordIdForTools = Guid.NewGuid().ToString("N");
 
         try
         {
@@ -405,7 +508,7 @@ public sealed class AiGatewayService(
             {
                 await usageRecorder.RecordFailureAsync(
                     context,
-                    providerId: provider.Name,
+                    providerId: selectedProviderCode ?? provider.Name,
                     model: effectiveModel,
                     keySource: prospectiveKeySource,
                     outcome: AiCallOutcome.Cancelled,
@@ -421,11 +524,15 @@ public sealed class AiGatewayService(
         catch (TimeoutException tex)
         {
             stopwatch.Stop();
+            var partialUsage = BuildAggregatedUsage(aggregatePromptTokens, aggregateCompletionTokens, completion?.Usage);
+            var partialCostEstimate = partialUsage is not null
+                ? await ComputeCostEstimateAsync(selectedProviderCode ?? provider.Name, partialUsage, CancellationToken.None)
+                : 0m;
             if (usageRecorder is not null)
             {
                 await usageRecorder.RecordFailureAsync(
                     context,
-                    providerId: provider.Name,
+                    providerId: selectedProviderCode ?? provider.Name,
                     model: effectiveModel,
                     keySource: prospectiveKeySource,
                     outcome: AiCallOutcome.Timeout,
@@ -434,7 +541,10 @@ public sealed class AiGatewayService(
                     latencyMs: (int)stopwatch.ElapsedMilliseconds,
                     retryCount: 0,
                     policyTrace: null,
-                    ct: CancellationToken.None);
+                    ct: CancellationToken.None,
+                    usage: partialUsage,
+                    costEstimateUsd: partialCostEstimate,
+                    usageRecordId: aiUsageRecordIdForTools);
             }
             throw;
         }
@@ -442,6 +552,10 @@ public sealed class AiGatewayService(
         {
             stopwatch.Stop();
             var errorCode = ClassifyError(ex);
+            var partialUsage = BuildAggregatedUsage(aggregatePromptTokens, aggregateCompletionTokens, completion?.Usage);
+            var partialCostEstimate = partialUsage is not null
+                ? await ComputeCostEstimateAsync(selectedProviderCode ?? provider.Name, partialUsage, CancellationToken.None)
+                : 0m;
 
             // BYOK auth failure: invalidate the credential so the resolver
             // will skip it until the configured cooldown expires. Non-fatal
@@ -475,7 +589,7 @@ public sealed class AiGatewayService(
                 var failover = ex as AiProviderFailoverException;
                 await usageRecorder.RecordFailureAsync(
                     context,
-                    providerId: provider.Name,
+                    providerId: selectedProviderCode ?? provider.Name,
                     model: effectiveModel,
                     keySource: prospectiveKeySource,
                     outcome: AiCallOutcome.ProviderError,
@@ -486,7 +600,10 @@ public sealed class AiGatewayService(
                     policyTrace: resolution?.PolicyTrace,
                     ct: CancellationToken.None,
                     accountId: failover?.LastAccountId,
-                    failoverTrace: failover?.FailoverTrace);
+                    failoverTrace: failover?.FailoverTrace,
+                    usage: partialUsage,
+                    costEstimateUsd: partialCostEstimate,
+                    usageRecordId: aiUsageRecordIdForTools);
             }
             throw;
         }
@@ -497,15 +614,44 @@ public sealed class AiGatewayService(
         // prompt+completion token totals (sum across turns) on the SINGLE
         // usage record. Single-turn calls fall through with completion.Usage
         // unchanged.
-        var aggregatedUsage = (aggregatePromptTokens > 0 || aggregateCompletionTokens > 0)
-            ? new AiUsage { PromptTokens = aggregatePromptTokens, CompletionTokens = aggregateCompletionTokens }
-            : completion.Usage;
+        var aggregatedUsage = BuildAggregatedUsage(aggregatePromptTokens, aggregateCompletionTokens, completion.Usage);
+
+        var costEstimate = aggregatedUsage is not null
+            ? await ComputeCostEstimateAsync(selectedProviderCode ?? provider.Name, aggregatedUsage, CancellationToken.None)
+            : 0m;
+
+        if (string.Equals(loopTrace, "tool_loop_truncated", StringComparison.Ordinal))
+        {
+            if (usageRecorder is not null)
+            {
+                await usageRecorder.RecordFailureAsync(
+                    context,
+                    providerId: selectedProviderCode ?? provider.Name,
+                    model: effectiveModel,
+                    keySource: prospectiveKeySource,
+                    outcome: AiCallOutcome.ProviderError,
+                    errorCode: "tool_loop_truncated",
+                    errorMessage: "AI tool loop reached the maximum turn limit before producing a final answer.",
+                    latencyMs: (int)stopwatch.ElapsedMilliseconds,
+                    retryCount: 0,
+                    policyTrace: resolution?.PolicyTrace,
+                    ct: CancellationToken.None,
+                    usage: aggregatedUsage,
+                    costEstimateUsd: costEstimate,
+                    usageRecordId: aiUsageRecordIdForTools);
+            }
+
+            throw new InvalidOperationException("AI tool loop reached the maximum turn limit before producing a final answer.");
+        }
+
+        string usageRecordId = aiUsageRecordIdForTools;
+        string? debitUsageRecordId = null;
 
         if (usageRecorder is not null)
         {
-            await usageRecorder.RecordSuccessAsync(
+            var persistedUsageRecordId = await usageRecorder.RecordSuccessAsync(
                 context,
-                providerId: provider.Name,
+                providerId: selectedProviderCode ?? provider.Name,
                 model: effectiveModel,
                 keySource: prospectiveKeySource,
                 usage: aggregatedUsage,
@@ -514,7 +660,19 @@ public sealed class AiGatewayService(
                 policyTrace: ComposeTrace(ComposeTrace(resolution?.PolicyTrace, quotaDecision?.PolicyTrace), loopTrace),
                 ct: CancellationToken.None,
                 accountId: completion.AccountId,
-                failoverTrace: completion.FailoverTrace);
+                failoverTrace: completion.FailoverTrace,
+                costEstimateUsd: costEstimate,
+                usageRecordId: aiUsageRecordIdForTools);
+            if (persistedUsageRecordId is null && shouldDebitLearnerCredit)
+            {
+                logger?.LogWarning("AI usage accounting failed before learner credit debit could be posted for user {UserId}, feature {FeatureCode}, usage record {UsageRecordId}.", request.UserId, featureCode, aiUsageRecordIdForTools);
+            }
+
+            if (persistedUsageRecordId is not null)
+            {
+                usageRecordId = persistedUsageRecordId;
+                debitUsageRecordId = persistedUsageRecordId;
+            }
         }
 
         // Commit token usage against the per-user counters. BYOK calls are
@@ -531,11 +689,6 @@ public sealed class AiGatewayService(
         {
             try
             {
-                // Cost estimate: rate card × token counts, if the provider
-                // exposes it. Falls back to 0 so the counter still moves.
-                var costEstimate = await ComputeCostEstimateAsync(
-                    selectedProviderCode ?? provider.Name, aggregatedUsage!, CancellationToken.None);
-
                 await quotaService!.CommitAsync(
                     request.UserId,
                     featureCode,
@@ -543,11 +696,44 @@ public sealed class AiGatewayService(
                     aggregatedUsage.CompletionTokens,
                     costEstimateUsd: costEstimate,
                     CancellationToken.None);
+
             }
-            catch
+            catch (Exception ex)
             {
+                logger?.LogWarning(ex, "Failed to commit AI quota usage for user {UserId}, feature {FeatureCode}, usage record {UsageRecordId}.", request.UserId, featureCode, usageRecordId);
                 // Commit must never break the caller. The provider returned
                 // a successful response; the user deserves it.
+            }
+        }
+
+        if (shouldDebitLearnerCredit)
+        {
+            if (string.IsNullOrWhiteSpace(debitUsageRecordId))
+            {
+                logger?.LogWarning("AI usage accounting failed before learner credit debit could be posted for user {UserId}, feature {FeatureCode}, usage record {UsageRecordId}.", request.UserId, featureCode, usageRecordId);
+            }
+            else
+            {
+                try
+                {
+                    var debited = await creditService!.DebitUsageAsync(
+                        new AiCreditUsageDebitRequest(
+                            UserId: request.UserId!,
+                            UsageRecordId: debitUsageRecordId,
+                            FeatureCode: featureCode,
+                            Credits: 1,
+                            CostUsd: costEstimate,
+                            OccurredAt: startedAt),
+                        CancellationToken.None);
+                    if (!debited)
+                    {
+                        logger?.LogWarning("AI credit debit was not posted for user {UserId}, feature {FeatureCode}, usage record {UsageRecordId}.", request.UserId, featureCode, debitUsageRecordId);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    logger?.LogWarning(ex, "Failed to debit AI credit for user {UserId}, feature {FeatureCode}, usage record {UsageRecordId}.", request.UserId, featureCode, debitUsageRecordId);
+                }
             }
         }
 
@@ -651,6 +837,22 @@ public sealed class AiGatewayService(
             return 0m;
         }
     }
+
+    // Conversation opening/reply turns are intentionally not debited here:
+    // the paid deliverable is the post-session ConversationEvaluation.
+    private static bool ShouldDebitAiCredit(string featureCode)
+        => string.Equals(featureCode, AiFeatureCodes.WritingGrade, StringComparison.OrdinalIgnoreCase)
+           || string.Equals(featureCode, AiFeatureCodes.WritingSampleScore, StringComparison.OrdinalIgnoreCase)
+           || string.Equals(featureCode, AiFeatureCodes.SpeakingGrade, StringComparison.OrdinalIgnoreCase)
+           || string.Equals(featureCode, AiFeatureCodes.MockFullGrade, StringComparison.OrdinalIgnoreCase)
+           || string.Equals(featureCode, AiFeatureCodes.PronunciationScore, StringComparison.OrdinalIgnoreCase)
+           || string.Equals(featureCode, AiFeatureCodes.PronunciationFeedback, StringComparison.OrdinalIgnoreCase)
+           || string.Equals(featureCode, AiFeatureCodes.ConversationEvaluation, StringComparison.OrdinalIgnoreCase)
+           || string.Equals(featureCode, SpeakingAiFeatureCodes.SpeakingScoreV2, StringComparison.OrdinalIgnoreCase);
+    private static AiUsage? BuildAggregatedUsage(int promptTokens, int completionTokens, AiUsage? fallback)
+        => promptTokens > 0 || completionTokens > 0
+            ? new AiUsage { PromptTokens = promptTokens, CompletionTokens = completionTokens }
+            : fallback;
 
     private static string ClassifyError(Exception ex)
     {

@@ -135,6 +135,100 @@ public class RefundDisputeTests
     }
 
     [Fact]
+    public async Task FullRefund_ReversesAiPackageCreditsAndLedgerBalance()
+    {
+        var (db, refundService, _) = Build();
+        var now = DateTimeOffset.UtcNow;
+        const string userId = "u-ai-refund";
+        const string quoteId = "quote-ai-refund";
+        const string txId = "tx_ai_refund";
+
+        db.Users.Add(new LearnerUser { Id = userId, DisplayName = "AI", Email = "ai-refund@x.test", CreatedAt = now, LastActiveAt = now });
+        db.Wallets.Add(new Wallet { Id = $"w-{userId}", UserId = userId, CreditBalance = 0, LastUpdatedAt = now });
+        db.Subscriptions.Add(new Subscription
+        {
+            Id = $"sub-{userId}",
+            UserId = userId,
+            PlanId = "basic",
+            Status = SubscriptionStatus.Active,
+            StartedAt = now,
+            ChangedAt = now,
+            NextRenewalAt = now.AddMonths(1),
+            AiCreditsRemaining = 12,
+        });
+        db.PaymentTransactions.Add(new PaymentTransaction
+        {
+            Id = Guid.NewGuid(),
+            LearnerUserId = userId,
+            Gateway = "stripe",
+            GatewayTransactionId = txId,
+            TransactionType = "subscription_payment",
+            Status = "completed",
+            Amount = 19m,
+            Currency = "AUD",
+            ProductType = "addon",
+            ProductId = "pkg_quick_check",
+            QuoteId = quoteId,
+            CreatedAt = now,
+            UpdatedAt = now,
+        });
+        db.SubscriptionItems.Add(new SubscriptionItem
+        {
+            Id = "subitem-ai-refund",
+            SubscriptionId = $"sub-{userId}",
+            ItemCode = "pkg_quick_check",
+            ItemType = "addon",
+            Quantity = 1,
+            Status = SubscriptionItemStatus.Active,
+            StartsAt = now,
+            QuoteId = quoteId,
+            CheckoutSessionId = txId,
+            CreatedAt = now,
+            UpdatedAt = now,
+        });
+        db.AiCreditLedger.Add(new AiCreditLedgerEntry
+        {
+            Id = "ledger-ai-package-purchase",
+            UserId = userId,
+            TokensDelta = 5,
+            CostDeltaUsd = 0m,
+            Source = AiCreditSource.Purchase,
+            Description = "Quick Check AI grading credits",
+            ReferenceId = "addon:quote-ai-refund:pkg_quick_check",
+            CreatedAt = now,
+        });
+        db.AiCreditLedger.Add(new AiCreditLedgerEntry
+        {
+            Id = "ledger-ai-plan-purchase",
+            UserId = userId,
+            TokensDelta = 7,
+            CostDeltaUsd = 0m,
+            Source = AiCreditSource.Purchase,
+            Description = "Course bundled AI grading credits",
+            ReferenceId = "plan:quote-ai-refund:pkg_course",
+            CreatedAt = now,
+        });
+        await db.SaveChangesAsync();
+
+        var result = await refundService.IssueRefundAsync(
+            new RefundRequest(txId, 19m, "requested_by_customer", "idem-ai-refund"),
+            default);
+
+        var subscription = await db.Subscriptions.SingleAsync();
+        var balance = await new OetLearner.Api.Services.AiManagement.AiCreditService(db).GetBalanceAsync(userId, default);
+
+        Assert.True(result.ReversedEntitlements);
+        Assert.Equal(0, subscription.AiCreditsRemaining);
+        Assert.Equal(0, balance.TokensAvailable);
+        Assert.True(await db.AiCreditLedger.AnyAsync(entry => entry.Source == AiCreditSource.AdminAdjustment
+                                                             && entry.TokensDelta == -5
+                                                             && entry.ReferenceId == "addon-refund:quote-ai-refund:pkg_quick_check"));
+        Assert.True(await db.AiCreditLedger.AnyAsync(entry => entry.Source == AiCreditSource.AdminAdjustment
+                                     && entry.TokensDelta == -7
+                                     && entry.ReferenceId == "plan-refund:quote-ai-refund:pkg_course"));
+    }
+
+    [Fact]
     public async Task Refund_IsIdempotentOnKey()
     {
         var (db, refundService, _) = Build();

@@ -430,6 +430,9 @@ public static class AiUsageAdminEndpoints
                 return Results.BadRequest(new { error = unsafeBaseUrlReason });
             if (string.IsNullOrWhiteSpace(dto.ApiKey) || dto.ApiKey.Length < 16)
                 return Results.BadRequest(new { error = "ApiKey is required and must be at least 16 chars." });
+            if (RequiresDefaultModel(dto.IsActive, dto.Category, dto.Dialect)
+                && string.IsNullOrWhiteSpace(dto.DefaultModel))
+                return Results.BadRequest(new { error = "DefaultModel is required for active text-chat providers." });
 
             var protector = dpProvider.CreateProtector("AiProvider.PlatformKey.v1");
             var now = DateTimeOffset.UtcNow;
@@ -505,6 +508,9 @@ public static class AiUsageAdminEndpoints
             row.CircuitBreakerWindowSeconds = dto.CircuitBreakerWindowSeconds;
             row.FailoverPriority = dto.FailoverPriority;
             row.IsActive = dto.IsActive;
+            if (RequiresDefaultModel(row.IsActive, row.Category, row.Dialect)
+                && string.IsNullOrWhiteSpace(row.DefaultModel))
+                return Results.BadRequest(new { error = "DefaultModel is required for active text-chat providers." });
             row.UpdatedAt = DateTimeOffset.UtcNow;
             row.UpdatedByAdminId = http.User.FindFirstValue(ClaimTypes.NameIdentifier);
             await SaveWithAuditAsync(db, http, "AiProviderUpdated", row.Id, row.Code, ct);
@@ -1105,6 +1111,11 @@ public static class AiUsageAdminEndpoints
         });
         await db.SaveChangesAsync(ct);
     }
+
+    private static bool RequiresDefaultModel(bool isActive, AiProviderCategory category, AiProviderDialect dialect)
+        => isActive
+           && category == AiProviderCategory.TextChat
+           && dialect is AiProviderDialect.OpenAiCompatible or AiProviderDialect.Anthropic or AiProviderDialect.Cloudflare or AiProviderDialect.Copilot;
 
     /// <summary>Trims, lower-cases and de-duplicates a CSV feature list so the
     /// stored value is canonical. Empty / null → empty string.</summary>

@@ -274,7 +274,7 @@ public sealed class ListeningAuthoringService(
             .OrderBy(q => q.Number)
             .ToList();
 
-        var serialized = JsonSerializer.SerializeToElement(normalized);
+        var serialized = JsonSerializer.SerializeToElement(normalized, CamelJson);
         root[QuestionsKey] = serialized;
 
         paper.ExtractedTextJson = JsonSerializer.Serialize(root);

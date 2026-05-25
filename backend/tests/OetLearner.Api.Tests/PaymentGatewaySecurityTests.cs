@@ -94,6 +94,62 @@ public class PaymentGatewaySecurityTests
         Assert.Contains("\"cancel_url\":\"https://app.example/cancel\"", handler.OrderPayload);
     }
 
+    [Fact]
+    public async Task StripeRefund_SendsIdempotencyKeyHeader()
+    {
+        var options = new BillingOptions
+        {
+            AllowSandboxFallbacks = false,
+            Stripe = new StripeBillingOptions { ApiBaseUrl = "https://stripe.example/" }
+        };
+        var handler = new CapturingStripeRefundHandler();
+        var runtime = TestRuntimeSettingsProvider.FromBillingSettings(new BillingSettings(
+            StripeSecretKey: "sk_test_runtime",
+            StripePublishableKey: null,
+            StripeWebhookSecret: null,
+            StripeSuccessUrl: null,
+            StripeCancelUrl: null,
+            PayPalClientId: null,
+            PayPalClientSecret: null,
+            PayPalWebhookId: null,
+            PayPalSuccessUrl: null,
+            PayPalCancelUrl: null));
+        IPaymentGateway gateway = new StripeGateway(new HttpClient(handler), Options.Create(options), runtime);
+
+        var result = await gateway.ProcessRefundAsync("pi_123", 10m, "AUD", "requested_by_customer", "refund-idem-123", default);
+
+        Assert.Equal("re_1", result.RefundId);
+        Assert.Equal("refund-idem-123", handler.IdempotencyKey);
+    }
+
+    [Fact]
+    public async Task PayPalRefund_SendsRequestIdHeader()
+    {
+        var options = new BillingOptions
+        {
+            AllowSandboxFallbacks = false,
+            PayPal = new PayPalBillingOptions { UseSandbox = true }
+        };
+        var handler = new CapturingPayPalRefundHandler();
+        var runtime = TestRuntimeSettingsProvider.FromBillingSettings(new BillingSettings(
+            StripeSecretKey: null,
+            StripePublishableKey: null,
+            StripeWebhookSecret: null,
+            StripeSuccessUrl: null,
+            StripeCancelUrl: null,
+            PayPalClientId: "runtime-client",
+            PayPalClientSecret: "runtime-secret",
+            PayPalWebhookId: "runtime-webhook",
+            PayPalSuccessUrl: null,
+            PayPalCancelUrl: null));
+        IPaymentGateway gateway = new PayPalGateway(new HttpClient(handler), Options.Create(options), runtime);
+
+        var result = await gateway.ProcessRefundAsync("CAPTURE-123", 10m, "AUD", "requested_by_customer", "refund-idem-456", default);
+
+        Assert.Equal("PAYPAL-REFUND-1", result.RefundId);
+        Assert.Equal("refund-idem-456", handler.PayPalRequestId);
+    }
+
     private sealed class CapturingPayPalHandler : HttpMessageHandler
     {
         public string? TokenRequestUri { get; private set; }
@@ -126,4 +182,51 @@ public class PaymentGatewaySecurityTests
                 Content = new StringContent(json, System.Text.Encoding.UTF8, "application/json"),
             };
     }
+
+    private sealed class CapturingStripeRefundHandler : HttpMessageHandler
+    {
+        public string? IdempotencyKey { get; private set; }
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            if (request.RequestUri?.AbsolutePath.EndsWith("/v1/refunds", StringComparison.Ordinal) == true)
+            {
+                IdempotencyKey = request.Headers.TryGetValues("Idempotency-Key", out var values)
+                    ? values.SingleOrDefault()
+                    : null;
+                return Task.FromResult(JsonResponse("""{"id":"re_1","status":"succeeded"}"""));
+            }
+
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound));
+        }
+    }
+
+    private sealed class CapturingPayPalRefundHandler : HttpMessageHandler
+    {
+        public string? PayPalRequestId { get; private set; }
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            if (request.RequestUri?.AbsolutePath.EndsWith("/v1/oauth2/token", StringComparison.Ordinal) == true)
+            {
+                return Task.FromResult(JsonResponse("""{"access_token":"token-1"}"""));
+            }
+
+            if (request.RequestUri?.AbsolutePath.EndsWith("/refund", StringComparison.Ordinal) == true)
+            {
+                PayPalRequestId = request.Headers.TryGetValues("PayPal-Request-Id", out var values)
+                    ? values.SingleOrDefault()
+                    : null;
+                return Task.FromResult(JsonResponse("""{"id":"PAYPAL-REFUND-1","status":"COMPLETED"}"""));
+            }
+
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound));
+        }
+    }
+
+    private static HttpResponseMessage JsonResponse(string json)
+        => new(HttpStatusCode.OK)
+        {
+            Content = new StringContent(json, System.Text.Encoding.UTF8, "application/json"),
+        };
 }

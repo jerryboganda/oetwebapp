@@ -20,7 +20,23 @@ public sealed class AiAssistantFeatureRouteSeeder(
         await using var scope = scopeFactory.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
 
-        // Seed default routes: all assistant features -> openai/gpt-4o
+        var defaultProvider = await db.AiProviders.AsNoTracking()
+            .Where(provider => provider.IsActive
+                               && provider.Category == AiProviderCategory.TextChat
+                               && !string.IsNullOrWhiteSpace(provider.EncryptedApiKey))
+            .OrderBy(provider => provider.FailoverPriority)
+            .FirstOrDefaultAsync(ct);
+        if (defaultProvider is null)
+        {
+            logger.LogInformation("AI Assistant feature route seeding skipped; no active credentialed text-chat provider exists yet.");
+            return;
+        }
+
+        var providerCode = defaultProvider.Code;
+        var model = defaultProvider.DefaultModel;
+
+        // Seed default routes from the active text-chat provider row when one
+        // exists. Leaving Model empty lets the gateway use the provider default.
         var featureCodes = new[]
         {
             AiFeatureCodes.AiAssistantAdmin,
@@ -38,12 +54,22 @@ public sealed class AiAssistantFeatureRouteSeeder(
                 {
                     Id = Guid.NewGuid().ToString("N"),
                     FeatureCode = code,
-                    ProviderCode = "openai",
-                    Model = "gpt-4o",
+                    ProviderCode = providerCode,
+                    Model = model,
                     IsActive = true,
                     CreatedAt = DateTimeOffset.UtcNow,
                     UpdatedAt = DateTimeOffset.UtcNow,
                 });
+            }
+            else
+            {
+                var route = await db.AiFeatureRoutes.FirstAsync(r => r.FeatureCode == code, ct);
+                if (IsLegacyOpenAiAssistantRoute(route.ProviderCode, route.Model))
+                {
+                    route.ProviderCode = providerCode;
+                    route.Model = model;
+                    route.UpdatedAt = DateTimeOffset.UtcNow;
+                }
             }
         }
 
@@ -52,4 +78,14 @@ public sealed class AiAssistantFeatureRouteSeeder(
     }
 
     public Task StopAsync(CancellationToken ct) => Task.CompletedTask;
+
+    private static bool IsLegacyOpenAiAssistantRoute(string? providerCode, string? model)
+    {
+        var providerIsLegacy = string.Equals(providerCode, "openai", StringComparison.OrdinalIgnoreCase)
+                               || string.Equals(providerCode, "openai-compatible", StringComparison.OrdinalIgnoreCase);
+        var modelIsLegacy = !string.IsNullOrWhiteSpace(model)
+                            && (model.StartsWith("gpt-4", StringComparison.OrdinalIgnoreCase)
+                                || model.StartsWith("gpt-5", StringComparison.OrdinalIgnoreCase));
+        return providerIsLegacy || modelIsLegacy;
+    }
 }

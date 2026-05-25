@@ -86,6 +86,185 @@ public class BillingQuoteGuardTests : IClassFixture<TestWebApplicationFactory>
     }
 
     [Fact]
+    public async Task CheckoutSession_AllowsStandaloneAiAddOnWithoutParentPlan()
+    {
+        var userId = $"billing-standalone-ai-{Guid.NewGuid():N}";
+        using var client = await CreateClientForUserAsync(userId);
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var addOnCode = $"pkg_quick_check_{suffix}";
+        var addOnVersionId = $"addon-version-{suffix}-v1";
+
+        await using (var scope = _factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+            await db.Database.EnsureCreatedAsync();
+            var now = DateTimeOffset.UtcNow;
+            var addOn = new BillingAddOn
+            {
+                Id = $"addon-{suffix}",
+                Code = addOnCode,
+                Name = "Quick Check AI Pack",
+                Description = "Standalone AI credit package for quick marking checks.",
+                Price = 9m,
+                Currency = "AUD",
+                Interval = "one_time",
+                DurationDays = 30,
+                GrantCredits = 10,
+                AppliesToAllPlans = false,
+                RequiresEligibleParent = false,
+                IsRecurring = false,
+                IsStackable = true,
+                QuantityStep = 1,
+                CompatiblePlanCodesJson = "[]",
+                GrantEntitlementsJson = JsonSerializer.Serialize(new Dictionary<string, int>
+                {
+                    ["ai_credits"] = 10
+                }),
+                Status = BillingAddOnStatus.Active,
+                CreatedAt = now,
+                UpdatedAt = now
+            };
+            var version = CreateAddOnVersion(addOn, addOnVersionId, 1, now);
+            addOn.ActiveVersionId = version.Id;
+            addOn.LatestVersionId = version.Id;
+            db.BillingAddOns.Add(addOn);
+            db.BillingAddOnVersions.Add(version);
+            await db.SaveChangesAsync();
+        }
+
+        var quoteResponse = await client.GetAsync($"/v1/billing/quote?productType=addon_purchase&quantity=1&priceId={Uri.EscapeDataString(addOnCode)}");
+        var quoteBody = await quoteResponse.Content.ReadAsStringAsync();
+        Assert.True(quoteResponse.IsSuccessStatusCode, quoteBody);
+
+        var checkoutResponse = await client.PostAsJsonAsync("/v1/billing/checkout-sessions", new
+        {
+            productType = "addon_purchase",
+            quantity = 1,
+            priceId = addOnCode,
+            gateway = "paypal"
+        });
+        var checkoutBody = await checkoutResponse.Content.ReadAsStringAsync();
+        Assert.True(checkoutResponse.IsSuccessStatusCode, checkoutBody);
+
+        using var checkoutJson = JsonDocument.Parse(checkoutBody);
+        Assert.False(string.IsNullOrWhiteSpace(checkoutJson.RootElement.GetProperty("checkoutSessionId").GetString()));
+    }
+
+    [Fact]
+    public async Task PayPalRefundWebhook_ForStandaloneAiAddOn_ReversesAiCreditsOnce()
+    {
+        var userId = $"billing-ai-refund-{Guid.NewGuid():N}";
+        using var client = await CreateClientForUserAsync(userId);
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var addOnCode = $"pkg_quick_check_refund_{suffix}";
+        var addOnVersionId = $"addon-version-{suffix}-v1";
+
+        await using (var scope = _factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+            await db.Database.EnsureCreatedAsync();
+            var now = DateTimeOffset.UtcNow;
+            var addOn = new BillingAddOn
+            {
+                Id = $"addon-refund-{suffix}",
+                Code = addOnCode,
+                Name = "Quick Check AI Refund Pack",
+                Description = "Standalone AI credit package for refund webhook tests.",
+                Price = 9m,
+                Currency = "AUD",
+                Interval = "one_time",
+                DurationDays = 30,
+                GrantCredits = 10,
+                AppliesToAllPlans = false,
+                RequiresEligibleParent = false,
+                IsRecurring = false,
+                IsStackable = true,
+                QuantityStep = 1,
+                CompatiblePlanCodesJson = "[]",
+                GrantEntitlementsJson = JsonSerializer.Serialize(new Dictionary<string, int>
+                {
+                    ["ai_credits"] = 10
+                }),
+                Status = BillingAddOnStatus.Active,
+                CreatedAt = now,
+                UpdatedAt = now
+            };
+            var version = CreateAddOnVersion(addOn, addOnVersionId, 1, now);
+            addOn.ActiveVersionId = version.Id;
+            addOn.LatestVersionId = version.Id;
+            db.BillingAddOns.Add(addOn);
+            db.BillingAddOnVersions.Add(version);
+            await db.SaveChangesAsync();
+        }
+
+        var checkoutResponse = await client.PostAsJsonAsync("/v1/billing/checkout-sessions", new
+        {
+            productType = "addon_purchase",
+            quantity = 1,
+            priceId = addOnCode,
+            gateway = "paypal"
+        });
+        var checkoutBody = await checkoutResponse.Content.ReadAsStringAsync();
+        Assert.True(checkoutResponse.IsSuccessStatusCode, checkoutBody);
+
+        using var checkoutJson = JsonDocument.Parse(checkoutBody);
+        var checkoutSessionId = checkoutJson.RootElement.GetProperty("checkoutSessionId").GetString();
+        Assert.False(string.IsNullOrWhiteSpace(checkoutSessionId));
+
+        await CompletePayPalCheckoutAsync(client, checkoutSessionId!);
+
+        string quoteId;
+        await using (var scope = _factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+            var quote = await db.BillingQuotes.SingleAsync(x => x.CheckoutSessionId == checkoutSessionId);
+            quoteId = quote.Id;
+            var purchase = await db.AiCreditLedger.SingleAsync(x => x.UserId == userId
+                && x.Source == AiCreditSource.Purchase
+                && x.ReferenceId == $"addon:{quoteId}:{addOnCode}");
+            Assert.Equal(10, purchase.TokensDelta);
+            Assert.Equal(10, await db.Subscriptions.Where(x => x.UserId == userId).Select(x => x.AiCreditsRemaining).SingleAsync());
+        }
+
+        var refundPayload = JsonSerializer.Serialize(new
+        {
+            id = $"evt-refund-{suffix}",
+            event_type = "PAYMENT.CAPTURE.REFUNDED",
+            resource = new
+            {
+                id = $"refund-{suffix}",
+                amount = new { value = "9.00", currency_code = "AUD" },
+                supplementary_data = new
+                {
+                    related_ids = new { order_id = checkoutSessionId }
+                }
+            }
+        });
+
+        for (var attempt = 0; attempt < 2; attempt++)
+        {
+            using var response = await client.PostAsync(
+                "/v1/payment/webhooks/paypal",
+                new StringContent(refundPayload, Encoding.UTF8, "application/json"));
+            var body = await response.Content.ReadAsStringAsync();
+            Assert.True(response.IsSuccessStatusCode, body);
+        }
+
+        await using (var scope = _factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+            var transaction = await db.PaymentTransactions.SingleAsync(x => x.GatewayTransactionId == checkoutSessionId);
+            Assert.Equal("refunded", transaction.Status);
+            Assert.Equal(1, await db.Set<OrderRefund>().CountAsync(x => x.PaymentTransactionId == checkoutSessionId));
+            Assert.Equal(0, await db.Subscriptions.Where(x => x.UserId == userId).Select(x => x.AiCreditsRemaining).SingleAsync());
+            Assert.Equal(1, await db.AiCreditLedger.CountAsync(x => x.UserId == userId
+                && x.Source == AiCreditSource.AdminAdjustment
+                && x.ReferenceId == $"addon-refund:{quoteId}:{addOnCode}"
+                && x.TokensDelta == -10));
+        }
+    }
+
+    [Fact]
     public async Task BillingQuote_ReleasesExpiredCouponReservationAndPersistsResolvedAddOnCode()
     {
         var userId = $"billing-coupon-{Guid.NewGuid():N}";

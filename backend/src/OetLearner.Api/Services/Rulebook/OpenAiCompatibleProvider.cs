@@ -46,32 +46,24 @@ public sealed class OpenAiCompatibleProvider(
         var reasoningEffort = (_options.ReasoningEffort ?? "high").Trim().ToLowerInvariant();
         var sendReasoning = IsReasoningCapable(model) && !string.IsNullOrWhiteSpace(reasoningEffort);
 
-        object payload = sendReasoning
-            ? new
-            {
-                model,
-                messages = new object[]
-                {
-                    new { role = "system", content = request.SystemPrompt },
-                    new { role = "user", content = request.UserPrompt },
-                },
-                temperature = request.Temperature,
-                max_tokens = maxTokens,
-                reasoning_effort = reasoningEffort,
-                stream = false,
-            }
-            : new
-            {
-                model,
-                messages = new object[]
-                {
-                    new { role = "system", content = request.SystemPrompt },
-                    new { role = "user", content = request.UserPrompt },
-                },
-                temperature = request.Temperature,
-                max_tokens = maxTokens,
-                stream = false,
-            };
+        var payload = new Dictionary<string, object?>
+        {
+            ["model"] = model,
+            ["messages"] = AiProviderPayloadBuilder.BuildOpenAiMessages(request),
+            ["temperature"] = request.Temperature,
+            ["max_tokens"] = maxTokens,
+            ["stream"] = false,
+        };
+        if (sendReasoning)
+        {
+            payload["reasoning_effort"] = reasoningEffort;
+        }
+        var tools = AiProviderPayloadBuilder.BuildOpenAiTools(request.Tools);
+        if (tools.Count > 0)
+        {
+            payload["tools"] = tools;
+            if (!string.IsNullOrWhiteSpace(request.ToolChoice)) payload["tool_choice"] = request.ToolChoice;
+        }
 
         using var response = await client.PostAsync(
             "chat/completions",
@@ -84,9 +76,9 @@ public sealed class OpenAiCompatibleProvider(
 
         using var doc = JsonDocument.Parse(body);
         var root = doc.RootElement;
-        var choice = root.GetProperty("choices")[0];
-        var message = choice.GetProperty("message");
-        var text = ReadMessageContent(message);
+        AiProviderPayloadBuilder.ReadOpenAiChoiceMessage(root, "AI provider", out var choice, out var message);
+        var text = AiProviderPayloadBuilder.ReadOpenAiMessageContent(message);
+        var toolCalls = AiProviderPayloadBuilder.ReadOpenAiToolCalls(message);
 
         var usage = root.TryGetProperty("usage", out var usageEl)
             ? new AiUsage
@@ -96,34 +88,8 @@ public sealed class OpenAiCompatibleProvider(
             }
             : null;
 
-        return new AiProviderCompletion { Text = text, Usage = usage };
-    }
-
-    private static string ReadMessageContent(JsonElement message)
-    {
-        if (!message.TryGetProperty("content", out var content)) return "";
-
-        if (content.ValueKind == JsonValueKind.String) return content.GetString() ?? "";
-
-        if (content.ValueKind == JsonValueKind.Array)
-        {
-            var parts = new List<string>();
-            foreach (var item in content.EnumerateArray())
-            {
-                if (item.ValueKind == JsonValueKind.String)
-                {
-                    parts.Add(item.GetString() ?? "");
-                    continue;
-                }
-                if (item.ValueKind == JsonValueKind.Object && item.TryGetProperty("text", out var textEl))
-                {
-                    parts.Add(textEl.GetString() ?? "");
-                }
-            }
-            return string.Join("\n", parts.Where(p => !string.IsNullOrWhiteSpace(p)));
-        }
-
-        return content.ToString();
+        var finishReason = choice.TryGetProperty("finish_reason", out var finish) ? finish.GetString() : null;
+        return new AiProviderCompletion { Text = text, Usage = usage, ToolCalls = toolCalls, FinishReason = finishReason };
     }
 
     /// <summary>

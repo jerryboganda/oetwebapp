@@ -60,7 +60,7 @@ without a DB row (CI, fresh DBs, isolated unit tests).
 | `admin.content_generation` | Generic admin authoring tool | `anthropic` | Admin-only. |
 | `admin.grammar_draft` / `admin.pronunciation_draft` / `admin.vocabulary_draft` / `admin.conversation_draft` / `admin.listening_draft` / `admin.reading_draft` / `admin.writing_draft` | Per-subtest admin drafting tools | `anthropic` | Admin-only. |
 | `admin.listening.skill_tag` / `admin.listening.transcript_segment` | Reserved (manual today) | platform default | Reserved by PRD-LISTENING-V2.md §5.2/5.4. |
-| `ai_assistant.admin` / `ai_assistant.expert` / `ai_assistant.learner` | Multi-role AI Assistant | `openai` / `gpt-4o` | Seeded by `AiAssistantFeatureRouteSeeder`. |
+| `ai_assistant.admin` / `ai_assistant.expert` / `ai_assistant.learner` | Multi-role AI Assistant | Active text-chat provider default | Seeded by `AiAssistantFeatureRouteSeeder`. |
 
 ## Provider account env keys
 
