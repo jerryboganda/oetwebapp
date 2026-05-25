@@ -19,6 +19,7 @@ using OetLearner.Api.Endpoints;
 using OetLearner.Api.Hubs;
 using OetLearner.Api.Security;
 using OetLearner.Api.Services;
+using OetLearner.Api.Services.LiveClasses;
 using OetLearner.Api.Observability;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -567,6 +568,12 @@ builder.Services.AddAuthorization(options =>
     options.AddPolicy("AdminSystemAdmin", policy => policy
         .RequireAuthenticatedUser().RequireRole("admin")
         .RequireAssertion(ctx => HasAdminPermission(ctx, "system_admin")));
+    options.AddPolicy("AdminLearnerRead", policy => policy
+        .RequireAuthenticatedUser().RequireRole("admin")
+        .RequireAssertion(ctx => HasAdminPermission(ctx, "learner:read", "system_admin")));
+    options.AddPolicy("AdminLearnerWrite", policy => policy
+        .RequireAuthenticatedUser().RequireRole("admin")
+        .RequireAssertion(ctx => HasAdminPermission(ctx, "learner:write", "system_admin")));
 });
 
 builder.Services.AddScoped<LearnerService>();
@@ -1281,6 +1288,7 @@ builder.Services.AddHttpClient("ZoomApi");
 builder.Services.AddHttpClient("ZoomAuth");
 builder.Services.AddSingleton<ZoomMeetingService>();
 builder.Services.AddScoped<PrivateSpeakingService>();
+builder.Services.AddScoped<LiveClassService>();
 
 var app = builder.Build();
 
@@ -1697,6 +1705,7 @@ if (app.Configuration.GetValue<bool>("Features:SponsorPortalEnabled"))
 
 // ── Private Speaking Sessions ──
 app.MapPrivateSpeakingEndpoints();
+app.MapLiveClassEndpoints();
 app.MapSpeakingCalibrationEndpoints();
 
 // ── OET Speaking module (Phase 1+ role-play cards, sessions, compliance) ──

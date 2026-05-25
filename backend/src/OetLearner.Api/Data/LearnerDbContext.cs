@@ -165,6 +165,15 @@ public partial class LearnerDbContext(DbContextOptions<LearnerDbContext> options
     public DbSet<PrivateSpeakingBooking> PrivateSpeakingBookings => Set<PrivateSpeakingBooking>();
     public DbSet<PrivateSpeakingAuditLog> PrivateSpeakingAuditLogs => Set<PrivateSpeakingAuditLog>();
 
+    // Zoom-backed live classes
+    public DbSet<LiveClass> LiveClasses => Set<LiveClass>();
+    public DbSet<LiveClassSession> LiveClassSessions => Set<LiveClassSession>();
+    public DbSet<LiveClassEnrollment> LiveClassEnrollments => Set<LiveClassEnrollment>();
+    public DbSet<LiveClassAttendance> LiveClassAttendances => Set<LiveClassAttendance>();
+    public DbSet<LiveClassRecording> LiveClassRecordings => Set<LiveClassRecording>();
+    public DbSet<LiveClassWaitlistEntry> LiveClassWaitlistEntries => Set<LiveClassWaitlistEntry>();
+    public DbSet<LiveClassWebhookEvent> LiveClassWebhookEvents => Set<LiveClassWebhookEvent>();
+
     // Social / achievement entities
     public DbSet<Certificate> Certificates => Set<Certificate>();
     public DbSet<ReferralCode> ReferralCodes => Set<ReferralCode>();
@@ -884,6 +893,34 @@ public partial class LearnerDbContext(DbContextOptions<LearnerDbContext> options
         modelBuilder.Entity<PrivateSpeakingBooking>().HasIndex(x => x.StripeCheckoutSessionId);
         modelBuilder.Entity<PrivateSpeakingAuditLog>().HasIndex(x => x.BookingId);
         modelBuilder.Entity<PrivateSpeakingAuditLog>().HasIndex(x => x.CreatedAt);
+
+        // Live class indexes and relationships
+        modelBuilder.Entity<LiveClass>().Property(x => x.PriceUsd).HasPrecision(10, 2);
+        modelBuilder.Entity<LiveClass>()
+            .HasOne(x => x.TutorProfile)
+            .WithMany()
+            .HasForeignKey(x => x.TutorProfileId)
+            .OnDelete(DeleteBehavior.SetNull);
+        modelBuilder.Entity<LiveClassSession>()
+            .HasOne(x => x.LiveClass)
+            .WithMany(x => x.Sessions)
+            .HasForeignKey(x => x.LiveClassId)
+            .OnDelete(DeleteBehavior.Cascade);
+        modelBuilder.Entity<LiveClassSession>()
+            .HasOne(x => x.Recording)
+            .WithOne(x => x.ClassSession)
+            .HasForeignKey<LiveClassRecording>(x => x.ClassSessionId)
+            .OnDelete(DeleteBehavior.Cascade);
+        modelBuilder.Entity<LiveClassEnrollment>()
+            .HasOne(x => x.ClassSession)
+            .WithMany(x => x.Enrollments)
+            .HasForeignKey(x => x.ClassSessionId)
+            .OnDelete(DeleteBehavior.Cascade);
+        modelBuilder.Entity<LiveClassAttendance>()
+            .HasOne(x => x.ClassSession)
+            .WithMany()
+            .HasForeignKey(x => x.ClassSessionId)
+            .OnDelete(DeleteBehavior.Cascade);
 
         // Social indexes
         modelBuilder.Entity<Certificate>().HasIndex(x => x.UserId);

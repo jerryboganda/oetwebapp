@@ -108,7 +108,7 @@ public static class PrivateSpeakingEndpoints
             CancellationToken ct) =>
         {
             var bookings = await svc.GetLearnerBookingsAsync(http.UserId(), status, ct);
-            return Results.Ok(bookings.Select(MapBookingResponse));
+            return Results.Ok(bookings.Select(MapLearnerBookingResponse));
         });
 
         learner.MapGet("/bookings/{bookingId}", async (
@@ -121,7 +121,7 @@ public static class PrivateSpeakingEndpoints
             if (booking is null || booking.LearnerUserId != http.UserId())
                 return Results.NotFound(new { error = "NOT_FOUND" });
 
-            return Results.Ok(MapBookingDetailResponse(booking));
+            return Results.Ok(MapLearnerBookingDetailResponse(booking));
         });
 
         learner.MapPost("/bookings/{bookingId}/cancel", async (
@@ -188,7 +188,7 @@ public static class PrivateSpeakingEndpoints
             CancellationToken ct) =>
         {
             var bookings = await svc.GetExpertBookingsAsync(http.UserId(), status, ct);
-            return Results.Ok(bookings.Select(MapBookingResponse));
+            return Results.Ok(bookings.Select(MapExpertBookingResponse));
         });
 
         expert.MapGet("/sessions/{bookingId}", async (
@@ -205,7 +205,7 @@ public static class PrivateSpeakingEndpoints
             if (profile is null || booking.TutorProfileId != profile.Id)
                 return Results.NotFound(new { error = "NOT_FOUND" });
 
-            return Results.Ok(MapBookingDetailResponse(booking));
+            return Results.Ok(MapExpertBookingDetailResponse(booking));
         });
 
         expert.MapPost("/sessions/{bookingId}/cancel", async (
@@ -516,7 +516,7 @@ public static class PrivateSpeakingEndpoints
 
             return Results.Ok(new
             {
-                items = bookings.Select(MapBookingResponse),
+                items = bookings.Select(MapAdminBookingResponse),
                 total,
                 page,
                 pageSize,
@@ -530,7 +530,7 @@ public static class PrivateSpeakingEndpoints
             var booking = await svc.GetBookingAsync(bookingId, ct);
             return booking is null
                 ? Results.NotFound(new { error = "NOT_FOUND" })
-                : Results.Ok(MapBookingDetailResponse(booking));
+                : Results.Ok(MapAdminBookingDetailResponse(booking));
         }).WithAdminRead("AdminReviewOps");
 
         admin.MapPost("/bookings/{bookingId}/cancel", async (
@@ -590,7 +590,29 @@ public static class PrivateSpeakingEndpoints
 
     // ── Response Mappers ────────────────────────────────────────────────
 
-    private static object MapBookingResponse(PrivateSpeakingBooking b) => new
+    private static object MapLearnerBookingResponse(PrivateSpeakingBooking b) => MapBookingSummary(b);
+
+    private static object MapExpertBookingResponse(PrivateSpeakingBooking b) => MapBookingSummary(b);
+
+    private static object MapAdminBookingResponse(PrivateSpeakingBooking b) => new
+    {
+        b.Id,
+        b.LearnerUserId,
+        b.TutorProfileId,
+        tutorName = b.TutorProfile?.DisplayName,
+        b.Status,
+        b.SessionStartUtc,
+        b.DurationMinutes,
+        b.TutorTimezone,
+        b.LearnerTimezone,
+        b.PriceMinorUnits,
+        b.Currency,
+        b.PaymentStatus,
+        b.ZoomStatus,
+        b.CreatedAt
+    };
+
+    private static object MapBookingSummary(PrivateSpeakingBooking b) => new
     {
         b.Id,
         b.TutorProfileId,
@@ -607,7 +629,60 @@ public static class PrivateSpeakingEndpoints
         b.CreatedAt
     };
 
-    private static object MapBookingDetailResponse(PrivateSpeakingBooking b) => new
+    private static object MapLearnerBookingDetailResponse(PrivateSpeakingBooking b) => new
+    {
+        b.Id,
+        b.TutorProfileId,
+        tutorName = b.TutorProfile?.DisplayName,
+        b.Status,
+        b.SessionStartUtc,
+        b.DurationMinutes,
+        b.TutorTimezone,
+        b.LearnerTimezone,
+        b.PriceMinorUnits,
+        b.Currency,
+        b.PaymentStatus,
+        b.PaymentConfirmedAt,
+        b.ZoomStatus,
+        b.ZoomJoinUrl,
+        b.LearnerNotes,
+        b.LearnerRating,
+        b.LearnerFeedback,
+        b.CancelledBy,
+        b.CancellationReason,
+        b.CancelledAt,
+        b.CompletedAt,
+        b.CreatedAt
+    };
+
+    private static object MapExpertBookingDetailResponse(PrivateSpeakingBooking b) => new
+    {
+        b.Id,
+        b.TutorProfileId,
+        tutorName = b.TutorProfile?.DisplayName,
+        b.Status,
+        b.SessionStartUtc,
+        b.DurationMinutes,
+        b.TutorTimezone,
+        b.LearnerTimezone,
+        b.PriceMinorUnits,
+        b.Currency,
+        b.PaymentStatus,
+        b.PaymentConfirmedAt,
+        b.ZoomStatus,
+        b.ZoomJoinUrl,
+        b.ZoomStartUrl,
+        b.LearnerNotes,
+        b.LearnerRating,
+        b.LearnerFeedback,
+        b.CancelledBy,
+        b.CancellationReason,
+        b.CancelledAt,
+        b.CompletedAt,
+        b.CreatedAt
+    };
+
+    private static object MapAdminBookingDetailResponse(PrivateSpeakingBooking b) => new
     {
         b.Id,
         b.LearnerUserId,

@@ -44,6 +44,7 @@ import {
   UserCog,
   CalendarDays,
   TrendingUp,
+  Video,
 } from 'lucide-react';
 import { usePathname } from 'next/navigation';
 
@@ -90,6 +91,7 @@ const adminNavGroups: NavGroup[] = [
       { href: '/admin/review-ops', label: 'Review Ops', icon: <Activity className="w-5 h-5" />, matchPrefix: '/admin/review-ops' },
       { href: '/admin/escalations', label: 'Escalations', icon: <Scale className="w-5 h-5" />, matchPrefix: '/admin/escalations' },
       { href: '/admin/marketplace-review', label: 'Marketplace Review', icon: <Store className="w-5 h-5" />, matchPrefix: '/admin/marketplace-review' },
+      { href: '/admin/live-classes', label: 'Live Classes', icon: <Video className="w-5 h-5" />, matchPrefix: '/admin/live-classes' },
       { href: '/admin/private-speaking', label: 'Private Speaking', icon: <Mic className="w-5 h-5" />, matchPrefix: '/admin/private-speaking' },
     ],
   },
@@ -366,6 +368,10 @@ function getAdminPageTitle(pathname: string | null) {
 
   if (pathname.startsWith('/admin/marketplace-review')) {
     return 'Marketplace Review';
+  }
+
+  if (pathname.startsWith('/admin/live-classes')) {
+    return 'Live Classes';
   }
 
   if (pathname.startsWith('/admin/freeze')) {

@@ -16,6 +16,8 @@ export const AdminPermission = {
   BillingSubscriptionWrite: 'billing:subscription_write',
   UsersRead: 'users:read',
   UsersWrite: 'users:write',
+  LearnerRead: 'learner:read',
+  LearnerWrite: 'learner:write',
   ReviewOps: 'review_ops',
   QualityAnalytics: 'quality_analytics',
   AiConfig: 'ai_config',
@@ -104,6 +106,7 @@ export const sidebarPermissionMap: Record<string, string[]> = {
   '/admin/pending-review': [AdminPermission.ContentEditorReview, AdminPermission.ContentPublisherApproval, AdminPermission.ContentPublish],
   '/admin/webhooks': [AdminPermission.SystemAdmin],
   '/admin/escalations': [AdminPermission.SystemAdmin],
+  '/admin/live-classes': [AdminPermission.ReviewOps],
   '/admin/private-speaking': [AdminPermission.ReviewOps],
   '/admin/recalls/bulk-upload': [AdminPermission.ContentWrite],
   '/admin/settings': [AdminPermission.SystemAdmin],
@@ -114,6 +117,7 @@ export const sidebarPermissionMap: Record<string, string[]> = {
   // Study Planner admin surfaces
   '/admin/study-plan-templates': [AdminPermission.ContentRead],
   '/admin/learners': [AdminPermission.UsersRead],
+  '/admin/readiness': [AdminPermission.LearnerRead],
 };
 
 export const adminRoutePermissionMap: Record<string, string[]> = {
@@ -173,6 +177,7 @@ export const adminRoutePermissionMap: Record<string, string[]> = {
   '/admin/institutions': [AdminPermission.UsersRead],
   '/admin/launch-readiness': [AdminPermission.SystemAdmin],
   '/admin/marketplace-review': [AdminPermission.ContentPublish],
+  '/admin/live-classes': [AdminPermission.ReviewOps],
   '/admin/notifications': [AdminPermission.SystemAdmin],
   '/admin/onboarding/interlocutor': [AdminPermission.ReviewOps],
   '/admin/pending-review': [

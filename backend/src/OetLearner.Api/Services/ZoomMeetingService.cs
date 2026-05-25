@@ -1,4 +1,5 @@
 using System.Net.Http.Headers;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -23,6 +24,8 @@ public sealed partial class ZoomMeetingService(
     private readonly SemaphoreSlim _tokenLock = new(1, 1);
 
     // ── Public API ──────────────────────────────────────────────────────
+
+    public string? MeetingSdkKey => _opts.MeetingSdkKey;
 
     public async Task<ZoomMeetingResult> CreateMeetingAsync(
         string topic, DateTimeOffset startTime, int durationMinutes,
@@ -120,6 +123,100 @@ public sealed partial class ZoomMeetingService(
         }
     }
 
+    public string? GenerateMeetingSdkSignature(string meetingNumber, int role, DateTimeOffset expiresAt)
+    {
+        if (string.IsNullOrWhiteSpace(_opts.MeetingSdkKey) || string.IsNullOrWhiteSpace(_opts.MeetingSdkSecret))
+        {
+            return null;
+        }
+
+        var issuedAt = DateTimeOffset.UtcNow.AddSeconds(-30).ToUnixTimeSeconds();
+        var expires = expiresAt.ToUnixTimeSeconds();
+        var header = new { alg = "HS256", typ = "JWT" };
+        var payload = new
+        {
+            sdkKey = _opts.MeetingSdkKey,
+            mn = meetingNumber,
+            role,
+            iat = issuedAt,
+            exp = expires,
+            appKey = _opts.MeetingSdkKey,
+            tokenExp = expires
+        };
+
+        var headerEncoded = Base64UrlEncode(JsonSerializer.SerializeToUtf8Bytes(header));
+        var payloadEncoded = Base64UrlEncode(JsonSerializer.SerializeToUtf8Bytes(payload));
+        var signingInput = $"{headerEncoded}.{payloadEncoded}";
+        var signatureBytes = HMACSHA256.HashData(
+            Encoding.UTF8.GetBytes(_opts.MeetingSdkSecret),
+            Encoding.UTF8.GetBytes(signingInput));
+        return $"{signingInput}.{Base64UrlEncode(signatureBytes)}";
+    }
+
+    public bool VerifyWebhookSignature(string rawBody, IHeaderDictionary headers)
+    {
+        if (string.IsNullOrWhiteSpace(_opts.WebhookSecretToken))
+        {
+            return _opts.AllowSandboxFallback;
+        }
+
+        if (!headers.TryGetValue("x-zm-request-timestamp", out var timestampValues)
+            || !headers.TryGetValue("x-zm-signature", out var signatureValues))
+        {
+            return false;
+        }
+
+        var timestamp = timestampValues.ToString();
+        var providedSignature = signatureValues.ToString();
+        if (!long.TryParse(timestamp, out var unixTimestamp))
+        {
+            return false;
+        }
+
+        var requestTime = DateTimeOffset.FromUnixTimeSeconds(unixTimestamp);
+        if (DateTimeOffset.UtcNow - requestTime > TimeSpan.FromMinutes(5))
+        {
+            return false;
+        }
+
+        var message = $"v0:{timestamp}:{rawBody}";
+        var digest = HMACSHA256.HashData(
+            Encoding.UTF8.GetBytes(_opts.WebhookSecretToken),
+            Encoding.UTF8.GetBytes(message));
+        var expectedSignature = "v0=" + Convert.ToHexString(digest).ToLowerInvariant();
+        return CryptographicOperations.FixedTimeEquals(
+            Encoding.UTF8.GetBytes(expectedSignature),
+            Encoding.UTF8.GetBytes(providedSignature));
+    }
+
+    public object? TryBuildWebhookUrlValidationResponse(string rawBody)
+    {
+        if (string.IsNullOrWhiteSpace(_opts.WebhookSecretToken))
+        {
+            return null;
+        }
+
+        using var document = JsonDocument.Parse(rawBody);
+        var root = document.RootElement;
+        if (!root.TryGetProperty("event", out var eventProperty)
+            || !string.Equals(eventProperty.GetString(), "endpoint.url_validation", StringComparison.OrdinalIgnoreCase)
+            || !root.TryGetProperty("payload", out var payload)
+            || !payload.TryGetProperty("plainToken", out var tokenProperty))
+        {
+            return null;
+        }
+
+        var plainToken = tokenProperty.GetString() ?? string.Empty;
+        var digest = HMACSHA256.HashData(
+            Encoding.UTF8.GetBytes(_opts.WebhookSecretToken),
+            Encoding.UTF8.GetBytes(plainToken));
+        return new
+        {
+            plainToken,
+            encryptedToken = Convert.ToHexString(digest).ToLowerInvariant()
+        };
+    }
+
     // ── Token Acquisition ───────────────────────────────────────────────
 
     private async Task<string> GetAccessTokenAsync(CancellationToken ct)
@@ -194,6 +291,12 @@ public sealed partial class ZoomMeetingService(
 
         return value;
     }
+
+    private static string Base64UrlEncode(byte[] value)
+        => Convert.ToBase64String(value)
+            .TrimEnd('=')
+            .Replace('+', '-')
+            .Replace('/', '_');
 
     [GeneratedRegex("(?i)(\"(?:access_token|refresh_token|token|api_key|client_secret|secret|password)\"\\s*:\\s*)\"[^\"]*\"")]
     private static partial Regex SensitiveJsonValueRegex();

@@ -10271,6 +10271,204 @@ export async function fetchAdminPrivateSpeakingAuditLogs(params?: { bookingId?: 
   return apiRequest(`/v1/admin/private-speaking/audit-logs?${qs}`);
 }
 
+// ── Zoom Live Classes ───────────────────────────────────
+
+export interface LiveClassSessionSummary {
+  id: string;
+  scheduledStartAt: string;
+  scheduledEndAt: string;
+  capacity: number;
+  enrolledCount: number;
+  status: string;
+  isEnrolled: boolean;
+  isJoinAvailable: boolean;
+  creditCost: number;
+}
+
+export interface LiveClassListItem {
+  id: string;
+  slug: string;
+  title: string;
+  titleAr?: string | null;
+  description: string;
+  descriptionAr?: string | null;
+  type: string;
+  professionTrack: string;
+  level: string;
+  tutorProfileId?: string | null;
+  tutorDisplayName?: string | null;
+  creditCost: number;
+  status: string;
+  coverImageUrl?: string | null;
+  sessions: LiveClassSessionSummary[];
+}
+
+export interface LiveClassDetail extends LiveClassListItem {
+  defaultDurationMinutes: number;
+  defaultCapacity: number;
+  tags: string[];
+}
+
+export interface LiveClassEnrollment {
+  id: string;
+  classSessionId: string;
+  userId: string;
+  enrolledAt: string;
+  creditsCharged: number;
+  status: string;
+  cancelledAt?: string | null;
+  cancellationReason?: string | null;
+}
+
+export interface LiveClassJoinToken {
+  provider: 'zoom';
+  sdkKey?: string | null;
+  signature?: string | null;
+  meetingNumber: string;
+  userName: string;
+  userEmail?: string | null;
+  role: number;
+  passWord?: string | null;
+  zak?: string | null;
+  joinUrl?: string | null;
+  expiresAt: string;
+}
+
+export interface LiveClassRecording {
+  id: string;
+  classSessionId: string;
+  status: string;
+  videoUrl?: string | null;
+  transcriptUrl?: string | null;
+  transcriptText?: string | null;
+  aiSummary?: string | null;
+  aiSummaryAr?: string | null;
+  chapters: Array<{ startSeconds: number; title: string; summary: string }>;
+  actionItems: string[];
+  expiresAt?: string | null;
+}
+
+export interface AdminLiveClassUpsertPayload {
+  title: string;
+  titleAr?: string | null;
+  description: string;
+  descriptionAr?: string | null;
+  type: string;
+  professionTrack: string;
+  level: string;
+  tutorProfileId?: string | null;
+  scheduledStartAt: string;
+  durationMinutes: number;
+  capacity: number;
+  creditCost: number;
+  coverImageUrl?: string | null;
+  tags?: string[];
+  autoPublish?: boolean;
+}
+
+export interface LiveClassQueryParams {
+  professionTrack?: string;
+  type?: string;
+  tutorProfileId?: string;
+  from?: string;
+  to?: string;
+  page?: number;
+  pageSize?: number;
+}
+
+function liveClassQuery(params?: LiveClassQueryParams) {
+  const qs = new URLSearchParams();
+  if (params?.professionTrack) qs.set('professionTrack', params.professionTrack);
+  if (params?.type) qs.set('type', params.type);
+  if (params?.tutorProfileId) qs.set('tutorProfileId', params.tutorProfileId);
+  if (params?.from) qs.set('from', params.from);
+  if (params?.to) qs.set('to', params.to);
+  qs.set('page', String(params?.page ?? 1));
+  qs.set('pageSize', String(params?.pageSize ?? 20));
+  return qs.toString();
+}
+
+export async function fetchLiveClasses(params?: LiveClassQueryParams): Promise<LiveClassListItem[]> {
+  return apiRequest<LiveClassListItem[]>(`/v1/classes?${liveClassQuery(params)}`);
+}
+
+export async function fetchLiveClassDetail(idOrSlug: string): Promise<LiveClassDetail> {
+  return apiRequest<LiveClassDetail>(`/v1/classes/${encodeURIComponent(idOrSlug)}`);
+}
+
+export async function enrollLiveClassSession(sessionId: string, idempotencyKey?: string): Promise<LiveClassEnrollment> {
+  return apiRequest<LiveClassEnrollment>(`/v1/classes/sessions/${encodeURIComponent(sessionId)}/enroll`, {
+    method: 'POST',
+    body: JSON.stringify({ idempotencyKey }),
+  });
+}
+
+export async function cancelLiveClassEnrollment(sessionId: string, reason?: string): Promise<LiveClassEnrollment> {
+  return apiRequest<LiveClassEnrollment>(`/v1/classes/sessions/${encodeURIComponent(sessionId)}/cancel-enrollment`, {
+    method: 'POST',
+    body: JSON.stringify({ reason }),
+  });
+}
+
+export async function fetchLiveClassJoinToken(sessionId: string): Promise<LiveClassJoinToken> {
+  return apiRequest<LiveClassJoinToken>(`/v1/classes/sessions/${encodeURIComponent(sessionId)}/join-token`, {
+    method: 'POST',
+  });
+}
+
+export async function fetchMyUpcomingLiveClasses(): Promise<LiveClassListItem[]> {
+  return apiRequest<LiveClassListItem[]>('/v1/classes/me/upcoming');
+}
+
+export async function fetchMyPastLiveClasses(): Promise<LiveClassListItem[]> {
+  return apiRequest<LiveClassListItem[]>('/v1/classes/me/past');
+}
+
+export async function fetchLiveClassRecording(sessionId: string): Promise<LiveClassRecording> {
+  return apiRequest<LiveClassRecording>(`/v1/classes/sessions/${encodeURIComponent(sessionId)}/recording`);
+}
+
+export async function fetchExpertLiveClassJoinToken(sessionId: string): Promise<LiveClassJoinToken> {
+  return apiRequest<LiveClassJoinToken>(`/v1/expert/live-classes/sessions/${encodeURIComponent(sessionId)}/join-token`, {
+    method: 'POST',
+  });
+}
+
+export async function fetchAdminLiveClasses(params?: LiveClassQueryParams): Promise<LiveClassListItem[]> {
+  return apiRequest<LiveClassListItem[]>(`/v1/admin/live-classes?${liveClassQuery({ ...params, pageSize: params?.pageSize ?? 50 })}`);
+}
+
+export async function createAdminLiveClass(payload: AdminLiveClassUpsertPayload): Promise<LiveClassDetail> {
+  return apiRequest<LiveClassDetail>('/v1/admin/live-classes', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function publishAdminLiveClass(liveClassId: string): Promise<LiveClassDetail> {
+  return apiRequest<LiveClassDetail>(`/v1/admin/live-classes/${encodeURIComponent(liveClassId)}/publish`, {
+    method: 'POST',
+  });
+}
+
+export async function updateAdminLiveClassSession(sessionId: string, payload: { scheduledStartAt?: string; durationMinutes?: number; capacity?: number; cancellationReason?: string }): Promise<LiveClassDetail> {
+  return apiRequest<LiveClassDetail>(`/v1/admin/live-classes/sessions/${encodeURIComponent(sessionId)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function cancelAdminLiveClassSession(sessionId: string, reason?: string): Promise<void> {
+  await apiRequest(`/v1/admin/live-classes/sessions/${encodeURIComponent(sessionId)}/cancel`, {
+    method: 'POST',
+    body: JSON.stringify({ reason }),
+  });
+}
+
+export async function fetchAdminLiveClassAnalytics() {
+  return apiRequest('/v1/admin/live-classes/analytics');
+}
+
 // ── Orphan Endpoint Wiring ────────────────────────────
 
 export async function fetchStudyPlanDrift() {

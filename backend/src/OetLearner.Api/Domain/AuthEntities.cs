@@ -197,6 +197,8 @@ public static class AdminPermissions
     /// (create, change-plan, extend, cancel, reactivate, status, wallet spend) only.</summary>
     public const string BillingSubscriptionWrite = "billing:subscription_write";
 
+    public const string LearnerRead = "learner:read";
+    public const string LearnerWrite = "learner:write";
     public const string UsersRead = "users:read";
     public const string UsersWrite = "users:write";
     public const string ReviewOps = "review_ops";
@@ -214,6 +216,7 @@ public static class AdminPermissions
         ContentEditorReview, ContentPublisherApproval,
         BillingRead, BillingWrite,
         BillingRefundWrite, BillingCatalogWrite, BillingSubscriptionWrite,
+        LearnerRead, LearnerWrite,
         UsersRead, UsersWrite,
         ReviewOps, QualityAnalytics, AiConfig,
         FeatureFlags, AuditLogs, SystemAdmin,
