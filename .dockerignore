@@ -45,6 +45,7 @@ copilot-worktrees
 tools
 ops
 scripts
+!scripts/backup
 tests
 docs
 playwright
