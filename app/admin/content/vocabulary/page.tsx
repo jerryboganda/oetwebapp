@@ -120,17 +120,30 @@ export default function AdminVocabularyPage() {
 
     setBulkDeleting(true);
     try {
-      const result = await deleteAdminVocabularyItems(itemIds);
+      // Backend limits to 200 per request — chunk large selections
+      const CHUNK_SIZE = 200;
+      let totalDeleted = 0;
+      let totalArchived = 0;
+      let totalFailed = 0;
+
+      for (let i = 0; i < itemIds.length; i += CHUNK_SIZE) {
+        const chunk = itemIds.slice(i, i + CHUNK_SIZE);
+        const result = await deleteAdminVocabularyItems(chunk);
+        totalDeleted += result.deleted;
+        totalArchived += result.archived;
+        totalFailed += result.failed;
+      }
+
       const removed = new Set(itemIds);
       setRows(prev => prev.filter(row => !removed.has(row.id)));
-      setTotal(prev => Math.max(0, prev - result.deleted - result.archived));
+      setTotal(prev => Math.max(0, prev - totalDeleted - totalArchived));
       setSelectedKeys(new Set());
       setConfirmBulkDelete(false);
-      const archivedMessage = result.archived > 0 ? ` ${result.archived} archived because learners reference them.` : '';
-      const failedMessage = result.failed > 0 ? ` ${result.failed} failed.` : '';
+      const archivedMessage = totalArchived > 0 ? ` ${totalArchived} archived because learners reference them.` : '';
+      const failedMessage = totalFailed > 0 ? ` ${totalFailed} failed.` : '';
       setToast({
-        variant: result.failed > 0 ? 'error' : 'success',
-        message: `Bulk delete complete: ${result.deleted} deleted.${archivedMessage}${failedMessage}`,
+        variant: totalFailed > 0 ? 'error' : 'success',
+        message: `Bulk delete complete: ${totalDeleted} deleted.${archivedMessage}${failedMessage}`,
       });
     } catch {
       setToast({ variant: 'error', message: 'Failed to delete selected vocabulary terms.' });
