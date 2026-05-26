@@ -78,6 +78,15 @@ public sealed class BrevoEmailSender(
             request.HtmlContent = message.HtmlBody;
         }
 
+        if (message.Attachments is { Count: > 0 })
+        {
+            request.Attachment = message.Attachments
+                .Select(attachment => new BrevoAttachment(
+                    Name: attachment.FileName,
+                    Content: Convert.ToBase64String(attachment.Content)))
+                .ToArray();
+        }
+
         using var outbound = new HttpRequestMessage(HttpMethod.Post, "/smtp/email")
         {
             Content = JsonContent.Create(request)
@@ -117,9 +126,12 @@ public sealed class BrevoEmailSender(
         public string? HtmlContent { get; set; }
         public int? TemplateId { get; set; }
         public Dictionary<string, object?>? Params { get; set; }
+        public IReadOnlyCollection<BrevoAttachment>? Attachment { get; set; }
     }
 
     private sealed record BrevoSender(string Email, string Name);
 
     private sealed record BrevoRecipient(string Email);
+
+    private sealed record BrevoAttachment(string Name, string Content);
 }

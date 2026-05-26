@@ -140,6 +140,48 @@ public static class AiFeatureRouteDefaults
             FallbackModel: null,
             PromptCachingEnabled: false,
             Description: "Gemini native-audio pronunciation linguistic scoring."),
+
+        // ── Live Class Recording AI Pipeline (Wave A2) ─────────────
+        new SpeakingAiRouteDefault(
+            FeatureCode: AiFeatureCodes.ClassRecordingTranscribe,
+            PrimaryProviderCode: "openai",
+            PrimaryModel: "whisper-1",
+            FallbackProviderCode: null,
+            FallbackModel: null,
+            PromptCachingEnabled: false,
+            Description: "Class recording audio-to-text (Whisper Large-v3)."),
+        new SpeakingAiRouteDefault(
+            FeatureCode: AiFeatureCodes.ClassRecordingSummarize,
+            PrimaryProviderCode: "anthropic",
+            PrimaryModel: "claude-sonnet-4-6",
+            FallbackProviderCode: "openai",
+            FallbackModel: "gpt-4o",
+            PromptCachingEnabled: true,
+            Description: "Class recording AI summary, chapters, action items, keyTopics."),
+        new SpeakingAiRouteDefault(
+            FeatureCode: AiFeatureCodes.ClassRecordingTranslate,
+            PrimaryProviderCode: "anthropic",
+            PrimaryModel: "claude-sonnet-4-6",
+            FallbackProviderCode: "openai",
+            FallbackModel: "gpt-4o",
+            PromptCachingEnabled: true,
+            Description: "Class recording summary EN→AR translation."),
+        new SpeakingAiRouteDefault(
+            FeatureCode: AiFeatureCodes.ClassAssistantQna,
+            PrimaryProviderCode: "anthropic",
+            PrimaryModel: "claude-haiku-4-5",
+            FallbackProviderCode: "openai",
+            FallbackModel: "gpt-4o-mini",
+            PromptCachingEnabled: true,
+            Description: "'Ask AI about this class' transcript RAG Q&A."),
+        new SpeakingAiRouteDefault(
+            FeatureCode: AiFeatureCodes.TutorRecommendation,
+            PrimaryProviderCode: "anthropic",
+            PrimaryModel: "claude-haiku-4-5",
+            FallbackProviderCode: "openai",
+            FallbackModel: "gpt-4o-mini",
+            PromptCachingEnabled: true,
+            Description: "Post-attendance next-class recommendation."),
     };
 }
 
@@ -204,6 +246,12 @@ public sealed class AiFeatureRouteResolver(LearnerDbContext db) : IAiFeatureRout
         SpeakingAiFeatureCodes.SpeakingScoreV2,
         SpeakingAiFeatureCodes.SpeakingPatientTurnV1,
         SpeakingAiFeatureCodes.CardDraftV1,
+        // Live Class Recording AI Pipeline (Wave A2).
+        AiFeatureCodes.ClassRecordingTranscribe,
+        AiFeatureCodes.ClassRecordingSummarize,
+        AiFeatureCodes.ClassRecordingTranslate,
+        AiFeatureCodes.ClassAssistantQna,
+        AiFeatureCodes.TutorRecommendation,
     };
 
     /// <summary>Subset of <see cref="KnownFeatureCodes"/> the bulk-route

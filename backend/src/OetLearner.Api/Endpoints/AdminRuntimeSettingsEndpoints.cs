@@ -14,7 +14,7 @@ namespace OetLearner.Api.Endpoints;
 
 /// <summary>
 /// Admin endpoints for managing runtime infrastructure settings (Email/Brevo,
-/// Stripe, Sentry, Backup S3, OAuth providers, Push). These map onto the
+/// Stripe, Sentry, Backup S3, OAuth providers, Push, Zoom). These map onto the
 /// <see cref="RuntimeSettingsRow"/> singleton (Id = "default") and let
 /// platform admins rotate secrets without editing <c>.env.production</c>.
 ///
@@ -49,8 +49,8 @@ public static class AdminRuntimeSettingsEndpoints
                 IRuntimeSettingsProvider provider,
                 CancellationToken ct) =>
             {
-                var row = await provider.GetRawAsync(ct);
-                return Results.Ok(BuildResponse(row));
+                var settings = await provider.GetAsync(ct);
+                return Results.Ok(BuildResponse(settings));
             })
             .WithAdminRead("AdminSystemAdmin");
 
@@ -81,6 +81,8 @@ public static class AdminRuntimeSettingsEndpoints
                     ApplyOAuth(row, request.OAuth, provider, changedKeys);
                     ApplyPush(row, request.Push, provider, changedKeys);
                     ApplyUploadScanner(row, request.UploadScanner, env, scannerOptions.Value, changedKeys);
+                    ApplyZoom(row, request.Zoom, provider, env, changedKeys);
+                    ApplyStripe(row, request.Stripe, provider, changedKeys);
                 }
                 catch (RuntimeSettingsValidationException ex)
                 {
@@ -109,7 +111,7 @@ public static class AdminRuntimeSettingsEndpoints
                 await db.SaveChangesAsync(ct);
                 provider.Invalidate();
 
-                return Results.Ok(BuildResponse(row));
+                return Results.Ok(BuildResponse(await provider.GetAsync(ct)));
             })
             .WithAdminWrite("AdminSystemAdmin");
 
@@ -156,6 +158,110 @@ public static class AdminRuntimeSettingsEndpoints
         => httpContext.User.FindFirstValue(ClaimTypes.Name) ?? "Admin";
 
     // ── Response shaping ───────────────────────────────────────────
+
+    private static object BuildResponse(EffectiveSettings settings)
+        => new
+        {
+            email = new
+            {
+                brevoApiKey = MaskPlainSecret(settings.Email.BrevoApiKey),
+                brevoEmailVerificationTemplateId = settings.Email.BrevoEmailVerificationTemplateId,
+                brevoPasswordResetTemplateId = settings.Email.BrevoPasswordResetTemplateId,
+                smtpHost = settings.Email.SmtpHost,
+                smtpPort = settings.Email.SmtpPort,
+                smtpUsername = settings.Email.SmtpUsername,
+                smtpPassword = MaskPlainSecret(settings.Email.SmtpPassword),
+                smtpFromAddress = settings.Email.SmtpFromAddress,
+                smtpFromName = settings.Email.SmtpFromName,
+            },
+            billing = new
+            {
+                stripeSecretKey = MaskPlainSecret(settings.Billing.StripeSecretKey),
+                stripePublishableKey = settings.Billing.StripePublishableKey,
+                stripeWebhookSecret = MaskPlainSecret(settings.Billing.StripeWebhookSecret),
+                stripeSuccessUrl = settings.Billing.StripeSuccessUrl,
+                stripeCancelUrl = settings.Billing.StripeCancelUrl,
+                paypalClientId = settings.Billing.PayPalClientId,
+                paypalClientSecret = MaskPlainSecret(settings.Billing.PayPalClientSecret),
+                paypalWebhookId = MaskPlainSecret(settings.Billing.PayPalWebhookId),
+                paypalSuccessUrl = settings.Billing.PayPalSuccessUrl,
+                paypalCancelUrl = settings.Billing.PayPalCancelUrl,
+            },
+            sentry = new
+            {
+                dsn = settings.Sentry.Dsn,
+                environment = settings.Sentry.Environment,
+                sampleRate = settings.Sentry.SampleRate,
+            },
+            backup = new
+            {
+                s3Url = settings.Backup.S3Url,
+                awsAccessKeyId = settings.Backup.AwsAccessKeyId,
+                awsSecretAccessKey = MaskPlainSecret(settings.Backup.AwsSecretAccessKey),
+                gpgPassphrase = MaskPlainSecret(settings.Backup.GpgPassphrase),
+                alertWebhook = settings.Backup.AlertWebhook,
+            },
+            oauth = new
+            {
+                googleClientId = settings.OAuth.GoogleClientId,
+                googleClientSecret = MaskPlainSecret(settings.OAuth.GoogleClientSecret),
+                appleClientId = settings.OAuth.AppleClientId,
+                appleTeamId = settings.OAuth.AppleTeamId,
+                appleKeyId = settings.OAuth.AppleKeyId,
+                applePrivateKey = MaskPlainSecret(settings.OAuth.ApplePrivateKey),
+                facebookAppId = settings.OAuth.FacebookAppId,
+                facebookAppSecret = MaskPlainSecret(settings.OAuth.FacebookAppSecret),
+            },
+            push = new
+            {
+                apnsKeyId = settings.Push.ApnsKeyId,
+                apnsTeamId = settings.Push.ApnsTeamId,
+                apnsBundleId = settings.Push.ApnsBundleId,
+                apnsAuthKey = MaskPlainSecret(settings.Push.ApnsAuthKey),
+                fcmServerKey = MaskPlainSecret(settings.Push.FcmServerKey),
+                fcmProjectId = settings.Push.FcmProjectId,
+                vapidSubject = settings.Push.VapidSubject,
+                vapidPublicKey = settings.Push.VapidPublicKey,
+                vapidPrivateKey = MaskPlainSecret(settings.Push.VapidPrivateKey),
+            },
+            uploadScanner = new
+            {
+                provider = settings.UploadScanner.Provider,
+                host = settings.UploadScanner.Host,
+                port = settings.UploadScanner.Port,
+                timeoutSeconds = settings.UploadScanner.TimeoutSeconds,
+                failClosedOnError = settings.UploadScanner.FailClosedOnError,
+            },
+            zoom = new
+            {
+                enabled = settings.Zoom.Enabled,
+                accountId = settings.Zoom.AccountId,
+                clientId = settings.Zoom.ClientId,
+                clientSecret = MaskPlainSecret(settings.Zoom.ClientSecret),
+                apiBaseUrl = settings.Zoom.ApiBaseUrl,
+                tokenUrl = settings.Zoom.TokenUrl,
+                hostUserId = settings.Zoom.HostUserId,
+                meetingSdkKey = settings.Zoom.MeetingSdkKey,
+                meetingSdkSecret = MaskPlainSecret(settings.Zoom.MeetingSdkSecret),
+                webhookSecretToken = MaskPlainSecret(settings.Zoom.WebhookSecretToken),
+                webhookRetryToleranceSeconds = settings.Zoom.WebhookRetryToleranceSeconds,
+                allowSandboxFallback = settings.Zoom.AllowSandboxFallback,
+            },
+            stripe = new
+            {
+                secretKey = MaskPlainSecret(settings.Stripe.SecretKey),
+                publishableKey = settings.Stripe.PublishableKey,
+                webhookSecret = MaskPlainSecret(settings.Stripe.WebhookSecret),
+                taxAutomaticEnabled = settings.Stripe.TaxAutomaticEnabled,
+                taxRegistrations = settings.Stripe.TaxRegistrations,
+                customerPortalConfigurationId = settings.Stripe.CustomerPortalConfigurationId,
+                radarHighRiskCountryAllowReview = settings.Stripe.RadarHighRiskCountryAllowReview,
+                radarBlockEmailDomainsCsv = settings.Stripe.RadarBlockEmailDomainsCsv,
+            },
+            updatedBy = settings.UpdatedByUserName,
+            updatedByUserId = settings.UpdatedByUserId,
+            updatedAt = settings.UpdatedAt,
+        };
 
     private static object BuildResponse(RuntimeSettingsRow r)
         => new
@@ -230,6 +336,34 @@ public static class AdminRuntimeSettingsEndpoints
                 timeoutSeconds = r.UploadScannerTimeoutSeconds,
                 failClosedOnError = r.UploadScannerFailClosedOnError,
             },
+            zoom = new
+            {
+                enabled = r.ZoomEnabled,
+                accountId = r.ZoomAccountId,
+                clientId = r.ZoomClientId,
+                clientSecret = MaskSecret(r.ZoomClientSecretEncrypted),
+                apiBaseUrl = r.ZoomApiBaseUrl,
+                tokenUrl = r.ZoomTokenUrl,
+                hostUserId = r.ZoomHostUserId,
+                meetingSdkKey = r.ZoomMeetingSdkKey,
+                meetingSdkSecret = MaskSecret(r.ZoomMeetingSdkSecretEncrypted),
+                webhookSecretToken = MaskSecret(r.ZoomWebhookSecretTokenEncrypted),
+                webhookRetryToleranceSeconds = r.ZoomWebhookRetryToleranceSeconds,
+                allowSandboxFallback = r.ZoomAllowSandboxFallback,
+            },
+            stripe = new
+            {
+                secretKey = MaskSecret(r.StripeSecretKeyEncrypted),
+                publishableKey = r.StripePublishableKey,
+                webhookSecret = MaskSecret(r.StripeWebhookSecretEncrypted),
+                taxAutomaticEnabled = r.StripeTaxAutomaticEnabled,
+                taxRegistrations = string.IsNullOrWhiteSpace(r.StripeTaxRegistrationsCsv)
+                    ? Array.Empty<string>()
+                    : r.StripeTaxRegistrationsCsv.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries),
+                customerPortalConfigurationId = r.StripeCustomerPortalConfigurationId,
+                radarHighRiskCountryAllowReview = r.StripeRadarHighRiskCountryAllowReview,
+                radarBlockEmailDomainsCsv = r.StripeRadarBlockEmailDomainsCsv,
+            },
             updatedBy = r.UpdatedByUserName,
             updatedByUserId = r.UpdatedByUserId,
             updatedAt = r.UpdatedAt == default ? (DateTimeOffset?)null : r.UpdatedAt,
@@ -237,6 +371,9 @@ public static class AdminRuntimeSettingsEndpoints
 
     private static string MaskSecret(string? cipher)
         => string.IsNullOrEmpty(cipher) ? string.Empty : SecretMask;
+
+    private static string MaskPlainSecret(string? value)
+        => string.IsNullOrWhiteSpace(value) ? string.Empty : SecretMask;
 
     // ── Per-section appliers ───────────────────────────────────────
 
@@ -381,6 +518,85 @@ public static class AdminRuntimeSettingsEndpoints
         }
     }
 
+    private static void ApplyStripe(RuntimeSettingsRow row, RuntimeSettingsStripeUpdate? d,
+        IRuntimeSettingsProvider p, List<string> changed)
+    {
+        if (d is null) return;
+
+        // Secret key + webhook secret share storage with the legacy Billing
+        // section: same column, same encryption. Either section is allowed to
+        // write them; the PUT contract documents the Stripe section as
+        // canonical going forward.
+        if (TrySetSecret(d.SecretKey, p, v => row.StripeSecretKeyEncrypted = v, "stripe.secretKey", changed)) { }
+        if (TrySetPlain(d.PublishableKey, v => row.StripePublishableKey = v, "stripe.publishableKey", changed)) { }
+        if (TrySetSecret(d.WebhookSecret, p, v => row.StripeWebhookSecretEncrypted = v, "stripe.webhookSecret", changed)) { }
+        if (TrySetNullableBool(d.TaxAutomaticEnabled, v => row.StripeTaxAutomaticEnabled = v, "stripe.taxAutomaticEnabled", changed)) { }
+
+        if (d.TaxRegistrations is not null)
+        {
+            // Trim, dedupe, upper-case. Empty list clears the override; null
+            // (omitted) leaves it unchanged.
+            var cleaned = d.TaxRegistrations
+                .Where(static r => !string.IsNullOrWhiteSpace(r))
+                .Select(static r => r.Trim().ToUpperInvariant())
+                .Distinct()
+                .ToArray();
+            row.StripeTaxRegistrationsCsv = cleaned.Length == 0 ? null : string.Join(",", cleaned);
+            changed.Add("stripe.taxRegistrations");
+        }
+
+        if (TrySetPlain(d.CustomerPortalConfigurationId, v => row.StripeCustomerPortalConfigurationId = v,
+            "stripe.customerPortalConfigurationId", changed)) { }
+        if (TrySetNullableBool(d.RadarHighRiskCountryAllowReview, v => row.StripeRadarHighRiskCountryAllowReview = v,
+            "stripe.radarHighRiskCountryAllowReview", changed)) { }
+        if (TrySetPlain(d.RadarBlockEmailDomainsCsv, v => row.StripeRadarBlockEmailDomainsCsv = v,
+            "stripe.radarBlockEmailDomainsCsv", changed)) { }
+    }
+
+    private static void ApplyZoom(RuntimeSettingsRow row, RuntimeSettingsZoomUpdate? d,
+        IRuntimeSettingsProvider p, IWebHostEnvironment env, List<string> changed)
+    {
+        if (d is null) return;
+        if (TrySetNullableBool(d.Enabled, v => row.ZoomEnabled = v, "zoom.enabled", changed)) { }
+        if (TrySetPlain(d.AccountId, v => row.ZoomAccountId = v, "zoom.accountId", changed)) { }
+        if (TrySetPlain(d.ClientId, v => row.ZoomClientId = v, "zoom.clientId", changed)) { }
+        if (TrySetSecret(d.ClientSecret, p, v => row.ZoomClientSecretEncrypted = v, "zoom.clientSecret", changed)) { }
+        if (TrySetPlain(d.ApiBaseUrl, v => row.ZoomApiBaseUrl = v, "zoom.apiBaseUrl", changed)) { }
+        if (TrySetPlain(d.TokenUrl, v => row.ZoomTokenUrl = v, "zoom.tokenUrl", changed)) { }
+        if (TrySetPlain(d.HostUserId, v => row.ZoomHostUserId = v, "zoom.hostUserId", changed)) { }
+        if (TrySetPlain(d.MeetingSdkKey, v => row.ZoomMeetingSdkKey = v, "zoom.meetingSdkKey", changed)) { }
+        if (TrySetSecret(d.MeetingSdkSecret, p, v => row.ZoomMeetingSdkSecretEncrypted = v, "zoom.meetingSdkSecret", changed)) { }
+        if (TrySetSecret(d.WebhookSecretToken, p, v => row.ZoomWebhookSecretTokenEncrypted = v, "zoom.webhookSecretToken", changed)) { }
+        if (TrySetNullableInt(d.WebhookRetryToleranceSeconds, v => row.ZoomWebhookRetryToleranceSeconds = v, "zoom.webhookRetryToleranceSeconds", changed, min: 60, max: 3600)) { }
+        if (TrySetNullableBool(d.AllowSandboxFallback, v => row.ZoomAllowSandboxFallback = v, "zoom.allowSandboxFallback", changed)) { }
+
+        if (env.IsProduction() && row.ZoomAllowSandboxFallback == true)
+        {
+            throw new RuntimeSettingsValidationException("zoom.allowSandboxFallback cannot be enabled in production.");
+        }
+
+        ValidateZoomUrl(row.ZoomApiBaseUrl, "zoom.apiBaseUrl", ["api.zoom.us", "api.zoom.com"]);
+        ValidateZoomUrl(row.ZoomTokenUrl, "zoom.tokenUrl", ["zoom.us", "zoom.com"]);
+    }
+
+    private static void ValidateZoomUrl(string? value, string key, IReadOnlyCollection<string> allowedHosts)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return;
+        }
+
+        if (!Uri.TryCreate(value, UriKind.Absolute, out var uri) || uri.Scheme != Uri.UriSchemeHttps)
+        {
+            throw new RuntimeSettingsValidationException($"{key} must be an https:// URL.");
+        }
+
+        if (!allowedHosts.Any(host => string.Equals(host, uri.Host, StringComparison.OrdinalIgnoreCase)))
+        {
+            throw new RuntimeSettingsValidationException($"{key} must use an official Zoom host.");
+        }
+    }
+
     // ── Per-field semantics ───────────────────────────────────────
     // strings: null => do nothing (leave stored value untouched)
     // "********" => secret-mask sentinel: do nothing
@@ -512,7 +728,7 @@ public static class AdminRuntimeSettingsEndpoints
     private static string? NormalizeSectionId(string? sectionId)
     {
         var normalized = sectionId?.Trim().ToLowerInvariant();
-        return normalized is "email" or "billing" or "sentry" or "backup" or "oauth" or "push" or "uploadscanner"
+        return normalized is "email" or "billing" or "sentry" or "backup" or "oauth" or "push" or "uploadscanner" or "zoom" or "stripe"
             ? normalized
             : normalized == "upload-scanner" ? "uploadscanner" : null;
     }
@@ -551,6 +767,13 @@ public static class AdminRuntimeSettingsEndpoints
                 ? Ok(sectionId, "At least one push provider is configured. No notification was sent.", testedAt)
                 : Failed(sectionId, "Configure browser VAPID, FCM, or APNs credentials before enabling push.", testedAt),
             "uploadscanner" => await TestUploadScannerAsync(settings.UploadScanner, env, scannerOptions, sectionId, testedAt, ct),
+            "zoom" => settings.Zoom.Enabled
+                      && HasAll(settings.Zoom.AccountId, settings.Zoom.ClientId, settings.Zoom.ClientSecret, settings.Zoom.HostUserId)
+                ? Ok(sectionId, "Zoom server-to-server OAuth settings are configured. No meeting was created.", testedAt)
+                : Failed(sectionId, "Configure Zoom account, client, client secret, and host user before enabling live classes.", testedAt),
+            "stripe" => HasAll(settings.Stripe.SecretKey, settings.Stripe.PublishableKey, settings.Stripe.WebhookSecret)
+                ? Ok(sectionId, "Stripe Tax/Portal/Radar runtime settings appear configured. No live API calls were made.", testedAt)
+                : Failed(sectionId, "Configure Stripe secret key, publishable key, and webhook secret before enabling Tax/Radar.", testedAt),
             _ => Failed(sectionId, "Unknown integration section.", testedAt),
         };
     }
@@ -621,6 +844,8 @@ public sealed class RuntimeSettingsUpdateRequest
     public RuntimeSettingsOAuthUpdate? OAuth { get; set; }
     public RuntimeSettingsPushUpdate? Push { get; set; }
     public RuntimeSettingsUploadScannerUpdate? UploadScanner { get; set; }
+    public RuntimeSettingsZoomUpdate? Zoom { get; set; }
+    public RuntimeSettingsStripeUpdate? Stripe { get; set; }
 }
 
 public sealed class RuntimeSettingsEmailUpdate
@@ -698,6 +923,39 @@ public sealed class RuntimeSettingsUploadScannerUpdate
     public JsonElement? Port { get; set; }
     public JsonElement? TimeoutSeconds { get; set; }
     public JsonElement? FailClosedOnError { get; set; }
+}
+
+public sealed class RuntimeSettingsZoomUpdate
+{
+    public JsonElement? Enabled { get; set; }
+    public string? AccountId { get; set; }
+    public string? ClientId { get; set; }
+    public string? ClientSecret { get; set; }
+    public string? ApiBaseUrl { get; set; }
+    public string? TokenUrl { get; set; }
+    public string? HostUserId { get; set; }
+    public string? MeetingSdkKey { get; set; }
+    public string? MeetingSdkSecret { get; set; }
+    public string? WebhookSecretToken { get; set; }
+    public JsonElement? WebhookRetryToleranceSeconds { get; set; }
+    public JsonElement? AllowSandboxFallback { get; set; }
+}
+
+/// <summary>Wave A5 — Stripe Tax / Customer Portal / Radar overrides.</summary>
+public sealed class RuntimeSettingsStripeUpdate
+{
+    public string? SecretKey { get; set; }
+    public string? PublishableKey { get; set; }
+    public string? WebhookSecret { get; set; }
+    public JsonElement? TaxAutomaticEnabled { get; set; }
+    /// <summary>
+    /// Tax-registration codes (e.g., ["UK_VAT", "EU_OSS", "AU_GST"]). Omit
+    /// to leave unchanged; pass an empty array to clear the override.
+    /// </summary>
+    public List<string>? TaxRegistrations { get; set; }
+    public string? CustomerPortalConfigurationId { get; set; }
+    public JsonElement? RadarHighRiskCountryAllowReview { get; set; }
+    public string? RadarBlockEmailDomainsCsv { get; set; }
 }
 
 public sealed record RuntimeSettingsIntegrationTestResponse(

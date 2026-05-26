@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useRef } from "react";
+import { safeZoomUrl } from "@/lib/zoom-url";
 
 // Type-only import to avoid SSR issues with the Zoom SDK
 type ZoomClient = {
@@ -17,6 +18,7 @@ type JoinTokenResponse = {
   passWord?: string | null;
   role: number;
   zak?: string | null;
+  joinUrl?: string | null;
 };
 
 type Props = {
@@ -27,6 +29,7 @@ type Props = {
 export function ZoomMeetingEmbed({ joinToken, onLeave }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const clientRef = useRef<ZoomClient | null>(null);
+  const fallbackUrl = safeZoomUrl(joinToken.joinUrl);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -76,7 +79,8 @@ export function ZoomMeetingEmbed({ joinToken, onLeave }: Props) {
           zak: joinToken.zak ?? undefined,
         });
       } catch (err) {
-        console.error("[ZoomMeetingEmbed] Failed to initialize or join:", err);
+        const message = err instanceof Error ? err.message : "unknown error";
+        console.error("[ZoomMeetingEmbed] Failed to initialize or join Zoom meeting", { message });
       }
     };
 
@@ -95,8 +99,19 @@ export function ZoomMeetingEmbed({ joinToken, onLeave }: Props) {
 
   return (
     <div
-      ref={containerRef}
-      className="w-full h-[80vh] rounded-2xl overflow-hidden bg-gray-900"
-    />
+      className="relative w-full h-[80vh] rounded-2xl overflow-hidden bg-gray-900"
+    >
+      <div ref={containerRef} className="h-full w-full" />
+      {fallbackUrl ? (
+        <a
+          href={fallbackUrl}
+          target="_blank"
+          rel="noreferrer"
+          className="absolute bottom-4 right-4 rounded-lg bg-white px-4 py-2 text-sm font-semibold text-gray-950 shadow-lg hover:bg-gray-100"
+        >
+          Open in Zoom
+        </a>
+      ) : null}
+    </div>
   );
 }

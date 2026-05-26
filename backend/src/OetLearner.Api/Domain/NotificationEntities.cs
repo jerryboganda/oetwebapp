@@ -126,7 +126,17 @@ public enum NotificationEventKey
     LearnerLiveClassRecordingReady,
     ExpertLiveClassAssigned,
     ExpertLiveClassReminder,
-    AdminLiveClassSessionAlert
+    AdminLiveClassSessionAlert,
+
+    // Wave A3 — class notifications + reminder scheduling
+    LearnerClassEnrollmentConfirmed,
+    LearnerClassCancelledByTutor,
+    LearnerClassCancelledByUser,
+    LearnerClassWaitlistOpening,
+    LearnerClassFeedbackRequest,
+    TutorClassStarting15Min,
+    TutorRecordingReady,
+    TutorFeedbackReceivedDigest
 }
 
 public enum NotificationChannel

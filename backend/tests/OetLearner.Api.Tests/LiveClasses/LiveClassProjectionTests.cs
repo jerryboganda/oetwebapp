@@ -22,10 +22,10 @@ public sealed class LiveClassProjectionTests
     // -------------------------------------------------------------------------
 
     [Fact]
-    public void LearnerJoinToken_ReturnsJoinUrl_NotStartUrl()
+    public async Task LearnerJoinToken_ReturnsJoinUrl_NotStartUrl()
     {
         var session = NewSession();
-        var token = InvokeCreateJoinToken(session, "Learner Name", "learner@example.com", role: 0);
+        var token = await InvokeCreateJoinTokenAsync(session, "Learner Name", "learner@example.com", role: 0);
 
         // Learner (role=0) should receive the join URL, not the host start URL.
         Assert.Equal("https://zoom.us/j/learner-join", token.JoinUrl);
@@ -33,10 +33,10 @@ public sealed class LiveClassProjectionTests
     }
 
     [Fact]
-    public void LearnerJoinToken_PropertyNames_DoNotContainStartUrl()
+    public async Task LearnerJoinToken_PropertyNames_DoNotContainStartUrl()
     {
         var session = NewSession();
-        var token = InvokeCreateJoinToken(session, "Learner Name", "learner@example.com", role: 0);
+        var token = await InvokeCreateJoinTokenAsync(session, "Learner Name", "learner@example.com", role: 0);
 
         // The DTO record type itself should not have a property named ZoomStartUrl.
         var propertyNames = PropertyNames(token);
@@ -44,10 +44,10 @@ public sealed class LiveClassProjectionTests
     }
 
     [Fact]
-    public void LearnerJoinToken_DoesNotContainZoomPasscode_AsDistinctField()
+    public async Task LearnerJoinToken_DoesNotContainZoomPasscode_AsDistinctField()
     {
         var session = NewSession();
-        var token = InvokeCreateJoinToken(session, "Learner Name", "learner@example.com", role: 0);
+        var token = await InvokeCreateJoinTokenAsync(session, "Learner Name", "learner@example.com", role: 0);
 
         // The DTO uses 'PassWord' (Zoom SDK convention), not a field literally named ZoomPasscode.
         var propertyNames = PropertyNames(token);
@@ -55,10 +55,10 @@ public sealed class LiveClassProjectionTests
     }
 
     [Fact]
-    public void ExpertJoinToken_ReturnsStartUrl_NotJoinUrl()
+    public async Task ExpertJoinToken_ReturnsStartUrl_NotJoinUrl()
     {
         var session = NewSession();
-        var token = InvokeCreateJoinToken(session, "Expert Name", "expert@example.com", role: 1);
+        var token = await InvokeCreateJoinTokenAsync(session, "Expert Name", "expert@example.com", role: 1);
 
         // Expert (role=1) should receive the host start URL.
         Assert.Equal("https://zoom.us/s/host-secret", token.JoinUrl);
@@ -202,7 +202,7 @@ public sealed class LiveClassProjectionTests
             ExpiresAt = DateTimeOffset.UtcNow.AddDays(365),
         };
 
-    private static LiveClassJoinTokenResponse InvokeCreateJoinToken(
+    private static async Task<LiveClassJoinTokenResponse> InvokeCreateJoinTokenAsync(
         LiveClassSession session,
         string displayName,
         string? email,
@@ -211,15 +211,16 @@ public sealed class LiveClassProjectionTests
         // CreateJoinToken is a private instance method, so we need a service instance.
         // We use reflection to access the private method directly.
         var serviceType = typeof(LiveClassService);
-        var method = serviceType.GetMethod("CreateJoinToken", BindingFlags.NonPublic | BindingFlags.Instance)
-            ?? throw new InvalidOperationException("CreateJoinToken method not found on LiveClassService.");
+        var method = serviceType.GetMethod("CreateJoinTokenAsync", BindingFlags.NonPublic | BindingFlags.Instance)
+            ?? throw new InvalidOperationException("CreateJoinTokenAsync method not found on LiveClassService.");
 
         // Build a minimal service instance using the internal constructor via reflection.
         // We stub out the ZoomMeetingService with a fake that only needs MeetingSdkKey
         // and GenerateMeetingSdkSignature.
         var service = CreateServiceStub();
-        return (LiveClassJoinTokenResponse)(method.Invoke(service, [session, displayName, email, role])
-            ?? throw new InvalidOperationException("CreateJoinToken returned null."));
+        var task = (Task<LiveClassJoinTokenResponse>)(method.Invoke(service, [session, displayName, email, role, CancellationToken.None])
+            ?? throw new InvalidOperationException("CreateJoinTokenAsync returned null."));
+        return await task;
     }
 
     private static LiveClassSessionSummaryDto InvokeMapSessionSummary(
@@ -232,7 +233,7 @@ public sealed class LiveClassProjectionTests
                 "MapSessionSummary",
                 BindingFlags.NonPublic | BindingFlags.Static)
             ?? throw new InvalidOperationException("MapSessionSummary not found.");
-        return (LiveClassSessionSummaryDto)(method.Invoke(null, [liveClass, session, isEnrolled, now])
+        return (LiveClassSessionSummaryDto)(method.Invoke(null, [liveClass, session, isEnrolled, now, false])
             ?? throw new InvalidOperationException("MapSessionSummary returned null."));
     }
 
@@ -245,7 +246,7 @@ public sealed class LiveClassProjectionTests
                 "MapListItem",
                 BindingFlags.NonPublic | BindingFlags.Static)
             ?? throw new InvalidOperationException("MapListItem not found.");
-        return (LiveClassListItemDto)(method.Invoke(null, [liveClass, enrolledSessionIds, now])
+        return (LiveClassListItemDto)(method.Invoke(null, [liveClass, enrolledSessionIds, now, false])
             ?? throw new InvalidOperationException("MapListItem returned null."));
     }
 
@@ -261,18 +262,17 @@ public sealed class LiveClassProjectionTests
 
     /// <summary>
     /// Creates a minimal <see cref="LiveClassService"/> instance for testing private
-    /// instance methods (specifically <c>CreateJoinToken</c>). All dependencies are
+    /// instance methods (specifically <c>CreateJoinTokenAsync</c>). All dependencies are
     /// either null or faked with the minimum surface needed.
     /// </summary>
     private static LiveClassService CreateServiceStub()
     {
-        // ZoomMeetingService requires IOptions<ZoomOptions> — use Options.Create with a blank
-        // ZoomOptions so the constructor does not throw (MeetingSdkKey will be null, which
-        // causes GenerateMeetingSdkSignature to return null, which is acceptable in tests).
-        var zoomOptions = Options.Create(new ZoomOptions());
+        // ZoomMeetingService reads effective runtime settings; leave SDK credentials blank
+        // so GenerateMeetingSdkSignatureAsync returns null, which is acceptable here.
+        var zoomOptions = new ZoomOptions();
         var zoomService = new ZoomMeetingService(
             httpClientFactory: null!,
-            options: zoomOptions,
+            runtimeSettings: TestRuntimeSettingsProvider.FromZoomOptions(zoomOptions),
             logger: null!);
 
         var serviceType = typeof(LiveClassService);

@@ -63,8 +63,11 @@ public partial class LearnerService(
 {
     private const string PaymentWebhookParserVersion = "payment-webhook-v1";
     private const int PaymentIdempotencyKeyMaxLength = 38;
+    private const int WritingRevisionContentMaxLength = 30000;
+    private const int WritingRevisionIdempotencyKeyMaxLength = 64;
     private static readonly TimeSpan PaymentWebhookProcessingLease = TimeSpan.FromMinutes(5);
     private static readonly Regex PaymentIdempotencyKeyRegex = new("^[A-Za-z0-9._:-]+$", RegexOptions.Compiled);
+    private static readonly Regex WritingRevisionIdempotencyKeyRegex = new("^[A-Za-z0-9._:-]+$", RegexOptions.Compiled);
     private readonly StorageOptions storageSettings = storageOptions?.Value ?? new StorageOptions();
 
     private static List<DiagnosticSubtestStatus> ActiveDiagnosticSubtests(List<DiagnosticSubtestStatus> subtests)
@@ -2353,9 +2356,12 @@ public partial class LearnerService(
 
     public async Task<object> GetWritingRevisionAsync(string userId, string attemptId, CancellationToken cancellationToken)
     {
-        var attempt = await GetAttemptOwnedByUserAsync(userId, attemptId, cancellationToken);
-        var evaluation = await db.Evaluations.Where(x => x.AttemptId == attemptId).OrderByDescending(x => x.GeneratedAt).FirstOrDefaultAsync(cancellationToken);
-        var related = await db.Attempts.Where(x => x.ParentAttemptId == attemptId && x.UserId == userId).OrderByDescending(x => x.StartedAt).ToListAsync(cancellationToken);
+        var requestedAttempt = await GetWritingAttemptOwnedByUserAsync(userId, attemptId, cancellationToken);
+        var attempt = requestedAttempt.ParentAttemptId is null
+            ? requestedAttempt
+            : await GetWritingAttemptOwnedByUserAsync(userId, requestedAttempt.ParentAttemptId, cancellationToken);
+        var evaluation = await GetCompletedWritingEvaluationForRevisionAsync(attempt.Id, cancellationToken);
+        var related = await db.Attempts.Where(x => x.ParentAttemptId == attempt.Id && x.UserId == userId && x.SubtestCode == "writing").OrderByDescending(x => x.StartedAt).ToListAsync(cancellationToken);
         var latestRevision = related.FirstOrDefault();
         var latestRevisionEvaluation = latestRevision is null
             ? null
@@ -2395,23 +2401,75 @@ public partial class LearnerService(
             deltaSummary,
             unresolvedIssues,
             priorRevisions = related.Select(x => new { attemptId = x.Id, submittedAt = x.SubmittedAt, state = ToApiState(x.State) }),
-            actions = new[] { new { label = "Submit Revision", route = $"/writing/revision/{attemptId}" } }
+            actions = new[] { new { label = "Submit Revision", route = $"/writing/revision/{attempt.Id}" } }
         };
     }
 
     public async Task<object> SubmitWritingRevisionAsync(string userId, string attemptId, RevisionSubmitRequest request, CancellationToken cancellationToken)
     {
         await EnsureLearnerMutationAllowedAsync(userId, cancellationToken);
-        if (!string.IsNullOrWhiteSpace(request.IdempotencyKey))
+        var idempotencyKey = NormalizeWritingRevisionIdempotencyKey(request.IdempotencyKey);
+        var idempotencyScope = $"writing-revision-submit:{userId}:{attemptId}";
+        if (idempotencyKey is not null)
         {
-            var cached = await GetIdempotentResponseAsync("writing-revision-submit", request.IdempotencyKey, cancellationToken);
+            var cached = await GetIdempotentResponseAsync(idempotencyScope, idempotencyKey, cancellationToken);
             if (cached is not null)
             {
                 return cached;
             }
         }
 
-        var baseAttempt = await GetAttemptOwnedByUserAsync(userId, attemptId, cancellationToken);
+        var baseAttempt = await GetWritingAttemptOwnedByUserAsync(userId, attemptId, cancellationToken);
+        if (baseAttempt.State is not (AttemptState.Submitted or AttemptState.Evaluating or AttemptState.Completed))
+        {
+            throw ApiException.Validation(
+                "writing_revision_base_not_submitted",
+                "Submit the original Writing attempt before creating a revision.",
+                [new ApiFieldError("attemptId", "not_submitted", "Revision requires a submitted Writing attempt.")]);
+        }
+
+        if (baseAttempt.ParentAttemptId is not null)
+        {
+            throw ApiException.Conflict(
+                "writing_revision_base_is_revision",
+                "Open the original Writing result before creating another revision.",
+                [new ApiFieldError("attemptId", "revision_attempt", "Revision submission must target the original Writing attempt.")]);
+        }
+
+        _ = await GetCompletedWritingEvaluationForRevisionAsync(baseAttempt.Id, cancellationToken);
+
+        if (string.IsNullOrWhiteSpace(request.Content))
+        {
+            throw ApiException.Validation(
+                "writing_revision_content_required",
+                "Revised Writing content is required before submission.",
+                [new ApiFieldError("content", "required", "Enter your revised response before submitting.")]);
+        }
+
+        if (request.Content.Length > WritingRevisionContentMaxLength)
+        {
+            throw ApiException.Validation(
+                "writing_revision_content_too_long",
+                "Revised Writing content is too long.",
+                [new ApiFieldError("content", "too_long", $"Keep the revised response under {WritingRevisionContentMaxLength} characters.")]);
+        }
+
+        if (writingEntitlement is not null)
+        {
+            var ent = await writingEntitlement.CheckAsync(userId, cancellationToken);
+            if (!ent.Allowed)
+            {
+                var msg = ent.Reason switch
+                {
+                    "premium_required" => "Writing practice requires an active subscription.",
+                    "quota_exceeded" => $"Free tier allows {ent.LimitPerWindow} writing attempts every {ent.WindowDays} days.",
+                    _ => ent.Reason,
+                };
+                var code = ent.Reason is "premium_required" or "quota_exceeded" ? ent.Reason : "writing_entitlement_blocked";
+                throw ApiException.PaymentRequired(code, msg);
+            }
+        }
+
         var revision = new Attempt
         {
             Id = $"wa-{Guid.NewGuid():N}",
@@ -2455,12 +2513,43 @@ public partial class LearnerService(
         await QueueJobAsync(JobType.WritingEvaluation, attemptId: revision.Id, resourceId: evaluation.Id, cancellationToken: cancellationToken);
         var response = new { attemptId = revision.Id, evaluationId = evaluation.Id, state = "queued" };
         await RecordEventAsync(baseAttempt.UserId, "revision_submitted", new { attemptId = revision.Id, parentAttemptId = baseAttempt.Id, evaluationId = evaluation.Id }, cancellationToken);
-        if (!string.IsNullOrWhiteSpace(request.IdempotencyKey))
+        if (idempotencyKey is not null)
         {
-            await SaveIdempotentResponseAsync("writing-revision-submit", request.IdempotencyKey, response, cancellationToken);
+            await SaveIdempotentResponseAsync(idempotencyScope, idempotencyKey, response, cancellationToken);
         }
         await db.SaveChangesAsync(cancellationToken);
         return response;
+    }
+
+    private async Task<Evaluation> GetCompletedWritingEvaluationForRevisionAsync(string attemptId, CancellationToken cancellationToken)
+    {
+        return await db.Evaluations
+            .Where(x => x.AttemptId == attemptId && x.SubtestCode == "writing" && x.State == AsyncState.Completed)
+            .OrderByDescending(x => x.GeneratedAt ?? x.CreatedAt)
+            .FirstOrDefaultAsync(cancellationToken)
+            ?? throw ApiException.Conflict(
+                "writing_revision_feedback_not_ready",
+                "Complete the original Writing feedback before creating a revision.",
+                [new ApiFieldError("attemptId", "feedback_not_ready", "Revision requires completed Writing feedback.")]);
+    }
+
+    private static string? NormalizeWritingRevisionIdempotencyKey(string? key)
+    {
+        var normalized = key?.Trim();
+        if (string.IsNullOrWhiteSpace(normalized))
+        {
+            return null;
+        }
+
+        if (normalized.Length > WritingRevisionIdempotencyKeyMaxLength || !WritingRevisionIdempotencyKeyRegex.IsMatch(normalized))
+        {
+            throw ApiException.Validation(
+                "writing_revision_idempotency_key_invalid",
+                "Revision idempotency key is invalid.",
+                [new ApiFieldError("idempotencyKey", "invalid", "Use only letters, numbers, dots, underscores, colons, or hyphens, up to 64 characters.")]);
+        }
+
+        return normalized;
     }
 
     public async Task<object> GetWritingModelAnswerAsync(string userId, string contentId, CancellationToken cancellationToken)

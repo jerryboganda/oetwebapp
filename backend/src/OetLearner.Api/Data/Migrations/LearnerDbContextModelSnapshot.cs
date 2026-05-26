@@ -16065,6 +16065,9 @@ namespace OetLearner.Api.Data.Migrations
                     b.Property<string>("GoogleClientSecretEncrypted")
                         .HasColumnType("text");
 
+                    b.Property<bool?>("LiveClassesAiRecordingProcessingEnabled")
+                        .HasColumnType("boolean");
+
                     b.Property<string>("PayPalCancelUrl")
                         .HasMaxLength(1024)
                         .HasColumnType("character varying(1024)");
@@ -16120,14 +16123,32 @@ namespace OetLearner.Api.Data.Migrations
                         .HasMaxLength(1024)
                         .HasColumnType("character varying(1024)");
 
+                    b.Property<string>("StripeCustomerPortalConfigurationId")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
                     b.Property<string>("StripePublishableKey")
                         .HasMaxLength(256)
                         .HasColumnType("character varying(256)");
+
+                    b.Property<string>("StripeRadarBlockEmailDomainsCsv")
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)");
+
+                    b.Property<bool?>("StripeRadarHighRiskCountryAllowReview")
+                        .HasColumnType("boolean");
 
                     b.Property<string>("StripeSecretKeyEncrypted")
                         .HasColumnType("text");
 
                     b.Property<string>("StripeSuccessUrl")
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)");
+
+                    b.Property<bool?>("StripeTaxAutomaticEnabled")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("StripeTaxRegistrationsCsv")
                         .HasMaxLength(1024)
                         .HasColumnType("character varying(1024)");
 
@@ -16172,6 +16193,48 @@ namespace OetLearner.Api.Data.Migrations
                     b.Property<string>("VapidSubject")
                         .HasMaxLength(256)
                         .HasColumnType("character varying(256)");
+
+                    b.Property<string>("ZoomAccountId")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<bool?>("ZoomAllowSandboxFallback")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("ZoomApiBaseUrl")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
+
+                    b.Property<string>("ZoomClientId")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<string>("ZoomClientSecretEncrypted")
+                        .HasColumnType("text");
+
+                    b.Property<bool?>("ZoomEnabled")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("ZoomHostUserId")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<string>("ZoomMeetingSdkKey")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<string>("ZoomMeetingSdkSecretEncrypted")
+                        .HasColumnType("text");
+
+                    b.Property<string>("ZoomTokenUrl")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
+
+                    b.Property<int?>("ZoomWebhookRetryToleranceSeconds")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ZoomWebhookSecretTokenEncrypted")
+                        .HasColumnType("text");
 
                     b.HasKey("Id");
 

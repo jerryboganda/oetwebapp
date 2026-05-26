@@ -42,10 +42,13 @@ function generateNonce(): string {
  * - 'unsafe-eval' only in dev for React fast-refresh.
  */
 function buildCsp(nonce: string, apiOrigins: string[], apiWsOrigins: string[], isDev: boolean): string {
+  const zoomHttpOrigins = ['https://zoom.us', 'https://*.zoom.us', 'https://zoom.com', 'https://*.zoom.com', 'https://source.zoom.us'];
+  const zoomWsOrigins = ['wss://zoom.us', 'wss://*.zoom.us', 'wss://zoom.com', 'wss://*.zoom.com'];
   const scriptSrc = [
     "'self'",
     `'nonce-${nonce}'`,
     "'strict-dynamic'",
+    ...zoomHttpOrigins,
     ...(isDev ? ["'unsafe-eval'"] : []),
   ].join(' ');
 
@@ -54,6 +57,8 @@ function buildCsp(nonce: string, apiOrigins: string[], apiWsOrigins: string[], i
     'blob:',
     ...apiOrigins,
     ...apiWsOrigins,
+    ...zoomHttpOrigins,
+    ...zoomWsOrigins,
     'https://*.googleapis.com',
   ].join(' ');
 
@@ -62,11 +67,11 @@ function buildCsp(nonce: string, apiOrigins: string[], apiWsOrigins: string[], i
     `script-src ${scriptSrc}`,
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
     "font-src 'self' https://fonts.gstatic.com",
-    "img-src 'self' data: blob:",
+    `img-src 'self' data: blob: ${zoomHttpOrigins.join(' ')}`,
     `connect-src ${connectSrc}`,
-    `media-src 'self' blob: ${apiOrigins.join(' ')}`,
-    "worker-src 'self' blob:",
-    "frame-src 'self'",
+    `media-src 'self' blob: ${apiOrigins.join(' ')} ${zoomHttpOrigins.join(' ')}`,
+    `worker-src 'self' blob: ${zoomHttpOrigins.join(' ')}`,
+    `frame-src 'self' ${zoomHttpOrigins.join(' ')}`,
     "frame-ancestors 'self'",
     "object-src 'none'",
     "base-uri 'self'",

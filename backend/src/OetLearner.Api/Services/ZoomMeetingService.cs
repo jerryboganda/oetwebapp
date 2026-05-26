@@ -4,8 +4,8 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
-using Microsoft.Extensions.Options;
 using OetLearner.Api.Configuration;
+using OetLearner.Api.Services.Settings;
 
 namespace OetLearner.Api.Services;
 
@@ -15,27 +15,36 @@ namespace OetLearner.Api.Services;
 /// </summary>
 public sealed partial class ZoomMeetingService(
     IHttpClientFactory httpClientFactory,
-    IOptions<ZoomOptions> options,
+    IRuntimeSettingsProvider runtimeSettings,
     ILogger<ZoomMeetingService> logger)
 {
-    private readonly ZoomOptions _opts = options.Value;
     private string? _cachedToken;
+    private string? _cachedTokenSettingsHash;
     private DateTimeOffset _tokenExpiresAt = DateTimeOffset.MinValue;
     private readonly SemaphoreSlim _tokenLock = new(1, 1);
 
-    // ── Public API ──────────────────────────────────────────────────────
+    public async Task<string?> GetMeetingSdkKeyAsync(CancellationToken ct)
+        => (await GetSettingsAsync(ct)).MeetingSdkKey;
 
-    public string? MeetingSdkKey => _opts.MeetingSdkKey;
+    public async Task<bool> IsEnabledAsync(CancellationToken ct)
+        => (await GetSettingsAsync(ct)).Enabled;
 
     public async Task<ZoomMeetingResult> CreateMeetingAsync(
-        string topic, DateTimeOffset startTime, int durationMinutes,
-        string timezone, CancellationToken ct)
+        string topic,
+        DateTimeOffset startTime,
+        int durationMinutes,
+        string timezone,
+        CancellationToken ct)
     {
-        if (_opts.AllowSandboxFallback &&
-            string.IsNullOrEmpty(_opts.ClientId))
+        var settings = await GetSettingsAsync(ct);
+        if (!settings.Enabled)
         {
-            // Sandbox fallback for dev/test without real Zoom credentials
-            logger.LogWarning("Zoom credentials not configured — returning sandbox meeting");
+            throw new InvalidOperationException("Zoom integration is disabled.");
+        }
+
+        if (settings.AllowSandboxFallback && string.IsNullOrEmpty(settings.ClientId))
+        {
+            logger.LogWarning("Zoom credentials not configured; returning sandbox meeting");
             return new ZoomMeetingResult(
                 MeetingId: 999_000_000 + Random.Shared.Next(1000, 99999),
                 JoinUrl: $"https://zoom.us/j/sandbox-{Guid.NewGuid():N}",
@@ -43,15 +52,15 @@ public sealed partial class ZoomMeetingService(
                 Password: "sandbox123");
         }
 
-        var hostUserId = RequireOption(_opts.HostUserId, nameof(ZoomOptions.HostUserId));
-        var token = await GetAccessTokenAsync(ct);
+        var hostUserId = RequireOption(settings.HostUserId, nameof(ZoomOptions.HostUserId));
+        var token = await GetAccessTokenAsync(settings, ct);
         var client = httpClientFactory.CreateClient("ZoomApi");
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
         var payload = new
         {
             topic,
-            type = 2, // Scheduled meeting
+            type = 2,
             start_time = startTime.UtcDateTime.ToString("yyyy-MM-ddTHH:mm:ssZ"),
             duration = durationMinutes,
             timezone,
@@ -69,17 +78,14 @@ public sealed partial class ZoomMeetingService(
 
         var json = JsonSerializer.Serialize(payload, JsonOpts);
         var content = new StringContent(json, Encoding.UTF8, "application/json");
-
-        var url = $"{_opts.ApiBaseUrl}/users/{hostUserId}/meetings";
-        var response = await client.PostAsync(url, content, ct);
+        var response = await client.PostAsync($"{settings.ApiBaseUrl}/users/{hostUserId}/meetings", content, ct);
 
         if (!response.IsSuccessStatusCode)
         {
             var errorBody = await response.Content.ReadAsStringAsync(ct);
             var safeErrorBody = SanitizeProviderErrorBody(errorBody);
             logger.LogError("Zoom API error {Status}: {Body}", response.StatusCode, safeErrorBody);
-            throw new InvalidOperationException(
-                $"Zoom API returned {(int)response.StatusCode}: {safeErrorBody}");
+            throw new InvalidOperationException($"Zoom API returned {(int)response.StatusCode}: {safeErrorBody}");
         }
 
         var responseJson = await response.Content.ReadAsStringAsync(ct);
@@ -97,44 +103,54 @@ public sealed partial class ZoomMeetingService(
 
     public async Task DeleteMeetingAsync(long meetingId, CancellationToken ct)
     {
-        if (_opts.AllowSandboxFallback && string.IsNullOrEmpty(_opts.ClientId))
+        var settings = await GetSettingsAsync(ct);
+        if (!settings.Enabled)
         {
-            logger.LogWarning("Zoom sandbox mode — skipping meeting deletion for {MeetingId}", meetingId);
+            logger.LogInformation("Zoom integration disabled; skipping meeting deletion for {MeetingId}", meetingId);
             return;
         }
 
-        var token = await GetAccessTokenAsync(ct);
+        if (settings.AllowSandboxFallback && string.IsNullOrEmpty(settings.ClientId))
+        {
+            logger.LogWarning("Zoom sandbox mode; skipping meeting deletion for {MeetingId}", meetingId);
+            return;
+        }
+
+        var token = await GetAccessTokenAsync(settings, ct);
         var client = httpClientFactory.CreateClient("ZoomApi");
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
-        var url = $"{_opts.ApiBaseUrl}/meetings/{meetingId}";
-        var response = await client.DeleteAsync(url, ct);
-
+        var response = await client.DeleteAsync($"{settings.ApiBaseUrl}/meetings/{meetingId}", ct);
         if (!response.IsSuccessStatusCode)
         {
             var errorBody = await response.Content.ReadAsStringAsync(ct);
             var safeErrorBody = SanitizeProviderErrorBody(errorBody);
             logger.LogWarning("Zoom meeting deletion failed for {MeetingId}: {Status} {Body}",
                 meetingId, response.StatusCode, safeErrorBody);
+            return;
         }
-        else
-        {
-            logger.LogInformation("Deleted Zoom meeting {MeetingId}", meetingId);
-        }
+
+        logger.LogInformation("Deleted Zoom meeting {MeetingId}", meetingId);
     }
 
     public async Task CopyRecordingFileAsync(long meetingId, string? recordingFileId, Stream destination, CancellationToken ct)
     {
-        if (_opts.AllowSandboxFallback && string.IsNullOrEmpty(_opts.ClientId))
+        var settings = await GetSettingsAsync(ct);
+        if (!settings.Enabled)
+        {
+            throw new InvalidOperationException("Zoom recording download requires Zoom integration to be enabled.");
+        }
+
+        if (settings.AllowSandboxFallback && string.IsNullOrEmpty(settings.ClientId))
         {
             throw new InvalidOperationException("Zoom recording download requires Zoom credentials.");
         }
 
-        var token = await GetAccessTokenAsync(ct);
+        var token = await GetAccessTokenAsync(settings, ct);
         var client = httpClientFactory.CreateClient("ZoomApi");
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
-        var metadataResponse = await client.GetAsync($"{_opts.ApiBaseUrl}/meetings/{meetingId}/recordings", ct);
+        var metadataResponse = await client.GetAsync($"{settings.ApiBaseUrl}/meetings/{meetingId}/recordings", ct);
         if (!metadataResponse.IsSuccessStatusCode)
         {
             var errorBody = await metadataResponse.Content.ReadAsStringAsync(ct);
@@ -184,9 +200,10 @@ public sealed partial class ZoomMeetingService(
         await downloadResponse.Content.CopyToAsync(destination, ct);
     }
 
-    public string? GenerateMeetingSdkSignature(string meetingNumber, int role, DateTimeOffset expiresAt)
+    public async Task<string?> GenerateMeetingSdkSignatureAsync(string meetingNumber, int role, DateTimeOffset expiresAt, CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(_opts.MeetingSdkKey) || string.IsNullOrWhiteSpace(_opts.MeetingSdkSecret))
+        var settings = await GetSettingsAsync(ct);
+        if (string.IsNullOrWhiteSpace(settings.MeetingSdkKey) || string.IsNullOrWhiteSpace(settings.MeetingSdkSecret))
         {
             return null;
         }
@@ -196,12 +213,12 @@ public sealed partial class ZoomMeetingService(
         var header = new { alg = "HS256", typ = "JWT" };
         var payload = new
         {
-            sdkKey = _opts.MeetingSdkKey,
+            sdkKey = settings.MeetingSdkKey,
             mn = meetingNumber,
             role,
             iat = issuedAt,
             exp = expires,
-            appKey = _opts.MeetingSdkKey,
+            appKey = settings.MeetingSdkKey,
             tokenExp = expires
         };
 
@@ -209,14 +226,70 @@ public sealed partial class ZoomMeetingService(
         var payloadEncoded = Base64UrlEncode(JsonSerializer.SerializeToUtf8Bytes(payload));
         var signingInput = $"{headerEncoded}.{payloadEncoded}";
         var signatureBytes = HMACSHA256.HashData(
-            Encoding.UTF8.GetBytes(_opts.MeetingSdkSecret),
+            Encoding.UTF8.GetBytes(settings.MeetingSdkSecret),
             Encoding.UTF8.GetBytes(signingInput));
         return $"{signingInput}.{Base64UrlEncode(signatureBytes)}";
     }
 
-    public bool VerifyWebhookSignature(string rawBody, IHeaderDictionary headers)
+    /// <summary>
+    /// Fetch the ZAK (Zoom Access Key) token for <paramref name="zoomUserId"/>
+    /// so the host can join their own meeting as role=1 from the embedded
+    /// Meeting SDK. Calls <c>GET /users/{userId}/token?type=zak</c> with the
+    /// S2S bearer token and returns the <c>token</c> field. See Zoom docs:
+    /// https://developers.zoom.us/docs/meeting-sdk/auth/#start-meetings-and-webinars-with-a-zoom-users-zak-token
+    /// </summary>
+    public async Task<string?> GetZakTokenAsync(string zoomUserId, CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(_opts.WebhookSecretToken))
+        if (string.IsNullOrWhiteSpace(zoomUserId))
+        {
+            return null;
+        }
+
+        var settings = await GetSettingsAsync(ct);
+        if (!settings.Enabled)
+        {
+            return null;
+        }
+
+        if (settings.AllowSandboxFallback && string.IsNullOrEmpty(settings.ClientId))
+        {
+            logger.LogInformation("Zoom sandbox mode; returning sandbox ZAK for {ZoomUserId}", zoomUserId);
+            return $"sandbox-zak-{Guid.NewGuid():N}";
+        }
+
+        var token = await GetAccessTokenAsync(settings, ct);
+        var client = httpClientFactory.CreateClient("ZoomApi");
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        var url = $"{settings.ApiBaseUrl}/users/{Uri.EscapeDataString(zoomUserId)}/token?type=zak";
+        using var response = await client.GetAsync(url, ct);
+        if (!response.IsSuccessStatusCode)
+        {
+            var errorBody = await response.Content.ReadAsStringAsync(ct);
+            logger.LogWarning(
+                "Zoom ZAK fetch failed for {ZoomUserId}: {Status} {Body}",
+                zoomUserId,
+                response.StatusCode,
+                SanitizeProviderErrorBody(errorBody));
+            return null;
+        }
+
+        var responseJson = await response.Content.ReadAsStringAsync(ct);
+        using var document = JsonDocument.Parse(responseJson);
+        if (!document.RootElement.TryGetProperty("token", out var tokenProperty)
+            || tokenProperty.ValueKind != JsonValueKind.String)
+        {
+            logger.LogWarning("Zoom ZAK response missing token field for {ZoomUserId}", zoomUserId);
+            return null;
+        }
+
+        return tokenProperty.GetString();
+    }
+
+    public async Task<bool> VerifyWebhookSignatureAsync(string rawBody, IHeaderDictionary headers, CancellationToken ct)
+    {
+        var settings = await GetSettingsAsync(ct);
+        if (string.IsNullOrWhiteSpace(settings.WebhookSecretToken))
         {
             return false;
         }
@@ -235,14 +308,15 @@ public sealed partial class ZoomMeetingService(
         }
 
         var requestTime = DateTimeOffset.FromUnixTimeSeconds(unixTimestamp);
-        if (DateTimeOffset.UtcNow - requestTime > TimeSpan.FromMinutes(5))
+        var skew = DateTimeOffset.UtcNow - requestTime;
+        if (skew.Duration() > TimeSpan.FromSeconds(settings.WebhookRetryToleranceSeconds))
         {
             return false;
         }
 
         var message = $"v0:{timestamp}:{rawBody}";
         var digest = HMACSHA256.HashData(
-            Encoding.UTF8.GetBytes(_opts.WebhookSecretToken),
+            Encoding.UTF8.GetBytes(settings.WebhookSecretToken),
             Encoding.UTF8.GetBytes(message));
         var expectedSignature = "v0=" + Convert.ToHexString(digest).ToLowerInvariant();
         return CryptographicOperations.FixedTimeEquals(
@@ -250,9 +324,10 @@ public sealed partial class ZoomMeetingService(
             Encoding.UTF8.GetBytes(providedSignature));
     }
 
-    public object? TryBuildWebhookUrlValidationResponse(string rawBody)
+    public async Task<object?> TryBuildWebhookUrlValidationResponseAsync(string rawBody, CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(_opts.WebhookSecretToken))
+        var settings = await GetSettingsAsync(ct);
+        if (string.IsNullOrWhiteSpace(settings.WebhookSecretToken))
         {
             return null;
         }
@@ -269,7 +344,7 @@ public sealed partial class ZoomMeetingService(
 
         var plainToken = tokenProperty.GetString() ?? string.Empty;
         var digest = HMACSHA256.HashData(
-            Encoding.UTF8.GetBytes(_opts.WebhookSecretToken),
+            Encoding.UTF8.GetBytes(settings.WebhookSecretToken),
             Encoding.UTF8.GetBytes(plainToken));
         return new
         {
@@ -278,29 +353,33 @@ public sealed partial class ZoomMeetingService(
         };
     }
 
-    // ── Token Acquisition ───────────────────────────────────────────────
-
-    private async Task<string> GetAccessTokenAsync(CancellationToken ct)
+    private async Task<string> GetAccessTokenAsync(ZoomSettings settings, CancellationToken ct)
     {
-        if (_cachedToken is not null && DateTimeOffset.UtcNow < _tokenExpiresAt.AddMinutes(-2))
+        var tokenSettingsHash = TokenSettingsHash(settings);
+        if (_cachedToken is not null
+            && _cachedTokenSettingsHash == tokenSettingsHash
+            && DateTimeOffset.UtcNow < _tokenExpiresAt.AddMinutes(-2))
+        {
             return _cachedToken;
+        }
 
         await _tokenLock.WaitAsync(ct);
         try
         {
-            // Double-check after acquiring lock
-            if (_cachedToken is not null && DateTimeOffset.UtcNow < _tokenExpiresAt.AddMinutes(-2))
+            if (_cachedToken is not null
+                && _cachedTokenSettingsHash == tokenSettingsHash
+                && DateTimeOffset.UtcNow < _tokenExpiresAt.AddMinutes(-2))
+            {
                 return _cachedToken;
+            }
 
             var client = httpClientFactory.CreateClient("ZoomAuth");
-            var accountId = RequireOption(_opts.AccountId, nameof(ZoomOptions.AccountId));
-            var clientId = RequireOption(_opts.ClientId, nameof(ZoomOptions.ClientId));
-            var clientSecret = RequireOption(_opts.ClientSecret, nameof(ZoomOptions.ClientSecret));
+            var accountId = RequireOption(settings.AccountId, nameof(ZoomOptions.AccountId));
+            var clientId = RequireOption(settings.ClientId, nameof(ZoomOptions.ClientId));
+            var clientSecret = RequireOption(settings.ClientSecret, nameof(ZoomOptions.ClientSecret));
 
-            var credentials = Convert.ToBase64String(
-                Encoding.ASCII.GetBytes($"{clientId}:{clientSecret}"));
-            client.DefaultRequestHeaders.Authorization =
-                new AuthenticationHeaderValue("Basic", credentials);
+            var credentials = Convert.ToBase64String(Encoding.ASCII.GetBytes($"{clientId}:{clientSecret}"));
+            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Basic", credentials);
 
             var form = new FormUrlEncodedContent(new Dictionary<string, string>
             {
@@ -308,23 +387,24 @@ public sealed partial class ZoomMeetingService(
                 ["account_id"] = accountId
             });
 
-            var response = await client.PostAsync(_opts.TokenUrl, form, ct);
-
+            var response = await client.PostAsync(settings.TokenUrl, form, ct);
             if (!response.IsSuccessStatusCode)
             {
                 var errorBody = await response.Content.ReadAsStringAsync(ct);
                 logger.LogError("Zoom token error {Status}: {Body}", response.StatusCode, SanitizeProviderErrorBody(errorBody));
-                throw new InvalidOperationException(
-                    $"Failed to obtain Zoom access token: {response.StatusCode}");
+                throw new InvalidOperationException($"Failed to obtain Zoom access token: {response.StatusCode}");
             }
 
             var json = await response.Content.ReadAsStringAsync(ct);
             var tokenResponse = JsonSerializer.Deserialize<ZoomTokenResponse>(json, JsonOpts)
                 ?? throw new InvalidOperationException("Failed to deserialize Zoom token response");
             if (string.IsNullOrWhiteSpace(tokenResponse.AccessToken))
+            {
                 throw new InvalidOperationException("Zoom token response did not include an access token");
+            }
 
             _cachedToken = tokenResponse.AccessToken;
+            _cachedTokenSettingsHash = tokenSettingsHash;
             _tokenExpiresAt = DateTimeOffset.UtcNow.AddSeconds(tokenResponse.ExpiresIn);
 
             logger.LogInformation("Acquired Zoom access token, expires at {Expiry}", _tokenExpiresAt);
@@ -335,6 +415,9 @@ public sealed partial class ZoomMeetingService(
             _tokenLock.Release();
         }
     }
+
+    private async Task<ZoomSettings> GetSettingsAsync(CancellationToken ct)
+        => (await runtimeSettings.GetAsync(ct)).Zoom;
 
     private static string SanitizeProviderErrorBody(string? body)
     {
@@ -348,9 +431,17 @@ public sealed partial class ZoomMeetingService(
     private static string RequireOption(string? value, string name)
     {
         if (string.IsNullOrWhiteSpace(value))
+        {
             throw new InvalidOperationException($"Zoom option {name} is required when sandbox fallback is disabled.");
+        }
 
         return value;
+    }
+
+    private static string TokenSettingsHash(ZoomSettings settings)
+    {
+        var material = $"{settings.AccountId}\n{settings.ClientId}\n{settings.ClientSecret}\n{settings.TokenUrl}";
+        return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(material))).ToLowerInvariant();
     }
 
     private static string Base64UrlEncode(byte[] value)
@@ -362,8 +453,6 @@ public sealed partial class ZoomMeetingService(
     [GeneratedRegex("(?i)(\"(?:access_token|refresh_token|token|api_key|client_secret|secret|password)\"\\s*:\\s*)\"[^\"]*\"")]
     private static partial Regex SensitiveJsonValueRegex();
 
-    // ── JSON Serialization ──────────────────────────────────────────────
-
     private static readonly JsonSerializerOptions JsonOpts = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
@@ -371,8 +460,6 @@ public sealed partial class ZoomMeetingService(
         PropertyNameCaseInsensitive = true
     };
 }
-
-// ── Zoom Response DTOs ──────────────────────────────────────────────────
 
 public record ZoomMeetingResult(
     long MeetingId,

@@ -184,6 +184,14 @@ public partial class LearnerDbContext(DbContextOptions<LearnerDbContext> options
     public DbSet<LiveClassRecording> LiveClassRecordings => Set<LiveClassRecording>();
     public DbSet<LiveClassWaitlistEntry> LiveClassWaitlistEntries => Set<LiveClassWaitlistEntry>();
     public DbSet<LiveClassWebhookEvent> LiveClassWebhookEvents => Set<LiveClassWebhookEvent>();
+    public DbSet<ClassRecordingEmbedding> ClassRecordingEmbeddings => Set<ClassRecordingEmbedding>();
+
+    // Wave A1 — Zoom tutor stack: principal tutor record, weekly availability
+    // schedule, per-class materials, and learner feedback rows.
+    public DbSet<OetLearner.Api.Domain.Classes.Tutor> Tutors => Set<OetLearner.Api.Domain.Classes.Tutor>();
+    public DbSet<OetLearner.Api.Domain.Classes.TutorAvailability> TutorAvailabilities => Set<OetLearner.Api.Domain.Classes.TutorAvailability>();
+    public DbSet<OetLearner.Api.Domain.Classes.ClassMaterial> ClassMaterials => Set<OetLearner.Api.Domain.Classes.ClassMaterial>();
+    public DbSet<OetLearner.Api.Domain.Classes.ClassFeedback> ClassFeedbacks => Set<OetLearner.Api.Domain.Classes.ClassFeedback>();
 
     // Social / achievement entities
     public DbSet<Certificate> Certificates => Set<Certificate>();
@@ -319,6 +327,20 @@ public partial class LearnerDbContext(DbContextOptions<LearnerDbContext> options
     public DbSet<ListeningAttemptNote> ListeningAttemptNotes => Set<ListeningAttemptNote>();
     public DbSet<ListeningExpertFeedback> ListeningExpertFeedbacks => Set<ListeningExpertFeedback>();
     public DbSet<ListeningTtsJob> ListeningTtsJobs => Set<ListeningTtsJob>();
+
+    // Listening Pathway subsystem (Listening Module Pathway Plan Phase 1).
+    // 5-stage learning pathway parallel to ReadingPathway — onboarding, audio_check,
+    // diagnostic, foundation, practice, mastery. Coexists with the existing V2
+    // attempt-level path (ListeningAttempt/ListeningPathwayProgress) which serves
+    // a different layer.
+    public DbSet<LearnerListeningProfile> LearnerListeningProfiles => Set<LearnerListeningProfile>();
+    public DbSet<LearnerListeningPathway> LearnerListeningPathways => Set<LearnerListeningPathway>();
+    public DbSet<LearnerListeningSkillScore> LearnerListeningSkillScores => Set<LearnerListeningSkillScore>();
+    public DbSet<LearnerAccentProgress> LearnerAccentProgresses => Set<LearnerAccentProgress>();
+    public DbSet<ListeningPracticeSession> ListeningPracticeSessions => Set<ListeningPracticeSession>();
+    public DbSet<ListeningQuestionAttempt> ListeningQuestionAttempts => Set<ListeningQuestionAttempt>();
+    public DbSet<ListeningPracticeNote> ListeningPracticeNotes => Set<ListeningPracticeNote>();
+
     public DbSet<BillingPlan> BillingPlans => Set<BillingPlan>();
     public DbSet<BillingPlanVersion> BillingPlanVersions => Set<BillingPlanVersion>();
     public DbSet<WalletTopUpTierConfig> WalletTopUpTierConfigs => Set<WalletTopUpTierConfig>();
@@ -954,6 +976,21 @@ public partial class LearnerDbContext(DbContextOptions<LearnerDbContext> options
             .HasForeignKey(x => x.ClassSessionId)
             .OnDelete(DeleteBehavior.Cascade);
 
+        // Wave A2 — recording transcript embeddings (RAG store).
+        modelBuilder.Entity<ClassRecordingEmbedding>()
+            .HasOne(x => x.Recording)
+            .WithMany()
+            .HasForeignKey(x => x.ClassRecordingId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // Wave A1 — Tutor + class extras (Zoom tutor stack).
+        modelBuilder.Entity<OetLearner.Api.Domain.Classes.Tutor>().Property(x => x.HourlyRateUsd).HasPrecision(10, 2);
+        modelBuilder.Entity<OetLearner.Api.Domain.Classes.TutorAvailability>()
+            .HasOne(x => x.Tutor)
+            .WithMany(x => x.Availability)
+            .HasForeignKey(x => x.TutorId)
+            .OnDelete(DeleteBehavior.Cascade);
+
         // Social indexes
         modelBuilder.Entity<Certificate>().HasIndex(x => x.UserId);
         modelBuilder.Entity<Certificate>().HasIndex(x => x.VerificationCode).IsUnique();
@@ -1099,6 +1136,15 @@ public partial class LearnerDbContext(DbContextOptions<LearnerDbContext> options
         modelBuilder.Entity<ReadingStrategyProgress>().HasIndex(x => new { x.UserId, x.StrategyId }).IsUnique();
         modelBuilder.Entity<LearnerXp>().HasIndex(x => x.UserId).IsUnique();
         modelBuilder.Entity<LearnerBadge>().HasIndex(x => new { x.UserId, x.BadgeCode }).IsUnique();
+
+        // Listening Pathway subsystem indexes
+        modelBuilder.Entity<LearnerListeningProfile>().HasIndex(x => x.UserId).IsUnique();
+        modelBuilder.Entity<LearnerListeningSkillScore>().HasIndex(x => new { x.UserId, x.SkillCode }).IsUnique();
+        modelBuilder.Entity<LearnerAccentProgress>().HasIndex(x => new { x.UserId, x.Accent }).IsUnique();
+        modelBuilder.Entity<ListeningPracticeSession>().HasIndex(x => new { x.UserId, x.StartedAt });
+        modelBuilder.Entity<ListeningQuestionAttempt>().HasIndex(x => new { x.UserId, x.AttemptedAt });
+        modelBuilder.Entity<ListeningQuestionAttempt>().HasIndex(x => new { x.UserId, x.InReviewQueue, x.NextReviewAt });
+        modelBuilder.Entity<ListeningPracticeNote>().HasIndex(x => new { x.UserId, x.PracticeSessionId, x.ListeningQuestionId });
 
         // Scoring Policy table (partial; see LearnerDbContext.ScoringPolicy.cs).
         OnModelCreatingScoringPolicy(modelBuilder);

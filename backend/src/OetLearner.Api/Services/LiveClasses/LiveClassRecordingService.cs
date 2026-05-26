@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services.Classes;
 using OetLearner.Api.Services.Content;
 
 namespace OetLearner.Api.Services.LiveClasses;
@@ -10,8 +11,8 @@ namespace OetLearner.Api.Services.LiveClasses;
 ///   Download from Zoom → store via IFileStorage → Transcribe → AI Summary
 ///
 /// All methods are safe to call from the background job processor.
-/// They handle their own exceptions gracefully — failures update
-/// the recording status and log rather than rethrowing.
+/// Failures update the recording status and are rethrown so the background
+/// job processor can apply its retry/backoff policy.
 /// </summary>
 public sealed class LiveClassRecordingService(
     LearnerDbContext db,
@@ -19,8 +20,10 @@ public sealed class LiveClassRecordingService(
     IFileStorage fileStorage,
     NotificationService notifications,
     TimeProvider timeProvider,
-    ILogger<LiveClassRecordingService> logger)
+    ILogger<LiveClassRecordingService> logger,
+    IClassNotificationService? classNotifications = null)
 {
+
     // ─────────────────────────────────────────────────────────────────────────
     // Step 1: Download
     // ─────────────────────────────────────────────────────────────────────────
@@ -44,7 +47,7 @@ public sealed class LiveClassRecordingService(
                 return;
             }
 
-            if (recording.Status is not (LiveClassRecordingStatus.Pending or LiveClassRecordingStatus.Downloading))
+            if (recording.Status is not (LiveClassRecordingStatus.Pending or LiveClassRecordingStatus.Downloading or LiveClassRecordingStatus.Failed))
             {
                 logger.LogInformation(
                     "ProcessDownloadAsync: recording {RecordingId} has status {Status} — skipping.",
@@ -109,7 +112,7 @@ public sealed class LiveClassRecordingService(
             {
                 try
                 {
-                    recording.Status = LiveClassRecordingStatus.Failed;
+                    recording.Status = LiveClassRecordingStatus.Downloading;
                     recording.FailureReason = ex.Message.Length > 500
                         ? ex.Message[..500]
                         : ex.Message;
@@ -122,6 +125,8 @@ public sealed class LiveClassRecordingService(
                         recordingId);
                 }
             }
+
+            throw;
         }
     }
 
@@ -199,6 +204,8 @@ public sealed class LiveClassRecordingService(
                         recordingId);
                 }
             }
+
+            throw;
         }
     }
 
@@ -280,6 +287,12 @@ public sealed class LiveClassRecordingService(
                     ct);
             }
 
+            // Wave A3 — also fire TutorRecordingReady so the tutor knows their replay is up.
+            if (classNotifications is not null)
+            {
+                await classNotifications.SendTutorRecordingReadyAsync(recording, session, ct);
+            }
+
             await db.SaveChangesAsync(ct);
 
             logger.LogInformation(
@@ -309,6 +322,8 @@ public sealed class LiveClassRecordingService(
                         recordingId);
                 }
             }
+
+            throw;
         }
     }
 
@@ -317,10 +332,40 @@ public sealed class LiveClassRecordingService(
     // ─────────────────────────────────────────────────────────────────────────
 
     /// <summary>
-    /// Dispatches session reminders to enrolled learners.
-    /// v1: stub — full notification integration pending NotificationEventKey.LearnerLiveClassReminder template.
+    /// Dispatches a single leg of the Wave A3 reminder cascade for one enrollment.
+    /// The job resource id encodes the enrollment id + lead window (see
+    /// <c>LiveClassService.BuildReminderResourceKey</c>); when the resource id is a
+    /// bare session id we treat it as the legacy session-wide reminder.
     /// </summary>
-    public async Task ProcessReminderDispatchAsync(string sessionId, CancellationToken ct)
+    public async Task ProcessReminderDispatchAsync(string resourceId, CancellationToken ct)
+    {
+        try
+        {
+            var (enrollmentId, leadMinutes, sessionFallback) = ParseReminderResourceKey(resourceId);
+
+            if (!string.IsNullOrWhiteSpace(enrollmentId))
+            {
+                await DispatchEnrollmentReminderAsync(enrollmentId!, leadMinutes ?? 0, ct);
+                return;
+            }
+
+            // Legacy session-wide reminder (pre-Wave-A3 jobs queued via QueueSessionReminderJobAsync).
+            await DispatchLegacySessionReminderAsync(sessionFallback, ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogError(ex,
+                "ProcessReminderDispatchAsync: unhandled exception for resource {ResourceId}.",
+                resourceId);
+        }
+    }
+
+    /// <summary>
+    /// Wave A3 — when a Zoom meeting.started webhook lands, we queue this job for
+    /// T+5min. It fans out a "starting now" push to every enrolled learner who has
+    /// not yet been recorded as attending.
+    /// </summary>
+    public async Task ProcessNoShowPingAsync(string sessionId, CancellationToken ct)
     {
         try
         {
@@ -331,44 +376,151 @@ public sealed class LiveClassRecordingService(
 
             if (session is null)
             {
-                logger.LogWarning("ProcessReminderDispatchAsync: session {SessionId} not found — skipping.", sessionId);
+                logger.LogWarning("ProcessNoShowPingAsync: session {SessionId} not found — skipping.", sessionId);
                 return;
             }
 
-            var activeEnrollments = session.Enrollments
-                .Where(e => e.Status == LiveClassEnrollmentStatus.Active)
+            var attendedUserIds = await db.LiveClassAttendances
+                .Where(a => a.ClassSessionId == sessionId)
+                .Select(a => a.UserId)
+                .ToHashSetAsync(ct);
+
+            var missing = session.Enrollments
+                .Where(e => e.Status == LiveClassEnrollmentStatus.Active && !attendedUserIds.Contains(e.UserId))
                 .ToList();
 
-            foreach (var enrollment in activeEnrollments)
+            foreach (var enrollment in missing)
             {
-                await notifications.CreateForLearnerAsync(
-                    NotificationEventKey.LearnerLiveClassReminder,
-                    enrollment.UserId,
-                    "live_class_session",
-                    session.Id,
-                    session.ScheduledStartAt.ToString("yyyyMMddHH", System.Globalization.CultureInfo.InvariantCulture),
-                    new Dictionary<string, object?>
-                    {
-                        ["classTitle"] = session.LiveClass.Title,
-                        ["sessionTime"] = session.ScheduledStartAt.ToString("yyyy-MM-dd HH:mm 'UTC'", System.Globalization.CultureInfo.InvariantCulture),
-                        ["classId"] = session.LiveClassId,
-                        ["sessionId"] = session.Id,
-                    },
-                    ct);
+                if (classNotifications is not null)
+                {
+                    await classNotifications.SendReminderAsync(enrollment, session, leadMinutes: 0, ct);
+                }
+                else
+                {
+                    await notifications.CreateForLearnerAsync(
+                        NotificationEventKey.LearnerLiveClassReminder,
+                        enrollment.UserId,
+                        "live_class_session",
+                        session.Id,
+                        $"{session.ScheduledStartAt.ToString("yyyyMMddHHmm", System.Globalization.CultureInfo.InvariantCulture)}-T0",
+                        BuildLegacyLearnerPayload(session),
+                        ct);
+                }
             }
 
             logger.LogInformation(
-                "ProcessReminderDispatchAsync: sent live class reminders for session {SessionId} to {Count} active learner(s).",
-                sessionId, activeEnrollments.Count);
+                "ProcessNoShowPingAsync: pinged {Count} learner(s) who had not yet joined session {SessionId}.",
+                missing.Count, sessionId);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             logger.LogError(ex,
-                "ProcessReminderDispatchAsync: unhandled exception for session {SessionId}.",
+                "ProcessNoShowPingAsync: unhandled exception for session {SessionId}.",
                 sessionId);
-            // Reminders are fire-and-forget — no status to update on failure.
         }
     }
+
+    private async Task DispatchEnrollmentReminderAsync(string enrollmentId, int leadMinutes, CancellationToken ct)
+    {
+        var enrollment = await db.LiveClassEnrollments
+            .Include(e => e.ClassSession)
+                .ThenInclude(s => s.LiveClass)
+            .FirstOrDefaultAsync(e => e.Id == enrollmentId, ct);
+
+        if (enrollment is null)
+        {
+            logger.LogInformation("DispatchEnrollmentReminderAsync: enrollment {EnrollmentId} not found — skipping.", enrollmentId);
+            return;
+        }
+
+        if (enrollment.Status != LiveClassEnrollmentStatus.Active)
+        {
+            logger.LogInformation(
+                "DispatchEnrollmentReminderAsync: enrollment {EnrollmentId} status {Status} — skipping reminder.",
+                enrollmentId, enrollment.Status);
+            return;
+        }
+
+        if (classNotifications is not null)
+        {
+            await classNotifications.SendReminderAsync(enrollment, enrollment.ClassSession, leadMinutes, ct);
+            // The 15-min push doubles as the tutor heads-up.
+            if (leadMinutes == 10 || leadMinutes == 15)
+            {
+                await classNotifications.SendTutorClassStartingSoonAsync(enrollment.ClassSession, ct);
+            }
+            return;
+        }
+
+        // Fallback (legacy callers that do not register IClassNotificationService).
+        await notifications.CreateForLearnerAsync(
+            NotificationEventKey.LearnerLiveClassReminder,
+            enrollment.UserId,
+            "live_class_session",
+            enrollment.ClassSession.Id,
+            $"{enrollment.ClassSession.ScheduledStartAt.ToString("yyyyMMddHHmm", System.Globalization.CultureInfo.InvariantCulture)}-T{leadMinutes}",
+            BuildLegacyLearnerPayload(enrollment.ClassSession),
+            ct);
+    }
+
+    private async Task DispatchLegacySessionReminderAsync(string sessionId, CancellationToken ct)
+    {
+        var session = await db.LiveClassSessions
+            .Include(s => s.LiveClass)
+            .Include(s => s.Enrollments)
+            .FirstOrDefaultAsync(s => s.Id == sessionId, ct);
+
+        if (session is null)
+        {
+            logger.LogWarning("DispatchLegacySessionReminderAsync: session {SessionId} not found — skipping.", sessionId);
+            return;
+        }
+
+        var activeEnrollments = session.Enrollments
+            .Where(e => e.Status == LiveClassEnrollmentStatus.Active)
+            .ToList();
+
+        foreach (var enrollment in activeEnrollments)
+        {
+            await notifications.CreateForLearnerAsync(
+                NotificationEventKey.LearnerLiveClassReminder,
+                enrollment.UserId,
+                "live_class_session",
+                session.Id,
+                session.ScheduledStartAt.ToString("yyyyMMddHH", System.Globalization.CultureInfo.InvariantCulture),
+                BuildLegacyLearnerPayload(session),
+                ct);
+        }
+    }
+
+    private static (string? EnrollmentId, int? LeadMinutes, string SessionId) ParseReminderResourceKey(string resourceId)
+    {
+        if (string.IsNullOrWhiteSpace(resourceId))
+        {
+            return (null, null, string.Empty);
+        }
+
+        var separatorIndex = resourceId.IndexOf(":T", StringComparison.Ordinal);
+        if (separatorIndex < 0)
+        {
+            return (null, null, resourceId);
+        }
+
+        var enrollmentId = resourceId[..separatorIndex];
+        var leadPart = resourceId[(separatorIndex + 2)..];
+        return int.TryParse(leadPart, out var leadMinutes)
+            ? (enrollmentId, leadMinutes, string.Empty)
+            : (enrollmentId, null, string.Empty);
+    }
+
+    private static Dictionary<string, object?> BuildLegacyLearnerPayload(LiveClassSession session)
+        => new()
+        {
+            ["classTitle"] = session.LiveClass.Title,
+            ["sessionTime"] = session.ScheduledStartAt.ToString("yyyy-MM-dd HH:mm 'UTC'", System.Globalization.CultureInfo.InvariantCulture),
+            ["classId"] = session.LiveClassId,
+            ["sessionId"] = session.Id,
+        };
 
     // ─────────────────────────────────────────────────────────────────────────
     // Private helpers

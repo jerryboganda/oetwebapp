@@ -137,6 +137,15 @@ public static class NotificationCatalog
             NotificationEventKey.ExpertPrivateSpeakingReminder => $"Upcoming session in {ReadToken(tokens, "hoursUntil", "a few")} hours",
             NotificationEventKey.ExpertPrivateSpeakingCancelled => "A private speaking session has been cancelled",
             NotificationEventKey.AdminPrivateSpeakingBooked => $"Private speaking session booked: {ReadToken(tokens, "tutorName", "tutor")} at {ReadToken(tokens, "sessionTime", "time to be confirmed")}",
+            // Wave A3 — class notifications
+            NotificationEventKey.LearnerClassEnrollmentConfirmed => $"You're in: {ReadToken(tokens, "classTitle", "your class")} on {ReadToken(tokens, "sessionTime", "the scheduled time")}",
+            NotificationEventKey.LearnerClassCancelledByTutor => $"Class cancelled: {ReadToken(tokens, "classTitle", "your class")}",
+            NotificationEventKey.LearnerClassCancelledByUser => $"Cancellation confirmed for {ReadToken(tokens, "classTitle", "your class")}",
+            NotificationEventKey.LearnerClassWaitlistOpening => $"A seat just opened in {ReadToken(tokens, "classTitle", "your waitlisted class")}",
+            NotificationEventKey.LearnerClassFeedbackRequest => $"How was {ReadToken(tokens, "classTitle", "your class")}? Share your feedback",
+            NotificationEventKey.TutorClassStarting15Min => $"Heads up: {ReadToken(tokens, "classTitle", "your class")} starts in 15 minutes",
+            NotificationEventKey.TutorRecordingReady => $"Recording ready: {ReadToken(tokens, "classTitle", "your class")}",
+            NotificationEventKey.TutorFeedbackReceivedDigest => $"You received {ReadToken(tokens, "feedbackCount", "new")} feedback responses today",
             _ when Entries.TryGetValue(key, out var entry) => entry.Label,
             _ => "Notification update"
         };
@@ -186,6 +195,15 @@ public static class NotificationCatalog
             NotificationEventKey.ExpertPrivateSpeakingReminder => $"Your private speaking session starts in {ReadToken(tokens, "hoursUntil", "a few")} hours. Use the Zoom start link in your session details.",
             NotificationEventKey.ExpertPrivateSpeakingCancelled => ReadToken(tokens, "message", "A private speaking session has been cancelled by the learner or admin."),
             NotificationEventKey.AdminPrivateSpeakingBooked => $"Private speaking session booked with {ReadToken(tokens, "tutorName", "a tutor")} at {ReadToken(tokens, "sessionTime", "time to be confirmed")}. Booking ID: {ReadToken(tokens, "bookingId", "unknown")}.",
+            // Wave A3 — class notification bodies
+            NotificationEventKey.LearnerClassEnrollmentConfirmed => $"Your seat is confirmed in {ReadToken(tokens, "classTitle", "the class")} at {ReadToken(tokens, "sessionTime", "the scheduled time")}. A calendar invite is attached and the Zoom link will become active 30 minutes before the start time.",
+            NotificationEventKey.LearnerClassCancelledByTutor => $"{ReadToken(tokens, "classTitle", "Your live class")} on {ReadToken(tokens, "sessionTime", "the scheduled time")} has been cancelled by the tutor. {ReadToken(tokens, "refundMessage", "Any credits charged have been refunded to your wallet.")}",
+            NotificationEventKey.LearnerClassCancelledByUser => $"Your cancellation of {ReadToken(tokens, "classTitle", "the class")} on {ReadToken(tokens, "sessionTime", "the scheduled time")} has been processed. {ReadToken(tokens, "refundMessage", "Refund details are reflected on your wallet.")}",
+            NotificationEventKey.LearnerClassWaitlistOpening => $"You're next on the waitlist for {ReadToken(tokens, "classTitle", "this class")}. Claim your seat within {ReadToken(tokens, "claimWindow", "60 minutes")} or it will roll to the next learner.",
+            NotificationEventKey.LearnerClassFeedbackRequest => $"Thanks for joining {ReadToken(tokens, "classTitle", "the class")}. Tap to share a quick rating and short comment — it helps the tutor and the next learner.",
+            NotificationEventKey.TutorClassStarting15Min => $"Your class {ReadToken(tokens, "classTitle", string.Empty)} starts in 15 minutes. Open the host link to join early and check audio.",
+            NotificationEventKey.TutorRecordingReady => $"The recording and transcript for {ReadToken(tokens, "classTitle", "your class")} on {ReadToken(tokens, "sessionTime", "the scheduled time")} have finished processing and are available in your tutor workspace.",
+            NotificationEventKey.TutorFeedbackReceivedDigest => $"Daily summary: you received {ReadToken(tokens, "feedbackCount", "new")} learner feedback responses across your classes in the last 24 hours.",
             _ when Entries.TryGetValue(key, out var entry) => entry.Description,
             _ => "A new notification is available."
         };
@@ -231,10 +249,23 @@ public static class NotificationCatalog
             NotificationEventKey.LearnerPrivateSpeakingBooked => $"/private-speaking/bookings/{ReadToken(tokens, "bookingId", string.Empty)}",
             NotificationEventKey.LearnerPrivateSpeakingReminder => $"/private-speaking/bookings/{ReadToken(tokens, "bookingId", string.Empty)}",
             NotificationEventKey.LearnerPrivateSpeakingCancelled => "/private-speaking",
+            NotificationEventKey.LearnerClassBookingConfirmed => $"/classes/{ReadToken(tokens, "classId", string.Empty)}",
+            NotificationEventKey.LearnerLiveClassReminder => $"/classes/{ReadToken(tokens, "classId", string.Empty)}/sessions/{ReadToken(tokens, "sessionId", string.Empty)}/join",
+            NotificationEventKey.LearnerLiveClassRecordingReady => $"/me/classes/recordings/{ReadToken(tokens, "sessionId", string.Empty)}",
+            NotificationEventKey.LearnerLiveClassCancelled => "/me/classes/upcoming",
             NotificationEventKey.ExpertPrivateSpeakingAssigned => $"/expert/private-speaking/{ReadToken(tokens, "bookingId", string.Empty)}",
             NotificationEventKey.ExpertPrivateSpeakingReminder => $"/expert/private-speaking/{ReadToken(tokens, "bookingId", string.Empty)}",
             NotificationEventKey.ExpertPrivateSpeakingCancelled => "/expert/private-speaking",
             NotificationEventKey.AdminPrivateSpeakingBooked => "/admin/private-speaking",
+            // Wave A3 — class notification action URLs
+            NotificationEventKey.LearnerClassEnrollmentConfirmed => $"/classes/{ReadToken(tokens, "classId", string.Empty)}/sessions/{ReadToken(tokens, "sessionId", string.Empty)}/join",
+            NotificationEventKey.LearnerClassCancelledByTutor => "/me/classes/upcoming",
+            NotificationEventKey.LearnerClassCancelledByUser => "/me/classes/upcoming",
+            NotificationEventKey.LearnerClassWaitlistOpening => $"/classes/{ReadToken(tokens, "classId", string.Empty)}",
+            NotificationEventKey.LearnerClassFeedbackRequest => $"/me/classes/{ReadToken(tokens, "sessionId", string.Empty)}/feedback",
+            NotificationEventKey.TutorClassStarting15Min => $"/expert/live-classes/{ReadToken(tokens, "sessionId", string.Empty)}/host",
+            NotificationEventKey.TutorRecordingReady => $"/expert/live-classes/{ReadToken(tokens, "sessionId", string.Empty)}/recording",
+            NotificationEventKey.TutorFeedbackReceivedDigest => "/expert/live-classes/feedback",
             _ => BuildFallbackActionUrl(key)
         };
 
@@ -364,7 +395,18 @@ public static class NotificationCatalog
             new(NotificationEventKey.AdminOverdueFeedbackSpikeAlert, ApplicationUserRoles.Admin, "operations", "Overdue Feedback Spike", "Alert admins when overdue feedback crosses configured thresholds.", NotificationSeverity.Critical, new(true, true, false, NotificationEmailMode.Immediate)),
             new(NotificationEventKey.AdminFailedPaymentSpikeAlert, ApplicationUserRoles.Admin, "operations", "Failed Payment Spike", "Alert admins when failed payments spike.", NotificationSeverity.Critical, new(true, true, false, NotificationEmailMode.Immediate)),
             new(NotificationEventKey.AdminCouponAbuseAlert, ApplicationUserRoles.Admin, "security", "Coupon Abuse Alert", "Alert admins about suspicious coupon activity.", NotificationSeverity.Warning, new(true, true, false, NotificationEmailMode.Immediate)),
-            new(NotificationEventKey.AdminContentFlaggedAlert, ApplicationUserRoles.Admin, "operations", "Content Flagged", "Alert admins when content is flagged for review.", NotificationSeverity.Warning, new(true, true, false, NotificationEmailMode.Immediate))
+            new(NotificationEventKey.AdminContentFlaggedAlert, ApplicationUserRoles.Admin, "operations", "Content Flagged", "Alert admins when content is flagged for review.", NotificationSeverity.Warning, new(true, true, false, NotificationEmailMode.Immediate)),
+
+            // Wave A3 — class notifications + reminder scheduling.
+            // EmailMode "Immediate" / "Off" maps to the plan §15 column: Immediate -> live send, DailyDigest -> scheduled digest.
+            new(NotificationEventKey.LearnerClassEnrollmentConfirmed, ApplicationUserRoles.Learner, "live_classes", "Class Enrollment Confirmed", "Confirm a learner has been enrolled in a live class and attach the calendar invite.", NotificationSeverity.Info, new(true, true, true, NotificationEmailMode.Immediate)),
+            new(NotificationEventKey.LearnerClassCancelledByTutor, ApplicationUserRoles.Learner, "live_classes", "Class Cancelled by Tutor", "Notify learners when a tutor or admin cancels a live class.", NotificationSeverity.Warning, new(true, true, true, NotificationEmailMode.Immediate)),
+            new(NotificationEventKey.LearnerClassCancelledByUser, ApplicationUserRoles.Learner, "live_classes", "Class Cancellation Confirmed", "Confirm a self-initiated live class cancellation to the learner.", NotificationSeverity.Info, new(false, true, false, NotificationEmailMode.Immediate)),
+            new(NotificationEventKey.LearnerClassWaitlistOpening, ApplicationUserRoles.Learner, "live_classes", "Waitlist Slot Available", "Tell a waitlisted learner that a seat has opened up; they have one hour to claim it.", NotificationSeverity.Info, new(true, false, true, NotificationEmailMode.Off)),
+            new(NotificationEventKey.LearnerClassFeedbackRequest, ApplicationUserRoles.Learner, "live_classes", "Class Feedback Request", "Ask learners to rate the live class twenty-four hours after it ends.", NotificationSeverity.Info, new(false, true, false, NotificationEmailMode.Immediate)),
+            new(NotificationEventKey.TutorClassStarting15Min, ApplicationUserRoles.Expert, "live_classes", "Class Starting In 15 Minutes", "Push a final-fifteen reminder to the tutor before their live class begins.", NotificationSeverity.Info, new(true, false, true, NotificationEmailMode.Off)),
+            new(NotificationEventKey.TutorRecordingReady, ApplicationUserRoles.Expert, "live_classes", "Tutor Recording Ready", "Notify the tutor when their live class recording has finished processing.", NotificationSeverity.Info, new(true, true, false, NotificationEmailMode.Immediate)),
+            new(NotificationEventKey.TutorFeedbackReceivedDigest, ApplicationUserRoles.Expert, "live_classes", "Tutor Feedback Digest", "Daily 0600 UTC roll-up of learner feedback received on tutor's classes.", NotificationSeverity.Info, new(true, true, false, NotificationEmailMode.DailyDigest))
         ];
     }
 

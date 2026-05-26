@@ -12,6 +12,7 @@ import { Button, buttonClassName } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ZoomMeetingEmbed } from '@/components/class/ZoomMeetingEmbed';
 import { fetchLiveClassJoinToken, type LiveClassJoinToken } from '@/lib/api';
+import { safeZoomUrl } from '@/lib/zoom-url';
 
 export default function LiveClassJoinPage() {
   const params = useParams();
@@ -45,8 +46,11 @@ export default function LiveClassJoinPage() {
     if (!token) return;
     if (token.sdkKey && token.signature) {
       setMeeting(true);
-    } else if (token.joinUrl) {
-      window.open(token.joinUrl, '_blank', 'noreferrer');
+    } else {
+      const joinUrl = safeZoomUrl(token.joinUrl);
+      if (joinUrl) {
+        window.open(joinUrl, '_blank', 'noopener,noreferrer');
+      }
     }
   };
 
@@ -86,6 +90,7 @@ export default function LiveClassJoinPage() {
         {token ? (
           (() => {
             const canEmbed = Boolean(token.sdkKey && token.signature);
+            const joinUrl = safeZoomUrl(token.joinUrl);
             return (
           <section className="rounded-2xl border border-border bg-surface p-6 shadow-sm">
             <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
@@ -113,8 +118,8 @@ export default function LiveClassJoinPage() {
                     </>
                   )}
                 </Button>
-                {!canEmbed && token.joinUrl ? (
-                  <a href={token.joinUrl} target="_blank" rel="noreferrer" className={buttonClassName({ variant: 'outline' })}>
+                {!canEmbed && joinUrl ? (
+                  <a href={joinUrl} target="_blank" rel="noreferrer" className={buttonClassName({ variant: 'outline' })}>
                     <ExternalLink className="h-4 w-4" /> Open Zoom directly
                   </a>
                 ) : null}

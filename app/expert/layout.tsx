@@ -3,7 +3,7 @@
 import { useMemo } from 'react';
 import { AppShell, ExpertDashboardShell, type MobileMenuSection } from '@/components/layout';
 import type { NavItem } from '@/components/layout/sidebar';
-import { LayoutDashboard, Inbox, CheckCircle, BarChart3, CalendarClock, Users, Mic, Rocket, MessageSquare, DollarSign, Headphones } from 'lucide-react';
+import { LayoutDashboard, Inbox, CheckCircle, BarChart3, CalendarClock, Users, Mic, Rocket, MessageSquare, DollarSign, Headphones, Video } from 'lucide-react';
 import { usePathname } from 'next/navigation';
 import { useExpertAuth } from '@/lib/hooks/use-expert-auth';
 
@@ -15,6 +15,7 @@ const expertNavItems: NavItem[] = [
   { href: '/expert/calibration', label: 'Calibration', icon: <CheckCircle className="w-5 h-5" />, matchPrefix: '/expert/calibration' },
   { href: '/expert/metrics', label: 'Metrics', icon: <BarChart3 className="w-5 h-5" />, matchPrefix: '/expert/metrics' },
   { href: '/expert/schedule', label: 'Schedule', icon: <CalendarClock className="w-5 h-5" />, matchPrefix: '/expert/schedule' },
+  { href: '/expert/live-classes', label: 'Live Classes', icon: <Video className="w-5 h-5" />, matchPrefix: '/expert/live-classes' },
   { href: '/expert/learners', label: 'Learners', icon: <Users className="w-5 h-5" />, matchPrefix: '/expert/learners' },
   { href: '/expert/private-speaking', label: 'Private Speaking', icon: <Mic className="w-5 h-5" />, matchPrefix: '/expert/private-speaking' },
   { href: '/expert/messages', label: 'Messages', icon: <MessageSquare className="w-5 h-5" />, matchPrefix: '/expert/messages' },
@@ -53,6 +54,10 @@ function getExpertPageTitle(pathname: string | null): string | undefined {
     return 'Schedule';
   }
 
+  if (pathname.startsWith('/expert/live-classes')) {
+    return 'Live Classes';
+  }
+
   if (pathname.startsWith('/expert/private-speaking')) {
     return 'Private Speaking';
   }
@@ -89,7 +94,7 @@ function ExpertLayoutContent({ children }: { children: React.ReactNode }) {
   }, [showOnboarding]);
 
   const mobileNavItems = useMemo(() => {
-    const base = [expertNavItems[0], expertNavItems[1], expertNavItems[2], expertNavItems[3], expertNavItems[4]];
+    const base = [expertNavItems[0], expertNavItems[1], expertNavItems[2], expertNavItems[3], expertNavItems[7]];
     if (!showOnboarding) return base;
     return [expertNavItems[0], onboardingNavItem, ...base.slice(1)];
   }, [showOnboarding]);
@@ -102,7 +107,7 @@ function ExpertLayoutContent({ children }: { children: React.ReactNode }) {
       },
       {
         label: 'Performance',
-        items: [expertNavItems[4], expertNavItems[5], expertNavItems[6]],
+        items: [expertNavItems[4], expertNavItems[5], expertNavItems[6], expertNavItems[7]],
       },
     ];
     if (showOnboarding) {

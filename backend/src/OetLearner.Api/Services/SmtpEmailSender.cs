@@ -10,13 +10,19 @@ using OetLearner.Api.Services.Settings;
 
 namespace OetLearner.Api.Services;
 
+public sealed record EmailAttachment(
+    string FileName,
+    string ContentType,
+    byte[] Content);
+
 public sealed record EmailMessage(
     string To,
     string Subject,
     string TextBody,
     string? HtmlBody = null,
     string? TemplateKey = null,
-    IReadOnlyDictionary<string, object?>? TemplateParameters = null);
+    IReadOnlyDictionary<string, object?>? TemplateParameters = null,
+    IReadOnlyCollection<EmailAttachment>? Attachments = null);
 
 public interface IEmailSender
 {
@@ -99,6 +105,18 @@ public sealed class SmtpEmailSender(
         {
             mailMessage.Body = message.TextBody;
             mailMessage.IsBodyHtml = false;
+        }
+
+        if (message.Attachments is { Count: > 0 })
+        {
+            foreach (var attachment in message.Attachments)
+            {
+                // The MemoryStream is owned by the Attachment which is in turn owned by
+                // mailMessage; disposing mailMessage closes both deterministically.
+                var stream = new MemoryStream(attachment.Content, writable: false);
+                var attached = new Attachment(stream, attachment.FileName, attachment.ContentType);
+                mailMessage.Attachments.Add(attached);
+            }
         }
 
         try

@@ -267,10 +267,10 @@ function WritingResultContent() {
             <span className="font-bold">View Detailed Feedback</span>
             <span className="text-xs text-info mt-1">See criterion breakdown</span>
           </Link>
-          <Link href={`/writing/player?taskId=${result.taskId}&mode=learning`} className="group rounded-2xl border border-border bg-surface px-4 py-5 text-center text-navy transition-all shadow-sm hover:border-primary/30 hover:shadow-md">
+          <Link href={`/writing/revision?id=${resultId}`} className="group rounded-2xl border border-border bg-surface px-4 py-5 text-center text-navy transition-all shadow-sm hover:border-primary/30 hover:shadow-md">
             <Edit3 className="w-6 h-6 mb-2 text-muted/60 group-hover:text-primary transition-colors" />
             <span className="font-bold group-hover:text-primary transition-colors">Revise Submission</span>
-            <span className="text-xs text-muted mt-1">Rewrite with learning support</span>
+            <span className="text-xs text-muted mt-1">Rewrite as a linked attempt</span>
           </Link>
           <Link href={`/writing/expert-request?id=${resultId}`} className="group rounded-2xl border border-border bg-surface px-4 py-5 text-center text-navy transition-all shadow-sm hover:border-warning/30 hover:shadow-md">
             <Star className="w-6 h-6 mb-2 text-muted/60 group-hover:text-warning transition-colors" />

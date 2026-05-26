@@ -32,14 +32,36 @@ public interface IStripeService
     /// <summary>Update a subscription to a new price (plan change).</summary>
     Task UpdateSubscriptionAsync(string subscriptionId, string newPriceId, CancellationToken ct = default);
 
+    /// <summary>Update a subscription to a new price, with explicit proration control.</summary>
+    Task UpdateSubscriptionAsync(string subscriptionId, string newPriceId, bool prorate, CancellationToken ct = default);
+
     /// <summary>Pause a subscription by setting pause_collection.</summary>
     Task PauseSubscriptionAsync(string subscriptionId, CancellationToken ct = default);
+
+    /// <summary>Pause a subscription with an explicit resume timestamp.</summary>
+    Task PauseSubscriptionAsync(string subscriptionId, DateTimeOffset? resumeAt, CancellationToken ct = default);
 
     /// <summary>Resume a paused subscription by clearing pause_collection.</summary>
     Task ResumeSubscriptionAsync(string subscriptionId, CancellationToken ct = default);
 
+    /// <summary>Apply (or clear, when <paramref name="couponId"/> is null) a coupon on an existing subscription.</summary>
+    Task ApplyCouponToSubscriptionAsync(string subscriptionId, string? couponId, CancellationToken ct = default);
+
     /// <summary>List invoices for a Stripe Customer.</summary>
     Task<IEnumerable<Invoice>> ListInvoicesAsync(string stripeCustomerId, int limit = 24, CancellationToken ct = default);
+
+    /// <summary>Retrieve a single invoice and surface its subscription id (if any).</summary>
+    Task<string?> GetInvoiceSubscriptionIdAsync(string invoiceId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Wave A5 — retry collection on an invoice via Stripe's
+    /// <c>InvoiceService.PayAsync</c>. Used by the smart-retry dunning ladder
+    /// (T+24h / T+72h / T+168h). The returned tuple reports the Stripe
+    /// outcome status and any payment-failure code; the caller is expected
+    /// to roll over to the next attempt when <c>Succeeded</c> is false.
+    /// Throws when Stripe is not configured (no SecretKey) in production.
+    /// </summary>
+    Task<PayInvoiceResult> PayInvoiceAsync(string stripeInvoiceId, CancellationToken ct = default);
 
     /// <summary>Create a Stripe Coupon.</summary>
     Task<string> CreateCouponAsync(CreateStripeCouponRequest request, CancellationToken ct = default);
@@ -75,3 +97,14 @@ public sealed record CreateStripeCouponRequest(
     string? Duration,  // "once" | "repeating" | "forever"
     int? DurationInMonths
 );
+
+/// <summary>
+/// Outcome of <see cref="IStripeService.PayInvoiceAsync"/>. Stripe returns 402
+/// when the card declines; the dunning service treats <c>Succeeded == false</c>
+/// as the trigger to schedule the next retry attempt.
+/// </summary>
+public sealed record PayInvoiceResult(
+    bool Succeeded,
+    string Status,
+    string? FailureCode,
+    string? FailureReason);

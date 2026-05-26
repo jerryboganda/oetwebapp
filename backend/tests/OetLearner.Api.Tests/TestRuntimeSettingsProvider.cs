@@ -15,6 +15,9 @@ internal sealed class TestRuntimeSettingsProvider(EffectiveSettings settings, Ru
             OAuth: new OAuthSettings(null, null, null, null, null, null, null, null),
             Push: new PushSettings(null, null, null, null, null, null),
             UploadScanner: new UploadScannerSettings("noop", "127.0.0.1", 3310, 30, true),
+            Zoom: DefaultZoomSettings(),
+            Stripe: DefaultStripeSettings(),
+            LiveClasses: DefaultLiveClassSettings(),
             UpdatedByUserId: null,
             UpdatedByUserName: null,
             UpdatedAt: null));
@@ -38,6 +41,84 @@ internal sealed class TestRuntimeSettingsProvider(EffectiveSettings settings, Ru
             OAuth: new OAuthSettings(null, null, null, null, null, null, null, null),
             Push: new PushSettings(null, null, null, null, null, null),
             UploadScanner: new UploadScannerSettings("noop", "127.0.0.1", 3310, 30, true),
+            Zoom: DefaultZoomSettings(),
+            Stripe: DefaultStripeSettings(),
+            LiveClasses: DefaultLiveClassSettings(),
+            UpdatedByUserId: null,
+            UpdatedByUserName: null,
+            UpdatedAt: null));
+
+    public static TestRuntimeSettingsProvider FromZoomOptions(ZoomOptions options)
+        => new(new EffectiveSettings(
+            Email: new EmailSettings(null, null, null, null, null, null, null, null, null),
+            Billing: new BillingSettings(null, null, null, null, null, null, null, null, null, null),
+            Sentry: new SentrySettings(null, null, null),
+            Backup: new BackupSettings(null, null, null, null, null),
+            OAuth: new OAuthSettings(null, null, null, null, null, null, null, null),
+            Push: new PushSettings(null, null, null, null, null, null),
+            UploadScanner: new UploadScannerSettings("noop", "127.0.0.1", 3310, 30, true),
+            Zoom: new ZoomSettings(
+                options.Enabled,
+                options.AccountId,
+                options.ClientId,
+                options.ClientSecret,
+                string.IsNullOrWhiteSpace(options.ApiBaseUrl) ? "https://api.zoom.us/v2" : options.ApiBaseUrl,
+                string.IsNullOrWhiteSpace(options.TokenUrl) ? "https://zoom.us/oauth/token" : options.TokenUrl,
+                options.HostUserId,
+                options.MeetingSdkKey,
+                options.MeetingSdkSecret,
+                options.WebhookSecretToken,
+                Math.Clamp(options.WebhookRetryToleranceSeconds <= 0 ? 300 : options.WebhookRetryToleranceSeconds, 60, 3600),
+                options.AllowSandboxFallback),
+            Stripe: DefaultStripeSettings(),
+            LiveClasses: DefaultLiveClassSettings(),
+            UpdatedByUserId: null,
+            UpdatedByUserName: null,
+            UpdatedAt: null));
+
+    private static ZoomSettings DefaultZoomSettings()
+        => new(
+            Enabled: false,
+            AccountId: null,
+            ClientId: null,
+            ClientSecret: null,
+            ApiBaseUrl: "https://api.zoom.us/v2",
+            TokenUrl: "https://zoom.us/oauth/token",
+            HostUserId: null,
+            MeetingSdkKey: null,
+            MeetingSdkSecret: null,
+            WebhookSecretToken: null,
+            WebhookRetryToleranceSeconds: 300,
+            AllowSandboxFallback: false);
+
+    private static StripeSettings DefaultStripeSettings()
+        => new(
+            SecretKey: null,
+            PublishableKey: null,
+            WebhookSecret: null,
+            TaxAutomaticEnabled: true,
+            TaxRegistrations: Array.Empty<string>(),
+            CustomerPortalConfigurationId: null,
+            RadarHighRiskCountryAllowReview: false,
+            RadarBlockEmailDomainsCsv: null);
+
+    private static LiveClassSettings DefaultLiveClassSettings()
+        => new(AiRecordingProcessingEnabled: false);
+
+    /// <summary>Convenience builder for Wave A2 tests that need the AI
+    /// recording-processing flag in a specific state.</summary>
+    public static TestRuntimeSettingsProvider WithLiveClassAi(bool enabled)
+        => new(new EffectiveSettings(
+            Email: new EmailSettings(null, null, null, null, null, null, null, null, null),
+            Billing: new BillingSettings(null, null, null, null, null, null, null, null, null, null),
+            Sentry: new SentrySettings(null, null, null),
+            Backup: new BackupSettings(null, null, null, null, null),
+            OAuth: new OAuthSettings(null, null, null, null, null, null, null, null),
+            Push: new PushSettings(null, null, null, null, null, null),
+            UploadScanner: new UploadScannerSettings("noop", "127.0.0.1", 3310, 30, true),
+            Zoom: DefaultZoomSettings(),
+            Stripe: DefaultStripeSettings(),
+            LiveClasses: new LiveClassSettings(AiRecordingProcessingEnabled: enabled),
             UpdatedByUserId: null,
             UpdatedByUserName: null,
             UpdatedAt: null));

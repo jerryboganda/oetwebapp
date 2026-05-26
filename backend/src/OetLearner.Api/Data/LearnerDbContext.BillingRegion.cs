@@ -20,6 +20,9 @@ public partial class LearnerDbContext
     public DbSet<DunningCampaign> DunningCampaigns => Set<DunningCampaign>();
     public DbSet<PaymentMethodUpdateLink> PaymentMethodUpdateLinks => Set<PaymentMethodUpdateLink>();
 
+    // ── Wave A5 — smart-retry dunning attempts (T+24h / T+72h / T+168h) ──
+    public DbSet<DunningAttempt> DunningAttempts => Set<DunningAttempt>();
+
     // ── Phase 6 ──
     public DbSet<CancellationIntent> CancellationIntents => Set<CancellationIntent>();
     public DbSet<DeflectionRule> DeflectionRules => Set<DeflectionRule>();

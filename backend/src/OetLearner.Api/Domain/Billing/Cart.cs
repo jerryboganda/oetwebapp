@@ -25,6 +25,14 @@ public class Cart
     public DateTimeOffset UpdatedAt { get; set; }
     public DateTimeOffset ExpiresAt { get; set; }
 
+    /// <summary>
+    /// When the +24h abandoned-cart recovery email was queued for this cart.
+    /// Set by <c>AbandonedCartRecoveryService</c> after a successful Brevo
+    /// dispatch so the same cart is never emailed twice. Null when no recovery
+    /// email has been sent.
+    /// </summary>
+    public DateTimeOffset? RecoveryEmailSentAt { get; set; }
+
     public ICollection<CartItem> Items { get; set; } = new List<CartItem>();
     public ICollection<AppliedPromoCode> AppliedPromoCodes { get; set; } = new List<AppliedPromoCode>();
 }

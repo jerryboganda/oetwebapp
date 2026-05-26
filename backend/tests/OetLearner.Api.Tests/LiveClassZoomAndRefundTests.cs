@@ -33,7 +33,7 @@ public sealed class LiveClassZoomAndRefundTests
     }
 
     [Fact]
-    public void VerifyWebhookSignatureAcceptsZoomHmacSignature()
+    public async Task VerifyWebhookSignatureAcceptsZoomHmacSignature()
     {
         var service = CreateZoomService(new ZoomOptions { WebhookSecretToken = "zoom-secret" });
         var rawBody = "{\"event\":\"meeting.started\"}";
@@ -45,16 +45,32 @@ public sealed class LiveClassZoomAndRefundTests
             ["x-zm-signature"] = signature,
         };
 
-        Assert.True(service.VerifyWebhookSignature(rawBody, headers));
-        Assert.False(service.VerifyWebhookSignature(rawBody + " ", headers));
+        Assert.True(await service.VerifyWebhookSignatureAsync(rawBody, headers, CancellationToken.None));
+        Assert.False(await service.VerifyWebhookSignatureAsync(rawBody + " ", headers, CancellationToken.None));
     }
 
     [Fact]
-    public void WebhookUrlValidationResponseUsesZoomEncryptedTokenContract()
+    public async Task VerifyWebhookSignatureRejectsFutureTimestampsOutsideTolerance()
+    {
+        var service = CreateZoomService(new ZoomOptions { WebhookSecretToken = "zoom-secret", WebhookRetryToleranceSeconds = 300 });
+        var rawBody = "{\"event\":\"meeting.started\"}";
+        var timestamp = DateTimeOffset.UtcNow.AddMinutes(10).ToUnixTimeSeconds().ToString();
+        var headers = new HeaderDictionary
+        {
+            ["x-zm-request-timestamp"] = timestamp,
+            ["x-zm-signature"] = BuildZoomWebhookSignature("zoom-secret", timestamp, rawBody),
+        };
+
+        Assert.False(await service.VerifyWebhookSignatureAsync(rawBody, headers, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task WebhookUrlValidationResponseUsesZoomEncryptedTokenContract()
     {
         var service = CreateZoomService(new ZoomOptions { WebhookSecretToken = "zoom-secret" });
-        var response = service.TryBuildWebhookUrlValidationResponse(
-            "{\"event\":\"endpoint.url_validation\",\"payload\":{\"plainToken\":\"plain-token\"}}");
+        var response = await service.TryBuildWebhookUrlValidationResponseAsync(
+            "{\"event\":\"endpoint.url_validation\",\"payload\":{\"plainToken\":\"plain-token\"}}",
+            CancellationToken.None);
 
         Assert.NotNull(response);
         var plainToken = response.GetType().GetProperty("plainToken")?.GetValue(response);
@@ -65,11 +81,37 @@ public sealed class LiveClassZoomAndRefundTests
     }
 
     [Fact]
-    public void VerifyWebhookSignatureRequiresConfiguredWebhookSecret()
+    public async Task ZoomWebhookUrlValidationRequiresValidZoomSignatureAtServiceBoundary()
+    {
+        await using var db = CreateDb();
+        var now = DateTimeOffset.UtcNow;
+        var service = CreateLiveClassService(db, now, new ZoomOptions { WebhookSecretToken = "zoom-secret" });
+        var rawBody = "{\"event\":\"endpoint.url_validation\",\"payload\":{\"plainToken\":\"plain-token\"}}";
+
+        var exception = await Assert.ThrowsAsync<ApiException>(() => service.HandleZoomWebhookAsync(rawBody, new HeaderDictionary(), CancellationToken.None));
+
+        Assert.Equal(StatusCodes.Status401Unauthorized, exception.StatusCode);
+        Assert.Equal("zoom_webhook_invalid_signature", exception.ErrorCode);
+
+        var timestamp = now.ToUnixTimeSeconds().ToString();
+        var headers = new HeaderDictionary
+        {
+            ["x-zm-request-timestamp"] = timestamp,
+            ["x-zm-signature"] = BuildZoomWebhookSignature("zoom-secret", timestamp, rawBody),
+        };
+
+        var response = await service.HandleZoomWebhookAsync(rawBody, headers, CancellationToken.None);
+
+        Assert.NotNull(response);
+        Assert.Equal("plain-token", response.GetType().GetProperty("plainToken")?.GetValue(response));
+    }
+
+    [Fact]
+    public async Task VerifyWebhookSignatureRequiresConfiguredWebhookSecret()
     {
         var service = CreateZoomService(new ZoomOptions { AllowSandboxFallback = true });
 
-        Assert.False(service.VerifyWebhookSignature("{\"event\":\"meeting.started\"}", new HeaderDictionary()));
+        Assert.False(await service.VerifyWebhookSignatureAsync("{\"event\":\"meeting.started\"}", new HeaderDictionary(), CancellationToken.None));
     }
 
     [Fact]
@@ -106,7 +148,7 @@ public sealed class LiveClassZoomAndRefundTests
     }
 
     [Fact]
-    public void MeetingSdkSignatureRequiresSdkCredentials()
+    public async Task MeetingSdkSignatureRequiresSdkCredentials()
     {
         var missingCredentials = CreateZoomService(new ZoomOptions());
         var configured = CreateZoomService(new ZoomOptions
@@ -115,11 +157,22 @@ public sealed class LiveClassZoomAndRefundTests
             MeetingSdkSecret = "sdk-secret",
         });
 
-        Assert.Null(missingCredentials.GenerateMeetingSdkSignature("123456789", role: 0, DateTimeOffset.UtcNow.AddMinutes(30)));
+        Assert.Null(await missingCredentials.GenerateMeetingSdkSignatureAsync("123456789", role: 0, DateTimeOffset.UtcNow.AddMinutes(30), CancellationToken.None));
 
-        var signature = configured.GenerateMeetingSdkSignature("123456789", role: 0, DateTimeOffset.UtcNow.AddMinutes(30));
+        var signature = await configured.GenerateMeetingSdkSignatureAsync("123456789", role: 0, DateTimeOffset.UtcNow.AddMinutes(30), CancellationToken.None);
         Assert.NotNull(signature);
         Assert.Equal(3, signature!.Split('.').Length);
+    }
+
+    [Fact]
+    public async Task ZoomRuntimeSettingsFailureFailsClosedInsteadOfUsingAppsettingsFallback()
+    {
+        var service = new ZoomMeetingService(
+            new StaticHttpClientFactory(),
+            new ThrowingRuntimeSettingsProvider(),
+            NullLogger<ZoomMeetingService>.Instance);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => service.IsEnabledAsync(CancellationToken.None));
     }
 
     [Fact]
@@ -209,6 +262,126 @@ public sealed class LiveClassZoomAndRefundTests
     }
 
     [Fact]
+    public async Task ExpertJoinTokenIsRefusedBeforeJoinWindow()
+    {
+        await using var db = CreateDb();
+        var now = DateTimeOffset.UtcNow;
+        var liveClass = CreateLiveClass("class-1", "published-class", LiveClassStatus.Published, now);
+        var session = CreateSession("session-1", liveClass.Id, now.AddHours(2), now.AddHours(3));
+        var tutor = CreateTutorProfile("tutor-1", "expert-1", now);
+        liveClass.TutorProfileId = tutor.Id;
+        liveClass.TutorProfile = tutor;
+        session.LiveClass = liveClass;
+        liveClass.Sessions.Add(session);
+        db.ExpertUsers.Add(CreateExpertUser("expert-1", now));
+        db.PrivateSpeakingTutorProfiles.Add(tutor);
+        db.LiveClasses.Add(liveClass);
+        await db.SaveChangesAsync();
+        var service = CreateLiveClassService(db, now);
+
+        var exception = await Assert.ThrowsAsync<ApiException>(() => service.CreateExpertJoinTokenAsync(session.Id, "expert-1", CancellationToken.None));
+
+        Assert.Equal(StatusCodes.Status409Conflict, exception.StatusCode);
+        Assert.Equal("live_class_join_window_closed", exception.ErrorCode);
+    }
+
+    [Fact]
+    public async Task ExpertClassListOnlyIncludesPublishedAssignments()
+    {
+        await using var db = CreateDb();
+        var now = DateTimeOffset.UtcNow;
+        var tutor = CreateTutorProfile("tutor-1", "expert-1", now);
+        var published = CreateLiveClass("class-1", "published-class", LiveClassStatus.Published, now);
+        var draft = CreateLiveClass("class-2", "draft-class", LiveClassStatus.Draft, now);
+        published.TutorProfileId = tutor.Id;
+        published.TutorProfile = tutor;
+        draft.TutorProfileId = tutor.Id;
+        draft.TutorProfile = tutor;
+        published.Sessions.Add(CreateSession("session-1", published.Id, now.AddMinutes(10), now.AddMinutes(70)));
+        draft.Sessions.Add(CreateSession("session-2", draft.Id, now.AddMinutes(10), now.AddMinutes(70)));
+        db.PrivateSpeakingTutorProfiles.Add(tutor);
+        db.LiveClasses.AddRange(published, draft);
+        await db.SaveChangesAsync();
+        var service = CreateLiveClassService(db, now);
+
+        var classes = await service.ListExpertClassesAsync("expert-1", CancellationToken.None);
+
+        var item = Assert.Single(classes);
+        Assert.Equal("published-class", item.Slug);
+    }
+
+    [Fact]
+    public async Task AttendedLearnersRemainVisibleInPastClasses()
+    {
+        await using var db = CreateDb();
+        var now = DateTimeOffset.UtcNow;
+        var liveClass = CreateLiveClass("class-1", "published-class", LiveClassStatus.Published, now);
+        var session = CreateSession("session-1", liveClass.Id, now.AddHours(-2), now.AddHours(-1));
+        session.LiveClass = liveClass;
+        liveClass.Sessions.Add(session);
+        db.LiveClasses.Add(liveClass);
+        db.LiveClassEnrollments.Add(new LiveClassEnrollment
+        {
+            Id = "enrollment-1",
+            ClassSessionId = session.Id,
+            UserId = "learner-1",
+            EnrolledAt = now.AddDays(-1),
+            IdempotencyKey = "past-attended-test",
+            Status = LiveClassEnrollmentStatus.Attended,
+        });
+        await db.SaveChangesAsync();
+        var service = CreateLiveClassService(db, now);
+
+        var classes = await service.ListLearnerEnrollmentsAsync("learner-1", upcoming: false, CancellationToken.None);
+
+        var item = Assert.Single(classes);
+        Assert.Equal("published-class", item.Slug);
+        Assert.Single(item.Sessions);
+        Assert.Equal("session-1", item.Sessions[0].Id);
+    }
+
+    [Fact]
+    public async Task ReEnrollAfterRefundDebitsWalletAgain()
+    {
+        await using var db = CreateDb();
+        var now = DateTimeOffset.UtcNow;
+        var liveClass = CreateLiveClass("class-1", "published-class", LiveClassStatus.Published, now);
+        liveClass.CreditCost = 10;
+        var session = CreateSession("session-1", liveClass.Id, now.AddDays(2), now.AddDays(2).AddHours(1));
+        session.LiveClass = liveClass;
+        liveClass.Sessions.Add(session);
+        db.Users.Add(new LearnerUser
+        {
+            Id = "learner-1",
+            DisplayName = "Learner One",
+            Email = "learner@example.test",
+            CreatedAt = now,
+            LastActiveAt = now,
+        });
+        db.Wallets.Add(new Wallet
+        {
+            Id = "wallet-1",
+            UserId = "learner-1",
+            CreditBalance = 30,
+            LastUpdatedAt = now,
+        });
+        db.LiveClasses.Add(liveClass);
+        await db.SaveChangesAsync();
+        var service = CreateLiveClassService(db, now);
+
+        await service.EnrollAsync(session.Id, "learner-1", idempotencyKey: null, CancellationToken.None);
+        await service.CancelEnrollmentAsync(session.Id, "learner-1", "learner cancelled", CancellationToken.None);
+        await service.EnrollAsync(session.Id, "learner-1", idempotencyKey: null, CancellationToken.None);
+
+        var wallet = await db.Wallets.SingleAsync(item => item.Id == "wallet-1");
+        var debits = await db.WalletTransactions.CountAsync(item => item.WalletId == "wallet-1" && item.Amount == -10);
+        var credits = await db.WalletTransactions.CountAsync(item => item.WalletId == "wallet-1" && item.Amount == 10);
+        Assert.Equal(20, wallet.CreditBalance);
+        Assert.Equal(2, debits);
+        Assert.Equal(1, credits);
+    }
+
+    [Fact]
     public async Task RefundedLearnersCannotAccessRecordings()
     {
         await using var db = CreateDb();
@@ -242,6 +415,42 @@ public sealed class LiveClassZoomAndRefundTests
 
         Assert.Equal(StatusCodes.Status403Forbidden, exception.StatusCode);
         Assert.Equal("live_class_recording_forbidden", exception.ErrorCode);
+    }
+
+    [Fact]
+    public async Task PendingRecordingsAreNotExposedToLearners()
+    {
+        await using var db = CreateDb();
+        var now = DateTimeOffset.UtcNow;
+        var liveClass = CreateLiveClass("class-1", "published-class", LiveClassStatus.Published, now);
+        var session = CreateSession("session-1", liveClass.Id, now.AddHours(-2), now.AddHours(-1));
+        session.LiveClass = liveClass;
+        liveClass.Sessions.Add(session);
+        db.LiveClasses.Add(liveClass);
+        db.LiveClassEnrollments.Add(new LiveClassEnrollment
+        {
+            Id = "enrollment-1",
+            ClassSessionId = session.Id,
+            UserId = "learner-1",
+            EnrolledAt = now.AddDays(-1),
+            IdempotencyKey = "recording-pending-test",
+            Status = LiveClassEnrollmentStatus.Attended,
+        });
+        db.LiveClassRecordings.Add(new LiveClassRecording
+        {
+            Id = "recording-1",
+            ClassSessionId = session.Id,
+            Status = LiveClassRecordingStatus.Processing,
+            S3VideoKey = "live-class-recordings/2026/06/session-1/video.mp4",
+            RecordedAt = now.AddHours(-1),
+        });
+        await db.SaveChangesAsync();
+        var service = CreateLiveClassService(db, now);
+
+        var exception = await Assert.ThrowsAsync<ApiException>(() => service.GetRecordingForLearnerAsync(session.Id, "learner-1", CancellationToken.None));
+
+        Assert.Equal(StatusCodes.Status404NotFound, exception.StatusCode);
+        Assert.Equal("live_class_recording_not_ready", exception.ErrorCode);
     }
 
     [Fact]
@@ -318,7 +527,10 @@ public sealed class LiveClassZoomAndRefundTests
     }
 
     private static ZoomMeetingService CreateZoomService(ZoomOptions options)
-        => new(new StaticHttpClientFactory(), Options.Create(options), NullLogger<ZoomMeetingService>.Instance);
+        => new(
+            new StaticHttpClientFactory(),
+            TestRuntimeSettingsProvider.FromZoomOptions(options),
+            NullLogger<ZoomMeetingService>.Instance);
 
     private static LearnerDbContext CreateDb()
     {
@@ -332,10 +544,26 @@ public sealed class LiveClassZoomAndRefundTests
         => new(
             db,
             CreateZoomService(zoomOptions ?? new ZoomOptions()),
-            notificationService: null!,
+            walletService: new WalletService(db, paymentGateways: null!, platformLinks: null!, billingOptions: Options.Create(new BillingOptions())),
+            notificationService: CreateNotificationService(db, now),
             fileStorage: new TestFileStorage(),
             new FixedTimeProvider(now),
             NullLogger<LiveClassService>.Instance);
+
+    private static NotificationService CreateNotificationService(LearnerDbContext db, DateTimeOffset now)
+        => new(
+            db,
+            emailSender: null!,
+            webPushDispatcher: null!,
+            mobilePushDispatcher: null!,
+            hubContext: null!,
+            platformLinks: null!,
+            timeProvider: new FixedTimeProvider(now),
+            webPushOptions: Options.Create(new WebPushOptions()),
+            runtimeSettingsProvider: TestRuntimeSettingsProvider.FromZoomOptions(new ZoomOptions()),
+            notificationProofOptions: Options.Create(new NotificationProofHarnessOptions()),
+            environment: null!,
+            logger: NullLogger<NotificationService>.Instance);
 
     private static LiveClass CreateLiveClass(string id, string slug, LiveClassStatus status, DateTimeOffset now)
         => new()
@@ -370,6 +598,26 @@ public sealed class LiveClassZoomAndRefundTests
             UpdatedAt = start.AddDays(-1),
         };
 
+    private static ExpertUser CreateExpertUser(string id, DateTimeOffset now)
+        => new()
+        {
+            Id = id,
+            DisplayName = "Expert One",
+            Email = "expert@example.test",
+            CreatedAt = now,
+        };
+
+    private static PrivateSpeakingTutorProfile CreateTutorProfile(string id, string expertUserId, DateTimeOffset now)
+        => new()
+        {
+            Id = id,
+            ExpertUserId = expertUserId,
+            DisplayName = "Expert One",
+            Timezone = "UTC",
+            CreatedAt = now,
+            UpdatedAt = now,
+        };
+
     private static string BuildZoomWebhookSignature(string secret, string timestamp, string rawBody)
     {
         var message = $"v0:{timestamp}:{rawBody}";
@@ -386,6 +634,19 @@ public sealed class LiveClassZoomAndRefundTests
     private sealed class StaticHttpClientFactory : IHttpClientFactory
     {
         public HttpClient CreateClient(string name) => new();
+    }
+
+    private sealed class ThrowingRuntimeSettingsProvider : OetLearner.Api.Services.Settings.IRuntimeSettingsProvider
+    {
+        public Task<OetLearner.Api.Services.Settings.EffectiveSettings> GetAsync(CancellationToken ct = default)
+            => throw new InvalidOperationException("runtime settings unavailable");
+
+        public Task<RuntimeSettingsRow> GetRawAsync(CancellationToken ct = default)
+            => throw new InvalidOperationException("runtime settings unavailable");
+
+        public void Invalidate() { }
+        public string Protect(string plain) => plain;
+        public string? Unprotect(string? cipher) => cipher;
     }
 
     private sealed class FixedTimeProvider(DateTimeOffset now) : TimeProvider

@@ -88,6 +88,21 @@ export interface UploadScannerSettings {
   failClosedOnError: boolean | null;
 }
 
+export interface ZoomSettings {
+  enabled: boolean | null;
+  accountId: string;
+  clientId: string;
+  clientSecret: string;
+  apiBaseUrl: string;
+  tokenUrl: string;
+  hostUserId: string;
+  meetingSdkKey: string;
+  meetingSdkSecret: string;
+  webhookSecretToken: string;
+  webhookRetryToleranceSeconds: number | null;
+  allowSandboxFallback: boolean | null;
+}
+
 export interface RuntimeSettingsResponse {
   email: EmailSettings;
   billing: BillingSettings;
@@ -96,6 +111,7 @@ export interface RuntimeSettingsResponse {
   oauth: OAuthSettings;
   push: PushSettings;
   uploadScanner: UploadScannerSettings;
+  zoom: ZoomSettings;
   updatedBy: string | null;
   updatedByUserId?: string | null;
   updatedAt: string | null;
@@ -108,7 +124,7 @@ export interface RuntimeSettingsIntegrationTestResponse {
   testedAt: string;
 }
 
-type SectionId = 'email' | 'billing' | 'sentry' | 'backup' | 'oauth' | 'push' | 'uploadScanner';
+type SectionId = 'email' | 'billing' | 'sentry' | 'backup' | 'oauth' | 'push' | 'uploadScanner' | 'zoom';
 
 type ToastState = { variant: 'success' | 'error'; message: string } | null;
 type TestStatusState = Partial<Record<SectionId, RuntimeSettingsIntegrationTestResponse>>;
@@ -194,6 +210,21 @@ const UPLOAD_SCANNER_FIELDS: FieldDef<UploadScannerSettings>[] = [
   { key: 'failClosedOnError', label: 'Fail closed on scanner errors', type: 'checkbox', hint: 'Reject uploads when ClamAV is unavailable or times out.' },
 ];
 
+const ZOOM_FIELDS: FieldDef<ZoomSettings>[] = [
+  { key: 'enabled', label: 'Enable Zoom live classes', type: 'checkbox', hint: 'Controls Zoom meeting creation and webhook processing for live classes.' },
+  { key: 'accountId', label: 'Account ID', hint: 'Zoom Server-to-Server OAuth account id.' },
+  { key: 'clientId', label: 'Client ID', hint: 'Zoom Server-to-Server OAuth client id.' },
+  { key: 'clientSecret', label: 'Client Secret', secret: true },
+  { key: 'apiBaseUrl', label: 'API Base URL', type: 'url', hint: 'Default is https://api.zoom.us/v2.' },
+  { key: 'tokenUrl', label: 'Token URL', type: 'url', hint: 'Default is https://zoom.us/oauth/token.' },
+  { key: 'hostUserId', label: 'Host User ID', hint: 'Zoom user id or email used to create hosted meetings.' },
+  { key: 'meetingSdkKey', label: 'Meeting SDK Key' },
+  { key: 'meetingSdkSecret', label: 'Meeting SDK Secret', secret: true },
+  { key: 'webhookSecretToken', label: 'Webhook Secret Token', secret: true },
+  { key: 'webhookRetryToleranceSeconds', label: 'Webhook Tolerance (seconds)', type: 'number', hint: 'Allowed range is 60-3600.' },
+  { key: 'allowSandboxFallback', label: 'Allow sandbox fallback', type: 'checkbox', hint: 'Development-only fallback when Zoom API credentials are unavailable.' },
+];
+
 const SECTION_META: { id: SectionId; title: string; description: string }[] = [
   { id: 'email', title: 'Email (Brevo + SMTP)', description: 'Transactional email delivery via Brevo with SMTP fallback.' },
   { id: 'billing', title: 'Billing (Stripe)', description: 'Stripe Checkout, Customer Portal, and webhook signing.' },
@@ -202,6 +233,7 @@ const SECTION_META: { id: SectionId; title: string; description: string }[] = [
   { id: 'oauth', title: 'OAuth (Google + Apple + Facebook)', description: 'Social sign-in providers.' },
   { id: 'push', title: 'Push (Browser + APNs + FCM)', description: 'Browser VAPID and native mobile push notifications via Apple and Firebase.' },
   { id: 'uploadScanner', title: 'Upload Scanner (ClamAV)', description: 'Antivirus scanning for learner/admin uploads.' },
+  { id: 'zoom', title: 'Zoom Live Classes', description: 'Server-to-server OAuth, Meeting SDK, and webhook verification.' },
 ];
 
 /* ───────────────────────── Helpers ───────────────────────── */
@@ -267,6 +299,20 @@ function emptyResponse(): RuntimeSettingsResponse {
       timeoutSeconds: null,
       failClosedOnError: null,
     },
+    zoom: {
+      enabled: null,
+      accountId: '',
+      clientId: '',
+      clientSecret: '',
+      apiBaseUrl: '',
+      tokenUrl: '',
+      hostUserId: '',
+      meetingSdkKey: '',
+      meetingSdkSecret: '',
+      webhookSecretToken: '',
+      webhookRetryToleranceSeconds: null,
+      allowSandboxFallback: null,
+    },
     updatedBy: null,
     updatedByUserId: null,
     updatedAt: null,
@@ -285,6 +331,7 @@ function normalizeResponse(data: Partial<RuntimeSettingsResponse>): RuntimeSetti
     oauth: { ...empty.oauth, ...data.oauth },
     push: { ...empty.push, ...data.push },
     uploadScanner: { ...empty.uploadScanner, ...data.uploadScanner },
+    zoom: { ...empty.zoom, ...data.zoom },
   });
 }
 
@@ -319,6 +366,12 @@ function sanitizeSecretFields(data: RuntimeSettingsResponse): RuntimeSettingsRes
       apnsAuthKey: maskUnexpectedSecret(data.push.apnsAuthKey),
       fcmServerKey: maskUnexpectedSecret(data.push.fcmServerKey),
       vapidPrivateKey: maskUnexpectedSecret(data.push.vapidPrivateKey),
+    },
+    zoom: {
+      ...data.zoom,
+      clientSecret: maskUnexpectedSecret(data.zoom.clientSecret),
+      meetingSdkSecret: maskUnexpectedSecret(data.zoom.meetingSdkSecret),
+      webhookSecretToken: maskUnexpectedSecret(data.zoom.webhookSecretToken),
     },
   };
 }
@@ -585,7 +638,7 @@ function LockedState() {
           size="md"
           illustration={<Lock aria-hidden="true" />}
           title="System administrator access required"
-          description="Runtime Settings exposes production secrets and is gated behind the system_admin permission. Ask a super-admin to grant access if you need to change Brevo, Stripe, Sentry, OAuth, push, or backup credentials from this UI."
+          description="Runtime Settings exposes production secrets and is gated behind the system_admin permission. Ask a super-admin to grant access if you need to change Brevo, Stripe, Sentry, OAuth, push, Zoom, or backup credentials from this UI."
         />
       </CardContent>
     </Card>
@@ -613,6 +666,7 @@ export function RuntimeSettingsClient() {
     oauth: false,
     push: false,
     uploadScanner: false,
+    zoom: false,
   });
 
   const load = useCallback(async () => {
@@ -944,6 +998,39 @@ export function RuntimeSettingsClient() {
                     }
                   />
                 ))}
+
+              {section.id === 'zoom' &&
+                ZOOM_FIELDS.map((field) =>
+                  field.secret ? (
+                    <SecretField
+                      key={field.key}
+                      label={field.label}
+                      hint={field.hint}
+                      serverValue={String(server.zoom[field.key] ?? '')}
+                      draftValue={String(draft.zoom[field.key] ?? '')}
+                      onChange={(next) => updateField('zoom', field.key, next as never)}
+                    />
+                  ) : (
+                    <PlainField
+                      key={field.key}
+                      label={field.label}
+                      hint={field.hint}
+                      type={field.type}
+                      value={draft.zoom[field.key] as string | number | boolean | null}
+                      onChange={(next) =>
+                        updateField(
+                          'zoom',
+                          field.key,
+                          (field.type === 'number'
+                            ? parseNullableNumberInput(String(next))
+                            : field.type === 'checkbox'
+                              ? Boolean(next)
+                              : String(next)) as never,
+                        )
+                      }
+                    />
+                  ),
+                )}
             </Section>
           ))}
 

@@ -17,6 +17,24 @@ function currentPushPlatform(): NativePushPlatform {
   return platform === 'android' || platform === 'ios' ? platform : 'web';
 }
 
+function toInternalRoute(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  if (!trimmed || trimmed.startsWith('//') || /[\u0000-\u001f\u007f]/.test(trimmed)) return null;
+  if (trimmed.startsWith('/') && !trimmed.startsWith('/\\')) return trimmed;
+
+  try {
+    const url = new URL(trimmed);
+    if (url.protocol !== 'https:') return null;
+    if (url.hostname !== 'app.oetwithdrhesham.co.uk') return null;
+    const route = `${url.pathname}${url.search}${url.hash}`;
+    if (!route || route.startsWith('//') || route.startsWith('/\\') || /[\u0000-\u001f\u007f]/.test(route)) return null;
+    return route;
+  } catch {
+    return null;
+  }
+}
+
 export function MobileRuntimeBridge() {
   const { refreshSession, isAuthenticated, loading } = useAuth();
   const router = useRouter();
@@ -81,7 +99,7 @@ export function MobileRuntimeBridge() {
         },
         onNotificationActionPerformed: (notification) => {
           // Navigate to a route if the push payload includes one
-          const route = notification.data.route;
+          const route = toInternalRoute(notification.data.route ?? notification.data.actionUrl);
           if (route) {
             router.push(route);
           }

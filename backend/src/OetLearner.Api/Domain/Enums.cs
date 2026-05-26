@@ -164,8 +164,16 @@ public enum JobType
     LiveClassRecordingDownload,          // Download Zoom cloud recording after session ends
     LiveClassRecordingTranscribe,        // Transcribe downloaded recording audio
     LiveClassRecordingSummarize,         // Summarize transcript into learner-facing notes
-    LiveClassSessionReminderDispatch,    // Send session reminders to enrolled learners
-    LiveClassWaitlistPromotion           // Promote waitlisted learner when a slot opens (fallback; handled inline on cancellation)
+    LiveClassRecordingTranslate,         // Wave A2: translate AI summary EN→AR after summarize stage
+    LiveClassRecordingEmbed,             // Wave A2: chunk + embed transcript for "Ask AI about this class" RAG
+    LiveClassSessionReminderDispatch,    // Send session reminders to enrolled learners (lead-minutes in payload)
+    LiveClassWaitlistPromotion,          // Promote waitlisted learner when a slot opens (fallback; handled inline on cancellation)
+    LiveClassNoShowPingDispatch,         // Wave A3: fire after meeting.started — push "starting now" to enrolled learners with no attendance yet
+
+    // ── Wave A5 — Billing background jobs ──
+    BillingDunningRetry,                 // Smart-retry a Stripe invoice (Stripe.InvoiceService.PayAsync) on 24h/72h/168h cadence
+    BillingAbandonedCartEmail,           // Daily sweep at 03:00 UTC; emails carts idle >24h that have not been recovered yet
+    BillingRenewalReminder               // 3-day "heads up renewal" email triggered by Stripe invoice.upcoming webhook
 }
 
 public enum ConfidenceBand

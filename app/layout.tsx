@@ -35,10 +35,13 @@ const adminFont = Montserrat({
   display: 'swap',
 });
 
+const zoomHttpOrigins = ['https://zoom.us', 'https://*.zoom.us', 'https://zoom.com', 'https://*.zoom.com', 'https://source.zoom.us'];
+const zoomWebSocketOrigins = ['wss://zoom.us', 'wss://*.zoom.us', 'wss://zoom.com', 'wss://*.zoom.com'];
+
 const metaScriptSrc =
   process.env.NODE_ENV === 'production'
-    ? "script-src 'self' 'unsafe-inline'"
-    : "script-src 'self' 'unsafe-inline' 'unsafe-eval'";
+    ? `script-src 'self' 'unsafe-inline' ${zoomHttpOrigins.join(' ')}`
+    : `script-src 'self' 'unsafe-inline' 'unsafe-eval' ${zoomHttpOrigins.join(' ')}`;
 
 function getOrigin(value: string | undefined, fallback: string): string {
   try {
@@ -123,7 +126,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         */}
         <meta
           httpEquiv="Content-Security-Policy"
-          content={`default-src 'self'; ${metaScriptSrc}; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' blob: ${apiOrigins.join(' ')} ${apiWebSocketOrigins.join(' ')} https://*.oetwithdrhesham.co.uk wss://*.oetwithdrhesham.co.uk https://*.googleapis.com; media-src 'self' blob: ${apiOrigins.join(' ')}; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self';`}
+          content={`default-src 'self'; ${metaScriptSrc}; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' blob: ${apiOrigins.join(' ')} ${apiWebSocketOrigins.join(' ')} ${zoomHttpOrigins.join(' ')} ${zoomWebSocketOrigins.join(' ')} https://*.oetwithdrhesham.co.uk wss://*.oetwithdrhesham.co.uk https://*.googleapis.com; media-src 'self' blob: ${apiOrigins.join(' ')} ${zoomHttpOrigins.join(' ')}; worker-src 'self' blob: ${zoomHttpOrigins.join(' ')}; frame-src 'self' ${zoomHttpOrigins.join(' ')}; object-src 'none'; base-uri 'self'; form-action 'self';`}
         />
       </head>
       <body className="font-sans antialiased min-h-[var(--app-viewport-height,100dvh)] bg-background-light text-navy overflow-x-hidden selection:bg-primary/15 selection:text-navy" suppressHydrationWarning>

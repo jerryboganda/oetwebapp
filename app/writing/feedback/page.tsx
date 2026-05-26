@@ -123,8 +123,8 @@ function WritingDetailedFeedbackContent() {
           </div>
         </div>
         <Button size="sm" asChild>
-<Link href={`/writing/player?taskId=${result.taskId}`}>Revise Submission</Link>
-</Button>
+          <Link href={`/writing/revision?id=${resultId}`}>Revise Submission</Link>
+        </Button>
       </header>
 
       <main className="flex min-h-0 flex-1 flex-col overflow-y-auto md:flex-row md:gap-6 md:overflow-hidden">

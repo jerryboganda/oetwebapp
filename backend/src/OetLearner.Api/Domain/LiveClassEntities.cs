@@ -291,3 +291,60 @@ public class LiveClassWebhookEvent
     public DateTimeOffset ReceivedAt { get; set; }
     public DateTimeOffset? ProcessedAt { get; set; }
 }
+
+/// <summary>
+/// Wave A2 — transcript chunk embeddings for the "Ask AI about this class"
+/// RAG retrieval surface. One row per ~500-token chunk of a recording's
+/// transcript text. The embedding vector is stored as a JSON array of floats
+/// for v1 portability (pgvector adoption deferred per orchestrator note in
+/// PROGRESS.md).
+///
+/// <para>
+/// Retrieval flow: at Q&amp;A time the orchestrator embeds the question with
+/// the same model (<c>text-embedding-3-small</c>, 1536 dims), pulls the top-K
+/// chunks by cosine similarity in-process, then prompts <c>class.assistant.qna.v1</c>
+/// with the matched chunks as context. v2 will move similarity to pgvector.
+/// </para>
+/// </summary>
+[Index(nameof(ClassRecordingId), nameof(ChunkIndex), IsUnique = true)]
+[Index(nameof(ClassRecordingId))]
+public class ClassRecordingEmbedding
+{
+    [Key]
+    [MaxLength(64)]
+    public string Id { get; set; } = default!;
+
+    [MaxLength(64)]
+    public string ClassRecordingId { get; set; } = default!;
+
+    /// <summary>Zero-based index within the recording's chunk sequence.</summary>
+    public int ChunkIndex { get; set; }
+
+    /// <summary>Raw transcript text for this chunk (≤ ~500 tokens of source text).</summary>
+    public string ChunkText { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Embedding vector serialised as a JSON array of 1536 single-precision
+    /// floats. Stored as text/jsonb for v1 portability — v2 should migrate to
+    /// pgvector(1536) once that extension is provisioned in the target DB.
+    /// </summary>
+    public string EmbeddingJson { get; set; } = "[]";
+
+    /// <summary>Identifier of the embedding model that produced the vector
+    /// (e.g. <c>text-embedding-3-small</c>). Stored so a future re-index can
+    /// detect stale vectors after a model swap.</summary>
+    [MaxLength(64)]
+    public string EmbeddingModel { get; set; } = "text-embedding-3-small";
+
+    /// <summary>Approximate transcript start time (seconds from recording
+    /// origin) for this chunk. Used to deep-link Q&amp;A citations into the
+    /// recording player at the right timestamp.</summary>
+    public int StartTimeSeconds { get; set; }
+
+    /// <summary>Approximate transcript end time (seconds).</summary>
+    public int EndTimeSeconds { get; set; }
+
+    public DateTimeOffset CreatedAt { get; set; }
+
+    public LiveClassRecording Recording { get; set; } = default!;
+}

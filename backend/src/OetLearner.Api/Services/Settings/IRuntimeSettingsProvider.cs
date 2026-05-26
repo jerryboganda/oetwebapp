@@ -51,6 +51,9 @@ public sealed record EffectiveSettings(
     OAuthSettings OAuth,
     PushSettings Push,
     UploadScannerSettings UploadScanner,
+    ZoomSettings Zoom,
+    StripeSettings Stripe,
+    LiveClassSettings LiveClasses,
     string? UpdatedByUserId,
     string? UpdatedByUserName,
     DateTimeOffset? UpdatedAt);
@@ -117,3 +120,42 @@ public sealed record UploadScannerSettings(
     int Port,
     int TimeoutSeconds,
     bool FailClosedOnError);
+
+public sealed record ZoomSettings(
+    bool Enabled,
+    string? AccountId,
+    string? ClientId,
+    string? ClientSecret,
+    string ApiBaseUrl,
+    string TokenUrl,
+    string? HostUserId,
+    string? MeetingSdkKey,
+    string? MeetingSdkSecret,
+    string? WebhookSecretToken,
+    int WebhookRetryToleranceSeconds,
+    bool AllowSandboxFallback);
+
+/// <summary>
+/// Wave A5 Stripe runtime overrides — Tax automatic calculation, Customer
+/// Portal configuration, and Radar fraud knobs. Secret keys remain on
+/// <see cref="BillingSettings"/> (StripeSecretKey / StripeWebhookSecret) so
+/// existing call-sites don't need rewiring; this record carries the
+/// non-secret Tax/Portal/Radar tunables in one place.
+/// </summary>
+public sealed record StripeSettings(
+    string? SecretKey,
+    string? PublishableKey,
+    string? WebhookSecret,
+    bool TaxAutomaticEnabled,
+    IReadOnlyList<string> TaxRegistrations,
+    string? CustomerPortalConfigurationId,
+    bool RadarHighRiskCountryAllowReview,
+    string? RadarBlockEmailDomainsCsv);
+
+/// <summary>
+/// Wave A2 — Live Classes runtime knobs. Currently a single feature flag for
+/// the AI recording-processing pipeline; defaults <b>off</b> so the gateway
+/// never makes platform AI calls until an admin explicitly enables it.
+/// </summary>
+public sealed record LiveClassSettings(
+    bool AiRecordingProcessingEnabled);

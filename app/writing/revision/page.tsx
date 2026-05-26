@@ -1,61 +1,76 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import {
   ChevronLeft,
   ArrowRight,
   AlertCircle,
   TrendingUp,
   Minus,
+  Send,
 } from 'lucide-react';
 import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { RevisionDiffViewer } from '@/components/domain/revision-diff-viewer';
 import { WritingImprovementBanner } from '@/components/domain/writing-improvement-banner';
 import { MotionSection } from '@/components/ui/motion-primitives';
 import { Card } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
-import { fetchWritingRevisionData } from '@/lib/api';
+import { fetchWritingEntitlement, fetchWritingRevisionData, isApiError, submitWritingRevision, type WritingEntitlement } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
 import type { CriteriaDelta } from '@/lib/mock-data';
 import { computeImprovementScore } from '@/lib/writing-revision/improvement-score';
 
 type RevisionState = {
   resultId: string;
+  attemptId: string;
   deltas: CriteriaDelta[];
   originalText: string;
+  evaluatedRevisedText: string;
   revisedText: string;
   unresolvedIssues: string[];
   loading: boolean;
   error: string | null;
 };
 
+type EntitlementBlock = Pick<WritingEntitlement, 'reason' | 'resetAt'>;
+
 const EMPTY_DELTAS: CriteriaDelta[] = [];
 const EMPTY_UNRESOLVED_ISSUES: string[] = [];
 
 export default function WritingRevisionMode() {
   const searchParams = useSearchParams();
+  const router = useRouter();
   const resultId = searchParams?.get('id') ?? '';
   const missingRevisionMessage = 'Revision unavailable. Open a completed Writing result first.';
   const [revisionState, setRevisionState] = useState<RevisionState>({
     resultId,
+    attemptId: '',
     deltas: [],
     originalText: '',
+    evaluatedRevisedText: '',
     revisedText: '',
     unresolvedIssues: [],
     loading: resultId.length > 0,
     error: null,
   });
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [entitlementBlock, setEntitlementBlock] = useState<EntitlementBlock | null>(null);
+  const submitKeyRef = useRef<{ attemptId: string; content: string; key: string } | null>(null);
   const isCurrentResult = revisionState.resultId === resultId;
   const deltas = isCurrentResult ? revisionState.deltas : EMPTY_DELTAS;
   const originalText = isCurrentResult ? revisionState.originalText : '';
+  const evaluatedRevisedText = isCurrentResult ? revisionState.evaluatedRevisedText : '';
   const revisedText = isCurrentResult ? revisionState.revisedText : '';
   const unresolvedIssues = isCurrentResult ? revisionState.unresolvedIssues : EMPTY_UNRESOLVED_ISSUES;
   const loading = resultId.length > 0 && (!isCurrentResult || revisionState.loading);
   const error = !resultId ? missingRevisionMessage : isCurrentResult ? revisionState.error : null;
+  const draftHasDiverged = revisedText.trim() !== evaluatedRevisedText.trim();
 
   const improvement = useMemo(
     () => computeImprovementScore({ deltas, unresolvedIssuesCount: unresolvedIssues.length }),
@@ -73,8 +88,10 @@ export default function WritingRevisionMode() {
         if (!active) return;
         setRevisionState({
           resultId,
+          attemptId: data.attemptId,
           deltas: data.deltas,
           originalText: data.originalText,
+          evaluatedRevisedText: data.revisedText,
           revisedText: data.revisedText,
           unresolvedIssues: data.unresolvedIssues,
           loading: false,
@@ -85,8 +102,10 @@ export default function WritingRevisionMode() {
         if (!active) return;
         setRevisionState({
           resultId,
+          attemptId: '',
           deltas: [],
           originalText: '',
+          evaluatedRevisedText: '',
           revisedText: '',
           unresolvedIssues: [],
           loading: false,
@@ -109,6 +128,94 @@ export default function WritingRevisionMode() {
       unresolvedIssuesCount: unresolvedIssues.length,
     });
   }, [loading, error, deltas.length, improvement.score, improvement.band, improvement.criteriaImproved, improvement.criteriaRegressed, unresolvedIssues.length, resultId]);
+
+  const updateRevisedText = (value: string) => {
+    setSubmitError(null);
+    setEntitlementBlock(null);
+    setRevisionState((current) => ({
+      ...current,
+      revisedText: value,
+    }));
+  };
+
+  const getRevisionSubmitKey = (attemptId: string, content: string) => {
+    const current = submitKeyRef.current;
+    if (current?.attemptId === attemptId && current.content === content) {
+      return current.key;
+    }
+
+    const randomId = globalThis.crypto?.randomUUID?.().replaceAll('-', '')
+      ?? `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 14)}`;
+    const key = `wr-${randomId}`;
+    submitKeyRef.current = { attemptId, content, key };
+    return key;
+  };
+
+  const blockForEntitlement = (reason: string, resetAt: string | null) => {
+    setEntitlementBlock({ reason, resetAt });
+    setSubmitError(null);
+  };
+
+  const handleSubmitRevision = async () => {
+    if (!revisionState.attemptId) {
+      setSubmitError('Revision unavailable. Reopen the completed Writing result and try again.');
+      return;
+    }
+
+    if (!revisedText.trim()) {
+      setSubmitError('Add your revised letter before submitting it for evaluation.');
+      return;
+    }
+
+    try {
+      const entitlement = await fetchWritingEntitlement();
+      if (!entitlement.allowed && (entitlement.reason === 'premium_required' || entitlement.reason === 'quota_exceeded')) {
+        blockForEntitlement(entitlement.reason, entitlement.resetAt);
+        return;
+      }
+    } catch {
+      // Server-side entitlement remains authoritative on submit.
+    }
+
+    setSubmitting(true);
+    setSubmitError(null);
+    try {
+      const submitted = await submitWritingRevision(
+        revisionState.attemptId,
+        revisedText,
+        getRevisionSubmitKey(revisionState.attemptId, revisedText),
+      );
+      submitKeyRef.current = null;
+      analytics.track('writing_revision_submitted', {
+        resultId,
+        attemptId: revisionState.attemptId,
+        revisionAttemptId: submitted.attemptId,
+        evaluationId: submitted.evaluationId,
+      });
+      router.push(`/writing/result?id=${encodeURIComponent(submitted.evaluationId)}`);
+    } catch (err) {
+      if (isApiError(err) && err.status === 402) {
+        blockForEntitlement(
+          err.code === 'premium_required' || err.code === 'quota_exceeded' ? err.code : 'quota_exceeded',
+          null,
+        );
+        return;
+      }
+
+      setSubmitError(isApiError(err) ? err.userMessage : 'Could not submit this revision. Please try again.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const entitlementTitle = entitlementBlock?.reason === 'premium_required'
+    ? 'AI grading is a premium feature'
+    : 'Free quota reached';
+  const entitlementMessage = entitlementBlock?.reason === 'premium_required'
+    ? 'Upgrade to submit this revision for instant rule-cited feedback. Your edited letter is still here.'
+    : entitlementBlock?.resetAt
+      ? `You have used all free Writing gradings for this window. Quota resets ${new Date(entitlementBlock.resetAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}. Your edited letter is still here.`
+      : 'You have reached the free Writing grading quota. Upgrade for unlimited revision grading. Your edited letter is still here.';
 
   if (loading) {
     return (
@@ -153,16 +260,68 @@ export default function WritingRevisionMode() {
               <Link href="/writing" className="inline-flex items-center justify-center rounded-xl bg-primary px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-primary/90">
                 Done
               </Link>
+              <Button type="button" onClick={handleSubmitRevision} loading={submitting} disabled={!revisedText.trim() || Boolean(entitlementBlock)}>
+                <Send className="h-4 w-4" /> Submit revision
+              </Button>
             </div>
           }
         />
+
+        {entitlementBlock ? (
+          <InlineAlert
+            variant="warning"
+            title={entitlementTitle}
+            action={(
+              <Link href="/billing/subscribe" className="inline-flex items-center justify-center rounded-xl bg-primary px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-primary/90">
+                Upgrade
+              </Link>
+            )}
+          >
+            {entitlementMessage}
+          </InlineAlert>
+        ) : null}
+
+        {submitError ? <InlineAlert variant="error">{submitError}</InlineAlert> : null}
+
+        {draftHasDiverged ? (
+          <InlineAlert variant="info">
+            Score movement reflects the last evaluated revision. Submit this edited draft to refresh the comparison.
+          </InlineAlert>
+        ) : null}
 
         <MotionSection>
           <WritingImprovementBanner result={improvement} />
         </MotionSection>
 
+        <MotionSection delayIndex={1}>
+          <Card className="border-border bg-surface p-6">
+            <LearnerSurfaceSectionHeader
+              eyebrow="Rewrite"
+              title="Revise your letter"
+              description="Edit the second version here, then submit it as a linked revision for a fresh Writing evaluation."
+              className="mb-5"
+            />
+            <label htmlFor="writing-revision-content" className="sr-only">Revised letter</label>
+            <textarea
+              id="writing-revision-content"
+              value={revisedText}
+              onChange={(event) => updateRevisedText(event.target.value)}
+              className="min-h-[280px] w-full resize-y rounded-2xl border border-border bg-background-light p-4 font-serif text-base leading-7 text-navy shadow-inner outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-primary/20"
+              aria-describedby="writing-revision-submit-note"
+            />
+            <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <p id="writing-revision-submit-note" className="text-sm text-muted">
+                This creates a new linked revision attempt. Your original letter remains unchanged.
+              </p>
+              <Button type="button" onClick={handleSubmitRevision} loading={submitting} disabled={!revisedText.trim() || Boolean(entitlementBlock)}>
+                <Send className="h-4 w-4" /> Submit revision
+              </Button>
+            </div>
+          </Card>
+        </MotionSection>
+
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-          <MotionSection className="lg:col-span-2">
+          <MotionSection delayIndex={2} className="lg:col-span-2">
             <Card className="border-border bg-surface p-6">
               <LearnerSurfaceSectionHeader
                 eyebrow="Criterion Delta"
@@ -196,7 +355,7 @@ export default function WritingRevisionMode() {
             </Card>
           </MotionSection>
 
-          <MotionSection delayIndex={1}>
+          <MotionSection delayIndex={3}>
             <Card className="flex h-full flex-col border-warning/30 bg-warning/10 p-6">
               <LearnerSurfaceSectionHeader
                 eyebrow="Open Issues"
@@ -216,7 +375,7 @@ export default function WritingRevisionMode() {
           </MotionSection>
         </div>
 
-        <MotionSection delayIndex={2}>
+        <MotionSection delayIndex={4}>
           <RevisionDiffViewer original={originalText} revised={revisedText} />
         </MotionSection>
       </main>

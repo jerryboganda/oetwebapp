@@ -304,6 +304,19 @@ public class ListeningQuestion
     [MaxLength(64)]
     public string? SkillTag { get; set; }
 
+    /// <summary>Listening Pathway — comma-separated L1..L8 sub-skill codes
+    /// (e.g. <c>"L2,L8"</c>). Drives diagnostic question selection + adaptive
+    /// drill targeting. Authoring is optional; null means unclassified.</summary>
+    [MaxLength(64)]
+    public string? SubSkillTagsCsv { get; set; }
+
+    /// <summary>Listening Pathway — primary accent of the speaker on this question's
+    /// audio (BCP-47-ish short code: <c>"en-GB"</c>, <c>"en-AU"</c>, <c>"en-US"</c>,
+    /// or <c>"en-XX"</c> for non-native). Drives accent-targeted drill selection
+    /// and the diagnostic accent test.</summary>
+    [MaxLength(16)]
+    public string? Accent { get; set; }
+
     /// <summary>Verbatim audio-script excerpt that supports the answer.
     /// NEVER serialised to learner DTOs pre-submit.</summary>
     [MaxLength(2048)]

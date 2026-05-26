@@ -31,9 +31,48 @@ public sealed class DunningCampaignService : IDunningCampaignService, IDunningSe
         (21, "day21_cancel"),
     };
 
-    private readonly LearnerDbContext _db;
+    /// <summary>
+    /// Wave A5 smart-retry cadence: attempt 1 at T+24h, attempt 2 at T+72h,
+    /// attempt 3 at T+168h (7 days). After attempt 3 the dunning ladder
+    /// gives up and cancels the subscription with
+    /// <c>reason="dunning_exhausted"</c>.
+    /// </summary>
+    public static readonly TimeSpan[] SmartRetryDelays =
+    {
+        TimeSpan.FromHours(24),
+        TimeSpan.FromHours(72),
+        TimeSpan.FromHours(168),
+    };
 
-    public DunningCampaignService(LearnerDbContext db) => _db = db;
+    public const int SmartRetryMaxAttempts = 3;
+
+    private readonly LearnerDbContext _db;
+    private readonly IStripeService? _stripe;
+    private readonly ISubscriptionService? _subscriptions;
+    private readonly IBillingNotificationDispatcher? _dispatcher;
+    private readonly TimeProvider _clock;
+    private readonly ILogger<DunningCampaignService>? _logger;
+
+    public DunningCampaignService(LearnerDbContext db)
+        : this(db, stripe: null, subscriptions: null, dispatcher: null, clock: null, logger: null)
+    {
+    }
+
+    public DunningCampaignService(
+        LearnerDbContext db,
+        IStripeService? stripe,
+        ISubscriptionService? subscriptions,
+        IBillingNotificationDispatcher? dispatcher,
+        TimeProvider? clock,
+        ILogger<DunningCampaignService>? logger)
+    {
+        _db = db;
+        _stripe = stripe;
+        _subscriptions = subscriptions;
+        _dispatcher = dispatcher;
+        _clock = clock ?? TimeProvider.System;
+        _logger = logger;
+    }
 
     public async Task<DunningCampaign> StartAsync(string subscriptionId, string userId, string? failureCode, string? failureReason, CancellationToken ct)
     {
@@ -203,6 +242,196 @@ public sealed class DunningCampaignService : IDunningCampaignService, IDunningSe
 
         await _db.SaveChangesAsync(ct);
     }
+
+    // ── Wave A5: smart-retry ladder (T+24h / T+72h / T+168h) ─────────────
+
+    public async Task ScheduleInvoiceRetryAsync(
+        string stripeSubscriptionId,
+        string stripeInvoiceId,
+        string userId,
+        CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(stripeInvoiceId))
+            throw new ArgumentException("invoice id required", nameof(stripeInvoiceId));
+
+        // Count attempts already on the ladder for this invoice — idempotent
+        // on (invoiceId, attemptNumber). A duplicate webhook from Stripe must
+        // not duplicate rows.
+        var nextAttempt = await _db.DunningAttempts
+            .Where(a => a.InvoiceId == stripeInvoiceId)
+            .OrderByDescending(a => a.AttemptNumber)
+            .Select(a => (int?)a.AttemptNumber)
+            .FirstOrDefaultAsync(ct) ?? 0;
+        nextAttempt += 1;
+
+        if (nextAttempt > SmartRetryMaxAttempts)
+        {
+            _logger?.LogInformation(
+                "Dunning ladder for invoice {InvoiceId} already exhausted (next attempt={Next}); ignoring.",
+                stripeInvoiceId, nextAttempt);
+            return;
+        }
+
+        var now = _clock.GetUtcNow();
+        var delay = SmartRetryDelays[nextAttempt - 1];
+        var attempt = new DunningAttempt
+        {
+            Id = Guid.NewGuid().ToString("N"),
+            SubscriptionId = stripeSubscriptionId,
+            InvoiceId = stripeInvoiceId,
+            UserId = userId,
+            AttemptNumber = nextAttempt,
+            ScheduledAt = now + delay,
+            Outcome = DunningAttemptOutcome.Pending,
+            CreatedAt = now,
+        };
+        _db.DunningAttempts.Add(attempt);
+        await _db.SaveChangesAsync(ct);
+    }
+
+    public async Task<DunningRetryExecutionResult> ExecutePendingRetryAsync(
+        string attemptId, CancellationToken ct = default)
+    {
+        var attempt = await _db.DunningAttempts.FirstOrDefaultAsync(a => a.Id == attemptId, ct)
+            ?? throw new InvalidOperationException($"DunningAttempt {attemptId} not found.");
+
+        if (attempt.Outcome != DunningAttemptOutcome.Pending)
+        {
+            return new DunningRetryExecutionResult(
+                attempt.Id,
+                attempt.AttemptNumber,
+                Succeeded: attempt.Outcome == DunningAttemptOutcome.Succeeded,
+                FinalAttemptExhausted: false,
+                attempt.StripeFailureCode,
+                attempt.FailureReason);
+        }
+
+        var now = _clock.GetUtcNow();
+        attempt.ExecutedAt = now;
+
+        // Stripe is optional only to keep unit tests light; in production the
+        // DI container always provides the concrete StripeService.
+        PayInvoiceResult? payResult = null;
+        if (_stripe is not null)
+        {
+            try
+            {
+                payResult = await _stripe.PayInvoiceAsync(attempt.InvoiceId, ct);
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogWarning(ex, "Stripe PayInvoiceAsync threw for invoice {InvoiceId}", attempt.InvoiceId);
+                payResult = new PayInvoiceResult(false, "stripe_exception", "exception", ex.Message);
+            }
+        }
+        else
+        {
+            payResult = new PayInvoiceResult(true, "paid", null, null);
+        }
+
+        if (payResult.Succeeded)
+        {
+            attempt.Outcome = DunningAttemptOutcome.Succeeded;
+            attempt.StripeFailureCode = null;
+            attempt.FailureReason = null;
+            await _db.SaveChangesAsync(ct);
+            return new DunningRetryExecutionResult(
+                attempt.Id,
+                attempt.AttemptNumber,
+                Succeeded: true,
+                FinalAttemptExhausted: false,
+                FailureCode: null,
+                FailureReason: null);
+        }
+
+        // Card declined — mark this attempt failed.
+        attempt.Outcome = DunningAttemptOutcome.Failed;
+        attempt.StripeFailureCode = Truncate(payResult.FailureCode, 64);
+        attempt.FailureReason = Truncate(payResult.FailureReason, 512);
+
+        // Email the learner about this attempt outcome.
+        if (_dispatcher is not null)
+        {
+            var updateCardUrl = "/settings/billing"; // portal/update-card link is built by frontend
+            try
+            {
+                await _dispatcher.SendDunningAttemptAsync(
+                    attemptNumber: attempt.AttemptNumber,
+                    userId: attempt.UserId,
+                    invoiceId: attempt.InvoiceId,
+                    failureReason: attempt.FailureReason ?? "card_declined",
+                    updateCardUrl: updateCardUrl,
+                    ct);
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogWarning(ex, "Dunning attempt {AttemptNumber} notification failed for invoice {InvoiceId}",
+                    attempt.AttemptNumber, attempt.InvoiceId);
+            }
+        }
+
+        var isFinal = attempt.AttemptNumber >= SmartRetryMaxAttempts;
+        if (!isFinal)
+        {
+            // Schedule the next attempt automatically — the scheduler picks
+            // it up when ScheduledAt passes.
+            var nextNumber = attempt.AttemptNumber + 1;
+            var nextDelay = SmartRetryDelays[nextNumber - 1] - SmartRetryDelays[attempt.AttemptNumber - 1];
+            _db.DunningAttempts.Add(new DunningAttempt
+            {
+                Id = Guid.NewGuid().ToString("N"),
+                SubscriptionId = attempt.SubscriptionId,
+                InvoiceId = attempt.InvoiceId,
+                UserId = attempt.UserId,
+                AttemptNumber = nextNumber,
+                ScheduledAt = now + nextDelay,
+                Outcome = DunningAttemptOutcome.Pending,
+                CreatedAt = now,
+            });
+        }
+        else if (_subscriptions is not null)
+        {
+            // Final exhaustion — cancel the subscription immediately (not at
+            // period end) and notify the learner that their access is lost.
+            try
+            {
+                await _subscriptions.CancelAsync(
+                    userId: attempt.UserId,
+                    cancelAtPeriodEnd: false,
+                    reason: "dunning_exhausted",
+                    ct);
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogError(ex, "Subscription cancel after dunning exhaustion failed (user={UserId})", attempt.UserId);
+            }
+
+            if (_dispatcher is not null)
+            {
+                try
+                {
+                    await _dispatcher.SendSubscriptionLostAsync(attempt.UserId, attempt.SubscriptionId, ct);
+                }
+                catch (Exception ex)
+                {
+                    _logger?.LogWarning(ex, "Subscription lost notification failed (user={UserId})", attempt.UserId);
+                }
+            }
+        }
+
+        await _db.SaveChangesAsync(ct);
+
+        return new DunningRetryExecutionResult(
+            attempt.Id,
+            attempt.AttemptNumber,
+            Succeeded: false,
+            FinalAttemptExhausted: isFinal,
+            FailureCode: attempt.StripeFailureCode,
+            FailureReason: attempt.FailureReason);
+    }
+
+    private static string? Truncate(string? value, int max)
+        => string.IsNullOrEmpty(value) || value.Length <= max ? value : value[..max];
 }
 
 /// <summary>

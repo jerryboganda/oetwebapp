@@ -1,8 +1,10 @@
+using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using OetLearner.Api.Data;
+using OetLearner.Api.Domain;
 using OetLearner.Api.Tests.Infrastructure;
 
 namespace OetLearner.Api.Tests;
@@ -80,6 +82,132 @@ public class CriticalFlowsTests : IClassFixture<TestWebApplicationFactory>
         Assert.Equal("completed", summaryJson!.RootElement.GetProperty("state").GetString());
         var scoreRange = summaryJson.RootElement.GetProperty("scoreRange").GetString();
         Assert.False(string.IsNullOrWhiteSpace(scoreRange));
+    }
+
+    [Fact]
+    public async Task WritingRevision_QueuesLinkedEvaluation()
+    {
+        var userId = $"writing-revision-{Guid.NewGuid():N}";
+        using var client = await CreateClientForUserAsync(userId, walletCredits: 0);
+        var baseAttemptId = await SeedCompletedWritingAttemptAsync(userId);
+
+        var response = await client.PostAsJsonAsync($"/v1/writing/revisions/{baseAttemptId}/submit", new
+        {
+            content = "Dear Dr Patterson, I am writing to revise the referral with a clearer purpose and concise follow-up request.",
+            idempotencyKey = Guid.NewGuid().ToString("N")
+        });
+
+        response.EnsureSuccessStatusCode();
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var revisionAttemptId = json.RootElement.GetProperty("attemptId").GetString();
+        var evaluationId = json.RootElement.GetProperty("evaluationId").GetString();
+
+        Assert.StartsWith("wa-", revisionAttemptId);
+        Assert.StartsWith("we-", evaluationId);
+        Assert.Equal("queued", json.RootElement.GetProperty("state").GetString());
+
+        await using var scope = _factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        var revision = await db.Attempts.SingleAsync(x => x.Id == revisionAttemptId);
+        Assert.Equal(baseAttemptId, revision.ParentAttemptId);
+        Assert.Equal("writing", revision.SubtestCode);
+        Assert.Equal(AttemptState.Evaluating, revision.State);
+        Assert.True(await db.Evaluations.AnyAsync(x => x.Id == evaluationId && x.AttemptId == revisionAttemptId && x.State == AsyncState.Queued));
+        Assert.True(await db.BackgroundJobs.AnyAsync(x => x.ResourceId == evaluationId && x.AttemptId == revisionAttemptId));
+    }
+
+    [Fact]
+    public async Task WritingRevision_IsIdempotent_ForDuplicateSubmission()
+    {
+        var userId = $"writing-revision-idem-{Guid.NewGuid():N}";
+        using var client = await CreateClientForUserAsync(userId, walletCredits: 0);
+        var baseAttemptId = await SeedCompletedWritingAttemptAsync(userId);
+        var idempotencyKey = Guid.NewGuid().ToString("N");
+        var body = new
+        {
+            content = "Dear Dr Patterson, I have revised the letter while preserving the clinical facts and clarifying the request.",
+            idempotencyKey
+        };
+
+        var firstResponse = await client.PostAsJsonAsync($"/v1/writing/revisions/{baseAttemptId}/submit", body);
+        var secondResponse = await client.PostAsJsonAsync($"/v1/writing/revisions/{baseAttemptId}/submit", body);
+
+        firstResponse.EnsureSuccessStatusCode();
+        secondResponse.EnsureSuccessStatusCode();
+
+        using var firstJson = JsonDocument.Parse(await firstResponse.Content.ReadAsStringAsync());
+        using var secondJson = JsonDocument.Parse(await secondResponse.Content.ReadAsStringAsync());
+        var revisionAttemptId = firstJson.RootElement.GetProperty("attemptId").GetString();
+
+        Assert.Equal(revisionAttemptId, secondJson.RootElement.GetProperty("attemptId").GetString());
+        Assert.Equal(
+            firstJson.RootElement.GetProperty("evaluationId").GetString(),
+            secondJson.RootElement.GetProperty("evaluationId").GetString());
+
+        await using var scope = _factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        Assert.Equal(1, await db.Attempts.CountAsync(x => x.ParentAttemptId == baseAttemptId));
+    }
+
+    [Fact]
+    public async Task WritingRevision_RejectsNonWritingAttempt()
+    {
+        var userId = $"writing-revision-nonwriting-{Guid.NewGuid():N}";
+        using var client = await CreateClientForUserAsync(userId, walletCredits: 0);
+        var readingAttemptId = await SeedCompletedNonWritingAttemptAsync(userId);
+
+        var getResponse = await client.GetAsync($"/v1/writing/revisions/{readingAttemptId}");
+        var submitResponse = await client.PostAsJsonAsync($"/v1/writing/revisions/{readingAttemptId}/submit", new
+        {
+            content = "This should not be accepted as a Writing revision.",
+            idempotencyKey = Guid.NewGuid().ToString("N")
+        });
+
+        Assert.Equal(HttpStatusCode.NotFound, getResponse.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, submitResponse.StatusCode);
+    }
+
+    [Fact]
+    public async Task WritingRevision_RequiresCompletedFeedback()
+    {
+        var userId = $"writing-revision-not-ready-{Guid.NewGuid():N}";
+        using var client = await CreateClientForUserAsync(userId, walletCredits: 0);
+        var baseAttemptId = await SeedCompletedWritingAttemptAsync(userId, includeEvaluation: false);
+
+        var response = await client.PostAsJsonAsync($"/v1/writing/revisions/{baseAttemptId}/submit", new
+        {
+            content = "Dear Dr Patterson, I am trying to revise before feedback is ready.",
+            idempotencyKey = Guid.NewGuid().ToString("N")
+        });
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task WritingRevision_RequiresWritingEntitlement()
+    {
+        var userId = $"writing-revision-free-{Guid.NewGuid():N}";
+        using var client = await CreateClientForUserAsync(userId, walletCredits: 0);
+        var baseAttemptId = await SeedCompletedWritingAttemptAsync(userId);
+
+        await using (var scope = _factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+            db.Subscriptions.RemoveRange(db.Subscriptions.Where(subscription => subscription.UserId == userId));
+            await db.SaveChangesAsync();
+        }
+
+        var response = await client.PostAsJsonAsync($"/v1/writing/revisions/{baseAttemptId}/submit", new
+        {
+            content = "Dear Dr Patterson, I am writing to revise this letter without an active subscription.",
+            idempotencyKey = Guid.NewGuid().ToString("N")
+        });
+
+        Assert.Equal(HttpStatusCode.PaymentRequired, response.StatusCode);
+
+        await using var verifyScope = _factory.Services.CreateAsyncScope();
+        var verifyDb = verifyScope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        Assert.False(await verifyDb.Attempts.AnyAsync(x => x.ParentAttemptId == baseAttemptId));
     }
 
     [Fact]
@@ -237,5 +365,78 @@ public class CriticalFlowsTests : IClassFixture<TestWebApplicationFactory>
         }
 
         throw new TimeoutException("Timed out waiting for writing evaluation to complete.");
+    }
+
+    private async Task<string> SeedCompletedWritingAttemptAsync(string userId, bool includeEvaluation = true)
+    {
+        await using var scope = _factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        var attempt = new Attempt
+        {
+            Id = $"wa-{Guid.NewGuid():N}",
+            UserId = userId,
+            ContentId = "wt-001",
+            SubtestCode = "writing",
+            Context = "practice",
+            Mode = "timed",
+            State = AttemptState.Completed,
+            StartedAt = DateTimeOffset.UtcNow.AddMinutes(-45),
+            SubmittedAt = DateTimeOffset.UtcNow.AddMinutes(-5),
+            CompletedAt = DateTimeOffset.UtcNow.AddMinutes(-4),
+            DraftContent = "Dear Dr Patterson, I am writing to update you regarding Mrs Vance after her knee replacement.",
+            DraftVersion = 1,
+            LastClientSyncAt = DateTimeOffset.UtcNow.AddMinutes(-4)
+        };
+        db.Attempts.Add(attempt);
+        if (includeEvaluation)
+        {
+            db.Evaluations.Add(new Evaluation
+            {
+                Id = $"we-{Guid.NewGuid():N}",
+                AttemptId = attempt.Id,
+                SubtestCode = "writing",
+                State = AsyncState.Completed,
+                ScoreRange = "350-380",
+                ConfidenceBand = ConfidenceBand.Medium,
+                StrengthsJson = "[\"Clear purpose\"]",
+                IssuesJson = "[\"Clarify the follow-up request.\"]",
+                CriterionScoresJson = "[{\"criterionCode\":\"purpose\",\"scoreRange\":\"2\"}]",
+                FeedbackItemsJson = "[]",
+                GeneratedAt = DateTimeOffset.UtcNow.AddMinutes(-3),
+                ModelExplanationSafe = "Completed seed evaluation.",
+                LearnerDisclaimer = "Practice estimate only.",
+                StatusReasonCode = "completed",
+                StatusMessage = "Completed.",
+                Retryable = false,
+                LastTransitionAt = DateTimeOffset.UtcNow.AddMinutes(-3)
+            });
+        }
+        await db.SaveChangesAsync();
+        return attempt.Id;
+    }
+
+    private async Task<string> SeedCompletedNonWritingAttemptAsync(string userId)
+    {
+        await using var scope = _factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        var attempt = new Attempt
+        {
+            Id = $"ra-{Guid.NewGuid():N}",
+            UserId = userId,
+            ContentId = "rt-001",
+            SubtestCode = "reading",
+            Context = "practice",
+            Mode = "exam",
+            State = AttemptState.Completed,
+            StartedAt = DateTimeOffset.UtcNow.AddMinutes(-45),
+            SubmittedAt = DateTimeOffset.UtcNow.AddMinutes(-5),
+            CompletedAt = DateTimeOffset.UtcNow.AddMinutes(-4),
+            DraftContent = "{}",
+            DraftVersion = 1,
+            LastClientSyncAt = DateTimeOffset.UtcNow.AddMinutes(-4)
+        };
+        db.Attempts.Add(attempt);
+        await db.SaveChangesAsync();
+        return attempt.Id;
     }
 }

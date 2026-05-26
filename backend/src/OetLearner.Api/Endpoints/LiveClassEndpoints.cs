@@ -1,5 +1,8 @@
 using System.Security.Claims;
+using System.Text;
 using OetLearner.Api.Contracts;
+using OetLearner.Api.Contracts.Classes;
+using OetLearner.Api.Services.Classes;
 using OetLearner.Api.Services.LiveClasses;
 
 namespace OetLearner.Api.Endpoints;
@@ -82,9 +85,66 @@ public static class LiveClassEndpoints
             return Results.Ok(await service.GetRecordingForLearnerAsync(sessionId, userId, ct));
         });
 
+        // Wave A1 — feedback, waitlist join/leave, transcript fetch.
+        learner.MapPost("/sessions/{sessionId}/feedback", async (
+            string sessionId,
+            ClassFeedbackSubmitRequest request,
+            HttpContext http,
+            IClassFeedbackService service,
+            CancellationToken ct) =>
+        {
+            var userId = GetRequiredUserId(http);
+            var idempotencyKey = http.Request.Headers["Idempotency-Key"].FirstOrDefault();
+            return Results.Ok(await service.SubmitAsync(sessionId, userId, request, idempotencyKey, ct));
+        }).RequireRateLimiting("PerUser");
+
+        learner.MapPost("/sessions/{sessionId}/waitlist", async (
+            string sessionId,
+            HttpContext http,
+            LiveClassService service,
+            CancellationToken ct) =>
+        {
+            var userId = GetRequiredUserId(http);
+            var entry = await service.JoinWaitlistAsync(sessionId, userId, ct);
+            return Results.Ok(new LiveClassWaitlistEntryDto(
+                entry.Id,
+                entry.ClassSessionId,
+                entry.UserId,
+                entry.Position,
+                entry.JoinedWaitlistAt));
+        }).RequireRateLimiting("PerUser");
+
+        learner.MapDelete("/sessions/{sessionId}/waitlist", async (
+            string sessionId,
+            HttpContext http,
+            LiveClassService service,
+            CancellationToken ct) =>
+        {
+            var userId = GetRequiredUserId(http);
+            await service.LeaveWaitlistAsync(sessionId, userId, ct);
+            return Results.NoContent();
+        });
+
+        app.MapGet("/v1/me/classes/sessions/{sessionId}/transcript", async (
+            string sessionId,
+            HttpContext http,
+            LiveClassService service,
+            CancellationToken ct) =>
+        {
+            var userId = GetRequiredUserId(http);
+            var (text, processedAt) = await service.GetTranscriptForLearnerAsync(sessionId, userId, ct);
+            return Results.Ok(new LiveClassTranscriptDto(sessionId, text, processedAt));
+        }).RequireAuthorization("LearnerOnly").WithTags("Live Classes");
+
         var expert = app.MapGroup("/v1/expert/live-classes")
             .WithTags("Expert Live Classes")
             .RequireAuthorization("ExpertOnly");
+
+        expert.MapGet("", async (HttpContext http, LiveClassService service, CancellationToken ct) =>
+        {
+            var expertUserId = GetRequiredUserId(http);
+            return Results.Ok(await service.ListExpertClassesAsync(expertUserId, ct));
+        });
 
         expert.MapPost("/sessions/{sessionId}/join-token", async (string sessionId, HttpContext http, LiveClassService service, CancellationToken ct) =>
         {
@@ -172,8 +232,19 @@ public static class LiveClassEndpoints
 
         app.MapPost("/v1/webhooks/zoom", async (HttpContext http, LiveClassService service, CancellationToken ct) =>
         {
-            using var reader = new StreamReader(http.Request.Body);
+            const int maxZoomWebhookBodyBytes = 1024 * 1024;
+            if (http.Request.ContentLength is > maxZoomWebhookBodyBytes)
+            {
+                return Results.StatusCode(StatusCodes.Status413PayloadTooLarge);
+            }
+
+            using var reader = new StreamReader(http.Request.Body, Encoding.UTF8, detectEncodingFromByteOrderMarks: false, bufferSize: 8192);
             var rawBody = await reader.ReadToEndAsync(ct);
+            if (Encoding.UTF8.GetByteCount(rawBody) > maxZoomWebhookBodyBytes)
+            {
+                return Results.StatusCode(StatusCodes.Status413PayloadTooLarge);
+            }
+
             var response = await service.HandleZoomWebhookAsync(rawBody, http.Request.Headers, ct);
             return Results.Ok(response ?? new { ok = true });
         }).WithTags("Zoom Webhooks").AllowAnonymous();

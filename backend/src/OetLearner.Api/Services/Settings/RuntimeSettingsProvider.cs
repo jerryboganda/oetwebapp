@@ -30,6 +30,7 @@ public sealed class RuntimeSettingsProvider : IRuntimeSettingsProvider
     private readonly IOptions<ExternalAuthOptions> _oauth;
     private readonly IOptions<UploadScannerOptions> _uploadScanner;
     private readonly IOptions<WebPushOptions> _webPush;
+    private readonly IOptions<ZoomOptions> _zoom;
     private readonly IOptionsMonitor<SmtpOptions> _smtp;
     private readonly IConfiguration _config;
     private readonly IHostEnvironment _environment;
@@ -43,6 +44,7 @@ public sealed class RuntimeSettingsProvider : IRuntimeSettingsProvider
         IOptions<ExternalAuthOptions> oauth,
         IOptions<UploadScannerOptions> uploadScanner,
         IOptions<WebPushOptions> webPush,
+        IOptions<ZoomOptions> zoom,
         IOptionsMonitor<SmtpOptions> smtp,
         IConfiguration config,
         IHostEnvironment environment)
@@ -55,6 +57,7 @@ public sealed class RuntimeSettingsProvider : IRuntimeSettingsProvider
         _oauth = oauth;
         _uploadScanner = uploadScanner;
         _webPush = webPush;
+        _zoom = zoom;
         _smtp = smtp;
         _config = config;
         _environment = environment;
@@ -108,11 +111,12 @@ public sealed class RuntimeSettingsProvider : IRuntimeSettingsProvider
     {
         var brevo = _brevo.Value;
         var billing = _billing.Value;
-        var stripe = billing.Stripe;
+        var stripeOptions = billing.Stripe;
         var paypal = billing.PayPal;
         var oauth = _oauth.Value;
         var smtp = _smtp.CurrentValue;
         var scanner = _uploadScanner.Value;
+        var zoomOptions = _zoom.Value;
 
         var email = new EmailSettings(
             BrevoApiKey: Unprotect(r.BrevoApiKeyEncrypted) ?? NullIfEmpty(brevo.ApiKey),
@@ -126,11 +130,11 @@ public sealed class RuntimeSettingsProvider : IRuntimeSettingsProvider
             SmtpFromName: Coalesce(r.SmtpFromName, brevo.FromName, smtp.FromName));
 
         var bill = new BillingSettings(
-            StripeSecretKey: Unprotect(r.StripeSecretKeyEncrypted) ?? NullIfEmpty(stripe.SecretKey),
-            StripePublishableKey: Coalesce(r.StripePublishableKey, stripe.PublishableKey),
-            StripeWebhookSecret: Unprotect(r.StripeWebhookSecretEncrypted) ?? NullIfEmpty(stripe.WebhookSecret),
-            StripeSuccessUrl: Coalesce(r.StripeSuccessUrl, stripe.SuccessUrl),
-            StripeCancelUrl: Coalesce(r.StripeCancelUrl, stripe.CancelUrl),
+            StripeSecretKey: Unprotect(r.StripeSecretKeyEncrypted) ?? NullIfEmpty(stripeOptions.SecretKey),
+            StripePublishableKey: Coalesce(r.StripePublishableKey, stripeOptions.PublishableKey),
+            StripeWebhookSecret: Unprotect(r.StripeWebhookSecretEncrypted) ?? NullIfEmpty(stripeOptions.WebhookSecret),
+            StripeSuccessUrl: Coalesce(r.StripeSuccessUrl, stripeOptions.SuccessUrl),
+            StripeCancelUrl: Coalesce(r.StripeCancelUrl, stripeOptions.CancelUrl),
             PayPalClientId: Coalesce(r.PayPalClientId, paypal.ClientId),
             PayPalClientSecret: Unprotect(r.PayPalClientSecretEncrypted) ?? NullIfEmpty(paypal.ClientSecret),
             PayPalWebhookId: Unprotect(r.PayPalWebhookIdEncrypted) ?? NullIfEmpty(paypal.WebhookId),
@@ -185,6 +189,38 @@ public sealed class RuntimeSettingsProvider : IRuntimeSettingsProvider
             TimeoutSeconds: r.UploadScannerTimeoutSeconds ?? Math.Max(1, (int)Math.Ceiling(scanner.Timeout.TotalSeconds)),
             FailClosedOnError: r.UploadScannerFailClosedOnError ?? scanner.FailClosedOnError);
 
+        var zoom = new ZoomSettings(
+            Enabled: r.ZoomEnabled ?? zoomOptions.Enabled,
+            AccountId: Coalesce(r.ZoomAccountId, zoomOptions.AccountId),
+            ClientId: Coalesce(r.ZoomClientId, zoomOptions.ClientId),
+            ClientSecret: ResolveStoredSecretOrFallback(r.ZoomClientSecretEncrypted, zoomOptions.ClientSecret, "zoom.clientSecret"),
+            ApiBaseUrl: Coalesce(r.ZoomApiBaseUrl, zoomOptions.ApiBaseUrl, "https://api.zoom.us/v2")!,
+            TokenUrl: Coalesce(r.ZoomTokenUrl, zoomOptions.TokenUrl, "https://zoom.us/oauth/token")!,
+            HostUserId: Coalesce(r.ZoomHostUserId, zoomOptions.HostUserId),
+            MeetingSdkKey: Coalesce(r.ZoomMeetingSdkKey, zoomOptions.MeetingSdkKey),
+            MeetingSdkSecret: ResolveStoredSecretOrFallback(r.ZoomMeetingSdkSecretEncrypted, zoomOptions.MeetingSdkSecret, "zoom.meetingSdkSecret"),
+            WebhookSecretToken: ResolveStoredSecretOrFallback(r.ZoomWebhookSecretTokenEncrypted, zoomOptions.WebhookSecretToken, "zoom.webhookSecretToken"),
+            WebhookRetryToleranceSeconds: Math.Clamp(r.ZoomWebhookRetryToleranceSeconds ?? (zoomOptions.WebhookRetryToleranceSeconds <= 0 ? 300 : zoomOptions.WebhookRetryToleranceSeconds), 60, 3600),
+            AllowSandboxFallback: r.ZoomAllowSandboxFallback ?? zoomOptions.AllowSandboxFallback);
+        ValidateEffectiveZoomSettings(zoom);
+
+        // Stripe — Tax/Portal/Radar runtime tunables. SecretKey/WebhookSecret
+        // mirror the existing BillingSettings fields so callers can opt for
+        // either source; new Wave A5 consumers (renewal/dunning/tax) use
+        // EffectiveSettings.Stripe directly to avoid coupling to the legacy
+        // BillingSettings shape.
+        var stripe = new StripeSettings(
+            SecretKey: bill.StripeSecretKey,
+            PublishableKey: bill.StripePublishableKey,
+            WebhookSecret: bill.StripeWebhookSecret,
+            TaxAutomaticEnabled: r.StripeTaxAutomaticEnabled ?? true,
+            TaxRegistrations: ParseCsvList(r.StripeTaxRegistrationsCsv),
+            CustomerPortalConfigurationId: NullIfEmpty(r.StripeCustomerPortalConfigurationId),
+            RadarHighRiskCountryAllowReview: r.StripeRadarHighRiskCountryAllowReview ?? false,
+            RadarBlockEmailDomainsCsv: NullIfEmpty(r.StripeRadarBlockEmailDomainsCsv));
+
+        var liveClasses = ResolveLiveClassSettings(r);
+
         return new EffectiveSettings(
             Email: email,
             Billing: bill,
@@ -193,9 +229,24 @@ public sealed class RuntimeSettingsProvider : IRuntimeSettingsProvider
             OAuth: oa,
             Push: push,
             UploadScanner: uploadScanner,
+            Zoom: zoom,
+            Stripe: stripe,
+            LiveClasses: liveClasses,
             UpdatedByUserId: r.UpdatedByUserId,
             UpdatedByUserName: r.UpdatedByUserName,
             UpdatedAt: r.UpdatedAt == default ? null : r.UpdatedAt);
+    }
+
+    private static LiveClassSettings ResolveLiveClassSettings(RuntimeSettingsRow r)
+        => new(AiRecordingProcessingEnabled: r.LiveClassesAiRecordingProcessingEnabled ?? false);
+
+    private static IReadOnlyList<string> ParseCsvList(string? csv)
+    {
+        if (string.IsNullOrWhiteSpace(csv)) return Array.Empty<string>();
+        return csv
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Where(static value => value.Length > 0)
+            .ToArray();
     }
 
     private static string? Coalesce(params string?[] values)
@@ -203,6 +254,47 @@ public sealed class RuntimeSettingsProvider : IRuntimeSettingsProvider
 
     private static string? NullIfEmpty(string? s)
         => string.IsNullOrWhiteSpace(s) ? null : s;
+
+    private string? ResolveStoredSecretOrFallback(string? cipher, string? fallback, string key)
+    {
+        if (string.IsNullOrEmpty(cipher))
+        {
+            return NullIfEmpty(fallback);
+        }
+
+        try
+        {
+            return _protector.Unprotect(cipher);
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException($"Runtime setting {key} could not be decrypted.", ex);
+        }
+    }
+
+    private void ValidateEffectiveZoomSettings(ZoomSettings zoom)
+    {
+        if (_environment.IsProduction() && zoom.AllowSandboxFallback)
+        {
+            throw new InvalidOperationException("Zoom sandbox fallback cannot be enabled in production.");
+        }
+
+        ValidateZoomEndpoint(zoom.ApiBaseUrl, "Zoom ApiBaseUrl", ["api.zoom.us", "api.zoom.com"]);
+        ValidateZoomEndpoint(zoom.TokenUrl, "Zoom TokenUrl", ["zoom.us", "zoom.com"]);
+    }
+
+    private static void ValidateZoomEndpoint(string value, string name, IReadOnlyCollection<string> allowedHosts)
+    {
+        if (!Uri.TryCreate(value, UriKind.Absolute, out var uri) || uri.Scheme != Uri.UriSchemeHttps)
+        {
+            throw new InvalidOperationException($"{name} must be an https:// URL.");
+        }
+
+        if (!allowedHosts.Any(host => string.Equals(host, uri.Host, StringComparison.OrdinalIgnoreCase)))
+        {
+            throw new InvalidOperationException($"{name} must use an official Zoom host.");
+        }
+    }
 
     private static double? ParseDouble(string? s)
         => double.TryParse(s, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var v) ? v : null;

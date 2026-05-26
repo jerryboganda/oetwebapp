@@ -34,6 +34,9 @@ public sealed class ZoomOptions
     /// <summary>Zoom webhook secret token used for x-zm-signature verification.</summary>
     public string? WebhookSecretToken { get; set; }
 
+    /// <summary>Maximum allowed webhook timestamp skew in seconds.</summary>
+    public int WebhookRetryToleranceSeconds { get; set; } = 300;
+
     /// <summary>Allow sandbox/mock responses when credentials are not configured.</summary>
     public bool AllowSandboxFallback { get; set; } = false;
 }

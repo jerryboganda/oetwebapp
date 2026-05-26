@@ -31,5 +31,6 @@
   "omnisharp.enableRoslynAnalyzers": false,
   "python.analysis.diagnosticMode": "openFilesOnly",
   "eslint.run": "onSave",
-  "typescript.tsserver.maxTsServerMemory": 1024
+  "typescript.tsserver.maxTsServerMemory": 1024,
+  "diffEditor.maxComputationTime": 0
 }

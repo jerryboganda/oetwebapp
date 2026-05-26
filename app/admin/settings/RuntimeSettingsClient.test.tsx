@@ -98,6 +98,20 @@ function makeResponse(overrides: Partial<RuntimeSettingsResponse> = {}): Runtime
       timeoutSeconds: 10,
       failClosedOnError: true,
     },
+    zoom: {
+      enabled: true,
+      accountId: 'zoom-account',
+      clientId: 'zoom-client',
+      clientSecret: '********',
+      apiBaseUrl: 'https://api.zoom.us/v2',
+      tokenUrl: 'https://zoom.us/oauth/token',
+      hostUserId: 'host@example.com',
+      meetingSdkKey: 'zoom-sdk-key',
+      meetingSdkSecret: '********',
+      webhookSecretToken: '********',
+      webhookRetryToleranceSeconds: 300,
+      allowSandboxFallback: false,
+    },
     updatedBy: 'admin@example.com',
     updatedByUserId: 'u-1',
     updatedAt: '2026-05-16T10:00:00Z',
@@ -111,6 +125,10 @@ async function expandSection(name: string) {
   if (trigger.getAttribute('aria-expanded') === 'false') {
     await user.click(trigger);
   }
+}
+
+function getPrimarySaveButton() {
+  return screen.getAllByRole('button', { name: 'Save all runtime settings' })[0];
 }
 
 describe('RuntimeSettingsClient', () => {
@@ -130,6 +148,7 @@ describe('RuntimeSettingsClient', () => {
     expect(screen.getByRole('region', { name: 'OAuth (Google + Apple + Facebook)' })).toBeInTheDocument();
     expect(screen.getByRole('region', { name: 'Push (Browser + APNs + FCM)' })).toBeInTheDocument();
     expect(screen.getByRole('region', { name: 'Upload Scanner (ClamAV)' })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Zoom Live Classes' })).toBeInTheDocument();
   });
 
   it('shows the "Set" badge when the API returns the masked sentinel', async () => {
@@ -168,7 +187,7 @@ describe('RuntimeSettingsClient', () => {
     const brevoLabel = await screen.findByLabelText('Brevo API Key');
     await user.type(brevoLabel, 'new-brevo-key');
 
-    await user.click(screen.getByRole('button', { name: 'Save all runtime settings' }));
+    await user.click(getPrimarySaveButton());
 
     await waitFor(() => expect(mockPut).toHaveBeenCalledTimes(1));
     const [path, body] = mockPut.mock.calls[0];
@@ -185,7 +204,7 @@ describe('RuntimeSettingsClient', () => {
     render(<RuntimeSettingsClient />);
 
     await screen.findByRole('region', { name: 'Email (Brevo + SMTP)' });
-    await user.click(screen.getByRole('button', { name: 'Save all runtime settings' }));
+    await user.click(getPrimarySaveButton());
 
     await waitFor(() => expect(mockPut).toHaveBeenCalledTimes(1));
     const payload = mockPut.mock.calls[0][1] as RuntimeSettingsResponse;
@@ -193,6 +212,8 @@ describe('RuntimeSettingsClient', () => {
     expect(payload.email.brevoApiKey).toBe('********');
     expect(payload.email.smtpPassword).toBe('********');
     expect(payload.backup.awsSecretAccessKey).toBe('********');
+    expect(payload.zoom.clientSecret).toBe('********');
+    expect(payload.zoom.meetingSdkSecret).toBe('********');
   });
 
   it('sends an empty string when the user clicks Clear on a set secret', async () => {
@@ -204,7 +225,7 @@ describe('RuntimeSettingsClient', () => {
 
     await screen.findByRole('region', { name: 'Email (Brevo + SMTP)' });
     await user.click(screen.getByRole('button', { name: 'Clear Brevo API Key' }));
-    await user.click(screen.getByRole('button', { name: 'Save all runtime settings' }));
+    await user.click(getPrimarySaveButton());
 
     await waitFor(() => expect(mockPut).toHaveBeenCalledTimes(1));
     const payload = mockPut.mock.calls[0][1] as RuntimeSettingsResponse;
@@ -219,7 +240,7 @@ describe('RuntimeSettingsClient', () => {
     render(<RuntimeSettingsClient />);
 
     await screen.findByRole('region', { name: 'Email (Brevo + SMTP)' });
-    await user.click(screen.getByRole('button', { name: 'Save all runtime settings' }));
+    await user.click(getPrimarySaveButton());
 
     expect(
       await screen.findByText('Runtime settings saved. Changes apply within ~30 seconds.'),
@@ -234,7 +255,7 @@ describe('RuntimeSettingsClient', () => {
     render(<RuntimeSettingsClient />);
 
     await screen.findByRole('region', { name: 'Email (Brevo + SMTP)' });
-    await user.click(screen.getByRole('button', { name: 'Save all runtime settings' }));
+    await user.click(getPrimarySaveButton());
 
     expect(await screen.findByText('Stripe key is invalid')).toBeInTheDocument();
   });

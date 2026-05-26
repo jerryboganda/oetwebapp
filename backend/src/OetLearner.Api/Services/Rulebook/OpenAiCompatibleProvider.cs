@@ -43,6 +43,11 @@ public sealed class OpenAiCompatibleProvider(
 
         var model = string.IsNullOrWhiteSpace(request.Model) ? _options.DefaultModel : request.Model;
         var maxTokens = request.MaxTokens ?? _options.DefaultMaxTokens;
+        if (request.AudioAttachments is { Count: > 0 } && IsTranscriptionModel(model))
+        {
+            return await TranscribeAudioAsync(client, model, request, ct);
+        }
+
         var reasoningEffort = (_options.ReasoningEffort ?? "high").Trim().ToLowerInvariant();
         var sendReasoning = IsReasoningCapable(model) && !string.IsNullOrWhiteSpace(reasoningEffort);
 
@@ -91,6 +96,63 @@ public sealed class OpenAiCompatibleProvider(
         var finishReason = choice.TryGetProperty("finish_reason", out var finish) ? finish.GetString() : null;
         return new AiProviderCompletion { Text = text, Usage = usage, ToolCalls = toolCalls, FinishReason = finishReason };
     }
+
+    private static async Task<AiProviderCompletion> TranscribeAudioAsync(HttpClient client, string model, AiProviderRequest request, CancellationToken ct)
+    {
+        var audio = request.AudioAttachments?.FirstOrDefault(attachment => attachment.Data.Length > 0);
+        if (audio is null)
+            throw new InvalidOperationException("OpenAI audio transcription requires a non-empty audio attachment.");
+
+        using var content = new MultipartFormDataContent();
+        content.Add(new StringContent(model), "model");
+        if (!string.IsNullOrWhiteSpace(request.UserPrompt))
+        {
+            content.Add(new StringContent(request.UserPrompt), "prompt");
+        }
+        content.Add(new StringContent("text"), "response_format");
+        content.Add(new StringContent(request.Temperature.ToString(System.Globalization.CultureInfo.InvariantCulture)), "temperature");
+
+        var fileContent = new ByteArrayContent(audio.Data);
+        fileContent.Headers.ContentType = new MediaTypeHeaderValue(string.IsNullOrWhiteSpace(audio.MimeType) ? "application/octet-stream" : audio.MimeType);
+        content.Add(fileContent, "file", FileNameForMimeType(audio.MimeType));
+
+        using var response = await client.PostAsync("audio/transcriptions", content, ct);
+        var body = await response.Content.ReadAsStringAsync(ct);
+        if (!response.IsSuccessStatusCode)
+            throw new InvalidOperationException(AiProviderErrorMessages.HttpFailure("AI transcription provider", (int)response.StatusCode, response.ReasonPhrase));
+
+        var text = body.Trim();
+        if (text.StartsWith('{'))
+        {
+            using var doc = JsonDocument.Parse(body);
+            if (doc.RootElement.TryGetProperty("text", out var textElement))
+            {
+                text = textElement.GetString()?.Trim() ?? string.Empty;
+            }
+        }
+
+        return new AiProviderCompletion { Text = text };
+    }
+
+    private static bool IsTranscriptionModel(string model)
+    {
+        if (string.IsNullOrWhiteSpace(model)) return false;
+        var normalized = model.Trim().ToLowerInvariant();
+        return normalized.StartsWith("whisper", StringComparison.Ordinal)
+            || normalized.Contains("transcribe", StringComparison.Ordinal);
+    }
+
+    private static string FileNameForMimeType(string mimeType)
+        => mimeType.ToLowerInvariant() switch
+        {
+            "audio/mpeg" => "recording.mp3",
+            "audio/mp4" => "recording.m4a",
+            "video/mp4" => "recording.mp4",
+            "audio/ogg" => "recording.ogg",
+            "audio/wav" => "recording.wav",
+            "audio/webm" => "recording.webm",
+            _ => "recording.bin",
+        };
 
     /// <summary>
     /// Returns true for models that accept the <c>reasoning_effort</c>

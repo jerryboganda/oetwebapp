@@ -163,8 +163,12 @@ public sealed class StripeService : IStripeService
         }
     }
 
-    public async Task UpdateSubscriptionAsync(
+    public Task UpdateSubscriptionAsync(
         string subscriptionId, string newPriceId, CancellationToken ct = default)
+        => UpdateSubscriptionAsync(subscriptionId, newPriceId, prorate: true, ct);
+
+    public async Task UpdateSubscriptionAsync(
+        string subscriptionId, string newPriceId, bool prorate, CancellationToken ct = default)
     {
         var service = new Stripe.SubscriptionService();
         var sub = await service.GetAsync(subscriptionId, cancellationToken: ct);
@@ -174,17 +178,58 @@ public sealed class StripeService : IStripeService
         await service.UpdateAsync(subscriptionId, new SubscriptionUpdateOptions
         {
             Items = [new SubscriptionItemOptions { Id = itemId, Price = newPriceId }],
-            ProrationBehavior = "create_prorations"
+            ProrationBehavior = prorate ? "create_prorations" : "none"
         }, cancellationToken: ct);
     }
 
-    public async Task PauseSubscriptionAsync(string subscriptionId, CancellationToken ct = default)
+    public Task PauseSubscriptionAsync(string subscriptionId, CancellationToken ct = default)
+        => PauseSubscriptionAsync(subscriptionId, resumeAt: null, ct);
+
+    public async Task PauseSubscriptionAsync(
+        string subscriptionId, DateTimeOffset? resumeAt, CancellationToken ct = default)
+    {
+        var service = new Stripe.SubscriptionService();
+        var options = new SubscriptionPauseCollectionOptions { Behavior = "void" };
+        if (resumeAt.HasValue)
+        {
+            options.ResumesAt = resumeAt.Value.UtcDateTime;
+        }
+        await service.UpdateAsync(subscriptionId, new SubscriptionUpdateOptions
+        {
+            PauseCollection = options
+        }, cancellationToken: ct);
+    }
+
+    public async Task ApplyCouponToSubscriptionAsync(
+        string subscriptionId, string? couponId, CancellationToken ct = default)
     {
         var service = new Stripe.SubscriptionService();
         await service.UpdateAsync(subscriptionId, new SubscriptionUpdateOptions
         {
-            PauseCollection = new SubscriptionPauseCollectionOptions { Behavior = "void" }
+            Coupon = couponId ?? string.Empty
         }, cancellationToken: ct);
+    }
+
+    public async Task<string?> GetInvoiceSubscriptionIdAsync(
+        string invoiceId, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(_opts.SecretKey))
+        {
+            return null;
+        }
+
+        var service = new InvoiceService();
+        try
+        {
+            var invoice = await service.GetAsync(invoiceId, cancellationToken: ct);
+            return invoice?.SubscriptionId;
+        }
+        catch (StripeException ex)
+        {
+            _logger.LogWarning(ex,
+                "GetInvoiceSubscriptionIdAsync: failed to retrieve invoice {InvoiceId}.", invoiceId);
+            return null;
+        }
     }
 
     public async Task ResumeSubscriptionAsync(string subscriptionId, CancellationToken ct = default)
@@ -213,6 +258,35 @@ public sealed class StripeService : IStripeService
             Limit = limit
         }, cancellationToken: ct);
         return invoices.Data;
+    }
+
+    public async Task<PayInvoiceResult> PayInvoiceAsync(string stripeInvoiceId, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(_opts.SecretKey))
+        {
+            _logger.LogWarning("Stripe SecretKey not configured — sandbox PayInvoiceAsync returns success.");
+            return new PayInvoiceResult(Succeeded: true, Status: "paid", FailureCode: null, FailureReason: null);
+        }
+
+        var service = new InvoiceService();
+        try
+        {
+            // PayAsync attempts to collect the invoice synchronously; it
+            // succeeds on a successful charge and throws a StripeException
+            // with HTTP 402 when the card declines (typical hard / soft fail).
+            var invoice = await service.PayAsync(stripeInvoiceId, new InvoicePayOptions(), cancellationToken: ct);
+            var status = invoice.Status ?? "unknown";
+            var succeeded = string.Equals(status, "paid", StringComparison.OrdinalIgnoreCase);
+            return new PayInvoiceResult(succeeded, status, FailureCode: null, FailureReason: null);
+        }
+        catch (StripeException ex)
+        {
+            return new PayInvoiceResult(
+                Succeeded: false,
+                Status: ex.StripeError?.Code ?? "stripe_error",
+                FailureCode: ex.StripeError?.DeclineCode ?? ex.StripeError?.Code,
+                FailureReason: ex.Message);
+        }
     }
 
     public async Task<string> CreateCouponAsync(CreateStripeCouponRequest request, CancellationToken ct = default)

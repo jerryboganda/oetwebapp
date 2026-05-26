@@ -126,7 +126,8 @@ public class WalletService(
         }
 
         var providerName = db.Database.ProviderName;
-        var supportsTx = !string.Equals(providerName, "Microsoft.EntityFrameworkCore.InMemory", StringComparison.Ordinal);
+        var supportsTx = !string.Equals(providerName, "Microsoft.EntityFrameworkCore.InMemory", StringComparison.Ordinal)
+            && db.Database.CurrentTransaction is null;
         await using var tx = supportsTx ? await db.Database.BeginTransactionAsync(ct) : null;
 
         var wallet = await db.Wallets.FirstAsync(w => w.Id == walletId, ct);
@@ -208,7 +209,8 @@ public class WalletService(
         }
 
         var providerName = db.Database.ProviderName;
-        var supportsTx = !string.Equals(providerName, "Microsoft.EntityFrameworkCore.InMemory", StringComparison.Ordinal);
+        var supportsTx = !string.Equals(providerName, "Microsoft.EntityFrameworkCore.InMemory", StringComparison.Ordinal)
+            && db.Database.CurrentTransaction is null;
         await using var tx = supportsTx ? await db.Database.BeginTransactionAsync(ct) : null;
 
         var wallet = await db.Wallets.FirstAsync(w => w.Id == walletId, ct);

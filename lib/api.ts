@@ -1924,6 +1924,26 @@ export async function fetchWritingRevisionData(referenceId: string): Promise<{
   };
 }
 
+export async function submitWritingRevision(attemptId: string, content: string, idempotencyKey?: string): Promise<{
+  attemptId: string;
+  evaluationId: string;
+  state: EvalStatus;
+}> {
+  const submitted = await apiRequest<ApiRecord>(`/v1/writing/revisions/${encodeURIComponent(attemptId)}/submit`, {
+    method: 'POST',
+    body: JSON.stringify({
+      content,
+      idempotencyKey: idempotencyKey ?? crypto.randomUUID?.() ?? String(Date.now()),
+    }),
+  });
+
+  return {
+    attemptId: String(submitted.attemptId ?? ''),
+    evaluationId: String(submitted.evaluationId ?? ''),
+    state: toEvalStatus(submitted.state),
+  };
+}
+
 export async function fetchModelAnswer(taskId: string): Promise<ModelAnswer> {
   const response = await apiRequest<ApiRecord>(`/v1/writing/content/${taskId}/model-answer`);
   const payload = response.payload ?? {};
@@ -10430,6 +10450,10 @@ export async function fetchMyPastLiveClasses(): Promise<LiveClassListItem[]> {
 
 export async function fetchLiveClassRecording(sessionId: string): Promise<LiveClassRecording> {
   return apiRequest<LiveClassRecording>(`/v1/classes/sessions/${encodeURIComponent(sessionId)}/recording`);
+}
+
+export async function fetchExpertLiveClasses(): Promise<LiveClassListItem[]> {
+  return apiRequest<LiveClassListItem[]>('/v1/expert/live-classes');
 }
 
 export async function fetchExpertLiveClassJoinToken(sessionId: string): Promise<LiveClassJoinToken> {

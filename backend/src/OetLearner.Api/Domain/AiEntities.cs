@@ -273,6 +273,28 @@ public static class AiFeatureCodes
     public const string ReadingExplanation = "reading.explanation.v1";
     public const string ReadingVocabularyCard = "reading.vocabulary.card";
 
+    // ── Live Class Recording AI Pipeline (Wave A2) ─────────────────
+    // Platform-only — server-side background processing of class recordings.
+    // No learner BYOK key applies: these calls run inside the background-job
+    // processor after a class ends, and consume cached system prompts where
+    // applicable (per the Zoom integration plan §14.1 / §14.3).
+
+    /// <summary>Whisper Large-v3 audio-to-text on a class recording. No caching.</summary>
+    public const string ClassRecordingTranscribe = "class.recording.transcribe.v1";
+
+    /// <summary>Sonnet-4.6 summarisation of the transcript into JSON
+    /// {summary, summaryAr, chapters, actionItems, keyTopics}. Cached system prompt.</summary>
+    public const string ClassRecordingSummarize = "class.recording.summarize.v1";
+
+    /// <summary>Sonnet-4.6 EN→AR translation of the AI summary. Cached system prompt.</summary>
+    public const string ClassRecordingTranslate = "class.recording.translate.v1";
+
+    /// <summary>Haiku-4.5 transcript Q&amp;A with per-session cached transcript chunks.</summary>
+    public const string ClassAssistantQna = "class.assistant.qna.v1";
+
+    /// <summary>Haiku-4.5 next-class recommendation after attendance / post-class email.</summary>
+    public const string TutorRecommendation = "tutor.recommendation.v1";
+
     // Catch-all for calls that pre-date feature classification. Tolerated only
     // during the Slice 1 rollout; future slices will validate against this set.
     public const string Unclassified = "unclassified";

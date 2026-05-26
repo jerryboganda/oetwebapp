@@ -51,6 +51,11 @@
          IContentTextExtractionService and the AI Listening extraction
          pipeline (GroundedListeningExtractionAi). License: Apache 2.0. -->
     <PackageReference Include="UglyToad.PdfPig" Version="1.7.0-custom-5" />
+    <!-- Ical.Net — pure-managed iCalendar (RFC 5545) serializer. Used by
+         ClassNotificationService to generate .ics calendar invites attached
+         to live-class enrollment confirmations and T-24h reminder emails.
+         License: MIT. -->
+    <PackageReference Include="Ical.Net" Version="4.2.0" />
   </ItemGroup>
 
   <!--

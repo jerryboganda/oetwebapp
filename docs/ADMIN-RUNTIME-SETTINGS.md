@@ -99,6 +99,23 @@ The admin settings page is divided into six sections. Each section lists the
 | APNs team ID | `PUSH__APNS_TEAMID` |
 | APNs private key (PEM) | `PUSH__APNS_PRIVATEKEY` |
 
+### 2.7 Zoom live classes
+
+| UI field | Supersedes env/appsettings key |
+|---|---|
+| Enable Zoom live classes | `ZOOM__ENABLED` |
+| Account ID | `ZOOM__ACCOUNTID` |
+| Client ID | `ZOOM__CLIENTID` |
+| Client secret | `ZOOM__CLIENTSECRET` |
+| API base URL | `ZOOM__APIBASEURL` |
+| Token URL | `ZOOM__TOKENURL` |
+| Host user ID | `ZOOM__HOSTUSERID` |
+| Meeting SDK key | `ZOOM__MEETINGSDKKEY` |
+| Meeting SDK secret | `ZOOM__MEETINGSDKSECRET` |
+| Webhook secret token | `ZOOM__WEBHOOKSECRETTOKEN` |
+| Webhook retry tolerance seconds | `ZOOM__WEBHOOKRETRYTOLERANCESECONDS` |
+| Allow sandbox fallback | `ZOOM__ALLOWSANDBOXFALLBACK` |
+
 ---
 
 ## 3. What is NOT covered here
@@ -244,6 +261,7 @@ redacting.
 | Backup S3 credentials | Within 30s — next scheduled backup job reads fresh creds |
 | OAuth client secrets | Within 30s — next OAuth redirect reads fresh config |
 | Push notification keys | Within 30s — next push dispatch reads fresh config |
+| Zoom live-class credentials | Within 30s — next meeting provision, join-token request, or webhook verification reads fresh config |
 | Stripe publishable key | Within 30s |
 | Stripe secret key | Within 30s |
 | Stripe webhook secret | **Next webhook request boundary** — see §4.6 |

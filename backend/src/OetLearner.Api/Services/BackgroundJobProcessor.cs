@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
@@ -10,10 +11,14 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
     private DateTimeOffset _lastAutoAssignAt = DateTimeOffset.MinValue;
     private DateTimeOffset _lastSlaCheckAt = DateTimeOffset.MinValue;
     private DateTimeOffset _lastReadinessRolloverAt = DateTimeOffset.MinValue;
+    private DateTimeOffset _lastBillingAbandonedCartSweepAt = DateTimeOffset.MinValue;
+    private DateTimeOffset _lastBillingDunningRetryDispatchAt = DateTimeOffset.MinValue;
     private static readonly TimeSpan ReconciliationInterval = TimeSpan.FromHours(1);
     private static readonly TimeSpan ExpertAutoAssignInterval = TimeSpan.FromSeconds(30);
     private static readonly TimeSpan ExpertSlaCheckInterval = TimeSpan.FromSeconds(60);
     private static readonly TimeSpan ReadinessRolloverInterval = TimeSpan.FromHours(24);
+    /// <summary>How often to poll <c>DunningAttempts</c> for rows ready to retry.</summary>
+    private static readonly TimeSpan BillingDunningRetryDispatchInterval = TimeSpan.FromMinutes(5);
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         while (!stoppingToken.IsCancellationRequested)
@@ -113,6 +118,7 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
                     job.StatusReasonCode = "processing_failed";
                     job.StatusMessage = $"Failed after {maxRetries} attempts: {ex.Message}";
                     job.RetryAfterMs = 0;
+                    await MarkResourceFailedAfterFinalRetryAsync(db, job, ex, cancellationToken);
                     await EmitFailureNotificationsAsync(scope.ServiceProvider, db, job, ex, cancellationToken);
                 }
             }
@@ -176,6 +182,131 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
                 logger.LogError(ex, "Readiness rollover poll failed");
             }
         }
+
+        // ── Wave A5 — Billing recurring jobs ─────────────────────────
+        // Dunning ladder dispatcher (every 5 min): claims due DunningAttempt
+        // rows and enqueues per-attempt BillingDunningRetry jobs so the
+        // standard job pipeline owns retries + backoff.
+        if (now - _lastBillingDunningRetryDispatchAt >= BillingDunningRetryDispatchInterval)
+        {
+            _lastBillingDunningRetryDispatchAt = now;
+            try
+            {
+                await EnqueueDueBillingDunningRetriesAsync(db, now, cancellationToken);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                logger.LogError(ex, "Billing dunning retry dispatch failed");
+            }
+        }
+
+        // Abandoned-cart sweep (daily 03:00 UTC). Enqueueing a single job at
+        // a time keeps the pipeline idempotent even across multiple API replicas
+        // — the BackgroundJobs queue is the source of truth.
+        if (ShouldEnqueueDailyAbandonedCartSweep(now, _lastBillingAbandonedCartSweepAt))
+        {
+            _lastBillingAbandonedCartSweepAt = now;
+            try
+            {
+                await EnqueueAbandonedCartSweepJobAsync(db, now, cancellationToken);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                logger.LogError(ex, "Billing abandoned-cart sweep enqueue failed");
+            }
+        }
+    }
+
+    /// <summary>
+    /// Wave A5 — claim pending dunning attempts whose <c>ScheduledAt</c> is in
+    /// the past and enqueue one <see cref="JobType.BillingDunningRetry"/> per
+    /// row. Uses a dedup guard on (ResourceId == DunningAttempt.Id) to avoid
+    /// double-enqueueing if multiple API replicas tick at the same moment.
+    /// </summary>
+    private static async Task EnqueueDueBillingDunningRetriesAsync(
+        LearnerDbContext db, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        var due = await db.DunningAttempts
+            .Where(a => a.Outcome == OetLearner.Api.Domain.DunningAttemptOutcome.Pending
+                     && a.ScheduledAt <= now
+                     && a.ExecutedAt == null)
+            .OrderBy(a => a.ScheduledAt)
+            .Take(50)
+            .ToListAsync(cancellationToken);
+
+        if (due.Count == 0) return;
+
+        var pendingAttemptIds = due.Select(a => a.Id).ToList();
+        var alreadyQueued = await db.BackgroundJobs
+            .Where(j => j.Type == JobType.BillingDunningRetry
+                     && pendingAttemptIds.Contains(j.ResourceId!)
+                     && (j.State == AsyncState.Queued || j.State == AsyncState.Processing))
+            .Select(j => j.ResourceId)
+            .ToListAsync(cancellationToken);
+        var alreadyQueuedSet = new HashSet<string?>(alreadyQueued);
+
+        foreach (var attempt in due)
+        {
+            if (alreadyQueuedSet.Contains(attempt.Id)) continue;
+            db.BackgroundJobs.Add(new BackgroundJobItem
+            {
+                Id = $"jb-dunning-retry-{Guid.NewGuid():N}",
+                Type = JobType.BillingDunningRetry,
+                ResourceId = attempt.Id,
+                State = AsyncState.Queued,
+                StatusReasonCode = "queued",
+                StatusMessage = "Billing dunning retry queued.",
+                CreatedAt = now,
+                AvailableAt = now,
+                LastTransitionAt = now,
+            });
+        }
+
+        await db.SaveChangesAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// Wave A5 — schedule a single <see cref="JobType.BillingAbandonedCartEmail"/>
+    /// sweep at 03:00 UTC each day. The "last enqueued" timestamp guards
+    /// against duplicate sweeps within the same UTC date when the worker
+    /// reschedules between ticks.
+    /// </summary>
+    private static async Task EnqueueAbandonedCartSweepJobAsync(
+        LearnerDbContext db, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        var today = now.UtcDateTime.ToString("yyyy-MM-dd");
+        var jobId = $"jb-cart-sweep-{today}";
+        var existing = await db.BackgroundJobs
+            .AsNoTracking()
+            .Where(j => j.Id == jobId)
+            .Select(j => j.Id)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (existing is not null) return;
+
+        db.BackgroundJobs.Add(new BackgroundJobItem
+        {
+            Id = jobId,
+            Type = JobType.BillingAbandonedCartEmail,
+            State = AsyncState.Queued,
+            StatusReasonCode = "queued",
+            StatusMessage = "Billing abandoned-cart sweep queued.",
+            CreatedAt = now,
+            AvailableAt = now,
+            LastTransitionAt = now,
+        });
+        await db.SaveChangesAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// True when "now" is at or past 03:00 UTC on a UTC date we have not yet
+    /// emitted a sweep job for. Encapsulated so unit tests can target it
+    /// without booting the full processor.
+    /// </summary>
+    internal static bool ShouldEnqueueDailyAbandonedCartSweep(DateTimeOffset now, DateTimeOffset lastEnqueuedAt)
+    {
+        if (now.UtcDateTime.Hour < 3) return false;
+        if (lastEnqueuedAt == DateTimeOffset.MinValue) return true;
+        return lastEnqueuedAt.UtcDateTime.Date < now.UtcDateTime.Date;
     }
 
     private static async Task RunReadinessRolloverAsync(IServiceProvider services, LearnerDbContext db, CancellationToken cancellationToken)
@@ -324,20 +455,48 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
             }
             case JobType.LiveClassRecordingTranscribe:
             {
-                var svc = services.GetRequiredService<OetLearner.Api.Services.LiveClasses.LiveClassRecordingService>();
-                await svc.ProcessTranscribeAsync(job.ResourceId!, cancellationToken);
+                // Wave A2 — when AI processing is enabled, the processor service
+                // calls Whisper (or reuses Zoom AI Companion's transcript) and
+                // queues the Summarize stage. Flag-off ⇒ recording stays Pending.
+                var processor = services.GetRequiredService<OetLearner.Api.Services.LiveClasses.LiveClassRecordingProcessingService>();
+                await processor.ProcessTranscribeAsync(job.ResourceId!, cancellationToken);
                 break;
             }
             case JobType.LiveClassRecordingSummarize:
             {
-                var svc = services.GetRequiredService<OetLearner.Api.Services.LiveClasses.LiveClassRecordingService>();
-                await svc.ProcessSummarizeAsync(job.ResourceId!, cancellationToken);
+                // Wave A2 — Sonnet-4.6 cached-prompt summarise → JSON
+                // {summary, chapters, actionItems, keyTopics} and queue Translate.
+                var processor = services.GetRequiredService<OetLearner.Api.Services.LiveClasses.LiveClassRecordingProcessingService>();
+                await processor.ProcessSummarizeAsync(job.ResourceId!, cancellationToken);
+                break;
+            }
+            case JobType.LiveClassRecordingTranslate:
+            {
+                // Wave A2 — Sonnet-4.6 EN→AR translation, mark Ready, fan-out
+                // learner "recording ready" notifications, queue Embed.
+                var processor = services.GetRequiredService<OetLearner.Api.Services.LiveClasses.LiveClassRecordingProcessingService>();
+                await processor.ProcessTranslateAsync(job.ResourceId!, cancellationToken);
+                await NotifyLiveClassRecordingReadyAsync(services, db, job.ResourceId!, cancellationToken);
+                break;
+            }
+            case JobType.LiveClassRecordingEmbed:
+            {
+                // Wave A2 — chunk transcript + persist 1536-d vectors for the
+                // "Ask AI about this class" RAG surface. Best-effort.
+                var processor = services.GetRequiredService<OetLearner.Api.Services.LiveClasses.LiveClassRecordingProcessingService>();
+                await processor.ProcessEmbedAsync(job.ResourceId!, cancellationToken);
                 break;
             }
             case JobType.LiveClassSessionReminderDispatch:
             {
                 var svc = services.GetRequiredService<OetLearner.Api.Services.LiveClasses.LiveClassRecordingService>();
                 await svc.ProcessReminderDispatchAsync(job.ResourceId!, cancellationToken);
+                break;
+            }
+            case JobType.LiveClassNoShowPingDispatch:
+            {
+                var svc = services.GetRequiredService<OetLearner.Api.Services.LiveClasses.LiveClassRecordingService>();
+                await svc.ProcessNoShowPingAsync(job.ResourceId!, cancellationToken);
                 break;
             }
 
@@ -348,7 +507,82 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
                         "Live class waitlist promotion job {JobId} — handled inline on cancellation.",
                         job.Id);
                 break;
+
+            // ── Wave A5 — Billing background jobs ──
+            case JobType.BillingDunningRetry:
+                await ExecuteBillingDunningRetryAsync(services, job, cancellationToken);
+                break;
+            case JobType.BillingAbandonedCartEmail:
+                await ExecuteBillingAbandonedCartEmailAsync(services, cancellationToken);
+                break;
+            case JobType.BillingRenewalReminder:
+                await ExecuteBillingRenewalReminderAsync(services, job, cancellationToken);
+                break;
         }
+    }
+
+    /// <summary>
+    /// Wave A5 — execute a single pending dunning attempt. The job payload
+    /// carries the <c>DunningAttempt.Id</c> (also stored in
+    /// <see cref="BackgroundJobItem.ResourceId"/> by the enqueuer).
+    /// </summary>
+    private static async Task ExecuteBillingDunningRetryAsync(
+        IServiceProvider services, BackgroundJobItem job, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(job.ResourceId)) return;
+        var dunning = services.GetRequiredService<OetLearner.Api.Services.Billing.IDunningService>();
+        await dunning.ExecutePendingRetryAsync(job.ResourceId, cancellationToken);
+    }
+
+    /// <summary>
+    /// Wave A5 — daily 03:00 UTC sweep that emails carts idle &gt; 24h.
+    /// </summary>
+    private static async Task ExecuteBillingAbandonedCartEmailAsync(
+        IServiceProvider services, CancellationToken cancellationToken)
+    {
+        var svc = services.GetRequiredService<OetLearner.Api.Services.Billing.IAbandonedCartRecoveryService>();
+        await svc.SweepAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// Wave A5 — 3-day renewal reminder. Wave A4's <c>invoice.upcoming</c>
+    /// webhook enqueues the job with payload
+    /// <c>{ userId, subscriptionId, renewsAt, amount, currency }</c>.
+    /// </summary>
+    private static async Task ExecuteBillingRenewalReminderAsync(
+        IServiceProvider services, BackgroundJobItem job, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(job.PayloadJson)) return;
+        BillingRenewalReminderPayload? payload;
+        try
+        {
+            payload = System.Text.Json.JsonSerializer.Deserialize<BillingRenewalReminderPayload>(job.PayloadJson);
+        }
+        catch
+        {
+            return;
+        }
+        if (payload is null || string.IsNullOrWhiteSpace(payload.UserId) || string.IsNullOrWhiteSpace(payload.SubscriptionId))
+            return;
+
+        var dispatcher = services.GetRequiredService<OetLearner.Api.Services.Billing.IBillingNotificationDispatcher>();
+        await OetLearner.Api.Services.Billing.BillingDunningNotifications.SendRenewalReminderAsync(
+            dispatcher,
+            userId: payload.UserId,
+            stripeSubscriptionId: payload.SubscriptionId,
+            renewsAt: payload.RenewsAt,
+            amount: payload.Amount ?? string.Empty,
+            currency: payload.Currency ?? string.Empty,
+            cancellationToken);
+    }
+
+    private sealed class BillingRenewalReminderPayload
+    {
+        public string? UserId { get; set; }
+        public string? SubscriptionId { get; set; }
+        public DateTimeOffset RenewsAt { get; set; }
+        public string? Amount { get; set; }
+        public string? Currency { get; set; }
     }
 
     private static async Task CompleteFreezeStartAsync(LearnerDbContext db, NotificationService notifications, BackgroundJobItem job, CancellationToken cancellationToken)
@@ -1217,6 +1451,72 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
                 ["message"] = $"Background job {job.Id} ({job.Type}) failed after {job.RetryCount} attempts: {ex.Message}"
             },
             cancellationToken);
+    }
+
+    private static async Task MarkResourceFailedAfterFinalRetryAsync(LearnerDbContext db, BackgroundJobItem job, Exception ex, CancellationToken cancellationToken)
+    {
+        if (IsLiveClassRecordingPipelineJob(job.Type) && !string.IsNullOrWhiteSpace(job.ResourceId))
+        {
+            var recording = await db.LiveClassRecordings.FirstOrDefaultAsync(item => item.Id == job.ResourceId, cancellationToken);
+            if (recording is not null && recording.Status != LiveClassRecordingStatus.Ready)
+            {
+                recording.Status = LiveClassRecordingStatus.Failed;
+                recording.FailureReason = ex.Message.Length > 500 ? ex.Message[..500] : ex.Message;
+            }
+        }
+    }
+
+    private static bool IsLiveClassRecordingPipelineJob(JobType jobType)
+        => jobType is JobType.LiveClassRecordingDownload
+            or JobType.LiveClassRecordingTranscribe
+            or JobType.LiveClassRecordingSummarize
+            or JobType.LiveClassRecordingTranslate
+            or JobType.LiveClassRecordingEmbed;
+
+    private static async Task NotifyLiveClassRecordingReadyAsync(IServiceProvider services, LearnerDbContext db, string recordingId, CancellationToken cancellationToken)
+    {
+        var recording = await db.LiveClassRecordings
+            .Include(item => item.ClassSession)
+                .ThenInclude(session => session.LiveClass)
+            .Include(item => item.ClassSession)
+                .ThenInclude(session => session.Enrollments)
+            .FirstOrDefaultAsync(item => item.Id == recordingId, cancellationToken);
+
+        if (recording is null || recording.Status != LiveClassRecordingStatus.Ready)
+        {
+            return;
+        }
+
+        var notifications = services.GetRequiredService<NotificationService>();
+        var session = recording.ClassSession;
+        var version = (recording.ProcessedAt ?? DateTimeOffset.UtcNow).ToString("yyyyMMdd", CultureInfo.InvariantCulture);
+        var activeEnrollments = session.Enrollments
+            .Where(enrollment => enrollment.Status is LiveClassEnrollmentStatus.Active or LiveClassEnrollmentStatus.Attended)
+            .ToList();
+
+        foreach (var enrollment in activeEnrollments)
+        {
+            await notifications.CreateForLearnerAsync(
+                NotificationEventKey.LearnerLiveClassRecordingReady,
+                enrollment.UserId,
+                "live_class_recording",
+                recording.Id,
+                version,
+                new Dictionary<string, object?>
+                {
+                    ["classTitle"] = session.LiveClass.Title,
+                    ["classId"] = session.LiveClassId,
+                    ["sessionId"] = session.Id,
+                    ["recordingId"] = recording.Id,
+                },
+                cancellationToken);
+        }
+
+        var classNotifications = services.GetService<OetLearner.Api.Services.Classes.IClassNotificationService>();
+        if (classNotifications is not null)
+        {
+            await classNotifications.SendTutorRecordingReadyAsync(recording, session, cancellationToken);
+        }
     }
 
     private static async Task CompleteContentGenerationAsync(LearnerDbContext db, BackgroundJobItem job, CancellationToken cancellationToken)

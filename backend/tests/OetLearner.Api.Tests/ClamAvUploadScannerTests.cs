@@ -67,6 +67,9 @@ public sealed class ClamAvUploadScannerTests
             OAuth: new OAuthSettings(null, null, null, null, null, null, null, null),
             Push: new PushSettings(null, null, null, null, null, null),
             UploadScanner: new UploadScannerSettings(provider, host, port, 30, true),
+            Zoom: new ZoomSettings(false, null, null, null, "https://api.zoom.us/v2", "https://zoom.us/oauth/token", null, null, null, null, 300, false),
+            Stripe: new StripeSettings(null, null, null, true, Array.Empty<string>(), null, false, null),
+            LiveClasses: new LiveClassSettings(AiRecordingProcessingEnabled: false),
             UpdatedByUserId: null,
             UpdatedByUserName: null,
             UpdatedAt: null));

@@ -1,6 +1,6 @@
 ﻿# PROGRESS — Ultrawork Completion
 
-Last updated: 2026-05-26 04:37 +05:00
+Last updated: 2026-05-26 15:50 +05:00
 
 ## Guardrails
 - No destructive git actions.
@@ -9,6 +9,14 @@ Last updated: 2026-05-26 04:37 +05:00
 - Preserve existing modified/untracked work; `.codex/config.toml` remains isolated tooling/config unless intentionally committed.
 
 ## Completed This Session
+- Zoom live classes completion slice advanced across backend, expert UX, security headers, and focused test helpers.
+- Routed Zoom effective settings through `IRuntimeSettingsProvider` with runtime-visible `ZoomSettings`, including SDK credentials, webhook secret token, retry tolerance, and sandbox fallback.
+- Rebuilt `ZoomMeetingService` around runtime-backed settings for Zoom OAuth, meeting creation, SDK key/signature generation, webhook URL validation, and timestamp/signature verification.
+- Hardened Zoom webhooks with a 1 MB request body cap, future/past timestamp tolerance, URL-validation response handling, and attendance finalization on `meeting.ended`.
+- Moved live-class enrollment charges/refunds onto canonical `WalletService` debit/credit paths and made wallet transactions ambient-transaction aware.
+- Added expert live-class listing support at `/v1/expert/live-classes` and wired `/expert/live-classes` to assigned class sessions with host Zoom token preparation and embedded/direct fallback behavior.
+- Extended CSP allowlists for Zoom Meeting SDK connect/media/frame/worker/script needs in both middleware response CSP and root meta CSP without broad wildcarding all origins.
+- Updated live-class/Zoom test helpers for the async runtime-backed join-token flow and new runtime settings contract.
 - Reading pathway implementation slice stabilized end to end across backend DTOs/endpoints, frontend typed client, onboarding, diagnostic, diagnostic results, pathway CTAs, and lightweight practice completion.
 - Added learner-safe diagnostic question projection at `/v1/reading-pathway/diagnostic/sessions/{sessionId}/questions`; it returns question/passage/options metadata without answer keys, accepted synonyms, or explanations.
 - Added diagnostic result reload support at `/v1/reading-pathway/diagnostic/sessions/{sessionId}/results` and wired the results page to fall back from `sessionStorage` to the API.
@@ -37,6 +45,12 @@ Last updated: 2026-05-26 04:37 +05:00
 - Improved visible speaking recorder errors for missing/blocked microphone, missing browser `MediaRecorder`, and recorder start failures.
 
 ## In Progress / Needs Validation
+
+### Zoom live classes slice validation status
+
+- Editor diagnostics are clean for all touched Zoom/live-class backend, frontend, middleware, and test files.
+- Local Docker Desktop validation is pending for focused backend live-class/Zoom tests and frontend type/lint coverage.
+- Independent review pass is pending after Docker validation.
 
 ### Reading pathway slice validation status
 
