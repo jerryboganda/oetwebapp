@@ -13,18 +13,11 @@ public partial class AddContentPaperRowVersion : Migration
 {
     protected override void Up(MigrationBuilder migrationBuilder)
     {
-        migrationBuilder.AddColumn<int>(
-            name: "RowVersion",
-            table: "ContentPapers",
-            type: "integer",
-            nullable: false,
-            defaultValue: 0);
+        // No-op: RowVersion column already added by 20260525123133_AddBillingV2Schema
     }
 
     protected override void Down(MigrationBuilder migrationBuilder)
     {
-        migrationBuilder.DropColumn(
-            name: "RowVersion",
-            table: "ContentPapers");
+        // No-op: column owned by 20260525123133_AddBillingV2Schema
     }
 }

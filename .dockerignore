@@ -64,7 +64,6 @@ VPS All in One File.md
 backend/**/bin
 backend/**/obj
 backend/tests
-pages
 speaking markdown (2).md
 *.png
 *.dump

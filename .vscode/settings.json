@@ -1,132 +1,35 @@
 {
-  "files.associations": {
-    "*.swift": "plaintext"
+  "docker.defaultContext": "default",
+  "docker.environment": {
+    "COMPOSE_PROJECT_NAME": "oet-local"
   },
-  "swift.sourcekit-lsp.disable": true,
-  "chat.promptFiles": true,
+  "chat.useAgentsMdFile": true,
+  "chat.includeApplyingInstructions": true,
+  "chat.includeReferencedInstructions": true,
+  "chat.useCustomizationsInParentRepositories": true,
+  "chat.useNestedAgentsMdFiles": true,
+  "chat.agentFilesLocations": {
+    ".github/agents": true,
+    "~/.copilot/agents": true
+  },
+  "chat.instructionsFilesLocations": {
+    ".github/instructions": true,
+    "~/.copilot/instructions": true
+  },
+  "chat.promptFilesLocations": {
+    ".github/prompts": true
+  },
   "chat.promptFilesRecommendations": true,
+  "chat.subagents.allowInvocationsFromSubagents": true,
+  "chat.autopilot.enabled": true,
+  "chat.agent.maxRequests": 300,
+  "chat.mcp.autoStart": true,
 
-  // ═══════════════ PERFORMANCE OPTIMIZATIONS ═══════════════
-
-  // Exclude heavy dirs from file watcher (biggest perf win)
-  "files.watcherExclude": {
-    "**/node_modules/**": true,
-    "**/.next/**": true,
-    "**/android/**": true,
-    "**/ios/**": true,
-    "**/output/**": true,
-    "**/backend/src/OetLearner.Api/bin/**": true,
-    "**/backend/src/OetLearner.Api/obj/**": true,
-    "**/.git/objects/**": true,
-    "**/.git/subtree-cache/**": true,
-    "**/playwright-report/**": true,
-    "**/playwright-report-prod/**": true,
-    "**/copilot-worktrees/**": true,
-    "**/$sdkRoot/**": true,
-    "**/capacitor-web/**": true,
-    "**/desktop-backend-runtime/**": true,
-    "**/_extracted/**": true,
-    "**/repomix-output.xml": true
-  },
-
-  // Exclude from search results
-  "search.exclude": {
-    "**/node_modules": true,
-    "**/.next": true,
-    "**/android": true,
-    "**/ios": true,
-    "**/output": true,
-    "**/backend/src/OetLearner.Api/bin": true,
-    "**/backend/src/OetLearner.Api/obj": true,
-    "**/playwright-report": true,
-    "**/playwright-report-prod": true,
-    "**/copilot-worktrees": true,
-    "**/$sdkRoot": true,
-    "**/capacitor-web": true,
-    "**/desktop-backend-runtime": true,
-    "**/_extracted": true,
-    "**/repomix-output.xml": true,
-    "**/*.min.js": true,
-    "**/*.min.css": true
-  },
-
-  // Hide clutter from explorer
-  "files.exclude": {
-    "**/.git": true,
-    "**/.DS_Store": true,
-    "**/Thumbs.db": true,
-    "$sdkRoot": true,
-    "output": true,
-    "copilot-worktrees": true,
-    "desktop-backend-runtime": true
-  },
-
-  // Reduce TypeScript memory usage
-  "typescript.tsserver.maxTsServerMemory": 2048,
-  "typescript.tsserver.experimental.enableProjectDiagnostics": false,
-
-  // Reduce editor overhead
-  "editor.bracketPairColorization.independentColorPoolPerBracketType": false,
-  "editor.guides.bracketPairs": false,
-  "editor.occurrencesHighlight": "off",
-  "editor.renderWhitespace": "none",
-  "editor.minimap.enabled": false,
-  "editor.smoothScrolling": false,
-  "editor.cursorBlinking": "solid",
-  "editor.cursorSmoothCaretAnimation": "off",
-
-  // Reduce terminal resource usage
-  "terminal.integrated.gpuAcceleration": "off",
-  "terminal.integrated.persistentSessionReviveProcess": "never",
-
-  // Reduce Git overhead on large repo
-  "git.autorefresh": false,
-  "git.decorations.enabled": false,
-
-  // ═══════════════ C# / ROSLYN MEMORY CONTROLS ═══════════════
-  // Only load the main backend solution — prevents Roslyn from
-  // discovering stray .csproj files (extract-writing-pdfs etc.)
-  "dotnet.defaultSolution": "backend/OetLearner.sln",
-  // Disable full-solution analysis — only analyze open files
-  "dotnet.backgroundAnalysis.analyzerDiagnosticsScope": "openFiles",
-  "dotnet.backgroundAnalysis.compilerDiagnosticsScope": "openFiles",
+  // Disable heavy language servers — Copilot agents don't need them
+  "csharp.suppressDotnetInstallWarning": true,
+  "dotnet.server.useOmnisharp": false,
   "omnisharp.enableRoslynAnalyzers": false,
-  // Cap Roslyn server memory via environment (GC Server mode off)
-  "dotnet.server.startTimeout": 60000,
-  // Disable source generators in editor (they run at build time anyway)
-  "dotnet.completion.showCompletionItemsFromUnimportedNamespaces": false,
-  "csharp.inlayHints.enableInlayHintsForTypes": false,
-  "csharp.inlayHints.enableInlayHintsForParameters": false,
-  "csharp.inlayHints.enableInlayHintsForLambdaParameterTypes": false,
-  "csharp.inlayHints.enableInlayHintsForImplicitObjectCreation": false,
-  "github.copilot.chat.codeGeneration.useInstructionFiles": true,
-  "github.copilot.chat.codeGeneration.instructions": [
-    { "file": "AGENTS.md" },
-    { "file": ".github/copilot-instructions.md" },
-    { "file": ".github/instructions/oet-agentic-workflow.instructions.md" },
-    { "file": ".github/instructions/oet-security-ai.instructions.md" }
-  ],
-  "github.copilot.chat.testGeneration.instructions": [
-    { "file": "AGENTS.md" },
-    { "file": ".github/copilot-instructions.md" },
-    { "file": ".github/instructions/oet-agentic-workflow.instructions.md" },
-    { "file": ".github/instructions/oet-testing-qa.instructions.md" },
-    { "text": "Always write the test before the implementation (TDD). Use Arrange-Act-Assert structure. Target 80%+ coverage on new code. Test names must describe the behavior under test, not just the function name. For .NET tests use SQLite in-memory (per AGENTS.md), never EF InMemory provider. For React tests use Vitest + React Testing Library, motion/react Proxy mock, and userEvent (not fireEvent)." }
-  ],
-  "github.copilot.chat.reviewSelection.instructions": [
-    { "file": "AGENTS.md" },
-    { "file": ".github/copilot-instructions.md" },
-    { "file": ".github/instructions/oet-agentic-workflow.instructions.md" },
-    { "file": ".github/instructions/oet-security-ai.instructions.md" },
-    { "file": ".github/instructions/oet-testing-qa.instructions.md" },
-    { "text": "Review across four dimensions: (1) Security CRITICAL — hardcoded secrets, missing input validation, injection, missing server-side authz, sensitive data in logs/errors. (2) Code Quality HIGH — in-place mutation, functions >50 lines, files >800 lines, nesting >4, duplicated logic. (3) Error Handling HIGH — swallowed catches, missing async error handling, leaking internals to users. (4) Test Coverage MEDIUM — missing edge/error cases, always-passing assertions. Output [CRITICAL|HIGH|MEDIUM|LOW] with file:line, issue, fix. Block ship on any CRITICAL." }
-  ],
-  "github.copilot.chat.commitMessageGeneration.instructions": [
-    { "file": ".github/copilot-instructions.md" },
-    { "text": "Use conventional commit format: <type>(<scope>): <description>. Types: feat, fix, refactor, docs, test, chore, perf, ci. Subject line under 72 chars. Focus on WHY the change was made, not WHAT changed. Example: feat(admin): add granular permission for paper publish." }
-  ],
-  "github.copilot.chat.pullRequestDescriptionGeneration.instructions": [
-    { "file": ".github/copilot-instructions.md" },
-    { "text": "Include: summary of change, motivation, test plan, screenshots if UI, breaking-change callouts, and a checklist confirming AGENTS.md mission-critical invariants (scoring, AI gateway, content upload, etc.) were not violated." }
-  ]
+  "python.analysis.diagnosticMode": "openFilesOnly",
+  "eslint.run": "onSave",
+  "typescript.tsserver.maxTsServerMemory": 1024
 }

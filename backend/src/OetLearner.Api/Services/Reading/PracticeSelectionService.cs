@@ -1,6 +1,8 @@
 using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 
 namespace OetLearner.Api.Services.Reading;
@@ -15,11 +17,10 @@ namespace OetLearner.Api.Services.Reading;
 // ReadingQuestionAttempt.ReadingQuestionId is Guid.  Pathway-generation code
 // carries the mapping in ReadingPracticeSession.MetadataJson.
 //
-// SelectQuestionsForDrillAsync returns List<string> (string question IDs from
-// ReadingQuestion.Id) because the drill pipeline stores those string IDs in
-// ReadingPracticeSession.QuestionIdsJson.  SelectWrongAnswerReviewQueueAsync
-// and SelectMockQuestionsAsync deal with Guid-domain IDs (ReadingQuestionAttempt
-// and ReadingMockTemplate respectively).
+// SelectQuestionsForDrillAsync and SelectWrongAnswerReviewQueueAsync return
+// List<string> (string question IDs from ReadingQuestion.Id) because the drill
+// pipeline stores those string IDs in ReadingPracticeSession.QuestionIdsJson.
+// SelectMockQuestionsAsync still deals with Guid-domain IDs from mock templates.
 //
 // Difficulty filtering: ReadingQuestion has no numeric DifficultyScore column
 // in the current schema — the difficulty-band logic is annotated as a no-op
@@ -41,10 +42,10 @@ public interface IPracticeSelectionService
         CancellationToken ct);
 
     /// <summary>
-    /// Return the wrong-answer review-queue question IDs that are due.
-    /// Ordered by NextReviewAt ascending (most overdue first).
+    /// Return unresolved wrong-answer review question IDs.
+    /// Ordered by most recently missed, then highest miss count.
     /// </summary>
-    Task<List<Guid>> SelectWrongAnswerReviewQueueAsync(
+    Task<List<string>> SelectWrongAnswerReviewQueueAsync(
         string userId,
         int targetCount,
         CancellationToken ct);
@@ -90,25 +91,25 @@ public sealed class PracticeSelectionService(LearnerDbContext db) : IPracticeSel
         // ── 2. Exclude questions seen in the last 14 days ─────────────────
         var recentCutoff = DateTimeOffset.UtcNow.AddDays(-SeenRecentlyDays);
 
-        // ReadingQuestionAttempt.ReadingQuestionId is Guid; ReadingQuestion.Id
-        // is string — EF Core cannot join them.  We collect recently-seen Guid
-        // IDs as strings for approximate cross-reference.
-        var recentSeenAsStrings = await db.ReadingQuestionAttempts
+        // ReadingQuestionAttempt uses the stable Guid bridge for ReadingQuestion.Id.
+        var recentQuestionIds = await db.ReadingQuestionAttempts
             .AsNoTracking()
             .Where(a => a.UserId == userId && a.AttemptedAt >= recentCutoff)
-            .Select(a => a.ReadingQuestionId.ToString())
+            .Select(a => a.ReadingQuestionId)
             .Distinct()
             .ToListAsync(ct);
-        var recentSet = recentSeenAsStrings.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var recentSet = recentQuestionIds.ToHashSet();
 
         // ── 3. Fetch candidate questions ──────────────────────────────────
         var candidates = await db.ReadingQuestions
             .AsNoTracking()
             .Where(q => q.SkillTag == focusSkill
-                && q.ReviewState == ReadingReviewState.Published
-                && !recentSet.Contains(q.Id))
+                    && q.ReviewState == ReadingReviewState.Published)
             .Select(q => q.Id)
             .ToListAsync(ct);
+        candidates = candidates
+            .Where(id => !recentSet.Contains(StableGuidFromQuestionId(id)))
+            .ToList();
 
         // Fallback: relax recency constraint if pool is empty
         if (candidates.Count == 0)
@@ -164,21 +165,18 @@ public sealed class PracticeSelectionService(LearnerDbContext db) : IPracticeSel
     // SelectWrongAnswerReviewQueueAsync
     // ═══════════════════════════════════════════════════════════════════════
 
-    public async Task<List<Guid>> SelectWrongAnswerReviewQueueAsync(
+    public async Task<List<string>> SelectWrongAnswerReviewQueueAsync(
         string userId,
         int targetCount,
         CancellationToken ct)
     {
-        var now = DateTimeOffset.UtcNow;
-        return await db.ReadingQuestionAttempts
+        return await db.ReadingErrorBankEntries
             .AsNoTracking()
-            .Where(a => a.UserId == userId
-                && a.InReviewQueue
-                && a.NextReviewAt != null
-                && a.NextReviewAt <= now)
-            .OrderBy(a => a.NextReviewAt)           // most overdue first
+            .Where(e => e.UserId == userId && !e.IsResolved)
+            .OrderByDescending(e => e.LastSeenWrongAt)
+            .ThenByDescending(e => e.TimesWrong)
             .Take(targetCount)
-            .Select(a => a.ReadingQuestionId)
+            .Select(e => e.ReadingQuestionId)
             .ToListAsync(ct);
     }
 
@@ -193,7 +191,7 @@ public sealed class PracticeSelectionService(LearnerDbContext db) : IPracticeSel
     {
         var template = await db.ReadingMockTemplates
             .AsNoTracking()
-            .Where(t => t.Id == mockTemplateId)
+            .Where(t => t.Id == mockTemplateId && t.IsPublished)
             .Select(t => t.QuestionIdsJson)
             .FirstOrDefaultAsync(ct);
 
@@ -219,5 +217,14 @@ public sealed class PracticeSelectionService(LearnerDbContext db) : IPracticeSel
             var j = rng.Next(i + 1);
             (list[i], list[j]) = (list[j], list[i]);
         }
+    }
+
+    private static Guid StableGuidFromQuestionId(string questionId)
+    {
+        if (Guid.TryParse(questionId, out var parsed)) return parsed;
+        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(questionId));
+        Span<byte> guidBytes = stackalloc byte[16];
+        bytes.AsSpan(0, 16).CopyTo(guidBytes);
+        return new Guid(guidBytes);
     }
 }

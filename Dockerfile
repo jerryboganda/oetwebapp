@@ -2,7 +2,7 @@
 FROM node:20-alpine AS deps
 WORKDIR /app
 
-COPY package.json package-lock.json ./
+COPY package.json package-lock.json .npmrc ./
 RUN --mount=type=cache,target=/root/.npm npm ci --no-audit --no-fund
 
 FROM node:20-alpine AS builder
@@ -26,6 +26,12 @@ ENV NODE_OPTIONS="--max-old-space-size=4096"
 RUN touch .env
 
 RUN --mount=type=cache,target=/app/.next/cache npm run build
+
+FROM node:20-alpine AS validate
+WORKDIR /app
+COPY --from=deps /app/node_modules ./node_modules
+COPY . .
+CMD ["npx", "tsc", "--noEmit"]
 
 FROM node:20-alpine AS runner
 WORKDIR /app

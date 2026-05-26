@@ -1,43 +1,52 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/auth-context';
 import { submitOnboarding, type OnboardingRequest } from '@/lib/reading-pathway-api';
 
-const TARGET_BANDS = [300, 350, 400, 450, 500] as const;
+const TARGET_BANDS = [
+  { value: 'B', label: 'B', score: '350+' },
+  { value: 'B+', label: 'B+', score: '400+' },
+  { value: 'A', label: 'A', score: '450+' },
+] as const;
 
 const PROFESSIONS = [
-  'Doctor',
-  'Nurse',
-  'Pharmacist',
+  'Medicine',
+  'Nursing',
+  'Pharmacy',
   'Dentist',
+  'Optometry',
   'Physiotherapist',
   'Occupational Therapist',
+  'Podiatry',
   'Radiographer',
+  'Speech Pathology',
+  'Veterinary Science',
+  'Dietetics',
   'Other',
 ] as const;
 
 interface FormData {
-  targetBand: number;
+  targetBand: string;
   examDate: string;
   hoursPerWeek: number;
   profession: string;
   hasTakenBefore: boolean;
   previousScore: string;
   selfRatedSpeed: number;
-  selfRatedVocab: number;
+  selfRatedVocabulary: number;
 }
 
 const INITIAL_FORM: FormData = {
-  targetBand: 350,
+  targetBand: 'B',
   examDate: '',
   hoursPerWeek: 5,
   profession: '',
   hasTakenBefore: false,
   previousScore: '',
   selfRatedSpeed: 3,
-  selfRatedVocab: 3,
+  selfRatedVocabulary: 3,
 };
 
 function StepIndicator({ current, total }: { current: number; total: number }) {
@@ -68,16 +77,25 @@ function StepIndicator({ current, total }: { current: number; total: number }) {
 }
 
 export default function ProfileSetupPage() {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, loading: authLoading } = useAuth();
   const router = useRouter();
   const [step, setStep] = useState(1);
   const [form, setForm] = useState<FormData>(INITIAL_FORM);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  if (!isAuthenticated) {
-    router.replace('/sign-in');
-    return null;
+  useEffect(() => {
+    if (!authLoading && !isAuthenticated) {
+      router.replace('/sign-in');
+    }
+  }, [authLoading, isAuthenticated, router]);
+
+  if (authLoading || !isAuthenticated) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-gradient-to-b from-violet-50 to-white px-4">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-violet-200 border-t-violet-600" />
+      </div>
+    );
   }
 
   const update = <K extends keyof FormData>(key: K, value: FormData[K]) =>
@@ -98,7 +116,7 @@ export default function ProfileSetupPage() {
             ? Number(form.previousScore)
             : null,
         selfRatedSpeed: form.selfRatedSpeed,
-        selfRatedVocab: form.selfRatedVocab,
+        selfRatedVocabulary: form.selfRatedVocabulary,
       };
       await submitOnboarding(req);
       router.push('/reading/diagnostic');
@@ -129,19 +147,20 @@ export default function ProfileSetupPage() {
                 <label className="mb-2 block text-sm font-semibold text-gray-700">
                   Target Band (OET scale)
                 </label>
-                <div className="grid grid-cols-5 gap-2">
+                <div className="grid grid-cols-3 gap-2">
                   {TARGET_BANDS.map((band) => (
                     <button
-                      key={band}
+                      key={band.value}
                       type="button"
-                      onClick={() => update('targetBand', band)}
+                      onClick={() => update('targetBand', band.value)}
                       className={`rounded-xl border py-3 text-sm font-bold transition-colors ${
-                        form.targetBand === band
+                        form.targetBand === band.value
                           ? 'border-violet-600 bg-violet-600 text-white'
                           : 'border-gray-200 bg-white text-gray-700 hover:border-violet-300'
                       }`}
                     >
-                      {band}
+                      <span className="block">{band.label}</span>
+                      <span className="block text-xs font-medium opacity-80">{band.score}</span>
                     </button>
                   ))}
                 </div>
@@ -199,7 +218,7 @@ export default function ProfileSetupPage() {
               {/* Profession */}
               <div>
                 <p className="mb-2 text-sm font-semibold text-gray-700">Profession</p>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                   {PROFESSIONS.map((prof) => (
                     <button
                       key={prof}
@@ -301,21 +320,21 @@ export default function ProfileSetupPage() {
               {/* Vocabulary */}
               <div>
                 <label
-                  htmlFor="selfRatedVocab"
+                  htmlFor="selfRatedVocabulary"
                   className="mb-2 flex items-center justify-between text-sm font-semibold text-gray-700"
                 >
                   <span>How would you rate your medical vocabulary?</span>
                   <span className="rounded-full bg-violet-100 px-3 py-0.5 text-violet-700">
-                    {form.selfRatedVocab}/5
+                    {form.selfRatedVocabulary}/5
                   </span>
                 </label>
                 <input
-                  id="selfRatedVocab"
+                  id="selfRatedVocabulary"
                   type="range"
                   min={1}
                   max={5}
-                  value={form.selfRatedVocab}
-                  onChange={(e) => update('selfRatedVocab', Number(e.target.value))}
+                  value={form.selfRatedVocabulary}
+                  onChange={(e) => update('selfRatedVocabulary', Number(e.target.value))}
                   className="w-full accent-violet-600"
                 />
                 <div className="mt-1 flex justify-between text-xs text-gray-400">

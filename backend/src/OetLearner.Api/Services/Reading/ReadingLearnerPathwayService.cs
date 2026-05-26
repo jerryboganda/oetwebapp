@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services;
 using System.Text.Json;
 
 namespace OetLearner.Api.Services.Reading;
@@ -219,8 +220,11 @@ public sealed class ReadingLearnerPathwayService(
         string userId, Guid sessionId, Dictionary<string, string> answers, CancellationToken ct)
     {
         var session = await db.ReadingPracticeSessions
-            .FirstOrDefaultAsync(s => s.Id == sessionId && s.UserId == userId, ct)
+            .FirstOrDefaultAsync(s => s.Id == sessionId && s.UserId == userId && s.SessionType == "diagnostic", ct)
             ?? throw new InvalidOperationException("Session not found");
+
+        if (session.CompletedAt is not null)
+            throw new InvalidOperationException("Diagnostic already submitted");
 
         var questionIds = JsonSerializer.Deserialize<List<string>>(session.QuestionIdsJson) ?? [];
 
@@ -316,8 +320,7 @@ public sealed class ReadingLearnerPathwayService(
         var skillScores = await skillScoring.GetCurrentScoresAsync(userId, ct);
 
         int totalQ = questions.Count;
-        decimal accuracy = totalQ > 0 ? (decimal)correct / totalQ : 0m;
-        int estimatedScaled = EstimateScaledScore(accuracy);
+        int estimatedScaled = EstimateScaledScore(correct, totalQ);
 
         return new DiagnosticSubmitResult(
             Score: correct,
@@ -528,17 +531,18 @@ public sealed class ReadingLearnerPathwayService(
         return string.Equals(correctAnswer.Trim(), selected.Trim(), comparison);
     }
 
-    /// <summary>Rough linear estimate: 0% → 80, 100% → 500.</summary>
-    private static int EstimateScaledScore(decimal accuracy)
-        => (int)Math.Round(accuracy * 420m + 80m);
-
-    private static string ScaledToOetBand(int scaled) => scaled switch
+    /// <summary>
+    /// Project a diagnostic subset to the canonical 42-item Reading scale,
+    /// then use OetScoring so the 30/42 == 350 invariant stays centralized.
+    /// </summary>
+    private static int EstimateScaledScore(int rawCorrect, int totalQuestions)
     {
-        >= 450 => "A",
-        >= 400 => "B+",
-        >= 350 => "B",
-        >= 300 => "C+",
-        >= 250 => "C",
-        _ => "E"
-    };
+        if (totalQuestions <= 0) return 0;
+        var projectedRaw = (int)Math.Round(
+            (decimal)rawCorrect / totalQuestions * OetScoring.ListeningReadingRawMax,
+            MidpointRounding.AwayFromZero);
+        return OetScoring.OetRawToScaled(projectedRaw);
+    }
+
+    private static string ScaledToOetBand(int scaled) => OetScoring.OetGradeLetterFromScaled(scaled);
 }

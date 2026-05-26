@@ -92,7 +92,7 @@ export default function VocabStatsPage() {
                       ))}
                     </Pie>
                     <Tooltip
-                      formatter={(value: number, name: string) => [value, name]}
+                      formatter={(value, name) => [value ?? 0, name ?? '']}
                       contentStyle={{
                         borderRadius: '0.75rem',
                         border: '1px solid #e5e7eb',

@@ -9,6 +9,7 @@ import ReadingPlayer, {
   type ReadingPassageDto,
   type ReadingQuestionDto,
 } from '@/components/reading/ReadingPlayer';
+import { endPracticeSession, getPracticeSessionQuestions, submitAnswer } from '@/lib/reading-pathway-api';
 
 interface StoredPracticeSession {
   questions: ReadingQuestionDto[];
@@ -33,35 +34,61 @@ export default function PracticeSessionPage() {
       return;
     }
 
+    let cancelled = false;
+
+    async function loadFromApi() {
+      try {
+        const loaded = await getPracticeSessionQuestions(sessionId);
+        const hydrated: StoredPracticeSession = {
+          questions: loaded.questions,
+          passages: loaded.passages,
+          mode: loaded.mode === 'wrong_review' ? 'review' : loaded.mode,
+          focusSkill: loaded.focusSkill ?? undefined,
+          timeLimitSeconds: loaded.timeLimitSeconds ?? undefined,
+        };
+        if (typeof sessionStorage !== 'undefined') {
+          sessionStorage.setItem(`practice_session_${sessionId}`, JSON.stringify(hydrated));
+        }
+        if (!cancelled) setSession(hydrated);
+      } catch {
+        if (!cancelled) setError('Session not found. Please start a new practice session.');
+      }
+    }
+
     const key = `practice_session_${sessionId}`;
     const raw = sessionStorage.getItem(key);
 
     if (!raw) {
-      setError('Session not found. Please start a new practice session.');
-      return;
+      void loadFromApi();
+    } else {
+      try {
+        const parsed = JSON.parse(raw) as StoredPracticeSession;
+        setSession(parsed);
+      } catch {
+        sessionStorage.removeItem(key);
+        void loadFromApi();
+      }
     }
 
-    try {
-      const parsed = JSON.parse(raw) as StoredPracticeSession;
-      setSession(parsed);
-    } catch {
-      setError('Session data is corrupted. Please start a new practice session.');
-    }
+    return () => {
+      cancelled = true;
+    };
   }, [sessionId]);
 
   const handleComplete = async (answers: Record<string, string>) => {
     setCompleting(true);
     try {
-      await fetch(`/v1/reading-pathway/sessions/${sessionId}/end`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ answers }),
-      });
-    } catch {
-      // Best-effort: navigate regardless of API failure
+      await Promise.all(
+        Object.entries(answers).map(([questionId, selectedOption]) =>
+          submitAnswer(sessionId, { questionId, selectedOption, timeSpentSeconds: 0 }),
+        ),
+      );
+      await endPracticeSession(sessionId);
+      router.push('/reading');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not save all answers. Please try again.');
     } finally {
       setCompleting(false);
-      router.push('/reading');
     }
   };
 

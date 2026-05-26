@@ -14,20 +14,13 @@ namespace OetLearner.Api.Data.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.AddColumn<int>(
-                name: "RowVersion",
-                table: "ListeningAttempts",
-                type: "integer",
-                nullable: false,
-                defaultValue: 0);
+            // No-op: RowVersion column already added by 20260525123133_AddBillingV2Schema
         }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropColumn(
-                name: "RowVersion",
-                table: "ListeningAttempts");
+            // No-op: column owned by 20260525123133_AddBillingV2Schema
         }
     }
 }

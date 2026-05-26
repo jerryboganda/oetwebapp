@@ -48,72 +48,94 @@ npm run mobile:run:ios
 
 ## Build & Verification
 
-### MISSION CRITICAL — Heavy Tasks Run On `oet-dev` VPS, NEVER Locally
+### MISSION CRITICAL — Heavy Tasks Run On Local Docker Desktop, VPS Is Production Only
 
-**This rule is absolute and binding for every AI agent and contributor working in this repo. Do not ask the user where to run a heavy task — the answer is always the VPS.**
+**This rule is absolute and binding for every AI agent and contributor working in this repo. Do not ask the user where to run a heavy task — the answer is always local Docker Desktop.**
 
-All CPU-, RAM-, disk- or network-intensive operations MUST execute on the production VPS `oet-dev` (`68.183.32.122`) at `/opt/oetwebapp`, NOT on the user's local Windows workstation. The local machine is for source editing and lightweight reads only.
+All CPU-, RAM-, disk- or network-intensive operations MUST execute inside local Docker Desktop containers, NOT directly on the Windows host shell. The VPS `oet-dev` (`68.183.32.122`) is reserved exclusively for production deployments via `deploy-prod.sh`.
 
-**Always run remotely (over `ssh oet-dev`) — no exceptions:**
+**Two local Docker modes:**
 
-- `npm install`, `npm ci`, `npm run build`, `npm run dev` (anything that boots Next.js or webpack)
+| Mode | Compose file | Use case |
+| ---- | ------------ | -------- |
+| **Full stack** | `docker compose -f docker-compose.local.yml --env-file .env.docker-local up` | Builds + runs everything (Next.js, API, PostgreSQL) in containers. Use for CI-like validation. |
+| **Dev mode** | `docker compose -f docker-compose.dev.yml --env-file .env.docker-local up` | Runs API + DB in Docker; Next.js runs on host via `npm run dev` for hot-reload convenience. |
+
+**Always run inside Docker containers — no exceptions:**
+
+- `npm install`, `npm ci`, `npm run build`, `npm run dev` (full-stack mode)
 - `npm run lint`, `npx tsc --noEmit`, `npm test`, `npm run test:watch`
 - `npm run test:e2e*`, `npm run test:e2e:install` (Playwright browsers)
 - `npm run backend:build`, `npm run backend:run`, `npm run backend:watch`, `npm run backend:test`, `dotnet build`, `dotnet restore`, `dotnet test`, `dotnet publish`, `dotnet ef *`
 - `npm run desktop:*`, `npm run mobile:*`, Capacitor sync, Gradle, Xcode tasks
-- Any `docker build`, `docker compose build`, `docker compose up`, image pulls
+- `docker compose build`, image builds, image pulls
 - Repomix bundle generation, large `rg` / search sweeps, codemods over the whole tree
 - Any script under `scripts/` that compiles, restores, packages, or hits the network at scale
 
-**Local-only operations (allowed on the user's Windows box):**
+**Host-only operations (allowed directly on the user's Windows box):**
 
 - Reading individual files, navigating code, viewing diffs.
 - `git status`, `git add`, `git commit`, `git push`, `git pull`, `git log`, `git diff` against this workspace.
 - Single-file edits via the editor or this agent's edit tools.
 - Trivial one-shot greps over a small folder.
+- `docker compose` commands (to orchestrate containers).
+- `npm run dev` when using dev mode (API+DB in Docker, Next.js on host).
 
-**Standard remote-execution pattern** (PowerShell-safe, no piping inside the ssh-quoted string):
-
-```powershell
-ssh oet-dev "cd /opt/oetwebapp && <command>"
-```
-
-For long-running builds, detach so the ssh pipe collapsing does not kill the job:
+**Standard execution patterns** (PowerShell):
 
 ```powershell
-ssh oet-dev "cd /opt/oetwebapp && nohup bash -lc '<command>' > /tmp/<tag>.log 2>&1 < /dev/null &"
-ssh oet-dev "tail -n 80 /tmp/<tag>.log"   # poll separately
+# Full stack — build and run everything
+docker compose -f docker-compose.local.yml --env-file .env.docker-local up --build
+
+# Dev mode — API + DB in Docker, Next.js on host
+docker compose -f docker-compose.dev.yml --env-file .env.docker-local up --build
+npm run dev   # in a separate terminal
+
+# Run a command inside the web container
+docker exec oet-local-web <command>
+
+# Run a command inside the API container
+docker exec oet-local-api <command>
 ```
 
 **The agent must:**
 
-1. Detect when a requested action is heavy (per the list above) and execute it on `oet-dev` automatically.
-2. Never spawn `npm`, `dotnet`, `docker`, Playwright, or build scripts in the local PowerShell terminal for this project.
-3. Stream/tail remote logs back to the user; do not silently block on local execution.
-4. If the VPS is unreachable, surface the error and stop — do NOT fall back to local execution as a "helpful" workaround.
+1. Detect when a requested action is heavy (per the list above) and execute it inside Docker Desktop containers automatically.
+2. Never spawn `npm install`, `npm run build`, `dotnet build`, `npm test`, or build scripts directly in the local PowerShell terminal (outside Docker) for this project.
+3. Use `docker exec` or `docker compose run` to run commands inside containers.
+4. If Docker Desktop is not running, surface the error and stop — do NOT fall back to bare-host execution as a "helpful" workaround.
+5. Never run builds, tests, or heavy tasks on the VPS — the VPS is production only.
 
-### Validation commands (run on `oet-dev`)
+**Production VPS (`oet-dev`) — deployment only:**
+
+- Production deploys use `ssh oet-dev "cd /opt/oetwebapp && DEPLOY_REF=<sha> bash ./scripts/deploy/deploy-prod.sh"`.
+- Do NOT run `npm test`, `npm run build`, `dotnet test`, or any validation commands on the VPS. All validation happens locally in Docker before pushing.
+
+### Validation commands (run in local Docker)
 
 Always validate before committing:
 
-```bash
-# Type-check (must return 0 errors)
-ssh oet-dev "cd /opt/oetwebapp && npx tsc --noEmit"
+```powershell
+# One-time setup: populate the validation node_modules volume
+npm run docker:tsc:setup
+
+# Type-check (must return 0 errors) — uses named volume, NOT oet-local-web
+npm run docker:tsc
 
 # Lint (must return 0 errors/warnings)
-ssh oet-dev "cd /opt/oetwebapp && npm run lint"
+npm run docker:lint
 
 # Unit tests (must be 113/113 files, 675/675 tests)
-ssh oet-dev "cd /opt/oetwebapp && npm test"
+npm run docker:test
 
 # Production build (must compile 169+ pages)
-ssh oet-dev "cd /opt/oetwebapp && npm run build"
+docker exec oet-local-web npm run build
 
 # Backend build
-ssh oet-dev "cd /opt/oetwebapp && npm run backend:build"
+docker exec oet-local-api dotnet build
 
 # Backend tests
-ssh oet-dev "cd /opt/oetwebapp && npm run backend:test"
+docker exec oet-local-api dotnet test
 ```
 
 ### E2E Testing

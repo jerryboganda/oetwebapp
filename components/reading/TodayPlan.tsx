@@ -7,6 +7,7 @@ const ITEM_TYPE_ICONS: Record<string, string> = {
   vocab_review: '🔤',
   wrong_review: '🔁',
   strategy: '💡',
+  strategy_read: '💡',
   lesson: '🎓',
   mock: '📝',
 };
@@ -30,7 +31,7 @@ export function TodayPlan({ plan, onStartItem }: TodayPlanProps) {
       {/* Header */}
       <div className="flex items-center justify-between px-5 py-4 border-b border-border">
         <div>
-          <h2 className="text-sm font-semibold text-navy dark:text-white">Today's Plan</h2>
+          <h2 className="text-sm font-semibold text-navy dark:text-white">Today&apos;s Plan</h2>
           <p className="text-xs text-muted mt-0.5">{plan.totalMinutes} min total</p>
         </div>
         <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-100 dark:bg-blue-900/30 px-2.5 py-0.5 text-xs font-semibold text-blue-700 dark:text-blue-300">
@@ -43,7 +44,7 @@ export function TodayPlan({ plan, onStartItem }: TodayPlanProps) {
         <ul className="divide-y divide-border">
           {visibleItems.map((item) => {
             const icon = ITEM_TYPE_ICONS[item.itemType] ?? '📌';
-            const isDone = item.status === 'complete' || item.status === 'skipped';
+            const isDone = item.status === 'complete' || item.status === 'completed' || item.status === 'skipped';
             return (
               <li key={item.id} className="flex items-center gap-3 px-5 py-3">
                 <span className="text-lg flex-shrink-0" aria-hidden="true">{icon}</span>

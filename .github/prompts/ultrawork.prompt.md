@@ -1,19 +1,11 @@
 ---
-description: "Run a full autonomous OET implementation loop: explore, plan, implement, review, verify, and report."
+name: "ultrawork"
+description: "Run the full OET OmO autonomous loop: explore, plan, delegate, implement, review, validate, and continue until complete or blocked."
+agent: "OET OmO Orchestrator"
 argument-hint: "Goal to complete end to end"
-agent: agent
+tools: ["agent", "read", "search", "edit", "execute", "web", "todo"]
 ---
-# OET Ultrawork Loop
 
-Run the full workspace automation loop for the requested goal.
+Run ultrawork for this goal: `${input:goal:Describe the task}`.
 
-1. Read `AGENTS.md` and matching `.github/instructions`.
-2. Build a todo list.
-3. Use read-only exploration before edits.
-4. Implement focused changes using existing patterns.
-5. Add or update tests when behavior changes.
-6. Run the lightest sufficient validation, expanding when risk requires it.
-7. Perform a review pass for security, OET invariants, regressions, and missing tests.
-8. Finish with changed files, validation, skipped checks, and remaining risk.
-
-Keep going until done or genuinely blocked.
+First perform evidence-based planning: inspect `AGENTS.md`, `docs/agent-operating-model.md`, relevant domain docs, current code, tests, local patterns, and useful web documentation before deciding the final plan. Include acceptance criteria, touched files/contracts, risks, rejected approaches, and validation matrix. Then enter autopilot implementation mode automatically; do not stop at the plan or offer manual proceed handoffs. Spawn only registered specialist agents from the Orchestrator allowlist when useful. Ask popup-style questions only when a missing user decision blocks correctness, and include recommended options. Implement, verify with Docker-safe checks, review, fix confirmed issues, and continue until complete or genuinely blocked.

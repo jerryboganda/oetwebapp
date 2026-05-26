@@ -1,3 +1,16 @@
 {
-  "servers": {}
+  "servers": {
+    "ai-coding": {
+      "type": "docker",
+      "image": "docker.io/egjerry/ai_coding:latest"
+    },
+    "mcp-docker": {
+      "type": "docker",
+      "image": "alpine/mcp-docker:latest"
+    },
+    "mcp-fetch": {
+      "type": "docker",
+      "image": "mcp/fetch:latest"
+    }
+  }
 }

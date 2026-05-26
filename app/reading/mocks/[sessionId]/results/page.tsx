@@ -31,18 +31,22 @@ function GradeBadge({ grade }: { grade: string }) {
 }
 
 export default function MockResultsPage() {
-  const { sessionId } = useParams<{ sessionId: string }>();
+  const params = useParams<{ sessionId: string }>();
+  const sessionId = params?.sessionId ?? '';
   const [result, setResult] = useState<MockResultDto | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<Tab>('score');
 
   useEffect(() => {
-    if (!sessionId) return;
+    if (!sessionId) {
+      setLoading(false);
+      return;
+    }
     let cancelled = false;
     (async () => {
       try {
-        const data = await getMockResults(sessionId as string);
+        const data = await getMockResults(sessionId);
         if (!cancelled) setResult(data);
       } catch (err) {
         if (!cancelled) setError(err instanceof Error ? err.message : 'Failed to load results.');

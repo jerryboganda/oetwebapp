@@ -49,7 +49,7 @@ const STAGES: StageConfig[] = [
     icon: FlaskConical,
     name: 'Diagnostic Assessment',
     description: 'A short adaptive test that maps your current strengths and weak spots across all 8 reading skills.',
-    link: '/reading/practice',
+    link: '/reading/diagnostic',
     ctaLabel: 'Start diagnostic',
   },
   {
@@ -76,7 +76,7 @@ const STAGES: StageConfig[] = [
     icon: Trophy,
     name: 'Mock Tests & Mastery',
     description: 'Full timed mock exams under real conditions. Aim for 3 consecutive passes before your exam date.',
-    link: '/reading',
+    link: '/mocks?subtest=reading',
     ctaLabel: 'Open mock center',
   },
 ];
@@ -260,7 +260,7 @@ export default function ReadingPathwayPage() {
               />
             ))}
           </div>
-        )}
+        ) : null}
       </div>
     </LearnerDashboardShell>
   );

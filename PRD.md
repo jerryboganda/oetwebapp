@@ -7,8 +7,8 @@ Complete the remaining work across mocks strict UX/business workflow, Speaking V
 
 ## Locked Decisions
 - Preserve current modified and untracked work; no reset/clean/branch switch.
-- Heavy validation/build/test/deploy runs only on `oet-dev` at `/opt/oetwebapp`.
-- Production deploy is allowed if remote validation passes; content publishing remains explicitly review-gated.
+- Heavy validation/build/test runs only inside local Docker Desktop containers per `AGENTS.md`; `oet-dev` is production deployment only.
+- Production deploy remains explicitly gated after local validation; content publishing remains explicitly review-gated.
 - Strict mock enforcement applies to final-readiness and explicit exam-mode mocks.
 - Mock booking reschedule limit is admin-configurable, default `2`.
 - Real Content import stages only missing/non-duplicate content as Drafts.
@@ -173,5 +173,5 @@ Complete the remaining work across mocks strict UX/business workflow, Speaking V
 - PRD/PROGRESS are current before implementation waves.
 - Mocks strict player, writing 5+40, booking settings, entitlement/readiness/QC/analytics are coherent and tested.
 - Speaking V2 has canonical session UX, typed recording pipeline, visible recorder errors, admin-configurable LiveKit/AI/TTS, and tests for configured/disabled states.
-- Real Content is re-audited on `oet-dev`; deploy/import/publish steps are evidenced, with publish gated by explicit approval.
-- Remote validation commands are recorded with pass/fail evidence in PROGRESS.md.
+- Real Content production readiness is re-audited without using the VPS for validation; deploy/import/publish steps are evidenced, with publish gated by explicit approval.
+- Local Docker validation commands are recorded with pass/fail evidence in PROGRESS.md.

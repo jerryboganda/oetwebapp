@@ -81,53 +81,44 @@ only when a missing decision blocks correctness or safety.
 Use the smallest useful check, then expand if risk demands it:
 
 ```powershell
-npx tsc --noEmit
-npm run lint
-npm test
-npm run build
-npm run backend:build
-npm run backend:test
-npm run test:e2e:smoke
+npm run docker:tsc
+npm run docker:lint
+npm run docker:test
+docker exec oet-local-web npm run build
+docker exec oet-local-api dotnet build
+docker exec oet-local-api dotnet test
+docker exec oet-local-web npm run test:e2e:smoke
 ```
 
 Run only the checks relevant to the files changed when a full suite is too
 expensive, and say so in the final answer.
 
-## Heavy Tasks Run On The VPS — Always (MISSION CRITICAL)
+## Heavy Tasks Run In Local Docker — Always (MISSION CRITICAL)
 
-All CPU-, RAM-, disk- or network-intensive work for this project runs on the
-production VPS `oet-dev` (`68.183.32.122`, path `/opt/oetwebapp`) — never on
-the user's local Windows workstation. This applies automatically; do NOT ask
-the user where to run a build, test, lint, install, or container task.
+All CPU-, RAM-, disk- or network-intensive work for this project runs inside
+local Docker Desktop containers — never directly on the user's Windows host and
+never on the production VPS. This applies automatically; do NOT ask the user
+where to run a build, test, lint, install, or container task.
 
-Always remote (over `ssh oet-dev`):
+Always run through Docker containers:
 
-- `npm install`, `npm ci`, `npm run build`, `npm run dev`
-- `npm run lint`, `npx tsc --noEmit`, `npm test`, `npm run test:e2e*`
-- `npm run backend:*`, `dotnet build|restore|test|publish|ef *`
-- `npm run desktop:*`, `npm run mobile:*`, Capacitor / Gradle / Xcode tasks
-- `docker build`, `docker compose build|up|pull`
-- Repomix bundles, repo-wide codemods, repo-wide search sweeps
+- `docker exec oet-local-web <command>` for frontend type-check, lint, tests,
+  builds, Playwright, desktop/mobile npm scripts, and other web-container work.
+- `docker exec oet-local-api <command>` for backend restore, build, test,
+  publish, EF, and API-container work.
+- Use `docker compose -f docker-compose.local.yml --env-file .env.docker-local up`
+  or `docker compose -f docker-compose.dev.yml --env-file .env.docker-local up`
+  only to orchestrate local containers.
 
 Local-only is reserved for editing, navigation, and `git` plumbing
-(`status`, `add`, `commit`, `push`, `pull`, `diff`, `log`).
+(`status`, `add`, `commit`, `push`, `pull`, `diff`, `log`), file reads, and
+single-file edits. `npm run dev` on the host is allowed only in dev mode after
+API+DB are running in Docker.
 
-Standard pattern (PowerShell-safe, no `|` inside the ssh-quoted string):
-
-```powershell
-ssh oet-dev "cd /opt/oetwebapp && <command>"
-```
-
-Long builds must be detached on the remote so the ssh pipe collapsing does not
-kill them:
-
-```powershell
-ssh oet-dev "cd /opt/oetwebapp && nohup bash -lc '<cmd>' > /tmp/<tag>.log 2>&1 < /dev/null &"
-ssh oet-dev "tail -n 80 /tmp/<tag>.log"
-```
-
-If the VPS is unreachable, stop and surface the error. Do NOT silently fall
-back to running heavy tasks on the local machine.
+The VPS `oet-dev` is production deployment only. Do not run builds, tests, lint,
+type-checks, installs, or exploratory validation on the VPS. If Docker Desktop
+is unavailable, report the blocker and stop instead of falling back to host or
+VPS execution.
 
 ## Prompt Defense Baseline
 

@@ -13,16 +13,17 @@ You verify changes with the lightest sufficient checks.
 - Do not edit files unless explicitly asked to switch into implementation.
 - Do not hide failing checks.
 - Do not run production deploy commands.
+- Do not run heavy validation directly on Windows or on the VPS; use local Docker containers.
 
 ## Validation Ladder
 
 1. Parse config or schema touched by the change.
 2. Run focused unit tests for changed behavior.
-3. Run `npx tsc --noEmit` for TypeScript surface changes.
-4. Run `npm run lint` for frontend/shared code changes.
-5. Run `npm test` when shared logic or broad UI behavior changed.
-6. Run `npm run backend:build` and `npm run backend:test` for backend changes.
-7. Run Playwright smoke/E2E only when runtime user flows are affected.
+3. Run `docker exec oet-local-web npx tsc --noEmit` for TypeScript surface changes.
+4. Run `docker exec oet-local-web npm run lint` for frontend/shared code changes.
+5. Run `docker exec oet-local-web npm test` when shared logic or broad UI behavior changed.
+6. Run `docker exec oet-local-api dotnet build` and `docker exec oet-local-api dotnet test` for backend changes.
+7. Run Playwright smoke/E2E through `docker exec oet-local-web` only when runtime user flows are affected.
 
 ## Output
 

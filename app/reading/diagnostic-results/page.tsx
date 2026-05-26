@@ -3,26 +3,23 @@
 import { useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/contexts/auth-context';
-import type { DiagnosticResultDto } from '@/lib/reading-pathway-api';
+import { getDiagnosticResult, type DiagnosticResultDto } from '@/lib/reading-pathway-api';
+import { isListeningReadingPassByScaled, oetGradeFromScaled } from '@/lib/scoring';
 
 function ScoreBadge({ score }: { score: number }) {
-  if (score >= 350) {
-    return (
-      <span className="inline-flex items-center rounded-full bg-emerald-100 px-4 py-1 text-sm font-bold text-emerald-700">
-        {score} — Strong
-      </span>
-    );
-  }
-  if (score >= 280) {
-    return (
-      <span className="inline-flex items-center rounded-full bg-amber-100 px-4 py-1 text-sm font-bold text-amber-700">
-        {score} — Developing
-      </span>
-    );
-  }
+  const grade = oetGradeFromScaled(score);
+  const isPass = isListeningReadingPassByScaled(score);
+  const isDeveloping = grade === 'C+';
+  const tone = isPass
+    ? 'bg-emerald-100 text-emerald-700'
+    : isDeveloping
+      ? 'bg-amber-100 text-amber-700'
+      : 'bg-red-100 text-red-700';
+  const label = isPass ? 'Strong' : isDeveloping ? 'Developing' : 'Needs Work';
+
   return (
-    <span className="inline-flex items-center rounded-full bg-red-100 px-4 py-1 text-sm font-bold text-red-700">
-      {score} — Needs Work
+    <span className={`inline-flex items-center rounded-full px-4 py-1 text-sm font-bold ${tone}`}>
+      {score} — {label}
     </span>
   );
 }
@@ -45,6 +42,22 @@ function SkillBar({ code, score }: { code: string; score: number }) {
   );
 }
 
+function isDiagnosticResult(value: unknown, sessionId: string | null): value is DiagnosticResultDto {
+  if (!value || typeof value !== 'object') return false;
+  const result = value as Partial<DiagnosticResultDto>;
+
+  if (typeof result.sessionId !== 'string') return false;
+  if (sessionId && result.sessionId !== sessionId) return false;
+
+  return typeof result.score === 'number'
+    && typeof result.totalQuestions === 'number'
+    && typeof result.estimatedScaledScore === 'number'
+    && typeof result.estimatedOetBand === 'string'
+    && typeof result.roadmapWeeks === 'number'
+    && typeof result.skillScores === 'object'
+    && result.skillScores !== null;
+}
+
 export default function DiagnosticResultsPage() {
   const { isAuthenticated, loading: authLoading } = useAuth();
   const router = useRouter();
@@ -59,25 +72,50 @@ export default function DiagnosticResultsPage() {
     }
   }, [authLoading, isAuthenticated, router]);
 
-  // Read result from sessionStorage
+  // Read the immediate submit result from sessionStorage, then fall back to the API
+  // so refresh/deep-link works after the diagnostic is complete.
   useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const raw = sessionStorage.getItem('diagnostic_result');
-    if (!raw) {
-      setNotFound(true);
-      return;
-    }
-    try {
-      const parsed = JSON.parse(raw) as DiagnosticResultDto;
-      setResult(parsed);
-    } catch {
-      setNotFound(true);
-    }
-  }, []);
+    let cancelled = false;
 
-  // sessionId used for display/logging if needed
-  const _sessionId = searchParams.get('sessionId');
-  void _sessionId;
+    const loadResult = async () => {
+      const sessionId = searchParams?.get('sessionId') ?? null;
+
+      if (typeof window !== 'undefined') {
+        const raw = sessionStorage.getItem('diagnostic_result');
+        if (raw) {
+          try {
+            const parsed = JSON.parse(raw) as unknown;
+            if (isDiagnosticResult(parsed, sessionId)) {
+              if (!cancelled) setResult(parsed);
+              return;
+            }
+
+            sessionStorage.removeItem('diagnostic_result');
+          } catch {
+            sessionStorage.removeItem('diagnostic_result');
+          }
+        }
+      }
+
+      if (!sessionId) {
+        if (!cancelled) setNotFound(true);
+        return;
+      }
+
+      try {
+        const loaded = await getDiagnosticResult(sessionId);
+        if (!cancelled) setResult(loaded);
+      } catch {
+        if (!cancelled) setNotFound(true);
+      }
+    };
+
+    void loadResult();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [searchParams]);
 
   if (authLoading) {
     return (
@@ -110,9 +148,12 @@ export default function DiagnosticResultsPage() {
     );
   }
 
-  const skillEntries = Object.entries(result.skillBreakdown).sort(([a], [b]) =>
+  const skillEntries = Object.entries(result.skillScores).sort(([a], [b]) =>
     a.localeCompare(b),
   );
+  const durationLabel = result.durationSeconds === null
+    ? 'Not recorded'
+    : `${Math.floor(result.durationSeconds / 60)}m ${result.durationSeconds % 60}s`;
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-start bg-gradient-to-b from-violet-50 to-white px-4 py-12">
@@ -126,11 +167,14 @@ export default function DiagnosticResultsPage() {
             Your estimated OET Reading score
           </h1>
           <div className="mb-2 text-5xl font-extrabold text-gray-900">
-            {result.estimatedScore}
+            {result.estimatedScaledScore}
           </div>
           <div className="mt-2">
-            <ScoreBadge score={result.estimatedScore} />
+            <ScoreBadge score={result.estimatedScaledScore} />
           </div>
+          <p className="mt-3 text-sm text-gray-500">
+            Raw score: {result.score}/{result.totalQuestions} · Estimated grade {result.estimatedOetBand}
+          </p>
         </div>
 
         {/* Sub-skill breakdown */}
@@ -147,21 +191,9 @@ export default function DiagnosticResultsPage() {
 
         {/* Time analysis */}
         <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
-          <h2 className="mb-3 text-base font-bold text-gray-900">Time Analysis</h2>
-          <div className="flex justify-around text-center">
-            {(
-              [
-                { label: 'Part A', value: result.timeAnalysis.partA },
-                { label: 'Part B', value: result.timeAnalysis.partB },
-                { label: 'Part C', value: result.timeAnalysis.partC },
-              ] as const
-            ).map(({ label, value }) => (
-              <div key={label}>
-                <p className="text-2xl font-extrabold text-gray-900">{value}s</p>
-                <p className="text-xs text-gray-500">{label}</p>
-              </div>
-            ))}
-          </div>
+          <h2 className="mb-3 text-base font-bold text-gray-900">Diagnostic Timing</h2>
+          <p className="text-2xl font-extrabold text-gray-900">{durationLabel}</p>
+          <p className="mt-1 text-sm text-gray-500">A 25-minute diagnostic is the target pace.</p>
         </div>
 
         {/* Roadmap */}
@@ -183,7 +215,7 @@ export default function DiagnosticResultsPage() {
               if (typeof window !== 'undefined') {
                 sessionStorage.removeItem('diagnostic_result');
               }
-              router.push('/reading');
+              router.push('/reading/pathway');
             }}
             className="inline-flex items-center gap-2 rounded-full bg-violet-600 px-10 py-4 text-base font-bold text-white shadow-lg transition hover:bg-violet-700 active:scale-95"
           >

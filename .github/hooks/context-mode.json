@@ -2,46 +2,30 @@
   "hooks": {
     "PreToolUse": [
       {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "cmd /c context-mode hook vscode-copilot pretooluse"
-          }
-        ]
+        "type": "command",
+        "command": "cmd /d /s /c \"where context-mode >nul 2>nul && context-mode hook vscode-copilot pretooluse || exit /b 0\"",
+        "timeout": 5
       }
     ],
     "PostToolUse": [
       {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "cmd /c context-mode hook vscode-copilot posttooluse"
-          }
-        ]
+        "type": "command",
+        "command": "cmd /d /s /c \"where context-mode >nul 2>nul && context-mode hook vscode-copilot posttooluse || exit /b 0\"",
+        "timeout": 5
       }
     ],
     "PreCompact": [
       {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "cmd /c context-mode hook vscode-copilot precompact"
-          }
-        ]
+        "type": "command",
+        "command": "cmd /d /s /c \"where context-mode >nul 2>nul && context-mode hook vscode-copilot precompact || exit /b 0\"",
+        "timeout": 5
       }
     ],
     "SessionStart": [
       {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "cmd /c context-mode hook vscode-copilot sessionstart"
-          }
-        ]
+        "type": "command",
+        "command": "cmd /d /s /c \"where context-mode >nul 2>nul && context-mode hook vscode-copilot sessionstart || exit /b 0\"",
+        "timeout": 5
       }
     ]
   }

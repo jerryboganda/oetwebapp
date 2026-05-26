@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { ChevronLeft, ChevronRight, Highlighter, Minus, Pin, Strikethrough, StickyNote } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
+import { sanitizeBodyHtml } from '@/lib/wizard/sanitize-html';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -127,8 +128,7 @@ function PassagePanel({ passage }: { passage: ReadingPassageDto | null }) {
       <div className="mb-2 text-sm font-semibold text-navy dark:text-white">{passage.title}</div>
       <div
         className="prose prose-sm max-w-none flex-1 overflow-y-auto rounded-lg border border-border bg-white p-4 text-sm leading-relaxed text-foreground dark:bg-slate-900 dark:text-slate-200"
-        // eslint-disable-next-line react/no-danger
-        dangerouslySetInnerHTML={{ __html: passage.bodyHtml }}
+        dangerouslySetInnerHTML={{ __html: sanitizeBodyHtml(passage.bodyHtml) }}
       />
     </div>
   );

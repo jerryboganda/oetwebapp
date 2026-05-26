@@ -4,30 +4,57 @@ import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/auth-context';
 import {
+  getDiagnosticQuestions,
   startDiagnostic,
   submitDiagnostic,
+  type DiagnosticQuestionDto,
   type DiagnosticResultDto,
-  type PracticeSessionDto,
+  type DiagnosticStartDto,
 } from '@/lib/reading-pathway-api';
+import { sanitizeBodyHtml } from '@/lib/wizard/sanitize-html';
 
 type FlowState = 'brief' | 'loading' | 'testing' | 'submitting';
 
 // Minimal shape we need from question data.
-interface DiagnosticQuestion {
-  id: string;
-  stem: string;
-  options: Record<string, string>;
+interface DiagnosticOption {
+  key: string;
+  label: string;
 }
 
-// We generate placeholder questions from the question IDs returned by the server,
-// since the actual question content lives in the reading-papers endpoint.
-// A real implementation would fetch each question via the reading-papers API.
-function makePlaceholderQuestions(ids: string[]): DiagnosticQuestion[] {
-  return ids.map((id) => ({
-    id,
-    stem: `Question (ID: ${id}) — question text will load from the reading-papers service.`,
-    options: { A: 'Option A', B: 'Option B', C: 'Option C', D: 'Option D' },
-  }));
+function normalizeOptions(options: unknown): DiagnosticOption[] {
+  if (Array.isArray(options)) {
+    return options.map((option, index) => ({
+      key: optionKey(option, String.fromCharCode(65 + index)),
+      label: optionLabel(option),
+    }));
+  }
+
+  if (options && typeof options === 'object') {
+    return Object.entries(options as Record<string, unknown>).map(([key, value]) => ({
+      key,
+      label: optionLabel(value),
+    }));
+  }
+
+  return [];
+}
+
+function optionKey(option: unknown, fallback: string): string {
+  if (option && typeof option === 'object') {
+    const record = option as Record<string, unknown>;
+    return String(record.value ?? record.key ?? record.id ?? fallback);
+  }
+
+  return fallback;
+}
+
+function optionLabel(option: unknown): string {
+  if (option && typeof option === 'object') {
+    const record = option as Record<string, unknown>;
+    return String(record.label ?? record.text ?? record.title ?? record.value ?? record.key ?? '');
+  }
+
+  return String(option);
 }
 
 function LoadingSpinner({ label }: { label: string }) {
@@ -44,8 +71,8 @@ export default function DiagnosticPage() {
   const router = useRouter();
 
   const [flowState, setFlowState] = useState<FlowState>('brief');
-  const [session, setSession] = useState<PracticeSessionDto | null>(null);
-  const [questions, setQuestions] = useState<DiagnosticQuestion[]>([]);
+  const [session, setSession] = useState<DiagnosticStartDto | null>(null);
+  const [questions, setQuestions] = useState<DiagnosticQuestionDto[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
@@ -78,7 +105,10 @@ export default function DiagnosticPage() {
     try {
       const sess = await startDiagnostic();
       setSession(sess);
-      const qs = makePlaceholderQuestions(sess.questionIds);
+      const qs = await getDiagnosticQuestions(sess.sessionId);
+      if (qs.length === 0) {
+        throw new Error('No diagnostic questions are available yet.');
+      }
       setQuestions(qs);
       setFlowState('testing');
     } catch {
@@ -126,6 +156,8 @@ export default function DiagnosticPage() {
   const timerLabel = `${elapsedMinutes}:${String(elapsedSecondsRemainder).padStart(2, '0')}`;
 
   const selectedOption = currentQuestion ? (answers[currentQuestion.id] ?? null) : null;
+  const currentOptions = currentQuestion ? normalizeOptions(currentQuestion.options) : [];
+  const expectsTextAnswer = currentQuestion ? currentOptions.length === 0 : false;
   const isLastQuestion = currentIndex === totalQuestions - 1;
 
   if (authLoading) {
@@ -153,7 +185,7 @@ export default function DiagnosticPage() {
               personalised plan.
             </p>
             <p className="mb-8 text-center text-sm text-gray-400">
-              Takes approximately 30–40 minutes.
+              Takes approximately 25 minutes.
             </p>
 
             {startError && (
@@ -189,9 +221,14 @@ export default function DiagnosticPage() {
               <span className="text-sm font-semibold text-gray-700">
                 Question {currentIndex + 1} of {totalQuestions}
               </span>
-              <span className="rounded-full bg-violet-100 px-3 py-1 text-xs font-bold text-violet-700">
-                {timerLabel}
-              </span>
+              <div className="flex items-center gap-2">
+                <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-bold text-gray-700">
+                  Part {currentQuestion.partCode || 'Reading'}
+                </span>
+                <span className="rounded-full bg-violet-100 px-3 py-1 text-xs font-bold text-violet-700">
+                  {timerLabel}
+                </span>
+              </div>
             </div>
 
             {/* Progress bar */}
@@ -202,37 +239,64 @@ export default function DiagnosticPage() {
               />
             </div>
 
+            {/* Passage card */}
+            {currentQuestion.textHtml && (
+              <div className="max-h-80 overflow-auto rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
+                {currentQuestion.textTitle && (
+                  <h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-gray-500">
+                    {currentQuestion.textTitle}
+                  </h2>
+                )}
+                <div
+                  className="prose prose-sm max-w-none text-gray-700"
+                  dangerouslySetInnerHTML={{ __html: sanitizeBodyHtml(currentQuestion.textHtml) }}
+                />
+              </div>
+            )}
+
             {/* Question card */}
             <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
               <p className="mb-6 text-base font-medium text-gray-900 leading-relaxed">
                 {currentQuestion.stem}
               </p>
 
-              <div className="space-y-3">
-                {Object.entries(currentQuestion.options).map(([key, label]) => (
-                  <button
-                    key={key}
-                    type="button"
-                    onClick={() => selectOption(key)}
-                    className={`flex w-full items-center gap-3 rounded-xl border px-4 py-3 text-sm text-left transition-colors ${
-                      selectedOption === key
-                        ? 'border-violet-600 bg-violet-50 text-violet-900'
-                        : 'border-gray-200 bg-white text-gray-700 hover:border-violet-200 hover:bg-violet-50/50'
-                    }`}
-                  >
-                    <span
-                      className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full border text-xs font-bold ${
+              {expectsTextAnswer ? (
+                <label className="block">
+                  <span className="mb-2 block text-sm font-semibold text-gray-700">Your answer</span>
+                  <input
+                    type="text"
+                    value={selectedOption === '__unknown__' ? '' : selectedOption ?? ''}
+                    onChange={(event) => selectOption(event.target.value)}
+                    className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm text-gray-900 focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-200"
+                  />
+                </label>
+              ) : (
+                <div className="space-y-3">
+                  {currentOptions.map(({ key, label }) => (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() => selectOption(key)}
+                      className={`flex w-full items-center gap-3 rounded-xl border px-4 py-3 text-sm text-left transition-colors ${
                         selectedOption === key
-                          ? 'border-violet-600 bg-violet-600 text-white'
-                          : 'border-gray-300 text-gray-500'
+                          ? 'border-violet-600 bg-violet-50 text-violet-900'
+                          : 'border-gray-200 bg-white text-gray-700 hover:border-violet-200 hover:bg-violet-50/50'
                       }`}
                     >
-                      {key}
-                    </span>
-                    {label}
-                  </button>
-                ))}
-              </div>
+                      <span
+                        className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full border text-xs font-bold ${
+                          selectedOption === key
+                            ? 'border-violet-600 bg-violet-600 text-white'
+                            : 'border-gray-300 text-gray-500'
+                        }`}
+                      >
+                        {key}
+                      </span>
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* Action buttons */}

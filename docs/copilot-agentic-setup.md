@@ -1,77 +1,100 @@
 # Copilot Agentic Setup
 
-This workspace has a project-local GitHub Copilot customization layer adapted
-from the Copilot-compatible ideas in Everything Claude Code (ECC), inspected at
-commit `3243a1c` on 2026-05-14.
+Last verified against official VS Code and GitHub Copilot documentation on
+2026-05-26.
 
-## Installed Workspace Surfaces
+This workspace uses the already-installed user-level Oh My OpenAgent agents in
+`~/.copilot/agents` plus a repo-local VS Code/GitHub Copilot customization layer.
+The repo layer supplies OET-specific rules, prompts, and specialist agents; it
+does not replace the selected `Oh My OpenAgent` agent in VS Code.
 
-- `.github/copilot-instructions.md`: always-on OET + ECC-inspired automation rules.
-- `.github/instructions/*.instructions.md`: file-scoped guidance for frontend,
-  backend, testing, security/AI grounding, deployment, and agentic workflow.
-- `.github/prompts/*.prompt.md`: optional slash-prompt shortcuts for planning,
-  ultrawork, TDD, code review, security review, build fixes, refactors, and
-  validation. Normal Copilot chat should infer these workflows automatically
-  from the always-on instructions.
-- `.github/agents/*.agent.md`: custom OET Explorer, Planner, Implementer,
-  Reviewer, Security Reviewer, and QA Validator agents.
-- `.vscode/settings.json`: enables prompt files and attaches the core Copilot
-  instruction files to code generation, test generation, reviews, and commits.
-- `.vscode/mcp.json`: registers no-token MCP servers for Playwright and
-  sequential thinking through lockfile-backed local `npx --no-install` binaries.
-- `.github/ISSUE_TEMPLATE/copilot-task.md`: structured GitHub Copilot task issues.
+## Official Documentation Basis
 
-## What Was Selected From ECC
+- VS Code custom agents: `.github/agents` for workspace agents and
+  `~/.copilot/agents` for user-level agents.
+- VS Code prompt files: `.github/prompts` for workspace slash prompts.
+- VS Code custom instructions: root `AGENTS.md` and the repo's existing
+  `.github/copilot-instructions.md` as always-on repo instructions, plus
+  `.github/instructions/*.instructions.md` for targeted rules.
+- VS Code subagents: coordinator/worker patterns are supported through the
+  `agent` tool and custom-agent `agents` frontmatter.
+- VS Code MCP: workspace MCP lives in `.vscode/mcp.json`; user MCP lives in the
+  VS Code user `mcp.json`.
+- GitHub Copilot repository customization: `.github/instructions` and
+  `.github/agents` are supported repository customization locations; `AGENTS.md`
+  is supported for agent instructions.
 
-ECC contains broad harness support for Claude Code, Codex, Cursor, OpenCode,
-Gemini, Qwen, CodeBuddy, and more. Its managed installer does not expose a
-GitHub Copilot target, but it does include a Copilot instruction file, prompt
-files, and workflow concepts. This setup translates the useful Copilot-ready
-parts into native VS Code/Copilot files for this repo.
+## Active Surfaces
 
-Relevant ECC concepts adapted here:
+- `AGENTS.md`: the primary always-on OET project contract and highest-priority
+  repo source of truth.
+- `.github/copilot-instructions.md`: the tracked GitHub Copilot automation
+  bridge. It must stay aligned with `AGENTS.md`; when they differ, `AGENTS.md`
+  wins.
+- `.github/instructions/*.instructions.md`: targeted guidance for agentic
+  workflow, Docker-heavy validation, frontend, backend, tests, security/AI, and
+  admin Hallmark discipline.
+- `.github/agents/*.agent.md`: OET-specific coordinator and specialist agents
+  that can be used directly or as subagents from the installed OmO agent.
+- `.github/prompts/*.prompt.md`: slash prompts for ultrawork, Ralph loop,
+  planning, scouting, review, security review, build fixes, validation,
+  handoff, and hyperplanning.
+- `.vscode/settings.json`: enables discovery for `.github/*` customizations and
+  the installed user-level `~/.copilot/agents` OmO agents.
+- `.vscode/mcp.json`: keeps the existing Docker-backed MCP configuration. No
+  tokened MCP services were added by this setup.
+- `.github/ISSUE_TEMPLATE/copilot-task.md`: structured task intake for Copilot
+  or OmO work.
 
-- research first
-- plan before broad edits
-- test-first when risk is real
-- security and prompt-defense baseline
-- review before handoff
-- validation loops
-- specialist agent roles
+## Installed User-Level OmO Agents
 
-## What Was Not Installed
-
-- No Claude Code, Cursor, Codex, OpenCode, Qwen, Gemini, or CodeBuddy target
-  folders were installed into this workspace.
-- No tokened MCP services were added. GitHub, Exa, and other account-backed
-  MCP services require explicit approval before registration.
-- The no-token MCP packages are pinned as dev dependencies so VS Code does not
-  fetch unpinned npm code when MCP starts.
-- No production credentials, `.env*` files, or deployment secrets were changed.
-- The full ECC repo was inspected in a temporary folder, not vendored into this
-  app.
+VS Code is configured with `chat.agentFilesLocations` pointing to
+`~/.copilot/agents`. That folder currently contains the active OmO/Ralph agent
+files shown in the Copilot agent picker, including `oh-my-openagent.agent.md`,
+`omo-hephaestus.agent.md`, `omo-prometheus.agent.md`, `omo-oracle.agent.md`,
+`omo-librarian.agent.md`, `omo-momus.agent.md`, `omo-visual-engineer.agent.md`,
+and `ralph-copilot.agent.md`.
 
 ## How To Use
 
-Copilot should automatically load the workspace instructions during coding,
-testing, review, and commit-message generation. You do not need to manually use
-slash commands for normal work. Ask naturally, for example "fix this build
-error", "add this feature", "review this diff", or "make this page work", and
-Copilot should choose the matching workflow automatically.
+Select `Oh My OpenAgent` in the Copilot agent picker for the full user-level OmO
+runtime. The workspace files then add OET-specific rules and helper agents.
+
+Copilot should automatically load `AGENTS.md`, `.github/copilot-instructions.md`,
+and any matching targeted instructions during coding, testing, review, and
+commit-message generation. You do not need slash prompts for normal work. Ask
+naturally, for example "fix this build error", "add this feature", "review this
+diff", or "make this page work".
 
 Slash prompts remain available only as optional shortcuts when you want to force
 a specific workflow:
 
-- `/ultrawork` for a full explore-plan-implement-review-verify loop
-- `/plan` for an implementation plan
-- `/tdd` for test-first work
+- `/ultrawork` for a full explore-plan-delegate-implement-review-verify loop
+- `/ralph-loop` for PRD.md / PROGRESS.md filesystem-memory execution
+- `/start-work` for an implementation plan
+- `/scout` for read-only exploration
 - `/code-review` or `/security-review` for reviews
 - `/build-fix` for failures
 - `/qa-validate` for validation selection
+- `/handoff` for continuation notes
+- `/hyperplan` for adversarial planning before risky work
 
-Custom agents are available from the agent picker when the UI exposes workspace
-agents. They are intentionally scoped to this project and should prefer
-`AGENTS.md` and domain docs over generic framework advice.
+Workspace custom agents are intentionally scoped to this project and should
+prefer `AGENTS.md` and domain docs over generic framework advice. The main entry
+point remains the installed `Oh My OpenAgent` agent unless you explicitly select
+an OET workspace agent.
+
+## Full-Power Settings
+
+- `chat.agentFilesLocations` includes both `.github/agents` and
+  `~/.copilot/agents`.
+- `chat.subagents.allowInvocationsFromSubagents` is enabled for nested
+  coordinator/worker workflows.
+- `chat.autopilot.enabled` is enabled so the Autopilot permission level is
+  available in the Chat UI.
+- `chat.agent.maxRequests` is set to `300` for longer autonomous sessions.
+- Tool approval level is still controlled by the Copilot Chat permission picker;
+  use Bypass Approvals or Autopilot only when you accept the security tradeoff.
 
 ## Maintenance
 
@@ -80,7 +103,7 @@ agents. They are intentionally scoped to this project and should prefer
 - Review `.vscode/mcp.json` before adding any MCP service that needs a token,
   account, browser login, external billing, or package execution outside the
   repo lockfile.
-- Optional BMad refresh, if you intentionally use that global workflow later:
-  `cd $env:USERPROFILE; npx bmad-method install --yes --directory $env:USERPROFILE --modules bmm,bmb,cis,tea --tools github-copilot`
-- If ECC adds an official `copilot` installer target later, dry-run it first and
-  compare against this setup before applying.
+- Do not run heavy validation on the Windows host or the VPS. Current repo rules
+  require local Docker Desktop containers for build/test/lint/type-check.
+- Use the Chat diagnostics/customizations UI to confirm which agents, prompts,
+  and instructions are loaded.

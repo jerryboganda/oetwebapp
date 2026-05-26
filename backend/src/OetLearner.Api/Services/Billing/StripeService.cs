@@ -144,14 +144,14 @@ public sealed class StripeService : IStripeService
 
     public async Task<Stripe.Subscription> RetrieveSubscriptionAsync(string subscriptionId, CancellationToken ct = default)
     {
-        var service = new SubscriptionService();
+        var service = new Stripe.SubscriptionService();
         return await service.GetAsync(subscriptionId, cancellationToken: ct);
     }
 
     public async Task CancelSubscriptionAsync(
         string subscriptionId, bool cancelAtPeriodEnd = true, CancellationToken ct = default)
     {
-        var service = new SubscriptionService();
+        var service = new Stripe.SubscriptionService();
         if (cancelAtPeriodEnd)
         {
             await service.UpdateAsync(subscriptionId,
@@ -166,7 +166,7 @@ public sealed class StripeService : IStripeService
     public async Task UpdateSubscriptionAsync(
         string subscriptionId, string newPriceId, CancellationToken ct = default)
     {
-        var service = new SubscriptionService();
+        var service = new Stripe.SubscriptionService();
         var sub = await service.GetAsync(subscriptionId, cancellationToken: ct);
         var itemId = sub.Items.Data.FirstOrDefault()?.Id
             ?? throw new InvalidOperationException("Subscription has no items.");
@@ -180,7 +180,7 @@ public sealed class StripeService : IStripeService
 
     public async Task PauseSubscriptionAsync(string subscriptionId, CancellationToken ct = default)
     {
-        var service = new SubscriptionService();
+        var service = new Stripe.SubscriptionService();
         await service.UpdateAsync(subscriptionId, new SubscriptionUpdateOptions
         {
             PauseCollection = new SubscriptionPauseCollectionOptions { Behavior = "void" }
@@ -192,7 +192,7 @@ public sealed class StripeService : IStripeService
         // Clearing pause_collection requires sending an explicit empty-string to the Stripe API.
         // PauseCollection is AnyOf<string, SubscriptionPauseCollectionOptions> in Stripe.net v47,
         // so assigning "" serialises as the empty-string sentinel that Stripe uses for removal.
-        var service = new SubscriptionService();
+        var service = new Stripe.SubscriptionService();
         AnyOf<string, SubscriptionPauseCollectionOptions> clearPause = "";
         await service.UpdateAsync(subscriptionId, new SubscriptionUpdateOptions
         {

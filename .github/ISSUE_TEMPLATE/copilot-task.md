@@ -1,27 +1,34 @@
 ---
-name: Copilot Agent Task
-about: Assign a scoped coding task to GitHub Copilot agent
-title: "[Copilot] "
-labels: copilot
-assignees: copilot
+name: "Copilot / OmO Task"
+about: "Give GitHub Copilot or Oh My OpenAgent a scoped implementation task"
+title: "[copilot] "
+labels: ["copilot"]
+assignees: []
 ---
 
 ## Goal
 
-<!-- What should Copilot complete? -->
-
 ## Scope
-
-<!-- Relevant files, routes, endpoints, docs, or modules -->
-
-## OET Contracts To Protect
-
-<!-- Scoring, rulebooks, AI gateway, uploads, result card, reading, grammar, pronunciation, conversation, deployment, etc. -->
 
 ## Acceptance Criteria
 
-- [ ] 
+- [ ]
 
-## Validation
+## Constraints
 
-<!-- Expected checks, for example: npx tsc --noEmit, npm test, backend build/test, Playwright smoke -->
+- Follow `AGENTS.md`.
+- Heavy validation runs in local Docker Desktop containers only.
+- Preserve unrelated worktree changes.
+- Ask before changing secrets, auth providers, production deploy settings, or broad admin UI patterns.
+
+## Suggested Agent Mode
+
+- [ ] OET OmO Orchestrator / ultrawork
+- [ ] OET Planner / planning
+- [ ] OET Implementer / implementation
+- [ ] OET Reviewer / review
+- [ ] RalphCopilot / PRD loop
+
+## Validation Evidence Required
+
+## Notes

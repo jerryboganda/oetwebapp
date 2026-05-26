@@ -11,42 +11,77 @@
 import { env } from './env';
 import { ensureFreshAccessToken } from './auth-client';
 import { fetchWithTimeout } from './network/fetch-with-timeout';
+import { oetGradeFromScaled } from './scoring';
 
 // ── DTOs ─────────────────────────────────────────────────────────────────────
 
 export interface LearnerReadingProfileDto {
   userId: string;
   currentStage: string;
-  targetBand: number;
+  targetBand: string | null;
   examDate: string | null;
-  hoursPerWeek: number;
-  profession: string;
+  hoursPerWeek: number | null;
+  profession: string | null;
+  hasTakenBefore: boolean;
+  previousScore: number | null;
+  selfRatedSpeed: number | null;
+  selfRatedVocabulary: number | null;
+  readinessScore: number | null;
+  predictedScore: number | null;
+  onboardingCompletedAt: string | null;
+  pathwayGeneratedAt: string | null;
+  weeksRemaining: number | null;
   diagnosticCompleted: boolean;
-  createdAt: string;
 }
 
 export interface OnboardingRequest {
-  targetBand: number;
+  targetBand: string;
   examDate: string | null;
   hoursPerWeek: number;
   profession: string;
   hasTakenBefore: boolean;
   previousScore: number | null;
   selfRatedSpeed: number;
-  selfRatedVocab: number;
+  selfRatedVocabulary: number;
+}
+
+export interface DiagnosticStartDto {
+  sessionId: string;
+  questionIds: string[];
+  timeLimitMinutes: number;
+}
+
+export interface DiagnosticQuestionDto {
+  id: string;
+  partCode: string;
+  questionType: string;
+  displayOrder: number;
+  stem: string;
+  options: unknown;
+  textTitle: string | null;
+  textHtml: string | null;
+  skillCode: string | null;
 }
 
 export interface DiagnosticResultDto {
   sessionId: string;
-  estimatedScore: number;
-  skillBreakdown: Record<string, number>;
+  score: number;
+  totalQuestions: number;
+  skillScores: Record<string, number>;
+  estimatedOetBand: string;
+  estimatedScaledScore: number;
+  durationSeconds: number | null;
   roadmapWeeks: number;
-  timeAnalysis: {
-    partA: number;
-    partB: number;
-    partC: number;
-  };
-  vocabFlagged: string[];
+  completedAt: string | null;
+}
+
+export interface PathwayWeekDto {
+  weekNumber: number;
+  phase: string;
+  focusSkills: string[];
+  theme: string;
+  mockScheduled: boolean;
+  isCompleted: boolean;
 }
 
 export interface PathwayDto {
@@ -55,14 +90,19 @@ export interface PathwayDto {
   currentWeek: number;
   weeksRemaining: number;
   readinessScore: number;
+  predictedScore: number | null;
+  generatedAt: string | null;
+  weeks: PathwayWeekDto[];
 }
 
 export interface DailyPlanItemDto {
   id: string;
   itemType: string;
+  focusSkill: string | null;
   skillCode: string | null;
   estimatedMinutes: number;
   status: string;
+  payloadJson: string;
   title: string;
   description: string;
 }
@@ -82,9 +122,45 @@ export interface PracticeSessionStartRequest {
 
 export interface PracticeSessionDto {
   sessionId: string;
-  questionIds: string[];
-  timeLimit: number | null;
-  mode: string;
+  questionIds?: string[];
+  questionCount?: number;
+  timeLimitMinutes?: number | null;
+  sessionType?: string;
+}
+
+export interface PracticeSessionPassageDto {
+  id: string;
+  title: string;
+  bodyHtml: string;
+  partCode: number;
+}
+
+export interface PracticeSessionQuestionDto {
+  id: string;
+  passageId: string;
+  stem: string;
+  options: { key: string; text: string }[];
+  questionType: string;
+  partCode: number;
+  skillCode?: string;
+}
+
+interface RawPracticeSessionQuestionDto extends Omit<PracticeSessionQuestionDto, 'options' | 'skillCode'> {
+  options: unknown;
+  skillCode?: string | null;
+}
+
+interface RawPracticeSessionQuestionsDto {
+  sessionId: string;
+  mode: 'drill' | 'review' | 'wrong_review';
+  focusSkill: string | null;
+  timeLimitSeconds: number | null;
+  questions: RawPracticeSessionQuestionDto[];
+  passages: PracticeSessionPassageDto[];
+}
+
+export interface PracticeSessionQuestionsDto extends Omit<RawPracticeSessionQuestionsDto, 'questions'> {
+  questions: PracticeSessionQuestionDto[];
 }
 
 export interface AnswerSubmitRequest {
@@ -102,9 +178,9 @@ export interface ExplanationDto {
 
 export interface AnswerResultDto {
   isCorrect: boolean;
-  explanation: ExplanationDto | null;
-  skillScoreDelta: number;
-  newSkillScore: number;
+  explanation: string | null;
+  skillScoreDelta?: number;
+  newSkillScore?: number;
 }
 
 export interface MockResultDto {
@@ -185,7 +261,11 @@ export interface ReadingLessonWithProgressDto {
 }
 
 export interface LessonProgressRequest {
-  step: string;
+  videoWatched?: boolean;
+  bodyRead?: boolean;
+  drill1Completed?: boolean;
+  drill2Completed?: boolean;
+  drill3Completed?: boolean;
   quizScore?: number;
 }
 
@@ -263,6 +343,50 @@ export interface ChatMessage {
   content: string;
 }
 
+interface RawDailyPlanItemDto {
+  id: string;
+  itemType: string;
+  focusSkill: string | null;
+  estimatedMinutes: number;
+  payloadJson: string;
+  status: string;
+}
+
+interface RawSkillStatsDto {
+  current?: Record<string, number>;
+  baseline?: Record<string, number>;
+}
+
+interface RawDashboardStatsDto {
+  skillScores?: Record<string, number>;
+  streakStatus?: {
+    currentStreak?: number;
+    longestStreak?: number;
+  };
+  predictedScore?: number | null;
+  readinessScore?: number | null;
+}
+
+interface RawScoreHistoryItemDto {
+  id?: string;
+  score?: number | null;
+  totalQuestions?: number | null;
+  completedAt?: string | null;
+}
+
+interface RawActivityItemDto {
+  date: string;
+  questionsAnsweredToday?: number;
+  hasActivity?: boolean;
+}
+
+interface RawMockResultDto {
+  score?: number | null;
+  totalQuestions?: number | null;
+  durationSeconds?: number | null;
+  scaledScore?: number | null;
+}
+
 // ── HTTP helper ───────────────────────────────────────────────────────────────
 
 function resolveUrl(path: string): string {
@@ -313,7 +437,10 @@ export const submitOnboarding = (req: OnboardingRequest) =>
 // ── Diagnostic ────────────────────────────────────────────────────────────────
 
 export const startDiagnostic = () =>
-  api<PracticeSessionDto>('/v1/reading-pathway/diagnostic/start', { method: 'POST' });
+  api<DiagnosticStartDto>('/v1/reading-pathway/diagnostic/start', { method: 'POST' });
+
+export const getDiagnosticQuestions = (sessionId: string) =>
+  api<DiagnosticQuestionDto[]>(`/v1/reading-pathway/diagnostic/sessions/${encodeURIComponent(sessionId)}/questions`);
 
 export const submitDiagnostic = (sessionId: string, answers: Record<string, string>) =>
   api<DiagnosticResultDto>('/v1/reading-pathway/diagnostic/submit', {
@@ -321,19 +448,22 @@ export const submitDiagnostic = (sessionId: string, answers: Record<string, stri
     body: JSON.stringify({ sessionId, answers }),
   });
 
+export const getDiagnosticResult = (sessionId: string) =>
+  api<DiagnosticResultDto>(`/v1/reading-pathway/diagnostic/sessions/${encodeURIComponent(sessionId)}/results`);
+
 // ── Pathway & Daily Plan ──────────────────────────────────────────────────────
 
 export const getPathway = () =>
   api<PathwayDto>('/v1/reading-pathway/pathway');
 
 export const getTodayPlan = () =>
-  api<DailyPlanDto>('/v1/reading-pathway/daily-plan');
+  api<RawDailyPlanItemDto[]>('/v1/reading-pathway/plan/today').then(mapDailyPlan);
 
 export const markPlanItemComplete = (itemId: string) =>
-  api<void>(`/v1/reading-pathway/daily-plan/${encodeURIComponent(itemId)}/complete`, { method: 'POST' });
+  api<void>(`/v1/reading-pathway/plan/items/${encodeURIComponent(itemId)}/complete`, { method: 'POST' });
 
 export const skipPlanItem = (itemId: string, reason: string) =>
-  api<void>(`/v1/reading-pathway/daily-plan/${encodeURIComponent(itemId)}/skip`, {
+  api<void>(`/v1/reading-pathway/plan/items/${encodeURIComponent(itemId)}/skip`, {
     method: 'POST',
     body: JSON.stringify({ reason }),
   });
@@ -341,19 +471,30 @@ export const skipPlanItem = (itemId: string, reason: string) =>
 // ── Practice Sessions ─────────────────────────────────────────────────────────
 
 export const startPracticeSession = (req: PracticeSessionStartRequest) =>
-  api<PracticeSessionDto>('/v1/reading-pathway/sessions', {
+  api<PracticeSessionDto>('/v1/reading-pathway/practice/sessions', {
     method: 'POST',
     body: JSON.stringify(req),
   });
 
 export const submitAnswer = (sessionId: string, req: AnswerSubmitRequest) =>
-  api<AnswerResultDto>(`/v1/reading-pathway/sessions/${encodeURIComponent(sessionId)}/answers`, {
+  api<AnswerResultDto>(`/v1/reading-pathway/practice/sessions/${encodeURIComponent(sessionId)}/answers`, {
     method: 'POST',
     body: JSON.stringify(req),
   });
 
+export const getPracticeSessionQuestions = (sessionId: string) =>
+  api<RawPracticeSessionQuestionsDto>(`/v1/reading-pathway/practice/sessions/${encodeURIComponent(sessionId)}/questions`)
+    .then((session) => ({
+      ...session,
+      questions: session.questions.map((question) => ({
+        ...question,
+        options: normalizeAnswerOptions(question.options),
+        skillCode: question.skillCode ?? undefined,
+      })),
+    }));
+
 export const endPracticeSession = (sessionId: string) =>
-  api<void>(`/v1/reading-pathway/sessions/${encodeURIComponent(sessionId)}/end`, { method: 'POST' });
+  api<void>(`/v1/reading-pathway/practice/sessions/${encodeURIComponent(sessionId)}/submit`, { method: 'POST' });
 
 export const getExplanation = (questionId: string, wrongOption: string) =>
   api<ExplanationDto>(
@@ -365,11 +506,26 @@ export const getExplanation = (questionId: string, wrongOption: string) =>
 export const startMock = (mockTemplateId: string) =>
   api<PracticeSessionDto>('/v1/reading-pathway/mocks/start', {
     method: 'POST',
-    body: JSON.stringify({ mockTemplateId }),
+    body: JSON.stringify({ sessionType: 'mock', targetMinutes: 60, mockTemplateId }),
   });
 
 export const getMockResults = (sessionId: string) =>
-  api<MockResultDto>(`/v1/reading-pathway/mocks/${encodeURIComponent(sessionId)}/results`);
+  api<RawMockResultDto>(`/v1/reading-pathway/mocks/sessions/${encodeURIComponent(sessionId)}/results`).then((raw) => {
+    const scaledScore = raw.scaledScore ?? 0;
+    const timeMap: Record<string, number> = raw.durationSeconds === null || raw.durationSeconds === undefined
+      ? {}
+      : { total: raw.durationSeconds };
+
+    return {
+      sessionId,
+      rawScore: raw.score ?? 0,
+      scaledScore,
+      grade: gradeFromScaled(scaledScore),
+      sectionBreakdown: {},
+      skillBreakdown: {},
+      timeMap,
+    };
+  });
 
 // ── Vocabulary (SM-2 spaced repetition) ──────────────────────────────────────
 
@@ -379,7 +535,7 @@ export const getVocabDue = () =>
 
 /** Add a word to the learner's personal vocab deck. */
 export const addVocabWord = (word: string, source: string) =>
-  api<VocabItemDto>('/v1/reading-pathway/vocab/words', {
+  api<VocabItemDto>('/v1/reading-pathway/vocab', {
     method: 'POST',
     body: JSON.stringify({ word, source }),
   });
@@ -403,8 +559,8 @@ export const getVocabLists = () =>
   api<VocabularyListDto[]>('/v1/reading-pathway/vocab/lists');
 
 /** Subscribe the learner to a curated vocabulary list. */
-export const subscribeToVocabList = (slug: string) =>
-  api<void>(`/v1/reading-pathway/vocab/lists/${encodeURIComponent(slug)}/subscribe`, { method: 'POST' });
+export const subscribeToVocabList = (listId: string) =>
+  api<void>(`/v1/reading-pathway/vocab/lists/${encodeURIComponent(listId)}/subscribe`, { method: 'POST' });
 
 // ── Lessons ───────────────────────────────────────────────────────────────────
 
@@ -441,32 +597,53 @@ export const getStrategy = (slug: string) =>
   api<ReadingStrategyWithProgressDto>(`/v1/reading-pathway/strategies/${encodeURIComponent(slug)}`);
 
 export const markStrategyRead = (slug: string) =>
-  api<void>(`/v1/reading-pathway/strategies/${encodeURIComponent(slug)}/read`, { method: 'POST' });
+  api<void>(`/v1/reading-pathway/strategies/${encodeURIComponent(slug)}/mark-read`, { method: 'POST' });
 
 // ── Analytics ─────────────────────────────────────────────────────────────────
 
 export const getReadingDashboard = () =>
-  api<ReadingDashboardDto>('/v1/reading-pathway/analytics/dashboard');
+  api<RawDashboardStatsDto>('/v1/reading-pathway/stats/dashboard').then((raw) => ({
+    readinessScore: raw.readinessScore ?? 0,
+    predictedScore: raw.predictedScore ?? 0,
+    streak: raw.streakStatus?.currentStreak ?? 0,
+    longestStreak: raw.streakStatus?.longestStreak ?? 0,
+    totalXp: 0,
+    level: 1,
+    todayPlan: null,
+    skillRadar: mapSkillRadar({ current: raw.skillScores, baseline: {} }),
+  }));
 
 export const getSkillRadar = () =>
-  api<SkillRadarDto>('/v1/reading-pathway/analytics/skill-radar');
+  api<RawSkillStatsDto>('/v1/reading-pathway/stats/skills').then(mapSkillRadar);
 
 export const getScoreHistory = () =>
-  api<ScoreHistoryDto>('/v1/reading-pathway/analytics/score-history');
+  api<RawScoreHistoryItemDto[]>('/v1/reading-pathway/stats/history').then((history) => ({
+    history: history.map((item) => ({
+      date: item.completedAt ?? new Date().toISOString(),
+      score: item.score ?? 0,
+      sessionType: 'mock',
+    })),
+  }));
 
 export const getReadinessScore = () =>
-  api<{ score: number; label: string }>('/v1/reading-pathway/analytics/readiness');
+  api<number>('/v1/reading-pathway/stats/readiness');
 
 export const getActivityCalendar = () =>
-  api<ActivityCalendarDto>('/v1/reading-pathway/analytics/activity');
+  api<RawActivityItemDto[]>('/v1/reading-pathway/stats/calendar').then((days) => ({
+    days: days.map((day) => ({
+      date: day.date,
+      minutesPracticed: day.hasActivity ? 15 : 0,
+      questionsAnswered: day.questionsAnsweredToday ?? 0,
+    })),
+  }));
 
 // ── Community ─────────────────────────────────────────────────────────────────
 
 export const getQuestionComments = (questionId: string) =>
-  api<CommentDto[]>(`/v1/reading-pathway/community/${encodeURIComponent(questionId)}/comments`);
+  api<CommentDto[]>(`/v1/reading-pathway/questions/${encodeURIComponent(questionId)}/comments`);
 
 export const postComment = (questionId: string, body: string) =>
-  api<CommentDto>(`/v1/reading-pathway/community/${encodeURIComponent(questionId)}/comments`, {
+  api<CommentDto>(`/v1/reading-pathway/questions/${encodeURIComponent(questionId)}/comments`, {
     method: 'POST',
     body: JSON.stringify({ body }),
   });
@@ -482,3 +659,113 @@ export const askAiAboutPassage = (
     method: 'POST',
     body: JSON.stringify({ passageId, message, history }),
   });
+
+function mapDailyPlan(items: RawDailyPlanItemDto[]): DailyPlanDto {
+  const mapped = items.map((item) => ({
+    ...item,
+    skillCode: item.focusSkill,
+    title: dailyPlanTitle(item),
+    description: dailyPlanDescription(item),
+  }));
+
+  return {
+    items: mapped,
+    totalMinutes: mapped.reduce((total, item) => total + item.estimatedMinutes, 0),
+    completedCount: mapped.filter((item) => item.status === 'completed').length,
+    streak: 0,
+  };
+}
+
+function mapSkillRadar(raw: RawSkillStatsDto): SkillRadarDto {
+  const current = raw.current ?? {};
+  const baseline = raw.baseline ?? {};
+  const codes = ['S1', 'S2', 'S3', 'S4', 'S5', 'S6', 'S7', 'S8'];
+  return {
+    skills: codes.map((code) => ({
+      code,
+      name: skillName(code),
+      current: current[code] ?? 5,
+      baseline: baseline[code] ?? current[code] ?? 5,
+      target: 8,
+    })),
+  };
+}
+
+function skillName(code: string): string {
+  switch (code) {
+    case 'S1': return 'Scanning';
+    case 'S2': return 'Skimming';
+    case 'S3': return 'Paraphrase';
+    case 'S4': return 'Distractors';
+    case 'S5': return 'Inference';
+    case 'S6': return 'Reference';
+    case 'S7': return 'Vocabulary';
+    case 'S8': return 'Timing';
+    default: return code;
+  }
+}
+
+function gradeFromScaled(score: number): string {
+  return oetGradeFromScaled(score);
+}
+
+function dailyPlanTitle(item: RawDailyPlanItemDto): string {
+  switch (item.itemType) {
+    case 'drill': return item.focusSkill ? `${item.focusSkill} drill` : 'Reading drill';
+    case 'vocab_review': return 'Vocabulary review';
+    case 'wrong_review': return 'Wrong-answer review';
+    case 'strategy_read': return 'Strategy read';
+    case 'lesson': return 'Foundation lesson';
+    case 'mock': return 'Full mock test';
+    default: return item.itemType.replace(/_/g, ' ');
+  }
+}
+
+function dailyPlanDescription(item: RawDailyPlanItemDto): string {
+  const minutes = `${item.estimatedMinutes} min`;
+  switch (item.itemType) {
+    case 'drill': return `${minutes} targeted practice for your current reading focus.`;
+    case 'vocab_review': return `${minutes} spaced repetition vocabulary review.`;
+    case 'wrong_review': return `${minutes} revisiting missed questions.`;
+    case 'strategy_read': return `${minutes} short reading strategy.`;
+    case 'lesson': return `${minutes} guided sub-skill foundation work.`;
+    case 'mock': return `${minutes} timed exam simulation.`;
+    default: return `${minutes} reading pathway task.`;
+  }
+}
+
+function normalizeAnswerOptions(options: unknown): { key: string; text: string }[] {
+  if (Array.isArray(options)) {
+    return options.map((option, index) => ({
+      key: optionValue(option, String.fromCharCode(65 + index)),
+      text: optionText(option),
+    }));
+  }
+
+  if (options && typeof options === 'object') {
+    return Object.entries(options as Record<string, unknown>).map(([key, value]) => ({
+      key,
+      text: optionText(value),
+    }));
+  }
+
+  return [];
+}
+
+function optionValue(option: unknown, fallback: string): string {
+  if (option && typeof option === 'object') {
+    const record = option as Record<string, unknown>;
+    return String(record.value ?? record.key ?? record.id ?? fallback);
+  }
+
+  return fallback;
+}
+
+function optionText(option: unknown): string {
+  if (option && typeof option === 'object') {
+    const record = option as Record<string, unknown>;
+    return String(record.text ?? record.label ?? record.title ?? record.value ?? record.key ?? '');
+  }
+
+  return String(option);
+}

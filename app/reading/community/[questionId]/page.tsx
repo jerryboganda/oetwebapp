@@ -19,7 +19,8 @@ function formatRelativeTime(iso: string): string {
 }
 
 export default function QuestionDiscussionPage() {
-  const { questionId } = useParams<{ questionId: string }>();
+  const params = useParams<{ questionId: string }>();
+  const questionId = params?.questionId ?? '';
   const [comments, setComments] = useState<CommentDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -29,11 +30,14 @@ export default function QuestionDiscussionPage() {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
-    if (!questionId) return;
+    if (!questionId) {
+      setLoading(false);
+      return;
+    }
     let cancelled = false;
     (async () => {
       try {
-        const data = await getQuestionComments(questionId as string);
+        const data = await getQuestionComments(questionId);
         if (!cancelled) setComments(data);
       } catch (err) {
         if (!cancelled) setError(err instanceof Error ? err.message : 'Failed to load comments.');
@@ -47,11 +51,11 @@ export default function QuestionDiscussionPage() {
   async function handlePost(e: React.FormEvent) {
     e.preventDefault();
     const trimmed = body.trim();
-    if (!trimmed) return;
+    if (!trimmed || !questionId) return;
     setPosting(true);
     setPostError(null);
     try {
-      const newComment = await postComment(questionId as string, trimmed);
+      const newComment = await postComment(questionId, trimmed);
       setComments((prev) => [newComment, ...prev]);
       setBody('');
       textareaRef.current?.focus();

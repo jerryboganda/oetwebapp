@@ -54,22 +54,20 @@ Before editing any of these, read the corresponding docs and nearest tests:
 
 ## Execution Locality (MISSION CRITICAL)
 
-The user's local machine is Windows and is **not** the build host. All
-CPU/RAM/disk/network-intensive work for this project runs on the VPS
-`oet-dev` (`68.183.32.122`) at `/opt/oetwebapp`. Do this automatically — do
-not ask the user every time.
+The user's local machine is Windows, but heavy work must run inside local Docker
+Desktop containers. Do this automatically and do not ask where to run builds,
+tests, lint, installs, or broad validation.
 
-- Always remote (`ssh oet-dev "cd /opt/oetwebapp && <cmd>"`):
-  `npm install|ci|run build|dev|lint|test|test:e2e*`, `npx tsc --noEmit`,
-  `npm run backend:*`, `dotnet build|restore|test|publish|ef *`,
-  `npm run desktop:*`, `npm run mobile:*`, any `docker build|compose *`,
-  Capacitor / Gradle / Xcode tasks, Playwright installs, Repomix bundles,
-  repo-wide codemods or sweeps.
+- Use `docker exec oet-local-web <cmd>` for frontend type-check, lint, tests,
+  builds, Playwright, and web-container npm scripts.
+- Use `docker exec oet-local-api <cmd>` for backend restore, build, test,
+  publish, EF, and API-container work.
+- Use `docker compose -f docker-compose.local.yml --env-file .env.docker-local up`
+  or `docker compose -f docker-compose.dev.yml --env-file .env.docker-local up`
+  only to orchestrate local containers.
 - Local-only: file editing, navigation, single-file reads, and git plumbing
   (`status`, `add`, `commit`, `push`, `pull`, `diff`, `log`).
-- Detach long jobs on the remote with
-  `nohup bash -lc '<cmd>' > /tmp/<tag>.log 2>&1 < /dev/null &` and tail the log
-  in a separate ssh call, because PowerShell collapsing the ssh pipe can kill
-  attached children.
-- If the VPS is unreachable, stop and report — never fall back to running heavy
-  work on the local Windows box.
+- The VPS `oet-dev` is production deployment only. Never run build, test, lint,
+  install, or exploratory validation commands there.
+- If Docker Desktop is unavailable, stop and report — never fall back to running
+  heavy work on the Windows host or the VPS.
