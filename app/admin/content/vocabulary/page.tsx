@@ -120,8 +120,8 @@ export default function AdminVocabularyPage() {
 
     setBulkDeleting(true);
     try {
-      // Backend limits to 200 per request — chunk large selections
-      const CHUNK_SIZE = 200;
+      // Backend limits to 1000 per request — chunk large selections
+      const CHUNK_SIZE = 1000;
       let totalDeleted = 0;
       let totalArchived = 0;
       let totalFailed = 0;

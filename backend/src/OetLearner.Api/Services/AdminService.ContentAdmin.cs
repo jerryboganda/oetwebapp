@@ -529,8 +529,8 @@ public partial class AdminService
         if (requestedIds.Count == 0)
             throw ApiException.Validation("VOCABULARY_BULK_DELETE_EMPTY", "Select at least one vocabulary item to delete.");
 
-        if (requestedIds.Count > 200)
-            throw ApiException.Validation("VOCABULARY_BULK_DELETE_LIMIT", "Bulk delete is limited to 200 vocabulary items at a time.");
+        if (requestedIds.Count > 1000)
+            throw ApiException.Validation("VOCABULARY_BULK_DELETE_LIMIT", "Bulk delete is limited to 1000 vocabulary items at a time.");
 
         var deleted = 0;
         var archived = 0;
