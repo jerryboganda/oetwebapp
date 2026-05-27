@@ -2,6 +2,13 @@
 @import "tw-animate-css";
 @import "./admin/_design/admin-tokens.css";
 
+/* ─── Dark mode: class-based (next-themes attribute="class") ─── */
+/* Without this, Tailwind 4 defaults to @media (prefers-color-scheme: dark)
+   which causes dark: variants to fire based on OS settings instead of
+   the in-app theme toggle. This ensures dark: only activates when the
+   .dark class is present on an ancestor (managed by next-themes). */
+@custom-variant dark (&:where(.dark, .dark *));
+
 @theme {
   --color-primary: #7c3aed;
   --color-primary-dark: #6d28d9;
