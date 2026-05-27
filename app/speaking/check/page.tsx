@@ -17,7 +17,13 @@ import { InlineAlert } from '@/components/ui/alert';
 import { MotionCollapse } from '@/components/ui/motion-primitives';
 import { analytics } from '@/lib/analytics';
 import { fetchSpeakingCompliance, postSpeakingDeviceCheck, type SpeakingComplianceCopy } from '@/lib/api';
-import { SpeakingRecorder, base64ToBlob } from '@/lib/mobile/speaking-recorder';
+import { SpeakingDeviceProbe } from '@/components/domain/speaking/SpeakingDeviceProbe';
+import {
+  SpeakingRecorder,
+  capturedSpeakingRecordingFromNativeStop,
+  capturedSpeakingRecordingFromWebBlob,
+  type CapturedSpeakingRecording,
+} from '@/lib/mobile/speaking-recorder';
 import { getRealtimeValueTransition, prefersReducedMotion } from '@/lib/motion';
 
 declare global {
@@ -61,7 +67,7 @@ function MicEnvironmentCheckContent() {
   const audioPlayerRef = useRef<HTMLAudioElement | null>(null);
   const autoStopTimeoutRef = useRef<number | null>(null);
   const isRecordingRef = useRef(false);
-  const recordedBlobRef = useRef<Blob | null>(null);
+  const recordedRecordingRef = useRef<CapturedSpeakingRecording | null>(null);
 
   // --- Initial Compatibility Check ---
   useEffect(() => {
@@ -185,10 +191,10 @@ function MicEnvironmentCheckContent() {
         setAudioUrl(null);
       }
 
-      recordedBlobRef.current = null;
+      recordedRecordingRef.current = null;
 
       if (isNativePlatform) {
-        await SpeakingRecorder.start({ mimeType: 'audio/mp4' });
+        await SpeakingRecorder.start({ mimeType: 'audio/mp4', fileName: `${taskId}-check.m4a` });
         audioChunksRef.current = [];
         mediaRecorderRef.current = null;
       } else {
@@ -227,22 +233,23 @@ function MicEnvironmentCheckContent() {
     try {
       if (isNativePlatform) {
         const recording = await SpeakingRecorder.stop();
-        recordedBlobRef.current = base64ToBlob(recording.base64, recording.mimeType);
+        recordedRecordingRef.current = capturedSpeakingRecordingFromNativeStop(recording, `${taskId}-check.m4a`);
       } else if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
         await new Promise<void>((resolve) => {
           mediaRecorderRef.current?.addEventListener('stop', () => resolve(), { once: true });
           mediaRecorderRef.current?.stop();
         });
 
-        recordedBlobRef.current = new Blob(audioChunksRef.current, { type: mediaRecorderRef.current?.mimeType || 'audio/webm' });
+        const blob = new Blob(audioChunksRef.current, { type: mediaRecorderRef.current?.mimeType || 'audio/webm' });
+        recordedRecordingRef.current = capturedSpeakingRecordingFromWebBlob(blob, `${taskId}-check.webm`, 3000);
       }
 
-      const audioBlob = recordedBlobRef.current;
-      if (!audioBlob || audioBlob.size === 0) {
+      const recording = recordedRecordingRef.current;
+      if (!recording || recording.blob.size === 0) {
         throw new Error('No audio was captured.');
       }
 
-      const url = URL.createObjectURL(audioBlob);
+      const url = URL.createObjectURL(recording.blob);
       setAudioUrl(url);
       setRecordingStatus('finished');
       if (!isNativePlatform) {
@@ -251,7 +258,7 @@ function MicEnvironmentCheckContent() {
     } catch (err) {
       console.error('Failed to stop recording:', err);
       setRecordingStatus('idle');
-      recordedBlobRef.current = null;
+      recordedRecordingRef.current = null;
       if (isNativePlatform) {
         void SpeakingRecorder.cancel().catch(() => undefined);
       }
@@ -389,6 +396,22 @@ function MicEnvironmentCheckContent() {
                   />
                   <span className="text-sm text-navy">I confirm my exam environment meets ALL of the requirements above.</span>
                 </label>
+
+                {/* 2026-05-27 audit fix — live device probe surfaces what
+                    the browser sees so the candidate can correct Bluetooth /
+                    second-monitor issues before the exam begins. */}
+                <div className="mt-3">
+                  <SpeakingDeviceProbe
+                    onResult={(r) => analytics.track('speaking_cbt_device_probe_result', {
+                      taskId,
+                      ok: r.ok,
+                      flaggedCount: r.audioInputs.filter((d) => d.flagged).length
+                        + r.audioOutputs.filter((d) => d.flagged).length
+                        + r.videoInputs.filter((d) => d.flagged).length,
+                      multipleMonitors: r.multipleMonitors,
+                    })}
+                  />
+                </div>
               </div>
 
               <div className="rounded-2xl border border-warning/30 bg-amber-50 p-4">

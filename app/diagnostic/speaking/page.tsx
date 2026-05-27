@@ -14,7 +14,12 @@ import { Modal } from '@/components/ui/modal';
 import { InlineAlert } from '@/components/ui/alert';
 import { useAnalytics } from '@/hooks/use-analytics';
 import { fetchDiagnosticTaskId, fetchRoleCard, submitSpeakingRecording } from '@/lib/api';
-import { SpeakingRecorder, base64ToBlob } from '@/lib/mobile/speaking-recorder';
+import {
+  SpeakingRecorder,
+  capturedSpeakingRecordingFromNativeStop,
+  capturedSpeakingRecordingFromWebBlob,
+  type CapturedSpeakingRecording,
+} from '@/lib/mobile/speaking-recorder';
 import type { RoleCard } from '@/lib/mock-data';
 import {
   Mic,
@@ -56,7 +61,7 @@ export default function DiagnosticSpeakingPage() {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const streamRef = useRef<MediaStream | null>(null);
-  const recordedBlobRef = useRef<Blob | null>(null);
+  const recordedRecordingRef = useRef<CapturedSpeakingRecording | null>(null);
   const autoStopTimeoutRef = useRef<number | null>(null);
 
   const load = useCallback(async () => {
@@ -111,10 +116,10 @@ export default function DiagnosticSpeakingPage() {
         autoStopTimeoutRef.current = null;
       }
 
-      recordedBlobRef.current = null;
+      recordedRecordingRef.current = null;
 
       if (isNativePlatform) {
-        await SpeakingRecorder.start({ mimeType: 'audio/mp4' });
+        await SpeakingRecorder.start({ mimeType: 'audio/mp4', fileName: `${taskId ?? 'diagnostic-speaking'}.m4a` });
         mediaRecorderRef.current = null;
         audioChunksRef.current = [];
       } else {
@@ -157,12 +162,12 @@ export default function DiagnosticSpeakingPage() {
 
       if (isNativePlatform) {
         const recording = await SpeakingRecorder.stop();
-        const blob = base64ToBlob(recording.base64, recording.mimeType);
-        recordedBlobRef.current = blob;
+        const captured = capturedSpeakingRecordingFromNativeStop(recording, `${taskId ?? 'diagnostic-speaking'}.m4a`);
+        recordedRecordingRef.current = captured;
         if (previewUrl) {
           URL.revokeObjectURL(previewUrl);
         }
-        setPreviewUrl(URL.createObjectURL(blob));
+        setPreviewUrl(URL.createObjectURL(captured.blob));
       } else {
         const recorder = mediaRecorderRef.current;
         if (recorder && recorder.state !== 'inactive') {
@@ -173,11 +178,16 @@ export default function DiagnosticSpeakingPage() {
         }
 
         const blob = new Blob(audioChunksRef.current, { type: recorder?.mimeType || 'audio/webm' });
-        recordedBlobRef.current = blob;
+        const captured = capturedSpeakingRecordingFromWebBlob(
+          blob,
+          `${taskId ?? 'diagnostic-speaking'}.webm`,
+          Math.max(1, recordingSeconds) * 1000,
+        );
+        recordedRecordingRef.current = captured;
         if (previewUrl) {
           URL.revokeObjectURL(previewUrl);
         }
-        setPreviewUrl(URL.createObjectURL(blob));
+        setPreviewUrl(URL.createObjectURL(captured.blob));
       }
 
       if (streamRef.current) {
@@ -188,7 +198,7 @@ export default function DiagnosticSpeakingPage() {
       setPhase('review');
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to stop recording');
-      recordedBlobRef.current = null;
+      recordedRecordingRef.current = null;
       if (isNativePlatform) {
         void SpeakingRecorder.cancel().catch(() => undefined);
       }
@@ -220,19 +230,26 @@ export default function DiagnosticSpeakingPage() {
         });
       }, 400);
 
-      if (!recordedBlobRef.current || recordedBlobRef.current.size === 0) {
+      const captured = recordedRecordingRef.current;
+      if (!captured || captured.blob.size === 0) {
         throw new Error('No diagnostic speaking audio was captured.');
       }
 
       if (!taskId) throw new Error('No diagnostic speaking task ID available.');
-      await submitSpeakingRecording(
+      const uploadDurationSeconds = Math.max(recordingSeconds || 120, Math.round(captured.durationMs / 1000) || 0);
+      const submission = await submitSpeakingRecording(
         taskId,
-        recordedBlobRef.current,
-        recordingSeconds || 120,
-        'exam',
+        captured.blob,
+        uploadDurationSeconds,
+        'diagnostic',
         {
           accepted: true,
           text: 'Diagnostic speaking audio consent accepted during microphone setup.',
+        },
+        {
+          fileName: captured.fileName,
+          captureMethod: captured.captureMethod,
+          contentType: captured.mimeType,
         },
       );
       clearInterval(interval);
@@ -241,7 +258,7 @@ export default function DiagnosticSpeakingPage() {
       track('task_submitted', { subTest: 'Speaking', mode: 'diagnostic', taskId });
       setPhase('done');
 
-      setTimeout(() => router.push('/diagnostic/hub'), 1500);
+      setTimeout(() => router.push(`/speaking/results/${submission.submissionId}?source=diagnostic`), 1500);
     } catch {
       setError('Upload failed. Please try again.');
       setPhase('review');

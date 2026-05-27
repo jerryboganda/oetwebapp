@@ -54,6 +54,26 @@ export interface TechReadinessResult {
   durationMs: number;
   checkedAt: string;
   ttlMs: number;
+  // 2026-05-27 audit fix — Listening rule L-R10.3 wired-audio gate.
+  audioOutputDeviceLabel?: string | null;
+  audioInputDeviceLabel?: string | null;
+  bluetoothAudioDetected?: boolean;
+  resolutionMeetsMinimum?: boolean;
+  displayScaleAcceptable?: boolean;
+}
+
+export interface TechReadinessProbe {
+  audioOk: boolean;
+  durationMs: number;
+  /** Output device label from navigator.mediaDevices.enumerateDevices(); used to detect Bluetooth. */
+  audioOutputDeviceLabel?: string | null;
+  /** Input device label (microphone). */
+  audioInputDeviceLabel?: string | null;
+  /** Screen.width / Screen.height — checked against the 1920×1080 minimum. */
+  screenWidth?: number | null;
+  screenHeight?: number | null;
+  /** window.devicePixelRatio * 100 (a coarse proxy for Windows display scale). */
+  displayScalePercent?: number | null;
 }
 
 export interface ListeningGradingResult {
@@ -102,7 +122,7 @@ export const listeningV2Api = {
       { answers: answers ?? {} },
     );
   },
-  recordTechReadiness(attemptId: string, result: { audioOk: boolean; durationMs: number }) {
+  recordTechReadiness(attemptId: string, result: TechReadinessProbe) {
     return apiClient.post<TechReadinessResult>(
       `/v1/listening/v2/attempts/${encodeURIComponent(attemptId)}/tech-readiness`,
       result,

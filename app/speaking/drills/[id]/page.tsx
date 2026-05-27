@@ -16,6 +16,7 @@ import {
   type DrillScoringResponse,
   type DrillSummary,
 } from '@/lib/api/speaking-drills';
+import { trackSpeaking } from '@/lib/analytics/speaking-events';
 
 export default function SpeakingDrillPlayerPage() {
   const params = useParams<{ id: string }>();
@@ -45,6 +46,10 @@ export default function SpeakingDrillPlayerPage() {
         }
         const createdAttempt = await startDrillAttempt(selected.drillId || drillId, 'ManualBrowse');
         if (cancelled) return;
+        trackSpeaking('drill_started', {
+          drillId: selected.drillId || drillId,
+          criterion: selected.targetCriteria[0] ?? 'general',
+        });
         setDrill(selected);
         setAttempt(createdAttempt);
       } catch (err) {
@@ -87,7 +92,13 @@ export default function SpeakingDrillPlayerPage() {
             <DrillPlayer
               drill={drill}
               attemptId={attempt.attemptId}
-              onComplete={setFeedback}
+              onComplete={(scored) => {
+                trackSpeaking('drill_scored', {
+                  drillId: drill.drillId || drill.id,
+                  score: scored.score,
+                });
+                setFeedback(scored);
+              }}
             />
           </>
         ) : (

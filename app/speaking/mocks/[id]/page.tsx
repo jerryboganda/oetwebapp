@@ -15,7 +15,7 @@
 // returned by GET /v1/speaking/mock-sessions/{id}, so a refresh in the
 // middle of either role-play will resume cleanly.
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { LearnerDashboardShell } from '@/components/layout';
@@ -32,6 +32,7 @@ import {
   type SpeakingMockSession,
 } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
+import { trackSpeaking } from '@/lib/analytics/speaking-events';
 
 type Props = {
   params: Promise<{ id: string }>;
@@ -79,6 +80,8 @@ export default function SpeakingMockSetOrchestratorPage({ params }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [bridgeAck, setBridgeAck] = useState(false);
   const [bridgeSyncing, setBridgeSyncing] = useState(false);
+  const trackedBridgeForRef = useRef<string | null>(null);
+  const trackedAggregateForRef = useRef<string | null>(null);
 
   useEffect(() => {
     void params.then(({ id }) => setMockSetId(id));
@@ -127,6 +130,21 @@ export default function SpeakingMockSetOrchestratorPage({ params }: Props) {
   const bridgeSessionId = stage === 'bridge' ? session?.mockSessionId : null;
 
   useEffect(() => {
+    if (!session || stage !== 'bridge' || trackedBridgeForRef.current === session.mockSessionId) return;
+    trackedBridgeForRef.current = session.mockSessionId;
+    trackSpeaking('mock_bridge_viewed', { mockSetId: session.mockSetId });
+  }, [session, stage]);
+
+  useEffect(() => {
+    if (!session || stage !== 'results' || trackedAggregateForRef.current === session.mockSessionId) return;
+    trackedAggregateForRef.current = session.mockSessionId;
+    trackSpeaking('mock_aggregated', {
+      mockSetId: session.mockSetId,
+      estimatedBand: session.combined.readinessBandLabel,
+    });
+  }, [session, stage]);
+
+  useEffect(() => {
     if (!bridgeSessionId) return;
     let active = true;
     void startSpeakingMockBridge(bridgeSessionId)
@@ -148,6 +166,7 @@ export default function SpeakingMockSetOrchestratorPage({ params }: Props) {
         mockSetId,
         sessionId: started.mockSessionId,
       });
+      trackSpeaking('mock_started', { mockSetId });
       router.replace(`/speaking/mocks/${mockSetId}?session=${started.mockSessionId}`);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Could not start the mock set.');

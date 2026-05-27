@@ -478,6 +478,15 @@ public class ListeningAttempt
     /// question edits never silently invalidate the in-flight attempt.</summary>
     public string? LastQuestionVersionMapJson { get; set; }
 
+    /// <summary>
+    /// 2026-05-27 audit fix — rulebook version pinning. Captured at attempt
+    /// start (from the listening-exam-mode rulebook). Lets post-hoc audit
+    /// determine which exam-UX rules applied to a graded attempt, even after
+    /// the rulebook is bumped to a new version.
+    /// </summary>
+    [MaxLength(32)]
+    public string? RulebookVersion { get; set; }
+
     public ICollection<ListeningAnswer> Answers { get; set; } = new List<ListeningAnswer>();
 }
 

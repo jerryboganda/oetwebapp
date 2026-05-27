@@ -9,7 +9,7 @@ import { LearnerDashboardShell } from '@/components/layout';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { analytics } from '@/lib/analytics';
+import { trackSpeaking } from '@/lib/analytics/speaking-events';
 import { InlineAlert } from '@/components/ui/alert';
 import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
 import {
@@ -64,7 +64,7 @@ export default function SpeakingHome() {
 
   useEffect(() => {
     if (authLoading || needsProfession) return;
-    analytics.track('module_entry', { module: 'speaking' });
+    trackSpeaking('module_entry', { from: 'speaking_home' });
     Promise.all([fetchSpeakingHome(), fetchSubmissions(), fetchMockReports(), learnerListSpeakingSharedResources()])
       .then(([speakingHome, allSubmissions, reports, resources]) => {
         setHome(speakingHome);

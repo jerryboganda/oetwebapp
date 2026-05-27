@@ -192,10 +192,58 @@ public sealed class ListeningSessionService
 
         var policy = await ResolveEffectivePolicyAsync(userId, ct);
         var now = _clock.GetUtcNow();
+
+        // 2026-05-27 audit fix — enforce Listening rules L-R10.1/R10.2/R10.3
+        // BEFORE persisting readiness. Exam and home modes reject Bluetooth
+        // audio devices, sub-1920×1080 resolution, and >125% display scale.
+        var modePolicy = _modes.For(attempt.Mode);
+        // OneWayLocks is true for exam + home + at-home strict modes — the
+        // exact set the device gate must enforce. Learning / Practice modes
+        // have OneWayLocks=false, which lets them iterate without device gates.
+        var enforceDeviceGates = modePolicy.OneWayLocks;
+        var outputBluetooth = TechReadinessAudioPolicy.LabelLooksBluetooth(cmd.AudioOutputDeviceLabel);
+        var inputBluetooth = TechReadinessAudioPolicy.LabelLooksBluetooth(cmd.AudioInputDeviceLabel);
+        var bluetoothDetected = outputBluetooth || inputBluetooth;
+
+        var resolutionOk = cmd.ScreenWidth is null
+            || cmd.ScreenHeight is null
+            || (cmd.ScreenWidth >= TechReadinessAudioPolicy.MinScreenWidth
+                && cmd.ScreenHeight >= TechReadinessAudioPolicy.MinScreenHeight);
+        var scaleOk = cmd.DisplayScalePercent is null
+            || cmd.DisplayScalePercent <= TechReadinessAudioPolicy.MaxDisplayScalePercent;
+
+        if (enforceDeviceGates)
+        {
+            if (bluetoothDetected)
+            {
+                throw new InvalidOperationException(
+                    "Listening rule L-R10.3 — wired headset or earphones required. " +
+                    $"A Bluetooth/wireless audio device was detected ({cmd.AudioOutputDeviceLabel ?? cmd.AudioInputDeviceLabel}). " +
+                    "Disconnect the wireless device and connect a wired one before continuing.");
+            }
+            if (!resolutionOk)
+            {
+                throw new InvalidOperationException(
+                    "Listening rule L-R10.1 — minimum screen resolution is 1920×1080. " +
+                    $"Detected {cmd.ScreenWidth}×{cmd.ScreenHeight}. Adjust your display before continuing.");
+            }
+            if (!scaleOk)
+            {
+                throw new InvalidOperationException(
+                    "Listening rule L-R10.2 — display scale must be 100% or at most 125%. " +
+                    $"Detected {cmd.DisplayScalePercent}%. Reduce your display scale before continuing.");
+            }
+        }
+
         var snapshot = new TechReadinessSnapshot(
             AudioOk: cmd.AudioOk,
             DurationMs: cmd.DurationMs,
-            CheckedAt: now);
+            CheckedAt: now,
+            AudioOutputDeviceLabel: cmd.AudioOutputDeviceLabel,
+            AudioInputDeviceLabel: cmd.AudioInputDeviceLabel,
+            ScreenWidth: cmd.ScreenWidth,
+            ScreenHeight: cmd.ScreenHeight,
+            DisplayScalePercent: cmd.DisplayScalePercent);
 
         attempt.TechReadinessJson = JsonSerializer.Serialize(snapshot, JsonOptions);
         attempt.LastActivityAt = now;
@@ -209,7 +257,16 @@ public sealed class ListeningSessionService
             Action = "listening.session.tech_readiness_recorded",
             ResourceType = "ListeningAttempt",
             ResourceId = attemptId,
-            Details = JsonSerializer.Serialize(new { audioOk = cmd.AudioOk, durationMs = cmd.DurationMs }),
+            Details = JsonSerializer.Serialize(new
+            {
+                audioOk = cmd.AudioOk,
+                durationMs = cmd.DurationMs,
+                outputDevice = cmd.AudioOutputDeviceLabel,
+                inputDevice = cmd.AudioInputDeviceLabel,
+                bluetoothDetected,
+                resolutionOk,
+                scaleOk,
+            }),
         });
 
         await _db.SaveChangesAsync(ct);
@@ -218,7 +275,12 @@ public sealed class ListeningSessionService
             AudioOk: snapshot.AudioOk,
             DurationMs: snapshot.DurationMs,
             CheckedAt: snapshot.CheckedAt,
-            TtlMs: policy.TechReadinessTtlMs);
+            TtlMs: policy.TechReadinessTtlMs,
+            AudioOutputDeviceLabel: snapshot.AudioOutputDeviceLabel,
+            AudioInputDeviceLabel: snapshot.AudioInputDeviceLabel,
+            BluetoothAudioDetected: bluetoothDetected,
+            ResolutionMeetsMinimum: resolutionOk,
+            DisplayScaleAcceptable: scaleOk);
     }
 
     public async Task<AudioResumeDto> AudioResumeAsync(
@@ -495,11 +557,63 @@ public sealed record NavigationState(string State, string[] Locks);
 
 public sealed record AdvanceCommand(string ToState, string? ConfirmToken);
 
-public sealed record TechReadinessCommand(bool AudioOk, int DurationMs);
+public sealed record TechReadinessCommand(
+    bool AudioOk,
+    int DurationMs,
+    // 2026-05-27 audit fix — Listening rule L-R10.3 (wired headset required).
+    // The client enumerates `navigator.mediaDevices` and reports the label of
+    // the active output device. Bluetooth / wireless devices are detected by
+    // matching the label against `BluetoothDeviceLabelPattern` and the request
+    // is rejected when the attempt is in exam or home mode.
+    string? AudioOutputDeviceLabel = null,
+    string? AudioInputDeviceLabel = null,
+    int? ScreenWidth = null,
+    int? ScreenHeight = null,
+    int? DisplayScalePercent = null);
 
-public sealed record TechReadinessSnapshot(bool AudioOk, int DurationMs, DateTimeOffset CheckedAt);
+public sealed record TechReadinessSnapshot(
+    bool AudioOk,
+    int DurationMs,
+    DateTimeOffset CheckedAt,
+    string? AudioOutputDeviceLabel = null,
+    string? AudioInputDeviceLabel = null,
+    int? ScreenWidth = null,
+    int? ScreenHeight = null,
+    int? DisplayScalePercent = null);
 
-public sealed record TechReadinessDto(bool AudioOk, int DurationMs, DateTimeOffset CheckedAt, int TtlMs);
+public sealed record TechReadinessDto(
+    bool AudioOk,
+    int DurationMs,
+    DateTimeOffset CheckedAt,
+    int TtlMs,
+    string? AudioOutputDeviceLabel = null,
+    string? AudioInputDeviceLabel = null,
+    bool BluetoothAudioDetected = false,
+    bool ResolutionMeetsMinimum = true,
+    bool DisplayScaleAcceptable = true);
+
+/// <summary>
+/// Configuration for the audio-device gate. Centralised so a single edit
+/// updates both `RecordTechReadinessAsync` and the contract tests.
+/// </summary>
+public static class TechReadinessAudioPolicy
+{
+    public const int MinScreenWidth = 1920;
+    public const int MinScreenHeight = 1080;
+    public const int MaxDisplayScalePercent = 125;
+
+    /// <summary>
+    /// Case-insensitive regex applied to `audioOutputDeviceLabel` /
+    /// `audioInputDeviceLabel`. Matches well-known Bluetooth / wireless
+    /// device labels that are forbidden in exam and home mode.
+    /// </summary>
+    public static readonly System.Text.RegularExpressions.Regex BluetoothDeviceLabelPattern =
+        new(@"\b(bluetooth|airpods|beats|wireless|sony wf|sony wh|jabra|bose qc)\b",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Compiled);
+
+    public static bool LabelLooksBluetooth(string? label)
+        => !string.IsNullOrWhiteSpace(label) && BluetoothDeviceLabelPattern.IsMatch(label!);
+}
 
 public sealed record SessionStateDto(
     string AttemptId, string Mode, string State, string[] Locks,

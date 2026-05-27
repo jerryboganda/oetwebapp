@@ -54,6 +54,7 @@ public sealed record EffectiveSettings(
     ZoomSettings Zoom,
     StripeSettings Stripe,
     LiveClassSettings LiveClasses,
+    SpeakingWhisperSettings SpeakingWhisper,
     string? UpdatedByUserId,
     string? UpdatedByUserName,
     DateTimeOffset? UpdatedAt);
@@ -159,3 +160,15 @@ public sealed record StripeSettings(
 /// </summary>
 public sealed record LiveClassSettings(
     bool AiRecordingProcessingEnabled);
+
+/// <summary>
+/// 2026-05-28 audit fix — Speaking Whisper transcription overrides. Lets an
+/// admin rotate the OpenAI API key from the admin UI without an app restart.
+/// Decrypted by the provider — callers see plain values. When no DB override
+/// is set, falls back to `Speaking:Whisper:*` in appsettings.
+/// </summary>
+public sealed record SpeakingWhisperSettings(
+    string? ApiKey,
+    string BaseUrl,
+    string Model,
+    bool IsConfigured);

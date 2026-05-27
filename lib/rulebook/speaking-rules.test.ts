@@ -217,4 +217,74 @@ describe('speaking audit — BBN protocol (RULE_41–47) for breaking_bad_news c
     const bbnFindings = findings.filter((f) => /RULE_4[1-7]/.test(f.ruleId));
     expect(bbnFindings.length).toBe(0);
   });
+
+  it('flags an out-of-order BBN sequence: diagnosis delivered before warning shots', () => {
+    const findings = auditSpeakingTranscript(
+      baseInput({
+        cardType: 'breaking_bad_news',
+        silenceAfterDiagnosisMs: 4000,
+        transcript: [
+          turn('candidate', "Before we discuss your results, is there anyone you'd like to have here with you?"),
+          turn('patient', 'My partner is outside.'),
+          // Diagnosis (step 3) BEFORE warning shots (step 2) — violation.
+          turn('candidate', 'I am very sorry to tell you — the results are showing signs of cancer.'),
+          turn('candidate', "I'm afraid the results are not quite what we had hoped for."),
+          turn('patient', '…'),
+          turn('candidate', 'I know this is a lot to take in.'),
+          turn('candidate', 'There is hope — we caught this at an early stage.'),
+          turn('candidate', 'I am here for you, my number is available whenever you need anything.'),
+        ],
+      }),
+    );
+    // RULE_43 (step 3) must fire an ORDER violation, not just a missing finding.
+    const r43 = findings.filter((f) => f.ruleId === 'RULE_43');
+    expect(r43.length).toBeGreaterThan(0);
+    expect(r43.some((f) => /order violation/i.test(f.message))).toBe(true);
+  });
+
+  it('flags an out-of-order BBN sequence: hope-and-next-steps before responding to emotion', () => {
+    const findings = auditSpeakingTranscript(
+      baseInput({
+        cardType: 'breaking_bad_news',
+        silenceAfterDiagnosisMs: 4000,
+        transcript: [
+          turn('candidate', "Before we discuss your results, is there anyone you'd like to have here with you?"),
+          turn('candidate', "I'm afraid the results are not quite what we had hoped for."),
+          turn('candidate', 'I am very sorry to tell you — the results are showing signs of cancer.'),
+          turn('patient', '…'),
+          // Step 6 (hope + next steps) BEFORE step 5 (respond to emotion) — violation.
+          turn('candidate', 'There are effective treatment options available, and we caught this at an early stage.'),
+          turn('candidate', 'I know this is a lot to take in. Please take all the time you need.'),
+          turn('candidate', 'I am here for you whenever you need anything.'),
+        ],
+      }),
+    );
+    const r46 = findings.filter((f) => f.ruleId === 'RULE_46');
+    expect(r46.some((f) => /order violation/i.test(f.message))).toBe(true);
+  });
+
+  it('does NOT flag an order violation when an earlier required step is missing — the missing rule handles it', () => {
+    const findings = auditSpeakingTranscript(
+      baseInput({
+        cardType: 'breaking_bad_news',
+        silenceAfterDiagnosisMs: 4000,
+        transcript: [
+          // No support-system ask (step 1 missing entirely).
+          turn('candidate', "I'm afraid the results are not quite what we had hoped for."),
+          turn('candidate', 'I am very sorry to tell you — the results are showing signs of cancer.'),
+          turn('patient', '…'),
+          turn('candidate', 'I know this is a lot to take in.'),
+          turn('candidate', 'There is hope — we caught this at an early stage.'),
+          turn('candidate', 'I am here for you, my number is available whenever you need anything.'),
+        ],
+      }),
+    );
+    // RULE_41 must fire as "not detected", but RULE_42/43/etc. must NOT have an
+    // order-violation finding caused by the missing step 1.
+    expect(findings.some((f) => f.ruleId === 'RULE_41' && /not detected/i.test(f.message))).toBe(true);
+    const orderViolationsBecauseOfStep1 = findings.filter(
+      (f) => /Step 1.*support system/i.test(f.message) && /order violation/i.test(f.message),
+    );
+    expect(orderViolationsBecauseOfStep1.length).toBe(0);
+  });
 });

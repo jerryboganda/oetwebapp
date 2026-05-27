@@ -14,6 +14,18 @@
 
 import { loadRulebook, rulesApplicableTo } from './loader';
 import type { LintFinding, Rule, WritingLintInput } from './types';
+import conditionListJson from '../../rulebooks/writing/common/condition-list.json';
+
+/**
+ * R12.5 — lowercase medical conditions. Loaded from
+ * `rulebooks/writing/common/condition-list.json` so authors can extend the
+ * list without editing TypeScript.
+ */
+const LOWERCASE_CONDITION_LIST: readonly string[] = Object.freeze(
+  ((conditionListJson as { lowercaseConditions?: string[] }).lowercaseConditions ?? []).filter(
+    (term) => typeof term === 'string' && term.length > 0,
+  ),
+);
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -255,8 +267,23 @@ const DETECTORS: Record<string, Detector> = {
       .filter((line) => line.trim().length > 0);
     const findings: LintFinding[] = [];
     for (const line of addressLines) {
-      if (/[,.]$/.test(line.trim())) {
-        findings.push(ruleFinding(rule, `Address line contains punctuation: "${line.trim()}". No commas or full stops in the address.`));
+      const trimmed = line.trim();
+      // R05.2 — no commas or full stops in the address.
+      if (/[,.]$/.test(trimmed)) {
+        findings.push(ruleFinding(rule, `Address line contains punctuation: "${trimmed}". No commas or full stops in the address.`));
+      }
+      // R05.2 — first letter of each component must be a CAPITAL.
+      // Skip lines that start with a digit (street numbers like "12 King Street"
+      // are typeset with the digit first — the capitalisation check is
+      // satisfied by the first ALPHABETIC token in the line).
+      const firstAlpha = trimmed.match(/[A-Za-z]/);
+      if (firstAlpha && firstAlpha[0] === firstAlpha[0].toLowerCase()) {
+        findings.push(
+          ruleFinding(
+            rule,
+            `Address line "${trimmed}" does not start with a capital letter. The first letter of each address component must be CAPITAL (R05.2).`,
+          ),
+        );
       }
     }
     return findings;
@@ -591,12 +618,19 @@ const DETECTORS: Record<string, Detector> = {
     return findings;
   },
 
-  // R12.5 — medical conditions lowercase (sample common ones)
+  // R12.5 — medical conditions lowercase. Term list is loaded from
+  // rulebooks/writing/common/condition-list.json (~100 entries) so authors
+  // can extend the list without editing TypeScript.
   conditions_lowercase(rule, _input, structure) {
-    const forbidden = ['Hypertension', 'Asthma', 'Diabetes Mellitus', 'Gastroenteritis', 'Bronchial Asthma', 'Myocardial Infarction'];
     const findings: LintFinding[] = [];
-    for (const term of forbidden) {
-      const re = new RegExp(`(?<![A-Za-z])${term}(?![a-z])`, 'g');
+    for (const term of LOWERCASE_CONDITION_LIST) {
+      // We're looking for the term in title-case ("Hypertension") in the body —
+      // i.e. with an uppercase first letter that wouldn't be word-initial.
+      const titleCase = term.replace(/\b([a-z])/g, (m) => m.toUpperCase());
+      if (titleCase === term) continue; // not capitalisable
+      // Escape regex special chars in `titleCase` so terms like "type 2 diabetes" don't blow up.
+      const escaped = titleCase.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const re = new RegExp(`(?<![A-Za-z])${escaped}(?![a-z])`, 'g');
       const m = re.exec(structure.body);
       if (m) {
         findings.push(
@@ -607,6 +641,9 @@ const DETECTORS: Record<string, Detector> = {
             fixSuggestion: m[0].toLowerCase(),
           }),
         );
+        // Cap at 5 findings to keep the lint panel tractable — additional
+        // capitalisations of the same kind are usually obvious.
+        if (findings.length >= 5) break;
       }
     }
     return findings;
@@ -815,6 +852,141 @@ const DETECTORS: Record<string, Detector> = {
       return [ruleFinding(rule, "Do not abbreviate the year (write 2024, not '24).", { quote: m[0], start: m.index, end: m.index + m[0].length })];
     }
     return [];
+  },
+
+  // ----- 2026-05-27 audit fixes: 6 new CRITICAL detectors ----------------
+
+  // R01.5 — suspected cancer MUST trigger urgent referral.
+  //
+  // Reads `rule.params.cancerMarkers` (already defined in every profession
+  // rulebook) and scans both the letter body and the case-notes-derived flag
+  // `caseNotesMarkers.cancerSuspected`. When a marker is present, the letter
+  // type must be `urgent_referral`. Discharge / non-medical / GP-only letters
+  // are skipped (the urgency belongs to the referral path).
+  cancer_suspected_flagged_urgent(rule, input) {
+    if (input.letterType === 'discharge' || input.letterType === 'non_medical_referral') return [];
+    const params = (rule.params as { cancerMarkers?: string[] } | undefined) ?? {};
+    const markers = (params.cancerMarkers ?? []).map((m) => m.toLowerCase());
+    const hay = `${input.letterText} ${(input.diagnosisKeywords ?? []).join(' ')}`.toLowerCase();
+    const flagged = Boolean(input.caseNotesMarkers?.cancerSuspected) || markers.some((m) => hay.includes(m));
+    if (!flagged) return [];
+    if (input.letterType === 'urgent_referral') return [];
+    return [
+      ruleFinding(
+        rule,
+        'Suspected cancer in the case notes MUST be treated as an urgent referral — change the letter type to "urgent_referral", include the word "urgent" in the introduction, and close with "at your earliest convenience" (R01.5).',
+      ),
+    ];
+  },
+
+  // R08.3 — previous visits combined or summarised: do NOT give every visit
+  // its own paragraph. Requires `caseNotesMarkers.visitCount` to know how many
+  // visits the case notes contain. The intro paragraph is excluded from the
+  // count of "visit paragraphs". A 6-visit set written as 5 body paragraphs
+  // (1 intro + 4 visit paragraphs) is fine; 1 intro + 6 visit paragraphs is a
+  // violation.
+  visit_paragraphization_check(rule, input, structure) {
+    const visitCount = input.caseNotesMarkers?.visitCount;
+    if (!visitCount || visitCount < 3) return [];
+    // Strip the introduction paragraph (the first one). The remainder are
+    // visit / background paragraphs.
+    const visitParagraphs = structure.bodyParagraphs.slice(1).length;
+    if (visitParagraphs <= visitCount) return [];
+    return [
+      ruleFinding(
+        rule,
+        `Case notes contain ${visitCount} visits but the body has ${visitParagraphs} visit paragraphs. Combine or summarise previous visits — do not give every visit its own paragraph (R08.3).`,
+      ),
+    ];
+  },
+
+  // R10.2 — all visit content uses PAST SIMPLE. The safest tense for visit
+  // content is past simple; present perfect is allowed only when the symptom
+  // persists at time of writing. This detector flags present-perfect verbs
+  // attached to clinical actions that are typically completed events (presented,
+  // examined, prescribed, admitted, referred, advised, counselled, reviewed,
+  // commenced).
+  visit_content_tense_basic_check(rule, _input, structure) {
+    const body = structure.body;
+    if (!body) return [];
+    const findings: LintFinding[] = [];
+    const PRESENT_PERFECT_VERBS = [
+      'presented',
+      'examined',
+      'prescribed',
+      'admitted',
+      'referred',
+      'advised',
+      'counselled',
+      'reviewed',
+      'commenced',
+      'attended',
+    ];
+    // Match "has/have/had" + verb (limited to first 3 hits to avoid noise).
+    const re = new RegExp(`\\b(has|have|had)\\s+(?:been\\s+)?(${PRESENT_PERFECT_VERBS.join('|')})\\b`, 'gi');
+    let m: RegExpExecArray | null;
+    let hits = 0;
+    while ((m = re.exec(body))) {
+      findings.push(
+        ruleFinding(
+          rule,
+          `Visit content should use past simple. "${m[0]}" looks like present perfect — prefer "${m[2]}" (e.g. "presented", "was examined") unless the symptom still persists at time of writing (R10.2).`,
+          { quote: m[0], start: m.index, end: m.index + m[0].length },
+        ),
+      );
+      hits++;
+      if (hits >= 3) break;
+    }
+    return findings;
+  },
+
+  // R11.8 — numeric values MUST appear with their units. Scan for common
+  // investigation keywords (BP, glucose, HbA1c, temperature, weight, height,
+  // pulse) followed within ~20 chars by a bare number with no unit token.
+  numerical_values_have_units(rule, input) {
+    const KEYWORDS = ['glucose', 'hba1c', 'temperature', 'blood pressure', 'pulse', 'weight', 'height', 'BMI', 'haemoglobin', 'sodium', 'potassium', 'creatinine'];
+    const UNIT_RE = /(mmol\/l|mg\/dl|kg|g|cm|mm|mmHg|bpm|°c|celsius|mmol|%)/i;
+    const text = input.letterText;
+    const findings: LintFinding[] = [];
+    for (const kw of KEYWORDS) {
+      const kwRe = new RegExp(`\\b${kw}\\b[^.\\n]{0,30}`, 'gi');
+      let m: RegExpExecArray | null;
+      while ((m = kwRe.exec(text))) {
+        const snippet = m[0];
+        const hasNumber = /\d/.test(snippet);
+        const hasUnit = UNIT_RE.test(snippet);
+        if (hasNumber && !hasUnit) {
+          findings.push(
+            ruleFinding(
+              rule,
+              `Investigation value missing its unit: "${snippet.trim()}" — always include units (e.g. "glucose of 7.8 mmol/L") (R11.8).`,
+              { quote: snippet, start: m.index, end: m.index + snippet.length },
+            ),
+          );
+          if (findings.length >= 3) return findings;
+        }
+      }
+    }
+    return findings;
+  },
+
+  // R14.9 — ALL admission investigations (including normal results) must be
+  // listed in the discharge letter. Requires `caseNotesMarkers.investigationsPerformed`
+  // to know what should appear. We do a case-insensitive substring match per
+  // investigation name in the body.
+  discharge_all_investigations_listed(rule, input) {
+    if (input.letterType !== 'discharge') return [];
+    const investigations = input.caseNotesMarkers?.investigationsPerformed ?? [];
+    if (investigations.length === 0) return [];
+    const body = input.letterText.toLowerCase();
+    const missing = investigations.filter((inv) => !body.includes(inv.name.toLowerCase())).map((inv) => inv.name);
+    if (missing.length === 0) return [];
+    return [
+      ruleFinding(
+        rule,
+        `Discharge letter is missing ${missing.length} investigation${missing.length === 1 ? '' : 's'} performed during admission: ${missing.join(', ')}. ALL investigations (including normal results) MUST be listed with values (R14.9).`,
+      ),
+    ];
   },
 };
 

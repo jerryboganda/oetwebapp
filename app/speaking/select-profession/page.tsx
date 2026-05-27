@@ -9,6 +9,7 @@ import { InlineAlert } from '@/components/ui/alert';
 import { useAuth } from '@/contexts/auth-context';
 import { useProfessions } from '@/lib/hooks/use-professions';
 import { setActiveProfession } from '@/lib/api';
+import { trackSpeaking } from '@/lib/analytics/speaking-events';
 
 export default function SelectSpeakingProfessionPage() {
   const router = useRouter();
@@ -31,6 +32,7 @@ export default function SelectSpeakingProfessionPage() {
     try {
       await setActiveProfession(selected);
       await refreshSession();
+      trackSpeaking('profession_set', { professionId: selected });
       router.replace('/speaking');
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Could not save your profession. Please try again.';

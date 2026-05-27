@@ -83,6 +83,7 @@ public static class AdminRuntimeSettingsEndpoints
                     ApplyUploadScanner(row, request.UploadScanner, env, scannerOptions.Value, changedKeys);
                     ApplyZoom(row, request.Zoom, provider, env, changedKeys);
                     ApplyStripe(row, request.Stripe, provider, changedKeys);
+                    ApplySpeakingWhisper(row, request.SpeakingWhisper, provider, changedKeys);
                 }
                 catch (RuntimeSettingsValidationException ex)
                 {
@@ -258,6 +259,16 @@ public static class AdminRuntimeSettingsEndpoints
                 radarHighRiskCountryAllowReview = settings.Stripe.RadarHighRiskCountryAllowReview,
                 radarBlockEmailDomainsCsv = settings.Stripe.RadarBlockEmailDomainsCsv,
             },
+            // 2026-05-28 audit fix — Whisper transcription API key for the
+            // Speaking module's RULE_40 tone pipeline. Plaintext never leaves
+            // the host process; the apiKey is always masked.
+            speakingWhisper = new
+            {
+                apiKey = MaskPlainSecret(settings.SpeakingWhisper.ApiKey),
+                baseUrl = settings.SpeakingWhisper.BaseUrl,
+                model = settings.SpeakingWhisper.Model,
+                isConfigured = settings.SpeakingWhisper.IsConfigured,
+            },
             updatedBy = settings.UpdatedByUserName,
             updatedByUserId = settings.UpdatedByUserId,
             updatedAt = settings.UpdatedAt,
@@ -363,6 +374,13 @@ public static class AdminRuntimeSettingsEndpoints
                 customerPortalConfigurationId = r.StripeCustomerPortalConfigurationId,
                 radarHighRiskCountryAllowReview = r.StripeRadarHighRiskCountryAllowReview,
                 radarBlockEmailDomainsCsv = r.StripeRadarBlockEmailDomainsCsv,
+            },
+            speakingWhisper = new
+            {
+                apiKey = MaskSecret(r.SpeakingWhisperApiKeyEncrypted),
+                baseUrl = r.SpeakingWhisperBaseUrl,
+                model = r.SpeakingWhisperModel,
+                isConfigured = !string.IsNullOrEmpty(r.SpeakingWhisperApiKeyEncrypted),
             },
             updatedBy = r.UpdatedByUserName,
             updatedByUserId = r.UpdatedByUserId,
@@ -551,6 +569,20 @@ public static class AdminRuntimeSettingsEndpoints
             "stripe.radarHighRiskCountryAllowReview", changed)) { }
         if (TrySetPlain(d.RadarBlockEmailDomainsCsv, v => row.StripeRadarBlockEmailDomainsCsv = v,
             "stripe.radarBlockEmailDomainsCsv", changed)) { }
+    }
+
+    /// <summary>
+    /// 2026-05-28 audit fix — apply Speaking Whisper transcription overrides
+    /// (RULE_40 tone pipeline). Mirrors the Stripe pattern: encrypted secret +
+    /// plain config knobs.
+    /// </summary>
+    private static void ApplySpeakingWhisper(RuntimeSettingsRow row, RuntimeSettingsSpeakingWhisperUpdate? d,
+        IRuntimeSettingsProvider p, List<string> changed)
+    {
+        if (d is null) return;
+        if (TrySetSecret(d.ApiKey, p, v => row.SpeakingWhisperApiKeyEncrypted = v, "speakingWhisper.apiKey", changed)) { }
+        if (TrySetPlain(d.BaseUrl, v => row.SpeakingWhisperBaseUrl = v, "speakingWhisper.baseUrl", changed)) { }
+        if (TrySetPlain(d.Model, v => row.SpeakingWhisperModel = v, "speakingWhisper.model", changed)) { }
     }
 
     private static void ApplyZoom(RuntimeSettingsRow row, RuntimeSettingsZoomUpdate? d,
@@ -846,6 +878,16 @@ public sealed class RuntimeSettingsUpdateRequest
     public RuntimeSettingsUploadScannerUpdate? UploadScanner { get; set; }
     public RuntimeSettingsZoomUpdate? Zoom { get; set; }
     public RuntimeSettingsStripeUpdate? Stripe { get; set; }
+    public RuntimeSettingsSpeakingWhisperUpdate? SpeakingWhisper { get; set; }
+}
+
+/// <summary>2026-05-28 audit fix — Speaking Whisper transcription overrides.</summary>
+public sealed class RuntimeSettingsSpeakingWhisperUpdate
+{
+    /// <summary>OpenAI API key (plaintext on input; stored encrypted). "********" sentinel leaves unchanged; empty string clears.</summary>
+    public string? ApiKey { get; set; }
+    public string? BaseUrl { get; set; }
+    public string? Model { get; set; }
 }
 
 public sealed class RuntimeSettingsEmailUpdate

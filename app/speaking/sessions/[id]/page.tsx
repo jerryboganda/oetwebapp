@@ -32,6 +32,7 @@ import {
   type SpeakingSessionMode,
 } from '@/lib/api/speaking-sessions';
 import { ApiError } from '@/lib/api';
+import { trackSpeaking } from '@/lib/analytics/speaking-events';
 
 const ROLE_PLAY_HARD_LIMIT_SECONDS = 5 * 60;
 
@@ -111,6 +112,9 @@ export default function SpeakingSessionRecordingPage() {
   const hubRef = useRef<ConversationHubBridge | null>(null);
   const endedRef = useRef(false);
   const audioCleanupRef = useRef<(() => void) | null>(null);
+  const roleplayStartedAtRef = useRef<number | null>(null);
+  const trackedRoleplayStartRef = useRef(false);
+  const trackedTimeWarningRef = useRef(false);
 
   // ── Load session ─────────────────────────────────────────────────────────
   useEffect(() => {
@@ -135,6 +139,9 @@ export default function SpeakingSessionRecordingPage() {
             Math.floor((new Date(s.rolePlayEndsAt).getTime() - Date.now()) / 1000),
           );
           setSecondsLeft(Math.min(ROLE_PLAY_HARD_LIMIT_SECONDS, remaining || ROLE_PLAY_HARD_LIMIT_SECONDS));
+        }
+        if (s.rolePlayStartedAt) {
+          roleplayStartedAtRef.current = new Date(s.rolePlayStartedAt).getTime();
         }
       })
       .catch((err: unknown) => {
@@ -179,7 +186,17 @@ export default function SpeakingSessionRecordingPage() {
       });
       try {
         await hub.start(session.sessionId);
-        if (!cancelled) setHubReady(true);
+        if (!cancelled) {
+          roleplayStartedAtRef.current ??= Date.now();
+          if (!trackedRoleplayStartRef.current) {
+            trackedRoleplayStartRef.current = true;
+            trackSpeaking('roleplay_started', {
+              sessionId: session.sessionId,
+              cardId: session.card.cardId,
+            });
+          }
+          setHubReady(true);
+        }
       } catch (err) {
         if (cancelled) return;
         const msg = err instanceof Error ? err.message : 'Could not start the AI partner.';
@@ -194,7 +211,7 @@ export default function SpeakingSessionRecordingPage() {
   }, [consentAccepted, session]);
 
   // ── Local 5-min hard timer ───────────────────────────────────────────────
-  const handleFinalize = useCallback(async () => {
+  const handleFinalize = useCallback(async (reason: 'manual' | 'timer' = 'manual') => {
     if (!session || endedRef.current) return;
     endedRef.current = true;
     setEnding(true);
@@ -210,6 +227,15 @@ export default function SpeakingSessionRecordingPage() {
           // Scoring kickoff is best-effort; results page will retry.
         }
       }
+      const startedAt = roleplayStartedAtRef.current;
+      const durationSeconds = startedAt
+        ? Math.max(0, Math.floor((Date.now() - startedAt) / 1000))
+        : ROLE_PLAY_HARD_LIMIT_SECONDS;
+      trackSpeaking('roleplay_ended', {
+        sessionId: session.sessionId,
+        durationSeconds,
+        reason,
+      });
       router.push(`/speaking/sessions/${session.sessionId}/results`);
     } catch (err) {
       const msg =
@@ -232,9 +258,16 @@ export default function SpeakingSessionRecordingPage() {
       const elapsed = Math.floor((Date.now() - start) / 1000);
       const remaining = Math.max(0, baseRemaining - elapsed);
       setSecondsLeft(remaining);
+      if (remaining <= 30 && !trackedTimeWarningRef.current) {
+        trackedTimeWarningRef.current = true;
+        trackSpeaking('roleplay_time_nearly_up', {
+          sessionId: session.sessionId,
+          secondsLeft: remaining,
+        });
+      }
       if (remaining <= 0) {
         window.clearInterval(id);
-        if (!endedRef.current) void handleFinalize();
+        if (!endedRef.current) void handleFinalize('timer');
       }
     }, 500);
     return () => {
@@ -369,7 +402,7 @@ export default function SpeakingSessionRecordingPage() {
             type="button"
             variant="destructive"
             size="md"
-            onClick={() => void handleFinalize()}
+            onClick={() => void handleFinalize('manual')}
             disabled={ending}
             data-testid="speaking-session-end-early"
           >

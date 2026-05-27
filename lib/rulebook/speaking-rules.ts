@@ -145,13 +145,22 @@ const DETECTORS: Record<string, Detector> = {
     return findings;
   },
 
-  // RULE_41–47 — Breaking Bad News protocol step order
+  // RULE_41–47 — Breaking Bad News protocol step presence AND order.
+  //
+  // Two findings shapes:
+  //   (a) Missing step (existing behaviour): the marker for THIS step never appears.
+  //   (b) Out-of-order (new in 2026-05-27 audit fix): the candidate delivered
+  //       THIS step before an earlier required step. We flag from the later
+  //       step's detector run so each ordering violation is reported once.
+  //
+  // Step 4 ("silence 3–4s") is enforced by `speaking_bbn_silence` because it
+  // is an acoustic measurement, not a text marker — and is therefore excluded
+  // from the order check's required-predecessors set.
   speaking_bbn_protocol_order(rule, input) {
     if (input.cardType !== 'breaking_bad_news') return [];
     const params = (rule.params as { step?: number } | undefined) ?? {};
     const step = params.step ?? 0;
     const turns = candidateTurns(input.transcript);
-    const text = turns.map((t) => t.text.toLowerCase());
 
     const markers: Record<number, RegExp> = {
       1: /(anyone you'd like to have here|someone with you|support system|partner or family with you)/i,
@@ -164,19 +173,49 @@ const DETECTORS: Record<string, Detector> = {
 
     const re = markers[step];
     if (!re) return [];
-    const found = text.some((t) => re.test(t));
-    if (!found) {
-      const stepName: Record<number, string> = {
-        1: 'Step 1 — ask about support system',
-        2: 'Step 2 — warning shots',
-        3: 'Step 3 — deliver the diagnosis',
-        5: 'Step 5 — respond to the emotional reaction',
-        6: 'Step 6 — give hope and next steps',
-        7: 'Step 7 — end with support system',
-      };
+
+    const stepName: Record<number, string> = {
+      1: 'Step 1 — ask about support system',
+      2: 'Step 2 — warning shots',
+      3: 'Step 3 — deliver the diagnosis',
+      5: 'Step 5 — respond to the emotional reaction',
+      6: 'Step 6 — give hope and next steps',
+      7: 'Step 7 — end with support system',
+    };
+
+    // Earliest candidate-turn index where each step's marker first appears.
+    // Returns Infinity when the step never appears.
+    const firstIndex = (pattern: RegExp): number => {
+      for (let i = 0; i < turns.length; i++) {
+        if (pattern.test(turns[i].text)) return i;
+      }
+      return Number.POSITIVE_INFINITY;
+    };
+
+    const myIndex = firstIndex(re);
+    if (myIndex === Number.POSITIVE_INFINITY) {
       return [finding(rule, `Breaking Bad News protocol: ${stepName[step] ?? 'step ' + step} not detected (${rule.id}).`)];
     }
-    return [];
+
+    // Order check — only steps strictly less than this one, defined in `markers`
+    // (step 4 is acoustic, so skipped).
+    const findings: LintFinding[] = [];
+    for (const earlierStepKey of Object.keys(markers)) {
+      const earlierStep = Number(earlierStepKey);
+      if (earlierStep >= step) continue;
+      const earlierPattern = markers[earlierStep]!;
+      const earlierIndex = firstIndex(earlierPattern);
+      if (earlierIndex === Number.POSITIVE_INFINITY) continue; // missing — its own rule flags it.
+      if (earlierIndex > myIndex) {
+        findings.push(
+          finding(
+            rule,
+            `Breaking Bad News protocol order violation: ${stepName[step] ?? 'step ' + step} appeared before ${stepName[earlierStep] ?? 'step ' + earlierStep}. The protocol requires steps 1 → 2 → 3 → 5 → 6 → 7 in order (${rule.id}).`,
+          ),
+        );
+      }
+    }
+    return findings;
   },
 
   // RULE_44 — measurable silence (needs audio timing)

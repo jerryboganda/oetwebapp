@@ -12,11 +12,23 @@
     },
     "kind": {
       "type": "string",
-      "enum": ["writing", "speaking", "grammar", "pronunciation"]
+      "enum": [
+        "writing",
+        "speaking",
+        "grammar",
+        "pronunciation",
+        "vocabulary",
+        "conversation",
+        "listening",
+        "reading",
+        "remediation",
+        "listening-exam-mode",
+        "reading-exam-mode"
+      ]
     },
     "profession": {
       "type": "string",
-      "enum": ["medicine", "nursing", "dentistry", "pharmacy", "physiotherapy", "veterinary", "optometry", "radiography", "occupational-therapy", "speech-pathology", "podiatry", "dietetics"]
+      "enum": ["medicine", "nursing", "dentistry", "pharmacy", "physiotherapy", "veterinary", "optometry", "radiography", "occupational-therapy", "speech-pathology", "podiatry", "dietetics", "other-allied-health"]
     },
     "publishedAt": { "type": "string", "format": "date-time" },
     "authoritySource": { "type": "string", "description": "Who authored / owns this content." },
@@ -66,6 +78,11 @@
           "type": "string",
           "enum": ["critical", "major", "minor", "info"],
           "description": "CRITICAL rules (auto-mark deduction per rulebook) must be severity 'critical'."
+        },
+        "enforcement": {
+          "type": "string",
+          "enum": ["deterministic", "ai-grounded", "human-review-only"],
+          "description": "How this rule is enforced. 'deterministic' = a checkId detector exists in the engine. 'ai-grounded' = the AI assessor is the sole enforcer (the rule body is fed into the prompt; no detector). 'human-review-only' = only a human tutor can score this rule. Omit when 'deterministic' (the default when a checkId is present)."
         },
         "appliesTo": {
           "description": "Which letter / card types this rule constrains. Use 'all' as a sentinel.",

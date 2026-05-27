@@ -127,6 +127,15 @@ public class SpeakingSession
     [MaxLength(32)]
     public string ConsentVersion { get; set; } = "recording.v1";
 
+    /// <summary>
+    /// 2026-05-27 audit fix — rulebook version pinning. Captured at session
+    /// start (from rulebooks/speaking/{profession}/rulebook.v1.json). Lets
+    /// post-hoc audit determine which Speaking rules applied to a graded
+    /// session, even after the rulebook is bumped to a new version.
+    /// </summary>
+    [MaxLength(32)]
+    public string? RulebookVersion { get; set; }
+
     public DateTimeOffset? ConsentAcceptedAt { get; set; }
 
     /// <summary>Paper-destruction acknowledgement timestamp for in-person

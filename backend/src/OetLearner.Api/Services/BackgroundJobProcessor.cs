@@ -11,12 +11,14 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
     private DateTimeOffset _lastAutoAssignAt = DateTimeOffset.MinValue;
     private DateTimeOffset _lastSlaCheckAt = DateTimeOffset.MinValue;
     private DateTimeOffset _lastReadinessRolloverAt = DateTimeOffset.MinValue;
+    private DateTimeOffset _lastSpeakingTranscriptionPollAt = DateTimeOffset.MinValue;
     private DateTimeOffset _lastBillingAbandonedCartSweepAt = DateTimeOffset.MinValue;
     private DateTimeOffset _lastBillingDunningRetryDispatchAt = DateTimeOffset.MinValue;
     private static readonly TimeSpan ReconciliationInterval = TimeSpan.FromHours(1);
     private static readonly TimeSpan ExpertAutoAssignInterval = TimeSpan.FromSeconds(30);
     private static readonly TimeSpan ExpertSlaCheckInterval = TimeSpan.FromSeconds(60);
     private static readonly TimeSpan ReadinessRolloverInterval = TimeSpan.FromHours(24);
+    private static readonly TimeSpan SpeakingTranscriptionPollInterval = TimeSpan.FromSeconds(10);
     /// <summary>How often to poll <c>DunningAttempts</c> for rows ready to retry.</summary>
     private static readonly TimeSpan BillingDunningRetryDispatchInterval = TimeSpan.FromMinutes(5);
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -189,6 +191,19 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
             }
         }
 
+        if (now - _lastSpeakingTranscriptionPollAt >= SpeakingTranscriptionPollInterval)
+        {
+            _lastSpeakingTranscriptionPollAt = now;
+            try
+            {
+                await RunSpeakingTranscriptionQueueAsync(scope.ServiceProvider, cancellationToken);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                logger.LogError(ex, "Speaking transcription queue poll failed");
+            }
+        }
+
         // ── Wave A5 — Billing recurring jobs ─────────────────────────
         // Dunning ladder dispatcher (every 5 min): claims due DunningAttempt
         // rows and enqueues per-attempt BillingDunningRetry jobs so the
@@ -219,6 +234,18 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
                 logger.LogError(ex, "Billing abandoned-cart sweep enqueue failed");
+            }
+        }
+    }
+
+    private static async Task RunSpeakingTranscriptionQueueAsync(IServiceProvider services, CancellationToken cancellationToken)
+    {
+        var pipeline = services.GetRequiredService<OetLearner.Api.Services.Speaking.SpeakingTranscriptionPipeline>();
+        for (var processed = 0; processed < 5; processed += 1)
+        {
+            if (!await pipeline.ProcessNextAsync(cancellationToken))
+            {
+                break;
             }
         }
     }

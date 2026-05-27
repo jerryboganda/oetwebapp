@@ -103,6 +103,17 @@ export interface ZoomSettings {
   allowSandboxFallback: boolean | null;
 }
 
+/**
+ * 2026-05-28 audit fix — Speaking Whisper transcription configuration.
+ * Drives the RULE_40 tone pipeline. apiKey is stored encrypted server-side.
+ */
+export interface SpeakingWhisperSettings {
+  apiKey: string;
+  baseUrl: string;
+  model: string;
+  isConfigured?: boolean | null;
+}
+
 export interface RuntimeSettingsResponse {
   email: EmailSettings;
   billing: BillingSettings;
@@ -112,6 +123,7 @@ export interface RuntimeSettingsResponse {
   push: PushSettings;
   uploadScanner: UploadScannerSettings;
   zoom: ZoomSettings;
+  speakingWhisper: SpeakingWhisperSettings;
   updatedBy: string | null;
   updatedByUserId?: string | null;
   updatedAt: string | null;
@@ -124,7 +136,7 @@ export interface RuntimeSettingsIntegrationTestResponse {
   testedAt: string;
 }
 
-type SectionId = 'email' | 'billing' | 'sentry' | 'backup' | 'oauth' | 'push' | 'uploadScanner' | 'zoom';
+type SectionId = 'email' | 'billing' | 'sentry' | 'backup' | 'oauth' | 'push' | 'uploadScanner' | 'zoom' | 'speakingWhisper';
 
 type ToastState = { variant: 'success' | 'error'; message: string } | null;
 type TestStatusState = Partial<Record<SectionId, RuntimeSettingsIntegrationTestResponse>>;
@@ -225,6 +237,12 @@ const ZOOM_FIELDS: FieldDef<ZoomSettings>[] = [
   { key: 'allowSandboxFallback', label: 'Allow sandbox fallback', type: 'checkbox', hint: 'Development-only fallback when Zoom API credentials are unavailable.' },
 ];
 
+const SPEAKING_WHISPER_FIELDS: FieldDef<SpeakingWhisperSettings>[] = [
+  { key: 'apiKey', label: 'OpenAI Whisper API Key', secret: true, hint: 'Used by the Speaking RULE_40 tone pipeline. Starts with sk-…' },
+  { key: 'baseUrl', label: 'Whisper API Base URL', type: 'url', hint: 'Default: https://api.openai.com/v1 — change only for self-hosted gateways.' },
+  { key: 'model', label: 'Whisper Model', hint: 'Default: whisper-1.' },
+];
+
 const SECTION_META: { id: SectionId; title: string; description: string }[] = [
   { id: 'email', title: 'Email (Brevo + SMTP)', description: 'Transactional email delivery via Brevo with SMTP fallback.' },
   { id: 'billing', title: 'Billing (Stripe)', description: 'Stripe Checkout, Customer Portal, and webhook signing.' },
@@ -234,6 +252,7 @@ const SECTION_META: { id: SectionId; title: string; description: string }[] = [
   { id: 'push', title: 'Push (Browser + APNs + FCM)', description: 'Browser VAPID and native mobile push notifications via Apple and Firebase.' },
   { id: 'uploadScanner', title: 'Upload Scanner (ClamAV)', description: 'Antivirus scanning for learner/admin uploads.' },
   { id: 'zoom', title: 'Zoom Live Classes', description: 'Server-to-server OAuth, Meeting SDK, and webhook verification.' },
+  { id: 'speakingWhisper', title: 'Speaking Whisper (RULE_40 tone)', description: 'OpenAI Whisper API key used by the Speaking tone-of-voice pipeline on Breaking Bad News cards. Falls back to the mock provider when unset.' },
 ];
 
 /* ───────────────────────── Helpers ───────────────────────── */
@@ -313,6 +332,12 @@ function emptyResponse(): RuntimeSettingsResponse {
       webhookRetryToleranceSeconds: null,
       allowSandboxFallback: null,
     },
+    speakingWhisper: {
+      apiKey: '',
+      baseUrl: '',
+      model: '',
+      isConfigured: false,
+    },
     updatedBy: null,
     updatedByUserId: null,
     updatedAt: null,
@@ -332,6 +357,7 @@ function normalizeResponse(data: Partial<RuntimeSettingsResponse>): RuntimeSetti
     push: { ...empty.push, ...data.push },
     uploadScanner: { ...empty.uploadScanner, ...data.uploadScanner },
     zoom: { ...empty.zoom, ...data.zoom },
+    speakingWhisper: { ...empty.speakingWhisper, ...data.speakingWhisper },
   });
 }
 
@@ -1020,6 +1046,39 @@ export function RuntimeSettingsClient() {
                       onChange={(next) =>
                         updateField(
                           'zoom',
+                          field.key,
+                          (field.type === 'number'
+                            ? parseNullableNumberInput(String(next))
+                            : field.type === 'checkbox'
+                              ? Boolean(next)
+                              : String(next)) as never,
+                        )
+                      }
+                    />
+                  ),
+                )}
+
+              {section.id === 'speakingWhisper' &&
+                SPEAKING_WHISPER_FIELDS.map((field) =>
+                  field.secret ? (
+                    <SecretField
+                      key={field.key}
+                      label={field.label}
+                      hint={field.hint}
+                      serverValue={String(server.speakingWhisper[field.key] ?? '')}
+                      draftValue={String(draft.speakingWhisper[field.key] ?? '')}
+                      onChange={(next) => updateField('speakingWhisper', field.key, next as never)}
+                    />
+                  ) : (
+                    <PlainField
+                      key={field.key}
+                      label={field.label}
+                      hint={field.hint}
+                      type={field.type}
+                      value={draft.speakingWhisper[field.key] as string | number | boolean | null}
+                      onChange={(next) =>
+                        updateField(
+                          'speakingWhisper',
                           field.key,
                           (field.type === 'number'
                             ? parseNullableNumberInput(String(next))

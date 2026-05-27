@@ -26,6 +26,7 @@ import {
   type LiveRoomTokenResponse,
 } from '@/lib/api/speaking-live-rooms';
 import { ApiError } from '@/lib/api';
+import { trackSpeaking } from '@/lib/analytics/speaking-events';
 
 export default function SpeakingSessionLiveTutorPage() {
   const params = useParams<{ id: string }>();
@@ -40,6 +41,8 @@ export default function SpeakingSessionLiveTutorPage() {
   const [consentAccepted, setConsentAccepted] = useState(false);
   const [ending, setEnding] = useState(false);
   const endedRef = useRef(false);
+  const joinedAtRef = useRef<number | null>(null);
+  const trackedJoinRef = useRef(false);
 
   // -- Load session + provision room + token --------------------------------
   useEffect(() => {
@@ -86,12 +89,29 @@ export default function SpeakingSessionLiveTutorPage() {
     };
   }, [router, sessionId]);
 
+  useEffect(() => {
+    if (!session || !room || !tokenInfo || !consentAccepted || trackedJoinRef.current) return;
+    trackedJoinRef.current = true;
+    joinedAtRef.current = Date.now();
+    trackSpeaking('live_room_joined', {
+      liveRoomId: room.liveRoomId,
+      role: 'learner',
+    });
+  }, [consentAccepted, room, session, tokenInfo]);
+
   const handleEnd = useCallback(async () => {
     if (!session || endedRef.current) return;
     endedRef.current = true;
     setEnding(true);
     try {
       await endSpeakingSession(session.sessionId);
+      trackSpeaking('live_room_ended', {
+        liveRoomId: room?.liveRoomId ?? session.sessionId,
+        durationSeconds: joinedAtRef.current
+          ? Math.max(0, Math.floor((Date.now() - joinedAtRef.current) / 1000))
+          : 0,
+        reason: 'learner_ended',
+      });
     } catch (err) {
       // We don't block navigation on the end-session failure - tutor
       // side will also finalize. Log for diagnostics.
@@ -100,7 +120,7 @@ export default function SpeakingSessionLiveTutorPage() {
     } finally {
       router.push(`/speaking/sessions/${session.sessionId}/results`);
     }
-  }, [router, session]);
+  }, [room?.liveRoomId, router, session]);
 
   if (loading) {
     return (

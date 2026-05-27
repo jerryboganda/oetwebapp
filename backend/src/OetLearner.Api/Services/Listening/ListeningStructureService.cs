@@ -207,6 +207,37 @@ public sealed class ListeningStructureService(LearnerDbContext db) : IListeningS
                 $"Question numbers must be unique across the paper; {duplicateNumbers} duplicate number group(s) found."));
         }
 
+        // 2026-05-27 audit fix — Listening rule L01.1 (contiguous numbering
+        // 1..42). The existing duplicate check is necessary but not sufficient;
+        // an authored paper could have all-unique numbers but skip 7 and still
+        // pass.
+        if (rows.Count > 0)
+        {
+            var expected = Enumerable.Range(1, 42).ToHashSet();
+            var have = rows.Select(r => r.QuestionNumber).ToHashSet();
+            var missing = expected.Except(have).ToArray();
+            var extra = have.Where(n => n < 1 || n > 42).ToArray();
+            if (missing.Length > 0 || extra.Length > 0)
+            {
+                var missingPart = missing.Length > 0 ? $"missing #{string.Join(", #", missing.OrderBy(n => n))}" : null;
+                var extraPart = extra.Length > 0 ? $"out-of-range #{string.Join(", #", extra.OrderBy(n => n))}" : null;
+                var detail = string.Join(" + ", new[] { missingPart, extraPart }.Where(s => s != null));
+                warnings.Add(new("listening_numbering_not_contiguous", "error",
+                    $"Listening rule L01.1 — every authored paper must have exactly questions 1..42; {detail}."));
+            }
+        }
+
+        // 2026-05-27 audit fix — Listening rule L06.1 (every authored item
+        // carries a transcript excerpt). The TranscriptEvidenceText column is
+        // already on ListeningQuestion; this gate ensures authors populate it
+        // before publish (needed for jump-to-evidence playback and tutor review).
+        var missingTranscriptEvidence = rows.Count(row => string.IsNullOrWhiteSpace(row.TranscriptEvidenceText));
+        if (missingTranscriptEvidence > 0)
+        {
+            warnings.Add(new("listening_transcript_evidence_missing", "error",
+                $"Listening rule L06.1 — every item must carry a verbatim transcript excerpt that supports the correct answer; {missingTranscriptEvidence} item(s) have no TranscriptEvidenceText."));
+        }
+
         if (a1 is not 0 and not 12 || a2 is not 0 and not 12)
         {
             warnings.Add(new("listening_part_a_split", "error",

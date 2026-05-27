@@ -1,8 +1,15 @@
 /**
- * Platform-aware audio recorder. On Capacitor native, routes to the
- * @capacitor-community/voice-recorder plugin. On web (and as fallback),
- * uses MediaRecorder. API surface is identical so callers do not branch.
+ * Platform-aware audio recorder. On Capacitor native, routes to the shared
+ * SpeakingRecorder plugin. On web (and as fallback), uses MediaRecorder.
+ * API surface is identical so callers do not branch.
  */
+
+import {
+  SpeakingRecorder,
+  base64ToBlob,
+  tryPauseNativeSpeakingRecorder,
+  tryResumeNativeSpeakingRecorder,
+} from '@/lib/mobile/speaking-recorder';
 
 export interface AudioRecorder {
   start(): Promise<void>;
@@ -11,11 +18,6 @@ export interface AudioRecorder {
   resume(): Promise<void>;
   isRecording(): boolean;
 }
-
-type NativeVoiceRecorderPlugin = {
-  startRecording: () => Promise<unknown>;
-  stopRecording: () => Promise<{ value: { recordDataBase64: string; mimeType: string } }>;
-};
 
 function isCapacitorNative(): boolean {
   if (typeof window === 'undefined') return false;
@@ -57,26 +59,15 @@ class WebRecorder implements AudioRecorder {
 
 class NativeRecorder implements AudioRecorder {
   private recording = false;
-  private plugin: NativeVoiceRecorderPlugin | null = null;
 
-  private async ensurePlugin() {
-    if (this.plugin) return;
-    const mod = await import(/* @vite-ignore */ 'capacitor-voice-recorder')
-      .catch(() => null);
-    this.plugin = (mod as unknown as { VoiceRecorder?: NativeVoiceRecorderPlugin } | null)?.VoiceRecorder ?? null;
-    if (!this.plugin) throw new Error('Voice recorder plugin missing.');
-  }
-
-  async start(): Promise<void> { await this.ensurePlugin(); await this.plugin!.startRecording(); this.recording = true; }
+  async start(): Promise<void> { await SpeakingRecorder.start({ mimeType: 'audio/mp4' }); this.recording = true; }
   async stop(): Promise<Blob> {
-    if (!this.plugin) return new Blob([]);
-    const res = await this.plugin.stopRecording();
+    const res = await SpeakingRecorder.stop();
     this.recording = false;
-    const bytes = Uint8Array.from(atob(res.value.recordDataBase64), (c) => c.charCodeAt(0));
-    return new Blob([bytes], { type: res.value.mimeType || 'audio/m4a' });
+    return base64ToBlob(res.base64, res.mimeType || 'audio/mp4');
   }
-  async pause(): Promise<void> { /* plugin currently does not support pause */ }
-  async resume(): Promise<void> { /* plugin currently does not support resume */ }
+  async pause(): Promise<void> { await tryPauseNativeSpeakingRecorder(); }
+  async resume(): Promise<void> { await tryResumeNativeSpeakingRecorder(); }
   isRecording(): boolean { return this.recording; }
 }
 

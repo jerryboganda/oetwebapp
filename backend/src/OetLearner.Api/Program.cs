@@ -698,9 +698,26 @@ builder.Services.AddScoped<OetLearner.Api.Services.Mocks.MockBundleReviewStageSe
 builder.Services.AddScoped<OetLearner.Api.Services.Mocks.MockPassPredictionService>();
 // W2-D — Speaking transcription pipeline (ASR adapter).
 // Default provider is the deterministic Mock; production wiring swaps this DI line for a real ASR adapter.
-builder.Services.AddScoped<OetLearner.Api.Services.Speaking.ISpeakingTranscriptionProvider,
-    OetLearner.Api.Services.Speaking.MockSpeakingTranscriptionProvider>();
+// 2026-05-27 audit fix — bind both providers; the pipeline picks Whisper when
+// the API key is configured (admin-panel DB override OR `Speaking:Whisper:ApiKey`
+// in appsettings), otherwise falls back to the deterministic mock so dev / CI
+// environments without an API key remain usable. 2026-05-28: the API key is
+// now resolved via IRuntimeSettingsProvider so admins can rotate it from the
+// admin panel without an app restart.
+builder.Services.AddHttpClient("SpeakingWhisperClient");
+builder.Services.AddScoped<OetLearner.Api.Services.Speaking.OpenAiWhisperSpeakingProvider>();
+builder.Services.AddScoped<OetLearner.Api.Services.Speaking.MockSpeakingTranscriptionProvider>();
+builder.Services.AddScoped<OetLearner.Api.Services.Speaking.ISpeakingTranscriptionProvider>(sp =>
+{
+    var whisper = sp.GetRequiredService<OetLearner.Api.Services.Speaking.OpenAiWhisperSpeakingProvider>();
+    return whisper.IsConfigured
+        ? whisper
+        : sp.GetRequiredService<OetLearner.Api.Services.Speaking.MockSpeakingTranscriptionProvider>();
+});
 builder.Services.AddScoped<OetLearner.Api.Services.Speaking.SpeakingTranscriptionPipeline>();
+// RULE_40 tone assessor — consumed by SpeakingTranscriptionEndpoints below.
+builder.Services.AddScoped<OetLearner.Api.Services.Speaking.ISpeakingToneAssessor,
+    OetLearner.Api.Services.Speaking.SpeakingToneAssessor>();
 // W2-E — Speaking + Writing AI pre-analysis services.
 builder.Services.AddScoped<OetLearner.Api.Services.Speaking.SpeakingPreAnalysisService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Writing.WritingPreScoreService>();
@@ -905,6 +922,7 @@ builder.Services.AddScoped<EngagementService>();
 // ── Billing V2 — Stripe catalog, cart, checkout, subscription ──
 builder.Services.AddSingleton<OetLearner.Api.Services.Billing.IStripeService, OetLearner.Api.Services.Billing.StripeService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Billing.IBillingCatalogService, OetLearner.Api.Services.Billing.BillingCatalogService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Billing.IFulfillmentService, OetLearner.Api.Services.Billing.FulfillmentService>();
 builder.Services.AddHostedService<BackgroundJobProcessor>();
 
 // ── Phase 1 new services ──
@@ -925,6 +943,9 @@ builder.Services.AddScoped<OetLearner.Api.Services.Planner.IPlanPersonalizer,
     OetLearner.Api.Services.Planner.RuleBasedPlanPersonalizer>();
 builder.Services.AddHostedService<OetLearner.Api.Services.Planner.StudyPlanReminderWorker>();
 builder.Services.AddScoped<VocabularyService>();
+// 2026-05-27 audit fix — Grammar + Remediation backend APIs (previously missing).
+builder.Services.AddSingleton<OetLearner.Api.Services.Grammar.IGrammarRulebookService, OetLearner.Api.Services.Grammar.GrammarRulebookService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Remediation.IRemediationApiService, OetLearner.Api.Services.Remediation.RemediationApiService>();
 builder.Services.AddScoped<VocabularyDraftService>();
 builder.Services.AddScoped<VocabularyGlossService>();
 builder.Services.AddSingleton<OetLearner.Api.Services.Vocabulary.IVocabularyAudioQueue,
@@ -1969,6 +1990,9 @@ app.MapRealContentFolderImportEndpoints();
 app.MapGamificationEndpoints();
 app.MapReviewItemEndpoints();
 app.MapVocabularyEndpoints();
+// 2026-05-27 audit fix — Grammar + Remediation endpoints (closed missing-API gap).
+app.MapGrammarEndpoints();
+app.MapRemediationEndpoints();
 app.MapRecallSetTagsEndpoints();
 app.MapAdaptiveEndpoints();
 

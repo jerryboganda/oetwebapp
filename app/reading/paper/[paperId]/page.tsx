@@ -236,6 +236,19 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
     void load();
   }, [load]);
 
+  // Auto-start: when the URL specifies a non-exam practice mode and there
+  // is no attemptId to resume, automatically kick off the attempt once the
+  // paper structure finishes loading.
+  const autoStartFired = useRef(false);
+  useEffect(() => {
+    if (autoStartFired.current) return;
+    if (loading || !structure || attempt || resumeAttemptId) return;
+    if (!urlMode || urlMode === 'exam') return;
+    autoStartFired.current = true;
+    void start();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, structure, attempt, resumeAttemptId, urlMode]);
+
   // Phase 3: when a subset attempt is in progress, restrict the rendered
   // questions to the in-scope set so the player only shows what the
   // grader will actually mark.
@@ -658,7 +671,7 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
             <h1 className="mt-4 text-2xl font-semibold tracking-tight text-gray-900 dark:text-gray-100">{structure.paper.title}</h1>
             <p className="mx-auto mt-2 max-w-2xl text-sm leading-6 text-gray-600 dark:text-gray-400">
               {urlMode && urlMode !== 'exam'
-                ? `Loading your ${urlMode.replace('-', ' ')} practice attempt…`
+                ? `Starting your ${urlMode === 'practice' ? 'practice' : `${urlMode.replace('-', ' ')} practice`} attempt…`
                 : 'Start a server-authoritative Reading attempt. Part A locks after its window, then Parts B and C share the remaining timer.'}
             </p>
             <p
@@ -863,6 +876,14 @@ function AttemptToolbar({
           {partALocked ? <Badge variant="warning">Part A locked</Badge> : null}
           {breakPending ? <Badge variant="info">B/C paused</Badge> : null}
           {paperExpired ? <Badge variant="danger">Time expired</Badge> : null}
+          {/* 2026-05-27 audit fix — Reading rule R10.5: copy/paste in Part A
+              is unreliable across exam centres. Show a one-time advisory chip
+              while the candidate is on Part A. */}
+          {activePart === 'A' && !partALocked ? (
+            <Badge variant="info" data-testid="reading-part-a-copy-paste-warning">
+              Copy/paste may be unavailable — type directly (R10.5)
+            </Badge>
+          ) : null}
           <span className="text-sm font-semibold text-gray-600 dark:text-gray-400" aria-label={`${answeredCount} of ${totalQuestions} questions answered`}>
             {answeredCount}/{totalQuestions} answered
           </span>

@@ -74,6 +74,11 @@ public static class WritingV2ContentSeeder
         try
         {
             await SeedCanonRulesAsync(db, folder, logger, cancellationToken);
+            // 2026-05-27 audit fix — also materialise the canonical R* rules
+            // from rulebooks/writing/{profession}/rulebook.v1.json. The legacy
+            // SC-001..025 rows stay so existing references keep working; new
+            // rows track the rulebook of record.
+            await BackendRulebookCanonBridge.SeedFromRulebooksAsync(db, logger, cancellationToken);
             await SeedScenariosAsync(db, folder, isMockFile: false, fileName: "scenarios.diagnostic.json", logger, cancellationToken);
             await SeedExemplarsAsync(db, folder, logger, cancellationToken);
             await SeedLessonsAsync(db, folder, logger, cancellationToken);
@@ -92,6 +97,18 @@ public static class WritingV2ContentSeeder
     }
 
     // ───────────────────────── 1. Canon rules ──────────────────────────────
+    //
+    // DEPRECATED 2026-05-27 — `canon-rules.launch-25.json` (25 SC-* rules)
+    // remains for historical-FK compatibility but the source of truth has
+    // moved to the rulebook JSONs at rulebooks/writing/{profession}/
+    // rulebook.v1.json, materialised into the same WritingCanonRule table
+    // by `BackendRulebookCanonBridge.SeedFromRulebooksAsync` (called next).
+    // The SC-* IDs and the R* IDs share the table but never collide.
+    //
+    // To fully retire the SC-* seed: set `Writing:V2Seeder:Legacy:Disabled`
+    // to true in appsettings once the rulebook bridge has run successfully
+    // in production for at least one release cycle.
+    private const string LegacyCanonDisabledKey = "Writing:V2Seeder:Legacy:Disabled";
 
     private static async Task SeedCanonRulesAsync(
         LearnerDbContext db, string folder, ILogger logger, CancellationToken ct)

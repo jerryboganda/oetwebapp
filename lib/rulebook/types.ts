@@ -13,7 +13,29 @@
  * ============================================================================
  */
 
-export type RuleKind = 'writing' | 'speaking' | 'grammar' | 'pronunciation' | 'vocabulary' | 'conversation';
+export type RuleKind =
+  | 'writing'
+  | 'speaking'
+  | 'grammar'
+  | 'pronunciation'
+  | 'vocabulary'
+  | 'conversation'
+  | 'listening'
+  | 'reading'
+  | 'remediation'
+  | 'listening-exam-mode'
+  | 'reading-exam-mode';
+
+/**
+ * How a rule is enforced. CRITICAL rules without a `checkId` must explicitly
+ * declare an enforcement other than `'deterministic'` so the CI gate can prove
+ * the rule is not silently dropped.
+ *
+ * - `deterministic`: an engine detector keyed by `Rule.checkId` runs at lint time.
+ * - `ai-grounded`: the rule body is fed into the AI assessor prompt; the AI is the sole enforcer.
+ * - `human-review-only`: only a human tutor can score this rule (e.g. acoustic tone).
+ */
+export type RuleEnforcement = 'deterministic' | 'ai-grounded' | 'human-review-only';
 
 export type RuleSeverity = 'critical' | 'major' | 'minor' | 'info';
 
@@ -103,6 +125,7 @@ export interface Rule {
   exemplarPhrases?: string[];
   forbiddenPatterns?: string[];
   checkId?: string; // engine detector to run for this rule
+  enforcement?: RuleEnforcement; // 'deterministic' (default when checkId set), 'ai-grounded', or 'human-review-only'
   params?: Record<string, unknown>;
 }
 
@@ -157,6 +180,12 @@ export interface WritingLintInput {
     consentDocumented?: boolean;
     followUpDate?: string | null;
     resultsEnclosed?: boolean;
+    /** R01.5: explicit case-notes signal that suspected cancer was documented. Optional — the detector also pattern-scans the letter+case-notes. */
+    cancerSuspected?: boolean;
+    /** R08.3: number of distinct prior visits represented in the case notes. Used by `visit_paragraphization_check`. */
+    visitCount?: number;
+    /** R14.9: investigations performed during admission (names + values). The discharge letter must list each. */
+    investigationsPerformed?: Array<{ name: string; value?: string | null }>;
   };
   profession?: ExamProfession;
 }

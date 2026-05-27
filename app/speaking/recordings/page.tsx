@@ -18,6 +18,7 @@ import {
   fetchMySpeakingRecordings,
   type MyRecordingRow,
 } from '@/lib/api/speaking-compliance';
+import { trackSpeaking } from '@/lib/analytics/speaking-events';
 
 function formatDate(iso: string | null): string {
   if (!iso) return '—';
@@ -61,6 +62,7 @@ export default function SpeakingRecordingsPage() {
     setError(null);
     try {
       await deleteSpeakingRecording(recordingId);
+      trackSpeaking('recording_deleted', { recordingId });
       await reload();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Delete failed.');

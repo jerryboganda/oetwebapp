@@ -170,6 +170,28 @@ public class PaymentWebhookHardeningTests
     }
 
     [Fact]
+    public async Task Stripe_InvoicePaidEvents_AreCategorisedForRenewalFulfillment()
+    {
+        var gateway = BuildStripe();
+        var (payload, headers) = SignStripe(new Dictionary<string, object?>
+        {
+            ["id"] = "evt_invoice_paid",
+            ["type"] = "invoice.paid",
+            ["data"] = new Dictionary<string, object?>
+            {
+                ["object"] = new { id = "in_renewal_1", subscription = "sub_renewal_1" }
+            }
+        });
+
+        var result = await gateway.HandleWebhookAsync(payload, headers, default);
+
+        Assert.True(result.Processed);
+        Assert.Equal(PaymentWebhookCategories.Payment, result.EventCategory);
+        Assert.Equal("completed", result.NormalizedStatus);
+        Assert.Equal("in_renewal_1", result.GatewayTransactionId);
+    }
+
+    [Fact]
     public void DeadLetter_ThresholdIsConfigurable_AndDefaultsToFive()
     {
         var defaults = new BillingOptions();

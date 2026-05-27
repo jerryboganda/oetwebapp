@@ -148,7 +148,8 @@
           "abnormal mass",
           "biopsy suspicious"
         ]
-      }
+      },
+      "checkId": "cancer_suspected_flagged_urgent"
     },
     {
       "id": "R01.6",
@@ -262,7 +263,8 @@
       "severity": "critical",
       "title": "Marks for inclusion AND exclusion",
       "body": "Marks are awarded for INCLUDING relevant data AND for EXCLUDING irrelevant data. Content selection is the single most important OET writing skill.",
-      "appliesTo": "all"
+      "appliesTo": "all",
+      "enforcement": "ai-grounded"
     },
     {
       "id": "R03.3",
@@ -329,7 +331,10 @@
       "body": "Letter length guide: 180–200 words (body only). Too long = semi-relevant data included. Too short = relevant data missing.",
       "appliesTo": "all",
       "checkId": "letter_body_length",
-      "params": { "min": 180, "max": 200 }
+      "params": {
+        "min": 180,
+        "max": 200
+      }
     },
     {
       "id": "R03.9",
@@ -691,7 +696,8 @@
       "severity": "critical",
       "title": "Previous visits combined or summarised",
       "body": "Previous visits may be combined or summarised. Do NOT give every visit its own paragraph.",
-      "appliesTo": "all"
+      "appliesTo": "all",
+      "checkId": "visit_paragraphization_check"
     },
     {
       "id": "R08.4",
@@ -906,7 +912,8 @@
       "severity": "critical",
       "title": "Visits = past simple",
       "body": "All visits (today and previous): PAST SIMPLE. Safest choice; never wrong for visit content.",
-      "appliesTo": "all"
+      "appliesTo": "all",
+      "checkId": "visit_content_tense_basic_check"
     },
     {
       "id": "R10.3",
@@ -1089,7 +1096,8 @@
       "severity": "critical",
       "title": "Include numerical values with units",
       "body": "Always include numerical values with units when given. Example: 'glucose of 7.8 mmol/L.' Never write the reference range.",
-      "appliesTo": "all"
+      "appliesTo": "all",
+      "checkId": "numerical_values_have_units"
     },
     {
       "id": "R11.9",
@@ -1521,7 +1529,8 @@
       "body": "All investigations performed during admission (including normal results) MUST be listed with values.",
       "appliesTo": [
         "discharge"
-      ]
+      ],
+      "checkId": "discharge_all_investigations_listed"
     },
     {
       "id": "R14.10",
@@ -1644,7 +1653,8 @@
       "severity": "critical",
       "title": "Imperative plan items = for GP",
       "body": "Imperative items in the plan = for GP. Items on the referral request line = for the specialist. Never ask the specialist to perform GP tasks.",
-      "appliesTo": "all"
+      "appliesTo": "all",
+      "enforcement": "ai-grounded"
     },
     {
       "id": "R15.8",
@@ -1710,7 +1720,8 @@
       "severity": "critical",
       "title": "Real-clinic test",
       "body": "Examiner standard: 'Could this letter be sent in a real clinical setting?' Yes = pass. No = fail.",
-      "appliesTo": "all"
+      "appliesTo": "all",
+      "enforcement": "ai-grounded"
     },
     {
       "id": "R16.8",

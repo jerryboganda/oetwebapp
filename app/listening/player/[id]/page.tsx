@@ -46,6 +46,7 @@ import { ListeningPreviewBanner, ListeningReviewBanner } from '@/components/doma
 import { completeMockSection } from '@/lib/api';
 import { resolveBlockedSeekTarget, shouldResumeAfterBlockedPause } from '@/lib/listening/audio-integrity';
 import { listeningV2Api, type AdvanceResult, type ListeningV2SessionState } from '@/lib/listening/v2-api';
+import { buildTechReadinessProbe } from '@/lib/listening/tech-readiness-probe';
 import { presentationModeFromSession } from '@/lib/listening/modes';
 import { ListeningPlayerSkinShell } from '@/components/domain/listening/player/skins/ListeningPlayerSkinShell';
 import { NotePanel } from '@/components/domain/listening/NotePanel';
@@ -480,7 +481,14 @@ function PlayerContent() {
         if (!readinessSnapshot?.audioOk) {
           throw new Error('Complete the audio readiness check before starting this strict Listening attempt.');
         }
-        await listeningV2Api.recordTechReadiness(started.attemptId, readinessSnapshot);
+        // 2026-05-27 audit fix — Listening rule L-R10.3 (wired headset).
+        // The full probe enumerates devices + screen so the server can
+        // reject Bluetooth audio, sub-1920×1080 resolution, and >125% scale.
+        const probe = await buildTechReadinessProbe({
+          audioOk: readinessSnapshot.audioOk,
+          durationMs: readinessSnapshot.durationMs,
+        });
+        await listeningV2Api.recordTechReadiness(started.attemptId, probe);
         await advanceStrictStart(started.attemptId);
       }
       if (session.modePolicy.integrityLockRequired && rootRef.current && !document.fullscreenElement) {
@@ -613,8 +621,16 @@ function PlayerContent() {
     } else if (focusParam === 'parts-bc') {
       sections = sections.filter((code) => code === 'B' || code === 'C1' || code === 'C2');
     }
+    // 2026-05-27 audit fix — Listening rules L-R05.9 / L-R05.10.
+    // During the final 2-minute review window (FSM state `c2_final_review`)
+    // the candidate may only see / modify C2 answers. Even if a future code
+    // path widens `currentSectionIndex` or `allPartsReviewEnabled` for paper
+    // mode, this guard keeps CBT exam mode strictly scoped to C2.
+    if (session?.state === 'c2_final_review' && session?.modePolicy?.onePlayOnly) {
+      sections = sections.filter((code) => code === 'C2');
+    }
     return sections;
-  }, [sectionGroups, focusParam]);
+  }, [sectionGroups, focusParam, session?.state, session?.modePolicy?.onePlayOnly]);
   const currentSection: ListeningSectionCode | null = sectionsInPaper[currentSectionIndex] ?? null;
   const freeNavigationEnabled = session?.modePolicy.freeNavigation === true;
   const allPartsReviewEnabled = freeNavigationEnabled && session?.modePolicy.printableBooklet === true;

@@ -6,7 +6,7 @@
  * Renders the 16-stage pathway with state per stage. Backend owns
  * the state machine (`/v1/speaking/course-pathway`).
  */
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { LearnerDashboardShell } from '@/components/layout';
 import { Card } from '@/components/ui/card';
@@ -19,6 +19,7 @@ import {
   type SpeakingPathway as SpeakingPathwayResponse,
   fetchSpeakingCoursePathway,
 } from '@/lib/api/speaking-course-pathway';
+import { trackSpeaking } from '@/lib/analytics/speaking-events';
 
 function stateBadge(state: SpeakingPathwayStage['state']) {
   switch (state) {
@@ -34,8 +35,14 @@ function stateBadge(state: SpeakingPathwayStage['state']) {
 export default function SpeakingPathwayPage() {
   const [data, setData] = useState<SpeakingPathwayResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const trackedViewRef = useRef(false);
 
   useEffect(() => {
+    if (!trackedViewRef.current) {
+      trackedViewRef.current = true;
+      trackSpeaking('pathway_viewed', {});
+    }
+
     let cancelled = false;
     (async () => {
       try {

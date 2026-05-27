@@ -357,3 +357,260 @@ describe('writing coverage summary', () => {
     expect(summary.findings.length).toBeGreaterThan(0);
   });
 });
+
+// ===========================================================================
+// 2026-05-27 audit fixes — direct unit tests for the 6 new detectors
+// ===========================================================================
+
+describe('writing linter — R01.5 suspected cancer must trigger urgent referral', () => {
+  const letterRoutineWithCancer = `Dr A B
+Oncology Clinic
+Main Street
+
+1 January 2026
+
+Dear Dr Smith,
+Re: Mr John Jones D.O.B: 01/01/1980
+
+I am writing to refer Mr Jones for your assessment of a suspected cancer in his left lung.
+
+Mr Jones smokes 10 cigarettes per day and drinks alcohol occasionally. He presented today with persistent cough. His chest examination was unremarkable.
+
+Yours sincerely,
+
+Doctor`;
+
+  it('fires R01.5 when suspected cancer is in a routine referral', () => {
+    const findings = lintWritingLetter(base({ letterText: letterRoutineWithCancer, letterType: 'routine_referral' }));
+    expect(findings.some((f) => f.ruleId === 'R01.5')).toBe(true);
+  });
+
+  it('does NOT fire R01.5 when the same cancer wording is in an urgent referral', () => {
+    const findings = lintWritingLetter(base({ letterText: letterRoutineWithCancer, letterType: 'urgent_referral' }));
+    expect(findings.some((f) => f.ruleId === 'R01.5')).toBe(false);
+  });
+
+  it('also fires when caseNotesMarkers.cancerSuspected is set without explicit wording', () => {
+    const clean = letterRoutineWithCancer.replace('suspected cancer in his left lung', 'a chest abnormality');
+    const findings = lintWritingLetter(
+      base({
+        letterText: clean,
+        letterType: 'routine_referral',
+        caseNotesMarkers: { cancerSuspected: true },
+      }),
+    );
+    expect(findings.some((f) => f.ruleId === 'R01.5')).toBe(true);
+  });
+});
+
+describe('writing linter — R08.3 visit paragraphization', () => {
+  const letterWithSeparatePerVisitParagraphs = `Dr A B
+Cardiology Clinic
+Main Street
+
+1 January 2026
+
+Dear Dr Smith,
+Re: Mr John Jones D.O.B: 01/01/1980
+
+I am writing to refer Mr Jones, a 45-year-old teacher, for your assessment.
+
+On the first visit, Mr Jones presented with mild chest pain.
+
+On the second visit, Mr Jones returned with worsening symptoms.
+
+On the third visit, Mr Jones reported palpitations.
+
+On the fourth visit, Mr Jones presented with shortness of breath.
+
+On the fifth visit, Mr Jones described chest tightness.
+
+Yours sincerely,
+
+Doctor`;
+
+  it('fires R08.3 when visit-per-paragraph count exceeds visitCount marker', () => {
+    const findings = lintWritingLetter(
+      base({
+        letterText: letterWithSeparatePerVisitParagraphs,
+        caseNotesMarkers: { visitCount: 3 },
+      }),
+    );
+    expect(findings.some((f) => f.ruleId === 'R08.3')).toBe(true);
+  });
+
+  it('does NOT fire R08.3 when visit count is unknown', () => {
+    const findings = lintWritingLetter(
+      base({
+        letterText: letterWithSeparatePerVisitParagraphs,
+        caseNotesMarkers: {},
+      }),
+    );
+    expect(findings.some((f) => f.ruleId === 'R08.3')).toBe(false);
+  });
+});
+
+describe('writing linter — R10.2 visit content uses past simple', () => {
+  it('fires when present perfect ("has presented") appears in body', () => {
+    const letter = `Dr A B
+Cardiology Clinic
+Main Street
+
+1 January 2026
+
+Dear Dr Smith,
+Re: Mr John Jones D.O.B: 01/01/1980
+
+I am writing to refer Mr Jones.
+
+Mr Jones has presented with chest pain. He has been examined and was advised lifestyle changes.
+
+Yours sincerely,
+
+Doctor`;
+    const findings = lintWritingLetter(base({ letterText: letter }));
+    expect(findings.some((f) => f.ruleId === 'R10.2')).toBe(true);
+  });
+
+  it('does NOT fire when visits use past simple', () => {
+    const letter = `Dr A B
+Cardiology Clinic
+Main Street
+
+1 January 2026
+
+Dear Dr Smith,
+Re: Mr John Jones D.O.B: 01/01/1980
+
+I am writing to refer Mr Jones.
+
+Mr Jones presented with chest pain. He was examined and advised lifestyle changes.
+
+Yours sincerely,
+
+Doctor`;
+    const findings = lintWritingLetter(base({ letterText: letter }));
+    expect(findings.some((f) => f.ruleId === 'R10.2')).toBe(false);
+  });
+});
+
+describe('writing linter — R11.8 numerical values must have units', () => {
+  it('fires when blood pressure value is missing mmHg unit', () => {
+    const letter = `Dear Dr Smith,
+Re: Mr John Jones
+
+His blood pressure was 140 over 90 and his pulse was regular. His weight was 80.
+
+Yours sincerely,
+Doctor`;
+    const findings = lintWritingLetter(base({ letterText: letter }));
+    expect(findings.some((f) => f.ruleId === 'R11.8')).toBe(true);
+  });
+
+  it('does NOT fire when values are written with units', () => {
+    const letter = `Dear Dr Smith,
+Re: Mr John Jones
+
+His blood pressure was 140/90 mmHg, glucose was 7.8 mmol/L, and his weight was 80 kg.
+
+Yours sincerely,
+Doctor`;
+    const findings = lintWritingLetter(base({ letterText: letter }));
+    expect(findings.some((f) => f.ruleId === 'R11.8')).toBe(false);
+  });
+});
+
+describe('writing linter — R14.9 discharge must list all admission investigations', () => {
+  const dischargeLetter = `Dr A B
+Royal Hospital
+
+1 January 2026
+
+Dear Dr GP,
+Re: Mr John Jones D.O.B: 01/01/1980
+
+I am writing to update you regarding Mr Jones, who underwent an appendicectomy at Royal Hospital and is now ready for discharge.
+
+Mr Jones was admitted with right iliac fossa pain. Bloods showed a raised white-cell count. He was treated with intravenous antibiotics and surgery.
+
+Please find enclosed a copy of Mr Jones' pathology results.
+
+Yours sincerely,
+
+Doctor`;
+
+  it('fires R14.9 when an investigation in case notes is not mentioned in the letter', () => {
+    const findings = lintWritingLetter(
+      base({
+        letterText: dischargeLetter,
+        letterType: 'discharge',
+        caseNotesMarkers: {
+          investigationsPerformed: [
+            { name: 'White cell count', value: '14.5' },
+            { name: 'CRP', value: '120' },
+            { name: 'Ultrasound abdomen', value: 'inflamed appendix' },
+          ],
+        },
+      }),
+    );
+    const r14_9 = findings.filter((f) => f.ruleId === 'R14.9');
+    expect(r14_9.length).toBeGreaterThan(0);
+    // CRP and Ultrasound are missing from the letter body.
+    expect(r14_9[0].message).toMatch(/CRP|Ultrasound abdomen/i);
+  });
+
+  it('does NOT fire R14.9 on a routine referral letter regardless of caseNotesMarkers', () => {
+    const findings = lintWritingLetter(
+      base({
+        letterText: dischargeLetter,
+        letterType: 'routine_referral',
+        caseNotesMarkers: {
+          investigationsPerformed: [{ name: 'CRP' }],
+        },
+      }),
+    );
+    expect(findings.some((f) => f.ruleId === 'R14.9')).toBe(false);
+  });
+});
+
+describe('writing linter — R05.2 address first-letter capitalisation', () => {
+  it('fires when an address component starts with a lowercase letter', () => {
+    const letter = `dr A B
+cardiology clinic
+Main Street
+
+1 January 2026
+
+Dear Dr Smith,
+Re: Mr John Jones
+
+Hello.
+
+Yours sincerely,
+
+Doctor`;
+    const findings = lintWritingLetter(base({ letterText: letter }));
+    const r05_2 = findings.filter((f) => f.ruleId === 'R05.2');
+    expect(r05_2.length).toBeGreaterThan(0);
+    expect(r05_2.some((f) => /capital/i.test(f.message))).toBe(true);
+  });
+
+  it('passes when every address line starts with a capital', () => {
+    const letter = `Dr A B
+Cardiology Clinic
+Main Street
+
+1 January 2026
+
+Dear Dr Smith,
+Re: Mr John Jones
+
+Hello.
+
+Yours sincerely,
+
+Doctor`;
+    const findings = lintWritingLetter(base({ letterText: letter }));
+    expect(findings.some((f) => f.ruleId === 'R05.2' && /capital/i.test(f.message))).toBe(false);
+  });
+});

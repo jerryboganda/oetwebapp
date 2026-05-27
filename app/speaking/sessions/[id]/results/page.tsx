@@ -12,7 +12,7 @@
  * (uses 1 credit)" — visually disabled for now (credit gating wires in later).
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { BookOpen, Loader2, Mic, UserPlus } from 'lucide-react';
@@ -31,6 +31,7 @@ import {
   type DualAssessmentResponse,
   type TimestampedComment,
 } from '@/lib/api/speaking-assessments';
+import { trackSpeaking } from '@/lib/analytics/speaking-events';
 
 interface SessionContext {
   recordingUrl?: string | null;
@@ -80,6 +81,8 @@ export default function SpeakingSessionResultsPage() {
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState('overview');
+  const trackedAiAssessmentRef = useRef(false);
+  const trackedTutorAssessmentRef = useRef(false);
 
   const load = useCallback(async () => {
     if (!sessionId) return;
@@ -103,6 +106,23 @@ export default function SpeakingSessionResultsPage() {
       setLoading(false);
     }
   }, [sessionId]);
+
+  useEffect(() => {
+    if (data?.ai && !trackedAiAssessmentRef.current) {
+      trackedAiAssessmentRef.current = true;
+      trackSpeaking('ai_assessment_viewed', {
+        sessionId,
+        estimatedBand: data.ai.readinessBand,
+      });
+    }
+    if (data?.tutor && !trackedTutorAssessmentRef.current) {
+      trackedTutorAssessmentRef.current = true;
+      trackSpeaking('tutor_assessment_viewed', {
+        sessionId,
+        estimatedBand: data.tutor.readinessBand,
+      });
+    }
+  }, [data, sessionId]);
 
   useEffect(() => {
     void load();

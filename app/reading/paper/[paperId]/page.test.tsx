@@ -158,6 +158,17 @@ describe('Reading paper player page', () => {
     expect(screen.queryByLabelText(/paper-based reading simulation/i)).not.toBeInTheDocument();
     expect(screen.getByRole('tabpanel', { name: /part a/i })).toBeInTheDocument();
   });
+
+  it('auto-starts the attempt when mode=practice is set in URL without attemptId', async () => {
+    mockSearchParams.current = new URLSearchParams('mode=practice&part=A');
+
+    await renderPlayer();
+
+    await waitFor(() => {
+      expect(mockStartReadingAttempt).toHaveBeenCalledWith('paper-1', { mockAttemptId: null, mockSectionId: null });
+    });
+    expect(await screen.findByRole('timer', { name: /part a window/i })).toBeInTheDocument();
+  });
 });
 
 function buildAttempt() {

@@ -88,6 +88,9 @@ public sealed class RulebookLoader : IRulebookLoader
         RuleKind.Conversation => "conversation",
         RuleKind.Listening => "listening",
         RuleKind.Reading => "reading",
+        RuleKind.Remediation => "remediation",
+        RuleKind.ListeningExamMode => "listening/_exam-mode",
+        RuleKind.ReadingExamMode => "reading/_exam-mode",
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, null),
     };
 
@@ -148,7 +151,22 @@ public sealed class RulebookNotFoundException(RuleKind kind, ExamProfession prof
 // Types — mirror lib/rulebook/types.ts
 // ---------------------------------------------------------------------------
 
-public enum RuleKind { Writing, Speaking, Grammar, Pronunciation, Vocabulary, Conversation, Listening, Reading }
+public enum RuleKind
+{
+    Writing,
+    Speaking,
+    Grammar,
+    Pronunciation,
+    Vocabulary,
+    Conversation,
+    Listening,
+    Reading,
+    Remediation,
+    /// <summary>Listening candidate-facing exam-UX rules (rulebooks/listening/_exam-mode/).</summary>
+    ListeningExamMode,
+    /// <summary>Reading candidate-facing exam-UX rules (rulebooks/reading/_exam-mode/).</summary>
+    ReadingExamMode,
+}
 
 public enum ExamProfession
 {
@@ -168,6 +186,21 @@ public enum ExamProfession
 }
 
 public enum RuleSeverity { Critical, Major, Minor, Info }
+
+/// <summary>
+/// How a rule is enforced. CRITICAL rules without a `CheckId` must explicitly
+/// declare an enforcement other than `Deterministic` so the CI gate can prove
+/// the rule is not silently dropped.
+/// </summary>
+public enum RuleEnforcement
+{
+    /// <summary>A deterministic engine detector keyed by `CheckId` enforces this rule at lint time.</summary>
+    Deterministic,
+    /// <summary>The rule body is fed into the AI assessor prompt; the AI is the sole enforcer.</summary>
+    AiGrounded,
+    /// <summary>Only a human tutor can score this rule (e.g. acoustic tone).</summary>
+    HumanReviewOnly,
+}
 
 public sealed record OetRulebookSection(string Id, string Title, int? Order = null);
 
@@ -201,6 +234,16 @@ public sealed record OetRule
     public List<string>? ExemplarPhrases { get; init; }
     public List<string>? ForbiddenPatterns { get; init; }
     public string? CheckId { get; init; }
+
+    /// <summary>
+    /// How the rule is enforced when there is no `CheckId`. The 2026-05-27
+    /// rulebook compliance audit added this field so we can prove every
+    /// critical/major rule is either deterministic, ai-grounded, or
+    /// human-review-only.
+    /// </summary>
+    [JsonConverter(typeof(LowercaseEnumConverter<RuleEnforcement>))]
+    public RuleEnforcement? Enforcement { get; init; }
+
     public JsonElement? Params { get; init; }
     public JsonElement? Examples { get; init; }
 }

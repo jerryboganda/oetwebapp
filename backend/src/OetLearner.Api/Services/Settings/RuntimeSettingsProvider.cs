@@ -220,6 +220,7 @@ public sealed class RuntimeSettingsProvider : IRuntimeSettingsProvider
             RadarBlockEmailDomainsCsv: NullIfEmpty(r.StripeRadarBlockEmailDomainsCsv));
 
         var liveClasses = ResolveLiveClassSettings(r);
+        var speakingWhisper = ResolveSpeakingWhisper(r);
 
         return new EffectiveSettings(
             Email: email,
@@ -232,6 +233,7 @@ public sealed class RuntimeSettingsProvider : IRuntimeSettingsProvider
             Zoom: zoom,
             Stripe: stripe,
             LiveClasses: liveClasses,
+            SpeakingWhisper: speakingWhisper,
             UpdatedByUserId: r.UpdatedByUserId,
             UpdatedByUserName: r.UpdatedByUserName,
             UpdatedAt: r.UpdatedAt == default ? null : r.UpdatedAt);
@@ -239,6 +241,20 @@ public sealed class RuntimeSettingsProvider : IRuntimeSettingsProvider
 
     private static LiveClassSettings ResolveLiveClassSettings(RuntimeSettingsRow r)
         => new(AiRecordingProcessingEnabled: r.LiveClassesAiRecordingProcessingEnabled ?? false);
+
+    private SpeakingWhisperSettings ResolveSpeakingWhisper(RuntimeSettingsRow r)
+    {
+        var dbKey = Unprotect(r.SpeakingWhisperApiKeyEncrypted);
+        var fallbackKey = NullIfEmpty(_config["Speaking:Whisper:ApiKey"]);
+        var key = !string.IsNullOrWhiteSpace(dbKey) ? dbKey : fallbackKey;
+        var baseUrl = Coalesce(r.SpeakingWhisperBaseUrl, _config["Speaking:Whisper:BaseUrl"], "https://api.openai.com/v1") ?? "https://api.openai.com/v1";
+        var model = Coalesce(r.SpeakingWhisperModel, _config["Speaking:Whisper:Model"], "whisper-1") ?? "whisper-1";
+        return new SpeakingWhisperSettings(
+            ApiKey: key,
+            BaseUrl: baseUrl,
+            Model: model,
+            IsConfigured: !string.IsNullOrWhiteSpace(key));
+    }
 
     private static IReadOnlyList<string> ParseCsvList(string? csv)
     {

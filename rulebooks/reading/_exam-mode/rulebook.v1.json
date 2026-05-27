@@ -1,0 +1,151 @@
+{
+  "version": "1.0.0",
+  "kind": "reading-exam-mode",
+  "profession": "medicine",
+  "publishedAt": "2026-05-27T00:00:00Z",
+  "authoritySource": "Dr. Ahmed Hesham — OET Reading Comprehensive Rulebook (AI Training Edition). Encodes every CANDIDATE-FACING exam-UX rule from the PDF as content-as-code. The profession is 'medicine' as a sentinel because R01.6 makes Reading profession-agnostic — the same exam-mode rules apply to every candidate. The companion authoring rulebook lives at rulebooks/reading/{profession}/rulebook.v1.json.",
+  "sections": [
+    { "id": "R-01", "title": "Exam Overview & Sequence",                       "order": 1 },
+    { "id": "R-02", "title": "Scoring & Pass Requirements",                     "order": 2 },
+    { "id": "R-03", "title": "Part A — Structure & Question Types",            "order": 3 },
+    { "id": "R-04", "title": "Part A — Marking & Accuracy Rules",              "order": 4 },
+    { "id": "R-05", "title": "Part A — Timing Rules",                          "order": 5 },
+    { "id": "R-06", "title": "Part B — Structure & Timing",                    "order": 6 },
+    { "id": "R-07", "title": "Part C — Structure & Timing",                    "order": 7 },
+    { "id": "R-08", "title": "Parts B & C — Marking & Interaction Rules",      "order": 8 },
+    { "id": "R-09", "title": "Navigation Rules — Computer-Based Exam",         "order": 9 },
+    { "id": "R-10", "title": "Display & Interaction — Computer-Based Exam",    "order": 10 },
+    { "id": "R-11", "title": "Technical Requirements — Computer-Based Exam",   "order": 11 },
+    { "id": "R-12", "title": "Navigation Rules — Paper-Based Exam",            "order": 12 }
+  ],
+  "rules": [
+    { "id": "R01.1", "section": "R-01", "severity": "info",     "title": "Reading is sub-test 2",                 "body": "Reading is the second sub-test in the OET exam. The sequence is: Listening → Reading → Writing → Speaking.", "appliesTo": "all" },
+    { "id": "R01.2", "section": "R-01", "severity": "critical", "title": "42 questions: 20 / 6 / 16",              "body": "Total questions: 42. Three parts: Part A (20 questions / 20 marks), Part B (6 questions / 6 marks), Part C (16 questions / 16 marks).", "appliesTo": "all", "checkId": "reading_paper_shape", "params": { "totalItems": 42, "partA": 20, "partB": 6, "partC": 16 } },
+    { "id": "R01.3", "section": "R-01", "severity": "critical", "title": "Part A 15 min; B+C 45 min combined",     "body": "Part A is a standalone section with its own 15-minute time block. Part B and Part C are delivered together in a shared 45-minute block.", "appliesTo": "all", "checkId": "reading_session_timing", "params": { "partAMinutes": 15, "partBcMinutes": 45 } },
+    { "id": "R01.4", "section": "R-01", "severity": "info",     "title": "Total Reading duration 60 min",          "body": "Total Reading exam duration: 60 minutes (15 min Part A + 45 min Parts B and C).", "appliesTo": "all" },
+    { "id": "R01.5", "section": "R-01", "severity": "info",     "title": "Part C split C1/C2 (8/8)",               "body": "Part C is divided into C1 (8 questions) and C2 (8 questions).", "appliesTo": "all", "checkId": "reading_paper_shape" },
+    { "id": "R01.6", "section": "R-01", "severity": "info",     "title": "Profession-agnostic format",             "body": "Reading applies the same format and content for ALL OET professions.", "appliesTo": "all" },
+
+    { "id": "R02.1", "section": "R-02", "severity": "critical", "title": "30/42 = Grade B (pass)",                 "body": "30 correct answers out of 42 = Grade B = 350 points = minimum passing score for doctors (GMC, ECFMG) and nurses (NMC).", "appliesTo": "all", "checkId": "reading_pass_threshold", "params": { "rawPass": 30, "scaledPass": 350, "totalItems": 42 } },
+    { "id": "R02.2", "section": "R-02", "severity": "info",     "title": "Scoring scale",                          "body": "Scoring scale: Grade A = 450+, Grade B = 350–449, Grade C+ = 300–349, Grade C = 250–299, Grade D = below 250.", "appliesTo": "all" },
+    { "id": "R02.3", "section": "R-02", "severity": "info",     "title": "1 mark per correct, no negative",         "body": "Each correct answer = 1 mark. No negative marking for wrong answers.", "appliesTo": "all" },
+    { "id": "R02.4", "section": "R-02", "severity": "critical", "title": "No score clipping for Medicine",          "body": "No combining (clipping) of scores across exam sittings for Medicine pathways (GMC, ECFMG, Canada). All four sub-tests must be passed in one sitting.", "appliesTo": "all", "checkId": "reading_no_score_clipping", "params": { "professions": ["medicine"] } },
+    { "id": "R02.5", "section": "R-02", "severity": "info",     "title": "Nursing (NMC) score combining",          "body": "Some nursing pathways (NMC) permit combining sub-test scores across sittings. This does not apply to Medicine.", "appliesTo": "all" },
+
+    { "id": "R03.1", "section": "R-03", "severity": "critical", "title": "Part A = 4 texts on one topic",          "body": "Part A contains 4 texts: Text A, Text B, Text C, Text D. All 4 texts relate to a single clinical or healthcare topic.", "appliesTo": "all", "checkId": "reading_part_a_four_texts" },
+    { "id": "R03.2", "section": "R-03", "severity": "critical", "title": "Part A question types",                   "body": "Part A has three question types across 20 questions: Q1–7 Matching (write A/B/C/D); Q8–14 Short answer from text; Q15–20 Sentence completion (single missing word/number).", "appliesTo": "all", "checkId": "reading_part_a_question_types" },
+    { "id": "R03.3", "section": "R-03", "severity": "info",     "title": "Text C usually has a table/graph",        "body": "Text C almost always contains a table, graph, or chart. Recent exams have also placed tables in Texts A, B, or D.", "appliesTo": "all" },
+    { "id": "R03.4", "section": "R-03", "severity": "critical", "title": "Part A answers come from the text",       "body": "Part A is a note-completion and short-answer section. Answers must be sourced directly from the text — they are not opinion-based.", "appliesTo": "all", "checkId": "reading_part_a_source_grounded" },
+    { "id": "R03.5", "section": "R-03", "severity": "info",     "title": "Part A 15 min; split layout in CBT",     "body": "Part A timing: 15 minutes. In the paper-based exam, the text booklet and answer sheet are separate. In the computer-based exam, text appears on the left panel and questions on the right panel.", "appliesTo": "all" },
+    { "id": "R03.6", "section": "R-03", "severity": "critical", "title": "After 15 min: Part A locks/collects",     "body": "After 15 minutes: in the paper-based exam the invigilator collects Part A papers. In the computer-based exam the text panel locks automatically. No further access to Part A is possible.", "appliesTo": "all", "checkId": "reading_part_a_lock_at_15_min" },
+
+    { "id": "R04.1", "section": "R-04", "severity": "critical", "title": "Spelling error = whole word wrong",       "body": "Spelling error in a Part A answer: any incorrect letter in a word = the entire word is marked wrong. The answer is expected to be copied directly from the text.", "appliesTo": "all", "checkId": "reading_part_a_strict_spelling" },
+    { "id": "R04.2", "section": "R-04", "severity": "critical", "title": "Singular/plural error = wrong",            "body": "Singular/plural error: writing the wrong number form (singular instead of plural, or vice versa) = answer marked wrong.", "appliesTo": "all", "checkId": "reading_part_a_strict_number_form" },
+    { "id": "R04.3", "section": "R-04", "severity": "critical", "title": "Wrong form (range vs max) = wrong",        "body": "Incorrect form of the answer: writing a range when the question asks for a maximum, or writing a dose per kg when the question asks for a total dose, = wrong answer.", "appliesTo": "all", "checkId": "reading_part_a_strict_form" },
+    { "id": "R04.4", "section": "R-04", "severity": "major",    "title": "Numbers verbatim with units",             "body": "Numbers must be written exactly as they appear in the text — correct units, decimal notation, and formatting are required.", "appliesTo": "all", "checkId": "reading_part_a_numeric_verbatim" },
+    { "id": "R04.5", "section": "R-04", "severity": "critical", "title": "Reading stricter than Listening",          "body": "Reading Part A has stricter spelling rules than Listening Part A. In Reading, any spelling error results in the answer being marked wrong with no exceptions.", "appliesTo": "all", "checkId": "reading_part_a_strict_spelling" },
+    { "id": "R04.6", "section": "R-04", "severity": "critical", "title": "Q8–14 / Q15–20 word-for-word",            "body": "Answers for Q8–14 and Q15–20 must come word-for-word from the text. Paraphrasing or synonyms are not accepted.", "appliesTo": "all", "checkId": "reading_part_a_verbatim_match" },
+
+    { "id": "R05.1", "section": "R-05", "severity": "critical", "title": "Part A 15-min hard limit",                "body": "Part A has a strict 15-minute time limit. When time expires, writing stops (paper-based) or the screen locks (computer-based).", "appliesTo": "all", "checkId": "reading_part_a_lock_at_15_min" },
+    { "id": "R05.2", "section": "R-05", "severity": "info",     "title": "CBT auto-advance after 15 min",           "body": "In the computer-based exam: when the 15-minute timer reaches zero, the Part A text panel locks and the candidate proceeds automatically to the optional break screen before Part B and C.", "appliesTo": ["exam", "home"] },
+    { "id": "R05.3", "section": "R-05", "severity": "critical", "title": "Paper: 'pencils down' at 15 min",         "body": "In the paper-based exam: the invigilator announces 'Pencils down' at 15 minutes and collects the Part A answer sheets and text booklets. No further writing is permitted.", "appliesTo": ["paper"], "enforcement": "human-review-only" },
+    { "id": "R05.4", "section": "R-05", "severity": "info",     "title": "Paper: Part A sheet separate from B+C",   "body": "Part A answer sheet is separate from the Part B and C question booklet in the paper-based exam. Collecting Part A papers does not affect access to Parts B and C.", "appliesTo": ["paper"] },
+
+    { "id": "R06.1", "section": "R-06", "severity": "info",     "title": "Part B = 6 independent short texts",      "body": "Part B consists of 6 questions. Each question has its own short, independent text.", "appliesTo": "all" },
+    { "id": "R06.2", "section": "R-06", "severity": "info",     "title": "Part B text and Q on same page",          "body": "Part B texts are short passages. Each text and its corresponding question appear on the same page.", "appliesTo": "all" },
+    { "id": "R06.3", "section": "R-06", "severity": "critical", "title": "Part B = 3 options, exactly one correct", "body": "Each Part B question has 3 answer choices (A, B, C). Exactly one is correct.", "appliesTo": "all", "checkId": "reading_part_b_three_options" },
+    { "id": "R06.4", "section": "R-06", "severity": "info",     "title": "Part B = 6 marks",                         "body": "Part B carries 6 marks (1 mark per question).", "appliesTo": "all" },
+    { "id": "R06.5", "section": "R-06", "severity": "info",     "title": "Parts B + C share 45-min block",          "body": "Part B and Part C share the same 45-minute time block and are contained in the same booklet.", "appliesTo": "all" },
+
+    { "id": "R07.1", "section": "R-07", "severity": "info",     "title": "Part C = 2 long texts, 8 Q each",         "body": "Part C consists of 2 long texts: C1 and C2. Each carries 8 questions. Total: 16 questions / 16 marks.", "appliesTo": "all" },
+    { "id": "R07.2", "section": "R-07", "severity": "info",     "title": "Part C text ~7–8 paragraphs",             "body": "Each Part C text is approximately 7–8 paragraphs long.", "appliesTo": "all" },
+    { "id": "R07.3", "section": "R-07", "severity": "critical", "title": "Part C = 4 options, exactly one correct", "body": "Each Part C question has 4 answer choices (A, B, C, D). Exactly one is correct.", "appliesTo": "all", "checkId": "reading_part_c_four_options" },
+    { "id": "R07.4", "section": "R-07", "severity": "critical", "title": "Part B = 3 choices; Part C = 4 choices",  "body": "Part B has 3 choices; Part C has 4 choices. This distinction is important for the AI to recognise correctly.", "appliesTo": "all", "checkId": "reading_part_b_three_options" },
+    { "id": "R07.5", "section": "R-07", "severity": "info",     "title": "C1 vs C2: unrelated topics",              "body": "C1 and C2 are on completely different topics with no connection to each other.", "appliesTo": "all" },
+    { "id": "R07.6", "section": "R-07", "severity": "critical", "title": "Part C questions follow paragraph order", "body": "Part C questions follow paragraph order within each text. Question 1 of C1 corresponds to the first paragraph; question 8 to the last. Questions do not reverse direction.", "appliesTo": "all", "checkId": "reading_part_c_paragraph_order" },
+    { "id": "R07.7", "section": "R-07", "severity": "info",     "title": "Underlined paragraph → ~2 questions",     "body": "If a paragraph contains an underlined word or sentence, approximately 2 questions from that paragraph are expected.", "appliesTo": "all" },
+    { "id": "R07.8", "section": "R-07", "severity": "info",     "title": "4–5 Part C qs are inference / attitude",  "body": "Approximately 4–5 questions per Part C text are based on the writer's point of view or implied meaning, rather than explicitly stated facts. Two answer choices may both appear plausible; the task is to identify the more correct one.", "appliesTo": "all" },
+    { "id": "R07.9", "section": "R-07", "severity": "info",     "title": "Remaining Part C answers are explicit",   "body": "The remaining 11–12 questions per Part C text have answers directly and explicitly stated in the text.", "appliesTo": "all" },
+    { "id": "R07.10","section": "R-07", "severity": "info",     "title": "B+C 45 min: candidate-pacing",            "body": "Part C and Part B share the same 45-minute block. Time allocation within this block is not enforced by the exam — it is entirely the candidate's responsibility.", "appliesTo": "all" },
+
+    { "id": "R08.1", "section": "R-08", "severity": "info",     "title": "B/C: 1 mark each, no negative",            "body": "Each question in Parts B and C = 1 mark. There is no negative marking.", "appliesTo": "all" },
+    { "id": "R08.2", "section": "R-08", "severity": "info",     "title": "B/C: one answer per question",             "body": "Only one answer choice can be selected per question. Selecting more than one is not permitted.", "appliesTo": "all" },
+    { "id": "R08.3", "section": "R-08", "severity": "critical", "title": "Blank answer = 0 marks (no auto-fill)",    "body": "An unanswered question = 0 marks. The system does not auto-fill blank answers.", "appliesTo": "all", "checkId": "reading_no_autofill" },
+    { "id": "R08.4", "section": "R-08", "severity": "info",     "title": "CBT: left-click selects, right-click strikes","body": "In the computer-based exam: left-clicking an answer choice selects it (highlighted in selection colour). Right-clicking applies a strikethrough (elimination) without selecting.", "appliesTo": ["exam", "home"], "checkId": "reading_bc_choice_strikethrough" },
+    { "id": "R08.5", "section": "R-08", "severity": "critical", "title": "Strikethrough ≠ selection",                "body": "Strikethrough / elimination in the computer-based exam does NOT count as a selected answer. The candidate must still left-click a final answer.", "appliesTo": ["exam", "home"], "checkId": "reading_bc_strikethrough_not_selection" },
+    { "id": "R08.6", "section": "R-08", "severity": "info",     "title": "Paper: fill answer circle clearly",         "body": "In the paper-based exam: candidates fill in the answer circle (A, B, C, or D) on the answer sheet. Partial fills or ambiguous marks may be rejected.", "appliesTo": ["paper"] },
+
+    { "id": "R09.1", "section": "R-09", "severity": "critical", "title": "CBT: no break Listening → Reading",        "body": "No break between the Listening and Reading sub-tests in the computer-based exam. Reading begins automatically after Listening ends.", "appliesTo": ["exam", "home"], "checkId": "reading_no_break_after_listening_cbt" },
+    { "id": "R09.2", "section": "R-09", "severity": "info",     "title": "10-min optional break after Part A",        "body": "Between Part A and Parts B+C in the computer-based exam: a 10-minute optional break is offered. The candidate may press 'Resume Test' to skip it and proceed immediately.", "appliesTo": ["exam", "home"], "checkId": "reading_optional_break_between_a_and_bc" },
+    { "id": "R09.3", "section": "R-09", "severity": "critical", "title": "After 15 min Part A: permanent lock",       "body": "After the 15-minute Part A period: the Part A text panel locks permanently. No access to Part A content or answers is possible after this point.", "appliesTo": ["exam", "home"], "checkId": "reading_part_a_lock_at_15_min" },
+    { "id": "R09.4", "section": "R-09", "severity": "info",     "title": "B+C 45 min: sequential navigation",         "body": "Within the 45-minute Parts B+C block: the candidate moves through questions sequentially. Navigation rules vary by delivery mode (see below).", "appliesTo": "all" },
+    { "id": "R09.5", "section": "R-09", "severity": "major",    "title": "CBT B+C: Next + confirm at boundaries",     "body": "In the computer-based exam, the candidate moves forward through questions by pressing Next. Confirmation is required at certain section boundaries.", "appliesTo": ["exam", "home"], "checkId": "reading_section_boundary_confirm_dialog" },
+    { "id": "R09.6", "section": "R-09", "severity": "critical", "title": "End of B+C: screen locks, exam ends",       "body": "At the end of the 45-minute Parts B+C block in the computer-based exam: the screen locks and the Reading sub-test ends. No further answers can be submitted.", "appliesTo": ["exam", "home"], "checkId": "reading_bc_lock_at_45_min" },
+
+    { "id": "R10.1", "section": "R-10", "severity": "info",     "title": "Part A: text left, questions right",        "body": "Part A display: the text appears on the LEFT panel of the screen. The questions and answer boxes appear on the RIGHT panel — a split-screen layout.", "appliesTo": ["exam", "home"] },
+    { "id": "R10.2", "section": "R-10", "severity": "info",     "title": "B/C: text + question on same screen",       "body": "Parts B and C display: each short Part B text appears on the same screen as its question. Each Part C long text appears alongside the corresponding questions on the same screen.", "appliesTo": ["exam", "home"] },
+    { "id": "R10.3", "section": "R-10", "severity": "info",     "title": "Timer always visible",                       "body": "The timer is always visible on screen throughout the computer-based exam.", "appliesTo": ["exam", "home"] },
+    { "id": "R10.4", "section": "R-10", "severity": "info",     "title": "Part A: highlighting is available",          "body": "Part A — Highlighting: available and functional. Candidates may highlight text in the passage during Part A.", "appliesTo": ["exam", "home"] },
+    { "id": "R10.5", "section": "R-10", "severity": "critical", "title": "Part A copy-paste is unreliable",            "body": "Part A — Copy-paste: not always available. It is unreliable and varies by exam centre. It cannot be depended upon.", "appliesTo": ["exam", "home"], "checkId": "reading_part_a_copy_paste_warning" },
+    { "id": "R10.6", "section": "R-10", "severity": "info",     "title": "B/C: passage highlighting permitted",        "body": "Parts B and C — Highlighting the text passage: permitted.", "appliesTo": ["exam", "home"] },
+    { "id": "R10.7", "section": "R-10", "severity": "info",     "title": "B/C: question-stem highlighting permitted", "body": "Parts B and C — Highlighting the question stem: permitted.", "appliesTo": ["exam", "home"] },
+    { "id": "R10.8", "section": "R-10", "severity": "critical", "title": "B/C: choices CANNOT be highlighted",         "body": "Parts B and C — Highlighting the answer choices (A/B/C/D): NOT permitted.", "appliesTo": ["exam", "home"], "checkId": "reading_bc_choices_no_highlight" },
+    { "id": "R10.9", "section": "R-10", "severity": "major",    "title": "B/C: right-click strikethrough",             "body": "Parts B and C — Eliminating an answer choice: right-click applies a strikethrough to a choice without selecting it.", "appliesTo": ["exam", "home"], "checkId": "reading_bc_choice_strikethrough" },
+    { "id": "R10.10","section": "R-10", "severity": "critical", "title": "Zoom: app +/− buttons, Ctrl+ blocked",       "body": "Zoom: + and − buttons within the exam application control zoom. The browser keyboard shortcut Ctrl+ is blocked in the exam environment.", "appliesTo": ["exam", "home"], "checkId": "reading_zoom_app_only" },
+    { "id": "R10.11","section": "R-10", "severity": "info",     "title": "CBT: no margin annotations",                 "body": "In the computer-based exam, candidates cannot write paragraph numbers in the margins or make physical annotations.", "appliesTo": ["exam", "home"] },
+
+    { "id": "R11.1", "section": "R-11", "severity": "critical", "title": "Min screen resolution 1920×1080",             "body": "Minimum screen resolution: 1920 × 1080. Below this, the split-screen layout fails — text and questions overlap or are cut off.", "appliesTo": ["exam", "home"], "checkId": "reading_tech_min_screen_resolution", "params": { "minWidth": 1920, "minHeight": 1080 } },
+    { "id": "R11.2", "section": "R-11", "severity": "critical", "title": "Display scale ≤ 125%",                        "body": "Display scale (Windows): 100% or maximum 125%. Scale above 125% causes interface panels to overlap and clip.", "appliesTo": ["exam", "home"], "checkId": "reading_tech_display_scale", "params": { "maxPercent": 125 } },
+    { "id": "R11.3", "section": "R-11", "severity": "critical", "title": "At-home: pre-exam display config required", "body": "At-home candidates: must configure screen resolution and display scale before exam day. Failure has caused exam cancellations.", "appliesTo": ["home"], "checkId": "reading_tech_at_home_pre_check" },
+    { "id": "R11.4", "section": "R-11", "severity": "info",     "title": "ProProctor dedicated app",                   "body": "The exam runs inside a dedicated application (ProProctor), not a regular browser.", "appliesTo": ["exam", "home"] },
+    { "id": "R11.5", "section": "R-11", "severity": "critical", "title": "Stable broadband required",                  "body": "Internet connection: must be stable throughout the exam. An unstable connection can interrupt the exam session.", "appliesTo": ["exam", "home"], "checkId": "reading_tech_stable_internet" },
+    { "id": "R11.6", "section": "R-11", "severity": "critical", "title": "VPN / VM must be off",                       "body": "All VPNs and virtual machines must be disabled before launching the exam application.", "appliesTo": ["exam", "home"], "checkId": "reading_tech_no_vpn_vm" },
+    { "id": "R11.7", "section": "R-11", "severity": "info",     "title": "Test-centre auto-configured display",        "body": "At test centres: split screen and display settings are pre-configured. No candidate action is required. This applies to at-home candidates only.", "appliesTo": ["exam"] },
+
+    { "id": "R12.1", "section": "R-12", "severity": "info",     "title": "Paper Listening → Reading: ~10-min gap",     "body": "In the paper-based exam, there is a natural 10-minute transition between Listening and Reading while papers are collected and new papers are distributed.", "appliesTo": ["paper"] },
+    { "id": "R12.2", "section": "R-12", "severity": "info",     "title": "Paper Part A: text booklet + answer sheet",  "body": "Part A: two separate documents are distributed — the text booklet (Texts A, B, C, D) and the answer sheet.", "appliesTo": ["paper"] },
+    { "id": "R12.3", "section": "R-12", "severity": "critical", "title": "Paper: invigilator collects Part A at 15 min","body": "After 15 minutes: the invigilator collects both the Part A text booklet and answer sheet. Access to Part A is permanently over.", "appliesTo": ["paper"], "enforcement": "human-review-only" },
+    { "id": "R12.4", "section": "R-12", "severity": "info",     "title": "Paper B+C in single combined booklet",       "body": "Parts B and C are delivered in a single combined booklet. The text and the question appear together in the same document.", "appliesTo": ["paper"] },
+    { "id": "R12.5", "section": "R-12", "severity": "info",     "title": "Paper B+C: free navigation within 45 min",    "body": "In the paper-based exam, the candidate can view and write in any question across Parts B and C at any time within the 45-minute block. There are no section locks.", "appliesTo": ["paper"] },
+    { "id": "R12.6", "section": "R-12", "severity": "info",     "title": "Paper: pencil annotations everywhere",       "body": "In the paper-based exam, candidates may write paragraph numbers in the margins and annotate the question paper freely with a pencil.", "appliesTo": ["paper"] },
+    { "id": "R12.7", "section": "R-12", "severity": "info",     "title": "Paper: pencil highlight/underline allowed",  "body": "Highlighting and underlining in the paper-based exam: permitted in all parts using a pencil.", "appliesTo": ["paper"] },
+    { "id": "R12.8", "section": "R-12", "severity": "info",     "title": "Paper timer: wall projector / clock",        "body": "Timer in the paper-based exam: displayed on a wall projector or clock visible to all candidates. The invigilator announces time warnings.", "appliesTo": ["paper"] },
+    { "id": "R12.9", "section": "R-12", "severity": "info",     "title": "Paper Part C: text and choices may be on separate pages","body": "Part C paper-based format: the long text and the answer choices may be on different pages within the booklet, requiring the candidate to flip between them. This is a key structural difference from the computer-based exam where both are on the same screen.", "appliesTo": ["paper"] }
+  ],
+  "tables": {
+    "shape": {
+      "totalItems": 42,
+      "partA": 20,
+      "partB": 6,
+      "partC": 16,
+      "partATexts": 4,
+      "partBTexts": 6,
+      "partCTexts": 2,
+      "partC1Questions": 8,
+      "partC2Questions": 8
+    },
+    "passThreshold": {
+      "rawCorrect": 30,
+      "rawTotal": 42,
+      "scaledScore": 350,
+      "grade": "B"
+    },
+    "questionTypes": {
+      "partA": ["matching", "short_answer", "sentence_completion"],
+      "partB": "mcq3",
+      "partC": "mcq4"
+    },
+    "modeMatrix": {
+      "exam":  { "partALockAt": "15min", "bcLockAt": "45min", "partAHighlightEnabled": true, "bcChoiceHighlightEnabled": false, "copyPasteReliable": false },
+      "home":  { "partALockAt": "15min", "bcLockAt": "45min", "partAHighlightEnabled": true, "bcChoiceHighlightEnabled": false, "copyPasteReliable": false },
+      "paper": { "partALockAt": "15min", "bcLockAt": "45min", "partAHighlightEnabled": true, "bcChoiceHighlightEnabled": false, "copyPasteReliable": false }
+    }
+  },
+  "stateMachines": {
+    "cbtTimedSections": [
+      { "name": "part_a",        "durationMs": 900000,  "lockOnTimeout": true,  "lockOnNext": true },
+      { "name": "optional_break","durationMs": 600000,  "lockOnTimeout": false, "lockOnNext": false, "skippable": true },
+      { "name": "parts_b_and_c", "durationMs": 2700000, "lockOnTimeout": true,  "lockOnNext": true }
+    ]
+  }
+}

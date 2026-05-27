@@ -96,13 +96,18 @@ public class SpeakingRecorderPlugin: CAPPlugin, CAPBridgedPlugin {
     }
 
     @objc func pause(_ call: CAPPluginCall) {
-        guard let recorder = recorder, recorder.isRecording else {
+        guard let recorder = recorder else {
             call.reject("No active recording.")
             return
         }
 
-        if recorder.isPaused {
+        if pausedAt != nil {
             call.resolve()
+            return
+        }
+
+        guard recorder.isRecording else {
+            call.reject("No active recording.")
             return
         }
 
@@ -112,21 +117,23 @@ public class SpeakingRecorderPlugin: CAPPlugin, CAPBridgedPlugin {
     }
 
     @objc func resume(_ call: CAPPluginCall) {
-        guard let recorder = recorder, recorder.isRecording else {
+        guard let recorder = recorder else {
             call.reject("No active recording.")
             return
         }
 
-        if !recorder.isPaused {
-            call.resolve()
+        guard let currentPausedAt = pausedAt else {
+            if recorder.isRecording {
+                call.resolve()
+            } else {
+                call.reject("No paused recording.")
+            }
             return
         }
 
-        if let pausedAt = pausedAt {
-            pausedDuration += Date().timeIntervalSince(pausedAt)
-        }
+        pausedDuration += Date().timeIntervalSince(currentPausedAt)
 
-        self.pausedAt = nil
+        pausedAt = nil
         recorder.record()
         call.resolve()
     }
@@ -151,7 +158,8 @@ public class SpeakingRecorderPlugin: CAPPlugin, CAPBridgedPlugin {
 
         let endedAt = Date()
         let startedAt = recordingStartedAt ?? endedAt
-        let durationMs = max(0, Int((endedAt.timeIntervalSince(startedAt) - pausedDuration) * 1000))
+        let activePausedDuration = pausedDuration + (pausedAt.map { endedAt.timeIntervalSince($0) } ?? 0)
+        let durationMs = max(0, Int((endedAt.timeIntervalSince(startedAt) - activePausedDuration) * 1000))
 
         let base64 = fileData.base64EncodedString()
         let fileName = recordingURL.lastPathComponent

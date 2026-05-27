@@ -50,6 +50,7 @@ public class EndpointRegistrationTests : IClassFixture<TestWebApplicationFactory
     [InlineData("/v1/admin/writing/analytics/rule-violations/{attemptId}")]
     [InlineData("/v1/writing/attempts/{attemptId}/pdf")]
     [InlineData("/v1/mocks/attempts/{mockAttemptId}/sections/writing/pdf")]
+    [InlineData("/v1/speaking/evaluations/{evaluationId}/pdf")]
     public void Program_RegistersFeatureRoutes(string routePattern)
     {
         using var client = _factory.CreateClient();

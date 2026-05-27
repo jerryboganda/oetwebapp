@@ -59,7 +59,9 @@ public partial class LearnerService(
     GamificationService? gamification = null,
     OetLearner.Api.Services.Planner.ContentPicker? studyPlanContentPicker = null,
     OetLearner.Api.Services.Readiness.ReadinessComputationService? readinessComputation = null,
-    OetLearner.Api.Services.Billing.ICouponVariantApplicator? couponVariantApplicator = null)
+    OetLearner.Api.Services.Billing.ICouponVariantApplicator? couponVariantApplicator = null,
+    PrivateSpeakingService? privateSpeakingService = null,
+    IFulfillmentService? fulfillmentService = null)
 {
     private const string PaymentWebhookParserVersion = "payment-webhook-v1";
     private const int PaymentIdempotencyKeyMaxLength = 38;
@@ -610,6 +612,11 @@ public partial class LearnerService(
             var structure = new ReadingStructureService(db);
             foreach (var paper in papers)
             {
+                if (!HasDiagnosticPaperTag(paper.TagsCsv))
+                {
+                    continue;
+                }
+
                 if (!await CanLearnerSeeContentPaperAsync(userId, paper, cancellationToken))
                 {
                     continue;
@@ -649,7 +656,8 @@ public partial class LearnerService(
             .AsNoTracking()
             .Where(x => x.SubtestCode == normalizedSubtest
                 && x.ContentType == contentType
-                && x.Status == ContentStatus.Published)
+                && x.Status == ContentStatus.Published
+                && x.IsDiagnosticEligible)
             .OrderByDescending(x => x.IsDiagnosticEligible)
             .ThenByDescending(x => x.QualityScore)
             .ThenBy(x => x.Id)
@@ -666,7 +674,7 @@ public partial class LearnerService(
             title = item.Title,
             difficulty = item.Difficulty,
             estimatedDurationMinutes = item.EstimatedDurationMinutes,
-            diagnosticEligible = item.IsDiagnosticEligible
+            diagnosticEligible = true
         };
     }
 
@@ -2857,24 +2865,12 @@ public partial class LearnerService(
                 return new { attemptId, evaluationId = existing.Id, state = ToAsyncState(existing.State) };
             }
 
-            if (attempt.AudioUploadState != UploadState.Uploaded)
-            {
-                throw ApiException.Validation(
-                    "speaking_audio_required",
-                    "Upload audio before submitting this speaking attempt.",
-                    [new ApiFieldError("audio", "required", "Complete the audio upload before submission.")]);
-            }
+            EnsureSpeakingAudioReadyForSubmission(attempt);
 
             return await QueueSpeakingEvaluationAsync(attempt, cancellationToken);
         }
 
-        if (attempt.AudioUploadState != UploadState.Uploaded)
-        {
-            throw ApiException.Validation(
-                "speaking_audio_required",
-                "Upload audio before submitting this speaking attempt.",
-                [new ApiFieldError("audio", "required", "Complete the audio upload before submission.")]);
-        }
+        EnsureSpeakingAudioReadyForSubmission(attempt);
 
         return await QueueSpeakingEvaluationAsync(attempt, cancellationToken);
     }
@@ -4998,6 +4994,25 @@ public partial class LearnerService(
         }
     }
 
+    private void EnsureSpeakingAudioReadyForSubmission(Attempt attempt)
+    {
+        if (attempt.AudioUploadState != UploadState.Uploaded || string.IsNullOrWhiteSpace(attempt.AudioObjectKey))
+        {
+            throw ApiException.Validation(
+                "speaking_audio_required",
+                "Upload audio before submitting this speaking attempt.",
+                [new ApiFieldError("audio", "required", "Complete the audio upload before submission.")]);
+        }
+
+        if (!fileStorage.Exists(attempt.AudioObjectKey) || fileStorage.Length(attempt.AudioObjectKey) <= 0)
+        {
+            throw ApiException.Validation(
+                "speaking_audio_not_ready",
+                "The speaking audio file is not ready for submission yet.",
+                [new ApiFieldError("audio", "not_ready", "Upload the recording bytes again before submitting.")]);
+        }
+    }
+
     private async Task EnsureSpeakingAttemptBindingAsync(
         Attempt attempt,
         string? expectedContentId,
@@ -6681,6 +6696,24 @@ public partial class LearnerService(
             "unsupported_diagnostic_subtest",
             "Choose a supported diagnostic subtest.",
             [new ApiFieldError("subtest", "unsupported", "Choose writing, speaking, reading, or listening.")]);
+    }
+
+    private static bool HasDiagnosticPaperTag(string? tagsCsv)
+    {
+        if (string.IsNullOrWhiteSpace(tagsCsv))
+        {
+            return false;
+        }
+
+        foreach (var tag in tagsCsv.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            if (StringComparer.OrdinalIgnoreCase.Equals(tag, "diagnostic"))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
 
@@ -8546,6 +8579,7 @@ public partial class LearnerService(
             }
         }
 
+        var isNewWebhookEvent = webhookEvent is null;
         webhookEvent ??= new PaymentWebhookEvent
         {
             Id = Guid.NewGuid(),
@@ -8572,7 +8606,30 @@ public partial class LearnerService(
             db.PaymentWebhookEvents.Add(webhookEvent);
         }
 
-        await db.SaveChangesAsync(ct);
+        try
+        {
+            await db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException) when (isNewWebhookEvent)
+        {
+            db.ChangeTracker.Clear();
+            var existingWebhookEvent = await db.PaymentWebhookEvents
+                .FirstOrDefaultAsync(x => x.Gateway == gatewayName && x.GatewayEventId == result.EventId, ct);
+            if (existingWebhookEvent is null)
+            {
+                throw;
+            }
+
+            return new
+            {
+                received = true,
+                duplicate = true,
+                gateway = gatewayName,
+                eventId = existingWebhookEvent.GatewayEventId,
+                eventType = existingWebhookEvent.EventType,
+                state = existingWebhookEvent.ProcessingStatus
+            };
+        }
 
         var applied = await ApplyVerifiedPaymentWebhookEventAsync(
             webhookEvent.Id,
@@ -8615,6 +8672,21 @@ public partial class LearnerService(
                 webhookEvent.ErrorMessage = "No checkout or payment transaction id was included in the webhook payload.";
                 webhookEvent.ProcessedAt = now;
                 await db.SaveChangesAsync(ct);
+                await CommitIfOwnedAsync(tx, ct);
+                return MapWebhookRetryResult(webhookEvent);
+            }
+
+            var privateSpeakingTargetStatus = string.IsNullOrWhiteSpace(normalizedStatus)
+                ? "pending"
+                : normalizedStatus.Trim().ToLowerInvariant();
+            if (await ApplyPrivateSpeakingWebhookIfMatchedAsync(webhookEvent, gatewayTransactionId, privateSpeakingTargetStatus, ct))
+            {
+                await CommitIfOwnedAsync(tx, ct);
+                return MapWebhookRetryResult(webhookEvent);
+            }
+
+            if (await ApplyLegacyBillingWebhookIfMatchedAsync(webhookEvent, gatewayTransactionId, privateSpeakingTargetStatus, ct))
+            {
                 await CommitIfOwnedAsync(tx, ct);
                 return MapWebhookRetryResult(webhookEvent);
             }
@@ -8737,6 +8809,179 @@ public partial class LearnerService(
             await db.SaveChangesAsync(ct);
             return MapWebhookRetryResult(webhookEvent);
         }
+    }
+
+    private async Task<bool> ApplyPrivateSpeakingWebhookIfMatchedAsync(
+        PaymentWebhookEvent webhookEvent,
+        string checkoutSessionId,
+        string targetStatus,
+        CancellationToken ct)
+    {
+        var bookingExists = await db.PrivateSpeakingBookings
+            .AnyAsync(booking => booking.StripeCheckoutSessionId == checkoutSessionId, ct);
+        if (!bookingExists)
+        {
+            return false;
+        }
+
+        if (privateSpeakingService is null)
+        {
+            throw new InvalidOperationException("Private speaking payment service is not available.");
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        switch (targetStatus)
+        {
+            case "completed":
+            {
+                var confirmed = await privateSpeakingService.ConfirmBookingPaymentAsync(
+                    checkoutSessionId,
+                    ExtractStripePaymentIntentId(webhookEvent.PayloadJson),
+                    ct);
+                if (!confirmed)
+                {
+                    throw new InvalidOperationException($"No private-speaking booking found for Stripe checkout session {checkoutSessionId}.");
+                }
+
+                webhookEvent.ProcessingStatus = "completed";
+                webhookEvent.ErrorMessage = null;
+                webhookEvent.ProcessedAt = now;
+                await db.SaveChangesAsync(ct);
+                return true;
+            }
+
+            case "failed":
+                if (string.Equals(webhookEvent.EventType, "checkout.session.expired", StringComparison.OrdinalIgnoreCase))
+                {
+                    await privateSpeakingService.HandleCheckoutExpiredAsync(checkoutSessionId, ct);
+                }
+                else
+                {
+                    await privateSpeakingService.HandlePaymentFailureAsync(checkoutSessionId, ct);
+                }
+
+                webhookEvent.ProcessingStatus = "completed";
+                webhookEvent.ErrorMessage = null;
+                webhookEvent.ProcessedAt = now;
+                await db.SaveChangesAsync(ct);
+                return true;
+
+            default:
+                webhookEvent.ProcessingStatus = "ignored";
+                webhookEvent.ErrorMessage = "Private speaking checkout payment is not settled yet; waiting for a terminal Stripe event.";
+                webhookEvent.ProcessedAt = now;
+                await db.SaveChangesAsync(ct);
+                return true;
+        }
+    }
+
+    private async Task<bool> ApplyLegacyBillingWebhookIfMatchedAsync(
+        PaymentWebhookEvent webhookEvent,
+        string gatewayObjectId,
+        string targetStatus,
+        CancellationToken ct)
+    {
+        if (IsStripeInvoiceWebhook(webhookEvent.EventType))
+        {
+            if (targetStatus == "completed")
+            {
+                if (fulfillmentService is null)
+                {
+                    throw new InvalidOperationException("Billing fulfillment service is not available.");
+                }
+
+                await fulfillmentService.FulfillRenewalAsync(gatewayObjectId, ct);
+                webhookEvent.ProcessingStatus = "completed";
+                webhookEvent.ErrorMessage = null;
+            }
+            else
+            {
+                webhookEvent.ProcessingStatus = "ignored";
+                webhookEvent.ErrorMessage = "Stripe invoice webhook is not a paid renewal event.";
+            }
+
+            webhookEvent.ProcessedAt = DateTimeOffset.UtcNow;
+            await db.SaveChangesAsync(ct);
+            return true;
+        }
+
+        if (!IsStripeCheckoutSessionWebhook(webhookEvent.EventType))
+        {
+            return false;
+        }
+
+        var checkoutSession = await db.CheckoutSessions
+            .FirstOrDefaultAsync(session => session.StripeSessionId == gatewayObjectId, ct);
+        if (checkoutSession is null)
+        {
+            return false;
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        switch (targetStatus)
+        {
+            case "completed":
+                if (fulfillmentService is null)
+                {
+                    throw new InvalidOperationException("Billing fulfillment service is not available.");
+                }
+
+                await fulfillmentService.FulfillCheckoutAsync(gatewayObjectId, ct);
+                webhookEvent.ProcessingStatus = "completed";
+                webhookEvent.ErrorMessage = null;
+                break;
+
+            case "failed":
+                if (!string.Equals(checkoutSession.Status, "fulfilled", StringComparison.OrdinalIgnoreCase))
+                {
+                    checkoutSession.Status = string.Equals(webhookEvent.EventType, "checkout.session.expired", StringComparison.OrdinalIgnoreCase)
+                        ? "expired"
+                        : "failed";
+                    checkoutSession.UpdatedAt = now;
+                    checkoutSession.ExpiresAt ??= now;
+                }
+
+                webhookEvent.ProcessingStatus = "completed";
+                webhookEvent.ErrorMessage = null;
+                break;
+
+            default:
+                webhookEvent.ProcessingStatus = "ignored";
+                webhookEvent.ErrorMessage = "Stripe checkout session payment is not settled yet; waiting for a terminal Stripe event.";
+                break;
+        }
+
+        webhookEvent.ProcessedAt = now;
+        await db.SaveChangesAsync(ct);
+        return true;
+    }
+
+    private static bool IsStripeCheckoutSessionWebhook(string? eventType)
+        => eventType is not null
+           && eventType.StartsWith("checkout.session.", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsStripeInvoiceWebhook(string? eventType)
+        => eventType is not null
+           && eventType.StartsWith("invoice.", StringComparison.OrdinalIgnoreCase);
+
+    private static string? ExtractStripePaymentIntentId(string? safePayloadJson)
+    {
+        if (string.IsNullOrWhiteSpace(safePayloadJson)) return null;
+        try
+        {
+            using var doc = JsonDocument.Parse(safePayloadJson);
+            if (doc.RootElement.TryGetProperty("data", out var data)
+                && data.TryGetProperty("object", out var obj))
+            {
+                return PaymentGatewayJson.GetString(obj, "payment_intent");
+            }
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+
+        return null;
     }
 
     private async Task<IDbContextTransaction?> BeginTransactionIfNeededAsync(CancellationToken ct)

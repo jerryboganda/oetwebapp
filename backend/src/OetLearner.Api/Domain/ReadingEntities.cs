@@ -271,6 +271,14 @@ public class ReadingQuestion
     [MaxLength(4096)]
     public string OptionsJson { get; set; } = "[]";
 
+    /// <summary>
+    /// 2026-05-27 audit fix — Reading rule R07.6 (Part C questions follow
+    /// paragraph order). 1-based paragraph index this question references
+    /// in the linked text. Nullable so legacy rows continue to validate,
+    /// and so non-Part-C question types remain unaffected.
+    /// </summary>
+    public int? ParagraphIndex { get; set; }
+
     /// <summary>Correct answer(s). Shape depends on type:
     /// MCQ → <c>"A"</c>; matching (multi) → <c>["1","3"]</c>;
     /// short answer → <c>"ORT"</c>. Capped at 512 chars.</summary>
@@ -425,6 +433,15 @@ public class ReadingAttempt
     /// </summary>
     [MaxLength(8192)]
     public string? ScopeJson { get; set; }
+
+    /// <summary>
+    /// 2026-05-27 audit fix — rulebook version pinning. Captured at attempt
+    /// start (from the reading-exam-mode rulebook). Lets post-hoc audit
+    /// determine which exam-UX rules applied to a graded attempt, even after
+    /// the rulebook is bumped to a new version.
+    /// </summary>
+    [MaxLength(32)]
+    public string? RulebookVersion { get; set; }
 
     public ICollection<ReadingAnswer> Answers { get; set; } = new List<ReadingAnswer>();
 }

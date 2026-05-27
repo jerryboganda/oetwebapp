@@ -16,6 +16,7 @@
       "letter": "Dr A B\nCardiology Clinic\nMain Street\nCity\n\n1 January 2026\n\nDear Dr Smith,\nRe: Mr John Jones aged 45\n\nI am writing to refer Mr Jones for your assessment of his recurrent chest pain.\n\nMr Jones is a non-smoker and consumes alcohol occasionally within recommended limits. He presented today with central chest tightness on exertion lasting two weeks. His blood pressure was 140 over 90 and his pulse was regular.\n\nI would appreciate your specialist review. Please contact me if further information is required.\n\nYours sincerely,\n\nDr A B",
       "expectedRuleIds": [
         "R04.1",
+        "R11.8",
         "R12.3"
       ]
     },
@@ -34,7 +35,8 @@
       "letter": "Dr A B\nCardiology Clinic\nMain Street\nCity\n\n1 January 2026\n\nDear Dr Smith,\nRe: Mr John Jones aged 45\n\nI am writing to refer Mr Jones for your assessment of his recurrent chest pain.\n\nMr Jones presented today with central chest tightness on exertion lasting two weeks. His blood pressure was 140 over 90 and his pulse was regular. Examination was otherwise unremarkable.\n\nI would appreciate your specialist review. Please contact me if further information is required.\n\nYours sincerely,\n\nDr A B",
       "expectedRuleIds": [
         "R03.4",
-        "R04.1"
+        "R04.1",
+        "R11.8"
       ]
     },
     {
@@ -57,6 +59,7 @@
         "R08.7",
         "R08.9",
         "R10.14",
+        "R11.8",
         "R12.2",
         "R12.3",
         "R13.10"
@@ -78,6 +81,7 @@
       "expectedRuleIds": [
         "R04.1",
         "R05.6",
+        "R11.8",
         "R12.3",
         "R12.9"
       ]

@@ -7,7 +7,7 @@
  * The actual conversational state is owned by the backend session
  * machine; this page is purely a timer + transition shell.
  */
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { LearnerDashboardShell } from '@/components/layout';
 import { Button } from '@/components/ui/button';
@@ -21,6 +21,7 @@ import {
   startSpeakingWarmup,
   type SpeakingSessionDetail,
 } from '@/lib/api/speaking-sessions';
+import { trackSpeaking } from '@/lib/analytics/speaking-events';
 
 const WARMUP_SECONDS = 90;
 
@@ -36,6 +37,7 @@ export default function SpeakingWarmupPage() {
   const [secondsLeft, setSecondsLeft] = useState(WARMUP_SECONDS);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const trackedWarmupStartRef = useRef(false);
 
   // Bootstrap: fetch session, transition to WarmUp if needed.
   useEffect(() => {
@@ -78,6 +80,10 @@ export default function SpeakingWarmupPage() {
   // Countdown.
   useEffect(() => {
     if (!session) return;
+    if (!trackedWarmupStartRef.current) {
+      trackedWarmupStartRef.current = true;
+      trackSpeaking('warmup_started', { sessionId: session.sessionId });
+    }
     if (secondsLeft <= 0) return;
     const t = window.setInterval(() => {
       setSecondsLeft((s) => Math.max(0, s - 1));
@@ -91,6 +97,10 @@ export default function SpeakingWarmupPage() {
     setError(null);
     try {
       await finishSpeakingWarmup(sessionId);
+      trackSpeaking('warmup_finished', {
+        sessionId,
+        durationSeconds: WARMUP_SECONDS - secondsLeft,
+      });
       router.push(`/speaking/sessions/${encodeURIComponent(sessionId)}/prep`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not finish warm-up.');

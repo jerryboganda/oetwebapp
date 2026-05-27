@@ -245,6 +245,7 @@ public sealed class StripeGateway(HttpClient httpClient, IOptions<BillingOptions
             "charge.refunded" or "refund.created" or "refund.updated" => PaymentWebhookCategories.Refund,
             "charge.dispute.created" or "charge.dispute.funds_withdrawn" or "charge.dispute.funds_reinstated" or "charge.dispute.closed" or "charge.dispute.updated" => PaymentWebhookCategories.Dispute,
             "checkout.session.completed" or "checkout.session.expired" or "checkout.session.async_payment_failed" or "checkout.session.async_payment_succeeded" => PaymentWebhookCategories.Payment,
+            "invoice.paid" or "invoice.payment_succeeded" or "invoice.payment_failed" => PaymentWebhookCategories.Payment,
             _ => PaymentWebhookCategories.Other
         };
 
@@ -265,6 +266,8 @@ public sealed class StripeGateway(HttpClient httpClient, IOptions<BillingOptions
             "checkout.session.async_payment_succeeded" => "completed",
             "checkout.session.expired" => "failed",
             "checkout.session.async_payment_failed" => "failed",
+            "invoice.paid" or "invoice.payment_succeeded" => "completed",
+            "invoice.payment_failed" => "failed",
             "charge.refunded" => "refunded",
             "refund.created" => "refund_pending",
             "refund.updated" => GetString(dataObject, "status") ?? "refund_updated",

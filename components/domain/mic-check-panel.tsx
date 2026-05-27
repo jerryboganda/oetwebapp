@@ -1,11 +1,13 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { Capacitor } from '@capacitor/core';
 import { cn } from '@/lib/utils';
 import { Mic, Volume2, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { InlineAlert } from '@/components/ui/alert';
 import { motion, AnimatePresence } from 'motion/react';
+import { SpeakingRecorder, capturedSpeakingRecordingFromNativeStop } from '@/lib/mobile/speaking-recorder';
 
 declare global {
   interface Window {
@@ -51,6 +53,7 @@ function stopStream(stream: MediaStream | null) {
 }
 
 export function MicCheckPanel({ onComplete, className }: MicCheckPanelProps) {
+  const isNativePlatform = Capacitor.isNativePlatform();
   const [steps, setSteps] = useState<Record<CheckStep, StepStatus>>({
     permission: 'active',
     record: 'pending',
@@ -69,12 +72,15 @@ export function MicCheckPanel({ onComplete, className }: MicCheckPanelProps) {
   const audioContextRef = useRef<AudioContext | null>(null);
 
   useEffect(() => () => {
+    if (isNativePlatform) {
+      void SpeakingRecorder.cancel().catch(() => undefined);
+    }
     stopStream(streamRef.current);
     if (audioContextRef.current?.state !== 'closed') {
       void audioContextRef.current?.close().catch(() => undefined);
     }
     if (audioUrl) URL.revokeObjectURL(audioUrl);
-  }, [audioUrl]);
+  }, [audioUrl, isNativePlatform]);
 
   const setStepStatus = (step: CheckStep, status: StepStatus) => {
     setSteps((prev) => ({ ...prev, [step]: status }));
@@ -104,6 +110,13 @@ export function MicCheckPanel({ onComplete, className }: MicCheckPanelProps) {
     setError(undefined);
     setStepStatus('permission', 'checking');
     try {
+      if (isNativePlatform) {
+        await SpeakingRecorder.start({ mimeType: 'audio/mp4', fileName: 'mic-check.m4a' });
+        await SpeakingRecorder.cancel();
+        passStep('permission', 'record');
+        return;
+      }
+
       ensureBrowserSupport();
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
@@ -127,6 +140,25 @@ export function MicCheckPanel({ onComplete, className }: MicCheckPanelProps) {
     }
 
     try {
+      if (isNativePlatform) {
+        await SpeakingRecorder.start({ mimeType: 'audio/mp4', fileName: 'mic-check.m4a' });
+        const countdown = window.setInterval(() => {
+          setRecordCountdown((value) => Math.max(0, value - 1));
+        }, 1000);
+        await new Promise((resolve) => window.setTimeout(resolve, RECORDING_TEST_SECONDS * 1000));
+        window.clearInterval(countdown);
+        const recording = await SpeakingRecorder.stop();
+        const captured = capturedSpeakingRecordingFromNativeStop(recording, 'mic-check.m4a');
+        if (captured.blob.size === 0) {
+          throw new Error('No audio was captured. Please check that your microphone is not muted.');
+        }
+
+        setAudioUrl(URL.createObjectURL(captured.blob));
+        setRecordCountdown(0);
+        passStep('record', 'playback');
+        return;
+      }
+
       ensureBrowserSupport();
       const stream = streamRef.current ?? await navigator.mediaDevices.getUserMedia({
         audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
@@ -191,6 +223,12 @@ export function MicCheckPanel({ onComplete, className }: MicCheckPanelProps) {
     setStepStatus('noise', 'checking');
 
     try {
+      if (isNativePlatform) {
+        setNoiseLevel(0);
+        passStep('noise', null);
+        return;
+      }
+
       ensureBrowserSupport();
       const stream = streamRef.current ?? await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;

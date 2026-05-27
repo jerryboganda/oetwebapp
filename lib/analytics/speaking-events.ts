@@ -79,7 +79,7 @@ export const SPEAKING_EVENTS = {
    * Hub broadcasts `TimeNearlyUp` (30s remaining). Used to verify the
    * audible warning is reaching learners.
    */
-  roleplay_time_nearly_up: { props: ['sessionId'] as const },
+  roleplay_time_nearly_up: { props: ['sessionId', 'secondsLeft'] as const },
 
   /**
    * Role-play ended. `reason` is one of `'timer'`, `'manual'`,
@@ -99,7 +99,7 @@ export const SPEAKING_EVENTS = {
   },
 
   /** Tutor (human) assessment view rendered to the learner. */
-  tutor_assessment_viewed: { props: ['sessionId'] as const },
+  tutor_assessment_viewed: { props: ['sessionId', 'estimatedBand'] as const },
 
   // ---------------------------------------------------------------------------
   // Micro-drills (course pathway recommendations)
@@ -128,12 +128,19 @@ export const SPEAKING_EVENTS = {
    */
   recording_deleted: { props: ['recordingId'] as const },
 
+  speaking_pdf_download_requested: { props: ['resultId'] as const },
+  speaking_pdf_download_succeeded: { props: ['resultId'] as const },
+  speaking_pdf_download_failed: { props: ['resultId', 'errorName'] as const },
+
   // ---------------------------------------------------------------------------
   // Two-role-play mock orchestrator
   // ---------------------------------------------------------------------------
 
   /** Learner starts a Speaking Mock Set (`/speaking/mocks/[id]`). */
   mock_started: { props: ['mockSetId'] as const },
+
+  /** Learner lands on the 60-second bridge between role-play 1 and role-play 2. */
+  mock_bridge_viewed: { props: ['mockSetId'] as const },
 
   /**
    * Combined estimated band is computed and persisted on

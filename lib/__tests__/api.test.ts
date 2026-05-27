@@ -289,6 +289,81 @@ describe('speaking API helpers', () => {
     expect(calls.some((call) => call.url.startsWith('http://localhost:5198/'))).toBe(false);
   });
 
+  it('creates diagnostic speaking attempts with diagnostic context and exam mode', async () => {
+    const calls: Array<{ url: string; method: string; body?: unknown }> = [];
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const method = String(init?.method ?? 'GET');
+      calls.push({
+        url,
+        method,
+        body: typeof init?.body === 'string' ? JSON.parse(init.body) : undefined,
+      });
+
+      if (url.endsWith('/v1/speaking/attempts')) {
+        return new Response(JSON.stringify({ attemptId: 'sa-diagnostic-1', state: 'in_progress' }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+
+      if (url.includes('/audio/upload-session')) {
+        return new Response(JSON.stringify({ uploadUrl: '/v1/speaking/upload-sessions/us-diagnostic/content', uploadSessionId: 'us-diagnostic' }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+
+      if (url.includes('/audio/complete')) {
+        return new Response(JSON.stringify({ attemptId: 'sa-diagnostic-1', canSubmit: true }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+
+      if (url.includes('/submit')) {
+        return new Response(JSON.stringify({ attemptId: 'sa-diagnostic-1', evaluationId: 'se-diagnostic-1', state: 'queued' }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+
+      return new Response(null, { status: 204 });
+    });
+
+    const { submitSpeakingRecording } = await import('../api');
+    const result = await submitSpeakingRecording(
+      'st-diagnostic-1',
+      new Blob(['audio'], { type: 'audio/webm' }),
+      120,
+      'diagnostic',
+      { accepted: true, text: 'Consent accepted' },
+    );
+
+    expect(result.submissionId).toBe('se-diagnostic-1');
+    expect(calls.find((call) => call.url.endsWith('/v1/speaking/attempts'))?.body).toEqual({
+      contentId: 'st-diagnostic-1',
+      context: 'diagnostic',
+      mode: 'exam',
+      deviceType: 'web',
+      parentAttemptId: null,
+    });
+  });
+
+  it('rejects diagnostic task responses that are not diagnostic eligible', async () => {
+    globalThis.fetch = vi.fn(async () => new Response(JSON.stringify({
+      taskId: 'ordinary-speaking-task',
+      diagnosticEligible: false,
+    }), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    }));
+
+    const { fetchDiagnosticTaskId } = await import('../api');
+
+    await expect(fetchDiagnosticTaskId('Speaking')).rejects.toThrow('Diagnostic Speaking task is unavailable.');
+  });
+
   it('keeps absolute backend object URLs on the browser proxy path', async () => {
     const originalCreateObjectURL = URL.createObjectURL;
     URL.createObjectURL = vi.fn(() => 'blob:expert-audio');

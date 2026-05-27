@@ -124,6 +124,16 @@ public class RuntimeSettingsRow
     /// </summary>
     public bool? LiveClassesAiRecordingProcessingEnabled { get; set; }
 
+    // ── Speaking Whisper transcription (RULE_40 tone pipeline) ─────
+    // 2026-05-28 audit fix — Dr. Hesham asked for the Whisper API key to be
+    // configurable from the admin panel. Stored encrypted via the existing
+    // RuntimeSettings.Secret.v1 protector. When null the OpenAiWhisperSpeakingProvider
+    // falls back to the appsettings (`Speaking:Whisper:ApiKey`) or, ultimately,
+    // the MockSpeakingTranscriptionProvider.
+    public string? SpeakingWhisperApiKeyEncrypted { get; set; }
+    [MaxLength(512)] public string? SpeakingWhisperBaseUrl { get; set; }
+    [MaxLength(64)] public string? SpeakingWhisperModel { get; set; }
+
     // ── Audit ──────────────────────────────────────────────────────
     [MaxLength(64)]
     public string? UpdatedByUserId { get; set; }

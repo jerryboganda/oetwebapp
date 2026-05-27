@@ -2336,9 +2336,9 @@ export async function submitSpeakingRecording(
   taskId: string,
   recording: Blob,
   durationSeconds = 120,
-  mode: 'self' | 'exam' | 'practice' = 'self',
+  mode: 'self' | 'exam' | 'practice' | 'diagnostic' = 'self',
   consent?: { accepted: boolean; text?: string },
-  options?: { attemptId?: string; mockSessionId?: string },
+  options?: { attemptId?: string; mockSessionId?: string; fileName?: string; captureMethod?: string; contentType?: string },
 ): Promise<{ uploadUrl: string; submissionId: string }> {
   const boundAttemptId = options?.attemptId?.trim();
   const attempt = boundAttemptId ? { attemptId: boundAttemptId } : await ensureAttempt('speaking', taskId, mode);
@@ -2352,11 +2352,11 @@ export async function submitSpeakingRecording(
     body: JSON.stringify({
       uploadSessionId: upload.uploadSessionId,
       storageKey: upload.storageKey,
-      fileName: `${taskId}.webm`,
+      fileName: options?.fileName ?? `${taskId}.webm`,
       sizeBytes: recording.size,
       durationSeconds,
-      captureMethod: 'browser-recording',
-      contentType: recording.type || 'audio/webm',
+      captureMethod: options?.captureMethod ?? 'browser-recording',
+      contentType: options?.contentType ?? (recording.type || 'audio/webm'),
       consentAccepted: consent?.accepted === true,
       consentText: consent?.text,
       consentAcceptedAt: new Date().toISOString(),
@@ -2567,6 +2567,45 @@ export async function downloadMockWritingPdf(mockAttemptId: string): Promise<voi
     anchor.remove();
   } finally {
     // Defer revoke so the browser has time to start the download.
+    setTimeout(() => URL.revokeObjectURL(objectUrl), 10_000);
+  }
+}
+
+export async function downloadSpeakingEvaluationPdf(evaluationId: string): Promise<void> {
+  const path = `/v1/speaking/evaluations/${encodeURIComponent(evaluationId)}/pdf`;
+  const response = await fetchWithTimeout(resolveApiUrl(path), {
+    method: 'GET',
+    headers: await getHeaders(path, undefined, { json: false }),
+  }, 60_000);
+
+  if (!response.ok) {
+    let code = 'unknown_error';
+    let message = `Download failed: ${response.status}`;
+    try {
+      const error = await response.json();
+      code = error.code ?? code;
+      message = error.message ?? error.title ?? message;
+    } catch {
+      // non-JSON; surface the status only
+    }
+    throw new ApiError(response.status, code, message, false);
+  }
+
+  const blob = await response.blob();
+  const disposition = response.headers.get('Content-Disposition') ?? '';
+  const filenameMatch = /filename="?([^";]+)"?/i.exec(disposition);
+  const filename = filenameMatch?.[1] ?? `speaking-${evaluationId}-practice.pdf`;
+
+  const objectUrl = URL.createObjectURL(blob);
+  try {
+    const anchor = document.createElement('a');
+    anchor.href = objectUrl;
+    anchor.download = filename;
+    anchor.rel = 'noopener';
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+  } finally {
     setTimeout(() => URL.revokeObjectURL(objectUrl), 10_000);
   }
 }
@@ -4311,6 +4350,9 @@ export async function startDiagnostic(): Promise<DiagnosticSession> {
 export async function fetchDiagnosticTaskId(subTest: SubTest): Promise<string> {
   try {
     const response = await apiRequest<ApiRecord>(`/v1/diagnostic/tasks?subtest=${encodeURIComponent(subTest)}`);
+    if (response.diagnosticEligible !== true) {
+      throw new Error('Diagnostic task is not marked eligible.');
+    }
     const taskId = response.taskId ?? response.contentId ?? null;
     if (taskId) return String(taskId);
   } catch {

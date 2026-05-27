@@ -12,6 +12,17 @@ export interface PartARendererProps {
   value: string;
   onChange: (value: string) => void;
   locked?: boolean;
+  /**
+   * OET Listening exam-mode rule L-R08.1 (PDF) — Part A: NO highlighting
+   * available to the candidate. Drives `user-select: none` on the prompt so
+   * native browser text-selection cannot be used as a workaround for the
+   * intentionally missing highlight tool.
+   *
+   * Default `false` so exam mode is safe-by-default. Learning / practice
+   * modes pass `true` (sourced from
+   * `ListeningModePolicy.HighlightingEnabledPartA`).
+   */
+  highlightingEnabled?: boolean;
 }
 
 export function PartARenderer({
@@ -22,6 +33,7 @@ export function PartARenderer({
   value,
   onChange,
   locked = false,
+  highlightingEnabled = false,
 }: PartARendererProps) {
   const inputId = providedInputId ?? `listening-answer-q${questionNumber}`;
   const segments = prompt.split(BLANK_PATTERN).filter(Boolean);
@@ -57,12 +69,20 @@ export function PartARenderer({
         </span>
       </div>
 
-      <div className="rounded-xl border border-border bg-background-light p-4">
+      <div
+        className="rounded-xl border border-border bg-background-light p-4"
+        data-highlighting-enabled={highlightingEnabled}
+        style={highlightingEnabled ? undefined : { userSelect: 'none', WebkitUserSelect: 'none' }}
+      >
         {hasAuthoredBlank ? (
           <p className="text-[1em] leading-10 text-navy">
             {segments.map((segment, segmentIndex) => {
               if (BLANK_PATTERN.test(segment)) {
-                return <span key={`blank-${segmentIndex}`}>{answerInput}</span>;
+                return (
+                  <span key={`blank-${segmentIndex}`} style={{ userSelect: 'auto', WebkitUserSelect: 'auto' }}>
+                    {answerInput}
+                  </span>
+                );
               }
               return <span key={`text-${segmentIndex}`}>{segment}</span>;
             })}
@@ -70,7 +90,7 @@ export function PartARenderer({
         ) : (
           <div className="space-y-3">
             <p className="text-[1em] leading-relaxed text-navy">{prompt}</p>
-            {answerInput}
+            <div style={{ userSelect: 'auto', WebkitUserSelect: 'auto' }}>{answerInput}</div>
           </div>
         )}
       </div>

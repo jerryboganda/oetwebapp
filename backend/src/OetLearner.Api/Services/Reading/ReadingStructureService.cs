@@ -766,6 +766,35 @@ public sealed class ReadingStructureService : IReadingStructureService
                             TargetId: text.Id));
                     }
                 }
+
+                // 2026-05-27 audit fix — Reading rule R07.6 (Part C questions
+                // follow paragraph order). Surface a warning chip when authors
+                // populated the optional ParagraphIndex column but the values
+                // are not monotonically non-decreasing across DisplayOrder.
+                if (part.PartCode == ReadingPartCode.C)
+                {
+                    foreach (var text in texts)
+                    {
+                        var ordered = part.Questions
+                            .Where(q => q.ReadingTextId == text.Id && q.ParagraphIndex.HasValue)
+                            .OrderBy(q => q.DisplayOrder)
+                            .Select(q => (q.DisplayOrder, q.ParagraphIndex!.Value, q.Id))
+                            .ToArray();
+                        if (ordered.Length < 2) continue;
+                        for (var i = 1; i < ordered.Length; i++)
+                        {
+                            if (ordered[i].Item2 < ordered[i - 1].Item2)
+                            {
+                                issues.Add(new(
+                                    Code: "part_c_paragraph_order_violation",
+                                    Severity: "warning",
+                                    Message: $"Reading rule R07.6 — Part C question {ordered[i].DisplayOrder} references paragraph {ordered[i].Item2} but the preceding question references paragraph {ordered[i - 1].Item2}. Questions must follow paragraph order.",
+                                    TargetId: ordered[i].Id));
+                                break; // one warning per text is enough.
+                            }
+                        }
+                    }
+                }
             }
 
             if (part.PartCode == ReadingPartCode.A && questionCount > 0 && part.Questions.All(q => q.ReadingTextId is null))
@@ -794,6 +823,31 @@ public sealed class ReadingStructureService : IReadingStructureService
         if (totalPoints != CanonicalMaxRawScore)
             issues.Add(new("total_points_mismatch", "error",
                 $"Total Reading points = {totalPoints}, must equal {CanonicalMaxRawScore}.", null));
+
+        // 2026-05-27 audit fix — Reading rule R04.5 (Reading Part A is stricter
+        // than Listening — any spelling error marks the answer wrong, with no
+        // exceptions). Reject any paper whose effective policy enables
+        // `fuzzy_levenshtein_1` short-answer matching for Reading. The Reading
+        // policy is a singleton row (Id = "global"); there is no per-paper
+        // override today, so we read the singleton.
+        var resolvedPolicy = await db.ReadingPolicies.AsNoTracking().FirstOrDefaultAsync(ct);
+        if (resolvedPolicy is not null
+            && string.Equals(resolvedPolicy.ShortAnswerNormalisation, "fuzzy_levenshtein_1", StringComparison.OrdinalIgnoreCase))
+        {
+            issues.Add(new(
+                Code: "short_answer_fuzzy_forbidden",
+                Severity: "error",
+                Message: "Reading rule R04.5 — short-answer marking must be strict; fuzzy_levenshtein_1 is forbidden. Switch the paper policy to trim_collapse_case_insensitive or exact.",
+                TargetId: paperId));
+        }
+        if (resolvedPolicy is not null && resolvedPolicy.ShortAnswerAcceptSynonyms)
+        {
+            issues.Add(new(
+                Code: "short_answer_synonyms_paper_wide",
+                Severity: "warning",
+                Message: "Reading rule R04.6 — Q8–14 and Q15–20 must come word-for-word from the text. Paper-wide synonym acceptance increases the risk of false positives; prefer per-question accepted variants only.",
+                TargetId: paperId));
+        }
 
         // Phase 4 — every question must be Published before paper publish.
         // Anything else surfaces as a single warning per non-published item

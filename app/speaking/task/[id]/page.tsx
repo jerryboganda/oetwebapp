@@ -15,7 +15,15 @@ import { Button } from '@/components/ui/button';
 import { Timer } from '@/components/ui/timer';
 import { fetchRoleCard, fetchSpeakingCompliance, submitSpeakingRecording, completeMockSection, type SpeakingComplianceCopy } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
-import { SpeakingRecorder, base64ToBlob } from '@/lib/mobile/speaking-recorder';
+import {
+  SpeakingRecorder,
+  capturedSpeakingRecordingFromNativeStop,
+  capturedSpeakingRecordingFromWebBlob,
+  nativeSpeakingPauseSupported,
+  tryPauseNativeSpeakingRecorder,
+  tryResumeNativeSpeakingRecorder,
+  type CapturedSpeakingRecording,
+} from '@/lib/mobile/speaking-recorder';
 import { SpeakingSelfPracticeButton } from '@/components/domain/speaking-self-practice-button';
 import { getRealtimeValueTransition, getRecordingPulseTransition, prefersReducedMotion } from '@/lib/motion';
 import type { RoleCard } from '@/lib/mock-data';
@@ -92,6 +100,8 @@ function LiveSpeakingTaskContent() {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const nativePulseRef = useRef<number | null>(null);
+  const pendingNativeRecordingRef = useRef<CapturedSpeakingRecording | null>(null);
+  const pendingNativeRecordingPromiseRef = useRef<Promise<CapturedSpeakingRecording> | null>(null);
   const recordingStartedAtRef = useRef<number | null>(null);
   const accumulatedRecordingMsRef = useRef(0);
 
@@ -109,6 +119,7 @@ function LiveSpeakingTaskContent() {
   const restoreFocusRef = useRef<HTMLElement | null>(null);
   const resultNavigationTimerRef = useRef<number | null>(null);
   const isNativeRecorder = Capacitor.isNativePlatform();
+  const nativePauseSupported = isNativeRecorder && nativeSpeakingPauseSupported();
 
   useEffect(() => {
     setPrepNotes(window.localStorage.getItem(`speaking-prep:${id}:notes`) ?? '');
@@ -123,8 +134,8 @@ function LiveSpeakingTaskContent() {
     recordingStateRef.current = recordingState;
   }, [recordingState]);
 
-  const buildRecordingBlob = () =>
-    new Blob(audioChunksRef.current, { type: mediaRecorderRef.current?.mimeType || 'audio/webm' });
+  const buildRecordingBlob = useCallback(() =>
+    new Blob(audioChunksRef.current, { type: mediaRecorderRef.current?.mimeType || 'audio/webm' }), []);
 
   const getRecordedDurationSeconds = useCallback(() => {
     const liveMs = recordingStartedAtRef.current === null ? 0 : Date.now() - recordingStartedAtRef.current;
@@ -199,21 +210,29 @@ function LiveSpeakingTaskContent() {
     }
   }, []);
 
-  const stopRecorderAsync = async () => {
+  const stopRecorderAsync = useCallback(async (): Promise<CapturedSpeakingRecording> => {
     if (isNativeRecorder) {
       const recording = await SpeakingRecorder.stop();
-      return base64ToBlob(recording.base64, recording.mimeType);
+      return capturedSpeakingRecordingFromNativeStop(recording, `${id}.m4a`);
     }
 
     const recorder = mediaRecorderRef.current;
     if (!recorder || recorder.state === 'inactive') {
-      return buildRecordingBlob();
+      return capturedSpeakingRecordingFromWebBlob(
+        buildRecordingBlob(),
+        `${id}.webm`,
+        getRecordedDurationSeconds() * 1000,
+      );
     }
 
-    return new Promise<Blob>((resolve, reject) => {
+    return new Promise<CapturedSpeakingRecording>((resolve, reject) => {
       const handleStop = () => {
         recorder.removeEventListener('error', handleError);
-        resolve(buildRecordingBlob());
+        resolve(capturedSpeakingRecordingFromWebBlob(
+          buildRecordingBlob(),
+          `${id}.webm`,
+          getRecordedDurationSeconds() * 1000,
+        ));
       };
 
       const handleError = () => {
@@ -225,7 +244,7 @@ function LiveSpeakingTaskContent() {
       recorder.addEventListener('error', handleError, { once: true });
       recorder.stop();
     });
-  };
+  }, [buildRecordingBlob, getRecordedDurationSeconds, id, isNativeRecorder]);
 
   const cleanupAudio = useCallback((stopRecorder = true) => {
     stopNativeVisualizerPulse();
@@ -340,7 +359,11 @@ function LiveSpeakingTaskContent() {
 
     if (recordingState === 'paused' && (isNativeRecorder || mediaRecorderRef.current)) {
       if (isNativeRecorder) {
-        await SpeakingRecorder.resume();
+        const resumed = await tryResumeNativeSpeakingRecorder();
+        if (!resumed) {
+          setSubmitError('Pause and resume are not available on this device yet. Continue recording or finish this attempt.');
+          return;
+        }
         startNativeVisualizerPulse();
       } else {
         const recorder = mediaRecorderRef.current;
@@ -361,9 +384,11 @@ function LiveSpeakingTaskContent() {
         return;
       }
       if (isNativeRecorder) {
-        await SpeakingRecorder.start({ mimeType: 'audio/mp4' });
+        await SpeakingRecorder.start({ mimeType: 'audio/mp4', fileName: `${id}.m4a` });
         mediaRecorderRef.current = null;
         audioChunksRef.current = [];
+        pendingNativeRecordingRef.current = null;
+        pendingNativeRecordingPromiseRef.current = null;
         startNativeVisualizerPulse();
         startDurationClock(true);
         setRecordingState('recording');
@@ -404,13 +429,17 @@ function LiveSpeakingTaskContent() {
     }
   };
 
-  const handlePauseRecording = () => {
+  const handlePauseRecording = async () => {
     if (mode === 'exam') {
       return;
     }
 
     if (isNativeRecorder) {
-      void SpeakingRecorder.pause().catch(() => undefined);
+      const paused = await tryPauseNativeSpeakingRecorder();
+      if (!paused) {
+        setSubmitError('Pause is not available on this device yet. Continue recording or finish this attempt.');
+        return;
+      }
       stopNativeVisualizerPulse();
       pauseDurationClock();
       setRecordingState('paused');
@@ -429,9 +458,20 @@ function LiveSpeakingTaskContent() {
       return;
     }
 
-    if (isNativeRecorder) {
-      void SpeakingRecorder.pause().catch(() => undefined);
+    if (isNativeRecorder && nativePauseSupported) {
+      void tryPauseNativeSpeakingRecorder();
       stopNativeVisualizerPulse();
+    } else if (isNativeRecorder) {
+      stopNativeVisualizerPulse();
+      pendingNativeRecordingPromiseRef.current = stopRecorderAsync()
+        .then((recording) => {
+          pendingNativeRecordingRef.current = recording;
+          return recording;
+        })
+        .catch((err) => {
+          setSubmitError(err instanceof Error ? err.message : 'Recording could not be stopped at the time limit.');
+          throw err;
+        });
     } else if (mediaRecorderRef.current?.state === 'recording') {
       mediaRecorderRef.current.pause();
     }
@@ -439,7 +479,7 @@ function LiveSpeakingTaskContent() {
     pauseDurationClock();
     setRecordingState('finished');
     setShowSubmitConfirm(true);
-  }, [elapsedSeconds, isNativeRecorder, mode, pauseDurationClock, recordingState, roleplayTimeSeconds, stopNativeVisualizerPulse]);
+  }, [elapsedSeconds, isNativeRecorder, mode, nativePauseSupported, pauseDurationClock, recordingState, roleplayTimeSeconds, stopNativeVisualizerPulse, stopRecorderAsync]);
 
   // Wave 2 of docs/SPEAKING-MODULE-PLAN.md: 30-second audible warning
   // before the role-play time cap expires (default 4:30 of 5:00) and a
@@ -550,24 +590,38 @@ function LiveSpeakingTaskContent() {
     analytics.track('task_submitted', { taskId: id, subtest: 'speaking', mode, durationSeconds, mockAttemptId, speakingMockSessionId });
 
     try {
-      const recording = await stopRecorderAsync();
+      const recording = pendingNativeRecordingRef.current ?? await (pendingNativeRecordingPromiseRef.current ?? stopRecorderAsync());
+      pendingNativeRecordingRef.current = null;
+      pendingNativeRecordingPromiseRef.current = null;
       cleanupAudio(false);
-      if (recording.size === 0) {
+      if (recording.blob.size === 0) {
         throw new Error('No speaking audio was captured.');
       }
 
+      const uploadDurationSeconds = Math.max(durationSeconds, Math.round(recording.durationMs / 1000) || durationSeconds);
+
       const { submissionId } = await submitSpeakingRecording(
         id,
-        recording,
-        durationSeconds,
+        recording.blob,
+        uploadDurationSeconds,
         mode,
         {
           accepted: recordingConsentAccepted,
           text: compliance?.consentText,
         },
         speakingMockAttemptId && speakingMockSessionId
-          ? { attemptId: speakingMockAttemptId, mockSessionId: speakingMockSessionId }
-          : undefined,
+          ? {
+              attemptId: speakingMockAttemptId,
+              mockSessionId: speakingMockSessionId,
+              fileName: recording.fileName,
+              captureMethod: recording.captureMethod,
+              contentType: recording.mimeType,
+            }
+          : {
+              fileName: recording.fileName,
+              captureMethod: recording.captureMethod,
+              contentType: recording.mimeType,
+            },
       );
       if (mockAttemptId && mockSectionId) {
         try {

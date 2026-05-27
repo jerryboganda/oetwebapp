@@ -48,7 +48,44 @@ public static class SpeakingTranscriptionEndpoints
             .Produces(StatusCodes.Status403Forbidden)
             .Produces(StatusCodes.Status404NotFound);
 
+        // ── RULE_40 tone assessment ──
+        // 2026-05-27 audit fix — surfaces the AI tone score (0–3) on Breaking
+        // Bad News cards. The endpoint is advisory; the FINAL grade still
+        // comes from a human OET Assessor (RULE_57 / RULE_58).
+        app.MapGet("/v1/speaking/sessions/{sessionId}/tone", LearnerGetToneAsync)
+            .RequireAuthorization("LearnerOnly")
+            .WithTags("Speaking transcription")
+            .WithSummary("Learner: read the RULE_40 tone score derived from the Whisper transcript.")
+            .Produces<OetLearner.Api.Services.Speaking.SpeakingToneResult>(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status404NotFound);
+
         return app;
+    }
+
+    private static async Task<IResult> LearnerGetToneAsync(
+        string sessionId,
+        HttpContext http,
+        OetLearner.Api.Services.Speaking.ISpeakingToneAssessor toneAssessor,
+        LearnerDbContext db,
+        CancellationToken ct)
+    {
+        var userId = http.User.FindFirstValue(ClaimTypes.NameIdentifier)
+            ?? http.User.FindFirstValue("sub")
+            ?? throw new UnauthorizedAccessException();
+
+        var session = await db.SpeakingSessions.AsNoTracking()
+            .FirstOrDefaultAsync(s => s.Id == sessionId, ct);
+        if (session is null)
+        {
+            return Results.NotFound(new { errorCode = "session_not_found" });
+        }
+        if (session.UserId != userId)
+        {
+            return Results.Forbid();
+        }
+
+        var result = await toneAssessor.AssessBreakingBadNewsAsync(sessionId, ct);
+        return Results.Ok(result);
     }
 
     // ─────────────────────────────────────────────────────────────────

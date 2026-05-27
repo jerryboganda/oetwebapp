@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
 import { PartARenderer } from '@/components/domain/listening/PartARenderer';
 
-function PartAHarness({ locked = false }: { locked?: boolean }) {
+function PartAHarness({ locked = false, highlightingEnabled }: { locked?: boolean; highlightingEnabled?: boolean }) {
   const [value, setValue] = useState('');
   return (
     <PartARenderer
@@ -15,6 +15,7 @@ function PartAHarness({ locked = false }: { locked?: boolean }) {
       value={value}
       onChange={setValue}
       locked={locked}
+      highlightingEnabled={highlightingEnabled}
     />
   );
 }
@@ -50,5 +51,23 @@ describe('PartARenderer', () => {
 
     expect(screen.queryByRole('button', { name: /highlight/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /strike out/i })).not.toBeInTheDocument();
+  });
+
+  it('disables native text-selection on the prompt by default (rule R08.1 exam-mode safe default)', () => {
+    render(<PartAHarness />);
+    const note = screen.getByTestId('part-a-clinical-note');
+    const promptContainer = note.querySelector('[data-highlighting-enabled]') as HTMLElement | null;
+    expect(promptContainer).not.toBeNull();
+    expect(promptContainer!.dataset.highlightingEnabled).toBe('false');
+    expect(promptContainer!.style.userSelect).toBe('none');
+  });
+
+  it('permits native text-selection when highlightingEnabled is true (learning / practice mode)', () => {
+    render(<PartAHarness highlightingEnabled />);
+    const note = screen.getByTestId('part-a-clinical-note');
+    const promptContainer = note.querySelector('[data-highlighting-enabled]') as HTMLElement | null;
+    expect(promptContainer).not.toBeNull();
+    expect(promptContainer!.dataset.highlightingEnabled).toBe('true');
+    expect(promptContainer!.style.userSelect).toBe('');
   });
 });

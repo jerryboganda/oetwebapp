@@ -17,7 +17,7 @@
  * No recordings happen here — consent is captured downstream in the
  * recording room via `<SpeakingConsentBanner>`.
  */
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { ArrowRight, BookOpen, Loader2, NotebookPen, SkipForward } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -29,6 +29,7 @@ import {
   type SpeakingSessionDetail,
 } from '@/lib/api/speaking-sessions';
 import { ApiError } from '@/lib/api';
+import { trackSpeaking } from '@/lib/analytics/speaking-events';
 
 const QUICK_PICK_PROMPTS: { label: string; insert: string }[] = [
   {
@@ -57,6 +58,7 @@ export default function SpeakingSessionPrepPage() {
   const [confirmSkipOpen, setConfirmSkipOpen] = useState(false);
   const [transitioning, setTransitioning] = useState(false);
   const [transitionError, setTransitionError] = useState<string | null>(null);
+  const trackedPrepStartRef = useRef(false);
 
   // ── Load session ─────────────────────────────────────────────────────────
   useEffect(() => {
@@ -87,6 +89,15 @@ export default function SpeakingSessionPrepPage() {
       cancelled = true;
     };
   }, [sessionId]);
+
+  useEffect(() => {
+    if (!session || trackedPrepStartRef.current) return;
+    trackedPrepStartRef.current = true;
+    trackSpeaking('prep_started', {
+      sessionId: session.sessionId,
+      cardId: session.card.cardId,
+    });
+  }, [session]);
 
   const beginRolePlay = useCallback(async () => {
     if (!sessionId) return;

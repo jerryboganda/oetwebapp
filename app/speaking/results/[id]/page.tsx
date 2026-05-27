@@ -1,6 +1,6 @@
 'use client';
 
-import { AlertCircle, CheckCircle2, ChevronRight, FileText, Headphones, Loader2, Mic, Target, TrendingUp, UserCheck, Zap } from 'lucide-react';
+import { AlertCircle, CheckCircle2, ChevronRight, Download, FileText, Headphones, Loader2, Mic, Target, TrendingUp, UserCheck, Zap } from 'lucide-react';
 import { motion, useReducedMotion } from 'motion/react';
 import { useEffect, useState } from 'react';
 import { getRecordingPulseTransition, prefersReducedMotion } from '@/lib/motion';
@@ -12,8 +12,9 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { InlineAlert } from '@/components/ui/alert';
 import { MotionSection } from '@/components/ui/motion-primitives';
-import { fetchPronunciationSpeakingLinked, fetchSpeakingResult } from '@/lib/api';
+import { downloadSpeakingEvaluationPdf, fetchPronunciationSpeakingLinked, fetchSpeakingResult } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
+import { trackSpeaking } from '@/lib/analytics/speaking-events';
 import { SpeakingSelfPracticeButton } from '@/components/domain/speaking-self-practice-button';
 import { SpeakingScoreDisclaimer } from '@/components/domain/SpeakingScoreDisclaimer';
 import type { SpeakingResult } from '@/lib/mock-data';
@@ -49,7 +50,18 @@ export default function SpeakingResultSummary() {
   const [analysing, setAnalysing] = useState(true);
   const [result, setResult] = useState<SpeakingResult | null>(null);
   const [pronunciationInsight, setPronunciationInsight] = useState<PronunciationLinkedAssessment | null>(null);
+  const [pdfState, setPdfState] = useState<'idle' | 'downloading' | 'error'>('idle');
+  const [pdfError, setPdfError] = useState<string | null>(null);
   const [error, setError] = useState(false);
+  // 2026-05-27 audit fix — RULE_40 tone score from the Whisper transcript.
+  const [tone, setTone] = useState<{
+    toneScore: number;
+    band: string;
+    isAdvisory: boolean;
+    provenance: string;
+    rationale: string;
+    rulebookRef: string;
+  } | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -73,6 +85,12 @@ export default function SpeakingResultSummary() {
             });
           analytics.track('evaluation_viewed', { resultId: id, subtest: 'speaking' });
           setAnalysing(false);
+          // RULE_40 tone — fetch advisory score from the Whisper/AI tone pipeline.
+          // Failure is non-fatal (BBN cards only have meaningful tone data).
+          void fetch(`/v1/speaking/sessions/${encodeURIComponent(id)}/tone`)
+            .then((r) => (r.ok ? r.json() : null))
+            .then((data) => { if (!cancelled && data) setTone(data); })
+            .catch(() => { /* tone is best-effort */ });
           return;
         }
 
@@ -150,6 +168,27 @@ export default function SpeakingResultSummary() {
   const weakestCriterion = result.criteria?.reduce<SpeakingCriterion | undefined>((weakest, item) => (
     !weakest || item.score / Math.max(1, item.max) < weakest.score / Math.max(1, weakest.max) ? item : weakest
   ), undefined);
+
+  const handleDownloadPdf = async () => {
+    setPdfState('downloading');
+    setPdfError(null);
+    try {
+      trackSpeaking('speaking_pdf_download_requested', { resultId: id });
+      await downloadSpeakingEvaluationPdf(id);
+      trackSpeaking('speaking_pdf_download_succeeded', { resultId: id });
+      setPdfState('idle');
+    } catch (err: unknown) {
+      const message = err instanceof Error && err.message
+        ? err.message
+        : 'Could not download the PDF. Please try again later.';
+      setPdfError(message);
+      setPdfState('error');
+      trackSpeaking('speaking_pdf_download_failed', {
+        resultId: id,
+        errorName: err instanceof Error && err.name ? err.name : 'unknown_error',
+      });
+    }
+  };
 
   return (
     <LearnerDashboardShell pageTitle="Performance Summary">
@@ -254,6 +293,18 @@ export default function SpeakingResultSummary() {
                   <UserCheck className="w-5 h-5" /> Request Tutor Review
                 </Link>
 </Button>
+              <Button
+                variant="outline"
+                fullWidth
+                onClick={() => void handleDownloadPdf()}
+                loading={pdfState === 'downloading'}
+                disabled={pdfState === 'downloading'}
+              >
+                <Download className="w-5 h-5" /> Download Practice PDF
+              </Button>
+              {pdfState === 'error' && pdfError ? (
+                <p className="text-xs text-danger" role="alert">{pdfError}</p>
+              ) : null}
               {/* Wave 5: deep-link this attempt's scenario into the
                   AI-patient Conversation module for unlimited
                   rehearsal. Falls back to no button when the result
@@ -328,6 +379,28 @@ export default function SpeakingResultSummary() {
                   );
                 })}
               </div>
+            </Card>
+          </MotionSection>
+        ) : null}
+
+        {/* 2026-05-27 audit fix — RULE_40 tone score card. Advisory only;
+            human OET Assessor remains authoritative per RULE_57 / RULE_58. */}
+        {tone ? (
+          <MotionSection delayIndex={1}>
+            <Card className="p-6" data-testid="speaking-tone-card">
+              <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
+                <div>
+                  <h2 className="text-base font-black text-navy">Tone of voice (RULE_40)</h2>
+                  <p className="text-xs text-muted mt-1">{tone.provenance}</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Badge variant={tone.toneScore >= 3 ? 'success' : tone.toneScore >= 2 ? 'info' : tone.toneScore >= 1 ? 'warning' : 'danger'} size="sm">
+                    {tone.band} · {tone.toneScore}/3
+                  </Badge>
+                  {tone.isAdvisory ? <Badge variant="info" size="sm">Advisory</Badge> : null}
+                </div>
+              </div>
+              <p className="text-sm text-navy leading-relaxed">{tone.rationale}</p>
             </Card>
           </MotionSection>
         ) : null}
