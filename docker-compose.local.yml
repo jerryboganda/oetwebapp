@@ -44,8 +44,8 @@ services:
       ASPNETCORE_ENVIRONMENT: Development
       ASPNETCORE_URLS: http://+:8080
       ConnectionStrings__DefaultConnection: Host=postgres;Port=5432;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD}
-      Auth__UseDevelopmentAuth: '${AUTH_USE_DEVELOPMENT_AUTH}'
-      Auth__AllowDevelopmentAuthInProduction: '${AUTH_ALLOW_DEVELOPMENT_AUTH_IN_PRODUCTION}'
+      Auth__UseDevelopmentAuth: '${AUTH_USE_DEVELOPMENT_AUTH:-false}'
+      Auth__AllowDevelopmentAuthInProduction: '${AUTH_ALLOW_DEVELOPMENT_AUTH_IN_PRODUCTION:-false}'
       Platform__PublicApiBaseUrl: ${PUBLIC_API_BASE_URL}
       Platform__PublicWebBaseUrl: ${APP_URL:-http://localhost:3000}
       Billing__CheckoutBaseUrl: ${CHECKOUT_BASE_URL}

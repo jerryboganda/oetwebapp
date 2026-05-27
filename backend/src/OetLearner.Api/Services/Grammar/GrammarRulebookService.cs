@@ -1,3 +1,4 @@
+using Microsoft.Extensions.DependencyInjection;
 using OetLearner.Api.Services.Rulebook;
 
 namespace OetLearner.Api.Services.Grammar;
@@ -18,13 +19,15 @@ public interface IGrammarRulebookService
     GrammarLessonViewList GetLessonsForTopic(ExamProfession profession, string sectionId);
 }
 
-public sealed class GrammarRulebookService(IRulebookLoader loader) : IGrammarRulebookService
+public sealed class GrammarRulebookService(IServiceScopeFactory scopeFactory) : IGrammarRulebookService
 {
-    private readonly IRulebookLoader _loader = loader;
+    private readonly IServiceScopeFactory _scopeFactory = scopeFactory;
 
     public GrammarTopicSummary[] GetTopics(ExamProfession profession)
     {
-        var book = _loader.Load(RuleKind.Grammar, profession);
+        using var scope = _scopeFactory.CreateScope();
+        var loader = scope.ServiceProvider.GetRequiredService<IRulebookLoader>();
+        var book = loader.Load(RuleKind.Grammar, profession);
         return book.Sections
             .OrderBy(s => s.Order ?? 0)
             .Select(s =>
@@ -38,7 +41,9 @@ public sealed class GrammarRulebookService(IRulebookLoader loader) : IGrammarRul
 
     public GrammarLessonViewList GetLessonsForTopic(ExamProfession profession, string sectionId)
     {
-        var book = _loader.Load(RuleKind.Grammar, profession);
+        using var scope = _scopeFactory.CreateScope();
+        var loader = scope.ServiceProvider.GetRequiredService<IRulebookLoader>();
+        var book = loader.Load(RuleKind.Grammar, profession);
         var section = book.Sections.FirstOrDefault(s => string.Equals(s.Id, sectionId, StringComparison.OrdinalIgnoreCase));
         if (section is null) throw new KeyNotFoundException($"Grammar topic '{sectionId}' not found for profession {profession}.");
         var lessons = book.Rules
@@ -56,7 +61,9 @@ public sealed class GrammarRulebookService(IRulebookLoader loader) : IGrammarRul
 
     public GrammarLessonView? GetLesson(ExamProfession profession, string ruleId)
     {
-        var rule = _loader.FindRule(RuleKind.Grammar, profession, ruleId);
+        using var scope = _scopeFactory.CreateScope();
+        var loader = scope.ServiceProvider.GetRequiredService<IRulebookLoader>();
+        var rule = loader.FindRule(RuleKind.Grammar, profession, ruleId);
         if (rule is null) return null;
         return new GrammarLessonView(
             rule.Id,
