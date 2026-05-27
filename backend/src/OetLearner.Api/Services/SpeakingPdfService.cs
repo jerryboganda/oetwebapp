@@ -276,9 +276,10 @@ public sealed class SpeakingPdfService : ISpeakingPdfService
                                 var text = ReadString(line, "text") ?? string.Empty;
                                 lines.Item().Text(t =>
                                 {
+                                    t.DefaultTextStyle(s => s.FontSize(9).LineHeight(1.25f));
                                     t.Span($"{CultureInfo.InvariantCulture.TextInfo.ToTitleCase(speaker)}: ").Bold();
                                     t.Span(text);
-                                }).FontSize(9).LineHeight(1.25f);
+                                });
                             }
                         });
                     }
