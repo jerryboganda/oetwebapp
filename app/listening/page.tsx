@@ -6,16 +6,10 @@ import { useRouter } from 'next/navigation';
 import {
   ArrowRight,
   CalendarDays,
-  Clock,
   Headphones,
-  ListChecks,
-  MapPin,
-  Mic,
   PlayCircle,
-  Sparkles,
   Target,
   TrendingUp,
-  Volume2,
 } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero } from '@/components/domain';
@@ -26,57 +20,78 @@ import { useAuth } from '@/contexts/auth-context';
 import { analytics } from '@/lib/analytics';
 import { useListeningProfile } from '@/hooks/useListeningProfile';
 
-interface QuickLink {
+// Per the 2026-05-27 OET sample-test alignment directive, the Listening hub
+// shows exactly four candidate-facing entries — three Practice-by-Part cards
+// (A / B / C) and one Full Listening Exam card. The Pathway, Drills, Lessons,
+// Strategies, Pronunciation, Dictation, Accent Training, and "Your audio
+// context" surfaces remain on disk and are still reachable by direct URL for
+// admin/QA, but they are intentionally hidden from the learner's primary path.
+interface HubCard {
   title: string;
-  description: string;
+  subtitle: string;
   href: string;
-  icon: typeof Headphones;
-  comingSoon?: boolean;
+  accent: 'partA' | 'partB' | 'partC' | 'exam';
 }
 
-const QUICK_LINKS: QuickLink[] = [
+const HUB_CARDS: HubCard[] = [
   {
-    title: 'Pathway',
-    description: 'Your personalised 12-week roadmap.',
-    href: '/listening/pathway',
-    icon: MapPin,
+    title: 'Practice Part A',
+    subtitle: 'Patient consultations — note-taking from two consultations (24 items).',
+    href: '/listening/practice/a',
+    accent: 'partA',
   },
   {
-    title: 'Accent training',
-    description: 'Targeted drills for British, Australian, and varied accents.',
-    href: '/listening',
-    icon: Headphones,
-    comingSoon: true,
+    title: 'Practice Part B',
+    subtitle: 'Workplace extracts — six short workplace audio extracts (6 items).',
+    href: '/listening/practice/b',
+    accent: 'partB',
   },
   {
-    title: 'Dictation',
-    description: 'Build detail capture with short dictation exercises.',
-    href: '/listening',
-    icon: ListChecks,
-    comingSoon: true,
+    title: 'Practice Part C',
+    subtitle: 'Healthcare presentations — two longer extracts with detailed questions (12 items).',
+    href: '/listening/practice/c',
+    accent: 'partC',
   },
   {
-    title: 'Pronunciation',
-    description: 'Tune your ear with paired listen-and-repeat practice.',
-    href: '/listening',
-    icon: Mic,
-    comingSoon: true,
-  },
-  {
-    title: 'Strategies',
-    description: 'Lessons for note-taking, gist, and distractor recognition.',
-    href: '/listening',
-    icon: Sparkles,
-    comingSoon: true,
+    title: 'Full Listening Exam',
+    subtitle: '45 minutes • 42 questions • audio plays once. Scored on the official OET 0–500 scale.',
+    href: '/listening/exam',
+    accent: 'exam',
   },
 ];
+
+const ACCENT_STYLES: Record<HubCard['accent'], { ring: string; badge: string; icon: string; chip: string }> = {
+  partA: {
+    ring: 'border-violet-200 hover:border-violet-300',
+    badge: 'bg-violet-100 text-violet-800',
+    icon: 'bg-violet-100 text-violet-700',
+    chip: 'Part A',
+  },
+  partB: {
+    ring: 'border-sky-200 hover:border-sky-300',
+    badge: 'bg-sky-100 text-sky-800',
+    icon: 'bg-sky-100 text-sky-700',
+    chip: 'Part B',
+  },
+  partC: {
+    ring: 'border-emerald-200 hover:border-emerald-300',
+    badge: 'bg-emerald-100 text-emerald-800',
+    icon: 'bg-emerald-100 text-emerald-700',
+    chip: 'Part C',
+  },
+  exam: {
+    ring: 'border-amber-200 hover:border-amber-300',
+    badge: 'bg-amber-100 text-amber-900',
+    icon: 'bg-amber-100 text-amber-800',
+    chip: 'Full exam',
+  },
+};
 
 export default function ListeningHome() {
   const { isAuthenticated, loading: authLoading } = useAuth();
   const router = useRouter();
   const { profile, isLoading, error } = useListeningProfile();
 
-  // Analytics
   useEffect(() => {
     if (!authLoading && isAuthenticated) {
       analytics.track('module_entry', { module: 'listening' });
@@ -136,7 +151,6 @@ export default function ListeningHome() {
     [profile, daysToExam],
   );
 
-  // Loading / unauthenticated guards
   if (authLoading) {
     return (
       <LearnerDashboardShell pageTitle="Listening">
@@ -153,7 +167,6 @@ export default function ListeningHome() {
     );
   }
 
-  // No profile yet — show welcome CTA
   if (!isLoading && !profile && !error) {
     return (
       <LearnerDashboardShell pageTitle="Listening">
@@ -163,10 +176,9 @@ export default function ListeningHome() {
             icon={Headphones}
             accent="purple"
             title="Welcome to the OET Listening module"
-            description="Set up your personalised 12-week pathway in under five minutes."
+            description="Set up your personalised pathway in under five minutes."
           />
           <div className="rounded-2xl border border-violet-100 bg-violet-50 p-8 text-center shadow-sm">
-            <Sparkles className="mx-auto mb-3 h-8 w-8 text-violet-600" aria-hidden />
             <p className="text-lg font-bold text-violet-900">Get started</p>
             <p className="mt-1 text-sm text-violet-700">
               We&apos;ll ask a few quick questions, run an audio check, and tailor your plan.
@@ -202,27 +214,25 @@ export default function ListeningHome() {
     );
   }
 
-  // Diagnostic stage — primary CTA is to take the diagnostic
   const needsDiagnostic =
     profile.currentStage === 'diagnostic' || profile.currentStage === 'audio_check';
 
   return (
     <LearnerDashboardShell pageTitle="Listening">
       <main className="space-y-10">
-        {/* Stage-gated banner */}
         {needsDiagnostic && (
           <div className="rounded-xl border border-blue-200 bg-blue-50 px-5 py-4 dark:border-blue-700 dark:bg-blue-900/20">
             <p className="mb-1 text-sm font-semibold text-blue-800 dark:text-blue-200">
               Start with your listening diagnostic
             </p>
             <p className="mb-3 text-xs text-blue-700/70 dark:text-blue-300/70">
-              A 30-minute diagnostic calibrates your sub-skills, accents, and 12-week plan.
+              A short diagnostic calibrates your sub-skills, accents, and recommended plan.
             </p>
             <Link
               href="/listening/diagnostic"
               className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-blue-700"
             >
-              Take the diagnostic (30 min)
+              Take the diagnostic
               <ArrowRight className="h-4 w-4" aria-hidden />
             </Link>
           </div>
@@ -232,120 +242,59 @@ export default function ListeningHome() {
           eyebrow="Module focus"
           icon={Headphones}
           accent="purple"
-          title="Train every part of OET Listening"
-          description="Sub-skill drills, accent practice, and full mock tests under exam timing."
+          title="OET Listening"
+          description="Practice each part separately or attempt the full listening exam under official timing."
           highlights={heroHighlights}
         />
 
         <LearnerSkillSwitcher compact />
 
-        {/* Today's plan placeholder */}
-        <section className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900">
-          <div className="mb-3 flex items-center justify-between gap-3 flex-wrap">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-widest text-violet-500">
-                Today
-              </p>
-              <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100">Your daily plan</h2>
-            </div>
-            <span className="rounded-full bg-violet-100 px-3 py-1 text-xs font-bold text-violet-700">
-              Coming in Phase 3
-            </span>
-          </div>
-          <div className="rounded-xl border border-dashed border-gray-200 bg-gray-50 p-6 text-center text-sm text-gray-500 dark:border-gray-700 dark:bg-gray-800/50 dark:text-gray-400">
-            <Clock className="mx-auto mb-2 h-6 w-6" aria-hidden />
-            <p>Your daily plan and adaptive drills will appear here once Phase 3 lands.</p>
-            <p className="mt-1 text-xs">
-              For now, head into your pathway to see the full 12-week schedule.
-            </p>
-            <Link
-              href="/listening/pathway"
-              className="mt-3 inline-flex items-center gap-1 text-sm font-bold text-violet-700 hover:underline"
-            >
-              View pathway
-              <ArrowRight className="h-3.5 w-3.5" aria-hidden />
-            </Link>
-          </div>
-        </section>
-
-        {/* Quick links to other listening surfaces */}
-        <section>
+        <section aria-labelledby="listening-hub-heading">
           <div className="mb-4">
             <p className="text-xs font-semibold uppercase tracking-widest text-violet-500">
-              Explore
+              Choose how to practice
             </p>
-            <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100">Listening modules</h2>
-          </div>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {QUICK_LINKS.map((link) => {
-              const Icon = link.icon;
-              return (
-                <Link
-                  key={link.title}
-                  href={link.href}
-                  aria-disabled={link.comingSoon}
-                  className={`group relative flex items-start gap-3 rounded-2xl border p-5 transition-shadow ${
-                    link.comingSoon
-                      ? 'border-gray-200 bg-gray-50 opacity-70 dark:border-gray-700 dark:bg-gray-800/40'
-                      : 'border-violet-100 bg-white hover:shadow-md dark:border-gray-800 dark:bg-gray-900'
-                  }`}
-                >
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-violet-100 text-violet-700">
-                    <Icon className="h-5 w-5" aria-hidden />
-                  </div>
-                  <div className="flex-1">
-                    <div className="flex items-center justify-between gap-2 flex-wrap">
-                      <h3 className="text-sm font-bold text-gray-900 dark:text-gray-100">
-                        {link.title}
-                      </h3>
-                      {link.comingSoon && (
-                        <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-800">
-                          Soon
-                        </span>
-                      )}
-                    </div>
-                    <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{link.description}</p>
-                  </div>
-                  {!link.comingSoon && (
-                    <PlayCircle
-                      className="h-4 w-4 text-violet-400 opacity-0 transition-opacity group-hover:opacity-100"
-                      aria-hidden
-                    />
-                  )}
-                </Link>
-              );
-            })}
-          </div>
-        </section>
-
-        {/* Sub-skill snapshot */}
-        <section className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900">
-          <div className="mb-3 flex items-center gap-2">
-            <Volume2 className="h-4 w-4 text-violet-600" aria-hidden />
-            <h2 className="text-base font-bold text-gray-900 dark:text-gray-100">
-              Your audio context
+            <h2 id="listening-hub-heading" className="text-lg font-bold text-gray-900 dark:text-gray-100">
+              Practice by Part, or attempt the full exam
             </h2>
           </div>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-            <div className="rounded-xl bg-gray-50 p-3 dark:bg-gray-800/50">
-              <p className="text-xs uppercase tracking-wide text-gray-500">British</p>
-              <p className="mt-1 text-xl font-extrabold text-gray-900 dark:text-gray-100">
-                {profile.comfortBritish}/5
-              </p>
-            </div>
-            <div className="rounded-xl bg-gray-50 p-3 dark:bg-gray-800/50">
-              <p className="text-xs uppercase tracking-wide text-gray-500">Australian</p>
-              <p className="mt-1 text-xl font-extrabold text-gray-900 dark:text-gray-100">
-                {profile.comfortAustralian}/5
-              </p>
-            </div>
-            <div className="rounded-xl bg-gray-50 p-3 dark:bg-gray-800/50">
-              <p className="text-xs uppercase tracking-wide text-gray-500">Various</p>
-              <p className="mt-1 text-xl font-extrabold text-gray-900 dark:text-gray-100">
-                {profile.comfortVarious}/5
-              </p>
-            </div>
-          </div>
+
+          <ul
+            className="grid grid-cols-1 gap-4 sm:grid-cols-2"
+            data-testid="listening-hub-cards"
+          >
+            {HUB_CARDS.map((card) => {
+              const accent = ACCENT_STYLES[card.accent];
+              return (
+                <li key={card.href}>
+                  <Link
+                    href={card.href}
+                    data-testid={`listening-hub-card-${card.accent}`}
+                    className={`group relative flex h-full items-start gap-4 rounded-2xl border bg-white p-5 transition-shadow hover:shadow-md dark:bg-gray-900 ${accent.ring}`}
+                  >
+                    <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${accent.icon}`}>
+                      <Headphones className="h-5 w-5" aria-hidden />
+                    </div>
+                    <div className="flex-1">
+                      <div className="flex items-center justify-between gap-2 flex-wrap">
+                        <h3 className="text-sm font-bold text-gray-900 dark:text-gray-100">
+                          {card.title}
+                        </h3>
+                        <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${accent.badge}`}>
+                          {accent.chip}
+                        </span>
+                      </div>
+                      <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{card.subtitle}</p>
+                    </div>
+                    <PlayCircle
+                      className="h-4 w-4 self-center text-violet-400 opacity-0 transition-opacity group-hover:opacity-100"
+                      aria-hidden
+                    />
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
         </section>
       </main>
     </LearnerDashboardShell>

@@ -119,7 +119,7 @@ export default function ProfileSetupGoalsPage() {
                 className="min-h-11 rounded-lg border border-border bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                 aria-describedby="exam-date-hint"
               />
-              <span id="exam-date-hint" className="text-xs font-normal text-muted">We'll compress or relax the plan to fit.</span>
+              <span id="exam-date-hint" className="text-xs font-normal text-muted">We&apos;ll compress or relax the plan to fit.</span>
             </label>
             <label className="flex flex-col gap-1 text-sm font-semibold text-navy">
               Target country

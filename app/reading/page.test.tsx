@@ -1,11 +1,10 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 
-const { mockGetReadingHome, mockGetReadingErrorBank, mockTrack, mockUseAuth, mockFetchMockReports } = vi.hoisted(() => ({
+const { mockGetReadingHome, mockTrack, mockUseAuth, mockUseReadingProfile } = vi.hoisted(() => ({
   mockGetReadingHome: vi.fn(),
-  mockGetReadingErrorBank: vi.fn(),
   mockTrack: vi.fn(),
   mockUseAuth: vi.fn(),
-  mockFetchMockReports: vi.fn(),
+  mockUseReadingProfile: vi.fn(),
 }));
 
 vi.mock('next/link', () => ({
@@ -13,8 +12,8 @@ vi.mock('next/link', () => ({
 }));
 
 vi.mock('@/components/layout', () => ({
-  LearnerDashboardShell: ({ children, workspaceClassName }: { children: React.ReactNode; workspaceClassName?: string }) => (
-    <div data-testid="learner-dashboard-shell" data-workspace-class={workspaceClassName}>{children}</div>
+  LearnerDashboardShell: ({ children }: { children: React.ReactNode }) => (
+    <div data-testid="learner-dashboard-shell">{children}</div>
   ),
 }));
 
@@ -23,37 +22,90 @@ vi.mock('@/contexts/auth-context', () => ({
 }));
 
 vi.mock('@/lib/analytics', () => ({
-  analytics: {
-    track: mockTrack,
-  },
+  analytics: { track: mockTrack },
 }));
 
 vi.mock('@/lib/reading-authoring-api', () => ({
   getReadingHome: mockGetReadingHome,
-  getReadingErrorBank: mockGetReadingErrorBank,
 }));
 
-vi.mock('@/lib/api', () => ({
-  fetchMockReports: mockFetchMockReports,
+vi.mock('@/hooks/useReadingProfile', () => ({
+  useReadingProfile: () => mockUseReadingProfile(),
 }));
 
-vi.mock('@/components/domain/part-launchpad-card', () => ({
-  PartLaunchpadCard: ({ partCode }: { partCode: string }) => <div data-testid={`part-launchpad-${partCode}`}>{partCode}</div>,
+vi.mock('@/components/domain/learner-skill-switcher', () => ({
+  LearnerSkillSwitcher: () => <div data-testid="learner-skill-switcher" />,
+}));
+
+vi.mock('@/components/domain/learner-skeletons', () => ({
+  LearnerSkeleton: () => <div data-testid="learner-skeleton" />,
+}));
+
+vi.mock('@/components/domain', () => ({
+  LearnerPageHero: ({ title, description }: { title: string; description: string }) => (
+    <div data-testid="learner-page-hero">
+      <h1>{title}</h1>
+      <p>{description}</p>
+    </div>
+  ),
 }));
 
 import ReadingPage from './page';
 
-describe('Reading page', () => {
+// Per the 2026-05-27 OET sample-test alignment, the Reading hub is intentionally
+// stripped to four primary cards (Practice Part A/B/C + Full Reading Exam). The
+// older Structured-Papers / Safe-Drills / Recent-Results / Mock-Reports surfaces
+// remain reachable by URL (and are still covered by their own dedicated tests)
+// but they are no longer rendered on the candidate hub.
+
+const READING_HOME_FIXTURE = {
+  intro: 'Reading practice uses full structured papers.',
+  papers: [],
+  activeAttempts: [],
+  recentResults: [],
+  policy: {
+    partATimerMinutes: 15,
+    partBCTimerMinutes: 45,
+    allowPausingAttempt: false,
+    allowResumeAfterExpiry: false,
+    showCorrectAnswerOnReview: true,
+    showExplanationsAfterSubmit: true,
+    allowPaperReadingMode: true,
+  },
+  safeDrills: [],
+};
+
+describe('Reading hub', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockUseAuth.mockReturnValue({
-      isAuthenticated: true,
-      loading: false,
-    });
-    mockFetchMockReports.mockResolvedValue([]);
-    mockGetReadingErrorBank.mockResolvedValue({ entries: [], total: 0 });
-    mockGetReadingHome.mockResolvedValue({
-      intro: 'Reading practice uses full structured papers.',
+    mockUseAuth.mockReturnValue({ isAuthenticated: true, loading: false });
+    mockUseReadingProfile.mockReturnValue({ profile: { examDate: null, currentStage: 'ready' } });
+    mockGetReadingHome.mockResolvedValue(READING_HOME_FIXTURE);
+  });
+
+  it('renders exactly four hub cards in the canonical OET sample-test order', async () => {
+    render(<ReadingPage />);
+
+    const grid = await screen.findByTestId('reading-hub-cards');
+    expect(grid).toBeInTheDocument();
+
+    const cards = within(grid).getAllByRole('link');
+    expect(cards).toHaveLength(4);
+
+    expect(cards[0]).toHaveAttribute('href', '/reading/practice/a');
+    expect(cards[1]).toHaveAttribute('href', '/reading/practice/b');
+    expect(cards[2]).toHaveAttribute('href', '/reading/practice/c');
+    expect(cards[3]).toHaveAttribute('href', '/reading/exam');
+
+    expect(screen.getByTestId('reading-hub-card-partA')).toBeInTheDocument();
+    expect(screen.getByTestId('reading-hub-card-partB')).toBeInTheDocument();
+    expect(screen.getByTestId('reading-hub-card-partC')).toBeInTheDocument();
+    expect(screen.getByTestId('reading-hub-card-exam')).toBeInTheDocument();
+  });
+
+  it('does not surface the legacy dashboard collage (papers / drills / mock reports)', async () => {
+    mockGetReadingHome.mockResolvedValueOnce({
+      ...READING_HOME_FIXTURE,
       papers: [
         {
           id: 'paper-1',
@@ -72,82 +124,67 @@ describe('Reading page', () => {
           lastAttempt: null,
         },
       ],
-      activeAttempts: [],
-      recentResults: [],
-      policy: {
-        partATimerMinutes: 15,
-        partBCTimerMinutes: 45,
-        allowPausingAttempt: false,
-        allowResumeAfterExpiry: false,
-        showCorrectAnswerOnReview: true,
-        showExplanationsAfterSubmit: true,
-        allowPaperReadingMode: true,
-      },
-      safeDrills: [],
-    });
-  });
-
-  it('renders structured Reading papers without linking to the legacy player', async () => {
-    const { container } = render(<ReadingPage />);
-
-    expect(await screen.findByText('Build reading accuracy before you validate it in mocks')).toBeInTheDocument();
-    expect(screen.getByText('Reading Sample Paper 1')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /start paper/i })).toHaveAttribute('href', '/reading/paper/paper-1');
-    expect(screen.getByRole('link', { name: /paper simulation/i })).toHaveAttribute('href', '/reading/paper/paper-1?presentation=paper');
-    expect(container.querySelector('a[href="/reading/player/rt-001"]')).not.toBeInTheDocument();
-    expect(screen.getByTestId('learner-dashboard-shell')).toBeInTheDocument();
-    expect(container.querySelector('[class*="max-w-5xl"][class*="mx-auto"][class*="px-4"]')).not.toBeInTheDocument();
-  });
-
-  it('renders targeted Reading next actions from safe drills', async () => {
-    mockGetReadingHome.mockResolvedValue({
-      intro: 'Reading practice uses full structured papers.',
-      papers: [],
-      activeAttempts: [],
-      recentResults: [],
-      policy: {
-        partATimerMinutes: 15,
-        partBCTimerMinutes: 45,
-        allowPausingAttempt: false,
-        allowResumeAfterExpiry: false,
-        showCorrectAnswerOnReview: true,
-        showExplanationsAfterSubmit: true,
-        allowPaperReadingMode: true,
-      },
       safeDrills: [
         {
           id: 'review-attempt-1-part-A',
           title: 'Repair Part A score loss',
-          description: 'Review the attempt section where the most Reading marks were lost.',
+          description: 'Review where most Reading marks were lost.',
           focusLabel: 'Part A',
           estimatedMinutes: 15,
           launchRoute: '/reading/paper/paper-1/results?attemptId=attempt-1#part-breakdown',
-          highlights: ['12/20 marks in Part A', '3 unanswered item(s) to review'],
+          highlights: ['12/20 marks in Part A'],
         },
       ],
     });
 
     render(<ReadingPage />);
 
-    expect(await screen.findByText('Targeted Reading practice')).toBeInTheDocument();
-    expect(screen.getByText('Repair Part A score loss')).toBeInTheDocument();
-    expect(screen.getByText('12/20 marks in Part A')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /open action/i })).toHaveAttribute(
+    await screen.findByTestId('reading-hub-cards');
+    expect(screen.queryByText('Reading Sample Paper 1')).not.toBeInTheDocument();
+    expect(screen.queryByText('Targeted Reading practice')).not.toBeInTheDocument();
+    expect(screen.queryByText('Recent Mock Reports')).not.toBeInTheDocument();
+    expect(screen.queryByText('Track Reading impact inside full mocks')).not.toBeInTheDocument();
+  });
+
+  it('shows a Resume banner when the learner has an active resumable Reading attempt', async () => {
+    mockGetReadingHome.mockResolvedValueOnce({
+      ...READING_HOME_FIXTURE,
+      activeAttempts: [
+        {
+          attemptId: 'attempt-1',
+          paperId: 'paper-1',
+          paperTitle: 'Reading Sample Paper 1',
+          status: 'InProgress',
+          startedAt: '2026-05-12T10:00:00Z',
+          deadlineAt: '2026-05-12T11:00:00Z',
+          partADeadlineAt: '2026-05-12T10:15:00Z',
+          partBCDeadlineAt: '2026-05-12T11:00:00Z',
+          answeredCount: 12,
+          totalQuestions: 42,
+          canResume: true,
+          route: '/reading/paper/paper-1/player?attemptId=attempt-1',
+        },
+      ],
+    });
+
+    render(<ReadingPage />);
+
+    expect(await screen.findByText(/open Reading attempt/i)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /resume attempt/i })).toHaveAttribute(
       'href',
-      '/reading/paper/paper-1/results?attemptId=attempt-1#part-breakdown',
+      '/reading/paper/paper-1/player?attemptId=attempt-1',
     );
   });
 
-  it('shows expired Reading attempts as fresh-start actions', async () => {
+  it('hides the Resume banner when no active attempts are resumable', async () => {
     mockGetReadingHome.mockResolvedValueOnce({
-      intro: 'Reading practice uses full structured papers.',
-      papers: [],
+      ...READING_HOME_FIXTURE,
       activeAttempts: [
         {
           attemptId: 'attempt-expired',
           paperId: 'paper-1',
           paperTitle: 'Reading Sample Paper 1',
-          status: 'InProgress',
+          status: 'Expired',
           startedAt: '2026-05-12T10:00:00Z',
           deadlineAt: '2026-05-12T11:00:00Z',
           partADeadlineAt: '2026-05-12T10:15:00Z',
@@ -158,63 +195,11 @@ describe('Reading page', () => {
           route: '/reading/paper/paper-1/player?attemptId=attempt-expired',
         },
       ],
-      recentResults: [],
-      policy: {
-        partATimerMinutes: 15,
-        partBCTimerMinutes: 45,
-        allowPausingAttempt: false,
-        allowResumeAfterExpiry: false,
-        showCorrectAnswerOnReview: true,
-        showExplanationsAfterSubmit: true,
-        allowPaperReadingMode: true,
-      },
-      safeDrills: [],
     });
 
     render(<ReadingPage />);
 
-    expect(await screen.findAllByText('Expired')).toHaveLength(2);
-    expect(screen.getByText(/past its answer window/i)).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /start fresh paper/i })).toHaveAttribute('href', '/reading/paper/paper-1');
-    expect(screen.queryByRole('link', { name: /resume attempt/i })).not.toBeInTheDocument();
-  });
-
-  it('uses scaled score rather than raw score for recent Reading evidence', async () => {
-    mockGetReadingHome.mockResolvedValueOnce({
-      intro: 'Reading practice uses full structured papers.',
-      papers: [],
-      activeAttempts: [],
-      recentResults: [
-        {
-          attemptId: 'attempt-349',
-          paperId: 'paper-1',
-          paperTitle: 'Reading Sample Paper 1',
-          rawScore: 30,
-          maxRawScore: 42,
-          scaledScore: 349,
-          gradeLetter: 'C+',
-          submittedAt: '2026-05-12T10:00:00Z',
-          route: '/reading/paper/paper-1/results?attemptId=attempt-349',
-        },
-      ],
-      policy: {
-        partATimerMinutes: 15,
-        partBCTimerMinutes: 45,
-        allowPausingAttempt: false,
-        allowResumeAfterExpiry: false,
-        showCorrectAnswerOnReview: true,
-        showExplanationsAfterSubmit: true,
-        allowPaperReadingMode: true,
-      },
-      safeDrills: [],
-    });
-
-    render(<ReadingPage />);
-
-    expect(await screen.findByText('Reading Sample Paper 1')).toBeInTheDocument();
-    expect(screen.getByText('30/42 raw | 349/500 scaled')).toBeInTheDocument();
-    expect(screen.getByText('Review Focus')).toBeInTheDocument();
-    expect(screen.getByText('Needs work')).toBeInTheDocument();
-    expect(screen.queryByText('Pass Evidence')).not.toBeInTheDocument();
+    await screen.findByTestId('reading-hub-cards');
+    expect(screen.queryByText(/open Reading attempt/i)).not.toBeInTheDocument();
   });
 });

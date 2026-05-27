@@ -58,22 +58,35 @@ describe('learner feature-gated navigation', () => {
     vi.clearAllMocks();
   });
 
-  it('hides the desktop Video Lessons link when the feature flag is disabled', async () => {
+  // Per the 2026-05-27 OET sample-test alignment, the Learn group (Grammar,
+  // Live Classes, Lessons, Strategies, Recalls, AI Conversation) is intentionally
+  // hidden from the candidate sidebar so the workspace mirrors the official
+  // computer-based sample-test simplicity. Video Lessons therefore never appears
+  // in the learner sidebar regardless of the `video_lessons` flag — feature-flag
+  // gating remains exercised in admin/tutor workspaces and via TopNav sectioned
+  // menus below.
+  it('does not surface the Learn group in the learner sidebar when the flag is disabled', async () => {
     prepareFlag(false);
 
     renderWithRouter(<Sidebar workspaceRole="learner" />, { pathname: '/' });
 
-    await waitFor(() => {
-      expect(mockFetchLearnerFeatureFlag).toHaveBeenCalledWith('video_lessons');
-    });
-
     expect(screen.queryByRole('link', { name: /video lessons/i })).not.toBeInTheDocument();
   });
 
-  it('shows the desktop Video Lessons link when the feature flag is enabled', async () => {
+  it('still hides the Learn group from the learner sidebar even when the flag is enabled', async () => {
     prepareFlag(true);
 
     renderWithRouter(<Sidebar workspaceRole="learner" />, { pathname: '/' });
+
+    expect(screen.queryByRole('link', { name: /video lessons/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /grammar/i })).not.toBeInTheDocument();
+  });
+
+  it('keeps the Learn group visible to admin/tutor workspaces when the flag is enabled', async () => {
+    mockFetchLearnerFeatureFlag.mockResolvedValue({ key: 'video_lessons', enabled: true });
+    mockUseAuth.mockReturnValue({ user: adminUser, signOut: mockSignOut });
+
+    renderWithRouter(<Sidebar workspaceRole="admin" />, { pathname: '/' });
 
     expect(await screen.findByRole('link', { name: /video lessons/i })).toHaveAttribute('href', '/lessons');
   });

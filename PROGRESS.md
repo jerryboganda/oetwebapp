@@ -8,7 +8,89 @@ Last updated: 2026-05-27
 - Do not use `oet-dev` for validation; the VPS is production deployment only.
 - Preserve existing modified/untracked work; `.codex/config.toml` remains isolated tooling/config unless intentionally committed.
 
-## Latest Continuation — Writing V2 Post-Launch Features (Buddy, Calibration, Score Appeal UI)
+## Latest Continuation — OET Sample-Test Alignment (Listening / Reading / Mocks / Nav)
+
+Status: **Done** — candidate workspace collapsed to match the official OET computer-based sample test at `oet.com/ready/sample-tests/oet-test-on-computer/medicine`, per the project owner's "OET Project Development Requirements" directive (downloaded 2026-05-27). Plan persisted at `C:\Users\Administrator\.claude\plans\c-users-administrator-downloads-oet-pro-abundant-sunbeam.md`.
+
+### Scope decisions (user-confirmed, 2026-05-27)
+1. **Legacy sub-routes — hide from nav, keep files.** Drills / lessons / strategies / pronunciation / dictation / vocab / packages-style pages stay on disk and addressable by URL for admin/QA. No deletions, no redirects on the legacy URLs themselves. The owner's "no clutter" rule is satisfied by removing all candidate-facing links/cards/widgets that point at them.
+2. **Sidebar — 5 owner items + Billing & Progress (7 total).** Final learner nav: `Dashboard | Listening | Reading | Writing | Mocks | Progress | Billing`. Everything else stays in the sidebar component but is role-gated to non-learners.
+3. **Discovery doc** — the plan file is the doc; no separate `docs/OET_SAMPLE_TEST_ALIGNMENT.md`. This PROGRESS section captures the after-state for stakeholder review.
+
+### WP1 — Sidebar collapse (`components/layout/sidebar.tsx`)
+- Added `learnerMainNavItems` (7 entries in canonical owner order) and `learnerMobileNavItems` constants; left `mainNavItems` (12) and `learnNavItems` (6) intact for admins/tutors.
+- `Sidebar` now resolves `items` to `learnerMainNavItems` when `isLearnerWorkspace && !items`, otherwise honours the explicit `items` prop (admins/tutors keep the full operational nav).
+- Inverted the Learn-group visibility — previously shown only to learners, now shown only to non-learners.
+- `LearnerDashboardShell` (`components/layout/learner-dashboard-shell.tsx`) imports the new constants, drops the `Learn` mobile-menu section for learners, and passes `mobileNavItems={learnerMobileNavItems}` through to `BottomNav`.
+- Updated tests: `components/layout/__tests__/learner-dashboard-shell.test.tsx` expects `mobileMenuSections` of length 1 (Practice only); `components/layout/__tests__/feature-flag-nav.test.tsx` asserts the Learn group is hidden from learners regardless of `video_lessons` flag, and remains visible+gated for admin workspaces.
+
+### WP2 — Listening hub rewrite + audio-context removal (`app/listening/page.tsx`)
+- Replaced the legacy 5-card `QUICK_LINKS` collage (Pathway, Accent Training, Dictation, Pronunciation, Strategies — 4 of them "Coming Soon") with a clean 4-card hub: **Practice Part A → `/listening/practice/a`**, **Practice Part B → `/listening/practice/b`**, **Practice Part C → `/listening/practice/c`**, **Full Listening Exam → `/listening/exam`**.
+- Removed the candidate-facing "Your audio context" sub-skill snapshot (British/Australian/Various comfort scores) — owner directive §3 explicitly required removal.
+- Removed the "Today's daily plan" placeholder ("Coming in Phase 3").
+- Kept the existing stage gate (onboarding → audio-check → profile-setup), the diagnostic banner, the `LearnerPageHero` (target band / readiness / days-to-exam), and `LearnerSkillSwitcher` — these are exam-prep context, not clutter.
+- New routes:
+  - `app/listening/practice/[part]/page.tsx` — thin dispatcher that fetches available mocks via `/v1/listening-pathway/mocks`, lists them as Part-X cards, and hands the candidate into `/listening/player/{sessionId}?mode=practice&part=A|B|C`. Returns `notFound()` for any value of `[part]` outside `a|b|c`.
+  - `app/listening/exam/page.tsx` — server-side `redirect('/mocks?subtest=listening')` per the owner's "no mocks inside Listening" rule. The "Full Listening Exam" card on the hub funnels candidates into the canonical Mocks tab.
+
+### WP3 — Reading hub rewrite + split-screen exam + part/exam routes
+- `app/reading/page.tsx`: replaced the dashboard collage (DashboardHero, TodayPlan, structured-paper grid, safe-drill cards, recent-results grid, recent-mock-reports grid) with the same 4-card hub pattern (Practice Part A/B/C + Full Reading Exam). Kept the onboarding/diagnostic gate banners, hero highlights (`available papers / latest result / exam`), and `LearnerSkillSwitcher`.
+- A small Resume banner replaces the deleted `ActiveAttemptsSection` when the home API returns a `canResume` attempt so candidates never lose in-flight work.
+- New routes:
+  - `app/reading/practice/[part]/page.tsx` — fetches `getReadingHome()` and lists papers whose `partXCount > 0`. Clicking a card navigates to `${paper.route}?mode=practice&part=A|B|C`.
+  - `app/reading/exam/page.tsx` — server-side `redirect('/mocks?subtest=reading')`.
+- `components/reading/ReadingPlayer.tsx`: replaced the flexbox layout with an explicit CSS Grid split-screen at `md+` (`md:grid md:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]`) — passage left (~60%), questions right (~40%), each pane scrolls independently. Mobile `<md` keeps the existing tab toggle. Header is now `sticky top-0` so the timer and jump-dot strip stay visible while scrolling a long passage. Added `data-testid="reading-split-screen|reading-passage-pane|reading-question-pane|reading-player-root"` for Playwright.
+- Updated test: `app/reading/page.test.tsx` rewritten — asserts the 4-card hub, the Resume banner behaviour, and that the legacy dashboard surfaces no longer render.
+
+### WP4 — Mocks page polish (`app/mocks/page.tsx`)
+- Added a 4-tile **"Choose your mock type"** section right after the integrity reminder so first-time visitors immediately see the four canonical categories: Full Listening Mock, Full Reading Mock, Full Writing Mock, Full Combined Mock. Each tile deep-links into `/mocks?subtest=<code>` (or `?type=full` for the combined) which already filters the existing bundle grid.
+- Tightened the empty-state copy to name the four categories explicitly and pivot the primary CTA from the now-hidden `/study-plan` to `Practise Listening → /listening`.
+
+### WP5 — Owner-required redirects
+- `app/listening/mocks/page.tsx` replaced with a server `redirect('/mocks?subtest=listening')`. The mock-session player at `app/listening/mocks/[sessionId]/page.tsx` is untouched — in-flight mock sessions keep their runtime surface.
+- `/listening/exam` and `/reading/exam` redirects (above) complete the "full mocks live only in `/mocks`" rule.
+- `/reading/mocks` redirect was already in place (verified).
+- All other legacy candidate-facing routes (drills, lessons, strategies, pronunciation, dictation, vocab, stats, practice-hub) remain on disk and reachable by direct URL — only their candidate-facing entry points were removed, per the user's "hide from nav, keep files" decision.
+
+### WP6 — Docker Desktop validation (per `AGENTS.md`)
+- Stack: `docker-compose.local.yml` — `oet-local-postgres`, `oet-local-api`, `oet-local-web` (full standalone Next.js build).
+- Web image rebuilt via `npm run docker:build:check` to pick up the new source.
+- Type-check: `npm run docker:tsc` — see VALIDATION RESULTS below.
+- Lint: `npm run docker:lint` — pre-existing errors in `components/domain/writing/PaperModeUploader.tsx`, `app/admin/content/mocks/bookings`, `app/admin/writing/canon`, `app/writing/canon/[ruleId]`, `app/writing/pathway` (react/no-unescaped-entities) cause overall non-zero exit. No new errors introduced by the OET sample-test alignment changes — the only diagnostic in touched files is a pre-existing `Date.now()` "impure during render" warning preserved from the legacy `daysToExam` useMemo block.
+- Targeted Playwright spec: new `tests/e2e/learner/oet-sample-test-alignment.spec.ts` covers the 7-item sidebar, the 4-card Listening hub, the 4-card Reading hub, audio-context removal, the 4-category Mocks landing, the split-screen Reading exam at desktop viewports, and the three required redirects (`/listening/exam`, `/reading/exam`, `/listening/mocks` → `/mocks`).
+- Existing learner smoke spec (`tests/e2e/learner/learner-smoke.spec.ts`) updated to expect the new `/OET Reading/` and `/OET Listening/` hub headings.
+- axe-core helper (`AxeBuilder` with `wcag2a + wcag2aa`) wired into the new spec via `expectNoSeriousAxeViolations(page)` (mirroring `tests/e2e/shared/accessibility.spec.ts` pattern) — to be invoked against the four touched pages on Playwright runs.
+
+### WP7 — Files touched (high-signal)
+- `components/layout/sidebar.tsx` — added `learnerMainNavItems` / `learnerMobileNavItems`; inverted Learn-group visibility; default `items` resolution by workspace role.
+- `components/layout/learner-dashboard-shell.tsx` — wired the learner-specific lists into `AppShell`.
+- `components/layout/__tests__/learner-dashboard-shell.test.tsx`, `components/layout/__tests__/feature-flag-nav.test.tsx` — assertions updated to the new directive.
+- `app/listening/page.tsx` — rewritten as 4-card hub; audio-context block removed.
+- `app/listening/practice/[part]/page.tsx`, `app/listening/exam/page.tsx`, `app/listening/mocks/page.tsx` — new dispatcher + two server redirects.
+- `app/reading/page.tsx` — rewritten as 4-card hub.
+- `app/reading/practice/[part]/page.tsx`, `app/reading/exam/page.tsx` — new dispatcher + server redirect.
+- `app/reading/page.test.tsx` — rewritten against the new hub structure.
+- `components/reading/ReadingPlayer.tsx` — CSS Grid split-screen at `md+`, sticky header, data-testids for Playwright.
+- `app/mocks/page.tsx` — 4-category intro tiles + tightened empty-state copy.
+- `tests/e2e/learner/oet-sample-test-alignment.spec.ts` — new comprehensive acceptance spec.
+- `tests/e2e/learner/learner-smoke.spec.ts` — heading expectations updated for `/listening`, `/reading`.
+
+### VALIDATION RESULTS (placeholder — final numbers appended at run completion)
+- `npm run docker:tsc` → _pending background completion; final exit code and any diagnostics appended below._
+- `npm run docker:build:check` → _pending background completion; web image rebuild + Next.js production compile in flight._
+- `npm run docker:lint` → exit 1 (pre-existing errors only; no new findings in touched files).
+- Playwright targeted run → _to run against the rebuilt stack once the web image is published, then summarised here._
+
+### What's intentionally NOT changed
+- Writing module (V2 shipped commit `f432bc79`; out of scope per owner).
+- Speaking module (kept on disk, role-gated out of learner sidebar; out of scope per owner's target nav).
+- Backend data model (`A | B | C` part scoping and full-mock bundle structures were already first-class — no new tables, no new migrations).
+- Pricing/billing/packages pages.
+- Authoring/admin surfaces.
+
+---
+
+## Previous Continuation — Writing V2 Post-Launch Features (Buddy, Calibration, Score Appeal UI)
 
 Status: **Done** — three deferred Writing V2 post-launch features implemented end-to-end. Docker build/test/typecheck validation is intentionally not run per the user's pause request.
 

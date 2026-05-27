@@ -2,7 +2,7 @@ import { type ReactNode } from 'react';
 import { LearnerBreadcrumbs } from '@/components/domain/learner-breadcrumbs';
 import { AppShell, type AppShellProps } from './app-shell';
 import { LearnerWorkspaceContainer } from './learner-workspace-container';
-import { learnNavItems, mainNavItems } from './sidebar';
+import { learnerMainNavItems, learnerMobileNavItems } from './sidebar';
 
 export interface LearnerDashboardShellProps extends AppShellProps {
   workspaceClassName?: string;
@@ -14,14 +14,19 @@ export function LearnerDashboardShell({
   workspaceClassName,
   distractionFree,
   mobileMenuSections,
+  mobileNavItems,
   navItems,
   ...shellProps
 }: LearnerDashboardShellProps) {
-  const learnerNavItems = navItems ?? mainNavItems;
+  // Per the 2026-05-27 OET sample-test alignment, learners see exactly:
+  // Dashboard | Listening | Reading | Writing | Mocks | Progress | Billing.
+  // The legacy Learn group (Grammar/Classes/Lessons/Strategies/Recalls/Conversation)
+  // is no longer surfaced in the candidate workspace.
+  const learnerNavItems = navItems ?? learnerMainNavItems;
   const learnerMobileMenuSections = mobileMenuSections ?? [
     { label: 'Practice', items: learnerNavItems },
-    { label: 'Learn', items: learnNavItems },
   ];
+  const learnerBottomNavItems = mobileNavItems ?? learnerMobileNavItems;
 
   return (
     <AppShell
@@ -29,6 +34,7 @@ export function LearnerDashboardShell({
       distractionFree={distractionFree}
       {...shellProps}
       navItems={learnerNavItems}
+      mobileNavItems={learnerBottomNavItems}
       mobileMenuSections={learnerMobileMenuSections}
       workspaceRole="learner"
     >

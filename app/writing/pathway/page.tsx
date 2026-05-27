@@ -39,7 +39,7 @@ export default function WritingPathwayPage() {
         {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
 
         <div className="flex flex-wrap gap-3">
-          <Button asChild><Link href="/writing/today">Open today's plan</Link></Button>
+          <Button asChild><Link href="/writing/today">Open today&apos;s plan</Link></Button>
           <Button asChild variant="outline"><Link href="/writing/profile-setup">Edit profile</Link></Button>
           <Button asChild variant="ghost"><Link href="/writing/canon">Browse canon</Link></Button>
         </div>

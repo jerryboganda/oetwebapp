@@ -1,0 +1,149 @@
+import AxeBuilder from '@axe-core/playwright';
+import { expect, test, type Page } from '@playwright/test';
+import { recoverBrowserSession } from '../fixtures/auth-bootstrap';
+import { waitForSessionGuardToClear } from '../fixtures/auth';
+
+async function expectNoSeriousAxeViolations(page: Page) {
+  const results = await new AxeBuilder({ page })
+    .withTags(['wcag2a', 'wcag2aa'])
+    .analyze();
+
+  const blocking = results.violations.filter((violation) => ['critical', 'serious'].includes(violation.impact ?? ''));
+  expect(blocking, 'Critical and serious axe violations should remain empty').toEqual([]);
+}
+
+/**
+ * 2026-05-27 OET Sample-Test Alignment — E2E acceptance suite.
+ *
+ * Covers the directive from "OET Project Development Requirements" — the
+ * candidate-facing workspace is collapsed so it mirrors the official OET
+ * computer-based sample test at oet.com/ready/sample-tests/oet-test-on-computer.
+ *
+ * Verifies:
+ *  1. Sidebar trims to 7 learner items (Dashboard, Listening, Reading,
+ *     Writing, Mocks, Progress, Billing).
+ *  2. Listening hub shows exactly 4 candidate-facing cards and the legacy
+ *     "Your audio context" panel is gone.
+ *  3. Reading hub shows exactly 4 candidate-facing cards.
+ *  4. Mocks page surfaces the 4 canonical mock categories.
+ *  5. Reading exam renders the OET-style split-screen at desktop viewports.
+ *  6. The "no mocks inside Listening / Reading" rule is enforced via
+ *     redirects from /listening/mocks, /listening/exam, /reading/exam.
+ */
+
+test.describe('OET sample-test alignment — learner workspace', () => {
+  test.beforeEach(async ({ page }) => {
+    await recoverBrowserSession(page);
+    await page.goto('/');
+    await waitForSessionGuardToClear(page);
+  });
+
+  test('sidebar exposes exactly the 7 learner-approved nav items', async ({ page }) => {
+    await page.goto('/');
+    await waitForSessionGuardToClear(page);
+
+    // Desktop sidebar — assert only the canonical learner entries are present.
+    const sidebar = page.locator('aside[aria-label="OET with Dr Ahmed Hesham home"]').first();
+    // The aside lacks an accessible name; fall back to the nav element.
+    const nav = page.getByRole('navigation', { name: /main navigation/i });
+    await expect(nav).toBeVisible();
+
+    const expected = ['Dashboard', 'Listening', 'Reading', 'Writing', 'Mocks', 'Progress', 'Billing'];
+    for (const label of expected) {
+      await expect(nav.getByRole('link', { name: new RegExp(`^${label}$`, 'i') })).toBeVisible();
+    }
+
+    // Items hidden from the learner workspace per the owner directive:
+    const hiddenFromLearner = ['Study Plan', 'Speaking', 'Readiness', 'History', 'Escalations', 'Grammar', 'Live Classes', 'Video Lessons', 'Strategies', 'Recalls', 'AI Conversation'];
+    for (const label of hiddenFromLearner) {
+      await expect(nav.getByRole('link', { name: new RegExp(`^${label}$`, 'i') })).toHaveCount(0);
+    }
+  });
+
+  test('Listening hub shows exactly four 4-card hub entries in canonical order', async ({ page }) => {
+    await page.goto('/listening');
+
+    const grid = page.getByTestId('listening-hub-cards');
+    await expect(grid).toBeVisible();
+
+    const cards = grid.locator('a[data-testid^="listening-hub-card-"]');
+    await expect(cards).toHaveCount(4);
+
+    await expect(cards.nth(0)).toHaveAttribute('href', '/listening/practice/a');
+    await expect(cards.nth(1)).toHaveAttribute('href', '/listening/practice/b');
+    await expect(cards.nth(2)).toHaveAttribute('href', '/listening/practice/c');
+    await expect(cards.nth(3)).toHaveAttribute('href', '/listening/exam');
+
+    // Owner directive §3 — the candidate-facing audio-context panel is removed.
+    await expect(page.getByText(/your audio context/i)).toHaveCount(0);
+
+    // Owner directive §3 — legacy "Coming Soon" drill/lesson/strategy chips are gone.
+    await expect(page.getByText(/coming soon/i, { exact: false })).toHaveCount(0);
+  });
+
+  test('Reading hub shows exactly four 4-card hub entries in canonical order', async ({ page }) => {
+    await page.goto('/reading');
+
+    const grid = page.getByTestId('reading-hub-cards');
+    await expect(grid).toBeVisible();
+
+    const cards = grid.locator('a[data-testid^="reading-hub-card-"]');
+    await expect(cards).toHaveCount(4);
+
+    await expect(cards.nth(0)).toHaveAttribute('href', '/reading/practice/a');
+    await expect(cards.nth(1)).toHaveAttribute('href', '/reading/practice/b');
+    await expect(cards.nth(2)).toHaveAttribute('href', '/reading/practice/c');
+    await expect(cards.nth(3)).toHaveAttribute('href', '/reading/exam');
+
+    // Owner directive §5 — Reading must not look like a package marketplace.
+    await expect(page.getByText(/view packages/i)).toHaveCount(0);
+    await expect(page.getByText(/recent mock reports/i)).toHaveCount(0);
+  });
+
+  test('Mocks page surfaces the four canonical mock categories', async ({ page }) => {
+    await page.goto('/mocks');
+
+    const categories = page.getByTestId('mocks-categories');
+    await expect(categories).toBeVisible();
+
+    await expect(page.getByTestId('mocks-cat-listening')).toBeVisible();
+    await expect(page.getByTestId('mocks-cat-reading')).toBeVisible();
+    await expect(page.getByTestId('mocks-cat-writing')).toBeVisible();
+    await expect(page.getByTestId('mocks-cat-combined')).toBeVisible();
+  });
+
+  test('Reading exam runs in the official split-screen layout at desktop viewports', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    // Probe a known-published paper from the Reading hub. The dispatcher route
+    // surfaces eligible papers and clicking one boots the player.
+    await page.goto('/reading/practice/a');
+
+    // If at least one paper renders, follow it into the player to assert the
+    // split-screen layout. Otherwise this path can't be verified end-to-end
+    // because no content was seeded — skip rather than fail.
+    const startButton = page.getByRole('button', { name: /start part a practice/i }).first();
+    if (await startButton.isVisible({ timeout: 5_000 }).catch(() => false)) {
+      await startButton.click();
+      await expect(page.getByTestId('reading-split-screen')).toBeVisible({ timeout: 10_000 });
+      await expect(page.getByTestId('reading-passage-pane')).toBeVisible();
+      await expect(page.getByTestId('reading-question-pane')).toBeVisible();
+    } else {
+      test.info().annotations.push({ type: 'skip', description: 'No published Reading paper available; split-screen path not exercised.' });
+    }
+  });
+
+  test('full-mock entry points outside /mocks redirect into the canonical Mocks tab', async ({ page }) => {
+    // Owner directive §6 — full mocks must live only in /mocks.
+    await page.goto('/listening/exam');
+    await expect(page).toHaveURL(/\/mocks(?:\?|$)/);
+    expect(page.url()).toContain('subtest=listening');
+
+    await page.goto('/reading/exam');
+    await expect(page).toHaveURL(/\/mocks(?:\?|$)/);
+    expect(page.url()).toContain('subtest=reading');
+
+    await page.goto('/listening/mocks');
+    await expect(page).toHaveURL(/\/mocks(?:\?|$)/);
+    expect(page.url()).toContain('subtest=listening');
+  });
+});

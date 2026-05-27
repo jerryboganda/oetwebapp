@@ -297,7 +297,7 @@ export default function AdminMockBookingsCalendarPage() {
         <CardHeader>
           <div>
             <CardTitle>Week view</CardTitle>
-            <p className="mt-1 text-sm text-admin-fg-muted">Rows are 30-minute slots from 08:00 to 22:00 in the operator's local timezone.</p>
+            <p className="mt-1 text-sm text-admin-fg-muted">Rows are 30-minute slots from 08:00 to 22:00 in the operator&apos;s local timezone.</p>
           </div>
         </CardHeader>
         <CardContent>

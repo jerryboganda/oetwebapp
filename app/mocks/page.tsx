@@ -447,14 +447,64 @@ export default function MockCenter() {
           OET test content is confidential — do not redistribute or share questions outside this practice context.
         </p>
 
+        {/* Per the 2026-05-27 OET sample-test alignment, the Mocks tab is the
+            single canonical home for full mocks. We surface the four owner-
+            required categories — Full Listening Mock, Full Reading Mock, Full
+            Writing Mock, Full Combined Mock — as a clear landing matrix so
+            first-time visitors immediately see the four routes without having
+            to scroll past Resume / Recommended / Profession-filter blocks. */}
+        <section aria-labelledby="mocks-categories-heading" data-testid="mocks-categories">
+          <div className="mb-3">
+            <p className="text-xs font-semibold uppercase tracking-widest text-primary">
+              Choose your mock type
+            </p>
+            <h2 id="mocks-categories-heading" className="text-lg font-bold text-navy">
+              The four canonical OET mock categories
+            </h2>
+          </div>
+          <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            {([
+              { href: '/mocks?subtest=listening', label: 'Full Listening Mock', icon: SUBTEST_ICON.listening, palette: SUBTEST_COLOR.listening, testid: 'mocks-cat-listening' },
+              { href: '/mocks?subtest=reading', label: 'Full Reading Mock', icon: SUBTEST_ICON.reading, palette: SUBTEST_COLOR.reading, testid: 'mocks-cat-reading' },
+              { href: '/mocks?subtest=writing', label: 'Full Writing Mock', icon: SUBTEST_ICON.writing, palette: SUBTEST_COLOR.writing, testid: 'mocks-cat-writing' },
+              { href: '/mocks?type=full', label: 'Full Combined Mock', icon: Layers, palette: { fg: 'text-amber-700', bg: 'bg-amber-100', label: 'Combined' }, testid: 'mocks-cat-combined' },
+            ] as const).map((category) => {
+              const Icon = category.icon;
+              return (
+                <li key={category.href}>
+                  <Link
+                    href={category.href}
+                    data-testid={category.testid}
+                    className="group flex h-full items-start gap-3 rounded-2xl border border-border bg-surface p-4 transition-shadow hover:shadow-md"
+                  >
+                    <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${category.palette.bg}`}>
+                      <Icon className={`h-5 w-5 ${category.palette.fg}`} />
+                    </div>
+                    <div className="flex-1">
+                      <h3 className="text-sm font-bold text-navy">{category.label}</h3>
+                      <p className="mt-0.5 text-xs text-muted">
+                        Jump straight to {category.palette.label.toLowerCase()} bundles
+                      </p>
+                    </div>
+                    <ArrowRight
+                      className="h-4 w-4 self-center text-muted/40 transition-colors group-hover:text-navy"
+                      aria-hidden
+                    />
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+
         <LearnerSkillSwitcher compact />
 
         {!loading && !error && fullMocks.length === 0 && subTestMocks.length === 0 ? (
           <LearnerEmptyState
             icon={Layers}
             title="No mock bundles are published yet"
-            description="Once a full or sub-test mock is published it will appear here with its real section order, profession targeting, and report route."
-            primaryAction={{ label: 'Open Study Plan', href: '/study-plan' }}
+            description="The four mock categories above will populate as bundles are published: Full Listening Mock, Full Reading Mock, Full Writing Mock, and Full Combined Mock (all four sub-tests). Meanwhile, you can still practise part-by-part inside Listening or Reading."
+            primaryAction={{ label: 'Practise Listening', href: '/listening' }}
             secondaryAction={{ label: 'Track Progress', href: '/progress' }}
           />
         ) : null}

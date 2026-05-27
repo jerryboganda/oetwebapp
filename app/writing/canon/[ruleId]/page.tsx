@@ -169,7 +169,7 @@ export default function WritingCanonRuleDetailPage() {
                     {t('writing.canon.detail.history.submission', { id: v.submissionId.slice(0, 8) })}
                   </Link>
                   {/* Snippet is verbatim from the learner letter (English). */}
-                  <span className="ms-1 text-xs text-muted" dir="ltr">— line {v.lineNumber}: "{v.snippet}"</span>
+                  <span className="ms-1 text-xs text-muted" dir="ltr">— line {v.lineNumber}: &quot;{v.snippet}&quot;</span>
                 </li>
               ))}
             </ul>

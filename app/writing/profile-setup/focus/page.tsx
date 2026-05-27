@@ -122,7 +122,7 @@ export default function ProfileSetupFocusPage() {
                   />
                   <span>
                     <span className="block font-bold">Join the community feed</span>
-                    <span className="block text-xs text-muted">See showcase letters from other learners and react to peers' work.</span>
+                    <span className="block text-xs text-muted">See showcase letters from other learners and react to peers&apos; work.</span>
                   </span>
                 </label>
               </li>

@@ -76,6 +76,10 @@ export function PaperModeUploader({
     };
   }, []);
 
+  // Hold the latest pollOnce in a ref so the recursive setTimeout schedule
+  // never has to refer to `pollOnce` before its declaration completes —
+  // satisfies react-hooks/immutability without changing runtime behaviour.
+  const pollOnceRef = useRef<((jobId: string) => Promise<void>) | null>(null);
   const pollOnce = useCallback(
     async (jobId: string) => {
       try {
@@ -85,7 +89,7 @@ export function PaperModeUploader({
           return;
         }
         pollTimerRef.current = setTimeout(() => {
-          void pollOnce(jobId);
+          void pollOnceRef.current?.(jobId);
         }, pollIntervalMs);
       } catch (err) {
         setError((err as Error).message ?? 'OCR polling failed');
@@ -93,6 +97,7 @@ export function PaperModeUploader({
     },
     [pollIntervalMs],
   );
+  pollOnceRef.current = pollOnce;
 
   const handleFiles = useCallback(
     async (files: FileList | null) => {

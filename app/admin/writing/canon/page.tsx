@@ -141,7 +141,7 @@ export default function AdminWritingCanonPage() {
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-xl font-bold text-navy"><BookOpen className="mr-2 inline h-5 w-5 text-amber-600" aria-hidden="true" /> Writing Canon Rules</h1>
-          <p className="mt-1 text-sm text-muted">Dr Ahmed's rule library. Versioning is manual — bump <code>version</code> before publishing breaking changes.</p>
+          <p className="mt-1 text-sm text-muted">Dr Ahmed&apos;s rule library. Versioning is manual — bump <code>version</code> before publishing breaking changes.</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Button onClick={() => void load()} variant="outline"><RefreshCcw className="h-4 w-4" aria-hidden="true" /> Refresh</Button>
@@ -154,7 +154,7 @@ export default function AdminWritingCanonPage() {
       <Card>
         <CardContent>
           <h2 className="text-base font-bold text-navy"><TestTube className="mr-1 inline h-4 w-4 text-amber-600" aria-hidden="true" /> Test rule detection</h2>
-          <p className="mt-1 text-xs text-muted">Paste a draft letter and pick a rule id — we'll show any violations the engine flags.</p>
+          <p className="mt-1 text-xs text-muted">Paste a draft letter and pick a rule id — we&apos;ll show any violations the engine flags.</p>
           <div className="mt-3 grid gap-2 md:grid-cols-3">
             <label className="flex flex-col gap-1 text-xs font-bold uppercase tracking-wider text-muted">
               Rule id

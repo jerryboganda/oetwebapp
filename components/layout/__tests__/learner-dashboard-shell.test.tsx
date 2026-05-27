@@ -29,9 +29,12 @@ describe('LearnerDashboardShell', () => {
     expect(container).toHaveClass('sm:py-4');
     expect(container).toHaveClass('lg:py-6');
     expect(container).toHaveClass('space-y-8');
+    // Per the 2026-05-27 OET sample-test alignment, the learner workspace exposes
+    // only the Practice section in the mobile menu; the Learn group (Grammar,
+    // Live Classes, Lessons, Strategies, Recalls, AI Conversation) is hidden
+    // from candidates and remains addressable only by direct URL.
     expect((appShellSpy.mock.calls[0]?.[0].mobileMenuSections as Array<{ label: string }> | undefined)?.map((section) => section.label)).toEqual([
       'Practice',
-      'Learn',
     ]);
   });
 

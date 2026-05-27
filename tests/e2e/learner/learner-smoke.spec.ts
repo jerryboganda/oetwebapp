@@ -21,12 +21,16 @@ const learnerRoutes = [
     heading: /see what needs to close before your target date/i,
   },
   {
+    // Per the 2026-05-27 OET sample-test alignment, the Reading hub is the
+    // simplified 4-card landing (Practice Part A/B/C + Full Reading Exam).
     path: '/reading',
-    heading: /build reading accuracy before you validate it in mocks/i,
+    heading: /OET Reading/i,
   },
   {
+    // Per the 2026-05-27 OET sample-test alignment, the Listening hub is the
+    // simplified 4-card landing (Practice Part A/B/C + Full Listening Exam).
     path: '/listening',
-    heading: /train listening accuracy before you test it under pressure/i,
+    heading: /OET Listening/i,
   },
   {
     path: '/writing',

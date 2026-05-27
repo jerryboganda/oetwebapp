@@ -476,9 +476,12 @@ export default function ReadingPlayer({
   const isLast = currentIndex === questions.length - 1;
 
   return (
-    <div className="flex h-full flex-col">
-      {/* ── Header bar ──────────────────────────────────────────── */}
-      <div className="flex items-center justify-between gap-4 border-b border-border bg-surface px-4 py-2">
+    <div className="flex h-full flex-col" data-testid="reading-player-root">
+      {/* ── Sticky header (timer + question jump dots) ─────────────────────────
+          The OET computer-based sample test keeps a thin status strip pinned at
+          the top of the screen. We mirror that affordance so the candidate always
+          sees the timer and jump dots even when scrolling a long passage. */}
+      <div className="sticky top-0 z-10 flex items-center justify-between gap-4 border-b border-border bg-surface px-4 py-2 shadow-sm">
         <ProgressDots
           total={questions.length}
           current={currentIndex}
@@ -490,29 +493,43 @@ export default function ReadingPlayer({
         <TimerDisplay elapsed={elapsed} remaining={remaining} mode={mode} />
       </div>
 
-      {/* ── Mobile: tab switcher ─────────────────────────────────── */}
+      {/* ── Mobile: tab switcher (hidden at md+ where the split-screen kicks in) ─ */}
       <div className="md:hidden">
         <MobileTabBar active={mobileTab} onChange={setMobileTab} />
       </div>
 
-      {/* ── Body ─────────────────────────────────────────────────── */}
-      <div className="flex flex-1 overflow-hidden">
-        {/* Passage — 60% desktop, full on mobile when tab = passage */}
+      {/* ── Body: official OET-style split-screen at md+ ─────────────────────
+          • Mobile (<md): one column at a time, toggled by MobileTabBar above.
+          • Tablet / desktop (md+): CSS Grid two-column layout, passage left
+            (~60%) and questions right (~40%), each pane scrolls independently.
+          The owner directive (2026-05-27 §7) requires the official passage-left
+          / questions-right exam layout — we use a fixed grid (not a draggable
+          resizer) to match the official sample-test affordance exactly. */}
+      <div
+        className={cn(
+          'flex-1 overflow-hidden',
+          'md:grid md:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]',
+        )}
+        data-testid="reading-split-screen"
+      >
+        {/* Passage pane */}
         <div
           className={cn(
-            'flex-[3] overflow-hidden border-r border-border p-4',
-            mobileTab === 'question' ? 'hidden md:flex md:flex-col' : 'flex flex-col',
+            'flex flex-col overflow-hidden border-border p-4 md:border-r',
+            mobileTab === 'question' ? 'hidden md:flex' : 'flex',
           )}
+          data-testid="reading-passage-pane"
         >
           <PassagePanel passage={currentPassage} />
         </div>
 
-        {/* Questions — 40% desktop, full on mobile when tab = question */}
+        {/* Question pane */}
         <div
           className={cn(
-            'flex-[2] overflow-hidden p-4',
+            'overflow-hidden p-4',
             mobileTab === 'passage' ? 'hidden md:block' : 'block',
           )}
+          data-testid="reading-question-pane"
         >
           <QuestionPanel
             question={currentQuestion}
