@@ -44,14 +44,18 @@ describe('AdminGrammarDashboard permissions', () => {
   it('hides the empty lesson authoring link without content write permission', async () => {
     renderGrammarPage([AdminPermission.ContentRead]);
 
-    expect(await screen.findByText('No lessons yet.')).toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: /author the first one/i })).not.toBeInTheDocument();
+    // EmptyState title is "No lessons yet" (no trailing period); content
+    // readers see the empty state but no primary action button.
+    expect(await screen.findByText('No lessons yet')).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /author lesson/i })).not.toBeInTheDocument();
   });
 
   it('shows the empty lesson authoring link for content writers', async () => {
     renderGrammarPage([AdminPermission.ContentWrite]);
 
-    expect(await screen.findByRole('link', { name: /author the first one/i })).toHaveAttribute(
+    // Primary action label was renamed from "Author the first one" to the
+    // shorter "Author lesson" in the EmptyState refresh.
+    expect(await screen.findByRole('link', { name: /author lesson/i })).toHaveAttribute(
       'href',
       '/admin/content/grammar/lessons/new',
     );

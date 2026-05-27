@@ -100,6 +100,13 @@ function queueFocusRestore(element: HTMLElement | null, descriptor: FocusRestore
   let attempts = 0;
 
   const tryRestoreFocus = () => {
+    // The retry chain runs on a setTimeout / requestAnimationFrame schedule that
+    // can outlive the test harness teardown (jsdom tears down `document` on
+    // unmount, so a delayed callback throws "document is not defined" and the
+    // vitest worker flags it as an unhandled rejection). Guard every DOM access
+    // so an aborted teardown is a no-op instead of a thrown error.
+    if (typeof document === 'undefined' || typeof window === 'undefined') return;
+
     const restoreTarget = resolveFocusTarget(element, descriptor);
     if (!restoreTarget) {
       if (attempts < 6) {
@@ -113,6 +120,7 @@ function queueFocusRestore(element: HTMLElement | null, descriptor: FocusRestore
     if (document.activeElement !== restoreTarget && attempts < 6) {
       attempts += 1;
       requestAnimationFrame(() => {
+        if (typeof document === 'undefined') return;
         restoreTarget.focus();
         if (document.activeElement !== restoreTarget) {
           window.setTimeout(tryRestoreFocus, 50);
@@ -121,7 +129,9 @@ function queueFocusRestore(element: HTMLElement | null, descriptor: FocusRestore
     }
   };
 
-  window.setTimeout(tryRestoreFocus, 50);
+  if (typeof window !== 'undefined') {
+    window.setTimeout(tryRestoreFocus, 50);
+  }
 }
 
 function getOverlayBackdropMotion(reducedMotion: boolean) {

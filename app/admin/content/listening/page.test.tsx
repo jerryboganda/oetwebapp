@@ -74,8 +74,10 @@ describe('AdminListeningPapersPage', () => {
 
     expect(await screen.findByText('Listening Papers')).toBeInTheDocument();
 
-    // Stats panel labels (rendered immediately, no async dependency)
-    expect(screen.getByText('Listening overview')).toBeInTheDocument();
+    // Stats panel labels (rendered immediately, no async dependency). The
+    // page eyebrow was renamed from "Listening overview" to "CMS" when
+    // the admin shell was unified — assert the new label.
+    expect(screen.getByText('CMS')).toBeInTheDocument();
     expect(screen.getByText('Total')).toBeInTheDocument();
     expect(screen.getByText('Drafts')).toBeInTheDocument();
     expect(screen.getByText('Missing assets')).toBeInTheDocument();

@@ -12,7 +12,9 @@ function walk(dir: string): string[] {
 }
 
 describe('admin shell ownership', () => {
-  it('keeps AdminDashboardShell owned by app/admin/layout only', () => {
+  // Walks a deep directory tree on a read-only Docker volume mount — the I/O
+  // cost can exceed vitest's 5s default. 30s is plenty even on a slow CI box.
+  it('keeps AdminDashboardShell owned by app/admin/layout only', { timeout: 30_000 }, () => {
     const adminDir = path.join(process.cwd(), 'app', 'admin');
     const offenders = walk(adminDir)
       .filter((file) => /\.(ts|tsx)$/.test(file))

@@ -73,7 +73,9 @@ describe('AdminWritingPapersPage', () => {
     setup([AdminPermission.ContentWrite, AdminPermission.ContentRead]);
 
     expect(await screen.findByText('Writing Papers')).toBeInTheDocument();
-    expect(screen.getByText('Writing overview')).toBeInTheDocument();
+    // The page eyebrow was renamed from "Writing overview" to "Catalog" when
+    // the admin shell was unified — assert the new label.
+    expect(screen.getByText('Catalog')).toBeInTheDocument();
     expect(screen.getByText('Missing assets')).toBeInTheDocument();
     expect(screen.getByText('Missing type')).toBeInTheDocument();
 

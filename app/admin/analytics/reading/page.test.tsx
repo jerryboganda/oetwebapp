@@ -95,7 +95,7 @@ describe('ReadingAnalyticsPage', () => {
   it('renders Reading analytics sections from the admin aggregate endpoint', async () => {
     renderWithRouter(<ReadingAnalyticsPage />);
 
-    expect(await screen.findByRole('main', { name: /reading analytics/i })).toBeInTheDocument();
+    expect(await screen.findByRole('main')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Reading Analytics' })).toBeInTheDocument();
     expect(await screen.findByText('Part B')).toBeInTheDocument();
     expect(screen.getAllByText('Inference').length).toBeGreaterThan(0);

@@ -12,6 +12,27 @@ vi.mock('@/components/layout/learner-dashboard-shell', () => ({
   LearnerDashboardShell: ({ children }: { children: React.ReactNode }) => <div data-testid="learner-dashboard-shell">{children}</div>,
 }));
 
+// The classes page transitively imports `useCurrentUser → useAuth`, which
+// throws if there is no AuthProvider in the tree. Mock both so the test can
+// render the page standalone.
+vi.mock('@/contexts/auth-context', () => ({
+  useAuth: () => ({
+    user: { userId: 'test-user', displayName: 'Test', email: 'test@example.com', role: 'expert', isEmailVerified: true },
+    isAuthenticated: true,
+    loading: false,
+    signOut: vi.fn(),
+  }),
+}));
+
+vi.mock('@/lib/hooks/use-current-user', () => ({
+  useCurrentUser: () => ({
+    user: { userId: 'test-user', displayName: 'Test', email: 'test@example.com', role: 'expert', isEmailVerified: true },
+    role: 'expert',
+    isAuthenticated: true,
+    loading: false,
+  }),
+}));
+
 vi.mock('@/lib/listening/v2-api', () => ({
   teacherClassApi: {
     list: mockList,

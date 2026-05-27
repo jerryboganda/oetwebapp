@@ -133,6 +133,13 @@ export interface AdminPageShellProps
   hideSkipLink?: boolean;
   /** Override the inner `<main>` id used by the skip link target. */
   mainId?: string;
+  /**
+   * Optional accessible label applied to the inner `<main>` element. Use this
+   * when the page's primary heading lives elsewhere in the document so screen
+   * readers (and a11y-aware Playwright/RTL queries) can still identify the
+   * landmark by name. Defaults to "Admin page" if not provided.
+   */
+  mainAriaLabel?: string;
 }
 
 const AdminPageShell = React.forwardRef<HTMLDivElement, AdminPageShellProps>(
@@ -144,6 +151,7 @@ const AdminPageShell = React.forwardRef<HTMLDivElement, AdminPageShellProps>(
       errorFallback,
       hideSkipLink = false,
       mainId = 'admin-main-content',
+      mainAriaLabel,
       ...rest
     },
     ref,
@@ -158,6 +166,7 @@ const AdminPageShell = React.forwardRef<HTMLDivElement, AdminPageShellProps>(
         <main
           id={mainId}
           tabIndex={-1}
+          aria-label={mainAriaLabel ?? 'Admin page'}
           className={cn(SHELL_CONTAINER, 'focus:outline-none', className)}
         >
           <AdminPageShellErrorBoundary fallback={errorFallback}>

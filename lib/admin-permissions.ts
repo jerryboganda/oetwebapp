@@ -234,6 +234,13 @@ export const adminRoutePermissionMap: Record<string, string[]> = {
   '/admin/readiness/:param': [AdminPermission.SystemAdmin],
   '/admin/readiness/metrics': [AdminPermission.SystemAdmin],
   '/admin/voice-design': [AdminPermission.AiConfig],
+  // Added 2026-05-27 — the route-permission test walks `app/admin/**/page.tsx`
+  // and these concrete pages exist on disk but were only registered in the
+  // sidebar map. Mirror them here so the test passes and the routes get the
+  // same explicit gating they get in the sidebar.
+  '/admin/learners': [AdminPermission.UsersRead],
+  '/admin/learners/:param': [AdminPermission.UsersRead],
+  '/admin/policies/reading': [AdminPermission.UsersWrite],
 };
 
 function normalizeAdminPath(pathname: string | null | undefined): string {

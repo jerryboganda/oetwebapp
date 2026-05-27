@@ -53,6 +53,15 @@ vi.mock('@/lib/api', () => ({
     weakPhonemes: [],
   }),
   fetchPronunciationDueDrills: vi.fn().mockResolvedValue([]),
+  // Added 2026-05-27: the Dashboard page now imports `fetchMyEntitlementSnapshot`
+  // to render the entitlement banner. Stub it with an empty snapshot so the
+  // page renders without throwing in the test environment.
+  fetchMyEntitlementSnapshot: vi.fn().mockResolvedValue({
+    activeBundles: [],
+    expiredBundles: [],
+    pendingBundles: [],
+    bundleStatuses: [],
+  }),
 }));
 
 import DashboardPage from './page';

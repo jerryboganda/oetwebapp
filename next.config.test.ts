@@ -1,3 +1,10 @@
+// next-intl ships its plugin under a non-standard subpath that vite's
+// import-analysis cannot resolve from this Node test environment. Stub it
+// so importing the real next.config never tries to load the plugin module.
+vi.mock('next-intl/plugin', () => ({
+  default: () => (config: unknown) => config,
+}));
+
 import nextConfig from './next.config';
 
 describe('nextConfig redirects', () => {

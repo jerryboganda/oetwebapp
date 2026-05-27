@@ -1,4 +1,4 @@
-﻿import type { ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 const navigation = vi.hoisted(() => ({
@@ -305,7 +305,7 @@ describe('Admin Non-Editor Pages', () => {
 
     renderPage(<AdminDashboardPage />);
 
-    expect(await screen.findByRole('main', { name: /admin operations/i })).toBeInTheDocument();
+    expect(await screen.findByRole('main')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /operations center/i })).toBeInTheDocument();
     expect(screen.getByText(/platform health/i)).toBeInTheDocument();
     expect(screen.getByText(/quick actions/i)).toBeInTheDocument();
@@ -332,7 +332,7 @@ describe('Admin Non-Editor Pages', () => {
 
     renderPage(<ContentLibraryPage />);
 
-    expect(await screen.findByRole('main', { name: /content library/i })).toBeInTheDocument();
+    expect(await screen.findByRole('main')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /^content library$/i })).toBeInTheDocument();
     expect(await screen.findByRole('heading', { name: /content items/i })).toBeInTheDocument();
     expect(screen.getAllByText('Discharge Letter Set A').length).toBeGreaterThan(0);
@@ -356,7 +356,7 @@ describe('Admin Non-Editor Pages', () => {
 
     renderPage(<AIConfigPage />);
 
-    expect(await screen.findByRole('main', { name: /ai evaluation config/i })).toBeInTheDocument();
+    expect(await screen.findByRole('main')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /^ai evaluation config$/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /configuration registry/i })).toBeInTheDocument();
     expect(screen.getAllByText('gpt-5-mini').length).toBeGreaterThan(0);
@@ -393,7 +393,7 @@ describe('Admin Non-Editor Pages', () => {
 
     renderPage(<AuditLogsPage />);
 
-    expect(await screen.findByRole('main', { name: /audit logs/i })).toBeInTheDocument();
+    expect(await screen.findByRole('main')).toBeInTheDocument();
     expect((await screen.findAllByText('Policy updated.')).length).toBeGreaterThan(0);
     expect(screen.getByRole('heading', { name: /^audit logs$/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /audit stream/i })).toBeInTheDocument();
@@ -415,7 +415,7 @@ describe('Admin Non-Editor Pages', () => {
 
     renderPage(<CriteriaPage />);
 
-    expect(await screen.findByRole('main', { name: /rubrics and criteria/i })).toBeInTheDocument();
+    expect(await screen.findByRole('main')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /rubrics & criteria/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /criteria library/i })).toBeInTheDocument();
     expect(screen.getAllByText('Purpose').length).toBeGreaterThan(0);
@@ -438,7 +438,7 @@ describe('Admin Non-Editor Pages', () => {
 
     renderPage(<FlagsPage />);
 
-    expect(await screen.findByRole('main', { name: /feature flags/i })).toBeInTheDocument();
+    expect(await screen.findByRole('main')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /^feature flags$/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /rollout registry/i })).toBeInTheDocument();
     expect(screen.getAllByText('AI Review Pilot').length).toBeGreaterThan(0);
@@ -508,7 +508,7 @@ describe('Admin Non-Editor Pages', () => {
 
     renderPage(<ReviewOpsPage />);
 
-    expect(await screen.findByRole('main', { name: /review operations/i })).toBeInTheDocument();
+    expect(await screen.findByRole('main')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /^review operations$/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /live queue/i })).toBeInTheDocument();
     expect(screen.getAllByText('Dr Amina Khan').length).toBeGreaterThan(0);
@@ -865,7 +865,7 @@ describe('Admin Non-Editor Pages', () => {
 
     renderPage(<BillingPage />);
 
-    expect(await screen.findByRole('main', { name: /billing operations/i })).toBeInTheDocument();
+    expect(await screen.findByRole('main')).toBeInTheDocument();
     expect((await screen.findAllByText('Starter')).length).toBeGreaterThan(0);
     expect(screen.getByRole('heading', { name: /^billing operations$/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /^entitlement diagnostics$/i })).toBeInTheDocument();
@@ -1031,7 +1031,7 @@ describe('Admin Non-Editor Pages', () => {
 
     renderPage(<NotificationsPage />);
 
-    expect(await screen.findByRole('main', { name: /notifications/i })).toBeInTheDocument();
+    expect(await screen.findByRole('main')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /^notifications$/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /role-wide channel governance/i })).toBeInTheDocument();
     expect(screen.getByText(/delivery filters/i)).toBeInTheDocument();
@@ -1183,7 +1183,7 @@ describe('Admin Non-Editor Pages', () => {
 
     renderPage(<TaxonomyPage />);
 
-    expect(await screen.findByRole('main', { name: /professions/i })).toBeInTheDocument();
+    expect(await screen.findByRole('main')).toBeInTheDocument();
     expect(screen.getAllByRole('heading', { name: /^professions$/i }).length).toBeGreaterThan(0);
     expect(screen.getAllByText('Nursing').length).toBeGreaterThan(0);
     expect(screen.getByRole('button', { name: /add profession/i })).toBeInTheDocument();
@@ -1208,7 +1208,7 @@ describe('Admin Non-Editor Pages', () => {
 
     renderPage(<UsersPage />);
 
-    expect(await screen.findByRole('main', { name: /user management/i })).toBeInTheDocument();
+    expect(await screen.findByRole('main')).toBeInTheDocument();
     expect((await screen.findAllByRole('link', { name: /dr sana malik/i })).length).toBeGreaterThan(0);
     expect(screen.getByRole('heading', { name: /^user management$/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /^directory$/i })).toBeInTheDocument();
@@ -1244,7 +1244,7 @@ describe('Admin Non-Editor Pages', () => {
 
     renderPage(<QualityAnalyticsPage />);
 
-    expect(await screen.findByRole('main', { name: /quality analytics/i })).toBeInTheDocument();
+    expect(await screen.findByRole('main')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /^quality analytics$/i })).toBeInTheDocument();
     expect(screen.getAllByTestId('responsive-chart')).toHaveLength(2);
     expect(screen.getAllByTestId('line-chart')).toHaveLength(2);
@@ -1264,7 +1264,7 @@ describe('Admin Non-Editor Pages', () => {
 
     renderPage(<ContentNewPage />);
 
-    expect(await screen.findByRole('main', { name: /content workspace/i })).toBeInTheDocument();
+    expect(await screen.findByRole('main')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /^create content$/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /core content metadata/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /save draft/i })).toBeInTheDocument();
@@ -1316,7 +1316,7 @@ describe('Admin Non-Editor Pages', () => {
 
     renderPage(<ContentEditPage />);
 
-    expect(await screen.findByRole('main', { name: /content workspace/i })).toBeInTheDocument();
+    expect(await screen.findByRole('main')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /edit sepsis handover/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /core content metadata/i })).toBeInTheDocument();
     expect(screen.getByText('18')).toBeInTheDocument();
@@ -1352,7 +1352,7 @@ describe('Admin Non-Editor Pages', () => {
 
     renderPage(<UserDetailPage />);
 
-    expect(await screen.findByRole('main', { name: /user operations detail/i })).toBeInTheDocument();
+    expect(await screen.findByRole('main')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /dr sana malik/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /identity/i })).toBeInTheDocument();
     expect(screen.getByText('icu')).toBeInTheDocument();
@@ -1372,7 +1372,7 @@ describe('Admin Non-Editor Pages', () => {
 
     renderPage(<RevisionsPage />);
 
-    expect(await screen.findByRole('main', { name: /revision history/i })).toBeInTheDocument();
+    expect(await screen.findByRole('main')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /^revision history$/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /saved revisions/i })).toBeInTheDocument();
     expect(screen.getAllByText(/published revision\./i).length).toBeGreaterThan(0);

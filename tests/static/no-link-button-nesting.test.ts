@@ -132,7 +132,9 @@ function findViolations(file: string): NestingViolation[] {
 }
 
 describe('static accessibility regression guard', () => {
-  it('does not nest Link and Button primitives in JSX source', () => {
+  // Parses every TSX file under the project's source roots — comfortably
+  // exceeds vitest's default 5s timeout on Docker volume mounts. Allow 60s.
+  it('does not nest Link and Button primitives in JSX source', { timeout: 60_000 }, () => {
     const projectRoot = process.cwd();
     const sourceFiles = SOURCE_ROOTS.flatMap((root) => listSourceFiles(path.join(projectRoot, root)));
     const violations = sourceFiles.flatMap(findViolations);

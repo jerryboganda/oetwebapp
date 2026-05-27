@@ -31,6 +31,16 @@ vi.mock('@/lib/api', () => ({
   fetchWritingSubmissions: mockFetchWritingSubmissions,
   fetchMockReports: mockFetchMockReports,
   fetchWritingEntitlement: mockFetchWritingEntitlement,
+  // Added 2026-05-27: writing/page transitively imports `apiClient` via
+  // `getWritingProfile` from lib/writing-pathway-api. Provide a no-op stub so
+  // the test environment doesn't trip on the missing export.
+  apiClient: {
+    get: vi.fn().mockResolvedValue(null),
+    post: vi.fn().mockResolvedValue(null),
+    put: vi.fn().mockResolvedValue(null),
+    patch: vi.fn().mockResolvedValue(null),
+    delete: vi.fn().mockResolvedValue(null),
+  },
 }));
 
 import WritingHome from './page';
