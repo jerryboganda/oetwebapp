@@ -831,6 +831,7 @@ builder.Services.AddScoped<OetLearner.Api.Services.Reading.IReadingExtractionSer
 builder.Services.AddScoped<OetLearner.Api.Services.Reading.IReadingPathwayService, OetLearner.Api.Services.Reading.ReadingPathwayService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Reading.IReadingReviewService, OetLearner.Api.Services.Reading.ReadingReviewService>();
 builder.Services.AddScoped<OetLearner.Api.Services.IWritingPdfService, OetLearner.Api.Services.WritingPdfService>();
+builder.Services.AddScoped<OetLearner.Api.Services.ISpeakingPdfService, OetLearner.Api.Services.SpeakingPdfService>();
 builder.Services.AddScoped<ISpeakingEvaluationPipeline, SpeakingEvaluationPipeline>();
 builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingEvaluationPipeline, OetLearner.Api.Services.Writing.WritingEvaluationPipeline>();
 builder.Services.AddHostedService<OetLearner.Api.Services.Speaking.SpeakingAudioRetentionWorker>();
@@ -1897,6 +1898,7 @@ app.MapBillingExpansionEndpoints();
 app.MapBillingExpansionV2Endpoints();
 app.MapOet2026CatalogEndpoints();
 app.MapBillingCatalogEndpoints();
+app.MapStripeWebhookEndpoints();
 // Wave B4 — finance/ops admin surface (revenue/MRR/churn/LTV/refunds + product
 // & coupon CRUD + Stripe Tax registrations). Each route requires a specific
 // granular billing permission (read/refund_write/catalog_write).
@@ -1983,6 +1985,7 @@ app.MapConversationEndpoints();
 app.MapPronunciationEndpoints();
 app.MapWritingCoachEndpoints();
 app.MapWritingPdfEndpoints();
+app.MapSpeakingPdfEndpoints();
 app.MapMarketplaceEndpoints();
 
 // ── Sponsor Dashboard ──
@@ -2053,18 +2056,17 @@ await using (var scope = app.Services.CreateAsyncScope())
         .Value;
     await DatabaseBootstrapper.SynchroniseAiProviderFromEnvAsync(db, dp, aiOpts);
 
-    // Seed the RecallSetTags registry with the 3 canonical codes on first boot.
-    // Idempotent; existing admin-edited rows are preserved.
-    var seedLogger = scope.ServiceProvider.GetRequiredService<ILoggerFactory>()
-        .CreateLogger("RecallSetTagRegistrySeeder");
-    try
-    {
-        await OetLearner.Api.Services.Recalls.RecallSetTagRegistrySeeder.EnsureAsync(db, seedLogger);
-    }
-    catch (Exception ex)
-    {
-        seedLogger.LogWarning(ex, "RecallSetTagRegistrySeeder failed at boot; continuing.");
-    }
+    // Seed the RecallSetTags registry — DISABLED: admin manages recalls catalog manually.
+    // var seedLogger = scope.ServiceProvider.GetRequiredService<ILoggerFactory>()
+    //     .CreateLogger("RecallSetTagRegistrySeeder");
+    // try
+    // {
+    //     await OetLearner.Api.Services.Recalls.RecallSetTagRegistrySeeder.EnsureAsync(db, seedLogger);
+    // }
+    // catch (Exception ex)
+    // {
+    //     seedLogger.LogWarning(ex, "RecallSetTagRegistrySeeder failed at boot; continuing.");
+    // }
 
     // Writing Module V2 content seed (OET_WRITING_MODULE_PATHWAY.md §13/14/15/16/17).
     // Loads 25 canon rules, 12 diagnostic scenarios, 6 exemplars, 16 lessons,

@@ -61,15 +61,16 @@ public static partial class SeedData
             hasChanges = true;
         }
 
-        if (!await db.VocabularyTerms.AnyAsync(cancellationToken))
-        {
-            SeedVocabularyTerms(db);
-            hasChanges = true;
-        }
-        else if (await EnsureMissingOetVocabularyBankAsync(db, cancellationToken))
-        {
-            hasChanges = true;
-        }
+        // Vocabulary seed disabled — admin manages recalls catalog manually.
+        // if (!await db.VocabularyTerms.AnyAsync(cancellationToken))
+        // {
+        //     SeedVocabularyTerms(db);
+        //     hasChanges = true;
+        // }
+        // else if (await EnsureMissingOetVocabularyBankAsync(db, cancellationToken))
+        // {
+        //     hasChanges = true;
+        // }
 
         if (!await db.ForumCategories.AnyAsync(cancellationToken))
         {
