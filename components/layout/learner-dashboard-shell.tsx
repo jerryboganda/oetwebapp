@@ -18,10 +18,9 @@ export function LearnerDashboardShell({
   navItems,
   ...shellProps
 }: LearnerDashboardShellProps) {
-  // Per the 2026-05-27 OET sample-test alignment, learners see exactly:
-  // Dashboard | Listening | Reading | Writing | Mocks | Progress | Billing.
-  // The legacy Learn group (Grammar/Classes/Lessons/Strategies/Recalls/Conversation)
-  // is no longer surfaced in the candidate workspace.
+  // Learner sidebar: Dashboard | Listening | Reading | Writing | Mocks |
+  // Recalls | Progress | Billing. The legacy Learn group (Grammar/Classes/
+  // Lessons/Strategies/Conversation) is not surfaced in the candidate workspace.
   const learnerNavItems = navItems ?? learnerMainNavItems;
   const learnerMobileMenuSections = mobileMenuSections ?? [
     { label: 'Practice', items: learnerNavItems },

@@ -69,16 +69,17 @@ export const mainNavItems: NavItem[] = [
 ];
 
 // Per the OET sample-test alignment directive (2026-05-27): the candidate
-// sidebar collapses to exactly the five owner-required modules plus Progress
-// and Billing. Other surfaces (Study Plan, Speaking, Readiness, History,
-// Escalations) remain addressable by URL and visible to admins/tutors via
-// `mainNavItems`, but are removed from the learner workspace nav.
+// sidebar collapses to the core modules plus Recalls, Progress, and Billing.
+// Other surfaces (Study Plan, Speaking, Readiness, History, Escalations)
+// remain addressable by URL and visible to admins/tutors via `mainNavItems`,
+// but are removed from the learner workspace nav.
 export const learnerMainNavItems: NavItem[] = [
   { href: '/', label: 'Dashboard', icon: <LayoutDashboard className="w-5 h-5" />, matchPrefix: '/' },
   { href: '/listening', label: 'Listening', icon: <Headphones className="w-5 h-5" />, matchPrefix: '/listening' },
   { href: '/reading', label: 'Reading', icon: <BookOpen className="w-5 h-5" />, matchPrefix: '/reading' },
   { href: '/writing', label: 'Writing', icon: <FilePenLine className="w-5 h-5" />, matchPrefix: '/writing' },
   { href: '/mocks', label: 'Mocks', icon: <FileQuestion className="w-5 h-5" />, matchPrefix: '/mocks' },
+  { href: '/recalls', label: 'Recalls', icon: <Brain className="w-5 h-5" />, matchPrefix: '/recalls' },
   { href: '/progress', label: 'Progress', icon: <TrendingUp className="w-5 h-5" />, matchPrefix: '/progress' },
   { href: '/billing', label: 'Billing', icon: <CreditCard className="w-5 h-5" />, matchPrefix: '/billing' },
 ];
@@ -268,11 +269,12 @@ export function Sidebar({
         ) : (
           <NavSection label="Practice" items={resolvedItems} pathname={pathname} reducedMotion={reducedMotion} />
         )}
-        {/* The dedicated "Learn" group (Grammar, Live Classes, Lessons, Strategies, Recalls,
+        {/* The dedicated "Learn" group (Grammar, Live Classes, Lessons, Strategies,
             AI Conversation) is intentionally hidden from the learner workspace per the
-            2026-05-27 sample-test-alignment directive — those surfaces remain addressable
-            by URL but are off the candidate's primary path. We keep the group available to
-            non-learner workspaces (admin/tutor) so internal users can still navigate to them. */}
+            sample-test-alignment directive — those surfaces remain addressable by URL but
+            are off the candidate's primary path. Recalls is promoted to the main Practice
+            group. We keep the Learn group available to non-learner workspaces so internal
+            users can still navigate to them. */}
         {!isLearnerWorkspace ? (
           <NavSection label="Learn" items={visibleLearnNavItems} pathname={pathname} reducedMotion={reducedMotion} />
         ) : null}
