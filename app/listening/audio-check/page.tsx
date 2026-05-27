@@ -34,7 +34,7 @@ export default function ListeningAudioCheckPage() {
 
   if (authLoading || !isAuthenticated) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-gradient-to-b from-violet-50 to-white">
+      <div className="flex min-h-screen items-center justify-center bg-gradient-to-b from-violet-50 to-white dark:from-slate-900 dark:to-slate-950">
         <div className="h-8 w-8 animate-spin rounded-full border-4 border-violet-200 border-t-violet-600" />
       </div>
     );
@@ -67,11 +67,11 @@ export default function ListeningAudioCheckPage() {
   };
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-gradient-to-b from-violet-50 to-white px-4 py-16">
+    <div className="flex min-h-screen flex-col items-center justify-center bg-gradient-to-b from-violet-50 to-white dark:from-slate-900 dark:to-slate-950 px-4 py-16">
       <div className="w-full max-w-xl">
         {/* Intro */}
         {phase === 'intro' && (
-          <div className="rounded-2xl border border-gray-100 bg-white p-8 shadow-sm">
+          <div className="rounded-2xl border border-gray-100 bg-white dark:bg-slate-800 dark:border-slate-700 p-8 shadow-sm">
             <div className="mb-6 text-center">
               <div className="mb-3 inline-flex h-14 w-14 items-center justify-center rounded-full bg-violet-100 text-violet-600">
                 <Headphones className="h-7 w-7" aria-hidden />
@@ -116,7 +116,7 @@ export default function ListeningAudioCheckPage() {
 
         {/* Checking */}
         {phase === 'checking' && (
-          <div className="rounded-2xl border border-gray-100 bg-white p-8 shadow-sm">
+          <div className="rounded-2xl border border-gray-100 bg-white dark:bg-slate-800 dark:border-slate-700 p-8 shadow-sm">
             <h1 className="mb-6 text-center text-xl font-extrabold text-gray-900">
               Play the clip and pick the result
             </h1>
@@ -135,7 +135,7 @@ export default function ListeningAudioCheckPage() {
 
         {/* Result */}
         {phase === 'result' && outcome !== null && (
-          <div className="rounded-2xl border border-gray-100 bg-white p-8 shadow-sm">
+          <div className="rounded-2xl border border-gray-100 bg-white dark:bg-slate-800 dark:border-slate-700 p-8 shadow-sm">
             {outcome === 'clear' && (
               <div className="text-center">
                 <div className="mb-4 inline-flex h-14 w-14 items-center justify-center rounded-full bg-emerald-100 text-emerald-600">

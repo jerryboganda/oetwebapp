@@ -942,9 +942,11 @@ async function ensureAttempt(subtest: 'writing' | 'speaking' | 'reading' | 'list
     }
   }
 
+  const context = mode === 'diagnostic' ? 'diagnostic' : mode === 'exam' ? 'exam' : 'practice';
+  const attemptMode = mode === 'diagnostic' ? 'exam' : mode;
   const created = await apiRequest<ApiRecord>(`/v1/${subtest}/attempts`, {
     method: 'POST',
-    body: JSON.stringify({ contentId, context: mode === 'exam' ? 'exam' : 'practice', mode, deviceType: 'web', parentAttemptId: null }),
+    body: JSON.stringify({ contentId, context, mode: attemptMode, deviceType: 'web', parentAttemptId: null }),
   });
   cacheSet(key, created.attemptId);
   return created;
@@ -961,7 +963,9 @@ export interface WritingAttemptSession {
   draftContent: string;
 }
 
-export async function ensureWritingAttempt(taskId: string, mode: 'exam' | 'learning' = 'exam'): Promise<WritingAttemptSession> {
+export type WritingAttemptMode = 'exam' | 'learning' | 'diagnostic';
+
+export async function ensureWritingAttempt(taskId: string, mode: WritingAttemptMode = 'exam'): Promise<WritingAttemptSession> {
   const attempt = await ensureAttempt('writing', taskId, mode);
   const startedAt = typeof attempt.startedAt === 'string' ? attempt.startedAt : '';
   if (!startedAt || Number.isNaN(Date.parse(startedAt))) {
@@ -971,7 +975,7 @@ export async function ensureWritingAttempt(taskId: string, mode: 'exam' | 'learn
   return {
     attemptId: String(attempt.attemptId ?? ''),
     contentId: String(attempt.contentId ?? taskId),
-    context: String(attempt.context ?? (mode === 'exam' ? 'exam' : 'practice')),
+    context: String(attempt.context ?? (mode === 'diagnostic' ? 'diagnostic' : mode === 'exam' ? 'exam' : 'practice')),
     mode: String(attempt.mode ?? mode),
     state: String(attempt.state ?? 'in_progress'),
     startedAt,
@@ -1736,7 +1740,7 @@ export async function fetchWritingChecklist(): Promise<ChecklistItem[]> {
   return criteria.map((criterion, index) => ({ id: index + 1, text: criterion.label, completed: false }));
 }
 
-export async function submitWritingDraft(taskId: string, content: string, mode: 'exam' | 'learning' = 'exam'): Promise<{ saved: boolean }> {
+export async function submitWritingDraft(taskId: string, content: string, mode: WritingAttemptMode = 'exam'): Promise<{ saved: boolean }> {
   const attempt = await ensureAttempt('writing', taskId, mode);
   const saved = await apiRequest<ApiRecord>(`/v1/writing/attempts/${attempt.attemptId}/draft`, {
     method: 'PATCH',
@@ -1757,7 +1761,7 @@ export interface WritingSubmitOptions {
   learnerNotes?: string;
 }
 
-export async function submitWritingTask(taskId: string, content: string, mode: 'exam' | 'learning' = 'exam', options: WritingSubmitOptions = {}): Promise<WritingSubmission & { attemptId?: string; reviewRequestId?: string; assessorType?: WritingAssessorType; examMode?: WritingExamMode }> {
+export async function submitWritingTask(taskId: string, content: string, mode: WritingAttemptMode = 'exam', options: WritingSubmitOptions = {}): Promise<WritingSubmission & { attemptId?: string; reviewRequestId?: string; assessorType?: WritingAssessorType; examMode?: WritingExamMode }> {
   const attempt = await ensureAttempt('writing', taskId, mode);
   const examMode = options.examMode ?? 'computer';
   const assessorType = options.assessorType ?? 'ai';
@@ -1805,7 +1809,7 @@ export async function submitWritingTask(taskId: string, content: string, mode: '
   };
 }
 
-export async function attachWritingPaperAssets(taskId: string, mediaAssetIds: string[], mode: 'exam' | 'learning' = 'exam', replaceExisting = true): Promise<{ attemptId: string; assets: WritingPaperAsset[]; extractionState: string; extractedText: string; extractedCharCount: number; wordCount: number }> {
+export async function attachWritingPaperAssets(taskId: string, mediaAssetIds: string[], mode: WritingAttemptMode = 'exam', replaceExisting = true): Promise<{ attemptId: string; assets: WritingPaperAsset[]; extractionState: string; extractedText: string; extractedCharCount: number; wordCount: number }> {
   const attempt = await ensureAttempt('writing', taskId, mode);
   return apiRequest(`/v1/writing/attempts/${encodeURIComponent(attempt.attemptId)}/paper-assets`, {
     method: 'POST',
@@ -1813,7 +1817,7 @@ export async function attachWritingPaperAssets(taskId: string, mediaAssetIds: st
   });
 }
 
-export async function fetchWritingPaperAssets(taskId: string, mode: 'exam' | 'learning' = 'exam'): Promise<{ attemptId: string; assets: WritingPaperAsset[]; extractionState: string; extractedText: string }> {
+export async function fetchWritingPaperAssets(taskId: string, mode: WritingAttemptMode = 'exam'): Promise<{ attemptId: string; assets: WritingPaperAsset[]; extractionState: string; extractedText: string }> {
   const attempt = await ensureAttempt('writing', taskId, mode);
   return apiRequest(`/v1/writing/attempts/${encodeURIComponent(attempt.attemptId)}/paper-assets`);
 }
@@ -10517,6 +10521,311 @@ export async function retryAdminLiveClassSessionZoom(sessionId: string): Promise
   });
 }
 
+// ── Tutor (Zoom-backed live classes — wave B1) ──────────
+
+export type DayOfWeekString =
+  | 'Sunday'
+  | 'Monday'
+  | 'Tuesday'
+  | 'Wednesday'
+  | 'Thursday'
+  | 'Friday'
+  | 'Saturday';
+
+export interface TutorProfile {
+  id: string;
+  userId: string;
+  displayName: string;
+  displayNameAr?: string | null;
+  bio: string;
+  bioAr?: string | null;
+  avatarUrl?: string | null;
+  specialties: string[];
+  languages: string[];
+  hourlyRateUsd?: number | null;
+  timeZone: string;
+  zoomUserId?: string | null;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TutorUpsertPayload {
+  displayName: string;
+  displayNameAr?: string | null;
+  bio?: string | null;
+  bioAr?: string | null;
+  avatarUrl?: string | null;
+  specialties?: string[];
+  languages?: string[];
+  hourlyRateUsd?: number | null;
+  timeZone?: string | null;
+  isActive?: boolean | null;
+}
+
+export interface TutorAvailabilitySlot {
+  id: string;
+  /** Server emits .NET DayOfWeek either as enum number (0–6) or name. We accept both. */
+  dayOfWeek: number | DayOfWeekString;
+  /** TimeOnly serializes as `HH:mm:ss`. */
+  startTime: string;
+  /** TimeOnly serializes as `HH:mm:ss`. */
+  endTime: string;
+  isActive: boolean;
+}
+
+export interface TutorAvailabilityUpsertPayload {
+  /** Accepts the .NET DayOfWeek enum index or name. */
+  dayOfWeek: number | DayOfWeekString;
+  startTime: string;
+  endTime: string;
+  isActive: boolean;
+}
+
+export interface TutorEarningsLine {
+  classSessionId: string;
+  liveClassId: string;
+  classTitle: string;
+  scheduledStartAt: string;
+  attendedCount: number;
+  creditCost: number;
+  creditUsdValue: number;
+  revenueSharePercent: number;
+  grossUsd: number;
+  netUsd: number;
+}
+
+export interface TutorEarnings {
+  from?: string | null;
+  to?: string | null;
+  grossUsd: number;
+  netUsd: number;
+  revenueSharePercent: number;
+  lines: TutorEarningsLine[];
+}
+
+export interface TutorClassCreatePayload {
+  title: string;
+  titleAr?: string | null;
+  description: string;
+  descriptionAr?: string | null;
+  type: string;
+  professionTrack: string;
+  level: string;
+  scheduledStartAt: string;
+  durationMinutes: number;
+  capacity: number;
+  creditCost: number;
+  coverImageUrl?: string | null;
+  tags?: string[];
+  autoPublish?: boolean;
+}
+
+export interface TutorClassUpdatePayload {
+  title?: string | null;
+  titleAr?: string | null;
+  description?: string | null;
+  descriptionAr?: string | null;
+  coverImageUrl?: string | null;
+  creditCost?: number | null;
+  defaultCapacity?: number | null;
+  defaultDurationMinutes?: number | null;
+  tags?: string[] | null;
+}
+
+export interface TutorClassSessionCreatePayload {
+  scheduledStartAt: string;
+  durationMinutes?: number | null;
+  capacity?: number | null;
+}
+
+export interface TutorClassSessionUpdatePayload {
+  scheduledStartAt?: string;
+  durationMinutes?: number;
+  capacity?: number;
+  cancellationReason?: string;
+}
+
+export interface TutorAttendanceLine {
+  userId: string;
+  displayName?: string | null;
+  joinedAt: string;
+  leftAt?: string | null;
+  durationSeconds: number;
+}
+
+export interface ClassFeedbackSubmitPayload {
+  rating: number;
+  comment?: string | null;
+  recommendToFriend?: boolean | null;
+}
+
+export interface ClassFeedbackEntry {
+  id: string;
+  classSessionId: string;
+  userId: string;
+  rating: number;
+  comment?: string | null;
+  recommendToFriend: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ClassWaitlistEntry {
+  id: string;
+  classSessionId: string;
+  userId: string;
+  position: number;
+  joinedAt: string;
+}
+
+export interface LiveClassTranscript {
+  classSessionId: string;
+  transcriptText: string;
+  processedAt?: string | null;
+}
+
+export async function fetchTutorProfile(): Promise<TutorProfile | null> {
+  try {
+    return await apiRequest<TutorProfile>('/v1/tutor/me');
+  } catch (err) {
+    if (isApiError(err) && err.status === 404) return null;
+    throw err;
+  }
+}
+
+export async function createTutorProfile(payload: TutorUpsertPayload): Promise<TutorProfile> {
+  return apiRequest<TutorProfile>('/v1/tutor/me', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function updateTutorProfile(payload: TutorUpsertPayload): Promise<TutorProfile> {
+  return apiRequest<TutorProfile>('/v1/tutor/me', {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function fetchTutorAvailability(): Promise<TutorAvailabilitySlot[]> {
+  return apiRequest<TutorAvailabilitySlot[]>('/v1/tutor/me/availability');
+}
+
+export async function replaceTutorAvailability(
+  slots: TutorAvailabilityUpsertPayload[],
+): Promise<TutorAvailabilitySlot[]> {
+  return apiRequest<TutorAvailabilitySlot[]>('/v1/tutor/me/availability', {
+    method: 'PUT',
+    body: JSON.stringify(slots),
+  });
+}
+
+export async function fetchTutorEarnings(from?: string, to?: string): Promise<TutorEarnings> {
+  const qs = new URLSearchParams();
+  if (from) qs.set('from', from);
+  if (to) qs.set('to', to);
+  const tail = qs.toString();
+  return apiRequest<TutorEarnings>(`/v1/tutor/me/earnings${tail ? `?${tail}` : ''}`);
+}
+
+export async function provisionTutorZoomUser(): Promise<{ zoomUserId: string | null }> {
+  return apiRequest<{ zoomUserId: string | null }>('/v1/tutor/me/zoom-user', {
+    method: 'POST',
+  });
+}
+
+export async function fetchTutorClasses(): Promise<LiveClassListItem[]> {
+  return apiRequest<LiveClassListItem[]>('/v1/tutor/me/classes');
+}
+
+export async function createTutorClass(payload: TutorClassCreatePayload): Promise<LiveClassDetail> {
+  return apiRequest<LiveClassDetail>('/v1/tutor/me/classes', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function updateTutorClass(
+  classId: string,
+  payload: TutorClassUpdatePayload,
+): Promise<LiveClassDetail> {
+  return apiRequest<LiveClassDetail>(`/v1/tutor/me/classes/${encodeURIComponent(classId)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function addTutorClassSession(
+  classId: string,
+  payload: TutorClassSessionCreatePayload,
+): Promise<LiveClassSessionSummary> {
+  return apiRequest<LiveClassSessionSummary>(
+    `/v1/tutor/me/classes/${encodeURIComponent(classId)}/sessions`,
+    {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
+export async function updateTutorClassSession(
+  sessionId: string,
+  payload: TutorClassSessionUpdatePayload,
+): Promise<LiveClassDetail> {
+  return apiRequest<LiveClassDetail>(
+    `/v1/tutor/me/classes/sessions/${encodeURIComponent(sessionId)}`,
+    {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
+export async function cancelTutorClassSession(sessionId: string): Promise<void> {
+  await apiRequest(`/v1/tutor/me/classes/sessions/${encodeURIComponent(sessionId)}`, {
+    method: 'DELETE',
+  });
+}
+
+export async function fetchTutorSessionAttendance(sessionId: string): Promise<TutorAttendanceLine[]> {
+  return apiRequest<TutorAttendanceLine[]>(
+    `/v1/tutor/me/classes/sessions/${encodeURIComponent(sessionId)}/attendance`,
+  );
+}
+
+export async function submitClassFeedback(
+  sessionId: string,
+  payload: ClassFeedbackSubmitPayload,
+): Promise<ClassFeedbackEntry> {
+  return apiRequest<ClassFeedbackEntry>(
+    `/v1/classes/sessions/${encodeURIComponent(sessionId)}/feedback`,
+    {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
+export async function joinClassWaitlist(sessionId: string): Promise<ClassWaitlistEntry> {
+  return apiRequest<ClassWaitlistEntry>(
+    `/v1/classes/sessions/${encodeURIComponent(sessionId)}/waitlist`,
+    { method: 'POST' },
+  );
+}
+
+export async function leaveClassWaitlist(sessionId: string): Promise<void> {
+  await apiRequest(`/v1/classes/sessions/${encodeURIComponent(sessionId)}/waitlist`, {
+    method: 'DELETE',
+  });
+}
+
+export async function fetchClassTranscript(sessionId: string): Promise<LiveClassTranscript> {
+  return apiRequest<LiveClassTranscript>(
+    `/v1/me/classes/sessions/${encodeURIComponent(sessionId)}/transcript`,
+  );
+}
+
 // ── Orphan Endpoint Wiring ────────────────────────────
 
 export async function fetchStudyPlanDrift() {
@@ -12949,4 +13258,390 @@ export async function adminUpsertListeningUserPolicyOverride(
     `/v1/admin/listening-policy/users/${encodeURIComponent(userId)}`,
     { method: 'PUT', body: JSON.stringify({ ...payload, userId }) }
   );
+}
+
+// ── Wave B2: Cart / Checkout / Subscription self-service / Admin products & coupons ──
+//
+// All endpoints here align with the plan in OET_BILLING_SUBSCRIPTION_PLAN.md §5/§7/§22.
+// When the backend route is not yet ready (e.g. analytics + refunds), the helper still
+// resolves so the page can degrade to a graceful "not yet available" message instead
+// of a hard 500. We surface 404 by returning `null`.
+
+export interface CartLineItem {
+  itemId: string;
+  productCode: string;
+  productName: string;
+  description?: string | null;
+  quantity: number;
+  unitAmount: number;
+  totalAmount: number;
+  currency: string;
+  productType?: string | null;
+  imageUrl?: string | null;
+}
+
+export interface CartPromoCode {
+  code: string;
+  discountAmount: number;
+  description?: string | null;
+}
+
+export interface Cart {
+  cartId: string;
+  currency: string;
+  items: CartLineItem[];
+  promoCodes: CartPromoCode[];
+  subtotalAmount: number;
+  discountAmount: number;
+  taxAmount: number;
+  totalAmount: number;
+  updatedAt: string;
+}
+
+function emptyCart(): Cart {
+  return {
+    cartId: '',
+    currency: 'AUD',
+    items: [],
+    promoCodes: [],
+    subtotalAmount: 0,
+    discountAmount: 0,
+    taxAmount: 0,
+    totalAmount: 0,
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+async function maybe<T>(promise: Promise<T>, fallback: T | null = null): Promise<T | null> {
+  try {
+    return await promise;
+  } catch (err) {
+    if (err instanceof ApiError && (err.status === 404 || err.status === 501)) {
+      return fallback;
+    }
+    throw err;
+  }
+}
+
+export async function fetchCart(): Promise<Cart> {
+  try {
+    return await apiRequest<Cart>('/v1/cart');
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 404) {
+      return emptyCart();
+    }
+    throw err;
+  }
+}
+
+export async function createCart(): Promise<Cart> {
+  return apiRequest<Cart>('/v1/cart', { method: 'POST' });
+}
+
+export async function addCartItem(payload: {
+  productCode: string;
+  quantity?: number;
+}): Promise<Cart> {
+  return apiRequest<Cart>('/v1/cart/items', {
+    method: 'POST',
+    body: JSON.stringify({ productCode: payload.productCode, quantity: payload.quantity ?? 1 }),
+  });
+}
+
+export async function updateCartItem(itemId: string, quantity: number): Promise<Cart> {
+  return apiRequest<Cart>(`/v1/cart/items/${encodeURIComponent(itemId)}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ quantity }),
+  });
+}
+
+export async function removeCartItem(itemId: string): Promise<Cart> {
+  return apiRequest<Cart>(`/v1/cart/items/${encodeURIComponent(itemId)}`, { method: 'DELETE' });
+}
+
+export async function applyCartPromoCode(code: string): Promise<Cart> {
+  return apiRequest<Cart>('/v1/cart/promo-codes', {
+    method: 'POST',
+    body: JSON.stringify({ code }),
+  });
+}
+
+export async function removeCartPromoCode(code: string): Promise<Cart> {
+  return apiRequest<Cart>(`/v1/cart/promo-codes/${encodeURIComponent(code)}`, { method: 'DELETE' });
+}
+
+export interface CheckoutSessionResponse {
+  sessionId: string;
+  url: string;
+}
+
+export async function createCheckoutSession(payload?: {
+  successUrl?: string;
+  cancelUrl?: string;
+  cartId?: string | null;
+}): Promise<CheckoutSessionResponse> {
+  return apiRequest<CheckoutSessionResponse>('/v1/checkout/sessions', {
+    method: 'POST',
+    body: JSON.stringify({
+      successUrl: payload?.successUrl ?? null,
+      cancelUrl: payload?.cancelUrl ?? null,
+      cartId: payload?.cartId ?? null,
+    }),
+  });
+}
+
+export interface CheckoutSessionStatusItem {
+  productCode: string;
+  productName: string;
+  quantity: number;
+  description?: string | null;
+}
+
+export interface CheckoutSessionStatus {
+  sessionId: string;
+  status: 'pending' | 'fulfilled' | 'failed' | 'expired' | string;
+  totalAmount?: number;
+  currency?: string;
+  items?: CheckoutSessionStatusItem[];
+  failureReason?: string | null;
+  fulfilledAt?: string | null;
+}
+
+export async function fetchCheckoutSessionStatus(sessionId: string): Promise<CheckoutSessionStatus> {
+  return apiRequest<CheckoutSessionStatus>(`/v1/checkout/sessions/${encodeURIComponent(sessionId)}/status`);
+}
+
+export interface CatalogRecommendation {
+  productCode: string;
+  name: string;
+  description?: string | null;
+  price: number;
+  currency: string;
+  imageUrl?: string | null;
+}
+
+export async function fetchCatalogRecommendations(): Promise<CatalogRecommendation[]> {
+  const result = await maybe<{ items: CatalogRecommendation[] } | CatalogRecommendation[]>(
+    apiRequest('/v1/catalog/recommendations'),
+    [],
+  );
+  if (!result) return [];
+  if (Array.isArray(result)) return result;
+  return result.items ?? [];
+}
+
+// ── Subscription self-service ───────────────────────────────────────
+
+export interface SubscriptionMe {
+  subscriptionId: string;
+  status: string;
+  planCode: string;
+  planName: string;
+  price: number;
+  currency: string;
+  interval: string;
+  startedAt: string | null;
+  nextRenewalAt: string | null;
+  cancelledAt: string | null;
+  pausedUntil: string | null;
+  cancelAtPeriodEnd: boolean;
+  trialEndsAt: string | null;
+  walletBalance?: number;
+  walletCurrency?: string;
+}
+
+export async function fetchSubscriptionMe(): Promise<SubscriptionMe | null> {
+  return maybe<SubscriptionMe>(apiRequest<SubscriptionMe>('/v1/subscriptions/me'));
+}
+
+export interface SubscriptionMeListItem extends SubscriptionMe {
+  productCategory?: string | null;
+}
+
+export async function fetchSubscriptionsMe(): Promise<SubscriptionMeListItem[]> {
+  const result = await maybe<{ items: SubscriptionMeListItem[] } | SubscriptionMeListItem[]>(
+    apiRequest('/v1/subscriptions/me/list'),
+    [],
+  );
+  if (!result) {
+    const one = await fetchSubscriptionMe();
+    return one ? [one] : [];
+  }
+  if (Array.isArray(result)) return result;
+  return result.items ?? [];
+}
+
+export async function createSubscriptionPortalSession(returnUrl?: string): Promise<{ url: string }> {
+  return apiRequest<{ url: string }>('/v1/subscriptions/me/portal-session', {
+    method: 'POST',
+    body: JSON.stringify({ returnUrl: returnUrl ?? null }),
+  });
+}
+
+export async function cancelSubscription(reason?: string): Promise<SubscriptionMe> {
+  return apiRequest<SubscriptionMe>('/v1/subscriptions/me/cancel', {
+    method: 'POST',
+    body: JSON.stringify({ reason: reason ?? null }),
+  });
+}
+
+export async function pauseSubscriptionSelf(days?: number, reason?: string): Promise<SubscriptionMe> {
+  return apiRequest<SubscriptionMe>('/v1/subscriptions/me/pause', {
+    method: 'POST',
+    body: JSON.stringify({ days: days ?? null, reason: reason ?? null }),
+  });
+}
+
+export async function resumeSubscriptionSelf(): Promise<SubscriptionMe> {
+  return apiRequest<SubscriptionMe>('/v1/subscriptions/me/resume', { method: 'POST' });
+}
+
+export async function changeSubscriptionPlanSelf(planCode: string, prorate?: boolean): Promise<SubscriptionMe> {
+  return apiRequest<SubscriptionMe>('/v1/subscriptions/me/change-plan', {
+    method: 'POST',
+    body: JSON.stringify({ planCode, prorate: prorate ?? true }),
+  });
+}
+
+export interface SubscriptionInvoice {
+  invoiceId: string;
+  number?: string | null;
+  date: string;
+  amount: number;
+  currency: string;
+  status: string;
+  description?: string | null;
+  pdfUrl?: string | null;
+  hostedInvoiceUrl?: string | null;
+}
+
+export async function fetchSubscriptionInvoices(params?: { page?: number; pageSize?: number }): Promise<{ items: SubscriptionInvoice[]; total: number; page: number; pageSize: number }> {
+  const qs = new URLSearchParams();
+  if (params?.page) qs.set('page', String(params.page));
+  if (params?.pageSize) qs.set('pageSize', String(params.pageSize));
+  const q = qs.toString();
+  const result = await maybe<{ items: SubscriptionInvoice[]; total: number; page?: number; pageSize?: number } | SubscriptionInvoice[]>(
+    apiRequest(`/v1/subscriptions/me/invoices${q ? `?${q}` : ''}`),
+    null,
+  );
+  if (result == null) return { items: [], total: 0, page: params?.page ?? 1, pageSize: params?.pageSize ?? 20 };
+  if (Array.isArray(result)) return { items: result, total: result.length, page: params?.page ?? 1, pageSize: params?.pageSize ?? 20 };
+  return { items: result.items ?? [], total: result.total ?? (result.items ?? []).length, page: result.page ?? params?.page ?? 1, pageSize: result.pageSize ?? params?.pageSize ?? 20 };
+}
+
+// ── Admin: Billing products (catalog) — Wave B2 thin CRUD ───────────
+
+export interface AdminBillingProductPrice {
+  priceId: string;
+  amount: number;
+  currency: string;
+  interval: string;
+  trialDays?: number;
+  isDefault?: boolean;
+}
+
+export interface AdminBillingProduct {
+  productCode: string;
+  name: string;
+  description?: string | null;
+  productType: string;
+  status: string;
+  imageUrl?: string | null;
+  displayOrder?: number;
+  prices: AdminBillingProductPrice[];
+  metadata?: Record<string, unknown>;
+}
+
+export async function fetchAdminBillingProducts(params?: { status?: string; search?: string }): Promise<AdminBillingProduct[]> {
+  const qs = new URLSearchParams();
+  if (params?.status) qs.set('status', params.status);
+  if (params?.search) qs.set('search', params.search);
+  const q = qs.toString();
+  const result = await maybe<{ items: AdminBillingProduct[] } | AdminBillingProduct[]>(
+    apiRequest(`/v1/admin/billing/products${q ? `?${q}` : ''}`),
+    [],
+  );
+  if (!result) return [];
+  if (Array.isArray(result)) return result;
+  return result.items ?? [];
+}
+
+export async function fetchAdminBillingProduct(productCode: string): Promise<AdminBillingProduct | null> {
+  return maybe<AdminBillingProduct>(
+    apiRequest<AdminBillingProduct>(`/v1/admin/billing/products/${encodeURIComponent(productCode)}`),
+  );
+}
+
+export async function updateAdminBillingProduct(productCode: string, payload: Partial<AdminBillingProduct>): Promise<AdminBillingProduct> {
+  return apiRequest<AdminBillingProduct>(`/v1/admin/billing/products/${encodeURIComponent(productCode)}`, {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+  });
+}
+
+export interface AdminRefundRequest {
+  id: string;
+  invoiceId: string;
+  userId: string;
+  userName: string;
+  amount: number;
+  currency: string;
+  reason: string;
+  status: 'pending' | 'approved' | 'denied' | 'issued' | string;
+  requestedAt: string;
+  reviewedAt?: string | null;
+  reviewerNotes?: string | null;
+}
+
+export async function fetchAdminRefunds(params?: { status?: string; page?: number; pageSize?: number }): Promise<{ items: AdminRefundRequest[]; total: number }> {
+  const qs = new URLSearchParams();
+  if (params?.status) qs.set('status', params.status);
+  if (params?.page) qs.set('page', String(params.page));
+  if (params?.pageSize) qs.set('pageSize', String(params.pageSize));
+  const q = qs.toString();
+  const result = await maybe<{ items: AdminRefundRequest[]; total?: number } | AdminRefundRequest[]>(
+    apiRequest(`/v1/admin/refunds${q ? `?${q}` : ''}`),
+    null,
+  );
+  if (result == null) return { items: [], total: 0 };
+  if (Array.isArray(result)) return { items: result, total: result.length };
+  return { items: result.items ?? [], total: result.total ?? (result.items ?? []).length };
+}
+
+export async function postAdminRefundAction(payload: { refundId: string; action: 'approve' | 'deny' | 'issue'; notes?: string | null; amount?: number | null }): Promise<AdminRefundRequest> {
+  return apiRequest<AdminRefundRequest>('/v1/admin/refunds', {
+    method: 'POST',
+    body: JSON.stringify({
+      refundId: payload.refundId,
+      action: payload.action,
+      notes: payload.notes ?? null,
+      amount: payload.amount ?? null,
+    }),
+  });
+}
+
+export interface AdminBillingAnalyticsSeriesPoint {
+  date: string;
+  value: number;
+}
+
+export interface AdminBillingAnalyticsResponse {
+  mrr: AdminBillingAnalyticsSeriesPoint[];
+  churnRate: AdminBillingAnalyticsSeriesPoint[];
+  ltv: AdminBillingAnalyticsSeriesPoint[];
+  currency: string;
+  available: boolean;
+}
+
+export async function fetchAdminBillingAnalytics(params?: { from?: string; to?: string }): Promise<AdminBillingAnalyticsResponse> {
+  const qs = new URLSearchParams();
+  if (params?.from) qs.set('from', params.from);
+  if (params?.to) qs.set('to', params.to);
+  const q = qs.toString();
+  const result = await maybe<AdminBillingAnalyticsResponse>(
+    apiRequest<AdminBillingAnalyticsResponse>(`/v1/admin/billing/analytics${q ? `?${q}` : ''}`),
+    null,
+  );
+  if (result) return { ...result, available: true };
+  return { mrr: [], churnRate: [], ltv: [], currency: 'AUD', available: false };
 }

@@ -655,14 +655,14 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
             <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-info/10 text-info">
               <Clock className="h-6 w-6" />
             </div>
-            <h1 className="mt-4 text-2xl font-semibold tracking-tight text-navy">{structure.paper.title}</h1>
-            <p className="mx-auto mt-2 max-w-2xl text-sm leading-6 text-muted">
+            <h1 className="mt-4 text-2xl font-semibold tracking-tight text-gray-900 dark:text-gray-100">{structure.paper.title}</h1>
+            <p className="mx-auto mt-2 max-w-2xl text-sm leading-6 text-gray-600 dark:text-gray-400">
               {urlMode && urlMode !== 'exam'
                 ? `Loading your ${urlMode.replace('-', ' ')} practice attempt…`
                 : 'Start a server-authoritative Reading attempt. Part A locks after its window, then Parts B and C share the remaining timer.'}
             </p>
             <p
-              className="mx-auto mt-4 max-w-2xl rounded-2xl border border-border bg-background-light px-4 py-3 text-xs font-semibold leading-5 text-muted"
+              className="mx-auto mt-4 max-w-2xl rounded-2xl border border-border bg-background-light px-4 py-3 text-xs font-semibold leading-5 text-gray-600 dark:text-gray-400"
               data-testid="reading-integrity-reminder"
               role="note"
             >
@@ -758,9 +758,9 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
 
         <Modal open={showConfirm} onClose={() => setShowConfirm(false)} title="Submit Reading attempt?">
           <div className="space-y-4">
-            <p className="text-sm leading-6 text-muted">
-              You have answered <strong className="text-navy">{answeredCount}</strong> of{' '}
-              <strong className="text-navy">{totalQuestions}</strong> questions. Unanswered questions score zero.
+            <p className="text-sm leading-6 text-gray-600 dark:text-gray-400">
+              You have answered <strong className="text-gray-900 dark:text-gray-100">{answeredCount}</strong> of{' '}
+              <strong className="text-gray-900 dark:text-gray-100">{totalQuestions}</strong> questions. Unanswered questions score zero.
             </p>
             {unansweredCount > 0 ? (
               <InlineAlert variant="warning">
@@ -857,13 +857,13 @@ function AttemptToolbar({
             aria-label={`${timerLabel}, ${formatCountdown(secondsLeft)} remaining`}
           >
             <Clock className="h-4 w-4 text-primary" aria-hidden="true" />
-            <span className="text-xs font-bold uppercase tracking-[0.14em] text-muted">{timerLabel}</span>
-            <span className="font-mono text-base font-bold text-navy">{formatCountdown(secondsLeft)}</span>
+            <span className="text-xs font-bold uppercase tracking-[0.14em] text-gray-600 dark:text-gray-400">{timerLabel}</span>
+            <span className="font-mono text-base font-bold text-gray-900 dark:text-gray-100">{formatCountdown(secondsLeft)}</span>
           </div>
           {partALocked ? <Badge variant="warning">Part A locked</Badge> : null}
           {breakPending ? <Badge variant="info">B/C paused</Badge> : null}
           {paperExpired ? <Badge variant="danger">Time expired</Badge> : null}
-          <span className="text-sm font-semibold text-muted" aria-label={`${answeredCount} of ${totalQuestions} questions answered`}>
+          <span className="text-sm font-semibold text-gray-600 dark:text-gray-400" aria-label={`${answeredCount} of ${totalQuestions} questions answered`}>
             {answeredCount}/{totalQuestions} answered
           </span>
         </div>
@@ -910,7 +910,7 @@ function ReadingZoomControls({ zoomLevel, onZoomChange }: { zoomLevel: number; o
       <Button variant="ghost" size="sm" className="h-9 w-9 px-0" onClick={() => changeZoom(zoomLevel - 5)} aria-label="Zoom out" title="Zoom out">
         <ZoomOut className="h-4 w-4" aria-hidden="true" />
       </Button>
-      <span className="w-12 text-center font-mono text-xs font-bold text-navy" aria-live="polite">{zoomLevel}%</span>
+      <span className="w-12 text-center font-mono text-xs font-bold text-gray-900 dark:text-gray-100" aria-live="polite">{zoomLevel}%</span>
       <Button variant="ghost" size="sm" className="h-9 w-9 px-0" onClick={() => changeZoom(zoomLevel + 5)} aria-label="Zoom in" title="Zoom in">
         <ZoomIn className="h-4 w-4" aria-hidden="true" />
       </Button>
@@ -955,7 +955,7 @@ function ReadingA11ySettings({
   return (
     <details className="group relative inline-block">
       <summary
-        className="inline-flex h-9 cursor-pointer list-none items-center gap-1.5 rounded-xl border border-border bg-background-light px-3 text-xs font-bold text-navy hover:border-border-hover focus:outline-none focus:ring-4 focus:ring-primary/15"
+        className="inline-flex h-9 cursor-pointer list-none items-center gap-1.5 rounded-xl border border-border bg-background-light px-3 text-xs font-bold text-gray-900 dark:text-gray-100 hover:border-border-hover focus:outline-none focus:ring-4 focus:ring-primary/15"
         aria-label="Accessibility settings"
       >
         <Settings className="h-4 w-4" aria-hidden />
@@ -968,7 +968,7 @@ function ReadingA11ySettings({
       >
         {policy.fontScaleUserControl ? (
           <div className="space-y-1">
-            <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">Font size</p>
+            <p className="text-xs font-bold uppercase tracking-[0.14em] text-gray-600 dark:text-gray-400">Font size</p>
             <div className="flex items-center gap-1">
               {[90, 100, 110, 125].map((value) => (
                 <button
@@ -980,7 +980,7 @@ function ReadingA11ySettings({
                     'flex-1 rounded-lg border px-2 py-1.5 text-xs font-bold transition-colors ' +
                     (fontScale === value
                       ? 'border-primary bg-primary text-white'
-                      : 'border-border bg-background-light text-navy hover:bg-surface')
+                      : 'border-border bg-background-light text-gray-900 dark:text-gray-100 hover:bg-surface')
                   }
                 >
                   {value}%
@@ -997,7 +997,7 @@ function ReadingA11ySettings({
               checked={highContrast}
               onChange={(e) => onHighContrastChange(e.target.checked)}
             />
-            <span className="font-semibold text-navy">High-contrast palette</span>
+            <span className="font-semibold text-gray-900 dark:text-gray-100">High-contrast palette</span>
           </label>
         ) : null}
         {policy.screenReaderOptimised ? (
@@ -1008,10 +1008,10 @@ function ReadingA11ySettings({
               checked={screenReaderHints}
               onChange={(e) => onScreenReaderHintsChange(e.target.checked)}
             />
-            <span className="font-semibold text-navy">Extra screen-reader hints</span>
+            <span className="font-semibold text-gray-900 dark:text-gray-100">Extra screen-reader hints</span>
           </label>
         ) : null}
-        <p className="text-[10px] text-muted">
+        <p className="text-[10px] text-gray-600 dark:text-gray-400">
           <Eye className="mr-1 inline h-3 w-3" aria-hidden />
           Settings are saved per paper — changes here only affect this paper.
         </p>
@@ -1033,7 +1033,7 @@ function ReadingBreakScreen({ attempt, nowMs, onResume }: { attempt: ActiveAttem
         <Badge variant="info">Part A collected</Badge>
         <div className="flex items-center gap-3 rounded-2xl bg-background-light px-5 py-4" role="timer" aria-live="polite" aria-label={`${formatCountdown(secondsLeft)} break time remaining`}>
           <Clock className="h-5 w-5 text-primary" aria-hidden="true" />
-          <span className="font-mono text-3xl font-bold text-navy">{formatCountdown(secondsLeft)}</span>
+          <span className="font-mono text-3xl font-bold text-gray-900 dark:text-gray-100">{formatCountdown(secondsLeft)}</span>
         </div>
         <Button variant="primary" onClick={onResume} aria-label="Resume Reading test">
           <Play className="h-4 w-4" aria-hidden="true" />
@@ -1057,7 +1057,7 @@ function SaveStatus({ state }: { state: SaveState }) {
     <span
       className={cn(
         'inline-flex items-center gap-2 text-sm font-semibold',
-        state === 'error' ? 'text-danger' : 'text-muted',
+        state === 'error' ? 'text-danger' : 'text-gray-600 dark:text-gray-400',
       )}
       role="status"
       aria-live="polite"
@@ -1114,12 +1114,12 @@ function PartTabs({
               'min-h-11 shrink-0 border-b-2 px-4 py-2 text-left text-sm font-bold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary',
               isActive
                 ? 'border-primary text-primary'
-                : 'border-transparent text-muted hover:text-navy',
-              isLocked && 'cursor-not-allowed opacity-60 hover:text-muted',
+                : 'border-transparent text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100',
+              isLocked && 'cursor-not-allowed opacity-60 hover:text-gray-600 dark:hover:text-gray-400',
             )}
           >
             <span>Part {part.partCode}</span>
-            <span className="ml-2 text-xs font-semibold text-muted" aria-hidden="true">{answered}/{part.questions.length}</span>
+            <span className="ml-2 text-xs font-semibold text-gray-600 dark:text-gray-400" aria-hidden="true">{answered}/{part.questions.length}</span>
             {flaggedCount ? <span className="ml-2 text-xs text-warning" aria-hidden="true">{flaggedCount} flagged</span> : null}
             {isLocked ? <span className="ml-2 text-xs text-danger" aria-hidden="true">locked</span> : null}
           </button>
@@ -1160,7 +1160,7 @@ function PartBody({
         id={`reading-part-panel-${part.partCode}`}
         aria-labelledby={`reading-part-tab-${part.partCode}`}
       >
-        <p className="text-sm text-muted">No questions available for this section in the selected drill.</p>
+        <p className="text-sm text-gray-600 dark:text-gray-400">No questions available for this section in the selected drill.</p>
       </div>
     );
   }
@@ -1179,15 +1179,15 @@ function PartBody({
         aria-label={`Reading passages for Part ${part.partCode}`}
       >
         <div className="mb-4 flex items-center justify-between gap-3">
-          <h2 className="text-sm font-black uppercase tracking-[0.18em] text-muted">Passages</h2>
+          <h2 className="text-sm font-black uppercase tracking-[0.18em] text-gray-600 dark:text-gray-400">Passages</h2>
           <Badge variant="muted">Part {part.partCode}</Badge>
         </div>
         <div className="space-y-6">
           {part.texts.map((text) => (
             <article key={text.id} className="space-y-2">
               <div>
-                <h3 className="text-base font-bold text-navy">{text.title}</h3>
-                {text.source ? <p className="text-xs font-semibold text-muted">Source: {text.source}</p> : null}
+                <h3 className="text-base font-bold text-gray-900 dark:text-gray-100">{text.title}</h3>
+                {text.source ? <p className="text-xs font-semibold text-gray-600 dark:text-gray-400">Source: {text.source}</p> : null}
               </div>
               {/* P0-J 2026-05 hardening: sanitize author-supplied HTML before
                   injecting into the DOM. Backend authoring stores raw HTML and
@@ -1197,7 +1197,7 @@ function PartBody({
                   allow-list (paragraphs, emphasis, lists, tables) and strips
                   script/iframe/event handlers. */}
               <div
-                className="prose prose-sm max-w-none text-navy selection:bg-warning/30"
+                className="prose prose-sm max-w-none text-gray-900 dark:text-gray-100 selection:bg-warning/30"
                 data-reading-highlight-scope="passage"
                 dangerouslySetInnerHTML={{ __html: sanitizeBodyHtml(text.bodyHtml) }}
               />
@@ -1212,7 +1212,7 @@ function PartBody({
       >
         <div className="mb-4 flex flex-col gap-3">
           <div className="flex items-center justify-between gap-3">
-            <h2 className="text-sm font-black uppercase tracking-[0.18em] text-muted">Questions</h2>
+            <h2 className="text-sm font-black uppercase tracking-[0.18em] text-gray-600 dark:text-gray-400">Questions</h2>
             {locked ? <Badge variant="warning">Inputs locked</Badge> : null}
           </div>
           <QuestionNavigator
@@ -1302,7 +1302,7 @@ function QuestionNavigator({
             aria-label={`Question ${question.displayOrder}${answered ? ', answered' : ', unanswered'}${isFlagged ? ', flagged' : ''}`}
             className={cn(
               'relative min-h-11 rounded-lg border text-sm font-bold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary',
-              isActive ? 'border-primary bg-primary text-white' : 'border-border bg-background-light text-navy hover:border-primary/40',
+              isActive ? 'border-primary bg-primary text-white' : 'border-border bg-background-light text-gray-900 dark:text-gray-100 hover:border-primary/40',
               answered && !isActive && 'border-success/30 bg-success/10 text-success',
               isFlagged && !isActive && 'border-warning/30 bg-warning/10 text-warning',
             )}
@@ -1343,8 +1343,8 @@ function QuestionInput({
     <div className="space-y-5">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-xs font-black uppercase tracking-[0.16em] text-muted">Question {question.displayOrder}</p>
-          <h3 className="mt-2 text-base font-semibold leading-7 text-navy selection:bg-warning/30" data-reading-highlight-scope="stem">{question.stem}</h3>
+          <p className="text-xs font-black uppercase tracking-[0.16em] text-gray-600 dark:text-gray-400">Question {question.displayOrder}</p>
+          <h3 className="mt-2 text-base font-semibold leading-7 text-gray-900 dark:text-gray-100 selection:bg-warning/30" data-reading-highlight-scope="stem">{question.stem}</h3>
         </div>
         <Button variant="ghost" size="sm" onClick={onToggleFlag} aria-pressed={flagged}>
           <Flag className={cn('h-4 w-4', flagged && 'fill-current text-warning')} />
@@ -1403,7 +1403,7 @@ function McqControl({
             className={cn(
               'flex min-h-11 cursor-pointer items-start gap-3 rounded-lg border border-border bg-background-light p-3 text-sm transition-colors',
               current === letter && 'border-primary bg-primary/5',
-              eliminated && 'text-muted line-through decoration-2',
+              eliminated && 'text-gray-600 dark:text-gray-400 line-through decoration-2',
               locked && 'cursor-not-allowed opacity-70',
             )}
           >
@@ -1415,8 +1415,8 @@ function McqControl({
               checked={current === letter}
               onChange={() => onChange(letter)}
             />
-            <span className="font-mono font-bold text-navy">{letter}.</span>
-            <span className={cn('leading-6 text-navy', eliminated && 'text-muted')}>{option.label}</span>
+            <span className="font-mono font-bold text-gray-900 dark:text-gray-100">{letter}.</span>
+            <span className={cn('leading-6 text-gray-900 dark:text-gray-100', eliminated && 'text-gray-600 dark:text-gray-400')}>{option.label}</span>
           </label>
         );
       })}
@@ -1469,8 +1469,8 @@ function MatchingControl({
               isSelected && 'border-primary bg-primary/5',
             )}
           >
-            <span className="block text-sm font-bold text-navy">Text {option.value}</span>
-            {option.label ? <span className="block text-xs text-muted">{option.label}</span> : null}
+            <span className="block text-sm font-bold text-gray-900 dark:text-gray-100">Text {option.value}</span>
+            {option.label ? <span className="block text-xs text-gray-600 dark:text-gray-400">{option.label}</span> : null}
           </button>
         );
       })}
@@ -1489,7 +1489,7 @@ function TextAnswerControl({
 }) {
   return (
     <input
-      className="min-h-11 w-full rounded-lg border border-border bg-background-light px-3 py-2 text-sm text-navy outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:cursor-not-allowed disabled:opacity-70"
+      className="min-h-11 w-full rounded-lg border border-border bg-background-light px-3 py-2 text-sm text-gray-900 dark:text-gray-100 outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:cursor-not-allowed disabled:opacity-70"
       placeholder="Type your answer"
       disabled={locked}
       value={typeof current === 'string' ? current : ''}

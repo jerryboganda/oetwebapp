@@ -282,3 +282,72 @@ public class PathwayResponse
 public sealed record SaveNotesRequest(
     [property: StringLength(64)] string? QuestionId,
     [property: Required, StringLength(4096)] string NoteMarkdown);
+
+// ═════════════════════════════════════════════════════════════════════════════
+// Phase 5 — Mock Test + Analytics Dashboard DTOs (§9, §19).
+//
+// Mirrors the Phase 1 DTO conventions above: PascalCase records, no
+// answer-bearing fields surfaced to the learner client. The 42-question mock
+// reuses ListeningPracticeSession (SessionType="mock") and the existing
+// IListeningLearnerGradingService grader.
+// ═════════════════════════════════════════════════════════════════════════════
+
+/// <summary>Catalog entry for a published mock test template (§9.1).</summary>
+public sealed record MockTemplateDto(
+    Guid Id,
+    string Title,
+    int Difficulty,
+    int DurationSeconds,
+    int TotalQuestions);
+
+/// <summary>Returned when a learner begins a 42-question full mock (§9.2).</summary>
+public sealed record StartMockResponse(
+    Guid SessionId,
+    int TotalQuestions,
+    int DurationSeconds);
+
+/// <summary>Bulk submission of all 42 mock answers (§9.3).</summary>
+public sealed record MockSubmitRequest(
+    IReadOnlyList<DiagnosticAnswerSubmission> Answers,
+    [property: Range(0, 36000)] int TotalDurationSeconds);
+
+/// <summary>Multi-section mock results envelope (§9.4).</summary>
+public sealed record MockResultResponse(
+    Guid SessionId,
+    int RawScore,
+    int ScaledScore,
+    string GradeLabel,
+    IReadOnlyList<SkillScoreDto> SkillRadar,
+    IReadOnlyList<AccentProgressDto> AccentChart,
+    int PredictedScoreLow,
+    int PredictedScoreHigh,
+    DateTimeOffset SubmittedAt);
+
+/// <summary>Hero block of the analytics dashboard (§19.2).</summary>
+public sealed record ListeningDashboardDto(
+    int ReadinessScore,
+    string CurrentStage,
+    int? DaysUntilExam,
+    int? LastMockScaledScore,
+    decimal? AveragePronunciationRetention);
+
+/// <summary>Skill radar payload — wraps <see cref="SkillScoreDto"/>.</summary>
+public sealed record SkillRadarDto(IReadOnlyList<SkillScoreDto> Skills);
+
+/// <summary>Accent chart payload — wraps <see cref="AccentProgressDto"/>.</summary>
+public sealed record AccentChartDto(IReadOnlyList<AccentProgressDto> Accents);
+
+/// <summary>Score-history points across diagnostics + mocks (§19.4).</summary>
+public sealed record ScoreHistoryDto(IReadOnlyList<MockHistoryPoint> Points);
+
+/// <summary>Single data point on the score-history line chart.</summary>
+public sealed record MockHistoryPoint(
+    DateTimeOffset At,
+    int RawScore,
+    int ScaledScore);
+
+/// <summary>Per-day activity counts for the calendar heatmap (§19.7).</summary>
+public sealed record CalendarHeatmapDto(IReadOnlyList<CalendarDay> Days);
+
+/// <summary>One day of question-attempt activity.</summary>
+public sealed record CalendarDay(DateOnly Date, int QuestionsAttempted);

@@ -46,7 +46,13 @@ public static class DatabaseConfiguration
             return;
         }
 
-        optionsBuilder.UseNpgsql(connectionString);
+        // UseVector() enables Pgvector.EntityFrameworkCore so EF can map the
+        // `vector(n)` column type to Pgvector.Vector and translate
+        // L2/cosine/inner-product distance operators into Postgres
+        // `<->` / `<=>` / `<#>` operator expressions. Harmless when the DB
+        // does not yet have the `vector` extension installed — the connection
+        // still works, only queries that touch a Vector column will fail.
+        optionsBuilder.UseNpgsql(connectionString, npgsql => npgsql.UseVector());
         optionsBuilder.ConfigureWarnings(w =>
             w.Ignore(RelationalEventId.PendingModelChangesWarning));
     }

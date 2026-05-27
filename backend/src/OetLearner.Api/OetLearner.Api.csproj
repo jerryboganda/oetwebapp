@@ -7,6 +7,16 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!--
+      Exposes internal members (notably BackgroundJobProcessor.ProcessOnceAsync)
+      to the test project so the harness can drive a single pass of the job
+      pipeline deterministically. Production callers see the same internal
+      surface — they live in this assembly already.
+    -->
+    <InternalsVisibleTo Include="OetLearner.Api.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="AWSSDK.S3" Version="3.7.*" />
     <PackageReference Include="Azure.AI.Inference" Version="1.0.0-beta.5" />
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.5" />
@@ -18,6 +28,22 @@
     <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" Version="10.0.5" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.5" />
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.1" />
+    <!-- pgvector (.NET bindings + Npgsql.EntityFrameworkCore integration). Used by
+         WritingExemplarEmbeddingService to store and query the 1536-dim
+         text-embedding-3-small vectors with proper HNSW cosine search instead
+         of the legacy C#-side cosine over JSON arrays. The legacy EmbeddingJson
+         column remains the source of truth until BackfillFromJsonAsync runs
+         the JSON → vector population.
+         TODO(WS10.4): if `Pgvector.EntityFrameworkCore 0.3.0` does not yet
+         publish a build that targets EF Core 10 by the time this lands,
+         downgrade the EFCore package to the most recent EF Core 10–compatible
+         release (0.2.x line) or drop it entirely and rely on raw SQL via
+         `FromSql` — the `Pgvector` core package alone is enough to construct
+         the `Vector` type that Npgsql 10 already serialises natively. The
+         service has a JSON-cosine fallback so embeddings keep working either
+         way. License: Apache 2.0. -->
+    <PackageReference Include="Pgvector" Version="0.3.2" />
+    <PackageReference Include="Pgvector.EntityFrameworkCore" Version="0.3.0" />
     <PackageReference Include="Swashbuckle.AspNetCore" Version="10.1.7" />
     <PackageReference Include="WebPush" Version="1.0.12" />
     <!-- Whitelist-based HTML sanitizer. Used by IHtmlSanitizer to scrub admin-authored
@@ -56,6 +82,17 @@
          to live-class enrollment confirmations and T-24h reminder emails.
          License: MIT. -->
     <PackageReference Include="Ical.Net" Version="4.2.0" />
+    <!-- Tesseract — managed wrapper around libtesseract (native). Used by
+         WritingOcrService to OCR uploaded handwritten letters as the
+         first-pass provider before falling back to Google Cloud Vision.
+         REQUIRES native binaries at runtime (libtesseract / tesseract.exe)
+         plus a tessdata directory containing the trained language data.
+         The Docker image installs `tesseract-ocr` + `tesseract-ocr-eng`
+         apt packages. If neither the package nor the binaries are
+         provisioned, WritingOcrService degrades gracefully to zero
+         confidence so the state machine continues to GCV / manual.
+         License: Apache 2.0. -->
+    <PackageReference Include="Tesseract" Version="5.2.0" />
   </ItemGroup>
 
   <!--
@@ -113,6 +150,34 @@
   -->
   <ItemGroup>
     <None Include="Data\Seeds\oet-2026-catalog.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </None>
+  </ItemGroup>
+
+  <!--
+    Wave B4 — canonical Stripe product seed (§10.2). Linked from the
+    StripeProductSeeder script project so the Stripe account, the local
+    BillingProducts table (via BillingCatalogSyncStartupTask) and the CLI
+    seeder all share one source of truth.
+  -->
+  <ItemGroup>
+    <None Include="..\..\scripts\StripeProductSeeder\catalog.json" Link="Data\Seeds\stripe-product-catalog.v1.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </None>
+  </ItemGroup>
+
+  <!--
+    OET Writing Module V2 launch content (OET_WRITING_MODULE_PATHWAY.md
+    §13/14/15/16/17). Eight versioned JSON files loaded at boot by
+    WritingV2ContentSeeder: 25 canon rules, 12 diagnostic scenarios, 6
+    exemplars, 16 lessons (2 per W1-W8), 30 sentence drills, 12 case-note
+    drills, 6 mocks, 20 common mistakes. Copied to publish output so the
+    seeder finds them in containerised deploys.
+  -->
+  <ItemGroup>
+    <None Include="Data\Seeds\WritingV2\**\*.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
     </None>

@@ -8,7 +8,13 @@
 
 services:
   postgres:
-    image: postgres:17-alpine
+    # pgvector/pgvector:pg17 is a drop-in replacement for postgres:17 that
+    # ships the `vector` extension pre-installed. The Writing V2 module
+    # uses it via migration 20260612120000_AddPgvectorEmbeddingColumns to
+    # back exemplar + scenario nearest-neighbour queries with proper HNSW
+    # cosine search. (Alpine variant not published upstream — use Debian
+    # slim.) See PROGRESS.md "pgvector adoption" section.
+    image: pgvector/pgvector:pg17
     container_name: oet-local-postgres
     restart: always
     environment:
@@ -104,6 +110,8 @@ services:
       # --- Listening sample seeder (imports 3 real OET papers on startup) ---
       Seed__ListeningSamples__Enabled: 'true'
       Seed__ListeningSamples__SourceRoot: '/app/real-content/Listening ( IMPORTANT NOTE =  Same for All Professions )'
+      # --- Listening diagnostic seeder (23-item Phase 1 diagnostic) ---
+      Seed__ListeningDiagnostic__Enabled: 'true'
     ports:
       - '8080:8080'
     volumes:

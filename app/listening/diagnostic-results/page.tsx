@@ -400,7 +400,7 @@ export default function ListeningDiagnosticResultsPage() {
   }
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-start bg-gradient-to-b from-violet-50 to-white px-4 py-12">
+    <div className="flex min-h-screen flex-col items-center justify-start bg-gradient-to-b from-violet-50 to-white dark:from-slate-900 dark:to-slate-950 px-4 py-12">
       <div className="w-full max-w-3xl space-y-6">
         <HeroSection result={result} />
         <SkillRadarSection result={result} />

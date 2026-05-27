@@ -1,0 +1,38 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Wave B4. Stripe product seed CLI.
+
+    Modes:
+      dotnet run -project backend/scripts/StripeProductSeeder - DRYRUN          (default)
+      STRIPE_TEST_SECRET_KEY=sk_test_xxx  dotnet run TEST
+      STRIPE_LIVE_SECRET_KEY=sk_live_xxx  dotnet run LIVE
+
+    Idempotent. Stripe Prices are immutable, so the seeder reuses any existing
+    Price that matches (currency, unit_amount, interval, intervalCount) on the
+    target Product. The Product itself is matched by metadata.code so re-running
+    the script after a name/description tweak only patches metadata, Name and
+    Description on the existing Product.
+  -->
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>OetLearner.Scripts.StripeProductSeeder</RootNamespace>
+    <AssemblyName>OetLearner.Scripts.StripeProductSeeder</AssemblyName>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Stripe.net" Version="47.*" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="catalog.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+</Project>

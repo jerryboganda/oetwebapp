@@ -63,7 +63,7 @@ export function AccentBarChart({
       <div
         className={[
           'flex h-32 items-center justify-center rounded-xl border border-dashed border-border',
-          'text-sm text-muted',
+          'text-sm text-gray-600 dark:text-gray-400',
           className ?? '',
         ]
           .filter(Boolean)
@@ -93,7 +93,7 @@ export function AccentBarChart({
           <li key={row.accent} className="grid grid-cols-[minmax(0,1fr)_3rem] items-center gap-3">
             <div className="min-w-0">
               <div className="mb-1 flex items-center justify-between gap-2">
-                <span className="inline-flex items-center gap-1.5 text-sm font-medium text-navy dark:text-slate-100">
+                <span className="inline-flex items-center gap-1.5 text-sm font-medium text-gray-900 dark:text-slate-100">
                   <span aria-hidden="true">{flag}</span>
                   <span className="truncate">{label}</span>
                 </span>
@@ -128,7 +128,7 @@ export function AccentBarChart({
                 />
               </div>
             </div>
-            <span className="text-right text-sm font-semibold tabular-nums text-navy dark:text-slate-100">
+            <span className="text-right text-sm font-semibold tabular-nums text-gray-900 dark:text-slate-100">
               {pct}%
             </span>
           </li>

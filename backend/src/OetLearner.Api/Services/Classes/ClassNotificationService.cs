@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text;
 using Ical.Net;
+using IcalCalendar = Ical.Net.Calendar;
 using Ical.Net.CalendarComponents;
 using Ical.Net.DataTypes;
 using Ical.Net.Serialization;
@@ -197,7 +198,7 @@ public sealed class ClassNotificationService(
 
     public EmailAttachment BuildIcsAttachment(LiveClassSession session, string? userTimezone, string? tutorEmail)
     {
-        var calendar = new Ical.Net.Calendar();
+        var calendar = new IcalCalendar();
         var ev = new CalendarEvent
         {
             Uid = $"oet-live-class-{session.Id}@oetlearner",

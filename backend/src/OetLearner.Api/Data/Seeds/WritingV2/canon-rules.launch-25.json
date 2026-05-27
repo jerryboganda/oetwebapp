@@ -1,0 +1,670 @@
+{
+  "schemaVersion": 1,
+  "source": "OET_WRITING_MODULE_PATHWAY.md §13.2",
+  "version": 1,
+  "rules": [
+    {
+      "id": "SC-001",
+      "category": "opening",
+      "applies_to_letter_types": ["LT-RR"],
+      "applies_to_professions": ["all"],
+      "severity": "medium",
+      "rule_text": "Routine referral opening pattern: \"I am writing to refer [Name], a [age]-year-old [occupation], who [provisional diagnosis or presenting complaint].\" Your assessment and management would be appreciated.",
+      "correct_examples": [
+        "I am writing to refer Mr Thomas Holm, a 55-year-old sales manager, who has been provisionally diagnosed with obstructive sleep apnoea. Your assessment and management would be highly appreciated.",
+        "I am writing to refer Mrs Carter, a 62-year-old retired teacher, who has experienced increasing breathlessness on exertion. Your specialist opinion would be appreciated.",
+        "I am writing to refer Mr Patel, a 47-year-old taxi driver, who presents with recurrent epigastric pain unresponsive to first-line therapy."
+      ],
+      "incorrect_examples": [
+        "This is a letter about a patient named Mr Holm. He has sleep apnoea.",
+        "Hi, I'm sending Mr Holm to you because he can't sleep.",
+        "Mr Holm needs to see you for sleep problems."
+      ],
+      "detection_type": "llm",
+      "detection_config": {
+        "prompt_key": "writing.canon.detect.v1",
+        "rule_context": "Detect whether a routine referral (LT-RR) opening uses the canonical pattern: 'I am writing to refer [Name], a [age]-year-old [occupation], who [reason]'. Flag if the opening uses informal greetings, omits occupation, omits age, or fails to state purpose in first sentence."
+      },
+      "lesson_id": null,
+      "version": 1,
+      "active": true
+    },
+    {
+      "id": "SC-002",
+      "category": "opening",
+      "applies_to_letter_types": ["LT-DG"],
+      "applies_to_professions": ["all"],
+      "severity": "medium",
+      "rule_text": "Discharge letter opening must focus on the discharge event itself. Do NOT include age or occupation in the opening paragraph of a discharge letter; the GP already has those details. Open with the discharge fact and the request for follow-up.",
+      "correct_examples": [
+        "I am writing to inform you that Mr Holm was discharged today following an admission for community-acquired pneumonia. Your continued care would be appreciated.",
+        "Mrs Carter was discharged today after a five-day admission for an exacerbation of chronic obstructive pulmonary disease. Your follow-up would be appreciated."
+      ],
+      "incorrect_examples": [
+        "I am writing to inform you that Mr Holm, a 55-year-old sales manager, was discharged today after pneumonia.",
+        "Mrs Carter, a 62-year-old retired teacher, has been discharged following an exacerbation of COPD."
+      ],
+      "detection_type": "llm",
+      "detection_config": {
+        "prompt_key": "writing.canon.detect.v1",
+        "rule_context": "Detect if a discharge letter (LT-DG) includes age or occupation in the opening paragraph (first 60 words). Look for patterns like ', a X-year-old', ', aged X,' inline with the opener, or occupation labels (e.g., 'retired teacher', 'sales manager') in the first sentence."
+      },
+      "lesson_id": null,
+      "version": 1,
+      "active": true
+    },
+    {
+      "id": "SC-003",
+      "category": "opening",
+      "applies_to_letter_types": ["LT-UR"],
+      "applies_to_professions": ["all"],
+      "severity": "high",
+      "rule_text": "An urgent referral must include an explicit urgency marker in the first sentence. Use words such as 'urgent', 'urgently', or 'immediate assessment' to flag clinical priority.",
+      "correct_examples": [
+        "I am writing to urgently refer Mr Holm, a 55-year-old sales manager, who presents with crushing central chest pain consistent with an acute coronary event.",
+        "I am writing to request an urgent assessment of Mrs Carter, who has developed sudden onset right-sided weakness and slurred speech within the last 90 minutes."
+      ],
+      "incorrect_examples": [
+        "I am writing to refer Mr Holm, who has chest pain. Please see him at your convenience.",
+        "Mrs Carter has had a stroke. I am referring her to your service."
+      ],
+      "detection_type": "regex",
+      "detection_config": {
+        "regex": "\\b(urgent(ly)?|immediate(ly)?|emergent(ly)?|stat|priority)\\b",
+        "ignore_case": true,
+        "first_sentence_only": true,
+        "expect_match": true
+      },
+      "lesson_id": null,
+      "version": 1,
+      "active": true
+    },
+    {
+      "id": "SC-004",
+      "category": "format",
+      "applies_to_letter_types": ["all"],
+      "applies_to_professions": ["all"],
+      "severity": "medium",
+      "rule_text": "A 'Today,' paragraph is required to introduce the most recent clinical encounter or examination. The paragraph must begin with the word 'Today' followed by a comma.",
+      "correct_examples": [
+        "Today, Mr Holm presented to the clinic complaining of worsening fatigue and witnessed apnoeic episodes.",
+        "Today, Mrs Carter attended for review and reported a marked improvement in her symptoms.",
+        "Today, Mr Patel was seen with persistent epigastric discomfort despite four weeks of proton-pump inhibitor therapy."
+      ],
+      "incorrect_examples": [
+        "Today Mr Holm presented to the clinic complaining of worsening fatigue.",
+        "On the day of writing, Mr Holm came to the clinic with worsening fatigue.",
+        "The patient was seen today with worsening fatigue."
+      ],
+      "detection_type": "structural",
+      "detection_config": {
+        "structural": "todayParagraphOpener",
+        "pattern": "^Today,\\s",
+        "scan_scope": "all_paragraphs",
+        "expect_at_least_one": true
+      },
+      "lesson_id": null,
+      "version": 1,
+      "active": true
+    },
+    {
+      "id": "SC-005",
+      "category": "denial",
+      "applies_to_letter_types": ["all"],
+      "applies_to_professions": ["all"],
+      "severity": "medium",
+      "rule_text": "Negative findings are reported using the pattern 'Please note, he/she denied [symptom(s)].' Avoid bare negative lists copied from case notes.",
+      "correct_examples": [
+        "Please note, he denied chest pain, shortness of breath, or palpitations.",
+        "Please note, she denied any history of cough, haemoptysis, or weight loss.",
+        "Please note, he denied alcohol or recreational drug use."
+      ],
+      "incorrect_examples": [
+        "No chest pain. No SOB. No palpitations.",
+        "The patient has no chest pain and no shortness of breath.",
+        "He has not had chest pain or palpitations."
+      ],
+      "detection_type": "regex",
+      "detection_config": {
+        "regex": "\\b(no [a-z]+, no [a-z]+|denied [a-z]+ and [a-z]+ and [a-z]+)\\b",
+        "ignore_case": true,
+        "whitelist": ["Please note, he denied", "Please note, she denied"]
+      },
+      "lesson_id": null,
+      "version": 1,
+      "active": true
+    },
+    {
+      "id": "SC-006",
+      "category": "examination",
+      "applies_to_letter_types": ["all"],
+      "applies_to_professions": ["all"],
+      "severity": "medium",
+      "rule_text": "Examination findings are introduced with the canonical opener 'Clinical examination revealed...' (or 'On examination,'). Avoid bullet-point lists or telegraphic note style.",
+      "correct_examples": [
+        "Clinical examination revealed a blood pressure of 142/88 mmHg, an oxygen saturation of 96% on room air, and a body mass index of 32.",
+        "On examination, his blood pressure was 142/88 mmHg with a regular pulse of 78 beats per minute.",
+        "Clinical examination revealed mild bilateral ankle oedema and reduced air entry at the right lung base."
+      ],
+      "incorrect_examples": [
+        "Exam: BP 142/88, SpO2 96%, BMI 32.",
+        "On exam BP was 142/88, sat 96%, BMI 32.",
+        "Vitals were BP 142/88, sats 96, BMI 32."
+      ],
+      "detection_type": "regex",
+      "detection_config": {
+        "regex": "\\b(clinical examination revealed|on examination[,])\\b",
+        "ignore_case": true,
+        "expect_match": true,
+        "scope": "if_examination_findings_present"
+      },
+      "lesson_id": null,
+      "version": 1,
+      "active": true
+    },
+    {
+      "id": "SC-007",
+      "category": "history",
+      "applies_to_letter_types": ["all"],
+      "applies_to_professions": ["all"],
+      "severity": "medium",
+      "rule_text": "Past medical history is reported using the pattern: '[Name]'s records show he/she has [condition], on [drug/dose].' Avoid telegraphic lists.",
+      "correct_examples": [
+        "Mr Holm's records show he has hypertension, on amlodipine 5 mg daily, and type 2 diabetes mellitus, on metformin 500 mg twice daily.",
+        "Mrs Carter's records show she has chronic obstructive pulmonary disease, on inhaled tiotropium 18 micrograms daily, and atrial fibrillation, on apixaban 5 mg twice daily."
+      ],
+      "incorrect_examples": [
+        "PMH: HTN (amlodipine), DM2 (metformin).",
+        "She has COPD and AF; on tiotropium and apixaban.",
+        "Past history: hypertension, diabetes."
+      ],
+      "detection_type": "regex",
+      "detection_config": {
+        "regex": "\\brecords show (he|she) has\\b",
+        "ignore_case": true,
+        "expect_match": true,
+        "scope": "if_past_history_present"
+      },
+      "lesson_id": null,
+      "version": 1,
+      "active": true
+    },
+    {
+      "id": "SC-008",
+      "category": "linker",
+      "applies_to_letter_types": ["all"],
+      "applies_to_professions": ["all"],
+      "severity": "high",
+      "rule_text": "Only the four approved linkers may be used to join independent clauses or paragraphs: 'Consequently,', 'Subsequently,', '; however,' and 'In addition,'. Other linkers such as 'However,', 'Moreover,', 'Furthermore,', 'Therefore,', 'Thus,' and 'Nevertheless,' should be replaced with one of the approved set.",
+      "correct_examples": [
+        "Consequently, an urgent cardiology review is requested.",
+        "Subsequently, his symptoms gradually improved over the next 48 hours.",
+        "His blood pressure remained elevated; however, he tolerated the new medication well.",
+        "In addition, he reports a two-week history of unexplained weight loss."
+      ],
+      "incorrect_examples": [
+        "However, his symptoms have not improved.",
+        "Moreover, he has a strong family history of cardiac disease.",
+        "Therefore, a referral has been arranged.",
+        "Furthermore, his blood pressure has been poorly controlled."
+      ],
+      "detection_type": "regex",
+      "detection_config": {
+        "regex": "(?i)(^|\\.\\s+)(however|moreover|furthermore|therefore|thus|nevertheless|nonetheless),",
+        "ignore_case": true,
+        "whitelist": ["; however,"]
+      },
+      "lesson_id": null,
+      "version": 1,
+      "active": true
+    },
+    {
+      "id": "SC-009",
+      "category": "closure",
+      "applies_to_letter_types": ["LT-RR", "LT-UR", "LT-NM"],
+      "applies_to_professions": ["all"],
+      "severity": "high",
+      "rule_text": "Referral letters close with the canonical request: 'I would be grateful if you could [specific action requested].' This invites action politely without being demanding.",
+      "correct_examples": [
+        "I would be grateful if you could assess Mr Holm and arrange further investigations as you see fit.",
+        "I would be grateful if you could review Mrs Carter at your earliest convenience and consider initiation of long-acting bronchodilator therapy.",
+        "I would be grateful if you could provide ongoing specialist input regarding her anticoagulation therapy."
+      ],
+      "incorrect_examples": [
+        "Please see this patient as soon as possible.",
+        "Could you please assess him.",
+        "Kindly review the patient and let me know what to do."
+      ],
+      "detection_type": "regex",
+      "detection_config": {
+        "regex": "\\bI would be grateful if you could\\b",
+        "ignore_case": false,
+        "expect_match": true,
+        "scope": "letter_body"
+      },
+      "lesson_id": null,
+      "version": 1,
+      "active": true
+    },
+    {
+      "id": "SC-010",
+      "category": "closure",
+      "applies_to_letter_types": ["LT-DG", "LT-TR", "LT-RP"],
+      "applies_to_professions": ["all"],
+      "severity": "high",
+      "rule_text": "Discharge, transfer and response letters close with the canonical phrase: 'It would be appreciated if you could [follow-up action].' This signals collaborative handover rather than referral request.",
+      "correct_examples": [
+        "It would be appreciated if you could review Mr Holm in clinic in two weeks and titrate his antihypertensive therapy as required.",
+        "It would be appreciated if you could continue to monitor his blood glucose and adjust his insulin dose accordingly.",
+        "It would be appreciated if you could arrange district nurse review for ongoing wound care over the next ten days."
+      ],
+      "incorrect_examples": [
+        "Please see him in two weeks for follow-up.",
+        "Kindly review the patient and adjust treatment.",
+        "Make sure his blood pressure is monitored."
+      ],
+      "detection_type": "regex",
+      "detection_config": {
+        "regex": "\\bIt would be appreciated if you could\\b",
+        "ignore_case": false,
+        "expect_match": true,
+        "scope": "letter_body"
+      },
+      "lesson_id": null,
+      "version": 1,
+      "active": true
+    },
+    {
+      "id": "SC-011",
+      "category": "closure",
+      "applies_to_letter_types": ["all"],
+      "applies_to_professions": ["all"],
+      "severity": "medium",
+      "rule_text": "The penultimate sentence (before the sign-off) must invite further contact in canonical form: 'If you require any further information, please do not hesitate to contact me.' Avoid informal alternatives.",
+      "correct_examples": [
+        "If you require any further information, please do not hesitate to contact me.",
+        "Should you require any further information, please do not hesitate to contact me."
+      ],
+      "incorrect_examples": [
+        "Let me know if you need anything else.",
+        "Feel free to call me if you have any questions.",
+        "Get in touch if you want more info."
+      ],
+      "detection_type": "regex",
+      "detection_config": {
+        "regex": "\\b(please )?do not hesitate to contact me\\b",
+        "ignore_case": true,
+        "expect_match": true,
+        "scope": "letter_body"
+      },
+      "lesson_id": null,
+      "version": 1,
+      "active": true
+    },
+    {
+      "id": "SC-012",
+      "category": "pronoun",
+      "applies_to_letter_types": ["all"],
+      "applies_to_professions": ["all"],
+      "severity": "high",
+      "rule_text": "Never refer to the subject as 'the patient'. Use the patient's name on first mention in each paragraph and a pronoun (he/she/they) thereafter. Possessive forms referring to family members ('the patient's wife') are tolerated but better rewritten where natural.",
+      "correct_examples": [
+        "Mr Holm has been suffering from daytime sleepiness for the past six months.",
+        "She also reports occasional palpitations during exertion.",
+        "Mrs Carter denied chest pain. She also reported a productive cough that has worsened over the past week."
+      ],
+      "incorrect_examples": [
+        "The patient has been suffering from daytime sleepiness for the past six months.",
+        "The patient attended the clinic for review.",
+        "The patient's symptoms have not improved despite treatment."
+      ],
+      "detection_type": "regex",
+      "detection_config": {
+        "regex": "\\b(the patient|the patient'?s)\\b",
+        "ignore_case": true,
+        "exclusions": [
+          "the patient'?s wife",
+          "the patient'?s husband",
+          "the patient'?s son",
+          "the patient'?s daughter",
+          "the patient'?s mother",
+          "the patient'?s father",
+          "the patient'?s partner",
+          "the patient'?s carer"
+        ]
+      },
+      "lesson_id": null,
+      "version": 1,
+      "active": true
+    },
+    {
+      "id": "SC-013",
+      "category": "format",
+      "applies_to_letter_types": ["all"],
+      "applies_to_professions": ["all"],
+      "severity": "medium",
+      "rule_text": "Avoid the phrase 'next visit'. Use specific time markers such as 'one month later', 'two weeks ago', 'on 14 January', or 'at the most recent review'.",
+      "correct_examples": [
+        "One month later, his symptoms had not improved despite optimal therapy.",
+        "On 14 January, the dose of amlodipine was increased to 10 mg daily.",
+        "At the most recent review on 3 March, his blood pressure was 138/82 mmHg."
+      ],
+      "incorrect_examples": [
+        "On his next visit, his symptoms had not improved.",
+        "At the next visit, we increased the dose of amlodipine.",
+        "His next visit showed a blood pressure of 138/82."
+      ],
+      "detection_type": "regex",
+      "detection_config": {
+        "regex": "\\bnext visit\\b",
+        "ignore_case": true
+      },
+      "lesson_id": null,
+      "version": 1,
+      "active": true
+    },
+    {
+      "id": "SC-014",
+      "category": "format",
+      "applies_to_letter_types": ["all"],
+      "applies_to_professions": ["all"],
+      "severity": "high",
+      "rule_text": "The Re: line uses the exact format 'Re: [Title] [Name], aged [N]'. The word 'aged' is lowercase, with no colon after it, and the age is not repeated in the introduction.",
+      "correct_examples": [
+        "Re: Mr Thomas Holm, aged 55",
+        "Re: Mrs Eleanor Carter, aged 62",
+        "Re: Mr Raj Patel, aged 47"
+      ],
+      "incorrect_examples": [
+        "Re: Mr Thomas Holm, 55 years old",
+        "Re: Mr Thomas Holm, Aged: 55",
+        "Re: Mr Thomas Holm (55)",
+        "RE: MR THOMAS HOLM, AGED 55"
+      ],
+      "detection_type": "structural",
+      "detection_config": {
+        "structural": "reLineFormat",
+        "pattern": "^Re: [A-Z][a-zA-Z'\\-\\s]+, aged \\d+$",
+        "line_scope": "first_re_line"
+      },
+      "lesson_id": null,
+      "version": 1,
+      "active": true
+    },
+    {
+      "id": "SC-015",
+      "category": "pronoun",
+      "applies_to_letter_types": ["all"],
+      "applies_to_professions": ["all"],
+      "severity": "medium",
+      "rule_text": "Within each paragraph the patient's name appears once on first mention; pronouns are used thereafter. A new paragraph re-introduces the name.",
+      "correct_examples": [
+        "Mr Holm has been suffering from daytime sleepiness. He reports falling asleep during meetings and has had two near-miss incidents while driving. His Epworth Sleepiness Scale score is 18.",
+        "Mrs Carter attended for review of her chronic obstructive pulmonary disease. She reported worsening dyspnoea on minimal exertion and a productive cough."
+      ],
+      "incorrect_examples": [
+        "Mr Holm has been suffering from daytime sleepiness. Mr Holm reports falling asleep during meetings. Mr Holm has had two near-miss incidents.",
+        "She has worsening dyspnoea. She has a productive cough. She has reduced exercise tolerance."
+      ],
+      "detection_type": "llm",
+      "detection_config": {
+        "prompt_key": "writing.canon.detect.v1",
+        "rule_context": "Within each paragraph, the patient name should appear once on first mention and pronouns should be used thereafter. Detect violations: (a) paragraphs that use the full name more than once, (b) paragraphs that use a pronoun before any name has been established in that paragraph."
+      },
+      "lesson_id": null,
+      "version": 1,
+      "active": true
+    },
+    {
+      "id": "SC-016",
+      "category": "vocabulary",
+      "applies_to_letter_types": ["all"],
+      "applies_to_professions": ["all"],
+      "severity": "medium",
+      "rule_text": "Use 'child' or 'young person' for under-18s; use 'adult' for those aged 18 and over. Age cut-off is the day before the 18th birthday.",
+      "correct_examples": [
+        "This 14-year-old young person was referred by his GP following a five-day history of productive cough.",
+        "Mr Patel, a 47-year-old adult, has been managed in our diabetes clinic for the past three years."
+      ],
+      "incorrect_examples": [
+        "This 14-year-old adult was referred by his GP.",
+        "This 19-year-old child was reviewed in the paediatric clinic.",
+        "The minor presented with fever and rash."
+      ],
+      "detection_type": "llm",
+      "detection_config": {
+        "prompt_key": "writing.canon.detect.v1",
+        "rule_context": "Check that learners use 'child' or 'young person' for subjects under 18, and 'adult' for those 18+. Flag mismatches such as calling a 14-year-old an adult, or a 19-year-old a child."
+      },
+      "lesson_id": null,
+      "version": 1,
+      "active": true
+    },
+    {
+      "id": "SC-017",
+      "category": "grammar",
+      "applies_to_letter_types": ["all"],
+      "applies_to_professions": ["all"],
+      "severity": "high",
+      "rule_text": "Requests use the conditional form 'I would be grateful if you could [verb]' or 'It would be appreciated if you could [verb]'. Avoid the malformed 'if you would [verb]' or 'if you can [verb]'.",
+      "correct_examples": [
+        "I would be grateful if you could assess Mr Holm and arrange the necessary investigations.",
+        "It would be appreciated if you could continue to monitor his blood glucose levels."
+      ],
+      "incorrect_examples": [
+        "I would be grateful if you would assess Mr Holm.",
+        "It would be appreciated if you can monitor his blood glucose.",
+        "I would be grateful if you arrange the investigations."
+      ],
+      "detection_type": "regex",
+      "detection_config": {
+        "regex": "\\b(I would be grateful if you (would|can)|It would be appreciated if you (would|can))\\b",
+        "ignore_case": false
+      },
+      "lesson_id": null,
+      "version": 1,
+      "active": true
+    },
+    {
+      "id": "SC-018",
+      "category": "profession-specific",
+      "applies_to_letter_types": ["LT-RR", "LT-RP", "LT-NM"],
+      "applies_to_professions": ["Pharmacy"],
+      "severity": "high",
+      "rule_text": "Pharmacy letters that raise a concern or complaint must state the request explicitly in the opening paragraph. Do not bury the request in the body.",
+      "correct_examples": [
+        "I am writing to alert you to a potential interaction between Mrs Carter's recently prescribed warfarin and her over-the-counter ibuprofen, and to request a review of her analgesia plan.",
+        "I am writing to flag a concern regarding Mr Holm's monitored dosage system adherence and to request a joint review of his medication regimen."
+      ],
+      "incorrect_examples": [
+        "I would like to write about Mrs Carter. She is taking warfarin and ibuprofen. This could be a problem. Please look at it.",
+        "I am writing about Mr Holm's medication. There may be some issues that need addressing. Please see him."
+      ],
+      "detection_type": "llm",
+      "detection_config": {
+        "prompt_key": "writing.canon.detect.v1",
+        "rule_context": "For Pharmacy letters (Profession=Pharmacy) that raise a concern, drug interaction, or adherence issue, check that the request to the recipient is stated explicitly in the first paragraph (not deferred to body or closure)."
+      },
+      "lesson_id": null,
+      "version": 1,
+      "active": true
+    },
+    {
+      "id": "SC-019",
+      "category": "profession-specific",
+      "applies_to_letter_types": ["LT-RR", "LT-RP", "LT-NM"],
+      "applies_to_professions": ["Pharmacy"],
+      "severity": "high",
+      "rule_text": "Pharmacy letters close by directing the reader back to the pharmacy. Use phrasing such as 'please do not hesitate to contact the pharmacy' rather than 'contact me'.",
+      "correct_examples": [
+        "If you require any further information, please do not hesitate to contact the pharmacy.",
+        "Should you have any queries, please do not hesitate to contact the pharmacy team."
+      ],
+      "incorrect_examples": [
+        "If you require any further information, please do not hesitate to contact me.",
+        "Let me know if you need anything else.",
+        "Call me on the number below if you have any questions."
+      ],
+      "detection_type": "regex",
+      "detection_config": {
+        "regex": "\\b(contact the pharmacy|contact the pharmacy team)\\b",
+        "ignore_case": true,
+        "expect_match": true,
+        "scope": "letter_body_pharmacy_only"
+      },
+      "lesson_id": null,
+      "version": 1,
+      "active": true
+    },
+    {
+      "id": "SC-020",
+      "category": "content",
+      "applies_to_letter_types": ["LT-DG"],
+      "applies_to_professions": ["all"],
+      "severity": "medium",
+      "rule_text": "Discharge letters to the GP must NOT include the patient's social history (alcohol, smoking, occupation, family circumstances) unless the social factor is directly relevant to ongoing management.",
+      "correct_examples": [
+        "Mr Holm was discharged home today following successful management of community-acquired pneumonia. He has been advised regarding smoking cessation, which is relevant to his ongoing respiratory care.",
+        "Mrs Carter was discharged today after a five-day admission for an exacerbation of COPD. No new social concerns were identified."
+      ],
+      "incorrect_examples": [
+        "Mr Holm was discharged today after pneumonia. He smokes 20 cigarettes a day, drinks 30 units of alcohol per week, and lives alone in a council flat.",
+        "Mrs Carter was discharged today. She works as a teacher, is married with two children, and enjoys gardening."
+      ],
+      "detection_type": "llm",
+      "detection_config": {
+        "prompt_key": "writing.canon.detect.v1",
+        "rule_context": "For discharge letters (LT-DG), detect inclusion of social history elements (alcohol units, cigarettes per day, occupation, marital status, hobbies, housing) that are not directly relevant to ongoing clinical management."
+      },
+      "lesson_id": null,
+      "version": 1,
+      "active": true
+    },
+    {
+      "id": "SC-021",
+      "category": "format",
+      "applies_to_letter_types": ["all"],
+      "applies_to_professions": ["all"],
+      "severity": "medium",
+      "rule_text": "Spacing convention: blank lines are produced with one or two keyboard Enters and equal a single blank line. There is NO blank line between the salutation and the Re: line. There is exactly one blank line before 'Yours sincerely,'.",
+      "correct_examples": [
+        "Dear Dr Smith,\nRe: Mr Thomas Holm, aged 55",
+        "If you require any further information, please do not hesitate to contact me.\n\nYours sincerely,"
+      ],
+      "incorrect_examples": [
+        "Dear Dr Smith,\n\n\nRe: Mr Thomas Holm, aged 55",
+        "If you require any further information, please do not hesitate to contact me.\n\n\n\nYours sincerely,"
+      ],
+      "detection_type": "structural",
+      "detection_config": {
+        "structural": "blankLinePolicy",
+        "salutation_to_re_max_blank_lines": 0,
+        "closure_to_signoff_blank_lines": 1
+      },
+      "lesson_id": null,
+      "version": 1,
+      "active": true
+    },
+    {
+      "id": "SC-022",
+      "category": "format",
+      "applies_to_letter_types": ["all"],
+      "applies_to_professions": ["all"],
+      "severity": "low",
+      "rule_text": "Exactly one blank line precedes the closing phrase ('If you require any further information...'). Do not run the closing phrase straight on from the body without a paragraph break.",
+      "correct_examples": [
+        "I would be grateful if you could assess Mr Holm and arrange the necessary investigations.\n\nIf you require any further information, please do not hesitate to contact me.",
+        "It would be appreciated if you could continue to monitor his blood glucose.\n\nIf you require any further information, please do not hesitate to contact me."
+      ],
+      "incorrect_examples": [
+        "I would be grateful if you could assess Mr Holm. If you require any further information, please do not hesitate to contact me.",
+        "It would be appreciated if you could continue to monitor his blood glucose. If you require any further information, please do not hesitate to contact me."
+      ],
+      "detection_type": "structural",
+      "detection_config": {
+        "structural": "blankLineBeforeClosing",
+        "closing_phrase_regex": "If you require any further information",
+        "expect_blank_line_before": true
+      },
+      "lesson_id": null,
+      "version": 1,
+      "active": true
+    },
+    {
+      "id": "SC-023",
+      "category": "content",
+      "applies_to_letter_types": ["all"],
+      "applies_to_professions": ["all"],
+      "severity": "medium",
+      "rule_text": "The phrase 'as you are aware' is used to introduce pre-existing medications or conditions that the recipient is expected to know about. It signals shared knowledge rather than new information.",
+      "correct_examples": [
+        "As you are aware, Mr Holm has been managed on amlodipine 10 mg daily for hypertension since 2022.",
+        "As you are aware, Mrs Carter has a long-standing diagnosis of chronic obstructive pulmonary disease, currently maintained on inhaled tiotropium."
+      ],
+      "incorrect_examples": [
+        "As you are aware, Mr Holm presented today with chest pain.",
+        "As you are aware, Mrs Carter was diagnosed with pneumonia yesterday."
+      ],
+      "detection_type": "llm",
+      "detection_config": {
+        "prompt_key": "writing.canon.detect.v1",
+        "rule_context": "Check that 'as you are aware' is used only to introduce information the recipient already knows (existing medications, established diagnoses, prior referrals). Flag if used to introduce new findings or fresh events."
+      },
+      "lesson_id": null,
+      "version": 1,
+      "active": true
+    },
+    {
+      "id": "SC-024",
+      "category": "closure",
+      "applies_to_letter_types": ["all"],
+      "applies_to_professions": ["all"],
+      "severity": "medium",
+      "rule_text": "The sign-off line is exactly 'Yours sincerely,' (capital Y, lowercase s, comma). Variants such as 'Yours Sincerely', 'Yours sincerely.', 'Kind regards', or 'Best wishes' are not accepted.",
+      "correct_examples": [
+        "Yours sincerely,",
+        "Yours sincerely,\n\nDr Sarah Ahmed"
+      ],
+      "incorrect_examples": [
+        "Yours Sincerely,",
+        "yours sincerely,",
+        "Yours sincerely.",
+        "Kind regards,",
+        "Best wishes,"
+      ],
+      "detection_type": "structural",
+      "detection_config": {
+        "structural": "signOffExact",
+        "expected_line": "Yours sincerely,",
+        "case_sensitive": true
+      },
+      "lesson_id": null,
+      "version": 1,
+      "active": true
+    },
+    {
+      "id": "SC-025",
+      "category": "format",
+      "applies_to_letter_types": ["LT-DG", "LT-RR"],
+      "applies_to_professions": ["all"],
+      "severity": "medium",
+      "rule_text": "GP-directed letters do not include a medication history block in the opening paragraph. Medications already on the GP's records should be referenced via 'as you are aware' later in the body, not enumerated up front.",
+      "correct_examples": [
+        "I am writing to refer Mr Holm, a 55-year-old sales manager, who has been provisionally diagnosed with obstructive sleep apnoea. Your assessment and management would be highly appreciated.",
+        "I am writing to inform you that Mrs Carter was discharged today following an admission for an exacerbation of chronic obstructive pulmonary disease."
+      ],
+      "incorrect_examples": [
+        "I am writing to refer Mr Holm, currently on amlodipine 10 mg daily, atorvastatin 20 mg nightly, metformin 500 mg twice daily, and aspirin 75 mg daily, for assessment of suspected sleep apnoea.",
+        "I am writing to inform you that Mrs Carter, on tiotropium, salbutamol PRN, apixaban 5 mg BD, and bisoprolol 2.5 mg daily, was discharged today."
+      ],
+      "detection_type": "llm",
+      "detection_config": {
+        "prompt_key": "writing.canon.detect.v1",
+        "rule_context": "For GP-directed letters (LT-DG, LT-RR sent to a GP), detect enumeration of three or more medications in the first paragraph. The opening should focus on purpose and presentation, not on listing existing prescriptions."
+      },
+      "lesson_id": null,
+      "version": 1,
+      "active": true
+    }
+  ]
+}

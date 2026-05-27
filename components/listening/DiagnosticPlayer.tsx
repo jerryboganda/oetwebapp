@@ -158,8 +158,8 @@ export function DiagnosticPlayer({
           .filter(Boolean)
           .join(' ')}
       >
-        <p className="text-sm font-medium text-navy dark:text-slate-100">Audio coming soon</p>
-        <p className="mt-1 text-xs text-muted">
+        <p className="text-sm font-medium text-gray-900 dark:text-slate-100">Audio coming soon</p>
+        <p className="mt-1 text-xs text-gray-600 dark:text-gray-400">
           This question does not have audio attached yet. You can skip ahead to the question
           prompt.
         </p>
@@ -224,7 +224,7 @@ export function DiagnosticPlayer({
             disabled={disabled}
             className={[
               'inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold',
-              'bg-slate-100 text-navy hover:bg-slate-200 transition-colors',
+              'bg-slate-100 text-gray-900 hover:bg-slate-200 transition-colors',
               'dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700',
               'disabled:cursor-not-allowed disabled:opacity-60',
             ].join(' ')}
@@ -234,7 +234,7 @@ export function DiagnosticPlayer({
           </button>
         ) : (
           <div
-            className="inline-flex items-center gap-2 rounded-xl bg-slate-100 px-4 py-2.5 text-sm font-medium text-muted dark:bg-slate-800"
+            className="inline-flex items-center gap-2 rounded-xl bg-slate-100 px-4 py-2.5 text-sm font-medium text-gray-600 dark:text-gray-400 dark:bg-slate-800"
             aria-live="polite"
           >
             {isPlaying ? (
@@ -264,7 +264,7 @@ export function DiagnosticPlayer({
               style={{ width: `${progressPct}%` }}
             />
           </div>
-          <div className="mt-1 flex items-center justify-between text-[11px] tabular-nums text-muted">
+          <div className="mt-1 flex items-center justify-between text-[11px] tabular-nums text-gray-600 dark:text-gray-400">
             <span aria-hidden="true">{formatSeconds(currentTime)}</span>
             <span aria-label="Time remaining">-{formatSeconds(remaining)}</span>
           </div>
@@ -290,7 +290,7 @@ export function DiagnosticPlayer({
                     'rounded-full px-2 py-1 text-[11px] font-semibold transition-colors',
                     active
                       ? 'bg-primary text-white shadow-sm'
-                      : 'text-muted hover:text-navy dark:hover:text-slate-100',
+                      : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100',
                     'disabled:cursor-not-allowed disabled:opacity-60',
                   ].join(' ')}
                 >
@@ -303,7 +303,7 @@ export function DiagnosticPlayer({
       </div>
 
       {!allowReplay ? (
-        <p className="mt-3 text-[11px] text-muted">
+        <p className="mt-3 text-[11px] text-gray-600 dark:text-gray-400">
           You will hear this audio only once. Take notes — replays are not available in the
           diagnostic.
         </p>

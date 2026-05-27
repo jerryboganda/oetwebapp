@@ -192,7 +192,7 @@ export default function ListeningProfileSetupPage() {
 
   if (authLoading || !isAuthenticated) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-gradient-to-b from-violet-50 to-white px-4">
+      <div className="flex min-h-screen items-center justify-center bg-gradient-to-b from-violet-50 to-white dark:from-slate-900 dark:to-slate-950 px-4">
         <div className="h-8 w-8 animate-spin rounded-full border-4 border-violet-200 border-t-violet-600" />
       </div>
     );
@@ -240,7 +240,7 @@ export default function ListeningProfileSetupPage() {
   };
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-gradient-to-b from-violet-50 to-white px-4 py-16">
+    <div className="flex min-h-screen flex-col items-center justify-center bg-gradient-to-b from-violet-50 to-white dark:from-slate-900 dark:to-slate-950 px-4 py-16">
       <div className="w-full max-w-lg">
         <div className="mb-6 text-center">
           <h1 className="text-2xl font-extrabold text-gray-900">Set up your listening profile</h1>
@@ -249,7 +249,7 @@ export default function ListeningProfileSetupPage() {
 
         <StepIndicator current={step} total={4} />
 
-        <div className="rounded-2xl border border-gray-100 bg-white p-8 shadow-sm">
+        <div className="rounded-2xl border border-gray-100 bg-white dark:bg-slate-800 dark:border-slate-700 p-8 shadow-sm">
           {/* Step 1 — Goal */}
           {step === 1 && (
             <div className="space-y-6">

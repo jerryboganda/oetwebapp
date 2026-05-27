@@ -47,7 +47,13 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
         }
     }
 
-    private async Task ProcessOnceAsync(CancellationToken cancellationToken)
+    /// <summary>
+    /// Exposed as <c>internal</c> so the test harness can drive a single
+    /// pass of the job pipeline deterministically (the hosted-service loop
+    /// is stripped by <c>TestWebApplicationFactory.IsLongRunningHostedWorker</c>
+    /// to avoid 2-second tick races in tests).
+    /// </summary>
+    internal async Task ProcessOnceAsync(CancellationToken cancellationToken)
     {
         await using var scope = scopeFactory.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();

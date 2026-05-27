@@ -156,7 +156,7 @@ export default function DiagnosticResultsPage() {
     : `${Math.floor(result.durationSeconds / 60)}m ${result.durationSeconds % 60}s`;
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-start bg-gradient-to-b from-violet-50 to-white px-4 py-12">
+    <div className="flex min-h-screen flex-col items-center justify-start bg-gradient-to-b from-violet-50 to-white dark:from-slate-900 dark:to-slate-950 px-4 py-12">
       <div className="w-full max-w-xl space-y-6">
         {/* Hero score card */}
         <div className="rounded-2xl border border-violet-100 bg-white p-8 text-center shadow-sm">

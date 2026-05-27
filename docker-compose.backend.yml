@@ -1,6 +1,8 @@
 services:
   postgres:
-    image: postgres:17-alpine
+    # See docker-compose.local.yml — pgvector/pgvector:pg17 ships the `vector`
+    # extension required by Writing V2 migration 20260612120000.
+    image: pgvector/pgvector:pg17
     container_name: oet-learner-postgres
     environment:
       POSTGRES_DB: oet_learner_dev

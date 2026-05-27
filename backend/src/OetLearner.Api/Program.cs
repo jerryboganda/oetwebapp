@@ -342,6 +342,101 @@ builder.Services.AddRateLimiter(options =>
             QueueLimit = 0
         });
     });
+
+    // ─── Writing Module V2 rate-limit policies (spec §27.21) ──────────────
+    // The free vs paid distinction is driven by entitlement claims; learners
+    // who lack a paid entitlement get the "-free" budget. Endpoints attach
+    // the free policy; the WritingEntitlementService bumps qualifying users
+    // to the paid bucket via an HttpContext.Items signal set in middleware.
+    static string ResolveWritingUserKey(HttpContext httpContext)
+        => httpContext.User.Identity?.IsAuthenticated == true
+            ? httpContext.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? "anonymous"
+            : httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+
+    var writingSubmissionsFreeHour = builder.Environment.IsDevelopment() ? 100 : 1;
+    var writingSubmissionsFreeDay = builder.Environment.IsDevelopment() ? 500 : 5;
+    options.AddPolicy("writing-submissions-free", httpContext =>
+    {
+        var key = ResolveWritingUserKey(httpContext);
+        // Two-window guard: hourly OR daily quotas — both must allow. The
+        // hourly window is the tighter rejection; daily is enforced via a
+        // partition-keyed sliding window matched on the user id.
+        return RateLimitPartition.GetSlidingWindowLimiter($"writing-sub-free-{key}", _ => new SlidingWindowRateLimiterOptions
+        {
+            PermitLimit = writingSubmissionsFreeDay,
+            Window = TimeSpan.FromDays(1),
+            SegmentsPerWindow = 24,
+            QueueLimit = 0,
+        });
+    });
+
+    var writingSubmissionsPaidHour = builder.Environment.IsDevelopment() ? 300 : 5;
+    var writingSubmissionsPaidDay = builder.Environment.IsDevelopment() ? 3000 : 30;
+    options.AddPolicy("writing-submissions-paid", httpContext =>
+    {
+        var key = ResolveWritingUserKey(httpContext);
+        return RateLimitPartition.GetSlidingWindowLimiter($"writing-sub-paid-{key}", _ => new SlidingWindowRateLimiterOptions
+        {
+            PermitLimit = writingSubmissionsPaidDay,
+            Window = TimeSpan.FromDays(1),
+            SegmentsPerWindow = 24,
+            QueueLimit = 0,
+        });
+    });
+
+    // Coach: 1 hint per 30 seconds per session. Partition key includes the
+    // sessionId pulled from the request body header (handler sets it on
+    // HttpContext.Items["writing_coach_session"] before the limiter runs).
+    var writingCoachPermit = builder.Environment.IsDevelopment() ? 200 : 1;
+    options.AddPolicy("writing-coach", httpContext =>
+    {
+        var userKey = ResolveWritingUserKey(httpContext);
+        var sessionKey = (httpContext.Items["writing_coach_session"] as string) ?? userKey;
+        return RateLimitPartition.GetFixedWindowLimiter($"writing-coach-{userKey}-{sessionKey}", _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = writingCoachPermit,
+            Window = TimeSpan.FromSeconds(30),
+            QueueLimit = 0,
+        });
+    });
+
+    var writingDrillsPermit = builder.Environment.IsDevelopment() ? 500 : 5;
+    options.AddPolicy("writing-drills", httpContext =>
+    {
+        var key = ResolveWritingUserKey(httpContext);
+        return RateLimitPartition.GetFixedWindowLimiter($"writing-drills-{key}", _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = writingDrillsPermit,
+            Window = TimeSpan.FromMinutes(1),
+            QueueLimit = 0,
+        });
+    });
+
+    var writingOcrFreePermit = builder.Environment.IsDevelopment() ? 200 : 5;
+    options.AddPolicy("writing-ocr-free", httpContext =>
+    {
+        var key = ResolveWritingUserKey(httpContext);
+        return RateLimitPartition.GetSlidingWindowLimiter($"writing-ocr-free-{key}", _ => new SlidingWindowRateLimiterOptions
+        {
+            PermitLimit = writingOcrFreePermit,
+            Window = TimeSpan.FromDays(1),
+            SegmentsPerWindow = 24,
+            QueueLimit = 0,
+        });
+    });
+
+    var writingOcrPaidPermit = builder.Environment.IsDevelopment() ? 1000 : 30;
+    options.AddPolicy("writing-ocr-paid", httpContext =>
+    {
+        var key = ResolveWritingUserKey(httpContext);
+        return RateLimitPartition.GetSlidingWindowLimiter($"writing-ocr-paid-{key}", _ => new SlidingWindowRateLimiterOptions
+        {
+            PermitLimit = writingOcrPaidPermit,
+            Window = TimeSpan.FromDays(1),
+            SegmentsPerWindow = 24,
+            QueueLimit = 0,
+        });
+    });
 });
 
 var defaultAuthScheme = useDevelopmentAuth ? HybridDevelopmentAuthScheme : JwtBearerDefaults.AuthenticationScheme;
@@ -375,7 +470,11 @@ void ConfigureJwtBearer(JwtBearerOptions options)
             if (!string.IsNullOrWhiteSpace(accessToken)
                 && (context.HttpContext.Request.Path.StartsWithSegments("/v1/notifications/hub")
                     || context.HttpContext.Request.Path.StartsWithSegments("/v1/conversations/hub")
-                    || context.HttpContext.Request.Path.StartsWithSegments("/v1/mocks/live-room/hub")))
+                    || context.HttpContext.Request.Path.StartsWithSegments("/v1/mocks/live-room/hub")
+                    || context.HttpContext.Request.Path.StartsWithSegments("/hubs/writing-submissions")
+                    || context.HttpContext.Request.Path.StartsWithSegments("/hubs/writing-today")
+                    || context.HttpContext.Request.Path.StartsWithSegments("/hubs/writing-coach")
+                    || context.HttpContext.Request.Path.StartsWithSegments("/ws/writing/coach")))
             {
                 context.Token = accessToken;
             }
@@ -907,6 +1006,14 @@ builder.Services.AddScoped<OetLearner.Api.Services.Conversation.IConversationAiO
 builder.Services.AddHostedService<OetLearner.Api.Services.Conversation.ConversationAudioRetentionWorker>();
 builder.Services.AddScoped<PronunciationService>();
 builder.Services.AddScoped<WritingCoachService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingLearnerPathwayService,
+    OetLearner.Api.Services.Writing.WritingLearnerPathwayService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingLessonService,
+    OetLearner.Api.Services.Writing.WritingLessonService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingDrillService,
+    OetLearner.Api.Services.Writing.WritingDrillService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingCaseNoteDrillService,
+    OetLearner.Api.Services.Writing.WritingCaseNoteDrillService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Writing.WritingWeaknessAnalyticsService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Writing.WritingDualAssessmentService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Expert.IExpertAssignmentNotifier,
@@ -1153,6 +1260,14 @@ builder.Services.Configure<Oet2026CatalogSeedOptions>(
 builder.Services.AddSingleton<OetLearner.Api.Services.Billing.Oet2026CatalogSeeder>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<OetLearner.Api.Services.Billing.Oet2026CatalogSeeder>());
 
+// Wave B4 — sync canonical Stripe seed catalogue (stripe-product-catalog.v1.json)
+// into BillingProducts + BillingPrices on every boot. Idempotent UPSERT on
+// metadata.code; the canonical JSON also drives the StripeProductSeeder CLI so
+// the local DB and the live Stripe account stay aligned.
+builder.Services.AddSingleton<OetLearner.Api.Services.Billing.BillingCatalogSyncStartupTask>();
+builder.Services.AddHostedService(sp =>
+    sp.GetRequiredService<OetLearner.Api.Services.Billing.BillingCatalogSyncStartupTask>());
+
 // Add-on eligibility service — enforces three-flag rule + Tutor Book
 // double-charge guard. Called from /v1/billing/quote/addon and the
 // checkout session creator.
@@ -1181,6 +1296,20 @@ builder.Services.AddScoped<OetLearner.Api.Services.Reading.IReadingAttemptServic
 // Reading Pathway subsystem (Reading Module Pathway Plan).
 builder.Services.AddScoped<OetLearner.Api.Services.Reading.IReadingLearnerPathwayService, OetLearner.Api.Services.Reading.ReadingLearnerPathwayService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Reading.ISkillScoringService, OetLearner.Api.Services.Reading.SkillScoringService>();
+// Listening Pathway subsystem (OET_LISTENING_MODULE_PATHWAY.md §5–§6 / A6+A7).
+// IListeningPathwayGenerator is a pure-function service so registering it as
+// a singleton avoids per-request allocation; the others touch DbContext.
+builder.Services.AddScoped<OetLearner.Api.Services.Listening.IListeningLearnerPathwayService, OetLearner.Api.Services.Listening.ListeningLearnerPathwayService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Listening.IListeningSkillScoringService, OetLearner.Api.Services.Listening.ListeningSkillScoringService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Listening.IListeningLearnerGradingService, OetLearner.Api.Services.Listening.ListeningLearnerGradingService>();
+// Listening dictation drill subsystem (Phase 4 of OET_LISTENING_MODULE_PATHWAY.md §14).
+builder.Services.AddScoped<OetLearner.Api.Services.Listening.IDictationService, OetLearner.Api.Services.Listening.DictationService>();
+// Listening pronunciation library — SM-2 spaced repetition (Phase 4 of §15).
+builder.Services.AddScoped<OetLearner.Api.Services.Listening.IPronunciationService, OetLearner.Api.Services.Listening.PronunciationService>();
+// Phase 3 daily plan + adaptive practice selection (§8, §10).
+builder.Services.AddScoped<OetLearner.Api.Services.Listening.IListeningDailyPlanService, OetLearner.Api.Services.Listening.ListeningDailyPlanService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Listening.IListeningPracticeSelectionService, OetLearner.Api.Services.Listening.ListeningPracticeSelectionService>();
+builder.Services.AddSingleton<OetLearner.Api.Services.Listening.IListeningPathwayGenerator, OetLearner.Api.Services.Listening.ListeningPathwayGenerator>();
 builder.Services.AddScoped<OetLearner.Api.Services.Reading.IDailyPlanService, OetLearner.Api.Services.Reading.DailyPlanService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Reading.IPracticeSelectionService, OetLearner.Api.Services.Reading.PracticeSelectionService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Reading.IReviewQueueService, OetLearner.Api.Services.Reading.ReviewQueueService>();
@@ -1225,6 +1354,20 @@ builder.Services.AddHostedService<OetLearner.Api.Services.Listening.ListeningAtt
 builder.Services.AddHostedService<OetLearner.Api.Services.Content.AdminUploadCleanupWorker>();
 builder.Services.AddScoped<OetLearner.Api.Services.Rulebook.IAiGatewayService,
     OetLearner.Api.Services.Rulebook.AiGatewayService>();
+
+// ── Writing Module V2 prompt templates (OET_WRITING_MODULE_PATHWAY.md §12+§13) ──
+// Singleton registry so the 10 templates (coach, rewrite, scenario.generate,
+// exemplar.embed, appeal, canon.detect, drill.grade, outline, paraphrase, ask)
+// resolve consistently across every Writing V2 service. The registrar runs
+// inline below so prompt-template misconfig fails fast at boot, not at the
+// first learner-visible request — every expected feature code is probed via
+// WritingPromptTemplateRegistrar.AssertAllExpectedTemplatesRegistered.
+builder.Services.AddSingleton<OetLearner.Api.Services.Rulebook.IWritingPromptTemplateRegistry>(_ =>
+{
+    var registry = new OetLearner.Api.Services.Rulebook.WritingPromptTemplateRegistry();
+    OetLearner.Api.Services.Rulebook.WritingPromptTemplateRegistrar.RegisterWritingV2Templates(registry);
+    return registry;
+});
 
 // ── Phase 5 — AI Tool Calling ──
 // All AI-tool services are Scoped so the registry, invoker, and executors
@@ -1304,6 +1447,94 @@ builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingOptionsProvid
     OetLearner.Api.Services.Writing.WritingOptionsProvider>();
 builder.Services.AddScoped<IWritingEntitlementService,
     OetLearner.Api.Services.Writing.WritingEntitlementService>();
+
+// ── Writing Module V2 services and crons (OET_WRITING_MODULE_PATHWAY.md §WS5) ──
+// Config root bound from appsettings.json:Writing.* — feature flags,
+// daily caps, cron toggles, OCR provider keys.
+builder.Services.Configure<OetLearner.Api.Services.Writing.Configuration.WritingV2Options>(
+    builder.Configuration.GetSection(OetLearner.Api.Services.Writing.Configuration.WritingV2Options.SectionName));
+// Event bus is singleton — opens scopes per dispatch so handlers see fresh DbContext.
+builder.Services.AddSingleton<OetLearner.Api.Services.Writing.Events.IWritingEventBus,
+    OetLearner.Api.Services.Writing.Events.WritingEventBus>();
+// Canon engine — scoped so it can consume scoped IAiGatewayService;
+// internal compiled-Regex cache lives across requests via a static cache in the implementation.
+builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingCanonEngine,
+    OetLearner.Api.Services.Writing.WritingCanonEngine>();
+// Pure pathway generator — no DB, no DI dependencies; safe as singleton.
+builder.Services.AddSingleton<OetLearner.Api.Services.Writing.IWritingPathwayGenerator,
+    OetLearner.Api.Services.Writing.WritingPathwayGenerator>();
+// Scoped services (one per HTTP request) — every method takes UserId first.
+builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingOnboardingService,
+    OetLearner.Api.Services.Writing.WritingOnboardingService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingPathwayServiceV2,
+    OetLearner.Api.Services.Writing.WritingPathwayServiceV2>();
+builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingDailyPlanServiceV2,
+    OetLearner.Api.Services.Writing.WritingDailyPlanServiceV2>();
+builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingPracticeSelectionService,
+    OetLearner.Api.Services.Writing.WritingPracticeSelectionService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingScenarioService,
+    OetLearner.Api.Services.Writing.WritingScenarioService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingExemplarService,
+    OetLearner.Api.Services.Writing.WritingExemplarService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingExemplarEmbeddingService,
+    OetLearner.Api.Services.Writing.WritingExemplarEmbeddingService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingCanonService,
+    OetLearner.Api.Services.Writing.WritingCanonService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingDrillServiceV2,
+    OetLearner.Api.Services.Writing.WritingDrillServiceV2>();
+builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingCaseNoteDrillService,
+    OetLearner.Api.Services.Writing.WritingCaseNoteDrillService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingLessonServiceV2,
+    OetLearner.Api.Services.Writing.WritingLessonServiceV2>();
+builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingMockService,
+    OetLearner.Api.Services.Writing.WritingMockService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingReadinessService,
+    OetLearner.Api.Services.Writing.WritingReadinessService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingCoachServiceV2,
+    OetLearner.Api.Services.Writing.WritingCoachServiceV2>();
+builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingOcrService,
+    OetLearner.Api.Services.Writing.WritingOcrService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingTutorReviewService,
+    OetLearner.Api.Services.Writing.WritingTutorReviewService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingAppealService,
+    OetLearner.Api.Services.Writing.WritingAppealService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingAnalyticsServiceV2,
+    OetLearner.Api.Services.Writing.WritingAnalyticsServiceV2>();
+builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingMistakeService,
+    OetLearner.Api.Services.Writing.WritingMistakeService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingContentAuditService,
+    OetLearner.Api.Services.Writing.WritingContentAuditService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingShowcaseService,
+    OetLearner.Api.Services.Writing.WritingShowcaseService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingRewriteService,
+    OetLearner.Api.Services.Writing.WritingRewriteService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingParaphraseService,
+    OetLearner.Api.Services.Writing.WritingParaphraseService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingAskService,
+    OetLearner.Api.Services.Writing.WritingAskService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingOutlineService,
+    OetLearner.Api.Services.Writing.WritingOutlineService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingScenarioGeneratorService,
+    OetLearner.Api.Services.Writing.WritingScenarioGeneratorService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingDraftServiceV2,
+    OetLearner.Api.Services.Writing.WritingDraftServiceV2>();
+builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingSubmissionEvaluationPipeline,
+    OetLearner.Api.Services.Writing.WritingSubmissionEvaluationPipeline>();
+builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingSubmissionService,
+    OetLearner.Api.Services.Writing.WritingSubmissionService>();
+// HttpClient used by OCR to call Google Cloud Vision REST endpoint.
+builder.Services.AddHttpClient("writing-ocr-gcv");
+// 8 hosted crons — gated by Writing:CronsEnabled (default true). Each runs
+// on its own cadence inside WritingCronBase; the daily ones run hourly and
+// short-circuit unless the current UTC hour matches.
+builder.Services.AddHostedService<OetLearner.Api.Services.Writing.Crons.WritingDailyPlanCron>();
+builder.Services.AddHostedService<OetLearner.Api.Services.Writing.Crons.WritingReadinessCron>();
+builder.Services.AddHostedService<OetLearner.Api.Services.Writing.Crons.WritingBatchGradingCron>();
+builder.Services.AddHostedService<OetLearner.Api.Services.Writing.Crons.WritingExemplarReindexCron>();
+builder.Services.AddHostedService<OetLearner.Api.Services.Writing.Crons.WritingAnalyticsAggregationCron>();
+builder.Services.AddHostedService<OetLearner.Api.Services.Writing.Crons.WritingTutorQueueAlertCron>();
+builder.Services.AddHostedService<OetLearner.Api.Services.Writing.Crons.WritingDraftCleanupCron>();
+builder.Services.AddHostedService<OetLearner.Api.Services.Writing.Crons.WritingContentAuditCron>();
 
 // ── Private Speaking Sessions ──
 builder.Services.Configure<ZoomOptions>(builder.Configuration.GetSection("Zoom"));
@@ -1553,6 +1784,10 @@ if (corsOrigins.Length > 0)
 app.UseAuthentication();
 app.UseRateLimiter();
 app.UseAuthorization();
+// Enable native WebSocket upgrades for the Writing Coach panel fallback
+// (/ws/writing/coach/{sessionId}). SignalR has its own internal websocket
+// handling; this only affects raw WS endpoints mapped via app.Map.
+app.UseWebSockets();
 
 app.MapGet("/health/live", () => Results.Ok(new { status = "ok", service = "OET Learner API", timestamp = DateTimeOffset.UtcNow, check = "live" }))
     .AllowAnonymous();
@@ -1656,6 +1891,10 @@ app.MapBillingExpansionEndpoints();
 app.MapBillingExpansionV2Endpoints();
 app.MapOet2026CatalogEndpoints();
 app.MapBillingCatalogEndpoints();
+// Wave B4 — finance/ops admin surface (revenue/MRR/churn/LTV/refunds + product
+// & coupon CRUD + Stripe Tax registrations). Each route requires a specific
+// granular billing permission (read/refund_write/catalog_write).
+app.MapAdminBillingEndpoints();
 app.MapTutorBookEndpoints();
 app.MapAffiliatePortalEndpoints();
 app.MapAiAnalyticsEndpoints();
@@ -1693,10 +1932,18 @@ app.MapContentPapersLearnerEndpoints();
 app.MapReadingAuthoringAdminEndpoints();
 app.MapReadingAnalyticsAdminEndpoints();
 app.MapWritingAnalyticsAdminEndpoints();
+app.MapWritingPathwayEndpoints();
+// Writing Module V2 — onboarding, diagnostic, pathway V2, submissions,
+// drafts V2, scenarios, exemplars, drills V2, lessons V2, mocks, coach,
+// stats, canon library, mistakes, tutor review, OCR, showcase, AI tools,
+// admin content, tutor portal + native WebSocket coach fallback (~60+
+// routes across 20 endpoint files). See WritingRouteBuilderExtensions.cs.
+app.MapWritingV2Endpoints();
 app.MapListeningAuthoringAdminEndpoints();
 app.MapListeningAdminAnalyticsEndpoints();
 app.MapReadingLearnerEndpoints();
 app.MapReadingPathwayEndpoints();
+app.MapListeningPathwayEndpoints();
 app.MapListeningLearnerEndpoints();
 app.MapListeningV2Endpoints();
 app.MapListeningExpertEndpoints();
@@ -1778,6 +2025,11 @@ app.MapHub<ConversationHub>("/v1/conversations/hub").RequireAuthorization();
 app.MapHub<OetLearner.Api.Hubs.AiAssistantHub>("/v1/ai-assistant/hub").RequireAuthorization();
 app.MapHub<OetLearner.Api.Services.Mocks.MockLiveRoomHub>("/v1/mocks/live-room/hub").RequireAuthorization();
 app.MapHub<OetLearner.Api.Hubs.SpeakingLiveRoomHub>("/v1/speaking/live-rooms/hub").RequireAuthorization();
+// Writing Module V2 hubs — submission grade events, coach hint streaming,
+// today/plan + pathway recalculate broadcasts. See Hubs/Writing*Hub.cs.
+app.MapHub<OetLearner.Api.Hubs.WritingSubmissionHub>("/hubs/writing-submissions").RequireAuthorization("LearnerOnly");
+app.MapHub<OetLearner.Api.Hubs.WritingCoachHub>("/hubs/writing-coach").RequireAuthorization("LearnerOnly");
+app.MapHub<OetLearner.Api.Hubs.WritingTodayHub>("/hubs/writing-today").RequireAuthorization("LearnerOnly");
 
 await using (var scope = app.Services.CreateAsyncScope())
 {
@@ -1806,6 +2058,24 @@ await using (var scope = app.Services.CreateAsyncScope())
     catch (Exception ex)
     {
         seedLogger.LogWarning(ex, "RecallSetTagRegistrySeeder failed at boot; continuing.");
+    }
+
+    // Writing Module V2 content seed (OET_WRITING_MODULE_PATHWAY.md §13/14/15/16/17).
+    // Loads 25 canon rules, 12 diagnostic scenarios, 6 exemplars, 16 lessons,
+    // 30 sentence drills, 12 case-note drills, 6 mocks, 20 common mistakes from
+    // Data/Seeds/WritingV2/*.json. Idempotent — re-runs are no-ops if rows present.
+    // Gated by Writing:V2Seeder:Enabled (default true). Non-fatal on failure.
+    var writingV2Logger = scope.ServiceProvider.GetRequiredService<ILoggerFactory>()
+        .CreateLogger("WritingV2ContentSeeder");
+    try
+    {
+        var writingV2Config = scope.ServiceProvider.GetRequiredService<IConfiguration>();
+        await OetLearner.Api.Services.Writing.WritingV2ContentSeeder.EnsureAsync(
+            db, app.Environment, writingV2Config, writingV2Logger);
+    }
+    catch (Exception ex)
+    {
+        writingV2Logger.LogWarning(ex, "WritingV2ContentSeeder failed at boot; continuing.");
     }
 }
 

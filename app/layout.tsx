@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import { headers } from 'next/headers';
 import { Fraunces, Manrope, Montserrat } from 'next/font/google';
 import { getRuntimeBootstrapScript } from '@/lib/runtime-signals';
+import { loadAllMessages, resolveLocale } from '@/i18n';
 import { AppProviders } from './providers';
 import './globals.css';
 
@@ -116,8 +117,15 @@ export const viewport: Viewport = {
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const nonce = (await headers()).get('x-nonce') ?? undefined;
+  // Resolve the active locale + load message bundles on the server so the
+  // `NextIntlClientProvider` rendered inside `AppProviders` can hand them to
+  // every client component beneath. Pages that don't call `useTranslations`
+  // are unaffected — existing English-inline pages keep rendering as-is.
+  const locale = await resolveLocale();
+  const messages = await loadAllMessages(locale);
+  const direction = locale === 'ar' ? 'rtl' : 'ltr';
   return (
-    <html lang="en" className={`${bodyFont.variable} ${displayFont.variable} ${adminFont.variable}`} suppressHydrationWarning>
+    <html lang={locale} dir={direction} className={`${bodyFont.variable} ${displayFont.variable} ${adminFont.variable}`} suppressHydrationWarning>
       <head>
         {/*
           CSP for Capacitor WebView and web — restrict script/style/connect sources.
@@ -141,7 +149,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           suppressHydrationWarning
           dangerouslySetInnerHTML={{ __html: getRuntimeBootstrapScript() }}
         />
-        <AppProviders nonce={nonce}>{children}</AppProviders>
+        <AppProviders nonce={nonce} locale={locale} messages={messages}>{children}</AppProviders>
       </body>
     </html>
   );

@@ -172,7 +172,7 @@ export function validateProxyPathSegments(pathSegments: string[]): string[] {
     throw new Error('Invalid proxy path.');
   }
 
-  if (pathSegments[0] !== 'v1') {
+  if (!['v1', 'hubs', 'ws'].includes(pathSegments[0])) {
     throw new Error('Invalid proxy path.');
   }
 

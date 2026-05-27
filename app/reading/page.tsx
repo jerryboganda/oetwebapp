@@ -160,7 +160,7 @@ export default function ReadingHome() {
         {profile?.currentStage === 'onboarding' ? (
           <Link
             href="/reading/profile-setup"
-            className="flex items-center justify-between rounded-xl border border-amber-200 bg-amber-50 dark:border-amber-700 dark:bg-amber-900/20 px-5 py-3 text-sm font-medium text-amber-800 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/30 transition-colors"
+            className="flex items-center justify-between rounded-xl border border-orange-300 bg-orange-50 px-5 py-3 text-sm font-semibold text-gray-900 shadow-sm hover:bg-orange-100 transition-colors dark:border-orange-500/40 dark:bg-orange-950/30 dark:text-white dark:hover:bg-orange-950/50"
           >
             <span>Complete your profile setup to unlock your personalised study plan</span>
             <span aria-hidden="true">→</span>
@@ -256,14 +256,14 @@ export default function ReadingHome() {
                   {papers.map((paper, index) => (
                     <MotionItem key={paper.id} delayIndex={index}>
                       <LearnerSurfaceCard card={paperCard(paper, home?.activeAttempts ?? [])}>
-                        <div className="grid grid-cols-3 gap-2 text-center text-xs font-semibold text-muted">
+                        <div className="grid grid-cols-3 gap-2 text-center text-xs font-semibold text-gray-600 dark:text-gray-400">
                           <span className="rounded-lg bg-background-light px-2 py-2">A {paper.partACount}</span>
                           <span className="rounded-lg bg-background-light px-2 py-2">B {paper.partBCount}</span>
                           <span className="rounded-lg bg-background-light px-2 py-2">C {paper.partCCount}</span>
                         </div>
                         {/* Attempt info — shows last attempt status + date when available */}
                         {paper.lastAttempt ? (
-                          <p className="mt-2 text-xs text-muted">
+                          <p className="mt-2 text-xs text-gray-600 dark:text-gray-400">
                             Last attempt:{' '}
                             <span className="font-medium capitalize">
                               {paper.lastAttempt.status.toLowerCase()}
@@ -277,7 +277,7 @@ export default function ReadingHome() {
                         {home?.policy.allowPaperReadingMode && !(paper.entitlement ? !paper.entitlement.allowed : false) ? (
                           <Link
                             href={`${paper.route}?presentation=paper`}
-                            className="mt-3 inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-border px-3 py-2 text-xs font-medium text-navy hover:border-border-hover hover:bg-surface"
+                            className="mt-3 inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-border px-3 py-2 text-xs font-medium text-gray-900 dark:text-gray-100 hover:border-border-hover hover:bg-surface"
                           >
                             <Printer className="h-4 w-4" aria-hidden />
                             Paper simulation
@@ -305,7 +305,7 @@ export default function ReadingHome() {
                     <MotionItem key={drill.id ?? `drill-${index}`} delayIndex={index}>
                       <LearnerSurfaceCard card={safeDrillCard(drill)}>
                         {drill.highlights?.length ? (
-                          <ul className="space-y-2 text-sm text-navy/80">
+                          <ul className="space-y-2 text-sm text-gray-900/80 dark:text-gray-100/80">
                             {drill.highlights.map((highlight) => (
                               <li key={highlight}>{highlight}</li>
                             ))}

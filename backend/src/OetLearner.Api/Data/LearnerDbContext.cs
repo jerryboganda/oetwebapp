@@ -306,6 +306,13 @@ public partial class LearnerDbContext(DbContextOptions<LearnerDbContext> options
     public DbSet<LearnerBadge> LearnerBadges => Set<LearnerBadge>();
     public DbSet<ReadingQuestionDiscussionComment> ReadingQuestionDiscussionComments => Set<ReadingQuestionDiscussionComment>();
 
+    // Writing Pathway subsystem — additive orchestration over existing Writing attempts/evaluations.
+    public DbSet<LearnerWritingProfile> LearnerWritingProfiles => Set<LearnerWritingProfile>();
+    public DbSet<LearnerWritingPathway> LearnerWritingPathways => Set<LearnerWritingPathway>();
+    public DbSet<WritingDailyPlanItem> WritingDailyPlanItems => Set<WritingDailyPlanItem>();
+    public DbSet<WritingLesson> WritingLessons => Set<WritingLesson>();
+    public DbSet<LearnerWritingLessonProgress> LearnerWritingLessonProgresses => Set<LearnerWritingLessonProgress>();
+
     // Listening Module subsystem (Phase 2 of LISTENING-MODULE-PLAN.md).
     // Additive to the existing JSON-backed ContentPaper.ExtractedTextJson
     // runtime — these tables are populated by the next-generation authoring
@@ -340,6 +347,18 @@ public partial class LearnerDbContext(DbContextOptions<LearnerDbContext> options
     public DbSet<ListeningPracticeSession> ListeningPracticeSessions => Set<ListeningPracticeSession>();
     public DbSet<ListeningQuestionAttempt> ListeningQuestionAttempts => Set<ListeningQuestionAttempt>();
     public DbSet<ListeningPracticeNote> ListeningPracticeNotes => Set<ListeningPracticeNote>();
+
+    // Listening Pathway subsystem (Phase 2–5).
+    public DbSet<ListeningLesson> ListeningLessons => Set<ListeningLesson>();
+    public DbSet<LearnerListeningLessonProgress> LearnerListeningLessonProgresses => Set<LearnerListeningLessonProgress>();
+    public DbSet<ListeningDailyPlanItem> ListeningDailyPlanItems => Set<ListeningDailyPlanItem>();
+    public DbSet<ListeningStrategy> ListeningStrategies => Set<ListeningStrategy>();
+    public DbSet<LearnerListeningStrategyProgress> LearnerListeningStrategyProgresses => Set<LearnerListeningStrategyProgress>();
+    public DbSet<PronunciationCard> PronunciationCards => Set<PronunciationCard>();
+    public DbSet<LearnerPronunciationCard> LearnerPronunciationCards => Set<LearnerPronunciationCard>();
+    public DbSet<DictationDrill> DictationDrills => Set<DictationDrill>();
+    public DbSet<LearnerDictationProgress> LearnerDictationProgresses => Set<LearnerDictationProgress>();
+    public DbSet<ListeningMockTemplate> ListeningMockTemplates => Set<ListeningMockTemplate>();
 
     public DbSet<BillingPlan> BillingPlans => Set<BillingPlan>();
     public DbSet<BillingPlanVersion> BillingPlanVersions => Set<BillingPlanVersion>();
@@ -527,6 +546,14 @@ public partial class LearnerDbContext(DbContextOptions<LearnerDbContext> options
             // admins racing to Approve/Reject the same Pending draft cannot
             // both succeed. xmin is a Postgres system column → no DDL.
             ConfigureXminToken<ListeningExtractionDraft>(modelBuilder);
+
+            // pgvector — used by WritingExemplarEmbedding /
+            // WritingScenarioEmbedding for HNSW cosine nearest-neighbour
+            // queries. The CREATE EXTENSION DDL is emitted by migration
+            // 20260612120000_AddPgvectorEmbeddingColumns; declaring it here
+            // keeps the model snapshot honest and survives `EnsureCreated`
+            // paths that bypass migrations.
+            modelBuilder.HasPostgresExtension("vector");
         }
 
         // Hot JSON columns stored as jsonb for smaller on-disk size, native
@@ -1137,6 +1164,24 @@ public partial class LearnerDbContext(DbContextOptions<LearnerDbContext> options
         modelBuilder.Entity<LearnerXp>().HasIndex(x => x.UserId).IsUnique();
         modelBuilder.Entity<LearnerBadge>().HasIndex(x => new { x.UserId, x.BadgeCode }).IsUnique();
 
+        // Writing Pathway subsystem indexes
+        modelBuilder.Entity<LearnerWritingProfile>(entity =>
+        {
+            entity.HasIndex(x => x.UserId).IsUnique();
+            entity.Property(x => x.AccommodationProfileJson).HasColumnType("jsonb").HasDefaultValue("{}");
+        });
+        modelBuilder.Entity<LearnerWritingPathway>(entity =>
+        {
+            entity.HasIndex(x => x.UserId).IsUnique();
+            entity.Property(x => x.WeaknessVectorJson).HasColumnType("jsonb").HasDefaultValue("{}");
+            entity.Property(x => x.SubSkillMasteryJson).HasColumnType("jsonb").HasDefaultValue("{}");
+        });
+        modelBuilder.Entity<WritingDailyPlanItem>().HasIndex(x => new { x.UserId, x.PlanDate });
+        modelBuilder.Entity<WritingDailyPlanItem>().HasIndex(x => new { x.UserId, x.Status });
+        modelBuilder.Entity<WritingLesson>().HasIndex(x => x.Slug).IsUnique();
+        modelBuilder.Entity<WritingLesson>().HasIndex(x => new { x.SkillCode, x.OrderIndex });
+        modelBuilder.Entity<LearnerWritingLessonProgress>().HasIndex(x => new { x.UserId, x.LessonId }).IsUnique();
+
         // Listening Pathway subsystem indexes
         modelBuilder.Entity<LearnerListeningProfile>().HasIndex(x => x.UserId).IsUnique();
         modelBuilder.Entity<LearnerListeningSkillScore>().HasIndex(x => new { x.UserId, x.SkillCode }).IsUnique();
@@ -1145,6 +1190,20 @@ public partial class LearnerDbContext(DbContextOptions<LearnerDbContext> options
         modelBuilder.Entity<ListeningQuestionAttempt>().HasIndex(x => new { x.UserId, x.AttemptedAt });
         modelBuilder.Entity<ListeningQuestionAttempt>().HasIndex(x => new { x.UserId, x.InReviewQueue, x.NextReviewAt });
         modelBuilder.Entity<ListeningPracticeNote>().HasIndex(x => new { x.UserId, x.PracticeSessionId, x.ListeningQuestionId });
+
+        // Listening Pathway Phase 2–5 indexes
+        modelBuilder.Entity<ListeningLesson>().HasIndex(x => x.Slug).IsUnique();
+        modelBuilder.Entity<ListeningLesson>().HasIndex(x => new { x.SkillCode, x.OrderIndex });
+        modelBuilder.Entity<LearnerListeningLessonProgress>().HasIndex(x => new { x.UserId, x.LessonId }).IsUnique();
+        modelBuilder.Entity<ListeningDailyPlanItem>().HasIndex(x => new { x.UserId, x.PlanDate });
+        modelBuilder.Entity<ListeningStrategy>().HasIndex(x => x.Slug).IsUnique();
+        modelBuilder.Entity<LearnerListeningStrategyProgress>().HasIndex(x => new { x.UserId, x.StrategyId }).IsUnique();
+        modelBuilder.Entity<PronunciationCard>().HasIndex(x => x.Word).IsUnique();
+        modelBuilder.Entity<LearnerPronunciationCard>().HasIndex(x => new { x.UserId, x.NextReviewAt });
+        modelBuilder.Entity<LearnerPronunciationCard>().HasIndex(x => new { x.UserId, x.PronunciationCardId }).IsUnique();
+        modelBuilder.Entity<DictationDrill>().HasIndex(x => new { x.DrillType, x.Accent, x.IsPublished });
+        modelBuilder.Entity<LearnerDictationProgress>().HasIndex(x => new { x.UserId, x.NextReviewAt });
+        modelBuilder.Entity<LearnerDictationProgress>().HasIndex(x => new { x.UserId, x.DictationDrillId }).IsUnique();
 
         // Scoring Policy table (partial; see LearnerDbContext.ScoringPolicy.cs).
         OnModelCreatingScoringPolicy(modelBuilder);
@@ -1188,6 +1247,23 @@ public partial class LearnerDbContext(DbContextOptions<LearnerDbContext> options
 
         // Readiness snapshot + weekly history (partial; see LearnerDbContext.Readiness.cs).
         OnModelCreatingReadiness(modelBuilder);
+
+        // Writing Module V2 — scenarios, exemplars, submissions, grades, canon,
+        // drills, lessons, mocks, readiness, mistakes, tutor, OCR, showcase.
+        // Each partial lives in LearnerDbContext.WritingScenarios.cs etc.
+        OnModelCreatingWritingScenarios(modelBuilder);
+        OnModelCreatingWritingExemplars(modelBuilder);
+        OnModelCreatingWritingSubmissions(modelBuilder);
+        OnModelCreatingWritingCanon(modelBuilder);
+        OnModelCreatingWritingDrills(modelBuilder);
+        OnModelCreatingWritingLessons(modelBuilder);
+        OnModelCreatingWritingMocks(modelBuilder);
+        OnModelCreatingWritingReadiness(modelBuilder);
+        OnModelCreatingWritingMistakes(modelBuilder);
+        OnModelCreatingWritingTutor(modelBuilder);
+        OnModelCreatingWritingOcr(modelBuilder);
+        OnModelCreatingWritingShowcase(modelBuilder);
+        OnModelCreatingWritingDiagnosticSessions(modelBuilder);
     }
 
     /// <summary>
@@ -1259,6 +1335,22 @@ public partial class LearnerDbContext(DbContextOptions<LearnerDbContext> options
     /// Defined in <see cref="LearnerDbContext"/>.Readiness.cs (partial).
     /// </summary>
     partial void OnModelCreatingReadiness(ModelBuilder modelBuilder);
+
+    // Writing Module V2 — partial method declarations. Implementations live in
+    // LearnerDbContext.Writing*.cs (one file per logical entity grouping).
+    partial void OnModelCreatingWritingScenarios(ModelBuilder modelBuilder);
+    partial void OnModelCreatingWritingExemplars(ModelBuilder modelBuilder);
+    partial void OnModelCreatingWritingSubmissions(ModelBuilder modelBuilder);
+    partial void OnModelCreatingWritingCanon(ModelBuilder modelBuilder);
+    partial void OnModelCreatingWritingDrills(ModelBuilder modelBuilder);
+    partial void OnModelCreatingWritingLessons(ModelBuilder modelBuilder);
+    partial void OnModelCreatingWritingMocks(ModelBuilder modelBuilder);
+    partial void OnModelCreatingWritingReadiness(ModelBuilder modelBuilder);
+    partial void OnModelCreatingWritingMistakes(ModelBuilder modelBuilder);
+    partial void OnModelCreatingWritingTutor(ModelBuilder modelBuilder);
+    partial void OnModelCreatingWritingOcr(ModelBuilder modelBuilder);
+    partial void OnModelCreatingWritingShowcase(ModelBuilder modelBuilder);
+    partial void OnModelCreatingWritingDiagnosticSessions(ModelBuilder modelBuilder);
 
     /// <summary>
     /// Configures the Postgres system column <c>xmin</c> as an optimistic

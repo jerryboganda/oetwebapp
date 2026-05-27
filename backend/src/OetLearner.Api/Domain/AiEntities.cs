@@ -220,6 +220,27 @@ public static class AiFeatureCodes
     // Non-scoring (BYOK-eligible)
     public const string WritingCoachSuggest = "writing.coach.suggest";
     public const string WritingCoachExplain = "writing.coach.explain";
+
+    // ── Writing Module V2 (OET_WRITING_MODULE_PATHWAY.md §12 + §13) ──
+    // Templates registered in WritingPromptTemplateRegistrar; every call site
+    // MUST pass the matching constant via AiGatewayRequest.PromptTemplateId so
+    // the AI usage explorer can correlate cost/quality with prompt version.
+    // Routing tier (per spec §12.2):
+    //   - Sonnet 4.6   → coach grading-adjacent + rewrite + scenario generation
+    //   - Haiku 4.5    → coach + canon detect + drill grade + outline + paraphrase + ask
+    //   - GPT-5.5 med  → independent appeal second-opinion
+    //   - embed-3-small→ exemplar embedding
+    public const string WritingCoachV1 = "writing.coach.v1";
+    public const string WritingRewriteV1 = "writing.rewrite.v1";
+    public const string WritingScenarioGenerateV1 = "writing.scenario.generate.v1";
+    public const string WritingExemplarEmbedV1 = "writing.exemplar.embed.v1";
+    public const string WritingAppealV1 = "writing.appeal.v1";
+    public const string WritingCanonDetectV1 = "writing.canon.detect.v1";
+    public const string WritingDrillGradeV1 = "writing.drill.grade.v1";
+    public const string WritingOutlineV1 = "writing.outline.v1";
+    public const string WritingParaphraseV1 = "writing.paraphrase.v1";
+    public const string WritingAskV1 = "writing.ask.v1";
+
     public const string ConversationReply = "conversation.reply";
     public const string ConversationOpening = "conversation.opening";
     public const string PronunciationTip = "pronunciation.tip";

@@ -117,13 +117,13 @@ export function AudioCheck({ onResult, audioSrc = '/test-audio.mp3' }: AudioChec
   }, [selected, onResult]);
 
   return (
-    <div className="rounded-2xl border border-border bg-surface p-5 shadow-clinical">
+    <div className="rounded-2xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-5 shadow-sm">
       <div className="mb-4 flex items-center justify-between gap-3">
-        <h2 className="text-lg font-semibold text-navy dark:text-slate-100">Audio check</h2>
+        <h2 className="text-lg font-semibold text-gray-900 dark:text-slate-100">Audio check</h2>
         <HeadphoneDetector />
       </div>
 
-      <p className="mb-4 text-sm text-muted">
+      <p className="mb-4 text-sm text-gray-600 dark:text-gray-400">
         Before the diagnostic begins, please confirm that audio plays clearly. For best
         results, use headphones in a quiet room — earbuds or over-ear headphones both work.
       </p>
@@ -165,7 +165,7 @@ export function AudioCheck({ onResult, audioSrc = '/test-audio.mp3' }: AudioChec
       ) : null}
 
       <fieldset className="mt-6">
-        <legend className="mb-2 text-sm font-medium text-navy dark:text-slate-100">
+        <legend className="mb-2 text-sm font-medium text-gray-900 dark:text-slate-100">
           Did you hear the test sound?
         </legend>
         <div className="grid gap-2">
@@ -191,10 +191,10 @@ export function AudioCheck({ onResult, audioSrc = '/test-audio.mp3' }: AudioChec
                   className="mt-1 h-4 w-4 accent-primary"
                 />
                 <span className="flex-1">
-                  <span className="block text-sm font-medium text-navy dark:text-slate-100">
+                  <span className="block text-sm font-medium text-gray-900 dark:text-slate-100">
                     {opt.label}
                   </span>
-                  <span className="block text-xs text-muted">{opt.description}</span>
+                  <span className="block text-xs text-gray-600 dark:text-gray-400">{opt.description}</span>
                 </span>
               </label>
             );

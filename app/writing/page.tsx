@@ -20,6 +20,8 @@ import {
   UploadCloud,
   Brain,
   UserRoundCheck,
+  Compass,
+  ListChecks,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { LearnerDashboardShell } from '@/components/layout';
@@ -28,6 +30,11 @@ import { MotionSection, MotionItem, MotionCollapse } from '@/components/ui/motio
 import { Badge, StatusBadge } from '@/components/ui/badge';
 import { FilterBar, type FilterGroup } from '@/components/ui/filter-bar';
 import { fetchWritingHome, fetchWritingTasks, fetchWritingSubmissions, fetchMockReports, fetchWritingEntitlement, type WritingEntitlement } from '@/lib/api';
+import { getWritingProfile, getWritingTodayPlan, writingStageLabels, type LearnerWritingProfileDto, type WritingTodayPlanDto } from '@/lib/writing-pathway-api';
+import { getWritingReadiness, getWritingStatsBands, getWritingStatsDashboard } from '@/lib/writing/api';
+import type { WritingReadinessScoreDto, WritingStatsBandsDto, WritingStatsDashboardDto } from '@/lib/writing/types';
+import { ReadinessWidget } from '@/components/domain/writing/ReadinessWidget';
+import { BandHistoryChart } from '@/components/domain/writing/BandHistoryChart';
 import { analytics } from '@/lib/analytics';
 import { InlineAlert } from '@/components/ui/alert';
 import type { WritingTask, WritingSubmission, MockReport } from '@/lib/mock-data';
@@ -148,6 +155,11 @@ export default function WritingHome() {
   const [submissions, setSubmissions] = useState<WritingSubmission[]>([]);
   const [mockReports, setMockReports] = useState<MockReport[]>([]);
   const [entitlement, setEntitlement] = useState<WritingEntitlement | null>(null);
+  const [pathwayProfile, setPathwayProfile] = useState<LearnerWritingProfileDto | null>(null);
+  const [todayPlan, setTodayPlan] = useState<WritingTodayPlanDto | null>(null);
+  const [readiness, setReadiness] = useState<WritingReadinessScoreDto | null>(null);
+  const [statsDashboard, setStatsDashboard] = useState<WritingStatsDashboardDto | null>(null);
+  const [bands, setBands] = useState<WritingStatsBandsDto | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filters, setFilters] = useState<Record<string, string[]>>({});
@@ -180,6 +192,23 @@ export default function WritingHome() {
         // Entitlement fetch failure is non-fatal; the submit-flow gate still
         // surfaces server-side 402 quota errors. Silently ignore here.
       });
+    Promise.all([getWritingProfile(), getWritingTodayPlan()])
+      .then(([profile, plan]) => {
+        setPathwayProfile(profile);
+        setTodayPlan(plan);
+      })
+      .catch(() => {
+        // Pathway is additive. Existing Writing dashboard remains usable if it is unavailable.
+      });
+    Promise.all([
+      getWritingReadiness().catch(() => null),
+      getWritingStatsDashboard().catch(() => null),
+      getWritingStatsBands().catch(() => null),
+    ]).then(([r, d, b]) => {
+      setReadiness(r);
+      setStatsDashboard(d);
+      setBands(b);
+    });
   }, []);
 
   const handleFilterChange = useCallback((groupId: string, optionId: string) => {
@@ -306,6 +335,82 @@ export default function WritingHome() {
         {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
 
         <WritingEntitlementBanner entitlement={entitlement} />
+
+        <MotionSection>
+          <div className="rounded-2xl border border-border bg-surface p-4 shadow-sm">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+              <div className="space-y-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge variant="info" size="sm">Pathway</Badge>
+                  <Badge variant="muted" size="sm">{writingStageLabels[pathwayProfile?.currentStage ?? 'onboarding'] ?? 'Onboarding'}</Badge>
+                  {todayPlan ? <Badge variant="warning" size="sm">{todayPlan.completedCount}/{todayPlan.items.length} today</Badge> : null}
+                </div>
+                <h2 className="text-lg font-bold text-navy">Follow the complete Writing pathway</h2>
+                <p className="max-w-3xl text-sm text-muted">
+                  Your pathway now links onboarding, diagnostic, daily practice, canon review, and the existing graded Writing player without changing the grading pipeline.
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button asChild size="sm"><Link href="/writing/today"><ListChecks className="h-4 w-4" /> Today</Link></Button>
+                <Button asChild size="sm" variant="outline"><Link href="/writing/diagnostic">Diagnostic</Link></Button>
+                <Button asChild size="sm" variant="outline"><Link href="/writing/skill-tree">Skill Tree</Link></Button>
+                <Button asChild size="sm" variant="outline"><Link href="/writing/drills">Drills</Link></Button>
+                <Button asChild size="sm" variant="outline"><Link href="/writing/case-notes-drills">Case Notes</Link></Button>
+                <Button asChild size="sm" variant="outline"><Link href="/writing/exemplars">Exemplars</Link></Button>
+                <Button asChild size="sm" variant="outline"><Link href="/writing/common-mistakes">Mistakes</Link></Button>
+                <Button asChild size="sm" variant="outline"><Link href="/writing/pathway"><Compass className="h-4 w-4" /> Pathway</Link></Button>
+                <Button asChild size="sm" variant="ghost"><Link href="/writing/profile-setup">Profile</Link></Button>
+                <Button asChild size="sm" variant="ghost"><Link href="/writing/stats">Stats</Link></Button>
+              </div>
+            </div>
+            {todayPlan?.items.length ? (
+              <div className="mt-4 grid gap-2 md:grid-cols-2">
+                {todayPlan.items.slice(0, 2).map((item) => (
+                  <Link key={item.id} href="/writing/today" className="rounded-lg border border-border bg-background px-3 py-2 text-sm transition-colors hover:border-primary/40 hover:text-primary">
+                    <span className="font-semibold text-navy">{item.title}</span>
+                    <span className="ml-2 text-xs text-muted">{item.estimatedMinutes} min</span>
+                  </Link>
+                ))}
+              </div>
+            ) : null}
+          </div>
+        </MotionSection>
+
+        {(readiness || statsDashboard || bands?.history?.length) ? (
+          <MotionSection>
+            <div className="grid gap-4 lg:grid-cols-3">
+              {readiness ? (
+                <ReadinessWidget
+                  score={readiness.score}
+                  subScores={readiness.subScores}
+                  deltaVsLastWeek={readiness.deltaVsLastWeek}
+                  predictedBand={readiness.predictedBand}
+                />
+              ) : null}
+              <div className="lg:col-span-2 rounded-2xl border border-border bg-surface p-4 shadow-sm">
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <h2 className="text-sm font-bold text-navy">Band trend</h2>
+                  {statsDashboard ? (
+                    <span className="flex items-center gap-2 text-xs text-muted">
+                      <Badge variant="info" size="sm">Streak {statsDashboard.streakDays}d</Badge>
+                      {statsDashboard.latestBand ? <Badge variant="success" size="sm">Latest {statsDashboard.latestBand}</Badge> : null}
+                    </span>
+                  ) : null}
+                </div>
+                <BandHistoryChart
+                  data={(bands?.history ?? []).map((p) => ({
+                    date: p.date,
+                    rawTotal: p.rawTotal,
+                    estimatedBand: p.estimatedBand,
+                    letterType: p.letterType,
+                    isRevision: p.isRevision,
+                  }))}
+                  targetBand={bands?.targetBand ?? undefined}
+                />
+              </div>
+            </div>
+          </MotionSection>
+        ) : null}
 
         <MotionSection>
           <div className="rounded-2xl border border-border bg-surface p-4 shadow-sm">

@@ -21,7 +21,7 @@ const SkillRadarChartInner = dynamic(
   {
     ssr: false,
     loading: () => (
-      <div className="flex h-64 items-center justify-center text-sm text-muted">
+      <div className="flex h-64 items-center justify-center text-sm text-gray-600 dark:text-gray-400">
         Loading chart...
       </div>
     ),

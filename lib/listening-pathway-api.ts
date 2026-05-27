@@ -267,6 +267,35 @@ export interface StageInfo {
   daysUntilExam?: number;
 }
 
+/**
+ * One row of the Listening daily plan (§8.1 / §10). The backend caps the
+ * plan at 4 items per learner per day to keep cognitive load manageable.
+ */
+export interface DailyPlanItem {
+  id: string;
+  /** Backend `PlanDate` — emitted as `yyyy-MM-dd`. */
+  planDate: string;
+  ordinal: number;
+  /**
+   * One of: drill | accent_drill | dictation | pronunciation_review |
+   * wrong_review | lesson | mock | strategy_read.
+   */
+  itemType: string;
+  /** L1..L8 sub-skill code for drill-style items, else null. */
+  focusSkill: string | null;
+  /** Canonical accent code (british / australian / us / non_native) for
+   * accent-drill items, else null. */
+  focusAccent: string | null;
+  estimatedMinutes: number;
+  /** Item-type-specific payload — e.g. `{ questionIds: string[] }` for
+   * drills, `{ cardIds: string[] }` for pronunciation reviews. */
+  payload: Record<string, unknown>;
+  /** pending | in_progress | completed | skipped. */
+  status: string;
+  startedAt: string | null;
+  completedAt: string | null;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // HTTP helper — mirrors Reading's `api<T>` so tests can stub the same hooks.
 // ─────────────────────────────────────────────────────────────────────────────
@@ -864,6 +893,392 @@ export async function getAccentProgress(): Promise<AccentProgress[]> {
   const raw = await api<unknown>('/v1/listening-pathway/accents/progress');
   const list = Array.isArray(raw) ? raw : pickArray(asRecord(raw), 'accents', 'items');
   return list.map(normalizeAccentProgress);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Daily plan engine (Phase 3 §8 / §10)
+//
+// Backend service: IListeningDailyPlanService
+// (Services/Listening/ListeningDailyPlanService.cs). Endpoints live under
+// /v1/listening-pathway/plan. The list endpoint generates today's items on
+// first touch — so the dashboard can simply call `getTodayPlan()` and trust
+// it to return the canonical plan.
+// ─────────────────────────────────────────────────────────────────────────────
+
+function normalizeDailyPlanItem(raw: unknown): DailyPlanItem {
+  const record = asRecord(raw);
+  const rawPayload = pick(record, 'payload', 'payloadJson');
+  let payload: Record<string, unknown>;
+  if (rawPayload && typeof rawPayload === 'object') {
+    payload = rawPayload as Record<string, unknown>;
+  } else if (typeof rawPayload === 'string') {
+    try {
+      const parsed = JSON.parse(rawPayload) as unknown;
+      payload = parsed && typeof parsed === 'object'
+        ? (parsed as Record<string, unknown>)
+        : {};
+    } catch {
+      payload = {};
+    }
+  } else {
+    payload = {};
+  }
+
+  return {
+    id: pickString(record, 'id'),
+    planDate: pickString(record, 'planDate'),
+    ordinal: pickNumber(record, 0, 'ordinal'),
+    itemType: pickString(record, 'itemType'),
+    focusSkill: pickOptionalString(record, 'focusSkill'),
+    focusAccent: pickOptionalString(record, 'focusAccent'),
+    estimatedMinutes: pickNumber(record, 0, 'estimatedMinutes'),
+    payload,
+    status: pickString(record, 'status') || 'pending',
+    startedAt: parseDateField(record, 'startedAt'),
+    completedAt: parseDateField(record, 'completedAt'),
+  };
+}
+
+/**
+ * Fetch today's Listening daily plan. The backend generates items on first
+ * touch when today's plan is empty, so the dashboard can call this once on
+ * mount without explicitly generating.
+ */
+export async function getTodayPlan(): Promise<DailyPlanItem[]> {
+  const raw = await api<unknown>('/v1/listening-pathway/plan/today');
+  const list = Array.isArray(raw) ? raw : pickArray(asRecord(raw), 'items', 'plan');
+  return list.map(normalizeDailyPlanItem);
+}
+
+/**
+ * Transition a plan item to `in_progress` and stamp `startedAt`. The backend
+ * returns the updated item.
+ */
+export async function startPlanItem(id: string): Promise<DailyPlanItem> {
+  const raw = await api<unknown>(
+    `/v1/listening-pathway/plan/items/${encodeURIComponent(id)}/start`,
+    { method: 'POST' },
+  );
+  return normalizeDailyPlanItem(raw);
+}
+
+/**
+ * Transition a plan item to `completed`. The backend stamps `completedAt`.
+ */
+export async function completePlanItem(id: string): Promise<DailyPlanItem> {
+  const raw = await api<unknown>(
+    `/v1/listening-pathway/plan/items/${encodeURIComponent(id)}/complete`,
+    { method: 'POST' },
+  );
+  return normalizeDailyPlanItem(raw);
+}
+
+/**
+ * Skip a plan item with an optional reason. The reason is embedded in the
+ * item's payload JSON for analytics; pass `undefined` for the default
+ * `"user_skip"` marker.
+ */
+export async function skipPlanItem(
+  id: string,
+  reason?: string,
+): Promise<DailyPlanItem> {
+  const raw = await api<unknown>(
+    `/v1/listening-pathway/plan/items/${encodeURIComponent(id)}/skip`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ reason: reason ?? null }),
+    },
+  );
+  return normalizeDailyPlanItem(raw);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Pronunciation library (SM-2 spaced repetition) — Phase 4 §15
+//
+// Backend service: IPronunciationService (Services/Listening/PronunciationService.cs).
+// Endpoints live under /v1/listening-pathway/pronunciation.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Per-learner pronunciation card joined to its master row. Mirrors backend
+ * `PronunciationCardDto`. The `id` is the LearnerPronunciationCard row id —
+ * pass this to `submitPronunciationReview` / `removePronunciationCard`.
+ */
+export interface PronunciationCardDto {
+  id: string;
+  pronunciationCardId: string;
+  word: string;
+  pronunciationIpa: string;
+  audioBritishUrl: string | null;
+  audioAustralianUrl: string | null;
+  definitionEn: string;
+  easiness: number;
+  intervalDays: number;
+  repetitions: number;
+  retentionScore: number;
+  nextReviewAt: string;
+  lastReviewedAt: string | null;
+  addedAt: string;
+}
+
+/** Aggregate retention counters for the learner's deck. */
+export interface PronunciationStatsDto {
+  total: number;
+  mastered: number;
+  learning: number;
+  struggling: number;
+  dueToday: number;
+}
+
+/** Result returned by `submitPronunciationReview` after an SM-2 update. */
+export interface PronunciationReviewResult {
+  cardId: string;
+  intervalDays: number;
+  nextReviewAt: string;
+  retentionScore: number;
+}
+
+function normalizePronunciationCard(raw: unknown): PronunciationCardDto {
+  const record = asRecord(raw);
+  return {
+    id: pickString(record, 'id'),
+    pronunciationCardId: pickString(record, 'pronunciationCardId'),
+    word: pickString(record, 'word'),
+    pronunciationIpa: pickString(record, 'pronunciationIpa'),
+    audioBritishUrl: pickOptionalString(record, 'audioBritishUrl'),
+    audioAustralianUrl: pickOptionalString(record, 'audioAustralianUrl'),
+    definitionEn: pickString(record, 'definitionEn'),
+    easiness: pickNumber(record, 2.5, 'easiness'),
+    intervalDays: pickNumber(record, 1, 'intervalDays'),
+    repetitions: pickNumber(record, 0, 'repetitions'),
+    retentionScore: pickNumber(record, 0, 'retentionScore'),
+    nextReviewAt: parseDateField(record, 'nextReviewAt') ?? '',
+    lastReviewedAt: parseDateField(record, 'lastReviewedAt'),
+    addedAt: parseDateField(record, 'addedAt') ?? '',
+  };
+}
+
+function normalizePronunciationStats(raw: unknown): PronunciationStatsDto {
+  const record = asRecord(raw);
+  return {
+    total: pickNumber(record, 0, 'total'),
+    mastered: pickNumber(record, 0, 'mastered'),
+    learning: pickNumber(record, 0, 'learning'),
+    struggling: pickNumber(record, 0, 'struggling'),
+    dueToday: pickNumber(record, 0, 'dueToday'),
+  };
+}
+
+function normalizePronunciationReviewResult(raw: unknown): PronunciationReviewResult {
+  const record = asRecord(raw);
+  return {
+    cardId: pickString(record, 'cardId'),
+    intervalDays: pickNumber(record, 1, 'intervalDays'),
+    nextReviewAt: parseDateField(record, 'nextReviewAt') ?? '',
+    retentionScore: pickNumber(record, 0, 'retentionScore'),
+  };
+}
+
+/** List every pronunciation card the learner has subscribed to. */
+export async function getPronunciationCards(): Promise<PronunciationCardDto[]> {
+  const raw = await api<unknown>('/v1/listening-pathway/pronunciation');
+  const list = Array.isArray(raw) ? raw : pickArray(asRecord(raw), 'cards', 'items');
+  return list.map(normalizePronunciationCard);
+}
+
+/**
+ * Add a word to the learner's pronunciation deck. Idempotent — re-adding an
+ * existing word returns the existing subscription rather than creating a
+ * duplicate.
+ */
+export async function addPronunciationCard(
+  word: string,
+  source?: string,
+): Promise<PronunciationCardDto> {
+  const raw = await api<unknown>('/v1/listening-pathway/pronunciation', {
+    method: 'POST',
+    body: JSON.stringify({ word, source: source ?? 'manual' }),
+  });
+  return normalizePronunciationCard(raw);
+}
+
+/**
+ * Fetch up to `max` (default 25) pronunciation cards that are due for review
+ * today (NextReviewAt &le; now).
+ */
+export async function getDueForReview(max?: number): Promise<PronunciationCardDto[]> {
+  const params = max && max > 0 ? `?max=${encodeURIComponent(max)}` : '';
+  const raw = await api<unknown>(`/v1/listening-pathway/pronunciation/due${params}`);
+  const list = Array.isArray(raw) ? raw : pickArray(asRecord(raw), 'cards', 'items');
+  return list.map(normalizePronunciationCard);
+}
+
+/**
+ * Submit an SM-2 quality rating for a card. Quality scale:
+ *   0 = didn't catch | 3 = hard | 4 = got it | 5 = easy.
+ */
+export async function submitPronunciationReview(
+  cardId: string,
+  quality: number,
+): Promise<PronunciationReviewResult> {
+  const raw = await api<unknown>(
+    `/v1/listening-pathway/pronunciation/${encodeURIComponent(cardId)}/review`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ quality }),
+    },
+  );
+  return normalizePronunciationReviewResult(raw);
+}
+
+/** Delete the learner's subscription to a pronunciation card. */
+export async function removePronunciationCard(cardId: string): Promise<void> {
+  await api<void>(`/v1/listening-pathway/pronunciation/${encodeURIComponent(cardId)}`, {
+    method: 'DELETE',
+  });
+}
+
+/** Fetch aggregate stats for the learner's pronunciation deck. */
+export async function getPronunciationStats(): Promise<PronunciationStatsDto> {
+  const raw = await api<unknown>('/v1/listening-pathway/pronunciation/stats');
+  return normalizePronunciationStats(raw);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Dictation drills (Phase 4 — OET_LISTENING_MODULE_PATHWAY.md §14).
+//
+// Three RPC-style endpoints:
+//   • POST /v1/listening-pathway/dictation/sessions  — start a drill set
+//   • POST /v1/listening-pathway/dictation/{id}/submit
+//   • GET  /v1/listening-pathway/dictation/stats
+//
+// All three are LearnerOnly. Backend grades the answer with healthcare-spelling
+// tolerance (typo within Levenshtein 1 → IsCorrect=false, OffByOneTypo=true).
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Lightweight per-drill projection used to render the dictation player.
+ * Backend never leaks the transcript from this endpoint — the transcript is
+ * only revealed via the {@link DictationResult} after submission.
+ */
+export interface DictationDrillDto {
+  id: string;
+  /** single_term | short_phrase | full_sentence | mini_consultation */
+  drillType: string;
+  /** Short-lived signed playback URL (or null if audio is missing). */
+  audioAssetUrl: string | null;
+  durationSeconds: number;
+  /** "en-GB" | "en-AU" | "en-US" | "en-XX" */
+  accent: string;
+  /** 1..5 difficulty band. */
+  difficulty: number;
+}
+
+/**
+ * Per-attempt grading envelope returned after submitting a single drill answer.
+ * `correctAnswer` is always populated so the UI can render a diff regardless
+ * of the outcome.
+ */
+export interface DictationResult {
+  drillId: string;
+  isCorrect: boolean;
+  /** True when the learner's answer was within Levenshtein 1 of canonical or a variant. */
+  offByOneTypo: boolean;
+  /** Canonical transcript text — surfaced so the UI can compare side-by-side. */
+  correctAnswer: string;
+  learnerAnswer: string;
+  /** Next scheduled review (ISO). Null when the drill has just been scheduled. */
+  nextReviewAt: string | null;
+}
+
+/**
+ * Aggregate dictation progress for the dashboard header. `accuracyPercentage`
+ * is a 0..100 decimal already rounded server-side.
+ */
+export interface DictationStats {
+  totalAttempted: number;
+  /** Answered correctly at least twice (rolling-correct streak). */
+  mastered: number;
+  /** Attempted more than twice without ever getting it right. */
+  struggling: number;
+  accuracyPercentage: number;
+}
+
+function normalizeDictationDrill(raw: unknown): DictationDrillDto {
+  const record = asRecord(raw);
+  return {
+    id: pickString(record, 'id'),
+    drillType: pickString(record, 'drillType'),
+    audioAssetUrl: pickOptionalString(record, 'audioAssetUrl'),
+    durationSeconds: pickNumber(record, 0, 'durationSeconds'),
+    accent: pickString(record, 'accent'),
+    difficulty: pickNumber(record, 1, 'difficulty'),
+  };
+}
+
+function normalizeDictationResult(raw: unknown, fallbackId: string): DictationResult {
+  const record = asRecord(raw);
+  return {
+    drillId: pickString(record, 'drillId') || fallbackId,
+    isCorrect: pickBoolean(record, 'isCorrect'),
+    offByOneTypo: pickBoolean(record, 'offByOneTypo'),
+    correctAnswer: pickString(record, 'correctAnswer'),
+    learnerAnswer: pickString(record, 'learnerAnswer'),
+    nextReviewAt: parseDateField(record, 'nextReviewAt'),
+  };
+}
+
+function normalizeDictationStats(raw: unknown): DictationStats {
+  const record = asRecord(raw);
+  return {
+    totalAttempted: pickNumber(record, 0, 'totalAttempted'),
+    mastered: pickNumber(record, 0, 'mastered'),
+    struggling: pickNumber(record, 0, 'struggling'),
+    accuracyPercentage: pickNumber(record, 0, 'accuracyPercentage'),
+  };
+}
+
+/**
+ * Start a dictation drill set. Backend mixes due review items with fresh
+ * drills the learner has not yet attempted and varies the difficulty
+ * distribution. Default target is 8 drills per set.
+ */
+export async function startDictationSession(targetCount = 8): Promise<DictationDrillDto[]> {
+  const raw = await api<unknown>('/v1/listening-pathway/dictation/sessions', {
+    method: 'POST',
+    body: JSON.stringify({ targetCount }),
+  });
+  const list = Array.isArray(raw) ? raw : pickArray(asRecord(raw), 'drills', 'items');
+  return list.map(normalizeDictationDrill);
+}
+
+/**
+ * Submit a transcription for a single dictation drill. Backend grades with
+ * healthcare-spelling tolerance — a Levenshtein-1 typo returns
+ * `isCorrect=false, offByOneTypo=true` so the UI can prompt "Did you mean…?"
+ * rather than penalise a minor slip.
+ */
+export async function submitDictationAnswer(
+  drillId: string,
+  learnerAnswer: string,
+): Promise<DictationResult> {
+  const raw = await api<unknown>(
+    `/v1/listening-pathway/dictation/${encodeURIComponent(drillId)}/submit`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ learnerAnswer }),
+    },
+  );
+  return normalizeDictationResult(raw, drillId);
+}
+
+/**
+ * Fetch aggregate dictation stats for the dashboard header (Mastered,
+ * Struggling, Accuracy).
+ */
+export async function getDictationStats(): Promise<DictationStats> {
+  const raw = await api<unknown>('/v1/listening-pathway/dictation/stats');
+  return normalizeDictationStats(raw);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

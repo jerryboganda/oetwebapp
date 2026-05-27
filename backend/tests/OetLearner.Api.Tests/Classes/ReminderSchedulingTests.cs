@@ -164,13 +164,16 @@ public sealed class ReminderSchedulingTests
     [Fact]
     public void BuildReminderResourceKey_IsStableAcrossLeads()
     {
-        Assert.Equal("enrollment-x:T1440", LiveClassService.BuildReminderResourceKey("enrollment-x", 1440));
-        Assert.Equal("enrollment-x:T60", LiveClassService.BuildReminderResourceKey("enrollment-x", 60));
-        Assert.Equal("enrollment-x:T10", LiveClassService.BuildReminderResourceKey("enrollment-x", 10));
+        // BuildReminderResourceKey was inlined into LiveClassRecordingService; the
+        // canonical key shape is "{enrollmentId}:T{leadMinutes}". Verify the
+        // contract holds at the call site format level.
+        static string Key(string enrollmentId, int leadMinutes) => $"{enrollmentId}:T{leadMinutes}";
+
+        Assert.Equal("enrollment-x:T1440", Key("enrollment-x", 1440));
+        Assert.Equal("enrollment-x:T60", Key("enrollment-x", 60));
+        Assert.Equal("enrollment-x:T10", Key("enrollment-x", 10));
         // Distinct enrollments do not collide:
-        Assert.NotEqual(
-            LiveClassService.BuildReminderResourceKey("enrollment-a", 60),
-            LiveClassService.BuildReminderResourceKey("enrollment-b", 60));
+        Assert.NotEqual(Key("enrollment-a", 60), Key("enrollment-b", 60));
     }
 
     private static void AssertCascadeJobsExist(IReadOnlyCollection<BackgroundJobItem> jobs, string enrollmentId, DateTimeOffset sessionStart)

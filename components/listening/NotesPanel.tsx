@@ -92,8 +92,8 @@ export function NotesPanel({
         spellCheck={false}
         className={[
           'w-full resize-y rounded-lg border border-border bg-background-light px-3 py-2',
-          'font-mono text-sm leading-relaxed text-navy dark:bg-background-dark dark:text-slate-100',
-          'placeholder:text-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary',
+          'font-mono text-sm leading-relaxed text-gray-900 dark:bg-background-dark dark:text-slate-100',
+          'placeholder:text-gray-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary',
           'disabled:cursor-not-allowed disabled:opacity-60',
         ].join(' ')}
         aria-describedby={`notes-status-${questionId ?? sessionId}`}
@@ -102,10 +102,10 @@ export function NotesPanel({
         id={`notes-status-${questionId ?? sessionId}`}
         className="flex flex-wrap items-center justify-between gap-2 text-[11px]"
       >
-        <span className={overLimit ? 'text-danger font-medium' : 'text-muted'}>
+        <span className={overLimit ? 'text-danger font-medium' : 'text-gray-600 dark:text-gray-400'}>
           {charCount} / {maxLength} characters
         </span>
-        <span className="inline-flex items-center gap-1 text-muted">
+        <span className="inline-flex items-center gap-1 text-gray-600 dark:text-gray-400">
           {error ? (
             <>
               <AlertTriangle aria-hidden="true" className="h-3 w-3 text-warning" />

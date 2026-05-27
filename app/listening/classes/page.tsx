@@ -189,14 +189,14 @@ function AnalyticsPanel({
     <div className="mt-3 space-y-3">
       <div className="grid grid-cols-2 gap-3">
         <div className="rounded-xl bg-background-light p-3">
-          <p className="text-xs font-semibold uppercase tracking-wider text-muted">
+          <p className="text-xs font-semibold uppercase tracking-wider text-gray-600 dark:text-gray-400">
             Attempts (last {analytics.days}d)
           </p>
-          <p className="mt-1 text-2xl font-bold text-navy">{analytics.attemptCount}</p>
+          <p className="mt-1 text-2xl font-bold text-gray-900 dark:text-gray-100">{analytics.attemptCount}</p>
         </div>
         <div className="rounded-xl bg-background-light p-3">
-          <p className="text-xs font-semibold uppercase tracking-wider text-muted">Avg Score</p>
-          <p className="mt-1 text-2xl font-bold text-navy">
+          <p className="text-xs font-semibold uppercase tracking-wider text-gray-600 dark:text-gray-400">Avg Score</p>
+          <p className="mt-1 text-2xl font-bold text-gray-900 dark:text-gray-100">
             {analytics.averageScore !== null && analytics.averageScore !== undefined
               ? analytics.averageScore.toFixed(1)
               : '—'}
@@ -206,20 +206,20 @@ function AnalyticsPanel({
 
       {analytics.learners && analytics.learners.length > 0 && (
         <div>
-          <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted">
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-600 dark:text-gray-400">
             Per-learner breakdown
           </p>
           <div className="overflow-x-auto rounded-xl border border-border">
             <table className="w-full min-w-[360px] text-left text-sm">
               <thead>
                 <tr className="border-b border-border bg-background-light">
-                  <th className="py-2 pl-3 pr-3 text-xs font-semibold uppercase tracking-wider text-muted">
+                  <th className="py-2 pl-3 pr-3 text-xs font-semibold uppercase tracking-wider text-gray-600 dark:text-gray-400">
                     Learner
                   </th>
-                  <th className="py-2 pr-3 text-xs font-semibold uppercase tracking-wider text-muted">
+                  <th className="py-2 pr-3 text-xs font-semibold uppercase tracking-wider text-gray-600 dark:text-gray-400">
                     Attempts
                   </th>
-                  <th className="py-2 pr-3 text-xs font-semibold uppercase tracking-wider text-muted">
+                  <th className="py-2 pr-3 text-xs font-semibold uppercase tracking-wider text-gray-600 dark:text-gray-400">
                     Avg Score
                   </th>
                 </tr>
@@ -227,11 +227,11 @@ function AnalyticsPanel({
               <tbody>
                 {analytics.learners.map((l) => (
                   <tr key={l.userId} className="border-b border-border last:border-0">
-                    <td className="py-2 pl-3 pr-3 text-sm text-navy">
-                      {l.displayName ?? <em className="text-muted">Anonymous</em>}
+                    <td className="py-2 pl-3 pr-3 text-sm text-gray-900 dark:text-gray-100">
+                      {l.displayName ?? <em className="text-gray-600 dark:text-gray-400">Anonymous</em>}
                     </td>
-                    <td className="py-2 pr-3 text-sm text-navy">{l.attemptCount}</td>
-                    <td className="py-2 pr-3 text-sm text-navy">
+                    <td className="py-2 pr-3 text-sm text-gray-900 dark:text-gray-100">{l.attemptCount}</td>
+                    <td className="py-2 pr-3 text-sm text-gray-900 dark:text-gray-100">
                       {l.averageScore !== null && l.averageScore !== undefined
                         ? l.averageScore.toFixed(1)
                         : '—'}
@@ -286,7 +286,7 @@ function ClassCard({ cls }: ClassCardProps) {
           <div className="space-y-1">
             <CardTitle>{cls.name}</CardTitle>
             {cls.description && (
-              <p className="text-sm text-muted">{cls.description}</p>
+              <p className="text-sm text-gray-600 dark:text-gray-400">{cls.description}</p>
             )}
           </div>
           {cls.memberCount !== undefined && (
@@ -393,8 +393,8 @@ export default function ListeningTeacherClassesPage() {
         {/* Header */}
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h1 className="text-2xl font-bold text-navy">Teacher Class Analytics</h1>
-            <p className="mt-1 text-sm text-muted">
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Teacher Class Analytics</h1>
+            <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
               View class progress and learner breakdowns.
             </p>
           </div>
@@ -433,9 +433,9 @@ export default function ListeningTeacherClassesPage() {
           <Card>
             <CardContent>
               <div className="py-8 text-center">
-                <Users className="mx-auto mb-3 h-10 w-10 text-muted" />
-                <p className="font-semibold text-navy">No classes yet</p>
-                <p className="mt-1 text-sm text-muted">
+                <Users className="mx-auto mb-3 h-10 w-10 text-gray-600 dark:text-gray-400" />
+                <p className="font-semibold text-gray-900 dark:text-gray-100">No classes yet</p>
+                <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
                   Create your first class to start tracking learner progress.
                 </p>
                 <Button

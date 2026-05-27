@@ -84,7 +84,7 @@ function ProgressDots({ total, current, answered, marked, questionIds, onJump }:
 function PassagePanel({ passage }: { passage: ReadingPassageDto | null }) {
   if (!passage) {
     return (
-      <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+      <div className="flex h-full items-center justify-center text-sm text-gray-600 dark:text-gray-400-foreground">
         No passage for this question.
       </div>
     );
@@ -94,7 +94,7 @@ function PassagePanel({ passage }: { passage: ReadingPassageDto | null }) {
     <div className="flex h-full flex-col">
       {/* Floating annotation toolbar */}
       <div className="mb-3 flex items-center gap-1 rounded-lg border border-border bg-surface px-3 py-2 shadow-sm">
-        <span className="mr-2 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Annotate</span>
+        <span className="mr-2 text-xs font-semibold text-gray-600 dark:text-gray-400-foreground uppercase tracking-wide">Annotate</span>
         <button
           type="button"
           title="Highlight"
@@ -125,7 +125,7 @@ function PassagePanel({ passage }: { passage: ReadingPassageDto | null }) {
         </button>
       </div>
 
-      <div className="mb-2 text-sm font-semibold text-navy dark:text-white">{passage.title}</div>
+      <div className="mb-2 text-sm font-semibold text-gray-900 dark:text-white">{passage.title}</div>
       <div
         className="prose prose-sm max-w-none flex-1 overflow-y-auto rounded-lg border border-border bg-white p-4 text-sm leading-relaxed text-foreground dark:bg-slate-900 dark:text-slate-200"
         dangerouslySetInnerHTML={{ __html: sanitizeBodyHtml(passage.bodyHtml) }}
@@ -176,7 +176,7 @@ function QuestionPanel({
     <div className="flex h-full flex-col gap-4 overflow-y-auto">
       {/* Q counter */}
       <div className="flex items-center justify-between">
-        <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+        <span className="text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-gray-400-foreground">
           Q{currentIndex + 1} of {total}
         </span>
         <button
@@ -187,7 +187,7 @@ function QuestionPanel({
             'flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors',
             isMarked
               ? 'border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-600 dark:bg-amber-900/30 dark:text-amber-400'
-              : 'border-border text-muted-foreground hover:border-amber-300 hover:bg-amber-50',
+              : 'border-border text-gray-600 dark:text-gray-400-foreground hover:border-amber-300 hover:bg-amber-50',
           )}
         >
           <Pin className="h-3 w-3" aria-hidden />
@@ -243,7 +243,7 @@ function QuestionPanel({
         <button
           type="button"
           onClick={() => onSelect(question.id, '__unknown__')}
-          className="self-start rounded-lg border border-border px-3 py-2 text-xs text-muted-foreground hover:bg-surface"
+          className="self-start rounded-lg border border-border px-3 py-2 text-xs text-gray-600 dark:text-gray-400-foreground hover:bg-surface"
         >
           I don&apos;t know
         </button>
@@ -313,7 +313,7 @@ function TimerDisplay({
           {fmt(remaining)}
         </span>
       ) : (
-        <span className="font-mono text-muted-foreground tabular-nums">{fmt(elapsed)}</span>
+        <span className="font-mono text-gray-600 dark:text-gray-400-foreground tabular-nums">{fmt(elapsed)}</span>
       )}
     </div>
   );
@@ -335,7 +335,7 @@ function MobileTabBar({ active, onChange }: { active: MobileTab; onChange: (t: M
             'flex-1 py-3 text-xs font-semibold uppercase tracking-wider transition-colors',
             active === tab
               ? 'border-b-2 border-primary text-primary'
-              : 'text-muted-foreground hover:text-foreground',
+              : 'text-gray-600 dark:text-gray-400-foreground hover:text-foreground',
           )}
         >
           {tab}
@@ -461,7 +461,7 @@ export default function ReadingPlayer({
 
   if (!currentQuestion) {
     return (
-      <div className="flex h-64 items-center justify-center text-muted-foreground">
+      <div className="flex h-64 items-center justify-center text-gray-600 dark:text-gray-400-foreground">
         No questions available.
       </div>
     );

@@ -11,6 +11,7 @@ public static class TargetCountryOptions
         "Australia",
         "New Zealand",
         "Canada",
+        "Qatar",
         "Gulf Countries",
         "Other Countries",
     };
@@ -25,10 +26,25 @@ public static class TargetCountryOptions
         var trimmed = value.Trim();
         var match = OptionValues.FirstOrDefault(option =>
             string.Equals(option, trimmed, StringComparison.OrdinalIgnoreCase));
-        if (match is null) return false;
+        if (match is not null)
+        {
+            canonical = match;
+            return true;
+        }
 
-        canonical = match;
-        return true;
+        var writingCode = OetScoring.NormalizeWritingCountry(trimmed);
+        canonical = writingCode switch
+        {
+            "GB" => "United Kingdom",
+            "IE" => "Ireland",
+            "AU" => "Australia",
+            "NZ" => "New Zealand",
+            "CA" => "Canada",
+            "US" => "USA",
+            "QA" => "Qatar",
+            _ => string.Empty,
+        };
+        return canonical.Length > 0;
     }
 
     public static bool Contains(string? value) => TryCanonicalize(value, out _);

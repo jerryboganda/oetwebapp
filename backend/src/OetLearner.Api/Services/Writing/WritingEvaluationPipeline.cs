@@ -98,6 +98,13 @@ public sealed class WritingEvaluationPipeline(
         // Candidate target country for the country-aware Writing pass mark
         // (UK/IE/AU/NZ/CA → 350, US/QA → 300). Read the latest LearnerGoal
         // submission for this user. SQLite-friendly: simple Where + ToList.
+        var profileCountry = string.IsNullOrWhiteSpace(attempt.UserId)
+            ? null
+            : await db.Set<LearnerWritingProfile>()
+                .Where(p => p.UserId == attempt.UserId)
+                .OrderByDescending(p => p.UpdatedAt)
+                .Select(p => p.TargetCountry)
+                .FirstOrDefaultAsync(cancellationToken);
         var goalCountry = string.IsNullOrWhiteSpace(attempt.UserId)
             ? null
             : (await db.Set<LearnerGoal>()
@@ -106,7 +113,7 @@ public sealed class WritingEvaluationPipeline(
                 .OrderByDescending(g => g.UpdatedAt)
                 .Select(g => g.TargetCountry)
                 .FirstOrDefault(c => !string.IsNullOrWhiteSpace(c));
-        var candidateCountry = goalCountry;
+        var candidateCountry = !string.IsNullOrWhiteSpace(profileCountry) ? profileCountry : goalCountry;
 
         // 1. Deterministic rule-engine pre-run.
         IReadOnlyList<LintFinding> ruleFindings;

@@ -1,6 +1,8 @@
 services:
   postgres:
-    image: postgres:17-alpine
+    # See docker-compose.local.yml — pgvector/pgvector:pg17 ships the `vector`
+    # extension that the Writing V2 migration 20260612120000 enables.
+    image: pgvector/pgvector:pg17
     container_name: oet-desktop-postgres
     restart: unless-stopped
     environment:

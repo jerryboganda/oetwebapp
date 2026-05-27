@@ -141,7 +141,13 @@ x-web-slot: &web-slot
 
 services:
   postgres:
-    image: postgres:17-alpine
+    # See docker-compose.local.yml — pgvector/pgvector:pg17 ships the `vector`
+    # extension required by Writing V2 migration 20260612120000.
+    # NOTE for managed-Postgres deploys (DigitalOcean, AWS RDS, etc.): enable
+    # the pgvector extension flag in the provider control panel before the
+    # next migration cycle, or migration 20260612120000 will fail with
+    # `extension "vector" is not available`.
+    image: pgvector/pgvector:pg17
     container_name: oet-postgres
     restart: unless-stopped
     command:

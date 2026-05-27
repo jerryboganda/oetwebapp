@@ -1,128 +1,81 @@
-import type { Metadata } from 'next';
+'use client';
+
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { ListChecks, MessageSquareQuote, ArrowDownUp, FileText, Sparkles, Hash } from 'lucide-react';
-import { Card, CardContent } from '@/components/ui/card';
+import { useSearchParams } from 'next/navigation';
+import { ArrowDownUp, Dumbbell, FileText, Hash, ListChecks, MessageSquareQuote, Repeat2, Sparkles, Target } from 'lucide-react';
+import { LearnerDashboardShell } from '@/components/layout/learner-dashboard-shell';
+import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { LearnerDashboardShell } from '@/components/layout';
-import { listDrills } from '@/lib/writing-drills/loader';
-import type { DrillType } from '@/lib/writing-drills/types';
+import { InlineAlert } from '@/components/ui/alert';
+import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain/learner-surface';
+import { getWritingDrills, type WritingDrillSummaryDto, writingSkillLabels } from '@/lib/writing-pathway-api';
 
-export const metadata: Metadata = {
-  title: 'Writing Drills',
-  description:
-    'Build the underlying writing skills tested by OET — content selection, opening purpose, paragraph order, sentence expansion, formal tone, and abbreviations.',
-};
-
-interface DrillCategory {
-  type: DrillType;
-  title: string;
-  description: string;
-  Icon: typeof ListChecks;
-  accent: string;
-}
-
-const CATEGORIES: DrillCategory[] = [
-  {
-    type: 'relevance',
-    title: 'Case-note selection',
-    description: 'Decide which case notes the recipient actually needs.',
-    Icon: ListChecks,
-    accent: 'bg-emerald-50 text-emerald-700',
-  },
-  {
-    type: 'opening',
-    title: 'Opening paragraphs',
-    description: 'Choose the strongest purpose-first opening sentence.',
-    Icon: MessageSquareQuote,
-    accent: 'bg-blue-50 text-blue-700',
-  },
-  {
-    type: 'ordering',
-    title: 'Paragraph ordering',
-    description: 'Sequence paragraphs the way the reader needs them.',
-    Icon: ArrowDownUp,
-    accent: 'bg-violet-50 text-violet-700',
-  },
-  {
-    type: 'expansion',
-    title: 'Sentence expansion',
-    description: 'Convert note-form lines into complete clinical sentences.',
-    Icon: FileText,
-    accent: 'bg-amber-50 text-amber-800',
-  },
-  {
-    type: 'tone',
-    title: 'Formal tone',
-    description: 'Lift casual phrasing into a professional clinical register.',
-    Icon: Sparkles,
-    accent: 'bg-rose-50 text-rose-700',
-  },
-  {
-    type: 'abbreviation',
-    title: 'Abbreviations',
-    description: 'Decide when to expand and when to keep abbreviations.',
-    Icon: Hash,
-    accent: 'bg-muted text-foreground',
-  },
+const categories = [
+  { type: 'relevance', title: 'Case-note selection', icon: ListChecks },
+  { type: 'opening', title: 'Opening paragraphs', icon: MessageSquareQuote },
+  { type: 'ordering', title: 'Paragraph ordering', icon: ArrowDownUp },
+  { type: 'expansion', title: 'Sentence expansion', icon: FileText },
+  { type: 'tone', title: 'Formal tone', icon: Sparkles },
+  { type: 'abbreviation', title: 'Abbreviations', icon: Hash },
 ];
 
-export default function WritingDrillsIndexPage() {
-  const all = listDrills();
-  const countByType = new Map<DrillType, number>();
-  for (const d of all) countByType.set(d.type, (countByType.get(d.type) ?? 0) + 1);
+export default function WritingDrillsPage() {
+  const searchParams = useSearchParams();
+  const skill = searchParams?.get('skill') ?? undefined;
+  const [drills, setDrills] = useState<WritingDrillSummaryDto[]>([]);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    getWritingDrills(skill).then(setDrills).catch(() => setError('Could not load Writing drills.'));
+  }, [skill]);
 
   return (
     <LearnerDashboardShell pageTitle="Writing Drills">
-      <header className="bg-navy text-white pt-10 pb-12 px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center gap-3 mb-2">
-          <div className="w-10 h-10 rounded-lg bg-white/10 flex items-center justify-center">
-            <ListChecks className="w-5 h-5 text-info" />
-          </div>
-          <h1 className="text-3xl sm:text-4xl font-bold">Writing Drills</h1>
-        </div>
-        <p className="text-white/70 text-lg max-w-2xl">
-          Bite-sized practice for the underlying skills tested in the OET Writing letter.
-          Drills are graded instantly against authored answer keys — they do not call AI and
-          never substitute for teacher correction.
-        </p>
-      </header>
+      <div className="space-y-8">
+        <LearnerPageHero
+          eyebrow="Writing Practice"
+          icon={Dumbbell}
+          accent="amber"
+          title={skill ? `${skill}: ${writingSkillLabels[skill] ?? 'Targeted drills'}` : 'Targeted Writing drills'}
+          description="Short deterministic drills practise one Writing skill at a time and store attempts separately from exam submissions."
+          highlights={[{ icon: Target, label: 'Available', value: `${drills.length}` }, { icon: Repeat2, label: 'Mode', value: 'Deterministic' }]}
+        />
+        {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
 
-      <main className="-mt-6 relative z-10 px-4 sm:px-6 lg:px-8 pb-16">
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-          {CATEGORIES.map(({ type, title, description, Icon, accent }) => {
-            const count = countByType.get(type) ?? 0;
-            return (
-              <Link
-                key={type}
-                href={`/writing/drills/${type}`}
-                aria-label={`${title} drills — ${count} available`}
-                className="group focus:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded-xl"
-              >
-                <Card className="h-full transition-shadow group-hover:shadow-md">
-                  <CardContent className="p-5 space-y-3">
-                    <div className="flex items-start justify-between gap-3">
-                      <div
-                        className={`inline-flex items-center justify-center w-10 h-10 rounded-lg ${accent}`}
-                      >
-                        <Icon className="w-5 h-5" />
-                      </div>
-                      <Badge variant={count > 0 ? 'info' : 'muted'} size="sm">
-                        {count} drill{count === 1 ? '' : 's'}
-                      </Badge>
-                    </div>
-                    <div>
-                      <h2 className="text-lg font-semibold text-navy group-hover:text-primary transition-colors">
-                        {title}
-                      </h2>
-                      <p className="text-sm text-muted">{description}</p>
-                    </div>
-                  </CardContent>
-                </Card>
-              </Link>
-            );
-          })}
-        </div>
-      </main>
+        <section className="space-y-4">
+          <LearnerSurfaceSectionHeader eyebrow="Categories" title="Authored drill bank" />
+          <div className="grid gap-3 md:grid-cols-3">
+            {categories.map((category) => {
+              const Icon = category.icon;
+              return (
+                <Link key={category.type} href={`/writing/drills/${category.type}`} className="rounded-2xl border border-border bg-surface p-4 shadow-sm transition-colors hover:border-primary/40">
+                  <Icon className="h-5 w-5 text-primary" />
+                  <p className="mt-3 font-bold text-navy">{category.title}</p>
+                </Link>
+              );
+            })}
+          </div>
+        </section>
+
+        <section className="space-y-4">
+          <LearnerSurfaceSectionHeader eyebrow="Pathway Drills" title="Skill-targeted practice queue" />
+          <div className="grid gap-3 md:grid-cols-2">
+            {drills.map((drill) => (
+              <div key={drill.id} className="rounded-2xl border border-border bg-surface p-4 shadow-sm">
+                <div className="flex flex-wrap gap-2">
+                  <Badge variant="info" size="sm">{drill.targetSubSkill}</Badge>
+                  <Badge variant="warning" size="sm">difficulty {drill.difficulty}</Badge>
+                  {drill.attemptCount ? <Badge variant="success" size="sm">{drill.attemptCount} attempts</Badge> : null}
+                </div>
+                <h2 className="mt-3 text-base font-bold text-navy">{drill.title}</h2>
+                <p className="mt-1 text-sm text-muted">{writingSkillLabels[drill.targetSubSkill] ?? drill.targetSubSkill}</p>
+                <Button asChild size="sm" className="mt-4"><Link href={`/writing/drills/practice/${drill.id}`}>Open drill</Link></Button>
+              </div>
+            ))}
+          </div>
+        </section>
+      </div>
     </LearnerDashboardShell>
   );
 }

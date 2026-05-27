@@ -109,6 +109,25 @@ vi.mock('motion/react', () => ({
 	MotionConfig: ({ children }: { children?: ReactNode }) => createElement(Fragment, null, children),
 }));
 
+/* ── next-intl mock ──
+ * The Writing pathway pages call `useTranslations` for chrome strings; jsdom
+ * tests render those pages outside the `NextIntlClientProvider` wrapper that
+ * the real app supplies. Return-the-key behaviour mirrors the production
+ * fallback (`getMessageFallback: ({ key }) => key`) so tests asserting visible
+ * text still match the key string and don't blow up on missing context.
+ */
+vi.mock('next-intl', () => ({
+	useTranslations: () => (key: string, values?: Record<string, unknown>) => {
+		if (!values) return key;
+		// Naive ICU-style interpolation for {var} placeholders so tests asserting
+		// rendered text still get a deterministic string.
+		return key.replace(/\{(\w+)[^}]*\}/g, (_, name: string) =>
+			values[name] === undefined || values[name] === null ? '' : String(values[name]),
+		);
+	},
+	NextIntlClientProvider: ({ children }: { children?: ReactNode }) => createElement(Fragment, null, children),
+}));
+
 if (typeof window !== 'undefined' && !window.matchMedia) {
 	Object.defineProperty(window, 'matchMedia', {
 		writable: true,

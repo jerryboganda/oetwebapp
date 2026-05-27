@@ -71,7 +71,7 @@ export default function ReadingWelcomePage() {
   }
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-gradient-to-b from-violet-50 to-white px-4 py-16">
+    <div className="flex min-h-screen flex-col items-center justify-center bg-gradient-to-b from-violet-50 to-white dark:from-slate-900 dark:to-slate-950 px-4 py-16">
       <div className="w-full max-w-2xl">
         {/* Hero */}
         <div className="mb-10 text-center">

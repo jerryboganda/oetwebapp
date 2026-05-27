@@ -224,6 +224,37 @@ const smokeRuns = [
       projects: ['chromium-admin'],
     }),
   },
+  {
+    label: 'learner: Writing V2 smoke on chromium',
+    args: playwrightArgs({
+      files: [
+        'tests/e2e/writing-v2/onboarding.spec.ts',
+        'tests/e2e/writing-v2/diagnostic.spec.ts',
+        'tests/e2e/writing-v2/canon-library.spec.ts',
+        'tests/e2e/writing-v2/drills.spec.ts',
+        'tests/e2e/writing-v2/stats.spec.ts',
+        'tests/e2e/writing-v2/mocks.spec.ts',
+      ],
+      projects: ['chromium-learner'],
+      workers: 1,
+    }),
+  },
+  {
+    label: 'tutor: Writing V2 queue smoke on chromium',
+    args: playwrightArgs({
+      files: ['tests/e2e/writing-v2/tutor-queue.spec.ts'],
+      projects: ['chromium-expert'],
+      workers: 1,
+    }),
+  },
+  {
+    label: 'admin: Writing V2 canon smoke on chromium',
+    args: playwrightArgs({
+      files: ['tests/e2e/writing-v2/admin-canon.spec.ts'],
+      projects: ['chromium-admin'],
+      workers: 1,
+    }),
+  },
 ];
 
 const fullRuns = [
@@ -269,6 +300,13 @@ const fullRuns = [
       files: ['tests/e2e/shared/accessibility.spec.ts'],
       projects: ['chromium-admin'],
       grep: 'admin content library|admin audit logs|admin user credit',
+    }),
+  },
+  {
+    label: 'accessibility: Writing V2 learner surfaces',
+    args: playwrightArgs({
+      files: ['tests/e2e/writing-v2/a11y.spec.ts'],
+      projects: ['chromium-learner'],
     }),
   },
   {

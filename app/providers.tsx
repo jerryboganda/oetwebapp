@@ -2,6 +2,7 @@
 
 import '@/lib/zod-jitless';
 import { useEffect, type ReactNode } from 'react';
+import { NextIntlClientProvider } from 'next-intl';
 import { ThemeProvider } from '@/components/theme-provider';
 import { AuthProvider } from '@/contexts/auth-context';
 import { MobileRuntimeBridge } from '@/components/mobile/mobile-runtime-bridge';
@@ -23,31 +24,54 @@ function useServiceWorkerRegistration() {
   }, []);
 }
 
-export function AppProviders({ children, nonce }: { children: ReactNode; nonce?: string }) {
+export function AppProviders({
+  children,
+  nonce,
+  locale = 'en',
+  messages = {},
+}: {
+  children: ReactNode;
+  nonce?: string;
+  locale?: string;
+  messages?: Record<string, string>;
+}) {
   useServiceWorkerRegistration();
 
   return (
-    <ThemeProvider nonce={nonce}>
-      {/*
-        TooltipProvider must wrap every admin (and learner) consumer of the
-        Tooltip primitive so portals share a single delay context. 800ms hover
-        delay matches the Material spec; focus opens are instant by default.
-      */}
-      <TooltipProvider delayDuration={800}>
-        <QueryProvider>
-          <AuthProvider>
-            <RuntimeLifecycleBridge />
-            <MobileRuntimeBridge />
-            {children}
-            {/*
-              Global sonner toaster — rendered once at the root so any
-              `toast()` call anywhere in the tree surfaces in the same anchor.
-              Theme is read from next-themes inside the component.
-            */}
-            <Toaster />
-          </AuthProvider>
-        </QueryProvider>
-      </TooltipProvider>
-    </ThemeProvider>
+    <NextIntlClientProvider
+      locale={locale}
+      messages={messages}
+      // Pages that don't have a translation for a requested key (or that
+      // don't use next-intl at all) keep their existing English strings —
+      // we don't want missing keys to throw a runtime error inside legacy
+      // pages while the rollout is partial.
+      onError={() => {
+        /* swallow MISSING_MESSAGE during partial rollout */
+      }}
+      getMessageFallback={({ key }) => key}
+    >
+      <ThemeProvider nonce={nonce}>
+        {/*
+          TooltipProvider must wrap every admin (and learner) consumer of the
+          Tooltip primitive so portals share a single delay context. 800ms hover
+          delay matches the Material spec; focus opens are instant by default.
+        */}
+        <TooltipProvider delayDuration={800}>
+          <QueryProvider>
+            <AuthProvider>
+              <RuntimeLifecycleBridge />
+              <MobileRuntimeBridge />
+              {children}
+              {/*
+                Global sonner toaster — rendered once at the root so any
+                `toast()` call anywhere in the tree surfaces in the same anchor.
+                Theme is read from next-themes inside the component.
+              */}
+              <Toaster />
+            </AuthProvider>
+          </QueryProvider>
+        </TooltipProvider>
+      </ThemeProvider>
+    </NextIntlClientProvider>
   );
 }

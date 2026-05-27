@@ -210,14 +210,14 @@ function ReadingPaperResultsContent({ params }: { params: Promise<{ paperId: str
                   <Badge variant={isPracticeOnly ? 'info' : passed ? 'success' : 'warning'}>
                     {isPracticeOnly ? 'Practice-only review' : passed ? 'Reading pass evidence' : 'Below Reading pass anchor'}
                   </Badge>
-                  <p className="mt-3 text-sm leading-6 text-muted">
+                  <p className="mt-3 text-sm leading-6 text-gray-600 dark:text-gray-400">
                     {isPracticeOnly
                       ? 'This subset attempt reports practice marks only. Use the item review to choose the next focused route.'
                       : 'Reading pass evidence is anchored to 30/42 equalling 350/500. Use the item review to choose the next practice route.'}
                   </p>
                   {!isPracticeOnly ? (
                     <p
-                      className="mt-3 border-t border-border pt-3 text-xs font-semibold leading-5 text-muted"
+                      className="mt-3 border-t border-border pt-3 text-xs font-semibold leading-5 text-gray-600 dark:text-gray-400"
                       data-testid="reading-results-estimate-disclaimer"
                     >
                       This is an estimate, not an official OET conversion.
@@ -243,9 +243,9 @@ function ReadingPaperResultsContent({ params }: { params: Promise<{ paperId: str
               <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
                 {review.partBreakdown.map((part) => (
                   <div key={part.partCode} className="rounded-[20px] border border-border bg-surface p-5 shadow-sm">
-                    <p className="text-sm font-black uppercase tracking-[0.16em] text-muted">Part {part.partCode}</p>
-                    <p className="mt-2 text-2xl font-semibold text-navy">{part.rawScore}/{part.maxRawScore}</p>
-                    <p className="mt-1 text-sm text-muted">
+                    <p className="text-sm font-black uppercase tracking-[0.16em] text-gray-600 dark:text-gray-400">Part {part.partCode}</p>
+                    <p className="mt-2 text-2xl font-semibold text-gray-900 dark:text-gray-100">{part.rawScore}/{part.maxRawScore}</p>
+                    <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
                       {part.correctCount} correct | {part.incorrectCount} wrong | {part.unansweredCount} unanswered
                     </p>
                   </div>
@@ -264,10 +264,10 @@ function ReadingPaperResultsContent({ params }: { params: Promise<{ paperId: str
                 {review.skillBreakdown.map((skill) => (
                   <div key={skill.label} className="rounded-[20px] border border-border bg-surface p-5 shadow-sm">
                     <div className="flex items-center justify-between gap-3">
-                      <p className="text-sm font-black uppercase tracking-[0.16em] text-muted">{skill.label}</p>
+                      <p className="text-sm font-black uppercase tracking-[0.16em] text-gray-600 dark:text-gray-400">{skill.label}</p>
                       <Badge variant="muted">{skill.totalCount} item(s)</Badge>
                     </div>
-                    <p className="mt-2 text-sm text-muted">
+                    <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
                       {skill.correctCount} correct | {skill.incorrectCount} wrong | {skill.unansweredCount} unanswered
                     </p>
                   </div>
@@ -286,14 +286,14 @@ function ReadingPaperResultsContent({ params }: { params: Promise<{ paperId: str
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                   {review.clusters.map((cluster) => (
                     <div key={cluster.label} className="rounded-[20px] border border-border bg-surface p-5 shadow-sm">
-                      <p className="text-sm font-black uppercase tracking-[0.16em] text-muted">{cluster.label}</p>
-                      <p className="mt-2 text-2xl font-semibold text-navy">{cluster.incorrectCount} missed</p>
-                      <p className="mt-1 text-sm text-muted">Questions {cluster.questions.map((question) => question.label).join(', ')}</p>
+                      <p className="text-sm font-black uppercase tracking-[0.16em] text-gray-600 dark:text-gray-400">{cluster.label}</p>
+                      <p className="mt-2 text-2xl font-semibold text-gray-900 dark:text-gray-100">{cluster.incorrectCount} missed</p>
+                      <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">Questions {cluster.questions.map((question) => question.label).join(', ')}</p>
                     </div>
                   ))}
                 </div>
               ) : (
-                <div className="rounded-[20px] border border-border bg-surface p-5 text-sm font-semibold text-muted shadow-sm">
+                <div className="rounded-[20px] border border-border bg-surface p-5 text-sm font-semibold text-gray-600 dark:text-gray-400 shadow-sm">
                   No incorrect clusters on this attempt.
                 </div>
               )}
@@ -312,8 +312,8 @@ function ReadingPaperResultsContent({ params }: { params: Promise<{ paperId: str
                     <summary className="cursor-pointer list-none">
                       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                         <div>
-                          <p className="text-sm font-bold text-navy">Part {item.partCode} | Question {item.displayOrder}</p>
-                          <p className="mt-1 text-sm text-muted">{item.stem}</p>
+                          <p className="text-sm font-bold text-gray-900 dark:text-gray-100">Part {item.partCode} | Question {item.displayOrder}</p>
+                          <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">{item.stem}</p>
                         </div>
                         <div className="flex flex-wrap items-center gap-2">
                           <Badge variant={item.isCorrect ? 'success' : 'danger'}>{item.isCorrect ? 'Correct' : 'Review'}</Badge>
@@ -327,7 +327,7 @@ function ReadingPaperResultsContent({ params }: { params: Promise<{ paperId: str
                     </div>
                     {item.explanationMarkdown ? (
                       <div className="mt-4 rounded-xl bg-background-light p-3">
-                        <SafeRichText markdown={item.explanationMarkdown} className="text-sm leading-6 text-muted" />
+                        <SafeRichText markdown={item.explanationMarkdown} className="text-sm leading-6 text-gray-600 dark:text-gray-400" />
                       </div>
                     ) : null}
                   </details>
@@ -398,8 +398,8 @@ function policyCard(review: ReadingAttemptReviewDto): LearnerSurfaceCardModel {
 function ReviewValue({ label, value }: { label: string; value: unknown }) {
   return (
     <div className="rounded-xl bg-background-light p-3">
-      <p className="text-xs font-black uppercase tracking-[0.16em] text-muted">{label}</p>
-      <p className="mt-1 break-words font-semibold text-navy">{formatReviewValue(value)}</p>
+      <p className="text-xs font-black uppercase tracking-[0.16em] text-gray-600 dark:text-gray-400">{label}</p>
+      <p className="mt-1 break-words font-semibold text-gray-900 dark:text-gray-100">{formatReviewValue(value)}</p>
     </div>
   );
 }

@@ -25,6 +25,12 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\OetLearner.Api\OetLearner.Api.csproj" />
+    <!--
+      Wave B4: tests for the Stripe product seeder (CLI script) live inside the
+      main API test project so they participate in the shared CI run. The
+      reference pulls in the seeder's classes and the catalog.json content file.
+    -->
+    <ProjectReference Include="..\..\scripts\StripeProductSeeder\StripeProductSeeder.csproj" />
   </ItemGroup>
 
 </Project>

@@ -107,6 +107,12 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
                 }
             }
             services.AddSingleton<IAiModelProvider, TestAiModelProvider>();
+
+            // Register BackgroundJobProcessor as a directly-resolvable singleton
+            // so tests can call its internal ProcessOnceAsync to deterministically
+            // drain queued jobs (the hosted-service tick is stripped above to
+            // avoid 2-second race loops during tests).
+            services.AddSingleton<BackgroundJobProcessor>();
         });
 
         if (_useFirstPartyAuth)
@@ -193,6 +199,24 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
         }
 
         return client;
+    }
+
+    /// <summary>
+    /// Drives one or more passes of the background job pipeline so tests can
+    /// drain queued evaluations deterministically. The hosted-service loop is
+    /// stripped from the test host (see <c>IsLongRunningHostedWorker</c>) so
+    /// queued <c>JobType.WritingEvaluation</c> / <c>JobType.SpeakingEvaluation</c>
+    /// rows would otherwise never advance past "queued". Default 3 passes
+    /// covers the common "evaluation → side-effects → notification fan-out"
+    /// cascade in one call.
+    /// </summary>
+    public async Task DrainBackgroundJobsAsync(int passes = 3, CancellationToken cancellationToken = default)
+    {
+        var processor = Services.GetRequiredService<BackgroundJobProcessor>();
+        for (var i = 0; i < passes; i++)
+        {
+            await processor.ProcessOnceAsync(cancellationToken);
+        }
     }
 
     public async Task EnsureLearnerProfileAsync(string userId, string email, string displayName)

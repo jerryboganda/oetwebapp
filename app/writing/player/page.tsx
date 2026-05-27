@@ -20,6 +20,7 @@ import { analytics } from '@/lib/analytics';
 import type { WritingTask } from '@/lib/mock-data';
 import type { WritingPaperAsset } from '@/lib/types/expert';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { useWritingDraftRecovery } from '@/hooks/use-writing-draft-recovery';
 import { inferWritingLetterType, type ExamProfession, type LintFinding } from '@/lib/rulebook';
 import {
   normalizeWritingPracticeMode,
@@ -98,6 +99,8 @@ export default function WritingPlayer() {
   const practiceMode = normalizeWritingPracticeMode(searchParams?.get('mode'));
   const examMode: WritingExamMode = searchParams?.get('examMode') === 'paper' ? 'paper' : 'computer';
   const assessorType: WritingAssessorType = (searchParams?.get('assessorType') ?? searchParams?.get('assessor')) === 'instructor' ? 'instructor' : 'ai';
+  const pathwayStage = searchParams?.get('pathwayStage') ?? '';
+  const attemptMode = pathwayStage === 'diagnostic' ? 'diagnostic' : practiceMode;
   const isPaperMode = examMode === 'paper';
   const isInstructorReview = assessorType === 'instructor';
   const isExamMode = practiceMode === 'exam';
@@ -107,6 +110,7 @@ export default function WritingPlayer() {
   // Completed (the mock report renders this as Provisional).
   const mockAttemptId = searchParams?.get('mockAttemptId') ?? null;
   const mockSectionId = searchParams?.get('mockSectionId') ?? null;
+  const { loadRecoveredDraft, saveRecoveredDraft, clearRecoveredDraft } = useWritingDraftRecovery(taskId, attemptMode);
 
   const [task, setTask] = useState<WritingTask | null>(null);
   const [checklist, setChecklist] = useState<{ id: string; label: string; checked: boolean }[]>([]);
@@ -307,7 +311,7 @@ export default function WritingPlayer() {
     let cancelled = false;
     setLoading(true);
 
-    const attemptPromise = isExamMode ? ensureWritingAttempt(taskId, practiceMode) : Promise.resolve(null);
+    const attemptPromise = isExamMode ? ensureWritingAttempt(taskId, attemptMode) : Promise.resolve(null);
     Promise.all([fetchWritingTask(taskId), fetchWritingChecklist(), attemptPromise])
       .then(([t, cl, attempt]) => {
         if (cancelled) return;
@@ -321,9 +325,11 @@ export default function WritingPlayer() {
           if (nextTimerState.phase === 'writing') {
             setMobileView('editor');
           }
-          if (attempt.draftContent && !latestContentRef.current) {
-            latestContentRef.current = attempt.draftContent;
-            setContent(attempt.draftContent);
+          const recoveredDraft = loadRecoveredDraft();
+          const draftContent = attempt.draftContent || recoveredDraft?.content || '';
+          if (draftContent && !latestContentRef.current) {
+            latestContentRef.current = draftContent;
+            setContent(draftContent);
             hasUnsavedChanges.current = false;
           }
         } else {
@@ -339,7 +345,7 @@ export default function WritingPlayer() {
     return () => {
       cancelled = true;
     };
-  }, [isExamMode, practiceMode, taskId]);
+  }, [attemptMode, isExamMode, loadRecoveredDraft, practiceMode, taskId]);
 
   useEffect(() => {
     return () => {
@@ -360,6 +366,7 @@ export default function WritingPlayer() {
 
     const saveSequence = autosaveSequenceRef.current + 1;
     autosaveSequenceRef.current = saveSequence;
+    saveRecoveredDraft(nextContent);
 
     setSaveStatus('saving');
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
@@ -369,12 +376,13 @@ export default function WritingPlayer() {
       }
 
       try {
-        await submitWritingDraft(taskId, nextContent, practiceMode);
+        await submitWritingDraft(taskId, nextContent, attemptMode);
         if (isSubmittingRef.current || autosaveSequenceRef.current !== saveSequence) {
           return;
         }
         setSaveStatus('saved');
         hasUnsavedChanges.current = false;
+        clearRecoveredDraft();
       } catch {
         if (isSubmittingRef.current || autosaveSequenceRef.current !== saveSequence) {
           return;
@@ -386,7 +394,7 @@ export default function WritingPlayer() {
         }
       }
     }, 3000);
-  }, [practiceMode, taskId]);
+  }, [attemptMode, clearRecoveredDraft, saveRecoveredDraft, taskId]);
 
   const handleContentChange = useCallback((val: string) => {
     latestContentRef.current = val;
@@ -397,7 +405,7 @@ export default function WritingPlayer() {
   useEffect(() => {
     if (!isPaperMode || !taskId) return;
     let cancelled = false;
-    fetchWritingPaperAssets(taskId, practiceMode)
+    fetchWritingPaperAssets(taskId, attemptMode)
       .then((result) => {
         if (cancelled) return;
         setPaperAssets(result.assets ?? []);
@@ -413,7 +421,7 @@ export default function WritingPlayer() {
     return () => {
       cancelled = true;
     };
-  }, [isPaperMode, practiceMode, taskId]);
+  }, [attemptMode, isPaperMode, taskId]);
 
   const handlePaperUpload = useCallback(async (files: FileList | null) => {
     if (!taskId || !files?.length || uploadingPaper) return;
@@ -422,7 +430,7 @@ export default function WritingPlayer() {
     setPaperError(null);
     try {
       const uploads = await Promise.all(selectedFiles.map((file) => uploadMedia(file)));
-      const attached = await attachWritingPaperAssets(taskId, uploads.map((asset) => asset.id), practiceMode, true);
+      const attached = await attachWritingPaperAssets(taskId, uploads.map((asset) => asset.id), attemptMode, true);
       setPaperAssets(attached.assets ?? []);
       const extractedText = attached.extractedText ?? '';
       setPaperExtractedText(extractedText);
@@ -434,7 +442,7 @@ export default function WritingPlayer() {
     } finally {
       setUploadingPaper(false);
     }
-  }, [practiceMode, taskId, uploadingPaper]);
+  }, [attemptMode, taskId, uploadingPaper]);
 
   useEffect(() => {
     if (!paperAssets.length) {
@@ -522,7 +530,7 @@ export default function WritingPlayer() {
     setSubmitting(true);
     setSaveStatus('saving');
     try {
-      const result = await submitWritingTask(taskId, submittedContent, practiceMode, {
+      const result = await submitWritingTask(taskId, submittedContent, attemptMode, {
         examMode,
         assessorType,
         paperAssetIds: isPaperMode ? paperAssets.map((asset) => asset.mediaAssetId) : [],
@@ -530,6 +538,7 @@ export default function WritingPlayer() {
       });
       analytics.track('task_submitted', { taskId, subtest: 'writing', mode: practiceMode, examMode, assessorType });
       hasUnsavedChanges.current = false;
+      clearRecoveredDraft();
       setSaveStatus('saved');
       setTimerRunning(false);
       if (mockAttemptId && mockSectionId) {
@@ -555,12 +564,18 @@ export default function WritingPlayer() {
         }, 500);
         return;
       }
-      const resultUrl = result.reviewRequestId
+      const resultUrl = attemptMode === 'diagnostic' && !result.reviewRequestId
+        ? `/writing/diagnostic/submitted?id=${encodeURIComponent(result.id)}`
+        : result.reviewRequestId
         ? `/submissions/${encodeURIComponent(result.attemptId ?? result.id)}`
         : `/writing/result?id=${encodeURIComponent(result.id)}`;
       router.replace(resultUrl);
       window.setTimeout(() => {
-        const expectedPath = result.reviewRequestId ? `/submissions/${encodeURIComponent(result.attemptId ?? result.id)}` : '/writing/result';
+        const expectedPath = attemptMode === 'diagnostic' && !result.reviewRequestId
+          ? '/writing/diagnostic/submitted'
+          : result.reviewRequestId
+            ? `/submissions/${encodeURIComponent(result.attemptId ?? result.id)}`
+            : '/writing/result';
         if (window.location.pathname !== expectedPath) {
           window.location.assign(resultUrl);
         }

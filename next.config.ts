@@ -1,6 +1,13 @@
 import type {NextConfig} from 'next';
 import { copyFileSync, existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
+import createNextIntlPlugin from 'next-intl/plugin';
+
+// Wraps the Next config so server components can call `useTranslations` / `getTranslations`.
+// `i18n.ts` at the repo root resolves the active locale from the `lang` cookie or
+// `Accept-Language` header per request. The wrapper does not introduce locale-prefixed
+// URLs — i18n here is content-only so existing routes stay untouched.
+const withNextIntl = createNextIntlPlugin('./i18n.ts');
 
 // NOTE: Content-Security-Policy is emitted by middleware.ts on a per-request basis
 // so each response carries a unique nonce. Do NOT add a CSP here — a static CSP
@@ -114,4 +121,4 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+export default withNextIntl(nextConfig);

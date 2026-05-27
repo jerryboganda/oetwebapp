@@ -60,15 +60,15 @@ export default function ReadingStatsPage() {
         {/* Back link */}
         <Link
           href="/reading"
-          className="inline-flex items-center gap-1.5 text-sm text-muted hover:text-navy dark:hover:text-white"
+          className="inline-flex items-center gap-1.5 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"
         >
           <ArrowLeft className="h-4 w-4" aria-hidden />
           Back to Reading
         </Link>
 
         <div>
-          <h1 className="text-2xl font-bold text-navy dark:text-white">Reading Analytics</h1>
-          <p className="mt-1 text-sm text-muted">Track your progress, activity, and skill development.</p>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Reading Analytics</h1>
+          <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">Track your progress, activity, and skill development.</p>
         </div>
 
         {loading ? (
@@ -91,17 +91,17 @@ export default function ReadingStatsPage() {
             <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
               {/* Skill Radar */}
               <div className="rounded-xl border border-border bg-surface p-5">
-                <h2 className="mb-4 text-sm font-semibold text-navy dark:text-white">Skill Radar</h2>
+                <h2 className="mb-4 text-sm font-semibold text-gray-900 dark:text-white">Skill Radar</h2>
                 {skillRadar ? (
                   <SkillRadarChart data={skillRadar} />
                 ) : (
-                  <p className="text-sm text-muted">No skill data yet. Complete more practice to unlock this chart.</p>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">No skill data yet. Complete more practice to unlock this chart.</p>
                 )}
               </div>
 
               {/* Score History */}
               <div className="rounded-xl border border-border bg-surface p-5">
-                <h2 className="mb-4 flex items-center gap-2 text-sm font-semibold text-navy dark:text-white">
+                <h2 className="mb-4 flex items-center gap-2 text-sm font-semibold text-gray-900 dark:text-white">
                   <TrendingUp className="h-4 w-4" aria-hidden />
                   Score History
                 </h2>
@@ -110,34 +110,34 @@ export default function ReadingStatsPage() {
                     {scoreHistory.history.slice(-5).reverse().map((entry, i) => (
                       <li key={i} className="flex items-center justify-between text-sm">
                         <div>
-                          <span className="font-medium text-navy dark:text-white">{entry.score}</span>
-                          <span className="ml-2 text-xs text-muted capitalize">{entry.sessionType}</span>
+                          <span className="font-medium text-gray-900 dark:text-white">{entry.score}</span>
+                          <span className="ml-2 text-xs text-gray-600 dark:text-gray-400 capitalize">{entry.sessionType}</span>
                         </div>
-                        <span className="text-xs text-muted">
+                        <span className="text-xs text-gray-600 dark:text-gray-400">
                           {new Intl.DateTimeFormat('en-GB', { day: '2-digit', month: 'short' }).format(new Date(entry.date))}
                         </span>
                       </li>
                     ))}
                   </ul>
                 ) : (
-                  <p className="text-sm text-muted">No score history yet.</p>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">No score history yet.</p>
                 )}
               </div>
 
               {/* Activity Heatmap */}
               <div className="rounded-xl border border-border bg-surface p-5 md:col-span-2">
-                <h2 className="mb-4 text-sm font-semibold text-navy dark:text-white">Activity (last 90 days)</h2>
+                <h2 className="mb-4 text-sm font-semibold text-gray-900 dark:text-white">Activity (last 90 days)</h2>
                 {activityCalendar?.days.length ? (
                   <ActivityHeatmap days={activityCalendar.days} />
                 ) : (
-                  <p className="text-sm text-muted">No activity data yet.</p>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">No activity data yet.</p>
                 )}
               </div>
 
               {/* Vocab Summary */}
               {vocabStats ? (
                 <div className="rounded-xl border border-border bg-surface p-5">
-                  <h2 className="mb-4 text-sm font-semibold text-navy dark:text-white">Vocabulary Summary</h2>
+                  <h2 className="mb-4 text-sm font-semibold text-gray-900 dark:text-white">Vocabulary Summary</h2>
                   <div className="grid grid-cols-3 gap-3">
                     {[
                       { label: 'Total', value: vocabStats.total },
@@ -145,8 +145,8 @@ export default function ReadingStatsPage() {
                       { label: 'Due Today', value: vocabStats.dueToday },
                     ].map(({ label, value }) => (
                       <div key={label} className="rounded-lg bg-background-light dark:bg-background-dark px-3 py-3 text-center">
-                        <p className="text-lg font-bold text-navy dark:text-white tabular-nums">{value}</p>
-                        <p className="text-xs text-muted">{label}</p>
+                        <p className="text-lg font-bold text-gray-900 dark:text-white tabular-nums">{value}</p>
+                        <p className="text-xs text-gray-600 dark:text-gray-400">{label}</p>
                       </div>
                     ))}
                   </div>

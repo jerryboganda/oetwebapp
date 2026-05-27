@@ -64,10 +64,14 @@ public class CriticalFlowsTests : IClassFixture<TestWebApplicationFactory>
         var evaluationId = submitJson.RootElement.GetProperty("evaluationId").GetString();
         Assert.False(string.IsNullOrWhiteSpace(evaluationId));
 
+        // Drive the background job pipeline deterministically — the hosted
+        // service is stripped from the test host so we drain it manually
+        // before polling for the completed evaluation state.
+        await _factory.DrainBackgroundJobsAsync();
+
         JsonDocument? summaryJson = null;
         for (var i = 0; i < 6; i++)
         {
-            await Task.Delay(TimeSpan.FromSeconds(1));
             var summaryResponse = await _client.GetAsync($"/v1/writing/evaluations/{evaluationId}/summary");
             summaryResponse.EnsureSuccessStatusCode();
             summaryJson?.Dispose();
@@ -76,6 +80,7 @@ public class CriticalFlowsTests : IClassFixture<TestWebApplicationFactory>
             {
                 break;
             }
+            await _factory.DrainBackgroundJobsAsync();
         }
 
         Assert.NotNull(summaryJson);
@@ -314,7 +319,7 @@ public class CriticalFlowsTests : IClassFixture<TestWebApplicationFactory>
         return client;
     }
 
-    private static async Task<string> CreateCompletedWritingAttemptAsync(HttpClient client)
+    private async Task<string> CreateCompletedWritingAttemptAsync(HttpClient client)
     {
         var createAttemptResponse = await client.PostAsJsonAsync("/v1/writing/attempts", new
         {
@@ -351,6 +356,10 @@ public class CriticalFlowsTests : IClassFixture<TestWebApplicationFactory>
         var evaluationId = submitJson.RootElement.GetProperty("evaluationId").GetString()
             ?? throw new InvalidOperationException("Writing evaluation id was missing.");
 
+        // Drive the background job pipeline deterministically — the hosted
+        // service tick is stripped in tests, so we drain the queue manually.
+        await _factory.DrainBackgroundJobsAsync();
+
         for (var poll = 0; poll < 20; poll++)
         {
             var summaryResponse = await client.GetAsync($"/v1/writing/evaluations/{evaluationId}/summary");
@@ -361,7 +370,7 @@ public class CriticalFlowsTests : IClassFixture<TestWebApplicationFactory>
                 return attemptId;
             }
 
-            await Task.Delay(250);
+            await _factory.DrainBackgroundJobsAsync();
         }
 
         throw new TimeoutException("Timed out waiting for writing evaluation to complete.");

@@ -14,7 +14,9 @@ services:
   # Env vars: POSTGRES_DB, POSTGRES_USER, POSTGRES_PASSWORD
   # ---------------------------------------------------------------------------
   postgres:
-    image: postgres:17-alpine
+    # See docker-compose.local.yml — pgvector/pgvector:pg17 ships the `vector`
+    # extension required by Writing V2 migration 20260612120000.
+    image: pgvector/pgvector:pg17
     container_name: oet-staging-postgres
     restart: unless-stopped
     command:

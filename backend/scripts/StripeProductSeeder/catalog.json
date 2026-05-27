@@ -1,0 +1,188 @@
+{
+  "$schema": "https://oetwithdrhesham.co.uk/schemas/stripe-product-seed.v1.json",
+  "version": "1.0.0",
+  "description": "Canonical Stripe product seed for the OET 2026 catalogue. Wave B4 §10.2. Re-running is idempotent — matched on metadata.code. Prices are immutable in Stripe, so existing prices for a (code, currency, unitAmount, interval) tuple are reused.",
+  "defaultCurrency": "usd",
+  "products": [
+    {
+      "code": "pkg_quick_check",
+      "name": "Quick Check",
+      "description": "5 AI grading credits, 30-day validity",
+      "category": "package",
+      "prices": [
+        { "unitAmount": 1900, "currency": "usd", "interval": null, "intervalCount": null }
+      ]
+    },
+    {
+      "code": "pkg_exam_prep_pro",
+      "name": "Exam Prep Pro",
+      "description": "15 AI grading credits + 2 Full Mocks, 90-day validity",
+      "category": "package",
+      "prices": [
+        { "unitAmount": 4200, "currency": "usd", "interval": null, "intervalCount": null }
+      ]
+    },
+    {
+      "code": "pkg_oet_mastery",
+      "name": "OET Mastery (One-Time)",
+      "description": "30 grading credits + 5 Mocks + priority, 180-day validity",
+      "category": "package",
+      "prices": [
+        { "unitAmount": 10000, "currency": "usd", "interval": null, "intervalCount": null }
+      ]
+    },
+    {
+      "code": "sub_mastery_monthly",
+      "name": "OET Mastery Subscription (Monthly)",
+      "description": "Monthly Mastery",
+      "category": "subscription",
+      "prices": [
+        { "unitAmount": 10000, "currency": "usd", "interval": "month", "intervalCount": 1 }
+      ]
+    },
+    {
+      "code": "sub_mastery_annual",
+      "name": "OET Mastery Subscription (Annual)",
+      "description": "Annual Mastery",
+      "category": "subscription",
+      "prices": [
+        { "unitAmount": 99900, "currency": "usd", "interval": "year", "intervalCount": 1 }
+      ]
+    },
+    {
+      "code": "sub_class_unlimited_monthly",
+      "name": "Class Unlimited Subscription (Monthly)",
+      "description": "unlimited classes",
+      "category": "subscription",
+      "prices": [
+        { "unitAmount": 9900, "currency": "usd", "interval": "month", "intervalCount": 1 }
+      ]
+    },
+    {
+      "code": "sub_class_unlimited_annual",
+      "name": "Class Unlimited Subscription (Annual)",
+      "description": "annual class subscription",
+      "category": "subscription",
+      "prices": [
+        { "unitAmount": 99000, "currency": "usd", "interval": "year", "intervalCount": 1 }
+      ]
+    },
+    {
+      "code": "sub_bundle_monthly",
+      "name": "Mastery + Class Bundle (Monthly)",
+      "description": "both bundled",
+      "category": "subscription",
+      "prices": [
+        { "unitAmount": 16900, "currency": "usd", "interval": "month", "intervalCount": 1 }
+      ]
+    },
+    {
+      "code": "sub_bundle_annual",
+      "name": "Mastery + Class Bundle (Annual)",
+      "description": "annual bundle",
+      "category": "subscription",
+      "prices": [
+        { "unitAmount": 169900, "currency": "usd", "interval": "year", "intervalCount": 1 }
+      ]
+    },
+    {
+      "code": "addon_credits_10",
+      "name": "Extra Grading Credits — 10 pack",
+      "description": "10 credits, 60-day",
+      "category": "addon",
+      "prices": [
+        { "unitAmount": 2000, "currency": "usd", "interval": null, "intervalCount": null }
+      ]
+    },
+    {
+      "code": "addon_credits_25",
+      "name": "Extra Grading Credits — 25 pack",
+      "description": "25 credits, 90-day",
+      "category": "addon",
+      "prices": [
+        { "unitAmount": 4000, "currency": "usd", "interval": null, "intervalCount": null }
+      ]
+    },
+    {
+      "code": "addon_mock_single",
+      "name": "Single Mock Exam",
+      "description": "1 mock",
+      "category": "addon",
+      "prices": [
+        { "unitAmount": 1500, "currency": "usd", "interval": null, "intervalCount": null }
+      ]
+    },
+    {
+      "code": "addon_mock_5",
+      "name": "Mock Exam 5-pack",
+      "description": "5 mocks",
+      "category": "addon",
+      "prices": [
+        { "unitAmount": 5900, "currency": "usd", "interval": null, "intervalCount": null }
+      ]
+    },
+    {
+      "code": "addon_tutor_30min",
+      "name": "1:1 Tutor Session — 30 min",
+      "description": "30-min session",
+      "category": "addon",
+      "prices": [
+        { "unitAmount": 3500, "currency": "usd", "interval": null, "intervalCount": null }
+      ]
+    },
+    {
+      "code": "addon_tutor_60min",
+      "name": "1:1 Tutor Session — 60 min",
+      "description": "60-min session",
+      "category": "addon",
+      "prices": [
+        { "unitAmount": 6500, "currency": "usd", "interval": null, "intervalCount": null }
+      ]
+    },
+    {
+      "code": "addon_class_starter",
+      "name": "Class Pack Starter",
+      "description": "25 class credits, 30-day",
+      "category": "class_pack",
+      "prices": [
+        { "unitAmount": 2900, "currency": "usd", "interval": null, "intervalCount": null }
+      ]
+    },
+    {
+      "code": "addon_class_pro",
+      "name": "Class Pack Pro",
+      "description": "75 class credits, 60-day",
+      "category": "class_pack",
+      "prices": [
+        { "unitAmount": 6900, "currency": "usd", "interval": null, "intervalCount": null }
+      ]
+    },
+    {
+      "code": "addon_tbook_2e",
+      "name": "TBook Second Edition (PDF)",
+      "description": "watermarked PDF + 1y updates",
+      "category": "addon",
+      "prices": [
+        { "unitAmount": 4900, "currency": "usd", "interval": null, "intervalCount": null }
+      ]
+    },
+    {
+      "code": "addon_score_appeal",
+      "name": "Score Appeal Re-grade",
+      "description": "GPT-5.5 re-grade",
+      "category": "addon",
+      "prices": [
+        { "unitAmount": 2500, "currency": "usd", "interval": null, "intervalCount": null }
+      ]
+    },
+    {
+      "code": "addon_priority_grade",
+      "name": "Priority Grading",
+      "description": "bump to front",
+      "category": "addon",
+      "prices": [
+        { "unitAmount": 500, "currency": "usd", "interval": null, "intervalCount": null }
+      ]
+    }
+  ]
+}

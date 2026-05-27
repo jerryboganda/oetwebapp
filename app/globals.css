@@ -484,3 +484,52 @@
   }
 }
 
+/* ------------------------------------------------------------------------- *
+ * Writing V2 annotation overlay
+ *
+ * Inline ProseMirror decorations rendered by `AnnotationsExtension` in
+ * `components/domain/writing/tiptap-annotations.ts`. Each decoration carries
+ * `class="writing-annotation writing-annotation--{type}"`, a `title` attribute
+ * for native browser tooltips, and `data-rule-id` / `data-note` so non-tooltip
+ * surfaces (eg. dev tools, future popovers) can read the payload directly.
+ *
+ * The screen-reader summary list at the bottom of the editor (see
+ * `useAnnotationOverlay`) is the accessibility fallback — keep both in sync
+ * when adding new annotation types.
+ * ------------------------------------------------------------------------- */
+.writing-annotation {
+  border-bottom: 2px solid;
+  cursor: help;
+  padding: 0 1px;
+  border-radius: 2px;
+  transition: background-color 120ms ease;
+}
+.writing-annotation:hover {
+  background-color: rgba(0, 0, 0, 0.04);
+}
+.writing-annotation--canon-violation {
+  border-color: #dc2626; /* red-600 */
+  background-color: #fee2e2; /* red-100 */
+}
+.writing-annotation--coach-hint {
+  border-color: #d97706; /* amber-600 */
+  background-color: #fef3c7; /* amber-100 */
+}
+.writing-annotation--feedback {
+  border-color: #156082; /* OET brand teal */
+  background-color: #dbeafe; /* blue-100 */
+}
+.writing-annotation--info {
+  border-color: #4b5563; /* gray-600 */
+  background-color: #f3f4f6; /* gray-100 */
+}
+
+/* High-contrast / forced-colors mode (Windows High Contrast, etc.) — fall back
+ * to system colours so the underline is still visible against the OS palette. */
+@media (forced-colors: active) {
+  .writing-annotation {
+    border-bottom-color: LinkText;
+    background-color: Canvas;
+  }
+}
+

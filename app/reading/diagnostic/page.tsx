@@ -169,11 +169,11 @@ export default function DiagnosticPage() {
   }
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-gradient-to-b from-violet-50 to-white px-4 py-12">
+    <div className="flex min-h-screen flex-col items-center justify-center bg-gradient-to-b from-violet-50 to-white dark:from-slate-900 dark:to-slate-950 px-4 py-12">
       <div className="w-full max-w-2xl">
         {/* Brief state */}
         {flowState === 'brief' && (
-          <div className="rounded-2xl border border-gray-100 bg-white p-8 shadow-sm">
+          <div className="rounded-2xl border border-gray-100 bg-white dark:bg-slate-800 dark:border-slate-700 p-8 shadow-sm">
             <div className="mb-6 text-center">
               <div className="mb-3 inline-flex h-14 w-14 items-center justify-center rounded-full bg-violet-100 text-violet-600">
                 <span className="text-2xl">📋</span>

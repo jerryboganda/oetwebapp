@@ -140,6 +140,7 @@ const TRACKED_EVENTS = [
   'writing_drill_graded',
   // Writing revision — rewrite improvement scoring
   'writing_revision_score_computed',
+  'writing_revision_submitted',
   // Writing expert review — criterion-tagged inline annotations
   'writing_expert_annotation_added',
   'writing_voice_note_added',
