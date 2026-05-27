@@ -12,7 +12,7 @@ import { analytics } from '@/lib/analytics';
 import { getReadingHome, type ReadingHomeDto, type ReadingHomePaperDto } from '@/lib/reading-authoring-api';
 import { readErrorMessage } from '@/lib/read-error-message';
 
-// Per the 2026-05-27 OET sample-test alignment, `/reading/practice/[part]` is
+// Per the 2026-05-27 OET sample-test alignment, `/reading/parts/[part]` is
 // a thin candidate dispatcher: it lists the published Reading papers that
 // contain questions for the requested part (A, B, or C) and hands the user
 // straight into the existing `/reading/paper/[paperId]` exam runner with a

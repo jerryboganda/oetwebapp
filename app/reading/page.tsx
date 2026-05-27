@@ -47,19 +47,19 @@ const HUB_CARDS: HubCard[] = [
   {
     title: 'Practice Part A',
     subtitle: 'Expeditious reading — match section headings to four short medical texts in 15 minutes.',
-    href: '/reading/practice/a',
+    href: '/reading/parts/a',
     accent: 'partA',
   },
   {
     title: 'Practice Part B',
     subtitle: 'Workplace texts — short workplace notices and excerpts, six 3-option items.',
-    href: '/reading/practice/b',
+    href: '/reading/parts/b',
     accent: 'partB',
   },
   {
     title: 'Practice Part C',
     subtitle: 'Long-text comprehension — two longer texts with detailed 4-option questions.',
-    href: '/reading/practice/c',
+    href: '/reading/parts/c',
     accent: 'partC',
   },
   {

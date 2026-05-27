@@ -90,9 +90,9 @@ test.describe('OET sample-test alignment — learner workspace', () => {
     const cards = grid.locator('a[data-testid^="reading-hub-card-"]');
     await expect(cards).toHaveCount(4);
 
-    await expect(cards.nth(0)).toHaveAttribute('href', '/reading/practice/a');
-    await expect(cards.nth(1)).toHaveAttribute('href', '/reading/practice/b');
-    await expect(cards.nth(2)).toHaveAttribute('href', '/reading/practice/c');
+    await expect(cards.nth(0)).toHaveAttribute('href', '/reading/parts/a');
+    await expect(cards.nth(1)).toHaveAttribute('href', '/reading/parts/b');
+    await expect(cards.nth(2)).toHaveAttribute('href', '/reading/parts/c');
     await expect(cards.nth(3)).toHaveAttribute('href', '/reading/exam');
 
     // Owner directive §5 — Reading must not look like a package marketplace.
@@ -116,7 +116,7 @@ test.describe('OET sample-test alignment — learner workspace', () => {
     await page.setViewportSize({ width: 1440, height: 900 });
     // Probe a known-published paper from the Reading hub. The dispatcher route
     // surfaces eligible papers and clicking one boots the player.
-    await page.goto('/reading/practice/a');
+    await page.goto('/reading/parts/a');
 
     // If at least one paper renders, follow it into the player to assert the
     // split-screen layout. Otherwise this path can't be verified end-to-end

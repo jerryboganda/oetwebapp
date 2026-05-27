@@ -92,9 +92,9 @@ describe('Reading hub', () => {
     const cards = within(grid).getAllByRole('link');
     expect(cards).toHaveLength(4);
 
-    expect(cards[0]).toHaveAttribute('href', '/reading/practice/a');
-    expect(cards[1]).toHaveAttribute('href', '/reading/practice/b');
-    expect(cards[2]).toHaveAttribute('href', '/reading/practice/c');
+    expect(cards[0]).toHaveAttribute('href', '/reading/parts/a');
+    expect(cards[1]).toHaveAttribute('href', '/reading/parts/b');
+    expect(cards[2]).toHaveAttribute('href', '/reading/parts/c');
     expect(cards[3]).toHaveAttribute('href', '/reading/exam');
 
     expect(screen.getByTestId('reading-hub-card-partA')).toBeInTheDocument();

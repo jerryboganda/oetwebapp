@@ -37,7 +37,7 @@ Status: **Done** — candidate workspace collapsed to match the official OET com
 - `app/reading/page.tsx`: replaced the dashboard collage (DashboardHero, TodayPlan, structured-paper grid, safe-drill cards, recent-results grid, recent-mock-reports grid) with the same 4-card hub pattern (Practice Part A/B/C + Full Reading Exam). Kept the onboarding/diagnostic gate banners, hero highlights (`available papers / latest result / exam`), and `LearnerSkillSwitcher`.
 - A small Resume banner replaces the deleted `ActiveAttemptsSection` when the home API returns a `canResume` attempt so candidates never lose in-flight work.
 - New routes:
-  - `app/reading/practice/[part]/page.tsx` — fetches `getReadingHome()` and lists papers whose `partXCount > 0`. Clicking a card navigates to `${paper.route}?mode=practice&part=A|B|C`.
+  - `app/reading/parts/[part]/page.tsx` — fetches `getReadingHome()` and lists papers whose `partXCount > 0`. Clicking a card navigates to `${paper.route}?mode=practice&part=A|B|C`. This avoids colliding with the existing legacy `/reading/practice/[sessionId]` runtime route.
   - `app/reading/exam/page.tsx` — server-side `redirect('/mocks?subtest=reading')`.
 - `components/reading/ReadingPlayer.tsx`: replaced the flexbox layout with an explicit CSS Grid split-screen at `md+` (`md:grid md:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]`) — passage left (~60%), questions right (~40%), each pane scrolls independently. Mobile `<md` keeps the existing tab toggle. Header is now `sticky top-0` so the timer and jump-dot strip stay visible while scrolling a long passage. Added `data-testid="reading-split-screen|reading-passage-pane|reading-question-pane|reading-player-root"` for Playwright.
 - Updated test: `app/reading/page.test.tsx` rewritten — asserts the 4-card hub, the Resume banner behaviour, and that the legacy dashboard surfaces no longer render.
@@ -68,7 +68,7 @@ Status: **Done** — candidate workspace collapsed to match the official OET com
 - `app/listening/page.tsx` — rewritten as 4-card hub; audio-context block removed.
 - `app/listening/practice/[part]/page.tsx`, `app/listening/exam/page.tsx`, `app/listening/mocks/page.tsx` — new dispatcher + two server redirects.
 - `app/reading/page.tsx` — rewritten as 4-card hub.
-- `app/reading/practice/[part]/page.tsx`, `app/reading/exam/page.tsx` — new dispatcher + server redirect.
+- `app/reading/parts/[part]/page.tsx`, `app/reading/exam/page.tsx` — new dispatcher + server redirect.
 - `app/reading/page.test.tsx` — rewritten against the new hub structure.
 - `components/reading/ReadingPlayer.tsx` — CSS Grid split-screen at `md+`, sticky header, data-testids for Playwright.
 - `app/mocks/page.tsx` — 4-category intro tiles + tightened empty-state copy.
