@@ -32,6 +32,8 @@ public static class WritingRouteBuilderExtensions
         app.MapWritingOcrEndpoints();
         app.MapWritingShowcaseEndpoints();
         app.MapWritingToolsEndpoints();
+        // Post-launch additions (spec §23.5 Buddy System, §33 calibration).
+        app.MapWritingBuddyEndpoints();
 
         // Native WebSocket fallback for the Coach panel.
         app.MapWritingCoachWebSocketEndpoint();
@@ -39,6 +41,8 @@ public static class WritingRouteBuilderExtensions
         // Admin + tutor portals
         app.MapWritingAdminContentEndpoints();
         app.MapWritingTutorPortalEndpoints();
+        // 50-letter calibration harness (spec §33) — admin-only.
+        app.MapWritingCalibrationEndpoints();
 
         return app;
     }

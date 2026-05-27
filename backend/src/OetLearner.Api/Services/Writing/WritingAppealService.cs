@@ -31,6 +31,14 @@ public interface IWritingAppealService
 
     // ── V2 endpoint contract adapter ─────────────────────────────────────────
     Task<WritingScoreAppealResponse?> RequestAppealAsync(string userId, Guid submissionId, string? reason, CancellationToken ct);
+
+    /// <summary>
+    /// Returns the latest appeal for <paramref name="submissionId"/> owned
+    /// by <paramref name="userId"/>, or <c>null</c> if no appeal exists or
+    /// the submission is not theirs. Used by the appeal UI to poll status
+    /// without re-triggering the AI call.
+    /// </summary>
+    Task<WritingScoreAppealResponse?> GetLatestAppealAsync(string userId, Guid submissionId, CancellationToken ct);
 }
 
 public sealed class WritingAppealService(
@@ -277,5 +285,26 @@ public sealed class WritingAppealService(
         {
             return null;
         }
+    }
+
+    public async Task<WritingScoreAppealResponse?> GetLatestAppealAsync(string userId, Guid submissionId, CancellationToken ct)
+    {
+        // Ownership check first — never leak appeal status across users.
+        var submissionOwned = await db.WritingSubmissions.AsNoTracking()
+            .AnyAsync(s => s.Id == submissionId && s.UserId == userId, ct);
+        if (!submissionOwned) return null;
+
+        var appeal = await db.WritingScoreAppeals.AsNoTracking()
+            .Where(a => a.SubmissionId == submissionId && a.UserId == userId)
+            .OrderByDescending(a => a.RequestedAt)
+            .FirstOrDefaultAsync(ct);
+        if (appeal is null) return null;
+
+        var originalGrade = await db.WritingGrades.AsNoTracking()
+            .FirstOrDefaultAsync(g => g.Id == appeal.OriginalGradeId, ct);
+        var newGrade = appeal.NewGradeId is { } newGradeId
+            ? await db.WritingGrades.AsNoTracking().FirstOrDefaultAsync(g => g.Id == newGradeId, ct)
+            : null;
+        return WritingV2ResponseMapper.ToResponse(ToResult(appeal, originalGrade, newGrade));
     }
 }

@@ -2,6 +2,8 @@ using System.Security.Claims;
 using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
+using OetLearner.Api.Configuration;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services.Speaking;
@@ -40,6 +42,12 @@ public static class SpeakingLiveRoomEndpoints
             .WithSummary("Mint a short-lived access token for the calling user against this room.")
             .Produces<SpeakingLiveRoomTokenPayload>(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status400BadRequest)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status404NotFound);
+
+        group.MapGet("/{id}", GetRoomAsync)
+            .WithSummary("Get live-room details for a participant or admin observer.")
+            .Produces<SpeakingLiveRoomDetailPayload>(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status403Forbidden)
             .Produces(StatusCodes.Status404NotFound);
 
@@ -146,6 +154,13 @@ public static class SpeakingLiveRoomEndpoints
 
         var userId = http.LiveRoomUserId();
 
+        if (string.Equals(request.Role, "observer", StringComparison.OrdinalIgnoreCase) && !IsAdmin(http.User))
+        {
+            return Results.Json(
+                new { errorCode = "forbidden", message = "Observer tokens require admin access." },
+                statusCode: StatusCodes.Status403Forbidden);
+        }
+
         try
         {
             var result = await service.IssueTokenAsync(userId, id, request.Role, ct);
@@ -176,6 +191,8 @@ public static class SpeakingLiveRoomEndpoints
 
     private static async Task<IResult> StartRecordingAsync(
         string id,
+        HttpContext http,
+        LearnerDbContext db,
         SpeakingLiveRoomService service,
         CancellationToken ct)
     {
@@ -186,6 +203,17 @@ public static class SpeakingLiveRoomEndpoints
 
         try
         {
+            var access = await LoadRoomWithSessionAsync(id, db, ct);
+            if (access is null)
+            {
+                return Results.NotFound(new { errorCode = "live_room_not_found", message = $"Live room '{id}' was not found." });
+            }
+            if (!IsAssignedTutor(http.User, access.Session))
+            {
+                return Results.Json(
+                    new { errorCode = "forbidden", message = "Only the assigned tutor may start room recording." },
+                    statusCode: StatusCodes.Status403Forbidden);
+            }
             var result = await service.StartRecordingAsync(id, ct);
             return Results.Ok(new SpeakingLiveRoomRecordingPayload(result.EgressId, result.OutputUrl));
         }
@@ -193,10 +221,16 @@ public static class SpeakingLiveRoomEndpoints
         {
             return Results.NotFound(new { errorCode = "live_room_not_found", message = ex.Message });
         }
+        catch (SpeakingLiveRoomInvalidStateException ex)
+        {
+            return Results.BadRequest(new { errorCode = "invalid_state", message = ex.Message });
+        }
     }
 
     private static async Task<IResult> StopRecordingAsync(
         string id,
+        HttpContext http,
+        LearnerDbContext db,
         SpeakingLiveRoomService service,
         CancellationToken ct)
     {
@@ -207,6 +241,17 @@ public static class SpeakingLiveRoomEndpoints
 
         try
         {
+            var access = await LoadRoomWithSessionAsync(id, db, ct);
+            if (access is null)
+            {
+                return Results.NotFound(new { errorCode = "live_room_not_found", message = $"Live room '{id}' was not found." });
+            }
+            if (!IsAssignedTutor(http.User, access.Session))
+            {
+                return Results.Json(
+                    new { errorCode = "forbidden", message = "Only the assigned tutor may stop room recording." },
+                    statusCode: StatusCodes.Status403Forbidden);
+            }
             var stopped = await service.StopRecordingAsync(id, ct);
             return Results.Ok(new SpeakingLiveRoomStopRecordingPayload(stopped));
         }
@@ -250,6 +295,34 @@ public static class SpeakingLiveRoomEndpoints
     // GET /{id}/token — convenience helper for the frontend client.
     // Infers role from the caller's relationship to the session.
     // ─────────────────────────────────────────────────────────────────
+
+    private static async Task<IResult> GetRoomAsync(
+        string id,
+        HttpContext http,
+        LearnerDbContext db,
+        IOptions<LiveKitOptions> liveKitOptions,
+        CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(id))
+        {
+            return Results.BadRequest(new { errorCode = "live_room_id_required", message = "live room id is required." });
+        }
+
+        var access = await LoadRoomWithSessionAsync(id, db, ct);
+        if (access is null)
+        {
+            return Results.NotFound(new { errorCode = "live_room_not_found", message = $"Live room '{id}' was not found." });
+        }
+
+        if (!IsRoomParticipantOrAdmin(http.User, access.Session))
+        {
+            return Results.Json(
+                new { errorCode = "forbidden", message = "User is not a participant of this live room." },
+                statusCode: StatusCodes.Status403Forbidden);
+        }
+
+        return Results.Ok(ToDetailPayload(access.Room, access.Card, liveKitOptions.Value.WssUrl));
+    }
 
     private static async Task<IResult> GetTokenAsync(
         string id,
@@ -295,7 +368,7 @@ public static class SpeakingLiveRoomEndpoints
         {
             role = "tutor";
         }
-        else if (http.User.IsInRole("Admin"))
+        else if (IsAdmin(http.User))
         {
             role = "observer";
         }
@@ -462,6 +535,70 @@ public static class SpeakingLiveRoomEndpoints
         return prop.ValueKind == JsonValueKind.String ? prop.GetString() : null;
     }
 
+    private static async Task<LiveRoomAccess?> LoadRoomWithSessionAsync(
+        string liveRoomId,
+        LearnerDbContext db,
+        CancellationToken ct)
+    {
+        var room = await db.SpeakingLiveRooms
+            .AsNoTracking()
+            .FirstOrDefaultAsync(r => r.Id == liveRoomId, ct);
+        if (room is null)
+        {
+            return null;
+        }
+
+        var session = await db.SpeakingSessions
+            .AsNoTracking()
+            .FirstOrDefaultAsync(s => s.Id == room.SpeakingSessionId, ct);
+        if (session is null)
+        {
+            return null;
+        }
+
+        var card = await db.RolePlayCards.AsNoTracking()
+            .FirstOrDefaultAsync(c => c.Id == session.RolePlayCardId, ct);
+
+        return card is null ? null : new LiveRoomAccess(room, session, card);
+    }
+
+    private static bool IsRoomParticipantOrAdmin(ClaimsPrincipal user, SpeakingSession session)
+    {
+        var userId = user.FindFirstValue(ClaimTypes.NameIdentifier) ?? user.FindFirstValue("sub");
+        return string.Equals(session.UserId, userId, StringComparison.Ordinal)
+            || (!string.IsNullOrWhiteSpace(session.InterlocutorActorId)
+                && string.Equals(session.InterlocutorActorId, userId, StringComparison.Ordinal))
+            || IsAdmin(user);
+    }
+
+    private static bool IsAssignedTutor(ClaimsPrincipal user, SpeakingSession session)
+    {
+        var userId = user.FindFirstValue(ClaimTypes.NameIdentifier) ?? user.FindFirstValue("sub");
+        return !string.IsNullOrWhiteSpace(session.InterlocutorActorId)
+            && string.Equals(session.InterlocutorActorId, userId, StringComparison.Ordinal);
+    }
+
+    private static bool IsAdmin(ClaimsPrincipal user)
+        => user.IsInRole(ApplicationUserRoles.Admin)
+           || user.IsInRole("Admin")
+           || user.IsInRole("system_admin");
+
+    private static SpeakingLiveRoomDetailPayload ToDetailPayload(SpeakingLiveRoom room, RolePlayCard card, string wssUrl) => new(
+        LiveRoomId: room.Id,
+        SpeakingSessionId: room.SpeakingSessionId,
+        RoomName: room.RoomName,
+        LivekitWssUrl: wssUrl,
+        State: room.State.ToString(),
+        RecordingEgressId: room.EgressId,
+        CreatedAt: room.CreatedAt,
+        EndedAt: room.ActualEndUtc,
+        Card: new SpeakingLiveRoomCardPayload(
+            CardId: card.Id,
+            ScenarioTitle: card.ScenarioTitle,
+            Setting: card.Setting,
+            CandidateRole: card.CandidateRole,
+            RolePlayTimeSeconds: card.RolePlayTimeSeconds));
+
     // ─────────────────────────────────────────────────────────────────
     // Helpers
     // ─────────────────────────────────────────────────────────────────
@@ -472,12 +609,32 @@ public static class SpeakingLiveRoomEndpoints
            ?? throw new InvalidOperationException("Authenticated user id is required.");
 }
 
+internal sealed record LiveRoomAccess(SpeakingLiveRoom Room, SpeakingSession Session, RolePlayCard Card);
+
 // ─────────────────────────────────────────────────────────────────────
 // DTOs
 // ─────────────────────────────────────────────────────────────────────
 
 public sealed record SpeakingLiveRoomCreateRequest(string SpeakingSessionId);
 public sealed record SpeakingLiveRoomCreatePayload(string LiveRoomId, string LivekitWssUrl, string RoomName);
+
+public sealed record SpeakingLiveRoomDetailPayload(
+    string LiveRoomId,
+    string SpeakingSessionId,
+    string RoomName,
+    string LivekitWssUrl,
+    string State,
+    string? RecordingEgressId,
+    DateTimeOffset CreatedAt,
+    DateTimeOffset? EndedAt,
+    SpeakingLiveRoomCardPayload Card);
+
+public sealed record SpeakingLiveRoomCardPayload(
+    string CardId,
+    string? ScenarioTitle,
+    string? Setting,
+    string? CandidateRole,
+    int RolePlayTimeSeconds);
 
 public sealed record SpeakingLiveRoomTokenRequest(string Role);
 public sealed record SpeakingLiveRoomTokenPayload(

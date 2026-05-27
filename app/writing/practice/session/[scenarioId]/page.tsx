@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
+import { useTranslations } from 'next-intl';
 import { Sparkles, PenTool } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout/learner-dashboard-shell';
 import { InlineAlert } from '@/components/ui/alert';
@@ -25,6 +26,7 @@ import type {
 type ScenarioMode = Extract<WritingEditorMode, 'practice' | 'coached'>;
 
 export default function WritingPracticeSessionPage() {
+  const t = useTranslations();
   const params = useParams<{ scenarioId: string }>();
   const router = useRouter();
   const scenarioId = String(params?.scenarioId ?? '');
@@ -58,16 +60,16 @@ export default function WritingPracticeSessionPage() {
       })
       .catch((err) => {
         if (cancelled) return;
-        setError(err instanceof Error ? err.message : 'Could not load this scenario.');
+        setError(err instanceof Error ? err.message : t('writing.practice.session.error.load'));
       });
     return () => {
       cancelled = true;
     };
-  }, [scenarioId, mode]);
+  }, [scenarioId, mode, t]);
 
   useEffect(() => {
     if (!scenarioId) return;
-    const t = window.setInterval(() => {
+    const timer = window.setInterval(() => {
       if (content === lastAutosaveContent.current) return;
       lastAutosaveContent.current = content;
       const elapsed = Math.round((Date.now() - startedAtRef.current) / 1000);
@@ -79,14 +81,14 @@ export default function WritingPracticeSessionPage() {
         /* best-effort */
       });
     }, 5000);
-    return () => window.clearInterval(t);
+    return () => window.clearInterval(timer);
   }, [scenarioId, content, wordCount, mode]);
 
   const canSubmit = wordCount >= 50 && !submitting;
 
   const helperText = wordCount < 50
-    ? `Letter is too short to submit (${50 - wordCount} words to minimum).`
-    : 'When you submit, the rubric, canon engine, and exemplar matcher run in parallel.';
+    ? t('writing.practice.session.helper.tooShort', { remaining: 50 - wordCount })
+    : t('writing.practice.session.helper.ready');
 
   const onSubmit = useCallback(async () => {
     if (!canSubmit || !scenario) return;
@@ -104,23 +106,24 @@ export default function WritingPracticeSessionPage() {
       });
       router.push(`/writing/submissions/${encodeURIComponent(submission.id)}/grading`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not submit. Try again.');
+      setError(err instanceof Error ? err.message : t('writing.practice.session.error.submit'));
       setSubmitting(false);
     }
-  }, [canSubmit, content, scenario, wordCount, mode, router]);
+  }, [canSubmit, content, scenario, wordCount, mode, router, t]);
 
   return (
-    <LearnerDashboardShell pageTitle="Practice Session" distractionFree>
+    <LearnerDashboardShell pageTitle={t('writing.practice.session.pageTitle')} distractionFree>
       <div className="space-y-4 pb-32" aria-busy={!scenario}>
         <header
           className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-surface p-4 shadow-sm"
-          aria-label="Practice session controls"
+          aria-label={t('writing.practice.session.controlsLabel')}
         >
           <div className="flex items-center gap-3">
             <PenTool className="h-5 w-5 text-amber-600" aria-hidden="true" />
             <div>
-              <p className="text-xs font-bold uppercase tracking-wider text-muted">Practice</p>
-              <h1 className="text-base font-bold text-navy">{scenario?.title ?? 'Loading scenario…'}</h1>
+              <p className="text-xs font-bold uppercase tracking-wider text-muted">{t('writing.practice.session.eyebrow')}</p>
+              {/* Scenario title is OET-authored English content. */}
+              <h1 className="text-base font-bold text-navy" dir="ltr">{scenario?.title ?? t('writing.practice.session.scenarioLoading')}</h1>
               <div className="mt-1 flex flex-wrap gap-1">
                 {scenario ? (
                   <>
@@ -133,7 +136,7 @@ export default function WritingPracticeSessionPage() {
           </div>
           <div className="flex flex-wrap items-center gap-3">
             <fieldset className="inline-flex rounded-lg border border-border bg-background p-0.5">
-              <legend className="sr-only">Editor mode</legend>
+              <legend className="sr-only">{t('writing.practice.session.editorModeLegend')}</legend>
               {(['practice', 'coached'] as const).map((m) => {
                 const active = mode === m;
                 return (
@@ -149,7 +152,7 @@ export default function WritingPracticeSessionPage() {
                       onChange={() => setMode(m)}
                       className="sr-only"
                     />
-                    {m === 'practice' ? 'Practice' : 'Coached'}
+                    {m === 'practice' ? t('writing.practice.session.mode.practice') : t('writing.practice.session.mode.coached')}
                     {m === 'coached' ? <Sparkles className="ml-1 inline h-3 w-3" aria-hidden="true" /> : null}
                   </label>
                 );
@@ -163,17 +166,17 @@ export default function WritingPracticeSessionPage() {
 
         <div className={`grid gap-4 ${mode === 'coached' ? 'lg:grid-cols-12' : 'lg:grid-cols-2'}`}>
           <section
-            aria-label="Case notes"
+            aria-label={t('writing.practice.session.caseNotesLabel')}
             className={`min-h-[60vh] overflow-hidden rounded-2xl border border-border bg-surface ${mode === 'coached' ? 'lg:col-span-4' : ''}`}
           >
             <WritingCaseNotesPanel
-              caseNotes={scenario?.caseNotesMarkdown ?? 'Loading case notes…'}
+              caseNotes={scenario?.caseNotesMarkdown ?? t('writing.practice.session.caseNotesLoading')}
               taskId={scenarioId}
             />
           </section>
 
           <section
-            aria-label="Writing editor"
+            aria-label={t('writing.practice.session.editorLabel')}
             className={`rounded-2xl border border-border bg-surface p-4 ${mode === 'coached' ? 'lg:col-span-5' : ''}`}
           >
             <WritingEditorV2
@@ -183,13 +186,13 @@ export default function WritingPracticeSessionPage() {
                 setContent(text);
                 setWordCount(words);
               }}
-              placeholder="Begin writing your response (180-220 words)."
+              placeholder={t('writing.practice.session.editorPlaceholder')}
               inputId="practice-editor"
             />
           </section>
 
           {mode === 'coached' && scenario ? (
-            <aside className="lg:col-span-3" aria-label="AI coach">
+            <aside className="lg:col-span-3" aria-label={t('writing.practice.session.coachLabel')}>
               <CoachPanel
                 sessionId={coachSessionId}
                 mode="on"
@@ -207,7 +210,7 @@ export default function WritingPracticeSessionPage() {
 
         <SubmitBar
           canSubmit={canSubmit}
-          submitLabel="Submit for grading"
+          submitLabel={t('writing.practice.session.submit')}
           onSubmit={() => void onSubmit()}
           loading={submitting}
           helperText={helperText}

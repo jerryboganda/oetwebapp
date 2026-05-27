@@ -134,6 +134,91 @@ public class SpeakingMockSetTests : IClassFixture<TestWebApplicationFactory>
     }
 
     [Fact]
+    public async Task GetMockSession_BothSubmittedBeforeGrading_WaitsForResults()
+    {
+        var mockSetId = await EnsureSeedMockSetAsync();
+        using var client = await CreateLearnerClientAsync("speaking-mocks-await-results");
+
+        var startResponse = await client.PostAsJsonAsync(
+            $"/v1/speaking/mock-sets/{mockSetId}/start",
+            new { mode = "exam" });
+        startResponse.EnsureSuccessStatusCode();
+
+        using var startJson = JsonDocument.Parse(await startResponse.Content.ReadAsStringAsync());
+        var sessionId = startJson.RootElement.GetProperty("mockSessionId").GetString()!;
+        var attempt1Id = startJson.RootElement.GetProperty("rolePlay1").GetProperty("attemptId").GetString()!;
+        var attempt2Id = startJson.RootElement.GetProperty("rolePlay2").GetProperty("attemptId").GetString()!;
+
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+            var attempt1 = await db.Attempts.FirstAsync(a => a.Id == attempt1Id);
+            var attempt2 = await db.Attempts.FirstAsync(a => a.Id == attempt2Id);
+            attempt1.State = AttemptState.Submitted;
+            attempt2.State = AttemptState.Evaluating;
+            await db.SaveChangesAsync();
+        }
+
+        var sessionResponse = await client.GetAsync($"/v1/speaking/mock-sessions/{sessionId}");
+        sessionResponse.EnsureSuccessStatusCode();
+        using var sessionJson = JsonDocument.Parse(await sessionResponse.Content.ReadAsStringAsync());
+
+        Assert.Equal(SpeakingMockOrchestratorStates.Finished2, sessionJson.RootElement.GetProperty("orchestratorState").GetString());
+        Assert.False(sessionJson.RootElement.GetProperty("combined").GetProperty("bothCompleted").GetBoolean());
+        Assert.Equal("submitted", sessionJson.RootElement.GetProperty("rolePlay1").GetProperty("state").GetString());
+        Assert.Equal("evaluating", sessionJson.RootElement.GetProperty("rolePlay2").GetProperty("state").GetString());
+    }
+
+    [Fact]
+    public async Task GetMockSession_FailedEvaluation_DoesNotReportCombinedCompletion()
+    {
+        var mockSetId = await EnsureSeedMockSetAsync();
+        using var client = await CreateLearnerClientAsync("speaking-mocks-failed-evaluation");
+
+        var startResponse = await client.PostAsJsonAsync(
+            $"/v1/speaking/mock-sets/{mockSetId}/start",
+            new { mode = "exam" });
+        startResponse.EnsureSuccessStatusCode();
+
+        using var startJson = JsonDocument.Parse(await startResponse.Content.ReadAsStringAsync());
+        var sessionId = startJson.RootElement.GetProperty("mockSessionId").GetString()!;
+        var attempt1Id = startJson.RootElement.GetProperty("rolePlay1").GetProperty("attemptId").GetString()!;
+        var attempt2Id = startJson.RootElement.GetProperty("rolePlay2").GetProperty("attemptId").GetString()!;
+
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+            var attempt1 = await db.Attempts.FirstAsync(a => a.Id == attempt1Id);
+            var attempt2 = await db.Attempts.FirstAsync(a => a.Id == attempt2Id);
+            attempt1.State = AttemptState.Evaluating;
+            attempt2.State = AttemptState.Submitted;
+            db.Evaluations.Add(new Evaluation
+            {
+                Id = $"eval-{Guid.NewGuid():N}",
+                AttemptId = attempt1Id,
+                SubtestCode = "speaking",
+                State = AsyncState.Failed,
+                ScoreRange = "0-0",
+                ConfidenceBand = ConfidenceBand.Low,
+                ModelExplanationSafe = "Scoring failed in the test fixture.",
+                LearnerDisclaimer = "Practice scoring failed in the test fixture.",
+                StatusReasonCode = "provider_failed",
+                StatusMessage = "Scoring failed.",
+                CreatedAt = DateTimeOffset.UtcNow,
+                LastTransitionAt = DateTimeOffset.UtcNow,
+            });
+            await db.SaveChangesAsync();
+        }
+
+        var sessionResponse = await client.GetAsync($"/v1/speaking/mock-sessions/{sessionId}");
+        sessionResponse.EnsureSuccessStatusCode();
+        using var sessionJson = JsonDocument.Parse(await sessionResponse.Content.ReadAsStringAsync());
+
+        Assert.False(sessionJson.RootElement.GetProperty("combined").GetProperty("bothCompleted").GetBoolean());
+        Assert.Equal("failed", sessionJson.RootElement.GetProperty("rolePlay1").GetProperty("evaluationState").GetString());
+    }
+
+    [Fact]
     public async Task SpeakingAttemptRoutes_NonSpeakingAttempt_Return404()
     {
         const string userId = "speaking-mocks-non-speaking-attempt";

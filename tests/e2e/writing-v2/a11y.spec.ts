@@ -14,31 +14,35 @@ import { expect, test, type Page } from '@playwright/test';
  * learners; running on the chromium shard is sufficient signal.
  */
 
+// Each entry accepts either the translated heading OR the raw next-intl
+// translation key as a fallback — covers deployments where the message
+// bundle hasn't been baked into the standalone container yet (see
+// next.config.ts outputFileTracingIncludes fix).
 const PAGES: Array<{ path: string; label: string; headingPattern: RegExp }> = [
   {
     path: '/writing/welcome',
     label: 'writing welcome',
-    headingPattern: /welcome — let'?s set up your writing pathway/i,
+    headingPattern: /(welcome — let'?s set up your writing pathway|writing\.welcome\.hero\.title)/i,
   },
   {
     path: '/writing/diagnostic',
     label: 'writing diagnostic briefing',
-    headingPattern: /a 50-minute baseline of your six writing criteria/i,
+    headingPattern: /(a 50-minute baseline of your six writing criteria|writing\.diagnostic\.briefing\.hero\.title)/i,
   },
   {
     path: '/writing/canon',
     label: 'writing canon library',
-    headingPattern: /dr ahmed's writing rules in one place/i,
+    headingPattern: /(dr ahmed's writing rules in one place|writing\.canon\.library\.hero\.title)/i,
   },
   {
     path: '/writing/skill-tree',
     label: 'writing skill tree',
-    headingPattern: /w1-w8 — the eight skills every oet letter rests on/i,
+    headingPattern: /(w1-w8 — the eight skills every oet letter rests on|writing\.skillTree\.title)/i,
   },
   {
     path: '/writing/stats',
     label: 'writing stats dashboard',
-    headingPattern: /track every dimension of your writing progress/i,
+    headingPattern: /(track every dimension of your writing progress|writing\.stats\.title)/i,
   },
 ];
 

@@ -209,14 +209,79 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
     /// rows would otherwise never advance past "queued". Default 3 passes
     /// covers the common "evaluation → side-effects → notification fan-out"
     /// cascade in one call.
+    ///
+    /// Before each pass we backdate <c>AvailableAt</c> on every Queued job
+    /// so deterministic drains do not have to wait for the production-default
+    /// 1-second submit-time buffer (or any retry backoff). Without this,
+    /// LearnerService.QueueJobAsync's <c>AvailableAt = now + 1s</c> would
+    /// cause tight test polling loops to skip the job on every pass.
     /// </summary>
     public async Task DrainBackgroundJobsAsync(int passes = 3, CancellationToken cancellationToken = default)
     {
         var processor = Services.GetRequiredService<BackgroundJobProcessor>();
         for (var i = 0; i < passes; i++)
         {
+            await ForceQueuedJobsImmediatelyAvailableAsync(cancellationToken);
             await processor.ProcessOnceAsync(cancellationToken);
         }
+    }
+
+    /// <summary>
+    /// Sets <c>AvailableAt</c> for every Queued job to "now - 1s" so the
+    /// BackgroundJobProcessor immediately considers it eligible. Production
+    /// uses the AvailableAt buffer to space retries; tests want deterministic
+    /// drain semantics with no wall-clock waits.
+    /// </summary>
+    private async Task ForceQueuedJobsImmediatelyAvailableAsync(CancellationToken cancellationToken)
+    {
+        await using var scope = Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        var now = DateTimeOffset.UtcNow;
+        var jobs = await db.BackgroundJobs
+            .Where(x => x.State == AsyncState.Queued && x.AvailableAt > now)
+            .ToListAsync(cancellationToken);
+        if (jobs.Count == 0) return;
+        foreach (var job in jobs)
+        {
+            job.AvailableAt = now.AddSeconds(-1);
+        }
+        await db.SaveChangesAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// Grants AI credits to the user so AI-debited features (writing grade,
+    /// speaking grade, etc.) do not throw <c>ai_credits_insufficient</c>.
+    /// Production credit accounting is enforced by <c>AiGatewayService</c>
+    /// for paid features; tests need to short-circuit that fail-closed gate
+    /// without disabling the production code path.
+    /// </summary>
+    public async Task EnsureAiCreditsAsync(string userId, int tokens = 10_000, CancellationToken cancellationToken = default)
+    {
+        await using var scope = Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        await db.Database.EnsureCreatedAsync(cancellationToken);
+
+        var now = DateTimeOffset.UtcNow;
+        var existing = await db.AiCreditLedger
+            .Where(x => x.UserId == userId && x.Source == AiCreditSource.Promo)
+            .Select(x => x.TokensDelta)
+            .ToListAsync(cancellationToken);
+        var existingTotal = existing.Sum();
+        if (existingTotal >= tokens) return;
+
+        db.AiCreditLedger.Add(new AiCreditLedgerEntry
+        {
+            Id = $"aicl-test-{Guid.NewGuid():N}",
+            UserId = userId,
+            TokensDelta = tokens - existingTotal,
+            CostDeltaUsd = 0m,
+            Source = AiCreditSource.Promo,
+            Description = "Test fixture grant",
+            ReferenceId = null,
+            ExpiresAt = null,
+            CreatedAt = now,
+        });
+        await db.SaveChangesAsync(cancellationToken);
     }
 
     public async Task EnsureLearnerProfileAsync(string userId, string email, string displayName)

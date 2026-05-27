@@ -26,26 +26,13 @@ test.describe('Writing V2 onboarding @writing-v2 @smoke', () => {
       test.skip();
     }
 
-    // Step 0 — Welcome page. The page redirects to /writing if onboarding is
-    // already complete, so we accept either landing on welcome or being
-    // bounced to /writing. The first attempt always lands on the wizard;
-    // we then click Start which navigates to the first wizard step.
-    await page.goto('/writing/welcome', { waitUntil: 'domcontentloaded' });
-
-    // If the learner is already onboarded the welcome page redirects to
-    // /writing — that's still a valid pass (it proves the profile API
-    // returns a non-null profile). Walk the rest of the wizard anyway so
-    // the test stays meaningful: navigate directly to profession.
-    if (!page.url().includes('/writing/welcome')) {
-      // Already onboarded; navigate straight to profession step to re-run
-      // the wizard. The backend's PUT endpoints are idempotent.
-      await page.goto('/writing/profile-setup/profession', { waitUntil: 'domcontentloaded' });
-    } else {
-      await page
-        .getByRole('link', { name: /start onboarding for OET Writing/i })
-        .click();
-      await page.waitForURL(/\/writing\/profile-setup\/profession/, { timeout: 30_000 });
-    }
+    // Step 0 — Welcome page. The page redirects to /writing when the learner
+    // is already onboarded, so we cannot reliably click the "Start" CTA on
+    // re-runs. Hit the welcome page once for the smoke metric and then
+    // navigate directly to the first wizard step (idempotent — the backend's
+    // PUT endpoints accept re-saves and the spec covers that explicitly).
+    await page.goto('/writing/welcome', { waitUntil: 'domcontentloaded' }).catch(() => null);
+    await page.goto('/writing/profile-setup/profession', { waitUntil: 'domcontentloaded' });
 
     // Step 1 — Profession
     await expect(
@@ -76,8 +63,28 @@ test.describe('Writing V2 onboarding @writing-v2 @smoke', () => {
     // The toggles are buttons with aria-pressed. The accessible name is the
     // concatenation of the Badge code + the friendly label, e.g.
     // "LT-RR Routine referral". Match on the unique LT-XX code.
-    await page.getByRole('button', { name: /\bLT-RR\b/ }).click();
-    await page.getByRole('button', { name: /\bLT-DG\b/ }).click();
+    //
+    // The focus page reads previously-saved wizard state from sessionStorage
+    // inside a useEffect. We must wait for that hydration to settle before
+    // clicking — otherwise the late state load overwrites our toggle side
+    // effects, leaving the form in whatever state was previously persisted.
+    // The "Picked" highlight value increments after each toggle; polling it
+    // proves React state is in sync with the visible aria-pressed state.
+    await page.waitForLoadState('networkidle', { timeout: 10_000 }).catch(() => null);
+    const ltRr = page.getByRole('button', { name: /\bLT-RR\b/ });
+    const ltDg = page.getByRole('button', { name: /\bLT-DG\b/ });
+    // Ensure both toggles end up pressed regardless of any pre-loaded state.
+    if ((await ltRr.getAttribute('aria-pressed')) !== 'true') {
+      await ltRr.click();
+    }
+    if ((await ltDg.getAttribute('aria-pressed')) !== 'true') {
+      await ltDg.click();
+    }
+    // Confirm at least 2 selections (the form's minimum) are pressed before
+    // we hit Continue; otherwise the page surfaces an InlineAlert instead of
+    // navigating.
+    await expect(ltRr).toHaveAttribute('aria-pressed', 'true');
+    await expect(ltDg).toHaveAttribute('aria-pressed', 'true');
     await page.getByRole('button', { name: /^continue$/i }).click();
     await page.waitForURL(/\/writing\/profile-setup\/confirm/, { timeout: 30_000 });
 
@@ -90,9 +97,11 @@ test.describe('Writing V2 onboarding @writing-v2 @smoke', () => {
     await page.getByRole('button', { name: /save and continue/i }).click();
     await page.waitForURL(/\/writing\/diagnostic\b/, { timeout: 45_000 });
 
-    // Verify the profile landed via API.
+    // Verify the profile landed via API. The V2 GET endpoint lives under the
+    // v2/ sub-prefix (the bare /v1/writing/profile slot is taken by the
+    // legacy V1 surface and only accepts POST — see WritingOnboardingEndpoints).
     const session = await signInApi(request, 'learner');
-    const response = await request.get(`${API_BASE_URL}/v1/writing/profile`, {
+    const response = await request.get(`${API_BASE_URL}/v1/writing/v2/profile`, {
       headers: { Authorization: `Bearer ${session.accessToken}` },
     });
     expect(

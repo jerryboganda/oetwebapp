@@ -59,7 +59,12 @@ export default function WritingCanonPage() {
               <Search className="pointer-events-none absolute start-3 top-3 h-5 w-5 text-muted" />
               <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={t('writing.canon.library.browse.searchPlaceholder')} className="min-h-11 w-full rounded-lg border border-border bg-background ps-10 pe-3 text-sm" />
             </label>
-            <select value={severity} onChange={(event) => setSeverity(event.target.value)} className="min-h-11 rounded-lg border border-border bg-background px-3 text-sm">
+            <select
+              value={severity}
+              onChange={(event) => setSeverity(event.target.value)}
+              aria-label={t('writing.canon.library.browse.severityLabel')}
+              className="min-h-11 rounded-lg border border-border bg-background px-3 text-sm"
+            >
               <option value="">{t('writing.canon.library.browse.severityAll')}</option>
               <option value="critical">{t('writing.canon.library.browse.severityCritical')}</option>
               <option value="major">{t('writing.canon.library.browse.severityMajor')}</option>

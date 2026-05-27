@@ -362,6 +362,96 @@
       "example_right": "Mrs Carter had a productive cough with greenish sputum and pleuritic right-sided chest pain rated 7 out of 10 on the numerical rating scale.",
       "canon_rule_id": null,
       "related_sub_skill": "W6"
+    },
+    {
+      "id": "00000000-0000-0000-0000-004C00020001",
+      "category": "length",
+      "summary": "Padded opening paragraph that introduces medications and history before stating the purpose — wastes the most-graded sentence on filler.",
+      "example_wrong": "Mr Holm is a 55-year-old gentleman known to this practice with a long-standing history of hypertension and type 2 diabetes for which he takes amlodipine and metformin. He has been our patient for many years. I would like to discuss with you his sleep symptoms.",
+      "example_right": "I am writing to refer Mr Holm, a 55-year-old sales manager, who has been provisionally diagnosed with obstructive sleep apnoea. Your assessment and management would be appreciated.",
+      "canon_rule_id": "SC-025",
+      "related_sub_skill": "W2"
+    },
+    {
+      "id": "00000000-0000-0000-0000-004C00020002",
+      "category": "letter-type-confusion",
+      "summary": "Treating a discharge home as if it were a referral to a new specialist, requesting investigation rather than continuation of care.",
+      "example_wrong": "I am writing to refer Mrs Carter, a 62-year-old retired teacher, who has had pneumonia. I would be grateful if you could arrange chest imaging and respiratory review.",
+      "example_right": "I am writing to inform you that Mrs Carter was discharged today following a seven-day admission for community-acquired pneumonia. It would be appreciated if you could arrange a repeat chest X-ray in six weeks to confirm radiological resolution.",
+      "canon_rule_id": "SC-002",
+      "related_sub_skill": "W5"
+    },
+    {
+      "id": "00000000-0000-0000-0000-004C00020003",
+      "category": "content-errors",
+      "summary": "Reporting examination findings without the unit of measurement — leaves the recipient unable to interpret severity.",
+      "example_wrong": "Clinical examination revealed a blood pressure of 142, a pulse of 78 and oxygen saturations of 96.",
+      "example_right": "Clinical examination revealed a blood pressure of 142 over 88 mmHg, a regular pulse of 78 beats per minute and oxygen saturations of 96 percent on room air.",
+      "canon_rule_id": "SC-006",
+      "related_sub_skill": "W4"
+    },
+    {
+      "id": "00000000-0000-0000-0000-004C00020004",
+      "category": "content-errors",
+      "summary": "Quoting a drug dose without the frequency, route or duration — clinically incomplete and unsafe for handover.",
+      "example_wrong": "He has been started on amoxicillin 500 mg and ramipril.",
+      "example_right": "He has been started on oral amoxicillin 500 mg three times daily for seven days and ramipril 5 mg daily, continued indefinitely.",
+      "canon_rule_id": null,
+      "related_sub_skill": "W4"
+    },
+    {
+      "id": "00000000-0000-0000-0000-004C00020005",
+      "category": "style",
+      "summary": "Including 'apparently', 'allegedly' or 'reportedly' when reporting the patient's history — these words cast doubt and read as disrespectful.",
+      "example_wrong": "Mrs Pearson apparently had a fall last week and allegedly hit her head, although she reportedly cannot remember the details.",
+      "example_right": "Mrs Pearson sustained a fall last week with possible head impact; she is unable to recall the details of the event.",
+      "canon_rule_id": null,
+      "related_sub_skill": "W6"
+    },
+    {
+      "id": "00000000-0000-0000-0000-004C00020006",
+      "category": "grammar",
+      "summary": "Dangling participle in clinical prose — modifier attached to the wrong subject.",
+      "example_wrong": "Walking into the surgery, his chest pain was severe.",
+      "example_right": "On walking into the surgery, Mr Patel reported that his chest pain was severe.",
+      "canon_rule_id": null,
+      "related_sub_skill": "W7"
+    },
+    {
+      "id": "00000000-0000-0000-0000-004C00020007",
+      "category": "vocabulary",
+      "summary": "Using 'patient denies' as a stative present tense when reporting a past consultation — should be past simple per the today-paragraph anchor.",
+      "example_wrong": "Today, Mr Holm presents for review and denies chest pain.",
+      "example_right": "Today, Mr Holm presented for review. Please note, he denied chest pain.",
+      "canon_rule_id": "SC-005",
+      "related_sub_skill": "W7"
+    },
+    {
+      "id": "00000000-0000-0000-0000-004C00020008",
+      "category": "format",
+      "summary": "Recipient address and date block missing or jumbled — undermines the professional appearance and costs C3/C4 marks.",
+      "example_wrong": "26-05-2026\nTo Helena Park\nDear Helena,\n\nRe: Tom Holm 55",
+      "example_right": "Dr Helena Park\nConsultant in Sleep Medicine\nCity General Hospital\n\n26 May 2026\n\nDear Dr Park,\n\nRe: Mr Thomas Holm, aged 55",
+      "canon_rule_id": "SC-014",
+      "related_sub_skill": "W6"
+    },
+    {
+      "id": "00000000-0000-0000-0000-004C00020009",
+      "category": "profession-crossover",
+      "summary": "Nursing handover that recommends specific antibiotic agents or doses — outside scope; the prescribing decision belongs to the medical team.",
+      "example_wrong": "The community team should commence oral co-amoxiclav 625 mg three times daily for seven days and add metronidazole if the wound smells offensive.",
+      "example_right": "The wound shows signs of localised infection. Re-referral to the medical team or GP for antibiotic prescribing is recommended; in the interim the wound has been swabbed and the dressing changed.",
+      "canon_rule_id": null,
+      "related_sub_skill": "W3"
+    },
+    {
+      "id": "00000000-0000-0000-0000-004C0002000A",
+      "category": "profession-crossover",
+      "summary": "Pharmacist offering a definitive medical diagnosis instead of flagging concerns and deferring to prescriber.",
+      "example_wrong": "Mrs Murphy has SIADH secondary to citalopram and requires fluid restriction; sertraline should be substituted.",
+      "example_right": "Mrs Murphy's recent symptoms and serum sodium of 128 mmol/L are suggestive of SSRI-related hyponatraemia following the recent citalopram uptitration; review and consideration of dose reduction or alternative agent is requested.",
+      "canon_rule_id": null,
+      "related_sub_skill": "W3"
     }
   ]
 }

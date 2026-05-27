@@ -35,13 +35,13 @@ function LiveSpeakingTaskContent() {
   const rawId = params?.id;
   const id = typeof rawId === 'string' ? rawId : '';
   const requestedMode = searchParams?.get('mode');
-  // Mocks V2 — BuildLaunchRoute writes mockAttemptId/mockSectionId on the
-  // URL when this player is launched as part of a mock attempt. The legacy
-  // names (`attemptId`, `mockSession`) referenced a different speaking-only
-  // session shape and were never written by the new launcher — reading
-  // them produced silent failures (no completion ever recorded).
+  // Generic mocks use mockAttemptId/mockSectionId; the two-role-play Speaking
+  // mock orchestrator binds directly to its paired attempt/session ids.
   const mockAttemptId = searchParams?.get('mockAttemptId') ?? undefined;
   const mockSectionId = searchParams?.get('mockSectionId') ?? undefined;
+  const speakingMockAttemptId = searchParams?.get('attemptId') ?? undefined;
+  const speakingMockSessionId = searchParams?.get('mockSession') ?? searchParams?.get('mockSessionId') ?? undefined;
+  const speakingMockSetId = searchParams?.get('mockSetId') ?? undefined;
   const mode: TaskMode = requestedMode === 'exam' ? 'exam' : 'self';
 
   // --- Card State ---
@@ -547,7 +547,7 @@ function LiveSpeakingTaskContent() {
     setIsSubmitting(true);
     setSubmitError(null);
     setRecordingState('finished');
-    analytics.track('task_submitted', { taskId: id, subtest: 'speaking', mode, durationSeconds, mockAttemptId });
+    analytics.track('task_submitted', { taskId: id, subtest: 'speaking', mode, durationSeconds, mockAttemptId, speakingMockSessionId });
 
     try {
       const recording = await stopRecorderAsync();
@@ -556,10 +556,19 @@ function LiveSpeakingTaskContent() {
         throw new Error('No speaking audio was captured.');
       }
 
-      const { submissionId } = await submitSpeakingRecording(id, recording, durationSeconds, mode, {
-        accepted: recordingConsentAccepted,
-        text: compliance?.consentText,
-      });
+      const { submissionId } = await submitSpeakingRecording(
+        id,
+        recording,
+        durationSeconds,
+        mode,
+        {
+          accepted: recordingConsentAccepted,
+          text: compliance?.consentText,
+        },
+        speakingMockAttemptId && speakingMockSessionId
+          ? { attemptId: speakingMockAttemptId, mockSessionId: speakingMockSessionId }
+          : undefined,
+      );
       if (mockAttemptId && mockSectionId) {
         try {
           await completeMockSection(mockAttemptId, mockSectionId, {
@@ -579,6 +588,17 @@ function LiveSpeakingTaskContent() {
         router.replace(mockUrl);
         resultNavigationTimerRef.current = window.setTimeout(() => {
           if (!window.location.pathname.startsWith('/mocks/player/')) {
+            window.location.assign(mockUrl);
+          }
+        }, 1500);
+        return;
+      }
+      if (speakingMockSessionId && speakingMockSetId) {
+        const mockUrl = `/speaking/mocks/${encodeURIComponent(speakingMockSetId)}?session=${encodeURIComponent(speakingMockSessionId)}`;
+        setShowSubmitConfirm(false);
+        router.replace(mockUrl);
+        resultNavigationTimerRef.current = window.setTimeout(() => {
+          if (!window.location.pathname.startsWith('/speaking/mocks/')) {
             window.location.assign(mockUrl);
           }
         }, 1500);
@@ -626,14 +646,14 @@ function LiveSpeakingTaskContent() {
   return (
     <AppShell pageTitle={card?.title ?? 'Speaking Task'} workspaceRole="learner" className="px-3 sm:px-4 lg:px-6">
     <div className="mx-auto flex min-h-[calc(100vh-7rem)] w-full max-w-[1280px] flex-col overflow-hidden rounded-2xl border border-border/80 bg-surface text-navy shadow-sm">
-      {mockAttemptId ? (
+      {mockAttemptId || speakingMockSessionId ? (
         <div
           role="status"
           className="flex items-start gap-3 border-b border-info/30 bg-info/10 px-4 py-2.5 text-sm text-info sm:px-6"
         >
           <ShieldCheck aria-hidden className="mt-0.5 h-4 w-4 shrink-0" />
           <p className="flex-1">
-            You&rsquo;re taking this Speaking section as part of a mock. Submitting will mark this section complete and return you to the mock dashboard. Tutor scoring continues asynchronously.
+            You&rsquo;re taking this Speaking section as part of a mock. Submitting will mark this section complete and return you to the mock dashboard. Scoring continues asynchronously.
           </p>
         </div>
       ) : null}

@@ -169,11 +169,12 @@ export function TranscriptPlayerWithComments({
     setError(null);
     try {
       await onAddComment({
-        segmentStartMs: startSeg.startMs,
-        segmentEndMs: endSeg.endMs,
-        criterion: composerCriterion || undefined,
+        transcriptSegmentIndex: composerSegments.startIdx,
+        startMs: startSeg.startMs,
+        endMs: endSeg.endMs,
+        criterionCode: composerCriterion || undefined,
         severity: composerSeverity,
-        body: composerBody.trim(),
+        bodyMarkdown: composerBody.trim(),
       });
       setComposerOpen(false);
     } catch (err) {

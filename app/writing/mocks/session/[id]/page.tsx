@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
+import { useTranslations } from 'next-intl';
 import { Award } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout/learner-dashboard-shell';
 import { InlineAlert } from '@/components/ui/alert';
@@ -24,6 +25,7 @@ import type {
 } from '@/lib/writing/types';
 
 export default function WritingMockSessionPage() {
+  const t = useTranslations();
   const params = useParams<{ id: string }>();
   const router = useRouter();
   const sessionId = String(params?.id ?? '');
@@ -65,12 +67,12 @@ export default function WritingMockSessionPage() {
       })
       .catch((err) => {
         if (cancelled) return;
-        setError(err instanceof Error ? err.message : 'Could not load mock session.');
+        setError(err instanceof Error ? err.message : t('writing.mocks.session.error.load'));
       });
     return () => {
       cancelled = true;
     };
-  }, [sessionId, router]);
+  }, [sessionId, router, t]);
 
   useEffect(() => {
     if (phase === 'completed') return;
@@ -95,7 +97,7 @@ export default function WritingMockSessionPage() {
   // Autosave every 5s during writing.
   useEffect(() => {
     if (phase !== 'writing' || !scenario?.id) return;
-    const t = window.setInterval(() => {
+    const timer = window.setInterval(() => {
       if (content === lastAutosaveContent.current) return;
       lastAutosaveContent.current = content;
       const elapsed = Math.round((Date.now() - startedAtRef.current) / 1000);
@@ -103,15 +105,15 @@ export default function WritingMockSessionPage() {
         /* best-effort */
       });
     }, 5000);
-    return () => window.clearInterval(t);
+    return () => window.clearInterval(timer);
   }, [phase, scenario?.id, content, wordCount]);
 
   const canSubmit = phase === 'writing' && wordCount >= 100 && !submitting;
   const helperText = useMemo(() => {
-    if (phase !== 'writing') return 'Submit unlocks at the start of the writing window.';
-    if (wordCount < 100) return 'Letter is too short to submit.';
-    return 'Submitting locks the mock.';
-  }, [phase, wordCount]);
+    if (phase !== 'writing') return t('writing.mocks.session.helper.notStarted');
+    if (wordCount < 100) return t('writing.mocks.session.helper.tooShort');
+    return t('writing.mocks.session.helper.ready');
+  }, [phase, wordCount, t]);
 
   const submit = useCallback(async () => {
     if (!canSubmit) return;
@@ -122,10 +124,10 @@ export default function WritingMockSessionPage() {
       await submitWritingMock(sessionId, { letterContent: content, wordCount, timeSpentSeconds: elapsed });
       router.push(`/writing/mocks/session/${encodeURIComponent(sessionId)}/results`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not submit mock.');
+      setError(err instanceof Error ? err.message : t('writing.mocks.session.error.submit'));
       setSubmitting(false);
     }
-  }, [canSubmit, content, sessionId, wordCount, router]);
+  }, [canSubmit, content, sessionId, wordCount, router, t]);
 
   const handlePhaseChange = useCallback(async (next: 'reading' | 'writing' | 'completed') => {
     if (next === 'writing' && phase !== 'writing') {
@@ -137,25 +139,26 @@ export default function WritingMockSessionPage() {
         setWritingSeconds(updated.writingSecondsRemaining);
         startedAtRef.current = updated.readingPhaseEndedAt ? new Date(updated.readingPhaseEndedAt).getTime() : Date.now();
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Could not start the writing window.');
+        setError(err instanceof Error ? err.message : t('writing.mocks.session.error.startWriting'));
       }
     } else if (next === 'completed') {
       setPhase('completed');
     }
-  }, [phase, sessionId]);
+  }, [phase, sessionId, t]);
 
   return (
-    <LearnerDashboardShell pageTitle="Writing Mock" distractionFree>
+    <LearnerDashboardShell pageTitle={t('writing.mocks.session.pageTitle')} distractionFree>
       <div className="space-y-4 pb-32" aria-busy={!session}>
         <header
           className="sticky top-0 z-20 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-surface/95 p-4 shadow-sm backdrop-blur"
-          aria-label="Mock session controls"
+          aria-label={t('writing.mocks.session.controlsLabel')}
         >
           <div className="flex items-center gap-3">
             <Award className="h-5 w-5 text-amber-600" aria-hidden="true" />
             <div>
-              <p className="text-xs font-bold uppercase tracking-wider text-muted">Mock — strict mode</p>
-              <h1 className="text-base font-bold text-navy">{scenario?.title ?? 'Loading…'}</h1>
+              <p className="text-xs font-bold uppercase tracking-wider text-muted">{t('writing.mocks.session.eyebrow')}</p>
+              {/* Scenario title is OET-authored English content. */}
+              <h1 className="text-base font-bold text-navy" dir="ltr">{scenario?.title ?? t('writing.mocks.session.scenarioLoading')}</h1>
               <div className="mt-1 flex flex-wrap gap-1">
                 {scenario ? (
                   <>
@@ -181,15 +184,15 @@ export default function WritingMockSessionPage() {
         {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
 
         <div className="grid gap-4 lg:grid-cols-2">
-          <section aria-label="Case notes" className="min-h-[60vh] overflow-hidden rounded-2xl border border-border bg-surface">
+          <section aria-label={t('writing.mocks.session.caseNotesLabel')} className="min-h-[60vh] overflow-hidden rounded-2xl border border-border bg-surface">
             <WritingCaseNotesPanel
-              caseNotes={scenario?.caseNotesMarkdown ?? 'Loading case notes…'}
+              caseNotes={scenario?.caseNotesMarkdown ?? t('writing.mocks.session.caseNotesLoading')}
               readingWindowLocked={phase === 'reading'}
               taskId={sessionId}
             />
           </section>
 
-          <section aria-label="Writing editor" className="rounded-2xl border border-border bg-surface p-4">
+          <section aria-label={t('writing.mocks.session.editorLabel')} className="rounded-2xl border border-border bg-surface p-4">
             <WritingEditorV2
               mode="mock"
               initialContent=""
@@ -199,7 +202,7 @@ export default function WritingMockSessionPage() {
                 setContent(text);
                 setWordCount(words);
               }}
-              placeholder={phase === 'reading' ? 'Writing window opens after the reading window.' : 'Begin writing (180-220 words).'}
+              placeholder={phase === 'reading' ? t('writing.mocks.session.editorPlaceholder.reading') : t('writing.mocks.session.editorPlaceholder.writing')}
               inputId="mock-editor"
             />
           </section>
@@ -207,7 +210,7 @@ export default function WritingMockSessionPage() {
 
         <SubmitBar
           canSubmit={canSubmit}
-          submitLabel="Submit mock"
+          submitLabel={t('writing.mocks.session.submit')}
           onSubmit={() => void submit()}
           loading={submitting}
           helperText={helperText}

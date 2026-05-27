@@ -322,13 +322,16 @@ public partial class LearnerService
         // sync helper never overwrites it back to Finished1 once entered;
         // it only auto-advances from Bridge to Prep2 if the learner already
         // started attempt 2 (e.g. via the legacy speaking task page).
-        var a1Done = a1.State == AttemptState.Submitted || a1.State == AttemptState.Completed;
-        var a2Done = a2.State == AttemptState.Submitted || a2.State == AttemptState.Completed;
+        var a1Done = IsMockAttemptSubmitted(a1);
+        var a2Done = IsMockAttemptSubmitted(a2);
+        var a1Graded = a1.State == AttemptState.Completed;
+        var a2Graded = a2.State == AttemptState.Completed;
         // Attempt.StartedAt is non-nullable DateTimeOffset, so InProgress
         // is the only "in flight" indicator we need.
         var a2Started = a2.State == AttemptState.InProgress;
 
-        if (a1Done && a2Done) return SpeakingMockOrchestratorStates.Aggregated;
+        if (a1Graded && a2Graded) return SpeakingMockOrchestratorStates.Aggregated;
+        if (a1Done && a2Done) return SpeakingMockOrchestratorStates.Finished2;
         if (a1Done && a2Started) return SpeakingMockOrchestratorStates.Active2;
         if (a1Done)
         {
@@ -340,6 +343,12 @@ public partial class LearnerService
         if (a1.State == AttemptState.InProgress) return SpeakingMockOrchestratorStates.Active1;
         return SpeakingMockOrchestratorStates.Prep1;
     }
+
+    private static bool IsMockAttemptSubmitted(Attempt attempt) => attempt.State switch
+    {
+        AttemptState.Submitted or AttemptState.Evaluating or AttemptState.Completed => true,
+        _ => false,
+    };
 
     private async Task<Attempt> CreateSpeakingMockAttemptAsync(
         string userId,

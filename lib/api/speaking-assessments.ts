@@ -7,6 +7,9 @@
  *
  * Backend endpoints targeted (see plan section E):
  *   GET    /v1/speaking/sessions/{id}/assessments
+ *   GET    /v1/expert/speaking/sessions/{id}/assessments
+ *   GET    /v1/expert/speaking/sessions/{id}/context
+ *   GET    /v1/expert/speaking/sessions/{id}/recording
  *   POST   /v1/expert/speaking/sessions/{id}/tutor-assessment              (create draft)
  *   PATCH  /v1/expert/speaking/sessions/{id}/tutor-assessments/{aid}
  *   POST   /v1/expert/speaking/sessions/{id}/tutor-assessments/{aid}/submit
@@ -130,6 +133,28 @@ async function request<T>(path: string, init?: RequestInit, opts?: { acceptedSta
   }
 
   throw lastError ?? new Error('Request failed after retries');
+}
+
+async function requestBlob(path: string, init?: RequestInit): Promise<Blob> {
+  const response = await fetchWithTimeout(resolveApiUrl(path), {
+    ...init,
+    headers: await buildHeaders(init),
+  });
+
+  if (!response.ok) {
+    let code = response.status === 401 ? 'not_authenticated' : response.status === 403 ? 'forbidden' : 'unknown_error';
+    let message = `Request failed: ${response.status}`;
+    try {
+      const err = await response.json();
+      code = err.code ?? code;
+      message = err.message ?? err.title ?? message;
+    } catch {
+      // Keep the fallback message for non-JSON blob errors.
+    }
+    throw new SpeakingAssessmentApiError(response.status, code, message, RETRYABLE_STATUS(response.status));
+  }
+
+  return response.blob();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -332,11 +357,15 @@ export interface DualAssessmentResponse {
 
 export interface TutorQueueItem {
   sessionId: string;
+  userId?: string;
   learnerDisplayName: string;
   professionId: string;
+  rolePlayCardId?: string;
+  scenarioTitle?: string | null;
   cardId: string;
   cardTitle: string;
   endedAt: string;
+  elapsedSeconds?: number;
   durationSeconds: number;
   aiReadinessBand?: string;
   aiScaledScore?: number;
@@ -349,6 +378,30 @@ export interface TutorQueueItem {
 export interface TutorQueueResponse {
   items: TutorQueueItem[];
   totalCount: number;
+}
+
+interface RawTutorQueueItem {
+  sessionId: string;
+  userId?: string;
+  learnerDisplayName?: string;
+  professionId: string;
+  rolePlayCardId?: string;
+  scenarioTitle?: string | null;
+  cardTitle?: string;
+  endedAt?: string | null;
+  elapsedSeconds?: number;
+  durationSeconds?: number;
+  aiReadinessBand?: string;
+  aiScaledScore?: number;
+  hasDraft?: boolean;
+  claimedByMe?: boolean;
+  claimedBySomeoneElse?: boolean;
+  claimExpiresAt?: string | null;
+}
+
+interface RawTutorQueueResponse {
+  items?: RawTutorQueueItem[];
+  totalCount?: number;
 }
 
 export interface TutorQueueFilters {
@@ -393,24 +446,45 @@ export interface SubmitTutorAssessmentInput {
   recommendedRulebookEntries?: string[];
 }
 
+export interface TutorDraftMutationResult {
+  assessmentId: string;
+}
+
 export interface TimestampedCommentInput {
-  segmentStartMs: number;
-  segmentEndMs: number;
-  criterion?: SpeakingCriterionCode;
-  severity?: 'note' | 'minor' | 'major';
-  body: string;
+  transcriptSegmentIndex: number;
+  startMs: number;
+  endMs: number;
+  criterionCode?: SpeakingCriterionCode;
+  severity?: 'note' | 'info' | 'praise' | 'minor' | 'major';
+  bodyMarkdown: string;
+  linkedRulebookEntryCode?: string;
+  linkedDrillId?: string;
 }
 
 export interface TimestampedComment {
   commentId: string;
-  tutorId: string;
+  tutorId?: string;
   tutorName?: string;
   segmentStartMs: number;
   segmentEndMs: number;
   criterion?: SpeakingCriterionCode;
-  severity?: 'note' | 'minor' | 'major';
+  severity?: 'note' | 'info' | 'praise' | 'minor' | 'major';
   body: string;
   createdAt: string;
+}
+
+export interface TutorSessionContext {
+  recordingUrl?: string | null;
+  transcript: {
+    segments: Array<{
+      segmentId?: string;
+      speaker: 'learner' | 'interlocutor' | 'system' | string;
+      startMs: number;
+      endMs: number;
+      text: string;
+    }>;
+  };
+  comments: TimestampedComment[];
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -425,6 +499,23 @@ export async function learnerGetDualAssessment(sessionId: string): Promise<DualA
   );
 }
 
+export async function tutorGetDualAssessment(sessionId: string): Promise<DualAssessmentResponse> {
+  return request<DualAssessmentResponse>(
+    `/v1/expert/speaking/sessions/${encodeURIComponent(sessionId)}/assessments`,
+  );
+}
+
+export async function tutorGetSessionContext(sessionId: string): Promise<TutorSessionContext> {
+  return request<TutorSessionContext>(
+    `/v1/expert/speaking/sessions/${encodeURIComponent(sessionId)}/context`,
+  );
+}
+
+export async function tutorGetSessionRecordingObjectUrl(sessionId: string): Promise<string> {
+  const blob = await requestBlob(`/v1/expert/speaking/sessions/${encodeURIComponent(sessionId)}/recording`);
+  return URL.createObjectURL(blob);
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Tutor — queue management
 // ─────────────────────────────────────────────────────────────────────────────
@@ -434,13 +525,34 @@ export async function tutorListQueue(filters: TutorQueueFilters = {}): Promise<T
   if (filters.professionId) qs.set('professionId', filters.professionId);
   if (filters.agePreset) qs.set('agePreset', filters.agePreset);
   const query = qs.toString();
-  return request<TutorQueueResponse>(`/v1/expert/speaking/queue${query ? `?${query}` : ''}`);
+  const response = await request<RawTutorQueueResponse>(`/v1/expert/speaking/queue${query ? `?${query}` : ''}`);
+  const items = (response.items ?? []).map((item): TutorQueueItem => ({
+    sessionId: item.sessionId,
+    userId: item.userId,
+    learnerDisplayName: item.learnerDisplayName ?? item.userId ?? 'Learner',
+    professionId: item.professionId,
+    rolePlayCardId: item.rolePlayCardId,
+    scenarioTitle: item.scenarioTitle,
+    cardId: item.rolePlayCardId ?? '',
+    cardTitle: item.cardTitle ?? item.scenarioTitle ?? 'Speaking session',
+    endedAt: item.endedAt ?? new Date().toISOString(),
+    elapsedSeconds: item.elapsedSeconds,
+    durationSeconds: item.durationSeconds ?? item.elapsedSeconds ?? 0,
+    aiReadinessBand: item.aiReadinessBand,
+    aiScaledScore: item.aiScaledScore,
+    hasDraft: item.hasDraft ?? false,
+    claimedByMe: item.claimedByMe ?? false,
+    claimedBySomeoneElse: item.claimedBySomeoneElse ?? false,
+    claimExpiresAt: item.claimExpiresAt ?? null,
+  }));
+  return { items, totalCount: response.totalCount ?? items.length };
 }
 
-export async function tutorClaimSession(sessionId: string): Promise<{ claimedUntil: string }> {
-  return request<{ claimedUntil: string }>(
+export async function tutorClaimSession(sessionId: string): Promise<void> {
+  await request<void>(
     `/v1/expert/speaking/queue/${encodeURIComponent(sessionId)}/claim`,
     { method: 'POST', body: '{}' },
+    { acceptedStatuses: [204] },
   );
 }
 
@@ -458,21 +570,23 @@ export async function tutorReleaseSession(sessionId: string): Promise<void> {
 export async function tutorCreateDraft(
   sessionId: string,
   body: CreateTutorDraftInput,
-): Promise<TutorAssessment> {
-  return request<TutorAssessment>(
+): Promise<TutorDraftMutationResult> {
+  const created = await request<{ id: string }>(
     `/v1/expert/speaking/sessions/${encodeURIComponent(sessionId)}/tutor-assessment`,
     { method: 'POST', body: JSON.stringify(body) },
   );
+  return { assessmentId: created.id };
 }
 
 export async function tutorUpdateDraft(
   sessionId: string,
   assessmentId: string,
   body: UpdateTutorDraftInput,
-): Promise<TutorAssessment> {
-  return request<TutorAssessment>(
+): Promise<void> {
+  await request<void>(
     `/v1/expert/speaking/sessions/${encodeURIComponent(sessionId)}/tutor-assessments/${encodeURIComponent(assessmentId)}`,
     { method: 'PATCH', body: JSON.stringify(body) },
+    { acceptedStatuses: [204] },
   );
 }
 
@@ -495,10 +609,21 @@ export async function tutorAddTimestampedComment(
   sessionId: string,
   body: TimestampedCommentInput,
 ): Promise<TimestampedComment> {
-  return request<TimestampedComment>(
+  const created = await request<{ id: string }>(
     `/v1/expert/speaking/sessions/${encodeURIComponent(sessionId)}/comments`,
     { method: 'POST', body: JSON.stringify(body) },
   );
+
+  return {
+    commentId: created.id,
+    tutorId: '',
+    segmentStartMs: body.startMs,
+    segmentEndMs: body.endMs,
+    criterion: body.criterionCode,
+    severity: body.severity,
+    body: body.bodyMarkdown,
+    createdAt: new Date().toISOString(),
+  };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
+import { useTranslations } from 'next-intl';
 import { ArrowRight, BookOpenCheck, CheckCircle2, Route, Target } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout/learner-dashboard-shell';
 import { Button } from '@/components/ui/button';
@@ -31,6 +32,7 @@ const SKILL_LABELS: Record<WritingSubSkill, string> = {
 const SKILLS: WritingSubSkill[] = ['W1', 'W2', 'W3', 'W4', 'W5', 'W6', 'W7', 'W8'];
 
 export default function WritingSkillTreePage() {
+  const t = useTranslations();
   const [lessons, setLessons] = useState<WritingLessonDto[]>([]);
   const [completions, setCompletions] = useState<WritingLessonCompletionDto[]>([]);
   const [skills, setSkills] = useState<WritingStatsSkillsDto | null>(null);
@@ -47,12 +49,12 @@ export default function WritingSkillTreePage() {
       })
       .catch((err) => {
         if (cancelled) return;
-        setError(err instanceof Error ? err.message : 'Could not load the skill tree.');
+        setError(err instanceof Error ? err.message : t('writing.skillTree.error.load'));
       });
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [t]);
 
   const completionMap = useMemo(() => {
     const m = new Set<string>();
@@ -76,30 +78,30 @@ export default function WritingSkillTreePage() {
   const totalComplete = completionMap.size;
 
   return (
-    <LearnerDashboardShell pageTitle="Writing Skill Tree">
+    <LearnerDashboardShell pageTitle={t('writing.skillTree.pageTitle')}>
       <div className="space-y-6">
         <LearnerPageHero
-          eyebrow="Foundation skills"
+          eyebrow={t('writing.skillTree.eyebrow')}
           icon={Route}
           accent="amber"
-          title="W1-W8 — the eight skills every OET letter rests on"
-          description="Each node holds two micro-lessons. Pass the quiz at ≥80% to mark it complete."
+          title={t('writing.skillTree.title')}
+          description={t('writing.skillTree.hero.description')}
           highlights={[
-            { icon: BookOpenCheck, label: 'Lessons', value: `${totalLessons}` },
-            { icon: CheckCircle2, label: 'Complete', value: `${totalComplete}` },
+            { icon: BookOpenCheck, label: t('writing.skillTree.highlights.lessons'), value: `${totalLessons}` },
+            { icon: CheckCircle2, label: t('writing.skillTree.highlights.complete'), value: `${totalComplete}` },
           ]}
         />
 
         {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
 
         <LearnerSurfaceSectionHeader
-          eyebrow="Skill tree"
-          title="Pick a sub-skill to drill into"
-          description="Mastery percentages reflect your last 20 letters; lessons are independent and stay open."
+          eyebrow={t('writing.skillTree.section.eyebrow')}
+          title={t('writing.skillTree.section.title')}
+          description={t('writing.skillTree.section.description')}
         />
 
         <ul
-          aria-label="Writing skill tree"
+          aria-label={t('writing.skillTree.list.label')}
           className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4"
         >
           {SKILLS.map((skill) => {
@@ -114,18 +116,19 @@ export default function WritingSkillTreePage() {
                 : 'border-border bg-background';
             return (
               <li key={skill}>
-                <Card padding="md" className={tone} aria-label={`Skill ${SKILL_LABELS[skill]}`}>
+                <Card padding="md" className={tone} aria-label={t('writing.skillTree.skillAria', { label: SKILL_LABELS[skill] })}>
                   <CardContent>
                     <header className="flex items-start justify-between gap-2">
                       <div>
                         <Badge variant={allComplete ? 'success' : 'muted'} size="sm">{skill}</Badge>
-                        <h2 className="mt-1 text-sm font-bold text-navy">{SKILL_LABELS[skill]}</h2>
+                        {/* SKILL_LABELS are OET-authored English content; force LTR inside RTL chrome. */}
+                        <h2 className="mt-1 text-sm font-bold text-navy" dir="ltr">{SKILL_LABELS[skill]}</h2>
                       </div>
                       <Target className="h-5 w-5 text-amber-600" aria-hidden="true" />
                     </header>
                     <div className="mt-3 space-y-1">
                       <div className="flex justify-between text-xs font-bold text-muted">
-                        <span>Mastery</span>
+                        <span>{t('writing.skillTree.card.mastery')}</span>
                         <span>{masteryValue}%</span>
                       </div>
                       <div
@@ -134,7 +137,7 @@ export default function WritingSkillTreePage() {
                         aria-valuemin={0}
                         aria-valuemax={100}
                         aria-valuenow={masteryValue}
-                        aria-label={`${SKILL_LABELS[skill]} mastery: ${masteryValue}%`}
+                        aria-label={t('writing.skillTree.masteryAria', { label: SKILL_LABELS[skill], value: masteryValue })}
                       >
                         <div
                           className="h-full bg-primary"
@@ -142,13 +145,13 @@ export default function WritingSkillTreePage() {
                         />
                       </div>
                       <p className="text-xs text-muted">
-                        Lessons: {completedForSkill}/{lessonsForSkill.length}
+                        {t('writing.skillTree.card.lessonsLabel')} {t('writing.skillTree.card.lessonsRatio', { complete: completedForSkill, total: lessonsForSkill.length })}
                       </p>
                     </div>
                     <div className="mt-3">
                       <Button asChild size="sm" variant="outline">
-                        <Link href={`/writing/lessons?subSkill=${encodeURIComponent(skill)}`} aria-label={`Open lessons for ${SKILL_LABELS[skill]}`}>
-                          Open lessons <ArrowRight className="h-3 w-3" aria-hidden="true" />
+                        <Link href={`/writing/lessons?subSkill=${encodeURIComponent(skill)}`} aria-label={t('writing.skillTree.openLessonsAria', { skill: SKILL_LABELS[skill] })}>
+                          {t('writing.skillTree.openLessons')} <ArrowRight className="h-3 w-3" aria-hidden="true" />
                         </Link>
                       </Button>
                     </div>

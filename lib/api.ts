@@ -2110,6 +2110,22 @@ export async function fetchSpeakingMockSession(sessionId: string): Promise<Speak
   return mapSpeakingMockSession(json);
 }
 
+export async function startSpeakingMockBridge(sessionId: string): Promise<SpeakingMockSession> {
+  const json = await apiRequest<ApiRecord>(`/v1/speaking/mock-sessions/${sessionId}/bridge/start`, {
+    method: 'POST',
+    body: '{}',
+  });
+  return mapSpeakingMockSession(json);
+}
+
+export async function finishSpeakingMockBridge(sessionId: string): Promise<SpeakingMockSession> {
+  const json = await apiRequest<ApiRecord>(`/v1/speaking/mock-sessions/${sessionId}/bridge/finish`, {
+    method: 'POST',
+    body: '{}',
+  });
+  return mapSpeakingMockSession(json);
+}
+
 export interface SpeakingComplianceCopy {
   consentText: string;
   scoreDisclaimer: string;
@@ -7138,6 +7154,7 @@ export async function startSpeakingSelfPracticeSession(
 // Wave 6 of docs/SPEAKING-MODULE-PLAN.md - speaking drills bank.
 export interface SpeakingDrillRow {
   id: string;
+  drillId: string;
   title: string;
   kind: string;
   difficulty: string;
@@ -7176,6 +7193,11 @@ export async function fetchSpeakingDrills(filters?: {
     completedCount: typeof json.completedCount === 'number' ? json.completedCount : 0,
     items: items.map((row) => ({
       id: typeof row.id === 'string' ? row.id : '',
+      drillId: typeof row.drillId === 'string'
+        ? row.drillId
+        : typeof row.id === 'string'
+          ? row.id
+          : '',
       title: typeof row.title === 'string' ? row.title : '',
       kind: typeof row.kind === 'string' ? row.kind : 'drill',
       difficulty: typeof row.difficulty === 'string' ? row.difficulty : 'easy',

@@ -7,16 +7,18 @@
  * the state machine (`/v1/speaking/course-pathway`).
  */
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { LearnerDashboardShell } from '@/components/layout';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
 import {
-  fetchSpeakingPathway,
-  type SpeakingPathwayResponse,
   type SpeakingPathwayStage,
-} from '@/lib/api/speaking-compliance';
+  type SpeakingPathway as SpeakingPathwayResponse,
+  fetchSpeakingCoursePathway,
+} from '@/lib/api/speaking-course-pathway';
 
 function stateBadge(state: SpeakingPathwayStage['state']) {
   switch (state) {
@@ -37,7 +39,7 @@ export default function SpeakingPathwayPage() {
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetchSpeakingPathway();
+        const res = await fetchSpeakingCoursePathway();
         if (!cancelled) setData(res);
       } catch (err) {
         if (!cancelled) {
@@ -93,7 +95,7 @@ export default function SpeakingPathwayPage() {
               {data.stages.map((stage, idx) => (
                 <li key={stage.code}>
                   <Card className="p-4">
-                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                       <div className="space-y-1">
                         <div className="flex flex-wrap items-center gap-2">
                           <span className="text-xs font-mono text-muted-foreground">
@@ -105,6 +107,11 @@ export default function SpeakingPathwayPage() {
                         </div>
                         <p className="text-sm text-muted-foreground">{stage.description}</p>
                       </div>
+                      {stage.actionHref && stage.state !== 'locked' ? (
+                        <Button asChild variant={stage.state === 'in_progress' ? 'primary' : 'outline'} size="sm">
+                          <Link href={stage.actionHref}>{stage.actionLabel ?? 'Continue'}</Link>
+                        </Button>
+                      ) : null}
                     </div>
                   </Card>
                 </li>

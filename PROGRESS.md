@@ -8,6 +8,59 @@ Last updated: 2026-05-27
 - Do not use `oet-dev` for validation; the VPS is production deployment only.
 - Preserve existing modified/untracked work; `.codex/config.toml` remains isolated tooling/config unless intentionally committed.
 
+## Latest Continuation — Writing V2 Post-Launch Features (Buddy, Calibration, Score Appeal UI)
+
+Status: **Done** — three deferred Writing V2 post-launch features implemented end-to-end. Docker build/test/typecheck validation is intentionally not run per the user's pause request.
+
+### Feature 1 — Buddy System (spec §23.5)
+
+- Domain entities: `WritingBuddyPair`, `WritingBuddyMessage`, `WritingBuddyCheckIn` (`backend/src/OetLearner.Api/Domain/WritingBuddyEntities.cs`). Added additive nullable `OptInBuddy` column to `LearnerWritingProfile`.
+- DbContext partial `Data/LearnerDbContext.WritingBuddy.cs` with: indexes on (UserA), (UserB), composite (Profession, Status, MatchedAtBand) for matching; partial-unique on (UserAId, UserBId) for active pairs only; descending (PairId, SentAt) for inbox view; unique (PairId, WeekStartDate) for check-ins.
+- Hand-written migration `20260613120000_AddWritingBuddySchema` + Designer + snapshot delta.
+- Service `Services/Writing/WritingBuddyService.cs`: `OptInAsync`, `RequestMatchAsync` (same profession + ±1 band ladder), `GetActivePairAsync`, `SendMessageAsync` (500-char limit + 10/day per-sender rate limit), `GetMessagesAsync` (also marks partner messages as read), `SubmitWeeklyCheckInAsync` (ISO-week keyed), `EndPairAsync`. Anonymised display names like "Anonymous Doctor (GB)" so identity never leaks.
+- Endpoints `Endpoints/WritingBuddyEndpoints.cs` — 7 routes under `/v1/writing/buddy/*` (opt-in, match, pair GET, messages POST/GET, check-in, end). Wired into `WritingRouteBuilderExtensions.MapWritingV2Endpoints()`. DI registration added to `Program.cs`.
+- Frontend lib `lib/writing/buddy.ts` (typed wrappers for the 7 endpoints).
+- Frontend page `app/writing/buddy/page.tsx` — three states (not opted in / queued / paired) with chat thread, message form (with remaining-character + sent-today counters), and weekly check-in widget capturing highlight/challenge/goal.
+
+### Feature 2 — 50-letter calibration test harness (spec §33)
+
+- Domain entities `Domain/WritingCalibrationEntities.cs`: `WritingCalibrationLetter`, `WritingCalibrationRun`, `WritingCalibrationResult`. DbContext partial `Data/LearnerDbContext.WritingCalibration.cs`.
+- Hand-written migration `20260613121000_AddWritingCalibration` + Designer + snapshot delta.
+- Service `Services/Writing/WritingCalibrationService.cs`: `ListLettersAsync`, `AddCalibrationLetterAsync`, `RunCalibrationAsync` (iterates every letter, calls AI gateway through `writing.score.v1` per AGENTS.md — all AI calls go through `IAiGatewayService.BuildGroundedPrompt`), `GetLatestRunAsync` with per-letter detail. Runs persist mean abs error, ±2-points count, band agreement count.
+- Endpoints `Endpoints/WritingCalibrationEndpoints.cs` — 4 admin routes under `/v1/admin/writing/calibration/*` (letters GET/POST, run POST, runs/latest GET). Wired into `WritingRouteBuilderExtensions` and DI in `Program.cs`.
+- Frontend admin page `app/admin/writing/calibration/page.tsx`: letter corpus list, add-letter form (with all 6 criterion scores + auto raw total), run button, latest-run report with side-by-side reference/AI table and §33 release-gate badge ("Gate: NN% within ±2 raw" coloured green when ≥90%).
+
+### Feature 3 — Score Appeal v2 UI (spec §12.6)
+
+- Extended existing backend `WritingAppealService` with `GetLatestAppealAsync(userId, submissionId, ct)` — ownership-checked read so the appeal UI can poll without re-triggering AI grading.
+- Added `GET /v1/writing/submissions/{id}/appeal` endpoint in `WritingSubmissionEndpoints` (existing POST untouched).
+- Added lib helpers in `lib/writing/api.ts`: `requestWritingAppeal(submissionId, reason)` alias and `getWritingAppealResult(submissionId)` (returns `null` on 404).
+- Frontend page `app/writing/submissions/[id]/appeal/page.tsx`: shows original AI grade summary, reason textarea (500-char cap), explicit $5-charge confirmation checkbox, request CTA; once a request exists, status badge cycles through `pending → in_progress → resolved`, a 5s poll keeps it fresh, and a three-card side-by-side comparison (Original | Second opinion | Final on record) makes Δ>3 averaging behaviour visible. Pending-manual fallback surfaces with a warning alert.
+
+### Cross-cutting
+
+- All service methods take `userId` and filter EF queries by it — multi-tenant per AGENTS.md.
+- Buddy display names are never raw user ids; messages return a `mineMessage` flag so the UI flips alignment without exposing the partner's identity.
+- No stubs in production paths: `WritingCalibrationService.GradeWithAiAsync` calls the real `IAiGatewayService` with `FeatureCode = AiFeatureCodes.WritingGrade` and prompt template `writing.score.v1`, identical to the live grading pipeline.
+- Docker build/typecheck/test not run; the user explicitly paused that. Editor diagnostics on touched files are clean.
+
+## Latest Continuation — Speaking Module Pathway Coding Completion
+
+- Status: **Coding/software development complete for the attached Speaking Module Pathway closure**. Docker Desktop validation was started only after the coding/review/security closure, per the user's sequencing instruction.
+- Continued the attached Speaking Module Pathway closure in coding-first mode after the user paused Docker validation until development was complete. After final coding closure, Docker-only validation ran on localhost Docker Desktop with no host or VPS build/test fallback.
+- Finished live-room hardening and client alignment: `/v1/speaking/live-rooms/{id}` now returns authorized room detail, observer tokens are admin-only at the endpoint boundary, start/stop recording require the assigned tutor, terminal rooms reject recording before provider egress, webhook-created provider media placeholders stay `Processing`, and the frontend client now calls `/start-recording` and `/stop-recording` with matching response types and enum states.
+- Finished learner drill launch/progression: legacy `/v1/speaking/drills` rows now expose canonical `drillId`, canonical drill attempts drive attempted/completed/best-score state, legacy content IDs are lazily bridged to `SpeakingDrillItem`, `/speaking/drills/[id]` launches the actual drill player, and drill scoring requires an uploaded audio blob before deterministic scoring.
+- Finished pathway and mock-set routing: pathway stages carry action labels/links, `/speaking/course-pathway` redirects to `/speaking/pathway`, mock launch URLs carry paired `mockSession`, `mockSetId`, and `attemptId`, the task recorder submits against the pre-created paired attempt, and the mock orchestrator moves to an awaiting-results state after both role-plays are submitted/evaluating while final combined results remain gated on completed evaluations.
+- Finished assessment seam fixes: tutor final submission now requires every score in the submit payload, divergence docs/tests pin signed tutor-minus-AI deltas while agreement bands still use absolute magnitude, and transcript comments now preserve the selected transcript segment index.
+- Closed the latest independent review findings before any full-stack testing: learner divergence now returns signed tutor-minus-AI per-criterion values while using absolute magnitude only for the agreement band; final submission requires a timestamped comment authored by the submitting tutor; live-room token/end client types now match backend response contracts; learner live-room creation uses the create payload shape; and failed mock-set evaluations now render an explicit scoring-failed recovery state instead of polling forever.
+- Closed the final coding review/security blockers: learner dual-assessment responses now hide tutor drafts and only expose final tutor assessments; expert assessment reads/comments/recording/context require assignment or an active non-expired claim; draft update/submit re-check current access; expert draft hydration is scoped to the requesting tutor; expert assessment now uses expert-only assessment/context/recording APIs; recording playback writes `SpeakingRecordingAccessed` audit evidence before streaming through `IFileStorage`; live tutor consent records both current recording and live-video consent types; live-room recording start enforces `RecordingEnabled` plus current non-revoked consents; expert live-room detail now carries a tutor-safe card summary and the expert end-room path also finishes the backing session; queue payload normalization matches the backend contract; mock bridge start/finish calls the backend state machine before role-play 2.
+- Added focused backend regression coverage in `backend/tests/OetLearner.Api.Tests/Speaking/DualAssessmentTests.cs`, `backend/tests/OetLearner.Api.Tests/Speaking/SpeakingDrillServiceTests.cs`, `backend/tests/OetLearner.Api.Tests/Speaking/SpeakingLiveRoomServiceTests.cs`, and `backend/tests/OetLearner.Api.Tests/SpeakingMockSetTests.cs` for strict tutor scoring, signed divergence, drill ID bridging, audio-before-score enforcement, live-room terminal-state recording rejection, and submitted/evaluating mock-set progression.
+- Added additional regression coverage for the review fixes: learner draft redaction, learner ownership, active/stale claim authorization, released-claim draft mutation denial, submitting-tutor-owned timestamped comment enforcement, protected live-room recording consent gating (missing-consent rejection and positive consent path), and failed mock evaluation state are now pinned in backend tests.
+- Independent read-only Speaking security review reported **no remaining Speaking security blockers** after the final consent/audit fixes. Unrelated Writing Buddy findings from the wider worktree were noted separately and not edited during this Speaking pass.
+- Validation completed as far as Docker Desktop would return useful evidence: VS Code diagnostics are clean on touched Speaking source/test files; `git diff --check` returned no whitespace/conflict-marker output for the edited Speaking paths; focused Docker ESLint on changed Speaking frontend files passed with 0 errors/warnings after hook-dependency fixes; Docker SDK `dotnet restore src/OetLearner.Api/OetLearner.Api.csproj` passed with one existing `NU1510` package-pruning warning; Docker SDK `dotnet build src/OetLearner.Api/OetLearner.Api.csproj --no-restore` passed with 0 errors and existing unrelated warnings.
+- Remaining validation blockers are infrastructure/runtime, not confirmed code failures: Docker `npm run docker:tsc` launched `node /src/node_modules/.bin/tsc --noEmit` and stayed CPU-active/silent beyond the useful validation window until stopped (`docker wait` 137); focused backend test restore for `tests/OetLearner.Api.Tests/OetLearner.Api.Tests.csproj` also stayed CPU-active/silent for about 8.5 minutes and was stopped (`docker wait` 137). The focused Speaking backend tests therefore remain not executed on the final tree.
+- Existing unrelated Writing diffs in the worktree were preserved and not edited during this Speaking pass.
+
 ## Latest Continuation — Speaking Module Pathway Closure
 
 - Finished the attached Speaking Module Pathway implementation as a focused closure over the existing Speaking subsystem instead of replacing it. The existing learner speaking pages, live room flow, drill service, mock-set orchestration, AI assessment rows, and tutor assessment rows remain the source of truth.
@@ -19,7 +72,7 @@ Last updated: 2026-05-27
 - Added focused backend coverage in `SpeakingDualAssessmentSecurityTests.cs` and updated existing Speaking dual-assessment/mock-set tests for the new authorization, draft-hiding, timestamped-comment, observer-token, and submitted/evaluating mock progression behavior.
 - Independent review passes were run. The final OET Reviewer pass found two issues — mock-set progression while scoring is queued and optional recording fetch failure blocking the expert page — and both were fixed. A focused OET Security Reviewer re-check reported no blockers for protected recording playback after the blob-fetch change.
 - Editor diagnostics are clean on all final touched Speaking files checked after the last patches.
-- Docker Desktop validation status: frontend `tsc` is blocked by Docker Desktop filesystem I/O after Docker-only attempts with the web/node container path; no host or VPS fallback was used. Backend focused Docker test attempts against the final tree used `mcr.microsoft.com/dotnet/sdk:10.0` and the filtered Speaking security/dual-assessment/mock test command, but the SDK test runner stayed CPU-active and silent beyond the useful validation window and was stopped; the stopped container's `docker wait` exit code is not counted as a pass. An earlier focused backend run passed before the final reviewer-driven patches, so final-tree backend validation remains blocked rather than green.
+- Docker Desktop validation status after the final coding pass: focused frontend Docker ESLint passed on changed Speaking files; Docker SDK backend API restore/build passed on the final tree with 0 errors and existing unrelated warnings. Frontend `tsc` remains blocked by Docker Desktop filesystem/runtime behavior after `node /src/node_modules/.bin/tsc --noEmit` stayed CPU-active and silent beyond the useful window; focused backend Speaking tests remain blocked because the test-project restore stayed CPU-active and silent for about 8.5 minutes. No host or VPS validation fallback was used.
 
 ## Latest Continuation — Writing Wave 7 Admin UI Closure
 

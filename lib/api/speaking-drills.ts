@@ -68,6 +68,7 @@ export type SpeakingDrillStatus = 'draft' | 'inreview' | 'published' | 'archived
 // ─────────────────────────────────────────────────────────────────────────────
 
 export interface DrillSummary {
+  id: string;
   drillId: string;
   drillKind: SpeakingDrillKind | string;
   title: string;
@@ -112,6 +113,8 @@ export interface ListDrillsParams {
   professionId?: string;
   recommendedForSessionId?: string;
 }
+
+type RawDrillSummary = Partial<DrillSummary> & Record<string, unknown>;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Admin-facing DTOs
@@ -163,13 +166,50 @@ function toQuery(params: Record<string, string | undefined>): string {
 }
 
 export async function listSpeakingDrills(params: ListDrillsParams = {}): Promise<ListDrillsResponse> {
-  return apiClient.get<ListDrillsResponse>(
+  const response = await apiClient.get<ListDrillsResponse | { kinds?: unknown; totalCount?: unknown; completedCount?: unknown; items?: unknown }>(
     `/v1/speaking/drills${toQuery({
       kind: params.kind,
-      professionId: params.professionId,
+      profession: params.professionId,
       recommendedForSessionId: params.recommendedForSessionId,
     })}`,
   );
+  const items = Array.isArray(response.items)
+    ? response.items.map((item) => normalizeDrillSummary(item as RawDrillSummary))
+    : [];
+  return {
+    kinds: Array.isArray(response.kinds) ? response.kinds.filter((item): item is string => typeof item === 'string') : [],
+    totalCount: typeof response.totalCount === 'number' ? response.totalCount : items.length,
+    completedCount: typeof response.completedCount === 'number' ? response.completedCount : items.filter((item) => item.hasAttempted).length,
+    items,
+  };
+}
+
+function normalizeDrillSummary(row: RawDrillSummary): DrillSummary {
+  const readString = (key: string, fallback = '') => {
+    const value = row[key];
+    return typeof value === 'string' ? value : fallback;
+  };
+  const readNumber = (key: string, fallback: number | null = null) => {
+    const value = row[key];
+    return typeof value === 'number' ? value : fallback;
+  };
+  const toStringArray = (value: unknown): string[] => Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === 'string')
+    : [];
+  const id = readString('id', readString('drillId'));
+  const drillId = readString('drillId', id);
+  const explicitTargets = toStringArray(row.targetCriteria);
+
+  return {
+    id,
+    drillId,
+    drillKind: readString('drillKind', readString('kind', 'Drill')),
+    title: readString('title', 'Speaking drill'),
+    instructionText: readString('instructionText', readString('caseNotes', 'Record a short focused speaking attempt.')),
+    targetCriteria: explicitTargets.length > 0 ? explicitTargets : toStringArray(row.criteriaFocus),
+    hasAttempted: row.hasAttempted === true || row.completed === true,
+    bestScore: readNumber('bestScore'),
+  };
 }
 
 export async function startDrillAttempt(

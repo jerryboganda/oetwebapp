@@ -58,28 +58,67 @@ public partial class LearnerService
             .Take(200)
             .ToListAsync(ct);
 
+        var contentIds = rows.Select(r => r.Id).ToArray();
+        var drillRows = await db.SpeakingDrillItems.AsNoTracking()
+            .Where(d => contentIds.Contains(d.ContentItemId))
+            .Select(d => new { d.Id, d.ContentItemId, d.TargetCriteriaJson })
+            .ToListAsync(ct);
+        var drillByContentId = drillRows.ToDictionary(d => d.ContentItemId, d => d, StringComparer.Ordinal);
+
         var completed = await db.Attempts.AsNoTracking()
             .Where(a => a.UserId == userId && a.State == AttemptState.Completed)
             .Select(a => a.ContentId)
             .Distinct()
             .ToListAsync(ct);
+        var completedLegacyContentSet = completed.ToHashSet(StringComparer.Ordinal);
+
+        var drillIds = drillRows.Select(d => d.Id).ToArray();
+        var drillAttempts = await db.SpeakingDrillAttempts.AsNoTracking()
+            .Where(a => a.UserId == userId && drillIds.Contains(a.DrillItemId))
+            .Select(a => new { a.DrillItemId, a.CompletedAt, a.Score })
+            .ToListAsync(ct);
+        var attemptStatsByDrillId = drillAttempts
+            .GroupBy(a => a.DrillItemId)
+            .ToDictionary(
+                g => g.Key,
+                g => new
+                {
+                    Completed = g.Any(a => a.CompletedAt != null),
+                    BestScore = g.Where(a => a.Score.HasValue).Select(a => (int?)a.Score!.Value).Max(),
+                },
+                StringComparer.Ordinal);
 
         var criterionFilter = string.IsNullOrWhiteSpace(criterionCode)
             ? null
             : criterionCode.Trim().ToLowerInvariant();
 
         var items = rows
-            .Select(row => new
+            .Select(row =>
             {
-                id = row.Id,
-                title = row.Title,
-                kind = row.ScenarioType ?? "drill",
-                difficulty = row.Difficulty,
-                estimatedDurationMinutes = row.EstimatedDurationMinutes,
-                professionCode = row.ProfessionId,
-                criteriaFocus = ParseCriteriaFocus(row.CriteriaFocusJson),
-                caseNotes = row.CaseNotes,
-                completed = completed.Contains(row.Id),
+                drillByContentId.TryGetValue(row.Id, out var drill);
+                var drillId = drill?.Id ?? row.Id;
+                var criteriaFocus = ParseCriteriaFocus(row.CriteriaFocusJson);
+                attemptStatsByDrillId.TryGetValue(drillId, out var attemptStats);
+                var isCompleted = completedLegacyContentSet.Contains(row.Id) || attemptStats?.Completed == true;
+
+                return new
+                {
+                    id = row.Id,
+                    drillId,
+                    title = row.Title,
+                    kind = row.ScenarioType ?? "drill",
+                    drillKind = row.ScenarioType ?? "drill",
+                    difficulty = row.Difficulty,
+                    estimatedDurationMinutes = row.EstimatedDurationMinutes,
+                    professionCode = row.ProfessionId,
+                    criteriaFocus,
+                    targetCriteria = drill is null ? criteriaFocus : ParseCriteriaFocus(drill.TargetCriteriaJson),
+                    instructionText = ParseInstructionText(row.DetailJson) ?? row.CaseNotes ?? row.Title,
+                    caseNotes = row.CaseNotes,
+                    completed = isCompleted,
+                    hasAttempted = isCompleted || attemptStats is not null,
+                    bestScore = attemptStats?.BestScore,
+                };
             })
             .Where(d => criterionFilter is null
                         || d.criteriaFocus.Contains(criterionFilter, StringComparer.OrdinalIgnoreCase))
@@ -115,6 +154,41 @@ public partial class LearnerService
         catch (JsonException)
         {
             return Array.Empty<string>();
+        }
+    }
+
+    private static string? ParseInstructionText(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return null;
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            if (doc.RootElement.ValueKind != JsonValueKind.Object) return null;
+            if (doc.RootElement.TryGetProperty("instructionText", out var instruction)
+                && instruction.ValueKind == JsonValueKind.String)
+            {
+                return instruction.GetString();
+            }
+            if (doc.RootElement.TryGetProperty("focus", out var focus)
+                && focus.ValueKind == JsonValueKind.String)
+            {
+                return focus.GetString();
+            }
+            if (doc.RootElement.TryGetProperty("promptLines", out var lines)
+                && lines.ValueKind == JsonValueKind.Array)
+            {
+                var prompts = lines.EnumerateArray()
+                    .Where(x => x.ValueKind == JsonValueKind.String)
+                    .Select(x => x.GetString())
+                    .Where(x => !string.IsNullOrWhiteSpace(x))
+                    .ToArray();
+                return prompts.Length == 0 ? null : string.Join("\n", prompts);
+            }
+            return null;
+        }
+        catch (JsonException)
+        {
+            return null;
         }
     }
 }

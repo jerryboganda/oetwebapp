@@ -50,6 +50,12 @@ public class LearnerWritingProfile
 
     public bool OptInDataForTraining { get; set; } = false;
 
+    /// <summary>
+    /// Buddy System opt-in (spec §23.5). Until the learner explicitly
+    /// flips this to <c>true</c>, the matcher will skip them.
+    /// </summary>
+    public bool OptInBuddy { get; set; } = false;
+
     public string AccommodationProfileJson { get; set; } = "{}";
 
     [MaxLength(32)]

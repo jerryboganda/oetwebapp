@@ -30,9 +30,11 @@ import { DualAssessmentColumn } from '@/components/domain/speaking/DualAssessmen
 import { TranscriptPlayerWithComments, type TranscriptPayload } from '@/components/domain/speaking/TranscriptPlayerWithComments';
 import {
   SpeakingAssessmentApiError,
-  learnerGetDualAssessment,
   tutorAddTimestampedComment,
   tutorCreateDraft,
+  tutorGetDualAssessment,
+  tutorGetSessionContext,
+  tutorGetSessionRecordingObjectUrl,
   tutorSubmitAssessment,
   tutorUpdateDraft,
   type DualAssessmentResponse,
@@ -88,6 +90,7 @@ export default function AssessSpeakingSessionPage() {
 
   const [data, setData] = useState<DualAssessmentResponse | null>(null);
   const [context, setContext] = useState<SessionContext | null>(null);
+  const [recordingObjectUrl, setRecordingObjectUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [rubric, setRubric] = useState<CriterionRubricFormValue>(EMPTY_RUBRIC_VALUE);
@@ -103,7 +106,10 @@ export default function AssessSpeakingSessionPage() {
     setLoading(true);
     setErrorMsg(null);
     try {
-      const response = await learnerGetDualAssessment(sessionId);
+      const [response, sessionContext] = await Promise.all([
+        tutorGetDualAssessment(sessionId),
+        tutorGetSessionContext(sessionId),
+      ]);
       setData(response);
       if (response.tutor) {
         setDraftId(response.tutor.assessmentId);
@@ -112,18 +118,25 @@ export default function AssessSpeakingSessionPage() {
         setDraftId(null);
         setRubric(EMPTY_RUBRIC_VALUE);
       }
-      // Session context (recording, transcript, prior comments) is currently
-      // included on the dual-assessment response as side-loaded fields. If the
-      // backend exposes a separate endpoint, swap this in.
-      const ctx = (response as unknown as { context?: SessionContext }).context;
-      setContext(
-        ctx ?? {
-          recordingUrl: null,
-          transcript: { segments: [] },
-          comments: [],
-        },
-      );
-      setComments(ctx?.comments ?? []);
+
+      let protectedRecordingUrl: string | null = null;
+      if (sessionContext.recordingUrl) {
+        try {
+          protectedRecordingUrl = await tutorGetSessionRecordingObjectUrl(sessionId);
+        } catch {
+          protectedRecordingUrl = null;
+        }
+      }
+      setRecordingObjectUrl((previous) => {
+        if (previous) URL.revokeObjectURL(previous);
+        return protectedRecordingUrl;
+      });
+      setContext({
+        recordingUrl: protectedRecordingUrl,
+        transcript: sessionContext.transcript ?? { segments: [] },
+        comments: sessionContext.comments ?? [],
+      });
+      setComments(sessionContext.comments ?? []);
     } catch (err) {
       const msg = err instanceof SpeakingAssessmentApiError ? err.message : 'Failed to load session.';
       setErrorMsg(msg);
@@ -131,6 +144,12 @@ export default function AssessSpeakingSessionPage() {
       setLoading(false);
     }
   }, [sessionId]);
+
+  useEffect(() => {
+    return () => {
+      if (recordingObjectUrl) URL.revokeObjectURL(recordingObjectUrl);
+    };
+  }, [recordingObjectUrl]);
 
   useEffect(() => {
     void load();
@@ -165,8 +184,7 @@ export default function AssessSpeakingSessionPage() {
     setSavingDraft(true);
     try {
       if (draftId) {
-        const updated = await tutorUpdateDraft(sessionId, draftId, buildDraftPayload());
-        setDraftId(updated.assessmentId);
+        await tutorUpdateDraft(sessionId, draftId, buildDraftPayload());
       } else {
         const created = await tutorCreateDraft(sessionId, buildDraftPayload());
         setDraftId(created.assessmentId);

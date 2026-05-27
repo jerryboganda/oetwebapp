@@ -5,6 +5,7 @@
 // /v1/speaking/drills (ContentItem rows with ContentType =
 // "speaking_drill" — see LearnerService.SpeakingDrills.cs).
 import { useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
 import { LearnerDashboardShell } from '@/components/layout';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -180,14 +181,10 @@ function DrillCard({ drill }: { drill: SpeakingDrillRow }) {
           {drill.completed ? (
             <Badge variant="success">Completed</Badge>
           ) : (
-            <Button
-              type="button"
-              variant="primary"
-              onClick={() => {
-                window.location.href = `/speaking/task/${encodeURIComponent(drill.id)}?mode=self`;
-              }}
-            >
-              Start drill
+            <Button type="button" variant="primary" asChild>
+              <Link href={`/speaking/drills/${encodeURIComponent(drill.drillId || drill.id)}`}>
+                Start drill
+              </Link>
             </Button>
           )}
         </div>

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
+import { useTranslations } from 'next-intl';
 import { Award, FileText, Flag, RefreshCw, Share2, Sparkles, UserRoundCheck } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout/learner-dashboard-shell';
 import { Button } from '@/components/ui/button';
@@ -51,6 +52,7 @@ function gradeToScores(g: WritingGradeDto): WritingCriteriaScoresDto {
 }
 
 export default function WritingSubmissionResultsPage() {
+  const t = useTranslations();
   const params = useParams<{ id: string }>();
   const submissionId = String(params?.id ?? '');
 
@@ -74,77 +76,77 @@ export default function WritingSubmissionResultsPage() {
           if (ex) setExemplar(ex);
         }
       })
-      .catch((err) => setError(err instanceof Error ? err.message : 'Could not load results.'));
-  }, [submissionId]);
+      .catch((err) => setError(err instanceof Error ? err.message : t('writing.submissions.results.error.load')));
+  }, [submissionId, t]);
 
   const onTutorReview = useCallback(async () => {
     if (!submissionId) return;
-    setActionStatus('Requesting tutor review…');
+    setActionStatus(t('writing.submissions.results.actions.tutorRequesting'));
     try {
       await requestTutorReview(submissionId, { priority: 'standard' });
-      setActionStatus('Tutor review requested. You will be notified when a tutor returns it.');
+      setActionStatus(t('writing.submissions.results.actions.tutorRequested'));
     } catch (err) {
-      setActionStatus(err instanceof Error ? err.message : 'Could not request tutor review.');
+      setActionStatus(err instanceof Error ? err.message : t('writing.submissions.results.actions.tutorError'));
     }
-  }, [submissionId]);
+  }, [submissionId, t]);
 
   const onAppeal = useCallback(async () => {
     if (!submissionId) return;
     const reason = window.prompt(
-      "Briefly explain why you believe the grade is wrong (20+ characters). We'll re-grade with a higher-cost model.",
+      t('writing.submissions.results.actions.appealPrompt'),
       '',
     );
     if (!reason || reason.trim().length < 20) {
-      setActionStatus('Appeal cancelled — at least 20 characters required.');
+      setActionStatus(t('writing.submissions.results.actions.appealCancelled'));
       return;
     }
-    setActionStatus('Submitting appeal…');
+    setActionStatus(t('writing.submissions.results.actions.appealSubmitting'));
     try {
       await appealWritingSubmission(submissionId, { reason: reason.trim() });
-      setActionStatus('Appeal submitted. Result will update once reviewed.');
+      setActionStatus(t('writing.submissions.results.actions.appealSubmitted'));
     } catch (err) {
-      setActionStatus(err instanceof Error ? err.message : 'Could not submit appeal.');
+      setActionStatus(err instanceof Error ? err.message : t('writing.submissions.results.actions.appealError'));
     }
-  }, [submissionId]);
+  }, [submissionId, t]);
 
   const onShowcase = useCallback(async () => {
     if (!submissionId) return;
-    setActionStatus('Publishing to showcase…');
+    setActionStatus(t('writing.submissions.results.actions.showcasePublishing'));
     try {
       await publishToShowcase(submissionId);
-      setActionStatus('Letter published anonymously to the showcase.');
+      setActionStatus(t('writing.submissions.results.actions.showcasePublished'));
     } catch (err) {
-      setActionStatus(err instanceof Error ? err.message : 'Could not publish to showcase.');
+      setActionStatus(err instanceof Error ? err.message : t('writing.submissions.results.actions.showcaseError'));
     }
-  }, [submissionId]);
+  }, [submissionId, t]);
 
   const onDisputeViolation = useCallback(async (ruleId: string, violationId: string) => {
-    const reason = window.prompt('Why is this detection wrong? (10+ characters)', '');
+    const reason = window.prompt(t('writing.submissions.results.actions.disputePrompt'), '');
     if (!reason || reason.trim().length < 10) return;
     try {
       await disputeWritingCanonViolation(submissionId, { ruleId, violationId, reason: reason.trim() });
     } catch (err) {
-      setActionStatus(err instanceof Error ? err.message : 'Dispute failed.');
+      setActionStatus(err instanceof Error ? err.message : t('writing.submissions.results.actions.disputeError'));
     }
-  }, [submissionId]);
+  }, [submissionId, t]);
 
   const scores = grade ? gradeToScores(grade) : null;
   const isA = grade?.bandLabel?.startsWith('A');
   const offerRevision = grade?.revisionInvite?.shouldOffer ?? false;
 
   return (
-    <LearnerDashboardShell pageTitle="Submission Results">
+    <LearnerDashboardShell pageTitle={t('writing.submissions.results.pageTitle')}>
       <div className="space-y-6" aria-busy={!grade}>
         <LearnerPageHero
-          eyebrow="Result"
+          eyebrow={t('writing.submissions.results.eyebrow')}
           icon={Award}
           accent="amber"
-          title={grade?.bandLabel ? `Estimated band: ${grade.bandLabel}` : 'Awaiting grade'}
-          description="Six-criterion rubric, canon engine, and the closest exemplar — together they explain exactly what to change next."
+          title={grade?.bandLabel ? t('writing.submissions.results.estimatedBand', { band: grade.bandLabel }) : t('writing.submissions.results.awaiting')}
+          description={t('writing.submissions.results.description')}
           highlights={grade ? [
-            { icon: Award, label: 'Raw', value: `${grade.rawTotal}/38` },
-            { icon: Sparkles, label: 'Confidence', value: grade.confidenceFlag },
-            { icon: FileText, label: 'Mode', value: submission?.mode ?? '—' },
+            { icon: Award, label: t('writing.submissions.results.highlights.raw'), value: `${grade.rawTotal}/38` },
+            { icon: Sparkles, label: t('writing.submissions.results.highlights.confidence'), value: grade.confidenceFlag },
+            { icon: FileText, label: t('writing.submissions.results.highlights.mode'), value: submission?.mode ?? '—' },
           ] : []}
         />
 
@@ -154,22 +156,25 @@ export default function WritingSubmissionResultsPage() {
         {scores ? (
           <section aria-labelledby="criteria-heading" className="grid gap-4 rounded-2xl border border-border bg-surface p-5 shadow-sm lg:grid-cols-2">
             <div>
-              <h2 id="criteria-heading" className="text-lg font-bold text-navy">Criteria radar</h2>
+              <h2 id="criteria-heading" className="text-lg font-bold text-navy">{t('writing.submissions.results.criteria.heading')}</h2>
               <CriteriaRadar scores={scores} targetScores={{ c1: 3, c2: 6, c3: 6, c4: 6, c5: 6, c6: 6 }} />
             </div>
             <details className="rounded-xl border border-border bg-background p-4" open>
-              <summary className="cursor-pointer text-sm font-bold text-navy">Per-criterion feedback</summary>
+              <summary className="cursor-pointer text-sm font-bold text-navy">{t('writing.submissions.results.criteria.perCriterion')}</summary>
               <ul className="mt-3 space-y-3">
                 {(Object.entries(grade!.perCriterion) as Array<[WritingCriterionCode, NonNullable<typeof grade>['perCriterion'][WritingCriterionCode]]>).map(([code, feedback]) => (
                   <li key={code} className="rounded-lg border border-border bg-surface p-3">
                     <div className="flex items-center justify-between gap-2">
-                      <h3 className="text-sm font-bold text-navy">{CRITERION_NAMES[code]}</h3>
+                      {/* Criterion names are OET-authored English content. */}
+                      <h3 className="text-sm font-bold text-navy" dir="ltr">{CRITERION_NAMES[code]}</h3>
                       <Badge variant="info" size="sm">{feedback.score}</Badge>
                     </div>
-                    <p className="mt-1 text-xs text-muted leading-snug">{feedback.feedback}</p>
+                    {/* AI feedback is English content per spec. */}
+                    <p className="mt-1 text-xs text-muted leading-snug" dir="ltr">{feedback.feedback}</p>
                     {feedback.exemplarFix ? (
                       <p className="mt-1 rounded bg-emerald-50 p-2 text-xs text-emerald-800">
-                        <span className="font-bold">Exemplar fix:</span> {feedback.exemplarFix}
+                        <span className="font-bold">{t('writing.submissions.results.criteria.exemplarFix')}</span>{' '}
+                        <span dir="ltr">{feedback.exemplarFix}</span>
                       </p>
                     ) : null}
                   </li>
@@ -181,12 +186,13 @@ export default function WritingSubmissionResultsPage() {
 
         {grade?.topThreePriorities?.length ? (
           <section aria-labelledby="priorities-heading" className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
-            <h2 id="priorities-heading" className="text-lg font-bold text-navy">Top three priorities</h2>
+            <h2 id="priorities-heading" className="text-lg font-bold text-navy">{t('writing.submissions.results.priorities.heading')}</h2>
             <ol className="mt-3 grid gap-2 md:grid-cols-3">
               {grade.topThreePriorities.map((priority, idx) => (
                 <li key={idx} className="rounded-xl border border-border bg-background p-3">
                   <Badge variant="warning" size="sm">#{idx + 1}</Badge>
-                  <p className="mt-2 text-sm text-navy">{priority}</p>
+                  {/* Priorities are AI-generated English content. */}
+                  <p className="mt-2 text-sm text-navy" dir="ltr">{priority}</p>
                 </li>
               ))}
             </ol>
@@ -195,7 +201,7 @@ export default function WritingSubmissionResultsPage() {
 
         {grade?.canonViolations?.length ? (
           <section aria-labelledby="canon-heading" className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
-            <h2 id="canon-heading" className="text-lg font-bold text-navy">Canon violations ({grade.canonViolations.length})</h2>
+            <h2 id="canon-heading" className="text-lg font-bold text-navy">{t('writing.submissions.results.canon.heading', { count: grade.canonViolations.length })}</h2>
             <div className="mt-3 grid gap-2 md:grid-cols-2">
               {grade.canonViolations.map((v) => (
                 <CanonViolationCard key={v.id} violation={v} onDispute={(rid, vid) => onDisputeViolation(rid, vid)} />
@@ -206,7 +212,7 @@ export default function WritingSubmissionResultsPage() {
 
         {submission && exemplar ? (
           <section aria-labelledby="exemplar-heading" className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
-            <h2 id="exemplar-heading" className="text-lg font-bold text-navy">Side-by-side with the gold-standard exemplar</h2>
+            <h2 id="exemplar-heading" className="text-lg font-bold text-navy">{t('writing.submissions.results.exemplar.heading')}</h2>
             <ExemplarSideBySide
               candidateLetter={submission.letterContent}
               exemplarLetter={exemplar.letterContent}
@@ -217,25 +223,25 @@ export default function WritingSubmissionResultsPage() {
         ) : null}
 
         <section aria-labelledby="actions-heading" className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
-          <h2 id="actions-heading" className="text-lg font-bold text-navy">What's next?</h2>
-          <p className="mt-1 text-sm text-muted">Take one of these actions — each is recorded against this submission.</p>
+          <h2 id="actions-heading" className="text-lg font-bold text-navy">{t('writing.submissions.results.next.heading')}</h2>
+          <p className="mt-1 text-sm text-muted">{t('writing.submissions.results.next.description')}</p>
           <div className="mt-3 flex flex-wrap gap-2">
             {offerRevision || (submission && !submission.isRevision) ? (
               <Button asChild>
                 <Link href={`/writing/submissions/${encodeURIComponent(submissionId)}/revise`}>
-                  <RefreshCw className="h-4 w-4" aria-hidden="true" /> Revise
+                  <RefreshCw className="h-4 w-4" aria-hidden="true" /> {t('writing.submissions.results.actions.revise')}
                 </Link>
               </Button>
             ) : null}
             <Button variant="outline" onClick={() => void onAppeal()}>
-              <Flag className="h-4 w-4" aria-hidden="true" /> Appeal score
+              <Flag className="h-4 w-4" aria-hidden="true" /> {t('writing.submissions.results.actions.appeal')}
             </Button>
             <Button variant="outline" onClick={() => void onTutorReview()}>
-              <UserRoundCheck className="h-4 w-4" aria-hidden="true" /> Request tutor review
+              <UserRoundCheck className="h-4 w-4" aria-hidden="true" /> {t('writing.submissions.results.actions.tutorReview')}
             </Button>
             {isA ? (
               <Button variant="outline" onClick={() => void onShowcase()}>
-                <Share2 className="h-4 w-4" aria-hidden="true" /> Share to showcase
+                <Share2 className="h-4 w-4" aria-hidden="true" /> {t('writing.submissions.results.actions.showcase')}
               </Button>
             ) : null}
           </div>
@@ -243,7 +249,8 @@ export default function WritingSubmissionResultsPage() {
             <Card padding="md" className="mt-4 border-amber-300/70 bg-amber-50/60">
               <CardContent>
                 <p className="text-sm text-amber-900">
-                  <span className="font-bold">Why revise:</span> {grade.revisionInvite.reason}
+                  <span className="font-bold">{t('writing.submissions.results.next.whyRevise')}</span>{' '}
+                  <span dir="ltr">{grade.revisionInvite.reason}</span>
                 </p>
               </CardContent>
             </Card>

@@ -22,7 +22,7 @@ import {
 import {
   createLiveRoom,
   issueLiveRoomToken,
-  type LiveRoomDetail,
+  type CreateLiveRoomResponse,
   type LiveRoomTokenResponse,
 } from '@/lib/api/speaking-live-rooms';
 import { ApiError } from '@/lib/api';
@@ -33,7 +33,7 @@ export default function SpeakingSessionLiveTutorPage() {
   const router = useRouter();
 
   const [session, setSession] = useState<SpeakingSessionDetail | null>(null);
-  const [room, setRoom] = useState<LiveRoomDetail | null>(null);
+  const [room, setRoom] = useState<CreateLiveRoomResponse | null>(null);
   const [tokenInfo, setTokenInfo] = useState<LiveRoomTokenResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -137,7 +137,6 @@ export default function SpeakingSessionLiveTutorPage() {
         <SpeakingConsentBanner
           sessionMode="live_tutor"
           onAccepted={() => setConsentAccepted(true)}
-          consentVersionOverride={session.consentVersion}
         />
       ) : null}
 

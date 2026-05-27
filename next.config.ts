@@ -33,6 +33,14 @@ const nextConfig: NextConfig = {
     remotePatterns: [],
   },
   output: 'standalone',
+  // next-intl bundles live under messages/ and are dynamically imported in
+  // i18n.ts. Next.js' file-tracing misses them in standalone builds (the
+  // bundler resolves the dynamic specifier statically but the JSON
+  // assets are not copied into .next/standalone). Force-include them so
+  // every server-rendered page in the container can resolve translations.
+  outputFileTracingIncludes: {
+    '/**': ['./messages/**/*.json', './i18n.ts'],
+  },
   async redirects() {
     // Phase 2 of the Content Hub consolidation: every legacy /admin/<area>
     // route now lives under /admin/content/<area>. Permanent redirects keep

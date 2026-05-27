@@ -25,11 +25,17 @@ test.describe('Writing V2 mocks @writing-v2 @smoke', () => {
 
     await page.goto('/writing/mocks', { waitUntil: 'domcontentloaded' });
 
+    // Accept either translated heading or raw next-intl key (page uses
+    // `t('writing.mocks.catalogue.title')`).
     await expect(
-      page.getByRole('heading', { name: /mocks under strict exam conditions/i }),
+      page.getByRole('heading', {
+        name: /(mocks under strict exam conditions|writing\.mocks\.catalogue\.title)/i,
+      }),
     ).toBeVisible({ timeout: 30_000 });
 
-    const startButtons = page.getByRole('button', { name: /take this mock/i });
+    const startButtons = page.getByRole('button', {
+      name: /(take this mock|writing\.mocks\.catalogue\.cta)/i,
+    });
     const startCount = await startButtons.count();
     if (startCount === 0) {
       // Empty seed for the learner's profession → spec describes this as
@@ -67,15 +73,19 @@ test.describe('Writing V2 mocks @writing-v2 @smoke', () => {
       timeout: 30_000,
     });
 
-    // Case notes panel rendered.
+    // Case notes panel rendered. Accept raw next-intl key fallback.
     await expect(
-      page.getByRole('region', { name: /case notes/i }),
+      page.getByRole('region', {
+        name: /(case notes|writing\.mocks\.session\.caseNotesLabel|writing\.diagnostic\.session\.caseNotesLabel)/i,
+      }),
     ).toBeVisible({ timeout: 30_000 });
 
     // Editor surface mounts (id-less; locate by role textbox inside the
     // writing-editor section). It is locked during the reading phase.
     await expect(
-      page.getByRole('region', { name: /writing editor/i }),
+      page.getByRole('region', {
+        name: /(writing editor|writing\.mocks\.session\.editorLabel|writing\.diagnostic\.session\.editorLabel)/i,
+      }),
     ).toBeVisible({ timeout: 30_000 });
   });
 });

@@ -108,6 +108,9 @@ public sealed class TutorAssessmentService(
         TutorAssessmentDraftRequest req,
         CancellationToken ct)
     {
+        var session = await LoadFinishedSessionAsync(sessionId, ct);
+        await EnsureTutorMayReviewAsync(tutorId, session, ct);
+
         var row = await LoadOwnedDraftAsync(tutorId, sessionId, assessmentId, ct);
 
         if (req.Intelligibility is not null) row.Intelligibility = req.Intelligibility.Value;
@@ -144,6 +147,9 @@ public sealed class TutorAssessmentService(
         TutorAssessmentSubmitRequest req,
         CancellationToken ct)
     {
+        var session = await LoadFinishedSessionAsync(sessionId, ct);
+        await EnsureTutorMayReviewAsync(tutorId, session, ct);
+
         var row = await LoadOwnedDraftAsync(tutorId, sessionId, assessmentId, ct);
 
         // Apply final-state field updates BEFORE validation so a tutor
@@ -173,7 +179,7 @@ public sealed class TutorAssessmentService(
         // anchored at least one timestamped comment to the session.
         ValidateAllScoresPresentAndInRange(row, req);
         ValidateOverallFeedbackProvided(row);
-        await ValidateAtLeastOneTimestampedCommentAsync(sessionId, ct);
+        await ValidateAtLeastOneTimestampedCommentAsync(sessionId, tutorId, ct);
 
         var scores = new OetScoring.SpeakingCriterionScores(
             row.Intelligibility,
@@ -234,13 +240,26 @@ public sealed class TutorAssessmentService(
         TutorTimestampedCommentRequest req,
         CancellationToken ct)
     {
-        await LoadFinishedSessionAsync(sessionId, ct);
+        var session = await LoadFinishedSessionAsync(sessionId, ct);
+        await EnsureTutorMayReviewAsync(tutorId, session, ct);
 
         if (req.EndMs < req.StartMs)
         {
             throw ApiException.Validation(
                 "comment_invalid_window",
                 "Comment endMs must be greater than or equal to startMs.");
+        }
+        if (req.StartMs < 0 || req.EndMs < 0)
+        {
+            throw ApiException.Validation(
+                "comment_invalid_window",
+                "Comment timestamps must be greater than or equal to zero.");
+        }
+        if (string.IsNullOrWhiteSpace(req.BodyMarkdown))
+        {
+            throw ApiException.Validation(
+                "comment_body_required",
+                "Comment body is required before saving a timestamped comment.");
         }
 
         var id = Guid.NewGuid().ToString("N");
@@ -255,7 +274,7 @@ public sealed class TutorAssessmentService(
             EndMs = req.EndMs,
             CriterionCode = string.IsNullOrWhiteSpace(req.CriterionCode) ? "general" : req.CriterionCode,
             Severity = string.IsNullOrWhiteSpace(req.Severity) ? "info" : req.Severity,
-            BodyMarkdown = req.BodyMarkdown ?? string.Empty,
+            BodyMarkdown = req.BodyMarkdown.Trim(),
             LinkedRulebookEntryCode = req.LinkedRulebookEntryCode,
             LinkedDrillId = req.LinkedDrillId,
             CreatedAt = clock.GetUtcNow(),
@@ -274,6 +293,12 @@ public sealed class TutorAssessmentService(
     public async Task<DualAssessmentResponse> GetDualAssessmentAsync(
         string sessionId,
         CancellationToken ct)
+        => await BuildDualAssessmentAsync(sessionId, includeDraftForTutorId: null, ct);
+
+    private async Task<DualAssessmentResponse> BuildDualAssessmentAsync(
+        string sessionId,
+        string? includeDraftForTutorId,
+        CancellationToken ct)
     {
         var ai = await db.SpeakingAiAssessments
             .AsNoTracking()
@@ -287,8 +312,12 @@ public sealed class TutorAssessmentService(
             .OrderByDescending(t => t.SubmittedAt ?? t.UpdatedAt)
             .ToListAsync(ct);
 
-        var latestTutor = tutorRows.FirstOrDefault(t => t.IsFinal) ?? tutorRows.FirstOrDefault();
-        var history = tutorRows.Where(t => t.IsFinal).Select(t => ProjectTutor(t, null)).ToArray();
+        var finalRows = tutorRows.Where(t => t.IsFinal).ToArray();
+        var latestTutor = finalRows.FirstOrDefault()
+            ?? (includeDraftForTutorId is null
+                ? null
+                : tutorRows.FirstOrDefault(t => t.TutorId == includeDraftForTutorId));
+        var history = finalRows.Select(t => ProjectTutor(t, null)).ToArray();
 
         var aiProjection = ai is null ? null : ProjectAi(ai);
         var tutorProjection = latestTutor is null ? null : ProjectTutor(latestTutor, null);
@@ -305,6 +334,112 @@ public sealed class TutorAssessmentService(
             Tutor: tutorProjection,
             TutorHistory: history,
             Divergence: divergence);
+    }
+
+    public async Task<DualAssessmentResponse> GetDualAssessmentForLearnerAsync(
+        string learnerId,
+        string sessionId,
+        CancellationToken ct)
+    {
+        var ownsSession = await db.SpeakingSessions
+            .AsNoTracking()
+            .AnyAsync(s => s.Id == sessionId && s.UserId == learnerId, ct);
+        if (!ownsSession)
+        {
+            throw ApiException.NotFound(
+                "speaking_session_not_found",
+                "Speaking session not found.");
+        }
+
+        return await BuildDualAssessmentAsync(sessionId, includeDraftForTutorId: null, ct);
+    }
+
+    public async Task<DualAssessmentResponse> GetDualAssessmentForTutorAsync(
+        string tutorId,
+        string sessionId,
+        CancellationToken ct)
+    {
+        var session = await LoadFinishedSessionAsync(sessionId, ct);
+        await EnsureTutorMayReviewAsync(tutorId, session, ct);
+
+        return await BuildDualAssessmentAsync(sessionId, includeDraftForTutorId: tutorId, ct);
+    }
+
+    public async Task<TutorSessionContextPayload> GetSessionContextForTutorAsync(
+        string tutorId,
+        string sessionId,
+        CancellationToken ct)
+    {
+        var session = await LoadFinishedSessionAsync(sessionId, ct);
+        await EnsureTutorMayReviewAsync(tutorId, session, ct);
+
+        var transcript = await db.SpeakingTranscripts.AsNoTracking()
+            .Where(t => t.SpeakingSessionId == sessionId && t.IsLatest)
+            .OrderByDescending(t => t.GeneratedAt)
+            .FirstOrDefaultAsync(ct);
+
+        var segments = Array.Empty<JsonElement>();
+        if (!string.IsNullOrWhiteSpace(transcript?.SegmentsJson))
+        {
+            try
+            {
+                segments = JsonSerializer.Deserialize<JsonElement[]>(transcript.SegmentsJson) ?? [];
+            }
+            catch (JsonException ex)
+            {
+                logger.LogWarning(ex, "Invalid speaking transcript JSON for session {SessionId}.", sessionId);
+            }
+        }
+
+        var comments = await db.SpeakingTimestampedComments.AsNoTracking()
+            .Where(c => c.SpeakingSessionId == sessionId)
+            .OrderBy(c => c.StartMs)
+            .ThenBy(c => c.CreatedAt)
+            .Select(c => new SpeakingTimestampedCommentPayload(
+                c.Id,
+                c.StartMs,
+                c.EndMs,
+                c.TranscriptSegmentIndex,
+                c.CriterionCode,
+                c.Severity,
+                c.BodyMarkdown,
+                c.AuthorRole,
+                c.CreatedAt))
+            .ToArrayAsync(ct);
+
+        var hasReadyRecording = await db.SpeakingRecordings.AsNoTracking()
+            .Include(r => r.MediaAsset)
+            .AnyAsync(r => r.SpeakingSessionId == sessionId
+                           && !r.IsArchived
+                           && r.MediaAsset != null
+                           && r.MediaAsset.Status == MediaAssetStatus.Ready, ct);
+
+        return new TutorSessionContextPayload(
+            RecordingUrl: hasReadyRecording ? $"/v1/expert/speaking/sessions/{sessionId}/recording" : null,
+            Transcript: new SpeakingTranscriptContextPayload(segments),
+            Comments: comments);
+    }
+
+    public async Task<SpeakingRecording> GetRecordingForTutorAsync(
+        string tutorId,
+        string sessionId,
+        CancellationToken ct)
+    {
+        var session = await LoadFinishedSessionAsync(sessionId, ct);
+        await EnsureTutorMayReviewAsync(tutorId, session, ct);
+
+        var recording = await db.SpeakingRecordings.AsNoTracking()
+            .Include(r => r.MediaAsset)
+            .Where(r => r.SpeakingSessionId == sessionId
+                        && !r.IsArchived
+                        && r.MediaAsset != null
+                        && r.MediaAsset.Status == MediaAssetStatus.Ready)
+            .OrderByDescending(r => r.CreatedAt)
+            .FirstOrDefaultAsync(ct);
+
+        return recording?.MediaAsset is not null
+            ? recording
+            : throw ApiException.NotFound("speaking_recording_not_found", "Speaking recording not found.");
     }
 
     // ── Helpers ─────────────────────────────────────────────────────────
@@ -329,13 +464,36 @@ public sealed class TutorAssessmentService(
 
     private async Task EnsureTutorMayReviewAsync(string tutorId, SpeakingSession session, CancellationToken ct)
     {
-        // TODO(Phase 4): wire claim-check against the tutor review queue
-        // (see TutorReviewQueueService.ClaimAsync). For now any
-        // authenticated expert may draft an assessment so the surface is
-        // usable while the queue UX lands.
-        _ = tutorId;
-        _ = session;
-        await Task.CompletedTask;
+        if (!string.IsNullOrWhiteSpace(session.InterlocutorActorId)
+            && string.Equals(session.InterlocutorActorId, tutorId, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        var claimCutoff = clock.GetUtcNow().AddMinutes(-TutorReviewQueueService.IdleClaimTtlMinutes);
+        var activeClaim = await db.ReviewRequests.AsNoTracking()
+            .Where(r => r.SubtestCode == TutorReviewQueueService.SubtestCode
+                        && r.AttemptId == session.Id
+                        && r.State == ReviewRequestState.InReview
+                        && r.CreatedAt >= claimCutoff)
+            .OrderByDescending(r => r.CreatedAt)
+            .FirstOrDefaultAsync(ct);
+        if (activeClaim is not null)
+        {
+            var latestClaimActor = await db.AuditEvents.AsNoTracking()
+                .Where(a => a.Action == "SpeakingSessionClaimed" && a.ResourceId == session.Id)
+                .OrderByDescending(a => a.OccurredAt)
+                .Select(a => a.ActorId)
+                .FirstOrDefaultAsync(ct);
+            if (string.Equals(latestClaimActor, tutorId, StringComparison.Ordinal))
+            {
+                return;
+            }
+        }
+
+        throw ApiException.Forbidden(
+            "tutor_assessment_forbidden",
+            "You may only review speaking sessions assigned or claimed to you.");
     }
 
     private async Task<SpeakingTutorAssessment> LoadOwnedDraftAsync(
@@ -375,18 +533,9 @@ public sealed class TutorAssessmentService(
     {
         var fieldErrors = new List<ApiFieldError>();
 
-        // The persisted column starts at 0 so we cannot tell from the row
-        // whether a tutor genuinely scored 0 or simply skipped the criterion.
-        // The submit payload is checked first to enforce explicit presence;
-        // for criteria present in a prior draft we accept the stored value
-        // (the draft contract uses `int?` so missing payload + stored value
-        // means the score was set on an earlier round-trip).
         void Linguistic(string field, int? requested, int stored)
         {
-            // Presence: either the submit body must provide a value or the
-            // draft must already hold one. Detecting "never scored" requires
-            // both checks because we cannot disambiguate stored zeros.
-            if (requested is null && stored == 0 && !PreviousNonZeroExists(field, row))
+            if (requested is null)
             {
                 fieldErrors.Add(new ApiFieldError(field, "missing", $"{field} must be scored before submitting."));
                 return;
@@ -398,7 +547,7 @@ public sealed class TutorAssessmentService(
         }
         void Clinical(string field, int? requested, int stored)
         {
-            if (requested is null && stored == 0 && !PreviousNonZeroExists(field, row))
+            if (requested is null)
             {
                 fieldErrors.Add(new ApiFieldError(field, "missing", $"{field} must be scored before submitting."));
                 return;
@@ -428,25 +577,6 @@ public sealed class TutorAssessmentService(
         }
     }
 
-    // Tutors may genuinely award a zero — so we accept a stored zero IF the
-    // row has at least one non-zero score (heuristic: a tutor who has worked
-    // through the rubric will rarely award all zeros, and the more common
-    // failure mode is "forgot one criterion"). When EVERY field is zero we
-    // assume the tutor has not yet scored.
-    private static bool PreviousNonZeroExists(string skipField, SpeakingTutorAssessment row)
-    {
-        bool IsNon(string field, int v) => !string.Equals(field, skipField, StringComparison.Ordinal) && v != 0;
-        return IsNon("intelligibility", row.Intelligibility)
-            || IsNon("fluency", row.Fluency)
-            || IsNon("appropriateness", row.Appropriateness)
-            || IsNon("grammarExpression", row.GrammarExpression)
-            || IsNon("relationshipBuilding", row.RelationshipBuilding)
-            || IsNon("patientPerspective", row.PatientPerspective)
-            || IsNon("structure", row.Structure)
-            || IsNon("informationGathering", row.InformationGathering)
-            || IsNon("informationGiving", row.InformationGiving);
-    }
-
     private static void ValidateOverallFeedbackProvided(SpeakingTutorAssessment row)
     {
         if (string.IsNullOrWhiteSpace(row.OverallFeedbackMarkdown))
@@ -464,11 +594,14 @@ public sealed class TutorAssessmentService(
         }
     }
 
-    private async Task ValidateAtLeastOneTimestampedCommentAsync(string sessionId, CancellationToken ct)
+    private async Task ValidateAtLeastOneTimestampedCommentAsync(string sessionId, string tutorId, CancellationToken ct)
     {
         var commentCount = await db.SpeakingTimestampedComments
             .AsNoTracking()
-            .CountAsync(c => c.SpeakingSessionId == sessionId, ct);
+            .CountAsync(c => c.SpeakingSessionId == sessionId
+                             && c.AuthorRole == "tutor"
+                             && c.AuthorId == tutorId
+                             && c.BodyMarkdown != string.Empty, ct);
         if (commentCount == 0)
         {
             throw ApiException.Validation(
@@ -483,18 +616,18 @@ public sealed class TutorAssessmentService(
     {
         var per = new Dictionary<string, int>(StringComparer.Ordinal)
         {
-            ["intelligibility"] = Math.Abs(ai.Intelligibility - tutor.Intelligibility),
-            ["fluency"] = Math.Abs(ai.Fluency - tutor.Fluency),
-            ["appropriateness"] = Math.Abs(ai.Appropriateness - tutor.Appropriateness),
-            ["grammarExpression"] = Math.Abs(ai.GrammarExpression - tutor.GrammarExpression),
-            ["relationshipBuilding"] = Math.Abs(ai.RelationshipBuilding - tutor.RelationshipBuilding),
-            ["patientPerspective"] = Math.Abs(ai.PatientPerspective - tutor.PatientPerspective),
-            ["structure"] = Math.Abs(ai.Structure - tutor.Structure),
-            ["informationGathering"] = Math.Abs(ai.InformationGathering - tutor.InformationGathering),
-            ["informationGiving"] = Math.Abs(ai.InformationGiving - tutor.InformationGiving),
+            ["intelligibility"] = tutor.Intelligibility - ai.Intelligibility,
+            ["fluency"] = tutor.Fluency - ai.Fluency,
+            ["appropriateness"] = tutor.Appropriateness - ai.Appropriateness,
+            ["grammarExpression"] = tutor.GrammarExpression - ai.GrammarExpression,
+            ["relationshipBuilding"] = tutor.RelationshipBuilding - ai.RelationshipBuilding,
+            ["patientPerspective"] = tutor.PatientPerspective - ai.PatientPerspective,
+            ["structure"] = tutor.Structure - ai.Structure,
+            ["informationGathering"] = tutor.InformationGathering - ai.InformationGathering,
+            ["informationGiving"] = tutor.InformationGiving - ai.InformationGiving,
         };
         var sumAbs = 0;
-        foreach (var v in per.Values) sumAbs += v;
+        foreach (var v in per.Values) sumAbs += Math.Abs(v);
         var band = sumAbs <= 4 ? "close" : sumAbs <= 10 ? "moderate" : "wide";
         var scaledDelta = tutor.EstimatedScaledScore - ai.EstimatedScaledScore;
         return new DivergenceMetric(per, scaledDelta, band);

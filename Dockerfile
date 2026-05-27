@@ -47,6 +47,12 @@ ENV NODE_ENV=production \
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/public ./public
+# next-intl message bundles live outside the .next traced output (they are
+# loaded via dynamic import at request time, so Next.js does not include them
+# in the standalone trace). Copy them explicitly so server-rendered pages can
+# resolve translation keys instead of falling back to the raw key.
+COPY --from=builder /app/messages ./messages
+COPY --from=builder /app/i18n.ts ./i18n.ts
 
 RUN mkdir -p /app/.next/cache \
     && chown -R nextjs:nodejs /app/.next /app/public

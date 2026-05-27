@@ -105,10 +105,15 @@ export function SpeakingConsentBanner({
         postConsent ??
         ((input: { consentType: SpeakingConsentType; consentVersion?: string }) =>
           recordSpeakingConsent(input));
-      await post({
-        consentType,
-        consentVersion: consentVersionOverride,
-      });
+      if (sessionMode === 'live_tutor') {
+        await post({ consentType: 'recording' });
+        await post({ consentType: 'live_video_with_tutor' });
+      } else {
+        await post({
+          consentType,
+          consentVersion: consentVersionOverride,
+        });
+      }
       setAccepted(true);
       onAccepted();
     } catch (e) {
@@ -117,7 +122,7 @@ export function SpeakingConsentBanner({
     } finally {
       setAccepting(false);
     }
-  }, [consentType, consentVersionOverride, onAccepted, postConsent]);
+  }, [consentType, consentVersionOverride, onAccepted, postConsent, sessionMode]);
 
   if (accepted) {
     return null;

@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using OetLearner.Api.Contracts;
+using OetLearner.Api.Services.Content;
 using OetLearner.Api.Services.Speaking;
 
 namespace OetLearner.Api.Endpoints;
@@ -13,6 +14,9 @@ namespace OetLearner.Api.Endpoints;
 //   PATCH  /v1/expert/speaking/sessions/{id}/tutor-assessments/{aid}
 //   POST   /v1/expert/speaking/sessions/{id}/tutor-assessments/{aid}/submit
 //   POST   /v1/expert/speaking/sessions/{id}/comments
+//   GET    /v1/expert/speaking/sessions/{id}/assessments
+//   GET    /v1/expert/speaking/sessions/{id}/context
+//   GET    /v1/expert/speaking/sessions/{id}/recording
 //   GET    /v1/expert/speaking/queue?professionId=
 //   POST   /v1/expert/speaking/queue/{sessionId}/claim
 //   POST   /v1/expert/speaking/queue/{sessionId}/release
@@ -78,6 +82,46 @@ public static class TutorSpeakingEndpoints
                 new { id = commentId });
         });
 
+        expert.MapGet("/sessions/{id}/assessments", async (
+            HttpContext http,
+            string id,
+            TutorAssessmentService svc,
+            CancellationToken ct) =>
+        {
+            var dual = await svc.GetDualAssessmentForTutorAsync(http.ExpertId(), id, ct);
+            return Results.Ok(dual);
+        });
+
+        expert.MapGet("/sessions/{id}/context", async (
+            HttpContext http,
+            string id,
+            TutorAssessmentService svc,
+            CancellationToken ct) =>
+        {
+            var context = await svc.GetSessionContextForTutorAsync(http.ExpertId(), id, ct);
+            return Results.Ok(context);
+        });
+
+        expert.MapGet("/sessions/{id}/recording", async (
+            HttpContext http,
+            string id,
+            TutorAssessmentService svc,
+            SpeakingComplianceService compliance,
+            IFileStorage storage,
+            CancellationToken ct) =>
+        {
+            var recording = await svc.GetRecordingForTutorAsync(http.ExpertId(), id, ct);
+            await compliance.AdminAccessRecordingAsync(
+                http.ExpertId(),
+                http.ExpertId(),
+                recording.Id,
+                "speaking_tutor_assessment_playback",
+                ct);
+            var media = recording.MediaAsset!;
+            var stream = await storage.OpenReadAsync(media.StoragePath, ct);
+            return Results.File(stream, media.MimeType, enableRangeProcessing: true);
+        });
+
         expert.MapGet("/queue", async (
             HttpContext http,
             string? professionId,
@@ -116,11 +160,12 @@ public static class TutorSpeakingEndpoints
             .RequireAuthorization("LearnerOnly");
 
         learner.MapGet("/sessions/{id}/assessments", async (
+            HttpContext http,
             string id,
             TutorAssessmentService svc,
             CancellationToken ct) =>
         {
-            var dual = await svc.GetDualAssessmentAsync(id, ct);
+            var dual = await svc.GetDualAssessmentForLearnerAsync(http.LearnerId(), id, ct);
             return Results.Ok(dual);
         });
 
@@ -130,4 +175,8 @@ public static class TutorSpeakingEndpoints
     private static string ExpertId(this HttpContext http)
         => http.User.FindFirstValue(ClaimTypes.NameIdentifier)
            ?? throw new InvalidOperationException("Authenticated expert id is required.");
+
+    private static string LearnerId(this HttpContext http)
+        => http.User.FindFirstValue(ClaimTypes.NameIdentifier)
+           ?? throw new InvalidOperationException("Authenticated learner id is required.");
 }

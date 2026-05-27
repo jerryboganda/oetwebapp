@@ -17,7 +17,7 @@ namespace OetLearner.Api.Tests.Speaking;
 //   * AiAssessment writes must NEVER mutate SpeakingTutorAssessment rows.
 //   * The learner-facing dual GET must surface both columns when both
 //     tracks have produced a row.
-//   * Divergence is computed via sum-of-abs across the nine criteria:
+//   * Divergence exposes signed tutor-minus-AI deltas and bands by sum-of-abs:
 //     ≤4 → close, ≤10 → moderate, otherwise wide.
 //   * The submitted scaled score MUST equal OetScoring.SpeakingProjectedScaled
 //     applied to the tutor's nine criterion scores — no local re-implementation.
@@ -197,6 +197,42 @@ public sealed class DualAssessmentTests : IAsyncLifetime
         Assert.NotNull(dual.Divergence);
     }
 
+    [Fact]
+    public async Task LearnerCannotReadAnotherLearnersDualAssessment()
+    {
+        var sessionId = await SeedFinishedSessionAsync("learner-owner");
+        await SeedAiAssessmentAsync(sessionId, new[] { 5, 5, 5, 5 }, new[] { 2, 2, 2, 2, 2 });
+
+        var ex = await Assert.ThrowsAsync<ApiException>(() => _svc.GetDualAssessmentForLearnerAsync(
+            "learner-other",
+            sessionId,
+            CancellationToken.None));
+
+        Assert.Equal("speaking_session_not_found", ex.ErrorCode);
+    }
+
+    [Fact]
+    public async Task LearnerCannotSeeTutorDraftBeforeFinalSubmission()
+    {
+        var sessionId = await SeedFinishedSessionAsync("learner-draft");
+        await SeedAiAssessmentAsync(sessionId, new[] { 5, 5, 5, 5 }, new[] { 2, 2, 2, 2, 2 });
+
+        await _svc.CreateDraftAsync(
+            "tutor-draft",
+            sessionId,
+            new TutorAssessmentDraftRequest(
+                4, 4, 4, 4, 2, 2, 2, 2, 2,
+                "Draft feedback should stay hidden.", null, null, null, null),
+            CancellationToken.None);
+
+        var dual = await _svc.GetDualAssessmentForLearnerAsync("learner-draft", sessionId, CancellationToken.None);
+
+        Assert.NotNull(dual.Ai);
+        Assert.Null(dual.Tutor);
+        Assert.Empty(dual.TutorHistory);
+        Assert.Null(dual.Divergence);
+    }
+
     // ── Divergence agreement bands ───────────────────────────────────────
 
     [Theory]
@@ -210,7 +246,7 @@ public sealed class DualAssessmentTests : IAsyncLifetime
         var (ai, tutor) = BuildPairWithSumOfAbs(sumOfAbs);
         var divergence = TutorAssessmentService.ComputeDivergence(ai, tutor);
         Assert.Equal(expectedBand, divergence.AgreementBand);
-        var actualSum = divergence.PerCriterion.Values.Sum();
+        var actualSum = divergence.PerCriterion.Values.Sum(Math.Abs);
         Assert.Equal(sumOfAbs, actualSum);
     }
 
@@ -242,6 +278,219 @@ public sealed class DualAssessmentTests : IAsyncLifetime
         var expected = OetScoring.SpeakingProjectedScaled(
             new OetScoring.SpeakingCriterionScores(5, 4, 5, 4, 2, 3, 2, 2, 3));
         Assert.Equal(expected, result.EstimatedScaledScore);
+    }
+
+    [Fact]
+    public async Task Submit_RequiresEveryScoreInRequest_EvenWhenDraftHadScores()
+    {
+        var sessionId = await SeedFinishedSessionAsync("learner-6");
+        await SeedTimestampedCommentAsync(sessionId, "tutor-6");
+
+        var draftId = await _svc.CreateDraftAsync(
+            "tutor-6",
+            sessionId,
+            new TutorAssessmentDraftRequest(
+                5, 4, 5, 4, 2, 3, 2, 2, 3,
+                "Complete draft feedback.", null, null, null, null),
+            CancellationToken.None);
+
+        var ex = await Assert.ThrowsAsync<ApiException>(() => _svc.SubmitAsync(
+            "tutor-6",
+            sessionId,
+            draftId,
+            new TutorAssessmentSubmitRequest(
+                null, 4, 5, 4, 2, 3, 2, 2, 3,
+                null, null, null, null, null),
+            CancellationToken.None));
+
+        Assert.Equal("tutor_assessment_invalid_scores", ex.ErrorCode);
+        Assert.Contains(ex.FieldErrors, err => err.Field == "intelligibility" && err.Code == "missing");
+    }
+
+    [Fact]
+    public async Task Submit_RequiresTimestampedCommentBySubmittingTutor()
+    {
+        var sessionId = await SeedFinishedSessionAsync("learner-7");
+        await SeedTimestampedCommentAsync(sessionId, "tutor-other");
+
+        var draftId = await _svc.CreateDraftAsync(
+            "tutor-7",
+            sessionId,
+            new TutorAssessmentDraftRequest(
+                5, 4, 5, 4, 2, 3, 2, 2, 3,
+                "Complete draft feedback.", null, null, null, null),
+            CancellationToken.None);
+
+        var ex = await Assert.ThrowsAsync<ApiException>(() => _svc.SubmitAsync(
+            "tutor-7",
+            sessionId,
+            draftId,
+            new TutorAssessmentSubmitRequest(
+                5, 4, 5, 4, 2, 3, 2, 2, 3,
+                null, null, null, null, null),
+            CancellationToken.None));
+
+        Assert.Equal("tutor_assessment_missing_timestamped_comment", ex.ErrorCode);
+    }
+
+    [Fact]
+    public async Task TimestampedComment_RejectsBlankBody()
+    {
+        var sessionId = await SeedFinishedSessionAsync("learner-8");
+
+        var ex = await Assert.ThrowsAsync<ApiException>(() => _svc.AddTimestampedCommentAsync(
+            "tutor-8",
+            sessionId,
+            new TutorTimestampedCommentRequest(
+                TranscriptSegmentIndex: 2,
+                StartMs: 1000,
+                EndMs: 1500,
+                CriterionCode: "fluency",
+                Severity: "minor",
+                BodyMarkdown: "   ",
+                LinkedRulebookEntryCode: null,
+                LinkedDrillId: null),
+            CancellationToken.None));
+
+        Assert.Equal("comment_body_required", ex.ErrorCode);
+        Assert.Empty(_db.SpeakingTimestampedComments);
+    }
+
+    [Fact]
+    public async Task TimestampedComment_RequiresAssignedOrClaimedTutor()
+    {
+        var sessionId = await SeedFinishedSessionAsync("learner-9");
+
+        var ex = await Assert.ThrowsAsync<ApiException>(() => _svc.AddTimestampedCommentAsync(
+            "tutor-other",
+            sessionId,
+            new TutorTimestampedCommentRequest(
+                TranscriptSegmentIndex: 0,
+                StartMs: 0,
+                EndMs: 1500,
+                CriterionCode: "fluency",
+                Severity: "minor",
+                BodyMarkdown: "Wrong tutor should not be able to comment.",
+                LinkedRulebookEntryCode: null,
+                LinkedDrillId: null),
+            CancellationToken.None));
+
+        Assert.Equal("tutor_assessment_forbidden", ex.ErrorCode);
+        Assert.Empty(_db.SpeakingTimestampedComments);
+    }
+
+    [Fact]
+    public async Task TutorAssessment_AllowsTutorWithActiveClaim()
+    {
+        var sessionId = await SeedFinishedSessionAsync("learner-claim");
+        await SeedReviewClaimAsync(sessionId, "tutor-claimed");
+
+        var response = await _svc.GetDualAssessmentForTutorAsync(
+            "tutor-claimed",
+            sessionId,
+            CancellationToken.None);
+
+        Assert.Equal(sessionId, response.SessionId);
+    }
+
+    [Fact]
+    public async Task TutorAssessment_RejectsExpiredClaim()
+    {
+        var sessionId = await SeedFinishedSessionAsync("learner-stale");
+        await SeedReviewClaimAsync(
+            sessionId,
+            "tutor-expired",
+            DateTimeOffset.UtcNow.AddMinutes(-(TutorReviewQueueService.IdleClaimTtlMinutes + 1)));
+
+        var ex = await Assert.ThrowsAsync<ApiException>(() => _svc.GetDualAssessmentForTutorAsync(
+            "tutor-expired",
+            sessionId,
+            CancellationToken.None));
+
+        Assert.Equal("tutor_assessment_forbidden", ex.ErrorCode);
+    }
+
+    [Fact]
+    public async Task UpdateDraft_RequiresCurrentClaimAfterDraftCreation()
+    {
+        var sessionId = await SeedFinishedSessionAsync("learner-release");
+        await SeedReviewClaimAsync(sessionId, "tutor-released");
+
+        var draftId = await _svc.CreateDraftAsync(
+            "tutor-released",
+            sessionId,
+            new TutorAssessmentDraftRequest(
+                4, 4, 4, 4, 2, 2, 2, 2, 2,
+                "Draft while claim is active.", null, null, null, null),
+            CancellationToken.None);
+
+        _db.ReviewRequests.RemoveRange(_db.ReviewRequests);
+        await _db.SaveChangesAsync();
+
+        var ex = await Assert.ThrowsAsync<ApiException>(() => _svc.UpdateDraftAsync(
+            "tutor-released",
+            sessionId,
+            draftId,
+            new TutorAssessmentDraftRequest(
+                5, null, null, null, null, null, null, null, null,
+                null, null, null, null, null),
+            CancellationToken.None));
+
+        Assert.Equal("tutor_assessment_forbidden", ex.ErrorCode);
+    }
+
+    [Fact]
+    public void DivergenceCalculation_ExposesSignedTutorMinusAiDeltas()
+    {
+        var ai = new SpeakingAiAssessment
+        {
+            Id = "ai-signed",
+            SpeakingSessionId = "sess-signed",
+            TranscriptId = "tx-signed",
+            Provider = "openai",
+            ModelId = "gpt-test",
+            Intelligibility = 6,
+            Fluency = 3,
+            Appropriateness = 3,
+            GrammarExpression = 3,
+            RelationshipBuilding = 2,
+            PatientPerspective = 1,
+            Structure = 1,
+            InformationGathering = 1,
+            InformationGiving = 1,
+            EstimatedScaledScore = 350,
+            ReadinessBand = "borderline",
+            GeneratedAt = DateTimeOffset.UtcNow,
+        };
+        var tutor = new SpeakingTutorAssessment
+        {
+            Id = "tu-signed",
+            SpeakingSessionId = "sess-signed",
+            TutorId = "tutor-signed",
+            Intelligibility = 4,
+            Fluency = 4,
+            Appropriateness = 3,
+            GrammarExpression = 3,
+            RelationshipBuilding = 3,
+            PatientPerspective = 1,
+            Structure = 1,
+            InformationGathering = 1,
+            InformationGiving = 1,
+            EstimatedScaledScore = 340,
+            ReadinessBand = "not_ready",
+            IsFinal = true,
+            SubmittedAt = DateTimeOffset.UtcNow,
+            CreatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow,
+        };
+
+        var divergence = TutorAssessmentService.ComputeDivergence(ai, tutor);
+
+        Assert.Equal(-2, divergence.PerCriterion["intelligibility"]);
+        Assert.Equal(1, divergence.PerCriterion["fluency"]);
+        Assert.Equal(1, divergence.PerCriterion["relationshipBuilding"]);
+        Assert.Equal(-10, divergence.ScaledDelta);
+        Assert.Equal("close", divergence.AgreementBand);
     }
 
     // ── Fixture helpers ──────────────────────────────────────────────────
@@ -308,6 +557,38 @@ public sealed class DualAssessmentTests : IAsyncLifetime
             CriterionCode = "general",
             Severity = "info",
             BodyMarkdown = "Fixture timestamped comment.",
+        });
+        await _db.SaveChangesAsync();
+    }
+
+    private async Task SeedReviewClaimAsync(string sessionId, string tutorId, DateTimeOffset? createdAt = null)
+    {
+        var now = createdAt ?? DateTimeOffset.UtcNow;
+        _db.ReviewRequests.Add(new ReviewRequest
+        {
+            Id = $"rr-{Guid.NewGuid():N}",
+            AttemptId = sessionId,
+            SubtestCode = TutorReviewQueueService.SubtestCode,
+            State = ReviewRequestState.InReview,
+            TurnaroundOption = "standard",
+            FocusAreasJson = "[]",
+            LearnerNotes = string.Empty,
+            PaymentSource = "included",
+            PriceSnapshot = 0,
+            ReviewerCompensation = 0,
+            CreatedAt = now,
+            EligibilitySnapshotJson = "{}",
+        });
+        _db.AuditEvents.Add(new AuditEvent
+        {
+            Id = $"audit-{Guid.NewGuid():N}",
+            Action = "SpeakingSessionClaimed",
+            ActorId = tutorId,
+            ActorName = tutorId,
+            ResourceId = sessionId,
+            ResourceType = "SpeakingSession",
+            Details = "fixture",
+            OccurredAt = now,
         });
         await _db.SaveChangesAsync();
     }

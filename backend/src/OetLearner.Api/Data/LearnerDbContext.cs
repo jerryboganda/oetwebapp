@@ -1264,6 +1264,12 @@ public partial class LearnerDbContext(DbContextOptions<LearnerDbContext> options
         OnModelCreatingWritingOcr(modelBuilder);
         OnModelCreatingWritingShowcase(modelBuilder);
         OnModelCreatingWritingDiagnosticSessions(modelBuilder);
+
+        // Writing Module V2 post-launch additions — Buddy System (spec §23.5)
+        // and 50-letter calibration harness (spec §33). Partial classes in
+        // LearnerDbContext.WritingBuddy.cs and LearnerDbContext.WritingCalibration.cs.
+        OnModelCreatingWritingBuddy(modelBuilder);
+        OnModelCreatingWritingCalibration(modelBuilder);
     }
 
     /// <summary>
@@ -1351,6 +1357,11 @@ public partial class LearnerDbContext(DbContextOptions<LearnerDbContext> options
     partial void OnModelCreatingWritingOcr(ModelBuilder modelBuilder);
     partial void OnModelCreatingWritingShowcase(ModelBuilder modelBuilder);
     partial void OnModelCreatingWritingDiagnosticSessions(ModelBuilder modelBuilder);
+
+    // Writing Module V2 post-launch additions — Buddy System (spec §23.5)
+    // and 50-letter calibration harness (spec §33).
+    partial void OnModelCreatingWritingBuddy(ModelBuilder modelBuilder);
+    partial void OnModelCreatingWritingCalibration(ModelBuilder modelBuilder);
 
     /// <summary>
     /// Configures the Postgres system column <c>xmin</c> as an optimistic

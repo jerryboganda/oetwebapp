@@ -1047,6 +1047,525 @@
       "grading_method": "llm",
       "grading_config": {"prompt_key": "writing.drill.grade.v1"},
       "status": "published"
+    },
+    {
+      "id": "00000000-0000-0000-0000-002C00020001",
+      "drill_type": "opening-builder",
+      "target_sub_skill": "W2",
+      "target_canon_rule_id": "SC-001",
+      "applies_to_professions": ["Medicine"],
+      "applies_to_letter_types": ["LT-RR"],
+      "difficulty": 2,
+      "prompt_markdown": "Write the OPENING sentence (one sentence only) for a routine referral.\n\n**Case-note snippet:**\n- Patient: Mrs Catherine Wallis, aged 44\n- Occupation: primary school teacher\n- Provisional diagnosis: medication-overuse headache superimposed on chronic migraine\n- Recipient: Consultant Neurologist\n\nMatch canon SC-001 exactly.",
+      "expected_answer": "I am writing to refer Mrs Wallis, a 44-year-old primary school teacher, who has been provisionally diagnosed with medication-overuse headache superimposed on chronic migraine.",
+      "alternatives": [
+        "I am writing to refer Mrs Wallis, a 44-year-old primary school teacher, who has a provisional diagnosis of medication-overuse headache superimposed on chronic migraine.",
+        "I am writing to refer Mrs Wallis, a 44-year-old primary school teacher, who has medication-overuse headache superimposed on chronic migraine."
+      ],
+      "grading_method": "llm",
+      "grading_config": {"prompt_key": "writing.drill.grade.v1"},
+      "status": "published"
+    },
+    {
+      "id": "00000000-0000-0000-0000-002C00020002",
+      "drill_type": "opening-builder",
+      "target_sub_skill": "W2",
+      "target_canon_rule_id": "SC-003",
+      "applies_to_professions": ["Medicine"],
+      "applies_to_letter_types": ["LT-UR"],
+      "difficulty": 3,
+      "prompt_markdown": "Write the OPENING sentence (one sentence only) for an URGENT referral.\n\n**Case-note snippet:**\n- Patient: Mr Joshua Quinn, aged 36\n- Occupation: electrician\n- Presentation: 48-hour painful red right eye with hypopyon and reduced acuity; suspected anterior uveitis with likely first presentation of ankylosing spondylitis\n- Recipient: on-call ophthalmology registrar\n\nMatch canon SC-003 exactly; the opening MUST include an urgency marker.",
+      "expected_answer": "I am writing to urgently refer Mr Quinn, a 36-year-old electrician, who presents with a 48-hour painful, red right eye with hypopyon and reduced acuity, suggestive of acute anterior uveitis.",
+      "alternatives": [
+        "I am writing to urgently refer Mr Quinn, a 36-year-old electrician, with a 48-hour painful red right eye and hypopyon, in keeping with acute anterior uveitis.",
+        "I am writing to urgently refer Mr Quinn, a 36-year-old electrician, who has a 48-hour painful right eye with hypopyon suggestive of acute anterior uveitis."
+      ],
+      "grading_method": "llm",
+      "grading_config": {"prompt_key": "writing.drill.grade.v1"},
+      "status": "published"
+    },
+    {
+      "id": "00000000-0000-0000-0000-002C00020003",
+      "drill_type": "opening-builder",
+      "target_sub_skill": "W2",
+      "target_canon_rule_id": null,
+      "applies_to_professions": ["Nursing"],
+      "applies_to_letter_types": ["LT-TR"],
+      "difficulty": 3,
+      "prompt_markdown": "Write the OPENING sentence (one sentence only) for a TRANSFER letter.\n\n**Case-note snippet:**\n- Patient: Mr Daniel Hartley, aged 29\n- Voluntary transfer from crisis team to acute mental health inpatient unit\n- Reason: deterioration in mental state despite intensive community support\n- Recipient: Senior Charge Nurse, Ward 4, Holly House Hospital\n\nMatch the canonical transfer opener pattern.",
+      "expected_answer": "I am writing to transfer the care of Mr Hartley to your service following deterioration in his mental state despite intensive crisis team input.",
+      "alternatives": [
+        "I am writing to transfer the care of Mr Hartley to your service for further assessment and stabilisation following deterioration in his mental state despite intensive crisis team input.",
+        "I am writing to transfer Mr Hartley to your acute inpatient service following deterioration in his mental state despite intensive crisis team input."
+      ],
+      "grading_method": "llm",
+      "grading_config": {"prompt_key": "writing.drill.grade.v1"},
+      "status": "published"
+    },
+    {
+      "id": "00000000-0000-0000-0000-002C00020004",
+      "drill_type": "denial-conversion",
+      "target_sub_skill": "W4",
+      "target_canon_rule_id": "SC-005",
+      "applies_to_professions": ["Medicine"],
+      "applies_to_letter_types": ["all"],
+      "difficulty": 2,
+      "prompt_markdown": "Convert the case-note shorthand into a single canon-pattern denial sentence using SC-005.\n\n**Case-note shorthand (male patient):**\nNo dyspnoea at rest. No orthopnoea. No paroxysmal nocturnal dyspnoea. No ankle swelling.",
+      "expected_answer": "Please note, he denied dyspnoea at rest, orthopnoea, paroxysmal nocturnal dyspnoea or ankle swelling.",
+      "alternatives": [
+        "Please note, he denied any dyspnoea at rest, orthopnoea, paroxysmal nocturnal dyspnoea or ankle swelling.",
+        "Please note, he denied dyspnoea at rest, orthopnoea, paroxysmal nocturnal dyspnoea and ankle swelling."
+      ],
+      "grading_method": "llm",
+      "grading_config": {"prompt_key": "writing.drill.grade.v1"},
+      "status": "published"
+    },
+    {
+      "id": "00000000-0000-0000-0000-002C00020005",
+      "drill_type": "denial-conversion",
+      "target_sub_skill": "W4",
+      "target_canon_rule_id": "SC-005",
+      "applies_to_professions": ["Nursing"],
+      "applies_to_letter_types": ["all"],
+      "difficulty": 2,
+      "prompt_markdown": "Convert the case-note shorthand into a single canon-pattern denial sentence using SC-005.\n\n**Case-note shorthand (female patient, post-op review):**\nNo wound pain at rest. No fever. No erythema around wound. No purulent discharge.",
+      "expected_answer": "Please note, she denied wound pain at rest, fever, surrounding erythema or purulent discharge.",
+      "alternatives": [
+        "Please note, she denied any wound pain at rest, fever, surrounding erythema or purulent discharge.",
+        "Please note, she denied wound pain at rest, fever, surrounding erythema and purulent discharge."
+      ],
+      "grading_method": "llm",
+      "grading_config": {"prompt_key": "writing.drill.grade.v1"},
+      "status": "published"
+    },
+    {
+      "id": "00000000-0000-0000-0000-002C00020006",
+      "drill_type": "denial-conversion",
+      "target_sub_skill": "W4",
+      "target_canon_rule_id": "SC-005",
+      "applies_to_professions": ["Pharmacy"],
+      "applies_to_letter_types": ["all"],
+      "difficulty": 2,
+      "prompt_markdown": "Convert the case-note shorthand into a single canon-pattern denial sentence using SC-005.\n\n**Case-note shorthand (elderly female patient):**\nNo confusion at baseline. No focal neurology. No seizure activity. No syncope.",
+      "expected_answer": "Please note, she denied confusion at baseline, focal neurology, seizure activity or syncope.",
+      "alternatives": [
+        "Please note, she denied any confusion at baseline, focal neurology, seizure activity or syncope.",
+        "Please note, she denied confusion at baseline, focal neurology, seizure activity and syncope."
+      ],
+      "grading_method": "llm",
+      "grading_config": {"prompt_key": "writing.drill.grade.v1"},
+      "status": "published"
+    },
+    {
+      "id": "00000000-0000-0000-0000-002C00020007",
+      "drill_type": "closure-selector",
+      "target_sub_skill": "W5",
+      "target_canon_rule_id": "SC-009",
+      "applies_to_professions": ["Medicine"],
+      "applies_to_letter_types": ["LT-RR"],
+      "difficulty": 2,
+      "prompt_markdown": "You are writing a ROUTINE REFERRAL for paediatric eczema to a paediatric dermatologist for step-up therapy review. Which closure sentence matches the canon?\n\nA. Please see Master Hughes and treat his eczema.\nB. I would be grateful if you could assess Master Hughes and consider step-up therapy, including discussion of wet wraps and topical calcineurin inhibitors if appropriate.\nC. Kindly review the patient's skin condition.\nD. Make sure Master Hughes gets a good plan.\n\nReply with the single letter (A, B, C or D).",
+      "expected_answer": "B",
+      "alternatives": ["b", "B."],
+      "grading_method": "regex",
+      "grading_config": {"regex": "^[Bb]\\.?$", "ignore_case": false},
+      "status": "published"
+    },
+    {
+      "id": "00000000-0000-0000-0000-002C00020008",
+      "drill_type": "closure-selector",
+      "target_sub_skill": "W5",
+      "target_canon_rule_id": "SC-010",
+      "applies_to_professions": ["Nursing"],
+      "applies_to_letter_types": ["LT-NM"],
+      "difficulty": 2,
+      "prompt_markdown": "You are writing a NURSING NM letter to a school nurse about a paediatric anaphylaxis care plan. Which closure sentence matches the canon?\n\nA. Please make sure the EpiPens are kept properly.\nB. It would be appreciated if you could distribute the updated allergy action plan to all relevant staff, confirm storage of two auto-injectors in his school bag and one spare in the first-aid cupboard, arrange annual staff training in adrenaline auto-injector technique, and communicate with classmates' parents regarding peanut-free environments.\nC. Could you kindly tell the teachers about his allergies?\nD. Please look after Ethan at school.\n\nReply with the single letter (A, B, C or D).",
+      "expected_answer": "B",
+      "alternatives": ["b", "B."],
+      "grading_method": "regex",
+      "grading_config": {"regex": "^[Bb]\\.?$", "ignore_case": false},
+      "status": "published"
+    },
+    {
+      "id": "00000000-0000-0000-0000-002C00020009",
+      "drill_type": "closure-selector",
+      "target_sub_skill": "W5",
+      "target_canon_rule_id": "SC-018",
+      "applies_to_professions": ["Pharmacy"],
+      "applies_to_letter_types": ["LT-NM"],
+      "difficulty": 3,
+      "prompt_markdown": "You are writing a PHARMACY communication letter to the GP about suspected SSRI-induced hyponatraemia following recent citalopram uptitration. Which OPENING sentence best matches the canon?\n\nA. I am writing about Mrs Murphy and her recent medication.\nB. I am writing to alert you to symptomatic features suggestive of SSRI-induced hyponatraemia following the recent dose increase of citalopram, and to request same-day review and consideration of dose reduction.\nC. Please review Mrs Murphy soon, she seems unwell.\nD. Mrs Murphy is having problems with her tablets — please can you have a look?\n\nReply with the single letter (A, B, C or D).",
+      "expected_answer": "B",
+      "alternatives": ["b", "B."],
+      "grading_method": "regex",
+      "grading_config": {"regex": "^[Bb]\\.?$", "ignore_case": false},
+      "status": "published"
+    },
+    {
+      "id": "00000000-0000-0000-0000-002C0002000A",
+      "drill_type": "linker-injection",
+      "target_sub_skill": "W6",
+      "target_canon_rule_id": "SC-008",
+      "applies_to_professions": ["Medicine"],
+      "applies_to_letter_types": ["all"],
+      "difficulty": 2,
+      "prompt_markdown": "Combine the two sentences into one using an approved canon linker (Consequently, Subsequently, ; however, In addition,).\n\n**Sentence 1:** Mrs Rashid's pain settled by day two and oxygen was weaned by day three.\n**Sentence 2:** She is mobilising independently without breathlessness at the time of discharge.\n\nWrite the combined sentence(s).",
+      "expected_answer": "Mrs Rashid's pain settled by day two and oxygen was weaned by day three. Subsequently, she is mobilising independently without breathlessness at the time of discharge.",
+      "alternatives": [
+        "Mrs Rashid's pain settled by day two and oxygen was weaned by day three; subsequently, she is mobilising independently without breathlessness at the time of discharge.",
+        "Mrs Rashid's pain settled by day two and oxygen was weaned by day three. Consequently, she is mobilising independently without breathlessness at the time of discharge."
+      ],
+      "grading_method": "llm",
+      "grading_config": {"prompt_key": "writing.drill.grade.v1"},
+      "status": "published"
+    },
+    {
+      "id": "00000000-0000-0000-0000-002C0002000B",
+      "drill_type": "linker-injection",
+      "target_sub_skill": "W6",
+      "target_canon_rule_id": "SC-008",
+      "applies_to_professions": ["Nursing"],
+      "applies_to_letter_types": ["all"],
+      "difficulty": 3,
+      "prompt_markdown": "Combine the two sentences into one using an approved canon linker (Consequently, Subsequently, ; however, In addition,).\n\n**Sentence 1:** Mr Hartley has had no prior psychiatric admissions and his physical health is unremarkable.\n**Sentence 2:** Compliance with aripiprazole has been uncertain over the past three days.\n\nWrite the combined sentence.",
+      "expected_answer": "Mr Hartley has had no prior psychiatric admissions and his physical health is unremarkable; however, compliance with aripiprazole has been uncertain over the past three days.",
+      "alternatives": [
+        "Mr Hartley has had no prior psychiatric admissions and his physical health is unremarkable. In addition, compliance with aripiprazole has been uncertain over the past three days.",
+        "Mr Hartley has had no prior psychiatric admissions and his physical health is unremarkable. However, compliance with aripiprazole has been uncertain over the past three days."
+      ],
+      "grading_method": "llm",
+      "grading_config": {"prompt_key": "writing.drill.grade.v1"},
+      "status": "published"
+    },
+    {
+      "id": "00000000-0000-0000-0000-002C0002000C",
+      "drill_type": "linker-injection",
+      "target_sub_skill": "W6",
+      "target_canon_rule_id": "SC-008",
+      "applies_to_professions": ["Pharmacy"],
+      "applies_to_letter_types": ["all"],
+      "difficulty": 2,
+      "prompt_markdown": "Combine the two sentences into one using an approved canon linker (Consequently, Subsequently, ; however, In addition,).\n\n**Sentence 1:** Atorvastatin has been reduced to 40 mg daily today.\n**Sentence 2:** Ezetimibe 10 mg daily has been added to support LDL target attainment.\n\nWrite the combined sentence(s).",
+      "expected_answer": "Atorvastatin has been reduced to 40 mg daily today. In addition, ezetimibe 10 mg daily has been added to support LDL target attainment.",
+      "alternatives": [
+        "Atorvastatin has been reduced to 40 mg daily today; in addition, ezetimibe 10 mg daily has been added to support LDL target attainment.",
+        "Atorvastatin has been reduced to 40 mg daily today. Subsequently, ezetimibe 10 mg daily has been added to support LDL target attainment."
+      ],
+      "grading_method": "llm",
+      "grading_config": {"prompt_key": "writing.drill.grade.v1"},
+      "status": "published"
+    },
+    {
+      "id": "00000000-0000-0000-0000-002C0002000D",
+      "drill_type": "pronoun-rewrite",
+      "target_sub_skill": "W6",
+      "target_canon_rule_id": "SC-012",
+      "applies_to_professions": ["Medicine"],
+      "applies_to_letter_types": ["all"],
+      "difficulty": 2,
+      "prompt_markdown": "Rewrite the paragraph using the patient's name on first mention and pronouns thereafter. Eliminate every instance of 'the patient' (SC-012).\n\n**Original:**\nThe patient attended walk-in surgery this afternoon. The patient described 90 minutes of crushing chest pain. The patient's pain radiated to the left arm and jaw. The patient appears distressed and diaphoretic. The patient's ECG showed ST elevation in II, III and aVF.\n\n**Patient name:** Mr Patel.",
+      "expected_answer": "Mr Patel attended walk-in surgery this afternoon. He described 90 minutes of crushing chest pain. His pain radiated to the left arm and jaw. He appears distressed and diaphoretic. His ECG showed ST elevation in II, III and aVF.",
+      "alternatives": [
+        "Mr Patel attended walk-in surgery this afternoon and described 90 minutes of crushing chest pain radiating to his left arm and jaw. He appears distressed and diaphoretic; his ECG showed ST elevation in II, III and aVF."
+      ],
+      "grading_method": "llm",
+      "grading_config": {"prompt_key": "writing.drill.grade.v1"},
+      "status": "published"
+    },
+    {
+      "id": "00000000-0000-0000-0000-002C0002000E",
+      "drill_type": "pronoun-rewrite",
+      "target_sub_skill": "W6",
+      "target_canon_rule_id": "SC-015",
+      "applies_to_professions": ["Nursing"],
+      "applies_to_letter_types": ["all"],
+      "difficulty": 2,
+      "prompt_markdown": "Rewrite the paragraph using the patient's name on first mention then pronouns. Per SC-015, name appears once per paragraph, then pronouns.\n\n**Original:**\nEthan demonstrated correct auto-injector technique. Ethan's mother also demonstrated correct technique. Ethan understands his peanut avoidance. Ethan has not had any reactions since November 2025. Ethan's family carries two auto-injectors at all times.\n\n**Patient name:** Ethan.",
+      "expected_answer": "Ethan demonstrated correct auto-injector technique; his mother also demonstrated correct technique. He understands his peanut avoidance. He has not had any reactions since November 2025. His family carries two auto-injectors at all times.",
+      "alternatives": [
+        "Ethan demonstrated correct auto-injector technique and his mother also demonstrated correct technique. He understands his peanut avoidance and has not had any reactions since November 2025. His family carries two auto-injectors at all times."
+      ],
+      "grading_method": "llm",
+      "grading_config": {"prompt_key": "writing.drill.grade.v1"},
+      "status": "published"
+    },
+    {
+      "id": "00000000-0000-0000-0000-002C0002000F",
+      "drill_type": "pronoun-rewrite",
+      "target_sub_skill": "W6",
+      "target_canon_rule_id": "SC-012",
+      "applies_to_professions": ["Pharmacy"],
+      "applies_to_letter_types": ["all"],
+      "difficulty": 3,
+      "prompt_markdown": "Rewrite the paragraph using the patient's name on first mention and pronouns thereafter. Eliminate every instance of 'the patient' (SC-012).\n\n**Original:**\nThe patient attended for monthly prescription collection. The patient's daughter accompanied her. The patient reported new fatigue. The patient has had two unwitnessed falls in the past 10 days. The patient's sodium on 22 May 2026 was 128 mmol/L.\n\n**Patient name:** Mrs Murphy.",
+      "expected_answer": "Mrs Murphy attended for monthly prescription collection accompanied by her daughter. She reported new fatigue. She has had two unwitnessed falls in the past 10 days. Her sodium on 22 May 2026 was 128 mmol/L.",
+      "alternatives": [
+        "Mrs Murphy attended for monthly prescription collection. Her daughter accompanied her and reported new fatigue, two unwitnessed falls in the past 10 days, and a sodium of 128 mmol/L on 22 May 2026."
+      ],
+      "grading_method": "llm",
+      "grading_config": {"prompt_key": "writing.drill.grade.v1"},
+      "status": "published"
+    },
+    {
+      "id": "00000000-0000-0000-0000-002C00020010",
+      "drill_type": "tense-conversion",
+      "target_sub_skill": "W7",
+      "target_canon_rule_id": null,
+      "applies_to_professions": ["Medicine"],
+      "applies_to_letter_types": ["all"],
+      "difficulty": 2,
+      "prompt_markdown": "Convert the case-note shorthand into a single letter-prose sentence with correct tense.\n\n**Case-note shorthand:** flight 18/05; admitted 23/05; CTPA segmental PE; apixaban 10 mg BD started d1; D/C today.\n\n**Patient:** Mrs Rashid.",
+      "expected_answer": "Mrs Rashid was admitted on 23 May 2026, five days after a long-haul flight; computed tomography pulmonary angiography confirmed a segmental pulmonary embolus, apixaban 10 mg twice daily was commenced on day 1, and she is being discharged today.",
+      "alternatives": [
+        "Mrs Rashid was admitted on 23 May 2026 following a long-haul flight on 18 May 2026. CTPA confirmed a segmental pulmonary embolus and apixaban 10 mg twice daily was started on day 1. She is being discharged today.",
+        "Mrs Rashid was admitted on 23 May 2026, five days after a long-haul flight; computed tomography pulmonary angiography confirmed a segmental pulmonary embolus and apixaban 10 mg twice daily was commenced on day 1. She is discharged today."
+      ],
+      "grading_method": "llm",
+      "grading_config": {"prompt_key": "writing.drill.grade.v1"},
+      "status": "published"
+    },
+    {
+      "id": "00000000-0000-0000-0000-002C00020011",
+      "drill_type": "tense-conversion",
+      "target_sub_skill": "W7",
+      "target_canon_rule_id": null,
+      "applies_to_professions": ["Nursing"],
+      "applies_to_letter_types": ["all"],
+      "difficulty": 2,
+      "prompt_markdown": "Convert the case-note shorthand into a single letter-prose sentence with correct tense.\n\n**Case-note shorthand:** dx peanut allergy 2024; anaphylaxis episode 11/2025; auto-injector used; A&E observation; updated AAP today.\n\n**Patient:** Ethan.",
+      "expected_answer": "Ethan was diagnosed with peanut allergy in 2024 and had one anaphylactic episode in November 2025, treated with an adrenaline auto-injector and observed in A&E; the allergy action plan has been updated today.",
+      "alternatives": [
+        "Ethan was diagnosed with peanut allergy in 2024 and had an anaphylactic episode in November 2025; he was treated with an adrenaline auto-injector and observed in A&E. Today the allergy action plan has been updated.",
+        "Ethan has had peanut allergy since 2024. He had an anaphylactic episode in November 2025 that was treated with an adrenaline auto-injector and A&E observation. Today the allergy action plan has been updated."
+      ],
+      "grading_method": "llm",
+      "grading_config": {"prompt_key": "writing.drill.grade.v1"},
+      "status": "published"
+    },
+    {
+      "id": "00000000-0000-0000-0000-002C00020012",
+      "drill_type": "tense-conversion",
+      "target_sub_skill": "W7",
+      "target_canon_rule_id": null,
+      "applies_to_professions": ["Pharmacy"],
+      "applies_to_letter_types": ["all"],
+      "difficulty": 3,
+      "prompt_markdown": "Convert the case-note shorthand into a single letter-prose sentence with correct tense.\n\n**Case-note shorthand:** STEMI 02/04/2026; PCI to LAD; statin 80 mg started; myalgia since; CK 412; dose reduced today to 40 mg + ezetimibe.\n\n**Patient:** Mr McKenzie.",
+      "expected_answer": "Mr McKenzie sustained an ST-elevation myocardial infarction on 2 April 2026 with primary percutaneous coronary intervention to the left anterior descending artery; atorvastatin 80 mg daily was commenced but has caused myalgia with a creatine kinase of 412 IU/L, so today the dose has been reduced to 40 mg with ezetimibe 10 mg daily added.",
+      "alternatives": [
+        "Mr McKenzie had an ST-elevation myocardial infarction on 2 April 2026 with primary PCI to the LAD. Atorvastatin 80 mg daily was commenced but caused myalgia and a creatine kinase of 412 IU/L; today his dose has been reduced to 40 mg and ezetimibe 10 mg daily has been added.",
+        "Following his ST-elevation myocardial infarction on 2 April 2026 with primary PCI to the LAD, Mr McKenzie was commenced on atorvastatin 80 mg daily. He developed myalgia with a CK of 412 IU/L; today his dose has been reduced to 40 mg with ezetimibe 10 mg daily added."
+      ],
+      "grading_method": "llm",
+      "grading_config": {"prompt_key": "writing.drill.grade.v1"},
+      "status": "published"
+    },
+    {
+      "id": "00000000-0000-0000-0000-002C00020013",
+      "drill_type": "spelling-spot",
+      "target_sub_skill": "W7",
+      "target_canon_rule_id": null,
+      "applies_to_professions": ["Medicine"],
+      "applies_to_letter_types": ["all"],
+      "difficulty": 2,
+      "prompt_markdown": "Spot the American-spelled word(s) in the sentence and write the corrected British-English sentence.\n\n**Sentence:** Mr Holm was referred to the pulmonology clinic for further analyzation of his diabetes-related pneumonia.",
+      "expected_answer": "Mr Holm was referred to the respiratory clinic for further analysis of his diabetes-related pneumonia.",
+      "alternatives": [
+        "Mr Holm was referred to the respiratory clinic for further analysis of his diabetes-related pneumonia."
+      ],
+      "grading_method": "regex",
+      "grading_config": {"regex": "^Mr Holm was referred to the respiratory clinic for further analysis of his diabetes-related pneumonia\\.?$", "ignore_case": false},
+      "status": "published"
+    },
+    {
+      "id": "00000000-0000-0000-0000-002C00020014",
+      "drill_type": "spelling-spot",
+      "target_sub_skill": "W7",
+      "target_canon_rule_id": null,
+      "applies_to_professions": ["Nursing"],
+      "applies_to_letter_types": ["all"],
+      "difficulty": 1,
+      "prompt_markdown": "Spot the American-spelled word(s) in the sentence and write the corrected British-English sentence.\n\n**Sentence:** The catheterized patient was admitted to the labor ward with edema and given an analgesic.",
+      "expected_answer": "The catheterised patient was admitted to the labour ward with oedema and given an analgesic.",
+      "alternatives": [
+        "The catheterised patient was admitted to the labour ward with oedema and given an analgesic."
+      ],
+      "grading_method": "regex",
+      "grading_config": {"regex": "^The catheterised patient was admitted to the labour ward with oedema and given an analgesic\\.?$", "ignore_case": false},
+      "status": "published"
+    },
+    {
+      "id": "00000000-0000-0000-0000-002C00020015",
+      "drill_type": "spelling-spot",
+      "target_sub_skill": "W7",
+      "target_canon_rule_id": null,
+      "applies_to_professions": ["Pharmacy"],
+      "applies_to_letter_types": ["all"],
+      "difficulty": 2,
+      "prompt_markdown": "Spot the American-spelled word(s) in the sentence and write the corrected British-English sentence.\n\n**Sentence:** Mrs Ahmed was advised to take her tablets in the evening to minimize the risk of hemorrhage and to recognize early bleeding signs.",
+      "expected_answer": "Mrs Ahmed was advised to take her tablets in the evening to minimise the risk of haemorrhage and to recognise early bleeding signs.",
+      "alternatives": [
+        "Mrs Ahmed was advised to take her tablets in the evening to minimise the risk of haemorrhage and to recognise early bleeding signs."
+      ],
+      "grading_method": "regex",
+      "grading_config": {"regex": "^Mrs Ahmed was advised to take her tablets in the evening to minimise the risk of haemorrhage and to recognise early bleeding signs\\.?$", "ignore_case": false},
+      "status": "published"
+    },
+    {
+      "id": "00000000-0000-0000-0000-002C00020016",
+      "drill_type": "time-marker-rewrite",
+      "target_sub_skill": "W6",
+      "target_canon_rule_id": "SC-013",
+      "applies_to_professions": ["Medicine"],
+      "applies_to_letter_types": ["all"],
+      "difficulty": 2,
+      "prompt_markdown": "Rewrite the sentence to replace the forbidden phrase 'next visit' with a specific time marker.\n\n**Sentence:** At his next visit, the apixaban dose will step down from 10 mg twice daily to 5 mg twice daily.",
+      "expected_answer": "On day seven of treatment, the apixaban dose will step down from 10 mg twice daily to 5 mg twice daily.",
+      "alternatives": [
+        "On 30 May 2026, the apixaban dose will step down from 10 mg twice daily to 5 mg twice daily.",
+        "Three days from today, the apixaban dose will step down from 10 mg twice daily to 5 mg twice daily."
+      ],
+      "grading_method": "llm",
+      "grading_config": {"prompt_key": "writing.drill.grade.v1"},
+      "status": "published"
+    },
+    {
+      "id": "00000000-0000-0000-0000-002C00020017",
+      "drill_type": "time-marker-rewrite",
+      "target_sub_skill": "W6",
+      "target_canon_rule_id": "SC-013",
+      "applies_to_professions": ["Nursing"],
+      "applies_to_letter_types": ["all"],
+      "difficulty": 2,
+      "prompt_markdown": "Rewrite the sentence to replace the forbidden phrase 'next visit' with a specific time marker.\n\n**Sentence:** At her next visit, the tinzaparin injection will be administered.",
+      "expected_answer": "On the next district nursing visit, scheduled for 27 May 2026, the tinzaparin injection will be administered.",
+      "alternatives": [
+        "Tomorrow, the tinzaparin injection will be administered at the planned district nursing visit.",
+        "At the scheduled visit on 27 May 2026, the tinzaparin injection will be administered."
+      ],
+      "grading_method": "llm",
+      "grading_config": {"prompt_key": "writing.drill.grade.v1"},
+      "status": "published"
+    },
+    {
+      "id": "00000000-0000-0000-0000-002C00020018",
+      "drill_type": "time-marker-rewrite",
+      "target_sub_skill": "W6",
+      "target_canon_rule_id": "SC-013",
+      "applies_to_professions": ["Pharmacy"],
+      "applies_to_letter_types": ["all"],
+      "difficulty": 2,
+      "prompt_markdown": "Rewrite the sentence to replace the forbidden phrase 'next visit' with a specific time marker.\n\n**Sentence:** At his next visit, the cycle 5 methotrexate dose will be reviewed.",
+      "expected_answer": "On 28 May 2026, when cycle 5 is scheduled, the methotrexate dose will be reviewed.",
+      "alternatives": [
+        "Two days from today, at the scheduled cycle 5 review, the methotrexate dose will be reviewed.",
+        "At the scheduled cycle 5 review on 28 May 2026, the methotrexate dose will be reviewed."
+      ],
+      "grading_method": "llm",
+      "grading_config": {"prompt_key": "writing.drill.grade.v1"},
+      "status": "published"
+    },
+    {
+      "id": "00000000-0000-0000-0000-002C00020019",
+      "drill_type": "re-line-builder",
+      "target_sub_skill": "W6",
+      "target_canon_rule_id": "SC-014",
+      "applies_to_professions": ["Medicine"],
+      "applies_to_letter_types": ["all"],
+      "difficulty": 1,
+      "prompt_markdown": "Write the Re: line in canon format (SC-014).\n\n**Patient:** Mrs Eleanor Carter, DOB 22/07/1963. Today's date 26/05/2026.",
+      "expected_answer": "Re: Mrs Eleanor Carter, aged 62",
+      "alternatives": [
+        "Re: Mrs Carter, aged 62"
+      ],
+      "grading_method": "regex",
+      "grading_config": {"regex": "^Re: Mrs (Eleanor )?Carter, aged 62$", "ignore_case": false},
+      "status": "published"
+    },
+    {
+      "id": "00000000-0000-0000-0000-002C0002001A",
+      "drill_type": "re-line-builder",
+      "target_sub_skill": "W6",
+      "target_canon_rule_id": "SC-014",
+      "applies_to_professions": ["Nursing"],
+      "applies_to_letter_types": ["all"],
+      "difficulty": 2,
+      "prompt_markdown": "Write the Re: line in canon format (SC-014) for a paediatric patient.\n\n**Patient:** Master Ethan Bryant, DOB 02/03/2017. Today's date 26/05/2026.",
+      "expected_answer": "Re: Master Ethan Bryant, aged 9",
+      "alternatives": [
+        "Re: Master Bryant, aged 9"
+      ],
+      "grading_method": "regex",
+      "grading_config": {"regex": "^Re: Master (Ethan )?Bryant, aged 9$", "ignore_case": false},
+      "status": "published"
+    },
+    {
+      "id": "00000000-0000-0000-0000-002C0002001B",
+      "drill_type": "re-line-builder",
+      "target_sub_skill": "W6",
+      "target_canon_rule_id": "SC-014",
+      "applies_to_professions": ["Pharmacy"],
+      "applies_to_letter_types": ["all"],
+      "difficulty": 1,
+      "prompt_markdown": "Write the Re: line in canon format (SC-014).\n\n**Patient:** Mr Donald McKenzie, DOB 14/06/1955. Today's date 26/05/2026.",
+      "expected_answer": "Re: Mr Donald McKenzie, aged 70",
+      "alternatives": [
+        "Re: Mr McKenzie, aged 70"
+      ],
+      "grading_method": "regex",
+      "grading_config": {"regex": "^Re: Mr (Donald )?McKenzie, aged 70$", "ignore_case": false},
+      "status": "published"
+    },
+    {
+      "id": "00000000-0000-0000-0000-002C0002001C",
+      "drill_type": "examination-finding-rewrite",
+      "target_sub_skill": "W6",
+      "target_canon_rule_id": "SC-006",
+      "applies_to_professions": ["Medicine"],
+      "applies_to_letter_types": ["all"],
+      "difficulty": 2,
+      "prompt_markdown": "Convert the case-note shorthand into a single sentence opening with 'Clinical examination revealed...' per SC-006.\n\n**Shorthand:** R eye conjunctival injection w ciliary flush; AC cells; small hypopyon; VA 6/12 R, 6/6 L; IOP 16 R, 14 L.",
+      "expected_answer": "Clinical examination revealed marked conjunctival injection of the right eye with ciliary flush, cells in the anterior chamber and a small hypopyon, with reduced right visual acuity at 6 over 12 (left eye 6 over 6), and intra-ocular pressures of 16 mmHg in the right eye and 14 mmHg in the left.",
+      "alternatives": [
+        "Clinical examination revealed marked right-eye conjunctival injection with ciliary flush, anterior chamber cells, a small hypopyon, reduced right visual acuity of 6 over 12, normal left acuity of 6 over 6, and intra-ocular pressures of 16 mmHg (right) and 14 mmHg (left)."
+      ],
+      "grading_method": "llm",
+      "grading_config": {"prompt_key": "writing.drill.grade.v1"},
+      "status": "published"
+    },
+    {
+      "id": "00000000-0000-0000-0000-002C0002001D",
+      "drill_type": "examination-finding-rewrite",
+      "target_sub_skill": "W6",
+      "target_canon_rule_id": "SC-006",
+      "applies_to_professions": ["Nursing"],
+      "applies_to_letter_types": ["all"],
+      "difficulty": 3,
+      "prompt_markdown": "Convert the case-note shorthand into a single sentence opening with 'Clinical examination revealed...' per SC-006.\n\n**Shorthand:** MOCA 22/30; transfers w 1-person assist; Zimmer frame; sling L arm; gait steady but slow; no peripheral oedema.",
+      "expected_answer": "Clinical examination revealed a Montreal Cognitive Assessment score of 22 out of 30, transfers requiring one-person assistance with a Zimmer frame, a sling on the left arm, a steady but slow gait and no peripheral oedema.",
+      "alternatives": [
+        "Clinical examination revealed a MOCA of 22 out of 30, one-person-assisted transfers with a Zimmer frame, a sling on the left arm, a steady but slow gait, and no peripheral oedema."
+      ],
+      "grading_method": "llm",
+      "grading_config": {"prompt_key": "writing.drill.grade.v1"},
+      "status": "published"
+    },
+    {
+      "id": "00000000-0000-0000-0000-002C0002001E",
+      "drill_type": "examination-finding-rewrite",
+      "target_sub_skill": "W6",
+      "target_canon_rule_id": "SC-006",
+      "applies_to_professions": ["Pharmacy"],
+      "applies_to_letter_types": ["all"],
+      "difficulty": 2,
+      "prompt_markdown": "Convert the case-note shorthand into a single sentence opening with 'Clinical examination revealed...' per SC-006.\n\n**Shorthand:** BP 122/74; pulse 64 reg; no proximal weakness; no muscle tenderness; gait normal.",
+      "expected_answer": "Clinical examination revealed a blood pressure of 122 over 74 mmHg, a regular pulse of 64 beats per minute, no proximal muscle weakness, no muscle tenderness and a normal gait.",
+      "alternatives": [
+        "Clinical examination revealed blood pressure of 122 over 74 mmHg, a regular pulse of 64 beats per minute, no proximal weakness or muscle tenderness, and a normal gait."
+      ],
+      "grading_method": "llm",
+      "grading_config": {"prompt_key": "writing.drill.grade.v1"},
+      "status": "published"
     }
   ]
 }

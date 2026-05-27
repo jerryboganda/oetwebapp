@@ -1,3 +1,5 @@
+using System.Text.Json;
+
 namespace OetLearner.Api.Contracts;
 
 // Phase 4 (B.4) of the OET Speaking module roadmap.
@@ -110,8 +112,9 @@ public sealed record DualAssessmentResponse(
     TutorAssessmentProjection[] TutorHistory,
     DivergenceMetric? Divergence);
 
-/// <summary>Per-criterion absolute deltas between the AI and the tutor's
-/// final score, plus the scaled-score delta and an agreement band:
+/// <summary>Per-criterion signed deltas between the tutor's final score and
+/// the AI score, plus the scaled-score delta and an agreement band computed
+/// from absolute difference magnitude:
 /// <c>close</c> (sum-of-abs ≤ 4), <c>moderate</c> (≤ 10), else
 /// <c>wide</c>. Drives the calibration banner in the learner UI.</summary>
 public sealed record DivergenceMetric(
@@ -131,6 +134,25 @@ public sealed record TutorTimestampedCommentRequest(
     string BodyMarkdown,
     string? LinkedRulebookEntryCode,
     string? LinkedDrillId);
+
+public sealed record SpeakingTranscriptContextPayload(
+    JsonElement[] Segments);
+
+public sealed record SpeakingTimestampedCommentPayload(
+    string CommentId,
+    int SegmentStartMs,
+    int SegmentEndMs,
+    int TranscriptSegmentIndex,
+    string Criterion,
+    string Severity,
+    string Body,
+    string AuthorRole,
+    DateTimeOffset CreatedAt);
+
+public sealed record TutorSessionContextPayload(
+    string? RecordingUrl,
+    SpeakingTranscriptContextPayload Transcript,
+    SpeakingTimestampedCommentPayload[] Comments);
 
 /// <summary>One row in the tutor review queue listing returned by
 /// GET /v1/expert/speaking/queue.</summary>

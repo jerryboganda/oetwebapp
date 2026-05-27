@@ -26,6 +26,8 @@ import { EmptyState } from '@/components/ui/empty-error';
 import { SpeakingSelfPracticeButton } from '@/components/domain/speaking-self-practice-button';
 import {
   fetchSpeakingMockSession,
+  finishSpeakingMockBridge,
+  startSpeakingMockBridge,
   startSpeakingMockSet,
   type SpeakingMockSession,
 } from '@/lib/api';
@@ -35,16 +37,34 @@ type Props = {
   params: Promise<{ id: string }>;
 };
 
-type Stage = 'briefing' | 'roleplay-1' | 'bridge' | 'roleplay-2' | 'results';
+type Stage = 'briefing' | 'roleplay-1' | 'bridge' | 'roleplay-2' | 'awaiting-results' | 'scoring-failed' | 'results';
+
+function rolePlaySubmitted(rolePlay: SpeakingMockSession['rolePlay1']): boolean {
+  return rolePlay.state === 'submitted'
+    || rolePlay.state === 'evaluating'
+    || rolePlay.state === 'completed'
+    || rolePlay.evaluationState === 'queued'
+    || rolePlay.evaluationState === 'processing'
+    || rolePlay.evaluationState === 'completed';
+}
+
+function rolePlayGraded(rolePlay: SpeakingMockSession['rolePlay1']): boolean {
+  return rolePlay.state === 'completed' || rolePlay.evaluationState === 'completed';
+}
+
+function rolePlayFailed(rolePlay: SpeakingMockSession['rolePlay1']): boolean {
+  return rolePlay.evaluationState === 'failed';
+}
 
 function deriveStage(session: SpeakingMockSession | null): Stage {
   if (!session) return 'briefing';
   if (session.combined.bothCompleted) return 'results';
-  const r1Done = session.rolePlay1.evaluationState === 'completed';
-  const r2Done = session.rolePlay2.evaluationState === 'completed';
-  if (!r1Done) return 'roleplay-1';
-  if (r1Done && !r2Done) return 'bridge';
-  return 'roleplay-2';
+  if (rolePlayFailed(session.rolePlay1) || rolePlayFailed(session.rolePlay2)) return 'scoring-failed';
+  const r1Submitted = rolePlaySubmitted(session.rolePlay1);
+  const r2Submitted = rolePlaySubmitted(session.rolePlay2);
+  if (!r1Submitted) return 'roleplay-1';
+  if (!r2Submitted) return 'bridge';
+  return 'awaiting-results';
 }
 
 export default function SpeakingMockSetOrchestratorPage({ params }: Props) {
@@ -58,6 +78,7 @@ export default function SpeakingMockSetOrchestratorPage({ params }: Props) {
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [bridgeAck, setBridgeAck] = useState(false);
+  const [bridgeSyncing, setBridgeSyncing] = useState(false);
 
   useEffect(() => {
     void params.then(({ id }) => setMockSetId(id));
@@ -95,7 +116,7 @@ export default function SpeakingMockSetOrchestratorPage({ params }: Props) {
   // Lightweight polling so finishing a role-play in the task page reflects
   // here without manual refresh.
   useEffect(() => {
-    if (!session || session.combined.bothCompleted) return undefined;
+    if (!session || session.combined.bothCompleted || rolePlayFailed(session.rolePlay1) || rolePlayFailed(session.rolePlay2)) return undefined;
     const interval = window.setInterval(() => {
       void refreshSession(session.mockSessionId).catch(() => undefined);
     }, 6_000);
@@ -103,6 +124,18 @@ export default function SpeakingMockSetOrchestratorPage({ params }: Props) {
   }, [refreshSession, session]);
 
   const stage = useMemo(() => deriveStage(session), [session]);
+  const bridgeSessionId = stage === 'bridge' ? session?.mockSessionId : null;
+
+  useEffect(() => {
+    if (!bridgeSessionId) return;
+    let active = true;
+    void startSpeakingMockBridge(bridgeSessionId)
+      .then((fresh) => {
+        if (active) setSession(fresh);
+      })
+      .catch(() => undefined);
+    return () => { active = false; };
+  }, [bridgeSessionId]);
 
   const beginMockSet = useCallback(async () => {
     if (!mockSetId || starting) return;
@@ -173,8 +206,23 @@ export default function SpeakingMockSetOrchestratorPage({ params }: Props) {
     );
   }
 
-  const role1Url = `/speaking/task/${session.rolePlay1.contentId}?mode=exam&mockSession=${session.mockSessionId}&attemptId=${session.rolePlay1.attemptId}`;
-  const role2Url = `/speaking/task/${session.rolePlay2.contentId}?mode=exam&mockSession=${session.mockSessionId}&attemptId=${session.rolePlay2.attemptId}`;
+  const role1Url = `/speaking/task/${encodeURIComponent(session.rolePlay1.contentId)}?mode=exam&mockSession=${encodeURIComponent(session.mockSessionId)}&mockSetId=${encodeURIComponent(session.mockSetId)}&attemptId=${encodeURIComponent(session.rolePlay1.attemptId)}`;
+  const role2Url = `/speaking/task/${encodeURIComponent(session.rolePlay2.contentId)}?mode=exam&mockSession=${encodeURIComponent(session.mockSessionId)}&mockSetId=${encodeURIComponent(session.mockSetId)}&attemptId=${encodeURIComponent(session.rolePlay2.attemptId)}`;
+
+  const finishBridgeAndRecordRole2 = async () => {
+    if (!session || bridgeSyncing) return;
+    setBridgeSyncing(true);
+    setError(null);
+    try {
+      const fresh = await finishSpeakingMockBridge(session.mockSessionId);
+      setSession(fresh);
+      router.push(role2Url);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Could not advance to role-play 2.');
+    } finally {
+      setBridgeSyncing(false);
+    }
+  };
 
   return (
     <LearnerDashboardShell pageTitle="Speaking mock set">
@@ -197,7 +245,9 @@ export default function SpeakingMockSetOrchestratorPage({ params }: Props) {
         <ol className="grid gap-3 sm:grid-cols-2">
           <StageStepCard
             label="Role-play 1"
-            done={session.rolePlay1.evaluationState === 'completed'}
+            done={rolePlayGraded(session.rolePlay1)}
+            submitted={rolePlaySubmitted(session.rolePlay1)}
+            failed={rolePlayFailed(session.rolePlay1)}
             active={stage === 'roleplay-1'}
             title={session.rolePlay1.title}
             scaled={session.rolePlay1.estimatedScaledScore}
@@ -205,7 +255,9 @@ export default function SpeakingMockSetOrchestratorPage({ params }: Props) {
           />
           <StageStepCard
             label="Role-play 2"
-            done={session.rolePlay2.evaluationState === 'completed'}
+            done={rolePlayGraded(session.rolePlay2)}
+            submitted={rolePlaySubmitted(session.rolePlay2)}
+            failed={rolePlayFailed(session.rolePlay2)}
             active={stage === 'roleplay-2'}
             title={session.rolePlay2.title}
             scaled={session.rolePlay2.estimatedScaledScore}
@@ -265,9 +317,9 @@ export default function SpeakingMockSetOrchestratorPage({ params }: Props) {
                 {bridgeAck ? (
                   <SpeakingSelfPracticeButton taskId={session.rolePlay2.contentId} label="Start AI patient role-play 2" />
                 ) : null}
-                <Button variant="outline" disabled={!bridgeAck} asChild>
-<Link href={role2Url}>Record for evaluation</Link>
-</Button>
+                <Button variant="outline" disabled={!bridgeAck || bridgeSyncing} onClick={() => void finishBridgeAndRecordRole2()}>
+                  {bridgeSyncing ? 'Preparing role-play 2...' : 'Record for evaluation'}
+                </Button>
               </div>
             </div>
           </section>
@@ -283,6 +335,40 @@ export default function SpeakingMockSetOrchestratorPage({ params }: Props) {
               <SpeakingSelfPracticeButton taskId={session.rolePlay2.contentId} label="Start AI patient role-play 2" />
               <Button variant="outline" asChild>
 <Link href={role2Url} className="inline-block">Record for evaluation</Link>
+</Button>
+            </div>
+          </section>
+        )}
+
+        {stage === 'awaiting-results' && (
+          <section className="rounded-2xl border border-info/30 bg-info/5 p-5">
+            <h2 className="text-lg font-black">Scoring in progress</h2>
+            <p className="mt-1 text-sm text-muted">
+              Both role-plays have been submitted. Results will appear here as soon as scoring finishes.
+            </p>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <Button variant="outline" onClick={() => void refreshSession(session.mockSessionId)}>
+                Refresh results
+              </Button>
+              <Button variant="ghost" asChild>
+<Link href="/speaking/mocks">All mock sets</Link>
+</Button>
+            </div>
+          </section>
+        )}
+
+        {stage === 'scoring-failed' && (
+          <section className="rounded-2xl border border-danger/30 bg-danger/5 p-5">
+            <h2 className="text-lg font-black">Scoring needs attention</h2>
+            <p className="mt-1 text-sm text-muted">
+              One role-play could not be scored. Refresh once in case the scorer recovered; if it still fails, start a fresh mock set from the catalogue.
+            </p>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <Button variant="outline" onClick={() => void refreshSession(session.mockSessionId)}>
+                Refresh status
+              </Button>
+              <Button variant="ghost" asChild>
+<Link href="/speaking/mocks">All mock sets</Link>
 </Button>
             </div>
           </section>
@@ -324,6 +410,8 @@ export default function SpeakingMockSetOrchestratorPage({ params }: Props) {
 function StageStepCard({
   label,
   done,
+  submitted,
+  failed,
   active,
   title,
   scaled,
@@ -331,6 +419,8 @@ function StageStepCard({
 }: {
   label: string;
   done: boolean;
+  submitted: boolean;
+  failed: boolean;
   active: boolean;
   title: string;
   scaled: number | null;
@@ -342,17 +432,21 @@ function StageStepCard({
       className={`rounded-2xl border p-4 transition ${
         done
           ? 'border-success/30 bg-success/5'
+          : failed
+            ? 'border-danger/30 bg-danger/5'
           : active
             ? 'border-primary/40 bg-primary/5'
             : 'border-border bg-surface'
       }`}
     >
       <div className="flex items-center gap-2">
-        <Badge variant={done ? 'success' : active ? 'info' : 'muted'} className="text-[10px] uppercase tracking-wider">
+        <Badge variant={done ? 'success' : failed ? 'danger' : active ? 'info' : 'muted'} className="text-[10px] uppercase tracking-wider">
           {label}
         </Badge>
+        {failed && <span className="text-[10px] font-bold uppercase tracking-widest text-danger">Failed</span>}
         {done && <span className="text-[10px] font-bold uppercase tracking-widest text-success">Graded</span>}
-        {active && !done && <span className="text-[10px] font-bold uppercase tracking-widest text-primary">In progress</span>}
+        {!failed && !done && submitted && <span className="text-[10px] font-bold uppercase tracking-widest text-info">Submitted</span>}
+        {active && !failed && !done && <span className="text-[10px] font-bold uppercase tracking-widest text-primary">In progress</span>}
       </div>
       <p className="mt-2 text-sm font-bold">{title}</p>
       {done && (

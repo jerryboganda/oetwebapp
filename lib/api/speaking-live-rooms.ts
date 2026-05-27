@@ -6,8 +6,8 @@
  *
  *   POST   /v1/speaking/live-rooms                          { speakingSessionId }
  *   POST   /v1/speaking/live-rooms/{id}/tokens              { role }
- *   POST   /v1/speaking/live-rooms/{id}/recording/start
- *   POST   /v1/speaking/live-rooms/{id}/recording/stop
+ *   POST   /v1/speaking/live-rooms/{id}/start-recording
+ *   POST   /v1/speaking/live-rooms/{id}/stop-recording
  *   POST   /v1/speaking/live-rooms/{id}/end
  *   GET    /v1/speaking/live-rooms/{id}
  *
@@ -20,10 +20,9 @@ import { apiClient } from '@/lib/api';
 export type LiveRoomRole = 'learner' | 'tutor' | 'observer';
 
 export type LiveRoomState =
+  | 'Scheduled'
   | 'Provisioning'
-  | 'Ready'
-  | 'InProgress'
-  | 'Recording'
+  | 'Active'
   | 'Ended'
   | 'Failed';
 
@@ -40,6 +39,13 @@ export interface LiveRoomDetail {
   recordingEgressId: string | null;
   createdAt: string;
   endedAt: string | null;
+  card: {
+    cardId: string;
+    scenarioTitle?: string | null;
+    setting?: string | null;
+    candidateRole?: string | null;
+    rolePlayTimeSeconds: number;
+  };
 }
 
 export interface LiveRoomTokenCapabilities {
@@ -49,8 +55,6 @@ export interface LiveRoomTokenCapabilities {
   canPublishVideo: boolean;
   /** Whether this participant can subscribe to other participants. */
   canSubscribe: boolean;
-  /** Whether this participant can send data channel messages (e.g. cues). */
-  canPublishData: boolean;
 }
 
 export interface LiveRoomTokenResponse {
@@ -58,14 +62,26 @@ export interface LiveRoomTokenResponse {
   token: string;
   /** ISO 8601 expiry. */
   expiresAt: string;
-  /** Identity assigned to the participant (sub claim). */
-  identity: string;
-  role: LiveRoomRole | string;
   capabilities: LiveRoomTokenCapabilities;
+}
+
+export interface LiveRoomRecordingResponse {
+  egressId: string;
+  outputUrl: string;
+}
+
+export interface LiveRoomStopRecordingResponse {
+  stopped: boolean;
 }
 
 export interface CreateLiveRoomInput {
   speakingSessionId: string;
+}
+
+export interface CreateLiveRoomResponse {
+  liveRoomId: string;
+  livekitWssUrl: string;
+  roomName: string;
 }
 
 export interface IssueLiveRoomTokenInput {
@@ -76,8 +92,8 @@ export interface IssueLiveRoomTokenInput {
 // API functions
 // ─────────────────────────────────────────────────────────────────────────────
 
-export async function createLiveRoom(input: CreateLiveRoomInput): Promise<LiveRoomDetail> {
-  return apiClient.post<LiveRoomDetail>('/v1/speaking/live-rooms', input);
+export async function createLiveRoom(input: CreateLiveRoomInput): Promise<CreateLiveRoomResponse> {
+  return apiClient.post<CreateLiveRoomResponse>('/v1/speaking/live-rooms', input);
 }
 
 export async function getLiveRoom(liveRoomId: string): Promise<LiveRoomDetail> {
@@ -96,22 +112,22 @@ export async function issueLiveRoomToken(
   );
 }
 
-export async function startRecording(liveRoomId: string): Promise<LiveRoomDetail> {
-  return apiClient.post<LiveRoomDetail>(
-    `/v1/speaking/live-rooms/${encodeURIComponent(liveRoomId)}/recording/start`,
+export async function startRecording(liveRoomId: string): Promise<LiveRoomRecordingResponse> {
+  return apiClient.post<LiveRoomRecordingResponse>(
+    `/v1/speaking/live-rooms/${encodeURIComponent(liveRoomId)}/start-recording`,
     {},
   );
 }
 
-export async function stopRecording(liveRoomId: string): Promise<LiveRoomDetail> {
-  return apiClient.post<LiveRoomDetail>(
-    `/v1/speaking/live-rooms/${encodeURIComponent(liveRoomId)}/recording/stop`,
+export async function stopRecording(liveRoomId: string): Promise<LiveRoomStopRecordingResponse> {
+  return apiClient.post<LiveRoomStopRecordingResponse>(
+    `/v1/speaking/live-rooms/${encodeURIComponent(liveRoomId)}/stop-recording`,
     {},
   );
 }
 
-export async function endLiveRoom(liveRoomId: string): Promise<LiveRoomDetail> {
-  return apiClient.post<LiveRoomDetail>(
+export async function endLiveRoom(liveRoomId: string): Promise<void> {
+  return apiClient.post<void>(
     `/v1/speaking/live-rooms/${encodeURIComponent(liveRoomId)}/end`,
     {},
   );

@@ -168,6 +168,8 @@ public sealed class SpeakingCoursePathwayService(LearnerDbContext db)
             description = s.Description,
             activityKind = s.ActivityKind.ToString(),
             state = states[idx],
+            actionHref = StageActionHref(s),
+            actionLabel = StageActionLabel(s.ActivityKind),
         }).ToArray();
 
         var nextStage = enrichedStages.FirstOrDefault(s => s.state == "in_progress");
@@ -200,4 +202,24 @@ public sealed class SpeakingCoursePathwayService(LearnerDbContext db)
         RolePlay = 3,
         Mock = 4,
     }
+
+    private static string StageActionHref(SpeakingPathwayStage stage) => stage.ActivityKind switch
+    {
+        SpeakingPathwayActivityKind.OrientationVideo => "/speaking/rulebook",
+        SpeakingPathwayActivityKind.GuidedReading => "/speaking/rulebook",
+        SpeakingPathwayActivityKind.Drill => "/speaking/drills",
+        SpeakingPathwayActivityKind.RolePlay => "/speaking/roleplay",
+        SpeakingPathwayActivityKind.Mock => "/speaking/mocks",
+        _ => "/speaking",
+    };
+
+    private static string StageActionLabel(SpeakingPathwayActivityKind kind) => kind switch
+    {
+        SpeakingPathwayActivityKind.OrientationVideo => "Open guide",
+        SpeakingPathwayActivityKind.GuidedReading => "Open role-play guide",
+        SpeakingPathwayActivityKind.Drill => "Practise drills",
+        SpeakingPathwayActivityKind.RolePlay => "Start role-play",
+        SpeakingPathwayActivityKind.Mock => "Open mock sets",
+        _ => "Continue",
+    };
 }

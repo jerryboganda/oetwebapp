@@ -34,6 +34,13 @@ public class CriticalFlowsTests : IClassFixture<TestWebApplicationFactory>
     [Fact]
     public async Task WritingSubmission_QueuesAndCompletesEvaluation()
     {
+        // Grant AI credits to the default dev-auth user before kicking off
+        // the V1 Writing submit path. The AI gateway debits credits for the
+        // WritingGrade feature and refuses the call when the user has zero
+        // balance (ai_credits_insufficient), which would mark the evaluation
+        // Failed instead of Completed.
+        await _factory.EnsureAiCreditsAsync("mock-user-001");
+
         var createAttemptResponse = await _client.PostAsJsonAsync("/v1/writing/attempts", new
         {
             contentId = "wt-001",
@@ -302,6 +309,7 @@ public class CriticalFlowsTests : IClassFixture<TestWebApplicationFactory>
     private async Task<HttpClient> CreateClientForUserAsync(string userId, int walletCredits)
     {
         await _factory.EnsureLearnerProfileAsync(userId, $"{userId}@example.test", userId);
+        await _factory.EnsureAiCreditsAsync(userId);
         await using (var scope = _factory.Services.CreateAsyncScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();

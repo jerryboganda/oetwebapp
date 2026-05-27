@@ -30,11 +30,6 @@ import {
   type LiveRoomDetail,
   type LiveRoomTokenResponse,
 } from '@/lib/api/speaking-live-rooms';
-import {
-  endSpeakingSession,
-  getSpeakingSession,
-  type SpeakingSessionDetail,
-} from '@/lib/api/speaking-sessions';
 import { ApiError } from '@/lib/api';
 
 export default function ExpertSpeakingLiveRoomPage() {
@@ -43,7 +38,6 @@ export default function ExpertSpeakingLiveRoomPage() {
   const router = useRouter();
 
   const [room, setRoom] = useState<LiveRoomDetail | null>(null);
-  const [session, setSession] = useState<SpeakingSessionDetail | null>(null);
   const [tokenInfo, setTokenInfo] = useState<LiveRoomTokenResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -63,12 +57,8 @@ export default function ExpertSpeakingLiveRoomPage() {
         if (cancelled) return;
         setRoom(r);
 
-        const [s, token] = await Promise.all([
-          getSpeakingSession(r.speakingSessionId),
-          issueLiveRoomToken(r.liveRoomId, 'tutor'),
-        ]);
+        const token = await issueLiveRoomToken(r.liveRoomId, 'tutor');
         if (cancelled) return;
-        setSession(s);
         setTokenInfo(token);
       } catch (err) {
         if (cancelled) return;
@@ -95,15 +85,12 @@ export default function ExpertSpeakingLiveRoomPage() {
     setEnding(true);
     try {
       // End the LiveKit room first so participants disconnect, then
-      // close the underlying speaking session.
+      // let the expert-authorized backend path finish the backing session.
       await endLiveRoom(room.liveRoomId).catch(() => undefined);
-      if (session) {
-        await endSpeakingSession(session.sessionId).catch(() => undefined);
-      }
     } finally {
       router.push('/expert/queue');
     }
-  }, [room, router, session]);
+  }, [room, router]);
 
   if (loading) {
     return (
@@ -115,7 +102,7 @@ export default function ExpertSpeakingLiveRoomPage() {
     );
   }
 
-  if (error || !room || !session || !tokenInfo) {
+  if (error || !room || !tokenInfo) {
     return (
       <div className="mx-auto max-w-xl rounded-2xl border border-rose-200 bg-rose-50 p-6 text-sm text-rose-900">
         <h2 className="text-base font-semibold">Could not open this tutor room</h2>
@@ -132,7 +119,7 @@ export default function ExpertSpeakingLiveRoomPage() {
     );
   }
 
-  const { card } = session;
+  const { card } = room;
 
   return (
     <div className="mx-auto max-w-7xl space-y-4 p-4 sm:p-6">
@@ -141,9 +128,9 @@ export default function ExpertSpeakingLiveRoomPage() {
           <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
             Expert · Live tutor room
           </p>
-          <h1 className="text-2xl font-bold text-foreground">{card.scenarioTitle}</h1>
+          <h1 className="text-2xl font-bold text-foreground">{card.scenarioTitle ?? 'Speaking role-play'}</h1>
           <p className="text-sm text-muted-foreground">
-            {card.setting} · Candidate: {card.candidateRole}
+            {card.setting ?? 'Clinical setting'} · Candidate: {card.candidateRole ?? 'Candidate'}
           </p>
         </div>
         <Button

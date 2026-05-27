@@ -33,17 +33,20 @@ public sealed class SpeakingLiveRoomService
     private readonly LearnerDbContext _db;
     private readonly ILiveKitGateway _gateway;
     private readonly IOptions<LiveKitOptions> _options;
+    private readonly IOptions<SpeakingComplianceOptions> _complianceOptions;
     private readonly ILogger<SpeakingLiveRoomService> _logger;
 
     public SpeakingLiveRoomService(
         LearnerDbContext db,
         ILiveKitGateway gateway,
         IOptions<LiveKitOptions> options,
+        IOptions<SpeakingComplianceOptions> complianceOptions,
         ILogger<SpeakingLiveRoomService> logger)
     {
         _db = db ?? throw new ArgumentNullException(nameof(db));
         _gateway = gateway ?? throw new ArgumentNullException(nameof(gateway));
         _options = options ?? throw new ArgumentNullException(nameof(options));
+        _complianceOptions = complianceOptions ?? throw new ArgumentNullException(nameof(complianceOptions));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
@@ -151,6 +154,7 @@ public sealed class SpeakingLiveRoomService
         var role = ParseRole(roleStr);
 
         var room = await _db.SpeakingLiveRooms
+            .Include(r => r.SpeakingSession)
             .FirstOrDefaultAsync(r => r.Id == liveRoomId, ct)
             ?? throw new SpeakingLiveRoomNotFoundException($"Live room '{liveRoomId}' was not found.");
 
@@ -259,6 +263,46 @@ public sealed class SpeakingLiveRoomService
         var room = await _db.SpeakingLiveRooms
             .FirstOrDefaultAsync(r => r.Id == liveRoomId, ct)
             ?? throw new SpeakingLiveRoomNotFoundException($"Live room '{liveRoomId}' was not found.");
+
+        if (room.State is SpeakingLiveRoomState.Ended or SpeakingLiveRoomState.Failed)
+        {
+            throw new SpeakingLiveRoomInvalidStateException(
+                $"Live room '{liveRoomId}' is in state {room.State} and cannot start recording.");
+        }
+
+        if (!room.RecordingEnabled)
+        {
+            throw new SpeakingLiveRoomInvalidStateException(
+                $"Live room '{liveRoomId}' is not configured for recording.");
+        }
+
+        var session = await _db.SpeakingSessions.AsNoTracking()
+            .FirstOrDefaultAsync(s => s.Id == room.SpeakingSessionId, ct);
+        if (session is null || string.IsNullOrWhiteSpace(session.UserId))
+        {
+            throw new SpeakingLiveRoomInvalidStateException(
+                $"Live room '{liveRoomId}' is missing learner session context.");
+        }
+
+        var learnerId = session.UserId;
+
+        var recordingConsentVersion = _complianceOptions.Value.CurrentConsentVersion;
+        var liveVideoConsentVersion = _complianceOptions.Value.CurrentLiveVideoConsentVersion;
+        var hasRequiredConsent = await _db.SpeakingComplianceConsents.AsNoTracking()
+            .AnyAsync(c => c.UserId == learnerId
+                           && c.RevokedAt == null
+                           && c.ConsentType == SpeakingComplianceConsentTypes.Recording
+                           && c.ConsentVersion == recordingConsentVersion, ct)
+            && await _db.SpeakingComplianceConsents.AsNoTracking()
+                .AnyAsync(c => c.UserId == learnerId
+                               && c.RevokedAt == null
+                               && c.ConsentType == SpeakingComplianceConsentTypes.LiveVideoWithTutor
+                               && c.ConsentVersion == liveVideoConsentVersion, ct);
+        if (!hasRequiredConsent)
+        {
+            throw new SpeakingLiveRoomInvalidStateException(
+                $"Live room '{liveRoomId}' requires current learner recording and live-video consent before recording can start.");
+        }
 
         if (!string.IsNullOrWhiteSpace(room.EgressId))
         {
@@ -429,7 +473,6 @@ public sealed class SpeakingLiveRoomService
             ?? throw new SpeakingLiveRoomNotFoundException($"Live room '{liveRoomId}' was not found.");
 
         var session = await _db.SpeakingSessions
-            .AsNoTracking()
             .FirstOrDefaultAsync(s => s.Id == room.SpeakingSessionId, ct)
             ?? throw new SpeakingLiveRoomNotFoundException(
                 $"Speaking session '{room.SpeakingSessionId}' was not found.");
@@ -449,9 +492,21 @@ public sealed class SpeakingLiveRoomService
             return;
         }
 
+        var endedAt = DateTimeOffset.UtcNow;
         room.State = SpeakingLiveRoomState.Ended;
-        room.ActualEndUtc = DateTimeOffset.UtcNow;
-        room.UpdatedAt = room.ActualEndUtc.Value;
+        room.ActualEndUtc = endedAt;
+        room.UpdatedAt = endedAt;
+
+        if (session.State != SpeakingSessionState.Finished)
+        {
+            session.State = SpeakingSessionState.Finished;
+            session.EndedAt = endedAt;
+            session.UpdatedAt = endedAt;
+            if (session.RolePlayStartedAt is not null)
+            {
+                session.ElapsedSeconds = (int)Math.Max(0, (endedAt - session.RolePlayStartedAt.Value).TotalSeconds);
+            }
+        }
         await _db.SaveChangesAsync(ct);
 
         _logger.LogInformation(
@@ -575,6 +630,9 @@ public sealed class SpeakingLiveRoomService
             SizeBytes = sizeBytes,
             DurationSeconds = durationSeconds > 0 ? durationSeconds : null,
             StoragePath = outputUrl,
+            Status = MediaAssetStatus.Processing,
+            MediaKind = "video",
+            UploadedAt = now,
         });
 
         _db.SpeakingRecordings.Add(new SpeakingRecording

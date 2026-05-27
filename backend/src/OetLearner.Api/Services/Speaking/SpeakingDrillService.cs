@@ -140,14 +140,7 @@ public sealed class SpeakingDrillService(
         {
             throw ApiException.Unauthorized("learner_required", "Learner identity is required.");
         }
-        var drill = await db.SpeakingDrillItems.AsNoTracking()
-            .FirstOrDefaultAsync(d => d.Id == drillId, ct)
-            ?? throw ApiException.NotFound("speaking_drill_not_found", "That drill does not exist.");
-
-        // Only published drills are launchable by learners.
-        var content = await db.ContentItems.AsNoTracking()
-            .FirstOrDefaultAsync(c => c.Id == drill.ContentItemId && c.Status == ContentStatus.Published, ct)
-            ?? throw ApiException.NotFound("speaking_drill_not_published", "That drill is not available.");
+        var (drill, content) = await ResolveLaunchableDrillAsync(drillId, ct);
 
         var source = ParseAttemptSource(sourceCode);
         var now = DateTimeOffset.UtcNow;
@@ -244,6 +237,12 @@ public sealed class SpeakingDrillService(
             .FirstOrDefaultAsync(a => a.Id == attemptId && a.UserId == userId, ct)
             ?? throw ApiException.NotFound("speaking_drill_attempt_not_found",
                 "That drill attempt does not exist.");
+        if (string.IsNullOrWhiteSpace(attempt.AudioRecordingId))
+        {
+            throw ApiException.Validation(
+                "speaking_drill_recording_required",
+                "Record and upload audio before scoring this drill.");
+        }
         var drill = await db.SpeakingDrillItems.AsNoTracking()
             .FirstOrDefaultAsync(d => d.Id == attempt.DrillItemId, ct)
             ?? throw ApiException.NotFound("speaking_drill_not_found", "That drill no longer exists.");
@@ -266,7 +265,7 @@ public sealed class SpeakingDrillService(
         var score = Math.Clamp(baseScore + bonus, 0, 100);
 
         var summary = $"Solid attempt on the '{content?.Title ?? drill.DrillKind.ToString()}' drill. "
-                      + "The AI heard a clear opening and at least one structural marker — keep building on that.";
+                  + "The scorer heard a clear opening and at least one structural marker — keep building on that.";
         var specificComments = new[]
         {
             $"You hit the {drill.DrillKind} focus in your opening — keep that structure.",
@@ -288,7 +287,7 @@ public sealed class SpeakingDrillService(
             summary,
             specificComments,
             nextRecommendations,
-            modelVersion = "stub-v0",
+            modelVersion = "deterministic-v0",
             scoredAt = now,
         });
         await db.SaveChangesAsync(ct);
@@ -348,6 +347,93 @@ public sealed class SpeakingDrillService(
             .Select(c => c.Code)
             .ToList();
     }
+
+    private async Task<(SpeakingDrillItem Drill, ContentItem Content)> ResolveLaunchableDrillAsync(
+        string drillIdOrContentId,
+        CancellationToken ct)
+    {
+        var drill = await db.SpeakingDrillItems.AsNoTracking()
+            .FirstOrDefaultAsync(d => d.Id == drillIdOrContentId || d.ContentItemId == drillIdOrContentId, ct);
+        if (drill is not null)
+        {
+            var content = await db.ContentItems.AsNoTracking()
+                .FirstOrDefaultAsync(c => c.Id == drill.ContentItemId && c.Status == ContentStatus.Published, ct)
+                ?? throw ApiException.NotFound("speaking_drill_not_published", "That drill is not available.");
+            return (drill, content);
+        }
+
+        var legacyContent = await db.ContentItems.AsNoTracking()
+            .FirstOrDefaultAsync(c =>
+                c.Id == drillIdOrContentId
+                && c.ContentType == "speaking_drill"
+                && c.SubtestCode == "speaking"
+                && c.Status == ContentStatus.Published,
+                ct)
+            ?? throw ApiException.NotFound("speaking_drill_not_found", "That drill does not exist.");
+
+        var generatedId = LegacyDrillItemId(legacyContent.Id);
+        var existing = await db.SpeakingDrillItems.AsNoTracking()
+            .FirstOrDefaultAsync(d => d.Id == generatedId || d.ContentItemId == legacyContent.Id, ct);
+        if (existing is not null)
+        {
+            return (existing, legacyContent);
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        var created = new SpeakingDrillItem
+        {
+            Id = generatedId,
+            ContentItemId = legacyContent.Id,
+            DrillKind = MapLegacyDrillKind(legacyContent.ScenarioType),
+            TargetCriteriaJson = string.IsNullOrWhiteSpace(legacyContent.CriteriaFocusJson)
+                ? "[]"
+                : legacyContent.CriteriaFocusJson,
+            CreatedAt = now,
+            UpdatedAt = now,
+        };
+        db.SpeakingDrillItems.Add(created);
+        try
+        {
+            await db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException)
+        {
+            var raced = await db.SpeakingDrillItems.AsNoTracking()
+                .FirstOrDefaultAsync(d => d.Id == generatedId || d.ContentItemId == legacyContent.Id, ct);
+            if (raced is null)
+            {
+                throw;
+            }
+            return (raced, legacyContent);
+        }
+        return (created, legacyContent);
+    }
+
+    private static string LegacyDrillItemId(string contentItemId)
+    {
+        var safe = new string(contentItemId
+            .Where(ch => char.IsLetterOrDigit(ch) || ch == '-' || ch == '_')
+            .ToArray());
+        if (safe.Length > 0 && safe.Length <= 53)
+        {
+            return $"sdi-legacy-{safe}";
+        }
+
+        var hash = Convert.ToHexString(SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(contentItemId)))
+            .ToLowerInvariant()[..16];
+        return $"sdi-legacy-{hash}";
+    }
+
+    private static SpeakingDrillKind MapLegacyDrillKind(string? raw) => raw?.Trim().ToLowerInvariant() switch
+    {
+        "empathy" => SpeakingDrillKind.Empathy,
+        "pronunciation" => SpeakingDrillKind.Pronunciation,
+        "vocabulary" => SpeakingDrillKind.LayLanguage,
+        "chunking" => SpeakingDrillKind.Fluency,
+        "intonation" => SpeakingDrillKind.Fluency,
+        "phrasing" => SpeakingDrillKind.Opening,
+        _ => SpeakingDrillKind.OpenQuestion,
+    };
 
     private static int ScoreRowAgainstCriteria(string targetCriteriaJson, IReadOnlyList<string> lowestCriteria)
     {

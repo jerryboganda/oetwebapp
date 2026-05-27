@@ -20,6 +20,8 @@ export interface SpeakingPathwayStage {
   description: string;
   activityKind: SpeakingPathwayActivityKind | string;
   state: SpeakingPathwayStageState;
+  actionHref?: string;
+  actionLabel?: string;
 }
 
 export interface SpeakingPathway {

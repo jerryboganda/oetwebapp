@@ -1522,6 +1522,12 @@ builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingSubmissionEva
     OetLearner.Api.Services.Writing.WritingSubmissionEvaluationPipeline>();
 builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingSubmissionService,
     OetLearner.Api.Services.Writing.WritingSubmissionService>();
+// Buddy System (spec §23.5) — opt-in matching + chat + weekly check-ins.
+builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingBuddyService,
+    OetLearner.Api.Services.Writing.WritingBuddyService>();
+// 50-letter calibration harness (spec §33) — pre-release AI agreement gate.
+builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingCalibrationService,
+    OetLearner.Api.Services.Writing.WritingCalibrationService>();
 // HttpClient used by OCR to call Google Cloud Vision REST endpoint.
 builder.Services.AddHttpClient("writing-ocr-gcv");
 // 8 hosted crons — gated by Writing:CronsEnabled (default true). Each runs

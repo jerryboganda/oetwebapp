@@ -71,6 +71,20 @@ public static class WritingSubmissionEndpoints
         .RequireRateLimiting("PerUserWrite")
         .WithName("AppealWritingSubmission");
 
+        // Read-only poll for the appeal UI (Writing V2 Score Appeal page).
+        // Returns the latest appeal row for this submission, or 404 if
+        // none exists. Polled by the appeal page after the POST returns.
+        group.MapGet("/{id:guid}/appeal", async (
+            Guid id,
+            HttpContext http,
+            IWritingAppealService service,
+            CancellationToken ct) =>
+        {
+            var appeal = await service.GetLatestAppealAsync(http.WritingV2UserId(), id, ct);
+            return appeal is null ? Results.NotFound() : Results.Ok(appeal);
+        })
+        .WithName("GetWritingSubmissionAppeal");
+
         group.MapGet("/{id:guid}/exemplar", async (
             Guid id,
             HttpContext http,

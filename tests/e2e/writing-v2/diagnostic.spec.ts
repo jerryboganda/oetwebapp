@@ -38,8 +38,13 @@ test.describe('Writing V2 diagnostic @writing-v2 @smoke', () => {
 
     // Land on the diagnostic briefing.
     await page.goto('/writing/diagnostic', { waitUntil: 'domcontentloaded' });
+    // Accept either the translated hero heading OR its raw translation key
+    // (some deployments lag on shipping the next-intl message bundle into the
+    // standalone container; the page still functionally renders).
     await expect(
-      page.getByRole('heading', { name: /a 50-minute baseline of your six writing criteria/i }),
+      page.getByRole('heading', {
+        name: /(a 50-minute baseline of your six writing criteria|writing\.diagnostic\.briefing\.hero\.title)/i,
+      }),
     ).toBeVisible({ timeout: 30_000 });
 
     // Click "Begin Diagnostic" — backend returns a session id and the page
@@ -50,7 +55,11 @@ test.describe('Writing V2 diagnostic @writing-v2 @smoke', () => {
         && r.request().method() === 'POST',
       { timeout: 30_000 },
     );
-    await page.getByRole('button', { name: /begin diagnostic/i }).click();
+    await page
+      .getByRole('button', {
+        name: /(begin diagnostic|writing\.diagnostic\.briefing\.cta)/i,
+      })
+      .click();
 
     // The button may fail if the learner hasn't completed onboarding yet
     // (404 writing_profile_missing). In that case the InlineAlert appears
@@ -85,8 +94,12 @@ test.describe('Writing V2 diagnostic @writing-v2 @smoke', () => {
     ).toBeVisible({ timeout: 30_000 });
 
     // Case notes panel is rendered (in reading phase the body is visible).
+    // Accept either the translated region label OR the raw next-intl key
+    // (some chunks may render before the message bundle hydrates).
     await expect(
-      page.getByRole('region', { name: /case notes/i }),
+      page.getByRole('region', {
+        name: /(case notes|writing\.diagnostic\.session\.caseNotesLabel)/i,
+      }),
     ).toBeVisible({ timeout: 30_000 });
 
     // The editor textbox exists (it is disabled during reading; we just

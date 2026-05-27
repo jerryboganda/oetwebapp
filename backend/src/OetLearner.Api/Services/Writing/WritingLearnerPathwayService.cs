@@ -183,18 +183,27 @@ public sealed class WritingLearnerPathwayService(LearnerDbContext db, TimeProvid
         }
 
         var since = clock.GetUtcNow().AddDays(-30);
-        var violations = await db.WritingRuleViolations.AsNoTracking()
+        // Project to an anonymous shape inside the SQL query (Npgsql can
+        // translate that) then materialise into the record DTO on the client.
+        // Constructing a positional record in the Select projection is not
+        // translatable on Postgres + EF Core in this version.
+        var rawViolations = await db.WritingRuleViolations.AsNoTracking()
             .Where(v => v.UserId == userId && v.GeneratedAt >= since)
             .GroupBy(v => new { v.RuleId, v.Severity })
-            .Select(g => new WritingCanonViolationStatResponse(
+            .Select(g => new
+            {
                 g.Key.RuleId,
-                g.Count(),
+                Count = g.Count(),
                 g.Key.Severity,
-                g.Max(v => v.GeneratedAt)))
+                LastSeenAt = g.Max(v => v.GeneratedAt),
+            })
             .OrderByDescending(v => v.Count)
             .ThenBy(v => v.RuleId)
             .Take(10)
             .ToListAsync(ct);
+        var violations = rawViolations
+            .Select(v => new WritingCanonViolationStatResponse(v.RuleId, v.Count, v.Severity, v.LastSeenAt))
+            .ToList();
 
         var rules = query.OrderBy(r => r.RuleId, StringComparer.OrdinalIgnoreCase).ToList();
         return new WritingCanonResponse(rules, violations, rules.Count, violations.Sum(v => v.Count));

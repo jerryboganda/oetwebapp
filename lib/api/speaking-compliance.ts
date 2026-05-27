@@ -210,6 +210,8 @@ export interface SpeakingPathwayStage {
   description: string;
   activityKind: string;
   state: 'completed' | 'in_progress' | 'locked';
+  actionHref?: string;
+  actionLabel?: string;
 }
 
 export interface SpeakingPathwayResponse {
