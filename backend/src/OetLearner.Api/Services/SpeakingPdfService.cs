@@ -466,7 +466,7 @@ public sealed class SpeakingPdfService : ISpeakingPdfService
     private static readonly string ProcessLocalFallbackSecret = Convert.ToHexString(RandomNumberGenerator.GetBytes(32));
 }
 
-file sealed record SpeakingRoleCardSummary(
+sealed record SpeakingRoleCardSummary(
     string Setting,
     string Patient,
     string Task,
