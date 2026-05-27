@@ -497,6 +497,17 @@ public sealed class ListeningLearnerPathwayService : IListeningLearnerPathwaySer
                 "Session already submitted — answers are immutable.");
         }
 
+        // Enforce: the question must be one of the session's seeded items.
+        // Out-of-session answers are rejected with 400 to keep the attempt
+        // table clean and prevent learners from injecting unrelated grading.
+        var sessionQuestionIds = DeserializeQuestionIds(session.QuestionIdsJson);
+        if (sessionQuestionIds.Count > 0 && !sessionQuestionIds.Contains(questionId))
+        {
+            throw new ArgumentException(
+                $"Question '{questionId}' is not part of session {sessionId}.",
+                nameof(questionId));
+        }
+
         var now = _clock.GetUtcNow();
 
         var existing = await _db.ListeningQuestionAttempts

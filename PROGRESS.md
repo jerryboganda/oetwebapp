@@ -8,6 +8,37 @@ Last updated: 2026-05-27
 - Do not use `oet-dev` for validation; the VPS is production deployment only.
 - Preserve existing modified/untracked work; `.codex/config.toml` remains isolated tooling/config unless intentionally committed.
 
+## Latest Continuation — Speaking Module Pathway Closure
+
+- Finished the attached Speaking Module Pathway implementation as a focused closure over the existing Speaking subsystem instead of replacing it. The existing learner speaking pages, live room flow, drill service, mock-set orchestration, AI assessment rows, and tutor assessment rows remain the source of truth.
+- Closed learner/tutor/expert assessment seams: learner dual-assessment reads now require session ownership and hide tutor drafts; expert reads and timestamped comments require assignment or an active claim; final tutor submission requires all nine criteria and a submitting-tutor timestamped comment; stale drafts cannot create a second final assessment.
+- Added expert assessment context and media playback: `/v1/expert/speaking/sessions/{id}/context` returns transcript segments and projected comments, `/recording` streams authorized ready media through `IFileStorage`, and the expert UI fetches protected audio with bearer/CSRF headers into a revocable blob URL. Optional recording failures now fail soft so transcript, comments, and rubric remain usable.
+- Hardened live-tutor room access: observer tokens require admin access, token issuance and room lookup are session-authorized, start/stop recording require the assigned tutor, room end hides unauthorized existence, and room creation rejects non-live-tutor or terminal sessions.
+- Completed learner progression seams: Speaking pathway stages now expose action labels/links and `/speaking/course-pathway` redirects to `/speaking/pathway`; drill catalogue rows carry canonical `drillId`, `/speaking/drills/[id]` plays canonical or legacy rows, and drill scoring now requires an uploaded recording before scoring.
+- Closed speaking mock-set routing: task launch URLs carry `mockSession`, `mockSetId`, and pre-created `attemptId`; the recorder submits against the paired mock attempt and returns to the orchestrator; the orchestrator treats submitted/evaluating role-plays as submitted for progression while still reserving final combined results for completed evaluations.
+- Added focused backend coverage in `SpeakingDualAssessmentSecurityTests.cs` and updated existing Speaking dual-assessment/mock-set tests for the new authorization, draft-hiding, timestamped-comment, observer-token, and submitted/evaluating mock progression behavior.
+- Independent review passes were run. The final OET Reviewer pass found two issues — mock-set progression while scoring is queued and optional recording fetch failure blocking the expert page — and both were fixed. A focused OET Security Reviewer re-check reported no blockers for protected recording playback after the blob-fetch change.
+- Editor diagnostics are clean on all final touched Speaking files checked after the last patches.
+- Docker Desktop validation status: frontend `tsc` is blocked by Docker Desktop filesystem I/O after Docker-only attempts with the web/node container path; no host or VPS fallback was used. Backend focused Docker test attempts against the final tree used `mcr.microsoft.com/dotnet/sdk:10.0` and the filtered Speaking security/dual-assessment/mock test command, but the SDK test runner stayed CPU-active and silent beyond the useful validation window and was stopped; the stopped container's `docker wait` exit code is not counted as a pass. An earlier focused backend run passed before the final reviewer-driven patches, so final-tree backend validation remains blocked rather than green.
+
+## Latest Continuation — Writing Wave 7 Admin UI Closure
+
+- Completed the remaining Writing admin UI after the user explicitly asked to finish everything remaining. Hallmark was still unavailable, so the approved substitute was the documented `docs/admin-redesign/axelit-study/` admin discipline.
+- Replaced the `/admin/writing` redirect with an operational Writing Authoring hub linking scenarios, exemplars, drills, lessons, mistakes, canon, audit, ContentPaper tasks, AI options, AI draft, and rule analytics.
+- Added missing admin CRUD/view pages for `/admin/writing/drills`, `/admin/writing/lessons`, `/admin/writing/mistakes`, and `/admin/writing/audit`, all backed by the existing `/v1/admin/writing/*` endpoints through `apiClient`.
+- Added frontend audit DTOs in `lib/writing/types.ts`, exposed Writing Authoring in the admin sidebar, and added explicit admin route permission mappings for scenarios, exemplars, canon, drills, lessons, mistakes, audit, and Writing AI routes.
+- Closed review findings: audit filters now apply explicitly instead of logging `/audit` reads on every keystroke; dashboard links are permission-filtered; new drill/lesson/mistake pages hide write controls from read-only admins; Writing drill/lesson publish-status upserts now require `AdminContentPublish` on the backend.
+- Final `OET Reviewer` and `OET Security Reviewer` passes reported no blockers after tightening published drill/lesson update and delete paths to require publish permission when either the current or requested status is `published`.
+- Cleaned the durable Writing ledger: Wave 1 diagnostic DTO/editor-shell items are now marked complete, and Wave 7 admin UI is now marked complete. Remaining work is content/operations proof only: Dr Ahmed-approved content scale, full Arabic translation beyond the existing chrome pass, and native mobile proof.
+- Editor diagnostics are clean on all touched admin/type/permission files. Docker build/test/lint/type-check were not run because validation remains paused by the user.
+
+## Latest Continuation — Writing Wave 7 Admin Backend Hardening
+
+- Completed the safe backend-only Wave 7 slice after Hallmark/admin discipline blocked broad admin Writing UI edits. Hallmark was not available in the workspace/tool surface, so missing drills/lessons/mistakes/audit admin pages remain intentionally unimplemented until the user approves a documented substitute from `docs/admin-redesign/`.
+- Hardened `WritingAdminContentEndpoints` so `/v1/admin/writing/*` retains the existing verified-admin `AdminOnly` group guard and layers granular per-endpoint permissions: content read for lists/details, content write for creates/updates/deletes/generation/test actions, content publish for scenario approval and exemplar publish, and audit-log permission for `/audit`.
+- Wired backend audit evidence for Writing admin content: scenario, exemplar, drill, canon, lesson, and common-mistake admin mutations now add concrete `writing.*` `AuditEvent` rows before the same `SaveChangesAsync` that commits the mutation; `/v1/admin/writing/audit` views now emit `writing.audit.viewed`.
+- Read-only `OET Security Reviewer` and `OET Reviewer` closure passes reported no remaining blockers. Editor diagnostics on touched Wave 7 backend files are clean; Docker build/test/lint/typecheck were not run because validation remains paused by the user.
+
 ## Latest Continuation — Writing Wave 5 Stats, Readiness, And Mocks
 
 - Completed Wave 5 in `docs/WRITING-MODULE-IMPLEMENTATION-LOOP.md` after a clean read-only `OET Reviewer` pass.
@@ -16,6 +47,18 @@ Last updated: 2026-05-27
 - Updated learner mock pages and `lib/writing/api.ts` so the client calls the server begin-writing route, uses the same 100-word submit threshold as the backend, and polls the results page while a grade is still settling.
 - Added focused backend coverage in `WritingWave5ServiceTests.cs` for user-scoped letter-type stats, raw target bands, early phase rejection, persisted writing phase, pre-writing submit rejection, short-submit rejection, duplicate submit idempotency, and reused-grade mock results.
 - Validation remains intentionally light per the user's pause request: editor diagnostics on touched Wave 5 files are clean; Docker build/test/lint/typecheck were not run.
+
+## Latest Continuation — Writing Wave 6 AI Coach, Appeals, OCR, Tutor, Community
+
+- Completed Wave 6 in `docs/WRITING-MODULE-IMPLEMENTATION-LOOP.md` after clean read-only security and general reviewer closure passes.
+- Hardened AI coach/realtime: V2 coach output now normalizes categories, rule IDs, hint text, and char ranges; raw WebSocket messages accept backend `payload` shape and send draft snapshots; realtime uses an absolute API origin instead of the HTTP proxy path; grade-ready events now flow through a registered SignalR event handler with a summary payload.
+- Hardened grade integrity: `WritingSubmissionEvaluationPipeline` now materializes reused idempotency grades and copied canon violations for every new submission before returning, so diagnostics/crons/submissions/mocks no longer need caller-specific grade-reuse fixes. V2 submission creation/revision now awaits grading in-scope instead of capturing scoped services in `Task.Run`.
+- Hardened appeals: appeal adjustments create linked replacement grade rows and preserve the original grade, existing unresolved appeal responses reload the appeal's original grade, and the frontend status union includes backend manual/in-progress states.
+- Hardened OCR: upload requests reject malformed submission IDs, validate submission ownership, file count, per-file/job size, content type, and image magic bytes; uploaded images are persisted through `IFileStorage`; `manual_required` is a first-class frontend/backend status; provider failures return learner-safe messages.
+- Hardened tutor review: tutor queue metadata now reports real word count, status, claim time, and tutor id; `in-review` maps to claimed; claims are terminal-state aware with a relational conditional update; tutor detail pages now load through `/v1/tutors/writing/reviews/{submissionId}` after verifying the assignment is claimed/submitted by the current tutor; score overrides create linked tutor-reviewed grades.
+- Hardened showcase/community: submission requires learner community opt-in plus A-grade status, resubmission preserves author ownership, sensitive residue holds posts in `needs_redaction`, approval re-checks privacy gates, and only published posts are listed publicly.
+- Added focused backend coverage in `WritingWave6ServiceTests.cs` for coach output normalization, OCR storage/manual-required flow, tutor claim/override grade linkage, and showcase opt-in/A-grade gates.
+- Validation remains intentionally light per the user's pause request: editor diagnostics on touched Wave 6 files are clean; Docker build/test/lint/typecheck were not run.
 
 ## Completed This Session — Writing Module V2 (end-to-end per OET_WRITING_MODULE_PATHWAY.md)
 
@@ -283,7 +326,34 @@ After the initial 8 workstreams shipped, ran a second pass to close every outsta
 - Validation status: no further Docker, build, test, type-check, lint, or GitHub Actions validation was run after the user said validations are unnecessary. Editor diagnostics for the changed Writing pathway service, tests, client, and pages reported no errors.
 - Remaining non-code/content dependencies from the full attached plan are intentionally not fabricated: large authored exemplar banks, OCR/provider fallbacks, embeddings-backed semantic retrieval, live classes, appeals workflows, and external AI/provider configuration require real content or service setup. The shipped slice creates durable profile/pathway/today/canon surfaces that can host those additions later without breaking existing Writing contracts.
 
-## Completed This Session — Listening Module Pathway Phase 1 (Foundation)
+## Completed This Session — Listening Module Pathway Phases 1–5 (full backend + frontend)
+
+Phases 2–5 ship as a continuation of Phase 1 in the same session — daily-plan engine, pronunciation library (SM-2), dictation drills, mock test infrastructure, analytics dashboard, foundation lessons, and strategy library. Audio production pipeline (Phase 6) remains stubbed per the locked decision.
+
+- Added 10 Phase 2–5 entities in `Domain/ListeningPathwayPhase2Entities.cs`: `ListeningLesson`, `LearnerListeningLessonProgress`, `ListeningDailyPlanItem`, `ListeningStrategy`, `LearnerListeningStrategyProgress`, `PronunciationCard`, `LearnerPronunciationCard`, `DictationDrill`, `LearnerDictationProgress`, `ListeningMockTemplate`. Indexes added in `LearnerDbContext.cs`. Migration `20260526193744_AddListeningPathwayPhase2Through5Schema` captures the schema; design-time `LearnerDbContextFactory` now enables `UseVector()` to match runtime so EF tooling can scaffold across vector-bearing models.
+- Backend services under `Services/Listening/` (new):
+  - `IListeningDailyPlanService` + `ListeningDailyPlanService` — spec §10 daily plan engine; idempotent `GenerateForTodayIfMissingAsync` builds up to 4 items per day (drill + accent_drill + dictation + pronunciation_review + wrong_review + strategy_read) keyed to weakest sub-skill and weakest accent.
+  - `IListeningPracticeSelectionService` + `ListeningPracticeSelectionService` — spec §8.2 adaptive selection (weight 3× for previously-incorrect, 1.5× for weakest-accent, 14-day cooldown, difficulty ±1 band).
+  - `IPronunciationService` + `PronunciationService` — SM-2 spaced repetition, healthcare-vocabulary cards, add/review/stats lifecycle.
+  - `IDictationService` + `DictationService` — healthcare-spelling-tolerant dictation drill grading with Levenshtein-≤-1 off-by-one warning and simple SR (correct twice → 7-day interval; miss → 1-day).
+  - `IListeningMockService` + `ListeningMockService` — full mock lifecycle (start, submit, results, listing) composing `IListeningLearnerGradingService` + scaled OET 0–500 conversion + readiness recompute.
+  - `IListeningPathwayAnalyticsService` + `ListeningPathwayAnalyticsService` — dashboard, skill radar, accent chart, score history, readiness (§9.6 weighted formula), note-taking stats, spelling stats, calendar heatmap.
+  - `IListeningLessonService` + `ListeningLessonService` — list/detail/progress for the 8 sub-skill foundation lessons.
+  - `IListeningStrategyService` + `ListeningStrategyService` — strategy library list/detail + mark-read + favorite toggle.
+  - `ListeningContentSeeder` — idempotent seed of 8 lessons (one per L1..L8) + 12 strategies spanning 6 categories (note-taking, gist, inference, time-management, accent, exam-day).
+- API surface grew from 13 routes to **~50 routes** under `/v1/listening-pathway/*` — daily plan CRUD, pronunciation, dictation, mocks, analytics, lessons, strategies. Cross-user 404 + learner-safe projections preserved throughout.
+- Frontend pages added under `app/listening/*`: `pronunciation/`, `pronunciation/review/`, `dictation/`, `mocks/`, `mocks/[sessionId]/`, `mocks/[sessionId]/results/`, `lessons/`, `lessons/[slug]/`, `strategies/`, `strategies/[slug]/`, `stats/`. All consume the new endpoints.
+- Frontend client at `lib/listening-pathway-api.ts` extended with daily-plan, pronunciation, dictation, mock, and analytics adapters.
+- Pre-existing test build failures patched so the Listening test slice can run cleanly:
+  - `backend/tests/.../Speaking/DualAssessmentTests.cs` — switched the now-typed `GetDualAssessmentForLearnerAsync(string, string, CancellationToken)` call site to supply the learner id parameter.
+  - `backend/src/.../Endpoints/ListeningPathwayEndpoints.cs` — added a sibling route `POST /diagnostic/sessions/{id}/answers/{questionId}` aliasing `/attempts/{questionId}` to match the safety-test naming convention.
+  - `backend/src/.../Services/Listening/ListeningLearnerPathwayService.cs` — `SaveDiagnosticAnswerAsync` now rejects out-of-session question IDs with `ArgumentException` so the locked-session/out-of-session contract test passes.
+- Validation (host dotnet 10.0.203 + Node toolchain):
+  - `dotnet build backend/src/OetLearner.Api/OetLearner.Api.csproj` → 0 errors.
+  - `dotnet test --filter "FullyQualifiedName~ListeningPathway"` → **21 / 21 passed**.
+  - `npx vitest run lib/__tests__/listening-pathway-api.test.ts` → **6 / 6 passed**.
+
+## Completed Earlier This Session — Listening Module Pathway Phase 1 (Foundation)
 
 - Implemented OET Listening Module Phase 1 (Foundation) end-to-end per `OET_LISTENING_MODULE_PATHWAY.md` §5–§6, §25–§28, §34. Five-stage learning pathway (onboarding → audio-check → diagnostic → foundation → practice → mastery) now parallels the shipped Reading pathway, with 8 L-sub-skills (L1–L8) and 4 target accents (British / Australian / North American / Non-native) tracked per learner.
 - Added 7 new EF Core entities at `backend/src/OetLearner.Api/Domain/ListeningPathwayEntities.cs` — `LearnerListeningProfile`, `LearnerListeningPathway`, `LearnerListeningSkillScore`, `LearnerAccentProgress`, `ListeningPracticeSession`, `ListeningQuestionAttempt`, `ListeningPracticeNote`. Wired DbSets + unique/composite indexes through `LearnerDbContext.cs`.

@@ -34,7 +34,10 @@ public sealed class LearnerDbContextFactory : IDesignTimeDbContextFactory<Learne
                 : DesignTimePlaceholder;
 
         var optionsBuilder = new DbContextOptionsBuilder<LearnerDbContext>();
-        optionsBuilder.UseNpgsql(connectionString);
+        // Match runtime: enable pgvector so design-time tooling can map
+        // Pgvector.Vector properties (e.g. WritingExemplarEmbedding.Embedding)
+        // to the postgres `vector(N)` column type during migration scaffold.
+        optionsBuilder.UseNpgsql(connectionString, npgsql => npgsql.UseVector());
         return new LearnerDbContext(optionsBuilder.Options);
     }
 

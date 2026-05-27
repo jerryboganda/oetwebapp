@@ -56,7 +56,7 @@ public sealed class DualAssessmentTests : IAsyncLifetime
             sessionId,
             new[] { 5, 5, 5, 5 },     // linguistic
             new[] { 2, 2, 2, 2, 2 }); // clinical
-        await SeedTimestampedCommentAsync(sessionId);
+        await SeedTimestampedCommentAsync(sessionId, "tutor-1");
 
         var aiBefore = await _db.SpeakingAiAssessments.AsNoTracking()
             .FirstAsync(a => a.Id == aiId);
@@ -115,7 +115,7 @@ public sealed class DualAssessmentTests : IAsyncLifetime
     public async Task AiAssessment_DoesNotMutateTutorAssessment()
     {
         var sessionId = await SeedFinishedSessionAsync("learner-2");
-        await SeedTimestampedCommentAsync(sessionId);
+        await SeedTimestampedCommentAsync(sessionId, "tutor-2");
 
         // Seed a finalised tutor assessment first.
         var draftId = await _svc.CreateDraftAsync(
@@ -169,7 +169,7 @@ public sealed class DualAssessmentTests : IAsyncLifetime
     {
         var sessionId = await SeedFinishedSessionAsync("learner-3");
         await SeedAiAssessmentAsync(sessionId, new[] { 5, 5, 5, 5 }, new[] { 2, 2, 2, 2, 2 });
-        await SeedTimestampedCommentAsync(sessionId);
+        await SeedTimestampedCommentAsync(sessionId, "tutor-3");
 
         var draftId = await _svc.CreateDraftAsync(
             "tutor-3",
@@ -187,7 +187,7 @@ public sealed class DualAssessmentTests : IAsyncLifetime
                 null, null, null, null, null),
             CancellationToken.None);
 
-        var dual = await _svc.GetDualAssessmentAsync(sessionId, CancellationToken.None);
+        var dual = await _svc.GetDualAssessmentForLearnerAsync("learner-3", sessionId, CancellationToken.None);
 
         Assert.Equal(sessionId, dual.SessionId);
         Assert.NotNull(dual.Ai);
@@ -220,7 +220,7 @@ public sealed class DualAssessmentTests : IAsyncLifetime
     public async Task Submit_RecomputesScaledScoreViaOetScoring()
     {
         var sessionId = await SeedFinishedSessionAsync("learner-5");
-        await SeedTimestampedCommentAsync(sessionId);
+        await SeedTimestampedCommentAsync(sessionId, "tutor-5");
 
         var draftId = await _svc.CreateDraftAsync(
             "tutor-5",
@@ -284,6 +284,7 @@ public sealed class DualAssessmentTests : IAsyncLifetime
             RolePlayCardId = cardId,
             Mode = SpeakingSessionMode.AiSelfPractice,
             State = SpeakingSessionState.Finished,
+            InterlocutorActorId = userId.Replace("learner-", "tutor-", StringComparison.Ordinal),
             ElapsedSeconds = 300,
             EndedAt = DateTimeOffset.UtcNow,
             CreatedAt = DateTimeOffset.UtcNow,
@@ -293,13 +294,13 @@ public sealed class DualAssessmentTests : IAsyncLifetime
         return sessionId;
     }
 
-    private async Task SeedTimestampedCommentAsync(string sessionId)
+    private async Task SeedTimestampedCommentAsync(string sessionId, string tutorId)
     {
         _db.SpeakingTimestampedComments.Add(new SpeakingTimestampedComment
         {
             Id = $"tc-{Guid.NewGuid():N}",
             SpeakingSessionId = sessionId,
-            AuthorId = "tutor-fixture",
+            AuthorId = tutorId,
             AuthorRole = "tutor",
             TranscriptSegmentIndex = 0,
             StartMs = 0,

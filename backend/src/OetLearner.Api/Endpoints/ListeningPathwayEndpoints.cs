@@ -202,13 +202,16 @@ public static class ListeningPathwayEndpoints
         // §6.3 Diagnostic — auto-save per-question answer
         // ─────────────────────────────────────────────────────────────────
 
-        group.MapPost("/diagnostic/sessions/{sessionId:guid}/attempts/{questionId}", async (
+        // Shared handler so both /attempts/{id} and the alias /answers/{id} hit
+        // the same per-question save logic. Tests use the /answers/{id} form to
+        // match the Reading endpoint convention; UI uses /attempts/{id}.
+        async Task<IResult> SaveAnswerHandlerAsync(
             Guid sessionId,
             string questionId,
             DiagnosticAnswerSubmission submission,
             HttpContext http,
             IListeningLearnerPathwayService svc,
-            CancellationToken ct) =>
+            CancellationToken ct)
         {
             var userId = RequireUserId(http);
             if (string.IsNullOrWhiteSpace(questionId))
@@ -239,8 +242,13 @@ public static class ListeningPathwayEndpoints
             {
                 return BadRequest("invalid_diagnostic_answer", ex.Message);
             }
-        })
-        .WithName("ListeningSaveDiagnosticAnswer");
+        }
+
+        group.MapPost("/diagnostic/sessions/{sessionId:guid}/attempts/{questionId}", SaveAnswerHandlerAsync)
+            .WithName("ListeningSaveDiagnosticAnswer");
+
+        group.MapPost("/diagnostic/sessions/{sessionId:guid}/answers/{questionId}", SaveAnswerHandlerAsync)
+            .WithName("ListeningSaveDiagnosticAnswerAlias");
 
         // ─────────────────────────────────────────────────────────────────
         // §6.3 Diagnostic — submit (idempotent)
