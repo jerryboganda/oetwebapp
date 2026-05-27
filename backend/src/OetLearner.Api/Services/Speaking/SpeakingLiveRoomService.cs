@@ -75,6 +75,18 @@ public sealed class SpeakingLiveRoomService
                 $"User '{userId}' is not the owner of session '{speakingSessionId}'.");
         }
 
+        if (session.Mode != SpeakingSessionMode.LiveTutor)
+        {
+            throw new SpeakingLiveRoomInvalidStateException(
+                $"Speaking session '{speakingSessionId}' is not a live-tutor session.");
+        }
+
+        if (IsTerminalSessionState(session.State))
+        {
+            throw new SpeakingLiveRoomInvalidStateException(
+                $"Speaking session '{speakingSessionId}' is in state {session.State} and cannot create a live room.");
+        }
+
         // If a room already exists for this session (idempotent retry of
         // the same "Start session" tap), return the existing identifiers
         // rather than provisioning a duplicate.
@@ -731,6 +743,9 @@ public sealed class SpeakingLiveRoomService
         if (!el.TryGetProperty(name, out var prop)) return null;
         return prop.ValueKind == JsonValueKind.Number && prop.TryGetInt64(out var v) ? v : null;
     }
+
+    private static bool IsTerminalSessionState(SpeakingSessionState state) =>
+        state is SpeakingSessionState.Finished or SpeakingSessionState.Cancelled or SpeakingSessionState.Expired;
 
     private static SpeakingLiveRoomTokenRole ParseRole(string roleStr) => roleStr?.Trim().ToLowerInvariant() switch
     {

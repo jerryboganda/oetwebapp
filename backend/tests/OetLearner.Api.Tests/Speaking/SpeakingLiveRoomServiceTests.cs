@@ -37,6 +37,53 @@ public sealed class SpeakingLiveRoomServiceTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task CreateRoom_RejectsNonLiveTutorSession_BeforeProviderCall()
+    {
+        _db.SpeakingSessions.Add(new SpeakingSession
+        {
+            Id = "speaking-session-ai",
+            UserId = "learner-ai",
+            RolePlayCardId = "card-ai",
+            Mode = SpeakingSessionMode.AiSelfPractice,
+            State = SpeakingSessionState.Active,
+            CreatedAt = DateTimeOffset.UtcNow.AddMinutes(-5),
+            UpdatedAt = DateTimeOffset.UtcNow,
+        });
+        await _db.SaveChangesAsync();
+
+        await Assert.ThrowsAsync<SpeakingLiveRoomInvalidStateException>(() => _svc.CreateRoomForSessionAsync(
+            "learner-ai",
+            "speaking-session-ai",
+            CancellationToken.None));
+
+        Assert.Equal(0, _gateway.CreateRoomCalls);
+    }
+
+    [Fact]
+    public async Task CreateRoom_RejectsTerminalLiveTutorSession_BeforeProviderCall()
+    {
+        _db.SpeakingSessions.Add(new SpeakingSession
+        {
+            Id = "speaking-session-finished",
+            UserId = "learner-finished",
+            RolePlayCardId = "card-finished",
+            Mode = SpeakingSessionMode.LiveTutor,
+            State = SpeakingSessionState.Finished,
+            CreatedAt = DateTimeOffset.UtcNow.AddMinutes(-10),
+            UpdatedAt = DateTimeOffset.UtcNow,
+            EndedAt = DateTimeOffset.UtcNow,
+        });
+        await _db.SaveChangesAsync();
+
+        await Assert.ThrowsAsync<SpeakingLiveRoomInvalidStateException>(() => _svc.CreateRoomForSessionAsync(
+            "learner-finished",
+            "speaking-session-finished",
+            CancellationToken.None));
+
+        Assert.Equal(0, _gateway.CreateRoomCalls);
+    }
+
+    [Fact]
     public async Task StartRecording_RejectsEndedRoom_BeforeProviderCall()
     {
         _db.SpeakingLiveRooms.Add(new SpeakingLiveRoom
@@ -162,10 +209,14 @@ public sealed class SpeakingLiveRoomServiceTests : IAsyncLifetime
 
     private sealed class RecordingLiveKitGateway : ILiveKitGateway
     {
+        public int CreateRoomCalls { get; private set; }
         public int StartEgressCalls { get; private set; }
 
         public Task<LiveKitRoomCreationResult> CreateRoomAsync(string roomName, int maxDurationSeconds, CancellationToken ct)
-            => Task.FromResult(new LiveKitRoomCreationResult("room-sid-test", "wss://livekit.test"));
+        {
+            CreateRoomCalls++;
+            return Task.FromResult(new LiveKitRoomCreationResult("room-sid-test", "wss://livekit.test"));
+        }
 
         public Task<string> MintAccessTokenAsync(
             string roomName,

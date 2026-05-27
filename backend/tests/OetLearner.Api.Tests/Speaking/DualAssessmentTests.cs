@@ -394,6 +394,26 @@ public sealed class DualAssessmentTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task TutorAssessment_RefreshesActiveClaimOnAssessmentActivity()
+    {
+        var sessionId = await SeedFinishedSessionAsync("learner-heartbeat");
+        var originalCreatedAt = DateTimeOffset.UtcNow.AddMinutes(-(TutorReviewQueueService.IdleClaimTtlMinutes - 1));
+        await SeedReviewClaimAsync(sessionId, "tutor-heartbeat", originalCreatedAt);
+
+        await _svc.GetDualAssessmentForTutorAsync(
+            "tutor-heartbeat",
+            sessionId,
+            CancellationToken.None);
+
+        var refreshedCreatedAt = await _db.ReviewRequests.AsNoTracking()
+            .Where(r => r.AttemptId == sessionId && r.SubtestCode == TutorReviewQueueService.SubtestCode)
+            .Select(r => r.CreatedAt)
+            .SingleAsync();
+
+        Assert.True(refreshedCreatedAt > originalCreatedAt);
+    }
+
+    [Fact]
     public async Task TutorAssessment_RejectsExpiredClaim()
     {
         var sessionId = await SeedFinishedSessionAsync("learner-stale");

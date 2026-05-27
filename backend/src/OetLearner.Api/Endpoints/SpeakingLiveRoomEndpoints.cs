@@ -133,6 +133,12 @@ public static class SpeakingLiveRoomEndpoints
                 new { errorCode = "forbidden", message = ex.Message },
                 statusCode: StatusCodes.Status403Forbidden);
         }
+        catch (SpeakingLiveRoomInvalidStateException ex)
+        {
+            return Results.Json(
+                new { errorCode = "invalid_state", message = ex.Message },
+                statusCode: StatusCodes.Status409Conflict);
+        }
     }
 
     private static async Task<IResult> IssueTokenAsync(

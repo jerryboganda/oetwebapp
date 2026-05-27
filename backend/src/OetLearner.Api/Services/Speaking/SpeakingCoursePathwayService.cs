@@ -107,11 +107,32 @@ public sealed class SpeakingCoursePathwayService(LearnerDbContext db)
             .OrderBy(d => d.StartedAt)
             .ToListAsync(ct);
 
+        var completedMockSessionIds = await db.SpeakingMockSessions
+            .AsNoTracking()
+            .Where(m => m.UserId == userId && m.State == SpeakingMockSessionState.Completed)
+            .Select(m => m.Id)
+            .ToListAsync(ct);
+
         var completedSessionCount = sessions.Count(s => s.State == SpeakingSessionState.Finished);
         var completedDrillCount = drills.Count(d => d.CompletedAt.HasValue);
-        var mockSessionCount = sessions.Count(s =>
-            s.State == SpeakingSessionState.Finished
-            && (!string.IsNullOrEmpty(s.MockSetId) || !string.IsNullOrEmpty(s.MockSessionId)));
+        var completedMockKeys = completedMockSessionIds
+            .Select(id => $"mock-session:{id}")
+            .ToHashSet(StringComparer.Ordinal);
+        foreach (var session in sessions.Where(s => s.State == SpeakingSessionState.Finished))
+        {
+            if (!string.IsNullOrEmpty(session.MockSessionId))
+            {
+                completedMockKeys.Add($"mock-session:{session.MockSessionId}");
+                continue;
+            }
+
+            if (!string.IsNullOrEmpty(session.MockSetId))
+            {
+                completedMockKeys.Add($"legacy-speaking-session:{session.Id}");
+            }
+        }
+
+        var mockSessionCount = completedMockKeys.Count;
 
         // State derivation strategy:
         //   - Orientation / Reading stages (1, 2): completed as soon as the
@@ -208,7 +229,7 @@ public sealed class SpeakingCoursePathwayService(LearnerDbContext db)
         SpeakingPathwayActivityKind.OrientationVideo => "/speaking/rulebook",
         SpeakingPathwayActivityKind.GuidedReading => "/speaking/rulebook",
         SpeakingPathwayActivityKind.Drill => "/speaking/drills",
-        SpeakingPathwayActivityKind.RolePlay => "/speaking/roleplay",
+        SpeakingPathwayActivityKind.RolePlay => "/speaking/selection",
         SpeakingPathwayActivityKind.Mock => "/speaking/mocks",
         _ => "/speaking",
     };

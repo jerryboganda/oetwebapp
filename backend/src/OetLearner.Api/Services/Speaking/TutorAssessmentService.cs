@@ -470,8 +470,9 @@ public sealed class TutorAssessmentService(
             return;
         }
 
-        var claimCutoff = clock.GetUtcNow().AddMinutes(-TutorReviewQueueService.IdleClaimTtlMinutes);
-        var activeClaim = await db.ReviewRequests.AsNoTracking()
+        var now = clock.GetUtcNow();
+        var claimCutoff = now.AddMinutes(-TutorReviewQueueService.IdleClaimTtlMinutes);
+        var activeClaim = await db.ReviewRequests
             .Where(r => r.SubtestCode == TutorReviewQueueService.SubtestCode
                         && r.AttemptId == session.Id
                         && r.State == ReviewRequestState.InReview
@@ -487,6 +488,8 @@ public sealed class TutorAssessmentService(
                 .FirstOrDefaultAsync(ct);
             if (string.Equals(latestClaimActor, tutorId, StringComparison.Ordinal))
             {
+                activeClaim.CreatedAt = now;
+                await db.SaveChangesAsync(ct);
                 return;
             }
         }
