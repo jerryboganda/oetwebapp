@@ -27,6 +27,7 @@ import {
 } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
 import { playTransientAudio } from '@/lib/recalls-audio';
+import { toast } from 'sonner';
 import type { VocabularyCategoriesResponse, VocabularyTerm } from '@/lib/types/vocabulary';
 import { Pagination } from '@/components/ui/pagination';
 
@@ -177,6 +178,8 @@ export default function RecallsWordsPage() {
       if (isApiError(err) && (err.status === 402 || err.status === 403)) {
         analytics.track('recalls_word_audio_blocked', { termId: term.id, status: err.status });
         setShowUpgradeModal(true);
+      } else {
+        toast.error('Audio not available for this term');
       }
     }
   }

@@ -86,7 +86,7 @@ public class VocabularyService(
             .Select(t => t.RecallSetCodesJson)
             .ToListAsync(ct);
 
-        var counts = new Dictionary<string, int>(StringComparer.Ordinal);
+        var counts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         foreach (var json in rawCodes)
         {
             try
@@ -94,8 +94,8 @@ public class VocabularyService(
                 var list = JsonSerializer.Deserialize<List<string>>(json) ?? new List<string>();
                 foreach (var raw in list)
                 {
-                    var c = OetLearner.Api.Domain.RecallSetCodes.Normalise(raw);
-                    if (c is null) continue;
+                    var c = raw?.Trim();
+                    if (string.IsNullOrEmpty(c)) continue;
                     counts[c] = counts.TryGetValue(c, out var n) ? n + 1 : 1;
                 }
             }
@@ -107,7 +107,8 @@ public class VocabularyService(
         // Fall back to the static metadata only if the table is empty.
         var tagRows = await db.RecallSetTags.AsNoTracking()
             .Where(t => t.IsActive)
-            .Where(t => t.ExamTypeCode == null || t.ExamTypeCode == resolvedExam)
+            .Where(t => t.ExamTypeCode == null
+                        || t.ExamTypeCode.ToUpper() == resolvedExam)
             .OrderBy(t => t.SortOrder).ThenBy(t => t.DisplayName)
             .ToListAsync(ct);
 
