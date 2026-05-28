@@ -101,6 +101,30 @@ services:
       Conversation__ChatTtsDefaultVoice: ${CONVERSATION__CHATTTSDEFAULTVOICE}
       MaxUploadBytes: '${MAX_UPLOAD_BYTES}'
       Features__EnableSwagger: 'true'
+      # ── Speaking Module ──────────────────────────────────────────────────────
+      LiveKit__Provider: ${LIVEKIT__PROVIDER:-disabled}
+      LiveKit__ApiKey: ${LIVEKIT__APIKEY}
+      LiveKit__ApiSecret: ${LIVEKIT__APISECRET}
+      LiveKit__WssUrl: ${LIVEKIT__WSSURL}
+      LiveKit__WebhookSigningSecret: ${LIVEKIT__WEBHOOKSIGNINGSECRET}
+      LiveKit__EgressBucket: ${LIVEKIT__EGRESSBUCKET}
+      LiveKit__DefaultMaxDurationSeconds: '${LIVEKIT__DEFAULTMAXDURATIONSECONDS:-1800}'
+      LiveKit__EgressEnabled: '${LIVEKIT__EGRESSENABLED:-false}'
+      Anthropic__ApiKey: ${ANTHROPIC__APIKEY}
+      OpenAi__ApiKey: ${OPENAI__APIKEY}
+      OpenAi__ApiBase: ${OPENAI__APIBASE:-https://api.openai.com/v1}
+      ElevenLabs__ApiKey: ${ELEVENLABS__APIKEY}
+      Whisper__ApiKey: ${WHISPER__APIKEY}
+      Aws__AccessKeyId: ${AWS__ACCESSKEYID}
+      Aws__SecretAccessKey: ${AWS__SECRETACCESSKEY}
+      Aws__Region: ${AWS__REGION:-eu-west-2}
+      Aws__Bucket: ${AWS__BUCKET}
+      SpeakingCompliance__CurrentConsentVersion: ${SPEAKINGCOMPLIANCE__CURRENTCONSENTVERSION:-recording.v1}
+      SpeakingCompliance__CurrentLiveVideoConsentVersion: ${SPEAKINGCOMPLIANCE__CURRENTLIVEVIDEOCONSENTVERSION:-live_video_with_tutor.v1}
+      SpeakingCompliance__RetentionDaysDefault: '${SPEAKINGCOMPLIANCE__RETENTIONDAYSDEFAULT:-90}'
+      SpeakingCompliance__RetentionDaysWhenTutorReviewed: '${SPEAKINGCOMPLIANCE__RETENTIONDAYSWHENTUTORREVIEWED:-365}'
+      SpeakingCompliance__AuditLogRetentionDays: '${SPEAKINGCOMPLIANCE__AUDITLOGRETENTIONDAYS:-2555}'
+      Features__SpeakingV2: '${FEATURES__SPEAKINGV2:-false}'
     ports:
       - '8080:8080'
     volumes:

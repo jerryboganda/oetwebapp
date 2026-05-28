@@ -134,6 +134,38 @@ public class RuntimeSettingsRow
     [MaxLength(512)] public string? SpeakingWhisperBaseUrl { get; set; }
     [MaxLength(64)] public string? SpeakingWhisperModel { get; set; }
 
+    // ── Speaking LiveKit (live tutor rooms + egress recording) ─────
+    [MaxLength(32)] public string? SpeakingLiveKitProvider { get; set; }
+    public string? SpeakingLiveKitApiKeyEncrypted { get; set; }
+    public string? SpeakingLiveKitApiSecretEncrypted { get; set; }
+    [MaxLength(512)] public string? SpeakingLiveKitWssUrl { get; set; }
+    public string? SpeakingLiveKitWebhookSigningSecretEncrypted { get; set; }
+    [MaxLength(256)] public string? SpeakingLiveKitEgressBucket { get; set; }
+    public int? SpeakingLiveKitDefaultMaxDurationSeconds { get; set; }
+    public bool? SpeakingLiveKitEgressEnabled { get; set; }
+
+    // ── Speaking AI (Anthropic — scoring + patient turns) ──────────
+    public string? SpeakingAnthropicApiKeyEncrypted { get; set; }
+
+    // ── Speaking ElevenLabs (AI patient TTS) ───────────────────────
+    public string? SpeakingElevenLabsApiKeyEncrypted { get; set; }
+
+    // ── Speaking AWS S3 (recording archive) ────────────────────────
+    [MaxLength(256)] public string? SpeakingAwsAccessKeyId { get; set; }
+    public string? SpeakingAwsSecretAccessKeyEncrypted { get; set; }
+    [MaxLength(64)] public string? SpeakingAwsRegion { get; set; }
+    [MaxLength(256)] public string? SpeakingAwsBucket { get; set; }
+
+    // ── Speaking Compliance (consent versioning + retention) ───────
+    [MaxLength(64)] public string? SpeakingComplianceCurrentConsentVersion { get; set; }
+    [MaxLength(64)] public string? SpeakingComplianceCurrentLiveVideoConsentVersion { get; set; }
+    public int? SpeakingComplianceRetentionDaysDefault { get; set; }
+    public int? SpeakingComplianceRetentionDaysWhenTutorReviewed { get; set; }
+    public int? SpeakingComplianceAuditLogRetentionDays { get; set; }
+
+    // ── Speaking Feature Flag ──────────────────────────────────────
+    public bool? SpeakingV2Enabled { get; set; }
+
     // ── Audit ──────────────────────────────────────────────────────
     [MaxLength(64)]
     public string? UpdatedByUserId { get; set; }

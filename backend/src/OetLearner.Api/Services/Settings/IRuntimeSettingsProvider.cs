@@ -55,6 +55,11 @@ public sealed record EffectiveSettings(
     StripeSettings Stripe,
     LiveClassSettings LiveClasses,
     SpeakingWhisperSettings SpeakingWhisper,
+    SpeakingLiveKitSettings SpeakingLiveKit,
+    SpeakingAiSettings SpeakingAi,
+    SpeakingStorageSettings SpeakingStorage,
+    SpeakingComplianceSettings SpeakingCompliance,
+    SpeakingFeatureSettings SpeakingFeatures,
     string? UpdatedByUserId,
     string? UpdatedByUserName,
     DateTimeOffset? UpdatedAt);
@@ -172,3 +177,54 @@ public sealed record SpeakingWhisperSettings(
     string BaseUrl,
     string Model,
     bool IsConfigured);
+
+/// <summary>
+/// Speaking LiveKit configuration — live tutor rooms + egress recording.
+/// Admin-configurable from the admin panel without env-file edits.
+/// </summary>
+public sealed record SpeakingLiveKitSettings(
+    string Provider,
+    string? ApiKey,
+    string? ApiSecret,
+    string? WssUrl,
+    string? WebhookSigningSecret,
+    string? EgressBucket,
+    int DefaultMaxDurationSeconds,
+    bool EgressEnabled,
+    bool IsEnabled);
+
+/// <summary>
+/// Speaking AI provider settings — Anthropic (scoring + patient turns) and
+/// ElevenLabs (AI patient TTS).
+/// </summary>
+public sealed record SpeakingAiSettings(
+    string? AnthropicApiKey,
+    string? ElevenLabsApiKey,
+    bool IsAnthropicConfigured,
+    bool IsElevenLabsConfigured);
+
+/// <summary>
+/// Speaking AWS S3 recording storage settings.
+/// </summary>
+public sealed record SpeakingStorageSettings(
+    string? AwsAccessKeyId,
+    string? AwsSecretAccessKey,
+    string Region,
+    string? Bucket,
+    bool IsConfigured);
+
+/// <summary>
+/// Speaking compliance settings — consent versioning + retention windows.
+/// </summary>
+public sealed record SpeakingComplianceSettings(
+    string CurrentConsentVersion,
+    string CurrentLiveVideoConsentVersion,
+    int RetentionDaysDefault,
+    int RetentionDaysWhenTutorReviewed,
+    int AuditLogRetentionDays);
+
+/// <summary>
+/// Speaking feature flags — controls the full v2 module rollout.
+/// </summary>
+public sealed record SpeakingFeatureSettings(
+    bool SpeakingV2Enabled);

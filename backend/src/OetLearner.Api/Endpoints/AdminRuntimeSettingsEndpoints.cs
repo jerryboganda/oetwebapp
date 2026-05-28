@@ -84,6 +84,11 @@ public static class AdminRuntimeSettingsEndpoints
                     ApplyZoom(row, request.Zoom, provider, env, changedKeys);
                     ApplyStripe(row, request.Stripe, provider, changedKeys);
                     ApplySpeakingWhisper(row, request.SpeakingWhisper, provider, changedKeys);
+                    ApplySpeakingLiveKit(row, request.SpeakingLiveKit, provider, changedKeys);
+                    ApplySpeakingAi(row, request.SpeakingAi, provider, changedKeys);
+                    ApplySpeakingStorage(row, request.SpeakingStorage, provider, changedKeys);
+                    ApplySpeakingCompliance(row, request.SpeakingCompliance, changedKeys);
+                    ApplySpeakingFeatures(row, request.SpeakingFeatures, changedKeys);
                 }
                 catch (RuntimeSettingsValidationException ex)
                 {
@@ -269,6 +274,45 @@ public static class AdminRuntimeSettingsEndpoints
                 model = settings.SpeakingWhisper.Model,
                 isConfigured = settings.SpeakingWhisper.IsConfigured,
             },
+            speakingLiveKit = new
+            {
+                provider = settings.SpeakingLiveKit.Provider,
+                apiKey = MaskPlainSecret(settings.SpeakingLiveKit.ApiKey),
+                apiSecret = MaskPlainSecret(settings.SpeakingLiveKit.ApiSecret),
+                wssUrl = settings.SpeakingLiveKit.WssUrl,
+                webhookSigningSecret = MaskPlainSecret(settings.SpeakingLiveKit.WebhookSigningSecret),
+                egressBucket = settings.SpeakingLiveKit.EgressBucket,
+                defaultMaxDurationSeconds = settings.SpeakingLiveKit.DefaultMaxDurationSeconds,
+                egressEnabled = settings.SpeakingLiveKit.EgressEnabled,
+                isEnabled = settings.SpeakingLiveKit.IsEnabled,
+            },
+            speakingAi = new
+            {
+                anthropicApiKey = MaskPlainSecret(settings.SpeakingAi.AnthropicApiKey),
+                elevenLabsApiKey = MaskPlainSecret(settings.SpeakingAi.ElevenLabsApiKey),
+                isAnthropicConfigured = settings.SpeakingAi.IsAnthropicConfigured,
+                isElevenLabsConfigured = settings.SpeakingAi.IsElevenLabsConfigured,
+            },
+            speakingStorage = new
+            {
+                awsAccessKeyId = settings.SpeakingStorage.AwsAccessKeyId,
+                awsSecretAccessKey = MaskPlainSecret(settings.SpeakingStorage.AwsSecretAccessKey),
+                region = settings.SpeakingStorage.Region,
+                bucket = settings.SpeakingStorage.Bucket,
+                isConfigured = settings.SpeakingStorage.IsConfigured,
+            },
+            speakingCompliance = new
+            {
+                currentConsentVersion = settings.SpeakingCompliance.CurrentConsentVersion,
+                currentLiveVideoConsentVersion = settings.SpeakingCompliance.CurrentLiveVideoConsentVersion,
+                retentionDaysDefault = settings.SpeakingCompliance.RetentionDaysDefault,
+                retentionDaysWhenTutorReviewed = settings.SpeakingCompliance.RetentionDaysWhenTutorReviewed,
+                auditLogRetentionDays = settings.SpeakingCompliance.AuditLogRetentionDays,
+            },
+            speakingFeatures = new
+            {
+                speakingV2Enabled = settings.SpeakingFeatures.SpeakingV2Enabled,
+            },
             updatedBy = settings.UpdatedByUserName,
             updatedByUserId = settings.UpdatedByUserId,
             updatedAt = settings.UpdatedAt,
@@ -381,6 +425,46 @@ public static class AdminRuntimeSettingsEndpoints
                 baseUrl = r.SpeakingWhisperBaseUrl,
                 model = r.SpeakingWhisperModel,
                 isConfigured = !string.IsNullOrEmpty(r.SpeakingWhisperApiKeyEncrypted),
+            },
+            speakingLiveKit = new
+            {
+                provider = r.SpeakingLiveKitProvider,
+                apiKey = MaskSecret(r.SpeakingLiveKitApiKeyEncrypted),
+                apiSecret = MaskSecret(r.SpeakingLiveKitApiSecretEncrypted),
+                wssUrl = r.SpeakingLiveKitWssUrl,
+                webhookSigningSecret = MaskSecret(r.SpeakingLiveKitWebhookSigningSecretEncrypted),
+                egressBucket = r.SpeakingLiveKitEgressBucket,
+                defaultMaxDurationSeconds = r.SpeakingLiveKitDefaultMaxDurationSeconds,
+                egressEnabled = r.SpeakingLiveKitEgressEnabled,
+                isEnabled = !string.Equals(r.SpeakingLiveKitProvider, "disabled", StringComparison.OrdinalIgnoreCase)
+                            && !string.IsNullOrEmpty(r.SpeakingLiveKitApiKeyEncrypted),
+            },
+            speakingAi = new
+            {
+                anthropicApiKey = MaskSecret(r.SpeakingAnthropicApiKeyEncrypted),
+                elevenLabsApiKey = MaskSecret(r.SpeakingElevenLabsApiKeyEncrypted),
+                isAnthropicConfigured = !string.IsNullOrEmpty(r.SpeakingAnthropicApiKeyEncrypted),
+                isElevenLabsConfigured = !string.IsNullOrEmpty(r.SpeakingElevenLabsApiKeyEncrypted),
+            },
+            speakingStorage = new
+            {
+                awsAccessKeyId = r.SpeakingAwsAccessKeyId,
+                awsSecretAccessKey = MaskSecret(r.SpeakingAwsSecretAccessKeyEncrypted),
+                region = r.SpeakingAwsRegion,
+                bucket = r.SpeakingAwsBucket,
+                isConfigured = !string.IsNullOrEmpty(r.SpeakingAwsAccessKeyId) && !string.IsNullOrEmpty(r.SpeakingAwsSecretAccessKeyEncrypted),
+            },
+            speakingCompliance = new
+            {
+                currentConsentVersion = r.SpeakingComplianceCurrentConsentVersion,
+                currentLiveVideoConsentVersion = r.SpeakingComplianceCurrentLiveVideoConsentVersion,
+                retentionDaysDefault = r.SpeakingComplianceRetentionDaysDefault,
+                retentionDaysWhenTutorReviewed = r.SpeakingComplianceRetentionDaysWhenTutorReviewed,
+                auditLogRetentionDays = r.SpeakingComplianceAuditLogRetentionDays,
+            },
+            speakingFeatures = new
+            {
+                speakingV2Enabled = r.SpeakingV2Enabled,
             },
             updatedBy = r.UpdatedByUserName,
             updatedByUserId = r.UpdatedByUserId,
@@ -585,6 +669,56 @@ public static class AdminRuntimeSettingsEndpoints
         if (TrySetPlain(d.Model, v => row.SpeakingWhisperModel = v, "speakingWhisper.model", changed)) { }
     }
 
+    private static void ApplySpeakingLiveKit(RuntimeSettingsRow row, RuntimeSettingsSpeakingLiveKitUpdate? d,
+        IRuntimeSettingsProvider p, List<string> changed)
+    {
+        if (d is null) return;
+        if (TrySetPlain(d.Provider, v => row.SpeakingLiveKitProvider = v, "speakingLiveKit.provider", changed)) { }
+        if (TrySetSecret(d.ApiKey, p, v => row.SpeakingLiveKitApiKeyEncrypted = v, "speakingLiveKit.apiKey", changed)) { }
+        if (TrySetSecret(d.ApiSecret, p, v => row.SpeakingLiveKitApiSecretEncrypted = v, "speakingLiveKit.apiSecret", changed)) { }
+        if (TrySetPlain(d.WssUrl, v => row.SpeakingLiveKitWssUrl = v, "speakingLiveKit.wssUrl", changed)) { }
+        if (TrySetSecret(d.WebhookSigningSecret, p, v => row.SpeakingLiveKitWebhookSigningSecretEncrypted = v, "speakingLiveKit.webhookSigningSecret", changed)) { }
+        if (TrySetPlain(d.EgressBucket, v => row.SpeakingLiveKitEgressBucket = v, "speakingLiveKit.egressBucket", changed)) { }
+        if (TrySetNullableInt(d.DefaultMaxDurationSeconds, v => row.SpeakingLiveKitDefaultMaxDurationSeconds = v, "speakingLiveKit.defaultMaxDurationSeconds", changed, min: 60, max: 7200)) { }
+        if (TrySetNullableBool(d.EgressEnabled, v => row.SpeakingLiveKitEgressEnabled = v, "speakingLiveKit.egressEnabled", changed)) { }
+    }
+
+    private static void ApplySpeakingAi(RuntimeSettingsRow row, RuntimeSettingsSpeakingAiUpdate? d,
+        IRuntimeSettingsProvider p, List<string> changed)
+    {
+        if (d is null) return;
+        if (TrySetSecret(d.AnthropicApiKey, p, v => row.SpeakingAnthropicApiKeyEncrypted = v, "speakingAi.anthropicApiKey", changed)) { }
+        if (TrySetSecret(d.ElevenLabsApiKey, p, v => row.SpeakingElevenLabsApiKeyEncrypted = v, "speakingAi.elevenLabsApiKey", changed)) { }
+    }
+
+    private static void ApplySpeakingStorage(RuntimeSettingsRow row, RuntimeSettingsSpeakingStorageUpdate? d,
+        IRuntimeSettingsProvider p, List<string> changed)
+    {
+        if (d is null) return;
+        if (TrySetPlain(d.AwsAccessKeyId, v => row.SpeakingAwsAccessKeyId = v, "speakingStorage.awsAccessKeyId", changed)) { }
+        if (TrySetSecret(d.AwsSecretAccessKey, p, v => row.SpeakingAwsSecretAccessKeyEncrypted = v, "speakingStorage.awsSecretAccessKey", changed)) { }
+        if (TrySetPlain(d.Region, v => row.SpeakingAwsRegion = v, "speakingStorage.region", changed)) { }
+        if (TrySetPlain(d.Bucket, v => row.SpeakingAwsBucket = v, "speakingStorage.bucket", changed)) { }
+    }
+
+    private static void ApplySpeakingCompliance(RuntimeSettingsRow row, RuntimeSettingsSpeakingComplianceUpdate? d,
+        List<string> changed)
+    {
+        if (d is null) return;
+        if (TrySetPlain(d.CurrentConsentVersion, v => row.SpeakingComplianceCurrentConsentVersion = v, "speakingCompliance.currentConsentVersion", changed)) { }
+        if (TrySetPlain(d.CurrentLiveVideoConsentVersion, v => row.SpeakingComplianceCurrentLiveVideoConsentVersion = v, "speakingCompliance.currentLiveVideoConsentVersion", changed)) { }
+        if (TrySetNullableInt(d.RetentionDaysDefault, v => row.SpeakingComplianceRetentionDaysDefault = v, "speakingCompliance.retentionDaysDefault", changed, min: 1, max: 36500)) { }
+        if (TrySetNullableInt(d.RetentionDaysWhenTutorReviewed, v => row.SpeakingComplianceRetentionDaysWhenTutorReviewed = v, "speakingCompliance.retentionDaysWhenTutorReviewed", changed, min: 1, max: 36500)) { }
+        if (TrySetNullableInt(d.AuditLogRetentionDays, v => row.SpeakingComplianceAuditLogRetentionDays = v, "speakingCompliance.auditLogRetentionDays", changed, min: 1, max: 36500)) { }
+    }
+
+    private static void ApplySpeakingFeatures(RuntimeSettingsRow row, RuntimeSettingsSpeakingFeaturesUpdate? d,
+        List<string> changed)
+    {
+        if (d is null) return;
+        if (TrySetNullableBool(d.SpeakingV2Enabled, v => row.SpeakingV2Enabled = v, "speakingFeatures.speakingV2Enabled", changed)) { }
+    }
+
     private static void ApplyZoom(RuntimeSettingsRow row, RuntimeSettingsZoomUpdate? d,
         IRuntimeSettingsProvider p, IWebHostEnvironment env, List<string> changed)
     {
@@ -760,7 +894,7 @@ public static class AdminRuntimeSettingsEndpoints
     private static string? NormalizeSectionId(string? sectionId)
     {
         var normalized = sectionId?.Trim().ToLowerInvariant();
-        return normalized is "email" or "billing" or "sentry" or "backup" or "oauth" or "push" or "uploadscanner" or "zoom" or "stripe"
+        return normalized is "email" or "billing" or "sentry" or "backup" or "oauth" or "push" or "uploadscanner" or "zoom" or "stripe" or "speakinglivekit" or "speakingai" or "speakingstorage" or "speakingcompliance" or "speakingfeatures" or "speakingwhisper"
             ? normalized
             : normalized == "upload-scanner" ? "uploadscanner" : null;
     }
@@ -806,6 +940,20 @@ public static class AdminRuntimeSettingsEndpoints
             "stripe" => HasAll(settings.Stripe.SecretKey, settings.Stripe.PublishableKey, settings.Stripe.WebhookSecret)
                 ? Ok(sectionId, "Stripe Tax/Portal/Radar runtime settings appear configured. No live API calls were made.", testedAt)
                 : Failed(sectionId, "Configure Stripe secret key, publishable key, and webhook secret before enabling Tax/Radar.", testedAt),
+            "speakingwhisper" => settings.SpeakingWhisper.IsConfigured
+                ? Ok(sectionId, "Speaking Whisper API key is configured. No transcription was performed.", testedAt)
+                : Failed(sectionId, "Configure a Whisper API key for speaking transcription.", testedAt),
+            "speakinglivekit" => settings.SpeakingLiveKit.IsEnabled
+                ? Ok(sectionId, "LiveKit is configured and enabled. No room was created.", testedAt)
+                : Failed(sectionId, "Configure LiveKit provider, API key, and API secret to enable live tutor rooms.", testedAt),
+            "speakingai" => settings.SpeakingAi.IsAnthropicConfigured
+                ? Ok(sectionId, "Anthropic API key is configured for Speaking AI scoring. No AI call was made.", testedAt)
+                : Failed(sectionId, "Configure the Anthropic API key for Speaking AI scoring and patient turns.", testedAt),
+            "speakingstorage" => settings.SpeakingStorage.IsConfigured
+                ? Ok(sectionId, "AWS S3 storage is configured for speaking recordings. No upload was performed.", testedAt)
+                : Failed(sectionId, "Configure AWS access key, secret, and bucket for speaking recording storage.", testedAt),
+            "speakingcompliance" => Ok(sectionId, "Speaking compliance settings are configured via defaults or admin overrides.", testedAt),
+            "speakingfeatures" => Ok(sectionId, $"Speaking V2 feature flag is {(settings.SpeakingFeatures.SpeakingV2Enabled ? "enabled" : "disabled")}.", testedAt),
             _ => Failed(sectionId, "Unknown integration section.", testedAt),
         };
     }
@@ -879,6 +1027,11 @@ public sealed class RuntimeSettingsUpdateRequest
     public RuntimeSettingsZoomUpdate? Zoom { get; set; }
     public RuntimeSettingsStripeUpdate? Stripe { get; set; }
     public RuntimeSettingsSpeakingWhisperUpdate? SpeakingWhisper { get; set; }
+    public RuntimeSettingsSpeakingLiveKitUpdate? SpeakingLiveKit { get; set; }
+    public RuntimeSettingsSpeakingAiUpdate? SpeakingAi { get; set; }
+    public RuntimeSettingsSpeakingStorageUpdate? SpeakingStorage { get; set; }
+    public RuntimeSettingsSpeakingComplianceUpdate? SpeakingCompliance { get; set; }
+    public RuntimeSettingsSpeakingFeaturesUpdate? SpeakingFeatures { get; set; }
 }
 
 /// <summary>2026-05-28 audit fix — Speaking Whisper transcription overrides.</summary>
@@ -998,6 +1151,51 @@ public sealed class RuntimeSettingsStripeUpdate
     public string? CustomerPortalConfigurationId { get; set; }
     public JsonElement? RadarHighRiskCountryAllowReview { get; set; }
     public string? RadarBlockEmailDomainsCsv { get; set; }
+}
+
+/// <summary>Speaking LiveKit — live tutor rooms + egress recording.</summary>
+public sealed class RuntimeSettingsSpeakingLiveKitUpdate
+{
+    public string? Provider { get; set; }
+    public string? ApiKey { get; set; }
+    public string? ApiSecret { get; set; }
+    public string? WssUrl { get; set; }
+    public string? WebhookSigningSecret { get; set; }
+    public string? EgressBucket { get; set; }
+    public JsonElement? DefaultMaxDurationSeconds { get; set; }
+    public JsonElement? EgressEnabled { get; set; }
+}
+
+/// <summary>Speaking AI providers — Anthropic (scoring + patient turns) and ElevenLabs (TTS).</summary>
+public sealed class RuntimeSettingsSpeakingAiUpdate
+{
+    public string? AnthropicApiKey { get; set; }
+    public string? ElevenLabsApiKey { get; set; }
+}
+
+/// <summary>Speaking AWS S3 recording storage.</summary>
+public sealed class RuntimeSettingsSpeakingStorageUpdate
+{
+    public string? AwsAccessKeyId { get; set; }
+    public string? AwsSecretAccessKey { get; set; }
+    public string? Region { get; set; }
+    public string? Bucket { get; set; }
+}
+
+/// <summary>Speaking compliance — consent versioning + retention windows.</summary>
+public sealed class RuntimeSettingsSpeakingComplianceUpdate
+{
+    public string? CurrentConsentVersion { get; set; }
+    public string? CurrentLiveVideoConsentVersion { get; set; }
+    public JsonElement? RetentionDaysDefault { get; set; }
+    public JsonElement? RetentionDaysWhenTutorReviewed { get; set; }
+    public JsonElement? AuditLogRetentionDays { get; set; }
+}
+
+/// <summary>Speaking feature flags.</summary>
+public sealed class RuntimeSettingsSpeakingFeaturesUpdate
+{
+    public JsonElement? SpeakingV2Enabled { get; set; }
 }
 
 public sealed record RuntimeSettingsIntegrationTestResponse(

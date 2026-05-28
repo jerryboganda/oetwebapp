@@ -221,6 +221,11 @@ public sealed class RuntimeSettingsProvider : IRuntimeSettingsProvider
 
         var liveClasses = ResolveLiveClassSettings(r);
         var speakingWhisper = ResolveSpeakingWhisper(r);
+        var speakingLiveKit = ResolveSpeakingLiveKit(r);
+        var speakingAi = ResolveSpeakingAi(r);
+        var speakingStorage = ResolveSpeakingStorage(r);
+        var speakingCompliance = ResolveSpeakingCompliance(r);
+        var speakingFeatures = ResolveSpeakingFeatures(r);
 
         return new EffectiveSettings(
             Email: email,
@@ -234,6 +239,11 @@ public sealed class RuntimeSettingsProvider : IRuntimeSettingsProvider
             Stripe: stripe,
             LiveClasses: liveClasses,
             SpeakingWhisper: speakingWhisper,
+            SpeakingLiveKit: speakingLiveKit,
+            SpeakingAi: speakingAi,
+            SpeakingStorage: speakingStorage,
+            SpeakingCompliance: speakingCompliance,
+            SpeakingFeatures: speakingFeatures,
             UpdatedByUserId: r.UpdatedByUserId,
             UpdatedByUserName: r.UpdatedByUserName,
             UpdatedAt: r.UpdatedAt == default ? null : r.UpdatedAt);
@@ -255,6 +265,82 @@ public sealed class RuntimeSettingsProvider : IRuntimeSettingsProvider
             Model: model,
             IsConfigured: !string.IsNullOrWhiteSpace(key));
     }
+
+    private SpeakingLiveKitSettings ResolveSpeakingLiveKit(RuntimeSettingsRow r)
+    {
+        var provider = Coalesce(r.SpeakingLiveKitProvider, _config["LiveKit:Provider"], "disabled") ?? "disabled";
+        var apiKey = Unprotect(r.SpeakingLiveKitApiKeyEncrypted) ?? NullIfEmpty(_config["LiveKit:ApiKey"]);
+        var apiSecret = Unprotect(r.SpeakingLiveKitApiSecretEncrypted) ?? NullIfEmpty(_config["LiveKit:ApiSecret"]);
+        var wssUrl = Coalesce(r.SpeakingLiveKitWssUrl, _config["LiveKit:WssUrl"]);
+        var webhookSecret = Unprotect(r.SpeakingLiveKitWebhookSigningSecretEncrypted) ?? NullIfEmpty(_config["LiveKit:WebhookSigningSecret"]);
+        var egressBucket = Coalesce(r.SpeakingLiveKitEgressBucket, _config["LiveKit:EgressBucket"]);
+        var maxDuration = r.SpeakingLiveKitDefaultMaxDurationSeconds ?? ParseInt(_config["LiveKit:DefaultMaxDurationSeconds"]) ?? 1800;
+        var egressEnabled = r.SpeakingLiveKitEgressEnabled ?? ParseBool(_config["LiveKit:EgressEnabled"]) ?? false;
+        var isEnabled = !string.Equals(provider, "disabled", StringComparison.OrdinalIgnoreCase)
+                        && !string.IsNullOrWhiteSpace(apiKey);
+        return new SpeakingLiveKitSettings(
+            Provider: provider,
+            ApiKey: apiKey,
+            ApiSecret: apiSecret,
+            WssUrl: wssUrl,
+            WebhookSigningSecret: webhookSecret,
+            EgressBucket: egressBucket,
+            DefaultMaxDurationSeconds: Math.Clamp(maxDuration, 60, 7200),
+            EgressEnabled: egressEnabled,
+            IsEnabled: isEnabled);
+    }
+
+    private SpeakingAiSettings ResolveSpeakingAi(RuntimeSettingsRow r)
+    {
+        var anthropicKey = Unprotect(r.SpeakingAnthropicApiKeyEncrypted) ?? NullIfEmpty(_config["Anthropic:ApiKey"]);
+        var elevenLabsKey = Unprotect(r.SpeakingElevenLabsApiKeyEncrypted) ?? NullIfEmpty(_config["ElevenLabs:ApiKey"]);
+        return new SpeakingAiSettings(
+            AnthropicApiKey: anthropicKey,
+            ElevenLabsApiKey: elevenLabsKey,
+            IsAnthropicConfigured: !string.IsNullOrWhiteSpace(anthropicKey),
+            IsElevenLabsConfigured: !string.IsNullOrWhiteSpace(elevenLabsKey));
+    }
+
+    private SpeakingStorageSettings ResolveSpeakingStorage(RuntimeSettingsRow r)
+    {
+        var accessKeyId = Coalesce(r.SpeakingAwsAccessKeyId, _config["Aws:AccessKeyId"]);
+        var secretKey = Unprotect(r.SpeakingAwsSecretAccessKeyEncrypted) ?? NullIfEmpty(_config["Aws:SecretAccessKey"]);
+        var region = Coalesce(r.SpeakingAwsRegion, _config["Aws:Region"], "eu-west-2") ?? "eu-west-2";
+        var bucket = Coalesce(r.SpeakingAwsBucket, _config["Aws:Bucket"]);
+        return new SpeakingStorageSettings(
+            AwsAccessKeyId: accessKeyId,
+            AwsSecretAccessKey: secretKey,
+            Region: region,
+            Bucket: bucket,
+            IsConfigured: !string.IsNullOrWhiteSpace(accessKeyId) && !string.IsNullOrWhiteSpace(secretKey) && !string.IsNullOrWhiteSpace(bucket));
+    }
+
+    private SpeakingComplianceSettings ResolveSpeakingCompliance(RuntimeSettingsRow r)
+    {
+        var consentVersion = Coalesce(r.SpeakingComplianceCurrentConsentVersion, _config["SpeakingCompliance:CurrentConsentVersion"], "recording.v1") ?? "recording.v1";
+        var liveVideoVersion = Coalesce(r.SpeakingComplianceCurrentLiveVideoConsentVersion, _config["SpeakingCompliance:CurrentLiveVideoConsentVersion"], "live_video_with_tutor.v1") ?? "live_video_with_tutor.v1";
+        var retentionDefault = r.SpeakingComplianceRetentionDaysDefault ?? ParseInt(_config["SpeakingCompliance:RetentionDaysDefault"]) ?? 90;
+        var retentionTutor = r.SpeakingComplianceRetentionDaysWhenTutorReviewed ?? ParseInt(_config["SpeakingCompliance:RetentionDaysWhenTutorReviewed"]) ?? 365;
+        var auditRetention = r.SpeakingComplianceAuditLogRetentionDays ?? ParseInt(_config["SpeakingCompliance:AuditLogRetentionDays"]) ?? 2555;
+        return new SpeakingComplianceSettings(
+            CurrentConsentVersion: consentVersion,
+            CurrentLiveVideoConsentVersion: liveVideoVersion,
+            RetentionDaysDefault: Math.Max(1, retentionDefault),
+            RetentionDaysWhenTutorReviewed: Math.Max(1, retentionTutor),
+            AuditLogRetentionDays: Math.Max(1, auditRetention));
+    }
+
+    private SpeakingFeatureSettings ResolveSpeakingFeatures(RuntimeSettingsRow r)
+    {
+        var v2 = r.SpeakingV2Enabled ?? ParseBool(_config["Features:SpeakingV2"]) ?? false;
+        return new SpeakingFeatureSettings(SpeakingV2Enabled: v2);
+    }
+
+    private static int? ParseInt(string? s)
+        => int.TryParse(s, out var v) ? v : null;
+
+    private static bool? ParseBool(string? s)
+        => bool.TryParse(s, out var v) ? v : null;
 
     private static IReadOnlyList<string> ParseCsvList(string? csv)
     {

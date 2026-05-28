@@ -944,7 +944,7 @@ builder.Services.AddScoped<OetLearner.Api.Services.Planner.IPlanPersonalizer,
 builder.Services.AddHostedService<OetLearner.Api.Services.Planner.StudyPlanReminderWorker>();
 builder.Services.AddScoped<VocabularyService>();
 // 2026-05-27 audit fix — Grammar + Remediation backend APIs (previously missing).
-builder.Services.AddSingleton<OetLearner.Api.Services.Grammar.IGrammarRulebookService, OetLearner.Api.Services.Grammar.GrammarRulebookService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Grammar.IGrammarRulebookService, OetLearner.Api.Services.Grammar.GrammarRulebookService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Remediation.IRemediationApiService, OetLearner.Api.Services.Remediation.RemediationApiService>();
 builder.Services.AddScoped<VocabularyDraftService>();
 builder.Services.AddScoped<VocabularyGlossService>();

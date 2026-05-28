@@ -114,6 +114,45 @@ export interface SpeakingWhisperSettings {
   isConfigured?: boolean | null;
 }
 
+export interface SpeakingLiveKitSettings {
+  provider: string;
+  apiKey: string;
+  apiSecret: string;
+  wssUrl: string;
+  webhookSigningSecret: string;
+  egressBucket: string;
+  defaultMaxDurationSeconds: number | null;
+  egressEnabled: boolean | null;
+  isEnabled?: boolean | null;
+}
+
+export interface SpeakingAiSettings {
+  anthropicApiKey: string;
+  elevenLabsApiKey: string;
+  isAnthropicConfigured?: boolean | null;
+  isElevenLabsConfigured?: boolean | null;
+}
+
+export interface SpeakingStorageSettings {
+  awsAccessKeyId: string;
+  awsSecretAccessKey: string;
+  region: string;
+  bucket: string;
+  isConfigured?: boolean | null;
+}
+
+export interface SpeakingComplianceSettingsData {
+  currentConsentVersion: string;
+  currentLiveVideoConsentVersion: string;
+  retentionDaysDefault: number | null;
+  retentionDaysWhenTutorReviewed: number | null;
+  auditLogRetentionDays: number | null;
+}
+
+export interface SpeakingFeaturesSettings {
+  speakingV2Enabled: boolean | null;
+}
+
 export interface RuntimeSettingsResponse {
   email: EmailSettings;
   billing: BillingSettings;
@@ -124,6 +163,11 @@ export interface RuntimeSettingsResponse {
   uploadScanner: UploadScannerSettings;
   zoom: ZoomSettings;
   speakingWhisper: SpeakingWhisperSettings;
+  speakingLiveKit: SpeakingLiveKitSettings;
+  speakingAi: SpeakingAiSettings;
+  speakingStorage: SpeakingStorageSettings;
+  speakingCompliance: SpeakingComplianceSettingsData;
+  speakingFeatures: SpeakingFeaturesSettings;
   updatedBy: string | null;
   updatedByUserId?: string | null;
   updatedAt: string | null;
@@ -136,7 +180,7 @@ export interface RuntimeSettingsIntegrationTestResponse {
   testedAt: string;
 }
 
-type SectionId = 'email' | 'billing' | 'sentry' | 'backup' | 'oauth' | 'push' | 'uploadScanner' | 'zoom' | 'speakingWhisper';
+type SectionId = 'email' | 'billing' | 'sentry' | 'backup' | 'oauth' | 'push' | 'uploadScanner' | 'zoom' | 'speakingWhisper' | 'speakingLiveKit' | 'speakingAi' | 'speakingStorage' | 'speakingCompliance' | 'speakingFeatures';
 
 type ToastState = { variant: 'success' | 'error'; message: string } | null;
 type TestStatusState = Partial<Record<SectionId, RuntimeSettingsIntegrationTestResponse>>;
@@ -243,6 +287,41 @@ const SPEAKING_WHISPER_FIELDS: FieldDef<SpeakingWhisperSettings>[] = [
   { key: 'model', label: 'Whisper Model', hint: 'Default: whisper-1.' },
 ];
 
+const SPEAKING_LIVEKIT_FIELDS: FieldDef<SpeakingLiveKitSettings>[] = [
+  { key: 'provider', label: 'LiveKit Provider', hint: '"livekit_cloud" to enable, "disabled" to stub out.' },
+  { key: 'apiKey', label: 'LiveKit API Key', secret: true, hint: 'Server-side LiveKit Cloud API key.' },
+  { key: 'apiSecret', label: 'LiveKit API Secret', secret: true, hint: 'Server-side LiveKit Cloud API secret.' },
+  { key: 'wssUrl', label: 'LiveKit WebSocket URL', type: 'url', hint: 'e.g. wss://your-project.livekit.cloud' },
+  { key: 'webhookSigningSecret', label: 'Webhook Signing Secret', secret: true, hint: 'HMAC secret for verifying LiveKit webhook payloads.' },
+  { key: 'egressBucket', label: 'Egress S3 Bucket', hint: 'S3 bucket name for LiveKit egress recordings.' },
+  { key: 'defaultMaxDurationSeconds', label: 'Max Session Duration (seconds)', type: 'number', hint: '60–7200 seconds (default: 1800 = 30 min).' },
+  { key: 'egressEnabled', label: 'Enable Egress Recording', type: 'checkbox', hint: 'When enabled, completed sessions are recorded to S3.' },
+];
+
+const SPEAKING_AI_FIELDS: FieldDef<SpeakingAiSettings>[] = [
+  { key: 'anthropicApiKey', label: 'Anthropic API Key', secret: true, hint: 'Claude Sonnet 4.6 for AI grading + patient turns. Starts with sk-ant-…' },
+  { key: 'elevenLabsApiKey', label: 'ElevenLabs API Key', secret: true, hint: 'AI patient TTS voice synthesis.' },
+];
+
+const SPEAKING_STORAGE_FIELDS: FieldDef<SpeakingStorageSettings>[] = [
+  { key: 'awsAccessKeyId', label: 'AWS Access Key ID', hint: 'IAM user with S3 PutObject/GetObject permissions.' },
+  { key: 'awsSecretAccessKey', label: 'AWS Secret Access Key', secret: true },
+  { key: 'region', label: 'AWS Region', hint: 'e.g. eu-west-2 (London).' },
+  { key: 'bucket', label: 'S3 Bucket Name', hint: 'Bucket for speaking session recordings.' },
+];
+
+const SPEAKING_COMPLIANCE_FIELDS: FieldDef<SpeakingComplianceSettingsData>[] = [
+  { key: 'currentConsentVersion', label: 'Recording Consent Version', hint: 'Version string shown to learners (e.g. recording.v1).' },
+  { key: 'currentLiveVideoConsentVersion', label: 'Live Video Consent Version', hint: 'Version string for live tutor video sessions (e.g. live_video_with_tutor.v1).' },
+  { key: 'retentionDaysDefault', label: 'Default Retention (days)', type: 'number', hint: 'Days to retain recordings before deletion (default: 90).' },
+  { key: 'retentionDaysWhenTutorReviewed', label: 'Tutor-Reviewed Retention (days)', type: 'number', hint: 'Extended retention when a tutor has reviewed (default: 365).' },
+  { key: 'auditLogRetentionDays', label: 'Audit Log Retention (days)', type: 'number', hint: 'Days to retain speaking audit logs (default: 2555 ≈ 7 years).' },
+];
+
+const SPEAKING_FEATURES_FIELDS: FieldDef<SpeakingFeaturesSettings>[] = [
+  { key: 'speakingV2Enabled', label: 'Enable Speaking V2 Module', type: 'checkbox', hint: 'Feature flag that gates the full Speaking v2 module rollout to learners.' },
+];
+
 const SECTION_META: { id: SectionId; title: string; description: string }[] = [
   { id: 'email', title: 'Email (Brevo + SMTP)', description: 'Transactional email delivery via Brevo with SMTP fallback.' },
   { id: 'billing', title: 'Billing (Stripe)', description: 'Stripe Checkout, Customer Portal, and webhook signing.' },
@@ -252,7 +331,12 @@ const SECTION_META: { id: SectionId; title: string; description: string }[] = [
   { id: 'push', title: 'Push (Browser + APNs + FCM)', description: 'Browser VAPID and native mobile push notifications via Apple and Firebase.' },
   { id: 'uploadScanner', title: 'Upload Scanner (ClamAV)', description: 'Antivirus scanning for learner/admin uploads.' },
   { id: 'zoom', title: 'Zoom Live Classes', description: 'Server-to-server OAuth, Meeting SDK, and webhook verification.' },
-  { id: 'speakingWhisper', title: 'Speaking Whisper (RULE_40 tone)', description: 'OpenAI Whisper API key used by the Speaking tone-of-voice pipeline on Breaking Bad News cards. Falls back to the mock provider when unset.' },
+  { id: 'speakingWhisper', title: 'Speaking — Whisper Transcription', description: 'OpenAI Whisper API for speaking session transcription and RULE_40 tone pipeline.' },
+  { id: 'speakingLiveKit', title: 'Speaking — LiveKit (Live Rooms)', description: 'LiveKit Cloud WebRTC for live tutor rooms and egress recording.' },
+  { id: 'speakingAi', title: 'Speaking — AI Providers', description: 'Anthropic (Claude scoring + patient turns) and ElevenLabs (AI patient TTS voice).' },
+  { id: 'speakingStorage', title: 'Speaking — Recording Storage (AWS S3)', description: 'AWS S3 bucket for speaking session recording archive.' },
+  { id: 'speakingCompliance', title: 'Speaking — Compliance & Retention', description: 'Consent versioning, recording retention windows, and audit log retention.' },
+  { id: 'speakingFeatures', title: 'Speaking — Feature Flags', description: 'Controls the Speaking v2 module rollout to learners.' },
 ];
 
 /* ───────────────────────── Helpers ───────────────────────── */
@@ -338,6 +422,40 @@ function emptyResponse(): RuntimeSettingsResponse {
       model: '',
       isConfigured: false,
     },
+    speakingLiveKit: {
+      provider: '',
+      apiKey: '',
+      apiSecret: '',
+      wssUrl: '',
+      webhookSigningSecret: '',
+      egressBucket: '',
+      defaultMaxDurationSeconds: null,
+      egressEnabled: null,
+      isEnabled: false,
+    },
+    speakingAi: {
+      anthropicApiKey: '',
+      elevenLabsApiKey: '',
+      isAnthropicConfigured: false,
+      isElevenLabsConfigured: false,
+    },
+    speakingStorage: {
+      awsAccessKeyId: '',
+      awsSecretAccessKey: '',
+      region: '',
+      bucket: '',
+      isConfigured: false,
+    },
+    speakingCompliance: {
+      currentConsentVersion: '',
+      currentLiveVideoConsentVersion: '',
+      retentionDaysDefault: null,
+      retentionDaysWhenTutorReviewed: null,
+      auditLogRetentionDays: null,
+    },
+    speakingFeatures: {
+      speakingV2Enabled: null,
+    },
     updatedBy: null,
     updatedByUserId: null,
     updatedAt: null,
@@ -358,6 +476,11 @@ function normalizeResponse(data: Partial<RuntimeSettingsResponse>): RuntimeSetti
     uploadScanner: { ...empty.uploadScanner, ...data.uploadScanner },
     zoom: { ...empty.zoom, ...data.zoom },
     speakingWhisper: { ...empty.speakingWhisper, ...data.speakingWhisper },
+    speakingLiveKit: { ...empty.speakingLiveKit, ...data.speakingLiveKit },
+    speakingAi: { ...empty.speakingAi, ...data.speakingAi },
+    speakingStorage: { ...empty.speakingStorage, ...data.speakingStorage },
+    speakingCompliance: { ...empty.speakingCompliance, ...data.speakingCompliance },
+    speakingFeatures: { ...empty.speakingFeatures, ...data.speakingFeatures },
   });
 }
 
@@ -398,6 +521,21 @@ function sanitizeSecretFields(data: RuntimeSettingsResponse): RuntimeSettingsRes
       clientSecret: maskUnexpectedSecret(data.zoom.clientSecret),
       meetingSdkSecret: maskUnexpectedSecret(data.zoom.meetingSdkSecret),
       webhookSecretToken: maskUnexpectedSecret(data.zoom.webhookSecretToken),
+    },
+    speakingLiveKit: {
+      ...data.speakingLiveKit,
+      apiKey: maskUnexpectedSecret(data.speakingLiveKit.apiKey),
+      apiSecret: maskUnexpectedSecret(data.speakingLiveKit.apiSecret),
+      webhookSigningSecret: maskUnexpectedSecret(data.speakingLiveKit.webhookSigningSecret),
+    },
+    speakingAi: {
+      ...data.speakingAi,
+      anthropicApiKey: maskUnexpectedSecret(data.speakingAi.anthropicApiKey),
+      elevenLabsApiKey: maskUnexpectedSecret(data.speakingAi.elevenLabsApiKey),
+    },
+    speakingStorage: {
+      ...data.speakingStorage,
+      awsSecretAccessKey: maskUnexpectedSecret(data.speakingStorage.awsSecretAccessKey),
     },
   };
 }
@@ -693,6 +831,12 @@ export function RuntimeSettingsClient() {
     push: false,
     uploadScanner: false,
     zoom: false,
+    speakingWhisper: false,
+    speakingLiveKit: false,
+    speakingAi: false,
+    speakingStorage: false,
+    speakingCompliance: false,
+    speakingFeatures: false,
   });
 
   const load = useCallback(async () => {
@@ -1090,6 +1234,115 @@ export function RuntimeSettingsClient() {
                     />
                   ),
                 )}
+
+              {section.id === 'speakingLiveKit' &&
+                SPEAKING_LIVEKIT_FIELDS.map((field) =>
+                  field.secret ? (
+                    <SecretField
+                      key={field.key}
+                      label={field.label}
+                      hint={field.hint}
+                      serverValue={String(server.speakingLiveKit[field.key] ?? '')}
+                      draftValue={String(draft.speakingLiveKit[field.key] ?? '')}
+                      onChange={(next) => updateField('speakingLiveKit', field.key, next as never)}
+                    />
+                  ) : (
+                    <PlainField
+                      key={field.key}
+                      label={field.label}
+                      hint={field.hint}
+                      type={field.type}
+                      value={draft.speakingLiveKit[field.key] as string | number | boolean | null}
+                      onChange={(next) =>
+                        updateField(
+                          'speakingLiveKit',
+                          field.key,
+                          (field.type === 'number'
+                            ? parseNullableNumberInput(String(next))
+                            : field.type === 'checkbox'
+                              ? Boolean(next)
+                              : String(next)) as never,
+                        )
+                      }
+                    />
+                  ),
+                )}
+
+              {section.id === 'speakingAi' &&
+                SPEAKING_AI_FIELDS.map((field) =>
+                  field.secret ? (
+                    <SecretField
+                      key={field.key}
+                      label={field.label}
+                      hint={field.hint}
+                      serverValue={String(server.speakingAi[field.key] ?? '')}
+                      draftValue={String(draft.speakingAi[field.key] ?? '')}
+                      onChange={(next) => updateField('speakingAi', field.key, next as never)}
+                    />
+                  ) : (
+                    <PlainField
+                      key={field.key}
+                      label={field.label}
+                      hint={field.hint}
+                      type={field.type}
+                      value={draft.speakingAi[field.key] as string | number | boolean | null}
+                      onChange={(next) => updateField('speakingAi', field.key, String(next) as never)}
+                    />
+                  ),
+                )}
+
+              {section.id === 'speakingStorage' &&
+                SPEAKING_STORAGE_FIELDS.map((field) =>
+                  field.secret ? (
+                    <SecretField
+                      key={field.key}
+                      label={field.label}
+                      hint={field.hint}
+                      serverValue={String(server.speakingStorage[field.key] ?? '')}
+                      draftValue={String(draft.speakingStorage[field.key] ?? '')}
+                      onChange={(next) => updateField('speakingStorage', field.key, next as never)}
+                    />
+                  ) : (
+                    <PlainField
+                      key={field.key}
+                      label={field.label}
+                      hint={field.hint}
+                      type={field.type}
+                      value={draft.speakingStorage[field.key] as string | number | boolean | null}
+                      onChange={(next) => updateField('speakingStorage', field.key, String(next) as never)}
+                    />
+                  ),
+                )}
+
+              {section.id === 'speakingCompliance' &&
+                SPEAKING_COMPLIANCE_FIELDS.map((field) => (
+                  <PlainField
+                    key={field.key}
+                    label={field.label}
+                    hint={field.hint}
+                    type={field.type}
+                    value={draft.speakingCompliance[field.key] as string | number | null}
+                    onChange={(next) =>
+                      updateField(
+                        'speakingCompliance',
+                        field.key,
+                        (field.type === 'number' && typeof next === 'string' ? parseNullableNumberInput(next) : next) as never,
+                      )
+                    }
+                  />
+                ))}
+
+              {section.id === 'speakingFeatures' &&
+                SPEAKING_FEATURES_FIELDS.map((field) => (
+                  <PlainField
+                    key={field.key}
+                    label={field.label}
+                    hint={field.hint}
+                    type={field.type}
+                    value={draft.speakingFeatures[field.key] as boolean | null}
+                    onChange={(next) => updateField('speakingFeatures', field.key, Boolean(next) as never)}
+                  />
+                ))}
             </Section>
           ))}
 

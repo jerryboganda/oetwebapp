@@ -36,9 +36,12 @@ public static class BackendRulebookCanonBridge
             .ToListAsync(ct);
         var existing = new HashSet<string>(existingIds, StringComparer.OrdinalIgnoreCase);
 
-        // Group writing rules across professions by `id+body` so identical
-        // rules (which is most of them — the rule bodies are profession-agnostic)
-        // collapse into a single row with `appliesToProfessions = ["all"]`.
+        // Group writing rules across professions by `id` only. The R-rule IDs
+        // are the primary key in WritingCanonRule, so two rules with the same
+        // ID but slightly different bodies (rare profession-specific wording
+        // tweaks) MUST collapse into a single row. We take the first body
+        // seen and union the professions; minor body divergences are surfaced
+        // to the AI prompt via rulebook reads, not via this canon table.
         var bucket = new Dictionary<string, (OetRule Rule, HashSet<string> Professions)>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var profession in Enum.GetValues<ExamProfession>())
@@ -49,11 +52,10 @@ public static class BackendRulebookCanonBridge
             foreach (var rule in book.Rules)
             {
                 if (existing.Contains(rule.Id)) continue;
-                var key = $"{rule.Id}|{rule.Body}";
-                if (!bucket.TryGetValue(key, out var entry))
+                if (!bucket.TryGetValue(rule.Id, out var entry))
                 {
                     entry = (rule, new HashSet<string>(StringComparer.OrdinalIgnoreCase));
-                    bucket[key] = entry;
+                    bucket[rule.Id] = entry;
                 }
                 entry.Professions.Add(profession.ToString().ToLowerInvariant());
             }
