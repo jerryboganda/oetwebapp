@@ -332,9 +332,11 @@ npm_proxy network ──▶ Nginx Proxy Manager targets oet-web/oet-api
 
 ### IMPORTANT
 
-- Docker volumes use the `oetwebsite_` prefix. **Never** recreate `oetwebsite_oet_postgres_data` without backup.
+- Docker volumes use the `oetwebsite_` prefix. **Never** recreate `oetwebsite_oet_postgres_data` or `oetwebsite_oet_learner_storage` without backup.
+- **All media/file storage MUST use the persistent Docker volume** — see the Storage Persistence rule below.
 - `.env.production` must be present on the VPS (not in Git).
 - Web container healthcheck: `GET /api/health`.
+- **Never** run `docker compose down -v` or `docker volume rm` on storage/postgres volumes without an explicit backup.
 
 ---
 
@@ -444,7 +446,8 @@ Stripe__SecretKey=<key>
 - **PowerShell on Windows**: Run `Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass` first, or use `cmd /c npm ...`.
 - **`motion/react` not `framer-motion`**: This project uses `motion` v12 package. Import from `motion/react`.
 - **Desktop OAuth**: Use `oet-prep://` scheme (double slash required).
-- **Docker volumes**: `oetwebsite_` prefix (migrated from old `oetwebapp_` prefix). Never delete postgres volume without backup.
+- **Storage Persistence (MISSION CRITICAL)**: ALL file/media data (audio, images, videos, documents, PDFs, uploads, OCR output, conversation recordings, pronunciation attempts, TTS output, content paper assets, profile photos, live class recordings, writing scans — everything) MUST be stored on the persistent Docker volume mounted at `/var/opt/oet-learner/storage`. Every docker-compose file MUST set `Storage__LocalRootPath: /var/opt/oet-learner/storage` in the API environment section — without this, files go to the container filesystem default (`App_Data/storage`) and are **permanently deleted** on container rebuild. The backend has a startup guard (`Program.cs`) that crashes in Production or logs CRITICAL in Development if it detects a relative storage path inside a container. All file I/O MUST go through `IFileStorage` (or `S3CompatibleFileStorage` when `Storage:Provider=s3`). Never use `File.*` / `Path.*` / `Directory.*` directly for media data. Named Docker volumes persist across `docker compose down`, `docker compose up --build`, and `--no-cache` rebuilds — they are only destroyed by `docker volume rm` or `docker compose down -v`. **NEVER** run `docker compose down -v` or `docker volume rm` on `oetwebsite_oet_learner_storage` / `newoetwebapp_oet_local_storage` without a verified backup.
+- **Docker volumes**: `oetwebsite_` prefix (migrated from old `oetwebapp_` prefix). Never delete postgres or storage volumes without backup.
 - **TypeScript 5.9**: Removed deprecated `baseUrl`; uses `ignoreDeprecations: '5.0'` only.
 - **Test regex**: Avoid fuzzy selectors like `/welcome/i` when multiple DOM elements match — use exact strings.
 - **Vitest globals**: `describe`/`it`/`expect`/`vi` are globally available via tsconfig `types` array.

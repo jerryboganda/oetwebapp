@@ -6,7 +6,8 @@ applyTo: ["Dockerfile*", "docker-compose*.yml", ".github/workflows/*.yml", "scri
 # OET Deployment Instructions
 
 - Preserve production/staging separation. Do not point staging at production secrets or databases.
-- Never delete or recreate `oetwebsite_oet_postgres_data` without explicit backup instructions and approval.
+- Never delete or recreate `oetwebsite_oet_postgres_data` or `oetwebsite_oet_learner_storage` without explicit backup instructions and approval.
+- **Storage Persistence (MISSION CRITICAL)**: Every `docker-compose*.yml` MUST set `Storage__LocalRootPath: /var/opt/oet-learner/storage`. Without it, media data goes to the container filesystem and is permanently lost on rebuild. NEVER run `docker compose down -v` or `docker volume rm` on storage volumes without a verified backup.", "oldString": "- Never delete or recreate `oetwebsite_oet_postgres_data` without explicit backup instructions and approval.
 - Keep Docker health checks aligned with `GET /api/health` and the documented production topology.
 - Production deploys are tag/manual controlled. Do not make normal pushes auto-deploy production.
 - Production deploys must be exact-SHA, not branch-moving deploys.

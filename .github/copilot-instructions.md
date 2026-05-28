@@ -76,6 +76,33 @@ only when a missing decision blocks correctness or safety.
 | Deployment/Docker | Preserve `oetwebsite_` volumes, environment separation, and production safety gates. Do not run production VPS commands unless explicitly asked. |
 | Desktop/mobile | Respect Electron and Capacitor packaging contracts; validate platform-specific paths before assuming they exist. |
 
+## Storage Persistence (MISSION CRITICAL)
+
+ALL file/media data (audio, images, videos, documents, PDFs, uploads, OCR
+output, conversation recordings, pronunciation attempts, TTS output, content
+paper assets, profile photos, live class recordings, writing scans — everything)
+MUST be stored on the persistent Docker volume mounted at
+`/var/opt/oet-learner/storage`.
+
+**Rules:**
+
+1. Every `docker-compose*.yml` file that runs the API container MUST set
+   `Storage__LocalRootPath: /var/opt/oet-learner/storage` in the environment
+   section. Without this, the default `App_Data/storage` writes to the container
+   filesystem and **all data is permanently deleted** on container rebuild.
+2. All file I/O MUST go through `IFileStorage` (or `S3CompatibleFileStorage`
+   when `Storage:Provider=s3`). Never use `File.*` / `Path.*` / `Directory.*`
+   directly for media/user data.
+3. Named Docker volumes persist across rebuilds, restarts, and `--no-cache`
+   builds. They are only destroyed by `docker volume rm` or
+   `docker compose down -v`.
+4. **NEVER** run `docker compose down -v` or `docker volume rm` on
+   `oetwebsite_oet_learner_storage` / `newoetwebapp_oet_local_storage` without
+   a verified backup.
+5. The backend has a startup guard (`Program.cs`) that crashes in Production or
+   logs CRITICAL in Development if it detects a relative storage path inside a
+   container.
+
 ## Validation Ladder
 
 Use the smallest useful check, then expand if risk demands it:

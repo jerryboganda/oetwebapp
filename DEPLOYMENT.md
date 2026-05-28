@@ -231,7 +231,13 @@ curl https://app.example.com/api/health
 The stack persists:
 
 - PostgreSQL data in Docker volume `oetwebsite_oet_postgres_data`
-- Uploaded learner audio in Docker volume `oetwebsite_oet_learner_storage`
+- **ALL media/file data** in Docker volume `oetwebsite_oet_learner_storage` (audio, images, videos, documents, PDFs, uploads, OCR output, conversation recordings, pronunciation attempts, TTS output, content paper assets, profile photos, live class recordings, writing scans — everything)
+
+**MISSION CRITICAL**: Every `docker-compose*.yml` MUST set
+`Storage__LocalRootPath: /var/opt/oet-learner/storage` in the API environment.
+Without this, the app defaults to `App_Data/storage` inside the container
+filesystem and ALL media data is **permanently deleted** on container rebuild.
+The backend crashes at startup in Production if this is misconfigured.
 
 Back up both named volumes before upgrades or VPS maintenance.
 
