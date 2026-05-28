@@ -26,7 +26,7 @@ import {
   type RecallSetSummary,
 } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
-import { playTransientAudio, speakWithBrowserTts } from '@/lib/recalls-audio';
+import { playTransientAudio } from '@/lib/recalls-audio';
 import { toast } from 'sonner';
 import type { VocabularyCategoriesResponse, VocabularyTerm } from '@/lib/types/vocabulary';
 import { Pagination } from '@/components/ui/pagination';
@@ -179,13 +179,7 @@ export default function RecallsWordsPage() {
         analytics.track('recalls_word_audio_blocked', { termId: term.id, status: err.status });
         setShowUpgradeModal(true);
       } else {
-        // Server audio unavailable — fall back to browser TTS
-        const spoke = speakWithBrowserTts(term.term ?? '');
-        if (spoke) {
-          analytics.track('recalls_word_audio_browser_tts', { termId: term.id });
-        } else {
-          toast.error('Audio not available for this term');
-        }
+        toast.error('Audio not available for this term');
       }
     }
   }
@@ -225,16 +219,10 @@ export default function RecallsWordsPage() {
       analytics.track('recalls_word_audio_played', { termId: it.termId });
     } catch (err) {
       // Backend gates audio behind an active subscription. Surface 402/403 as
-      // an upgrade prompt; treat anything else as browser TTS fallback.
+      // an upgrade prompt; treat anything else as a quiet best-effort failure.
       if (isApiError(err) && (err.status === 402 || err.status === 403)) {
         analytics.track('recalls_word_audio_blocked', { termId: it.termId, status: err.status });
         setShowUpgradeModal(true);
-      } else {
-        const text = it.title ?? it.termId ?? '';
-        const spoke = speakWithBrowserTts(text);
-        if (!spoke) {
-          toast.error('Audio not available for this term');
-        }
       }
     }
   }

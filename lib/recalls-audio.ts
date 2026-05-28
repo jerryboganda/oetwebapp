@@ -15,27 +15,3 @@ export function playTransientAudio(url: string) {
 
   return audioElement;
 }
-
-/**
- * Speak text using the browser's built-in Web Speech API (SpeechSynthesis).
- * Used as a fallback when server-side TTS audio is unavailable.
- */
-export function speakWithBrowserTts(text: string, lang = 'en-GB'): boolean {
-  if (typeof window === 'undefined' || !window.speechSynthesis) return false;
-
-  window.speechSynthesis.cancel();
-  const utterance = new SpeechSynthesisUtterance(text);
-  utterance.lang = lang;
-  utterance.rate = 0.9;
-
-  // Try to pick a good English voice
-  const voices = window.speechSynthesis.getVoices();
-  const preferred = voices.find(
-    (v) => v.lang.startsWith('en') && v.name.toLowerCase().includes('female'),
-  ) ?? voices.find((v) => v.lang.startsWith('en-GB'))
-    ?? voices.find((v) => v.lang.startsWith('en'));
-  if (preferred) utterance.voice = preferred;
-
-  window.speechSynthesis.speak(utterance);
-  return true;
-}
