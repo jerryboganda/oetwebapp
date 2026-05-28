@@ -100,6 +100,7 @@ services:
       Conversation__ChatTtsApiKey: ${CONVERSATION__CHATTTSAPIKEY}
       Conversation__ChatTtsDefaultVoice: ${CONVERSATION__CHATTTSDEFAULTVOICE}
       MaxUploadBytes: '${MAX_UPLOAD_BYTES}'
+      Storage__LocalRootPath: /var/opt/oet-learner/storage
       Features__EnableSwagger: 'true'
       # ── Speaking Module ──────────────────────────────────────────────────────
       LiveKit__Provider: ${LIVEKIT__PROVIDER:-disabled}

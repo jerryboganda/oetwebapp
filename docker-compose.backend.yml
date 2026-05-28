@@ -35,6 +35,7 @@ services:
       Billing__CheckoutBaseUrl: http://localhost:3000/billing/checkout
       Bootstrap__AutoMigrate: 'true'
       Bootstrap__SeedDemoData: 'true'
+      Storage__LocalRootPath: /var/opt/oet-learner/storage
     ports:
       - '5198:8080'
     volumes:

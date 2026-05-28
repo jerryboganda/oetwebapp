@@ -1625,6 +1625,30 @@ var app = builder.Build();
     }
 }
 
+// ── Storage persistence guard ─────────────────────────────────────────────────
+// If running inside a container (DOTNET_RUNNING_IN_CONTAINER=true) and the
+// storage root is the default relative "App_Data/storage", files will be lost
+// on container rebuild. Fail-fast in Production; warn loudly in Development.
+{
+    var isContainer = string.Equals(
+        Environment.GetEnvironmentVariable("DOTNET_RUNNING_IN_CONTAINER"), "true",
+        StringComparison.OrdinalIgnoreCase);
+
+    if (isContainer && !Path.IsPathRooted(storageOptions.LocalRootPath))
+    {
+        var msg = $"Storage:LocalRootPath is '{storageOptions.LocalRootPath}' (relative) inside a container. "
+                + "Files stored here will be LOST on container rebuild. "
+                + "Set Storage__LocalRootPath to an absolute path backed by a Docker volume "
+                + "(e.g. /var/opt/oet-learner/storage).";
+
+        if (app.Environment.IsProduction())
+        {
+            throw new InvalidOperationException(msg);
+        }
+
+        app.Logger.LogCritical("⚠️  STORAGE DATA LOSS RISK: {Message}", msg);
+    }
+}
 
 if (trustForwardHeaders)
 {
