@@ -7,6 +7,8 @@ import { Sparkles, PenTool } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout/learner-dashboard-shell';
 import { InlineAlert } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Modal } from '@/components/ui/modal';
 import { WritingEditorV2 } from '@/components/domain/writing/WritingEditorV2';
 import { WordCounter } from '@/components/domain/writing/WordCounter';
 import { SubmitBar } from '@/components/domain/writing/SubmitBar';
@@ -38,6 +40,7 @@ export default function WritingPracticeSessionPage() {
   const [wordCount, setWordCount] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [noCreditsOpen, setNoCreditsOpen] = useState(false);
   const startedAtRef = useRef<number>(Date.now());
   const lastAutosaveContent = useRef<string>('');
   const coachSessionId = useMemo(() => `practice-${scenarioId}`, [scenarioId]);
@@ -106,7 +109,16 @@ export default function WritingPracticeSessionPage() {
       });
       router.push(`/writing/submissions/${encodeURIComponent(submission.id)}/grading`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('writing.practice.session.error.submit'));
+      // Balance = 0 (spec §9): the AI grading credit pool is exhausted. Surface
+      // a dedicated modal with a direct path to the AI Credits storefront rather
+      // than a generic inline error. The draft autosaves, so nothing is lost.
+      const code = (err as { code?: string }).code;
+      const status = (err as { status?: number }).status;
+      if (code === 'ai_credits_insufficient' || status === 402) {
+        setNoCreditsOpen(true);
+      } else {
+        setError(err instanceof Error ? err.message : t('writing.practice.session.error.submit'));
+      }
       setSubmitting(false);
     }
   }, [canSubmit, content, scenario, wordCount, mode, router, t]);
@@ -216,6 +228,27 @@ export default function WritingPracticeSessionPage() {
           helperText={helperText}
         />
       </div>
+
+      <Modal
+        open={noCreditsOpen}
+        onClose={() => setNoCreditsOpen(false)}
+        title="No AI credits remaining"
+      >
+        <div className="space-y-4">
+          <p className="text-sm leading-6 text-muted">
+            You have no AI grading credits remaining. AI Credits grade your Writing letters and Speaking
+            cards instantly — purchase a package to continue. Your draft has been saved.
+          </p>
+          <div className="flex flex-wrap justify-end gap-2">
+            <Button variant="outline" onClick={() => setNoCreditsOpen(false)}>
+              Not now
+            </Button>
+            <Button onClick={() => router.push('/billing?tab=ai-credits')}>
+              Buy AI Credits
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </LearnerDashboardShell>
   );
 }

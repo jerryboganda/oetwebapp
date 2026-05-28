@@ -5,7 +5,7 @@ import { motion, useReducedMotion } from 'motion/react';
 import { useEffect, useState } from 'react';
 import { getRecordingPulseTransition, prefersReducedMotion } from '@/lib/motion';
 import Link from 'next/link';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import { LearnerDashboardShell } from '@/components/layout';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -47,8 +47,10 @@ export default function SpeakingResultSummary() {
   const params = useParams();
   const rawId = params?.id;
   const id = Array.isArray(rawId) ? rawId[0] ?? '' : rawId ?? '';
+  const router = useRouter();
   const [analysing, setAnalysing] = useState(true);
   const [result, setResult] = useState<SpeakingResult | null>(null);
+  const [failedResult, setFailedResult] = useState<SpeakingResult | null>(null);
   const [pronunciationInsight, setPronunciationInsight] = useState<PronunciationLinkedAssessment | null>(null);
   const [pdfState, setPdfState] = useState<'idle' | 'downloading' | 'error'>('idle');
   const [pdfError, setPdfError] = useState<string | null>(null);
@@ -91,6 +93,14 @@ export default function SpeakingResultSummary() {
             .then((r) => (r.ok ? r.json() : null))
             .then((data) => { if (!cancelled && data) setTone(data); })
             .catch(() => { /* tone is best-effort */ });
+          return;
+        }
+
+        // Terminal failure (e.g. AI grading credits exhausted, spec §9). Stop
+        // polling and surface the reason instead of spinning on "Analyzing" forever.
+        if (response.evalStatus === 'failed') {
+          setFailedResult(response);
+          setAnalysing(false);
           return;
         }
 
@@ -149,6 +159,28 @@ export default function SpeakingResultSummary() {
               ))}
             </div>
           </motion.div>
+        </div>
+      </LearnerDashboardShell>
+    );
+  }
+
+  if (failedResult) {
+    const noCredits = failedResult.statusReasonCode === 'ai_credits_insufficient';
+    return (
+      <LearnerDashboardShell pageTitle="Results">
+        <div className="max-w-xl space-y-4">
+          <InlineAlert variant={noCredits ? 'warning' : 'error'}>
+            {failedResult.statusMessage
+              ?? 'Grading could not be completed for this attempt. Please try again.'}
+          </InlineAlert>
+          <div className="flex flex-wrap gap-2">
+            {noCredits ? (
+              <Button onClick={() => router.push('/billing?tab=ai-credits')}>Buy AI Credits</Button>
+            ) : null}
+            <Button variant="outline" onClick={() => router.push('/speaking')}>
+              Back to Speaking
+            </Button>
+          </div>
         </div>
       </LearnerDashboardShell>
     );

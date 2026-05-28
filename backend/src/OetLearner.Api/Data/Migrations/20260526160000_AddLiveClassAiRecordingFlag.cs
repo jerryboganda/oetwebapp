@@ -17,11 +17,12 @@ namespace OetLearner.Api.Data.Migrations
             // Wave A2 — single feature flag for the AI recording-processing
             // pipeline (transcribe / summarize / translate / embed). Defaults
             // null which the provider treats as `false` until an admin opts in.
-            migrationBuilder.AddColumn<bool>(
-                name: "LiveClassesAiRecordingProcessingEnabled",
-                table: "RuntimeSettings",
-                type: "boolean",
-                nullable: true);
+            //
+            // 2026-05-28 — idempotent so it no-ops on EnsureCreated-bootstrapped
+            // databases where the column already exists, and still adds it on a
+            // fresh/production database.
+            migrationBuilder.Sql(
+                @"ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""LiveClassesAiRecordingProcessingEnabled"" boolean;");
         }
 
         /// <inheritdoc />
