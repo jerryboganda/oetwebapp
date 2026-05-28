@@ -150,6 +150,7 @@ const TRACKED_EVENTS = [
   'speaking_cbt_environment_confirmed',
   'speaking_cbt_paper_acknowledged',
   'speaking_cbt_paper_destroyed',
+  'speaking_cbt_device_probe_result',
   'speaking_recording_consent_accepted',
   // Speaking module — strict exam-mode time enforcement
   // (Wave 2 of docs/SPEAKING-MODULE-PLAN.md). Fires once per attempt

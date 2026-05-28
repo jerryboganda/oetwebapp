@@ -10,7 +10,15 @@ public partial class DropRecallDocuments : Migration
     /// <inheritdoc />
     protected override void Up(MigrationBuilder migrationBuilder)
     {
-        migrationBuilder.DropTable(name: "RecallDocuments");
+        // 2026-05-28 — idempotent drop. In some environments the
+        // RecallDocuments table is already absent (recalls seeders were
+        // permanently disabled and the table was removed via an EnsureCreated /
+        // manual-apply divergence). A bare DropTable would throw "table does
+        // not exist" and crash AutoMigrate on boot. DROP TABLE IF EXISTS does
+        // the right thing everywhere — drops it where present (the original
+        // intent), no-ops where already gone — and is safe for the future
+        // production deploy too.
+        migrationBuilder.Sql("DROP TABLE IF EXISTS \"RecallDocuments\";");
     }
 
     /// <inheritdoc />
