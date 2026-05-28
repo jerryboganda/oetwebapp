@@ -53,6 +53,31 @@ function formatCategoryLabel(category: string, count: number) {
 }
 
 /**
+ * Animated three-bar equalizer shown while a term's pronunciation is playing.
+ * Falls back to a static volume glyph when idle (handled by the caller).
+ */
+function PlayingBars() {
+  return (
+    <span className="flex h-3.5 items-end gap-[2px]" aria-hidden="true">
+      {[0, 1, 2].map((bar) => (
+        <motion.span
+          key={bar}
+          className="w-[2px] rounded-full bg-current"
+          initial={{ height: 4 }}
+          animate={{ height: [4, 13, 6, 11, 4] }}
+          transition={{
+            duration: 0.9,
+            repeat: Infinity,
+            ease: 'easeInOut',
+            delay: bar * 0.15,
+          }}
+        />
+      ))}
+    </span>
+  );
+}
+
+/**
  * /recalls/words — vocabulary-side card list.
  *
  * Surfaces the queued cards (vocab + review) with a star toggle, audio button,
@@ -75,6 +100,9 @@ export default function RecallsWordsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [starOpenFor, setStarOpenFor] = useState<string | null>(null);
+  // Tracks the term/item id whose pronunciation is currently playing so the
+  // audio button can render an animated equalizer instead of the static glyph.
+  const [playingId, setPlayingId] = useState<string | null>(null);
   // Per PRD Phase 2 §2 the click-to-hear feature is paid-only. The backend is
   // authoritative (returns 402/403 for free learners) — we surface that as an
   // upgrade modal instead of a silent failure so candidates understand why.
@@ -169,12 +197,23 @@ export default function RecallsWordsPage() {
     }
   }
 
+  function bindPlaybackState(audio: HTMLAudioElement, id: string) {
+    setPlayingId(id);
+    const clear = () => setPlayingId((current) => (current === id ? null : current));
+    if (typeof audio.addEventListener === 'function') {
+      audio.addEventListener('ended', clear, { once: true });
+      audio.addEventListener('pause', clear, { once: true });
+      audio.addEventListener('error', clear, { once: true });
+    }
+  }
+
   async function playTerm(term: VocabularyTerm) {
     try {
       const url = (await fetchRecallsAudio(term.id, 'normal')).url;
-      playTransientAudio(url);
+      bindPlaybackState(playTransientAudio(url), term.id);
       analytics.track('recalls_word_audio_played', { termId: term.id });
     } catch (err) {
+      setPlayingId((current) => (current === term.id ? null : current));
       if (isApiError(err) && (err.status === 402 || err.status === 403)) {
         analytics.track('recalls_word_audio_blocked', { termId: term.id, status: err.status });
         setShowUpgradeModal(true);
@@ -213,15 +252,17 @@ export default function RecallsWordsPage() {
 
   async function handlePlay(it: RecallsQueueItem) {
     if (it.kind !== 'vocab' || !it.termId) return;
+    const termId = it.termId;
     try {
-      const url = (await fetchRecallsAudio(it.termId, 'normal')).url;
-      playTransientAudio(url);
-      analytics.track('recalls_word_audio_played', { termId: it.termId });
+      const url = (await fetchRecallsAudio(termId, 'normal')).url;
+      bindPlaybackState(playTransientAudio(url), termId);
+      analytics.track('recalls_word_audio_played', { termId });
     } catch (err) {
+      setPlayingId((current) => (current === termId ? null : current));
       // Backend gates audio behind an active subscription. Surface 402/403 as
       // an upgrade prompt; treat anything else as a quiet best-effort failure.
       if (isApiError(err) && (err.status === 402 || err.status === 403)) {
-        analytics.track('recalls_word_audio_blocked', { termId: it.termId, status: err.status });
+        analytics.track('recalls_word_audio_blocked', { termId, status: err.status });
         setShowUpgradeModal(true);
       }
     }
@@ -334,7 +375,7 @@ export default function RecallsWordsPage() {
                           playTerm(term);
                         }
                       }}
-                      className="group rounded-2xl border border-border bg-surface p-5 transition-all duration-200 hover:border-primary/30 hover:shadow-md hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                      className="group rounded-2xl border border-border bg-surface p-5 transition-[color,background-color,border-color,box-shadow,transform,opacity,filter] duration-200 hover:border-primary/30 hover:shadow-md hoverable:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                     >
                       <div className="flex flex-wrap items-center gap-2">
                         <h3 className="text-base font-bold text-navy">{term.term}</h3>
@@ -342,10 +383,15 @@ export default function RecallsWordsPage() {
                           type="button"
                           onClick={() => playTerm(term)}
                           aria-label={`Play pronunciation of ${term.term}`}
+                          aria-pressed={playingId === term.id}
                           title="Play pronunciation"
                           className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-primary/10 p-1.5 text-primary transition-colors hover:bg-primary/20 group-hover:bg-primary/15"
                         >
-                          <Volume2 size={14} strokeWidth={2} className="h-3.5 w-3.5" />
+                          {playingId === term.id ? (
+                            <PlayingBars />
+                          ) : (
+                            <Volume2 size={14} strokeWidth={2} className="h-3.5 w-3.5" />
+                          )}
                         </button>
                         {(term.examFrequencyCount ?? 1) > 1 && (
                           <span
@@ -410,9 +456,10 @@ export default function RecallsWordsPage() {
                     variant="primary"
                     onClick={() => handlePlay(it)}
                     aria-label={`Play ${it.title}`}
+                    aria-pressed={playingId === it.termId}
                     className="flex h-10 w-10 items-center justify-center rounded-full p-0"
                   >
-                    <Volume2 className="h-4 w-4" />
+                    {playingId === it.termId ? <PlayingBars /> : <Volume2 className="h-4 w-4" />}
                   </Button>
                 ) : (
                   <div className="flex h-10 w-10 items-center justify-center rounded-full bg-info/10 text-info">

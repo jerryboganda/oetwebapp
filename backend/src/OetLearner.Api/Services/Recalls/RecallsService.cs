@@ -218,19 +218,19 @@ public sealed class RecallsService(
             throw ApiException.Validation("INVALID_AUDIO_SPEED", "Speed must be normal, slow, or sentence.");
         }
 
-        var learnerProfession = await db.Users.AsNoTracking()
-            .Where(user => user.Id == userId)
-            .Select(user => user.ActiveProfessionId)
-            .SingleOrDefaultAsync(ct);
-        var normalizedProfession = learnerProfession?.Trim().ToLowerInvariant();
-
+        // Recall vocabulary is shared across professions ("Same for All
+        // Professions"), and the learner-facing catalog (VocabularyService)
+        // surfaces every active recall term regardless of profession. The audio
+        // lookup MUST mirror that scope — otherwise a term that is visible in the
+        // catalog (e.g. a `medicine` term shown to a `nursing` learner) would
+        // resolve here as TERM_NOT_FOUND and the click-to-hear button would fail
+        // with a misleading "Audio not available" error.
         var term = await db.VocabularyTerms.FirstOrDefaultAsync(t =>
                 t.Id == termId
                 && t.Status == "active"
                 && t.RecallSetCodesJson != null
                 && t.RecallSetCodesJson != ""
-                && t.RecallSetCodesJson != "[]"
-                && (t.ProfessionId == null || t.ProfessionId == normalizedProfession), ct)
+                && t.RecallSetCodesJson != "[]", ct)
             ?? throw ApiException.NotFound("TERM_NOT_FOUND", "Term not found.");
 
         if (normalizedSpeed == "normal" && !string.IsNullOrWhiteSpace(term.AudioMediaAssetId))
