@@ -199,9 +199,24 @@ public sealed class ChurnPredictionService : IChurnPredictionService
             .Distinct()
             .ToListAsync(ct);
 
+        // Subscriptions can outlive their user account (hard-deleted learners,
+        // mock/seed ids). Drop ids with no live account so a stale row cannot
+        // abort its own scoring with "User not found".
+        var existingUserIds = await _db.ApplicationUserAccounts
+            .Where(a => activeUserIds.Contains(a.Id))
+            .Select(a => a.Id)
+            .ToHashSetAsync(ct);
+
         int scored = 0;
+        int skipped = 0;
         foreach (var userId in activeUserIds)
         {
+            if (!existingUserIds.Contains(userId))
+            {
+                skipped++;
+                continue;
+            }
+
             try
             {
                 await ScoreUserAsync(userId, ct);
@@ -212,6 +227,13 @@ public sealed class ChurnPredictionService : IChurnPredictionService
                 _logger.LogWarning(ex, "ChurnPredictionService failed for user {UserId}", userId);
             }
         }
+
+        if (skipped > 0)
+        {
+            _logger.LogDebug(
+                "Churn rollup skipped {Skipped} subscription(s) with no matching user account.", skipped);
+        }
+
         return scored;
     }
 }
