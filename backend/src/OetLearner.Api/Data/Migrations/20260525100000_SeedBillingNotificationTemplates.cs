@@ -1,3 +1,5 @@
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
@@ -10,7 +12,14 @@ namespace OetLearner.Api.Data.Migrations
     /// scholarship / manual-payment). Admin can re-author these via the
     /// /admin/billing/notification-templates UI; this migration only
     /// provides a working baseline so dispatcher has rows to render.
+    ///
+    /// 2026-05-28 — restored the missing [DbContext]/[Migration] attributes so
+    /// EF's migration scanner recognises and applies this migration. The seed
+    /// is also made idempotent below (ON CONFLICT DO NOTHING) so re-runs and
+    /// already-seeded environments do not collide on the template primary keys.
     /// </summary>
+    [DbContext(typeof(LearnerDbContext))]
+    [Migration("20260525100000_SeedBillingNotificationTemplates")]
     public partial class SeedBillingNotificationTemplates : Migration
     {
         protected override void Up(MigrationBuilder migrationBuilder)
@@ -40,7 +49,8 @@ namespace OetLearner.Api.Data.Migrations
                   ('tpl_dunning_day0_email',       'dunning_day0_email',         'email', 'en', 'Your payment failed', 'We could not process your renewal. We will retry tomorrow.', '[]', 1, TRUE, {ts}, {ts}),
                   ('tpl_dunning_day3_email',       'dunning_day3_retry_email',   'email', 'en', 'Retry failed — please update your card', 'We retried and failed again. Update your card at {{updateCardUrl}} before {{deadline}}.', '[""updateCardUrl"",""deadline""]', 1, TRUE, {ts}, {ts}),
                   ('tpl_dunning_day7_email',       'dunning_day7_retry_whatsapp','email', 'en', 'Final reminder', 'Your subscription will be paused on day 10 if payment is not received.', '[]', 1, TRUE, {ts}, {ts}),
-                  ('tpl_dunning_day14_email',      'dunning_day14_winback_coupon','email','en', 'Come back — 25% off', 'We miss you. Use {{couponCode}} for 25% off when you reactivate.', '[""couponCode""]', 1, TRUE, {ts}, {ts});
+                  ('tpl_dunning_day14_email',      'dunning_day14_winback_coupon','email','en', 'Come back — 25% off', 'We miss you. Use {{couponCode}} for 25% off when you reactivate.', '[""couponCode""]', 1, TRUE, {ts}, {ts})
+                ON CONFLICT (""Id"") DO NOTHING;
             ");
         }
 

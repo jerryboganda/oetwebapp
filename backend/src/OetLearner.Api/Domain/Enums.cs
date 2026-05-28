@@ -148,6 +148,7 @@ public enum JobType
     // ── Private Speaking Sessions ──
     PrivateSpeakingZoomCreate,           // Create Zoom meeting after payment confirmation
     PrivateSpeakingBookingConfirmation,  // Send booking confirmation notifications
+    PrivateSpeakingCalendarSync,         // Sync connected tutor Google Calendar event
     PrivateSpeakingReminder,             // Session reminder notifications
     PrivateSpeakingReservationExpiry,     // Expire unpaid reservations
 

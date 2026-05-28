@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using System.Text;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Data;
@@ -26,6 +27,7 @@ public static class PrivateSpeakingEndpoints
                 config.MinBookingLeadTimeHours,
                 config.MaxBookingAdvanceDays,
                 config.CancellationWindowHours,
+                config.AllowReschedule,
                 config.RescheduleWindowHours,
                 config.ReservationTimeoutMinutes
             });
@@ -97,7 +99,9 @@ public static class PrivateSpeakingEndpoints
             {
                 result.BookingId,
                 result.CheckoutSessionId,
-                result.CheckoutUrl
+                result.CheckoutUrl,
+                result.EntitlementUsed,
+                result.SpeakingSessionsRemaining
             });
         });
 
@@ -136,6 +140,52 @@ public static class PrivateSpeakingEndpoints
             return success
                 ? Results.Ok(new { cancelled = true })
                 : Results.BadRequest(new { error });
+        });
+
+        learner.MapPost("/bookings/{bookingId}/reschedule", async (
+            HttpContext http,
+            string bookingId,
+            ReschedulePrivateSpeakingBookingRequest req,
+            PrivateSpeakingService svc,
+            CancellationToken ct) =>
+        {
+            var result = await svc.RescheduleBookingAsync(
+                bookingId,
+                http.UserId(),
+                req.SessionStartUtc,
+                req.LearnerTimezone,
+                req.LearnerNotes,
+                req.IdempotencyKey,
+                ct);
+
+            return result.Success
+                ? Results.Ok(new
+                {
+                    result.BookingId,
+                    result.EntitlementUsed,
+                    result.SpeakingSessionsRemaining
+                })
+                : Results.BadRequest(new { error = result.Error });
+        });
+
+        learner.MapPost("/bookings/{bookingId}/join-token", async (
+            HttpContext http,
+            string bookingId,
+            PrivateSpeakingService svc,
+            CancellationToken ct) =>
+        {
+            var token = await svc.CreateLearnerJoinTokenAsync(bookingId, http.UserId(), ct);
+            return Results.Ok(token);
+        });
+
+        learner.MapGet("/bookings/{bookingId}/calendar.ics", async (
+            HttpContext http,
+            string bookingId,
+            PrivateSpeakingService svc,
+            CancellationToken ct) =>
+        {
+            var invite = await svc.BuildCalendarInviteAsync(bookingId, http.UserId(), "learner", ct);
+            return Results.File(Encoding.UTF8.GetBytes(invite.Content), invite.ContentType, invite.FileName);
         });
 
         learner.MapPost("/bookings/{bookingId}/rate", async (
@@ -230,6 +280,70 @@ public static class PrivateSpeakingEndpoints
                 : Results.BadRequest(new { error });
         });
 
+        expert.MapPost("/sessions/{bookingId}/join-token", async (
+            HttpContext http,
+            string bookingId,
+            PrivateSpeakingService svc,
+            CancellationToken ct) =>
+        {
+            var token = await svc.CreateExpertJoinTokenAsync(bookingId, http.UserId(), ct);
+            return Results.Ok(token);
+        });
+
+        expert.MapGet("/sessions/{bookingId}/calendar.ics", async (
+            HttpContext http,
+            string bookingId,
+            PrivateSpeakingService svc,
+            CancellationToken ct) =>
+        {
+            var invite = await svc.BuildCalendarInviteAsync(bookingId, http.UserId(), "expert", ct);
+            return Results.File(Encoding.UTF8.GetBytes(invite.Content), invite.ContentType, invite.FileName);
+        });
+
+        expert.MapGet("/calendar/status", async (
+            HttpContext http,
+            PrivateSpeakingCalendarService calendarService,
+            CancellationToken ct) =>
+        {
+            var status = await calendarService.GetStatusAsync(http.UserId(), ct);
+            return Results.Ok(status);
+        });
+
+        expert.MapPost("/calendar/google/connect", async (
+            HttpContext http,
+            PrivateSpeakingCalendarService calendarService,
+            CancellationToken ct) =>
+        {
+            var result = await calendarService.BuildGoogleConnectUrlAsync(http.UserId(), ct);
+            return Results.Ok(result);
+        });
+
+        expert.MapGet("/calendar/google/callback", async (
+            [FromQuery] string? code,
+            [FromQuery] string? state,
+            [FromQuery] string? error,
+            PrivateSpeakingCalendarService calendarService,
+            PlatformLinkService platformLinks,
+            CancellationToken ct) =>
+        {
+            if (!string.IsNullOrWhiteSpace(error) || string.IsNullOrWhiteSpace(code) || string.IsNullOrWhiteSpace(state))
+            {
+                return Results.Redirect(platformLinks.BuildWebUrl("/expert/private-speaking?calendar=error"));
+            }
+
+            await calendarService.CompleteGoogleConnectCallbackAsync(code, state, ct);
+            return Results.Redirect(platformLinks.BuildWebUrl("/expert/private-speaking?calendar=connected"));
+        }).AllowAnonymous();
+
+        expert.MapDelete("/calendar", async (
+            HttpContext http,
+            PrivateSpeakingCalendarService calendarService,
+            CancellationToken ct) =>
+        {
+            await calendarService.DisconnectAsync(http.UserId(), ct);
+            return Results.Ok(new { disconnected = true });
+        });
+
         expert.MapGet("/availability", async (
             HttpContext http,
             PrivateSpeakingService svc,
@@ -315,6 +429,7 @@ public static class PrivateSpeakingEndpoints
                 if (req.MinBookingLeadTimeHours.HasValue) c.MinBookingLeadTimeHours = req.MinBookingLeadTimeHours.Value;
                 if (req.MaxBookingAdvanceDays.HasValue) c.MaxBookingAdvanceDays = req.MaxBookingAdvanceDays.Value;
                 if (req.CancellationWindowHours.HasValue) c.CancellationWindowHours = req.CancellationWindowHours.Value;
+                if (req.AllowReschedule.HasValue) c.AllowReschedule = req.AllowReschedule.Value;
                 if (req.RescheduleWindowHours.HasValue) c.RescheduleWindowHours = req.RescheduleWindowHours.Value;
                 if (req.ReservationTimeoutMinutes.HasValue) c.ReservationTimeoutMinutes = req.ReservationTimeoutMinutes.Value;
                 if (req.ReminderOffsetsHoursJson is not null) c.ReminderOffsetsHoursJson = req.ReminderOffsetsHoursJson;
@@ -609,12 +724,18 @@ public static class PrivateSpeakingEndpoints
         b.Currency,
         b.PaymentStatus,
         b.ZoomStatus,
+        b.EntitlementConsumed,
+        b.EntitlementRestoredAt,
+        b.RescheduledFromBookingId,
+        b.RescheduledToBookingId,
+        b.GoogleCalendarSyncStatus,
         b.CreatedAt
     };
 
     private static object MapBookingSummary(PrivateSpeakingBooking b) => new
     {
         b.Id,
+        b.LearnerUserId,
         b.TutorProfileId,
         tutorName = b.TutorProfile?.DisplayName,
         b.Status,
@@ -626,6 +747,11 @@ public static class PrivateSpeakingEndpoints
         b.Currency,
         b.PaymentStatus,
         b.ZoomStatus,
+        b.EntitlementConsumed,
+        b.EntitlementRestoredAt,
+        b.RescheduledFromBookingId,
+        b.RescheduledToBookingId,
+        b.GoogleCalendarSyncStatus,
         b.CreatedAt
     };
 
@@ -644,7 +770,13 @@ public static class PrivateSpeakingEndpoints
         b.PaymentStatus,
         b.PaymentConfirmedAt,
         b.ZoomStatus,
-        b.ZoomJoinUrl,
+        b.EntitlementConsumed,
+        b.EntitlementRestoredAt,
+        b.EntitlementRestorationReason,
+        b.RescheduledFromBookingId,
+        b.RescheduledToBookingId,
+        b.GoogleCalendarSyncStatus,
+        b.GoogleCalendarSyncedAt,
         b.LearnerNotes,
         b.LearnerRating,
         b.LearnerFeedback,
@@ -670,8 +802,13 @@ public static class PrivateSpeakingEndpoints
         b.PaymentStatus,
         b.PaymentConfirmedAt,
         b.ZoomStatus,
-        b.ZoomJoinUrl,
-        b.ZoomStartUrl,
+        b.EntitlementConsumed,
+        b.EntitlementRestoredAt,
+        b.EntitlementRestorationReason,
+        b.RescheduledFromBookingId,
+        b.RescheduledToBookingId,
+        b.GoogleCalendarSyncStatus,
+        b.GoogleCalendarSyncedAt,
         b.LearnerNotes,
         b.LearnerRating,
         b.LearnerFeedback,
@@ -701,6 +838,17 @@ public static class PrivateSpeakingEndpoints
         b.ZoomJoinUrl,
         b.ZoomStartUrl,
         b.ZoomMeetingPassword,
+        b.EntitlementSubscriptionId,
+        b.EntitlementConsumed,
+        b.EntitlementConsumedAt,
+        b.EntitlementRestoredAt,
+        b.EntitlementRestorationReason,
+        b.RescheduledFromBookingId,
+        b.RescheduledToBookingId,
+        b.GoogleCalendarEventId,
+        b.GoogleCalendarSyncStatus,
+        b.GoogleCalendarSyncError,
+        b.GoogleCalendarSyncedAt,
         b.LearnerNotes,
         b.LearnerRating,
         b.LearnerFeedback,
@@ -724,6 +872,12 @@ public record CreatePrivateSpeakingBookingRequest(
 
 public record CancelBookingRequest(string? Reason);
 
+public record ReschedulePrivateSpeakingBookingRequest(
+    DateTimeOffset SessionStartUtc,
+    string LearnerTimezone,
+    string? LearnerNotes,
+    string IdempotencyKey);
+
 public record UpdatePrivateSpeakingConfigRequest(
     bool? IsEnabled,
     int? DefaultPriceMinorUnits,
@@ -733,6 +887,7 @@ public record UpdatePrivateSpeakingConfigRequest(
     int? MinBookingLeadTimeHours,
     int? MaxBookingAdvanceDays,
     int? CancellationWindowHours,
+    bool? AllowReschedule,
     int? RescheduleWindowHours,
     int? ReservationTimeoutMinutes,
     string? ReminderOffsetsHoursJson);

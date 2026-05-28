@@ -1069,6 +1069,29 @@ public static class AdminEndpoints
             .RequireRateLimiting("PerUserWrite")
             .WithAdminWrite("AdminContentWrite");
 
+        admin.MapPost("/vocabulary/items/bulk-activate", async (HttpContext http, AdminVocabularyBulkIdsRequest request, AdminService service, CancellationToken ct)
+            => Results.Ok(await service.BulkActivateVocabularyAsync(http.AdminId(), http.AdminName(), request.ItemIds, ct)))
+            .RequireRateLimiting("PerUserWrite")
+            .WithAdminWrite("AdminContentWrite");
+
+        admin.MapPost("/vocabulary/items/bulk-archive", async (HttpContext http, AdminVocabularyBulkIdsRequest request, AdminService service, CancellationToken ct)
+            => Results.Ok(await service.BulkArchiveVocabularyAsync(http.AdminId(), http.AdminName(), request.ItemIds, ct)))
+            .RequireRateLimiting("PerUserWrite")
+            .WithAdminWrite("AdminContentWrite");
+
+        admin.MapPost("/vocabulary/items/bulk-draft", async (HttpContext http, AdminVocabularyBulkIdsRequest request, AdminService service, CancellationToken ct)
+            => Results.Ok(await service.BulkDraftVocabularyAsync(http.AdminId(), http.AdminName(), request.ItemIds, ct)))
+            .RequireRateLimiting("PerUserWrite")
+            .WithAdminWrite("AdminContentWrite");
+
+        admin.MapGet("/vocabulary/audio/progress", async (AdminService service, CancellationToken ct)
+            => Results.Ok(await service.GetVocabularyAudioProgressAsync(ct)))
+            .WithAdminRead("AdminContentRead");
+
+        admin.MapPost("/vocabulary/audio/resume", async (AdminService service, CancellationToken ct)
+            => Results.Ok(await service.ResumeVocabularyAudioAsync(ct)))
+            .WithAdminWrite("AdminContentWrite");
+
         admin.MapDelete("/vocabulary/items/{itemId}", async (string itemId, HttpContext http, AdminService service, CancellationToken ct)
             => Results.Ok(await service.DeleteVocabularyItemAsync(http.AdminId(), http.AdminName(), itemId, ct)))
             .WithAdminWrite("AdminContentWrite");

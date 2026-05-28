@@ -67,7 +67,7 @@ export function EarningsChart({ lines }: EarningsChartProps) {
             <XAxis dataKey="label" tick={{ fontSize: 12 }} stroke="rgba(100, 116, 139, 0.7)" />
             <YAxis tick={{ fontSize: 12 }} stroke="rgba(100, 116, 139, 0.7)" tickFormatter={(v) => `$${v}`} />
             <Tooltip
-              formatter={(value: number) => `$${value.toFixed(2)}`}
+              formatter={(value) => `$${Number(value).toFixed(2)}`}
               contentStyle={{ borderRadius: 12, borderColor: 'rgba(148, 163, 184, 0.3)' }}
             />
             <Bar dataKey="gross" fill="#a78bfa" name="Gross (USD)" radius={[4, 4, 0, 0]} />

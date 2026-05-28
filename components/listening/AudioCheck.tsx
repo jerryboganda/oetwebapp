@@ -27,6 +27,8 @@ export interface AudioCheckProps {
   onResult: (outcome: AudioCheckOutcome) => void;
   /** Override the default `/test-audio.mp3` path for testing. */
   audioSrc?: string;
+  /** Lock the controls (e.g. while the parent is persisting the result). */
+  disabled?: boolean;
 }
 
 const TEST_AUDIO_DURATION_MS = 5000;
@@ -55,7 +57,7 @@ const OPTIONS: OptionDef[] = [
   },
 ];
 
-export function AudioCheck({ onResult, audioSrc = '/test-audio.mp3' }: AudioCheckProps) {
+export function AudioCheck({ onResult, audioSrc = '/test-audio.mp3', disabled = false }: AudioCheckProps) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const stopTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -140,7 +142,7 @@ export function AudioCheck({ onResult, audioSrc = '/test-audio.mp3' }: AudioChec
       <button
         type="button"
         onClick={handlePlay}
-        disabled={isPlaying}
+        disabled={isPlaying || disabled}
         className={[
           'inline-flex items-center gap-2 rounded-xl px-5 py-3 text-base font-semibold',
           'bg-primary text-white shadow-md transition-colors',
@@ -206,7 +208,7 @@ export function AudioCheck({ onResult, audioSrc = '/test-audio.mp3' }: AudioChec
         <button
           type="button"
           onClick={handleContinue}
-          disabled={!selected}
+          disabled={!selected || disabled}
           className={[
             'inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-semibold',
             'bg-primary text-white shadow-sm transition-colors',

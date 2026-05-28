@@ -99,6 +99,23 @@ public sealed class SpeakingEvaluationPipeline(
         {
             throw;
         }
+        catch (OetLearner.Api.Services.AiManagement.AiQuotaDeniedException quotaEx)
+        {
+            // Balance = 0 (spec §9). The gateway throws before debiting, so no
+            // credit was consumed. Mark the evaluation failed with a clean,
+            // non-retryable "no credits" reason instead of a generic provider error.
+            logger.LogInformation(
+                "Speaking grading blocked — AI grading credits exhausted for attempt {AttemptId} ({Code}).",
+                attempt.Id, quotaEx.ErrorCode);
+            evaluation.State = AsyncState.Failed;
+            evaluation.StatusReasonCode = "ai_credits_insufficient";
+            evaluation.StatusMessage = "You have no AI grading credits remaining. Purchase an AI Credits package to continue.";
+            evaluation.Retryable = false;
+            evaluation.RetryAfterMs = null;
+            evaluation.LastTransitionAt = DateTimeOffset.UtcNow;
+            evaluation.LearnerDisclaimer = "Grading was not completed — no AI grading credits remaining.";
+            return;
+        }
         catch (Exception ex)
         {
             // Q3 (docs/SPEAKING-MODULE-PLAN.md §6): fail loud on AI provider

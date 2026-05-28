@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 
 export default function ListeningMockSessionPage() {
   const params = useParams<{ sessionId: string }>();
+  const sessionId = params?.sessionId ?? '';
   const router = useRouter();
   const [secondsLeft, setSecondsLeft] = useState(45 * 60);
   const [confirmedStart, setConfirmedStart] = useState(false);
@@ -20,9 +21,9 @@ export default function ListeningMockSessionPage() {
   useEffect(() => {
     if (confirmedStart && secondsLeft === 0) {
       // Auto-submit on timeout — route to results.
-      router.push(`/listening/mocks/${params.sessionId}/results`);
+      router.push(`/listening/mocks/${sessionId}/results`);
     }
-  }, [confirmedStart, secondsLeft, params.sessionId, router]);
+  }, [confirmedStart, secondsLeft, sessionId, router]);
 
   const minutes = Math.floor(secondsLeft / 60);
   const seconds = secondsLeft % 60;
@@ -65,7 +66,7 @@ export default function ListeningMockSessionPage() {
           tested end-to-end.
         </p>
         <button
-          onClick={() => router.push(`/listening/mocks/${params.sessionId}/results`)}
+          onClick={() => router.push(`/listening/mocks/${sessionId}/results`)}
           className="mt-6 rounded-md bg-slate-900 px-4 py-2 text-white text-sm"
         >
           Submit mock now →

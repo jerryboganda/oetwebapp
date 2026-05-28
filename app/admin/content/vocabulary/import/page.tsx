@@ -121,6 +121,8 @@ export default function AdminVocabularyImportPage() {
   const [batchActionLoading, setBatchActionLoading] = useState(false);
   const [reconciling, setReconciling] = useState(false);
   const [toast, setToast] = useState<{ variant: 'success' | 'warning' | 'error'; message: string } | null>(null);
+  const [audioPolling, setAudioPolling] = useState(false);
+  const audioPollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const fileInput = useRef<HTMLInputElement | null>(null);
   const manifestInput = useRef<HTMLInputElement | null>(null);
 
@@ -195,7 +197,7 @@ export default function AdminVocabularyImportPage() {
   }
 
   async function handleImport() {
-    if (!file || !dryRun || dryRun.failedRows > 0 || dryRun.skipped > 0 || dryRun.imported !== preview?.validRows) return;
+    if (!file || !dryRun || dryRun.failedRows > 0 || dryRun.imported !== preview?.validRows) return;
     setImporting(true);
     try {
       const res = await bulkImportAdminVocabulary(file, false, importBatchId.trim(), recallSetCode);
@@ -257,6 +259,42 @@ export default function AdminVocabularyImportPage() {
     }
   }
 
+  // ── Auto-polling for audio progress ──────────────────────────────
+  function startAudioPolling() {
+    if (audioPollingRef.current) return;
+    setAudioPolling(true);
+    audioPollingRef.current = setInterval(() => {
+      const batchId = committedBatchId ?? importBatchId.trim();
+      if (batchId) void loadBatchSummary(batchId);
+    }, 3000);
+  }
+
+  function stopAudioPolling() {
+    if (audioPollingRef.current) {
+      clearInterval(audioPollingRef.current);
+      audioPollingRef.current = null;
+    }
+    setAudioPolling(false);
+  }
+
+  // Auto-stop polling when all audio is ready
+  useEffect(() => {
+    if (!batchSummary || !audioPolling) return;
+    const rows = batchSummary.rows ?? [];
+    const total = rows.length;
+    const done = rows.filter(r => !!r.audioMediaAssetId).length;
+    if (total > 0 && done >= total) {
+      stopAudioPolling();
+      setToast({ variant: 'success', message: `All ${total} audio files generated successfully!` });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [batchSummary]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => { if (audioPollingRef.current) clearInterval(audioPollingRef.current); };
+  }, []);
+
   async function handleExportBatch() {
     const batchId = committedBatchId ?? importBatchId.trim();
     if (!batchId) return;
@@ -288,7 +326,8 @@ export default function AdminVocabularyImportPage() {
       if (res?.skipped) {
         setToast({ variant: 'warning', message: `Audio backfill not available: ${res.skipped}.` });
       } else {
-        setToast({ variant: 'success', message: `Queued ${res?.enqueued ?? 0} term${res?.enqueued === 1 ? '' : 's'} for Qwen3 TTS generation.` });
+        setToast({ variant: 'success', message: `Queued ${res?.enqueued ?? 0} term${res?.enqueued === 1 ? '' : 's'} for ElevenLabs TTS generation.` });
+        startAudioPolling();
       }
       await loadBatchSummary(batchId);
     } catch (e) {
@@ -422,7 +461,7 @@ export default function AdminVocabularyImportPage() {
                   {dryRunning ? 'Running…' : 'Dry run'}
                 </Button>
               )}
-              {preview && dryRun && dryRun.imported === preview.validRows && dryRun.skipped === 0 && dryRun.failedRows === 0 && (
+              {preview && dryRun && dryRun.imported === preview.validRows && dryRun.failedRows === 0 && (
                 <Button variant="primary" size="sm" disabled={importing} onClick={handleImport}>
                   {importing ? 'Importing…' : `Import ${preview.validRows} row${preview.validRows === 1 ? '' : 's'}`}
                 </Button>
@@ -447,28 +486,91 @@ export default function AdminVocabularyImportPage() {
               const knownRowCount = summaryRows.length;
               const audioReady = knownRowCount > 0 && audioReadyCount >= knownRowCount;
               const showAudioBlock = knownRowCount > 0;
+              const percentage = knownRowCount > 0 ? Math.round((audioReadyCount / knownRowCount) * 100) : 0;
+              const remaining = knownRowCount - audioReadyCount;
+              // Estimate: ~1.5s per term (ElevenLabs TTS + network)
+              const etaSeconds = remaining * 1.5;
+              const etaMin = Math.floor(etaSeconds / 60);
+              const etaSec = Math.round(etaSeconds % 60);
               return (
-                <div className="space-y-2">
+                <div className="space-y-3">
                   <InlineAlert variant={batchSummary.active > 0 ? 'warning' : 'success'}>
                     Batch {batchSummary.importBatchId}: {batchSummary.total} total · {batchSummary.draft} draft · {batchSummary.active} active · {batchSummary.archived} archived.
                     {batchSummary.warnings.length > 0 && ` ${batchSummary.warnings.join(' ')}`}
                   </InlineAlert>
                   {showAudioBlock && (
-                    <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border bg-background-light/60 px-3 py-2 text-xs text-navy">
-                      <Volume2 className="h-4 w-4 text-primary" />
-                      <span className="font-medium">Audio: {audioReadyCount} / {knownRowCount}</span>
-                      {audioReady
-                        ? <Badge variant="success"><CheckCircle2 className="mr-1 h-3 w-3" />Ready</Badge>
-                        : <Badge variant="warning"><RefreshCw className="mr-1 h-3 w-3" />Generating…</Badge>
-                      }
-                      <Button variant="outline" size="sm" disabled={batchActionLoading} onClick={() => void loadBatchSummary()}>
-                        <RefreshCw className="mr-1.5 h-3 w-3" /> Refresh
-                      </Button>
-                      {!audioReady && (
-                        <Button variant="secondary" size="sm" disabled={batchActionLoading} onClick={handleAudioBackfill}>
-                          Backfill missing audio
+                    <div className="rounded-xl border border-border bg-background-light/60 p-4 space-y-3">
+                      {/* Header row */}
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <Volume2 className="h-5 w-5 text-primary" />
+                          <span className="font-semibold text-sm text-navy">ElevenLabs Audio Generation</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {audioReady
+                            ? <Badge variant="success"><CheckCircle2 className="mr-1 h-3 w-3" />Complete</Badge>
+                            : audioPolling
+                              ? <Badge variant="warning"><RefreshCw className="mr-1 h-3 w-3 animate-spin" />Live tracking</Badge>
+                              : <Badge variant="warning">Paused</Badge>
+                          }
+                        </div>
+                      </div>
+
+                      {/* Progress bar */}
+                      <div className="space-y-1.5">
+                        <div className="flex items-center justify-between text-xs text-admin-fg-muted">
+                          <span>{audioReadyCount} of {knownRowCount} generated</span>
+                          <span className="font-bold text-sm text-navy">{percentage}%</span>
+                        </div>
+                        <div className="h-4 w-full rounded-full bg-navy/10 overflow-hidden">
+                          <div
+                            className="h-full rounded-full bg-gradient-to-r from-primary to-emerald-500 transition-all duration-500 ease-out"
+                            style={{ width: `${percentage}%` }}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Stats row */}
+                      <div className="grid grid-cols-4 gap-3 text-center">
+                        <div className="rounded-lg bg-surface p-2">
+                          <div className="text-lg font-bold text-navy">{knownRowCount}</div>
+                          <div className="text-[10px] text-admin-fg-muted uppercase tracking-wide">Total</div>
+                        </div>
+                        <div className="rounded-lg bg-surface p-2">
+                          <div className="text-lg font-bold text-emerald-600">{audioReadyCount}</div>
+                          <div className="text-[10px] text-admin-fg-muted uppercase tracking-wide">Done</div>
+                        </div>
+                        <div className="rounded-lg bg-surface p-2">
+                          <div className="text-lg font-bold text-amber-600">{remaining}</div>
+                          <div className="text-[10px] text-admin-fg-muted uppercase tracking-wide">Remaining</div>
+                        </div>
+                        <div className="rounded-lg bg-surface p-2">
+                          <div className="text-lg font-bold text-navy">{remaining > 0 ? `${etaMin}m ${etaSec}s` : '—'}</div>
+                          <div className="text-[10px] text-admin-fg-muted uppercase tracking-wide">ETA</div>
+                        </div>
+                      </div>
+
+                      {/* Action buttons */}
+                      <div className="flex flex-wrap items-center gap-2 pt-1">
+                        {!audioReady && !audioPolling && (
+                          <Button variant="outline" size="sm" onClick={startAudioPolling}>
+                            <RefreshCw className="mr-1.5 h-3 w-3" /> Start live tracking
+                          </Button>
+                        )}
+                        {audioPolling && (
+                          <Button variant="outline" size="sm" onClick={stopAudioPolling}>
+                            Stop tracking
+                          </Button>
+                        )}
+                        <Button variant="outline" size="sm" disabled={batchActionLoading} onClick={() => void loadBatchSummary()}>
+                          <RefreshCw className="mr-1.5 h-3 w-3" /> Refresh now
                         </Button>
-                      )}
+                        {!audioReady && (
+                          <Button variant="secondary" size="sm" disabled={batchActionLoading} onClick={handleAudioBackfill}>
+                            Backfill missing audio
+                          </Button>
+                        )}
+                      </div>
                     </div>
                   )}
                 </div>

@@ -64,6 +64,7 @@ import type {
   MockTypeToken,
   MockDeliveryMode,
   MockStrictness,
+  EvalStatus,
 } from './mock-data';
 import {
   WRITING_CRITERION_MAX_SCORES,
@@ -75,6 +76,8 @@ import type {
   BillingQuote,
   BillingProductType,
   Invoice,
+  AiPackage,
+  AiPackagesResponse,
 } from './billing-types';
 import type { FreezePolicy } from './types/freeze';
 import type {
@@ -4229,6 +4232,37 @@ export async function createBillingCheckoutSession(input: {
   };
 }
 
+export async function fetchAiPackages(): Promise<AiPackagesResponse> {
+  const data = await apiRequest<ApiRecord>('/v1/billing/ai-packages');
+  const mapPackage = (p: ApiRecord): AiPackage => ({
+    code: String(p.code ?? ''),
+    name: String(p.name ?? ''),
+    description: String(p.description ?? ''),
+    price: Number(p.price ?? 0),
+    currency: String(p.currency ?? 'GBP'),
+    credits: Number(p.credits ?? 0),
+    writingCredits: Number(p.writingCredits ?? 0),
+    speakingCredits: Number(p.speakingCredits ?? 0),
+    mocks: Number(p.mocks ?? 0),
+    validityDays: Number(p.validityDays ?? 0),
+    priorityQueue: Boolean(p.priorityQueue ?? false),
+    group: String(p.group ?? 'full') as AiPackage['group'],
+    features: toStringArray(p.features),
+  });
+  const separate = asRecord(data.separate);
+  return {
+    currency: String(data.currency ?? 'GBP'),
+    full: asArray(data.full).map(mapPackage),
+    separate: {
+      listening: asArray(separate.listening).map(mapPackage),
+      reading: asArray(separate.reading).map(mapPackage),
+      writing: asArray(separate.writing).map(mapPackage),
+      speaking: asArray(separate.speaking).map(mapPackage),
+    },
+    mock: asArray(data.mock).map(mapPackage),
+  };
+}
+
 export async function downloadInvoice(invoiceId: string): Promise<string> {
   return fetchAuthorizedObjectUrl(`/v1/billing/invoices/${encodeURIComponent(invoiceId)}/download`);
 }
@@ -7338,6 +7372,58 @@ export async function deleteAdminVocabularyItems(itemIds: string[]): Promise<Adm
   }) as Promise<AdminVocabularyBulkDeleteResponse>;
 }
 
+export type AdminVocabularyBulkActivateResponse = {
+  totalRequested: number;
+  activated: number;
+  skipped: number;
+  failed: number;
+  errors: string[];
+};
+
+export async function bulkActivateAdminVocabularyItems(itemIds: string[]): Promise<AdminVocabularyBulkActivateResponse> {
+  return apiRequest('/v1/admin/vocabulary/items/bulk-activate', {
+    method: 'POST',
+    body: JSON.stringify({ itemIds }),
+  }) as Promise<AdminVocabularyBulkActivateResponse>;
+}
+
+export type AdminVocabularyBulkArchiveResponse = {
+  totalRequested: number;
+  archived: number;
+  skipped: number;
+};
+
+export async function bulkArchiveAdminVocabularyItems(itemIds: string[]): Promise<AdminVocabularyBulkArchiveResponse> {
+  return apiRequest('/v1/admin/vocabulary/items/bulk-archive', {
+    method: 'POST',
+    body: JSON.stringify({ itemIds }),
+  }) as Promise<AdminVocabularyBulkArchiveResponse>;
+}
+
+export type AdminVocabularyBulkDraftResponse = {
+  totalRequested: number;
+  drafted: number;
+  skipped: number;
+};
+
+export async function bulkDraftAdminVocabularyItems(itemIds: string[]): Promise<AdminVocabularyBulkDraftResponse> {
+  return apiRequest('/v1/admin/vocabulary/items/bulk-draft', {
+    method: 'POST',
+    body: JSON.stringify({ itemIds }),
+  }) as Promise<AdminVocabularyBulkDraftResponse>;
+}
+
+export type AdminVocabularyAudioProgress = {
+  total: number;
+  withAudio: number;
+  pending: number;
+  percentComplete: number;
+};
+
+export async function fetchAdminVocabularyAudioProgress(): Promise<AdminVocabularyAudioProgress> {
+  return apiRequest('/v1/admin/vocabulary/audio/progress') as Promise<AdminVocabularyAudioProgress>;
+}
+
 export async function fetchAdminVocabularyCategories(params?: { examTypeCode?: string; professionId?: string }) {
   const p = new URLSearchParams();
   if (params?.examTypeCode) p.set('examTypeCode', params.examTypeCode);
@@ -7402,6 +7488,10 @@ export async function fetchAdminVocabularyImportBatch(importBatchId: string) {
 export async function backfillAdminVocabularyAudio(batchId?: string) {
   const qs = batchId ? `?batchId=${encodeURIComponent(batchId)}` : '';
   return apiRequest(`/v1/admin/vocabulary/audio/backfill${qs}`, { method: 'POST' });
+}
+
+export async function resumeAdminVocabularyAudio() {
+  return apiRequest(`/v1/admin/vocabulary/audio/resume`, { method: 'POST' });
 }
 
 export async function exportAdminVocabularyImportBatchCsv(importBatchId: string) {
@@ -10183,6 +10273,30 @@ export async function reviewScoreGuaranteeClaim(pledgeId: string, decision: 'app
 
 // ── Private Speaking Sessions ─────────────────────────────
 
+export interface PrivateSpeakingBookingResult {
+  bookingId: string;
+  checkoutSessionId?: string | null;
+  checkoutUrl?: string | null;
+  entitlementUsed: boolean;
+  speakingSessionsRemaining?: number | null;
+}
+
+export interface PrivateSpeakingCalendarStatus {
+  connected: boolean;
+  provider?: string | null;
+  calendarId?: string | null;
+  connectedEmail?: string | null;
+  connectedAt?: string | null;
+  lastCheckedAt?: string | null;
+  lastSyncedAt?: string | null;
+  lastError?: string | null;
+}
+
+export interface PrivateSpeakingCalendarConnectResult {
+  authorizationUrl: string;
+  expiresAt: string;
+}
+
 export async function fetchPrivateSpeakingConfig() {
   return apiRequest('/v1/private-speaking/config');
 }
@@ -10206,8 +10320,20 @@ export async function createPrivateSpeakingBooking(payload: {
   learnerTimezone: string;
   learnerNotes?: string;
   idempotencyKey: string;
-}) {
-  return apiRequest('/v1/private-speaking/bookings', {
+}): Promise<PrivateSpeakingBookingResult> {
+  return apiRequest<PrivateSpeakingBookingResult>('/v1/private-speaking/bookings', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function reschedulePrivateSpeakingBooking(bookingId: string, payload: {
+  sessionStartUtc: string;
+  learnerTimezone: string;
+  learnerNotes?: string;
+  idempotencyKey: string;
+}): Promise<PrivateSpeakingBookingResult> {
+  return apiRequest<PrivateSpeakingBookingResult>(`/v1/private-speaking/bookings/${encodeURIComponent(bookingId)}/reschedule`, {
     method: 'POST',
     body: JSON.stringify(payload),
   });
@@ -10227,6 +10353,23 @@ export async function cancelPrivateSpeakingBooking(bookingId: string, reason?: s
     method: 'POST',
     body: JSON.stringify({ reason }),
   });
+}
+
+export async function fetchPrivateSpeakingJoinToken(bookingId: string): Promise<LiveClassJoinToken> {
+  return apiRequest<LiveClassJoinToken>(`/v1/private-speaking/bookings/${encodeURIComponent(bookingId)}/join-token`, {
+    method: 'POST',
+  });
+}
+
+export async function downloadPrivateSpeakingCalendarInvite(bookingId: string): Promise<Blob> {
+  const path = `/v1/private-speaking/bookings/${encodeURIComponent(bookingId)}/calendar.ics`;
+  const response = await fetchWithTimeout(resolveApiUrl(path), {
+    headers: await getHeaders(path, undefined, { json: false }),
+  });
+  if (!response.ok) {
+    throw new ApiError(response.status, 'calendar_invite_download_failed', 'Could not download the calendar invite.', false);
+  }
+  return response.blob();
 }
 
 export async function ratePrivateSpeakingSession(bookingId: string, rating: number, feedback?: string) {
@@ -10267,6 +10410,39 @@ export async function cancelExpertPrivateSpeakingSession(bookingId: string, reas
   return apiRequest(`/v1/expert/private-speaking/sessions/${encodeURIComponent(bookingId)}/cancel`, {
     method: 'POST',
     body: JSON.stringify({ reason: reason || null }),
+  });
+}
+
+export async function fetchExpertPrivateSpeakingJoinToken(bookingId: string): Promise<LiveClassJoinToken> {
+  return apiRequest<LiveClassJoinToken>(`/v1/expert/private-speaking/sessions/${encodeURIComponent(bookingId)}/join-token`, {
+    method: 'POST',
+  });
+}
+
+export async function downloadExpertPrivateSpeakingCalendarInvite(bookingId: string): Promise<Blob> {
+  const path = `/v1/expert/private-speaking/sessions/${encodeURIComponent(bookingId)}/calendar.ics`;
+  const response = await fetchWithTimeout(resolveApiUrl(path), {
+    headers: await getHeaders(path, undefined, { json: false }),
+  });
+  if (!response.ok) {
+    throw new ApiError(response.status, 'calendar_invite_download_failed', 'Could not download the calendar invite.', false);
+  }
+  return response.blob();
+}
+
+export async function fetchExpertPrivateSpeakingCalendarStatus(): Promise<PrivateSpeakingCalendarStatus> {
+  return apiRequest<PrivateSpeakingCalendarStatus>('/v1/expert/private-speaking/calendar/status');
+}
+
+export async function connectExpertPrivateSpeakingGoogleCalendar(): Promise<PrivateSpeakingCalendarConnectResult> {
+  return apiRequest<PrivateSpeakingCalendarConnectResult>('/v1/expert/private-speaking/calendar/google/connect', {
+    method: 'POST',
+  });
+}
+
+export async function disconnectExpertPrivateSpeakingCalendar(): Promise<{ disconnected: boolean }> {
+  return apiRequest<{ disconnected: boolean }>('/v1/expert/private-speaking/calendar', {
+    method: 'DELETE',
   });
 }
 

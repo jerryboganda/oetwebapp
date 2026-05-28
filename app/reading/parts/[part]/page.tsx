@@ -123,7 +123,7 @@ export default function ReadingPartPracticePage() {
         {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
 
         {loading ? (
-          <LearnerSkeleton variant="cards" />
+          <LearnerSkeleton variant="card-grid" />
         ) : eligiblePapers.length === 0 ? (
           <InlineAlert variant="info">
             No published Reading papers contain Part {part} content yet. Check back soon or attempt

@@ -106,6 +106,13 @@ public class VocabularyTerm
     /// </summary>
     public string RecallSetCodesJson { get; set; } = "[]";
 
+    /// <summary>
+    /// How many times this term has appeared across CSV imports. Starts at 1
+    /// on first insert; incremented each time the same (Term, ExamTypeCode,
+    /// ProfessionId) key is encountered in a subsequent import.
+    /// </summary>
+    public int ExamFrequencyCount { get; set; } = 1;
+
     [MaxLength(512)]
     public string? SourceProvenance { get; set; }           // Required at publish
 

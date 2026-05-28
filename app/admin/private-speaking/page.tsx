@@ -5,7 +5,6 @@ import { Users, Calendar, BarChart3, Settings, Plus, Trash2, RefreshCw, X, Check
 import { AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
 import { InlineAlert } from '@/components/ui/alert';
 import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
-import { AdminTableLayout } from '@/components/admin/layout/admin-table-layout';
 import { AdminPageShell } from '@/components/admin/layout/admin-page-shell';
 import { PageHeader } from '@/components/admin/ui/page-header';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/admin/ui/card';
@@ -40,7 +39,7 @@ type Config = {
   isEnabled: boolean; defaultPriceMinorUnits: number; currency: string;
   defaultSlotDurationMinutes: number; bufferMinutesBetweenSlots: number;
   minBookingLeadTimeHours: number; maxBookingAdvanceDays: number;
-  cancellationWindowHours: number; rescheduleWindowHours: number;
+  cancellationWindowHours: number; allowReschedule: boolean; rescheduleWindowHours: number;
   reservationTimeoutMinutes: number; reminderOffsetsHoursJson: string;
 };
 
@@ -61,6 +60,8 @@ type AdminBooking = {
   learnerUserId: string; status: string; sessionStartUtc: string;
   durationMinutes: number; priceMinorUnits: number; currency: string;
   paymentStatus: string; zoomStatus: string; createdAt: string;
+  entitlementConsumed?: boolean; entitlementRestoredAt?: string | null;
+  googleCalendarSyncStatus?: string | null;
 };
 
 type AuditLog = {
@@ -259,6 +260,11 @@ export default function AdminPrivateSpeakingPage() {
                   className="w-4 h-4 rounded text-primary" />
                 <span className="text-sm text-admin-fg-strong">Module Enabled</span>
               </label>
+              <label className="flex items-center gap-3">
+                <input type="checkbox" checked={config.allowReschedule} onChange={e => setConfig(c => c ? { ...c, allowReschedule: e.target.checked } : c)}
+                  className="w-4 h-4 rounded text-primary" />
+                <span className="text-sm text-admin-fg-strong">Learner Reschedule Enabled</span>
+              </label>
               <div>
                 <label className="text-xs text-admin-fg-muted mb-1 block">Default Price (minor units)</label>
                 <input type="number" value={config.defaultPriceMinorUnits}
@@ -299,6 +305,12 @@ export default function AdminPrivateSpeakingPage() {
                 <label className="text-xs text-admin-fg-muted mb-1 block">Cancellation Window (hours)</label>
                 <input type="number" value={config.cancellationWindowHours}
                   onChange={e => setConfig(c => c ? { ...c, cancellationWindowHours: Number(e.target.value) } : c)}
+                  className="w-full px-3 py-2 border border-admin-border rounded-admin-md text-sm bg-admin-bg-surface text-admin-fg-strong" />
+              </div>
+              <div>
+                <label className="text-xs text-admin-fg-muted mb-1 block">Reschedule Window (hours)</label>
+                <input type="number" value={config.rescheduleWindowHours}
+                  onChange={e => setConfig(c => c ? { ...c, rescheduleWindowHours: Number(e.target.value) } : c)}
                   className="w-full px-3 py-2 border border-admin-border rounded-admin-md text-sm bg-admin-bg-surface text-admin-fg-strong" />
               </div>
               <div>
@@ -434,7 +446,9 @@ export default function AdminPrivateSpeakingPage() {
                     <th className="pb-2 pr-3">Session</th>
                     <th className="pb-2 pr-3">Status</th>
                     <th className="pb-2 pr-3">Payment</th>
+                    <th className="pb-2 pr-3">Entitlement</th>
                     <th className="pb-2 pr-3">Zoom</th>
+                    <th className="pb-2 pr-3">Calendar</th>
                     <th className="pb-2">Actions</th>
                   </tr>
                 </thead>
@@ -446,7 +460,11 @@ export default function AdminPrivateSpeakingPage() {
                       <td className="py-2 pr-3">{new Date(b.sessionStartUtc).toLocaleString('en-AU', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</td>
                       <td className="py-2 pr-3"><Badge variant="default" intensity="tinted" size="sm">{b.status}</Badge></td>
                       <td className="py-2 pr-3 text-xs">{b.paymentStatus}</td>
+                      <td className="py-2 pr-3 text-xs">
+                        {b.entitlementConsumed ? (b.entitlementRestoredAt ? 'Restored' : 'Consumed') : 'Legacy payment'}
+                      </td>
                       <td className="py-2 pr-3 text-xs">{b.zoomStatus ?? '—'}</td>
+                      <td className="py-2 pr-3 text-xs">{b.googleCalendarSyncStatus ?? '—'}</td>
                       <td className="py-2 flex items-center gap-1.5">
                         {(b.status === 'Confirmed' || b.status === 'ZoomCreated') && (
                           <>

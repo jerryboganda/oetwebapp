@@ -251,6 +251,20 @@ public sealed class WritingSubmissionEvaluationPipeline(
                 UserId = submission.UserId,
             }, ct);
         }
+        catch (OetLearner.Api.Services.AiManagement.AiQuotaDeniedException quotaEx)
+        {
+            // No-charge-on-failure: the gateway throws before debiting, so no
+            // credit was consumed. Surface a clean, modal-ready signal instead
+            // of masking it as a generic service error (spec §9 — balance = 0).
+            logger.LogInformation(
+                "Writing grading blocked — AI grading credits exhausted for submission {SubmissionId} ({Code}).",
+                submission.Id, quotaEx.ErrorCode);
+            submission.Status = "failed";
+            await db.SaveChangesAsync(ct);
+            throw ApiException.PaymentRequired(
+                "ai_credits_insufficient",
+                "You have no AI grading credits remaining. Purchase an AI Credits package to continue.");
+        }
         catch (Exception ex)
         {
             logger.LogWarning(ex, "Writing rubric AI call failed for submission {SubmissionId}", submission.Id);

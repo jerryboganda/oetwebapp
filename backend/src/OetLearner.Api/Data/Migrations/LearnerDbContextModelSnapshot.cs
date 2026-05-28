@@ -14489,6 +14489,38 @@ namespace OetLearner.Api.Data.Migrations
                     b.Property<int>("DurationMinutes")
                         .HasColumnType("integer");
 
+                    b.Property<bool>("EntitlementConsumed")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTimeOffset?>("EntitlementConsumedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("EntitlementRestorationReason")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<DateTimeOffset?>("EntitlementRestoredAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("EntitlementSubscriptionId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("GoogleCalendarEventId")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<DateTimeOffset?>("GoogleCalendarSyncedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("GoogleCalendarSyncError")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
+
+                    b.Property<string>("GoogleCalendarSyncStatus")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
                     b.Property<string>("IdempotencyKey")
                         .HasMaxLength(128)
                         .HasColumnType("character varying(128)");
@@ -14529,6 +14561,10 @@ namespace OetLearner.Api.Data.Migrations
                         .HasColumnType("character varying(256)");
 
                     b.Property<string>("RescheduledFromBookingId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("RescheduledToBookingId")
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)");
 
@@ -14595,6 +14631,10 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.HasIndex("IdempotencyKey")
                         .IsUnique();
+
+                    b.HasIndex("EntitlementSubscriptionId");
+
+                    b.HasIndex("GoogleCalendarEventId");
 
                     b.HasIndex("Status");
 
@@ -14675,6 +14715,73 @@ namespace OetLearner.Api.Data.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("PrivateSpeakingConfigs");
+                });
+
+            modelBuilder.Entity("OetLearner.Api.Domain.PrivateSpeakingTutorCalendarConnection", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("CalendarId")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<DateTimeOffset>("ConnectedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ConnectedEmail")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<DateTimeOffset?>("DisconnectedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ExpertUserId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTimeOffset?>("LastCheckedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("LastError")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
+
+                    b.Property<DateTimeOffset?>("LastSyncedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Provider")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("RefreshTokenEncrypted")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Scopes")
+                        .IsRequired()
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)");
+
+                    b.Property<string>("TutorProfileId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ExpertUserId");
+
+                    b.HasIndex("TutorProfileId")
+                        .IsUnique();
+
+                    b.ToTable("PrivateSpeakingTutorCalendarConnections");
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.PrivateSpeakingTutorProfile", b =>
@@ -23939,6 +24046,17 @@ namespace OetLearner.Api.Data.Migrations
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.PrivateSpeakingBooking", b =>
+                {
+                    b.HasOne("OetLearner.Api.Domain.PrivateSpeakingTutorProfile", "TutorProfile")
+                        .WithMany()
+                        .HasForeignKey("TutorProfileId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("TutorProfile");
+                });
+
+            modelBuilder.Entity("OetLearner.Api.Domain.PrivateSpeakingTutorCalendarConnection", b =>
                 {
                     b.HasOne("OetLearner.Api.Domain.PrivateSpeakingTutorProfile", "TutorProfile")
                         .WithMany()

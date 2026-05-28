@@ -138,4 +138,21 @@ describe('Recalls words page audio playback', () => {
     });
     expect(mockPlayTransientAudio).not.toHaveBeenCalled();
   });
+
+  it('renders frequency badge when examFrequencyCount > 1', async () => {
+    const highFreqTerm = { ...catalogTerm, examFrequencyCount: 10 };
+    mockFetchVocabularyTerms.mockResolvedValue({ total: 1, terms: [highFreqTerm] });
+    render(<RecallsWordsPage />);
+
+    const badge = await screen.findByTitle('This word appeared 10 times in the exam');
+    expect(badge).toBeInTheDocument();
+    expect(badge).toHaveTextContent('10x');
+  });
+
+  it('hides frequency badge when examFrequencyCount is 1 or absent', async () => {
+    render(<RecallsWordsPage />);
+
+    await screen.findByText('dyspnoea');
+    expect(screen.queryByTitle(/appeared.*times in the exam/)).not.toBeInTheDocument();
+  });
 });

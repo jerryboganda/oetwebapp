@@ -1,22 +1,28 @@
 using System.Globalization;
-using System.Net.Http.Headers;
+using System.Data;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using Ical.Net;
+using Ical.Net.CalendarComponents;
+using Ical.Net.DataTypes;
+using Ical.Net.Serialization;
+using IcalCalendar = Ical.Net.Calendar;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Options;
-using OetLearner.Api.Configuration;
+using OetLearner.Api.Contracts;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services.Entitlements;
 
 namespace OetLearner.Api.Services;
 
 public sealed class PrivateSpeakingService(
     LearnerDbContext db,
-    PaymentGatewayService paymentGateways,
     NotificationService notificationService,
     ZoomMeetingService zoomService,
+    PrivateSpeakingCalendarService calendarService,
+    IEffectiveEntitlementResolver entitlementResolver,
     TimeProvider timeProvider,
-    IOptions<BillingOptions> billingOptions,
     ILogger<PrivateSpeakingService> logger)
 {
     private const double CalibrationRedDriftThreshold100 = 40.0;
@@ -263,22 +269,28 @@ public sealed class PrivateSpeakingService(
             .Where(o => o.TutorProfileId == tutorProfileId && o.Date >= fromDate && o.Date <= toDate)
             .ToListAsync(ct);
 
+        var slotDuration = profile.SlotDurationOverrideMinutes ?? config.DefaultSlotDurationMinutes;
+        var bufferMinutes = config.BufferMinutesBetweenSlots;
+        var minBookingTime = now.AddHours(config.MinBookingLeadTimeHours);
+        var tutorTz = TimeZoneInfo.FindSystemTimeZoneById(profile.Timezone);
+        var priceMinorUnits = profile.PriceOverrideMinorUnits ?? config.DefaultPriceMinorUnits;
+        var queryStartUtc = new DateTimeOffset(
+            TimeZoneInfo.ConvertTimeToUtc(DateTime.SpecifyKind(fromDate.ToDateTime(TimeOnly.MinValue), DateTimeKind.Unspecified), tutorTz),
+            TimeSpan.Zero).AddMinutes(-bufferMinutes);
+        var queryEndUtc = new DateTimeOffset(
+            TimeZoneInfo.ConvertTimeToUtc(DateTime.SpecifyKind(toDate.ToDateTime(TimeOnly.MaxValue), DateTimeKind.Unspecified), tutorTz),
+            TimeSpan.Zero).AddMinutes(bufferMinutes);
+
         var existingBookings = await db.PrivateSpeakingBookings
             .Where(b => b.TutorProfileId == tutorProfileId
-                && b.SessionStartUtc >= fromDate.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc)
-                && b.SessionStartUtc <= toDate.ToDateTime(TimeOnly.MaxValue, DateTimeKind.Utc)
+                && b.SessionStartUtc < queryEndUtc
+                && b.SessionStartUtc.AddMinutes(b.DurationMinutes) > queryStartUtc
                 && b.Status != PrivateSpeakingBookingStatus.Cancelled
                 && b.Status != PrivateSpeakingBookingStatus.Expired
                 && b.Status != PrivateSpeakingBookingStatus.Failed
                 && b.Status != PrivateSpeakingBookingStatus.Refunded)
             .Select(b => new { b.SessionStartUtc, b.DurationMinutes })
             .ToListAsync(ct);
-
-        var slotDuration = profile.SlotDurationOverrideMinutes ?? config.DefaultSlotDurationMinutes;
-        var bufferMinutes = config.BufferMinutesBetweenSlots;
-        var minBookingTime = now.AddHours(config.MinBookingLeadTimeHours);
-        var tutorTz = TimeZoneInfo.FindSystemTimeZoneById(profile.Timezone);
-        var priceMinorUnits = profile.PriceOverrideMinorUnits ?? config.DefaultPriceMinorUnits;
 
         var slots = new List<AvailableSlot>();
 
@@ -335,10 +347,18 @@ public sealed class PrivateSpeakingService(
                     }
 
                     // Check for partial-day blocks
+                    var slotEndLocal = current.AddMinutes(slotDuration);
                     var isBlockedByOverride = blockedOverrides.Any(o =>
-                        o.StartTime is not null && o.EndTime is not null
-                        && TimeOnly.Parse(o.StartTime) <= current
-                        && TimeOnly.Parse(o.EndTime) >= current.AddMinutes(slotDuration));
+                    {
+                        if (o.StartTime is null || o.EndTime is null)
+                        {
+                            return false;
+                        }
+
+                        var blockStart = TimeOnly.Parse(o.StartTime);
+                        var blockEnd = TimeOnly.Parse(o.EndTime);
+                        return blockStart < slotEndLocal && blockEnd > current;
+                    });
 
                     if (isBlockedByOverride)
                     {
@@ -357,6 +377,13 @@ public sealed class PrivateSpeakingService(
 
                     if (!hasConflict)
                     {
+                        var calendarBusy = await calendarService.CheckBusyAsync(tutorProfileId, utcStartOffset, utcEnd, ct);
+                        if (calendarBusy.Connected && (calendarBusy.IsBusy || calendarBusy.Error is not null))
+                        {
+                            current = current.AddMinutes(slotDuration + bufferMinutes);
+                            continue;
+                        }
+
                         slots.Add(new AvailableSlot(
                             TutorProfileId: tutorProfileId,
                             TutorDisplayName: profile.DisplayName,
@@ -403,8 +430,8 @@ public sealed class PrivateSpeakingService(
     // ── Booking Flow ────────────────────────────────────────────────────
 
     /// <summary>
-    /// Reserve a slot, create a Stripe checkout session, and return checkout details.
-    /// Uses optimistic concurrency to prevent double-booking.
+    /// Reserve a slot by consuming one bundled/private-speaking entitlement.
+    /// Uses a serializable transaction to prevent double-booking and double-debiting.
     /// </summary>
     public async Task<BookingCheckoutResult> CreateBookingAndCheckoutAsync(
         string learnerUserId, string tutorProfileId,
@@ -415,16 +442,37 @@ public sealed class PrivateSpeakingService(
         var config = await GetConfigAsync(ct);
         if (!config.IsEnabled)
             return BookingCheckoutResult.Fail("Private Speaking Sessions are currently disabled.");
+        if (!IsUsableIdempotencyKey(idempotencyKey))
+            return BookingCheckoutResult.Fail("A valid booking idempotency key is required.");
+
+        await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, ct);
+        var idempotencyScope = BuildIdempotencyScopeKey("book", learnerUserId, idempotencyKey);
+        var idempotencyPrefix = BuildScopedIdempotencyPrefix(idempotencyScope);
+        var scopedIdempotencyKey = BuildScopedIdempotencyKey(
+            idempotencyScope,
+            tutorProfileId,
+            sessionStartUtc.UtcDateTime.ToString("O", CultureInfo.InvariantCulture),
+            durationMinutes.ToString(CultureInfo.InvariantCulture),
+            learnerTimezone,
+            learnerNotes ?? string.Empty);
 
         // Idempotency check
         var existingBooking = await db.PrivateSpeakingBookings
-            .FirstOrDefaultAsync(b => b.IdempotencyKey == idempotencyKey, ct);
+            .FirstOrDefaultAsync(b => b.LearnerUserId == learnerUserId
+                && b.IdempotencyKey != null
+                && b.IdempotencyKey.StartsWith(idempotencyPrefix), ct);
         if (existingBooking is not null)
         {
+            if (!string.Equals(existingBooking.IdempotencyKey, scopedIdempotencyKey, StringComparison.Ordinal))
+            {
+                return BookingCheckoutResult.Fail("This idempotency key was already used with different booking details. Please retry with a new key.");
+            }
+
+            await transaction.CommitAsync(ct);
             return existingBooking.Status == PrivateSpeakingBookingStatus.Expired
                 ? BookingCheckoutResult.Fail("Previous booking attempt expired. Please try again with a new request.")
                 : new BookingCheckoutResult(true, null, existingBooking.Id,
-                    existingBooking.StripeCheckoutSessionId, null);
+                    existingBooking.StripeCheckoutSessionId, null, existingBooking.EntitlementConsumed);
         }
 
         var profile = await db.PrivateSpeakingTutorProfiles.FindAsync([tutorProfileId], ct);
@@ -446,10 +494,18 @@ public sealed class PrivateSpeakingService(
         if (sessionStartUtc > maxBookingTime)
             return BookingCheckoutResult.Fail($"Sessions cannot be booked more than {config.MaxBookingAdvanceDays} days in advance.");
 
+        if (!await IsRequestedSlotAvailableAsync(profile, sessionStartUtc, durationMinutes, ct))
+            return BookingCheckoutResult.Fail("This time slot is no longer available. Please select another slot.");
+
+        var sessionEnd = sessionStartUtc.AddMinutes(durationMinutes);
+        var sessionStartWithBuffer = sessionStartUtc.AddMinutes(-config.BufferMinutesBetweenSlots);
+        var sessionEndWithBuffer = sessionEnd.AddMinutes(config.BufferMinutesBetweenSlots);
+
         // Check for conflicting tutor bookings (race protection via DB unique constraint)
         var hasConflict = await db.PrivateSpeakingBookings.AnyAsync(b =>
             b.TutorProfileId == tutorProfileId
-            && b.SessionStartUtc == sessionStartUtc
+            && b.SessionStartUtc < sessionEndWithBuffer
+            && b.SessionStartUtc.AddMinutes(b.DurationMinutes) > sessionStartWithBuffer
             && b.Status != PrivateSpeakingBookingStatus.Cancelled
             && b.Status != PrivateSpeakingBookingStatus.Expired
             && b.Status != PrivateSpeakingBookingStatus.Failed
@@ -459,7 +515,6 @@ public sealed class PrivateSpeakingService(
             return BookingCheckoutResult.Fail("This time slot is no longer available. Please select another slot.");
 
         // Check for overlapping learner bookings
-        var sessionEnd = sessionStartUtc.AddMinutes(durationMinutes);
         var learnerConflict = await db.PrivateSpeakingBookings.AnyAsync(b =>
             b.LearnerUserId == learnerUserId
             && b.SessionStartUtc < sessionEnd
@@ -473,22 +528,40 @@ public sealed class PrivateSpeakingService(
             return BookingCheckoutResult.Fail("You already have a booking at this time. Please select a different slot.");
 
         var priceMinorUnits = profile.PriceOverrideMinorUnits ?? config.DefaultPriceMinorUnits;
+        var calendarBusy = await calendarService.CheckBusyAsync(tutorProfileId, sessionStartUtc, sessionEnd, ct);
+        if (calendarBusy.Connected)
+        {
+            if (calendarBusy.Error is not null)
+                return BookingCheckoutResult.Fail("Tutor calendar availability could not be verified. Please try another slot shortly.");
+            if (calendarBusy.IsBusy)
+                return BookingCheckoutResult.Fail("Tutor calendar shows this slot is no longer available. Please select another slot.");
+        }
+
+        var subscription = await ResolveEligibleSpeakingSubscriptionAsync(learnerUserId, now, ct);
+        if (subscription is null)
+            return BookingCheckoutResult.Fail("You need an available private speaking session credit to book this session.");
+
+        subscription.SpeakingSessionsRemaining -= 1;
 
         var booking = new PrivateSpeakingBooking
         {
             Id = $"psb-{Guid.NewGuid():N}",
             LearnerUserId = learnerUserId,
             TutorProfileId = tutorProfileId,
-            Status = PrivateSpeakingBookingStatus.Reserved,
+            Status = PrivateSpeakingBookingStatus.Confirmed,
             SessionStartUtc = sessionStartUtc,
             DurationMinutes = durationMinutes,
             TutorTimezone = profile.Timezone,
             LearnerTimezone = learnerTimezone,
-            PriceMinorUnits = priceMinorUnits,
+            PriceMinorUnits = 0,
             Currency = config.Currency,
-            PaymentStatus = PrivateSpeakingPaymentStatus.Pending,
-            ReservationExpiresAt = now.AddMinutes(config.ReservationTimeoutMinutes),
-            IdempotencyKey = idempotencyKey,
+            PaymentStatus = PrivateSpeakingPaymentStatus.Succeeded,
+            PaymentConfirmedAt = now,
+            EntitlementSubscriptionId = subscription.Id,
+            EntitlementConsumed = true,
+            EntitlementConsumedAt = now,
+            ReservationExpiresAt = null,
+            IdempotencyKey = scopedIdempotencyKey,
             LearnerNotes = learnerNotes,
             CreatedAt = now,
             UpdatedAt = now
@@ -506,44 +579,20 @@ public sealed class PrivateSpeakingService(
         }
 
         await AuditAsync(booking.Id, learnerUserId, "learner", "booking_reserved",
-            $"Tutor: {tutorProfileId}, Time: {sessionStartUtc:O}", ct);
+            $"Tutor: {tutorProfileId}, Time: {sessionStartUtc:O}, Entitlement subscription: {subscription.Id}, Catalog price minor units: {priceMinorUnits}", ct);
 
-        // Create Stripe checkout session
-        var billing = billingOptions.Value;
-        var successUrl = $"{billing.CheckoutBaseUrl}/private-speaking/success?booking_id={booking.Id}";
-        var cancelUrl = $"{billing.CheckoutBaseUrl}/private-speaking/cancel?booking_id={booking.Id}";
-
-        var paymentResult = await paymentGateways.GetGateway("stripe").CreatePaymentIntentAsync(
-            new CreatePaymentIntentRequest(
-                UserId: learnerUserId,
-                Amount: priceMinorUnits / 100m,
-                Currency: config.Currency,
-                ProductType: "private_speaking_session",
-                ProductId: booking.Id,
-                Description: $"Private Speaking Session with {profile.DisplayName} on {sessionStartUtc:yyyy-MM-dd HH:mm} UTC",
-                Metadata: new Dictionary<string, string>
-                {
-                    ["booking_id"] = booking.Id,
-                    ["tutor_profile_id"] = tutorProfileId,
-                    ["learner_user_id"] = learnerUserId,
-                    ["session_start_utc"] = sessionStartUtc.ToString("O"),
-                    ["product_type"] = "private_speaking_session"
-                },
-                SuccessUrl: successUrl,
-                CancelUrl: cancelUrl),
-            ct);
-
-        booking.StripeCheckoutSessionId = paymentResult.GatewayTransactionId;
-        booking.Status = PrivateSpeakingBookingStatus.PendingPayment;
-        booking.UpdatedAt = timeProvider.GetUtcNow();
+        QueueBookingPostCommitJobs(booking.Id, includeCalendarSync: false);
         await db.SaveChangesAsync(ct);
+        await transaction.CommitAsync(ct);
 
         return new BookingCheckoutResult(
             Success: true,
             Error: null,
             BookingId: booking.Id,
-            CheckoutSessionId: paymentResult.GatewayTransactionId,
-            CheckoutUrl: paymentResult.CheckoutUrl);
+            CheckoutSessionId: null,
+            CheckoutUrl: null,
+            EntitlementUsed: true,
+            SpeakingSessionsRemaining: subscription.SpeakingSessionsRemaining);
     }
 
     /// <summary>
@@ -578,28 +627,7 @@ public sealed class PrivateSpeakingService(
         await AuditAsync(booking.Id, "system", "system", "payment_confirmed",
             $"Stripe session: {stripeCheckoutSessionId}", ct);
 
-        // Queue Zoom meeting creation as a background job
-        db.BackgroundJobs.Add(new BackgroundJobItem
-        {
-            Id = $"bgj-{Guid.NewGuid():N}",
-            Type = JobType.PrivateSpeakingZoomCreate,
-            ResourceId = booking.Id,
-            State = AsyncState.Queued,
-            AvailableAt = timeProvider.GetUtcNow(),
-            CreatedAt = timeProvider.GetUtcNow()
-        });
-
-        // Queue notification jobs
-        db.BackgroundJobs.Add(new BackgroundJobItem
-        {
-            Id = $"bgj-{Guid.NewGuid():N}",
-            Type = JobType.PrivateSpeakingBookingConfirmation,
-            ResourceId = booking.Id,
-            State = AsyncState.Queued,
-            AvailableAt = timeProvider.GetUtcNow(),
-            CreatedAt = timeProvider.GetUtcNow()
-        });
-
+        QueueBookingPostCommitJobs(booking.Id, includeCalendarSync: false);
         await db.SaveChangesAsync(ct);
 
         return true;
@@ -685,6 +713,9 @@ public sealed class PrivateSpeakingService(
 
             await AuditAsync(booking.Id, "system", "system", "zoom_created",
                 $"Meeting ID: {result.MeetingId}", ct);
+
+            QueueCalendarSyncJob(booking.Id);
+            await db.SaveChangesAsync(ct);
         }
         catch (Exception ex)
         {
@@ -692,6 +723,12 @@ public sealed class PrivateSpeakingService(
             booking.ZoomError = ex.Message.Length > 500 ? ex.Message[..500] : ex.Message;
             booking.ZoomRetryCount++;
             booking.UpdatedAt = timeProvider.GetUtcNow();
+            if (booking.ZoomRetryCount >= 3)
+            {
+                booking.Status = PrivateSpeakingBookingStatus.Failed;
+                await RestoreSpeakingEntitlementAsync(booking, "zoom_creation_failed", ct);
+                QueueCalendarSyncJob(booking.Id);
+            }
             await db.SaveChangesAsync(ct);
 
             logger.LogError(ex, "Failed to create Zoom meeting for booking {BookingId}", bookingId);
@@ -896,6 +933,11 @@ public sealed class PrivateSpeakingService(
         booking.CancelledAt = timeProvider.GetUtcNow();
         booking.UpdatedAt = timeProvider.GetUtcNow();
 
+        if (booking.EntitlementConsumed && booking.EntitlementRestoredAt is null && booking.RescheduledToBookingId is null)
+        {
+            await RestoreSpeakingEntitlementAsync(booking, $"cancelled_by_{actorRole}", ct);
+        }
+
         await db.SaveChangesAsync(ct);
         await AuditAsync(booking.Id, actorId, actorRole, "booking_cancelled", reason, ct);
 
@@ -905,6 +947,9 @@ public sealed class PrivateSpeakingService(
             try { await zoomService.DeleteMeetingAsync(booking.ZoomMeetingId.Value, ct); }
             catch (Exception ex) { logger.LogWarning(ex, "Failed to delete Zoom meeting {MeetingId}", booking.ZoomMeetingId); }
         }
+
+        QueueCalendarSyncJob(booking.Id);
+        await db.SaveChangesAsync(ct);
 
         // Notify parties
         var tutorName = booking.TutorProfile?.DisplayName ?? "Tutor";
@@ -937,6 +982,177 @@ public sealed class PrivateSpeakingService(
         }
 
         return (true, null);
+    }
+
+    public async Task<BookingCheckoutResult> RescheduleBookingAsync(
+        string bookingId,
+        string learnerUserId,
+        DateTimeOffset newSessionStartUtc,
+        string learnerTimezone,
+        string? learnerNotes,
+        string idempotencyKey,
+        CancellationToken ct)
+    {
+        var config = await GetConfigAsync(ct);
+        if (!config.IsEnabled)
+            return BookingCheckoutResult.Fail("Private Speaking Sessions are currently disabled.");
+        if (!config.AllowReschedule)
+            return BookingCheckoutResult.Fail("Rescheduling is not currently enabled.");
+        if (!IsUsableIdempotencyKey(idempotencyKey))
+            return BookingCheckoutResult.Fail("A valid reschedule idempotency key is required.");
+
+        await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, ct);
+        var idempotencyScope = BuildIdempotencyScopeKey("reschedule", learnerUserId, bookingId, idempotencyKey);
+        var idempotencyPrefix = BuildScopedIdempotencyPrefix(idempotencyScope);
+        var scopedIdempotencyKey = BuildScopedIdempotencyKey(
+            idempotencyScope,
+            newSessionStartUtc.UtcDateTime.ToString("O", CultureInfo.InvariantCulture),
+            learnerTimezone,
+            learnerNotes ?? string.Empty);
+
+        var existingByIdempotency = await db.PrivateSpeakingBookings
+            .FirstOrDefaultAsync(item => item.LearnerUserId == learnerUserId
+                && item.IdempotencyKey != null
+                && item.IdempotencyKey.StartsWith(idempotencyPrefix), ct);
+        if (existingByIdempotency is not null)
+        {
+            if (!string.Equals(existingByIdempotency.IdempotencyKey, scopedIdempotencyKey, StringComparison.Ordinal))
+            {
+                return BookingCheckoutResult.Fail("This idempotency key was already used with different reschedule details. Please retry with a new key.");
+            }
+
+            await transaction.CommitAsync(ct);
+            return new BookingCheckoutResult(
+                true,
+                null,
+                existingByIdempotency.Id,
+                existingByIdempotency.StripeCheckoutSessionId,
+                null,
+                existingByIdempotency.EntitlementConsumed);
+        }
+
+        var original = await db.PrivateSpeakingBookings
+            .Include(item => item.TutorProfile)
+            .FirstOrDefaultAsync(item => item.Id == bookingId, ct);
+        if (original is null || original.LearnerUserId != learnerUserId)
+            return BookingCheckoutResult.Fail("Booking not found.");
+        if (original.Status is not (PrivateSpeakingBookingStatus.Confirmed or PrivateSpeakingBookingStatus.ZoomCreated))
+            return BookingCheckoutResult.Fail("Only confirmed upcoming sessions can be rescheduled.");
+        if (original.RescheduledToBookingId is not null)
+            return BookingCheckoutResult.Fail("This booking has already been rescheduled.");
+
+        var now = timeProvider.GetUtcNow();
+        var hoursUntilOriginal = (original.SessionStartUtc - now).TotalHours;
+        if (hoursUntilOriginal < config.RescheduleWindowHours)
+            return BookingCheckoutResult.Fail($"Reschedules must be made at least {config.RescheduleWindowHours} hours before the session.");
+
+        var profile = original.TutorProfile
+            ?? await db.PrivateSpeakingTutorProfiles.FindAsync([original.TutorProfileId], ct);
+        if (profile is null || !profile.IsActive)
+            return BookingCheckoutResult.Fail("Tutor is not available.");
+
+        var minBookingTime = now.AddHours(config.MinBookingLeadTimeHours);
+        if (newSessionStartUtc <= minBookingTime)
+            return BookingCheckoutResult.Fail($"Sessions must be booked at least {config.MinBookingLeadTimeHours} hours in advance.");
+        var maxBookingTime = now.AddDays(config.MaxBookingAdvanceDays);
+        if (newSessionStartUtc > maxBookingTime)
+            return BookingCheckoutResult.Fail($"Sessions cannot be booked more than {config.MaxBookingAdvanceDays} days in advance.");
+
+        var durationMinutes = original.DurationMinutes;
+        if (!await IsRequestedSlotAvailableAsync(profile, newSessionStartUtc, durationMinutes, ct))
+            return BookingCheckoutResult.Fail("This time slot is no longer available. Please select another slot.");
+
+        var newSessionEndUtc = newSessionStartUtc.AddMinutes(durationMinutes);
+        var newSessionStartWithBuffer = newSessionStartUtc.AddMinutes(-config.BufferMinutesBetweenSlots);
+        var newSessionEndWithBuffer = newSessionEndUtc.AddMinutes(config.BufferMinutesBetweenSlots);
+        var hasTutorConflict = await db.PrivateSpeakingBookings.AnyAsync(b =>
+            b.Id != original.Id
+            && b.TutorProfileId == original.TutorProfileId
+            && b.SessionStartUtc < newSessionEndWithBuffer
+            && b.SessionStartUtc.AddMinutes(b.DurationMinutes) > newSessionStartWithBuffer
+            && b.Status != PrivateSpeakingBookingStatus.Cancelled
+            && b.Status != PrivateSpeakingBookingStatus.Expired
+            && b.Status != PrivateSpeakingBookingStatus.Failed
+            && b.Status != PrivateSpeakingBookingStatus.Refunded, ct);
+        if (hasTutorConflict)
+            return BookingCheckoutResult.Fail("This time slot is no longer available. Please select another slot.");
+
+        var learnerConflict = await db.PrivateSpeakingBookings.AnyAsync(b =>
+            b.Id != original.Id
+            && b.LearnerUserId == learnerUserId
+            && b.SessionStartUtc < newSessionEndUtc
+            && b.SessionStartUtc.AddMinutes(b.DurationMinutes) > newSessionStartUtc
+            && b.Status != PrivateSpeakingBookingStatus.Cancelled
+            && b.Status != PrivateSpeakingBookingStatus.Expired
+            && b.Status != PrivateSpeakingBookingStatus.Failed
+            && b.Status != PrivateSpeakingBookingStatus.Refunded, ct);
+        if (learnerConflict)
+            return BookingCheckoutResult.Fail("You already have a booking at this time. Please select a different slot.");
+
+        var calendarBusy = await calendarService.CheckBusyAsync(original.TutorProfileId, newSessionStartUtc, newSessionEndUtc, ct);
+        if (calendarBusy.Connected)
+        {
+            if (calendarBusy.Error is not null)
+                return BookingCheckoutResult.Fail("Tutor calendar availability could not be verified. Please try another slot shortly.");
+            if (calendarBusy.IsBusy)
+                return BookingCheckoutResult.Fail("Tutor calendar shows this slot is no longer available. Please select another slot.");
+        }
+
+        var replacement = new PrivateSpeakingBooking
+        {
+            Id = $"psb-{Guid.NewGuid():N}",
+            LearnerUserId = learnerUserId,
+            TutorProfileId = original.TutorProfileId,
+            Status = PrivateSpeakingBookingStatus.Confirmed,
+            SessionStartUtc = newSessionStartUtc,
+            DurationMinutes = durationMinutes,
+            TutorTimezone = profile.Timezone,
+            LearnerTimezone = learnerTimezone,
+            PriceMinorUnits = original.PriceMinorUnits,
+            Currency = original.Currency,
+            PaymentStatus = original.PaymentStatus,
+            PaymentConfirmedAt = original.PaymentConfirmedAt,
+            EntitlementSubscriptionId = original.EntitlementSubscriptionId,
+            EntitlementConsumed = original.EntitlementConsumed,
+            EntitlementConsumedAt = original.EntitlementConsumedAt,
+            StripeCheckoutSessionId = null,
+            LearnerNotes = learnerNotes ?? original.LearnerNotes,
+            IdempotencyKey = scopedIdempotencyKey,
+            RescheduledFromBookingId = original.Id,
+            CreatedAt = now,
+            UpdatedAt = now
+        };
+
+        db.PrivateSpeakingBookings.Add(replacement);
+        original.Status = PrivateSpeakingBookingStatus.Cancelled;
+        original.CancelledBy = learnerUserId;
+        original.CancellationReason = "rescheduled";
+        original.CancelledAt = now;
+        original.RescheduledToBookingId = replacement.Id;
+        original.UpdatedAt = now;
+
+        await db.SaveChangesAsync(ct);
+        await AuditAsync(original.Id, learnerUserId, "learner", "booking_rescheduled_from", replacement.Id, ct);
+        await AuditAsync(replacement.Id, learnerUserId, "learner", "booking_rescheduled_to", original.Id, ct);
+        QueueCalendarSyncJob(original.Id);
+        QueueBookingPostCommitJobs(replacement.Id, includeCalendarSync: false);
+        await db.SaveChangesAsync(ct);
+        await transaction.CommitAsync(ct);
+
+        if (original.ZoomMeetingId.HasValue)
+        {
+            try { await zoomService.DeleteMeetingAsync(original.ZoomMeetingId.Value, ct); }
+            catch (Exception ex) { logger.LogWarning(ex, "Failed to delete Zoom meeting {MeetingId} for rescheduled booking", original.ZoomMeetingId); }
+        }
+
+        return new BookingCheckoutResult(
+            true,
+            null,
+            replacement.Id,
+            null,
+            null,
+            replacement.EntitlementConsumed,
+            null);
     }
 
     // ── Learner Queries ─────────────────────────────────────────────────
@@ -985,6 +1201,106 @@ public sealed class PrivateSpeakingService(
 
         var bookings = await query.ToListAsync(ct);
         return bookings.OrderByDescending(b => b.SessionStartUtc).ToList();
+    }
+
+    public async Task<LiveClassJoinTokenResponse> CreateLearnerJoinTokenAsync(
+        string bookingId,
+        string learnerUserId,
+        CancellationToken ct)
+    {
+        var booking = await db.PrivateSpeakingBookings
+            .AsNoTracking()
+            .Include(item => item.TutorProfile)
+            .FirstOrDefaultAsync(item => item.Id == bookingId && item.LearnerUserId == learnerUserId, ct)
+            ?? throw ApiException.NotFound("private_speaking_booking_not_found", "Private speaking booking not found.");
+
+        ValidateJoinWindow(booking, role: "learner");
+
+        var learner = await db.Users.AsNoTracking().FirstOrDefaultAsync(user => user.Id == learnerUserId, ct)
+            ?? throw ApiException.NotFound("learner_not_found", "Learner profile not found.");
+
+        return await CreateJoinTokenAsync(booking, learner.DisplayName, learner.Email, role: 0, ct);
+    }
+
+    public async Task<LiveClassJoinTokenResponse> CreateExpertJoinTokenAsync(
+        string bookingId,
+        string expertUserId,
+        CancellationToken ct)
+    {
+        var booking = await db.PrivateSpeakingBookings
+            .AsNoTracking()
+            .Include(item => item.TutorProfile)
+            .FirstOrDefaultAsync(item => item.Id == bookingId, ct)
+            ?? throw ApiException.NotFound("private_speaking_booking_not_found", "Private speaking booking not found.");
+
+        if (booking.TutorProfile?.ExpertUserId != expertUserId)
+        {
+            throw ApiException.Forbidden("private_speaking_not_assigned", "This private speaking session is assigned to another tutor.");
+        }
+
+        ValidateJoinWindow(booking, role: "expert");
+
+        var expert = await db.ExpertUsers.AsNoTracking().FirstOrDefaultAsync(user => user.Id == expertUserId, ct)
+            ?? throw ApiException.NotFound("expert_not_found", "Expert profile not found.");
+
+        return await CreateJoinTokenAsync(booking, expert.DisplayName, expert.Email, role: 1, ct);
+    }
+
+    public async Task<PrivateSpeakingCalendarInvite> BuildCalendarInviteAsync(
+        string bookingId,
+        string actorId,
+        string actorRole,
+        CancellationToken ct)
+    {
+        var booking = await db.PrivateSpeakingBookings
+            .AsNoTracking()
+            .Include(item => item.TutorProfile)
+            .FirstOrDefaultAsync(item => item.Id == bookingId, ct)
+            ?? throw ApiException.NotFound("private_speaking_booking_not_found", "Private speaking booking not found.");
+
+        if (actorRole == "learner" && booking.LearnerUserId != actorId)
+        {
+            throw ApiException.NotFound("private_speaking_booking_not_found", "Private speaking booking not found.");
+        }
+
+        if (actorRole == "expert" && booking.TutorProfile?.ExpertUserId != actorId)
+        {
+            throw ApiException.NotFound("private_speaking_booking_not_found", "Private speaking booking not found.");
+        }
+
+        var calendar = new IcalCalendar { Method = "REQUEST" };
+        var title = $"OET Private Speaking Session with {booking.TutorProfile?.DisplayName ?? "Tutor"}";
+        var ev = new CalendarEvent
+        {
+            Uid = $"oet-private-speaking-{booking.Id}@oetlearner",
+            Summary = title,
+            Description = "OET private speaking session. Join from your OET dashboard when the room opens.",
+            Start = new CalDateTime(booking.SessionStartUtc.UtcDateTime, "UTC"),
+            End = new CalDateTime(booking.SessionStartUtc.AddMinutes(booking.DurationMinutes).UtcDateTime, "UTC"),
+            Location = "OET dashboard",
+            DtStamp = new CalDateTime(timeProvider.GetUtcNow().UtcDateTime, "UTC"),
+        };
+
+        if (!string.IsNullOrWhiteSpace(booking.LearnerTimezone) && !string.Equals(booking.LearnerTimezone, "UTC", StringComparison.OrdinalIgnoreCase))
+        {
+            try
+            {
+                ev.Start = new CalDateTime(booking.SessionStartUtc.UtcDateTime, booking.LearnerTimezone);
+                ev.End = new CalDateTime(booking.SessionStartUtc.AddMinutes(booking.DurationMinutes).UtcDateTime, booking.LearnerTimezone);
+            }
+            catch (Exception ex)
+            {
+                logger.LogDebug(ex, "Falling back to UTC for private speaking ics TZID {Timezone}", booking.LearnerTimezone);
+                ev.Start = new CalDateTime(booking.SessionStartUtc.UtcDateTime, "UTC");
+                ev.End = new CalDateTime(booking.SessionStartUtc.AddMinutes(booking.DurationMinutes).UtcDateTime, "UTC");
+            }
+        }
+
+        calendar.Events.Add(ev);
+        var serializer = new CalendarSerializer();
+        var ics = serializer.SerializeToString(calendar) ?? string.Empty;
+        var fileName = $"oet-private-speaking-{booking.Id}.ics";
+        return new PrivateSpeakingCalendarInvite(fileName, "text/calendar; method=REQUEST", ics);
     }
 
     // ── Admin Queries ───────────────────────────────────────────────────
@@ -1127,6 +1443,272 @@ public sealed class PrivateSpeakingService(
 
     // ── Private Helpers ─────────────────────────────────────────────────
 
+    private async Task<Subscription?> ResolveEligibleSpeakingSubscriptionAsync(
+        string learnerUserId,
+        DateTimeOffset now,
+        CancellationToken ct)
+    {
+        var snapshot = await entitlementResolver.ResolveAsync(learnerUserId, ct);
+        if (!snapshot.HasEligibleSubscription
+            || snapshot.IsFrozen
+            || snapshot.SpeakingSessionsRemaining <= 0
+            || string.IsNullOrWhiteSpace(snapshot.SubscriptionId))
+        {
+            return null;
+        }
+
+        return await db.Subscriptions
+            .FirstOrDefaultAsync(subscription => subscription.Id == snapshot.SubscriptionId
+                && subscription.UserId == learnerUserId
+                && subscription.SpeakingSessionsRemaining > 0
+                && (subscription.ExpiresAt == null || subscription.ExpiresAt > now), ct);
+    }
+
+    private async Task<bool> IsRequestedSlotAvailableAsync(
+        PrivateSpeakingTutorProfile profile,
+        DateTimeOffset sessionStartUtc,
+        int durationMinutes,
+        CancellationToken ct)
+    {
+        TimeZoneInfo tutorTimeZone;
+        try
+        {
+            tutorTimeZone = TimeZoneInfo.FindSystemTimeZoneById(profile.Timezone);
+        }
+        catch (TimeZoneNotFoundException)
+        {
+            return false;
+        }
+        catch (InvalidTimeZoneException)
+        {
+            return false;
+        }
+
+        var tutorLocalStart = TimeZoneInfo.ConvertTime(sessionStartUtc, tutorTimeZone);
+        var tutorLocalDate = DateOnly.FromDateTime(tutorLocalStart.DateTime);
+        var slots = await GetAvailableSlotsAsync(profile.Id, tutorLocalDate, tutorLocalDate, ct);
+        return slots.Any(slot => slot.StartTimeUtc == sessionStartUtc && slot.DurationMinutes == durationMinutes);
+    }
+
+    private async Task RestoreSpeakingEntitlementAsync(
+        PrivateSpeakingBooking booking,
+        string reason,
+        CancellationToken ct)
+    {
+        if (!booking.EntitlementConsumed || booking.EntitlementRestoredAt is not null)
+        {
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(booking.EntitlementSubscriptionId))
+        {
+            booking.EntitlementRestoredAt = timeProvider.GetUtcNow();
+            booking.EntitlementRestorationReason = "subscription_missing";
+            return;
+        }
+
+        var subscription = await db.Subscriptions
+            .FirstOrDefaultAsync(item => item.Id == booking.EntitlementSubscriptionId, ct);
+        if (subscription is null)
+        {
+            booking.EntitlementRestoredAt = timeProvider.GetUtcNow();
+            booking.EntitlementRestorationReason = "subscription_missing";
+            return;
+        }
+
+        subscription.SpeakingSessionsRemaining = checked(subscription.SpeakingSessionsRemaining + 1);
+        booking.EntitlementRestoredAt = timeProvider.GetUtcNow();
+        booking.EntitlementRestorationReason = reason.Length > 128 ? reason[..128] : reason;
+    }
+
+    private void QueueBookingPostCommitJobs(string bookingId, bool includeCalendarSync)
+    {
+        var now = timeProvider.GetUtcNow();
+        db.BackgroundJobs.Add(new BackgroundJobItem
+        {
+            Id = $"bgj-{Guid.NewGuid():N}",
+            Type = JobType.PrivateSpeakingZoomCreate,
+            ResourceId = bookingId,
+            State = AsyncState.Queued,
+            AvailableAt = now,
+            CreatedAt = now,
+            LastTransitionAt = now
+        });
+
+        db.BackgroundJobs.Add(new BackgroundJobItem
+        {
+            Id = $"bgj-{Guid.NewGuid():N}",
+            Type = JobType.PrivateSpeakingBookingConfirmation,
+            ResourceId = bookingId,
+            State = AsyncState.Queued,
+            AvailableAt = now,
+            CreatedAt = now,
+            LastTransitionAt = now
+        });
+
+        if (includeCalendarSync)
+        {
+            QueueCalendarSyncJob(bookingId);
+        }
+    }
+
+    private void QueueCalendarSyncJob(string bookingId)
+    {
+        var now = timeProvider.GetUtcNow();
+        db.BackgroundJobs.Add(new BackgroundJobItem
+        {
+            Id = $"bgj-{Guid.NewGuid():N}",
+            Type = JobType.PrivateSpeakingCalendarSync,
+            ResourceId = bookingId,
+            State = AsyncState.Queued,
+            AvailableAt = now,
+            CreatedAt = now,
+            LastTransitionAt = now
+        });
+    }
+
+    private void ValidateJoinWindow(PrivateSpeakingBooking booking, string role)
+    {
+        if (booking.Status is not (PrivateSpeakingBookingStatus.ZoomCreated or PrivateSpeakingBookingStatus.InProgress))
+        {
+            throw ApiException.Conflict("private_speaking_zoom_not_ready", "The Zoom room is not ready yet.");
+        }
+
+        if (booking.ZoomMeetingId is null)
+        {
+            throw ApiException.ServiceUnavailable("private_speaking_zoom_not_ready", "The Zoom room is not ready yet.");
+        }
+
+        var now = timeProvider.GetUtcNow();
+        var opensAt = booking.SessionStartUtc.AddMinutes(-30);
+        var closesAt = booking.SessionStartUtc.AddMinutes(booking.DurationMinutes).AddMinutes(15);
+        if (now < opensAt || now > closesAt)
+        {
+            var accessLabel = role == "expert" ? "host access" : "joins";
+            throw ApiException.Conflict("private_speaking_join_window_closed", $"Private speaking {accessLabel} open 30 minutes before start and close 15 minutes after the scheduled end.");
+        }
+    }
+
+    private async Task<LiveClassJoinTokenResponse> CreateJoinTokenAsync(
+        PrivateSpeakingBooking booking,
+        string displayName,
+        string? email,
+        int role,
+        CancellationToken ct)
+    {
+        var meetingNumber = booking.ZoomMeetingId?.ToString(CultureInfo.InvariantCulture)
+            ?? throw ApiException.ServiceUnavailable("private_speaking_zoom_not_ready", "The Zoom room is not ready yet.");
+        var now = timeProvider.GetUtcNow();
+        var expiresAt = Min(now.AddHours(2), booking.SessionStartUtc.AddMinutes(booking.DurationMinutes).AddMinutes(15));
+        var signature = await zoomService.GenerateMeetingSdkSignatureAsync(meetingNumber, role, expiresAt, ct);
+        var sdkKey = await zoomService.GetMeetingSdkKeyAsync(ct);
+
+        string? zak = null;
+        if (role == 1)
+        {
+            var hostZoomUserId = await ResolveHostZoomUserIdAsync(booking, ct);
+            if (!string.IsNullOrWhiteSpace(hostZoomUserId))
+            {
+                try
+                {
+                    zak = await zoomService.GetZakTokenAsync(hostZoomUserId, ct);
+                }
+                catch (Exception ex)
+                {
+                    logger.LogWarning(ex, "Failed to fetch private speaking ZAK token for booking {BookingId}", booking.Id);
+                }
+            }
+        }
+
+        return new LiveClassJoinTokenResponse(
+            "zoom",
+            sdkKey,
+            signature,
+            meetingNumber,
+            displayName,
+            email,
+            role,
+            booking.ZoomMeetingPassword,
+            zak,
+            role == 0 ? booking.ZoomJoinUrl : booking.ZoomStartUrl,
+            expiresAt);
+    }
+
+    private async Task<string?> ResolveHostZoomUserIdAsync(PrivateSpeakingBooking booking, CancellationToken ct)
+    {
+        var expertUserId = booking.TutorProfile?.ExpertUserId;
+        if (string.IsNullOrWhiteSpace(expertUserId))
+        {
+            expertUserId = await db.PrivateSpeakingTutorProfiles
+                .AsNoTracking()
+                .Where(item => item.Id == booking.TutorProfileId)
+                .Select(item => item.ExpertUserId)
+                .FirstOrDefaultAsync(ct);
+        }
+
+        if (string.IsNullOrWhiteSpace(expertUserId))
+        {
+            return null;
+        }
+
+        var zoomUserId = await db.Tutors
+            .AsNoTracking()
+            .Where(tutor => tutor.UserId == expertUserId && tutor.IsActive)
+            .Select(tutor => tutor.ZoomUserId)
+            .FirstOrDefaultAsync(ct);
+        return string.IsNullOrWhiteSpace(zoomUserId) ? null : zoomUserId;
+    }
+
+    private static DateTimeOffset Min(DateTimeOffset left, DateTimeOffset right)
+        => left <= right ? left : right;
+
+    private static string BuildIdempotencyScopeKey(params string[] parts)
+    {
+        var normalized = string.Join('|', parts.Select(part => part.Trim()));
+        var hash = SHA256.HashData(Encoding.UTF8.GetBytes(normalized));
+        return Convert.ToHexString(hash).ToLowerInvariant();
+    }
+
+    private static string BuildScopedIdempotencyPrefix(string scopeHash)
+        => $"psik-{scopeHash}-";
+
+    private static string BuildScopedIdempotencyKey(string scopeHash, params string[] payloadParts)
+    {
+        var normalizedPayload = string.Join('|', payloadParts.Select(part => part.Trim()));
+        var payloadHash = SHA256.HashData(Encoding.UTF8.GetBytes(normalizedPayload));
+        return $"{BuildScopedIdempotencyPrefix(scopeHash)}{Convert.ToHexString(payloadHash)[..16].ToLowerInvariant()}";
+    }
+
+    private static bool IsUsableIdempotencyKey(string? idempotencyKey)
+    {
+        var trimmed = idempotencyKey?.Trim();
+        if (trimmed is null || trimmed.Length is < 16 or > 256)
+        {
+            return false;
+        }
+
+        if (Guid.TryParse(trimmed, out var guid))
+        {
+            var formatted = guid.ToString("D");
+            return guid != Guid.Empty
+                && formatted[14] == '4'
+                && formatted[19] is '8' or '9' or 'a' or 'b'
+                && formatted.Where(char.IsAsciiHexDigit).Distinct().Take(8).Count() == 8;
+        }
+
+        return trimmed.Length >= 32
+            && trimmed.All(IsIdempotencyTokenChar)
+            && trimmed.Distinct().Take(8).Count() == 8;
+    }
+
+    private static bool IsIdempotencyTokenChar(char value)
+    {
+        return value is >= 'a' and <= 'z'
+            || value is >= 'A' and <= 'Z'
+            || value is >= '0' and <= '9'
+            || value is '-' or '_' or '.' or '~';
+    }
+
     private async Task<TutorCalibrationBookingGuard> CheckTutorCalibrationBookingGuardAsync(
         PrivateSpeakingTutorProfile profile,
         DateTimeOffset now,
@@ -1266,10 +1848,14 @@ public record BookingCheckoutResult(
     string? Error,
     string? BookingId = null,
     string? CheckoutSessionId = null,
-    string? CheckoutUrl = null)
+    string? CheckoutUrl = null,
+    bool EntitlementUsed = false,
+    int? SpeakingSessionsRemaining = null)
 {
     public static BookingCheckoutResult Fail(string error) => new(false, error);
 }
+
+public record PrivateSpeakingCalendarInvite(string FileName, string ContentType, string Content);
 
 public record PrivateSpeakingDashboardStats(
     int TotalBookings,

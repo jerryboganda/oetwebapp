@@ -35,12 +35,13 @@ const STEPS = [
 
 export default function ListeningLessonPage() {
   const params = useParams<{ slug: string }>();
+  const slug = params?.slug ?? '';
   const [lesson, setLesson] = useState<LessonDetail | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
-    fetch(`/v1/listening-pathway/lessons/${encodeURIComponent(params.slug)}`)
+    fetch(`/v1/listening-pathway/lessons/${encodeURIComponent(slug)}`)
       .then((res) => (res.ok ? res.json() : null))
       .then((d: LessonDetail | null) => {
         if (!cancelled) {
@@ -54,7 +55,7 @@ export default function ListeningLessonPage() {
     return () => {
       cancelled = true;
     };
-  }, [params.slug]);
+  }, [slug]);
 
   if (loading) {
     return (

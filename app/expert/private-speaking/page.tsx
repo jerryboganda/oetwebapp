@@ -1,19 +1,28 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { ZoomMeetingEmbed } from '@/components/class/ZoomMeetingEmbed';
 import { ExpertRouteHero, ExpertRouteSectionHeader } from '@/components/domain/expert-route-surface';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
-import { Calendar, Clock, Video, Star, Plus, Trash2, X } from 'lucide-react';
+import { Calendar, Clock, Video, Star, Plus, Trash2, X, Link2, Unlink, Download } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
+  type LiveClassJoinToken,
+  type PrivateSpeakingCalendarStatus,
   fetchExpertPrivateSpeakingProfile,
   fetchExpertPrivateSpeakingSessions,
   fetchExpertPrivateSpeakingAvailability,
   updateExpertPrivateSpeakingAvailability,
   deleteExpertPrivateSpeakingAvailability,
   cancelExpertPrivateSpeakingSession,
+  fetchExpertPrivateSpeakingJoinToken,
+  fetchExpertPrivateSpeakingCalendarStatus,
+  connectExpertPrivateSpeakingGoogleCalendar,
+  disconnectExpertPrivateSpeakingCalendar,
+  downloadExpertPrivateSpeakingCalendarInvite,
 } from '@/lib/api';
+import { safeZoomUrl } from '@/lib/zoom-url';
 
 type TutorProfile = {
   id: string; displayName: string; bio: string | null; timezone: string;
@@ -23,7 +32,7 @@ type TutorProfile = {
 
 type ExpertSession = {
   id: string; learnerUserId: string; status: string; sessionStartUtc: string;
-  durationMinutes: number; zoomJoinUrl: string | null; zoomStartUrl: string | null;
+  durationMinutes: number; zoomJoinUrl: string | null;
   zoomStatus: string; learnerRating: number | null; learnerFeedback: string | null;
 };
 
@@ -34,6 +43,12 @@ type AvailabilityRule = {
 
 type ExpertTab = 'sessions' | 'availability';
 const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+type ActiveMeeting = {
+  token: LiveClassJoinToken;
+  title: string;
+  startsAt: string;
+};
 
 function StatusBadge({ status }: { status: string }) {
   const colors: Record<string, string> = {
@@ -55,8 +70,12 @@ export default function ExpertPrivateSpeakingPage() {
   const [profile, setProfile] = useState<TutorProfile | null>(null);
   const [sessions, setSessions] = useState<ExpertSession[]>([]);
   const [availability, setAvailability] = useState<AvailabilityRule[]>([]);
+  const [calendarStatus, setCalendarStatus] = useState<PrivateSpeakingCalendarStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [calendarBusy, setCalendarBusy] = useState(false);
+  const [startingSessionId, setStartingSessionId] = useState<string | null>(null);
+  const [activeMeeting, setActiveMeeting] = useState<ActiveMeeting | null>(null);
 
   // New availability rule form
   const [newRule, setNewRule] = useState({ dayOfWeek: 1, startTime: '09:00', endTime: '17:00' });
@@ -73,13 +92,15 @@ export default function ExpertPrivateSpeakingPage() {
   async function loadData() {
     setLoading(true);
     try {
-      const [profileData, sessionData] = await Promise.all([
+      const [profileData, sessionData, calendarData] = await Promise.all([
         fetchExpertPrivateSpeakingProfile(),
         fetchExpertPrivateSpeakingSessions(),
+        fetchExpertPrivateSpeakingCalendarStatus(),
       ]);
       // Backend returns `null` when the expert has not yet created a tutor profile.
       setProfile(profileData ? (profileData as TutorProfile) : null);
       setSessions(sessionData as ExpertSession[]);
+      setCalendarStatus(calendarData);
     } catch {
       setError('Failed to load your private speaking data.');
     } finally {
@@ -91,8 +112,12 @@ export default function ExpertPrivateSpeakingPage() {
     try {
       const data = await fetchExpertPrivateSpeakingProfile();
       setProfile(data ? (data as TutorProfile) : null);
-      const rules = await fetchExpertPrivateSpeakingAvailability();
+      const [rules, calendarData] = await Promise.all([
+        fetchExpertPrivateSpeakingAvailability(),
+        fetchExpertPrivateSpeakingCalendarStatus(),
+      ]);
       setAvailability(rules as AvailabilityRule[]);
+      setCalendarStatus(calendarData);
     } catch {
       setError('Failed to load availability.');
     }
@@ -128,6 +153,69 @@ export default function ExpertPrivateSpeakingPage() {
       setError('Failed to cancel session.');
     } finally {
       setCancelling(false);
+    }
+  }
+
+  async function handleStartSession(session: ExpertSession) {
+    setStartingSessionId(session.id);
+    setError(null);
+    try {
+      const token = await fetchExpertPrivateSpeakingJoinToken(session.id);
+      if (token.sdkKey && token.signature && (token.role === 0 || token.zak)) {
+        setActiveMeeting({ token, title: 'Private Speaking Session', startsAt: session.sessionStartUtc });
+        return;
+      }
+
+      const joinUrl = safeZoomUrl(token.joinUrl);
+      if (joinUrl) {
+        window.open(joinUrl, '_blank', 'noopener,noreferrer');
+        return;
+      }
+
+      setError('Zoom host details are not ready for this session yet.');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Could not prepare the Zoom host room.');
+    } finally {
+      setStartingSessionId(null);
+    }
+  }
+
+  async function handleConnectCalendar() {
+    setCalendarBusy(true);
+    setError(null);
+    try {
+      const result = await connectExpertPrivateSpeakingGoogleCalendar();
+      window.location.href = result.authorizationUrl;
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Could not start Google Calendar connection.');
+      setCalendarBusy(false);
+    }
+  }
+
+  async function handleDisconnectCalendar() {
+    setCalendarBusy(true);
+    setError(null);
+    try {
+      await disconnectExpertPrivateSpeakingCalendar();
+      setCalendarStatus(await fetchExpertPrivateSpeakingCalendarStatus());
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Could not disconnect Google Calendar.');
+    } finally {
+      setCalendarBusy(false);
+    }
+  }
+
+  async function handleDownloadInvite(sessionId: string) {
+    try {
+      const blob = await downloadExpertPrivateSpeakingCalendarInvite(sessionId);
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = `oet-private-speaking-${sessionId}.ics`;
+      anchor.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      setError('Could not download the calendar invite.');
     }
   }
 
@@ -170,6 +258,24 @@ export default function ExpertPrivateSpeakingPage() {
     );
   }
 
+  if (activeMeeting && activeMeeting.token.sdkKey && activeMeeting.token.signature) {
+    return (
+      <div className="space-y-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-primary">Private Speaking</p>
+            <h1 className="text-xl font-semibold text-navy">{activeMeeting.title}</h1>
+            <p className="text-sm text-muted">{new Date(activeMeeting.startsAt).toLocaleString('en-AU', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</p>
+          </div>
+          <Button type="button" variant="outline" onClick={() => setActiveMeeting(null)}>
+            Close meeting
+          </Button>
+        </div>
+        <ZoomMeetingEmbed joinToken={activeMeeting.token} onLeave={() => setActiveMeeting(null)} />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <ExpertRouteHero
@@ -186,14 +292,29 @@ export default function ExpertPrivateSpeakingPage() {
 
       {/* Profile summary */}
       <div className="rounded-2xl border border-border bg-surface p-5">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h3 className="font-bold text-navy">{profile.displayName}</h3>
             <p className="text-xs text-muted">{profile.timezone} · {profile.totalSessions} sessions · {profile.averageRating.toFixed(1)} avg rating</p>
+            <p className="mt-1 text-xs text-muted">
+              Calendar: {calendarStatus?.connected ? `Connected${calendarStatus.connectedEmail ? ` as ${calendarStatus.connectedEmail}` : ''}` : 'Not connected'}
+              {calendarStatus?.lastError ? ` · Last sync issue: ${calendarStatus.lastError}` : ''}
+            </p>
           </div>
-          <span className={`text-xs px-2.5 py-1 rounded-full ${profile.isActive ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300' : 'bg-background-light text-muted'}`}>
-            {profile.isActive ? 'Active' : 'Inactive'}
-          </span>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className={`text-xs px-2.5 py-1 rounded-full ${profile.isActive ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300' : 'bg-background-light text-muted'}`}>
+              {profile.isActive ? 'Active' : 'Inactive'}
+            </span>
+            {calendarStatus?.connected ? (
+              <Button type="button" variant="outline" size="sm" onClick={handleDisconnectCalendar} disabled={calendarBusy}>
+                <Unlink className="w-4 h-4 mr-1" /> Disconnect Calendar
+              </Button>
+            ) : (
+              <Button type="button" variant="primary" size="sm" onClick={handleConnectCalendar} disabled={calendarBusy}>
+                <Link2 className="w-4 h-4 mr-1" /> Connect Google Calendar
+              </Button>
+            )}
+          </div>
         </div>
       </div>
 
@@ -238,12 +359,16 @@ export default function ExpertPrivateSpeakingPage() {
                         </p>
                       </div>
                       <div className="flex items-center gap-2">
-                        {session.zoomStartUrl && (
-                          <a href={session.zoomStartUrl} target="_blank" rel="noopener noreferrer"
-                            className="flex items-center gap-1.5 px-4 py-2 bg-primary hover:bg-primary/90 text-white rounded-lg text-sm font-medium">
-                            <Video className="w-4 h-4" /> Start Zoom
-                          </a>
+                        {(session.status === 'ZoomCreated' || session.status === 'InProgress') && (
+                          <button onClick={() => handleStartSession(session)} disabled={startingSessionId === session.id}
+                            className="flex items-center gap-1.5 px-4 py-2 bg-primary hover:bg-primary/90 text-white rounded-lg text-sm font-medium disabled:opacity-50">
+                            <Video className="w-4 h-4" /> {startingSessionId === session.id ? 'Opening...' : 'Start'}
+                          </button>
                         )}
+                        <button onClick={() => handleDownloadInvite(session.id)}
+                          className="flex items-center gap-1.5 px-3 py-2 border border-border text-muted hover:text-navy rounded-lg text-sm font-medium transition-colors">
+                          <Download className="w-4 h-4" /> Calendar
+                        </button>
                         <button
                           onClick={() => setCancelTarget(session)}
                           className="flex items-center gap-1.5 px-3 py-2 border border-danger/30 text-danger hover:bg-red-50 rounded-lg text-sm font-medium transition-colors"

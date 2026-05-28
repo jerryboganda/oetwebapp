@@ -5,6 +5,7 @@ import { motion, useReducedMotion } from 'motion/react';
 import {
   ArrowDownCircle,
   ArrowUpCircle,
+  Bot,
   Calendar,
   CheckCircle2,
   Clock,
@@ -34,6 +35,7 @@ import {
   createBillingCheckoutSession,
   createWalletTopUp,
   downloadInvoice,
+  fetchAiPackages,
   fetchBilling,
   fetchBillingChangePreview,
   fetchBillingQuote,
@@ -44,6 +46,8 @@ import {
 } from '@/lib/api';
 import type { WalletTopUpTier } from '@/lib/api';
 import type {
+  AiPackage,
+  AiPackagesResponse,
   BillingChangePreview,
   BillingData,
   BillingQuote,
@@ -92,14 +96,33 @@ function getPaymentBanner(payment: string | null, gateway: string | null) {
   }
 }
 
-type BillingTabId = 'overview' | 'plans' | 'credits' | 'invoices';
+type BillingTabId = 'overview' | 'plans' | 'credits' | 'ai-credits' | 'invoices';
 
 const BILLING_TABS: Array<{ id: BillingTabId; label: string; icon: React.ReactNode }> = [
   { id: 'overview', label: 'Overview', icon: <LayoutDashboard className="h-4 w-4" /> },
   { id: 'plans', label: 'Plans', icon: <Layers className="h-4 w-4" /> },
   { id: 'credits', label: 'Credits & Add-ons', icon: <Sparkles className="h-4 w-4" /> },
+  { id: 'ai-credits', label: 'AI Credits', icon: <Bot className="h-4 w-4" /> },
   { id: 'invoices', label: 'Invoices', icon: <Receipt className="h-4 w-4" /> },
 ];
+
+const AI_PACKAGE_SUBTEST_SECTIONS: Array<{ key: 'listening' | 'reading' | 'writing' | 'speaking'; label: string; headerClass: string }> = [
+  { key: 'listening', label: 'Listening', headerClass: 'bg-blue-700' },
+  { key: 'reading', label: 'Reading', headerClass: 'bg-purple-700' },
+  { key: 'writing', label: 'Writing', headerClass: 'bg-amber-600' },
+  { key: 'speaking', label: 'Speaking', headerClass: 'bg-emerald-700' },
+];
+
+function aiPackageValidityLabel(validityDays: number): string {
+  if (validityDays <= 0) return '';
+  return validityDays >= 180 ? '6-month validity' : `${validityDays}-day validity`;
+}
+
+function aiPackageHeadline(pkg: AiPackage): string {
+  if (pkg.group === 'mock') return `${pkg.mocks} full mock${pkg.mocks === 1 ? '' : 's'}`;
+  if (pkg.credits > 0) return `${pkg.credits} AI credit${pkg.credits === 1 ? '' : 's'}`;
+  return 'Unlimited practice access';
+}
 
 // ─── Component ───────────────────────────────────────────────────────
 
@@ -129,6 +152,10 @@ export default function BillingPage() {
   const [walletLoading, setWalletLoading] = useState(true);
   const [topUpTiers, setTopUpTiers] = useState<WalletTopUpTier[]>([]);
   const [walletCurrency, setWalletCurrency] = useState('AUD');
+
+  const [aiPackages, setAiPackages] = useState<AiPackagesResponse | null>(null);
+  const [aiPackagesLoading, setAiPackagesLoading] = useState(true);
+  const [aiPackageView, setAiPackageView] = useState<'full' | 'separate'>('full');
 
   const [freezeState, setFreezeState] = useState<LearnerFreezeStatus | null>(null);
   const [freezeLoadFailed, setFreezeLoadFailed] = useState(false);
@@ -200,6 +227,24 @@ export default function BillingPage() {
       .finally(() => setLoading(false));
     loadWallet();
   }, [loadWallet]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setAiPackagesLoading(true);
+    fetchAiPackages()
+      .then((res) => {
+        if (!cancelled) setAiPackages(res);
+      })
+      .catch(() => {
+        /* AI packages are optional; fail silently and show empty state */
+      })
+      .finally(() => {
+        if (!cancelled) setAiPackagesLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const visibleAddOns = useMemo(
     () =>
@@ -391,6 +436,62 @@ export default function BillingPage() {
   const invoiceDownloadsAvailable = data.entitlements?.invoiceDownloadsAvailable ?? false;
   const recentInvoices = invoices.slice(0, 3);
   const recentTransactions: WalletTransactionDto[] = wallet?.transactions?.slice(0, 4) ?? [];
+
+  const renderAiPackageCard = (pkg: AiPackage) => {
+    const busy = busyKey === `addon_purchase:${pkg.code}`;
+    const validity = aiPackageValidityLabel(pkg.validityDays);
+    return (
+      <motion.article
+        key={pkg.code}
+        initial={reducedMotion ? false : { opacity: 0, y: 6 }}
+        animate={reducedMotion ? undefined : { opacity: 1, y: 0 }}
+        transition={reducedMotion ? undefined : { duration: 0.25 }}
+        className="flex flex-col rounded-2xl border border-border bg-surface p-5 shadow-sm"
+      >
+        <div className="flex items-start justify-between gap-3">
+          <h3 className="text-xl font-semibold tracking-tight text-navy">{pkg.name}</h3>
+          {pkg.priorityQueue ? (
+            <span className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-amber-800 dark:bg-amber-300/20 dark:text-amber-200">
+              Priority
+            </span>
+          ) : null}
+        </div>
+        <p className="mt-2 text-sm leading-6 text-muted">{pkg.description}</p>
+        <div className="mt-4 rounded-xl border border-border/70 bg-background-light/60 p-4">
+          <p className="text-2xl font-semibold tracking-tight text-navy">{formatCurrency(pkg.price, pkg.currency)}</p>
+          <p className="mt-1 text-sm text-muted">
+            {aiPackageHeadline(pkg)}
+            {validity ? ` · ${validity}` : ''}
+          </p>
+        </div>
+        {pkg.features.length > 0 ? (
+          <ul className="mt-4 flex-1 space-y-2 text-sm text-navy">
+            {pkg.features.map((feature, index) => (
+              <li key={index} className="flex items-start gap-2">
+                <CheckCircle2 className="mt-0.5 h-4 w-4 flex-none text-emerald-600" />
+                <span>{feature}</span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <div className="flex-1" />
+        )}
+        <Button
+          className="mt-5"
+          fullWidth
+          loading={busy}
+          disabled={billingMutationsBlocked}
+          aria-busy={busy}
+          aria-disabled={billingMutationsBlocked || undefined}
+          title={billingMutationsBlocked ? billingBlockedMessage : undefined}
+          onClick={() => startCheckout('addon_purchase', 1, pkg.code, pkg.name)}
+        >
+          <ShoppingCart className="h-4 w-4" />
+          Buy now
+        </Button>
+      </motion.article>
+    );
+  };
 
   return (
     <LearnerDashboardShell
@@ -1084,6 +1185,98 @@ export default function BillingPage() {
               </div>
             )}
           </section>
+        </TabPanel>
+
+        {/* ── AI CREDITS ────────────────────────────────────────── */}
+        <TabPanel id="ai-credits" activeTab={activeTab}>
+          <LearnerSurfaceSectionHeader
+            eyebrow="AI Credits"
+            title="AI grading packages"
+            description="Credits grade your Writing letters and Speaking cards instantly with AI — 1 credit = 1 letter or card. Listening & Reading practice is always free. Credits are deducted when grading starts and automatically refunded if grading fails."
+            className="mb-4"
+          />
+
+          {aiPackagesLoading ? (
+            <div className="grid gap-4 lg:grid-cols-3">
+              {[1, 2, 3].map((i) => (
+                <Skeleton key={i} className="h-72 rounded-2xl" />
+              ))}
+            </div>
+          ) : !aiPackages ? (
+            <div className="rounded-2xl border border-dashed border-border bg-background-light p-5 text-center text-sm text-muted">
+              AI packages are not available right now. Please check back shortly.
+            </div>
+          ) : (
+            <>
+              <div className="mb-5 inline-flex rounded-xl border border-border bg-background-light p-1">
+                {(
+                  [
+                    { id: 'full' as const, label: 'Full Packages' },
+                    { id: 'separate' as const, label: 'Separate Packages' },
+                  ]
+                ).map((view) => (
+                  <button
+                    key={view.id}
+                    type="button"
+                    onClick={() => setAiPackageView(view.id)}
+                    className={`rounded-lg px-4 py-1.5 text-sm font-medium transition-all ${
+                      aiPackageView === view.id
+                        ? 'bg-emerald-700 text-white shadow-sm'
+                        : 'text-navy hover:bg-surface'
+                    }`}
+                    aria-pressed={aiPackageView === view.id}
+                  >
+                    {view.label}
+                  </button>
+                ))}
+              </div>
+
+              <p className="mb-5 text-sm text-muted">
+                {aiPackageView === 'full'
+                  ? 'All-in-one packages combine AI grading credits with unlimited Listening & Reading practice.'
+                  : 'Targeted packages focus on a single subtest. Listening & Reading are deterministic and always free to grade.'}
+              </p>
+
+              {aiPackageView === 'full' ? (
+                aiPackages.full.length > 0 ? (
+                  <div className="grid gap-4 lg:grid-cols-3">{aiPackages.full.map(renderAiPackageCard)}</div>
+                ) : (
+                  <div className="rounded-2xl border border-dashed border-border bg-background-light p-5 text-center text-sm text-muted">
+                    No full packages are available yet.
+                  </div>
+                )
+              ) : (
+                <div className="space-y-6">
+                  {AI_PACKAGE_SUBTEST_SECTIONS.map((section) => {
+                    const packages = aiPackages.separate[section.key];
+                    if (!packages || packages.length === 0) return null;
+                    return (
+                      <section key={section.key}>
+                        <div
+                          className={`mb-3 inline-block rounded-lg px-3 py-1.5 text-sm font-semibold text-white ${section.headerClass}`}
+                        >
+                          {section.label} Packages
+                        </div>
+                        <div className="grid gap-4 lg:grid-cols-3">{packages.map(renderAiPackageCard)}</div>
+                      </section>
+                    );
+                  })}
+                </div>
+              )}
+
+              {aiPackages.mock.length > 0 ? (
+                <div className="mt-8">
+                  <LearnerSurfaceSectionHeader
+                    eyebrow="Mock exams"
+                    title="Full mock exam packages"
+                    description="Each mock covers all 4 subtests — Writing & Speaking are AI-graded, Listening & Reading are auto-marked. Mock allowances are separate from AI credits."
+                    className="mb-4"
+                  />
+                  <div className="grid gap-4 lg:grid-cols-3">{aiPackages.mock.map(renderAiPackageCard)}</div>
+                </div>
+              ) : null}
+            </>
+          )}
         </TabPanel>
 
         {/* ── INVOICES ──────────────────────────────────────────── */}

@@ -176,7 +176,8 @@ public partial class AdminService
                 v.Category,
                 v.ExampleSentence,
                 v.AmericanSpelling,
-                v.Status
+                v.Status,
+                hasAudio = v.AudioMediaAssetId != null || !string.IsNullOrWhiteSpace(v.AudioUrl),
             })
         };
     }
@@ -573,6 +574,152 @@ public partial class AdminService
             Errors: errors);
     }
 
+    // ── Bulk activate (publish) ─────────────────────────────────────────
+
+    public async Task<object> BulkActivateVocabularyAsync(
+        string adminId, string adminName, IReadOnlyList<string> itemIds, CancellationToken ct)
+    {
+        if (itemIds.Count == 0)
+            throw ApiException.Validation("VOCABULARY_BULK_ACTIVATE_EMPTY", "Select at least one vocabulary item to publish.");
+        if (itemIds.Count > 2000)
+            throw ApiException.Validation("VOCABULARY_BULK_ACTIVATE_LIMIT", "Bulk publish is limited to 2000 vocabulary items at a time.");
+
+        var ids = itemIds.Select(id => id.Trim()).Where(id => !string.IsNullOrWhiteSpace(id)).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        var entities = await db.VocabularyTerms.Where(t => ids.Contains(t.Id)).ToListAsync(ct);
+
+        var activated = 0;
+        var skipped = 0;
+        var errors = new List<string>();
+
+        foreach (var entity in entities)
+        {
+            if (entity.Status == "active") { skipped++; continue; }
+            try
+            {
+                EnforceVocabularyPublishGate(entity);
+                entity.Status = "active";
+                entity.UpdatedAt = DateTimeOffset.UtcNow;
+                activated++;
+            }
+            catch (ApiException ex)
+            {
+                errors.Add($"{entity.Term}: {ex.Message}");
+            }
+        }
+
+        if (activated > 0)
+            await db.SaveChangesAsync(ct);
+
+        return new { totalRequested = itemIds.Count, activated, skipped, failed = errors.Count, errors };
+    }
+
+    // ── Bulk archive ────────────────────────────────────────────────────
+
+    public async Task<object> BulkArchiveVocabularyAsync(
+        string adminId, string adminName, IReadOnlyList<string> itemIds, CancellationToken ct)
+    {
+        if (itemIds.Count == 0)
+            throw ApiException.Validation("VOCABULARY_BULK_ARCHIVE_EMPTY", "Select at least one vocabulary item to archive.");
+        if (itemIds.Count > 2000)
+            throw ApiException.Validation("VOCABULARY_BULK_ARCHIVE_LIMIT", "Bulk archive is limited to 2000 vocabulary items at a time.");
+
+        var ids = itemIds.Select(id => id.Trim()).Where(id => !string.IsNullOrWhiteSpace(id)).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        var entities = await db.VocabularyTerms.Where(t => ids.Contains(t.Id)).ToListAsync(ct);
+
+        var archived = 0;
+        var skipped = 0;
+
+        foreach (var entity in entities)
+        {
+            if (entity.Status == "archived") { skipped++; continue; }
+            entity.Status = "archived";
+            entity.UpdatedAt = DateTimeOffset.UtcNow;
+            archived++;
+        }
+
+        if (archived > 0)
+            await db.SaveChangesAsync(ct);
+
+        return new { totalRequested = itemIds.Count, archived, skipped };
+    }
+
+    // ── Bulk set to draft ───────────────────────────────────────────────
+
+    public async Task<object> BulkDraftVocabularyAsync(
+        string adminId, string adminName, IReadOnlyList<string> itemIds, CancellationToken ct)
+    {
+        if (itemIds.Count == 0)
+            throw ApiException.Validation("VOCABULARY_BULK_DRAFT_EMPTY", "Select at least one vocabulary item.");
+        if (itemIds.Count > 2000)
+            throw ApiException.Validation("VOCABULARY_BULK_DRAFT_LIMIT", "Bulk draft is limited to 2000 items at a time.");
+
+        var ids = itemIds.Select(id => id.Trim()).Where(id => !string.IsNullOrWhiteSpace(id)).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        var entities = await db.VocabularyTerms.Where(t => ids.Contains(t.Id)).ToListAsync(ct);
+
+        var drafted = 0;
+        var skipped = 0;
+
+        foreach (var entity in entities)
+        {
+            if (entity.Status == "draft") { skipped++; continue; }
+            entity.Status = "draft";
+            entity.UpdatedAt = DateTimeOffset.UtcNow;
+            drafted++;
+        }
+
+        if (drafted > 0)
+            await db.SaveChangesAsync(ct);
+
+        return new { totalRequested = itemIds.Count, drafted, skipped };
+    }
+
+    // ── Audio generation progress (global) ──────────────────────────────
+
+    public async Task<object> GetVocabularyAudioProgressAsync(CancellationToken ct)
+    {
+        var total = await db.VocabularyTerms.CountAsync(ct);
+        var withAudio = await db.VocabularyTerms.CountAsync(t => t.AudioMediaAssetId != null || (t.AudioUrl != null && t.AudioUrl != ""), ct);
+        var pending = total - withAudio;
+
+        return new { total, withAudio, pending, percentComplete = total > 0 ? Math.Round((double)withAudio / total * 100, 1) : 100.0 };
+    }
+
+    /// <summary>
+    /// Resume audio generation for ALL terms without audio — regardless of
+    /// recall set membership. Use when the background worker stalled (e.g.
+    /// after a container restart) and the normal backfill endpoint skips
+    /// recall-set terms.
+    /// </summary>
+    public async Task<object> ResumeVocabularyAudioAsync(CancellationToken ct)
+    {
+        if (vocabularyAudioQueue is null)
+            return new { enqueued = 0, skipped = "queue-not-configured" };
+
+        var rows = await db.VocabularyTerms.AsNoTracking()
+            .Where(t => t.AudioMediaAssetId == null
+                && (t.AudioUrl == null || t.AudioUrl == ""))
+            .OrderBy(t => t.Id)
+            .Take(5000)
+            .Select(t => new { t.Id, t.Term })
+            .ToListAsync(ct);
+
+        var enqueued = 0;
+        foreach (var row in rows)
+        {
+            if (string.IsNullOrWhiteSpace(row.Term)) continue;
+            await vocabularyAudioQueue.EnqueueAsync(
+                new OetLearner.Api.Services.Vocabulary.VocabularyAudioJob(
+                    TermId: row.Id,
+                    Text: row.Term,
+                    Voice: null,
+                    Locale: "en-GB",
+                    BatchId: string.Empty),
+                ct);
+            enqueued++;
+        }
+        return new { enqueued };
+    }
+
     // ── CSV import (RFC-4180 aware) ─────────────────────────────────────
 
     public async Task<AdminVocabularyImportPreviewResponse> PreviewVocabularyImportAsync(
@@ -606,10 +753,24 @@ public partial class AdminService
                     // wins; emit a warning with the stable code so admins can
                     // see why the row was skipped. The publish path is not
                     // affected because no DB row is written for skipped dups.
+                    // Duplicates are NOT counted as invalid — they are a
+                    // separate category and should not block dry-run/commit.
                     dups++;
-                    err = $"duplicate-in-csv: Skipped: duplicate of line {firstLine} in the same upload.";
+                    err = $"duplicate-in-csv (duplicate of line {firstLine})";
                     warnings.Add($"line {r.LineNumber}: duplicate-in-csv (duplicate of line {firstLine})");
-                    ok = false;
+                    // Mark row as not-valid for display purposes but don't
+                    // count it as "invalid" — it's just a duplicate.
+                    preview.Add(new AdminVocabularyImportPreviewRow(
+                        LineNumber: r.LineNumber,
+                        Valid: false,
+                        Term: r.Term,
+                        Definition: r.Definition,
+                        Category: r.Category,
+                        ProfessionId: r.ProfessionId,
+                        AmericanSpelling: r.AmericanSpelling,
+                        ExampleSentence: r.ExampleSentence,
+                        Error: err));
+                    continue;
                 }
                 else
                 {
@@ -623,8 +784,19 @@ public partial class AdminService
                 {
                     existingConflicts++;
                     dups++;
-                    err = "Existing vocabulary term with the same term, exam type, and profession will be skipped unless reviewed as an update.";
-                    ok = false;
+                    err = "duplicate-in-db: existing term will have frequency incremented on commit.";
+                    // DB duplicates are not invalid — they get frequency-merged.
+                    preview.Add(new AdminVocabularyImportPreviewRow(
+                        LineNumber: r.LineNumber,
+                        Valid: false,
+                        Term: r.Term,
+                        Definition: r.Definition,
+                        Category: r.Category,
+                        ProfessionId: r.ProfessionId,
+                        AmericanSpelling: r.AmericanSpelling,
+                        ExampleSentence: r.ExampleSentence,
+                        Error: err));
+                    continue;
                 }
                 else if (existing is not null && !string.IsNullOrWhiteSpace(r.ExistingId))
                 {
@@ -705,6 +877,13 @@ public partial class AdminService
             var existing = await FindExistingVocabularyTermForImportAsync(BuildImportKey(r), ct);
             if (existing is not null && string.IsNullOrWhiteSpace(r.ExistingId))
             {
+                // Increment frequency count on commit only (not dry-run) to
+                // avoid double-counting since both passes process the same CSV.
+                if (!dryRun)
+                {
+                    existing.ExamFrequencyCount++;
+                    existing.UpdatedAt = DateTimeOffset.UtcNow;
+                }
                 duplicates++;
                 continue;
             }
@@ -1642,6 +1821,17 @@ public partial class AdminService
         "oral_health",
         "dispensing",
         "counselling",
+        // Singular forms (accepted alongside plural for CSV convenience)
+        "symptom",
+        "condition",
+        // Additional OET vocabulary taxonomy categories
+        "medication",
+        "nutrition",
+        "profession",
+        "descriptor",
+        "activity",
+        "function",
+        "investigation",
         // Default category for header-less / undeclared rows imported via the
         // term-only CSV path. The publish gate still enforces medical-category
         // pronunciation rules separately, so this is safe to expose.

@@ -13,12 +13,13 @@ interface MockResult {
 
 export default function ListeningMockResultsPage() {
   const params = useParams<{ sessionId: string }>();
+  const sessionId = params?.sessionId ?? '';
   const [result, setResult] = useState<MockResult | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
-    fetch(`/v1/listening-pathway/mocks/sessions/${params.sessionId}/results`)
+    fetch(`/v1/listening-pathway/mocks/sessions/${sessionId}/results`)
       .then((res) => (res.ok ? res.json() : null))
       .then((r) => {
         if (!cancelled) {
@@ -32,7 +33,7 @@ export default function ListeningMockResultsPage() {
     return () => {
       cancelled = true;
     };
-  }, [params.sessionId]);
+  }, [sessionId]);
 
   if (loading) {
     return (

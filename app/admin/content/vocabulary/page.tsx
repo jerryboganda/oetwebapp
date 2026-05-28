@@ -1,9 +1,9 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { BookOpen, Plus, Upload, Sparkles, Trash2, Edit3, Volume2, Crown } from 'lucide-react';
+import { BookOpen, Plus, Upload, Sparkles, Trash2, Edit3, Volume2, CheckCircle2, Archive, FileText, RefreshCw } from 'lucide-react';
 import { AdminCatalogLayout } from '@/components/admin/layout/admin-catalog-layout';
 import { Button } from '@/components/admin/ui/button';
 import { Card, CardContent } from '@/components/admin/ui/card';
@@ -21,9 +21,15 @@ import {
   fetchAdminVocabularyItems,
   deleteAdminVocabularyItem,
   deleteAdminVocabularyItems,
+  bulkActivateAdminVocabularyItems,
+  bulkArchiveAdminVocabularyItems,
+  bulkDraftAdminVocabularyItems,
+  fetchAdminVocabularyAudioProgress,
+  resumeAdminVocabularyAudio,
   fetchAdminVocabularyCategories,
   fetchAdminVocabularyRecallSets,
   type AdminRecallSetSummary,
+  type AdminVocabularyAudioProgress,
 } from '@/lib/api';
 
 type VocabRow = {
@@ -34,6 +40,7 @@ type VocabRow = {
   category: string;
   exampleSentence: string | null;
   status: 'draft' | 'active' | 'archived';
+  hasAudio?: boolean;
 };
 
 type ListResponse = {
@@ -61,7 +68,53 @@ export default function AdminVocabularyPage() {
   const [toast, setToast] = useState<{ variant: 'success' | 'error'; message: string } | null>(null);
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
+  const [confirmBulkPublish, setConfirmBulkPublish] = useState(false);
+  const [confirmBulkArchive, setConfirmBulkArchive] = useState(false);
   const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [bulkPublishing, setBulkPublishing] = useState(false);
+  const [bulkArchiving, setBulkArchiving] = useState(false);
+  const [bulkDrafting, setBulkDrafting] = useState(false);
+  const [audioProgress, setAudioProgress] = useState<AdminVocabularyAudioProgress | null>(null);
+  const [audioStalled, setAudioStalled] = useState(false);
+  const audioPollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const lastPendingRef = useRef<number | null>(null);
+  const stalledCountRef = useRef(0);
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  // ── Audio progress polling ────────────────────────────────────────────
+  const pollAudioProgress = useCallback(async () => {
+    try {
+      const progress = await fetchAdminVocabularyAudioProgress();
+      setAudioProgress(progress);
+      // Stop polling when all done
+      if (progress.pending === 0 && audioPollingRef.current) {
+        clearInterval(audioPollingRef.current);
+        audioPollingRef.current = null;
+        setAudioStalled(false);
+      } else if (progress.pending > 0) {
+        // Detect stall: pending unchanged for 3+ consecutive polls (12+ seconds)
+        if (lastPendingRef.current === progress.pending) {
+          stalledCountRef.current++;
+          if (stalledCountRef.current >= 3) {
+            setAudioStalled(true);
+          }
+        } else {
+          stalledCountRef.current = 0;
+          setAudioStalled(false);
+        }
+        lastPendingRef.current = progress.pending;
+      }
+    } catch { /* silent */ }
+  }, []);
+
+  useEffect(() => {
+    pollAudioProgress();
+    // Start polling every 4 seconds
+    audioPollingRef.current = setInterval(pollAudioProgress, 4000);
+    return () => {
+      if (audioPollingRef.current) clearInterval(audioPollingRef.current);
+    };
+  }, [pollAudioProgress]);
 
   useEffect(() => {
     fetchAdminVocabularyCategories()
@@ -101,7 +154,7 @@ export default function AdminVocabularyPage() {
       }
     }, 300);
     return () => { cancelled = true; clearTimeout(t); };
-  }, [search, category, profession, status, recallSet, page, pageSize]);
+  }, [search, category, profession, status, recallSet, page, pageSize, refreshKey]);
 
   async function handleDelete(id: string, term: string) {
     if (!confirm(`Delete "${term}"? Referenced terms will be archived instead.`)) return;
@@ -152,6 +205,78 @@ export default function AdminVocabularyPage() {
     }
   }
 
+  async function handleBulkPublish() {
+    const itemIds = Array.from(selectedKeys);
+    if (itemIds.length === 0) return;
+    setBulkPublishing(true);
+    try {
+      const result = await bulkActivateAdminVocabularyItems(itemIds);
+      setConfirmBulkPublish(false);
+      setRefreshKey(k => k + 1);
+      setPage(p => p); // triggers re-fetch
+      const failMsg = result.failed > 0 ? ` ${result.failed} failed publish gate.` : '';
+      const skipMsg = result.skipped > 0 ? ` ${result.skipped} already active.` : '';
+      setToast({
+        variant: result.failed > 0 ? 'error' : 'success',
+        message: `Published ${result.activated} terms.${skipMsg}${failMsg}${result.errors?.length ? ' ' + result.errors[0] : ''}`,
+      });
+    } catch {
+      setToast({ variant: 'error', message: 'Failed to publish selected terms.' });
+    } finally {
+      setBulkPublishing(false);
+    }
+  }
+
+  async function handleBulkArchive() {
+    const itemIds = Array.from(selectedKeys);
+    if (itemIds.length === 0) return;
+    setBulkArchiving(true);
+    try {
+      const result = await bulkArchiveAdminVocabularyItems(itemIds);
+      setConfirmBulkArchive(false);
+      setSelectedKeys(new Set());
+      setRows(prev => prev.map(r => itemIds.includes(r.id) ? { ...r, status: 'archived' as const } : r));
+      setToast({ variant: 'success', message: `Archived ${result.archived} terms.${result.skipped > 0 ? ` ${result.skipped} already archived.` : ''}` });
+    } catch {
+      setToast({ variant: 'error', message: 'Failed to archive selected terms.' });
+    } finally {
+      setBulkArchiving(false);
+    }
+  }
+
+  async function handleBulkDraft() {
+    const itemIds = Array.from(selectedKeys);
+    if (itemIds.length === 0) return;
+    setBulkDrafting(true);
+    try {
+      const result = await bulkDraftAdminVocabularyItems(itemIds);
+      setSelectedKeys(new Set());
+      setRows(prev => prev.map(r => itemIds.includes(r.id) ? { ...r, status: 'draft' as const } : r));
+      setToast({ variant: 'success', message: `Set ${result.drafted} terms to draft.${result.skipped > 0 ? ` ${result.skipped} already draft.` : ''}` });
+    } catch {
+      setToast({ variant: 'error', message: 'Failed to set terms to draft.' });
+    } finally {
+      setBulkDrafting(false);
+    }
+  }
+
+  async function handleRegenerateAudio() {
+    try {
+      const result = await resumeAdminVocabularyAudio();
+      const count = (result as { enqueued?: number }).enqueued ?? 0;
+      setToast({ variant: 'success', message: `Resumed: queued ${count} terms for audio generation.` });
+      setAudioStalled(false);
+      stalledCountRef.current = 0;
+      lastPendingRef.current = null;
+      // Restart polling
+      if (!audioPollingRef.current) {
+        audioPollingRef.current = setInterval(pollAudioProgress, 4000);
+      }
+    } catch {
+      setToast({ variant: 'error', message: 'Failed to resume audio generation.' });
+    }
+  }
+
   const columns = useMemo<Column<VocabRow>[]>(() => [
     {
       key: 'term',
@@ -165,6 +290,15 @@ export default function AdminVocabularyPage() {
     },
     { key: 'category', header: 'Category', render: (row) => <span className="capitalize text-sm">{row.category.replace(/_/g, ' ')}</span> },
     { key: 'profession', header: 'Profession', render: (row) => <span className="text-sm capitalize">{row.professionId ?? '—'}</span>, hideOnMobile: true },
+    {
+      key: 'audio',
+      header: 'Audio',
+      render: (row) => (
+        row.hasAudio
+          ? <Volume2 className="h-4 w-4 text-[var(--admin-success)]" aria-label="Has audio" />
+          : <Volume2 className="h-4 w-4 text-admin-fg-muted opacity-30" aria-label="No audio" />
+      ),
+    },
     {
       key: 'status',
       header: 'Status',
@@ -255,6 +389,24 @@ export default function AdminVocabularyPage() {
         onConfirm={handleBulkDelete}
         onClose={() => setConfirmBulkDelete(false)}
       />
+      <BulkActionConfirmModal
+        open={confirmBulkPublish}
+        title="Publish selected vocabulary terms"
+        description={`Publish ${selectedKeys.size} selected ${selectedKeys.size === 1 ? 'term' : 'terms'}? Terms that don't meet the publish gate (missing example sentence, category, source provenance, or audio for medical terms) will be skipped with an error.`}
+        confirmLabel="Publish selected"
+        loading={bulkPublishing}
+        onConfirm={handleBulkPublish}
+        onClose={() => setConfirmBulkPublish(false)}
+      />
+      <BulkActionConfirmModal
+        open={confirmBulkArchive}
+        title="Archive selected vocabulary terms"
+        description={`Archive ${selectedKeys.size} selected ${selectedKeys.size === 1 ? 'term' : 'terms'}? Archived terms won't appear in learner practice sets.`}
+        confirmLabel="Archive selected"
+        loading={bulkArchiving}
+        onConfirm={handleBulkArchive}
+        onClose={() => setConfirmBulkArchive(false)}
+      />
       <AdminCatalogLayout
         eyebrow="CMS"
         title="Vocabulary"
@@ -281,33 +433,71 @@ export default function AdminVocabularyPage() {
         hideViewModeToggle
         itemsClassName="flex flex-col gap-4"
       >
-        {/* TTS Configuration Info */}
-        <Card>
-          <CardContent className="p-4 pt-4">
-            <h3 className="flex items-center gap-2 text-sm font-semibold text-admin-fg-strong mb-2">
-              <Volume2 className="h-4 w-4 text-[var(--admin-primary)]" />
-              Vocabulary Audio (TTS Configuration)
-            </h3>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div className="flex items-start gap-3 rounded-admin-lg border border-[var(--admin-success-tint-strong)] bg-[var(--admin-success-tint)] p-3">
-                <Volume2 className="mt-0.5 h-4 w-4 shrink-0 text-[var(--admin-success)]" />
-                <div className="flex-1">
-                  <p className="text-sm font-medium text-admin-fg-strong">Browser TTS</p>
-                  <p className="text-xs text-admin-fg-muted mt-0.5">Free-tier fallback via Web Speech API. Works offline, instant playback. Active for all learners by default.</p>
+        {/* Audio Generation Progress */}
+        {audioProgress && (
+          <Card>
+            <CardContent className="p-4 pt-4">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="flex items-center gap-2 text-sm font-semibold text-admin-fg-strong">
+                  <Volume2 className="h-4 w-4 text-[var(--admin-primary)]" />
+                  Audio Generation Progress
+                </h3>
+                <div className="flex items-center gap-2">
+                  {audioProgress.pending > 0 && audioStalled && (
+                    <Badge variant="danger" size="sm">
+                      Stalled
+                    </Badge>
+                  )}
+                  {audioProgress.pending > 0 && !audioStalled && (
+                    <Badge variant="warning" size="sm">
+                      {audioProgress.pending} pending
+                    </Badge>
+                  )}
+                  {audioProgress.pending === 0 && (
+                    <Badge variant="success" size="sm">
+                      All complete
+                    </Badge>
+                  )}
+                  {audioProgress.pending > 0 && (
+                    <Button variant="primary" size="sm" onClick={handleRegenerateAudio}>
+                      <RefreshCw className="mr-1 h-3.5 w-3.5" />Resume generation
+                    </Button>
+                  )}
                 </div>
-                <Badge variant="success" size="sm">Active</Badge>
               </div>
-              <div className="flex items-start gap-3 rounded-admin-lg border border-[var(--admin-warning-tint-strong)] bg-[var(--admin-warning-tint)] p-3">
-                <Crown className="mt-0.5 h-4 w-4 shrink-0 text-[var(--admin-warning)]" />
-                <div className="flex-1">
-                  <p className="text-sm font-medium text-admin-fg-strong">Premium TTS (ElevenLabs)</p>
-                  <p className="text-xs text-admin-fg-muted mt-0.5">British clinical pronunciation via AI. Requires active subscription. Managed in AI Providers settings.</p>
+              {/* Progress bar */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between text-xs text-admin-fg-muted">
+                  <span>{audioProgress.withAudio} of {audioProgress.total} terms have audio</span>
+                  <span className="font-mono font-semibold text-admin-fg-strong">{audioProgress.percentComplete}%</span>
                 </div>
-                <Badge variant="warning" size="sm">Premium</Badge>
+                <div className="h-3 w-full overflow-hidden rounded-full bg-[var(--admin-bg-inset)]">
+                  <div
+                    className="h-full rounded-full transition-all duration-500 ease-out"
+                    style={{
+                      width: `${audioProgress.percentComplete}%`,
+                      background: audioProgress.percentComplete === 100
+                        ? 'var(--admin-success)'
+                        : audioStalled
+                          ? 'var(--admin-warning)'
+                          : 'linear-gradient(90deg, var(--admin-primary), var(--admin-primary-strong))',
+                    }}
+                  />
+                </div>
+                {audioProgress.pending > 0 && audioStalled && (
+                  <p className="text-xs text-[var(--admin-danger)]">
+                    Generation stalled — {audioProgress.pending} terms still need audio. Click &quot;Resume generation&quot; to continue.
+                  </p>
+                )}
+                {audioProgress.pending > 0 && !audioStalled && (
+                  <p className="text-xs text-admin-fg-muted animate-pulse">
+                    Audio generation in progress — ElevenLabs TTS is processing {audioProgress.pending} remaining terms...
+                  </p>
+                )}
               </div>
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        )}
 
         {recallSets.length > 0 && (
           <Card>
@@ -358,12 +548,43 @@ export default function AdminVocabularyPage() {
               />
               <BulkActionBar
                 selectedCount={selectedKeys.size}
-                totalCount={rows.length}
+                totalCount={total}
                 onClearSelection={() => setSelectedKeys(new Set())}
+                onSelectAll={() => {
+                  // Select all on current page
+                  setSelectedKeys(new Set(rows.map(r => r.id)));
+                }}
                 actions={[
                   {
+                    key: 'publish',
+                    label: 'Publish',
+                    icon: <CheckCircle2 className="h-4 w-4" aria-hidden="true" />,
+                    variant: 'primary',
+                    disabled: selectedRows.length === 0,
+                    loading: bulkPublishing,
+                    onClick: () => setConfirmBulkPublish(true),
+                  },
+                  {
+                    key: 'draft',
+                    label: 'Set to Draft',
+                    icon: <FileText className="h-4 w-4" aria-hidden="true" />,
+                    variant: 'secondary',
+                    disabled: selectedRows.length === 0,
+                    loading: bulkDrafting,
+                    onClick: handleBulkDraft,
+                  },
+                  {
+                    key: 'archive',
+                    label: 'Archive',
+                    icon: <Archive className="h-4 w-4" aria-hidden="true" />,
+                    variant: 'secondary',
+                    disabled: selectedRows.length === 0,
+                    loading: bulkArchiving,
+                    onClick: () => setConfirmBulkArchive(true),
+                  },
+                  {
                     key: 'delete',
-                    label: 'Delete selected',
+                    label: 'Delete',
                     icon: <Trash2 className="h-4 w-4" aria-hidden="true" />,
                     variant: 'danger',
                     disabled: selectedRows.length === 0,

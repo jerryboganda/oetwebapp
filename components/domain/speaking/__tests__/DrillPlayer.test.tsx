@@ -30,6 +30,7 @@ vi.mock('@/lib/api/speaking-drills', () => ({
 }));
 
 const SAMPLE_DRILL: DrillSummary = {
+  id: 'sdi-test',
   drillId: 'sdi-test',
   drillKind: 'Opening',
   title: 'Open with a wound-check follow-up',

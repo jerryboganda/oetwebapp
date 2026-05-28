@@ -311,6 +311,7 @@ public static class LearnerEndpoints
         });
         billing.MapGet("/review-options", (LearnerService service) => Results.Ok(service.GetReviewOptions()));
         billing.MapGet("/extras", async (LearnerService service) => Results.Ok(await service.GetBillingExtrasAsync()));
+        billing.MapGet("/ai-packages", async (LearnerService service) => Results.Ok(await service.GetAiPackagesAsync()));
         billing.MapPost("/checkout-sessions", async (HttpContext http, CheckoutSessionCreateRequest request, LearnerService service, CancellationToken ct) => Results.Ok(await service.CreateCheckoutSessionAsync(http.UserId(), request, ct)))
             .RequireRateLimiting("PerUserWrite");
         billing.MapPost("/cancel", async (HttpContext http, [FromQuery] bool immediate, LearnerService service, CancellationToken ct) => Results.Ok(await service.CancelOwnSubscriptionAsync(http.UserId(), immediate, ct)))

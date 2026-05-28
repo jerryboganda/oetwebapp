@@ -449,6 +449,12 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
                 await psSvc.SendBookingConfirmationNotificationsAsync(job.ResourceId!, cancellationToken);
                 break;
             }
+            case JobType.PrivateSpeakingCalendarSync:
+            {
+                var calendarSvc = services.GetRequiredService<PrivateSpeakingCalendarService>();
+                await calendarSvc.SyncBookingAsync(job.ResourceId!, cancellationToken);
+                break;
+            }
             case JobType.PrivateSpeakingReminder:
             {
                 var psSvc = services.GetRequiredService<PrivateSpeakingService>();

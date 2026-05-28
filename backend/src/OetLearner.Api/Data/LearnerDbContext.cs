@@ -161,6 +161,7 @@ public partial class LearnerDbContext(DbContextOptions<LearnerDbContext> options
     // Private Speaking session entities
     public DbSet<PrivateSpeakingConfig> PrivateSpeakingConfigs => Set<PrivateSpeakingConfig>();
     public DbSet<PrivateSpeakingTutorProfile> PrivateSpeakingTutorProfiles => Set<PrivateSpeakingTutorProfile>();
+    public DbSet<PrivateSpeakingTutorCalendarConnection> PrivateSpeakingTutorCalendarConnections => Set<PrivateSpeakingTutorCalendarConnection>();
     public DbSet<PrivateSpeakingAvailabilityRule> PrivateSpeakingAvailabilityRules => Set<PrivateSpeakingAvailabilityRule>();
     public DbSet<PrivateSpeakingAvailabilityOverride> PrivateSpeakingAvailabilityOverrides => Set<PrivateSpeakingAvailabilityOverride>();
     public DbSet<PrivateSpeakingBooking> PrivateSpeakingBookings => Set<PrivateSpeakingBooking>();
@@ -965,10 +966,14 @@ public partial class LearnerDbContext(DbContextOptions<LearnerDbContext> options
 
         // Private Speaking indexes
         modelBuilder.Entity<PrivateSpeakingTutorProfile>().HasIndex(x => x.ExpertUserId).IsUnique();
+        modelBuilder.Entity<PrivateSpeakingTutorCalendarConnection>().HasIndex(x => x.TutorProfileId).IsUnique();
+        modelBuilder.Entity<PrivateSpeakingTutorCalendarConnection>().HasIndex(x => x.ExpertUserId);
         modelBuilder.Entity<PrivateSpeakingAvailabilityRule>().HasIndex(x => new { x.TutorProfileId, x.DayOfWeek });
         modelBuilder.Entity<PrivateSpeakingAvailabilityOverride>().HasIndex(x => new { x.TutorProfileId, x.Date });
         modelBuilder.Entity<PrivateSpeakingBooking>().HasIndex(x => new { x.TutorProfileId, x.SessionStartUtc });
         modelBuilder.Entity<PrivateSpeakingBooking>().HasIndex(x => new { x.LearnerUserId, x.SessionStartUtc });
+        modelBuilder.Entity<PrivateSpeakingBooking>().HasIndex(x => x.EntitlementSubscriptionId);
+        modelBuilder.Entity<PrivateSpeakingBooking>().HasIndex(x => x.GoogleCalendarEventId);
         modelBuilder.Entity<PrivateSpeakingBooking>().HasIndex(x => x.Status);
         modelBuilder.Entity<PrivateSpeakingBooking>().HasIndex(x => x.IdempotencyKey).IsUnique();
         modelBuilder.Entity<PrivateSpeakingBooking>().HasIndex(x => x.StripeCheckoutSessionId);

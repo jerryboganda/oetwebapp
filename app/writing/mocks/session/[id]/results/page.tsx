@@ -62,7 +62,7 @@ export default function WritingMockResultsPage() {
           if (cancelled) return;
           if (attempts < 15) {
             setError(t('writing.mocks.results.statusGrading'));
-            timer = window.setTimeout(load, 2000);
+            timer = setTimeout(load, 2000);
             return;
           }
           setError(err instanceof Error ? err.message : t('writing.mocks.results.error.load'));

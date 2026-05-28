@@ -2,26 +2,33 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
-import { Mic, Calendar, Star, Clock, CreditCard, Video, X, ChevronLeft, ChevronRight, User } from 'lucide-react';
+import { Mic, Calendar, Star, Clock, CreditCard, Video, X, ChevronLeft, ChevronRight, User, Download } from 'lucide-react';
+import { ZoomMeetingEmbed } from '@/components/class/ZoomMeetingEmbed';
 import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
 import {
+  type LiveClassJoinToken,
   fetchPrivateSpeakingConfig,
   fetchPrivateSpeakingTutors,
   fetchAllPrivateSpeakingSlots,
   createPrivateSpeakingBooking,
+  reschedulePrivateSpeakingBooking,
   fetchLearnerPrivateSpeakingBookings,
   cancelPrivateSpeakingBooking,
+  fetchPrivateSpeakingJoinToken,
+  downloadPrivateSpeakingCalendarInvite,
+  fetchMyEntitlementSnapshot,
   ratePrivateSpeakingSession,
 } from '@/lib/api';
+import { safeZoomUrl } from '@/lib/zoom-url';
 import { analytics } from '@/lib/analytics';
 
 type Config = {
   isEnabled: boolean; defaultPriceMinorUnits: number; currency: string;
   defaultSlotDurationMinutes: number; cancellationWindowHours: number;
-  reservationTimeoutMinutes: number;
+  allowReschedule: boolean; rescheduleWindowHours: number; reservationTimeoutMinutes: number;
 };
 
 type Tutor = {
@@ -43,8 +50,19 @@ type Booking = {
   priceMinorUnits: number; currency: string;
   paymentStatus: string; zoomStatus: string;
   zoomJoinUrl: string | null; zoomMeetingPassword: string | null;
+  entitlementConsumed?: boolean;
+  entitlementRestoredAt?: string | null;
+  rescheduledFromBookingId?: string | null;
+  rescheduledToBookingId?: string | null;
+  googleCalendarSyncStatus?: string | null;
   learnerRating: number | null; learnerFeedback: string | null;
   createdAt: string;
+};
+
+type ActiveMeeting = {
+  token: LiveClassJoinToken;
+  title: string;
+  startsAt: string;
 };
 
 const STATUS_COLORS: Record<string, string> = {
@@ -108,8 +126,12 @@ export default function PrivateSpeakingPage() {
   const [weekOffset, setWeekOffset] = useState(0);
   const [selectedTutor, setSelectedTutor] = useState<string | null>(null);
   const [selectedSlot, setSelectedSlot] = useState<Slot | null>(null);
+  const [rescheduleTarget, setRescheduleTarget] = useState<Booking | null>(null);
   const [bookingNotes, setBookingNotes] = useState('');
   const [bookingInProgress, setBookingInProgress] = useState(false);
+  const [entitlementRemaining, setEntitlementRemaining] = useState<number | null>(null);
+  const [joiningBookingId, setJoiningBookingId] = useState<string | null>(null);
+  const [activeMeeting, setActiveMeeting] = useState<ActiveMeeting | null>(null);
   const [ratingSession, setRatingSession] = useState<string | null>(null);
   const [ratingValue, setRatingValue] = useState(5);
   const [ratingFeedback, setRatingFeedback] = useState('');
@@ -121,10 +143,12 @@ export default function PrivateSpeakingPage() {
       fetchPrivateSpeakingConfig(),
       fetchPrivateSpeakingTutors(),
       fetchLearnerPrivateSpeakingBookings(),
-    ]).then(([cfg, tut, bk]) => {
+      fetchMyEntitlementSnapshot(),
+    ]).then(([cfg, tut, bk, entitlement]) => {
       setConfig(cfg as Config);
       setTutors(tut as Tutor[]);
       setBookings(bk as Booking[]);
+      setEntitlementRemaining(entitlement.speakingSessionsRemaining);
       setLoading(false);
     }).catch(() => {
       setError('Could not load private speaking sessions.');
@@ -162,7 +186,7 @@ export default function PrivateSpeakingPage() {
         learnerTimezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
         learnerNotes: bookingNotes || undefined,
         idempotencyKey: crypto.randomUUID(),
-      }) as { bookingId: string; checkoutUrl: string };
+      });
 
       analytics.track('private_speaking_booking_created', { bookingId: result.bookingId });
 
@@ -175,12 +199,41 @@ export default function PrivateSpeakingPage() {
       // Fallback: refresh bookings
       setSelectedSlot(null);
       setBookingNotes('');
+      if (result.speakingSessionsRemaining !== undefined) {
+        setEntitlementRemaining(result.speakingSessionsRemaining ?? null);
+      }
       const updated = await fetchLearnerPrivateSpeakingBookings() as Booking[];
       setBookings(updated);
       setViewMode('bookings');
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Could not book session.';
       setError(message);
+    } finally {
+      setBookingInProgress(false);
+    }
+  }
+
+  async function handleReschedule() {
+    if (!selectedSlot || !rescheduleTarget || bookingInProgress) return;
+    setBookingInProgress(true);
+    setError(null);
+    try {
+      const result = await reschedulePrivateSpeakingBooking(rescheduleTarget.id, {
+        sessionStartUtc: selectedSlot.startTimeUtc,
+        learnerTimezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        learnerNotes: bookingNotes || undefined,
+        idempotencyKey: crypto.randomUUID(),
+      });
+
+      analytics.track('private_speaking_booking_rescheduled', { bookingId: rescheduleTarget.id, newBookingId: result.bookingId });
+      setSelectedSlot(null);
+      setRescheduleTarget(null);
+      setBookingNotes('');
+      const updated = await fetchLearnerPrivateSpeakingBookings() as Booking[];
+      setBookings(updated);
+      setViewMode('bookings');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Could not reschedule session.');
     } finally {
       setBookingInProgress(false);
     }
@@ -193,6 +246,52 @@ export default function PrivateSpeakingPage() {
     } catch {
       setError('Could not cancel booking.');
     }
+  }
+
+  async function handleJoin(booking: Booking) {
+    setJoiningBookingId(booking.id);
+    setError(null);
+    try {
+      const token = await fetchPrivateSpeakingJoinToken(booking.id);
+      if (token.sdkKey && token.signature) {
+        setActiveMeeting({ token, title: booking.tutorName ?? 'Private Speaking Session', startsAt: booking.sessionStartUtc });
+        return;
+      }
+
+      const joinUrl = safeZoomUrl(token.joinUrl);
+      if (joinUrl) {
+        window.open(joinUrl, '_blank', 'noopener,noreferrer');
+        return;
+      }
+
+      setError('Zoom details are not ready for this session yet.');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Could not prepare the Zoom room.');
+    } finally {
+      setJoiningBookingId(null);
+    }
+  }
+
+  async function handleDownloadInvite(bookingId: string) {
+    try {
+      const blob = await downloadPrivateSpeakingCalendarInvite(bookingId);
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = `oet-private-speaking-${bookingId}.ics`;
+      anchor.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      setError('Could not download the calendar invite.');
+    }
+  }
+
+  function startReschedule(booking: Booking) {
+    setRescheduleTarget(booking);
+    setSelectedTutor(booking.tutorProfileId);
+    setSelectedSlot(null);
+    setBookingNotes('');
+    setViewMode('browse');
   }
 
   async function handleRate(bookingId: string) {
@@ -234,14 +333,46 @@ export default function PrivateSpeakingPage() {
     );
   }
 
+  if (activeMeeting && activeMeeting.token.sdkKey && activeMeeting.token.signature) {
+    return (
+      <LearnerDashboardShell>
+        <div className="space-y-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-primary">Private Speaking</p>
+              <h1 className="text-xl font-semibold text-navy">{activeMeeting.title}</h1>
+              <p className="text-sm text-muted">{formatDate(activeMeeting.startsAt)}</p>
+            </div>
+            <button type="button" onClick={() => setActiveMeeting(null)} className="rounded-lg border border-border px-4 py-2 text-sm font-medium text-muted hover:text-navy">
+              Close meeting
+            </button>
+          </div>
+          <ZoomMeetingEmbed joinToken={activeMeeting.token} onLeave={() => setActiveMeeting(null)} />
+        </div>
+      </LearnerDashboardShell>
+    );
+  }
+
   return (
     <LearnerDashboardShell>
       <div className="flex items-center justify-between mb-6">
         <LearnerPageHero
           title="Private Speaking Sessions"
-          description="Book 1-on-1 sessions with expert OET speaking tutors via Zoom"
+          description="Use your included private speaking sessions for 1-on-1 Zoom practice with expert OET tutors"
           icon={Mic}
         />
+      </div>
+
+      <div className="mb-6 rounded-xl border border-primary/20 bg-primary/5 p-4">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-sm font-semibold text-navy">Speaking session credits</p>
+            <p className="text-xs text-muted">Bookings use one bundled or add-on private speaking session.</p>
+          </div>
+          <span className="inline-flex w-fit items-center rounded-full bg-surface px-3 py-1 text-sm font-semibold text-primary ring-1 ring-primary/20">
+            {entitlementRemaining ?? 0} remaining
+          </span>
+        </div>
       </div>
 
       {error && <InlineAlert variant="warning" className="mb-4">{error}<button onClick={() => setError(null)} className="ml-2"><X className="w-4 h-4 inline" /></button></InlineAlert>}
@@ -351,14 +482,14 @@ export default function PrivateSpeakingPage() {
           {selectedSlot && (
             <MotionSection className="fixed bottom-[calc(var(--bottom-nav-height)+0.5rem)] lg:bottom-6 left-4 right-4 sm:left-auto sm:right-6 sm:max-w-md bg-surface rounded-xl border border-primary/30 shadow-2xl p-5 z-40">
               <div className="flex items-center justify-between mb-3">
-                <h3 className="font-semibold text-navy">Confirm Booking</h3>
-                <button onClick={() => setSelectedSlot(null)} className="text-muted/60 hover:text-muted"><X className="w-5 h-5" /></button>
+                <h3 className="font-semibold text-navy">{rescheduleTarget ? 'Confirm Reschedule' : 'Confirm Booking'}</h3>
+                <button onClick={() => { setSelectedSlot(null); setRescheduleTarget(null); }} className="text-muted/60 hover:text-muted"><X className="w-5 h-5" /></button>
               </div>
               <div className="space-y-2 text-sm text-muted mb-4">
                 <div className="flex items-center gap-2"><User className="w-4 h-4 text-muted/60" /> {selectedSlot.tutorDisplayName}</div>
                 <div className="flex items-center gap-2"><Calendar className="w-4 h-4 text-muted/60" /> {formatDate(selectedSlot.startTimeUtc)}</div>
                 <div className="flex items-center gap-2"><Clock className="w-4 h-4 text-muted/60" /> {selectedSlot.durationMinutes} minutes</div>
-                <div className="flex items-center gap-2"><CreditCard className="w-4 h-4 text-muted/60" /> {formatPrice(selectedSlot.priceMinorUnits, selectedSlot.currency)}</div>
+                <div className="flex items-center gap-2"><CreditCard className="w-4 h-4 text-muted/60" /> Uses 1 session credit</div>
               </div>
               <textarea
                 placeholder="Notes for the tutor (optional)"
@@ -367,13 +498,13 @@ export default function PrivateSpeakingPage() {
                 rows={2}
                 className="w-full px-3 py-2 border border-border rounded-lg text-sm bg-surface text-navy resize-none focus:outline-none focus:ring-2 focus:ring-primary/40 mb-3"
               />
-              <button onClick={handleBook} disabled={bookingInProgress}
+              <button onClick={rescheduleTarget ? handleReschedule : handleBook} disabled={bookingInProgress || (!rescheduleTarget && (entitlementRemaining ?? 0) <= 0)}
                 className="w-full px-5 py-2.5 bg-primary hover:bg-primary/90 text-white rounded-lg text-sm font-medium disabled:opacity-50 transition-colors">
-                {bookingInProgress ? 'Processing...' : `Pay ${formatPrice(selectedSlot.priceMinorUnits, selectedSlot.currency)} & Book`}
+                {bookingInProgress ? 'Processing...' : rescheduleTarget ? 'Confirm Reschedule' : 'Use Session Credit & Book'}
               </button>
-                <p className="text-xs text-muted/60 text-center mt-2">
-                  You&apos;ll be redirected to secure checkout. Slot reserved for {config.reservationTimeoutMinutes} minutes.
-                </p>
+              <p className="text-xs text-muted/60 text-center mt-2">
+                {rescheduleTarget ? 'Your original booking will close and this slot will replace it.' : 'No checkout is needed when a session credit is available.'}
+              </p>
             </MotionSection>
           )}
         </>
@@ -404,17 +535,30 @@ export default function PrivateSpeakingPage() {
                       <div className="flex items-center gap-3 text-xs text-muted/60">
                         <span className="flex items-center gap-1"><Calendar className="w-3.5 h-3.5" />{formatDate(booking.sessionStartUtc)}</span>
                         <span>{booking.durationMinutes} min</span>
-                        <span>{formatPrice(booking.priceMinorUnits, booking.currency)}</span>
+                        <span>{booking.entitlementConsumed ? 'Session credit' : formatPrice(booking.priceMinorUnits, booking.currency)}</span>
                       </div>
                     </div>
 
                     <div className="flex items-center gap-2">
-                      {/* Zoom join button */}
-                      {booking.zoomJoinUrl && (booking.status === 'ZoomCreated' || booking.status === 'Confirmed') && (
-                        <a href={booking.zoomJoinUrl} target="_blank" rel="noopener noreferrer"
-                          className="flex items-center gap-1.5 px-3 py-1.5 bg-info hover:bg-info/90 text-white rounded-lg text-xs font-medium transition-colors">
-                          <Video className="w-3.5 h-3.5" /> Join Zoom
-                        </a>
+                      {(booking.status === 'ZoomCreated' || booking.status === 'InProgress') && (
+                        <button onClick={() => handleJoin(booking)} disabled={joiningBookingId === booking.id}
+                          className="flex items-center gap-1.5 px-3 py-1.5 bg-info hover:bg-info/90 text-white rounded-lg text-xs font-medium transition-colors disabled:opacity-50">
+                          <Video className="w-3.5 h-3.5" /> {joiningBookingId === booking.id ? 'Opening...' : 'Join'}
+                        </button>
+                      )}
+
+                      {config.allowReschedule && (booking.status === 'Confirmed' || booking.status === 'ZoomCreated') && (
+                        <button onClick={() => startReschedule(booking)}
+                          className="text-xs text-primary hover:text-primary font-medium">
+                          Reschedule
+                        </button>
+                      )}
+
+                      {(booking.status === 'Confirmed' || booking.status === 'ZoomCreated') && (
+                        <button onClick={() => handleDownloadInvite(booking.id)}
+                          className="flex items-center gap-1 text-xs text-muted hover:text-navy font-medium">
+                          <Download className="w-3.5 h-3.5" /> Calendar
+                        </button>
                       )}
 
                       {/* Cancel button */}

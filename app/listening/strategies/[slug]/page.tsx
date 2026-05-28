@@ -22,12 +22,13 @@ interface StrategyDetail {
 
 export default function ListeningStrategyDetailPage() {
   const params = useParams<{ slug: string }>();
+  const slug = params?.slug ?? '';
   const [strategy, setStrategy] = useState<StrategyDetail | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
-    fetch(`/v1/listening-pathway/strategies/${encodeURIComponent(params.slug)}`)
+    fetch(`/v1/listening-pathway/strategies/${encodeURIComponent(slug)}`)
       .then((res) => (res.ok ? res.json() : null))
       .then((d: StrategyDetail | null) => {
         if (!cancelled) {
@@ -41,7 +42,7 @@ export default function ListeningStrategyDetailPage() {
     return () => {
       cancelled = true;
     };
-  }, [params.slug]);
+  }, [slug]);
 
   async function markRead() {
     if (!strategy) return;

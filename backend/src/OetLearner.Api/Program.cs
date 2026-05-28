@@ -1568,7 +1568,9 @@ builder.Services.AddHostedService<OetLearner.Api.Services.Writing.Crons.WritingC
 builder.Services.Configure<ZoomOptions>(builder.Configuration.GetSection("Zoom"));
 builder.Services.AddHttpClient("ZoomApi");
 builder.Services.AddHttpClient("ZoomAuth");
+builder.Services.AddHttpClient("GoogleCalendar");
 builder.Services.AddSingleton<ZoomMeetingService>();
+builder.Services.AddScoped<PrivateSpeakingCalendarService>();
 builder.Services.AddScoped<PrivateSpeakingService>();
 builder.Services.AddScoped<LiveClassService>();
 builder.Services.AddScoped<OetLearner.Api.Services.LiveClasses.LiveClassRecordingService>();

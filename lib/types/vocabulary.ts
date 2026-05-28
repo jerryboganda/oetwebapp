@@ -26,6 +26,11 @@ export interface VocabularyTerm {
    * into any practice collection label yet.
    */
   recallSetCodes?: string[];
+  /**
+   * How many times this term appeared across CSV imports.
+   * Higher count = higher exam importance.
+   */
+  examFrequencyCount?: number;
 }
 
 export interface VocabularyTermSummary {

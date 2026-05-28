@@ -151,3 +151,33 @@ export interface WalletData {
   lastUpdatedAt?: string;
   transactions: WalletTransactionDto[];
 }
+
+export type AiPackageGroup = 'full' | 'listening' | 'reading' | 'writing' | 'speaking' | 'mock';
+
+export interface AiPackage {
+  code: string;
+  name: string;
+  description: string;
+  price: number;
+  currency: string;
+  credits: number;
+  writingCredits: number;
+  speakingCredits: number;
+  mocks: number;
+  validityDays: number;
+  priorityQueue: boolean;
+  group: AiPackageGroup;
+  features: string[];
+}
+
+export interface AiPackagesResponse {
+  currency: string;
+  full: AiPackage[];
+  separate: {
+    listening: AiPackage[];
+    reading: AiPackage[];
+    writing: AiPackage[];
+    speaking: AiPackage[];
+  };
+  mock: AiPackage[];
+}

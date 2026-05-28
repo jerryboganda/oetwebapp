@@ -372,7 +372,7 @@ export default function ListeningDiagnosticPage() {
             {/* Audio player */}
             {currentQuestion.audioPlaybackUrl && (
               <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
-                <DiagnosticPlayer audioUrl={currentQuestion.audioPlaybackUrl} allowReplay={false} />
+                <DiagnosticPlayer audioUrl={currentQuestion.audioPlaybackUrl} allowReplay={false} onEnded={() => {}} />
               </div>
             )}
 

@@ -243,7 +243,7 @@ export default function ReadingHome() {
           </div>
 
           {loading ? (
-            <LearnerSkeleton variant="cards" />
+            <LearnerSkeleton variant="card-grid" />
           ) : (
             <ul
               className="grid grid-cols-1 gap-4 sm:grid-cols-2"

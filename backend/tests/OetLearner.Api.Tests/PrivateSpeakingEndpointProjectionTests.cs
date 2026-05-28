@@ -15,17 +15,18 @@ public sealed class PrivateSpeakingEndpointProjectionTests
 
         Assert.DoesNotContain("ZoomStartUrl", ProjectionPropertyNames(learnerProjection));
         Assert.DoesNotContain("ZoomMeetingPassword", ProjectionPropertyNames(learnerProjection));
-        Assert.Contains("ZoomJoinUrl", ProjectionPropertyNames(learnerProjection));
+        Assert.DoesNotContain("ZoomJoinUrl", ProjectionPropertyNames(learnerProjection));
     }
 
     [Fact]
-    public void ExpertBookingDetail_ExposesStartUrlButNotMeetingPassword()
+    public void ExpertBookingDetail_DoesNotExposeRawZoomUrlsOrMeetingPassword()
     {
         var booking = NewBooking();
 
         var expertProjection = InvokeMapper("MapExpertBookingDetailResponse", booking);
 
-        Assert.Contains("ZoomStartUrl", ProjectionPropertyNames(expertProjection));
+        Assert.DoesNotContain("ZoomJoinUrl", ProjectionPropertyNames(expertProjection));
+        Assert.DoesNotContain("ZoomStartUrl", ProjectionPropertyNames(expertProjection));
         Assert.DoesNotContain("ZoomMeetingPassword", ProjectionPropertyNames(expertProjection));
     }
 

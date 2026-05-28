@@ -31,7 +31,12 @@ public sealed record VocabularyTermResponse(
     /// appear in several historical recall PDFs (e.g. ["old","2026"]).
     /// Empty array means the term is not part of any curated recall set yet.
     /// </summary>
-    string[] RecallSetCodes
+    string[] RecallSetCodes,
+    /// <summary>
+    /// How many times this term appeared across CSV imports.
+    /// Higher count = higher exam importance.
+    /// </summary>
+    int ExamFrequencyCount
 );
 
 /// <summary>One row in the canonical recall-set registry response.</summary>
@@ -101,7 +106,8 @@ public sealed record VocabularyFlashcardDto(
     string? IpaPronunciation,
     string? AudioUrl,
     string[] Synonyms,
-    string Mastery
+    string Mastery,
+    int ExamFrequencyCount
 );
 
 public sealed record FlashcardReviewResponse(
@@ -331,6 +337,10 @@ public sealed record AdminVocabularyImportRollbackResponse(
 );
 
 public sealed record AdminVocabularyBulkDeleteRequest(
+    IReadOnlyList<string> ItemIds
+);
+
+public sealed record AdminVocabularyBulkIdsRequest(
     IReadOnlyList<string> ItemIds
 );
 

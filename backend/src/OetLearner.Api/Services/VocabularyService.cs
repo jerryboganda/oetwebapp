@@ -796,7 +796,8 @@ public class VocabularyService(
         RelatedTerms: ParseStringArray(t.RelatedTermsJson).ToArray(),
         SourceProvenance: t.SourceProvenance,
         Status: t.Status,
-        RecallSetCodes: ParseStringArray(t.RecallSetCodesJson).ToArray());
+        RecallSetCodes: ParseStringArray(t.RecallSetCodesJson).ToArray(),
+        ExamFrequencyCount: t.ExamFrequencyCount);
 
     private static bool IsInternalAudioReference(string? audioUrl)
         => !string.IsNullOrWhiteSpace(audioUrl)
@@ -852,7 +853,8 @@ public class VocabularyService(
         IpaPronunciation: term.IpaPronunciation,
         AudioUrl: null,
         Synonyms: ParseStringArray(term.SynonymsJson).ToArray(),
-        Mastery: lv.Mastery);
+        Mastery: lv.Mastery,
+        ExamFrequencyCount: term.ExamFrequencyCount);
 
     private static List<string> ParseStringArray(string? json)
     {

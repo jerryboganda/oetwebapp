@@ -224,6 +224,7 @@ const TRACKED_EVENTS = [
   'phrase_suggestions_check',
   // Private speaking events
   'private_speaking_booking_created',
+  'private_speaking_booking_rescheduled',
   'private_speaking_page_viewed',
   // Quick session events
   'quick_session_completed',

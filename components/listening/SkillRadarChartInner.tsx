@@ -55,7 +55,7 @@ export function SkillRadarChartInner({ scores }: SkillRadarChartInnerProps) {
           <PolarGrid />
           <PolarAngleAxis dataKey="skill" tick={{ fontSize: 11 }} />
           <Tooltip
-            formatter={(value: number) => `${value}%`}
+            formatter={(value) => `${value}%`}
             cursor={{ stroke: '#cbd5e1' }}
           />
           <Radar

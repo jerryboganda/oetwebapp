@@ -1,4 +1,6 @@
 using System;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
@@ -17,7 +19,12 @@ namespace OetLearner.Api.Data.Migrations
     ///
     /// Hand-authored to avoid absorbing unrelated EF snapshot drift; follows the
     /// same pattern as <c>20260522100000_AddSpeakingDriftColumns</c>.
+    ///
+    /// 2026-05-28 — restored the missing [DbContext]/[Migration] attributes so
+    /// EF's migration scanner recognises and applies this migration.
     /// </summary>
+    [DbContext(typeof(LearnerDbContext))]
+    [Migration("20260523200000_AddBillingRegionFoundation")]
     public partial class AddBillingRegionFoundation : Migration
     {
         protected override void Up(MigrationBuilder migrationBuilder)

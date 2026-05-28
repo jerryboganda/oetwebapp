@@ -108,6 +108,50 @@ public class PrivateSpeakingTutorProfile
     public ExpertUser? ExpertUser { get; set; }
 }
 
+/// <summary>OAuth connection used to check and sync a tutor's external calendar.</summary>
+[Index(nameof(TutorProfileId), IsUnique = true)]
+public class PrivateSpeakingTutorCalendarConnection
+{
+    [Key]
+    [MaxLength(64)]
+    public string Id { get; set; } = default!;
+
+    [MaxLength(64)]
+    public string TutorProfileId { get; set; } = default!;
+
+    [MaxLength(64)]
+    public string ExpertUserId { get; set; } = default!;
+
+    [MaxLength(32)]
+    public string Provider { get; set; } = "google";
+
+    [MaxLength(256)]
+    public string CalendarId { get; set; } = "primary";
+
+    [MaxLength(256)]
+    public string? ConnectedEmail { get; set; }
+
+    public string? RefreshTokenEncrypted { get; set; }
+
+    [MaxLength(1024)]
+    public string Scopes { get; set; } = string.Empty;
+
+    public DateTimeOffset ConnectedAt { get; set; }
+
+    public DateTimeOffset UpdatedAt { get; set; }
+
+    public DateTimeOffset? DisconnectedAt { get; set; }
+
+    public DateTimeOffset? LastCheckedAt { get; set; }
+
+    public DateTimeOffset? LastSyncedAt { get; set; }
+
+    [MaxLength(512)]
+    public string? LastError { get; set; }
+
+    public PrivateSpeakingTutorProfile? TutorProfile { get; set; }
+}
+
 // ── Availability Rules ────────────────────────────────────────────────
 
 /// <summary>Recurring weekly availability rule for a tutor.</summary>
@@ -227,6 +271,20 @@ public class PrivateSpeakingBooking
 
     public DateTimeOffset? PaymentConfirmedAt { get; set; }
 
+    // ── Entitlement accounting ──
+
+    [MaxLength(64)]
+    public string? EntitlementSubscriptionId { get; set; }
+
+    public bool EntitlementConsumed { get; set; }
+
+    public DateTimeOffset? EntitlementConsumedAt { get; set; }
+
+    public DateTimeOffset? EntitlementRestoredAt { get; set; }
+
+    [MaxLength(128)]
+    public string? EntitlementRestorationReason { get; set; }
+
     // ── Zoom ──
 
     public long? ZoomMeetingId { get; set; }
@@ -281,6 +339,22 @@ public class PrivateSpeakingBooking
 
     [MaxLength(64)]
     public string? RescheduledFromBookingId { get; set; }
+
+    [MaxLength(64)]
+    public string? RescheduledToBookingId { get; set; }
+
+    // ── External calendar sync ──
+
+    [MaxLength(256)]
+    public string? GoogleCalendarEventId { get; set; }
+
+    [MaxLength(32)]
+    public string? GoogleCalendarSyncStatus { get; set; }
+
+    [MaxLength(512)]
+    public string? GoogleCalendarSyncError { get; set; }
+
+    public DateTimeOffset? GoogleCalendarSyncedAt { get; set; }
 
     // ── Reminders ──
 

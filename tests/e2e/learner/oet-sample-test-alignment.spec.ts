@@ -32,29 +32,27 @@ async function expectNoSeriousAxeViolations(page: Page) {
  */
 
 test.describe('OET sample-test alignment — learner workspace', () => {
-  test.beforeEach(async ({ page }) => {
-    await recoverBrowserSession(page);
+  test.beforeEach(async ({ page, request }) => {
     await page.goto('/');
-    await waitForSessionGuardToClear(page);
+    await waitForSessionGuardToClear(page, {
+      recover: () => recoverBrowserSession(page, request, 'learner', '/'),
+    });
   });
 
-  test('sidebar exposes exactly the 7 learner-approved nav items', async ({ page }) => {
-    await page.goto('/');
-    await waitForSessionGuardToClear(page);
-
-    // Desktop sidebar — assert only the canonical learner entries are present.
-    const sidebar = page.locator('aside[aria-label="OET with Dr Ahmed Hesham home"]').first();
-    // The aside lacks an accessible name; fall back to the nav element.
+  test('sidebar exposes the canonical learner nav items', async ({ page }) => {
     const nav = page.getByRole('navigation', { name: /main navigation/i });
     await expect(nav).toBeVisible();
 
-    const expected = ['Dashboard', 'Listening', 'Reading', 'Writing', 'Mocks', 'Progress', 'Billing'];
+    // Per the 2026-05-27 alignment + the follow-up that restored Recalls to the
+    // learner study menu, the learner sidebar shows exactly these entries.
+    const expected = ['Dashboard', 'Listening', 'Reading', 'Writing', 'Mocks', 'Recalls', 'Progress', 'Billing'];
     for (const label of expected) {
       await expect(nav.getByRole('link', { name: new RegExp(`^${label}$`, 'i') })).toBeVisible();
     }
 
-    // Items hidden from the learner workspace per the owner directive:
-    const hiddenFromLearner = ['Study Plan', 'Speaking', 'Readiness', 'History', 'Escalations', 'Grammar', 'Live Classes', 'Video Lessons', 'Strategies', 'Recalls', 'AI Conversation'];
+    // Items intentionally hidden from the learner workspace (still reachable by
+    // URL / visible to admin + tutor workspaces).
+    const hiddenFromLearner = ['Study Plan', 'Speaking', 'Readiness', 'History', 'Escalations', 'Grammar', 'Live Classes', 'Video Lessons', 'Strategies', 'AI Conversation'];
     for (const label of hiddenFromLearner) {
       await expect(nav.getByRole('link', { name: new RegExp(`^${label}$`, 'i') })).toHaveCount(0);
     }

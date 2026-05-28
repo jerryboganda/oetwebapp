@@ -626,11 +626,11 @@ function PlayerContent() {
     // the candidate may only see / modify C2 answers. Even if a future code
     // path widens `currentSectionIndex` or `allPartsReviewEnabled` for paper
     // mode, this guard keeps CBT exam mode strictly scoped to C2.
-    if (session?.state === 'c2_final_review' && session?.modePolicy?.onePlayOnly) {
+    if (strictServerState?.state === 'c2_final_review' && session?.modePolicy?.onePlayOnly) {
       sections = sections.filter((code) => code === 'C2');
     }
     return sections;
-  }, [sectionGroups, focusParam, session?.state, session?.modePolicy?.onePlayOnly]);
+  }, [sectionGroups, focusParam, strictServerState?.state, session?.modePolicy?.onePlayOnly]);
   const currentSection: ListeningSectionCode | null = sectionsInPaper[currentSectionIndex] ?? null;
   const freeNavigationEnabled = session?.modePolicy.freeNavigation === true;
   const allPartsReviewEnabled = freeNavigationEnabled && session?.modePolicy.printableBooklet === true;

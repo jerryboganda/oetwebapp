@@ -1,3 +1,5 @@
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
@@ -5,6 +7,13 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace OetLearner.Api.Data.Migrations;
 
 /// <inheritdoc />
+// 2026-05-28 — restored EF recognition. This migration was missing its
+// [DbContext]/[Migration] attributes (no companion .Designer.cs), so EF's
+// migration scanner ignored it entirely. Re-added inline (matching the
+// AddSpeakingFullRuntimeSettings pattern) so it is applied via the normal
+// pipeline.
+[DbContext(typeof(LearnerDbContext))]
+[Migration("20260523120000_DropRecallDocuments")]
 public partial class DropRecallDocuments : Migration
 {
     /// <inheritdoc />

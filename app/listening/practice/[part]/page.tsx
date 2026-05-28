@@ -154,7 +154,7 @@ export default function ListeningPartPracticePage() {
         {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
 
         {loading ? (
-          <LearnerSkeleton variant="cards" />
+          <LearnerSkeleton variant="card-grid" />
         ) : mocks.length === 0 ? (
           <InlineAlert variant="info">
             No practice papers are available yet. Complete the diagnostic to unlock part-scoped

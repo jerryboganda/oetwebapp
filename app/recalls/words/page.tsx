@@ -344,6 +344,15 @@ export default function RecallsWordsPage() {
                         >
                           <Volume2 size={14} strokeWidth={2} className="h-3.5 w-3.5" />
                         </button>
+                        {(term.examFrequencyCount ?? 1) > 1 && (
+                          <span
+                            title={`This word appeared ${term.examFrequencyCount} times in the exam`}
+                            className="inline-flex items-center gap-0.5 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-700 dark:bg-amber-900/30 dark:text-amber-300"
+                          >
+                            <Star size={12} className="fill-amber-500 text-amber-500" />
+                            {term.examFrequencyCount}x
+                          </span>
+                        )}
                       </div>
                       <div className="mt-2 flex flex-wrap items-center gap-1.5">
                         <CategoryBadge category={term.category} size="sm" />

@@ -3307,6 +3307,144 @@ public partial class LearnerService(
         };
     }
 
+    /// <summary>
+    /// Returns the AI Credits storefront catalog (<c>addonKind="ai_package"</c>)
+    /// grouped into Full / Separate (listening, reading, writing, speaking) / Mock
+    /// families for the billing module's "AI Credits" tab. Grouping is derived from
+    /// the canonical <c>pkg_*</c> code prefix so no extra catalog column is required.
+    /// Purchases flow through the same quote → checkout-session → webhook pipeline
+    /// as every other add-on (<see cref="CreateCheckoutSessionAsync"/>).
+    /// </summary>
+    public async Task<object> GetAiPackagesAsync()
+    {
+        var addOns = await db.BillingAddOns.AsNoTracking()
+            .Where(x => x.Status == BillingAddOnStatus.Active && x.AddonKind == "ai_package")
+            .OrderBy(x => x.DisplayOrder)
+            .ThenBy(x => x.Price)
+            .ToListAsync();
+
+        var views = addOns.Select(ToAiPackageView).ToList();
+        var currency = views.FirstOrDefault()?.Currency ?? "GBP";
+
+        static object Project(AiPackageView v) => new
+        {
+            code = v.Code,
+            name = v.Name,
+            description = v.Description,
+            price = v.Price,
+            currency = v.Currency,
+            credits = v.Credits,
+            writingCredits = v.WritingCredits,
+            speakingCredits = v.SpeakingCredits,
+            mocks = v.Mocks,
+            validityDays = v.ValidityDays,
+            priorityQueue = v.PriorityQueue,
+            group = v.Group,
+            features = v.Features,
+        };
+
+        return new
+        {
+            currency,
+            full = views.Where(v => v.Group == "full").Select(Project).ToList(),
+            separate = new
+            {
+                listening = views.Where(v => v.Group == "listening").Select(Project).ToList(),
+                reading = views.Where(v => v.Group == "reading").Select(Project).ToList(),
+                writing = views.Where(v => v.Group == "writing").Select(Project).ToList(),
+                speaking = views.Where(v => v.Group == "speaking").Select(Project).ToList(),
+            },
+            mock = views.Where(v => v.Group == "mock").Select(Project).ToList(),
+        };
+    }
+
+    private static AiPackageView ToAiPackageView(BillingAddOn x)
+    {
+        var (mocks, priorityQueue) = ReadAiPackageExtras(x.GrantEntitlementsJson);
+        var group = ResolveAiPackageGroup(x.Code);
+        var features = BuildAiPackageFeatures(group, x.GrantCredits, mocks, x.DurationDays, priorityQueue);
+        return new AiPackageView(
+            x.Code, x.Name, x.Description ?? string.Empty,
+            x.Price, x.Currency, x.GrantCredits, x.LettersGranted,
+            x.SessionsGranted, mocks, x.DurationDays, priorityQueue, group, features);
+    }
+
+    private static string ResolveAiPackageGroup(string code)
+    {
+        if (code.StartsWith("pkg_listening", StringComparison.OrdinalIgnoreCase)) return "listening";
+        if (code.StartsWith("pkg_reading", StringComparison.OrdinalIgnoreCase)) return "reading";
+        if (code.StartsWith("pkg_writing", StringComparison.OrdinalIgnoreCase)) return "writing";
+        if (code.StartsWith("pkg_speaking", StringComparison.OrdinalIgnoreCase)) return "speaking";
+        if (code.StartsWith("pkg_mock", StringComparison.OrdinalIgnoreCase)) return "mock";
+        return "full";
+    }
+
+    private static IReadOnlyList<string> BuildAiPackageFeatures(
+        string group, int credits, int mocks, int validityDays, bool priorityQueue)
+    {
+        var features = new List<string>();
+        var validity = validityDays >= 180 ? "6-month validity" : $"{validityDays}-day validity";
+        switch (group)
+        {
+            case "full":
+                features.Add($"{credits} flexible grading credits (Writing or Speaking)");
+                if (mocks > 0) features.Add($"{mocks} full mock exam{(mocks == 1 ? string.Empty : "s")} included");
+                features.Add("Unlimited Listening & Reading practice");
+                features.Add("AI feedback reports");
+                if (priorityQueue) features.Add("Priority grading queue");
+                features.Add(validity);
+                break;
+            case "writing":
+                features.Add($"{credits} AI-graded Writing letters");
+                features.Add("Instant Claude feedback on every letter");
+                features.Add("Detailed per-criterion feedback");
+                features.Add(validity);
+                break;
+            case "speaking":
+                features.Add($"{credits} AI-graded Speaking cards");
+                features.Add("Whisper transcription + Claude assessment");
+                features.Add("Rule-cited transcript markers");
+                features.Add(validity);
+                break;
+            case "listening":
+            case "reading":
+                features.Add("Deterministic answer-key marking");
+                features.Add("Always free to grade — no credits used");
+                features.Add(validity);
+                break;
+            case "mock":
+                features.Add($"{mocks} full mock exam{(mocks == 1 ? string.Empty : "s")} — all 4 subtests");
+                features.Add("Writing + Speaking AI-graded");
+                features.Add("Listening + Reading auto-marked");
+                features.Add("Separate from AI credits");
+                features.Add(validity);
+                break;
+        }
+        return features;
+    }
+
+    private static (int Mocks, bool PriorityQueue) ReadAiPackageExtras(string? grantEntitlementsJson)
+    {
+        if (string.IsNullOrWhiteSpace(grantEntitlementsJson)) return (0, false);
+        try
+        {
+            using var doc = JsonDocument.Parse(grantEntitlementsJson);
+            if (doc.RootElement.ValueKind != JsonValueKind.Object) return (0, false);
+            var mocks = doc.RootElement.TryGetProperty("mockFull", out var m) && m.TryGetInt32(out var mv) ? Math.Max(0, mv) : 0;
+            var pq = doc.RootElement.TryGetProperty("priority_queue", out var p) && p.ValueKind == JsonValueKind.True;
+            return (mocks, pq);
+        }
+        catch (JsonException)
+        {
+            return (0, false);
+        }
+    }
+
+    private sealed record AiPackageView(
+        string Code, string Name, string Description, decimal Price, string Currency,
+        int Credits, int WritingCredits, int SpeakingCredits, int Mocks, int ValidityDays,
+        bool PriorityQueue, string Group, IReadOnlyList<string> Features);
+
     public async Task<object> CreateCheckoutSessionAsync(string userId, CheckoutSessionCreateRequest request, CancellationToken cancellationToken)
     {
         await EnsureUserAsync(userId, cancellationToken);
