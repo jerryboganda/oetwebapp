@@ -55,16 +55,20 @@ public static class RecallsEndpoints
             var userId = http.UserId();
             http.Response.Headers.CacheControl = "private, no-store";
             http.Response.Headers.Vary = "Authorization";
-            var snapshot = await entitlements.ResolveAsync(userId, ct);
-            if (!snapshot.HasEligibleSubscription || snapshot.IsFrozen)
+            var isAdmin = http.User.IsInRole("admin");
+            if (!isAdmin)
             {
-                return Results.Json(
-                    new
-                    {
-                        code = "subscription_required",
-                        message = "Pronunciation audio is available for paid candidates only.",
-                    },
-                    statusCode: StatusCodes.Status402PaymentRequired);
+                var snapshot = await entitlements.ResolveAsync(userId, ct);
+                if (!snapshot.HasEligibleSubscription || snapshot.IsFrozen)
+                {
+                    return Results.Json(
+                        new
+                        {
+                            code = "subscription_required",
+                            message = "Pronunciation audio is available for paid candidates only.",
+                        },
+                        statusCode: StatusCodes.Status402PaymentRequired);
+                }
             }
 
             var audio = await svc.EnsureAudioAsync(userId, termId, speed ?? "normal", ct);

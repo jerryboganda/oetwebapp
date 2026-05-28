@@ -571,7 +571,7 @@ else
 
 builder.Services.AddAuthorization(options =>
 {
-    options.AddPolicy("LearnerOnly", policy => policy.RequireAuthenticatedUser().RequireRole(ApplicationUserRoles.Learner));
+    options.AddPolicy("LearnerOnly", policy => policy.RequireAuthenticatedUser().RequireRole(ApplicationUserRoles.Learner, ApplicationUserRoles.Admin));
     options.AddPolicy("ExpertOnly", policy => policy
         .RequireAuthenticatedUser()
         .RequireRole(ApplicationUserRoles.Expert)
