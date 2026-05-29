@@ -8,9 +8,9 @@ import { useAuth } from '@/contexts/auth-context';
 import { getVocabStats, type VocabStatsDto } from '@/lib/reading-pathway-api';
 
 const CHART_COLORS = {
-  mastered:   '#10b981',
-  learning:   '#3b82f6',
-  struggling: '#ef4444',
+  mastered:   'var(--color-success)',
+  learning:   'var(--color-info)',
+  struggling: 'var(--color-danger)',
 };
 
 export default function VocabStatsPage() {
@@ -52,7 +52,7 @@ export default function VocabStatsPage() {
             <p className="mb-0.5 text-xs font-semibold uppercase tracking-widest text-violet-500">
               Spaced Repetition
             </p>
-            <h1 className="text-2xl font-bold text-neutral-900 dark:text-white">
+            <h1 className="text-2xl font-bold text-navy">
               Vocabulary Stats
             </h1>
           </div>
@@ -66,13 +66,13 @@ export default function VocabStatsPage() {
 
         {loading ? (
           <div className="flex h-64 items-center justify-center">
-            <div className="h-10 w-10 animate-spin rounded-full border-4 border-violet-200 border-t-violet-600" />
+            <div className="h-10 w-10 motion-safe:animate-spin rounded-full border-4 border-violet-200 border-t-violet-600" />
           </div>
         ) : (
           <>
             {/* Donut chart */}
-            <section className="rounded-2xl border border-neutral-200 bg-white px-6 py-6 dark:border-neutral-800 dark:bg-neutral-900">
-              <h2 className="mb-4 text-base font-semibold text-neutral-900 dark:text-white">
+            <section className="rounded-2xl border border-border bg-surface px-6 py-6">
+              <h2 className="mb-4 text-base font-semibold text-navy">
                 Word Breakdown
               </h2>
               {chartData.length > 0 ? (
@@ -95,7 +95,7 @@ export default function VocabStatsPage() {
                       formatter={(value, name) => [value ?? 0, name ?? '']}
                       contentStyle={{
                         borderRadius: '0.75rem',
-                        border: '1px solid #e5e7eb',
+                        border: '1px solid var(--color-border)',
                         fontSize: '0.8rem',
                       }}
                     />
@@ -103,13 +103,13 @@ export default function VocabStatsPage() {
                       iconType="circle"
                       iconSize={10}
                       formatter={(value) => (
-                        <span className="text-sm text-neutral-600 dark:text-neutral-300">{value}</span>
+                        <span className="text-sm text-muted">{value}</span>
                       )}
                     />
                   </PieChart>
                 </ResponsiveContainer>
               ) : (
-                <p className="py-12 text-center text-sm text-neutral-400">
+                <p className="py-12 text-center text-sm text-muted">
                   No words in your deck yet. Add some words to see the breakdown.
                 </p>
               )}
@@ -124,7 +124,7 @@ export default function VocabStatsPage() {
               />
               <StatCard
                 label="Average Retention"
-                value={stats ? `${Math.round(stats.averageRetention)}%` : '—'}
+                value={stats ? `${Math.round(stats.averageRetention)}%` : '–'}
                 colorClass="text-blue-700 dark:text-blue-300"
               />
               <StatCard
@@ -135,11 +135,11 @@ export default function VocabStatsPage() {
             </section>
 
             {/* Retention chart placeholder */}
-            <section className="rounded-2xl border border-dashed border-neutral-300 bg-neutral-50 px-6 py-8 text-center dark:border-neutral-700 dark:bg-neutral-900/50">
-              <p className="text-sm font-medium text-neutral-500 dark:text-neutral-400">
+            <section className="rounded-2xl border border-dashed border-border bg-background-light px-6 py-8 text-center">
+              <p className="text-sm font-medium text-muted">
                 Retention chart coming soon
               </p>
-              <p className="mt-1 text-xs text-neutral-400 dark:text-neutral-500">
+              <p className="mt-1 text-xs text-muted">
                 Daily retention trends will appear here once you complete more review sessions.
               </p>
             </section>
@@ -152,8 +152,8 @@ export default function VocabStatsPage() {
 
 function StatCard({ label, value, colorClass }: { label: string; value: number | string; colorClass: string }) {
   return (
-    <div className="rounded-xl border border-neutral-200 bg-white px-5 py-4 dark:border-neutral-800 dark:bg-neutral-900">
-      <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-400 dark:text-neutral-500">
+    <div className="rounded-xl border border-border bg-surface px-5 py-4">
+      <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted">
         {label}
       </p>
       <p className={`text-3xl font-bold ${colorClass}`}>{value}</p>

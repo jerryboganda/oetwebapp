@@ -1,0 +1,28 @@
+{
+  "version": "1",
+  "skills": {
+    "emilkowalski/skill": {
+      "source": "https://github.com/emilkowalski/skill.git",
+      "skills": [
+        {
+          "name": "emil-design-eng",
+          "description": "This skill encodes Emil Kowalski's philosophy on UI polish, component design, animation decisions, and the invisible details that make software feel great.",
+          "path": "skills/emil-design-eng"
+        }
+      ],
+      "agents": ["claude-code"]
+    },
+    "pbakaus/impeccable": {
+      "source": "https://github.com/pbakaus/impeccable.git",
+      "skills": [
+        {
+          "name": "impeccable",
+          "description": "Use when the user wants to design, redesign, shape, critique, audit, polish, clarify, distill, harden, optimize, adapt, animate, colorize, extract, or otherwise improve a frontend interface.",
+          "path": "skills/impeccable",
+          "version": "3.1.1"
+        }
+      ],
+      "agents": ["claude-code"]
+    }
+  }
+}

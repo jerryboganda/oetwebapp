@@ -160,7 +160,7 @@ export default function ExpertSpeakingCalibrationPage() {
       {loading ? (
         <Skeleton className="h-32 w-full" />
       ) : samples.length === 0 ? (
-        <p className="text-sm text-muted">No published calibration samples yet — check back soon.</p>
+        <p className="text-sm text-muted">No published calibration samples yet. Check back soon.</p>
       ) : (
         <DataTable<TutorSpeakingCalibrationSampleRow>
           columns={sampleColumns}

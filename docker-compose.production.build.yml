@@ -1,6 +1,18 @@
 # Emergency/local source-build override for docker-compose.production.yml.
-# Normal production deploys must use immutable digest images from release evidence.
+# Normal production deploys must use immutable digest image refs supplied to the deploy workflow.
 services:
+  learner-api:
+    build:
+      context: scripts/deploy/nginx
+      dockerfile: Dockerfile
+    pull_policy: build
+
+  web:
+    build:
+      context: scripts/deploy/nginx
+      dockerfile: Dockerfile
+    pull_policy: build
+
   learner-api-blue:
     build:
       context: .

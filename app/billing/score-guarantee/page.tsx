@@ -108,7 +108,7 @@ export default function ScoreGuaranteePage() {
     if (submittingRef.current) return;
     const score = parseInt(baselineScore, 10);
     if (Number.isNaN(score) || score < 0 || score > 500) {
-      setToast({ variant: 'error', message: 'Enter a valid OET score (0–500).' });
+      setToast({ variant: 'error', message: 'Enter a valid OET score (0-500).' });
       return;
     }
     submittingRef.current = true;

@@ -54,8 +54,12 @@ const accentTokens = {
 } as const;
 
 const actionVariantStyles = {
-  primary: 'bg-primary text-white hover:bg-primary/90 shadow-sm',
-  secondary: 'bg-navy text-white hover:bg-navy/90 shadow-sm',
+  // Dark-mode contrast parity with components/ui/button.tsx: `--color-primary`
+  // lightens to #a78bfa in dark, where white text only reaches ~2.88:1 (AA fail).
+  // Pin the fill to violet-700 (~7.3:1). `--color-navy` inverts to near-white in
+  // dark, so force a dark foreground on the secondary action.
+  primary: 'bg-primary text-white hover:bg-primary/90 active:scale-[0.98] motion-reduce:active:scale-100 shadow-sm dark:bg-violet-700 dark:hover:bg-violet-600',
+  secondary: 'bg-navy text-white hover:bg-navy/90 shadow-sm dark:text-slate-900',
   outline: 'border border-border text-navy hover:bg-surface hover:border-border-hover',
   ghost: 'text-navy hover:bg-lavender/40 dark:hover:bg-white/5',
 } as const;
@@ -83,7 +87,7 @@ function renderAction(action: LearnerSurfaceCardModel['primaryAction'] | Learner
       <Link
         href={action.href}
         className={cn(
-          'inline-flex items-center justify-center gap-2 rounded-lg px-5 py-2 text-sm font-medium transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 active:scale-[0.98]',
+          'inline-flex items-center justify-center gap-2 rounded-lg px-5 py-2 text-sm font-medium transition-[color,background-color,border-color,box-shadow,transform,opacity,filter] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 active:scale-[0.98]',
           actionVariantStyles[variant],
           fullWidth && 'w-full',
         )}

@@ -79,9 +79,9 @@ export function AudioPlayerWaveform({ audioUrl, onTimeUpdate, seekToTime, classN
 
     const ws = WaveSurfer.create({
       container: containerRef.current,
-      waveColor: '#d1d5db',
-      progressColor: '#3b82f6',
-      cursorColor: '#1d4ed8',
+      waveColor: '#d8e0e8',
+      progressColor: '#7c3aed',
+      cursorColor: '#6d28d9',
       barWidth: 2,
       barGap: 1,
       barRadius: 2,
@@ -151,7 +151,7 @@ export function AudioPlayerWaveform({ audioUrl, onTimeUpdate, seekToTime, classN
         <p className="text-xs text-muted">Loading audio waveform...</p>
       )}
       {loadError && (
-        <p className="text-xs text-red-600" role="alert">{loadError}</p>
+        <p className="text-xs text-danger" role="alert">{loadError}</p>
       )}
       <div ref={containerRef} className="w-full" aria-hidden="true" />
       

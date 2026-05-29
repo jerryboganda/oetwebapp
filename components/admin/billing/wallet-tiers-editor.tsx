@@ -225,8 +225,8 @@ export function WalletTiersEditor({ initialTiers, defaultCurrency, source, onSav
     <div className="space-y-4" data-testid="wallet-tiers-editor">
       {source === 'appsettings' ? (
         <InlineAlert variant="info" title="Showing appsettings fallback">
-          No DB-backed tiers exist yet — these rows reflect the current{' '}
-          <code className="rounded bg-white/60 px-1 py-0.5 font-mono text-xs">Billing__Wallet__TopUpTiers</code>{' '}
+          No DB-backed tiers exist yet. These rows reflect the current{' '}
+          <code className="rounded bg-admin-bg-surface/60 px-1 py-0.5 font-mono text-xs">Billing__Wallet__TopUpTiers</code>{' '}
           values. Save to persist them in the database (the UI then becomes the source of truth).
         </InlineAlert>
       ) : null}
@@ -269,7 +269,7 @@ export function WalletTiersEditor({ initialTiers, defaultCurrency, source, onSav
       <Card className="overflow-hidden p-0">
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-border text-sm">
-            <thead className="bg-background-light">
+            <thead className="bg-admin-bg-subtle">
               <tr className="text-left text-xs font-semibold uppercase tracking-[0.12em] text-muted">
                 <th scope="col" className="px-3 py-3">Amount</th>
                 <th scope="col" className="px-3 py-3">Currency</th>

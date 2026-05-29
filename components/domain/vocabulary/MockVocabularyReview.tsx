@@ -83,14 +83,12 @@ export function MockVocabularyReview({
 
   return (
     <MotionSection delayIndex={3}>
-      <Card className="rounded-3xl border-primary/20 bg-gradient-to-br from-primary/5 to-indigo-50 p-6 shadow-sm">
+      <Card className="rounded-3xl border-primary/20 bg-primary/5 p-6 shadow-sm">
         <div className="mb-4 flex items-start gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-white/70 text-primary">
-            <BookOpen className="h-5 w-5" />
-          </div>
+          <BookOpen className="h-5 w-5 shrink-0 text-primary" aria-hidden="true" />
           <div className="flex-1">
             <div className="mb-1 flex items-center gap-2 text-xs font-black uppercase tracking-widest text-primary">
-              <Sparkles className="h-3.5 w-3.5" />
+              <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
               Words to Review
             </div>
             <h3 className="text-lg font-black text-navy">
@@ -112,7 +110,7 @@ export function MockVocabularyReview({
           {terms.map(term => (
             <li
               key={term.id}
-              className="flex items-start gap-3 rounded-2xl border border-white/70 bg-white/70 p-3"
+              className="flex items-start gap-3 rounded-2xl border border-border bg-surface p-3"
             >
               <div className="flex-1 min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
@@ -134,13 +132,13 @@ export function MockVocabularyReview({
                 aria-label={added.has(term.id) ? `${term.term} added` : `Add ${term.term} to my list`}
                 className={`inline-flex shrink-0 items-center gap-1 rounded-full px-3 py-1.5 text-xs font-medium ${
                   added.has(term.id)
-                    ? 'bg-green-50 text-green-600'
-                    : 'bg-primary text-white hover:bg-primary/90'
+                    ? 'bg-success/10 text-success'
+                    : 'bg-primary text-white hover:bg-primary/90 active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600'
                 } transition-colors`}
               >
                 {added.has(term.id)
-                  ? (<><CheckCircle2 className="h-3 w-3" /> Added</>)
-                  : (<><Plus className="h-3 w-3" /> Save</>)}
+                  ? (<><CheckCircle2 className="h-3 w-3" aria-hidden="true" /> Added</>)
+                  : (<><Plus className="h-3 w-3" aria-hidden="true" /> Save</>)}
               </button>
             </li>
           ))}

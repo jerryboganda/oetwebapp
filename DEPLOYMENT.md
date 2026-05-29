@@ -94,7 +94,6 @@ Minimum values you must set correctly:
 - `BACKUP_AWS_ACCESS_KEY_ID`
 - `BACKUP_AWS_SECRET_ACCESS_KEY`
 - `BACKUP_ALERT_WEBHOOK`
-- `EVIDENCE_SIGNER_FINGERPRINT`
 - `READING_SMOKE_LEARNER_EMAIL` / `READING_SMOKE_LEARNER_PASSWORD` for a least-privilege smoke learner
 - `READING_SMOKE_*_ID` fixture values for the deploy-gate media smoke
 - `ROUTER_IMAGE` pinned to an immutable `nginx`-compatible `@sha256:` digest
@@ -112,36 +111,52 @@ Notes:
 - `SMTP__USERNAME` and `SMTP__PASSWORD` are required for production SMTP relay delivery.
 - `SEED_DEMO_DATA` should stay `false` in production.
 - `AUTH__USEDEVELOPMENTAUTH` is only for local development and should remain `false` in production.
-- The production GitHub Environment variable `EVIDENCE_SIGNER_FINGERPRINT` must match `.env.production`; the protected GitHub value is the deploy verifier trust root.
 - The Reading/media smoke learner should have only the fixture entitlement needed by `scripts/deploy/reading-media-smoke.sh` and should not require MFA.
 
 ## 3. Build and start the stack
 
-Production rollout is exact-SHA only. First set the protected GitHub production
-environment variable `ROUTER_IMAGE` to the same immutable digest configured in
-`.env.production`, then run the protected GitHub workflow
-`Verify Release Artifacts` for the target commit in `production` mode. It builds
-and pushes immutable GHCR image digests, writes `image-digests.env`, signs the
-evidence manifest, and uploads an artifact named `release-evidence-<sha>`.
+Production rollout is exact-SHA only. First run the protected `Build Release
+Images` workflow for the target commit. It checks out the exact 40-character
+SHA, builds and pushes the web, API, DB-backup, and router images to GHCR, and
+uploads `release-images-<sha>/release-images.env` with immutable `@sha256`
+refs for `WEB_IMAGE`, `API_IMAGE`, `DB_BACKUP_IMAGE`, and `ROUTER_IMAGE`.
 
-Then run the protected `Deploy Production` workflow with the same 40-character
-`target_sha`. The workflow downloads only `release-evidence-<sha>`, copies it to
-the VPS, and runs the deploy helper with `DEPLOY_REF=<sha>`.
+Then run the protected `Deploy Production` workflow with the same `target_sha`
+and the four refs from `release-images.env`. The deploy workflow downloads the
+matching release-image artifact, rejects any image ref that does not exactly
+match that artifact, requires successful `qa-smoke.yml` and `sbom-sca.yml` runs
+for the exact SHA, downloads the matching SBOM/SCA artifact, logs the VPS into
+GHCR with a temporary Docker config, and passes the digest refs to the VPS
+deploy helper with `DEPLOY_REF=<sha>`.
+
+Manual shell rollout is reserved for incident use. Prefer the protected
+workflow; if shell rollout is required, pass the exact SHA plus all four
+immutable image refs:
 
 ```bash
-DEPLOY_REF=<40-character-sha> bash ./scripts/deploy/deploy-prod.sh
+DEPLOY_REF=<40-character-sha> \
+WEB_IMAGE=<web-image@sha256:...> \
+API_IMAGE=<api-image@sha256:...> \
+DB_BACKUP_IMAGE=<db-backup-image@sha256:...> \
+ROUTER_IMAGE=<router-image@sha256:...> \
+bash ./scripts/deploy/deploy-prod.sh
 ```
 
-The helper refuses branch names and short SHAs, verifies signed evidence before
-checkout reset, starts the inactive blue/green slot from digest-pinned images,
-health-checks it internally, switches the stable `web`/`learner-api` router
-containers to the new slot, and runs post-deploy verification, observability
-smoke, and Reading/media smoke before a release is recorded as previous-good.
+The helper refuses branch names and short SHAs, starts the inactive blue/green
+slot from digest-pinned images, verifies each pulled image carries the expected
+`org.opencontainers.image.revision=<sha>` label, health-checks it internally,
+switches the stable `web`/`learner-api` router containers to the new slot, and
+runs post-deploy verification, observability smoke, and Reading/media smoke
+before a release is recorded as previous-good.
+
+Rollback operators should read `.deploy/rollback-target.env` first. The rollout
+copies the prior known-good release there before overwriting
+`.deploy/previous-good.env` with the newly successful release.
 
 The API runs database migrations automatically on startup when `AUTO_MIGRATE=true`.
 
-Production normally uses immutable image digests from release evidence. Local
-rehearsal or emergency source-build fallback must opt in to the build override:
+Production normally uses immutable image digest inputs. Local rehearsal or
+emergency source-build fallback must opt in to the build override:
 
 ```bash
 docker compose --env-file .env.production \
@@ -243,27 +258,32 @@ Back up both named volumes before upgrades or VPS maintenance.
 
 ## 8. Updating the deployment
 
-For a clean production deploy, use the exact SHA that already has signed release
-evidence:
+For a clean production deploy, use `Build Release Images` first, then use the
+protected deploy workflow with the exact SHA and the CI-recorded immutable image
+digest handoff:
 
 ```bash
-DEPLOY_REF=<40-character-sha> bash ./scripts/deploy/deploy-prod.sh
+DEPLOY_REF=<40-character-sha> \
+WEB_IMAGE=<web-image@sha256:...> \
+API_IMAGE=<api-image@sha256:...> \
+DB_BACKUP_IMAGE=<db-backup-image@sha256:...> \
+ROUTER_IMAGE=<router-image@sha256:...> \
+bash ./scripts/deploy/deploy-prod.sh
 ```
 
-That script preserves named volumes, verifies signed release evidence and image
-digests for the deployed SHA, runs pre-flight, rolls out digest-pinned images
-into the inactive blue/green slot, and only records `.deploy/previous-good.env`
-and `.deploy/active-slot.env` after the health and smoke gates pass. The prior
-known-good record is copied to `.deploy/rollback-target.env` before it is
-overwritten, and every successful rollout appends `.deploy/release-history.tsv`.
-By default the previous slot remains running for fast router rollback; set
-`KEEP_PREVIOUS_SLOT_RUNNING=false` only after confirming VPS capacity and a
-separate rollback image path. Keep at least one previous-good evidence bundle and
-digest set available for rollback.
+That script preserves named volumes, validates immutable image digests, runs
+pre-flight, rolls out digest-pinned images into the inactive blue/green slot, and
+only records `.deploy/previous-good.env` and `.deploy/active-slot.env` after the
+health and smoke gates pass. The prior known-good record is copied to
+`.deploy/rollback-target.env` before it is overwritten, and every successful
+rollout appends `.deploy/release-history.tsv`. By default the previous slot
+remains running for fast router rollback; set `KEEP_PREVIOUS_SLOT_RUNNING=false`
+only after confirming VPS capacity and a separate rollback image path. Keep at
+least one previous-good SHA, slot, and image digest set available for rollback.
 
 Do **not** run `docker compose down -v`, `docker volume prune`, `docker system prune --volumes`, or manually delete `oetwebsite_*` named volumes as part of a normal redeploy. Volume cleanup is a separate destructive maintenance task and requires an explicit backup, restore plan, and approval naming the exact volume.
 
-Direct `docker compose up -d --build` is reserved for local rehearsal and emergency use after explicit approval; it bypasses the production evidence gate.
+Direct `docker compose up -d --build` is reserved for local rehearsal and emergency use after explicit approval; it bypasses the production digest-input gate.
 
 Destructive or irreversible EF migrations require a maintenance window, fresh
 verified backup ID, non-live restore drill evidence, and owner approval before

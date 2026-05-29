@@ -77,12 +77,12 @@ export function PronunciationResultsCard(props: PronunciationResultsCardProps) {
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <div className="text-xs uppercase tracking-[0.18em] text-muted">Projected OET Speaking band</div>
-            <div className="text-2xl font-semibold text-navy dark:text-white">
+            <div className="text-2xl font-semibold text-navy">
               {props.projectedSpeakingScaled}/500 · Grade {props.projectedSpeakingGrade}
             </div>
             <p className="mt-1 max-w-lg text-xs text-muted">
               Advisory projection from this pronunciation attempt. The authoritative Speaking band
-              is set by tutor review of a full Speaking role-play — pass is 350/500 (universal).
+              is set by tutor review of a full Speaking role-play. Pass is 350/500 (universal).
             </p>
           </div>
           <Info className="h-5 w-5 shrink-0 text-muted" aria-hidden />
@@ -90,7 +90,7 @@ export function PronunciationResultsCard(props: PronunciationResultsCardProps) {
       </div>
 
       <section aria-labelledby="word-heatmap-heading" className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
-        <h3 id="word-heatmap-heading" className="mb-3 text-sm font-semibold text-navy dark:text-white">
+        <h3 id="word-heatmap-heading" className="mb-3 text-sm font-semibold text-navy">
           Word-level accuracy
         </h3>
         <PhonemeHeatmap wordScores={words as Array<{ word: string; accuracyScore: number; errorType: string }>} />
@@ -98,14 +98,14 @@ export function PronunciationResultsCard(props: PronunciationResultsCardProps) {
 
       {phonemes.length > 0 && (
         <section aria-labelledby="phoneme-issues-heading" className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
-          <h3 id="phoneme-issues-heading" className="mb-3 text-sm font-semibold text-navy dark:text-white">
+          <h3 id="phoneme-issues-heading" className="mb-3 text-sm font-semibold text-navy">
             Phonemes that need work
           </h3>
           <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             {phonemes.map((p, i) => (
               <li key={`${p.phoneme}-${i}`} className="flex items-center justify-between rounded-2xl border border-border p-3">
                 <div className="flex items-center gap-3">
-                  <span className="font-mono text-lg font-semibold text-navy dark:text-white">/{p.phoneme}/</span>
+                  <span className="font-mono text-lg font-semibold text-navy">/{p.phoneme}/</span>
                   <span className="text-xs text-muted">
                     {p.occurrences} occurrence{p.occurrences !== 1 ? 's' : ''}
                     {p.ruleId ? ` · ${p.ruleId}` : ''}
@@ -136,15 +136,15 @@ export function PronunciationResultsCard(props: PronunciationResultsCardProps) {
 
       {(feedback.summary || (feedback.improvements?.length ?? 0) > 0) && (
         <section aria-labelledby="coaching-heading" className="rounded-2xl border border-primary/30 bg-primary/5 p-5 shadow-sm">
-          <h3 id="coaching-heading" className="mb-2 text-sm font-semibold text-navy dark:text-white">
+          <h3 id="coaching-heading" className="mb-2 text-sm font-semibold text-navy">
             Targeted coaching
           </h3>
-          {feedback.summary && <p className="text-sm text-navy dark:text-white/90">{feedback.summary}</p>}
+          {feedback.summary && <p className="text-sm text-navy">{feedback.summary}</p>}
 
           {(feedback.strengths?.length ?? 0) > 0 && (
             <div className="mt-3">
               <div className="text-xs uppercase tracking-[0.15em] text-muted">Strengths</div>
-              <ul className="mt-1 space-y-1 text-sm text-navy dark:text-white/90">
+              <ul className="mt-1 space-y-1 text-sm text-navy">
                 {feedback.strengths!.map((s, i) => (
                   <li key={i} className="flex items-start gap-2">
                     <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-500" aria-hidden />
@@ -158,7 +158,7 @@ export function PronunciationResultsCard(props: PronunciationResultsCardProps) {
           {(feedback.improvements?.length ?? 0) > 0 && (
             <div className="mt-3">
               <div className="text-xs uppercase tracking-[0.15em] text-muted">Work on next</div>
-              <ul className="mt-1 space-y-2 text-sm text-navy dark:text-white/90">
+              <ul className="mt-1 space-y-2 text-sm text-navy">
                 {feedback.improvements!.map((imp, i) => (
                   <li key={`${imp.ruleId}-${i}`} className="rounded-2xl border border-border bg-surface p-3">
                     <div className="flex items-center gap-2 text-xs text-muted">
@@ -226,7 +226,7 @@ function StatTile({ label, value, hint }: { label: string; value: string; hint: 
   return (
     <div className="rounded-2xl border border-border bg-surface p-4 shadow-sm">
       <div className="text-[11px] uppercase tracking-[0.15em] text-muted">{label}</div>
-      <div className="mt-1 font-mono text-lg font-semibold text-navy dark:text-white">{value}</div>
+      <div className="mt-1 font-mono text-lg font-semibold text-navy">{value}</div>
       <div className="text-[11px] text-muted">{hint}</div>
     </div>
   );

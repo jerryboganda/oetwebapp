@@ -224,7 +224,7 @@ export default function BrowseVocabularyPage() {
                 <MotionItem
                   key={term.id}
                   delayIndex={i}
-                  className="group flex gap-4 rounded-2xl border border-border bg-surface p-5 transition-all duration-200 hover:border-primary/30 hover:shadow-md hover:-translate-y-0.5"
+                  className="group flex gap-4 rounded-2xl border border-border bg-surface p-5 transition-[color,background-color,border-color,box-shadow,transform,opacity,filter] duration-200 hover:border-primary/30 hover:shadow-md hoverable:-translate-y-0.5"
                 >
                   <div className="flex-1 min-w-0">
                     <div className="mb-1.5 flex flex-wrap items-center gap-2">
@@ -254,7 +254,7 @@ export default function BrowseVocabularyPage() {
                   <button
                     onClick={() => handleAdd(term.id)}
                     disabled={adding.has(term.id) || added.has(term.id)}
-                    className={`flex-shrink-0 self-start rounded-xl p-2.5 transition-all duration-200 ${added.has(term.id) ? 'bg-emerald-50 text-emerald-600 border border-emerald-200/60' : 'text-muted border border-transparent hover:bg-primary/10 hover:text-primary hover:border-primary/20'}`}
+                    className={`flex-shrink-0 self-start rounded-xl p-2.5 transition-[color,background-color,border-color,box-shadow,transform,opacity,filter] duration-200 ${added.has(term.id) ? 'bg-emerald-50 text-emerald-600 border border-emerald-200/60' : 'text-muted border border-transparent hover:bg-primary/10 hover:text-primary hover:border-primary/20'}`}
                     title={added.has(term.id) ? 'Added to your list' : 'Add to my list'}
                     aria-label={added.has(term.id) ? `${term.term} added to your list` : `Add ${term.term} to your list`}
                   >

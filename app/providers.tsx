@@ -55,8 +55,10 @@ export function AppProviders({
           TooltipProvider must wrap every admin (and learner) consumer of the
           Tooltip primitive so portals share a single delay context. 800ms hover
           delay matches the Material spec; focus opens are instant by default.
+          skipDelayDuration={500} makes moving between adjacent tooltips (e.g. a
+          toolbar) open instantly — the whole row then feels fast after the first.
         */}
-        <TooltipProvider delayDuration={800}>
+        <TooltipProvider delayDuration={800} skipDelayDuration={500}>
           <QueryProvider>
             <AuthProvider>
               <RuntimeLifecycleBridge />

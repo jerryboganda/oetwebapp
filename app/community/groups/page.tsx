@@ -103,14 +103,14 @@ export default function GroupsPage() {
                         <Badge variant="outline">Open</Badge>
                       )}
                     </div>
-                    <p className="text-xs text-muted-foreground mb-3 line-clamp-2">{group.description}</p>
+                    <p className="text-xs text-muted mb-3 line-clamp-2">{group.description}</p>
                     <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <div className="flex items-center gap-2 text-xs text-muted">
                         <Users className="w-3.5 h-3.5" />
                         <span>{group.memberCount} members</span>
                         <Badge variant="muted" className="text-[10px] capitalize">{group.profession}</Badge>
                       </div>
-                      <ArrowRight className="w-4 h-4 text-muted-foreground" />
+                      <ArrowRight className="w-4 h-4 text-muted" />
                     </div>
                   </Card>
                 </Link>

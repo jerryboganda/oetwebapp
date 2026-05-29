@@ -155,7 +155,7 @@ export default function TutorWritingReviewPage() {
                   value={freeText}
                   onChange={(e) => setFreeText(e.target.value)}
                   className="rounded border border-border bg-background p-2 text-sm"
-                  placeholder="Overall feedback for the learner — what to focus on next."
+                  placeholder="Overall feedback for the learner: what to focus on next."
                   aria-describedby="free-helper"
                 />
               </label>

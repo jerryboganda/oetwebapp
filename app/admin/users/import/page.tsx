@@ -171,7 +171,7 @@ export default function BulkImportUsersPage() {
             ) : (
               <div className="mt-3">
                 <p className="text-sm font-medium text-admin-fg-strong">Drop your CSV file here</p>
-                <p className="mt-1 text-xs text-admin-fg-muted">or click to browse — max 5 MB, up to 1,000 rows</p>
+                <p className="mt-1 text-xs text-admin-fg-muted">or click to browse, max 5 MB, up to 1,000 rows</p>
               </div>
             )}
           </div>
@@ -234,9 +234,9 @@ export default function BulkImportUsersPage() {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-admin-border bg-admin-bg-subtle">
-                      <th className="px-4 py-2 text-left font-semibold text-admin-fg-strong">Row</th>
-                      <th className="px-4 py-2 text-left font-semibold text-admin-fg-strong">Email</th>
-                      <th className="px-4 py-2 text-left font-semibold text-admin-fg-strong">Error</th>
+                      <th scope="col" className="px-4 py-2 text-left font-semibold text-admin-fg-strong">Row</th>
+                      <th scope="col" className="px-4 py-2 text-left font-semibold text-admin-fg-strong">Email</th>
+                      <th scope="col" className="px-4 py-2 text-left font-semibold text-admin-fg-strong">Error</th>
                     </tr>
                   </thead>
                   <tbody>

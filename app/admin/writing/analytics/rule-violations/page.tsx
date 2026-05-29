@@ -203,14 +203,14 @@ export default function WritingRuleViolationDashboardPage() {
                       <table className="w-full text-sm">
                         <thead>
                           <tr className="border-b border-admin-border text-left text-xs text-admin-fg-muted">
-                            <th className="py-2 pr-3">Rule ID</th>
-                            <th className="py-2 pr-3 text-right">Total</th>
-                            <th className="py-2 pr-3 text-right">Attempts</th>
-                            <th className="py-2 pr-3 text-right">Learners</th>
-                            <th className="py-2 pr-3 text-right">Critical</th>
-                            <th className="py-2 pr-3 text-right">Major</th>
-                            <th className="py-2 pr-3 text-right">Minor</th>
-                            <th className="py-2 pr-3 text-right">Info</th>
+                            <th scope="col" className="py-2 pr-3">Rule ID</th>
+                            <th scope="col" className="py-2 pr-3 text-right">Total</th>
+                            <th scope="col" className="py-2 pr-3 text-right">Attempts</th>
+                            <th scope="col" className="py-2 pr-3 text-right">Learners</th>
+                            <th scope="col" className="py-2 pr-3 text-right">Critical</th>
+                            <th scope="col" className="py-2 pr-3 text-right">Major</th>
+                            <th scope="col" className="py-2 pr-3 text-right">Minor</th>
+                            <th scope="col" className="py-2 pr-3 text-right">Info</th>
                           </tr>
                         </thead>
                         <tbody>

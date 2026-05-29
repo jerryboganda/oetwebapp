@@ -90,14 +90,14 @@ export default function AffiliatePortalPage() {
           <section className="space-y-3">
             <h2 className="text-lg font-semibold">Recent commissions</h2>
             {stats.commissions.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No commissions yet.</p>
+              <p className="text-sm text-muted">No commissions yet.</p>
             ) : (
               <div className="space-y-2">
                 {stats.commissions.map((c) => (
                   <div key={c.id} className="flex items-center justify-between rounded-lg border border-border bg-card p-3 text-sm">
                     <div>
                       <p className="font-medium">{c.amountAmount.toFixed(2)} {c.currency}</p>
-                      <p className="text-xs text-muted-foreground">{new Date(c.accruedAt).toLocaleDateString()} · payment {c.paymentTransactionId.slice(0, 12)}…</p>
+                      <p className="text-xs text-muted">{new Date(c.accruedAt).toLocaleDateString()} · payment {c.paymentTransactionId.slice(0, 12)}…</p>
                     </div>
                     <Badge variant={c.status === 'paid' ? 'success' : c.status === 'reversed' ? 'danger' : 'default'}>{c.status}</Badge>
                   </div>
@@ -114,7 +114,7 @@ export default function AffiliatePortalPage() {
 function Card({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
   return (
     <div className="rounded-2xl border border-border bg-card p-5 shadow-sm">
-      <div className="flex items-center gap-2 text-muted-foreground">
+      <div className="flex items-center gap-2 text-muted">
         {icon}
         <span className="text-sm">{label}</span>
       </div>

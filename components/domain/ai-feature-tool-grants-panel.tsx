@@ -104,7 +104,7 @@ export function AiFeatureToolGrantsPanel() {
     () =>
       activeTools
         .filter((t) => !grantedToolCodesForDraftFeature.has(t.code))
-        .map((t) => ({ value: t.code, label: `${t.code} — ${t.name}` })),
+        .map((t) => ({ value: t.code, label: `${t.code}: ${t.name}` })),
     [activeTools, grantedToolCodesForDraftFeature],
   );
 
@@ -244,7 +244,7 @@ export function AiFeatureToolGrantsPanel() {
           label="Filter feature"
           value={filterFeature}
           onChange={(e) => setFilterFeature(e.target.value)}
-          placeholder="— all features —"
+          placeholder="All features"
           options={[
             { value: '', label: 'All features' },
             ...KNOWN_FEATURE_CODES.map((c) => ({ value: c, label: c })),
@@ -262,14 +262,14 @@ export function AiFeatureToolGrantsPanel() {
           label="Feature"
           value={draftFeature}
           onChange={(e) => setDraftFeature(e.target.value)}
-          placeholder="— pick feature —"
+          placeholder="Pick a feature"
           options={KNOWN_FEATURE_CODES.map((c) => ({ value: c, label: c }))}
         />
         <Select
           label="Tool"
           value={draftTool}
           onChange={(e) => setDraftTool(e.target.value)}
-          placeholder={draftFeature ? '— pick tool —' : 'pick a feature first'}
+          placeholder={draftFeature ? 'Pick a tool' : 'Pick a feature first'}
           options={draftToolOptions}
         />
         <div className="flex items-end">

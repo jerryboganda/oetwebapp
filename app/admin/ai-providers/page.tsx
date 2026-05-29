@@ -296,7 +296,7 @@ export default function AiProvidersPage() {
       const result = await testAiProvider(code);
       setToast({
         variant: result.status === 'ok' ? 'success' : 'error',
-        message: `Test ${code}: ${result.status}${result.errorMessage ? ' — ' + result.errorMessage : ''} (${result.latencyMs} ms)`,
+        message: `Test ${code}: ${result.status}${result.errorMessage ? ', ' + result.errorMessage : ''} (${result.latencyMs} ms)`,
       });
       await load();
     } catch (e) {
@@ -506,12 +506,12 @@ export default function AiProvidersPage() {
                   { value: 'Anthropic', label: 'Anthropic (native)' },
                   { value: 'Cloudflare', label: 'Cloudflare Workers AI (native)' },
                   { value: 'Copilot', label: 'GitHub Copilot / Models' },
-                  { value: 'AzureTts', label: 'Azure Speech — TTS' },
-                  { value: 'ElevenLabsTts', label: 'ElevenLabs — TTS' },
-                  { value: 'AzureAsr', label: 'Azure Speech — ASR' },
-                  { value: 'WhisperAsr', label: 'Whisper — ASR' },
+                  { value: 'AzureTts', label: 'Azure Speech: TTS' },
+                  { value: 'ElevenLabsTts', label: 'ElevenLabs: TTS' },
+                  { value: 'AzureAsr', label: 'Azure Speech: ASR' },
+                  { value: 'WhisperAsr', label: 'Whisper: ASR' },
                   { value: 'AzurePhoneme', label: 'Azure Pronunciation Assessment' },
-                  { value: 'ElevenLabsStt', label: 'ElevenLabs Scribe — realtime STT' },
+                  { value: 'ElevenLabsStt', label: 'ElevenLabs Scribe: realtime STT' },
                   { value: 'Mock', label: 'Mock (dev only)' },
                 ]} />
               <Select label="Category" value={editing.category}

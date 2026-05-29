@@ -165,7 +165,7 @@ export function AiProviderAccountsModal({ open, providerId, providerLabel, onClo
       const result = await testAiProviderAccount(providerId, accountId);
       setToast({
         variant: result.status === 'ok' ? 'success' : 'error',
-        message: `Test: ${result.status}${result.errorMessage ? ' — ' + result.errorMessage : ''} (${result.latencyMs} ms)`,
+        message: `Test: ${result.status}${result.errorMessage ? ': ' + result.errorMessage : ''} (${result.latencyMs} ms)`,
       });
       await load();
     } catch (e) {
@@ -212,7 +212,7 @@ export function AiProviderAccountsModal({ open, providerId, providerLabel, onClo
             {a.lastTestedAt && <span className="text-[10px] text-muted">{new Date(a.lastTestedAt).toLocaleString()}</span>}
           </div>
         )
-        : <span className="text-xs text-muted">—</span>,
+        : <span className="text-xs text-muted">N/A</span>,
     },
     {
       key: 'acts',
@@ -259,7 +259,7 @@ export function AiProviderAccountsModal({ open, providerId, providerLabel, onClo
   if (!open) return null;
 
   return (
-    <Modal open={open} onClose={onClose} title={`Account pool — ${providerLabel}`} size="lg">
+    <Modal open={open} onClose={onClose} title={`Account pool: ${providerLabel}`} size="lg">
       <div className="space-y-4">
         {toast && <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} />}
 
@@ -285,7 +285,7 @@ export function AiProviderAccountsModal({ open, providerId, providerLabel, onClo
         {status === 'loading' && <p className="text-sm text-muted">Loading…</p>}
         {status !== 'loading' && rows.length === 0 && (
           <p className="text-sm text-muted">
-            No accounts yet — add one above. Until you do, this provider falls back to its single API key on the
+            No accounts yet. Add one above. Until you do, this provider falls back to its single API key on the
             row above.
           </p>
         )}

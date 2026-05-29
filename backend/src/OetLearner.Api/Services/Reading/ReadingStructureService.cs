@@ -84,7 +84,11 @@ public sealed record ReadingQuestionUpsert(
     string? AcceptedSynonymsJson,
     bool CaseSensitive,
     string? ExplanationMarkdown,
-    string? SkillTag);
+    string? SkillTag,
+    int? Difficulty = null,
+    string? EvidenceSentence = null,
+    int? ParagraphIndex = null,
+    string? DistractorRationaleJson = null);
 
 public sealed record ReadingStructure(
     string PaperId,
@@ -338,6 +342,10 @@ public sealed class ReadingStructureService : IReadingStructureService
                 CaseSensitive = args.CaseSensitive,
                 ExplanationMarkdown = args.ExplanationMarkdown,
                 SkillTag = args.SkillTag,
+                Difficulty = args.Difficulty,
+                EvidenceSentence = args.EvidenceSentence,
+                ParagraphIndex = args.ParagraphIndex,
+                DistractorRationaleJson = args.DistractorRationaleJson,
                 CreatedAt = now,
                 UpdatedAt = now,
             };
@@ -357,6 +365,10 @@ public sealed class ReadingStructureService : IReadingStructureService
             row.CaseSensitive = args.CaseSensitive;
             row.ExplanationMarkdown = args.ExplanationMarkdown;
             row.SkillTag = args.SkillTag;
+            row.Difficulty = args.Difficulty;
+            row.EvidenceSentence = args.EvidenceSentence;
+            row.ParagraphIndex = args.ParagraphIndex;
+            row.DistractorRationaleJson = args.DistractorRationaleJson;
             row.UpdatedAt = now;
         }
         await WriteAuditAsync("ReadingQuestionUpserted", row.Id,
@@ -988,10 +1000,12 @@ public sealed class ReadingStructureService : IReadingStructureService
 
     private static readonly HashSet<string> LearnerSafeOptionKeys = new(StringComparer.OrdinalIgnoreCase)
     {
+        "id",
         "value",
         "label",
         "text",
         "title",
+        "letter",
     };
 
     private static void ValidateManifest(ReadingStructureManifest manifest, bool replaceExisting)

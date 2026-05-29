@@ -62,25 +62,25 @@ export default function MockResultsPage() {
       <main className="space-y-8">
         <Link
           href="/reading/mocks"
-          className="inline-flex items-center gap-1.5 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"
+          className="inline-flex items-center gap-1.5 text-sm text-muted hover:text-navy"
         >
           <ArrowLeft className="h-4 w-4" aria-hidden />
           Back to Mocks
         </Link>
 
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Mock Results</h1>
-          <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">Session: {sessionId}</p>
+          <h1 className="text-2xl font-bold text-navy">Mock Results</h1>
+          <p className="mt-1 text-sm text-muted">Session: {sessionId}</p>
         </div>
 
         {loading ? (
           <div className="space-y-3">
             {[...Array(4)].map((_, i) => (
-              <div key={i} className="h-16 animate-pulse rounded-xl bg-gray-100 dark:bg-gray-800" />
+              <div key={i} className="h-16 animate-pulse rounded-xl bg-border/80 dark:bg-border/50" />
             ))}
           </div>
         ) : error ? (
-          <div className="rounded-lg border border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-900/20 px-4 py-3 text-sm text-red-700 dark:text-red-300">
+          <div className="rounded-lg border border-danger/30 bg-danger/10 px-4 py-3 text-sm text-danger">
             {error}
           </div>
         ) : result ? (
@@ -95,8 +95,8 @@ export default function MockResultsPage() {
                   className={[
                     'flex-shrink-0 rounded-lg px-4 py-2 text-xs font-semibold transition-colors',
                     activeTab === tab.id
-                      ? 'bg-blue-600 text-white'
-                      : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-800',
+                      ? 'bg-primary text-white dark:bg-violet-700'
+                      : 'text-muted hover:text-navy hover:bg-background-light dark:hover:bg-background-dark',
                   ].join(' ')}
                 >
                   {tab.label}
@@ -108,90 +108,90 @@ export default function MockResultsPage() {
             <div className="rounded-xl border border-border bg-surface p-6">
               {activeTab === 'score' && (
                 <div className="flex flex-col items-center gap-4 py-4">
-                  <p className="text-6xl font-bold tabular-nums text-gray-900 dark:text-white">
+                  <p className="text-6xl font-bold tabular-nums text-navy">
                     {result.scaledScore}
                   </p>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">Scaled score (out of 500)</p>
+                  <p className="text-sm text-muted">Scaled score (out of 500)</p>
                   <GradeBadge grade={result.grade} />
-                  <p className="text-sm text-gray-600 dark:text-gray-400">Raw score: {result.rawScore}</p>
+                  <p className="text-sm text-muted">Raw score: {result.rawScore}</p>
                 </div>
               )}
 
               {activeTab === 'sections' && (
                 <div className="space-y-3">
-                  <h2 className="text-sm font-semibold text-gray-900 dark:text-white mb-4">Part Scores</h2>
+                  <h2 className="text-sm font-semibold text-navy mb-4">Part Scores</h2>
                   {Object.entries(result.sectionBreakdown).length > 0 ? (
                     Object.entries(result.sectionBreakdown).map(([section, score]) => (
                       <div key={section} className="flex items-center justify-between rounded-lg border border-border px-4 py-3">
-                        <span className="text-sm font-medium text-gray-900 dark:text-white">Part {section}</span>
-                        <span className="text-sm font-bold tabular-nums text-gray-900 dark:text-white">{score}</span>
+                        <span className="text-sm font-medium text-navy">Part {section}</span>
+                        <span className="text-sm font-bold tabular-nums text-navy">{score}</span>
                       </div>
                     ))
                   ) : (
-                    <p className="text-sm text-gray-600 dark:text-gray-400">No section data available.</p>
+                    <p className="text-sm text-muted">No section data available.</p>
                   )}
                 </div>
               )}
 
               {activeTab === 'skills' && (
                 <div className="space-y-3">
-                  <h2 className="text-sm font-semibold text-gray-900 dark:text-white mb-4">Sub-skill Scores</h2>
+                  <h2 className="text-sm font-semibold text-navy mb-4">Sub-skill Scores</h2>
                   {Object.entries(result.skillBreakdown).length > 0 ? (
                     <div className="overflow-x-auto">
                       <table className="w-full text-sm">
                         <thead>
                           <tr className="border-b border-border">
-                            <th className="pb-2 text-left text-xs font-semibold text-gray-600 dark:text-gray-400">Skill</th>
-                            <th className="pb-2 text-right text-xs font-semibold text-gray-600 dark:text-gray-400">Score</th>
+                            <th className="pb-2 text-left text-xs font-semibold text-muted">Skill</th>
+                            <th className="pb-2 text-right text-xs font-semibold text-muted">Score</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-border">
                           {Object.entries(result.skillBreakdown).map(([skill, score]) => (
                             <tr key={skill}>
-                              <td className="py-2.5 text-gray-900 dark:text-white">{skill}</td>
-                              <td className="py-2.5 text-right font-bold tabular-nums text-gray-900 dark:text-white">{score}</td>
+                              <td className="py-2.5 text-navy">{skill}</td>
+                              <td className="py-2.5 text-right font-bold tabular-nums text-navy">{score}</td>
                             </tr>
                           ))}
                         </tbody>
                       </table>
                     </div>
                   ) : (
-                    <p className="text-sm text-gray-600 dark:text-gray-400">No skill data available.</p>
+                    <p className="text-sm text-muted">No skill data available.</p>
                   )}
                 </div>
               )}
 
               {activeTab === 'time' && (
                 <div className="space-y-3">
-                  <h2 className="text-sm font-semibold text-gray-900 dark:text-white mb-4">Time per Section (seconds)</h2>
+                  <h2 className="text-sm font-semibold text-navy mb-4">Time per Section (seconds)</h2>
                   {Object.entries(result.timeMap).length > 0 ? (
                     Object.entries(result.timeMap).map(([section, seconds]) => {
                       const minutes = Math.floor(seconds / 60);
                       const secs = seconds % 60;
                       return (
                         <div key={section} className="flex items-center justify-between rounded-lg border border-border px-4 py-3">
-                          <span className="text-sm font-medium text-gray-900 dark:text-white">Part {section}</span>
-                          <span className="text-sm tabular-nums text-gray-600 dark:text-gray-400">
+                          <span className="text-sm font-medium text-navy">Part {section}</span>
+                          <span className="text-sm tabular-nums text-muted">
                             {minutes}m {secs}s
                           </span>
                         </div>
                       );
                     })
                   ) : (
-                    <p className="text-sm text-gray-600 dark:text-gray-400">No time data available.</p>
+                    <p className="text-sm text-muted">No time data available.</p>
                   )}
                 </div>
               )}
 
               {activeTab === 'next' && (
                 <div className="space-y-4">
-                  <h2 className="text-sm font-semibold text-gray-900 dark:text-white">Next Steps</h2>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">
+                  <h2 className="text-sm font-semibold text-navy">Next Steps</h2>
+                  <p className="text-sm text-muted">
                     Review your weak areas and continue with your personalised study plan.
                   </p>
                   <Link
                     href="/reading"
-                    className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 transition-colors"
+                    className="inline-flex items-center gap-2 rounded-lg bg-primary px-5 py-2.5 text-sm font-semibold text-white hover:bg-primary-dark active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600 transition-[color,background-color,transform] duration-200"
                   >
                     Continue your plan
                     <ArrowRight className="h-4 w-4" aria-hidden />

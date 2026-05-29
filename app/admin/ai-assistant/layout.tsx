@@ -34,7 +34,7 @@ export default function AiAssistantLayout({ children }: { children: React.ReactN
               className={cn(
                 'flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
                 active
-                  ? 'bg-violet-500/15 text-violet-300'
+                  ? 'bg-[var(--admin-primary-tint)] text-[var(--admin-primary)]'
                   : 'text-admin-text-muted hover:bg-admin-surface-raised hover:text-admin-text',
               )}
             >

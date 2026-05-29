@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using Microsoft.EntityFrameworkCore;
 
 namespace OetLearner.Api.Domain;
 
@@ -193,4 +194,105 @@ public class Sponsorship
 
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset? RevokedAt { get; set; }
+}
+
+// ── Sponsor Seat Packs (institutional billing) ──
+
+/// <summary>A purchased bundle of learner seats that a sponsor can assign.
+/// Seat packs are the billing unit for institutional sponsors — they buy N
+/// seats at a per-seat price and assign them to individual learners.</summary>
+[Index(nameof(SponsorId))]
+public class SponsorSeatPack
+{
+    [Key]
+    public Guid Id { get; set; }
+
+    [MaxLength(64)]
+    public string SponsorId { get; set; } = default!;
+
+    /// <summary>Human-friendly label: "50-seat OET Nursing – Q2 2026"</summary>
+    [MaxLength(256)]
+    public string Name { get; set; } = default!;
+
+    /// <summary>Total seats purchased in this pack.</summary>
+    public int TotalSeats { get; set; }
+
+    /// <summary>Seats currently assigned to learners.</summary>
+    public int AssignedSeats { get; set; }
+
+    /// <summary>Per-seat unit price at time of purchase (decimal, e.g. 29.99).</summary>
+    public decimal UnitPrice { get; set; }
+
+    [MaxLength(3)]
+    public string Currency { get; set; } = "GBP";
+
+    /// <summary>Stripe payment intent or invoice ID backing this purchase.</summary>
+    [MaxLength(256)]
+    public string? StripePaymentId { get; set; }
+
+    /// <summary>Pack lifecycle: "active", "exhausted", "expired", "cancelled"</summary>
+    [MaxLength(16)]
+    public string Status { get; set; } = "active";
+
+    public DateTimeOffset PurchasedAt { get; set; }
+    public DateTimeOffset? ExpiresAt { get; set; }
+    public DateTimeOffset CreatedAt { get; set; }
+    public DateTimeOffset UpdatedAt { get; set; }
+}
+
+/// <summary>Individual seat assignment linking a seat-pack seat to a learner.</summary>
+[Index(nameof(SeatPackId))]
+[Index(nameof(LearnerId))]
+public class SponsorSeatAssignment
+{
+    [Key]
+    public Guid Id { get; set; }
+
+    public Guid SeatPackId { get; set; }
+
+    [MaxLength(64)]
+    public string LearnerId { get; set; } = default!;
+
+    [MaxLength(256)]
+    public string LearnerEmail { get; set; } = default!;
+
+    /// <summary>"assigned", "revoked", "expired"</summary>
+    [MaxLength(16)]
+    public string Status { get; set; } = "assigned";
+
+    public DateTimeOffset AssignedAt { get; set; }
+    public DateTimeOffset? RevokedAt { get; set; }
+}
+
+/// <summary>Immutable ledger entry for seat-pack billing events (purchase,
+/// top-up, refund, seat-assign, seat-revoke).</summary>
+[Index(nameof(SponsorId))]
+public class SponsorBillingEvent
+{
+    [Key]
+    public Guid Id { get; set; }
+
+    [MaxLength(64)]
+    public string SponsorId { get; set; } = default!;
+
+    public Guid? SeatPackId { get; set; }
+
+    /// <summary>"purchase", "top_up", "refund", "seat_assigned", "seat_revoked", "pack_expired"</summary>
+    [MaxLength(32)]
+    public string EventType { get; set; } = default!;
+
+    public decimal? Amount { get; set; }
+
+    [MaxLength(3)]
+    public string? Currency { get; set; }
+
+    public int? SeatsDelta { get; set; }
+
+    [MaxLength(512)]
+    public string? Description { get; set; }
+
+    [MaxLength(64)]
+    public string? ActorUserId { get; set; }
+
+    public DateTimeOffset CreatedAt { get; set; }
 }

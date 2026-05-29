@@ -168,7 +168,7 @@ function DraftCard({ draft, paperId: _paperId, onApprove, onReject }: DraftCardP
               <Badge variant={statusBadgeVariant(draft.status)}>{draft.status}</Badge>
               {draft.isStub && (
                 <Badge variant="warning">
-                  Stub — AI could not generate full structure
+                  Stub: AI could not generate full structure
                 </Badge>
               )}
             </div>
@@ -226,11 +226,11 @@ function DraftCard({ draft, paperId: _paperId, onApprove, onReject }: DraftCardP
                 <table className="w-full min-w-[600px] text-left text-sm">
                   <thead>
                     <tr className="border-b border-admin-border bg-admin-bg-subtle text-xs font-semibold uppercase tracking-widest text-admin-fg-muted">
-                      <th className="py-2 pr-3 pl-3">#</th>
-                      <th className="py-2 pr-3">Part</th>
-                      <th className="py-2 pr-3">Type</th>
-                      <th className="py-2 pr-3">Stem</th>
-                      <th className="py-2 pr-3">Options / Answer</th>
+                      <th scope="col" className="py-2 pr-3 pl-3">#</th>
+                      <th scope="col" className="py-2 pr-3">Part</th>
+                      <th scope="col" className="py-2 pr-3">Type</th>
+                      <th scope="col" className="py-2 pr-3">Stem</th>
+                      <th scope="col" className="py-2 pr-3">Options / Answer</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-admin-border px-3">

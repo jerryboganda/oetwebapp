@@ -28,16 +28,22 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      - name: Collect release evidence bundle
+      - name: Generate SBOM
         env:
-          EVIDENCE_DIR: release-evidence
+          SBOM_OUTPUT: sbom-sca-artifacts/sbom.json
+        run: bash scripts/sbom-generate.sh
+
+      - name: Run SCA scan
+        env:
+          SBOM_OUTPUT: sbom-sca-artifacts/sbom.json
+          SCA_OUTPUT: sbom-sca-artifacts/sca.json
           SCA_FAIL_ON: ${{ inputs.fail_on || 'high' }}
-        run: bash scripts/evidence-collect.sh
+        run: bash scripts/sca-scan.sh
 
       - name: Upload SBOM/SCA artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: release-evidence-${{ github.sha }}
-          path: release-evidence/
+          name: sbom-sca-${{ github.sha }}
+          path: sbom-sca-artifacts/
           if-no-files-found: error

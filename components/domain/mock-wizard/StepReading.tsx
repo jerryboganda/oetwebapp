@@ -58,7 +58,7 @@ interface QuestionDraft {
  * is the canonical Part A "which text contains this idea?" form.
  */
 const QUESTION_TYPES: { value: ReadingQuestionType; label: string }[] = [
-  { value: 'MatchingTextReference', label: 'Matching — text reference (Part A)' },
+  { value: 'MatchingTextReference', label: 'Matching: text reference (Part A)' },
   { value: 'ShortAnswer', label: 'Short answer' },
   { value: 'SentenceCompletion', label: 'Sentence completion' },
   { value: 'MultipleChoice4', label: 'Multiple choice (4)' },
@@ -66,9 +66,9 @@ const QUESTION_TYPES: { value: ReadingQuestionType; label: string }[] = [
 ];
 
 const PART_TARGETS: Record<ReadingPartCode, { items: number; label: string }> = {
-  A: { items: 20, label: 'Part A — 20 items' },
-  B: { items: 6, label: 'Part B — 6 items' },
-  C: { items: 16, label: 'Part C — 16 items' },
+  A: { items: 20, label: 'Part A: 20 items' },
+  B: { items: 6, label: 'Part B: 6 items' },
+  C: { items: 16, label: 'Part C: 16 items' },
 };
 
 function makeId() {
@@ -240,7 +240,7 @@ export function StepReading() {
   return (
     <div className="space-y-6">
       <header className="space-y-1">
-        <h2 className="text-lg font-bold text-navy">Step 3 — Reading</h2>
+        <h2 className="text-lg font-bold text-navy">Step 3: Reading</h2>
         <p className="text-sm text-muted">
           Upload the question paper + answer key, then author texts and questions for Parts A
           (20), B (6), C (16).
@@ -290,7 +290,7 @@ export function StepReading() {
                 className={
                   'rounded-xl border px-3 py-1.5 text-xs font-bold ' +
                   (activeTab === t
-                    ? 'border-primary bg-primary text-white'
+                    ? 'border-primary bg-primary text-white dark:bg-violet-700'
                     : 'border-border bg-surface text-navy hover:bg-background-light')
                 }
               >

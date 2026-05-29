@@ -419,7 +419,7 @@ function renderLinkedLocalIds(signal: AdminBillingProviderLifecycleSignal) {
     <div className="max-w-[320px] space-y-1">
       {groups.map((group) => (
         <p key={group.label} className="break-words text-xs text-muted">
-          <span className="font-semibold text-navy">{group.label}:</span> {group.values.join(', ')}
+          <span className="font-semibold text-admin-fg-strong">{group.label}:</span> {group.values.join(', ')}
         </p>
       ))}
     </div>
@@ -429,7 +429,7 @@ function renderLinkedLocalIds(signal: AdminBillingProviderLifecycleSignal) {
 function EvidenceSection({ title, children }: { title: string; children: ReactNode }) {
   return (
     <section className="space-y-3 border-t border-border pt-4">
-      <h3 className="text-sm font-semibold text-navy">{title}</h3>
+      <h3 className="text-sm font-semibold text-admin-fg-strong">{title}</h3>
       {children}
     </section>
   );
@@ -437,9 +437,9 @@ function EvidenceSection({ title, children }: { title: string; children: ReactNo
 
 function EvidenceField({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <div className="min-w-0 rounded-lg bg-background-light px-3 py-2">
+    <div className="min-w-0 rounded-lg bg-admin-bg-subtle px-3 py-2">
       <dt className="text-[11px] uppercase tracking-[0.12em] text-muted">{label}</dt>
-      <dd className="mt-1 break-words text-sm font-medium text-navy">{children || 'Not recorded'}</dd>
+      <dd className="mt-1 break-words text-sm font-medium text-admin-fg-strong">{children || 'Not recorded'}</dd>
     </div>
   );
 }
@@ -1042,7 +1042,7 @@ export default function BillingPage() {
       header: 'Plan',
       render: (plan) => (
         <div className="space-y-1">
-          <p className="font-medium text-navy">{plan.name}</p>
+          <p className="font-medium text-admin-fg-strong">{plan.name}</p>
           <p className="text-xs uppercase tracking-[0.12em] text-muted">{plan.code ?? plan.id}</p>
           {renderCatalogVersionMeta(plan)}
           {plan.description ? <p className="text-sm text-muted">{plan.description}</p> : null}
@@ -1121,7 +1121,7 @@ export default function BillingPage() {
       header: 'Add-on',
       render: (addOn) => (
         <div className="space-y-1">
-          <p className="font-medium text-navy">{addOn.name}</p>
+          <p className="font-medium text-admin-fg-strong">{addOn.name}</p>
           <p className="text-xs uppercase tracking-[0.12em] text-muted">{addOn.code}</p>
           {renderCatalogVersionMeta(addOn)}
           {addOn.description ? <p className="text-sm text-muted">{addOn.description}</p> : null}
@@ -1199,7 +1199,7 @@ export default function BillingPage() {
       header: 'Coupon',
       render: (coupon) => (
         <div className="space-y-1">
-          <p className="font-medium text-navy">{coupon.code}</p>
+          <p className="font-medium text-admin-fg-strong">{coupon.code}</p>
           <p className="text-sm text-muted">{coupon.name}</p>
           {renderCatalogVersionMeta(coupon)}
         </div>
@@ -1257,7 +1257,7 @@ export default function BillingPage() {
       header: 'User',
       render: (subscription) => (
         <div className="space-y-1">
-          <p className="font-medium text-navy">{subscription.userName}</p>
+          <p className="font-medium text-admin-fg-strong">{subscription.userName}</p>
           <p className="text-xs uppercase tracking-[0.12em] text-muted">{subscription.userId}</p>
         </div>
       ),
@@ -1354,7 +1354,7 @@ export default function BillingPage() {
     {
       key: 'couponCode',
       header: 'Coupon',
-      render: (redemption) => <span className="font-medium text-navy">{redemption.couponCode}</span>,
+      render: (redemption) => <span className="font-medium text-admin-fg-strong">{redemption.couponCode}</span>,
     },
     {
       key: 'userId',
@@ -1389,7 +1389,7 @@ export default function BillingPage() {
       header: 'User',
       render: (invoice) => (
         <div className="space-y-1">
-          <p className="font-medium text-navy">{invoice.userName}</p>
+          <p className="font-medium text-admin-fg-strong">{invoice.userName}</p>
           <p className="text-sm text-muted">{invoice.plan}</p>
         </div>
       ),
@@ -1438,7 +1438,7 @@ export default function BillingPage() {
       header: 'Learner',
       render: (payment) => (
         <div className="space-y-1">
-          <p className="font-medium text-navy">{payment.learnerName}</p>
+          <p className="font-medium text-admin-fg-strong">{payment.learnerName}</p>
           <p className="text-xs uppercase tracking-[0.12em] text-muted">{payment.learnerUserId}</p>
         </div>
       ),
@@ -1496,7 +1496,7 @@ export default function BillingPage() {
       header: 'Provider Signal',
       render: (signal) => (
         <div className="space-y-1">
-          <p className="font-medium text-navy">{signal.eventType}</p>
+          <p className="font-medium text-admin-fg-strong">{signal.eventType}</p>
           <div className="flex flex-wrap items-center gap-1.5">
             <Badge variant={providerSignalCategoryVariant(signal.category)}>{labelSummaryKey(signal.category)}</Badge>
             <span className="text-xs text-muted">{labelSummaryKey(signal.source)}</span>
@@ -1565,7 +1565,7 @@ export default function BillingPage() {
     <div className="space-y-3">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="truncate font-semibold text-navy">{plan.name}</p>
+          <p className="truncate font-semibold text-admin-fg-strong">{plan.name}</p>
           <p className="truncate text-xs uppercase tracking-[0.12em] text-muted">{plan.code ?? plan.id}</p>
           <div className="mt-1">{renderCatalogVersionMeta(plan)}</div>
         </div>
@@ -1577,25 +1577,25 @@ export default function BillingPage() {
       {plan.description ? <p className="text-sm text-muted">{plan.description}</p> : null}
 
       <div className="grid grid-cols-2 gap-3 text-sm">
-        <div className="rounded-2xl bg-background-light px-3 py-2">
+        <div className="rounded-2xl bg-admin-bg-subtle px-3 py-2">
           <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Pricing</p>
-          <p className="mt-1 font-medium text-navy">{formatCurrency(plan.price, plan.currency)} / {plan.interval}</p>
+          <p className="mt-1 font-medium text-admin-fg-strong">{formatCurrency(plan.price, plan.currency)} / {plan.interval}</p>
         </div>
-        <div className="rounded-2xl bg-background-light px-3 py-2">
+        <div className="rounded-2xl bg-admin-bg-subtle px-3 py-2">
           <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Subscribers</p>
-          <p className="mt-1 font-medium text-navy">{plan.activeSubscribers.toLocaleString()}</p>
+          <p className="mt-1 font-medium text-admin-fg-strong">{plan.activeSubscribers.toLocaleString()}</p>
         </div>
-        <div className="rounded-2xl bg-background-light px-3 py-2">
+        <div className="rounded-2xl bg-admin-bg-subtle px-3 py-2">
           <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Credits</p>
-          <p className="mt-1 font-medium text-navy">{(plan.includedCredits ?? 0).toLocaleString()}</p>
+          <p className="mt-1 font-medium text-admin-fg-strong">{(plan.includedCredits ?? 0).toLocaleString()}</p>
         </div>
-        <div className="rounded-2xl bg-background-light px-3 py-2">
+        <div className="rounded-2xl bg-admin-bg-subtle px-3 py-2">
           <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Visibility</p>
-          <p className="mt-1 font-medium text-navy">{plan.isVisible ? 'Visible' : 'Hidden'}</p>
+          <p className="mt-1 font-medium text-admin-fg-strong">{plan.isVisible ? 'Visible' : 'Hidden'}</p>
         </div>
-        <div className="rounded-2xl bg-background-light px-3 py-2 sm:col-span-2">
+        <div className="rounded-2xl bg-admin-bg-subtle px-3 py-2 sm:col-span-2">
           <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Diagnostic mocks</p>
-          <p className="mt-1 font-medium text-navy">{(plan.diagnosticMockEntitlement ?? 'one_per_lifetime').replace(/_/g, ' ')}</p>
+          <p className="mt-1 font-medium text-admin-fg-strong">{(plan.diagnosticMockEntitlement ?? 'one_per_lifetime').replace(/_/g, ' ')}</p>
         </div>
       </div>
 
@@ -1615,7 +1615,7 @@ export default function BillingPage() {
     <div className="space-y-3">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="truncate font-semibold text-navy">{addOn.name}</p>
+          <p className="truncate font-semibold text-admin-fg-strong">{addOn.name}</p>
           <p className="truncate text-xs uppercase tracking-[0.12em] text-muted">{addOn.code}</p>
           <div className="mt-1">{renderCatalogVersionMeta(addOn)}</div>
         </div>
@@ -1627,21 +1627,21 @@ export default function BillingPage() {
       {addOn.description ? <p className="text-sm text-muted">{addOn.description}</p> : null}
 
       <div className="grid grid-cols-2 gap-3 text-sm">
-        <div className="rounded-2xl bg-background-light px-3 py-2">
+        <div className="rounded-2xl bg-admin-bg-subtle px-3 py-2">
           <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Pricing</p>
-          <p className="mt-1 font-medium text-navy">{formatCurrency(addOn.price, addOn.currency)} / {addOn.interval}</p>
+          <p className="mt-1 font-medium text-admin-fg-strong">{formatCurrency(addOn.price, addOn.currency)} / {addOn.interval}</p>
         </div>
-        <div className="rounded-2xl bg-background-light px-3 py-2">
+        <div className="rounded-2xl bg-admin-bg-subtle px-3 py-2">
           <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Credits</p>
-          <p className="mt-1 font-medium text-navy">{addOn.grantCredits.toLocaleString()}</p>
+          <p className="mt-1 font-medium text-admin-fg-strong">{addOn.grantCredits.toLocaleString()}</p>
         </div>
-        <div className="rounded-2xl bg-background-light px-3 py-2">
+        <div className="rounded-2xl bg-admin-bg-subtle px-3 py-2">
           <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Scope</p>
-          <p className="mt-1 font-medium text-navy">{addOn.appliesToAllPlans ? 'All plans' : (addOn.compatiblePlanCodes.join(', ') || 'Restricted')}</p>
+          <p className="mt-1 font-medium text-admin-fg-strong">{addOn.appliesToAllPlans ? 'All plans' : (addOn.compatiblePlanCodes.join(', ') || 'Restricted')}</p>
         </div>
-        <div className="rounded-2xl bg-background-light px-3 py-2">
+        <div className="rounded-2xl bg-admin-bg-subtle px-3 py-2">
           <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Type</p>
-          <p className="mt-1 font-medium text-navy">{addOn.isRecurring ? 'Recurring' : 'One-time'}</p>
+          <p className="mt-1 font-medium text-admin-fg-strong">{addOn.isRecurring ? 'Recurring' : 'One-time'}</p>
         </div>
       </div>
 
@@ -1661,7 +1661,7 @@ export default function BillingPage() {
     <div className="space-y-3">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="truncate font-semibold text-navy">{coupon.code}</p>
+          <p className="truncate font-semibold text-admin-fg-strong">{coupon.code}</p>
           <p className="truncate text-sm text-muted">{coupon.name}</p>
           <div className="mt-1">{renderCatalogVersionMeta(coupon)}</div>
         </div>
@@ -1673,25 +1673,25 @@ export default function BillingPage() {
       {coupon.description ? <p className="text-sm text-muted">{coupon.description}</p> : null}
 
       <div className="grid grid-cols-2 gap-3 text-sm">
-        <div className="rounded-2xl bg-background-light px-3 py-2">
+        <div className="rounded-2xl bg-admin-bg-subtle px-3 py-2">
           <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Discount</p>
-          <p className="mt-1 font-medium text-navy">
+          <p className="mt-1 font-medium text-admin-fg-strong">
             {coupon.discountType === 'percentage'
               ? `${coupon.discountValue}%`
               : formatCurrency(coupon.discountValue, coupon.currency)}
           </p>
         </div>
-        <div className="rounded-2xl bg-background-light px-3 py-2">
+        <div className="rounded-2xl bg-admin-bg-subtle px-3 py-2">
           <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Redemptions</p>
-          <p className="mt-1 font-medium text-navy">{coupon.redemptionCount.toLocaleString()}</p>
+          <p className="mt-1 font-medium text-admin-fg-strong">{coupon.redemptionCount.toLocaleString()}</p>
         </div>
-        <div className="rounded-2xl bg-background-light px-3 py-2">
+        <div className="rounded-2xl bg-admin-bg-subtle px-3 py-2">
           <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Usage limit</p>
-          <p className="mt-1 font-medium text-navy">{coupon.usageLimitTotal == null ? 'Unlimited' : coupon.usageLimitTotal.toLocaleString()}</p>
+          <p className="mt-1 font-medium text-admin-fg-strong">{coupon.usageLimitTotal == null ? 'Unlimited' : coupon.usageLimitTotal.toLocaleString()}</p>
         </div>
-        <div className="rounded-2xl bg-background-light px-3 py-2">
+        <div className="rounded-2xl bg-admin-bg-subtle px-3 py-2">
           <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Scope</p>
-          <p className="mt-1 font-medium text-navy">{coupon.isStackable ? 'Stackable' : 'Single use'}</p>
+          <p className="mt-1 font-medium text-admin-fg-strong">{coupon.isStackable ? 'Stackable' : 'Single use'}</p>
         </div>
       </div>
 
@@ -1711,7 +1711,7 @@ export default function BillingPage() {
     <div className="space-y-3">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="truncate font-semibold text-navy">{subscription.userName}</p>
+          <p className="truncate font-semibold text-admin-fg-strong">{subscription.userName}</p>
           <p className="truncate text-xs uppercase tracking-[0.12em] text-muted">{subscription.userId}</p>
         </div>
         <Badge variant={subscription.status === 'active' ? 'success' : subscription.status === 'trial' ? 'info' : 'muted'}>
@@ -1720,21 +1720,21 @@ export default function BillingPage() {
       </div>
 
       <div className="grid grid-cols-2 gap-3 text-sm">
-        <div className="rounded-2xl bg-background-light px-3 py-2">
+        <div className="rounded-2xl bg-admin-bg-subtle px-3 py-2">
           <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Plan</p>
-          <p className="mt-1 font-medium text-navy">{subscription.planName}</p>
+          <p className="mt-1 font-medium text-admin-fg-strong">{subscription.planName}</p>
         </div>
-        <div className="rounded-2xl bg-background-light px-3 py-2">
+        <div className="rounded-2xl bg-admin-bg-subtle px-3 py-2">
           <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Billing</p>
-          <p className="mt-1 font-medium text-navy">{formatCurrency(subscription.price, subscription.currency)} / {subscription.interval}</p>
+          <p className="mt-1 font-medium text-admin-fg-strong">{formatCurrency(subscription.price, subscription.currency)} / {subscription.interval}</p>
         </div>
-        <div className="rounded-2xl bg-background-light px-3 py-2">
+        <div className="rounded-2xl bg-admin-bg-subtle px-3 py-2">
           <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Add-ons</p>
-          <p className="mt-1 font-medium text-navy">{subscription.addOnCount.toLocaleString()}</p>
+          <p className="mt-1 font-medium text-admin-fg-strong">{subscription.addOnCount.toLocaleString()}</p>
         </div>
-        <div className="rounded-2xl bg-background-light px-3 py-2">
+        <div className="rounded-2xl bg-admin-bg-subtle px-3 py-2">
           <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Renewal</p>
-          <p className="mt-1 font-medium text-navy">{subscription.nextRenewalAt ? new Date(subscription.nextRenewalAt).toLocaleString() : 'N/A'}</p>
+          <p className="mt-1 font-medium text-admin-fg-strong">{subscription.nextRenewalAt ? new Date(subscription.nextRenewalAt).toLocaleString() : 'N/A'}</p>
         </div>
       </div>
     </div>
@@ -1744,7 +1744,7 @@ export default function BillingPage() {
     <div className="space-y-3">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="truncate font-semibold text-navy">{redemption.couponCode}</p>
+          <p className="truncate font-semibold text-admin-fg-strong">{redemption.couponCode}</p>
           <p className="truncate text-xs uppercase tracking-[0.12em] text-muted">{redemption.userId}</p>
         </div>
         <Badge variant={redemption.status === 'applied' ? 'success' : redemption.status === 'rejected' ? 'danger' : 'muted'}>
@@ -1753,13 +1753,13 @@ export default function BillingPage() {
       </div>
 
       <div className="grid grid-cols-2 gap-3 text-sm">
-        <div className="rounded-2xl bg-background-light px-3 py-2">
+        <div className="rounded-2xl bg-admin-bg-subtle px-3 py-2">
           <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Discount</p>
-          <p className="mt-1 font-medium text-navy">{formatCurrency(redemption.discountAmount, redemption.currency)}</p>
+          <p className="mt-1 font-medium text-admin-fg-strong">{formatCurrency(redemption.discountAmount, redemption.currency)}</p>
         </div>
-        <div className="rounded-2xl bg-background-light px-3 py-2">
+        <div className="rounded-2xl bg-admin-bg-subtle px-3 py-2">
           <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Redeemed</p>
-          <p className="mt-1 font-medium text-navy">{new Date(redemption.redeemedAt).toLocaleString()}</p>
+          <p className="mt-1 font-medium text-admin-fg-strong">{new Date(redemption.redeemedAt).toLocaleString()}</p>
         </div>
       </div>
     </div>
@@ -1769,7 +1769,7 @@ export default function BillingPage() {
     <div className="space-y-3">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="truncate font-semibold text-navy">{invoice.userName}</p>
+          <p className="truncate font-semibold text-admin-fg-strong">{invoice.userName}</p>
           <p className="truncate text-xs uppercase tracking-[0.12em] text-muted">{invoice.plan}</p>
         </div>
         <Badge variant={invoice.status === 'paid' ? 'success' : invoice.status === 'failed' ? 'danger' : 'warning'}>
@@ -1778,17 +1778,17 @@ export default function BillingPage() {
       </div>
 
       <div className="grid grid-cols-2 gap-3 text-sm">
-        <div className="rounded-2xl bg-background-light px-3 py-2">
+        <div className="rounded-2xl bg-admin-bg-subtle px-3 py-2">
           <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Invoice</p>
-          <p className="mt-1 font-mono text-xs text-navy">{invoice.id}</p>
+          <p className="mt-1 font-mono text-xs text-admin-fg-strong">{invoice.id}</p>
         </div>
-        <div className="rounded-2xl bg-background-light px-3 py-2">
+        <div className="rounded-2xl bg-admin-bg-subtle px-3 py-2">
           <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Amount</p>
-          <p className="mt-1 font-medium text-navy">{formatCurrency(invoice.amount, invoice.currency)}</p>
+          <p className="mt-1 font-medium text-admin-fg-strong">{formatCurrency(invoice.amount, invoice.currency)}</p>
         </div>
-        <div className="rounded-2xl bg-background-light px-3 py-2">
+        <div className="rounded-2xl bg-admin-bg-subtle px-3 py-2">
           <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Issued</p>
-          <p className="mt-1 font-medium text-navy">{new Date(invoice.date).toLocaleString()}</p>
+          <p className="mt-1 font-medium text-admin-fg-strong">{new Date(invoice.date).toLocaleString()}</p>
         </div>
       </div>
 
@@ -1803,28 +1803,28 @@ export default function BillingPage() {
     <div className="space-y-3">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="truncate font-semibold text-navy">{payment.learnerName}</p>
+          <p className="truncate font-semibold text-admin-fg-strong">{payment.learnerName}</p>
           <p className="truncate font-mono text-xs text-muted">{payment.gatewayTransactionId}</p>
         </div>
         <Badge variant={paymentStatusVariant(payment.status)}>{payment.status || 'unknown'}</Badge>
       </div>
 
       <div className="grid grid-cols-2 gap-3 text-sm">
-        <div className="rounded-2xl bg-background-light px-3 py-2">
+        <div className="rounded-2xl bg-admin-bg-subtle px-3 py-2">
           <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Amount</p>
-          <p className="mt-1 font-medium text-navy">{formatCurrency(payment.amount, payment.currency)}</p>
+          <p className="mt-1 font-medium text-admin-fg-strong">{formatCurrency(payment.amount, payment.currency)}</p>
         </div>
-        <div className="rounded-2xl bg-background-light px-3 py-2">
+        <div className="rounded-2xl bg-admin-bg-subtle px-3 py-2">
           <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Gateway</p>
-          <p className="mt-1 font-medium text-navy">{payment.gateway || 'unknown'}</p>
+          <p className="mt-1 font-medium text-admin-fg-strong">{payment.gateway || 'unknown'}</p>
         </div>
-        <div className="rounded-2xl bg-background-light px-3 py-2">
+        <div className="rounded-2xl bg-admin-bg-subtle px-3 py-2">
           <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Type</p>
-          <p className="mt-1 font-medium text-navy">{paymentTypeLabel(payment.transactionType)}</p>
+          <p className="mt-1 font-medium text-admin-fg-strong">{paymentTypeLabel(payment.transactionType)}</p>
         </div>
-        <div className="rounded-2xl bg-background-light px-3 py-2">
+        <div className="rounded-2xl bg-admin-bg-subtle px-3 py-2">
           <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Created</p>
-          <p className="mt-1 font-medium text-navy">{formatDateTime(payment.createdAt)}</p>
+          <p className="mt-1 font-medium text-admin-fg-strong">{formatDateTime(payment.createdAt)}</p>
         </div>
       </div>
 
@@ -1839,28 +1839,28 @@ export default function BillingPage() {
     <div className="space-y-3">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="truncate font-semibold text-navy">{signal.eventType}</p>
+          <p className="truncate font-semibold text-admin-fg-strong">{signal.eventType}</p>
           <p className="truncate font-mono text-xs text-muted">{signal.maskedProviderTransactionId ?? signal.maskedProviderEventId}</p>
         </div>
         <Badge variant={providerSignalCorrelationVariant(signal.correlationStatus)}>{labelSummaryKey(signal.correlationStatus)}</Badge>
       </div>
 
       <div className="grid grid-cols-2 gap-3 text-sm">
-        <div className="rounded-2xl bg-background-light px-3 py-2">
+        <div className="rounded-2xl bg-admin-bg-subtle px-3 py-2">
           <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Category</p>
-          <p className="mt-1 font-medium text-navy">{labelSummaryKey(signal.category)}</p>
+          <p className="mt-1 font-medium text-admin-fg-strong">{labelSummaryKey(signal.category)}</p>
         </div>
-        <div className="rounded-2xl bg-background-light px-3 py-2">
+        <div className="rounded-2xl bg-admin-bg-subtle px-3 py-2">
           <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Gateway</p>
-          <p className="mt-1 font-medium text-navy">{signal.gateway || 'unknown'}</p>
+          <p className="mt-1 font-medium text-admin-fg-strong">{signal.gateway || 'unknown'}</p>
         </div>
-        <div className="rounded-2xl bg-background-light px-3 py-2">
+        <div className="rounded-2xl bg-admin-bg-subtle px-3 py-2">
           <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Processing</p>
-          <p className="mt-1 font-medium text-navy">{signal.processingStatus}</p>
+          <p className="mt-1 font-medium text-admin-fg-strong">{signal.processingStatus}</p>
         </div>
-        <div className="rounded-2xl bg-background-light px-3 py-2">
+        <div className="rounded-2xl bg-admin-bg-subtle px-3 py-2">
           <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Received</p>
-          <p className="mt-1 font-medium text-navy">{formatDateTime(signal.receivedAt)}</p>
+          <p className="mt-1 font-medium text-admin-fg-strong">{formatDateTime(signal.receivedAt)}</p>
         </div>
       </div>
 
@@ -2479,7 +2479,7 @@ export default function BillingPage() {
         >
           <div role="status" aria-live="polite" className="space-y-4">
             {entitlementDiagnosticsStatus === 'loading' ? (
-              <div className="rounded-lg border border-dashed border-border bg-background-light px-4 py-5 text-sm text-muted">
+              <div className="rounded-lg border border-dashed border-border bg-admin-bg-subtle px-4 py-5 text-sm text-muted">
                 Loading entitlement diagnostics...
               </div>
             ) : null}
@@ -2521,14 +2521,14 @@ export default function BillingPage() {
                         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                           <div className="flex items-center gap-2">
                             <AlertTriangle className={check.severity === 'danger' ? 'h-4 w-4 text-red-600' : 'h-4 w-4 text-amber-600'} aria-hidden="true" />
-                            <p className="text-sm font-semibold text-navy">{check.label}</p>
+                            <p className="text-sm font-semibold text-admin-fg-strong">{check.label}</p>
                           </div>
                           <Badge variant={check.severity === 'danger' ? 'danger' : 'warning'}>{check.count}</Badge>
                         </div>
                         {check.examples.length > 0 ? (
                           <div className="mt-3 space-y-2">
                             {check.examples.map((example) => (
-                              <div key={`${check.key}-${example.subjectType}-${example.subjectId}`} className="rounded-md bg-background-light px-3 py-2">
+                              <div key={`${check.key}-${example.subjectType}-${example.subjectId}`} className="rounded-md bg-admin-bg-subtle px-3 py-2">
                                 <div className="flex flex-wrap items-center gap-2">
                                   <Badge variant="default">{example.subjectType}</Badge>
                                   <span className="text-sm font-semibold text-foreground">{example.subjectName || example.subjectCode}</span>
@@ -2674,7 +2674,7 @@ export default function BillingPage() {
           />
 
           {providerSignalStatus === 'loading' ? (
-            <div className="rounded-lg border border-dashed border-border bg-background-light px-4 py-5 text-sm text-muted" role="status" aria-live="polite">
+            <div className="rounded-lg border border-dashed border-border bg-admin-bg-subtle px-4 py-5 text-sm text-muted" role="status" aria-live="polite">
               Loading provider lifecycle signals...
             </div>
           ) : null}
@@ -2695,7 +2695,7 @@ export default function BillingPage() {
                       ? 'rounded-lg border border-red-200 bg-red-50 px-4 py-3'
                       : item.tone === 'warning'
                         ? 'rounded-lg border border-amber-200 bg-amber-50 px-4 py-3'
-                        : 'rounded-lg border border-border bg-background-light px-4 py-3'}
+                        : 'rounded-lg border border-border bg-admin-bg-subtle px-4 py-3'}
                   >
                     <div className="flex items-center gap-2">
                       {item.icon}
@@ -2703,7 +2703,7 @@ export default function BillingPage() {
                         ? 'text-2xl font-bold text-red-700'
                         : item.tone === 'warning'
                           ? 'text-2xl font-bold text-amber-700'
-                          : 'text-2xl font-bold text-navy'}
+                          : 'text-2xl font-bold text-admin-fg-strong'}
                       >
                         {item.value.toLocaleString()}
                       </p>
@@ -2760,14 +2760,14 @@ export default function BillingPage() {
                 {catalogHistory?.subject.activeVersionNumber ? <Badge variant="info">Active v{catalogHistory.subject.activeVersionNumber}</Badge> : null}
                 {catalogHistory?.subject.versionCount ? <Badge variant="default">{catalogHistory.subject.versionCount} versions</Badge> : null}
               </div>
-              <h2 className="mt-3 text-lg font-semibold text-navy">{catalogHistory?.subject.name ?? catalogHistoryTarget.name}</h2>
+              <h2 className="mt-3 text-lg font-semibold text-admin-fg-strong">{catalogHistory?.subject.name ?? catalogHistoryTarget.name}</h2>
               <p className="mt-1 text-xs uppercase tracking-[0.12em] text-muted">{catalogHistory?.subject.code ?? catalogHistoryTarget.code}</p>
             </div>
 
             {catalogHistoryStatus === 'loading' ? (
               <div className="space-y-3" role="status" aria-live="polite">
                 {[0, 1, 2].map((item) => (
-                  <div key={item} className="h-24 animate-pulse rounded-lg bg-background-light" />
+                  <div key={item} className="h-24 animate-pulse rounded-lg bg-admin-bg-subtle" />
                 ))}
               </div>
             ) : null}
@@ -2807,7 +2807,7 @@ export default function BillingPage() {
                               {version.isLatest ? <Badge variant="info">Latest</Badge> : null}
                               <Badge variant={version.status === 'active' ? 'success' : version.status === 'archived' ? 'danger' : 'muted'}>{version.status}</Badge>
                             </div>
-                            <p className="mt-2 font-medium text-navy">{version.name}</p>
+                            <p className="mt-2 font-medium text-admin-fg-strong">{version.name}</p>
                             <p className="text-xs uppercase tracking-[0.12em] text-muted">{version.code}</p>
                           </div>
                           <div className="text-right text-xs text-muted">
@@ -2821,9 +2821,9 @@ export default function BillingPage() {
                         {summaryEntries.length > 0 ? (
                           <dl className="grid gap-2 text-sm sm:grid-cols-2">
                             {summaryEntries.map(([key, value]) => (
-                              <div key={key} className="rounded-lg bg-background-light px-3 py-2">
+                              <div key={key} className="rounded-lg bg-admin-bg-subtle px-3 py-2">
                                 <dt className="text-[11px] uppercase tracking-[0.12em] text-muted">{labelSummaryKey(key)}</dt>
-                                <dd className="mt-1 break-words font-medium text-navy">{formatSummaryValue(value)}</dd>
+                                <dd className="mt-1 break-words font-medium text-admin-fg-strong">{formatSummaryValue(value)}</dd>
                               </div>
                             ))}
                           </dl>
@@ -2853,7 +2853,7 @@ export default function BillingPage() {
                 {invoiceEvidence?.payments.length ? <Badge variant="info">{invoiceEvidence.payments.length} payment {invoiceEvidence.payments.length === 1 ? 'record' : 'records'}</Badge> : null}
                 {invoiceEvidence?.notRecorded.length ? <Badge variant="default">partial local evidence</Badge> : null}
               </div>
-              <h2 className="mt-3 text-lg font-semibold text-navy">{invoiceEvidence?.invoice.userName ?? invoiceEvidenceTarget.userName}</h2>
+              <h2 className="mt-3 text-lg font-semibold text-admin-fg-strong">{invoiceEvidence?.invoice.userName ?? invoiceEvidenceTarget.userName}</h2>
               <p className="mt-1 break-words font-mono text-xs text-muted">{invoiceEvidenceTarget.id}</p>
               <p className="mt-1 text-sm text-muted">{invoiceEvidence?.invoice.description ?? invoiceEvidenceTarget.plan}</p>
             </div>
@@ -2861,7 +2861,7 @@ export default function BillingPage() {
             {invoiceEvidenceStatus === 'loading' ? (
               <div className="space-y-3" role="status" aria-live="polite">
                 {[0, 1, 2, 3].map((item) => (
-                  <div key={item} className="h-24 animate-pulse rounded-lg bg-background-light" />
+                  <div key={item} className="h-24 animate-pulse rounded-lg bg-admin-bg-subtle" />
                 ))}
               </div>
             ) : null}
@@ -2877,7 +2877,7 @@ export default function BillingPage() {
             {invoiceEvidenceStatus === 'success' && invoiceEvidence ? (
               <div className="space-y-5">
                 {invoiceEvidence.notRecorded.length > 0 ? (
-                  <div className="rounded-lg border border-border bg-background-light px-4 py-3">
+                  <div className="rounded-lg border border-border bg-admin-bg-subtle px-4 py-3">
                     <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted">Not recorded</p>
                     <div className="mt-2 flex flex-wrap gap-2">
                       {invoiceEvidence.notRecorded.map((item) => <Badge key={item} variant="muted">{evidenceGapLabel(item)}</Badge>)}
@@ -2919,12 +2919,12 @@ export default function BillingPage() {
                       {invoiceEvidence.quote.items.length > 0 ? (
                         <div className="space-y-2">
                           {invoiceEvidence.quote.items.map((item) => (
-                            <div key={`${item.kind}-${item.code}`} className="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-background-light px-3 py-2 text-sm">
+                            <div key={`${item.kind}-${item.code}`} className="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-admin-bg-subtle px-3 py-2 text-sm">
                               <div className="min-w-0">
-                                <p className="font-medium text-navy">{item.name}</p>
+                                <p className="font-medium text-admin-fg-strong">{item.name}</p>
                                 <p className="text-xs uppercase tracking-[0.12em] text-muted">{item.kind} - {item.code}</p>
                               </div>
-                              <p className="font-medium text-navy">{formatCurrency(item.amount, item.currency)} x {item.quantity}</p>
+                              <p className="font-medium text-admin-fg-strong">{formatCurrency(item.amount, item.currency)} x {item.quantity}</p>
                             </div>
                           ))}
                         </div>
@@ -2971,9 +2971,9 @@ export default function BillingPage() {
                   {invoiceEvidence.subscriptionItems.length > 0 ? (
                     <div className="space-y-2">
                       {invoiceEvidence.subscriptionItems.map((item) => (
-                        <div key={item.id} className="grid gap-2 rounded-lg bg-background-light px-3 py-2 text-sm sm:grid-cols-[1fr_auto]">
+                        <div key={item.id} className="grid gap-2 rounded-lg bg-admin-bg-subtle px-3 py-2 text-sm sm:grid-cols-[1fr_auto]">
                           <div className="min-w-0">
-                            <p className="font-medium text-navy">{item.itemCode}</p>
+                            <p className="font-medium text-admin-fg-strong">{item.itemCode}</p>
                             <p className="text-xs uppercase tracking-[0.12em] text-muted">{item.itemType} - {item.addOnVersionId ?? 'Not recorded'}</p>
                           </div>
                           <div className="flex flex-wrap items-center gap-2 sm:justify-end">
@@ -3005,10 +3005,10 @@ export default function BillingPage() {
                       {invoiceEvidence.events.map((event) => (
                         <div key={event.id} className="relative border-l border-border pl-4">
                           <span className="absolute -left-1.5 top-2 h-3 w-3 rounded-full border-2 border-white bg-primary" aria-hidden="true" />
-                          <div className="rounded-lg bg-background-light px-3 py-2">
+                          <div className="rounded-lg bg-admin-bg-subtle px-3 py-2">
                             <div className="flex flex-wrap items-start justify-between gap-3">
                               <div className="min-w-0">
-                                <p className="break-words font-medium text-navy">{event.eventType}</p>
+                                <p className="break-words font-medium text-admin-fg-strong">{event.eventType}</p>
                                 <p className="break-words text-xs uppercase tracking-[0.12em] text-muted">{event.entityType} - {event.entityId || 'Not recorded'}</p>
                               </div>
                               <p className="text-xs text-muted">{formatDateTime(event.occurredAt)}</p>
@@ -3118,7 +3118,7 @@ export default function BillingPage() {
             <div className="mt-3 grid gap-4 md:grid-cols-2">
               <Select label="Product category" value={planForm.productCategory} onChange={(event) => setPlanForm((current) => ({ ...current, productCategory: event.target.value }))}
                 options={[
-                  { value: '', label: '— Select —' },
+                  { value: '', label: 'Select…' },
                   { value: 'full_course', label: 'Full course' },
                   { value: 'full_course_bundle', label: 'Full course bundle' },
                   { value: 'crash_course', label: 'Crash course' },
@@ -3127,8 +3127,8 @@ export default function BillingPage() {
                   { value: 'writing_crash_bundle', label: 'Writing crash bundle' },
                   { value: 'speaking_crash', label: 'Speaking crash course' },
                   { value: 'speaking_session', label: 'Speaking session' },
-                  { value: 'combo_double', label: 'Combo — Double Special' },
-                  { value: 'combo_mega', label: 'Combo — Mega Special' },
+                  { value: 'combo_double', label: 'Combo: Double Special' },
+                  { value: 'combo_mega', label: 'Combo: Mega Special' },
                   { value: 'foundation', label: 'Foundation' },
                   { value: 'book', label: 'Book' },
                 ]}
@@ -3144,12 +3144,12 @@ export default function BillingPage() {
                 hint="One bullet per line. Shown as the public product card's feature list. Persisted on the linked ContentPackage."
               />
             </div>
-            <div className="mt-4 rounded-md border border-amber-300/40 bg-white/60 p-3 dark:border-amber-700/40 dark:bg-amber-950/20">
+            <div className="mt-4 rounded-md border border-amber-300/40 bg-admin-bg-surface/60 p-3 dark:border-amber-700/40 dark:bg-amber-950/20">
               <p className="text-xs font-semibold uppercase tracking-wider text-amber-800 dark:text-amber-300">Three add-on eligibility flags</p>
               <div className="mt-2 flex flex-wrap gap-4">
-                <Checkbox label="W — Writing letter assessment add-ons" checked={planForm.writingAddonsEnabled} onChange={(event) => setPlanForm((current) => ({ ...current, writingAddonsEnabled: event.target.checked }))} />
-                <Checkbox label="S — Speaking session add-ons" checked={planForm.speakingAddonsEnabled} onChange={(event) => setPlanForm((current) => ({ ...current, speakingAddonsEnabled: event.target.checked }))} />
-                <Checkbox label="TB £32 — Discounted Tutor Book add-on" checked={planForm.tutorBookDiscountEnabled} onChange={(event) => setPlanForm((current) => ({ ...current, tutorBookDiscountEnabled: event.target.checked }))} />
+                <Checkbox label="W: Writing letter assessment add-ons" checked={planForm.writingAddonsEnabled} onChange={(event) => setPlanForm((current) => ({ ...current, writingAddonsEnabled: event.target.checked }))} />
+                <Checkbox label="S: Speaking session add-ons" checked={planForm.speakingAddonsEnabled} onChange={(event) => setPlanForm((current) => ({ ...current, speakingAddonsEnabled: event.target.checked }))} />
+                <Checkbox label="TB £32: Discounted Tutor Book add-on" checked={planForm.tutorBookDiscountEnabled} onChange={(event) => setPlanForm((current) => ({ ...current, tutorBookDiscountEnabled: event.target.checked }))} />
               </div>
             </div>
             <div className="mt-4">
@@ -3255,7 +3255,7 @@ export default function BillingPage() {
               <Input label="Original price £ (was)" type="number" min={0} step="0.01" value={addOnForm.originalPriceGbp} onChange={(event) => setAddOnForm((current) => ({ ...current, originalPriceGbp: event.target.value }))} hint="Blank = no strikethrough." />
               <Select label="Add-on kind" value={addOnForm.addonKind} onChange={(event) => setAddOnForm((current) => ({ ...current, addonKind: event.target.value }))}
                 options={[
-                  { value: '', label: '— Select —' },
+                  { value: '', label: 'Select…' },
                   { value: 'writing_assessments', label: 'Writing assessments' },
                   { value: 'speaking_sessions', label: 'Speaking sessions' },
                   { value: 'tutor_book', label: 'Tutor Book' },
@@ -3264,7 +3264,7 @@ export default function BillingPage() {
               />
               <Select label="Eligibility flag (parent must have)" value={addOnForm.eligibilityFlag} onChange={(event) => setAddOnForm((current) => ({ ...current, eligibilityFlag: event.target.value }))}
                 options={[
-                  { value: '', label: '— None —' },
+                  { value: '', label: 'None' },
                   { value: 'writing_addons', label: 'writing_addons' },
                   { value: 'speaking_addons', label: 'speaking_addons' },
                   { value: 'tutor_book_discount', label: 'tutor_book_discount' },
@@ -3412,11 +3412,11 @@ export default function BillingPage() {
         onClose={closeSubscriptionAction}
         title={
           subscriptionAction?.kind === 'create' ? 'Create Subscription' :
-          subscriptionAction?.kind === 'change-plan' ? `Change plan — ${subscriptionAction.subscription.userName}` :
-          subscriptionAction?.kind === 'extend' ? `Extend renewal — ${subscriptionAction.subscription.userName}` :
-          subscriptionAction?.kind === 'cancel' ? `Cancel subscription — ${subscriptionAction.subscription.userName}` :
-          subscriptionAction?.kind === 'reactivate' ? `Reactivate — ${subscriptionAction.subscription.userName}` :
-          subscriptionAction?.kind === 'set-status' ? `Override status — ${subscriptionAction.subscription.userName}` :
+          subscriptionAction?.kind === 'change-plan' ? `Change plan: ${subscriptionAction.subscription.userName}` :
+          subscriptionAction?.kind === 'extend' ? `Extend renewal: ${subscriptionAction.subscription.userName}` :
+          subscriptionAction?.kind === 'cancel' ? `Cancel subscription: ${subscriptionAction.subscription.userName}` :
+          subscriptionAction?.kind === 'reactivate' ? `Reactivate: ${subscriptionAction.subscription.userName}` :
+          subscriptionAction?.kind === 'set-status' ? `Override status: ${subscriptionAction.subscription.userName}` :
           'Subscription action'
         }
       >
@@ -3446,7 +3446,7 @@ export default function BillingPage() {
 
             {subscriptionAction.kind === 'change-plan' ? (
               <>
-                <p className="text-sm text-muted">Currently on <span className="font-medium text-navy">{subscriptionAction.subscription.planName}</span> ({subscriptionAction.subscription.planId}).</p>
+                <p className="text-sm text-muted">Currently on <span className="font-medium text-admin-fg-strong">{subscriptionAction.subscription.planName}</span> ({subscriptionAction.subscription.planId}).</p>
                 <Select
                   label="Target plan"
                   value={subscriptionActionForm.planCode}
@@ -3602,9 +3602,9 @@ export default function BillingPage() {
         }
         description={
           hardDeleteTarget?.kind === 'plan'
-            ? `Permanently removes "${hardDeleteTarget.name}" (${hardDeleteTarget.code}) — the plan row, all its version history, and the linked content package. This cannot be undone.${hardDeleteTarget.activeSubscribers > 0 ? ` ⚠ ${hardDeleteTarget.activeSubscribers} active subscriber(s) — the server will refuse and ask you to archive instead.` : ''}`
+            ? `Permanently removes "${hardDeleteTarget.name}" (${hardDeleteTarget.code}): the plan row, all its version history, and the linked content package. This cannot be undone.${hardDeleteTarget.activeSubscribers > 0 ? ` ⚠ ${hardDeleteTarget.activeSubscribers} active subscriber(s); the server will refuse and ask you to archive instead.` : ''}`
           : hardDeleteTarget?.kind === 'add-on'
-            ? `Permanently removes "${hardDeleteTarget.name}" (${hardDeleteTarget.code}) — the add-on row, all its version history, and the linked content package. This cannot be undone. If the add-on has any historical subscription items or quotes, the server will refuse and ask you to archive instead.`
+            ? `Permanently removes "${hardDeleteTarget.name}" (${hardDeleteTarget.code}): the add-on row, all its version history, and the linked content package. This cannot be undone. If the add-on has any historical subscription items or quotes, the server will refuse and ask you to archive instead.`
             : ''
         }
         confirmPhrase={hardDeleteTarget?.code ?? ''}

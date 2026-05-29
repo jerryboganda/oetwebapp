@@ -218,7 +218,7 @@ export default function WritingStatsPage() {
                   return (
                     <li key={skill} className="flex items-center gap-2 text-xs">
                       <span className="w-12 shrink-0 font-bold text-muted">{SKILL_LABELS[skill]}</span>
-                      <div className="flex-1 h-1.5 rounded-full bg-slate-200" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={v} aria-label={t('writing.stats.skills.masteryAria', { skill: SKILL_LABELS[skill] })}>
+                      <div className="flex-1 h-1.5 rounded-full bg-border" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={v} aria-label={t('writing.stats.skills.masteryAria', { skill: SKILL_LABELS[skill] })}>
                         <div className="h-full bg-primary" style={{ width: `${v}%` }} />
                       </div>
                       <span className="w-10 text-right font-bold tabular-nums">{v}%</span>
@@ -239,7 +239,7 @@ export default function WritingStatsPage() {
                 {calendar.days.slice(-7 * 8).map((d) => {
                   const intensity = Math.min(4, d.count);
                   const tone = intensity === 0
-                    ? 'bg-slate-100'
+                    ? 'bg-background-light'
                     : intensity === 1
                       ? 'bg-emerald-100'
                       : intensity === 2

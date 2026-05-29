@@ -142,7 +142,9 @@ function PlayerContent() {
   const attemptIdFromRoute = searchParams?.get('attemptId');
   const pathwayStage = searchParams?.get('pathwayStage') ?? null;
   const drillId = searchParams?.get('drill');
-  const focusParam = searchParams?.get('focus') ?? null;
+  const partFocus = searchParams?.get('part')?.toLowerCase();
+  const focusParam = searchParams?.get('focus')
+    ?? (partFocus === 'a' ? 'part-a' : partFocus === 'b' ? 'part-b' : partFocus === 'c' ? 'part-c' : null);
   // Mocks V2 — when this player is launched as a section of a mock attempt,
   // BuildLaunchRoute writes mockAttemptId/mockSectionId/mockMode/strictness
   // onto the URL. After grading we POST to completeMockSection so the mock
@@ -502,6 +504,8 @@ function PlayerContent() {
       }
       setHasStarted(true);
       const nextParams = new URLSearchParams({ attemptId: started.attemptId, mode: started.mode });
+      if (focusParam) nextParams.set('focus', focusParam);
+      if (partFocus) nextParams.set('part', partFocus.toUpperCase());
       if (pathwayStage) nextParams.set('pathwayStage', pathwayStage);
       if (drillId) nextParams.set('drill', drillId);
       if (mockAttemptId) nextParams.set('mockAttemptId', mockAttemptId);
@@ -618,6 +622,10 @@ function PlayerContent() {
     // Focus filtering: restrict visible sections when launched from Part Practice links
     if (focusParam === 'part-a') {
       sections = sections.filter((code) => code === 'A1' || code === 'A2');
+    } else if (focusParam === 'part-b') {
+      sections = sections.filter((code) => code === 'B');
+    } else if (focusParam === 'part-c') {
+      sections = sections.filter((code) => code === 'C1' || code === 'C2');
     } else if (focusParam === 'parts-bc') {
       sections = sections.filter((code) => code === 'B' || code === 'C1' || code === 'C2');
     }
@@ -974,8 +982,8 @@ function PlayerContent() {
       <AppShell pageTitle="Listening Task" distractionFree>
         <div className="flex flex-1 flex-col items-center justify-center gap-4 p-8 text-center">
           <AlertCircle className="h-12 w-12 text-danger" />
-          <h2 className="text-xl font-black text-gray-900 dark:text-gray-100">Listening task unavailable</h2>
-          <p className="max-w-md text-sm text-gray-600 dark:text-gray-400">{loadError ?? 'Task not found.'}</p>
+          <h2 className="text-xl font-black text-navy">Listening task unavailable</h2>
+          <p className="max-w-md text-sm text-muted">{loadError ?? 'Task not found.'}</p>
           <Button variant="ghost" asChild>
 <Link href="/listening">Back to Listening</Link>
 </Button>
@@ -989,8 +997,8 @@ function PlayerContent() {
       <AppShell pageTitle="Submitting" distractionFree>
         <div className="flex flex-1 flex-col items-center justify-center gap-4 p-8 text-center">
           <Loader2 className="h-12 w-12 animate-spin text-primary" />
-          <h2 className="text-xl font-black text-gray-900 dark:text-gray-100">Grading Listening Answers</h2>
-          <p className="text-sm text-gray-600 dark:text-gray-400">Calculating your score and preparing your transcript…</p>
+          <h2 className="text-xl font-black text-navy">Grading Listening Answers</h2>
+          <p className="text-sm text-muted">Calculating your score and preparing your transcript…</p>
         </div>
       </AppShell>
     );
@@ -1219,7 +1227,7 @@ function PlayerContent() {
                   className={`mt-1 flex items-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-semibold transition-colors ${
                     isNotePanelOpen
                       ? 'border-primary bg-primary/10 text-primary'
-                      : 'border-border bg-surface text-gray-600 dark:text-gray-400 hover:border-primary/50 hover:text-gray-900 dark:text-gray-100'
+                      : 'border-border bg-surface text-muted hover:border-primary/50 hover:text-navy'
                   }`}
                 >
                   <StickyNote className="h-4 w-4" />
@@ -1232,7 +1240,7 @@ function PlayerContent() {
                 mode but the real CBLA exam plays once. */}
             {session.modePolicy.mode === 'practice' && session.modePolicy.onePlayOnly === false ? (
               <div>
-                <Badge variant="info">Practice mode — replay allowed</Badge>
+                <Badge variant="info">Practice mode: replay allowed</Badge>
               </div>
             ) : null}
 
@@ -1263,7 +1271,7 @@ function PlayerContent() {
 
             {visibleExtracts.length > 0 ? (
               <div className="rounded-2xl border border-border bg-surface p-4">
-                <div className="flex flex-wrap items-center gap-3 text-xs text-gray-600 dark:text-gray-400">
+                <div className="flex flex-wrap items-center gap-3 text-xs text-muted">
                   {visibleExtracts.map((extract) => {
                     const extractKey = `${extract.partCode}-${extract.displayOrder}`;
                     const completed = completedExtractIds.has(extractKey);
@@ -1274,7 +1282,7 @@ function PlayerContent() {
                         ) : (
                           <Volume2 className="h-4 w-4" />
                         )}
-                        <span className="font-semibold text-gray-900 dark:text-gray-100">{extract.title}</span>
+                        <span className="font-semibold text-navy">{extract.title}</span>
                         <span>{extract.accentCode ?? 'accent not set'}</span>
                         {extract.audioStartMs != null || extract.audioEndMs != null ? (
                           <span>{formatMilliseconds(extract.audioStartMs) ?? '00:00'} - {formatMilliseconds(extract.audioEndMs) ?? 'end'}</span>
@@ -1344,7 +1352,7 @@ function PlayerContent() {
                   {/* Question jumper — intra-section in CBT, all-parts in paper mode. */}
                   {navigationQuestions.length > 1 ? (
                     <div className="sticky top-40 z-10 flex flex-wrap items-center gap-2 rounded-2xl border border-border bg-surface/95 p-3 backdrop-blur">
-                      <span className="mr-1 text-[10px] font-black uppercase tracking-widest text-gray-600 dark:text-gray-400">
+                      <span className="mr-1 text-[10px] font-black uppercase tracking-widest text-muted">
                         {allPartsReviewEnabled ? 'All-parts jump' : 'Jump to'}
                       </span>
                       {navigationQuestions.map((question) => {
@@ -1363,7 +1371,7 @@ function PlayerContent() {
                             className={`inline-flex h-8 w-8 items-center justify-center rounded-full text-xs font-black transition-colors ${
                               isAnswered
                                 ? 'bg-success/10 text-success hover:bg-success/20'
-                                : 'bg-background-light text-gray-600 dark:text-gray-400 hover:bg-border'
+                                : 'bg-background-light text-muted hover:bg-border'
                             }`}
                           >
                             {question.number}
@@ -1379,7 +1387,7 @@ function PlayerContent() {
                     {visibleQuestionSections.map(({ section, questions }) => (
                       <section key={section} className="space-y-4" aria-label={LISTENING_SECTION_LABEL[section]}>
                         {allPartsReviewEnabled ? (
-                          <h2 className="rounded-2xl border border-border bg-surface px-4 py-3 text-sm font-black uppercase tracking-widest text-gray-600 dark:text-gray-400">
+                          <h2 className="rounded-2xl border border-border bg-surface px-4 py-3 text-sm font-black uppercase tracking-widest text-muted">
                             {LISTENING_SECTION_LABEL[section]}
                           </h2>
                         ) : null}
@@ -1423,13 +1431,13 @@ function PlayerContent() {
             </div>
 
             <div className="flex items-center justify-between gap-3 pt-4">
-              <p className="text-xs text-gray-600 dark:text-gray-400">
+              <p className="text-xs text-muted">
                 {allPartsReviewEnabled
-                  ? 'Paper simulation — all parts stay editable for final all-parts review.'
+                  ? 'Paper simulation: all parts stay editable for final all-parts review.'
                   : phase === 'review'
                   ? 'Edit freely until the countdown ends. This section will lock permanently.'
                   : isLastSection
-                    ? 'Final section — the 2-minute review window opens when you press Next.'
+                    ? 'Final section: the 2-minute review window opens when you press Next.'
                     : `Pressing Next locks ${currentSection ? LISTENING_SECTION_LABEL[currentSection] : 'this section'} and opens the next one.`}
               </p>
               {phase === 'audio' ? (
@@ -1452,7 +1460,7 @@ function PlayerContent() {
               size="sm"
             >
               <div className="space-y-4">
-                <p className="text-sm text-gray-600 dark:text-gray-400">
+                <p className="text-sm text-muted">
                   {phase === 'review'
                     ? `This will permanently lock ${currentSection ? LISTENING_SECTION_LABEL[currentSection] : 'this section'}. You will not be able to return to it at any point.`
                     : currentSectionReviewSeconds > 0
@@ -1485,7 +1493,7 @@ function PlayerContent() {
 
             <Modal open={showSubmitConfirm} onClose={() => setShowSubmitConfirm(false)} title="Submit listening task?" size="sm">
               <div className="space-y-4">
-                <p className="text-sm text-gray-600 dark:text-gray-400">
+                <p className="text-sm text-muted">
                   Submit your answers now? This locks the attempt and opens server-graded OET score plus transcript-backed review.
                 </p>
                 {unansweredQuestionNumbers.length > 0 ? (
@@ -1513,13 +1521,13 @@ function PlayerContent() {
 
         {session.modePolicy.printableBooklet ? (
           <div className="hidden print:block print:p-6">
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">{session.paper.title}</h1>
-            <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">Listening paper-mode answer sheet</p>
+            <h1 className="text-2xl font-bold text-navy">{session.paper.title}</h1>
+            <p className="mt-2 text-sm text-muted">Listening paper-mode answer sheet</p>
             <div className="mt-6 grid grid-cols-2 gap-x-8 gap-y-3">
               {session.questions.map((question) => (
                 <div key={`print-${question.id}`} className="flex items-end gap-3 border-b border-border pb-2 text-sm">
                   <span className="w-12 font-bold">Q{question.number}</span>
-                  <span className="flex-1 text-gray-600 dark:text-gray-400">{question.partCode}</span>
+                  <span className="flex-1 text-muted">{question.partCode}</span>
                 </div>
               ))}
             </div>

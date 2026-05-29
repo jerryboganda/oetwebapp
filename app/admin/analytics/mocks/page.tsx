@@ -82,9 +82,9 @@ function RevenuePanel({ rows }: { rows: AdminMocksAnalyticsRevenueRow[] }) {
       <table className="min-w-full divide-y divide-admin-border text-sm">
         <thead>
           <tr className="text-left text-xs font-bold uppercase tracking-[0.14em] text-admin-text-muted">
-            <th className="py-3 pr-4">Package</th>
-            <th className="px-4 py-3">Code</th>
-            <th className="px-4 py-3 text-right">Total revenue</th>
+            <th scope="col" className="py-3 pr-4">Package</th>
+            <th scope="col" className="px-4 py-3">Code</th>
+            <th scope="col" className="px-4 py-3 text-right">Total revenue</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-admin-border/70">
@@ -123,9 +123,9 @@ function WorkloadPanel({ rows }: { rows: AdminMocksAnalyticsTutorWorkloadRow[] }
       <table className="min-w-full divide-y divide-admin-border text-sm">
         <thead>
           <tr className="text-left text-xs font-bold uppercase tracking-[0.14em] text-admin-text-muted">
-            <th className="py-3 pr-4">Tutor</th>
-            <th className="px-4 py-3 text-right">Pending</th>
-            <th className="px-4 py-3 text-right">Completed (7d)</th>
+            <th scope="col" className="py-3 pr-4">Tutor</th>
+            <th scope="col" className="px-4 py-3 text-right">Pending</th>
+            <th scope="col" className="px-4 py-3 text-right">Completed (7d)</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-admin-border/70">
@@ -292,7 +292,7 @@ function PassPredictionPanel({ data }: { data: AdminMocksAnalyticsPassPrediction
   if (data.byProfession.length === 0) {
     return (
       <p className="text-sm text-admin-text-muted">
-        Profession breakdown unavailable — global predicted pass rate: {formatPercent(data.predictedPassRate)}.
+        Profession breakdown unavailable. Global predicted pass rate: {formatPercent(data.predictedPassRate)}.
       </p>
     );
   }
@@ -302,9 +302,9 @@ function PassPredictionPanel({ data }: { data: AdminMocksAnalyticsPassPrediction
       <table className="min-w-full divide-y divide-admin-border text-sm">
         <thead>
           <tr className="text-left text-xs font-bold uppercase tracking-[0.14em] text-admin-text-muted">
-            <th className="py-3 pr-4">Profession</th>
-            <th className="px-4 py-3 text-right">Sample size</th>
-            <th className="px-4 py-3 text-right">Predicted pass rate</th>
+            <th scope="col" className="py-3 pr-4">Profession</th>
+            <th scope="col" className="px-4 py-3 text-right">Sample size</th>
+            <th scope="col" className="px-4 py-3 text-right">Predicted pass rate</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-admin-border/70">
@@ -344,10 +344,10 @@ function MarkingDelayPanel({ data }: { data: AdminMocksAnalyticsMarkingDelay }) 
       <table className="min-w-full divide-y divide-admin-border text-sm">
         <thead>
           <tr className="text-left text-xs font-bold uppercase tracking-[0.14em] text-admin-text-muted">
-            <th className="py-3 pr-4">Sub-test</th>
-            <th className="px-4 py-3 text-right">Sample size</th>
-            <th className="px-4 py-3 text-right">Avg delay</th>
-            <th className="px-4 py-3 text-right">P95 delay</th>
+            <th scope="col" className="py-3 pr-4">Sub-test</th>
+            <th scope="col" className="px-4 py-3 text-right">Sample size</th>
+            <th scope="col" className="px-4 py-3 text-right">Avg delay</th>
+            <th scope="col" className="px-4 py-3 text-right">P95 delay</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-admin-border/70">

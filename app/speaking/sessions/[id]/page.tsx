@@ -339,7 +339,7 @@ export default function SpeakingSessionRecordingPage() {
   if (loading) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
-        <span className="inline-flex items-center gap-2 text-sm text-muted-foreground">
+        <span className="inline-flex items-center gap-2 text-sm text-muted">
           <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> Preparing your role-play…
         </span>
       </div>
@@ -348,7 +348,7 @@ export default function SpeakingSessionRecordingPage() {
 
   if (loadError || !session) {
     return (
-      <div className="mx-auto max-w-xl rounded-2xl border border-rose-200 bg-rose-50 p-6 text-sm text-rose-900">
+      <div className="mx-auto max-w-xl rounded-2xl border border-danger/30 bg-danger/10 p-6 text-sm text-danger">
         <h2 className="text-base font-semibold">Could not load this session</h2>
         <p className="mt-1">{loadError ?? 'Session not available.'}</p>
         <Button
@@ -367,7 +367,7 @@ export default function SpeakingSessionRecordingPage() {
     // Redirect is in flight — render a tiny placeholder so the page
     // never flashes the AI UI.
     return (
-      <div className="flex min-h-[40vh] items-center justify-center text-sm text-muted-foreground">
+      <div className="flex min-h-[40vh] items-center justify-center text-sm text-muted">
         <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden /> Switching to live tutor room…
       </div>
     );
@@ -388,11 +388,11 @@ export default function SpeakingSessionRecordingPage() {
 
       <header className="flex flex-wrap items-baseline justify-between gap-2">
         <div>
-          <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+          <p className="text-xs font-medium uppercase tracking-wider text-muted">
             Speaking · Role-play
           </p>
           <h1 className="text-2xl font-bold text-foreground">{card.scenarioTitle}</h1>
-          <p className="text-sm text-muted-foreground">
+          <p className="text-sm text-muted">
             {card.setting} · {card.candidateRole}
           </p>
         </div>
@@ -422,7 +422,7 @@ export default function SpeakingSessionRecordingPage() {
       <div className="grid gap-6 lg:grid-cols-[1fr_minmax(280px,360px)]">
         {/* Card recap */}
         <section className="rounded-2xl border border-border bg-surface p-6 shadow-sm">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">
             Candidate card
           </h2>
           <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-foreground">
@@ -441,16 +441,16 @@ export default function SpeakingSessionRecordingPage() {
         <aside className="flex flex-col gap-4">
           <div className="rounded-2xl border border-border bg-surface p-4 shadow-sm">
             <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-foreground">
-              <Mic className="h-4 w-4 text-muted-foreground" aria-hidden /> Microphone
+              <Mic className="h-4 w-4 text-muted" aria-hidden /> Microphone
             </div>
             <MicLevelMeter level={micLevel} />
-            <p className="mt-2 text-xs text-muted-foreground">
+            <p className="mt-2 text-xs text-muted">
               {hubReady ? 'AI partner connected.' : 'Connecting AI partner…'}
             </p>
             {hubError ? (
               <p
                 role="alert"
-                className="mt-2 rounded-md border border-rose-300 bg-rose-50 p-2 text-xs text-rose-800"
+                className="mt-2 rounded-md border border-danger/30 bg-danger/10 p-2 text-xs text-danger"
               >
                 {hubError}
               </p>
@@ -459,14 +459,14 @@ export default function SpeakingSessionRecordingPage() {
 
           <div className="rounded-2xl border border-border bg-surface p-4 shadow-sm">
             <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-foreground">
-              <Activity className="h-4 w-4 text-muted-foreground" aria-hidden /> Live captions
+              <Activity className="h-4 w-4 text-muted" aria-hidden /> Live captions
             </div>
             <div
               className="h-40 overflow-y-auto rounded-md bg-muted p-2 text-sm text-foreground"
               aria-live="polite"
             >
               {captions.length === 0 ? (
-                <p className="italic text-slate-400">
+                <p className="italic text-muted">
                   Captions will appear here as you speak.
                 </p>
               ) : (
@@ -476,7 +476,7 @@ export default function SpeakingSessionRecordingPage() {
                       <span
                         className={cn(
                           'mr-1 text-xs font-semibold uppercase tracking-wide',
-                          c.speaker === 'candidate' ? 'text-emerald-700' : 'text-indigo-700',
+                          c.speaker === 'candidate' ? 'text-success' : 'text-info',
                         )}
                       >
                         {c.speaker === 'candidate' ? 'You' : 'Patient'}:
@@ -492,7 +492,7 @@ export default function SpeakingSessionRecordingPage() {
           {endError ? (
             <p
               role="alert"
-              className="rounded-md border border-rose-300 bg-rose-50 p-2 text-xs text-rose-800"
+              className="rounded-md border border-danger/30 bg-danger/10 p-2 text-xs text-danger"
             >
               {endError}
             </p>
@@ -510,7 +510,7 @@ function Timer({ secondsLeft, isWarning }: { secondsLeft: number; isWarning: boo
       aria-live="polite"
       className={cn(
         'inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-base font-mono tabular-nums',
-        isWarning ? 'bg-rose-50 text-rose-700' : 'bg-muted text-foreground',
+        isWarning ? 'bg-danger/10 text-danger' : 'bg-muted text-foreground',
       )}
     >
       <Activity className="h-4 w-4" aria-hidden />
@@ -522,11 +522,11 @@ function Timer({ secondsLeft, isWarning }: { secondsLeft: number; isWarning: boo
 function MicLevelMeter({ level }: { level: number }) {
   const clamped = Math.max(0, Math.min(1, level));
   return (
-    <div className="h-2 w-full overflow-hidden rounded-full bg-slate-200">
+    <div className="h-2 w-full overflow-hidden rounded-full bg-background-light">
       <div
         className={cn(
           'h-full rounded-full transition-[width,background-color] duration-100',
-          clamped > 0.85 ? 'bg-rose-500' : clamped > 0.4 ? 'bg-emerald-500' : 'bg-slate-400',
+          clamped > 0.85 ? 'bg-danger' : clamped > 0.4 ? 'bg-success' : 'bg-muted',
         )}
         style={{ width: `${Math.round(clamped * 100)}%` }}
         aria-hidden

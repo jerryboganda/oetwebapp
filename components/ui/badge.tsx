@@ -19,7 +19,7 @@ const badgeVariants: Record<string, string> = {
   sky:     'bg-sky-50    text-sky-700    border border-sky-200/60    dark:bg-sky-950    dark:text-sky-300    dark:border-sky-800/60',
   rose:    'bg-rose-50   text-rose-700   border border-rose-200/60   dark:bg-rose-950   dark:text-rose-300   dark:border-rose-800/60',
   emerald: 'bg-emerald-50 text-emerald-700 border border-emerald-200/60 dark:bg-emerald-950 dark:text-emerald-300 dark:border-emerald-800/60',
-  slate:   'bg-slate-50  text-slate-700  border border-slate-200/60  dark:bg-slate-900  dark:text-slate-300  dark:border-slate-700/60',
+  slate:   'bg-background-light text-muted border border-border',
   indigo: 'bg-indigo-50 text-indigo-700 border border-indigo-200/60 dark:bg-indigo-950 dark:text-indigo-300 dark:border-indigo-800/60',
 };
 
@@ -89,9 +89,9 @@ export function CriterionChip({ label, active, onClick, className }: { label: st
       type="button"
       onClick={onClick}
       className={cn(
-        'px-3.5 py-2.5 rounded-full text-xs font-bold border transition-all duration-200 active:scale-95 shadow-sm',
+        'px-3.5 py-2.5 rounded-full text-xs font-bold border transition-[color,background-color,border-color,box-shadow,transform] duration-200 active:scale-95 shadow-sm',
         active
-          ? 'bg-primary text-white border-primary ring-2 ring-primary/20 ring-offset-1'
+          ? 'bg-primary text-white dark:bg-violet-700 border-primary ring-2 ring-primary/20 ring-offset-1'
           : 'bg-surface text-navy border-border hover:border-primary/50 hover:bg-background-light hover:text-primary dark:text-white dark:border-border dark:hover:bg-background-light dark:hover:border-primary/50',
         className,
       )}

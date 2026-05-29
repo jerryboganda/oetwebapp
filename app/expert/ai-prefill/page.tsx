@@ -58,7 +58,7 @@ export default function AiPreFillPage() {
               <label className="text-sm font-medium text-muted mb-1 block">Review Request ID</label>
               <input className="w-full border rounded-lg px-3 py-2 text-sm" placeholder="Enter review request ID..." value={reviewId} onChange={e => setReviewId(e.target.value)} />
             </div>
-            <button onClick={load} disabled={loading} className="px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:bg-primary/90 disabled:opacity-50">{loading ? 'Loading...' : 'Load AI Suggestions'}</button>
+            <button onClick={load} disabled={loading} className="px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:bg-primary/90 active:scale-[0.98] motion-reduce:active:scale-100 disabled:opacity-50">{loading ? 'Loading...' : 'Load AI Suggestions'}</button>
           </div>
 
           {loading && <div className="space-y-3">{Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-24 rounded-xl" />)}</div>}

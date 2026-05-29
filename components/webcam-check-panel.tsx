@@ -144,7 +144,7 @@ export function WebcamCheckPanel({
               'w-10 h-10 rounded-full flex items-center justify-center shrink-0 shadow-sm transition-transform duration-300',
               isPassed && 'bg-emerald-100 text-emerald-600',
               isBlocked && 'bg-red-100 text-red-600',
-              isBusy && 'bg-primary text-white scale-110',
+              isBusy && 'bg-primary text-white dark:bg-violet-700 scale-110',
               !isPassed && !isBlocked && !isBusy && 'bg-primary/10 text-primary',
             )}
           >
@@ -163,7 +163,7 @@ export function WebcamCheckPanel({
             <p className="text-sm font-semibold text-navy">Camera check</p>
             {isPassed ? (
               <p className="text-xs text-emerald-600 font-medium tracking-wide">
-                Passed — webcam is streaming
+                Passed. Webcam is streaming.
               </p>
             ) : isBusy ? (
               <p className="text-xs text-primary font-medium">
@@ -173,7 +173,7 @@ export function WebcamCheckPanel({
               <p className="text-xs text-red-600 font-medium">
                 {status === 'unavailable'
                   ? 'No camera detected on this device.'
-                  : 'Camera blocked — enable to continue.'}
+                  : 'Camera blocked. Enable it to continue.'}
               </p>
             ) : (
               <p className="text-xs text-muted">
@@ -199,7 +199,7 @@ export function WebcamCheckPanel({
 
         <div
           className={cn(
-            'w-full overflow-hidden rounded-lg border border-border bg-black/90 aspect-video flex items-center justify-center',
+            'w-full overflow-hidden rounded-lg border border-border bg-background-dark/90 aspect-video flex items-center justify-center',
             isPassed ? 'opacity-100' : 'opacity-60',
           )}
         >
@@ -227,7 +227,7 @@ export function WebcamCheckPanel({
           {errorMessage ??
             (status === 'unavailable'
               ? 'No camera was detected. Connect a webcam and retry.'
-              : 'Camera blocked — enable to continue. Check your browser site permissions, then press Retry.')}
+              : 'Camera blocked. Enable it to continue. Check your browser site permissions, then press Retry.')}
         </InlineAlert>
       ) : null}
     </motion.div>

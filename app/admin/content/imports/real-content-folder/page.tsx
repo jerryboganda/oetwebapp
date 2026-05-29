@@ -100,7 +100,7 @@ export default function AdminRealContentFolderImportPage() {
   return (
     <AdminSettingsLayout
       title="Real Content folder importer"
-      description="Drop the zipped Project Real Content folder. The system parses Listening/Reading/Writing/Speaking samples, result-table images, rulebook PDFs, and the Scoring System file — then lets you review + commit them all as Drafts."
+      description="Drop the zipped Project Real Content folder. The system parses Listening/Reading/Writing/Speaking samples, result-table images, rulebook PDFs, and the Scoring System file, then lets you review + commit them all as Drafts."
       eyebrow="CMS"
       breadcrumbs={[
         { label: 'Admin', href: '/admin' },
@@ -109,7 +109,7 @@ export default function AdminRealContentFolderImportPage() {
         { label: 'Real Content Folder' },
       ]}
     >
-      <SettingsSection title="Step 1 — Upload ZIP" description="Zip up your Project Real Content folder, upload it here, review the parsed proposals, then commit. Nothing is auto-published.">
+      <SettingsSection title="Step 1: Upload ZIP" description="Zip up your Project Real Content folder, upload it here, review the parsed proposals, then commit. Nothing is auto-published.">
         <div className="space-y-3">
           <div className="flex flex-col sm:flex-row sm:items-end gap-3">
             <div className="flex-1">

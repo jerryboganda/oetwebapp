@@ -4,11 +4,13 @@ using System.Text.Json;
 using Microsoft.Extensions.Logging;
 
 using OetLearner.Api.Configuration;
+using OetLearner.Api.Contracts;
 
 namespace OetLearner.Api.Services.Conversation.Asr;
 
 public sealed class ElevenLabsConversationRealtimeAsrProvider(
     IConversationOptionsProvider optionsProvider,
+    ILaunchReadinessService launchReadinessService,
     ILogger<ElevenLabsConversationRealtimeAsrProvider> logger) : IConversationRealtimeAsrProvider
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
@@ -27,6 +29,14 @@ public sealed class ElevenLabsConversationRealtimeAsrProvider(
         if (string.IsNullOrWhiteSpace(options.ElevenLabsSttApiKey))
         {
             throw new InvalidOperationException("ElevenLabs realtime STT is not configured.");
+        }
+
+        var readiness = await launchReadinessService.GetSettingsAsync(ct);
+        if (!CanUseRealProvider(options, readiness))
+        {
+            throw new ConversationAsrException(
+                "elevenlabs_realtime_launch_readiness_required",
+                "ElevenLabs realtime STT cannot start until legal, privacy, protected-smoke, spend, topology, and evidence launch-readiness gates are approved.");
         }
 
         var audioFormat = NormalizeAudioFormat(options.ElevenLabsSttAudioFormat);
@@ -121,6 +131,26 @@ public sealed class ElevenLabsConversationRealtimeAsrProvider(
     private static bool IsApprovedElevenLabsHost(Uri uri)
         => string.Equals(uri.Host, "api.elevenlabs.io", StringComparison.OrdinalIgnoreCase)
            && uri.Scheme is "https" or "wss";
+
+    private static bool CanUseRealProvider(ConversationOptions options, AdminLaunchReadinessSettingsResponse readiness)
+        => options.RealtimeSttAllowRealProvider
+           && options.RealtimeSttRealProviderProductionAuthorized
+           && options.RealtimeSttMonthlyBudgetCapUsd > 0
+           && options.RealtimeSttDailyAudioSecondsPerUser > 0
+           && options.RealtimeSttEstimatedCostUsdPerMinute > 0
+           && options.RealtimeSttAssumeLearnersAdult
+           && !options.RealtimeSttAllowManagedLearnerRealProvider
+           && !string.IsNullOrWhiteSpace(options.RealtimeSttRegionId)
+           && IsLaunchApproved(readiness.RealtimeLegalApprovalStatus)
+           && IsLaunchApproved(readiness.RealtimePrivacyApprovalStatus)
+           && IsLaunchApproved(readiness.RealtimeProtectedSmokeStatus)
+           && readiness.RealtimeSpendCapApproved
+           && readiness.RealtimeTopologyApproved
+           && !string.IsNullOrWhiteSpace(readiness.RealtimeEvidenceUrl);
+
+    private static bool IsLaunchApproved(string? value)
+        => string.Equals(value?.Trim(), "approved", StringComparison.OrdinalIgnoreCase)
+           || string.Equals(value?.Trim(), "complete", StringComparison.OrdinalIgnoreCase);
 
     private static string NormalizeAudioFormat(string? value)
     {

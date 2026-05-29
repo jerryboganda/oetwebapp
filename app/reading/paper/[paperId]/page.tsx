@@ -2,7 +2,7 @@
 
 import { Suspense, use, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { AlertCircle, Clock, Eye, Flag, Loader2, Play, RotateCcw, Save, Send, Settings, ZoomIn, ZoomOut } from 'lucide-react';
+import { AlertCircle, Clock, Eye, Flag, Highlighter, Loader2, Play, RotateCcw, Save, Send, Settings, ZoomIn, ZoomOut } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -107,6 +107,20 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
   const [screenReaderHints, setScreenReaderHints] = useState(false);
   const [displayWarnings, setDisplayWarnings] = useState<string[]>([]);
   const [eliminatedChoices, setEliminatedChoices] = useState<Set<string>>(() => new Set());
+  /**
+   * Computer-mode passage highlights — keyed by reading text id so they
+   * survive Part tab switches (PartBody remounts) for the duration of the
+   * session. Each value is a list of {start,end} character offsets relative
+   * to that passage's scope element. Highlights are presentation-only: they
+   * never touch answers, autosave, scoring, or the locked-input state.
+   */
+  const [passageHighlights, setPassageHighlights] = useState<Record<string, ReadingHighlightRange[]>>({});
+  /**
+   * One-shot acknowledgement for the Part A → Parts B/C transition screen.
+   * Once the learner presses Continue (or resumes a break, which already
+   * served as the transition) we never show the screen again this session.
+   */
+  const [partTransitionAcknowledged, setPartTransitionAcknowledged] = useState(false);
 
   const saveTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const autoSubmitTriggered = useRef(false);
@@ -375,6 +389,26 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
   const paperExpired = Boolean(attempt && nowMs > overallDeadlineMs);
   const attemptInputsLocked = breakPending || partBCWindowEnded || paperExpired;
 
+  /**
+   * Part A → Parts B/C transition gate. Shown once, only in real exam mode,
+   * after Part A locks and any optional break has ended. It is purely a
+   * dismissible information screen — the B/C deadline is already running
+   * server-side, so Continue only reveals the section and does NOT start or
+   * restart any timer.
+   */
+  const showPartTransition = Boolean(
+    attempt
+    && !isPracticeMode
+    && partALocked
+    && !breakPending
+    && !partBCWindowEnded
+    && !paperExpired
+    && !partTransitionAcknowledged,
+  );
+  const partBCMinutesRemaining = Number.isFinite(partBCDeadlineMs)
+    ? Math.max(0, Math.round((partBCDeadlineMs - nowMs) / 60_000))
+    : 0;
+
   useEffect(() => {
     timingState.current = { partALocked, partBCWindowEnded, paperExpired, breakPending };
   }, [breakPending, paperExpired, partALocked, partBCWindowEnded]);
@@ -602,8 +636,11 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
       } : current);
       setActivePart('B');
       setTimingNotice('Break ended. Parts B and C are now active.');
+      // Resuming the break already served as the explicit Part A → B/C
+      // transition, so suppress the standalone transition screen.
+      setPartTransitionAcknowledged(true);
     } catch (err) {
-      setError(readErrorMessage(err, 'Failed to resume — please try again.'));
+      setError(readErrorMessage(err, 'Failed to resume. Please try again.'));
     }
   }, [attempt]);
 
@@ -665,21 +702,19 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
 
         {!attempt ? (
           <section className="rounded-[20px] border border-border bg-surface px-5 py-8 text-center shadow-sm">
-            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-info/10 text-info">
-              <Clock className="h-6 w-6" />
-            </div>
-            <h1 className="mt-4 text-2xl font-semibold tracking-tight text-gray-900 dark:text-gray-100">{structure.paper.title}</h1>
-            <p className="mx-auto mt-2 max-w-2xl text-sm leading-6 text-gray-600 dark:text-gray-400">
+            <Clock className="mx-auto h-7 w-7 text-info" aria-hidden="true" />
+            <h1 className="mt-4 text-2xl font-semibold tracking-tight text-navy">{structure.paper.title}</h1>
+            <p className="mx-auto mt-2 max-w-2xl text-sm leading-6 text-muted">
               {urlMode && urlMode !== 'exam'
                 ? `Starting your ${urlMode === 'practice' ? 'practice' : `${urlMode.replace('-', ' ')} practice`} attempt…`
                 : 'Start a server-authoritative Reading attempt. Part A locks after its window, then Parts B and C share the remaining timer.'}
             </p>
             <p
-              className="mx-auto mt-4 max-w-2xl rounded-2xl border border-border bg-background-light px-4 py-3 text-xs font-semibold leading-5 text-gray-600 dark:text-gray-400"
+              className="mx-auto mt-4 max-w-2xl rounded-2xl border border-border bg-background-light px-4 py-3 text-xs font-semibold leading-5 text-muted"
               data-testid="reading-integrity-reminder"
               role="note"
             >
-              OET test content is confidential — do not redistribute or share questions outside this practice context.
+              OET test content is confidential. Do not redistribute or share questions outside this practice context.
             </p>
             {!urlMode || urlMode === 'exam' ? (
               <div className="mt-5 flex justify-center">
@@ -693,7 +728,7 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
           <>
             {isSubsetPracticeMode(attempt.mode) ? (
               <InlineAlert variant="info">
-                <strong>{practiceModeLabel(attempt.mode)} — practice only.</strong>{' '}
+                <strong>{practiceModeLabel(attempt.mode)}: practice only.</strong>{' '}
                 This attempt does not produce an OET 0–500 scaled score and does not consume an exam attempt.
               </InlineAlert>
             ) : null}
@@ -725,7 +760,14 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
               <ReadingBreakScreen attempt={attempt} nowMs={nowMs} onResume={() => void resumeBreak()} />
             ) : null}
 
-            {!breakPending ? (
+            {showPartTransition ? (
+              <ReadingPartTransitionScreen
+                minutes={partBCMinutesRemaining}
+                onContinue={() => setPartTransitionAcknowledged(true)}
+              />
+            ) : null}
+
+            {!breakPending && !showPartTransition ? (
               <PartTabs
                 structure={displayedStructure ?? structure}
                 activePart={activePart}
@@ -737,7 +779,7 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
               />
             ) : null}
 
-            {!breakPending && presentation === 'paper' && displayedStructure ? (
+            {!breakPending && !showPartTransition && presentation === 'paper' && displayedStructure ? (
               <ReadingPaperSimulation
                 structure={displayedStructure}
                 answers={answers}
@@ -750,7 +792,7 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
               />
             ) : null}
 
-            {!breakPending && presentation === 'computer' && displayedCurrentPart ? (
+            {!breakPending && !showPartTransition && presentation === 'computer' && displayedCurrentPart ? (
               <div className="origin-top" style={{ transform: 'scale(var(--reading-player-scale))', transformOrigin: 'top center' }}>
                 <PartBody
                   part={displayedCurrentPart}
@@ -759,6 +801,17 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
                   activeQuestionId={activeQuestionId}
                   eliminatedChoices={eliminatedChoices}
                   locked={attemptInputsLocked || (displayedCurrentPart.partCode === 'A' && partALocked)}
+                  highlights={passageHighlights}
+                  onAddHighlight={(textId, range) =>
+                    setPassageHighlights((prev) => ({ ...prev, [textId]: mergeReadingHighlightRanges(prev[textId] ?? [], range) }))
+                  }
+                  onClearHighlights={(textIds) =>
+                    setPassageHighlights((prev) => {
+                      const next = { ...prev };
+                      for (const id of textIds) delete next[id];
+                      return next;
+                    })
+                  }
                   onActiveQuestionChange={setActiveQuestionId}
                   onToggleFlag={(questionId) => setFlagged((prev) => toggleSetValue(prev, questionId))}
                   onToggleEliminated={(questionId, optionValue) => setEliminatedChoices((prev) => toggleSetValue(prev, `${questionId}:${optionValue}`))}
@@ -771,9 +824,9 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
 
         <Modal open={showConfirm} onClose={() => setShowConfirm(false)} title="Submit Reading attempt?">
           <div className="space-y-4">
-            <p className="text-sm leading-6 text-gray-600 dark:text-gray-400">
-              You have answered <strong className="text-gray-900 dark:text-gray-100">{answeredCount}</strong> of{' '}
-              <strong className="text-gray-900 dark:text-gray-100">{totalQuestions}</strong> questions. Unanswered questions score zero.
+            <p className="text-sm leading-6 text-muted">
+              You have answered <strong className="text-navy">{answeredCount}</strong> of{' '}
+              <strong className="text-navy">{totalQuestions}</strong> questions. Unanswered questions score zero.
             </p>
             {unansweredCount > 0 ? (
               <InlineAlert variant="warning">
@@ -870,8 +923,8 @@ function AttemptToolbar({
             aria-label={`${timerLabel}, ${formatCountdown(secondsLeft)} remaining`}
           >
             <Clock className="h-4 w-4 text-primary" aria-hidden="true" />
-            <span className="text-xs font-bold uppercase tracking-[0.14em] text-gray-600 dark:text-gray-400">{timerLabel}</span>
-            <span className="font-mono text-base font-bold text-gray-900 dark:text-gray-100">{formatCountdown(secondsLeft)}</span>
+            <span className="text-xs font-bold uppercase tracking-[0.14em] text-muted">{timerLabel}</span>
+            <span className="font-mono text-base font-bold text-navy">{formatCountdown(secondsLeft)}</span>
           </div>
           {partALocked ? <Badge variant="warning">Part A locked</Badge> : null}
           {breakPending ? <Badge variant="info">B/C paused</Badge> : null}
@@ -881,10 +934,10 @@ function AttemptToolbar({
               while the candidate is on Part A. */}
           {activePart === 'A' && !partALocked ? (
             <Badge variant="info" data-testid="reading-part-a-copy-paste-warning">
-              Copy/paste may be unavailable — type directly (R10.5)
+              Copy/paste may be unavailable. Type directly (R10.5)
             </Badge>
           ) : null}
-          <span className="text-sm font-semibold text-gray-600 dark:text-gray-400" aria-label={`${answeredCount} of ${totalQuestions} questions answered`}>
+          <span className="text-sm font-semibold text-muted" aria-label={`${answeredCount} of ${totalQuestions} questions answered`}>
             {answeredCount}/{totalQuestions} answered
           </span>
         </div>
@@ -931,7 +984,7 @@ function ReadingZoomControls({ zoomLevel, onZoomChange }: { zoomLevel: number; o
       <Button variant="ghost" size="sm" className="h-9 w-9 px-0" onClick={() => changeZoom(zoomLevel - 5)} aria-label="Zoom out" title="Zoom out">
         <ZoomOut className="h-4 w-4" aria-hidden="true" />
       </Button>
-      <span className="w-12 text-center font-mono text-xs font-bold text-gray-900 dark:text-gray-100" aria-live="polite">{zoomLevel}%</span>
+      <span className="w-12 text-center font-mono text-xs font-bold text-navy" aria-live="polite">{zoomLevel}%</span>
       <Button variant="ghost" size="sm" className="h-9 w-9 px-0" onClick={() => changeZoom(zoomLevel + 5)} aria-label="Zoom in" title="Zoom in">
         <ZoomIn className="h-4 w-4" aria-hidden="true" />
       </Button>
@@ -976,7 +1029,7 @@ function ReadingA11ySettings({
   return (
     <details className="group relative inline-block">
       <summary
-        className="inline-flex h-9 cursor-pointer list-none items-center gap-1.5 rounded-xl border border-border bg-background-light px-3 text-xs font-bold text-gray-900 dark:text-gray-100 hover:border-border-hover focus:outline-none focus:ring-4 focus:ring-primary/15"
+        className="inline-flex h-9 cursor-pointer list-none items-center gap-1.5 rounded-xl border border-border bg-background-light px-3 text-xs font-bold text-navy hover:border-border-hover focus:outline-none focus:ring-4 focus:ring-primary/15"
         aria-label="Accessibility settings"
       >
         <Settings className="h-4 w-4" aria-hidden />
@@ -989,7 +1042,7 @@ function ReadingA11ySettings({
       >
         {policy.fontScaleUserControl ? (
           <div className="space-y-1">
-            <p className="text-xs font-bold uppercase tracking-[0.14em] text-gray-600 dark:text-gray-400">Font size</p>
+            <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">Font size</p>
             <div className="flex items-center gap-1">
               {[90, 100, 110, 125].map((value) => (
                 <button
@@ -1000,8 +1053,8 @@ function ReadingA11ySettings({
                   className={
                     'flex-1 rounded-lg border px-2 py-1.5 text-xs font-bold transition-colors ' +
                     (fontScale === value
-                      ? 'border-primary bg-primary text-white'
-                      : 'border-border bg-background-light text-gray-900 dark:text-gray-100 hover:bg-surface')
+                      ? 'border-primary bg-primary text-white dark:bg-violet-700'
+                      : 'border-border bg-background-light text-navy hover:bg-surface')
                   }
                 >
                   {value}%
@@ -1018,7 +1071,7 @@ function ReadingA11ySettings({
               checked={highContrast}
               onChange={(e) => onHighContrastChange(e.target.checked)}
             />
-            <span className="font-semibold text-gray-900 dark:text-gray-100">High-contrast palette</span>
+            <span className="font-semibold text-navy">High-contrast palette</span>
           </label>
         ) : null}
         {policy.screenReaderOptimised ? (
@@ -1029,12 +1082,12 @@ function ReadingA11ySettings({
               checked={screenReaderHints}
               onChange={(e) => onScreenReaderHintsChange(e.target.checked)}
             />
-            <span className="font-semibold text-gray-900 dark:text-gray-100">Extra screen-reader hints</span>
+            <span className="font-semibold text-navy">Extra screen-reader hints</span>
           </label>
         ) : null}
-        <p className="text-[10px] text-gray-600 dark:text-gray-400">
+        <p className="text-[10px] text-muted">
           <Eye className="mr-1 inline h-3 w-3" aria-hidden />
-          Settings are saved per paper — changes here only affect this paper.
+          Settings are saved per paper. Changes here only affect this paper.
         </p>
       </div>
     </details>
@@ -1054,11 +1107,35 @@ function ReadingBreakScreen({ attempt, nowMs, onResume }: { attempt: ActiveAttem
         <Badge variant="info">Part A collected</Badge>
         <div className="flex items-center gap-3 rounded-2xl bg-background-light px-5 py-4" role="timer" aria-live="polite" aria-label={`${formatCountdown(secondsLeft)} break time remaining`}>
           <Clock className="h-5 w-5 text-primary" aria-hidden="true" />
-          <span className="font-mono text-3xl font-bold text-gray-900 dark:text-gray-100">{formatCountdown(secondsLeft)}</span>
+          <span className="font-mono text-3xl font-bold text-navy">{formatCountdown(secondsLeft)}</span>
         </div>
         <Button variant="primary" onClick={onResume} aria-label="Resume Reading test">
           <Play className="h-4 w-4" aria-hidden="true" />
           Resume Test
+        </Button>
+      </div>
+    </section>
+  );
+}
+
+function ReadingPartTransitionScreen({ minutes, onContinue }: { minutes: number; onContinue: () => void }) {
+  return (
+    <section
+      className="rounded-[20px] border border-border bg-surface p-6 shadow-sm"
+      aria-label="Part A locked — continue to Parts B and C"
+      role="alertdialog"
+      aria-modal="false"
+    >
+      <div className="mx-auto flex max-w-2xl flex-col items-center gap-4 text-center">
+        <Badge variant="warning">Part A submitted &amp; locked</Badge>
+        <h2 className="text-xl font-semibold tracking-tight text-navy">Part A is complete</h2>
+        <p className="text-sm leading-6 text-muted">
+          Part A has been submitted and locked — you cannot return to it. You now have{' '}
+          <strong className="text-navy">{minutes} minute{minutes === 1 ? '' : 's'}</strong> for Parts B &amp; C.
+        </p>
+        <Button variant="primary" onClick={onContinue} aria-label="Continue to Parts B and C">
+          <Play className="h-4 w-4" aria-hidden="true" />
+          Continue to Parts B &amp; C
         </Button>
       </div>
     </section>
@@ -1078,12 +1155,12 @@ function SaveStatus({ state }: { state: SaveState }) {
     <span
       className={cn(
         'inline-flex items-center gap-2 text-sm font-semibold',
-        state === 'error' ? 'text-danger' : 'text-gray-600 dark:text-gray-400',
+        state === 'error' ? 'text-danger' : 'text-muted',
       )}
       role="status"
       aria-live="polite"
     >
-      <Icon className={cn('h-4 w-4', state === 'saving' && 'animate-spin')} aria-hidden="true" />
+      <Icon className={cn('h-4 w-4', state === 'saving' && 'motion-safe:animate-spin')} aria-hidden="true" />
       {label}
     </span>
   );
@@ -1135,12 +1212,12 @@ function PartTabs({
               'min-h-11 shrink-0 border-b-2 px-4 py-2 text-left text-sm font-bold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary',
               isActive
                 ? 'border-primary text-primary'
-                : 'border-transparent text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100',
-              isLocked && 'cursor-not-allowed opacity-60 hover:text-gray-600 dark:hover:text-gray-400',
+                : 'border-transparent text-muted hover:text-navy',
+              isLocked && 'cursor-not-allowed opacity-60 hover:text-muted',
             )}
           >
             <span>Part {part.partCode}</span>
-            <span className="ml-2 text-xs font-semibold text-gray-600 dark:text-gray-400" aria-hidden="true">{answered}/{part.questions.length}</span>
+            <span className="ml-2 text-xs font-semibold text-muted" aria-hidden="true">{answered}/{part.questions.length}</span>
             {flaggedCount ? <span className="ml-2 text-xs text-warning" aria-hidden="true">{flaggedCount} flagged</span> : null}
             {isLocked ? <span className="ml-2 text-xs text-danger" aria-hidden="true">locked</span> : null}
           </button>
@@ -1157,6 +1234,9 @@ function PartBody({
   activeQuestionId,
   eliminatedChoices,
   locked,
+  highlights,
+  onAddHighlight,
+  onClearHighlights,
   onActiveQuestionChange,
   onToggleFlag,
   onToggleEliminated,
@@ -1168,11 +1248,57 @@ function PartBody({
   activeQuestionId: string | null;
   eliminatedChoices: Set<string>;
   locked: boolean;
+  highlights: Record<string, ReadingHighlightRange[]>;
+  onAddHighlight: (textId: string, range: ReadingHighlightRange) => void;
+  onClearHighlights: (textIds: string[]) => void;
   onActiveQuestionChange: (questionId: string) => void;
   onToggleFlag: (questionId: string) => void;
   onToggleEliminated: (questionId: string, optionValue: string) => void;
   onAnswerChange: (question: ReadingQuestionLearnerDto, value: unknown) => void;
 }) {
+  // Map of reading-text id → its passage scope element, so the highlight
+  // controls know which passage a text selection belongs to and can repaint
+  // stored ranges after re-mounts/zoom changes.
+  const scopeRefs = useRef<Map<string, HTMLElement>>(new Map());
+
+  // Repaint persisted highlights whenever they change or the active part
+  // changes (which remounts the passage scopes). Because the passage HTML is
+  // injected via dangerouslySetInnerHTML, React never re-touches the inner
+  // DOM unless `bodyHtml` changes, so our marks survive per-second re-renders.
+  useEffect(() => {
+    for (const [textId, scope] of scopeRefs.current.entries()) {
+      paintReadingHighlights(scope, highlights[textId] ?? []);
+    }
+  }, [highlights, part.partCode, part.texts]);
+
+  // Escape clears the pending (un-applied) selection without removing any
+  // committed highlights — matches the official player's keyboard affordance.
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') window.getSelection?.()?.removeAllRanges();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
+  const handleHighlightSelection = () => {
+    for (const [textId, scope] of scopeRefs.current.entries()) {
+      const range = readReadingScopeSelection(scope);
+      if (range) {
+        onAddHighlight(textId, range);
+        window.getSelection?.()?.removeAllRanges();
+        return;
+      }
+    }
+  };
+
+  const handleClearHighlights = () => {
+    onClearHighlights(part.texts.map((text) => text.id));
+    window.getSelection?.()?.removeAllRanges();
+  };
+
+  const hasHighlights = part.texts.some((text) => (highlights[text.id] ?? []).length > 0);
+
   if (part.questions.length === 0) {
     return (
       <div
@@ -1181,7 +1307,7 @@ function PartBody({
         id={`reading-part-panel-${part.partCode}`}
         aria-labelledby={`reading-part-tab-${part.partCode}`}
       >
-        <p className="text-sm text-gray-600 dark:text-gray-400">No questions available for this section in the selected drill.</p>
+        <p className="text-sm text-muted">No questions available for this section in the selected drill.</p>
       </div>
     );
   }
@@ -1199,16 +1325,41 @@ function PartBody({
         className="max-h-[72vh] overflow-y-auto rounded-[20px] border border-border bg-surface p-5 shadow-sm"
         aria-label={`Reading passages for Part ${part.partCode}`}
       >
-        <div className="mb-4 flex items-center justify-between gap-3">
-          <h2 className="text-sm font-black uppercase tracking-[0.18em] text-gray-600 dark:text-gray-400">Passages</h2>
-          <Badge variant="muted">Part {part.partCode}</Badge>
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <h2 className="text-sm font-black uppercase tracking-[0.18em] text-muted">Passages</h2>
+          <div className="flex items-center gap-2">
+            <div className="inline-flex items-center gap-1 rounded-lg border border-border bg-background-light p-1" aria-label="Passage highlight tools">
+              <button
+                type="button"
+                // Prevent the click from collapsing the text selection before we read it.
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={handleHighlightSelection}
+                className="inline-flex items-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-semibold text-amber-700 hover:bg-amber-50 dark:text-amber-300 dark:hover:bg-amber-900/30"
+                aria-label="Highlight selected passage text"
+              >
+                <Highlighter className="h-4 w-4" aria-hidden="true" />
+                Highlight
+              </button>
+              <button
+                type="button"
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={handleClearHighlights}
+                disabled={!hasHighlights}
+                className="rounded-md px-2 py-1.5 text-xs font-semibold text-muted hover:bg-surface hover:text-navy disabled:cursor-not-allowed disabled:opacity-50"
+                aria-label="Clear highlights in this part"
+              >
+                Clear highlights
+              </button>
+            </div>
+            <Badge variant="muted">Part {part.partCode}</Badge>
+          </div>
         </div>
         <div className="space-y-6">
           {part.texts.map((text) => (
             <article key={text.id} className="space-y-2">
               <div>
-                <h3 className="text-base font-bold text-gray-900 dark:text-gray-100">{text.title}</h3>
-                {text.source ? <p className="text-xs font-semibold text-gray-600 dark:text-gray-400">Source: {text.source}</p> : null}
+                <h3 className="text-base font-bold text-navy">{text.title}</h3>
+                {text.source ? <p className="text-xs font-semibold text-muted">Source: {text.source}</p> : null}
               </div>
               {/* P0-J 2026-05 hardening: sanitize author-supplied HTML before
                   injecting into the DOM. Backend authoring stores raw HTML and
@@ -1218,7 +1369,11 @@ function PartBody({
                   allow-list (paragraphs, emphasis, lists, tables) and strips
                   script/iframe/event handlers. */}
               <div
-                className="prose prose-sm max-w-none text-gray-900 dark:text-gray-100 selection:bg-warning/30"
+                ref={(el) => {
+                  if (el) scopeRefs.current.set(text.id, el);
+                  else scopeRefs.current.delete(text.id);
+                }}
+                className="prose prose-sm max-w-none text-navy selection:bg-warning/30"
                 data-reading-highlight-scope="passage"
                 dangerouslySetInnerHTML={{ __html: sanitizeBodyHtml(text.bodyHtml) }}
               />
@@ -1233,7 +1388,7 @@ function PartBody({
       >
         <div className="mb-4 flex flex-col gap-3">
           <div className="flex items-center justify-between gap-3">
-            <h2 className="text-sm font-black uppercase tracking-[0.18em] text-gray-600 dark:text-gray-400">Questions</h2>
+            <h2 className="text-sm font-black uppercase tracking-[0.18em] text-muted">Questions</h2>
             {locked ? <Badge variant="warning">Inputs locked</Badge> : null}
           </div>
           <QuestionNavigator
@@ -1323,7 +1478,7 @@ function QuestionNavigator({
             aria-label={`Question ${question.displayOrder}${answered ? ', answered' : ', unanswered'}${isFlagged ? ', flagged' : ''}`}
             className={cn(
               'relative min-h-11 rounded-lg border text-sm font-bold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary',
-              isActive ? 'border-primary bg-primary text-white' : 'border-border bg-background-light text-gray-900 dark:text-gray-100 hover:border-primary/40',
+              isActive ? 'border-primary bg-primary text-white dark:bg-violet-700' : 'border-border bg-background-light text-navy hover:border-primary/40',
               answered && !isActive && 'border-success/30 bg-success/10 text-success',
               isFlagged && !isActive && 'border-warning/30 bg-warning/10 text-warning',
             )}
@@ -1364,8 +1519,8 @@ function QuestionInput({
     <div className="space-y-5">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-xs font-black uppercase tracking-[0.16em] text-gray-600 dark:text-gray-400">Question {question.displayOrder}</p>
-          <h3 className="mt-2 text-base font-semibold leading-7 text-gray-900 dark:text-gray-100 selection:bg-warning/30" data-reading-highlight-scope="stem">{question.stem}</h3>
+          <p className="text-xs font-black uppercase tracking-[0.16em] text-muted">Question {question.displayOrder}</p>
+          <h3 className="mt-2 text-base font-semibold leading-7 text-navy selection:bg-warning/30" data-reading-highlight-scope="stem">{question.stem}</h3>
         </div>
         <Button variant="ghost" size="sm" onClick={onToggleFlag} aria-pressed={flagged}>
           <Flag className={cn('h-4 w-4', flagged && 'fill-current text-warning')} />
@@ -1424,7 +1579,7 @@ function McqControl({
             className={cn(
               'flex min-h-11 cursor-pointer items-start gap-3 rounded-lg border border-border bg-background-light p-3 text-sm transition-colors',
               current === letter && 'border-primary bg-primary/5',
-              eliminated && 'text-gray-600 dark:text-gray-400 line-through decoration-2',
+              eliminated && 'text-muted line-through decoration-2',
               locked && 'cursor-not-allowed opacity-70',
             )}
           >
@@ -1436,8 +1591,8 @@ function McqControl({
               checked={current === letter}
               onChange={() => onChange(letter)}
             />
-            <span className="font-mono font-bold text-gray-900 dark:text-gray-100">{letter}.</span>
-            <span className={cn('leading-6 text-gray-900 dark:text-gray-100', eliminated && 'text-gray-600 dark:text-gray-400')}>{option.label}</span>
+            <span className="font-mono font-bold text-navy">{letter}.</span>
+            <span className={cn('leading-6 text-navy', eliminated && 'text-muted')}>{option.label}</span>
           </label>
         );
       })}
@@ -1490,8 +1645,8 @@ function MatchingControl({
               isSelected && 'border-primary bg-primary/5',
             )}
           >
-            <span className="block text-sm font-bold text-gray-900 dark:text-gray-100">Text {option.value}</span>
-            {option.label ? <span className="block text-xs text-gray-600 dark:text-gray-400">{option.label}</span> : null}
+            <span className="block text-sm font-bold text-navy">Text {option.value}</span>
+            {option.label ? <span className="block text-xs text-muted">{option.label}</span> : null}
           </button>
         );
       })}
@@ -1510,7 +1665,7 @@ function TextAnswerControl({
 }) {
   return (
     <input
-      className="min-h-11 w-full rounded-lg border border-border bg-background-light px-3 py-2 text-sm text-gray-900 dark:text-gray-100 outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:cursor-not-allowed disabled:opacity-70"
+      className="min-h-11 w-full rounded-lg border border-border bg-background-light px-3 py-2 text-sm text-navy outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:cursor-not-allowed disabled:opacity-70"
       placeholder="Type your answer"
       disabled={locked}
       value={typeof current === 'string' ? current : ''}
@@ -1645,5 +1800,105 @@ function formatCountdown(totalSec: number): string {
 function minutesBetween(start: string, end: string): number {
   return Math.max(0, Math.round((new Date(end).getTime() - new Date(start).getTime()) / 60000));
 }
+
+// ─── Computer-mode passage highlighting ──────────────────────────────────────
+// Lightweight, session-only text highlighting scoped strictly to a passage
+// container. Highlights are stored as character offsets relative to the scope's
+// concatenated text content, so they survive re-renders and Part switches and
+// can be repainted deterministically. None of this touches answers, autosave,
+// or scoring — it is purely presentational.
+
+interface ReadingHighlightRange {
+  start: number;
+  end: number;
+}
+
+const READING_HIGHLIGHT_CLASS =
+  'rounded-[2px] bg-amber-200/80 text-navy dark:bg-amber-300/40 dark:text-amber-50';
+
+/** Character offset of a DOM boundary within the scope's text content. */
+function readingOffsetWithin(scope: HTMLElement, node: Node, nodeOffset: number): number {
+  const measure = document.createRange();
+  measure.selectNodeContents(scope);
+  try {
+    measure.setEnd(node, nodeOffset);
+  } catch {
+    return 0;
+  }
+  return (measure.cloneContents().textContent ?? '').length;
+}
+
+/** Reads the current window selection as a scope-relative range, or null. */
+function readReadingScopeSelection(scope: HTMLElement): ReadingHighlightRange | null {
+  if (typeof window === 'undefined') return null;
+  const selection = window.getSelection();
+  if (!selection || selection.rangeCount === 0 || selection.isCollapsed) return null;
+  const range = selection.getRangeAt(0);
+  if (!scope.contains(range.startContainer) || !scope.contains(range.endContainer)) return null;
+  const a = readingOffsetWithin(scope, range.startContainer, range.startOffset);
+  const b = readingOffsetWithin(scope, range.endContainer, range.endOffset);
+  const start = Math.min(a, b);
+  const end = Math.max(a, b);
+  if (end - start < 1) return null;
+  return { start, end };
+}
+
+/** Inserts a new range, merging any that overlap or touch. */
+function mergeReadingHighlightRanges(
+  ranges: ReadingHighlightRange[],
+  next: ReadingHighlightRange,
+): ReadingHighlightRange[] {
+  const all = [...ranges, next].sort((x, y) => x.start - y.start);
+  const merged: ReadingHighlightRange[] = [];
+  for (const range of all) {
+    const last = merged[merged.length - 1];
+    if (last && range.start <= last.end) last.end = Math.max(last.end, range.end);
+    else merged.push({ ...range });
+  }
+  return merged;
+}
+
+/** Repaints `<mark>` elements for the supplied ranges, clearing prior ones. */
+function paintReadingHighlights(scope: HTMLElement, ranges: ReadingHighlightRange[]): void {
+  // Unwrap any existing highlight marks first so repaints are idempotent.
+  scope.querySelectorAll('mark[data-reading-highlight]').forEach((mark) => {
+    const parent = mark.parentNode;
+    if (!parent) return;
+    while (mark.firstChild) parent.insertBefore(mark.firstChild, mark);
+    parent.removeChild(mark);
+  });
+  scope.normalize();
+  if (ranges.length === 0) return;
+
+  for (const { start, end } of ranges) {
+    const segments: Array<{ node: Text; from: number; to: number }> = [];
+    const walker = document.createTreeWalker(scope, NodeFilter.SHOW_TEXT);
+    let offset = 0;
+    let node = walker.nextNode() as Text | null;
+    while (node) {
+      const len = node.textContent?.length ?? 0;
+      const from = Math.max(start, offset);
+      const to = Math.min(end, offset + len);
+      if (from < to) segments.push({ node, from: from - offset, to: to - offset });
+      offset += len;
+      node = walker.nextNode() as Text | null;
+    }
+    // Wrap last-to-first so earlier offsets stay valid as nodes split.
+    for (const segment of segments.reverse()) {
+      const range = document.createRange();
+      range.setStart(segment.node, segment.from);
+      range.setEnd(segment.node, segment.to);
+      const mark = document.createElement('mark');
+      mark.setAttribute('data-reading-highlight', '');
+      mark.className = READING_HIGHLIGHT_CLASS;
+      try {
+        range.surroundContents(mark);
+      } catch {
+        // Segment spans an element boundary — skip; remaining segments still paint.
+      }
+    }
+  }
+}
+
 
 

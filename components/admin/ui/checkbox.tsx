@@ -44,9 +44,9 @@ const Checkbox = React.forwardRef<
         'bg-[var(--admin-bg-surface)] border border-[var(--admin-border)]',
         // checked / indeterminate
         'data-[state=checked]:bg-[var(--admin-primary)] data-[state=checked]:border-[var(--admin-primary)]',
-        'data-[state=checked]:text-white',
+        'data-[state=checked]:text-[var(--admin-primary-fg)]',
         'data-[state=indeterminate]:bg-[var(--admin-primary)] data-[state=indeterminate]:border-[var(--admin-primary)]',
-        'data-[state=indeterminate]:text-white',
+        'data-[state=indeterminate]:text-[var(--admin-primary-fg)]',
         // focus ring
         'focus-visible:outline-none focus-visible:ring-2',
         'focus-visible:ring-[var(--admin-primary)] focus-visible:ring-offset-2',

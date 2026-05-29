@@ -23,12 +23,12 @@ export function BetterPhraseCard({
         {criterion && <span className="text-xs font-bold text-primary uppercase tracking-wide">{criterion}</span>}
 
         {/* Original */}
-        <div className="p-3 bg-red-50 border border-red-200 rounded">
-          <p className="text-xs font-bold text-red-700 mb-1">Original phrase</p>
+        <div className="p-3 bg-danger/10 border border-danger/30 rounded">
+          <p className="text-xs font-bold text-danger mb-1">Original phrase</p>
           <div className="flex items-start gap-2">
             <p className="text-sm text-navy flex-1">&ldquo;{original}&rdquo;</p>
             {onPlayOriginal && (
-              <button onClick={onPlayOriginal} className="p-2.5 -m-1 text-red-500 hover:text-red-700" aria-label="Play original">
+              <button onClick={onPlayOriginal} className="p-2.5 -m-1 text-danger hover:text-danger/80" aria-label="Play original">
                 <Volume2 className="w-4 h-4" />
               </button>
             )}
@@ -36,18 +36,18 @@ export function BetterPhraseCard({
         </div>
 
         {/* Issue */}
-        <div className="flex items-center gap-2 text-xs text-amber-700">
-          <ArrowRight className="w-3.5 h-3.5" />
+        <div className="flex items-center gap-2 text-xs text-warning">
+          <ArrowRight className="w-3.5 h-3.5" aria-hidden="true" />
           <span className="font-bold">Issue:</span> {issue}
         </div>
 
         {/* Alternative */}
-        <div className="p-3 bg-emerald-50 border border-emerald-200 rounded">
-          <p className="text-xs font-bold text-emerald-700 mb-1">Stronger alternative</p>
+        <div className="p-3 bg-success/10 border border-success/30 rounded">
+          <p className="text-xs font-bold text-success mb-1">Stronger alternative</p>
           <div className="flex items-start gap-2">
             <p className="text-sm text-navy flex-1">&ldquo;{alternative}&rdquo;</p>
             {onPlayAlternative && (
-              <button onClick={onPlayAlternative} className="p-2.5 -m-1 text-emerald-600 hover:text-emerald-800" aria-label="Play alternative">
+              <button onClick={onPlayAlternative} className="p-2.5 -m-1 text-success hover:text-success/80" aria-label="Play alternative">
                 <Volume2 className="w-4 h-4" />
               </button>
             )}

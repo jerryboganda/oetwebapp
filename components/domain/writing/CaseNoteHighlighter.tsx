@@ -57,22 +57,22 @@ function verdictFor(
 
 const VERDICT_STYLES: Record<string, { tone: string; icon?: typeof CheckCircle2; label: string }> = {
   correct: {
-    tone: 'border-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-900 dark:text-emerald-100',
+    tone: 'border-success/40 bg-success/10 text-navy dark:text-white',
     icon: CheckCircle2,
     label: 'Correctly identified',
   },
   incorrect: {
-    tone: 'border-red-400 bg-red-50 dark:bg-red-950/40 text-red-900 dark:text-red-100',
+    tone: 'border-danger/40 bg-danger/10 text-navy dark:text-white',
     icon: XCircle,
     label: 'Should not have been marked',
   },
   missed: {
-    tone: 'border-amber-400 bg-amber-50 dark:bg-amber-950/40 text-amber-900 dark:text-amber-100',
+    tone: 'border-warning/40 bg-warning/10 text-navy dark:text-white',
     icon: HelpCircle,
     label: 'Should have been marked',
   },
   partial: {
-    tone: 'border-slate-300 bg-slate-50 dark:bg-slate-900/40 text-slate-800 dark:text-slate-100',
+    tone: 'border-border bg-background-light text-navy dark:text-white',
     icon: HelpCircle,
     label: 'Either answer acceptable',
   },

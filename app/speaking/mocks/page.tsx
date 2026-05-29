@@ -45,7 +45,7 @@ export default function SpeakingMockSetIndexPage() {
         <header className="space-y-2">
           <h1 className="text-3xl font-black">Speaking mock sets</h1>
           <p className="text-sm text-muted">
-            Each mock set pairs two role-plays — exactly like the official OET Speaking sub-test. Take both back-to-back for a realistic combined readiness band.
+            Each mock set pairs two role-plays, exactly like the official OET Speaking sub-test. Take both back-to-back for a realistic combined readiness band.
           </p>
         </header>
 
@@ -57,7 +57,7 @@ export default function SpeakingMockSetIndexPage() {
               blocked
                 ? 'border-danger/30 bg-danger/5 text-danger'
                 : remaining <= 1
-                  ? 'border-warning/30 bg-amber-50 text-warning'
+                  ? 'border-warning/30 bg-warning/10 text-warning'
                   : 'border-border bg-surface text-muted'
             }`}
           >

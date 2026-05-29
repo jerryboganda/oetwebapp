@@ -301,8 +301,8 @@ export function AdminContentEditor({ contentId }: AdminContentEditorProps) {  co
                         const isPast = ['Draft', 'EditorReview', 'PublisherApproval', 'Published'].indexOf(contentStatus) > i;
                         return (
                           <span key={step} className="flex items-center gap-1">
-                            {i > 0 ? <span className="text-[var(--color-border)]">→</span> : null}
-                            <span className={`px-2 py-0.5 rounded-full ${isActive ? 'bg-[var(--color-accent)] text-white' : isPast ? 'bg-[var(--color-success-bg)] text-[var(--color-success)]' : 'bg-[var(--color-surface-secondary)] text-[var(--color-text-tertiary)]'}`}>
+                            {i > 0 ? <span className="text-[var(--admin-border-strong)]">→</span> : null}
+                            <span className={`px-2 py-0.5 rounded-full ${isActive ? 'bg-[var(--admin-primary)] text-[var(--admin-primary-fg)]' : isPast ? 'bg-[var(--admin-success-tint)] text-[var(--admin-success)]' : 'bg-[var(--admin-bg-subtle)] text-[var(--admin-fg-muted)]'}`}>
                               {labels[step]}
                             </span>
                           </span>
@@ -466,7 +466,7 @@ export function AdminContentEditor({ contentId }: AdminContentEditorProps) {  co
               ) : (
                 <div className="grid gap-3 md:grid-cols-2">
                   {criteriaOptions.map((criterion) => (
-                    <div key={criterion.id} className="rounded-[20px] border border-border bg-background-light p-4 shadow-sm">
+                    <div key={criterion.id} className="rounded-[20px] border border-border bg-admin-bg-subtle p-4 shadow-sm">
                       <Checkbox
                         checked={form.criteriaFocus.includes(criterion.id)}
                         onChange={() => toggleCriterion(criterion.id)}

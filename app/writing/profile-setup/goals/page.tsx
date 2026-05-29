@@ -63,7 +63,7 @@ export default function ProfileSetupGoalsPage() {
   };
 
   return (
-    <LearnerDashboardShell pageTitle="Writing Profile — Step 2">
+    <LearnerDashboardShell pageTitle="Writing Profile: Step 2">
       <div className="space-y-6">
         <LearnerPageHero
           eyebrow="Step 2 of 4"
@@ -97,7 +97,7 @@ export default function ProfileSetupGoalsPage() {
                     type="button"
                     onClick={() => setTargetBand(band)}
                     aria-pressed={selected}
-                    className={`min-w-12 rounded-lg border px-4 py-2 text-sm font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${selected ? 'border-primary bg-primary text-white' : 'border-border bg-background text-navy hover:border-primary/40'}`}
+                    className={`min-w-12 rounded-lg border px-4 py-2 text-sm font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${selected ? 'border-primary bg-primary text-white dark:bg-violet-700' : 'border-border bg-background text-navy hover:border-primary/40'}`}
                   >
                     {band}
                   </button>

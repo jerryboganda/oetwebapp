@@ -9,7 +9,7 @@ import { AUTH_ROUTES } from '@/lib/auth/routes';
 export const metadata: Metadata = {
   title: 'Terms of Service · OET with Dr Ahmed Hesham',
   description:
-    'The terms of service governing use of the OET with Dr Ahmed Hesham preparation platform — eligibility, billing, the Score Guarantee, AI feedback, tutor review, intellectual property, and your rights.',
+    'The terms of service governing use of the OET with Dr Ahmed Hesham preparation platform: eligibility, billing, the Score Guarantee, AI feedback, tutor review, intellectual property, and your rights.',
 };
 
 const LAST_UPDATED = '26 April 2026';
@@ -46,7 +46,7 @@ const sections: LegalSection[] = [
       'OET with Dr Ahmed Hesham is an independent OET (Occupational English Test) preparation service operated for healthcare professionals preparing to register and practise abroad.',
     callout: (
       <>
-        <strong>Important —</strong> we are not affiliated with, endorsed by, or
+        <strong>Important:</strong> we are not affiliated with, endorsed by, or
         a partner of Cambridge Boxhill Language Assessment (CBLA), the operator
         of the official OET examination. &quot;OET&quot; is referenced descriptively to
         identify the test we help you prepare for. The official OET website is
@@ -93,7 +93,7 @@ const sections: LegalSection[] = [
       'Eligible learners on qualifying plans may enrol in our Score Guarantee programme, which provides additional preparation support if a target sub-score is not met on a qualifying official OET attempt.',
     bullets: [
       'Eligibility, qualifying activity (mocks, tutor reviews, study-plan completion), and the redemption process are set out in the Score Guarantee Terms shown at enrolment and in Billing → Score Guarantee.',
-      'The Score Guarantee is a preparation-support pledge — it is not a refund of fees paid to CBLA, immigration regulators, or third parties, and it is not a guarantee of registration with any regulatory body.',
+      'The Score Guarantee is a preparation-support pledge. It is not a refund of fees paid to CBLA, immigration regulators, or third parties, and it is not a guarantee of registration with any regulatory body.',
       'Fraudulent activity (account sharing, falsified score reports, manipulated practice data) voids Score Guarantee eligibility immediately.',
     ],
   },
@@ -105,7 +105,7 @@ const sections: LegalSection[] = [
     bullets: [
       'AI-generated feedback (Writing, Speaking, Conversation, Pronunciation, Reading explanations, Grammar drafts) is grounded against our published rulebooks but may still contain mistakes. Treat it as a guided second opinion, not the final word.',
       'Tutor reviewers are qualified human experts under contract; their feedback represents their professional opinion based on the OET rubric. Turnaround windows shown at submission are targets, not guarantees.',
-      'Predicted scores, advisory bands, and readiness percentages are calibrated estimates — they do not guarantee any outcome on the official OET examination.',
+      'Predicted scores, advisory bands, and readiness percentages are calibrated estimates. They do not guarantee any outcome on the official OET examination.',
       'You retain ownership of the work you submit (your essays, recordings, written responses). You grant us a non-exclusive, worldwide, royalty-free licence to process, store, and use that work for the purpose of operating the Service, generating feedback, training internal quality models on de-identified data, and improving the platform.',
     ],
   },
@@ -126,7 +126,7 @@ const sections: LegalSection[] = [
     id: 'ip',
     title: 'Content & intellectual property',
     bullets: [
-      'All Service content — including practice papers, rulebooks, model answers, scoring logic, AI prompts, design system, brand marks, and software — is owned by us or our licensors and protected by copyright and other intellectual-property laws.',
+      'All Service content, including practice papers, rulebooks, model answers, scoring logic, AI prompts, design system, brand marks, and software, is owned by us or our licensors and protected by copyright and other intellectual-property laws.',
       'We grant you a personal, non-transferable, non-exclusive, revocable licence to access the Service for your own OET preparation while your subscription is active.',
       <>
         The &quot;OET with Dr Ahmed Hesham&quot; name and logo are our trademarks. The
@@ -142,7 +142,7 @@ const sections: LegalSection[] = [
     lead:
       'We process personal data under UK GDPR and the Data Protection Act 2018 (and equivalent regimes in your jurisdiction). Our Privacy Notice explains what we collect, why, how long we retain it, and your rights.',
     bullets: [
-      'Sensitive learner data — speaking recordings, written submissions, tutor feedback — is stored encrypted at rest and is only accessed by personnel with a need-to-know basis.',
+      'Sensitive learner data (speaking recordings, written submissions, tutor feedback) is stored encrypted at rest and is only accessed by personnel with a need-to-know basis.',
       'You can request export or deletion of your account data at any time from Settings → Privacy or by emailing dpo@oetwithdrhesham.co.uk.',
       'Audio retention is controlled by the configurable Pronunciation/Conversation retention windows set out in the in-app Privacy Notice; defaults are 30 days unless you change them.',
     ],
@@ -217,7 +217,7 @@ export default function TermsPage() {
       brandLabel="OET with Dr Ahmed Hesham"
       eyebrow="Legal"
       title="Terms of Service"
-      subtitle="The rules for using the OET with Dr Ahmed Hesham preparation platform — written in plain English, organised by topic."
+      subtitle="The rules for using the OET with Dr Ahmed Hesham preparation platform, written in plain English, organised by topic."
       stackClassName={shellStyles.successStackWide}
       cardClassName={shellStyles.successCardWide}
       headerClassName={shellStyles.successHeaderWide}

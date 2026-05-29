@@ -441,15 +441,15 @@ export default function AdminPrivateSpeakingPage() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-admin-border text-left text-xs text-admin-fg-muted uppercase">
-                    <th className="pb-2 pr-3">Booking</th>
-                    <th className="pb-2 pr-3">Tutor</th>
-                    <th className="pb-2 pr-3">Session</th>
-                    <th className="pb-2 pr-3">Status</th>
-                    <th className="pb-2 pr-3">Payment</th>
-                    <th className="pb-2 pr-3">Entitlement</th>
-                    <th className="pb-2 pr-3">Zoom</th>
-                    <th className="pb-2 pr-3">Calendar</th>
-                    <th className="pb-2">Actions</th>
+                    <th scope="col" className="pb-2 pr-3">Booking</th>
+                    <th scope="col" className="pb-2 pr-3">Tutor</th>
+                    <th scope="col" className="pb-2 pr-3">Session</th>
+                    <th scope="col" className="pb-2 pr-3">Status</th>
+                    <th scope="col" className="pb-2 pr-3">Payment</th>
+                    <th scope="col" className="pb-2 pr-3">Entitlement</th>
+                    <th scope="col" className="pb-2 pr-3">Zoom</th>
+                    <th scope="col" className="pb-2 pr-3">Calendar</th>
+                    <th scope="col" className="pb-2">Actions</th>
                   </tr>
                 </thead>
                 <tbody>

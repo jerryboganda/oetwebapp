@@ -2,7 +2,7 @@
 name: "OET OmO Orchestrator"
 description: "Use when: coordinating full-power Oh My OpenAgent, OmO, ultrawork, Ralph Loop, multi-agent execution, autonomous implementation, or end-to-end repo tasks for the OET platform."
 argument-hint: "Describe the goal, or type ultrawork / ulw."
-tools: ["agent", "read", "search", "edit", "execute", "web", "todo"]
+tools: [vscode, execute, read, agent, edit, search, web, 'mcp_docker/*', browser, ms-azuretools.vscode-containers/containerToolsConfig, todo]
 user-invocable: true
 disable-model-invocation: false
 agents: ["OET Explorer", "OET Planner", "OET Implementer", "OET Reviewer", "OET QA Validator", "OET Security Reviewer", "RalphCoordinator", "RalphPlanner", "RalphCopilot", "Oh My OpenAgent"]

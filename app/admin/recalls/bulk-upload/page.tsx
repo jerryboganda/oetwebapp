@@ -15,7 +15,7 @@ const BREADCRUMBS = [
 export default function AdminRecallsBulkUploadPage() {
   return (
     <AdminSettingsLayout
-      title="Recalls — Bulk upload"
+      title="Recalls bulk upload"
       description="Legacy Recalls bulk upload is disabled for production safety."
       breadcrumbs={BREADCRUMBS}
       icon={<Upload className="h-5 w-5" />}

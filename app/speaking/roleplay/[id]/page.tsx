@@ -141,7 +141,7 @@ export default function RoleCardPreview() {
             />
 
             {/* Computer-based Speaking paper rule notice (rulebook RULE_61/RULE_75 + RULE_62/RULE_76). */}
-            <div className="rounded-2xl border border-warning/30 bg-amber-50 p-4">
+            <div className="rounded-2xl border border-warning/30 bg-warning/10 p-4">
               <div className="flex items-start gap-3">
                 <AlertTriangle className="h-5 w-5 text-warning shrink-0 mt-0.5" />
                 <div className="space-y-1.5 text-sm leading-relaxed">
@@ -229,12 +229,12 @@ export default function RoleCardPreview() {
                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                   {([
                     { id: 'self', label: 'Guided Self-Practice', icon: User, color: 'text-primary', bg: 'bg-primary/10' },
-                    { id: 'exam', label: 'Simulation', icon: ShieldCheck, color: 'text-warning', bg: 'bg-amber-50' },
+                    { id: 'exam', label: 'Simulation', icon: ShieldCheck, color: 'text-warning', bg: 'bg-warning/10' },
                   ] as const).map((m) => (
                     <button
                       key={m.id}
                       onClick={() => setSelectedMode(m.id)}
-                      className={`flex flex-col items-center gap-2 p-3 rounded-xl border transition-all ${
+                      className={`flex flex-col items-center gap-2 p-3 rounded-xl border transition-[color,background-color,border-color,box-shadow,transform,opacity,filter] duration-200 ${
                         selectedMode === m.id ? 'border-primary bg-primary/5' : 'border-border hover:border-border-hover'
                       }`}
                     >
@@ -262,9 +262,7 @@ export default function RoleCardPreview() {
 
             <Card className="border-primary/15 bg-primary/5 p-5">
               <div className="flex items-start gap-3">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-surface text-primary">
-                  <MessageCircle className="h-5 w-5" />
-                </div>
+                <MessageCircle className="h-5 w-5 shrink-0 text-primary" aria-hidden />
                 <div>
                   <p className="text-sm font-bold text-navy">Need an AI patient?</p>
                   <p className="mt-1 text-sm leading-relaxed text-muted">

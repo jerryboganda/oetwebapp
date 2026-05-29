@@ -18,20 +18,20 @@ const SEVERITY_META: Record<WritingSeverity, { label: string; icon: typeof Alert
   high: {
     label: 'High severity',
     icon: AlertOctagon,
-    tone: 'text-red-700 dark:text-red-300',
-    ring: 'border-red-200/70 dark:border-red-800/60 bg-red-50/60 dark:bg-red-950/40',
+    tone: 'text-danger',
+    ring: 'border-danger/30 bg-danger/10',
   },
   medium: {
     label: 'Medium severity',
     icon: AlertTriangle,
-    tone: 'text-amber-700 dark:text-amber-300',
-    ring: 'border-amber-200/70 dark:border-amber-800/60 bg-amber-50/60 dark:bg-amber-950/40',
+    tone: 'text-warning',
+    ring: 'border-warning/30 bg-warning/10',
   },
   low: {
     label: 'Low severity',
     icon: Info,
-    tone: 'text-slate-700 dark:text-slate-300',
-    ring: 'border-slate-200/70 dark:border-slate-700/60 bg-slate-50/60 dark:bg-slate-900/40',
+    tone: 'text-info',
+    ring: 'border-info/30 bg-info/10',
   },
 };
 
@@ -87,7 +87,7 @@ export function CanonViolationCard({ violation, onDispute, className }: CanonVio
               </span>
             </div>
             <p className="text-sm text-navy dark:text-white leading-snug">{violation.ruleText}</p>
-            <div className="mt-2 rounded border-l-2 border-current pl-3 py-1 text-xs italic text-muted bg-white/40 dark:bg-black/20">
+            <div className="mt-2 rounded px-3 py-1 text-xs italic text-muted bg-background-light dark:bg-navy/20">
               Line {violation.lineNumber}: &ldquo;{violation.snippet}&rdquo;
             </div>
             {violation.suggestedFix ? (

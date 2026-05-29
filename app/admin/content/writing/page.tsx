@@ -337,8 +337,8 @@ export default function AdminWritingPapersPage() {
             <div>
               <strong className="text-admin-fg-strong">Required asset roles:</strong>
               <ul className="ml-5 mt-1 list-disc space-y-1">
-                <li><code>CaseNotes</code> — learner-facing stimulus PDF.</li>
-                <li><code>ModelAnswer</code> — hidden reference answer PDF, shown only after submission through study views.</li>
+                <li><code>CaseNotes</code>: learner-facing stimulus PDF.</li>
+                <li><code>ModelAnswer</code>: hidden reference answer PDF, shown only after submission through study views.</li>
               </ul>
             </div>
             <div>

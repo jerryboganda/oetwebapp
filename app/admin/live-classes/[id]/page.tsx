@@ -125,7 +125,7 @@ function CancelSessionModal({ session, onClose, onConfirm }: CancelModalProps) {
         <DlgHeader>
           <DialogTitle>Cancel session</DialogTitle>
           <DialogDescription>
-            {session ? `${fmtDateTime(session.scheduledStartAt)} — enrolled: ${session.enrolledCount}` : ''}
+            {session ? `${fmtDateTime(session.scheduledStartAt)} · enrolled: ${session.enrolledCount}` : ''}
           </DialogDescription>
         </DlgHeader>
 
@@ -542,19 +542,19 @@ export default function AdminLiveClassDetailPage({ params }: { params: Promise<{
                 <table className="w-full min-w-[820px] text-left text-sm">
                   <thead className="border-b border-admin-border bg-admin-bg-subtle text-xs uppercase tracking-wide text-admin-fg-muted">
                     <tr>
-                      <th className="px-4 py-3">Date / Time</th>
-                      <th className="px-4 py-3">Status</th>
-                      <th className="px-4 py-3">Seats</th>
-                      <th className="px-4 py-3">Zoom meeting</th>
-                      <th className="px-4 py-3">Zoom error</th>
-                      <th className="px-4 py-3 text-right">Actions</th>
+                      <th scope="col" className="px-4 py-3">Date / Time</th>
+                      <th scope="col" className="px-4 py-3">Status</th>
+                      <th scope="col" className="px-4 py-3">Seats</th>
+                      <th scope="col" className="px-4 py-3">Zoom meeting</th>
+                      <th scope="col" className="px-4 py-3">Zoom error</th>
+                      <th scope="col" className="px-4 py-3 text-right">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-admin-border">
                     {sessions.length === 0 ? (
                       <tr>
                         <td colSpan={6} className="px-4 py-10 text-center text-admin-fg-muted">
-                          No sessions yet — add the first one.
+                          No sessions yet. Add the first one.
                         </td>
                       </tr>
                     ) : null}

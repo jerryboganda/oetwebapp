@@ -169,6 +169,8 @@ public static class ProductionProviderSafetyValidator
         if (string.IsNullOrWhiteSpace(options.ElevenLabsSttApiKey)
             || !options.RealtimeSttAllowRealProvider
             || !options.RealtimeSttRealProviderProductionAuthorized
+            || options.RealtimeSttMonthlyBudgetCapUsd <= 0
+            || options.RealtimeSttDailyAudioSecondsPerUser <= 0
             || options.RealtimeSttEstimatedCostUsdPerMinute <= 0
             || !options.RealtimeSttAssumeLearnersAdult
             || string.IsNullOrWhiteSpace(options.RealtimeSttRegionId)

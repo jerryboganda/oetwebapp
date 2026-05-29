@@ -95,7 +95,7 @@ export default function ExpertSpeakingLiveRoomPage() {
   if (loading) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
-        <span className="inline-flex items-center gap-2 text-sm text-muted-foreground">
+        <span className="inline-flex items-center gap-2 text-sm text-muted">
           <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> Preparing the tutor room…
         </span>
       </div>
@@ -125,11 +125,11 @@ export default function ExpertSpeakingLiveRoomPage() {
     <div className="mx-auto max-w-7xl space-y-4 p-4 sm:p-6">
       <header className="flex flex-wrap items-baseline justify-between gap-2">
         <div>
-          <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+          <p className="text-xs font-medium uppercase tracking-wider text-muted">
             Expert · Live tutor room
           </p>
           <h1 className="text-2xl font-bold text-foreground">{card.scenarioTitle ?? 'Speaking role-play'}</h1>
-          <p className="text-sm text-muted-foreground">
+          <p className="text-sm text-muted">
             {card.setting ?? 'Clinical setting'} · Candidate: {card.candidateRole ?? 'Candidate'}
           </p>
         </div>
@@ -166,17 +166,17 @@ export default function ExpertSpeakingLiveRoomPage() {
 
       <section className="rounded-2xl border border-border bg-surface p-4 shadow-sm">
         <div className="mb-2 flex items-center gap-2">
-          <NotebookPen className="h-4 w-4 text-muted-foreground" aria-hidden />
+          <NotebookPen className="h-4 w-4 text-muted" aria-hidden />
           <h2 className="text-sm font-semibold text-foreground">Private notes (tutor only)</h2>
         </div>
         <textarea
           value={privateNotes}
           onChange={(e) => setPrivateNotes(e.target.value)}
-          placeholder="Observations, coaching points, follow-up cues — kept on your device only."
+          placeholder="Observations, coaching points, follow-up cues. Kept on your device only."
           className="h-32 w-full resize-y rounded-md border border-border bg-surface px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
           aria-label="Tutor private notes"
         />
-        <p className="mt-1 text-xs text-muted-foreground">
+        <p className="mt-1 text-xs text-muted">
           Notes are local to this device. Use the review screen after the session for
           formal feedback that the learner will see.
         </p>

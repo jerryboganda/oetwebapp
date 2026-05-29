@@ -229,7 +229,7 @@ export default function EscalationsPage() {
                   onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') router.push(`/escalations/${esc.id}`); }}
                   role="button"
                   tabIndex={0}
-                  className="rounded-2xl border border-border bg-surface p-5 cursor-pointer hover:border-primary/30 hover:shadow-sm transition-all"
+                  className="rounded-2xl border border-border bg-surface p-5 cursor-pointer hover:border-primary/30 hover:shadow-sm transition-[color,background-color,border-color,box-shadow,transform,opacity,filter] duration-200"
                 >
                   <div className="flex items-start justify-between gap-4">
                     <div className="min-w-0 flex-1 space-y-1">

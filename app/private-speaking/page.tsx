@@ -375,14 +375,14 @@ export default function PrivateSpeakingPage() {
         </div>
       </div>
 
-      {error && <InlineAlert variant="warning" className="mb-4">{error}<button onClick={() => setError(null)} className="ml-2"><X className="w-4 h-4 inline" /></button></InlineAlert>}
+      {error && <InlineAlert variant="warning" className="mb-4">{error}<button onClick={() => setError(null)} aria-label="Dismiss error" className="ml-2"><X className="w-4 h-4 inline" aria-hidden /></button></InlineAlert>}
 
       {/* View mode toggle */}
       <div className="flex gap-2 mb-6">
-        <button onClick={() => setViewMode('browse')} className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${viewMode === 'browse' ? 'bg-primary text-white' : 'bg-background-light text-muted hover:bg-border'}`}>
+        <button onClick={() => setViewMode('browse')} className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${viewMode === 'browse' ? 'bg-primary text-white dark:bg-violet-700' : 'bg-background-light text-muted hover:bg-border'}`}>
           Browse Slots
         </button>
-        <button onClick={() => setViewMode('bookings')} className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${viewMode === 'bookings' ? 'bg-primary text-white' : 'bg-background-light text-muted hover:bg-border'}`}>
+        <button onClick={() => setViewMode('bookings')} className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${viewMode === 'bookings' ? 'bg-primary text-white dark:bg-violet-700' : 'bg-background-light text-muted hover:bg-border'}`}>
           My Bookings {bookings.length > 0 && <span className="ml-1 bg-white/20 px-1.5 rounded-full text-xs">{bookings.length}</span>}
         </button>
       </div>
@@ -394,13 +394,15 @@ export default function PrivateSpeakingPage() {
           <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 mb-5">
             <div className="flex items-center gap-2">
               <button onClick={() => setWeekOffset(Math.max(0, weekOffset - 1))} disabled={weekOffset === 0}
+                aria-label="Previous week"
                 className="p-2.5 rounded-lg border border-border hover:bg-background-light disabled:opacity-30 transition-colors">
-                <ChevronLeft className="w-4 h-4" />
+                <ChevronLeft className="w-4 h-4" aria-hidden />
               </button>
               <span className="text-sm font-medium text-navy min-w-[200px] text-center">{weekLabel}</span>
               <button onClick={() => setWeekOffset(weekOffset + 1)}
+                aria-label="Next week"
                 className="p-2.5 rounded-lg border border-border hover:bg-background-light transition-colors">
-                <ChevronRight className="w-4 h-4" />
+                <ChevronRight className="w-4 h-4" aria-hidden />
               </button>
             </div>
             <select value={selectedTutor ?? ''} onChange={e => setSelectedTutor(e.target.value || null)}
@@ -443,7 +445,7 @@ export default function PrivateSpeakingPage() {
             <div className="space-y-3"><Skeleton className="h-32 rounded-xl" /><Skeleton className="h-32 rounded-xl" /></div>
           ) : Object.keys(slotsByDate).length === 0 ? (
             <div className="text-center py-12 text-muted/60">
-              <Calendar className="w-10 h-10 mx-auto mb-3 opacity-30" />
+              <Calendar className="w-10 h-10 mx-auto mb-3 opacity-30" aria-hidden />
               <p>No available slots this week. Try another week or tutor.</p>
             </div>
           ) : (
@@ -459,7 +461,7 @@ export default function PrivateSpeakingPage() {
                       return (
                         <button key={`${slot.tutorProfileId}-${slot.startTimeUtc}-${i}`}
                           onClick={() => setSelectedSlot(isSelected ? null : slot)}
-                          className={`p-3 rounded-lg border text-left transition-all text-sm ${
+                          className={`p-3 rounded-lg border text-left transition-[color,background-color,border-color,box-shadow,transform,opacity,filter] duration-200 text-sm ${
                             isSelected
                               ? 'border-primary bg-primary/10 ring-2 ring-primary/30'
                               : 'border-border bg-surface hover:border-primary/30'
@@ -483,7 +485,7 @@ export default function PrivateSpeakingPage() {
             <MotionSection className="fixed bottom-[calc(var(--bottom-nav-height)+0.5rem)] lg:bottom-6 left-4 right-4 sm:left-auto sm:right-6 sm:max-w-md bg-surface rounded-xl border border-primary/30 shadow-2xl p-5 z-40">
               <div className="flex items-center justify-between mb-3">
                 <h3 className="font-semibold text-navy">{rescheduleTarget ? 'Confirm Reschedule' : 'Confirm Booking'}</h3>
-                <button onClick={() => { setSelectedSlot(null); setRescheduleTarget(null); }} className="text-muted/60 hover:text-muted"><X className="w-5 h-5" /></button>
+                <button onClick={() => { setSelectedSlot(null); setRescheduleTarget(null); }} aria-label="Close booking panel" className="text-muted/60 hover:text-muted"><X className="w-5 h-5" aria-hidden /></button>
               </div>
               <div className="space-y-2 text-sm text-muted mb-4">
                 <div className="flex items-center gap-2"><User className="w-4 h-4 text-muted/60" /> {selectedSlot.tutorDisplayName}</div>
@@ -499,7 +501,7 @@ export default function PrivateSpeakingPage() {
                 className="w-full px-3 py-2 border border-border rounded-lg text-sm bg-surface text-navy resize-none focus:outline-none focus:ring-2 focus:ring-primary/40 mb-3"
               />
               <button onClick={rescheduleTarget ? handleReschedule : handleBook} disabled={bookingInProgress || (!rescheduleTarget && (entitlementRemaining ?? 0) <= 0)}
-                className="w-full px-5 py-2.5 bg-primary hover:bg-primary/90 text-white rounded-lg text-sm font-medium disabled:opacity-50 transition-colors">
+                className="w-full px-5 py-2.5 bg-primary hover:bg-primary/90 active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600 text-white rounded-lg text-sm font-medium disabled:opacity-50 transition-[color,background-color,transform] duration-200">
                 {bookingInProgress ? 'Processing...' : rescheduleTarget ? 'Confirm Reschedule' : 'Use Session Credit & Book'}
               </button>
               <p className="text-xs text-muted/60 text-center mt-2">
@@ -516,7 +518,7 @@ export default function PrivateSpeakingPage() {
           <LearnerSurfaceSectionHeader title="Your Bookings" />
           {bookings.length === 0 ? (
             <div className="text-center py-12 text-muted/60">
-              <Mic className="w-10 h-10 mx-auto mb-3 opacity-30" />
+              <Mic className="w-10 h-10 mx-auto mb-3 opacity-30" aria-hidden />
               <p>No bookings yet. Browse available slots to get started.</p>
             </div>
           ) : (

@@ -150,7 +150,7 @@ export function NotePanel({
     <>
       {/* Backdrop */}
       <div
-        className="fixed inset-0 z-40 bg-black/20"
+        className="fixed inset-0 z-40 bg-navy/20"
         aria-hidden="true"
         onClick={onClose}
       />
@@ -200,7 +200,7 @@ export function NotePanel({
               type="button"
               disabled={saving || draftText.trim().length === 0}
               onClick={() => void handleSave()}
-              className="rounded-lg bg-primary px-4 py-1.5 text-sm font-semibold text-white transition-colors hover:bg-primary/90 disabled:opacity-50"
+              className="rounded-lg bg-primary px-4 py-1.5 text-sm font-semibold text-white transition-[color,background-color,transform] duration-200 hover:bg-primary/90 active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600 disabled:opacity-50"
             >
               {saving ? (
                 <Loader2 className="h-4 w-4 animate-spin" />

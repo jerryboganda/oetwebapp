@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import ReviewPage from '../review/page';
 
 export const metadata: Metadata = {
-  title: 'Reviews — OET Prep',
+  title: 'Reviews | OET Prep',
   description: 'Track tutor review requests and returned feedback across your attempts.',
 };
 

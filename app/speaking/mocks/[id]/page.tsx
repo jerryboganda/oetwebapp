@@ -398,7 +398,7 @@ export default function SpeakingMockSetOrchestratorPage({ params }: Props) {
             <div className="flex flex-wrap items-center gap-3">
               <Badge variant="info">{session.combined.readinessBandLabel}</Badge>
               <span className="text-sm text-muted">
-                Estimated <strong className="text-foreground">{session.combined.estimatedScaledScore ?? '—'}/500</strong> · pass threshold {session.combined.passThreshold}
+                Estimated <strong className="text-foreground">{session.combined.estimatedScaledScore ?? '–'}/500</strong> · pass threshold {session.combined.passThreshold}
               </span>
             </div>
             <p className="mt-3 text-sm text-muted">

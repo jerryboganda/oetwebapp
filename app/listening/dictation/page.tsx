@@ -210,12 +210,12 @@ export default function DictationDrillPage() {
           <p className="mb-1 text-xs font-semibold uppercase tracking-widest text-violet-500">
             Phase 4 · Listening pathway
           </p>
-          <h1 className="text-2xl font-bold text-neutral-900 dark:text-white">
+          <h1 className="text-2xl font-bold text-navy">
             Dictation Drills
           </h1>
-          <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">
+          <p className="mt-1 text-sm text-muted">
             Train your ear and your spelling at the same time. We grade healthcare
-            vocabulary with typo tolerance — but every correct keystroke counts.
+            vocabulary with typo tolerance, and every correct keystroke counts.
           </p>
         </section>
 
@@ -299,7 +299,7 @@ function StatsStrip({ stats, loading }: { stats: DictationStats | null; loading:
         {[0, 1, 2, 3].map((i) => (
           <div
             key={i}
-            className="h-24 animate-pulse rounded-xl border border-neutral-200 bg-neutral-100 dark:border-neutral-700 dark:bg-neutral-800"
+            className="h-24 motion-safe:animate-pulse rounded-xl border border-border bg-border/40"
           />
         ))}
       </div>
@@ -326,24 +326,24 @@ function StatsStrip({ stats, loading }: { stats: DictationStats | null; loading:
 
 function IdlePanel({ onStart, hasHistory }: { onStart: () => void; hasHistory: boolean }) {
   return (
-    <section className="rounded-2xl border border-neutral-200 bg-white px-8 py-10 text-center dark:border-neutral-800 dark:bg-neutral-900">
+    <section className="rounded-2xl border border-border bg-surface px-8 py-10 text-center">
       <Headphones className="mx-auto h-12 w-12 text-violet-500" aria-hidden />
-      <h2 className="mt-4 text-xl font-bold text-neutral-900 dark:text-white">
+      <h2 className="mt-4 text-xl font-bold text-navy">
         {hasHistory ? 'Ready for another set?' : 'Start your first dictation set'}
       </h2>
-      <p className="mx-auto mt-2 max-w-md text-sm text-neutral-500 dark:text-neutral-400">
-        We&apos;ll play 8 short healthcare clips. Type what you hear — single terms,
+      <p className="mx-auto mt-2 max-w-md text-sm text-muted">
+        We&apos;ll play 8 short healthcare clips. Type what you hear: single terms,
         short phrases, full sentences. Mix of due reviews and fresh drills.
       </p>
       <button
         type="button"
         onClick={onStart}
-        className="mt-6 inline-flex items-center gap-2 rounded-xl bg-violet-600 px-6 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-violet-700 active:scale-95"
+        className="mt-6 inline-flex items-center gap-2 rounded-xl bg-primary px-6 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-primary-dark dark:bg-violet-700 dark:hover:bg-violet-600 active:scale-95"
       >
         <Play className="h-4 w-4" aria-hidden />
         Start a dictation set
       </button>
-      <p className="mt-3 text-xs text-neutral-400 dark:text-neutral-500">
+      <p className="mt-3 text-xs text-muted">
         Takes about 8&ndash;10 minutes.
       </p>
     </section>
@@ -352,8 +352,8 @@ function IdlePanel({ onStart, hasHistory }: { onStart: () => void; hasHistory: b
 
 function StartingPanel() {
   return (
-    <section className="flex h-48 items-center justify-center rounded-2xl border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-900">
-      <div className="flex items-center gap-3 text-sm text-neutral-500 dark:text-neutral-400">
+    <section className="flex h-48 items-center justify-center rounded-2xl border border-border bg-surface">
+      <div className="flex items-center gap-3 text-sm text-muted">
         <Loader2 className="h-5 w-5 animate-spin" aria-hidden />
         Loading your dictation set…
       </div>
@@ -399,14 +399,14 @@ function DrillPanel({
   result,
 }: DrillPanelProps) {
   return (
-    <section className="space-y-6 rounded-2xl border border-neutral-200 bg-white px-8 py-8 dark:border-neutral-800 dark:bg-neutral-900">
+    <section className="space-y-6 rounded-2xl border border-border bg-surface px-8 py-8">
       <div className="flex items-center justify-between">
-        <span className="text-xs font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
+        <span className="text-xs font-semibold uppercase tracking-wide text-muted">
           Drill {index + 1} of {total} · {humaniseDrillType(drill.drillType)} · {drill.accent}
         </span>
-        <div className="h-1.5 w-32 overflow-hidden rounded-full bg-neutral-200 dark:bg-neutral-800">
+        <div className="h-1.5 w-32 overflow-hidden rounded-full bg-border">
           <div
-            className="h-full bg-violet-500 transition-all"
+            className="h-full bg-primary transition-[width,background-color] duration-300"
             style={{ width: `${((index + (phase === 'reviewing' ? 1 : 0)) / total) * 100}%` }}
           />
         </div>
@@ -419,12 +419,12 @@ function DrillPanel({
             <button
               type="button"
               onClick={onAudioPlay}
-              className="flex h-16 w-16 items-center justify-center rounded-full bg-violet-600 text-white shadow-md transition hover:bg-violet-700 active:scale-95"
+              className="flex h-16 w-16 items-center justify-center rounded-full bg-primary text-white shadow-md transition-colors hover:bg-primary-dark dark:bg-violet-700 dark:hover:bg-violet-600 active:scale-95"
               aria-label={audioPlaying ? 'Pause clip' : 'Play clip'}
             >
               {audioPlaying ? <Pause className="h-7 w-7" /> : <Play className="h-7 w-7 ml-0.5" />}
             </button>
-            <p className="text-xs text-neutral-500 dark:text-neutral-400">
+            <p className="text-xs text-muted">
               {drill.durationSeconds}s clip · Tap to {audioPlaying ? 'pause' : 'replay'} as
               needed
             </p>
@@ -438,15 +438,15 @@ function DrillPanel({
             />
           </>
         ) : (
-          <p className="text-sm italic text-neutral-500 dark:text-neutral-400">
-            Audio asset missing for this drill — please report.
+          <p className="text-sm italic text-muted">
+            Audio asset missing for this drill. Please report it.
           </p>
         )}
       </div>
 
       {/* Answer input */}
       <div className="space-y-2">
-        <label htmlFor="dictation-input" className="text-sm font-semibold text-neutral-700 dark:text-neutral-200">
+        <label htmlFor="dictation-input" className="text-sm font-semibold text-navy">
           Type what you hear
         </label>
         <input
@@ -463,11 +463,11 @@ function DrillPanel({
           }}
           disabled={phase === 'reviewing'}
           placeholder="Listen, then type your answer…"
-          className="w-full rounded-xl border border-neutral-200 bg-neutral-50 px-4 py-3 text-base text-neutral-900 placeholder:text-neutral-400 focus:border-violet-400 focus:outline-none focus:ring-2 focus:ring-violet-200 disabled:opacity-70 dark:border-neutral-700 dark:bg-neutral-800 dark:text-white dark:placeholder:text-neutral-500"
+          className="w-full rounded-xl border border-border bg-background-light px-4 py-3 text-base text-navy placeholder:text-muted focus:border-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 disabled:opacity-70"
         />
         {phase === 'attempting' && secondsOnDrill >= HINT_AFTER_SECONDS && (
           <p className="text-xs text-amber-600 dark:text-amber-400">
-            Stuck? Replay the clip a few times — listening twice through often helps more than thinking harder.
+            Stuck? Replay the clip a few times. Listening twice through often helps more than thinking harder.
           </p>
         )}
       </div>
@@ -482,7 +482,7 @@ function DrillPanel({
             type="button"
             onClick={onSubmit}
             disabled={submitting || answer.trim().length === 0}
-            className="inline-flex items-center gap-2 rounded-xl bg-violet-600 px-6 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex items-center gap-2 rounded-xl bg-primary px-6 py-2.5 text-sm font-semibold text-white shadow-sm transition-[color,background-color,transform] duration-200 hover:bg-primary-dark active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
             {submitting ? 'Checking…' : 'Submit'}
@@ -491,7 +491,7 @@ function DrillPanel({
           <button
             type="button"
             onClick={onNext}
-            className="inline-flex items-center gap-2 rounded-xl bg-violet-600 px-6 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-violet-700 active:scale-95"
+            className="inline-flex items-center gap-2 rounded-xl bg-primary px-6 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-primary-dark dark:bg-violet-700 dark:hover:bg-violet-600 active:scale-95"
           >
             {index + 1 === total ? 'Finish set' : 'Next drill'}
           </button>
@@ -530,7 +530,7 @@ function ReviewBlock({ result }: { result: DictationResult }) {
               Did you mean &ldquo;{result.correctAnswer}&rdquo;?
             </p>
             <p className="text-sm text-amber-800 dark:text-amber-200/80">
-              Very close — a one-letter slip. We&apos;ll resurface this one soon so you can
+              Very close, just a one-letter slip. We&apos;ll resurface this one soon so you can
               nail the spelling.
             </p>
             <SpellingDiffLine canonical={result.correctAnswer} typed={result.learnerAnswer} />
@@ -571,13 +571,13 @@ function SpellingDiffLine({ canonical, typed }: { canonical: string; typed: stri
   const cells = useMemo(() => buildDiffCells(canonical, typed), [canonical, typed]);
   return (
     <p className="font-mono text-xs">
-      <span className="text-neutral-500">Yours: </span>
+      <span className="text-muted">Yours: </span>
       {cells.map((cell, i) => (
         <span
           key={i}
           className={
             cell.kind === 'equal'
-              ? 'text-neutral-700 dark:text-neutral-300'
+              ? 'text-navy'
               : 'text-rose-700 underline decoration-rose-400 dark:text-rose-300'
           }
         >
@@ -633,13 +633,13 @@ function CompletePanel({
     >
       <Trophy className="mx-auto h-12 w-12 text-violet-500" aria-hidden />
       <div>
-        <h2 className="text-2xl font-bold text-neutral-900 dark:text-white">
+        <h2 className="text-2xl font-bold text-navy">
           Set complete!
         </h2>
-        <p className="mt-2 text-3xl font-bold text-neutral-900 dark:text-white">
+        <p className="mt-2 text-3xl font-bold text-navy">
           {correct} correct / {total}
         </p>
-        <p className="mt-1 text-sm text-neutral-600 dark:text-neutral-300">
+        <p className="mt-1 text-sm text-muted">
           {score}% accuracy on this set
         </p>
       </div>
@@ -647,7 +647,7 @@ function CompletePanel({
         <button
           type="button"
           onClick={onAgain}
-          className="inline-flex items-center gap-2 rounded-xl bg-violet-600 px-6 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-violet-700 active:scale-95"
+          className="inline-flex items-center gap-2 rounded-xl bg-primary px-6 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-primary-dark dark:bg-violet-700 dark:hover:bg-violet-600 active:scale-95"
         >
           <RefreshCw className="h-4 w-4" aria-hidden />
           Continue practicing
@@ -655,13 +655,13 @@ function CompletePanel({
         <button
           type="button"
           onClick={onRestart}
-          className="inline-flex items-center gap-2 rounded-xl border border-neutral-200 bg-white px-6 py-3 text-sm font-semibold text-neutral-700 transition hover:bg-neutral-50 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-300"
+          className="inline-flex items-center gap-2 rounded-xl border border-border bg-surface px-6 py-3 text-sm font-semibold text-navy transition-colors hover:bg-background-light"
         >
           Back to start
         </button>
         <Link
           href="/listening"
-          className="inline-flex items-center gap-2 rounded-xl border border-neutral-200 bg-white px-6 py-3 text-sm font-semibold text-neutral-700 transition hover:bg-neutral-50 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-300"
+          className="inline-flex items-center gap-2 rounded-xl border border-border bg-surface px-6 py-3 text-sm font-semibold text-navy transition-colors hover:bg-background-light"
         >
           Listening hub
         </Link>

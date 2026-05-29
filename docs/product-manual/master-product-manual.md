@@ -234,8 +234,8 @@ These rules are product behavior, not implementation trivia. The verbatim engine
 
 1. Learner opens a Reading paper/practice task or Listening player.
 2. Learner submits objective answers.
-3. Results expose scores and review data that must be reconciled against PM-001 before release sign-off.
-4. Reading feeds paper/practice analytics while answer-key-only review exposure remains PM-001-tracked.
+3. Results expose scores and learner-safe review data; PM-001 was reconciled locally on 2026-05-29 by redacting answer-key-only review fields.
+4. Reading feeds paper/practice analytics while answer-key-only content remains server-side/admin-only.
 5. Listening feeds transcript-backed review, drills, pathway, and analytics.
 6. Admin authoring, policy, and analytics surfaces govern future content quality.
 

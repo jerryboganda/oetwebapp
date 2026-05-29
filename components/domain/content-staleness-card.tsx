@@ -33,7 +33,7 @@ export default function ContentStalenessCard({ assessment, onRefresh, onArchive 
     <Card className="border-border bg-surface p-5">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h3 className="text-sm font-bold text-navy">{assessment.title}</h3>
+          <h3 className="text-sm font-bold text-admin-fg-strong">{assessment.title}</h3>
           <p className="text-xs text-muted mt-1">
             Last published {assessment.daysSinceLastEdit} days ago
             {assessment.daysSinceLastUsage !== null && (

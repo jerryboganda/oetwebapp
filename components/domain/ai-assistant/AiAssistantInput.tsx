@@ -54,7 +54,7 @@ export function AiAssistantInput({ onSend, onCancel, isStreaming, disabled = fal
           <button
             onClick={handleSend}
             disabled={!value.trim() || disabled}
-            className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary text-white hover:bg-primary-dark disabled:opacity-50"
+            className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary text-white hover:bg-primary-dark active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600 disabled:opacity-50"
             aria-label="Send message"
           >
             <Send className="h-4 w-4" />

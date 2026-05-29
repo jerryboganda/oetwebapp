@@ -361,7 +361,7 @@ export default function ExpertPrivateSpeakingPage() {
                       <div className="flex items-center gap-2">
                         {(session.status === 'ZoomCreated' || session.status === 'InProgress') && (
                           <button onClick={() => handleStartSession(session)} disabled={startingSessionId === session.id}
-                            className="flex items-center gap-1.5 px-4 py-2 bg-primary hover:bg-primary/90 text-white rounded-lg text-sm font-medium disabled:opacity-50">
+                            className="flex items-center gap-1.5 px-4 py-2 bg-primary hover:bg-primary/90 active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600 text-white rounded-lg text-sm font-medium disabled:opacity-50">
                             <Video className="w-4 h-4" /> {startingSessionId === session.id ? 'Opening...' : 'Start'}
                           </button>
                         )}
@@ -467,7 +467,7 @@ export default function ExpertPrivateSpeakingPage() {
 
       {/* ── Cancel Confirmation Dialog ────────────── */}
       {cancelTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-navy/40 backdrop-blur-sm">
           <div className="w-full max-w-md rounded-2xl border border-border bg-surface p-6 shadow-xl">
             <h3 className="text-lg font-bold text-navy mb-2">Cancel Session</h3>
             <p className="text-sm text-muted mb-4">

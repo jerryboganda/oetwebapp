@@ -27,7 +27,7 @@ export default function AccountPaymentMethodsPage() {
         </p>
       </header>
 
-      <div className="rounded-2xl border border-border bg-background p-6 shadow-sm">
+      <div className="rounded-2xl border border-border bg-surface p-6 shadow-sm">
         <div className="flex items-start gap-3">
           <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
             <CreditCard className="h-5 w-5" aria-hidden="true" />
@@ -45,7 +45,7 @@ export default function AccountPaymentMethodsPage() {
 
       <div className="rounded-2xl border border-border bg-surface p-5 text-sm text-muted">
         <div className="flex items-start gap-2">
-          <ShieldCheck className="mt-0.5 h-4 w-4 flex-none text-emerald-700" aria-hidden="true" />
+          <ShieldCheck className="mt-0.5 h-4 w-4 flex-none text-success" aria-hidden="true" />
           <p>
             All payments are encrypted in transit and tokenised by Stripe. We never see your full
             card number or CVV. For receipts and past charges, see your{' '}

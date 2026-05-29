@@ -60,8 +60,8 @@ function optionLabel(option: unknown): string {
 function LoadingSpinner({ label }: { label: string }) {
   return (
     <div className="flex flex-col items-center gap-4">
-      <div className="h-10 w-10 animate-spin rounded-full border-4 border-violet-200 border-t-violet-600" />
-      <p className="text-sm text-gray-500">{label}</p>
+      <div className="h-10 w-10 motion-safe:animate-spin rounded-full border-4 border-violet-200 border-t-violet-600" />
+      <p className="text-sm text-muted">{label}</p>
     </div>
   );
 }
@@ -169,27 +169,25 @@ export default function DiagnosticPage() {
   }
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-gradient-to-b from-violet-50 to-white dark:from-slate-900 dark:to-slate-950 px-4 py-12">
+    <div className="flex min-h-screen flex-col items-center justify-center bg-background-light px-4 py-12">
       <div className="w-full max-w-2xl">
         {/* Brief state */}
         {flowState === 'brief' && (
-          <div className="rounded-2xl border border-gray-100 bg-white dark:bg-slate-800 dark:border-slate-700 p-8 shadow-sm">
+          <div className="rounded-2xl border border-border bg-surface p-8 shadow-sm">
             <div className="mb-6 text-center">
-              <div className="mb-3 inline-flex h-14 w-14 items-center justify-center rounded-full bg-violet-100 text-violet-600">
-                <span className="text-2xl">📋</span>
-              </div>
-              <h1 className="text-2xl font-extrabold text-gray-900">Diagnostic Assessment</h1>
+              <span className="mb-3 block text-4xl" aria-hidden="true">📋</span>
+              <h1 className="text-2xl font-extrabold text-navy">Diagnostic Assessment</h1>
             </div>
-            <p className="mb-4 text-center text-gray-600">
+            <p className="mb-4 text-center text-muted">
               22 questions across all 3 parts (Part A, B, C). This helps us build your
               personalised plan.
             </p>
-            <p className="mb-8 text-center text-sm text-gray-400">
+            <p className="mb-8 text-center text-sm text-muted">
               Takes approximately 25 minutes.
             </p>
 
             {startError && (
-              <p className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-center text-sm text-red-700">
+              <p className="mb-4 rounded-xl border border-danger/30 bg-danger/10 px-4 py-3 text-center text-sm text-danger">
                 {startError}
               </p>
             )}
@@ -197,9 +195,9 @@ export default function DiagnosticPage() {
             <button
               type="button"
               onClick={handleStart}
-              className="w-full rounded-xl bg-violet-600 py-4 text-base font-bold text-white transition hover:bg-violet-700 active:scale-95"
+              className="w-full rounded-xl bg-primary py-4 text-base font-bold text-white transition-colors hover:bg-primary-dark dark:bg-violet-700 dark:hover:bg-violet-600 active:scale-95"
             >
-              I&apos;m ready — start diagnostic
+              I&apos;m ready, start diagnostic
             </button>
           </div>
         )}
@@ -217,57 +215,57 @@ export default function DiagnosticPage() {
         {flowState === 'testing' && currentQuestion && (
           <div className="space-y-6">
             {/* Header bar */}
-            <div className="flex items-center justify-between rounded-xl border border-violet-100 bg-white px-5 py-3 shadow-sm">
-              <span className="text-sm font-semibold text-gray-700">
+            <div className="flex items-center justify-between rounded-xl border border-violet-100 bg-surface px-5 py-3 shadow-sm">
+              <span className="text-sm font-semibold text-navy">
                 Question {currentIndex + 1} of {totalQuestions}
               </span>
               <div className="flex items-center gap-2">
-                <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-bold text-gray-700">
+                <span className="rounded-full bg-background-light px-3 py-1 text-xs font-bold text-muted">
                   Part {currentQuestion.partCode || 'Reading'}
                 </span>
-                <span className="rounded-full bg-violet-100 px-3 py-1 text-xs font-bold text-violet-700">
+                <span className="rounded-full bg-lavender px-3 py-1 text-xs font-bold text-primary">
                   {timerLabel}
                 </span>
               </div>
             </div>
 
             {/* Progress bar */}
-            <div className="h-1.5 w-full overflow-hidden rounded-full bg-gray-100">
+            <div className="h-1.5 w-full overflow-hidden rounded-full bg-border">
               <div
-                className="h-full rounded-full bg-violet-600 transition-all duration-300"
+                className="h-full rounded-full bg-primary transition-[width] duration-300"
                 style={{ width: `${((currentIndex + 1) / totalQuestions) * 100}%` }}
               />
             </div>
 
             {/* Passage card */}
             {currentQuestion.textHtml && (
-              <div className="max-h-80 overflow-auto rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
+              <div className="max-h-80 overflow-auto rounded-2xl border border-border bg-surface p-6 shadow-sm">
                 {currentQuestion.textTitle && (
-                  <h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-gray-500">
+                  <h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-muted">
                     {currentQuestion.textTitle}
                   </h2>
                 )}
                 <div
-                  className="prose prose-sm max-w-none text-gray-700"
+                  className="prose prose-sm max-w-[70ch] text-navy"
                   dangerouslySetInnerHTML={{ __html: sanitizeBodyHtml(currentQuestion.textHtml) }}
                 />
               </div>
             )}
 
             {/* Question card */}
-            <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
-              <p className="mb-6 text-base font-medium text-gray-900 leading-relaxed">
+            <div className="rounded-2xl border border-border bg-surface p-6 shadow-sm">
+              <p className="mb-6 text-base font-medium text-navy leading-relaxed">
                 {currentQuestion.stem}
               </p>
 
               {expectsTextAnswer ? (
                 <label className="block">
-                  <span className="mb-2 block text-sm font-semibold text-gray-700">Your answer</span>
+                  <span className="mb-2 block text-sm font-semibold text-navy">Your answer</span>
                   <input
                     type="text"
                     value={selectedOption === '__unknown__' ? '' : selectedOption ?? ''}
                     onChange={(event) => selectOption(event.target.value)}
-                    className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm text-gray-900 focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-200"
+                    className="w-full rounded-xl border border-border px-4 py-3 text-sm text-navy focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
                   />
                 </label>
               ) : (
@@ -279,15 +277,15 @@ export default function DiagnosticPage() {
                       onClick={() => selectOption(key)}
                       className={`flex w-full items-center gap-3 rounded-xl border px-4 py-3 text-sm text-left transition-colors ${
                         selectedOption === key
-                          ? 'border-violet-600 bg-violet-50 text-violet-900'
-                          : 'border-gray-200 bg-white text-gray-700 hover:border-violet-200 hover:bg-violet-50/50'
+                          ? 'border-primary bg-lavender text-primary'
+                          : 'border-border bg-surface text-navy hover:border-primary/40 hover:bg-lavender/40'
                       }`}
                     >
                       <span
                         className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full border text-xs font-bold ${
                           selectedOption === key
-                            ? 'border-violet-600 bg-violet-600 text-white'
-                            : 'border-gray-300 text-gray-500'
+                            ? 'border-primary bg-primary text-white dark:bg-violet-700'
+                            : 'border-border text-muted'
                         }`}
                       >
                         {key}
@@ -304,7 +302,7 @@ export default function DiagnosticPage() {
               <button
                 type="button"
                 onClick={markUnknown}
-                className="rounded-xl border border-gray-200 px-5 py-3 text-sm font-semibold text-gray-500 transition hover:bg-gray-50"
+                className="rounded-xl border border-border px-5 py-3 text-sm font-semibold text-muted transition-colors hover:bg-background-light"
               >
                 I don&apos;t know
               </button>
@@ -313,7 +311,7 @@ export default function DiagnosticPage() {
                 <button
                   type="button"
                   onClick={handleNext}
-                  className="flex-1 rounded-xl bg-violet-600 py-3 text-sm font-bold text-white transition hover:bg-violet-700"
+                  className="flex-1 rounded-xl bg-primary py-3 text-sm font-bold text-white transition-[color,background-color,transform] duration-200 hover:bg-primary-dark active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600"
                 >
                   Next
                 </button>
@@ -321,7 +319,7 @@ export default function DiagnosticPage() {
                 <button
                   type="button"
                   onClick={handleFinish}
-                  className="flex-1 rounded-xl bg-violet-600 py-3 text-sm font-bold text-white transition hover:bg-violet-700"
+                  className="flex-1 rounded-xl bg-primary py-3 text-sm font-bold text-white transition-[color,background-color,transform] duration-200 hover:bg-primary-dark active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600"
                 >
                   Finish Diagnostic
                 </button>

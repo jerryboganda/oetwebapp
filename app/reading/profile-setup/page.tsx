@@ -57,17 +57,17 @@ function StepIndicator({ current, total }: { current: number; total: number }) {
           <div
             className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-bold transition-colors ${
               step < current
-                ? 'bg-violet-600 text-white'
+                ? 'bg-primary text-white dark:bg-violet-700'
                 : step === current
-                  ? 'border-2 border-violet-600 bg-white text-violet-600'
-                  : 'border-2 border-gray-200 bg-white text-gray-400'
+                  ? 'border-2 border-primary bg-surface text-primary'
+                  : 'border-2 border-border bg-surface text-muted'
             }`}
           >
             {step < current ? '✓' : step}
           </div>
           {step < total && (
             <div
-              className={`h-0.5 flex-1 transition-colors ${step < current ? 'bg-violet-600' : 'bg-gray-200'}`}
+              className={`h-0.5 flex-1 transition-colors ${step < current ? 'bg-primary' : 'bg-border'}`}
             />
           )}
         </div>
@@ -92,8 +92,8 @@ export default function ProfileSetupPage() {
 
   if (authLoading || !isAuthenticated) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-gradient-to-b from-violet-50 to-white dark:from-slate-900 dark:to-slate-950 px-4">
-        <div className="h-8 w-8 animate-spin rounded-full border-4 border-violet-200 border-t-violet-600" />
+      <div className="flex min-h-screen items-center justify-center bg-background-light px-4">
+        <div className="h-8 w-8 motion-safe:animate-spin rounded-full border-4 border-violet-200 border-t-violet-600" />
       </div>
     );
   }
@@ -128,23 +128,23 @@ export default function ProfileSetupPage() {
   };
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-gradient-to-b from-violet-50 to-white dark:from-slate-900 dark:to-slate-950 px-4 py-16">
+    <div className="flex min-h-screen flex-col items-center justify-center bg-background-light px-4 py-16">
       <div className="w-full max-w-lg">
         <div className="mb-6 text-center">
-          <h1 className="text-2xl font-extrabold text-gray-900">Set Up Your Profile</h1>
-          <p className="mt-1 text-sm text-gray-500">Step {step} of 3</p>
+          <h1 className="text-2xl font-extrabold text-navy">Set Up Your Profile</h1>
+          <p className="mt-1 text-sm text-muted">Step {step} of 3</p>
         </div>
 
         <StepIndicator current={step} total={3} />
 
-        <div className="rounded-2xl border border-gray-100 bg-white dark:bg-slate-800 dark:border-slate-700 p-8 shadow-sm">
+        <div className="rounded-2xl border border-border bg-surface p-8 shadow-sm">
           {step === 1 && (
             <div className="space-y-6">
-              <h2 className="text-lg font-bold text-gray-900">Your Goals</h2>
+              <h2 className="text-lg font-bold text-navy">Your Goals</h2>
 
               {/* Target band */}
               <div>
-                <label className="mb-2 block text-sm font-semibold text-gray-700">
+                <label className="mb-2 block text-sm font-semibold text-navy">
                   Target Band (OET scale)
                 </label>
                 <div className="grid grid-cols-3 gap-2">
@@ -155,8 +155,8 @@ export default function ProfileSetupPage() {
                       onClick={() => update('targetBand', band.value)}
                       className={`rounded-xl border py-3 text-sm font-bold transition-colors ${
                         form.targetBand === band.value
-                          ? 'border-violet-600 bg-violet-600 text-white'
-                          : 'border-gray-200 bg-white text-gray-700 hover:border-violet-300'
+                          ? 'border-primary bg-primary text-white dark:bg-violet-700'
+                          : 'border-border bg-surface text-navy hover:border-primary/40'
                       }`}
                     >
                       <span className="block">{band.label}</span>
@@ -170,16 +170,16 @@ export default function ProfileSetupPage() {
               <div>
                 <label
                   htmlFor="examDate"
-                  className="mb-2 block text-sm font-semibold text-gray-700"
+                  className="mb-2 block text-sm font-semibold text-navy"
                 >
-                  Exam Date <span className="font-normal text-gray-400">(optional)</span>
+                  Exam Date <span className="font-normal text-muted">(optional)</span>
                 </label>
                 <input
                   id="examDate"
                   type="date"
                   value={form.examDate}
                   onChange={(e) => update('examDate', e.target.value)}
-                  className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm text-gray-900 focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-200"
+                  className="w-full rounded-xl border border-border px-4 py-3 text-sm text-navy focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
                 />
               </div>
 
@@ -187,10 +187,10 @@ export default function ProfileSetupPage() {
               <div>
                 <label
                   htmlFor="hoursPerWeek"
-                  className="mb-2 flex items-center justify-between text-sm font-semibold text-gray-700"
+                  className="mb-2 flex items-center justify-between text-sm font-semibold text-navy"
                 >
                   <span>Hours per week</span>
-                  <span className="rounded-full bg-violet-100 px-3 py-0.5 text-violet-700">
+                  <span className="rounded-full bg-lavender px-3 py-0.5 text-primary">
                     {form.hoursPerWeek} hrs
                   </span>
                 </label>
@@ -201,9 +201,9 @@ export default function ProfileSetupPage() {
                   max={20}
                   value={form.hoursPerWeek}
                   onChange={(e) => update('hoursPerWeek', Number(e.target.value))}
-                  className="w-full accent-violet-600"
+                  className="w-full accent-primary"
                 />
-                <div className="mt-1 flex justify-between text-xs text-gray-400">
+                <div className="mt-1 flex justify-between text-xs text-muted">
                   <span>1 hr</span>
                   <span>20 hrs</span>
                 </div>
@@ -213,11 +213,11 @@ export default function ProfileSetupPage() {
 
           {step === 2 && (
             <div className="space-y-6">
-              <h2 className="text-lg font-bold text-gray-900">Your Background</h2>
+              <h2 className="text-lg font-bold text-navy">Your Background</h2>
 
               {/* Profession */}
               <div>
-                <p className="mb-2 text-sm font-semibold text-gray-700">Profession</p>
+                <p className="mb-2 text-sm font-semibold text-navy">Profession</p>
                 <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                   {PROFESSIONS.map((prof) => (
                     <button
@@ -226,8 +226,8 @@ export default function ProfileSetupPage() {
                       onClick={() => update('profession', prof)}
                       className={`rounded-xl border px-3 py-3 text-sm font-medium transition-colors ${
                         form.profession === prof
-                          ? 'border-violet-600 bg-violet-600 text-white'
-                          : 'border-gray-200 bg-white text-gray-700 hover:border-violet-300'
+                          ? 'border-primary bg-primary text-white dark:bg-violet-700'
+                          : 'border-border bg-surface text-navy hover:border-primary/40'
                       }`}
                     >
                       {prof}
@@ -238,7 +238,7 @@ export default function ProfileSetupPage() {
 
               {/* Has taken before */}
               <div>
-                <p className="mb-2 text-sm font-semibold text-gray-700">
+                <p className="mb-2 text-sm font-semibold text-navy">
                   Have you taken the OET before?
                 </p>
                 <div className="flex gap-3">
@@ -252,8 +252,8 @@ export default function ProfileSetupPage() {
                         onClick={() => update('hasTakenBefore', isYes)}
                         className={`flex-1 rounded-xl border py-3 text-sm font-bold transition-colors ${
                           active
-                            ? 'border-violet-600 bg-violet-600 text-white'
-                            : 'border-gray-200 bg-white text-gray-700 hover:border-violet-300'
+                            ? 'border-primary bg-primary text-white dark:bg-violet-700'
+                            : 'border-border bg-surface text-navy hover:border-primary/40'
                         }`}
                       >
                         {option}
@@ -268,7 +268,7 @@ export default function ProfileSetupPage() {
                 <div>
                   <label
                     htmlFor="previousScore"
-                    className="mb-2 block text-sm font-semibold text-gray-700"
+                    className="mb-2 block text-sm font-semibold text-navy"
                   >
                     Previous OET Reading score (0–500)
                   </label>
@@ -280,7 +280,7 @@ export default function ProfileSetupPage() {
                     placeholder="e.g. 300"
                     value={form.previousScore}
                     onChange={(e) => update('previousScore', e.target.value)}
-                    className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm text-gray-900 focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-200"
+                    className="w-full rounded-xl border border-border px-4 py-3 text-sm text-navy focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
                   />
                 </div>
               )}
@@ -289,16 +289,16 @@ export default function ProfileSetupPage() {
 
           {step === 3 && (
             <div className="space-y-6">
-              <h2 className="text-lg font-bold text-gray-900">Self-Assessment</h2>
+              <h2 className="text-lg font-bold text-navy">Self-Assessment</h2>
 
               {/* Reading speed */}
               <div>
                 <label
                   htmlFor="selfRatedSpeed"
-                  className="mb-2 flex items-center justify-between text-sm font-semibold text-gray-700"
+                  className="mb-2 flex items-center justify-between text-sm font-semibold text-navy"
                 >
                   <span>How would you rate your reading speed?</span>
-                  <span className="rounded-full bg-violet-100 px-3 py-0.5 text-violet-700">
+                  <span className="rounded-full bg-lavender px-3 py-0.5 text-primary">
                     {form.selfRatedSpeed}/5
                   </span>
                 </label>
@@ -309,9 +309,9 @@ export default function ProfileSetupPage() {
                   max={5}
                   value={form.selfRatedSpeed}
                   onChange={(e) => update('selfRatedSpeed', Number(e.target.value))}
-                  className="w-full accent-violet-600"
+                  className="w-full accent-primary"
                 />
-                <div className="mt-1 flex justify-between text-xs text-gray-400">
+                <div className="mt-1 flex justify-between text-xs text-muted">
                   <span>Very slow</span>
                   <span>Very fast</span>
                 </div>
@@ -321,10 +321,10 @@ export default function ProfileSetupPage() {
               <div>
                 <label
                   htmlFor="selfRatedVocabulary"
-                  className="mb-2 flex items-center justify-between text-sm font-semibold text-gray-700"
+                  className="mb-2 flex items-center justify-between text-sm font-semibold text-navy"
                 >
                   <span>How would you rate your medical vocabulary?</span>
-                  <span className="rounded-full bg-violet-100 px-3 py-0.5 text-violet-700">
+                  <span className="rounded-full bg-lavender px-3 py-0.5 text-primary">
                     {form.selfRatedVocabulary}/5
                   </span>
                 </label>
@@ -335,16 +335,16 @@ export default function ProfileSetupPage() {
                   max={5}
                   value={form.selfRatedVocabulary}
                   onChange={(e) => update('selfRatedVocabulary', Number(e.target.value))}
-                  className="w-full accent-violet-600"
+                  className="w-full accent-primary"
                 />
-                <div className="mt-1 flex justify-between text-xs text-gray-400">
+                <div className="mt-1 flex justify-between text-xs text-muted">
                   <span>Very limited</span>
                   <span>Very strong</span>
                 </div>
               </div>
 
               {error && (
-                <p className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                <p className="rounded-xl border border-danger/30 bg-danger/10 px-4 py-3 text-sm text-danger">
                   {error}
                 </p>
               )}
@@ -357,7 +357,7 @@ export default function ProfileSetupPage() {
               <button
                 type="button"
                 onClick={() => setStep((s) => s - 1)}
-                className="flex-1 rounded-xl border border-gray-200 py-3 text-sm font-semibold text-gray-700 transition hover:bg-gray-50"
+                className="flex-1 rounded-xl border border-border py-3 text-sm font-semibold text-navy transition-colors hover:bg-background-light"
               >
                 Back
               </button>
@@ -367,7 +367,7 @@ export default function ProfileSetupPage() {
                 type="button"
                 onClick={() => setStep((s) => s + 1)}
                 disabled={step === 2 && !form.profession}
-                className="flex-1 rounded-xl bg-violet-600 py-3 text-sm font-bold text-white transition hover:bg-violet-700 disabled:opacity-50"
+                className="flex-1 rounded-xl bg-primary py-3 text-sm font-bold text-white transition-[color,background-color,transform] duration-200 hover:bg-primary-dark active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600 disabled:opacity-50"
               >
                 Next
               </button>
@@ -376,7 +376,7 @@ export default function ProfileSetupPage() {
                 type="button"
                 onClick={handleSubmit}
                 disabled={submitting}
-                className="flex-1 rounded-xl bg-violet-600 py-3 text-sm font-bold text-white transition hover:bg-violet-700 disabled:opacity-50"
+                className="flex-1 rounded-xl bg-primary py-3 text-sm font-bold text-white transition-[color,background-color,transform] duration-200 hover:bg-primary-dark active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600 disabled:opacity-50"
               >
                 {submitting ? 'Saving…' : 'Start Diagnostic'}
               </button>

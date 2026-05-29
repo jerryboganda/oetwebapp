@@ -114,7 +114,7 @@ export default function RubricReferencePage() {
       <div className="max-w-5xl mx-auto px-4 py-8 space-y-8">
         <div>
           <h1 className="text-3xl font-bold flex items-center gap-2"><BookOpen className="w-8 h-8" /> Expert Rubric Quick Reference</h1>
-          <p className="text-muted-foreground mt-2">Band descriptors and scoring guidance for OET review criteria.</p>
+          <p className="text-muted mt-2">Band descriptors and scoring guidance for OET review criteria.</p>
         </div>
 
         <MotionSection className="space-y-6">
@@ -130,7 +130,7 @@ export default function RubricReferencePage() {
                   {r.bands.map(b => (
                     <div key={b.range} className="flex gap-3 items-start text-sm">
                       <span className="font-mono font-medium text-primary min-w-[3rem]">{b.range}</span>
-                      <span className="text-muted-foreground">{b.desc}</span>
+                      <span className="text-muted">{b.desc}</span>
                     </div>
                   ))}
                 </div>
@@ -152,7 +152,7 @@ export default function RubricReferencePage() {
                   {r.bands.map(b => (
                     <div key={b.range} className="flex gap-3 items-start text-sm">
                       <span className="font-mono font-medium text-primary min-w-[3rem]">{b.range}</span>
-                      <span className="text-muted-foreground">{b.desc}</span>
+                      <span className="text-muted">{b.desc}</span>
                     </div>
                   ))}
                 </div>

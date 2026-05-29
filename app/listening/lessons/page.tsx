@@ -50,20 +50,20 @@ export default function ListeningLessonsPage() {
   return (
     <main className="mx-auto max-w-5xl px-4 py-12 space-y-8">
       <header>
-        <h1 className="text-3xl font-bold tracking-tight">Foundation Lessons</h1>
-        <p className="mt-2 text-slate-600">
+        <h1 className="text-3xl font-bold tracking-tight text-navy">Foundation Lessons</h1>
+        <p className="mt-2 text-muted">
           8 bite-sized lessons covering each Listening sub-skill (L1–L8). Each lesson runs ~30 min:
-          watch → read → drill × 3 → mini-quiz.
+          watch, read, drill × 3, then a mini-quiz.
         </p>
       </header>
 
       {loading ? (
-        <p className="text-slate-500">Loading lessons…</p>
+        <p className="text-muted">Loading lessons…</p>
       ) : lessons.length === 0 ? (
-        <div className="rounded-2xl border border-slate-200 bg-white p-6 text-slate-600">
+        <div className="rounded-2xl border border-border bg-surface p-6 text-muted">
           <p>Foundation lessons are being seeded by the content team.</p>
           <p className="mt-2 text-sm">
-            Enable the <code className="rounded bg-slate-100 px-1">Seed:ListeningContent</code> flag
+            Enable the <code className="rounded bg-background-light px-1">Seed:ListeningContent</code> flag
             in development to populate sample lessons.
           </p>
         </div>
@@ -72,21 +72,21 @@ export default function ListeningLessonsPage() {
           {lessons.map((l) => (
             <li
               key={l.id}
-              className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm flex flex-col"
+              className="rounded-2xl border border-border bg-surface p-5 shadow-sm flex flex-col"
             >
-              <span className="text-xs font-semibold tracking-wide text-blue-700 uppercase">
+              <span className="text-xs font-semibold tracking-wide text-primary uppercase">
                 {l.skillCode} · {SKILL_LABEL[l.skillCode] ?? l.skillCode}
               </span>
-              <h2 className="mt-1 text-base font-semibold">{l.title}</h2>
-              <p className="mt-1 text-xs text-slate-500">~{l.estimatedMinutes} min</p>
+              <h2 className="mt-1 text-base font-semibold text-navy">{l.title}</h2>
+              <p className="mt-1 text-xs text-muted">~{l.estimatedMinutes} min</p>
               {l.completedByUser && (
-                <span className="mt-2 inline-block rounded-full bg-emerald-100 px-2 py-0.5 text-xs text-emerald-700">
+                <span className="mt-2 inline-block rounded-full bg-success/10 px-2 py-0.5 text-xs text-success">
                   ✓ Completed
                 </span>
               )}
               <Link
                 href={`/listening/lessons/${l.slug}`}
-                className="mt-4 self-start text-sm text-blue-700 underline"
+                className="mt-4 self-start text-sm text-primary underline"
               >
                 Open lesson →
               </Link>

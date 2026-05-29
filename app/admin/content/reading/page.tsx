@@ -182,7 +182,7 @@ export default function AdminReadingPapersPage() {
 
       {/* Archive Confirm Dialog */}
       {archiveTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-navy/50">
           <div className="bg-admin-bg-surface rounded-admin-lg p-6 shadow-admin-lg max-w-sm w-full mx-4 border border-admin-border">
             <h3 className="text-base font-semibold text-admin-fg-strong mb-2">Archive Paper?</h3>
             <p className="text-sm text-admin-fg-muted mb-4">

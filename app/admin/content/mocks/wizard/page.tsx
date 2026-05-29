@@ -78,7 +78,7 @@ export default function MockWizardLandingPage() {
     <AdminOperationsLayout
       eyebrow="Content"
       title="Mock Builder Wizard"
-      description="Build one OET mock end-to-end — bundle metadata, then Listening, Reading, Writing, Speaking, then publish."
+      description="Build one OET mock end-to-end: bundle metadata, then Listening, Reading, Writing, Speaking, then publish."
       breadcrumbs={[
         { label: 'Admin', href: '/admin' },
         { label: 'Content', href: '/admin/content' },

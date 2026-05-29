@@ -3,7 +3,7 @@
 # --------------------------------------
 # deploy-production.sh - emergency/local source-build fallback.
 # Normal production deploys must use scripts/deploy/deploy-prod.sh, which verifies
-# exact-SHA evidence and rolls out immutable image digests.
+# exact SHA plus immutable image digest refs.
 # --------------------------------------
 set -Eeuo pipefail
 

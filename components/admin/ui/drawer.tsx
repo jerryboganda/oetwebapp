@@ -139,7 +139,7 @@ const DrawerOverlay = React.forwardRef<
 >(({ className, ...props }, ref) => {
   const surface = useDrawerSurface();
   const sharedClass = cn(
-    'fixed inset-0 z-[var(--admin-z-overlay)] bg-black/50 backdrop-blur-sm',
+    'fixed inset-0 z-[var(--admin-z-overlay)] bg-navy/50 backdrop-blur-sm',
     'data-[state=open]:animate-in data-[state=open]:fade-in-0',
     'data-[state=closed]:animate-out data-[state=closed]:fade-out-0',
     'data-[state=open]:duration-200 data-[state=closed]:duration-150',

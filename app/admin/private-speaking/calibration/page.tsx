@@ -168,7 +168,7 @@ export default function AdminSpeakingCalibrationPage() {
           </CardHeader>
           <CardContent>
             {samples.length === 0 ? (
-              <p className="text-sm text-admin-fg-muted">No samples yet — create one in the speaking content workspace.</p>
+              <p className="text-sm text-admin-fg-muted">No samples yet. Create one in the speaking content workspace.</p>
             ) : (
               <ul className="flex flex-col gap-2">
                 {samples.map((s) => (

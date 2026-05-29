@@ -105,7 +105,7 @@ export function RolePlayCardEditor({
     if (!setting.trim()) hints.push('Setting is required.');
     if (!candidateRole.trim()) hints.push('Candidate role is required.');
     if (!background.trim()) hints.push('Background is required.');
-    if (!clinicalTopic.trim()) hints.push('Clinical topic helps drill recommendation — please fill in.');
+    if (!clinicalTopic.trim()) hints.push('Clinical topic helps drill recommendation. Please fill it in.');
     if (prepTimeSeconds <= 0 || prepTimeSeconds > 600) hints.push('Prep time must be between 1 and 600 seconds.');
     if (rolePlayTimeSeconds <= 0 || rolePlayTimeSeconds > 1800) {
       hints.push('Role-play time must be between 1 and 1800 seconds.');

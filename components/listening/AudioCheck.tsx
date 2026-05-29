@@ -53,7 +53,7 @@ const OPTIONS: OptionDef[] = [
   {
     value: 'failed',
     label: "No, I didn't hear anything",
-    description: 'Silent — check your output device and try again.',
+    description: 'Silent. Check your output device and try again.',
   },
 ];
 
@@ -119,15 +119,15 @@ export function AudioCheck({ onResult, audioSrc = '/test-audio.mp3', disabled = 
   }, [selected, onResult]);
 
   return (
-    <div className="rounded-2xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-5 shadow-sm">
+    <div className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
       <div className="mb-4 flex items-center justify-between gap-3">
-        <h2 className="text-lg font-semibold text-gray-900 dark:text-slate-100">Audio check</h2>
+        <h2 className="text-lg font-semibold text-navy">Audio check</h2>
         <HeadphoneDetector />
       </div>
 
-      <p className="mb-4 text-sm text-gray-600 dark:text-gray-400">
+      <p className="mb-4 text-sm text-muted">
         Before the diagnostic begins, please confirm that audio plays clearly. For best
-        results, use headphones in a quiet room — earbuds or over-ear headphones both work.
+        results, use headphones in a quiet room. Earbuds or over-ear headphones both work.
       </p>
 
       <audio
@@ -145,8 +145,8 @@ export function AudioCheck({ onResult, audioSrc = '/test-audio.mp3', disabled = 
         disabled={isPlaying || disabled}
         className={[
           'inline-flex items-center gap-2 rounded-xl px-5 py-3 text-base font-semibold',
-          'bg-primary text-white shadow-md transition-colors',
-          'hover:bg-primary-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary',
+          'bg-primary text-white dark:bg-violet-700 shadow-md transition-colors',
+          'hover:bg-primary-dark active:scale-[0.98] motion-reduce:active:scale-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary',
           'disabled:cursor-not-allowed disabled:opacity-60',
         ].join(' ')}
       >
@@ -167,7 +167,7 @@ export function AudioCheck({ onResult, audioSrc = '/test-audio.mp3', disabled = 
       ) : null}
 
       <fieldset className="mt-6">
-        <legend className="mb-2 text-sm font-medium text-gray-900 dark:text-slate-100">
+        <legend className="mb-2 text-sm font-medium text-navy">
           Did you hear the test sound?
         </legend>
         <div className="grid gap-2">
@@ -193,10 +193,10 @@ export function AudioCheck({ onResult, audioSrc = '/test-audio.mp3', disabled = 
                   className="mt-1 h-4 w-4 accent-primary"
                 />
                 <span className="flex-1">
-                  <span className="block text-sm font-medium text-gray-900 dark:text-slate-100">
+                  <span className="block text-sm font-medium text-navy">
                     {opt.label}
                   </span>
-                  <span className="block text-xs text-gray-600 dark:text-gray-400">{opt.description}</span>
+                  <span className="block text-xs text-muted">{opt.description}</span>
                 </span>
               </label>
             );
@@ -211,8 +211,8 @@ export function AudioCheck({ onResult, audioSrc = '/test-audio.mp3', disabled = 
           disabled={!selected || disabled}
           className={[
             'inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-semibold',
-            'bg-primary text-white shadow-sm transition-colors',
-            'hover:bg-primary-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary',
+            'bg-primary text-white dark:bg-violet-700 shadow-sm transition-colors',
+            'hover:bg-primary-dark active:scale-[0.98] motion-reduce:active:scale-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary',
             'disabled:cursor-not-allowed disabled:opacity-50',
           ].join(' ')}
         >

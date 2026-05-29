@@ -141,7 +141,7 @@ export default function AdminWritingCanonPage() {
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-xl font-bold text-navy"><BookOpen className="mr-2 inline h-5 w-5 text-amber-600" aria-hidden="true" /> Writing Canon Rules</h1>
-          <p className="mt-1 text-sm text-muted">Dr Ahmed&apos;s rule library. Versioning is manual — bump <code>version</code> before publishing breaking changes.</p>
+          <p className="mt-1 text-sm text-muted">Dr Ahmed&apos;s rule library. Versioning is manual: bump <code>version</code> before publishing breaking changes.</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Button onClick={() => void load()} variant="outline"><RefreshCcw className="h-4 w-4" aria-hidden="true" /> Refresh</Button>
@@ -154,7 +154,7 @@ export default function AdminWritingCanonPage() {
       <Card>
         <CardContent>
           <h2 className="text-base font-bold text-navy"><TestTube className="mr-1 inline h-4 w-4 text-amber-600" aria-hidden="true" /> Test rule detection</h2>
-          <p className="mt-1 text-xs text-muted">Paste a draft letter and pick a rule id — we&apos;ll show any violations the engine flags.</p>
+          <p className="mt-1 text-xs text-muted">Paste a draft letter and pick a rule id. We&apos;ll show any violations the engine flags.</p>
           <div className="mt-3 grid gap-2 md:grid-cols-3">
             <label className="flex flex-col gap-1 text-xs font-bold uppercase tracking-wider text-muted">
               Rule id
@@ -179,13 +179,13 @@ export default function AdminWritingCanonPage() {
           <table className="w-full text-sm" aria-label="Canon rules">
             <thead>
               <tr className="border-b border-border text-xs uppercase tracking-wider text-muted">
-                <th className="py-2 text-left">Id</th>
-                <th className="text-left">Category</th>
-                <th className="text-left">Severity</th>
-                <th className="text-left">Detection</th>
-                <th className="text-left">Version</th>
-                <th className="text-left">Active</th>
-                <th className="text-right">Actions</th>
+                <th scope="col" className="py-2 text-left">Id</th>
+                <th scope="col" className="text-left">Category</th>
+                <th scope="col" className="text-left">Severity</th>
+                <th scope="col" className="text-left">Detection</th>
+                <th scope="col" className="text-left">Version</th>
+                <th scope="col" className="text-left">Active</th>
+                <th scope="col" className="text-right">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -210,7 +210,7 @@ export default function AdminWritingCanonPage() {
       </Card>
 
       {editing ? (
-        <aside role="dialog" aria-modal="true" aria-label="Canon rule editor" className="fixed inset-0 z-50 flex items-stretch justify-end bg-black/40">
+        <aside role="dialog" aria-modal="true" aria-label="Canon rule editor" className="fixed inset-0 z-50 flex items-stretch justify-end bg-navy/40">
           <div className="flex h-full w-full max-w-2xl flex-col gap-3 overflow-y-auto bg-surface p-5 shadow-2xl">
             <header className="flex items-center justify-between gap-2">
               <h2 className="text-lg font-bold text-navy">{editing.isNew ? 'New rule' : `Edit ${editing.id}`}</h2>

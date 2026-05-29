@@ -41,12 +41,12 @@ function slaToneVariant(state: ExpertAssignedItem['slaState']): 'success' | 'war
 }
 
 function letterTypeLabel(value: string | null): string {
-  if (!value) return '—';
+  if (!value) return 'N/A';
   return value.replace(/_/g, ' ').replace(/\b\w/g, (m) => m.toUpperCase());
 }
 
 function professionLabel(value: string | null): string {
-  if (!value) return '—';
+  if (!value) return 'N/A';
   return value.replace(/-/g, ' ').replace(/\b\w/g, (m) => m.toUpperCase());
 }
 
@@ -111,7 +111,7 @@ export default function ExpertAssignedQueuePage() {
     {
       key: 'learner',
       header: 'Learner',
-      render: (item) => <span className="text-sm text-navy">{item.learnerDisplayName || '—'}</span>,
+      render: (item) => <span className="text-sm text-navy">{item.learnerDisplayName || 'N/A'}</span>,
     },
     {
       key: 'sla',
@@ -130,7 +130,7 @@ export default function ExpertAssignedQueuePage() {
       header: 'Comp',
       render: (item) => (
         <span className="text-sm tabular-nums text-navy">
-          {item.reviewerCompensation > 0 ? `£${(item.reviewerCompensation / 100).toFixed(2)}` : '—'}
+          {item.reviewerCompensation > 0 ? `£${(item.reviewerCompensation / 100).toFixed(2)}` : 'N/A'}
         </span>
       ),
     },
@@ -144,7 +144,7 @@ export default function ExpertAssignedQueuePage() {
             reviewRequestId: item.reviewRequestId,
             slaState: item.slaState,
           })}
-          className="inline-flex min-h-9 items-center rounded-md bg-primary px-3 py-2 text-sm font-semibold text-white transition-colors hover:bg-primary/90"
+          className="inline-flex min-h-9 items-center rounded-md bg-primary px-3 py-2 text-sm font-semibold text-white transition-[color,background-color,transform] duration-200 hover:bg-primary/90 active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600"
         >
           Open review
         </Link>
@@ -198,7 +198,7 @@ export default function ExpertAssignedQueuePage() {
             <ExpertRouteSectionHeader
               eyebrow="Active assignments"
               title={`Assigned reviews (${items.length})`}
-              description="Sorted by SLA deadline — most urgent first."
+              description="Sorted by SLA deadline, most urgent first."
               className="mb-4"
             />
             <DataTable data={items} columns={columns} keyExtractor={(item) => item.reviewRequestId} />

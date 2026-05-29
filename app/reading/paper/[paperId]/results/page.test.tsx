@@ -60,6 +60,69 @@ describe('Reading paper results page', () => {
     expect(await screen.findByText('Practice-only review')).toBeInTheDocument();
     expect(screen.getByText('6/10 practice marks')).toBeInTheDocument();
   });
+
+  it('renders the spelling miss diagnostic and per-part accuracy percentage from the payload', async () => {
+    mockGetReadingAttemptReview.mockResolvedValueOnce(
+      buildReview({
+        scaledScore: 350,
+        rawScore: 30,
+        gradeLetter: 'B',
+        partAccuracyPercent: 75,
+        items: [
+          {
+            questionId: 'q-a-1',
+            partCode: 'A',
+            displayOrder: 1,
+            questionType: 'ShortAnswer',
+            stem: 'Name the medication.',
+            skillTag: 'detail',
+            userAnswer: 'asprin',
+            isCorrect: false,
+            pointsEarned: 0,
+            maxPoints: 1,
+            missReason: 'spelling',
+            correctAnswer: 'aspirin',
+            explanationMarkdown: 'The accepted spelling is "aspirin".',
+            elapsedMs: 42000,
+          },
+        ],
+      }),
+    );
+
+    await renderResults();
+
+    expect(await screen.findByTestId('reading-miss-spelling')).toBeInTheDocument();
+    expect(screen.getByText('Spelling caused this miss')).toBeInTheDocument();
+    expect(screen.getByTestId('reading-part-accuracy-A')).toHaveTextContent('75% correct');
+    expect(screen.getByText('aspirin')).toBeInTheDocument();
+    expect(screen.getByTestId('reading-explanation')).toBeInTheDocument();
+  });
+
+  it('renders tutor feedback entries when the attempt returns them', async () => {
+    mockGetReadingAttemptReview.mockResolvedValueOnce(
+      buildReview({
+        scaledScore: 350,
+        rawScore: 30,
+        gradeLetter: 'B',
+        feedback: [
+          {
+            id: 'fb-1',
+            scope: 'test',
+            targetRef: null,
+            feedbackText: 'Strong inference work — tighten your Part A scanning speed.',
+            createdAt: '2026-05-12T11:05:00.000Z',
+            updatedAt: '2026-05-12T11:05:00.000Z',
+          },
+        ],
+      }),
+    );
+
+    await renderResults();
+
+    expect(await screen.findByTestId('reading-tutor-feedback')).toBeInTheDocument();
+    expect(screen.getByText('Strong inference work — tighten your Part A scanning speed.')).toBeInTheDocument();
+    expect(screen.getByText('Whole test')).toBeInTheDocument();
+  });
 });
 
 async function renderResults() {
@@ -81,8 +144,25 @@ function buildReview(opts: {
   rawScore: number;
   maxRawScore?: number;
   gradeLetter: string;
+  partAccuracyPercent?: number;
+  items?: Array<Record<string, unknown>>;
+  feedback?: Array<Record<string, unknown>>;
 }): ReadingAttemptReviewDto {
   const maxRawScore = opts.maxRawScore ?? 42;
+  const items = opts.items ?? [
+    {
+      questionId: 'q-a-1',
+      partCode: 'A',
+      displayOrder: 1,
+      questionType: 'ShortAnswer',
+      stem: 'Name the medication.',
+      skillTag: 'detail',
+      userAnswer: 'aspirin',
+      isCorrect: true,
+      pointsEarned: 1,
+      maxPoints: 1,
+    },
+  ];
   return {
     attempt: {
       id: 'attempt-1',
@@ -106,32 +186,26 @@ function buildReview(opts: {
       subtestCode: 'reading',
     },
     policy: {
-      showCorrectAnswerOnReview: true,
-      showExplanationsAfterSubmit: true,
+      showCorrectAnswerOnReview: false,
+      showExplanationsAfterSubmit: false,
       showExplanationsOnlyIfWrong: false,
     },
-    items: [
-      {
-        questionId: 'q-a-1',
-        partCode: 'A',
-        displayOrder: 1,
-        questionType: 'ShortAnswer',
-        stem: 'Name the medication.',
-        skillTag: 'detail',
-        userAnswer: 'aspirin',
-        isCorrect: true,
-        pointsEarned: 1,
-        maxPoints: 1,
-        correctAnswer: 'aspirin',
-        explanationMarkdown: 'Copied from Text A.',
-      },
-    ],
+    items: items as ReadingAttemptReviewDto['items'],
     clusters: [],
     partBreakdown: [
-      { partCode: 'A', rawScore: opts.rawScore, maxRawScore, correctCount: opts.rawScore, incorrectCount: 0, unansweredCount: 0 },
+      {
+        partCode: 'A',
+        rawScore: opts.rawScore,
+        maxRawScore,
+        correctCount: opts.rawScore,
+        incorrectCount: 0,
+        unansweredCount: 0,
+        ...(typeof opts.partAccuracyPercent === 'number' ? { accuracyPercent: opts.partAccuracyPercent } : {}),
+      } as ReadingAttemptReviewDto['partBreakdown'][number],
     ],
     skillBreakdown: [
       { label: 'detail', correctCount: opts.rawScore, incorrectCount: 0, unansweredCount: 0, totalCount: maxRawScore },
     ],
-  };
+    ...(opts.feedback ? { feedback: opts.feedback } : {}),
+  } as ReadingAttemptReviewDto;
 }

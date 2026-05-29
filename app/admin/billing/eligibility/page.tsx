@@ -118,7 +118,7 @@ export default function AdminEligibilityMatrixPage() {
     <AdminPageShell>
       <PageHeader
         eyebrow="Billing"
-        title="OET 2026 — Add-on Eligibility Matrix"
+        title="OET 2026 Add-on Eligibility Matrix"
         description="Audit the three independent eligibility flags (writing_addons, speaking_addons, tutor_book_discount) across every plan, and inspect which add-on SKUs each plan unlocks."
         icon={<ShieldCheck aria-hidden className="h-5 w-5" />}
         breadcrumbs={[
@@ -209,13 +209,13 @@ export default function AdminEligibilityMatrixPage() {
             <table className="min-w-full divide-y divide-admin-border text-sm">
               <thead className="bg-admin-bg-subtle text-left text-xs font-medium uppercase tracking-wide text-admin-fg-muted">
                 <tr>
-                  <th className="px-4 py-3">Plan</th>
-                  <th className="px-4 py-3">Profession</th>
-                  <th className="px-4 py-3">Category</th>
-                  <th className="px-4 py-3 text-center">W</th>
-                  <th className="px-4 py-3 text-center">S</th>
-                  <th className="px-4 py-3 text-center">TB £32</th>
-                  <th className="px-4 py-3">Eligible add-ons</th>
+                  <th scope="col" className="px-4 py-3">Plan</th>
+                  <th scope="col" className="px-4 py-3">Profession</th>
+                  <th scope="col" className="px-4 py-3">Category</th>
+                  <th scope="col" className="px-4 py-3 text-center">W</th>
+                  <th scope="col" className="px-4 py-3 text-center">S</th>
+                  <th scope="col" className="px-4 py-3 text-center">TB £32</th>
+                  <th scope="col" className="px-4 py-3">Eligible add-ons</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-admin-border">

@@ -21,7 +21,7 @@ import {
 import { trackSpeaking } from '@/lib/analytics/speaking-events';
 
 function formatDate(iso: string | null): string {
-  if (!iso) return '—';
+  if (!iso) return '–';
   try {
     return new Date(iso).toLocaleString();
   } catch {
@@ -30,7 +30,7 @@ function formatDate(iso: string | null): string {
 }
 
 function formatDuration(seconds: number): string {
-  if (!Number.isFinite(seconds) || seconds <= 0) return '—';
+  if (!Number.isFinite(seconds) || seconds <= 0) return '–';
   const m = Math.floor(seconds / 60);
   const s = Math.floor(seconds % 60);
   return `${m}:${String(s).padStart(2, '0')}`;
@@ -76,7 +76,7 @@ export default function SpeakingRecordingsPage() {
       <div className="mx-auto max-w-5xl space-y-6 py-8">
         <header className="space-y-2">
           <h1 className="text-2xl font-semibold text-foreground">My speaking recordings</h1>
-          <p className="text-muted-foreground">
+          <p className="text-muted">
             Manage the audio captured during your role-plays. You can delete a recording at any
             time. Recordings are also automatically removed after the retention window expires.
           </p>
@@ -87,7 +87,7 @@ export default function SpeakingRecordingsPage() {
         {!rows ? (
           <Skeleton className="h-48 w-full rounded-xl" />
         ) : rows.length === 0 ? (
-          <Card className="p-8 text-center text-muted-foreground">
+          <Card className="p-8 text-center text-muted">
             You don&apos;t have any saved recordings yet.
           </Card>
         ) : (
@@ -102,7 +102,7 @@ export default function SpeakingRecordingsPage() {
                       <Badge variant="default">{r.professionId}</Badge>
                       {r.isArchived && <Badge variant="warning">archived</Badge>}
                     </div>
-                    <div className="text-xs text-muted-foreground">
+                    <div className="text-xs text-muted">
                       Captured {formatDate(r.createdAt)} · Duration {formatDuration(r.durationSeconds)}
                       {r.retentionExpiresAt
                         ? ` · Auto-deletes ${formatDate(r.retentionExpiresAt)}`

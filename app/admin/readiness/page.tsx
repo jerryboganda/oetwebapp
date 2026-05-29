@@ -266,7 +266,7 @@ export default function AdminReadinessLearnersPage() {
                   Intervention candidates detected
                 </p>
                 <p className="text-xs text-admin-fg-muted">
-                  High-risk learners benefit from outreach — consider a tutor check-in or revised study plan.
+                  High-risk learners benefit from outreach. Consider a tutor check-in or revised study plan.
                 </p>
               </div>
             </div>

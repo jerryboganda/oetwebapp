@@ -1,5 +1,7 @@
 # Learner Portal Enhancement Plan — Ultra-High-Level
 
+> **Current status (2026-05-29)**: mixed historical plan and active product aspirations. The “100%” statement below refers to the original 11 audit gaps, not the whole learner portal; open learner work is tracked in [`STATUS/REMAINING-WORK.md`](STATUS/REMAINING-WORK.md) under P2-012 and related release QA items.
+
 ## Executive Summary
 
 The Learner Portal is the largest surface area with **45+ route groups, ~85 backend endpoint files, and a complete 10-phase user journey** (auth → onboarding → diagnostic → study plan → practice loop → spaced repetition → mock exams → progress monitoring → exam prep → support). All 11 original gaps from the comprehensive audit are closed (100%).

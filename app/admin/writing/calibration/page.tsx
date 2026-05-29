@@ -181,9 +181,7 @@ export default function AdminWritingCalibrationPage() {
     <div className="space-y-6 p-6">
       <header className="flex items-start justify-between gap-4">
         <div className="flex items-start gap-3">
-          <span className="rounded-full bg-violet-100 p-3 text-violet-700">
-            <Beaker className="h-6 w-6" aria-hidden="true" />
-          </span>
+          <Beaker className="mt-1 h-6 w-6 shrink-0 text-[var(--admin-primary)]" aria-hidden="true" />
           <div>
             <h1 className="text-2xl font-bold">Writing calibration harness</h1>
             <p className="text-sm text-muted">
@@ -347,7 +345,7 @@ export default function AdminWritingCalibrationPage() {
             ) : null}
           </header>
           {!latestRun ? (
-            <p className="text-sm text-muted">No runs yet — add letters and click &ldquo;Run calibration&rdquo;.</p>
+            <p className="text-sm text-muted">No runs yet. Add letters and click &ldquo;Run calibration&rdquo;.</p>
           ) : (
             <div className="space-y-4">
               <dl className="grid grid-cols-2 gap-3 text-sm md:grid-cols-4">
@@ -373,11 +371,11 @@ export default function AdminWritingCalibrationPage() {
                 <table className="w-full text-sm">
                   <thead className="bg-surface text-xs uppercase tracking-wider text-muted">
                     <tr>
-                      <th className="px-2 py-1 text-left">Letter</th>
-                      <th className="px-2 py-1 text-left">Reference</th>
-                      <th className="px-2 py-1 text-left">AI</th>
-                      <th className="px-2 py-1 text-right">|Δ|</th>
-                      <th className="px-2 py-1 text-right">Band</th>
+                      <th scope="col" className="px-2 py-1 text-left">Letter</th>
+                      <th scope="col" className="px-2 py-1 text-left">Reference</th>
+                      <th scope="col" className="px-2 py-1 text-left">AI</th>
+                      <th scope="col" className="px-2 py-1 text-right">|Δ|</th>
+                      <th scope="col" className="px-2 py-1 text-right">Band</th>
                     </tr>
                   </thead>
                   <tbody>

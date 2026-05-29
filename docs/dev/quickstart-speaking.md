@@ -1,12 +1,11 @@
-# Speaking Module — 10-Minute Local Quickstart
+# Speaking Module — Local Docker Quickstart
 
-This guide gets a new developer from a fresh clone to a working AI self-practice role-play in under ten minutes.
+This guide gets a developer to a working local Speaking stack using the repo's Docker-first workflow.
 
 ## Prereqs
 
-- .NET SDK 10
-- Node.js 20
-- Postgres 16 (Docker is fine)
+- Docker Desktop
+- Node.js only for lightweight repo scripts if needed
 - Git
 - (Optional) Anthropic API key — without it, the local stack runs against mock AI
 
@@ -15,8 +14,9 @@ This guide gets a new developer from a fresh clone to a working AI self-practice
 ```bash
 git clone https://github.com/<org>/oet-web-app.git
 cd oet-web-app
-npm ci
 ```
+
+Do not run dependency installs on the Windows host. Validation dependencies are managed through the Docker-backed `node_modules` volume.
 
 ## 2. Configure env
 
@@ -27,35 +27,22 @@ cp .env.example .env.local
 # mock provider in place by leaving it empty).
 ```
 
-## 3. Start Postgres
+## 3. Start the local stack
 
-```bash
-docker compose up -d postgres
+```powershell
+docker compose -f docker-compose.local.yml --env-file .env.docker-local up -d --build
 ```
 
-(If you don't have a docker-compose file yet, run `docker run -d --name oet-pg -p 5432:5432 -e POSTGRES_PASSWORD=postgres postgres:16`.)
+This starts the local web, API, and PostgreSQL containers using the repo-standard Docker configuration.
 
 ## 4. Seed Speaking data
 
-```bash
-./scripts/seed-speaking-dev.sh        # bash / WSL / mac / linux
-pwsh ./scripts/seed-speaking-dev.ps1  # Windows PowerShell
-```
+Local compose applies migrations and demo seed data through the API container configuration. Do not run legacy seed scripts on the host unless they are rewritten to execute through `docker exec oet-local-api`.
 
-This applies EF Core migrations and runs the seeders (warm-up questions, role-play cards, drills, training modules).
+## 5. Follow logs
 
-## 5. Run the stack
-
-In two terminals:
-
-```bash
-# terminal 1 — backend
-dotnet run --project backend/src/OetLearner.Api
-```
-
-```bash
-# terminal 2 — frontend
-npm run dev
+```powershell
+docker compose -f docker-compose.local.yml --env-file .env.docker-local logs -f learner-api web
 ```
 
 ## 6. Sign in + try Speaking
@@ -69,7 +56,7 @@ npm run dev
 ## 7. Run the smoke
 
 ```bash
-./scripts/speaking-smoke.sh
+docker exec oet-local-web ./scripts/speaking-smoke.sh
 ```
 
 You should see `[smoke] PASS — readiness band: <band>` within 60 seconds.
@@ -84,7 +71,7 @@ You should see `[smoke] PASS — readiness band: <band>` within 60 seconds.
 
 ## Troubleshooting
 
-- **`pg_isready` not found** — install the Postgres client (`sudo apt install postgresql-client` or `brew install libpq`).
+- **Container is not healthy** — inspect `docker compose -f docker-compose.local.yml --env-file .env.docker-local ps` and `docker compose -f docker-compose.local.yml --env-file .env.docker-local logs learner-api web postgres`.
 - **AI assessment never lands** — check `ANTHROPIC__APIKEY`; without it, the mock provider returns synthetic scores.
 - **Microphone not detected** — `chrome://settings/content/microphone` → allow `localhost:3000`.
 - **LiveKit not wired** — local dev defaults to the stub gateway; live-tutor flow requires the cloud keys in `.env.local`.

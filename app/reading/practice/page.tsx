@@ -339,7 +339,7 @@ export default function ReadingPracticePage() {
         <LearnerPageHero
           eyebrow="Reading"
           title="Practice Hub"
-          description="Untimed Learning Mode and your personal Error Bank — review missed questions in your own time without consuming an exam attempt."
+          description="Untimed Learning Mode and your personal Error Bank. Review missed questions in your own time without consuming an exam attempt."
           icon={Sparkles}
         />
 
@@ -475,10 +475,10 @@ export default function ReadingPracticePage() {
         <section ref={errorBankSectionRef} id="error-bank">
           <LearnerSurfaceSectionHeader
             eyebrow="Error Bank"
-            title={`${focusPart ? `Part ${focusPart} \u2014 ` : ''}${focusPart ? filteredErrorEntries.length : openErrorCount} question${(focusPart ? filteredErrorEntries.length : openErrorCount) === 1 ? '' : 's'} to revisit`}
+            title={`${focusPart ? `Part ${focusPart}: ` : ''}${focusPart ? filteredErrorEntries.length : openErrorCount} question${(focusPart ? filteredErrorEntries.length : openErrorCount) === 1 ? '' : 's'} to revisit`}
             description={focusPart
               ? `Filtered to Part ${focusPart}. Clear ?focus to see every part.`
-              : "Questions you missed in past graded attempts. Clear an entry when you're confident \u2014 the next time you answer it correctly we clear it automatically."}
+              : "Questions you missed in past graded attempts. Clear an entry when you're confident. The next time you answer it correctly we clear it automatically."}
             className="mb-5"
           />
           {(focusPart ? filteredErrorEntries.length === 0 : openErrorCount === 0) ? (
@@ -491,7 +491,7 @@ export default function ReadingPracticePage() {
           ) : (
             <div className="overflow-hidden rounded-2xl border border-border bg-surface shadow-sm">
               <table className="w-full text-left text-sm">
-                <thead className="bg-muted text-xs uppercase tracking-wide text-muted-foreground">
+                <thead className="bg-muted text-xs uppercase tracking-wide text-muted">
                   <tr>
                     <th className="px-4 py-3">Paper</th>
                     <th className="px-4 py-3">Part</th>
@@ -513,17 +513,17 @@ export default function ReadingPracticePage() {
                             {entry.paper.title}
                           </Link>
                         ) : (
-                          <span className="text-muted-foreground">—</span>
+                          <span className="text-muted">Unavailable</span>
                         )}
                       </td>
                       <td className="px-4 py-3">
                         <Badge variant="info">Part {entry.partCode}</Badge>
                       </td>
                       <td className="px-4 py-3 max-w-md truncate" title={entry.questionStem ?? ''}>
-                        {entry.questionStem ?? <span className="text-muted-foreground">(stem unavailable)</span>}
+                        {entry.questionStem ?? <span className="text-muted">(stem unavailable)</span>}
                       </td>
-                      <td className="px-4 py-3 text-muted-foreground">
-                        {entry.skillTag ?? entry.questionType ?? '—'}
+                      <td className="px-4 py-3 text-muted">
+                        {entry.skillTag ?? entry.questionType ?? 'General'}
                       </td>
                       <td className="px-4 py-3 text-right">
                         <span className="inline-flex items-center gap-1 text-warning">
@@ -555,7 +555,7 @@ export default function ReadingPracticePage() {
           <LearnerSurfaceSectionHeader
             eyebrow="Skill Drills"
             title="Targeted Part A / B / C practice"
-            description="Short scoped runs against one Part or sub-skill. Drill scores are practice-only — they don't produce an OET 0-500 scaled grade."
+            description="Short scoped runs against one Part or sub-skill. Drill scores are practice-only and do not produce an OET 0-500 scaled grade."
             className="mb-5"
           />
           {papers.length === 0 || !drillCatalogue ? (
@@ -716,7 +716,7 @@ export default function ReadingPracticePage() {
                 {busyKey === 'retest' ? 'Building retest…' : `Retest up to ${Math.min(10, visibleErrorCount)} ${focusPart ? `Part ${focusPart} ` : ''}open miss${Math.min(10, visibleErrorCount) === 1 ? '' : 'es'}`}
                 <ArrowRight className="ml-1 h-4 w-4" aria-hidden />
               </Button>
-              <span className="text-sm text-muted-foreground">
+              <span className="text-sm text-muted">
                 Pulls from the {visibleErrorCount} visible open question
                 {visibleErrorCount === 1 ? '' : 's'} above.
               </span>

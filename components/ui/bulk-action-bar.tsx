@@ -57,7 +57,7 @@ export function BulkActionBar({
         >
           <div className="mx-auto flex max-w-4xl flex-col gap-3 rounded-xl border border-border bg-surface/95 p-3 shadow-xl shadow-navy/10 backdrop-blur sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-center gap-3">
-              <span className="inline-flex h-8 min-w-8 items-center justify-center rounded-full bg-primary px-2 text-sm font-bold text-white">
+              <span className="inline-flex h-8 min-w-8 items-center justify-center rounded-full bg-primary px-2 text-sm font-bold text-white dark:bg-violet-700">
                 {selectedCount}
               </span>
               <div className="min-w-0">

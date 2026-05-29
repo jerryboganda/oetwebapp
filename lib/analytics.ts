@@ -39,6 +39,7 @@ const TRACKED_EVENTS = [
   'review_started',
   'review_draft_saved',
   'review_submitted',
+  'peer_review_submitted',
   'calibration_viewed',
   'calibration_case_started',
   'calibration_case_completed',

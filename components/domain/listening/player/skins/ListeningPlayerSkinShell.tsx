@@ -88,9 +88,9 @@ export function ListeningPlayerSkinShell({
         data-listening-skin="home"
         className="min-h-screen bg-navy text-white"
       >
-        <div className="sticky top-0 z-50 flex items-center gap-3 border-b border-white/10 bg-black/60 px-4 py-2 text-sm font-semibold backdrop-blur">
+        <div className="sticky top-0 z-50 flex items-center gap-3 border-b border-white/10 bg-navy/60 px-4 py-2 text-sm font-semibold backdrop-blur">
           <ShieldAlert className="h-4 w-4 text-warning" aria-hidden="true" />
-          <span>OET@Home — kiosk mode. Do not switch tabs or windows.</span>
+          <span>OET@Home kiosk mode. Do not switch tabs or windows.</span>
           <span className="ml-auto flex items-center gap-1 text-xs uppercase tracking-widest text-white/70">
             <Maximize2 className="h-3 w-3" aria-hidden="true" />
             Fullscreen on first interaction
@@ -108,7 +108,7 @@ export function ListeningPlayerSkinShell({
     <div ref={rootRef} data-listening-skin="paper" className="listening-paper-skin">
       <div className="sticky top-0 z-50 flex items-center gap-3 border-b border-border bg-warning/10 px-4 py-2 text-sm font-semibold print:hidden">
         <Printer className="h-4 w-4 text-warning" aria-hidden="true" />
-        <span>OET on Paper simulation — printable booklet styles active.</span>
+        <span>OET on Paper simulation. Printable booklet styles active.</span>
         <button
           type="button"
           onClick={() => { if (typeof window !== 'undefined') window.print(); }}

@@ -107,8 +107,8 @@ function ListeningResultsContent() {
       <LearnerDashboardShell pageTitle="Listening Results" backHref="/listening">
         <div className="flex flex-1 flex-col items-center justify-center gap-4 p-8 text-center">
           <AlertCircle className="h-12 w-12 text-danger" />
-          <h2 className="text-xl font-black text-gray-900 dark:text-gray-100">Result not found</h2>
-          <p className="max-w-md text-sm text-gray-600 dark:text-gray-400">{error ?? 'Complete a Listening task before opening results.'}</p>
+          <h2 className="text-xl font-black text-navy">Result not found</h2>
+          <p className="max-w-md text-sm text-muted">{error ?? 'Complete a Listening task before opening results.'}</p>
           <Button variant="ghost" asChild>
 <Link href="/listening">Back to Listening</Link>
 </Button>
@@ -137,9 +137,9 @@ function ListeningResultsContent() {
           {isFullOetPaper ? (
             <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
               <div>
-                <p className="text-xs font-black uppercase tracking-widest text-gray-600 dark:text-gray-400">Canonical OET Listening Score</p>
-                <h2 className="mt-2 text-3xl font-black text-gray-900 dark:text-gray-100">{result.scoreDisplay}</h2>
-                <p className="mt-3 max-w-2xl text-sm text-gray-600 dark:text-gray-400">
+                <p className="text-xs font-black uppercase tracking-widest text-muted">Canonical OET Listening Score</p>
+                <h2 className="mt-2 text-3xl font-black text-navy">{result.scoreDisplay}</h2>
+                <p className="mt-3 max-w-2xl text-sm text-muted">
                   This is graded against the official answer key. A pass on Listening is 30/42 (350/500, Grade B).
                 </p>
               </div>
@@ -152,47 +152,45 @@ function ListeningResultsContent() {
           ) : (
             <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
               <div>
-                <p className="text-xs font-black uppercase tracking-widest text-gray-600 dark:text-gray-400">Practice Score</p>
-                <h2 className="mt-2 text-3xl font-black text-gray-900 dark:text-gray-100">{result.rawScore} / {result.maxRawScore} correct ({percentCorrect}%)</h2>
-                <p className="mt-3 max-w-2xl text-sm text-gray-600 dark:text-gray-400">
+                <p className="text-xs font-black uppercase tracking-widest text-muted">Practice Score</p>
+                <h2 className="mt-2 text-3xl font-black text-navy">{result.rawScore} / {result.maxRawScore} correct ({percentCorrect}%)</h2>
+                <p className="mt-3 max-w-2xl text-sm text-muted">
                   This is a drill / starter paper, not a full OET Listening test. Official OET grade and 350/500 scaled
                   pass mark only apply to full 42-item papers.
                 </p>
               </div>
-              <div className="rounded-2xl border border-border bg-background-light p-5 text-center text-gray-900 dark:text-gray-100">
-                <p className="text-xs font-black uppercase tracking-widest text-gray-600 dark:text-gray-400">Practice</p>
+              <div className="rounded-2xl border border-border bg-background-light p-5 text-center text-navy">
+                <p className="text-xs font-black uppercase tracking-widest text-muted">Practice</p>
                 <p className="mt-2 text-4xl font-black">{percentCorrect}%</p>
-                <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">{result.rawScore} of {result.maxRawScore}</p>
+                <p className="mt-1 text-sm text-muted">{result.rawScore} of {result.maxRawScore}</p>
               </div>
             </div>
           )}
 
           <div className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-3">
             <div className="rounded-2xl border border-border bg-background-light p-4">
-              <p className="text-xs font-black uppercase tracking-widest text-gray-600 dark:text-gray-400">Raw</p>
-              <p className="mt-2 text-2xl font-black text-gray-900 dark:text-gray-100">{result.rawScore} / {result.maxRawScore}</p>
+              <p className="text-xs font-black uppercase tracking-widest text-muted">Raw</p>
+              <p className="mt-2 text-2xl font-black text-navy">{result.rawScore} / {result.maxRawScore}</p>
             </div>
             <div className="rounded-2xl border border-border bg-background-light p-4">
-              <p className="text-xs font-black uppercase tracking-widest text-gray-600 dark:text-gray-400">Correct</p>
-              <p className="mt-2 text-2xl font-black text-gray-900 dark:text-gray-100">{result.correctCount}</p>
+              <p className="text-xs font-black uppercase tracking-widest text-muted">Correct</p>
+              <p className="mt-2 text-2xl font-black text-navy">{result.correctCount}</p>
             </div>
             <div className="rounded-2xl border border-border bg-background-light p-4">
-              <p className="text-xs font-black uppercase tracking-widest text-gray-600 dark:text-gray-400">Review Policy</p>
-              <p className="mt-2 text-sm font-bold capitalize text-gray-900 dark:text-gray-100">{result.transcriptAccess.state.replace(/_/g, ' ')}</p>
+              <p className="text-xs font-black uppercase tracking-widest text-muted">Review Policy</p>
+              <p className="mt-2 text-sm font-bold capitalize text-navy">{result.transcriptAccess.state.replace(/_/g, ' ')}</p>
             </div>
           </div>
         </MotionSection>
 
         {result.recommendedNextDrill ? (
           <MotionSection delayIndex={1}>
-            <h2 className="mb-4 text-sm font-black uppercase tracking-widest text-gray-600 dark:text-gray-400">Recommended Next Step</h2>
-            <Link href={result.recommendedNextDrill.launchRoute} className="group block rounded-2xl border border-primary/30 bg-primary/10 p-6 transition-all hover:border-primary/40 hover:shadow-md">
+            <h2 className="mb-4 text-sm font-black uppercase tracking-widest text-muted">Recommended Next Step</h2>
+            <Link href={result.recommendedNextDrill.launchRoute} className="group block rounded-2xl border border-primary/30 bg-primary/10 p-6 transition-[color,background-color,border-color,box-shadow,transform,opacity,filter] duration-200 hover:border-primary/40 hover:shadow-md">
               <div className="flex items-start gap-4">
-                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-primary/10">
-                  <Target className="h-6 w-6 text-primary" />
-                </div>
+                <Target className="mt-1 h-6 w-6 shrink-0 text-primary" aria-hidden />
                 <div className="flex-1">
-                  <h3 className="mb-1 text-lg font-black text-primary transition-colors group-hover:text-primary">
+                  <h3 className="mb-1 text-lg font-black text-primary">
                     {result.recommendedNextDrill.title}
                   </h3>
                   <p className="mb-4 text-sm leading-relaxed text-primary/80">
@@ -208,7 +206,7 @@ function ListeningResultsContent() {
         ) : null}
 
         <MotionSection delayIndex={2}>
-          <h2 className="mb-4 text-sm font-black uppercase tracking-widest text-gray-600 dark:text-gray-400">Detailed Review</h2>
+          <h2 className="mb-4 text-sm font-black uppercase tracking-widest text-muted">Detailed Review</h2>
           <MotionList className="space-y-4">
             {result.itemReview.map((item, index) => {
               const isExpanded = expandedItems[item.questionId];
@@ -227,12 +225,12 @@ function ListeningResultsContent() {
                       )}
                     </div>
                     <div className="flex-1 pr-4">
-                      <span className="mb-1 block text-xs font-black uppercase tracking-widest text-gray-600 dark:text-gray-400">
+                      <span className="mb-1 block text-xs font-black uppercase tracking-widest text-muted">
                         Part {item.partCode} / Question {item.number}
                       </span>
-                      <h3 className="text-base font-medium leading-relaxed text-gray-900 dark:text-gray-100">{item.prompt}</h3>
+                      <h3 className="text-base font-medium leading-relaxed text-navy">{item.prompt}</h3>
                     </div>
-                    <div className="shrink-0 text-gray-600 dark:text-gray-400">
+                    <div className="shrink-0 text-muted">
                       {isExpanded ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
                     </div>
                   </button>
@@ -269,21 +267,21 @@ function ListeningResultsContent() {
                           ) : null}
 
                           <div>
-                            <span className="mb-2 block text-xs font-black uppercase tracking-widest text-gray-600 dark:text-gray-400">Explanation</span>
-                            <p className="text-sm leading-relaxed text-gray-600 dark:text-gray-400">{item.explanation}</p>
+                            <span className="mb-2 block text-xs font-black uppercase tracking-widest text-muted">Explanation</span>
+                            <p className="text-sm leading-relaxed text-muted">{item.explanation}</p>
                           </div>
 
                           {item.transcript?.allowed && item.transcript.excerpt ? (
                             <div className="pt-2">
                               {revealedTranscripts[item.questionId] ? (
                                 <div className="relative rounded-xl border border-border bg-surface p-4">
-                                  <Quote className="absolute left-2 top-2 h-8 w-8 text-border" />
-                                  <p className="relative z-10 border-l-2 border-primary pl-6 text-sm italic text-gray-600 dark:text-gray-400">
+                                  <Quote className="absolute left-2 top-2 h-8 w-8 text-primary/30" />
+                                  <p className="relative z-10 pl-6 text-sm italic text-muted">
                                     {item.transcript.excerpt}
                                   </p>
                                   <button
                                     onClick={(event) => toggleTranscript(item.questionId, event)}
-                                    className="mt-3 text-xs font-bold uppercase tracking-widest text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:text-gray-100"
+                                    className="mt-3 text-xs font-bold uppercase tracking-widest text-muted hover:text-navy"
                                   >
                                     Hide Transcript
                                   </button>
@@ -309,8 +307,8 @@ function ListeningResultsContent() {
         <section className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
           <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
             <div>
-              <p className="text-xs font-black uppercase tracking-widest text-gray-600 dark:text-gray-400">Transcript Access</p>
-              <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">{result.transcriptAccess.reason}</p>
+              <p className="text-xs font-black uppercase tracking-widest text-muted">Transcript Access</p>
+              <p className="mt-2 text-sm text-muted">{result.transcriptAccess.reason}</p>
             </div>
             <Button variant="outline" className="gap-2" asChild>
 <Link href={`/listening/review/${result.attemptId}`}>

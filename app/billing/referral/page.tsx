@@ -199,7 +199,7 @@ export default function ReferralPage() {
                 key={s.step}
                 className="rounded-2xl border border-border bg-background-light p-4 text-center"
               >
-                <div className="mx-auto mb-2 flex h-10 w-10 items-center justify-center rounded-full bg-primary text-sm font-bold text-white">
+                <div className="mx-auto mb-2 flex h-10 w-10 items-center justify-center rounded-full bg-primary text-sm font-bold text-white dark:bg-violet-700">
                   {s.step}
                 </div>
                 <p className="text-sm font-bold text-navy">{s.title}</p>

@@ -60,7 +60,7 @@ export default function ListeningLessonPage() {
   if (loading) {
     return (
       <main className="mx-auto max-w-3xl px-4 py-12">
-        <p className="text-slate-500">Loading lesson…</p>
+        <p className="text-muted">Loading lesson…</p>
       </main>
     );
   }
@@ -68,8 +68,8 @@ export default function ListeningLessonPage() {
   if (!lesson) {
     return (
       <main className="mx-auto max-w-3xl px-4 py-12 space-y-4">
-        <h1 className="text-2xl font-bold">Lesson not found</h1>
-        <Link href="/listening/lessons" className="rounded-md bg-slate-900 px-4 py-2 text-white text-sm inline-block">
+        <h1 className="text-2xl font-bold text-navy">Lesson not found</h1>
+        <Link href="/listening/lessons" className="rounded-md bg-primary px-4 py-2 text-white dark:bg-violet-700 text-sm inline-block">
           Back to lesson list
         </Link>
       </main>
@@ -79,25 +79,25 @@ export default function ListeningLessonPage() {
   return (
     <main className="mx-auto max-w-3xl px-4 py-12 space-y-6">
       <header>
-        <span className="text-xs font-semibold uppercase tracking-wide text-blue-700">
+        <span className="text-xs font-semibold uppercase tracking-wide text-primary">
           Sub-skill {lesson.skillCode}
         </span>
-        <h1 className="text-3xl font-bold tracking-tight">{lesson.title}</h1>
-        <p className="mt-1 text-sm text-slate-500">~{lesson.estimatedMinutes} min</p>
+        <h1 className="text-3xl font-bold tracking-tight text-navy">{lesson.title}</h1>
+        <p className="mt-1 text-sm text-muted">~{lesson.estimatedMinutes} min</p>
       </header>
 
       <ol className="space-y-3">
         {STEPS.map((step, i) => (
           <li
             key={step.key}
-            className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm flex items-center justify-between"
+            className="rounded-xl border border-border bg-surface p-4 shadow-sm flex items-center justify-between"
           >
             <div>
-              <span className="text-xs font-mono text-slate-400">Step {i + 1}</span>
-              <p className="font-semibold">{step.label}</p>
-              <p className="text-xs text-slate-500">~{step.minutes} min</p>
+              <span className="text-xs font-mono text-muted">Step {i + 1}</span>
+              <p className="font-semibold text-navy">{step.label}</p>
+              <p className="text-xs text-muted">~{step.minutes} min</p>
             </div>
-            <span className="text-xs text-slate-400">
+            <span className="text-xs text-muted">
               {lesson.progress?.[(step.key + 'Completed') as keyof typeof lesson.progress]
                 ? '✓'
                 : '·'}
@@ -106,12 +106,12 @@ export default function ListeningLessonPage() {
         ))}
       </ol>
 
-      <article className="prose prose-slate max-w-none rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+      <article className="prose prose-slate max-w-none rounded-2xl border border-border bg-surface p-6 shadow-sm">
         {/* Markdown rendering is intentionally simple here — body comes already-rendered or plain text */}
         <pre className="whitespace-pre-wrap font-sans">{lesson.bodyMarkdownEn}</pre>
       </article>
 
-      <Link href="/listening/lessons" className="text-sm text-blue-700 underline">
+      <Link href="/listening/lessons" className="text-sm text-primary underline">
         ← All lessons
       </Link>
     </main>

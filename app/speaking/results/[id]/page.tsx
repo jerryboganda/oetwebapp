@@ -358,7 +358,7 @@ export default function SpeakingResultSummary() {
                 <div>
                   <h2 className="text-lg font-black text-navy">Criterion-by-criterion breakdown</h2>
                   <p className="text-xs text-muted mt-1">
-                    OET Speaking has nine advisory criteria — four linguistic (each scored out of 6) and five clinical-communication (each scored out of 3).
+                    OET Speaking has nine advisory criteria: four linguistic (each scored out of 6) and five clinical-communication (each scored out of 3).
                   </p>
                 </div>
                 {result.criteriaSource ? (
@@ -393,7 +393,7 @@ export default function SpeakingResultSummary() {
                               </div>
                               <div className="mt-1 h-1.5 rounded-full bg-background-light overflow-hidden">
                                 <div
-                                  className="h-full bg-primary transition-all"
+                                  className="h-full bg-primary transition-[width,background-color] duration-300"
                                   style={{ width: `${pct}%` }}
                                   aria-hidden="true"
                                 />
@@ -441,9 +441,7 @@ export default function SpeakingResultSummary() {
           <MotionSection delayIndex={1}>
             <Card className="p-8 h-full">
               <div className="flex items-center gap-3 mb-6">
-                <div className="w-10 h-10 rounded-xl bg-success/10 flex items-center justify-center">
-                  <Zap className="w-5 h-5 text-success" />
-                </div>
+                <Zap className="w-5 h-5 text-success shrink-0" aria-hidden />
                 <h2 className="text-lg font-black text-navy">Key Strengths</h2>
               </div>
               <ul className="space-y-4">
@@ -460,9 +458,7 @@ export default function SpeakingResultSummary() {
           <MotionSection delayIndex={2}>
             <Card className="p-8 h-full">
               <div className="flex items-center gap-3 mb-6">
-                <div className="w-10 h-10 rounded-xl bg-warning/10 flex items-center justify-center">
-                  <Target className="w-5 h-5 text-warning" />
-                </div>
+                <Target className="w-5 h-5 text-warning shrink-0" aria-hidden />
                 <h2 className="text-lg font-black text-navy">Top Improvements</h2>
               </div>
               <ul className="space-y-4">
@@ -481,9 +477,7 @@ export default function SpeakingResultSummary() {
           <MotionSection delayIndex={3}>
             <Card className="p-8 h-full">
               <div className="flex items-center gap-3 mb-6">
-                <div className="w-10 h-10 rounded-xl bg-danger/10 flex items-center justify-center">
-                  <Headphones className="w-5 h-5 text-danger" />
-                </div>
+                <Headphones className="w-5 h-5 text-danger shrink-0" aria-hidden />
                 <h2 className="text-lg font-black text-navy">Pronunciation Insight</h2>
               </div>
               <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4 text-center">
@@ -526,17 +520,15 @@ export default function SpeakingResultSummary() {
             delayIndex={4}
             className="bg-navy rounded-3xl p-8 text-white flex flex-col md:flex-row items-center justify-between gap-8"
           >
-            <div className="flex items-center gap-6">
-              <div className="w-16 h-16 rounded-2xl bg-white/10 flex items-center justify-center shrink-0">
-                <TrendingUp className="w-8 h-8 text-primary" />
-              </div>
+            <div className="flex items-center gap-4">
+              <TrendingUp className="w-8 h-8 text-primary shrink-0" aria-hidden />
               <div>
                 <div className="text-xs font-bold text-primary uppercase tracking-widest mb-1">Recommended Next Drill</div>
                 <h3 className="text-xl font-black mb-2">{result.nextDrill.title}</h3>
                 <p className="text-sm text-white/60 max-w-sm">{result.nextDrill.description}</p>
               </div>
             </div>
-            <Button className="bg-primary text-white px-8 py-4 rounded-2xl font-black whitespace-nowrap" asChild>
+            <Button className="bg-primary text-white dark:bg-violet-700 px-8 py-4 rounded-2xl font-black whitespace-nowrap" asChild>
 <Link href={result.nextDrill.route ?? `/speaking/phrasing/${result.nextDrill.id}`}>
                 Start Drill <ChevronRight className="w-5 h-5" />
               </Link>

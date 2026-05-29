@@ -63,7 +63,7 @@ export function InterlocutorScriptEditor({
   const validationHints = useMemo(() => {
     const hints: string[] = [];
     if (!openingResponse.trim()) {
-      hints.push('Opening response is required — the AI patient needs a first line.');
+      hints.push('Opening response is required. The AI patient needs a first line.');
     }
     if (openingResponse.length > 500) {
       hints.push('Opening response must be under 500 characters.');
@@ -128,7 +128,7 @@ export function InterlocutorScriptEditor({
           <p className="font-bold uppercase tracking-[0.16em]">Eyes-only: tutor + admin</p>
           <p className="text-xs leading-5">
             Everything authored here drives the AI patient persona and the tutor cue panel. It is
-            never shown to learners — the candidate card has no overlap with this content.
+            never shown to learners. The candidate card has no overlap with this content.
           </p>
         </div>
       </div>
@@ -144,7 +144,7 @@ export function InterlocutorScriptEditor({
           rows={3}
           maxLength={500}
           required
-          hint={`${openingResponse.length}/500 — first thing the AI patient says.`}
+          hint={`${openingResponse.length}/500. First thing the AI patient says.`}
         />
         <div className="grid gap-3">
           <Textarea
@@ -220,7 +220,7 @@ export function InterlocutorScriptEditor({
           label="Profession role notes (optional)"
           value={professionRoleNotes ?? ''}
           onChange={(e) => setProfessionRoleNotes(e.target.value)}
-          placeholder={`e.g. "Patient's daughter who lives nearby" — only when interlocutor is not the patient.`}
+          placeholder={`e.g. "Patient's daughter who lives nearby" (only when interlocutor is not the patient).`}
           maxLength={500}
         />
       </section>

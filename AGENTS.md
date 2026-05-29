@@ -108,7 +108,7 @@ docker exec oet-local-api <command>
 
 **Production VPS (`oet-dev`) — deployment only:**
 
-- Production deploys use `ssh oet-dev "cd /opt/oetwebapp && DEPLOY_REF=<sha> bash ./scripts/deploy/deploy-prod.sh"`.
+- Production deploys use the protected GitHub workflow, or `ssh oet-dev "cd /opt/oetwebapp && DEPLOY_REF=<sha> WEB_IMAGE=<digest> API_IMAGE=<digest> DB_BACKUP_IMAGE=<digest> ROUTER_IMAGE=<digest> bash ./scripts/deploy/deploy-prod.sh"` for incident rollback.
 - Do NOT run `npm test`, `npm run build`, `dotnet test`, or any validation commands on the VPS. All validation happens locally in Docker before pushing.
 
 ### Validation commands (run in local Docker)
@@ -295,15 +295,20 @@ tests/e2e/                    # Playwright E2E tests
 ```bash
 ssh root@68.183.32.122
 cd /opt/oetwebapp
-DEPLOY_REF=<40-character-sha> bash ./scripts/deploy/deploy-prod.sh
+DEPLOY_REF=<40-character-sha> \
+WEB_IMAGE=<web-image@sha256:...> \
+API_IMAGE=<api-image@sha256:...> \
+DB_BACKUP_IMAGE=<db-backup-image@sha256:...> \
+ROUTER_IMAGE=<router-image@sha256:...> \
+bash ./scripts/deploy/deploy-prod.sh
 ```
 
-Production deploys are exact-SHA only. The target SHA must have a signed
-`release-evidence-<sha>` artifact with immutable image digests. The deploy rolls
-the inactive blue/green app slot forward, switches stable router containers only
-after health checks pass, and preserves at least one previous-good release for
-rollback. Destructive migrations require a maintenance window, verified backup,
-non-live restore drill, and owner approval.
+Production deploys are exact-SHA only. The deploy workflow must provide immutable
+`@sha256` image refs for the web, API, DB backup, and router images. The deploy
+rolls the inactive blue/green app slot forward, switches stable router containers
+only after health checks pass, and preserves at least one previous-good release
+record for rollback. Destructive migrations require a maintenance window,
+verified backup, non-live restore drill, and owner approval.
 
 ### Staging / GitHub-only flow
 

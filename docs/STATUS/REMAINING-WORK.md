@@ -1,6 +1,6 @@
 # Current Remaining Work
 
-Status date: 2026-05-17
+Status date: 2026-05-29
 
 Audience: owner, engineering, QA, release, support, and stakeholder review.
 
@@ -29,6 +29,7 @@ Current active work is tracked here by workstream and points to the authoritativ
 | --- | --- | --- |
 | V1 launch closure | `docs/STATUS/remaining-work.yaml` | Closed for v1 launch evidence. |
 | Current remaining-work index | `docs/STATUS/REMAINING-WORK.md` | Current stakeholder index. |
+| Docs completion audit | `docs/STATUS/DOCS-COMPLETION-AUDIT-2026-05-29.md` | Current docs-folder completion verdict. |
 | Progress ledger | `PROGRESS.md` | Append-only narrative. |
 | ElevenLabs realtime STT | `docs/ELEVENLABS-REALTIME-STT-PRODUCTION-PLAN.md` | Active rollout backlog. |
 | Conversation invariants | `docs/CONVERSATION.md` | Production contract. |
@@ -54,8 +55,8 @@ RW-001 through RW-022 are closed in `docs/STATUS/remaining-work.yaml`. Do not re
 
 ### P0-002 - Backend Build Health Check
 
-- Evidence: one failure-mode audit reported `npm run backend:build` failing on `ConversationAsrProviderSelector.cs` and `ConversationOptions` resolution.
-- Remaining work: rerun `npm run backend:build` in the current worktree and fix any live compile errors before relying on deeper validation.
+- Evidence: Docker backend API build on 2026-05-29 produced `OetLearner.Api.dll`; warnings remain but no live compile error was emitted for `ConversationAsrProviderSelector.cs` / `ConversationOptions`.
+- Remaining work: keep backend build in the final validation matrix; fix only live compiler errors, not historical stale-assets output.
 - Input required: none.
 - Recommendation: make this the first verification command after planning edits.
 
@@ -63,6 +64,7 @@ RW-001 through RW-022 are closed in `docs/STATUS/remaining-work.yaml`. Do not re
 
 - Canonical source: `docs/ELEVENLABS-REALTIME-STT-PRODUCTION-PLAN.md`.
 - Local hardening complete: production startup now fails closed unless the grounded AI provider has an external HTTPS base URL plus API key, and realtime STT has a real provider key, adult-learner authorization, legal/privacy approval, spend/pricing controls, approved region, and an approved topology value (`single-instance`, `single-region-sticky`, or `distributed`).
+- Local hardening update 2026-05-29: launch-readiness statuses are server-validated, and admin conversation settings now reject realtime real-provider authorization unless legal, privacy, protected-smoke, spend-cap, topology, and evidence URL gates are approved.
 - Remaining work: complete RTSTT-001 through RTSTT-008 before any real-provider exposure outside protected smoke: audio/device compatibility, protected smoke, spend reservations, circuit breaker, transcript authority, topology evidence, sponsor/school/minor gates, and consent model.
 - User defaults: `$25/month` pilot cap, single API instance beta, protected smoke mandatory, compare all audio strategies.
 - Input required: rotated ElevenLabs STT key through protected secret channel, vendor/privacy approval, target beta users, region/topology confirmation.
@@ -72,6 +74,7 @@ RW-001 through RW-022 are closed in `docs/STATUS/remaining-work.yaml`. Do not re
 
 - Evidence: mobile store credentials/assets/privacy approval, signed desktop artifacts, manual assistive-tech signoff, and GitHub-hosted QA observation are still external-evidence items.
 - Local hardening complete: mobile release validation rejects placeholder association files, invalid app versions/version codes, and malformed Android certificate fingerprints; production Capacitor app URLs now fail closed to HTTPS/non-loopback except explicit local-loopback development mode; mobile app-host deep links reject HTTP; desktop public release builds require a safe remote API target, verify update metadata/checksums, and route packaged smoke through the release wrapper.
+- Local hardening update 2026-05-29: desktop Speaking keeps using the proven Chromium recorder path until native Electron capture sends real chunks, preventing zero-byte desktop recordings from the dormant IPC bridge.
 - Remaining work: attach real external evidence for these explicit `pending-external` gates instead of hiding them behind closed v1 status.
 - Input required: Apple/Google accounts and signing assets, desktop signing method, release channel decisions, manual QA availability.
 - Recommendation: launch web/API first if desired; keep mobile stores and signed desktop as beta until evidence is attached.
@@ -84,18 +87,18 @@ RW-001 through RW-022 are closed in `docs/STATUS/remaining-work.yaml`. Do not re
 - Input required: Apple Team ID, final bundle ID, Android signing certificate fingerprint, support contact path.
 - Recommendation: create a simple public support page with contact, privacy, delete-account, and response-time expectations.
 
-### P0-006 - Production Release Evidence Handoff
+### P0-006 - Production Digest Handoff
 
-- Evidence: production deploy workflow expects an evidence bundle already present in the production checkout, while the deploy wrapper fails closed if it is missing.
-- Remaining work: document and automate how signed CI evidence reaches `/opt/oetwebapp` for a given SHA.
-- Input required: choose manual copy to release-evidence or GitHub Actions artifact fetch by SHA.
-- Recommendation: automate artifact fetch by SHA and verify with `EXPECTED_GIT_SHA`.
+- Evidence: production deploy workflow now requires immutable image digest refs for the target SHA, and deploy scripts now consume the protected workflow's digest inputs directly.
+- Remaining work: ensure each manual deploy records the source CI run and the four digest refs in release/deploy notes.
+- Input required: final CI artifact URL or run ID at deploy time.
+- Recommendation: keep deploys exact-SHA only and supply digest refs through the protected GitHub workflow.
 
 ### P0-007 - Accessibility Launch Policy
 
 - Evidence: release readiness requires manual NVDA/VoiceOver signoff, while the old remaining-work register marks broader accessibility as done-v1-scope.
-- Local hardening complete: production release evidence verification now fails closed unless `accessibility-signoff.env` records zero critical/serious axe violations plus manual NVDA and VoiceOver pass results for auth, dashboard, billing, one immersive learner flow, expert review submit, and admin audit/user-credit flows.
-- Remaining work: execute the manual assistive-technology pass and attach the evidence manifest to the release bundle.
+- Local hardening complete: accessibility signoff validation now fails closed unless `qa-artifacts/accessibility-signoff.env` records zero critical/serious axe violations plus manual NVDA and VoiceOver pass results for auth, dashboard, billing, one immersive learner flow, expert review submit, and admin audit/user-credit flows.
+- Remaining work: execute the manual assistive-technology pass and attach the signoff artifact to release/deploy notes.
 - Input required: manual QA operator availability and the final evidence URL/artifact.
 - Recommendation: keep this as a hard production launch gate.
 
@@ -124,12 +127,14 @@ RW-001 through RW-022 are closed in `docs/STATUS/remaining-work.yaml`. Do not re
 ### P1-005 - Mobile Release Readiness
 
 - Local hardening complete: mobile release CI passes app version/version-code inputs into the validator and stamps Capacitor/iOS versions with structured Node updates instead of fragile shell substitutions. Production Capacitor config now enforces HTTPS/non-loopback URLs unless explicit local-loopback development mode is enabled, and app deep-link handling rejects HTTP.
+- Local hardening update 2026-05-29: mobile `/pair?code=...` deep links now dispatch through the existing device-pairing redeem/exchange backend flow instead of being swallowed by the runtime bridge.
 - Remaining work: validate signing secrets, store metadata, privacy manifest, deep links, push config, real-device microphone/keyboard/safe-area/background tests, signed artifact verification, native IAP products, receipt validation, entitlement mapping, cancellation/refund handling, and store-review evidence.
 - Input required: Apple Developer account, Google Play account, signing certs, provisioning profile, store products, privacy/support/delete-account metadata, and final IAP policy.
 
 ### P1-006 - Desktop Release Readiness
 
 - Local hardening complete: desktop release CI has write permission for GitHub Releases, uses the workflow token explicitly, verifies Windows Authenticode signatures when signing is required, uploads `SHA256SUMS.txt`, enforces safe remote API targets for public releases, validates Electron update metadata, registers the `oet-prep` protocol, queues cold-start deep links, and provides a packaged-smoke wrapper.
+- Local hardening update 2026-05-29: the desktop Speaking recorder intentionally falls back to the browser recorder until Electron native capture is implemented end-to-end, avoiding empty recordings.
 - Remaining work: prove signed Windows release, hosted update server behavior, OAuth callback, packaged desktop smoke, backend API/version compatibility evidence, macOS signing/notarization, and Linux package evidence.
 - Input required: Windows signing method, update server URL/CDN, Apple Developer ID/notarization access, Linux package targets, and final release channel.
 
@@ -152,7 +157,7 @@ RW-001 through RW-022 are closed in `docs/STATUS/remaining-work.yaml`. Do not re
 
 ### P1-010 - Mobile Push Token Registration
 
-- Remaining work: route native push-token registration through `apiClient` or a typed helper with CSRF/auth coverage and add a bridge test.
+- Remaining work: push-token registration already routes through the typed notification helper; add bridge tests for registration retry/resume and notification tap routing.
 - Input required: none.
 
 ### P1-011 - OET Scoring Threshold Audit
@@ -167,6 +172,13 @@ RW-001 through RW-022 are closed in `docs/STATUS/remaining-work.yaml`. Do not re
 - Local hardening complete: `admin.reading_draft` is registered as a platform-only known AI feature, Reading AI extraction always requires human approval, auto-approval was removed, raw provider bodies are not retained by default, and provider/internal failure details are not persisted into draft notes or audit details.
 - Remaining work: implement full grounded provider extraction and admin review UI/approval evidence for production.
 - Input required: provider credentials and owner approval for protected sandbox/provider smoke.
+
+### P1-013 - Reading Learner DTO Contract Reconciliation
+
+- Local hardening complete 2026-05-29: submitted Reading review payloads no longer emit `CorrectAnswer` or `ExplanationMarkdown`; answer-key-only data stays server-side/admin-only per the AGENTS hard ban.
+- Evidence: backend projection redaction in `ReadingLearnerEndpoints.cs`, frontend review copy updated to learner-safe outcome language, and focused regression coverage added to `ReadingAuthoringTests.cs`.
+- Remaining work: keep this in the final backend validation matrix and do not reintroduce answer-key-only learner fields without explicit owner signoff changing the invariant.
+- Input required: none.
 
 ## Active P2 Work
 
@@ -204,6 +216,7 @@ RW-001 through RW-022 are closed in `docs/STATUS/remaining-work.yaml`. Do not re
 ### P2-008 - Listening V2 Deferred Work
 
 - Local hardening complete: V2 save/submit facades, active-player answer handoff, exact unanswered-number warnings, paper all-parts final review, and free-navigation unit coverage are implemented.
+- Local hardening update 2026-05-29: learner pathway now consumes the server-authoritative V2 pathway snapshot; Part A/B/C practice waits for diagnostic completion, skips diagnostic launch targets, and passes distinct `part-a`, `part-b`, and `part-c` focus values to the player.
 - Local live evidence complete: an isolated Postgres-backed frontend/API runtime passed focused Chromium learner smoke for Reading deep-link, mock report deep-link, Listening answer-key isolation, exam strict-lock intro, paper no-FSM mount, practice happy path, and R10 readiness.
 - Remaining work: publish/operator-approve complete real-content multi-part Listening papers as content evidence; this is not a local route-code blocker.
 
@@ -217,7 +230,15 @@ RW-001 through RW-022 are closed in `docs/STATUS/remaining-work.yaml`. Do not re
 
 ### P2-011 - Markdown/Docs Hygiene Scope
 
-- Remaining work: run markdownlint over release, ops, QA, and mission-critical docs; fix violations or define a launch-doc lint scope that excludes historical docs.
+- Evidence: `docs/STATUS/DOCS-COMPLETION-AUDIT-2026-05-29.md` confirms the docs folder is not 100% complete; it contains canonical specs, active launch gates, stale historical plans, and external-evidence blockers.
+- Local hardening complete 2026-05-29: active runbooks with host/VPS-heavy validation guidance were rewritten to local Docker-first commands, and status banners were added to mixed historical/progress docs so they no longer imply standalone backlog truth.
+- Remaining work: run markdownlint over release, ops, QA, and mission-critical docs; fix violations or define a launch-doc lint scope that excludes historical evidence logs.
+
+### P2-012 - Learner Portal Enhancement Plan Reconciliation
+
+- Evidence: `docs/learner-portal-enhancement-plan.md` still lists critical open gaps such as Recalls test coverage, `/practice` route status, mobile hardware validation, Writing revision coach, and Speaking transcript/fluency roadmap work.
+- Remaining work: re-audit those claims against current routes/code/tests; close stale items with evidence and move any live implementation gaps into this current index.
+- Input required: none.
 
 ## Inputs Still Required From You
 
@@ -226,7 +247,7 @@ RW-001 through RW-022 are closed in `docs/STATUS/remaining-work.yaml`. Do not re
 | Web/API versus whole-platform public launch order | Launch web/API first; keep mobile stores and signed desktop as beta until external evidence lands. |
 | Manual accessibility signoff | Require it for T0/T1 launch flows before public launch. |
 | Mobile billing policy | Use reader-app/subscriber-access first; keep checkout on web until store review guidance is confirmed. |
-| Production evidence handoff | Automate GitHub artifact fetch by SHA on the VPS/deploy workflow. |
+| Production digest handoff | Record the CI run plus `WEB_IMAGE`, `API_IMAGE`, `DB_BACKUP_IMAGE`, and `ROUTER_IMAGE` digest refs for the exact SHA. |
 | Support route | Add a public `/support` page with privacy/delete-account/contact details. |
 | Sponsor portal launch status | Keep disabled by default until real billing, ROI, invoice, and contract evidence is attached. |
 | Native app release credentials | Provide Apple Team ID, bundle IDs, Android SHA-256, signing assets, store products, and app-store metadata before public mobile/desktop release. |
@@ -242,7 +263,7 @@ RW-001 through RW-022 are closed in `docs/STATUS/remaining-work.yaml`. Do not re
 - No all-audience speech processing until sponsor/school/minor privacy gates are approved and tested.
 - No mobile store submission with placeholder app association files or missing support surface.
 - No signed desktop public release without signed artifact validation and update-flow proof.
-- No production deploy unless signed evidence for the exact SHA is available and verified.
+- No production deploy unless the exact SHA has CI-recorded immutable image digest refs for web, API, DB backup, and router images.
 - No claim that the whole platform is “complete” without separating closed v1 work from active post-v1/all-audience readiness.
 
 ## Change Log

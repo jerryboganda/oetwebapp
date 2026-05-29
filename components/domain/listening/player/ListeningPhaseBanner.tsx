@@ -36,10 +36,10 @@ export function ListeningPreviewBanner({
         <Timer className="mt-0.5 h-5 w-5 shrink-0 text-info" />
         <div>
           <p className="text-sm font-black text-info">
-            {LISTENING_PREVIEW_LABEL} — {secondsRemaining} seconds left
+            {LISTENING_PREVIEW_LABEL}: {secondsRemaining} seconds left
           </p>
           <p className="mt-0.5 text-xs text-info">
-            {LISTENING_SECTION_LABEL[section]} — read the questions and mark answers in advance.
+            {LISTENING_SECTION_LABEL[section]}: read the questions and mark answers in advance.
             Audio will start automatically when the timer hits zero.
           </p>
         </div>
@@ -80,7 +80,7 @@ export function ListeningReviewBanner({
         <Timer className="mt-0.5 h-5 w-5 shrink-0 text-warning" />
         <div>
           <p className="text-sm font-black text-warning">
-            {LISTENING_SECTION_LABEL[section]} — review window
+            {LISTENING_SECTION_LABEL[section]} review window
           </p>
           <p className="mt-0.5 text-xs text-warning">
             You can finish completing any words you abbreviated. Answers for this section remain

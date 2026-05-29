@@ -65,12 +65,10 @@ export default function WritingTaskLibrary() {
       <header className="bg-navy text-white pt-10 pb-12 px-4 sm:px-6 lg:px-8">
         <div>
           <div className="flex items-center gap-3 mb-2">
-            <div className="w-10 h-10 rounded-lg bg-white/10 flex items-center justify-center">
-              <BookOpen className="w-5 h-5 text-info" />
-            </div>
+            <BookOpen className="w-7 h-7 text-info shrink-0" aria-hidden="true" />
             <h1 className="text-3xl sm:text-4xl font-bold">Writing Task Library</h1>
           </div>
-          <p className="text-muted/40 text-lg">
+          <p className="text-white/70 text-lg">
             Choose strict exam simulation for the 5-minute reading + 40-minute writing workflow, or learning mode for guided planning and rulebook support.
           </p>
         </div>
@@ -96,7 +94,7 @@ export default function WritingTaskLibrary() {
                       key={option.value}
                       type="button"
                       onClick={() => setSelectedExamMode(option.value)}
-                      className={`flex min-h-12 items-center justify-center gap-2 rounded-lg border px-3 text-sm font-bold transition-colors ${active ? 'border-primary bg-primary text-white' : 'border-border bg-background-light text-navy hover:border-primary/50'}`}
+                      className={`flex min-h-12 items-center justify-center gap-2 rounded-lg border px-3 text-sm font-bold transition-colors ${active ? 'border-primary bg-primary text-white dark:bg-violet-700' : 'border-border bg-background-light text-navy hover:border-primary/50'}`}
                       aria-pressed={active}
                     >
                       <Icon className="h-4 w-4" />
@@ -121,7 +119,7 @@ export default function WritingTaskLibrary() {
                       key={option.value}
                       type="button"
                       onClick={() => setSelectedAssessor(option.value)}
-                      className={`flex min-h-12 items-center justify-center gap-2 rounded-lg border px-3 text-sm font-bold transition-colors ${active ? 'border-primary bg-primary text-white' : 'border-border bg-background-light text-navy hover:border-primary/50'}`}
+                      className={`flex min-h-12 items-center justify-center gap-2 rounded-lg border px-3 text-sm font-bold transition-colors ${active ? 'border-primary bg-primary text-white dark:bg-violet-700' : 'border-border bg-background-light text-navy hover:border-primary/50'}`}
                       aria-pressed={active}
                     >
                       <Icon className="h-4 w-4" />

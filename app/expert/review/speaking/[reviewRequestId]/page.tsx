@@ -135,7 +135,7 @@ function normalizeSpeakingVoiceNote(raw: unknown): SpeakingVoiceNote | null {
 }
 
 function formatDuration(seconds?: number | null): string {
-  if (seconds == null || !Number.isFinite(seconds) || seconds <= 0) return '--:--';
+  if (seconds == null || !Number.isFinite(seconds) || seconds <= 0) return '0:00';
   const total = Math.round(seconds);
   const mins = Math.floor(total / 60);
   const secs = total % 60;
@@ -723,10 +723,10 @@ export default function SpeakingReviewWorkspace() {
             {reviewDetail?.artifactStatus && (
               <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
                 {Object.entries(reviewDetail.artifactStatus).map(([artifact, artifactState]) => (
-                  <div key={artifact} className="rounded-lg bg-muted px-3 py-2 text-xs text-muted-foreground">
+                  <div key={artifact} className="rounded-lg bg-muted px-3 py-2 text-xs text-muted">
                     <p className="font-semibold text-foreground">{artifact}</p>
                     <p>{artifactState.state}{artifactState.isStale ? ' • stale' : ''}</p>
-                    {artifactState.message ? <p className="mt-1 text-muted-foreground">{artifactState.message}</p> : null}
+                    {artifactState.message ? <p className="mt-1 text-muted">{artifactState.message}</p> : null}
                   </div>
                 ))}
               </div>
@@ -953,7 +953,7 @@ export default function SpeakingReviewWorkspace() {
                 </div>
                 <div className="mt-3 space-y-2">
                   {reviewHistory.entries.slice(-4).reverse().map((entry) => (
-                    <div key={`${entry.timestamp}-${entry.action}`} className="rounded-lg bg-muted px-3 py-2 text-xs text-muted-foreground">
+                    <div key={`${entry.timestamp}-${entry.action}`} className="rounded-lg bg-muted px-3 py-2 text-xs text-muted">
                       <p className="font-medium text-foreground">{entry.action.replace(/_/g, ' ')}</p>
                       <p>{entry.actorName ?? 'System'} • {new Date(entry.timestamp).toLocaleString()}</p>
                       {entry.details ? <p className="mt-1">{entry.details}</p> : null}

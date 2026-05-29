@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import SubmissionsPage from '../submissions/page';
 
 export const metadata: Metadata = {
-  title: 'History — OET Prep',
+  title: 'History: OET Prep',
   description: 'Review every attempt you have made across Writing, Speaking, Reading, and Listening.',
 };
 

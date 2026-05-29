@@ -120,7 +120,7 @@ function validate(filePath) {
   }
 }
 
-const filePath = path.resolve(process.argv[2] || 'release-evidence/accessibility-signoff.env');
+const filePath = path.resolve(process.argv[2] || 'qa-artifacts/accessibility-signoff.env');
 
 try {
   validate(filePath);

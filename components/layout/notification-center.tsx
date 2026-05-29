@@ -150,7 +150,7 @@ function NotificationItem({
       transition={{ ...itemTransition, delay: getMotionDelay(index, reducedMotion) }}
       onClick={() => onOpen(item)}
       className={cn(
-        'group relative flex w-full items-start gap-3 rounded-xl px-3 py-3 text-left transition-all duration-200',
+        'group relative flex w-full items-start gap-3 rounded-xl px-3 py-3 text-left transition-colors duration-200',
         item.isRead
           ? 'hover:bg-background-light'
           : 'bg-primary/[0.03] hover:bg-primary/[0.05] dark:bg-primary/[0.08] dark:hover:bg-primary/[0.12]',
@@ -268,7 +268,7 @@ function NotificationCenterContent({ onNavigate }: { onNavigate?: () => void }) 
               type="button"
               onClick={() => setTab(value)}
               className={cn(
-                'rounded-md px-3 py-1.5 text-[12px] font-semibold transition-all duration-150',
+                'rounded-md px-3 py-1.5 text-[12px] font-semibold transition-[color,background-color,box-shadow] duration-150',
                 tab === value
                   ? 'bg-surface text-navy shadow-sm'
                   : 'text-muted hover:text-navy',
@@ -293,7 +293,7 @@ function NotificationCenterContent({ onNavigate }: { onNavigate?: () => void }) 
       {(connectionStatus === 'reconnecting' || connectionStatus === 'disconnected') && (
         <div className="mx-1 mb-2 flex items-center gap-2 rounded-lg bg-amber-50/80 px-3 py-2 text-[12px] text-amber-700">
           <WifiOff className="h-3.5 w-3.5 shrink-0" />
-          {connectionStatus === 'reconnecting' ? 'Reconnecting…' : 'Offline — updates may be delayed'}
+          {connectionStatus === 'reconnecting' ? 'Reconnecting…' : 'Offline. Updates may be delayed.'}
         </div>
       )}
 
@@ -432,7 +432,7 @@ export function NotificationCenter() {
             <Popover.Content
               align="end"
               sideOffset={12}
-              className="z-[100] w-[24rem] rounded-2xl glass-panel p-4 shadow-2xl shadow-black/[0.08] data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-[0.97] data-[state=open]:slide-in-from-top-3 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-[0.97] duration-200"
+              className="z-[100] w-[24rem] origin-[var(--radix-popover-content-transform-origin)] rounded-2xl glass-panel p-4 shadow-2xl shadow-black/[0.08] data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-[0.97] data-[state=open]:slide-in-from-top-3 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-[0.97] duration-200"
             >
               <NotificationCenterContent onNavigate={() => setDesktopOpen(false)} />
             </Popover.Content>

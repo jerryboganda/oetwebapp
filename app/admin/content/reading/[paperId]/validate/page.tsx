@@ -213,7 +213,7 @@ export default function ReadingValidatePublishPage() {
                     <div className="flex items-center gap-3">
                       <XCircle className="h-8 w-8 text-[var(--admin-danger)]" />
                       <Badge variant="danger" size="lg">
-                        Not Ready — {report?.issues.length ?? 0} issue
+                        Not Ready: {report?.issues.length ?? 0} issue
                         {(report?.issues.length ?? 0) !== 1 ? 's' : ''}
                       </Badge>
                     </div>
@@ -322,7 +322,7 @@ export default function ReadingValidatePublishPage() {
                         )}
                         {publishState === 'error' && (
                           <span className="text-sm text-[var(--admin-danger)]">
-                            Publish failed — click Publish to retry.
+                            Publish failed. Click Publish to retry.
                           </span>
                         )}
                       </div>

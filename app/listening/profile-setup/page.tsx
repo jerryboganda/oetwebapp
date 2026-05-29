@@ -116,17 +116,17 @@ function StepIndicator({ current, total }: { current: number; total: number }) {
           <div
             className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-bold transition-colors ${
               step < current
-                ? 'bg-violet-600 text-white'
+                ? 'bg-primary text-white dark:bg-violet-700'
                 : step === current
-                  ? 'border-2 border-violet-600 bg-white text-violet-600'
-                  : 'border-2 border-gray-200 bg-white text-gray-400'
+                  ? 'border-2 border-primary bg-surface text-primary'
+                  : 'border-2 border-border bg-surface text-muted'
             }`}
           >
             {step < current ? '✓' : step}
           </div>
           {step < total && (
             <div
-              className={`h-0.5 flex-1 transition-colors ${step < current ? 'bg-violet-600' : 'bg-gray-200'}`}
+              className={`h-0.5 flex-1 transition-colors ${step < current ? 'bg-primary' : 'bg-border'}`}
             />
           )}
         </div>
@@ -147,10 +147,10 @@ function ComfortSlider({ id, label, value, onChange }: ComfortSliderProps) {
     <div>
       <label
         htmlFor={id}
-        className="mb-2 flex items-center justify-between text-sm font-semibold text-gray-700"
+        className="mb-2 flex items-center justify-between text-sm font-semibold text-navy"
       >
         <span>{label}</span>
-        <span className="rounded-full bg-violet-100 px-3 py-0.5 text-violet-700">{value}/5</span>
+        <span className="rounded-full bg-lavender px-3 py-0.5 text-primary">{value}/5</span>
       </label>
       <input
         id={id}
@@ -159,12 +159,12 @@ function ComfortSlider({ id, label, value, onChange }: ComfortSliderProps) {
         max={5}
         value={value}
         onChange={(event) => onChange(Number(event.target.value))}
-        className="w-full accent-violet-600"
+        className="w-full accent-primary"
         aria-valuemin={1}
         aria-valuemax={5}
         aria-valuenow={value}
       />
-      <div className="mt-1 flex justify-between text-xs text-gray-400">
+      <div className="mt-1 flex justify-between text-xs text-muted">
         <span>Uncomfortable</span>
         <span>Very confident</span>
       </div>
@@ -192,8 +192,8 @@ export default function ListeningProfileSetupPage() {
 
   if (authLoading || !isAuthenticated) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-gradient-to-b from-violet-50 to-white dark:from-slate-900 dark:to-slate-950 px-4">
-        <div className="h-8 w-8 animate-spin rounded-full border-4 border-violet-200 border-t-violet-600" />
+      <div className="flex min-h-screen items-center justify-center bg-background-light px-4">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-lavender border-t-primary" />
       </div>
     );
   }
@@ -240,23 +240,23 @@ export default function ListeningProfileSetupPage() {
   };
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-gradient-to-b from-violet-50 to-white dark:from-slate-900 dark:to-slate-950 px-4 py-16">
+    <div className="flex min-h-screen flex-col items-center justify-center bg-background-light px-4 py-16">
       <div className="w-full max-w-lg">
         <div className="mb-6 text-center">
-          <h1 className="text-2xl font-extrabold text-gray-900">Set up your listening profile</h1>
-          <p className="mt-1 text-sm text-gray-500">Step {step} of 4</p>
+          <h1 className="text-2xl font-extrabold text-navy">Set up your listening profile</h1>
+          <p className="mt-1 text-sm text-muted">Step {step} of 4</p>
         </div>
 
         <StepIndicator current={step} total={4} />
 
-        <div className="rounded-2xl border border-gray-100 bg-white dark:bg-slate-800 dark:border-slate-700 p-8 shadow-sm">
+        <div className="rounded-2xl border border-border bg-surface p-8 shadow-sm">
           {/* Step 1 — Goal */}
           {step === 1 && (
             <div className="space-y-6">
-              <h2 className="text-lg font-bold text-gray-900">Your goal</h2>
+              <h2 className="text-lg font-bold text-navy">Your goal</h2>
 
               <div>
-                <p className="mb-2 block text-sm font-semibold text-gray-700">
+                <p className="mb-2 block text-sm font-semibold text-navy">
                   Target band (OET scale)
                 </p>
                 <div className="grid grid-cols-3 gap-2" role="radiogroup" aria-label="Target band">
@@ -269,8 +269,8 @@ export default function ListeningProfileSetupPage() {
                       onClick={() => update('targetBand', band.value)}
                       className={`rounded-xl border py-3 text-sm font-bold transition-colors ${
                         form.targetBand === band.value
-                          ? 'border-violet-600 bg-violet-600 text-white'
-                          : 'border-gray-200 bg-white text-gray-700 hover:border-violet-300'
+                          ? 'border-primary bg-primary text-white dark:bg-violet-700'
+                          : 'border-border bg-surface text-navy hover:border-border-hover'
                       }`}
                     >
                       <span className="block">{band.label}</span>
@@ -283,7 +283,7 @@ export default function ListeningProfileSetupPage() {
               <div>
                 <label
                   htmlFor="examDate"
-                  className="mb-2 block text-sm font-semibold text-gray-700"
+                  className="mb-2 block text-sm font-semibold text-navy"
                 >
                   Exam date
                 </label>
@@ -293,14 +293,14 @@ export default function ListeningProfileSetupPage() {
                   value={form.examDate}
                   disabled={form.examNotBooked}
                   onChange={(event) => update('examDate', event.target.value)}
-                  className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm text-gray-900 focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-200 disabled:cursor-not-allowed disabled:bg-gray-50 disabled:text-gray-400"
+                  className="w-full rounded-xl border border-border px-4 py-3 text-sm text-navy focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:cursor-not-allowed disabled:bg-background-light disabled:text-muted"
                 />
-                <label className="mt-2 flex cursor-pointer items-center gap-2 text-sm text-gray-600">
+                <label className="mt-2 flex cursor-pointer items-center gap-2 text-sm text-muted">
                   <input
                     type="checkbox"
                     checked={form.examNotBooked}
                     onChange={(event) => update('examNotBooked', event.target.checked)}
-                    className="rounded border-gray-300 text-violet-600 focus:ring-violet-500"
+                    className="rounded border-border text-primary focus:ring-primary"
                   />
                   I haven&apos;t booked my exam yet
                 </label>
@@ -309,10 +309,10 @@ export default function ListeningProfileSetupPage() {
               <div>
                 <label
                   htmlFor="hoursPerWeek"
-                  className="mb-2 flex items-center justify-between text-sm font-semibold text-gray-700"
+                  className="mb-2 flex items-center justify-between text-sm font-semibold text-navy"
                 >
                   <span>Hours per week</span>
-                  <span className="rounded-full bg-violet-100 px-3 py-0.5 text-violet-700">
+                  <span className="rounded-full bg-lavender px-3 py-0.5 text-primary">
                     {form.hoursPerWeek} hrs
                   </span>
                 </label>
@@ -323,9 +323,9 @@ export default function ListeningProfileSetupPage() {
                   max={20}
                   value={form.hoursPerWeek}
                   onChange={(event) => update('hoursPerWeek', Number(event.target.value))}
-                  className="w-full accent-violet-600"
+                  className="w-full accent-primary"
                 />
-                <div className="mt-1 flex justify-between text-xs text-gray-400">
+                <div className="mt-1 flex justify-between text-xs text-muted">
                   <span>3 hrs</span>
                   <span>20 hrs</span>
                 </div>
@@ -336,8 +336,8 @@ export default function ListeningProfileSetupPage() {
           {/* Step 2 — Profession */}
           {step === 2 && (
             <div className="space-y-6">
-              <h2 className="text-lg font-bold text-gray-900">Your profession</h2>
-              <p className="text-sm text-gray-500">
+              <h2 className="text-lg font-bold text-navy">Your profession</h2>
+              <p className="text-sm text-muted">
                 We&apos;ll tailor scenarios and vocabulary to your field.
               </p>
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-3" role="radiogroup" aria-label="Profession">
@@ -353,8 +353,8 @@ export default function ListeningProfileSetupPage() {
                       onClick={() => update('profession', prof.value)}
                       className={`flex flex-col items-center gap-2 rounded-xl border px-3 py-4 text-center text-xs font-medium transition-colors ${
                         active
-                          ? 'border-violet-600 bg-violet-600 text-white'
-                          : 'border-gray-200 bg-white text-gray-700 hover:border-violet-300'
+                          ? 'border-primary bg-primary text-white dark:bg-violet-700'
+                          : 'border-border bg-surface text-navy hover:border-border-hover'
                       }`}
                     >
                       <Icon className="h-6 w-6" aria-hidden />
@@ -369,12 +369,12 @@ export default function ListeningProfileSetupPage() {
           {/* Step 3 — Audio context */}
           {step === 3 && (
             <div className="space-y-6">
-              <h2 className="text-lg font-bold text-gray-900">Your audio context</h2>
+              <h2 className="text-lg font-bold text-navy">Your audio context</h2>
 
               <div>
                 <label
                   htmlFor="exposureSource"
-                  className="mb-2 block text-sm font-semibold text-gray-700"
+                  className="mb-2 block text-sm font-semibold text-navy"
                 >
                   Where do you encounter English most?
                 </label>
@@ -384,7 +384,7 @@ export default function ListeningProfileSetupPage() {
                   onChange={(event) =>
                     update('englishExposureSource', event.target.value as ExposureSource)
                   }
-                  className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm text-gray-900 focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-200"
+                  className="w-full rounded-xl border border-border px-4 py-3 text-sm text-navy focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
                 >
                   {EXPOSURE_SOURCES.map((option) => (
                     <option key={option.value} value={option.value}>
@@ -418,15 +418,15 @@ export default function ListeningProfileSetupPage() {
           {/* Step 4 — Self-rating */}
           {step === 4 && (
             <div className="space-y-6">
-              <h2 className="text-lg font-bold text-gray-900">Self-assessment</h2>
+              <h2 className="text-lg font-bold text-navy">Self-assessment</h2>
 
               <div>
                 <label
                   htmlFor="selfRatedSpeed"
-                  className="mb-2 flex items-center justify-between text-sm font-semibold text-gray-700"
+                  className="mb-2 flex items-center justify-between text-sm font-semibold text-navy"
                 >
                   <span>Keeping up with fast spoken English</span>
-                  <span className="rounded-full bg-violet-100 px-3 py-0.5 text-violet-700">
+                  <span className="rounded-full bg-lavender px-3 py-0.5 text-primary">
                     {form.selfRatedSpeed}/5
                   </span>
                 </label>
@@ -437,9 +437,9 @@ export default function ListeningProfileSetupPage() {
                   max={5}
                   value={form.selfRatedSpeed}
                   onChange={(event) => update('selfRatedSpeed', Number(event.target.value))}
-                  className="w-full accent-violet-600"
+                  className="w-full accent-primary"
                 />
-                <div className="mt-1 flex justify-between text-xs text-gray-400">
+                <div className="mt-1 flex justify-between text-xs text-muted">
                   <span>Struggle</span>
                   <span>Very strong</span>
                 </div>
@@ -448,10 +448,10 @@ export default function ListeningProfileSetupPage() {
               <div>
                 <label
                   htmlFor="selfRatedNoteTaking"
-                  className="mb-2 flex items-center justify-between text-sm font-semibold text-gray-700"
+                  className="mb-2 flex items-center justify-between text-sm font-semibold text-navy"
                 >
                   <span>Note-taking while listening</span>
-                  <span className="rounded-full bg-violet-100 px-3 py-0.5 text-violet-700">
+                  <span className="rounded-full bg-lavender px-3 py-0.5 text-primary">
                     {form.selfRatedNoteTaking}/5
                   </span>
                 </label>
@@ -462,9 +462,9 @@ export default function ListeningProfileSetupPage() {
                   max={5}
                   value={form.selfRatedNoteTaking}
                   onChange={(event) => update('selfRatedNoteTaking', Number(event.target.value))}
-                  className="w-full accent-violet-600"
+                  className="w-full accent-primary"
                 />
-                <div className="mt-1 flex justify-between text-xs text-gray-400">
+                <div className="mt-1 flex justify-between text-xs text-muted">
                   <span>I miss details</span>
                   <span>I capture everything</span>
                 </div>
@@ -473,10 +473,10 @@ export default function ListeningProfileSetupPage() {
               <div>
                 <label
                   htmlFor="selfRatedSpelling"
-                  className="mb-2 flex items-center justify-between text-sm font-semibold text-gray-700"
+                  className="mb-2 flex items-center justify-between text-sm font-semibold text-navy"
                 >
                   <span>Spelling under time pressure</span>
-                  <span className="rounded-full bg-violet-100 px-3 py-0.5 text-violet-700">
+                  <span className="rounded-full bg-lavender px-3 py-0.5 text-primary">
                     {form.selfRatedSpelling}/5
                   </span>
                 </label>
@@ -487,16 +487,16 @@ export default function ListeningProfileSetupPage() {
                   max={5}
                   value={form.selfRatedSpelling}
                   onChange={(event) => update('selfRatedSpelling', Number(event.target.value))}
-                  className="w-full accent-violet-600"
+                  className="w-full accent-primary"
                 />
-                <div className="mt-1 flex justify-between text-xs text-gray-400">
+                <div className="mt-1 flex justify-between text-xs text-muted">
                   <span>Often misspell</span>
                   <span>Very accurate</span>
                 </div>
               </div>
 
               <div>
-                <p className="mb-2 text-sm font-semibold text-gray-700">
+                <p className="mb-2 text-sm font-semibold text-navy">
                   Have you taken OET Listening before?
                 </p>
                 <div className="flex gap-3" role="radiogroup" aria-label="OET Listening history">
@@ -512,8 +512,8 @@ export default function ListeningProfileSetupPage() {
                         onClick={() => update('hasTakenBefore', isYes)}
                         className={`flex-1 rounded-xl border py-3 text-sm font-bold transition-colors ${
                           active
-                            ? 'border-violet-600 bg-violet-600 text-white'
-                            : 'border-gray-200 bg-white text-gray-700 hover:border-violet-300'
+                            ? 'border-primary bg-primary text-white dark:bg-violet-700'
+                            : 'border-border bg-surface text-navy hover:border-border-hover'
                         }`}
                       >
                         {option}
@@ -527,7 +527,7 @@ export default function ListeningProfileSetupPage() {
                 <div>
                   <label
                     htmlFor="previousScore"
-                    className="mb-2 block text-sm font-semibold text-gray-700"
+                    className="mb-2 block text-sm font-semibold text-navy"
                   >
                     Previous OET Listening score (0–500)
                   </label>
@@ -539,14 +539,14 @@ export default function ListeningProfileSetupPage() {
                     placeholder="e.g. 320"
                     value={form.previousScore}
                     onChange={(event) => update('previousScore', event.target.value)}
-                    className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm text-gray-900 focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-200"
+                    className="w-full rounded-xl border border-border px-4 py-3 text-sm text-navy focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
                   />
                 </div>
               )}
 
               {error && (
                 <p
-                  className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
+                  className="rounded-xl border border-danger/20 bg-danger/10 px-4 py-3 text-sm text-danger"
                   role="alert"
                 >
                   {error}
@@ -561,7 +561,7 @@ export default function ListeningProfileSetupPage() {
               <button
                 type="button"
                 onClick={() => setStep((s) => s - 1)}
-                className="flex-1 rounded-xl border border-gray-200 py-3 text-sm font-semibold text-gray-700 transition hover:bg-gray-50"
+                className="flex-1 rounded-xl border border-border py-3 text-sm font-semibold text-navy transition-colors hover:bg-background-light"
               >
                 Back
               </button>
@@ -571,7 +571,7 @@ export default function ListeningProfileSetupPage() {
                 type="button"
                 onClick={() => setStep((s) => s + 1)}
                 disabled={!canProceed(step)}
-                className="flex-1 rounded-xl bg-violet-600 py-3 text-sm font-bold text-white transition hover:bg-violet-700 disabled:opacity-50"
+                className="flex-1 rounded-xl bg-primary py-3 text-sm font-bold text-white transition-[color,background-color,transform] duration-200 hover:bg-primary-dark active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600 disabled:opacity-50"
               >
                 Next
               </button>
@@ -580,7 +580,7 @@ export default function ListeningProfileSetupPage() {
                 type="button"
                 onClick={handleSubmit}
                 disabled={submitting}
-                className="flex-1 rounded-xl bg-violet-600 py-3 text-sm font-bold text-white transition hover:bg-violet-700 disabled:opacity-50"
+                className="flex-1 rounded-xl bg-primary py-3 text-sm font-bold text-white transition-[color,background-color,transform] duration-200 hover:bg-primary-dark active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600 disabled:opacity-50"
               >
                 {submitting ? 'Saving…' : 'Complete'}
               </button>

@@ -126,7 +126,7 @@ export default function VocabularyTermDetailPage() {
     return (
       <LearnerDashboardShell>
         <InlineAlert variant="warning" className="mb-4">Term not found.</InlineAlert>
-        <button onClick={() => router.back()} className="rounded-xl bg-primary px-4 py-2 text-sm text-white">Go back</button>
+        <button onClick={() => router.back()} className="rounded-xl bg-primary px-4 py-2 text-sm text-white dark:bg-violet-700">Go back</button>
       </LearnerDashboardShell>
     );
   }
@@ -188,7 +188,7 @@ export default function VocabularyTermDetailPage() {
                 description="How the term appears in an OET-style sentence."
                 className="mb-3"
               />
-              <blockquote className="border-l-4 border-primary/40 pl-4 text-base italic text-navy">
+              <blockquote className="rounded-lg bg-primary/5 px-4 py-2 text-base italic text-navy">
                 &quot;{term.exampleSentence}&quot;
               </blockquote>
             </Card>
@@ -252,7 +252,7 @@ export default function VocabularyTermDetailPage() {
                   <div className="mt-3 space-y-1 text-sm text-muted">
                     <div>Review count: <span className="font-medium text-navy">{myEntry.reviewCount}</span></div>
                     <div>Correct: <span className="font-medium text-navy">{myEntry.correctCount}</span></div>
-                    <div>Next review: <span className="font-medium text-navy">{myEntry.nextReviewDate ?? '—'}</span></div>
+                    <div>Next review: <span className="font-medium text-navy">{myEntry.nextReviewDate ?? '–'}</span></div>
                     <div>Interval: <span className="font-medium text-navy">{myEntry.intervalDays}d</span></div>
                   </div>
                 </div>
@@ -270,7 +270,7 @@ export default function VocabularyTermDetailPage() {
                 <button
                   onClick={handleAdd}
                   disabled={saving}
-                  className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-primary/90 disabled:opacity-50"
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-primary/90 active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600 disabled:opacity-50"
                 >
                   {saving ? 'Adding…' : (<><Plus className="h-4 w-4" /> Add to my list</>)}
                 </button>
@@ -293,7 +293,7 @@ export default function VocabularyTermDetailPage() {
       {/* Added confirmation */}
       {myEntry && (
         <div className="mt-6 flex justify-center">
-          <Link href="/vocabulary/flashcards" className="inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-primary/90">
+          <Link href="/vocabulary/flashcards" className="inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-medium text-white shadow-sm transition-[color,background-color,transform] duration-200 hover:bg-primary/90 active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600">
             <CheckCircle2 className="h-4 w-4" /> Practice with flashcards
           </Link>
         </div>

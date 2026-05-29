@@ -644,47 +644,11 @@ The renderer is the standard Next.js web application. It detects desktop mode vi
 
 ### Current Security Posture Assessment
 
-**Excellent** — The existing implementation scores 18/20 on official Electron security checklist (see Section 3).
+**Excellent** — The existing implementation covers the previously listed Electron fuse and IPC sender-validation hardening items.
 
 ### Remaining Security Hardening (no product impact)
 
-#### Priority 1: Electron Fuses
-
-```javascript
-// afterSign hook (add to electron-builder.config.cjs)
-const { flipFuses, FuseVersion, FuseV1Options } = require('@electron/fuses');
-
-afterSign: async (context) => {
-  await flipFuses(
-    context.getElectronBinaryPath(),
-    {
-      version: FuseVersion.V1,
-      [FuseV1Options.RunAsNode]: false,
-      [FuseV1Options.EnableNodeCliInspectArguments]: false,
-      [FuseV1Options.EnableEmbeddedAsarIntegrityValidation]: true,
-      [FuseV1Options.OnlyLoadAppFromAsar]: true,
-    }
-  );
-}
-```
-
-#### Priority 2: IPC Sender Validation
-
-```javascript
-function validateSenderFrame(event) {
-  const senderUrl = event?.senderFrame?.url;
-  if (!senderUrl) return false;
-  return isTrustedRendererUrl(senderUrl);
-}
-
-// Apply to all handlers:
-ipcMain.handle('desktop:open-external', async (event, url) => {
-  if (!validateSenderFrame(event)) return false;
-  // ... existing logic
-});
-```
-
-#### Priority 3: Download Handler
+#### Priority 1: Download Handler
 
 ```javascript
 session.defaultSession.on('will-download', (event, item) => {
@@ -703,6 +667,8 @@ session.defaultSession.on('will-download', (event, item) => {
 - ✅ No node integration
 - ✅ webSecurity enabled
 - ✅ CSP defined
+- ✅ Electron fuses configured in `electron-builder.config.cjs`
+- ✅ IPC sender validation wired in `electron/main.cjs`
 - ✅ Navigation restricted to trusted origin
 - ✅ Window creation denied
 - ✅ WebView tag disabled
@@ -887,7 +853,7 @@ The OET Prep project is an **exceptionally clean candidate** for Electron deskto
 
 1. **Architecture is already correct**: The standalone Next.js server + bundled backend pattern is the most robust way to wrap a full-stack web app in Electron. This was a deliberate architectural choice, not a hack.
 
-2. **Security model exceeds most Electron apps**: 18/20 on the official checklist out of the box, with the remaining 2 items (fuses, IPC validation) being straightforward additions.
+2. **Security model exceeds most Electron apps**: fuses and IPC sender validation are now implemented; remaining work is release packaging/signing validation.
 
 3. **Zero UI/UX modification needed**: The renderer loads the exact same web application. Every pixel, animation, and interaction is identical because it IS the same code rendered in the same Chromium engine.
 
@@ -899,9 +865,9 @@ The OET Prep project is an **exceptionally clean candidate** for Electron deskto
 
 | Category | Completeness | Remaining Work |
 |---|---|---|
-| Main process | 95% | IPC validation, fuses |
+| Main process | 98% | Release packaging validation |
 | Preload bridge | 100% | — |
-| Security | 90% | Fuses, IPC validation |
+| Security | 95% | Download handling and signed-release validation |
 | Windows packaging | 95% | CI signing |
 | macOS packaging | 70% | Notarization, testing |
 | Linux packaging | 30% | Target config, testing |

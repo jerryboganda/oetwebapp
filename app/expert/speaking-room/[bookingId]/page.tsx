@@ -194,9 +194,9 @@ export default function ExpertSpeakingLiveRoomPage() {
               icon={Mic}
               accent="navy"
               title={booking.title ?? 'OET Speaking Mock'}
-              description="Tutor view — interlocutor card, patient background, and live-room controls. The learner cannot see this content."
+              description="Tutor view: interlocutor card, patient background, and live-room controls. The learner cannot see this content."
               highlights={[
-                { icon: CalendarClock, label: 'Scheduled', value: scheduledStart ?? '—' },
+                { icon: CalendarClock, label: 'Scheduled', value: scheduledStart ?? 'N/A' },
                 {
                   icon: ShieldCheck,
                   label: 'Recording',
@@ -234,7 +234,7 @@ export default function ExpertSpeakingLiveRoomPage() {
                       href={startUrl}
                       target="_blank"
                       rel="noreferrer"
-                      className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-black text-white shadow-sm hover:bg-primary/90"
+                      className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-black text-white shadow-sm hover:bg-primary/90 active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600"
                     >
                       <Mic className="h-4 w-4" />
                       Open host room

@@ -81,7 +81,7 @@ export default function PackagesPage() {
       <div className="flex gap-2 mb-6 flex-wrap">
         <button
           onClick={() => changeFilter('')}
-          className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${!typeFilter ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:bg-muted/80'}`}
+          className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${!typeFilter ? 'bg-primary text-white dark:bg-violet-700' : 'bg-muted text-muted hover:bg-muted/80'}`}
         >
           All Packages
         </button>
@@ -89,7 +89,7 @@ export default function PackagesPage() {
           <button
             key={key}
             onClick={() => changeFilter(key)}
-            className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${typeFilter === key ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:bg-muted/80'}`}
+            className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${typeFilter === key ? 'bg-primary text-white dark:bg-violet-700' : 'bg-muted text-muted hover:bg-muted/80'}`}
           >
             {label}
           </button>
@@ -108,7 +108,7 @@ export default function PackagesPage() {
         <>
           {/* Package comparison grid */}
           {packages.length === 0 ? (
-            <div className="text-center py-12 text-muted-foreground">
+            <div className="text-center py-12 text-muted">
               <Package className="w-12 h-12 mx-auto mb-3 opacity-40" />
               <p className="text-lg font-medium">No packages available</p>
               <p className="text-sm mt-1">Check back soon for new content packages.</p>
@@ -118,10 +118,10 @@ export default function PackagesPage() {
               <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
                 {packages.map((pkg, i) => (
                   <MotionItem key={pkg.id}>
-                    <div className={`relative rounded-xl border bg-card p-6 flex flex-col h-full ${i === 0 ? 'ring-2 ring-primary' : ''}`}>
+                    <div className={`relative rounded-xl border border-border bg-surface p-6 flex flex-col h-full ${i === 0 ? 'ring-2 ring-primary' : ''}`}>
                       {i === 0 && (
                         <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-                          <Badge className="bg-primary text-primary-foreground">
+                          <Badge className="bg-primary text-white dark:bg-violet-700">
                             <Star className="w-3 h-3 mr-1" /> Most Popular
                           </Badge>
                         </div>
@@ -133,7 +133,7 @@ export default function PackagesPage() {
 
                       <h3 className="text-lg font-semibold mb-1">{pkg.title}</h3>
                       {pkg.description && (
-                        <p className="text-sm text-muted-foreground mb-4 line-clamp-2">{pkg.description}</p>
+                        <p className="text-sm text-muted mb-4 line-clamp-2">{pkg.description}</p>
                       )}
 
                       {/* Feature comparison list */}
@@ -150,7 +150,7 @@ export default function PackagesPage() {
 
                       <Link
                         href={`/marketplace/packages/${pkg.id}`}
-                        className="mt-auto flex items-center justify-center gap-1 rounded-lg bg-primary text-primary-foreground px-4 py-2.5 text-sm font-medium hover:bg-primary/90 transition-colors"
+                        className="mt-auto flex items-center justify-center gap-1 rounded-lg bg-primary text-white px-4 py-2.5 text-sm font-medium hover:bg-primary/90 active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600 transition-[color,background-color,transform] duration-200"
                       >
                         View Details <ChevronRight className="w-4 h-4" />
                       </Link>
@@ -171,7 +171,7 @@ export default function PackagesPage() {
                     <MotionItem key={preview.id}>
                       <Link
                         href={preview.contentItemId ? `/lessons/${preview.contentItemId}` : '#'}
-                        className="group block rounded-lg border bg-card p-4 hover:shadow-sm transition-shadow"
+                        className="group block rounded-lg border border-border bg-surface p-4 hover:shadow-sm transition-shadow"
                       >
                         <Badge variant="muted" className="text-[10px] mb-2">{preview.previewType.replaceAll('_', ' ')}</Badge>
                         <h3 className="text-sm font-medium leading-tight group-hover:text-primary transition-colors">{preview.title}</h3>

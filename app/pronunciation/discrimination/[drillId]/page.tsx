@@ -13,10 +13,10 @@ export default function PronunciationDiscriminationPage() {
       <Card className="p-6">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-              <Headphones className="h-6 w-6" />
-            </div>
-            <h1 className="text-2xl font-bold text-navy">Minimal-pair discrimination</h1>
+            <h1 className="flex items-center gap-2.5 text-2xl font-bold text-navy">
+              <Headphones className="h-6 w-6 shrink-0 text-primary" aria-hidden />
+              Minimal-pair discrimination
+            </h1>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-muted">
               This first-class pronunciation route is ready for the learner module. The live listening rounds stay disabled until the published drill includes verified audio pairs and scoring evidence.
             </p>

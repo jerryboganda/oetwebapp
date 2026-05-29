@@ -28,6 +28,29 @@ public static class SponsorEndpoints
         sponsor.MapGet("/billing", async (HttpContext http, SponsorService service, CancellationToken ct)
             => Results.Ok(await service.GetBillingAsync(http.SponsorId(), ct)));
 
+        // ─── Seat Pack endpoints ───────────────────────────────────────────
+        sponsor.MapGet("/seat-packs", async (HttpContext http, ISponsorSeatPackService service, CancellationToken ct)
+            => Results.Ok(await service.ListPacksAsync(http.SponsorId(), ct)));
+
+        sponsor.MapPost("/seat-packs", async (HttpContext http,
+            PurchaseSeatPackRequest request, ISponsorSeatPackService service, CancellationToken ct)
+            => Results.Ok(await service.PurchasePackAsync(http.SponsorId(), request, ct)));
+
+        sponsor.MapPost("/seat-packs/{packId:guid}/assign", async (Guid packId, HttpContext http,
+            AssignSeatRequest request, ISponsorSeatPackService service, CancellationToken ct)
+            => Results.Ok(await service.AssignSeatAsync(http.SponsorId(), packId, request, ct)));
+
+        sponsor.MapDelete("/seat-packs/assignments/{assignmentId:guid}", async (Guid assignmentId, HttpContext http,
+            ISponsorSeatPackService service, CancellationToken ct) =>
+        {
+            await service.RevokeSeatAsync(http.SponsorId(), assignmentId, ct);
+            return Results.NoContent();
+        });
+
+        sponsor.MapGet("/billing/ledger", async (HttpContext http, ISponsorSeatPackService service, CancellationToken ct,
+            int? page, int? pageSize)
+            => Results.Ok(await service.GetLedgerAsync(http.SponsorId(), page ?? 1, pageSize ?? 20, ct)));
+
         return app;
     }
 

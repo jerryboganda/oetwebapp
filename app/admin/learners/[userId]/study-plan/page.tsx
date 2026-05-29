@@ -182,7 +182,7 @@ export default function AdminLearnerStudyPlanPage() {
         <Card surface="tinted-success">
           <CardContent className="p-3 text-sm text-admin-success flex items-center gap-2">
             <CheckCircle2 className="w-4 h-4" />
-            Regeneration job queued — plan will refresh shortly.
+            Regeneration job queued. Plan will refresh shortly.
           </CardContent>
         </Card>
       )}
@@ -282,14 +282,14 @@ export default function AdminLearnerStudyPlanPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-muted/50 text-left">
-                  <th className="px-4 py-3 font-medium">Task</th>
-                  <th className="px-4 py-3 font-medium">Subtest</th>
-                  <th className="px-4 py-3 font-medium">Section</th>
-                  <th className="px-4 py-3 font-medium">Status</th>
-                  <th className="px-4 py-3 font-medium">Week</th>
-                  <th className="px-4 py-3 font-medium">Due</th>
-                  <th className="px-4 py-3 font-medium">Min</th>
-                  <th className="px-4 py-3 font-medium">Feedback</th>
+                  <th scope="col" className="px-4 py-3 font-medium">Task</th>
+                  <th scope="col" className="px-4 py-3 font-medium">Subtest</th>
+                  <th scope="col" className="px-4 py-3 font-medium">Section</th>
+                  <th scope="col" className="px-4 py-3 font-medium">Status</th>
+                  <th scope="col" className="px-4 py-3 font-medium">Week</th>
+                  <th scope="col" className="px-4 py-3 font-medium">Due</th>
+                  <th scope="col" className="px-4 py-3 font-medium">Min</th>
+                  <th scope="col" className="px-4 py-3 font-medium">Feedback</th>
                 </tr>
               </thead>
               <tbody className="divide-y">

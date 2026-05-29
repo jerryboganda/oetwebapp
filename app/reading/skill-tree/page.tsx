@@ -43,13 +43,13 @@ function ScoreBar({ score, max = 10 }: { score: number; max?: number }) {
 
   return (
     <div className="space-y-1">
-      <div className="flex items-center justify-between text-xs text-muted-foreground">
+      <div className="flex items-center justify-between text-xs text-muted">
         <span>Score</span>
         <span className="font-semibold text-foreground">{score.toFixed(1)} / {max}</span>
       </div>
-      <div className="h-2 w-full rounded-full bg-slate-100 dark:bg-slate-800">
+      <div className="h-2 w-full rounded-full bg-border">
         <div
-          className={cn('h-2 rounded-full transition-all', color)}
+          className={cn('h-2 rounded-full transition-[width,background-color] duration-300', color)}
           style={{ width: `${pct}%` }}
           role="progressbar"
           aria-valuenow={score}
@@ -89,7 +89,7 @@ function SkillNode({ skill, radarSkill, lesson }: SkillNodeProps) {
         )}
       </div>
 
-      <p className="text-xs text-muted-foreground leading-relaxed">{skill.description}</p>
+      <p className="text-xs text-muted leading-relaxed">{skill.description}</p>
 
       <ScoreBar score={score} />
 
@@ -147,7 +147,7 @@ export default function SkillTreePage() {
       <div className="space-y-8">
         <div>
           <h1 className="text-2xl font-bold text-foreground">Reading Skill Tree</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
+          <p className="mt-1 text-sm text-muted">
             8 core sub-skills that determine your OET Reading score. Build each to reach exam readiness.
           </p>
         </div>

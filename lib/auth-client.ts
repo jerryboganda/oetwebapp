@@ -27,10 +27,21 @@ const API_BASE_URL = env.apiBaseUrl;
 
 interface AuthErrorPayload {
   code?: string;
+  error?: string;
   message?: string;
   retryable?: boolean;
   email?: string;
   challengeToken?: string;
+}
+
+interface DevicePairingRedeemResponse {
+  handoffToken: string;
+  expiresAt: string;
+}
+
+export interface DevicePairingInitiateResponse {
+  code: string;
+  expiresAt: string;
 }
 
 export class AuthClientError extends Error {
@@ -134,8 +145,8 @@ async function parseResponse<T>(response: Response): Promise<T> {
 
     throw new AuthClientError(
       response.status,
-      payload.code ?? 'auth_request_failed',
-      payload.message ?? `Auth request failed with status ${response.status}.`,
+      payload.code ?? payload.error ?? 'auth_request_failed',
+      payload.message ?? payload.error ?? `Auth request failed with status ${response.status}.`,
       payload.retryable ?? false,
       payload,
     );
@@ -345,6 +356,37 @@ export async function signIn(input: { email: string; password: string; rememberM
 
     throw error;
   }
+}
+
+function createDeviceChallenge(): string {
+  const bytes = new Uint8Array(32);
+  globalThis.crypto.getRandomValues(bytes);
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+
+export async function completeDevicePairing(code: string): Promise<AuthSession> {
+  const normalizedCode = code.trim().toUpperCase();
+  if (!/^[A-Z0-9]{6,8}$/.test(normalizedCode)) {
+    throw new AuthClientError(400, 'invalid_pairing_code', 'Invalid pairing code.');
+  }
+
+  const deviceChallenge = createDeviceChallenge();
+  const redeemed = await postJson<DevicePairingRedeemResponse>('/v1/device-pairing/redeem', {
+    code: normalizedCode,
+    deviceChallenge,
+  });
+
+  const session = await postJson<AuthSession>('/v1/device-pairing/exchange', {
+    handoffToken: redeemed.handoffToken,
+    deviceChallenge,
+  });
+  saveStoredSession(session, 'local');
+  clearPendingMfaChallenge();
+  return session;
+}
+
+export async function initiateDevicePairing(accessToken?: string | null): Promise<DevicePairingInitiateResponse> {
+  return postJson<DevicePairingInitiateResponse>('/v1/device-pairing/initiate', {}, accessToken);
 }
 
 export async function registerLearner(

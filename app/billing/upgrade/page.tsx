@@ -36,7 +36,7 @@ function formatPrice(amount: number, currency: string) {
 const linkButtonBase =
   'inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2';
 const linkButtonStyles = {
-  primary: 'bg-primary text-white hover:bg-primary/90 shadow-sm',
+  primary: 'bg-primary text-white hover:bg-primary/90 active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600 shadow-sm',
   outline: 'border border-border text-navy hover:bg-surface hover:border-border-hover',
   disabled: 'cursor-not-allowed border border-border bg-background-light text-muted',
 } as const;

@@ -60,7 +60,7 @@ function FAQItem({ item }: { item: FaqItem }) {
   const [open, setOpen] = useState(false);
   return (
     <details
-      className="group rounded-2xl border border-border bg-background"
+      className="group rounded-2xl border border-border bg-surface"
       open={open}
       onToggle={(event) => setOpen((event.target as HTMLDetailsElement).open)}
     >

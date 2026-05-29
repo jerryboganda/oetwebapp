@@ -75,11 +75,12 @@ Create `.env.staging` by copying `.env.staging.example` and filling in every `re
 
 ## Manual staging command reference
 
-Run **on the staging host** after `.env.staging` is created:
+Run **on the staging host** after `.env.staging` is created. The staging host should pull and start already-built images from CI; do not use staging as an ad-hoc build machine.
 
 ```bash
-# Start / rebuild the staging stack
-docker compose --env-file .env.staging -f docker-compose.staging.yml up -d --build
+# Pull / start the staging stack from prebuilt images
+docker compose --env-file .env.staging -f docker-compose.staging.yml pull
+docker compose --env-file .env.staging -f docker-compose.staging.yml up -d
 
 # Check service status
 docker compose --env-file .env.staging -f docker-compose.staging.yml ps
@@ -90,8 +91,7 @@ docker compose --env-file .env.staging -f docker-compose.staging.yml logs -f --t
 # Tear down (keeps volumes)
 docker compose --env-file .env.staging -f docker-compose.staging.yml down
 
-# Tear down AND delete volumes (full reset)
-docker compose --env-file .env.staging -f docker-compose.staging.yml down -v
+# Full volume reset is destructive and requires explicit approval plus a verified backup/restore plan.
 ```
 
 ---
@@ -125,4 +125,4 @@ docker compose --env-file .env.staging -f docker-compose.staging.yml down -v
 - Billing sandbox fallbacks are enabled — Stripe test keys are sufficient.
 - Demo data is seeded by default for QA convenience.
 - The production compose file and production deploy workflow are **not** modified by any staging artifact.
-- Production-only variables (`BACKUP_*`, `ELECTRON_*`, `EVIDENCE_SIGNER_FINGERPRINT`, `READING_SMOKE_*`) are intentionally omitted from staging.
+- Production-only variables (`BACKUP_*`, `ELECTRON_*`, production digest refs such as `WEB_IMAGE` / `API_IMAGE` / `DB_BACKUP_IMAGE` / `ROUTER_IMAGE`, `READING_SMOKE_*`) are intentionally omitted from staging.

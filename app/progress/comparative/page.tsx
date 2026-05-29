@@ -57,7 +57,7 @@ export default function ComparativeAnalyticsPage() {
         {loading ? (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">{Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-48 rounded-xl" />)}</div>
         ) : !data || data.subtests.length === 0 ? (
-          <Card className="p-8 text-center text-muted-foreground"><BarChart3 className="w-8 h-8 mx-auto mb-3 opacity-50" /><p>Complete some practice evaluations to see your comparative analytics.</p></Card>
+          <Card className="p-8 text-center text-muted"><BarChart3 className="w-8 h-8 mx-auto mb-3 opacity-50" /><p>Complete some practice evaluations to see your comparative analytics.</p></Card>
         ) : (
           <>
             <LearnerSurfaceSectionHeader title="Per-Subtest Ranking" />
@@ -73,9 +73,9 @@ export default function ComparativeAnalyticsPage() {
                       </div>
 
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
-                        <div className="text-center"><p className="text-2xl font-bold text-primary">{s.yourScore}</p><p className="text-xs text-muted-foreground">Your Score</p></div>
-                        <div className="text-center"><p className="text-2xl font-bold">{s.cohortAverage}</p><p className="text-xs text-muted-foreground">Cohort Avg</p></div>
-                        <div className="text-center"><p className="text-2xl font-bold">{s.percentile}%</p><p className="text-xs text-muted-foreground">Percentile</p></div>
+                        <div className="text-center"><p className="text-2xl font-bold text-primary">{s.yourScore}</p><p className="text-xs text-muted">Your Score</p></div>
+                        <div className="text-center"><p className="text-2xl font-bold">{s.cohortAverage}</p><p className="text-xs text-muted">Cohort Avg</p></div>
+                        <div className="text-center"><p className="text-2xl font-bold">{s.percentile}%</p><p className="text-xs text-muted">Percentile</p></div>
                       </div>
 
                       {/* Percentile bar */}
@@ -83,12 +83,12 @@ export default function ComparativeAnalyticsPage() {
                         <div className="h-3 rounded-full bg-muted overflow-hidden relative">
                           <div className="h-full rounded-full bg-gradient-to-r from-red-400 via-amber-400 to-emerald-400" style={{ width: `${s.percentile}%` }} />
                         </div>
-                        <div className="flex justify-between mt-1"><span className="text-[10px] text-muted-foreground">0%</span><span className="text-[10px] text-muted-foreground">50%</span><span className="text-[10px] text-muted-foreground">100%</span></div>
+                        <div className="flex justify-between mt-1"><span className="text-[10px] text-muted">0%</span><span className="text-[10px] text-muted">50%</span><span className="text-[10px] text-muted">100%</span></div>
                       </div>
 
                       {s.targetScore && s.gapToTarget !== null && (
                         <div className="flex items-center gap-2 text-sm">
-                          <Target className="w-4 h-4 text-muted-foreground" />
+                          <Target className="w-4 h-4 text-muted" />
                           <span>Target: {s.targetScore}</span>
                           <Badge variant={s.gapToTarget <= 0 ? 'default' : 'danger'} className="text-xs">
                             {s.gapToTarget <= 0 ? 'Target reached!' : `${s.gapToTarget} pts to go`}
@@ -96,7 +96,7 @@ export default function ComparativeAnalyticsPage() {
                         </div>
                       )}
 
-                      <p className="text-xs text-muted-foreground mt-2">Based on {s.cohortSize} learners in the last 90 days</p>
+                      <p className="text-xs text-muted mt-2">Based on {s.cohortSize} learners in the last 90 days</p>
                     </Card>
                   </MotionItem>
                 );

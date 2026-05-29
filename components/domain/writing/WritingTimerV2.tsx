@@ -121,11 +121,11 @@ export function WritingTimerV2({
   const seconds = phase === 'reading' ? readingSecondsRemaining : writingSecondsRemaining;
   const tone =
     phase === 'completed'
-      ? 'text-slate-500'
+      ? 'text-muted'
       : seconds <= 60
-        ? 'text-red-600 dark:text-red-400'
+        ? 'text-danger'
         : seconds <= 300
-          ? 'text-amber-600 dark:text-amber-400'
+          ? 'text-warning'
           : 'text-navy dark:text-white';
 
   const phaseLabel =

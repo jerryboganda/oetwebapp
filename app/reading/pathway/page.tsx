@@ -128,10 +128,10 @@ function StageCard({
         className={cn(
           'flex h-9 w-9 shrink-0 items-center justify-center rounded-full',
           isCurrent
-            ? 'bg-primary text-white'
+            ? 'bg-primary text-white dark:bg-violet-700'
             : isComplete
               ? 'bg-emerald-500 text-white'
-              : 'bg-slate-200 text-slate-500 dark:bg-slate-700 dark:text-slate-400',
+              : 'bg-border text-muted',
         )}
       >
         {isComplete ? <CheckCircle2 className="h-5 w-5" aria-hidden /> : isLocked ? <Lock className="h-4 w-4" aria-hidden /> : <Icon className="h-5 w-5" aria-hidden />}
@@ -148,12 +148,12 @@ function StageCard({
           </Badge>
         </div>
 
-        <p className="mt-1 text-sm text-muted-foreground">{config.description}</p>
+        <p className="mt-1 text-sm text-muted">{config.description}</p>
 
         {/* Progress bar for current stage */}
         {isCurrent && pathway.totalWeeks > 0 && (
           <div className="mt-3 space-y-1">
-            <div className="flex items-center justify-between text-xs text-muted-foreground">
+            <div className="flex items-center justify-between text-xs text-muted">
               <span className="flex items-center gap-1">
                 <Clock className="h-3 w-3" aria-hidden />
                 Week {pathway.currentWeek} of {pathway.totalWeeks}
@@ -162,7 +162,7 @@ function StageCard({
             </div>
             <div className="h-2 w-full rounded-full bg-primary/10 dark:bg-primary/20">
               <div
-                className="h-2 rounded-full bg-primary transition-all"
+                className="h-2 rounded-full bg-primary transition-[width,background-color] duration-300"
                 style={{ width: `${Math.min(100, (pathway.currentWeek / pathway.totalWeeks) * 100)}%` }}
                 role="progressbar"
                 aria-valuenow={pathway.currentWeek}
@@ -219,7 +219,7 @@ export default function ReadingPathwayPage() {
       <div className="mx-auto max-w-2xl space-y-8">
         <div>
           <h1 className="text-2xl font-bold text-foreground">Your Reading Pathway</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
+          <p className="mt-1 text-sm text-muted">
             Five stages from onboarding to exam-day mastery. Work through each stage in order.
           </p>
         </div>
@@ -227,15 +227,15 @@ export default function ReadingPathwayPage() {
         {pathway && (
           <div className="flex flex-wrap gap-6 rounded-2xl border border-border bg-surface p-5 text-sm">
             <div>
-              <span className="block text-xs uppercase tracking-wide text-muted-foreground">Readiness</span>
+              <span className="block text-xs uppercase tracking-wide text-muted">Readiness</span>
               <span className="text-xl font-bold text-primary">{pathway.readinessScore}%</span>
             </div>
             <div>
-              <span className="block text-xs uppercase tracking-wide text-muted-foreground">Weeks remaining</span>
+              <span className="block text-xs uppercase tracking-wide text-muted">Weeks remaining</span>
               <span className="text-xl font-bold text-foreground">{pathway.weeksRemaining}</span>
             </div>
             <div>
-              <span className="block text-xs uppercase tracking-wide text-muted-foreground">Stage</span>
+              <span className="block text-xs uppercase tracking-wide text-muted">Stage</span>
               <span className="text-xl font-bold text-foreground capitalize">{pathway.currentStage.replace(/_/g, ' ')}</span>
             </div>
           </div>

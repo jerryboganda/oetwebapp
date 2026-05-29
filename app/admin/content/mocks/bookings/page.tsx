@@ -321,13 +321,14 @@ export default function AdminMockBookingsCalendarPage() {
             <table className="min-w-full border-collapse text-xs" aria-label="Mock booking calendar grid">
               <thead>
                 <tr>
-                  <th className="sticky left-0 z-10 w-20 border-b border-admin-border bg-admin-bg-surface px-2 py-2 text-left text-[10px] font-black uppercase tracking-widest text-admin-fg-muted">
+                  <th scope="col" className="sticky left-0 z-10 w-20 border-b border-admin-border bg-admin-bg-surface px-2 py-2 text-left text-[10px] font-black uppercase tracking-widest text-admin-fg-muted">
                     Time
                   </th>
                   {weekDays.map((day) => {
                     const header = formatDayHeader(day);
                     return (
                       <th
+                        scope="col"
                         key={day.toISOString()}
                         className="min-w-[140px] border-b border-admin-border px-2 py-2 text-left"
                       >
@@ -366,7 +367,7 @@ export default function AdminMockBookingsCalendarPage() {
                                   key={booking.bookingId || booking.id}
                                   type="button"
                                   onClick={() => openBookingModal(booking)}
-                                  className={`group flex flex-col rounded-lg border px-2 py-1 text-left text-[11px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400 ${
+                                  className={`group flex flex-col rounded-lg border px-2 py-1 text-left text-[11px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--admin-border-focus)] ${
                                     tutorMissing
                                       ? 'border-amber-500/40 bg-amber-500/10 hover:bg-amber-500/20'
                                       : 'border-admin-border bg-admin-bg-surface-raised hover:bg-admin-bg-elevated/60'
@@ -411,27 +412,27 @@ export default function AdminMockBookingsCalendarPage() {
       >
         {activeBooking ? (
           <div className="space-y-4 text-sm">
-            <div className="rounded-xl border border-border bg-background-light p-3">
+            <div className="rounded-xl border border-border bg-admin-bg-subtle p-3">
               <p className="text-xs font-black uppercase tracking-widest text-muted">Bundle</p>
-              <p className="font-bold text-navy">
+              <p className="font-bold text-admin-fg-strong">
                 {activeBooking.mockBundleTitle ?? activeBooking.title ?? activeBooking.mockBundleId}
               </p>
               <p className="mt-1 text-xs text-muted">{activeBooking.mockBundleId}</p>
             </div>
 
             <div className="grid gap-3 sm:grid-cols-2">
-              <div className="rounded-xl border border-border bg-background-light p-3">
+              <div className="rounded-xl border border-border bg-admin-bg-subtle p-3">
                 <p className="text-xs font-black uppercase tracking-widest text-muted">Learner</p>
-                <p className="font-bold text-navy">
+                <p className="font-bold text-admin-fg-strong">
                   {activeBooking.learnerDisplayName ?? activeBooking.learnerEmail ?? 'Unknown'}
                 </p>
                 {activeBooking.learnerEmail ? (
                   <p className="mt-1 text-xs text-muted">{activeBooking.learnerEmail}</p>
                 ) : null}
               </div>
-              <div className="rounded-xl border border-border bg-background-light p-3">
+              <div className="rounded-xl border border-border bg-admin-bg-subtle p-3">
                 <p className="text-xs font-black uppercase tracking-widest text-muted">When</p>
-                <p className="font-bold text-navy">
+                <p className="font-bold text-admin-fg-strong">
                   {new Date(activeBooking.scheduledStartAt).toLocaleString()}
                 </p>
                 <p className="mt-1 text-xs text-muted">{activeBooking.timezoneIana}</p>
@@ -439,7 +440,7 @@ export default function AdminMockBookingsCalendarPage() {
             </div>
 
             <div className="grid gap-3 sm:grid-cols-2">
-              <div className="rounded-xl border border-border bg-background-light p-3">
+              <div className="rounded-xl border border-border bg-admin-bg-subtle p-3">
                 <p className="text-xs font-black uppercase tracking-widest text-muted">Status</p>
                 <Badge variant={STATUS_VARIANT[activeBooking.status] ?? 'default'}>
                   {activeBooking.status.replace(/_/g, ' ')}
@@ -450,9 +451,9 @@ export default function AdminMockBookingsCalendarPage() {
                   </p>
                 ) : null}
               </div>
-              <div className="rounded-xl border border-border bg-background-light p-3">
+              <div className="rounded-xl border border-border bg-admin-bg-subtle p-3">
                 <p className="text-xs font-black uppercase tracking-widest text-muted">Delivery</p>
-                <p className="font-bold text-navy">{activeBooking.deliveryMode ?? '—'}</p>
+                <p className="font-bold text-admin-fg-strong">{activeBooking.deliveryMode ?? '—'}</p>
                 {activeBooking.consentToRecording ? (
                   <p className="mt-1 text-xs text-muted">Consent to record: yes</p>
                 ) : null}
@@ -463,26 +464,26 @@ export default function AdminMockBookingsCalendarPage() {
               <p className="text-xs font-black uppercase tracking-widest text-muted">Assign staff</p>
               <div className="grid gap-3 sm:grid-cols-2">
                 <label className="flex flex-col gap-1.5 text-xs">
-                  <span className="font-semibold text-navy">Tutor user ID</span>
+                  <span className="font-semibold text-admin-fg-strong">Tutor user ID</span>
                   <input
                     type="text"
                     value={assignDraft.tutor}
                     onChange={(event) => setAssignDraft((prev) => ({ ...prev, tutor: event.target.value }))}
                     placeholder="tutor-user-id"
-                    className="rounded-md border border-border bg-background-light px-3 py-2 text-sm text-navy"
+                    className="rounded-md border border-border bg-admin-bg-subtle px-3 py-2 text-sm text-admin-fg-strong"
                   />
                   {activeBooking.assignedTutorDisplayName ? (
                     <span className="text-muted">Current: {activeBooking.assignedTutorDisplayName}</span>
                   ) : null}
                 </label>
                 <label className="flex flex-col gap-1.5 text-xs">
-                  <span className="font-semibold text-navy">Interlocutor user ID</span>
+                  <span className="font-semibold text-admin-fg-strong">Interlocutor user ID</span>
                   <input
                     type="text"
                     value={assignDraft.interlocutor}
                     onChange={(event) => setAssignDraft((prev) => ({ ...prev, interlocutor: event.target.value }))}
                     placeholder="interlocutor-user-id"
-                    className="rounded-md border border-border bg-background-light px-3 py-2 text-sm text-navy"
+                    className="rounded-md border border-border bg-admin-bg-subtle px-3 py-2 text-sm text-admin-fg-strong"
                   />
                   {activeBooking.assignedInterlocutorDisplayName ? (
                     <span className="text-muted">Current: {activeBooking.assignedInterlocutorDisplayName}</span>

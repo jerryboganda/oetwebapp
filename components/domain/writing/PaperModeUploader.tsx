@@ -161,8 +161,8 @@ export function PaperModeUploader({
             <label
               htmlFor={inputId}
               className={cn(
-                'inline-flex items-center gap-1.5 rounded-lg bg-primary text-white px-4 py-2 text-sm font-bold cursor-pointer',
-                'hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2',
+                'inline-flex items-center gap-1.5 rounded-lg bg-primary text-white dark:bg-violet-700 px-4 py-2 text-sm font-bold cursor-pointer',
+                'hover:bg-primary/90 active:scale-[0.98] motion-reduce:active:scale-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2',
                 uploading && 'opacity-60 pointer-events-none',
               )}
             >
@@ -183,9 +183,9 @@ export function PaperModeUploader({
           <div className="rounded-lg border border-border bg-surface p-4">
             <div className="flex items-center gap-2 mb-2">
               {status === 'completed' ? (
-                <CheckCircle2 className="w-5 h-5 text-emerald-600" aria-hidden="true" />
+                <CheckCircle2 className="w-5 h-5 text-success" aria-hidden="true" />
               ) : status === 'failed' || status === 'manual_required' ? (
-                <AlertCircle className="w-5 h-5 text-red-600" aria-hidden="true" />
+                <AlertCircle className="w-5 h-5 text-danger" aria-hidden="true" />
               ) : (
                 <Loader2 className="w-5 h-5 animate-spin text-primary" aria-hidden="true" />
               )}
@@ -217,7 +217,7 @@ export function PaperModeUploader({
 
             {status === 'failed' || status === 'manual_required' ? (
               <>
-                <p className="text-xs text-red-700 dark:text-red-300 mt-1">
+                <p className="text-xs text-danger mt-1">
                   {job.errorMessage ?? 'OCR could not read the image. Try again with better lighting or transcribe manually.'}
                 </p>
                 <div className="mt-3 flex items-center justify-end">
@@ -236,7 +236,7 @@ export function PaperModeUploader({
         )}
 
         {error ? (
-          <p className="mt-3 text-xs text-red-700 dark:text-red-300" role="alert">
+          <p className="mt-3 text-xs text-danger" role="alert">
             {error}
           </p>
         ) : null}

@@ -53,8 +53,8 @@ export default function AdminCatalogToolsPage() {
     <AdminPageShell>
       <PageHeader
         eyebrow="Billing"
-        title="OET 2026 — Catalog Tools"
-        description="Re-run the canonical seeder against the live database. Idempotent UPSERT on Code — existing rows refresh, missing rows insert, nothing is deleted."
+        title="OET 2026 Catalog Tools"
+        description="Re-run the canonical seeder against the live database. Idempotent UPSERT on Code: existing rows refresh, missing rows insert, nothing is deleted."
         icon={<Database aria-hidden className="h-5 w-5" />}
         breadcrumbs={[
           { label: 'Admin', href: '/admin' },

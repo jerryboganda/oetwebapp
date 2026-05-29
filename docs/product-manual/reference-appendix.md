@@ -63,7 +63,7 @@ These invariants come from `AGENTS.md` and the linked domain specs. They are not
 - Canonical paper structure is **20 (Part A) + 6 (Part B) + 16 (Part C) = 42 items**, enforced at the publish gate.
 - Grading is exact-match against authored structure, not against AI. Raw-to-scaled goes through `OetScoring.OetRawToScaled` only.
 - Learner-facing endpoints must never serialize `CorrectAnswerJson`, `ExplanationMarkdown`, or `AcceptedSynonymsJson`. The projection layer in `ReadingLearnerEndpoints.cs` enforces this.
-- Tracked exception: PM-001 documents the current backend ability to emit answer/explanation fields after submit when policy permits, which conflicts with this invariant and must be reconciled before release sign-off.
+- PM-001 reconciliation: on 2026-05-29 the submitted learner review payload was redacted so answer/explanation fields are not emitted to learners; keep focused regression coverage before release sign-off.
 
 ### 1.7 Grammar
 

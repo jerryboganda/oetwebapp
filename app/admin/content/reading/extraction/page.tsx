@@ -166,7 +166,7 @@ export default function AdminReadingExtractionPage() {
       role="main"
       aria-label="Reading AI extraction"
       title="AI Extraction Drafts"
-      description="Propose AI-extracted Reading questions, review the generated manifest, and approve or reject. Approval replaces the live paper structure — preview before confirming."
+      description="Propose AI-extracted Reading questions, review the generated manifest, and approve or reject. Approval replaces the live paper structure; preview before confirming."
       eyebrow="Content / Reading"
       breadcrumbs={[
         { label: 'Admin', href: '/admin' },

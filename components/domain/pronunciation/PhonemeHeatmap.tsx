@@ -42,7 +42,7 @@ function bucketClass(score: number) {
     case 'below':
       return 'bg-rose-50 text-rose-800 border-rose-200 dark:bg-rose-900/30 dark:text-rose-200 dark:border-rose-800';
     default:
-      return 'bg-background-light text-muted border-border dark:bg-gray-800 dark:text-muted/60 dark:border-gray-700';
+      return 'bg-background-light text-muted border-border dark:text-muted/60';
   }
 }
 

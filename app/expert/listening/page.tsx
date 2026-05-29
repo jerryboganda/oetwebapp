@@ -110,7 +110,7 @@ export default function ExpertListeningAttemptsPage() {
           <tbody>
             {loading
               ? Array.from({ length: 5 }).map((_, i) => (
-                  <tr key={i} className="border-b border-gray-50">
+                  <tr key={i} className="border-b border-border">
                     {Array.from({ length: 6 }).map((__, j) => (
                       <td key={j} className="px-4 py-3">
                         <Skeleton className="h-4 rounded" />
@@ -121,7 +121,7 @@ export default function ExpertListeningAttemptsPage() {
               : items.map((item) => (
                   <tr
                     key={item.attemptId}
-                    className="border-b border-gray-50 transition-colors hover:bg-gray-50"
+                    className="border-b border-border transition-colors hover:bg-background-light"
                   >
                     <td className="px-4 py-3 font-medium text-navy">
                       {item.learnerDisplayName}

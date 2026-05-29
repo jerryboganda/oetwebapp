@@ -57,7 +57,7 @@ export default function UpdateCardPage() {
         description="Use this one-time link to update the card on file for your subscription."
       />
 
-      <div className="space-y-4 rounded-2xl border border-border bg-card p-6 shadow-sm">
+      <div className="space-y-4 rounded-2xl border border-border bg-surface p-6 shadow-sm">
         {state === 'loading' && <Skeleton className="h-24 w-full" />}
 
         {state === 'invalid' && (

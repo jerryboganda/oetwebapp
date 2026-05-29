@@ -26,7 +26,7 @@ export default function MockBundleReviewPipelinePage() {
     <AdminOperationsLayout
       eyebrow="Mock bundle"
       title="Editorial review pipeline"
-      description="Walk a bundle from academic review through to published. Stage transitions are monotonic — the backend rejects regressions."
+      description="Walk a bundle from academic review through to published. Stage transitions are monotonic; the backend rejects regressions."
       breadcrumbs={[
         { label: 'Admin', href: '/admin' },
         { label: 'Content', href: '/admin/content' },

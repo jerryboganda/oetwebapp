@@ -470,11 +470,19 @@ public sealed class ReadingAttemptService(
         //      change-tracking after a read.
         var existingAnswerCount = await db.ReadingAnswers
             .CountAsync(a => a.ReadingAttemptId == attemptId, ct);
-        var existingRowId = await db.ReadingAnswers
+        var existingRow = await db.ReadingAnswers
             .Where(a => a.ReadingAttemptId == attemptId && a.ReadingQuestionId == questionId)
-            .Select(a => a.Id)
+            .Select(a => new { a.Id, a.UserAnswerJson })
             .FirstOrDefaultAsync(ct);
+        var existingRowId = existingRow?.Id;
+        var previousUserAnswerJson = existingRow?.UserAnswerJson;
         var isNewAnswer = false;
+
+        // Wave 1 — record changed-answer history. A revision is appended when
+        // the saved value differs from the currently-stored value (or there
+        // was no prior value). Only InProgress attempts reach this point.
+        var answerChanged = existingRowId is null
+            || !string.Equals(previousUserAnswerJson, userAnswerJson, StringComparison.Ordinal);
 
         if (existingRowId is null)
         {
@@ -559,6 +567,21 @@ public sealed class ReadingAttemptService(
         // it does not get tangled with the answer write path above.
         attempt.LastActivityAt = now;
         attempt.RowVersion++;
+
+        // Wave 1 — append a changed-answer revision row when the value moved.
+        // attempt.Status is guaranteed InProgress here (asserted at entry).
+        if (answerChanged)
+        {
+            db.ReadingAnswerRevisions.Add(new ReadingAnswerRevision
+            {
+                Id = Guid.NewGuid().ToString("N"),
+                ReadingAttemptId = attemptId,
+                ReadingQuestionId = questionId,
+                UserAnswerJson = userAnswerJson,
+                RecordedAt = now,
+            });
+        }
+
         var elapsedDetail = sanitisedElapsedMs is int dm ? $"; elapsedMs={dm}" : string.Empty;
         db.AuditEvents.Add(new AuditEvent
         {
@@ -644,12 +667,62 @@ public sealed class ReadingAttemptService(
 
         var result = await grader.GradeAttemptAsync(attemptId, ct);
 
+        // Wave 2 — best-effort: fulfil any open assignment that targets this
+        // paper for this learner. Never block submit on failure.
+        await TryCompleteMatchingAssignmentsAsync(userId, attemptId, attempt.PaperId, ct);
+
         // Persist the cache row AFTER grading succeeded so transient failures
         // do not lock us out of retrying. On unique-index collision (two
         // concurrent submits raced), prefer the row already written by the
         // peer and return its cached result.
         var cachedAfterRace = await TryPersistSubmitIdempotencyAsync(key, result, ct);
         return cachedAfterRace ?? result;
+    }
+
+    /// <summary>
+    /// Wave 2 — when a learner submits an attempt matching an open Reading
+    /// assignment (same paper, still <c>assigned</c>), mark the assignment
+    /// <c>completed</c> and record the fulfilling attempt. Best-effort: any
+    /// failure is logged and swallowed so it never blocks the submit.
+    /// </summary>
+    private async Task TryCompleteMatchingAssignmentsAsync(
+        string userId, string attemptId, string paperId, CancellationToken ct)
+    {
+        try
+        {
+            var open = await db.ReadingAssignments
+                .Where(x => x.AssignedToUserId == userId
+                    && x.PaperId == paperId
+                    && x.Status == "assigned")
+                .OrderBy(x => x.CreatedAt)
+                .ToListAsync(ct);
+            if (open.Count == 0) return;
+
+            var now = DateTimeOffset.UtcNow;
+            foreach (var assignment in open)
+            {
+                assignment.Status = "completed";
+                assignment.CompletedAttemptId = attemptId;
+                assignment.UpdatedAt = now;
+                db.AuditEvents.Add(new AuditEvent
+                {
+                    Id = Guid.NewGuid().ToString("N"),
+                    OccurredAt = now,
+                    ActorId = userId,
+                    ActorName = userId,
+                    Action = "ReadingAssignmentCompleted",
+                    ResourceType = "ReadingAssignment",
+                    ResourceId = assignment.Id,
+                    Details = $"attemptId={attemptId} paperId={paperId}",
+                });
+            }
+            await db.SaveChangesAsync(ct);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex,
+                "Reading assignment auto-completion failed for attempt {AttemptId}; ignoring.", attemptId);
+        }
     }
 
     private async Task<ReadingGradingResult?> TryPersistSubmitIdempotencyAsync(

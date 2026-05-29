@@ -270,7 +270,7 @@ export function ReadingStructureEditor({ paperId }: Props) {
       {report && report.issues.length > 0 && (
         <ul className="mb-4 space-y-1 text-sm">
           {report.issues.map((iss, i) => (
-            <li key={i} className={iss.severity === 'error' ? 'text-red-700' : 'text-amber-700'}>
+            <li key={i} className={iss.severity === 'error' ? 'text-danger' : 'text-warning'}>
               <Badge variant={iss.severity === 'error' ? 'danger' : 'warning'}>{iss.code}</Badge>
               <span className="ml-2">{iss.message}</span>
             </li>
@@ -413,8 +413,8 @@ function PartEditor({
           <h3 className="font-black text-lg text-navy">{expected.label}</h3>
           <p className="text-xs text-muted">
             {part.timeLimitMinutes} min · {part.texts.length}/{expected.texts} text units ({expected.textLabel}) · {part.questions.length}/{expected.items} items
-            {textShort > 0 && <span className="text-red-600"> · {textShort} more text unit(s) needed</span>}
-            {short > 0 && <span className="text-red-600"> · {short} more needed</span>}
+            {textShort > 0 && <span className="text-danger"> · {textShort} more text unit(s) needed</span>}
+            {short > 0 && <span className="text-danger"> · {short} more needed</span>}
           </p>
         </div>
         <div className="flex flex-wrap items-end gap-2">
@@ -423,7 +423,7 @@ function PartEditor({
               <ShieldCheck className="w-4 h-4" /> Publish {unpublishedCount}
             </Button>
           ) : <Badge variant="success">All questions published</Badge>}
-          <div className="rounded-lg border border-border bg-background px-3 py-2 text-xs text-muted">
+          <div className="rounded-lg border border-border bg-background-light px-3 py-2 text-xs text-muted">
             <span className="block font-bold text-navy">Timer</span>
             {expected.minutes} min fixed{part.partCode === 'B' || part.partCode === 'C' ? ' · shared B+C block' : ''}
           </div>

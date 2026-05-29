@@ -236,7 +236,7 @@ export default function AdminMediaPage() {
                     Drag &amp; drop files here, or click to select
                   </p>
                   <p className="text-xs text-admin-fg-muted mb-3">
-                    Allowed: JPG, PNG, GIF, WebP, PDF — Max 10 MB per file
+                    Allowed: JPG, PNG, GIF, WebP, PDF. Max 10 MB per file
                   </p>
                   <input
                     ref={fileInputRef}

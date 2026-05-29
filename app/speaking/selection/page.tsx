@@ -76,7 +76,7 @@ export default function SpeakingTaskSelection() {
               eyebrow: 'Rulebook',
               eyebrowIcon: BookOpen,
               title: 'See the exact rules behind your speaking feedback',
-              description: 'Open the criteria that shape every audit — from conversational flow to the protocol for breaking bad news.',
+              description: 'Open the criteria that shape every audit, from conversational flow to the protocol for breaking bad news.',
               metaItems: [
                 { icon: FileText, label: 'Speaking criteria' },
                 { icon: Heart, label: 'Breaking bad news' },

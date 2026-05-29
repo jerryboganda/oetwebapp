@@ -54,9 +54,9 @@ function StageHistoryRow({ entry, isCurrent }: StageHistoryRowProps) {
   const label = STAGE_LABELS[stageKey] ?? entry.stage;
   const status = entry.resolvedAt ? 'approved' : 'pending';
   return (
-    <li className="rounded-xl border border-border bg-background-light p-3">
+    <li className="rounded-xl border border-admin-border bg-admin-bg-subtle p-3">
       <div className="flex flex-wrap items-center gap-2">
-        <p className="font-semibold text-navy">{label}</p>
+        <p className="font-semibold text-admin-fg-strong">{label}</p>
         <Badge variant={isCurrent ? 'info' : status === 'approved' ? 'success' : 'muted'} className="text-[10px] capitalize">
           {status}
         </Badge>
@@ -143,9 +143,9 @@ export function AdminMocksReviewStageStepper({ bundleId }: AdminMocksReviewStage
   }, [bundleId, nextStage, notes, advancing, load]);
 
   return (
-    <section className="space-y-4 rounded-2xl border border-border bg-surface p-4">
+    <section className="space-y-4 rounded-2xl border border-admin-border bg-admin-bg-surface p-4">
       <header className="space-y-1">
-        <h2 className="text-lg font-bold text-navy">Multi-stage content review</h2>
+        <h2 className="text-lg font-bold text-admin-fg-strong">Multi-stage content review</h2>
         <p className="text-sm text-muted">
           Each stage gates the next. Approvals are recorded in the bundle&apos;s review history; only the
           final &apos;Published&apos; stage releases the bundle to learners.
@@ -164,7 +164,7 @@ export function AdminMocksReviewStageStepper({ bundleId }: AdminMocksReviewStage
 
       {loading ? (
         <p className="inline-flex items-center gap-2 text-sm text-muted">
-          <Loader2 className="h-4 w-4 animate-spin" /> Loading review stages…
+          <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" /> Loading review stages…
         </p>
       ) : (
         <ol className="flex flex-wrap items-center gap-2" aria-label="Review stages">
@@ -180,16 +180,16 @@ export function AdminMocksReviewStageStepper({ bundleId }: AdminMocksReviewStage
                   className={
                     'inline-flex items-center gap-2 rounded-xl px-3 py-1.5 text-xs font-bold transition-colors ' +
                     (isCurrent
-                      ? 'bg-primary text-white'
+                      ? 'bg-admin-primary text-admin-primary-fg'
                       : isComplete
-                        ? 'bg-emerald-100 text-emerald-700'
-                        : 'bg-background-light text-navy')
+                        ? 'bg-admin-success-tint text-admin-success'
+                        : 'bg-admin-bg-subtle text-admin-fg-strong')
                   }
                 >
                   <span
                     className={
                       'inline-flex h-5 w-5 items-center justify-center rounded-full text-[11px] ' +
-                      (isCurrent ? 'bg-white/30' : isComplete ? 'bg-emerald-200' : 'bg-white/60')
+                      (isCurrent ? 'bg-admin-primary-fg/25' : isComplete ? 'bg-admin-success-tint-strong' : 'bg-admin-bg-surface/70')
                     }
                   >
                     {isComplete ? <Check className="h-3 w-3" aria-hidden /> : idx + 1}
@@ -218,7 +218,7 @@ export function AdminMocksReviewStageStepper({ bundleId }: AdminMocksReviewStage
       ) : null}
 
       {!loading && nextStage ? (
-        <div className="space-y-2 rounded-xl border border-border bg-background-light p-3">
+        <div className="space-y-2 rounded-xl border border-admin-border bg-admin-bg-subtle p-3">
           <label htmlFor="review-stage-notes" className="text-xs font-bold uppercase tracking-[0.14em] text-muted">
             Notes for this transition (optional)
           </label>
@@ -228,18 +228,18 @@ export function AdminMocksReviewStageStepper({ bundleId }: AdminMocksReviewStage
             onChange={(event) => setNotes(event.target.value)}
             rows={2}
             placeholder={`What did the ${STAGE_LABELS[(MOCK_REVIEW_STAGES[currentIndex] ?? 'academic') as MockReviewStage]} reviewer find?`}
-            className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-navy placeholder:text-muted focus:border-primary focus:outline-none"
+            className="w-full rounded-lg border border-admin-border bg-admin-bg-surface px-3 py-2 text-sm text-admin-fg-default placeholder:text-admin-fg-muted focus:border-admin-border-focus focus:outline-none"
           />
           <div className="flex items-center justify-between gap-2">
             <p className="text-xs text-muted">
-              Next: <span className="font-semibold text-navy">{STAGE_LABELS[nextStage]}</span> — {STAGE_DESCRIPTIONS[nextStage]}
+              Next: <span className="font-semibold text-admin-fg-strong">{STAGE_LABELS[nextStage]}</span>. {STAGE_DESCRIPTIONS[nextStage]}
             </p>
             <Button
               variant="primary"
               onClick={() => void handleAdvance()}
               disabled={advancing}
             >
-              {advancing ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <ChevronRight className="mr-1 h-4 w-4" />}
+              {advancing ? <Loader2 className="mr-1 h-4 w-4 animate-spin motion-reduce:animate-none" /> : <ChevronRight className="mr-1 h-4 w-4" />}
               Advance to {STAGE_LABELS[nextStage]}
             </Button>
           </div>
@@ -247,13 +247,13 @@ export function AdminMocksReviewStageStepper({ bundleId }: AdminMocksReviewStage
       ) : null}
 
       {!loading && !nextStage && currentStage ? (
-        <p className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+        <p className="rounded-xl border border-admin-success/40 bg-admin-success-tint px-3 py-2 text-sm text-admin-success">
           Final stage reached. No further review advances are required.
         </p>
       ) : null}
 
       <section className="space-y-2">
-        <h3 className="inline-flex items-center gap-2 text-sm font-bold text-navy">
+        <h3 className="inline-flex items-center gap-2 text-sm font-bold text-admin-fg-strong">
           <History className="h-4 w-4" /> Stage history
         </h3>
         {(summary?.transitions ?? []).length === 0 ? (

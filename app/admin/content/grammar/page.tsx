@@ -238,13 +238,13 @@ export default function AdminGrammarDashboard() {
                 <table className="w-full text-sm">
                   <thead className="bg-admin-bg-subtle text-left text-xs uppercase tracking-[0.12em] text-admin-fg-muted">
                     <tr>
-                      <th className="p-3">Title</th>
-                      <th className="p-3">Topic</th>
-                      <th className="p-3">Level</th>
-                      <th className="p-3">Mins</th>
-                      <th className="p-3">State</th>
-                      <th className="p-3">Updated</th>
-                      {hasLessonActions ? <th className="p-3">Actions</th> : null}
+                      <th scope="col" className="p-3">Title</th>
+                      <th scope="col" className="p-3">Topic</th>
+                      <th scope="col" className="p-3">Level</th>
+                      <th scope="col" className="p-3">Mins</th>
+                      <th scope="col" className="p-3">State</th>
+                      <th scope="col" className="p-3">Updated</th>
+                      {hasLessonActions ? <th scope="col" className="p-3">Actions</th> : null}
                     </tr>
                   </thead>
                   <tbody>

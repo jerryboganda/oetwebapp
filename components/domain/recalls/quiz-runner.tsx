@@ -360,7 +360,7 @@ function SpellingCard({ item, onAnswered }: CardProps) {
     <div className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
       <div className="flex items-center gap-3">
         <PlayAudioButton termId={item.termId} label="Play term" />
-        <div className="text-xs uppercase tracking-wide text-muted">Listen &amp; type — British spelling</div>
+        <div className="text-xs uppercase tracking-wide text-muted">Listen &amp; type: British spelling</div>
       </div>
       {item.ipa && <div className="mt-2 text-xs text-muted">{item.ipa}</div>}
       <input

@@ -193,7 +193,7 @@ export function LearnerSpeakingAnalyticsDashboard({
   return (
     <div className="space-y-6">
       {/* -- Hero band ------------------------------------------------- */}
-      <Card className="bg-gradient-to-br from-primary/10 via-surface to-info/10 p-6">
+      <Card className="bg-surface p-6">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <p className="text-xs font-bold uppercase tracking-[0.18em] text-muted">

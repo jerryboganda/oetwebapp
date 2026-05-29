@@ -27,7 +27,7 @@ import {
 } from '@/lib/listening-authoring-api';
 
 const DISTRACTOR_CATEGORY_OPTIONS: { value: ListeningDistractorCategory | ''; label: string }[] = [
-  { value: '',                  label: '— not authored —' },
+  { value: '',                  label: 'Not authored' },
   { value: 'too_strong',        label: 'Too strong (always / definitely)' },
   { value: 'too_weak',          label: 'Too weak (rarely / unlikely)' },
   { value: 'wrong_speaker',     label: 'Wrong speaker held the view' },
@@ -37,7 +37,7 @@ const DISTRACTOR_CATEGORY_OPTIONS: { value: ListeningDistractorCategory | ''; la
 ];
 
 const SPEAKER_ATTITUDE_OPTIONS: { value: ListeningSpeakerAttitude | ''; label: string }[] = [
-  { value: '',           label: '— not authored —' },
+  { value: '',           label: 'Not authored' },
   { value: 'concerned',  label: 'Concerned' },
   { value: 'optimistic', label: 'Optimistic' },
   { value: 'doubtful',   label: 'Doubtful' },
@@ -215,7 +215,7 @@ export function ListeningStructureEditor({ paperId }: { paperId: string }) {
       >
         <div className="space-y-6">
           <InlineAlert variant="info">
-            AI proposals now land in the <strong>Extraction</strong> panel above for review before applying — they no longer overwrite this editor in place.
+            AI proposals now land in the <strong>Extraction</strong> panel above for review before applying. They no longer overwrite this editor in place.
           </InlineAlert>
 
           <CountsBar live={liveCounts} server={counts} />

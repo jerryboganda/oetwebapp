@@ -49,7 +49,7 @@ export function SubscriptionCard({ subscription, onChanged }: SubscriptionCardPr
   const isCancelled = subscription.status === 'cancelled' || subscription.status === 'canceled';
 
   return (
-    <article className="rounded-2xl border border-border bg-background p-5 shadow-sm">
+    <article className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
       <div className="flex items-start justify-between gap-3">
         <div>
           <h3 className="text-lg font-bold text-navy">{subscription.planName}</h3>
@@ -160,16 +160,16 @@ function Detail({
 function StatusBadge({ status, paused }: { status: string; paused: boolean }) {
   if (paused) {
     return (
-      <span className="mt-1 inline-flex items-center rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wider text-amber-800">
+      <span className="mt-1 inline-flex items-center rounded-full bg-warning/10 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wider text-warning">
         Paused
       </span>
     );
   }
   const tone =
     status === 'active' || status === 'trial'
-      ? 'bg-emerald-50 text-emerald-700'
+      ? 'bg-success/10 text-success'
       : status === 'cancelled' || status === 'canceled' || status === 'expired'
-        ? 'bg-red-50 text-red-700'
+        ? 'bg-danger/10 text-danger'
         : 'bg-background-light text-muted';
   return (
     <span

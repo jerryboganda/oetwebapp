@@ -31,13 +31,13 @@ export default function QuestionProgressDots({
             role="listitem"
             aria-label={`Question ${i + 1}${isAnswered ? ' answered' : ''}${isMarked ? ' marked for review' : ''}${isCurrent ? ' current' : ''}`}
             className={cn(
-              'h-4 w-4 rounded-full transition-all',
+              'h-4 w-4 rounded-full transition-[background-color,box-shadow] duration-200',
               isCurrent && 'ring-2 ring-primary ring-offset-1',
               isMarked
                 ? 'bg-orange-400'
                 : isAnswered
                   ? 'bg-emerald-500'
-                  : 'bg-slate-200 dark:bg-slate-700',
+                  : 'bg-background-light dark:bg-border',
             )}
           />
         );

@@ -206,7 +206,7 @@ export function VoiceNoteRecorder({
 
   const handleUpload = useCallback(async () => {
     if (!blobRef.current) {
-      setErrorMessage('Nothing to upload — record a note first.');
+      setErrorMessage('Nothing to upload. Record a note first.');
       setState('error');
       return;
     }

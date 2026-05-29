@@ -10,7 +10,7 @@
 
 **Auditor verdict:** **NOT 100% implemented at audit date 2026-05-10.** One P0 showstopper (Writing AI grader returns hard-coded scores for every submission) plus several P1/P2 gaps. Reading module is materially compliant; Writing module is structurally present but not enforced at submission time. Detailed mapping below.
 
-**Closure verdict (2026-05-12 reconciliation, see [`rulebook-compliance-2026-05-11-closure.md`](./rulebook-compliance-2026-05-11-closure.md)):** All P0 + P1 items and the structural P2 items (P2-1 / P2-3) are now resolved on `main`. Residual P2 / P3 items are doc-level closures (banner copy, disclaimer string verification, in-app zoom tooltip, drill-content schedule). The audit body below preserves the original 2026-05-10 evidence; a Resolution column has been appended to each P0/P1/P2/P3 row.
+**Closure verdict (2026-05-12 reconciliation):** All P0 + P1 items and the structural P2 items (P2-1 / P2-3) are now resolved on `main`. Residual P2 / P3 items are doc-level closures (banner copy, disclaimer string verification, in-app zoom tooltip, drill-content schedule). The audit body below preserves the original 2026-05-10 evidence; a Resolution column has been appended to each P0/P1/P2/P3 row.
 
 ---
 

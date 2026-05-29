@@ -197,7 +197,7 @@ export default function SpeakingQueuePage() {
         render: (item) =>
           item.aiScaledScore !== undefined ? (
             <div className="flex items-center gap-2">
-              <Sparkles className="h-3.5 w-3.5 text-indigo-500" aria-hidden />
+              <Sparkles className="h-3.5 w-3.5 text-primary" aria-hidden />
               <span className="font-bold tabular-nums">{Math.round(item.aiScaledScore)}</span>
               {item.aiReadinessBand && (
                 <Badge variant="info" className="capitalize">

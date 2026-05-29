@@ -52,10 +52,10 @@ const BAND_STYLE: Record<
     icon: AlertTriangle,
   },
   regressed: {
-    ring: 'border-error/40',
-    text: 'text-error',
-    bar: 'bg-error',
-    bg: 'bg-error/10',
+    ring: 'border-danger/40',
+    text: 'text-danger',
+    bar: 'bg-danger',
+    bg: 'bg-danger/10',
     icon: ArrowDownRight,
   },
 };
@@ -69,12 +69,10 @@ export function WritingImprovementBanner({ result, className }: WritingImproveme
     <Card
       className={`flex flex-col gap-4 border-2 p-6 sm:flex-row sm:items-center sm:justify-between ${style.ring} ${style.bg} ${className ?? ''}`}
       role="status"
-      aria-label={`Improvement score ${result.score} out of 100 — ${result.headline}`}
+      aria-label={`Improvement score ${result.score} out of 100: ${result.headline}`}
     >
       <div className="flex items-center gap-4">
-        <div className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-surface ${style.text}`}>
-          <Icon className="h-7 w-7" aria-hidden />
-        </div>
+        <Icon className={`h-9 w-9 shrink-0 ${style.text}`} aria-hidden />
         <div>
           <div className="flex items-baseline gap-2">
             <span className={`text-3xl font-bold tabular-nums ${style.text}`}>{result.score}</span>

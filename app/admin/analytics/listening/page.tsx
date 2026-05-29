@@ -207,7 +207,7 @@ export default function ListeningAnalyticsPage() {
                 <CardHeader><CardTitle>Hardest questions</CardTitle></CardHeader>
                 <CardContent>
                   {analytics.hardestQuestions.length === 0 ? (
-                    <p className="text-sm text-admin-fg-muted">Not enough attempts yet — at least 3 attempts are required for an item to qualify.</p>
+                    <p className="text-sm text-admin-fg-muted">Not enough attempts yet. At least 3 attempts are required for an item to qualify.</p>
                   ) : (
                     <div className="space-y-2">
                       {analytics.hardestQuestions.map((q) => (

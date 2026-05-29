@@ -46,7 +46,7 @@ export default function SelectSpeakingProfessionPage() {
       <div className="mx-auto flex max-w-2xl flex-col gap-6 px-4 py-10">
         <header className="space-y-2">
           <h1 className="text-2xl font-semibold tracking-tight text-foreground">Choose your healthcare profession</h1>
-          <p className="text-sm text-muted-foreground">
+          <p className="text-sm text-muted">
             OET Speaking is profession-specific. Pick the profession you will sit the exam in so we can show role-play
             scenarios that match your real workplace.
           </p>
@@ -56,9 +56,9 @@ export default function SelectSpeakingProfessionPage() {
 
         <Card className="space-y-3 p-4">
           {professionsLoading ? (
-            <p className="text-sm text-muted-foreground">Loading professions…</p>
+            <p className="text-sm text-muted">Loading professions…</p>
           ) : options.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No professions available. Please contact support.</p>
+            <p className="text-sm text-muted">No professions available. Please contact support.</p>
           ) : (
             <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               {options.map((option) => {

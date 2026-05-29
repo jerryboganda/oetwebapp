@@ -104,15 +104,15 @@ function WritingEntitlementBanner({ entitlement }: { entitlement: WritingEntitle
       <div
         role="status"
         data-testid="writing-entitlement-premium-required"
-        className="flex flex-col gap-3 rounded-2xl border border-amber-200/60 bg-amber-50 px-4 py-3 text-sm text-amber-900 sm:flex-row sm:items-center sm:justify-between"
+        className="flex flex-col gap-3 rounded-2xl border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-navy sm:flex-row sm:items-center sm:justify-between"
       >
         <div>
-          <span className="font-semibold">AI grading is a premium feature</span>
-          <span className="ml-1">— Upgrade for instant rule-cited feedback.</span>
+          <span className="font-semibold">AI grading is a premium feature.</span>
+          <span className="ml-1">Upgrade for instant rule-cited feedback.</span>
         </div>
         <Link
           href="/billing/subscribe"
-          className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-primary px-3 py-2 text-xs font-medium text-white shadow-sm transition-[background-color,border-color,color,box-shadow,opacity] duration-200 hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+          className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-primary px-3 py-2 text-xs font-medium text-white shadow-sm transition-[background-color,border-color,color,box-shadow,opacity] duration-200 hover:bg-primary/90 active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
         >
           Upgrade
         </Link>
@@ -128,7 +128,7 @@ function WritingEntitlementBanner({ entitlement }: { entitlement: WritingEntitle
       <div
         role="status"
         data-testid="writing-entitlement-quota-exceeded"
-        className="flex flex-col gap-3 rounded-2xl border border-red-200/60 bg-red-50 px-4 py-3 text-sm text-red-900 sm:flex-row sm:items-center sm:justify-between"
+        className="flex flex-col gap-3 rounded-2xl border border-danger/30 bg-danger/10 px-4 py-3 text-sm text-navy sm:flex-row sm:items-center sm:justify-between"
       >
         <div>
           <span className="font-semibold">Free quota reached.</span>
@@ -136,7 +136,7 @@ function WritingEntitlementBanner({ entitlement }: { entitlement: WritingEntitle
         </div>
         <Link
           href="/billing/subscribe"
-          className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-primary px-3 py-2 text-xs font-medium text-white shadow-sm transition-[background-color,border-color,color,box-shadow,opacity] duration-200 hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+          className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-primary px-3 py-2 text-xs font-medium text-white shadow-sm transition-[background-color,border-color,color,box-shadow,opacity] duration-200 hover:bg-primary/90 active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
         >
           Upgrade for more
         </Link>
@@ -479,7 +479,7 @@ export default function WritingHome() {
               eyebrow: 'Resume Draft',
               eyebrowIcon: RefreshCw,
               title: 'Continue your in-progress letter',
-              description: 'Your draft is autosaved to the server — pick up exactly where you stopped. The 45-minute timer resumes from its last synced value.',
+              description: 'Your draft is autosaved to the server. Pick up exactly where you stopped. The 45-minute timer resumes from its last synced value.',
               metaItems: [
                 { icon: Clock, label: 'Autosaved' },
                 { icon: RefreshCw, label: 'In progress' },
@@ -633,7 +633,7 @@ export default function WritingHome() {
                           <Badge variant="info" size="sm">New</Badge>
                         </div>
                         <p className="text-sm text-muted max-w-2xl">
-                          Practice the underlying writing skills — case-note selection, opening
+                          Practice the underlying writing skills: case-note selection, opening
                           purpose, paragraph order, sentence expansion, formal tone, and
                           abbreviations.
                         </p>
@@ -656,7 +656,7 @@ export default function WritingHome() {
                         </div>
                         <p className="text-sm text-muted max-w-2xl">
                           See exactly where you keep losing marks across drills, rewrites and
-                          expert feedback — pick the next thing to practise.
+                          expert feedback. Pick the next thing to practise.
                         </p>
                       </div>
                       <ArrowRight className="w-5 h-5 text-muted group-hover:text-primary" aria-hidden />

@@ -27,7 +27,7 @@ export async function generateMetadata({
   if (!parsed.success) return { title: 'Writing drills' };
   return {
     title: `${TYPE_TITLES[parsed.data]} drills`,
-    description: `OET Writing practice — ${TYPE_TITLES[parsed.data].toLowerCase()} drills.`,
+    description: `OET Writing practice: ${TYPE_TITLES[parsed.data].toLowerCase()} drills.`,
   };
 }
 
@@ -44,7 +44,7 @@ export default async function WritingDrillsTypeListPage({
   const drills = listDrills({ type });
 
   return (
-    <LearnerDashboardShell pageTitle={`Writing — ${TYPE_TITLES[type]}`}>
+    <LearnerDashboardShell pageTitle={`Writing: ${TYPE_TITLES[type]}`}>
       <header className="bg-navy text-white pt-10 pb-12 px-4 sm:px-6 lg:px-8">
         <Link
           href="/writing/drills"

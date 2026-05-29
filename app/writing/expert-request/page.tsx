@@ -109,10 +109,10 @@ function WritingExpertReviewContent() {
         <div className="flex items-center justify-center min-h-[60vh] p-4">
           <MotionPage>
             <Card className="p-8 max-w-md w-full text-center">
-              <div className="w-20 h-20 bg-success/10 text-success rounded-full flex items-center justify-center mx-auto mb-6"><CheckCircle2 className="w-10 h-10" /></div>
+              <div className="w-20 h-20 bg-success/10 text-success rounded-full flex items-center justify-center mx-auto mb-6"><CheckCircle2 className="w-10 h-10" aria-hidden="true" /></div>
               <h1 className="text-2xl font-bold text-navy mb-2">Request Submitted!</h1>
               <p className="text-muted mb-8">Your submission has been queued for tutor review. {selectedCost} review credit{selectedCost > 1 ? 's were' : ' was'} used, and the estimated turnaround is {estimatedDelivery ?? '48-72 hours'}.</p>
-              <div className="text-sm text-muted/60 animate-pulse">Redirecting to results…</div>
+              <div className="text-sm text-muted/60 motion-safe:animate-pulse">Redirecting to results…</div>
             </Card>
           </MotionPage>
         </div>
@@ -155,7 +155,7 @@ function WritingExpertReviewContent() {
             <h3 className="text-sm font-bold text-muted uppercase tracking-wider mb-4 flex items-center gap-2"><Clock className="w-4 h-4" /> 1. Turnaround Speed</h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {turnaroundOptions.map(option => (
-                <label key={option.id} className={`relative flex flex-col p-4 rounded-xl border-2 cursor-pointer transition-all ${speed === option.id ? 'border-primary bg-primary/5 ring-4 ring-primary/5' : 'border-border bg-surface hover:border-border-hover'}`}>
+                <label key={option.id} className={`relative flex flex-col p-4 rounded-xl border-2 cursor-pointer transition-[color,background-color,border-color,box-shadow,transform,opacity,filter] duration-200 ${speed === option.id ? 'border-primary bg-primary/5 ring-4 ring-primary/5' : 'border-border bg-surface hover:border-border-hover'}`}>
                   <input type="radio" name="speed" className="sr-only" checked={speed === option.id} onChange={() => setSpeed(option.id)} />
                   <div className="flex items-center justify-between mb-1">
                     <span className="font-bold text-navy">{option.label}</span>
@@ -179,7 +179,7 @@ function WritingExpertReviewContent() {
                 const isDisabled = !isSelected && selectedFocus.length >= 3;
                 return (
                   <button key={area.id} type="button" disabled={isDisabled} onClick={() => toggleFocus(area.id)}
-                    className={`px-4 py-2 rounded-full text-sm font-medium border transition-all ${isSelected ? 'bg-primary border-primary text-white shadow-sm' : isDisabled ? 'bg-background-light border-border text-muted/40 cursor-not-allowed' : 'bg-surface border-border text-muted hover:border-border-hover'}`}>
+                    className={`px-4 py-2 rounded-full text-sm font-medium border transition-[color,background-color,border-color,box-shadow,transform,opacity,filter] duration-200 ${isSelected ? 'bg-primary border-primary text-white dark:bg-violet-700 shadow-sm' : isDisabled ? 'bg-background-light border-border text-muted/40 cursor-not-allowed' : 'bg-surface border-border text-muted hover:border-border-hover'}`}>
                     {area.label}
                   </button>
                 );
@@ -190,7 +190,7 @@ function WritingExpertReviewContent() {
           {/* 3. Notes */}
           <section>
             <h3 className="text-sm font-bold text-muted uppercase tracking-wider mb-4 flex items-center gap-2"><MessageSquare className="w-4 h-4" /> 3. Notes for Reviewer</h3>
-            <textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="e.g., I'm struggling with the discharge plan structure…" className="w-full h-32 p-4 rounded-xl border-2 border-border focus:border-primary focus:ring-4 focus:ring-primary/5 outline-none transition-all resize-none text-sm" />
+            <textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="e.g., I'm struggling with the discharge plan structure…" className="w-full h-32 p-4 rounded-xl border-2 border-border focus:border-primary focus:ring-4 focus:ring-primary/5 outline-none transition-[color,background-color,border-color,box-shadow,transform,opacity,filter] duration-200 resize-none text-sm" />
           </section>
 
           {/* 4. Credits */}

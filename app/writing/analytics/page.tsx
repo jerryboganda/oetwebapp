@@ -123,7 +123,7 @@ export default function WritingAnalyticsPage() {
               </Link>
               <Link
                 href="/writing/drills"
-                className="inline-flex items-center justify-center rounded-xl bg-primary px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-primary/90"
+                className="inline-flex items-center justify-center rounded-xl bg-primary px-4 py-2 text-sm font-medium text-white shadow-sm transition-[color,background-color,transform] duration-200 hover:bg-primary/90 active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600"
               >
                 Practise drills
               </Link>
@@ -149,7 +149,7 @@ export default function WritingAnalyticsPage() {
             </p>
             <Link
               href="/writing/drills"
-              className="mt-4 inline-flex items-center justify-center rounded-xl bg-primary px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-primary/90"
+              className="mt-4 inline-flex items-center justify-center rounded-xl bg-primary px-4 py-2 text-sm font-medium text-white shadow-sm transition-[color,background-color,transform] duration-200 hover:bg-primary/90 active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600"
             >
               Start drills
             </Link>
@@ -234,7 +234,7 @@ export default function WritingAnalyticsPage() {
                 <LearnerSurfaceSectionHeader
                   eyebrow="Trend"
                   title="Last 14 days"
-                  description="Daily count of issues — flat or downward is good."
+                  description="Daily count of issues. Flat or downward is good."
                   className="mb-5"
                 />
                 <div className="flex h-32 items-end gap-1.5" role="img" aria-label="14 day trend chart">
@@ -269,7 +269,7 @@ export default function WritingAnalyticsPage() {
                   <LearnerSurfaceSectionHeader
                     eyebrow="Score snapshot"
                     title="Latest AI estimate"
-                    description="Estimate only — not an official OET score. Tutor review may differ."
+                    description="Estimate only, not an official OET score. Tutor review may differ."
                     className="mb-5"
                   />
                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -315,7 +315,7 @@ export default function WritingAnalyticsPage() {
                       tag: topTagDrillLink.tag,
                       route: topTagDrillLink.route,
                     })}
-                    className="inline-flex items-center justify-center rounded-xl bg-primary px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-primary/90"
+                    className="inline-flex items-center justify-center rounded-xl bg-primary px-4 py-2 text-sm font-medium text-white shadow-sm transition-[color,background-color,transform] duration-200 hover:bg-primary/90 active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600"
                   >
                     Open drill
                   </Link>

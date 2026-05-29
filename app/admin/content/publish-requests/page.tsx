@@ -43,15 +43,15 @@ function StatusPipeline({ status }: { status: string }) {
         const isPast = stepIndex > i;
         return (
           <span key={step} className="flex items-center gap-1">
-            {i > 0 ? <span className="text-[var(--color-border)]">→</span> : null}
-            <span className={`px-1.5 py-0.5 rounded ${isActive ? 'bg-[var(--color-accent)] text-white' : isPast ? 'bg-[var(--color-success-bg)] text-[var(--color-success)]' : 'bg-[var(--color-surface-secondary)] text-[var(--color-text-tertiary)]'}`}>
+            {i > 0 ? <span className="text-[var(--admin-border-strong)]">→</span> : null}
+            <span className={`px-1.5 py-0.5 rounded ${isActive ? 'bg-[var(--admin-primary)] text-[var(--admin-primary-fg)]' : isPast ? 'bg-[var(--admin-success-tint)] text-[var(--admin-success)]' : 'bg-[var(--admin-bg-subtle)] text-[var(--admin-fg-muted)]'}`}>
               {labels[step]}
             </span>
           </span>
         );
       })}
       {status === 'rejected' ? (
-        <span className="ml-1 px-1.5 py-0.5 rounded bg-[var(--color-error-bg)] text-[var(--color-error)]">Rejected</span>
+        <span className="ml-1 px-1.5 py-0.5 rounded bg-[var(--admin-danger-tint)] text-[var(--admin-danger)]">Rejected</span>
       ) : null}
     </div>
   );
@@ -111,7 +111,7 @@ export default function PublishRequestsPage() {
     setIsMutating(true);
     try {
       await editorApproveContent(reviewTarget.contentItemId, reviewNote || undefined);
-      setToast({ variant: 'success', message: 'Editor approved — moved to publisher review.' });
+      setToast({ variant: 'success', message: 'Editor approved. Moved to publisher review.' });
       setReviewTarget(null);
       setReviewNote('');
       setRequests((prev) => prev.map((r) =>
@@ -128,7 +128,7 @@ export default function PublishRequestsPage() {
     setIsMutating(true);
     try {
       await editorRejectContent(reviewTarget.contentItemId, rejectionReason);
-      setToast({ variant: 'success', message: 'Editor rejected — returned to draft.' });
+      setToast({ variant: 'success', message: 'Editor rejected. Returned to draft.' });
       setReviewTarget(null);
       setRejectionReason('');
       setShowRejectForm(false);
@@ -146,7 +146,7 @@ export default function PublishRequestsPage() {
     setIsMutating(true);
     try {
       await publisherApproveContent(reviewTarget.contentItemId, reviewNote || undefined);
-      setToast({ variant: 'success', message: 'Publisher approved — content published.' });
+      setToast({ variant: 'success', message: 'Publisher approved. Content published.' });
       setReviewTarget(null);
       setReviewNote('');
       setRequests((prev) => prev.map((r) =>
@@ -163,7 +163,7 @@ export default function PublishRequestsPage() {
     setIsMutating(true);
     try {
       await publisherRejectContent(reviewTarget.contentItemId, rejectionReason);
-      setToast({ variant: 'success', message: 'Publisher rejected — returned to editor review.' });
+      setToast({ variant: 'success', message: 'Publisher rejected. Returned to editor review.' });
       setReviewTarget(null);
       setRejectionReason('');
       setShowRejectForm(false);
@@ -236,7 +236,7 @@ export default function PublishRequestsPage() {
       header: 'Stage',
       render: (r) => {
         const badge = stageBadge[r.stage];
-        return badge ? <Badge variant={badge.variant}>{badge.label}</Badge> : <span className="text-xs text-[var(--color-text-tertiary)]">—</span>;
+        return badge ? <Badge variant={badge.variant}>{badge.label}</Badge> : <span className="text-xs text-[var(--admin-fg-muted)]">—</span>;
       },
     },
     {
@@ -248,7 +248,7 @@ export default function PublishRequestsPage() {
       key: 'rejectionReason' as keyof AdminPublishRequest,
       header: 'Last Rejection',
       render: (r) => r.rejectionReason ? (
-        <span className="text-xs text-[var(--color-error)]" title={r.rejectionReason}>
+        <span className="text-xs text-[var(--admin-danger)]" title={r.rejectionReason}>
           {r.rejectionReason.length > 40 ? `${r.rejectionReason.slice(0, 40)}…` : r.rejectionReason}
         </span>
       ) : null,
@@ -335,7 +335,7 @@ export default function PublishRequestsPage() {
                 <p className="font-mono text-xs">{r.contentItemId}</p>
                 <p className="text-sm">{r.requestedByName}</p>
                 <StatusPipeline status={r.status} />
-                {r.rejectionReason ? <p className="text-xs text-[var(--color-error)]">{r.rejectionReason}</p> : null}
+                {r.rejectionReason ? <p className="text-xs text-[var(--admin-danger)]">{r.rejectionReason}</p> : null}
               </div>
             )}
             selectable
@@ -370,10 +370,10 @@ export default function PublishRequestsPage() {
               <p className="text-sm text-muted">Requested by: {reviewTarget.requestedByName}</p>
               {reviewTarget.requestNote && <p className="text-sm mt-2 italic">&ldquo;{reviewTarget.requestNote}&rdquo;</p>}
               {reviewTarget.editorNotes && (
-                <p className="text-sm mt-1 text-[var(--color-text-secondary)]">Editor notes: {reviewTarget.editorNotes}</p>
+                <p className="text-sm mt-1 text-[var(--admin-fg-default)]">Editor notes: {reviewTarget.editorNotes}</p>
               )}
               {reviewTarget.rejectionReason && (
-                <p className="text-sm mt-1 text-[var(--color-error)]">Previous rejection: {reviewTarget.rejectionReason} (at {reviewTarget.rejectionStage})</p>
+                <p className="text-sm mt-1 text-[var(--admin-danger)]">Previous rejection: {reviewTarget.rejectionReason} (at {reviewTarget.rejectionStage})</p>
               )}
               <div className="mt-2">
                 <StatusPipeline status={reviewTarget.status} />

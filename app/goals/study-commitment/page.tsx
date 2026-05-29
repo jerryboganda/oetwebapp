@@ -136,7 +136,7 @@ export default function StudyCommitmentPage() {
                 onClick={() => setSelectedMinutes(m)}
                 className={`px-4 py-2 rounded-full text-sm font-medium border transition-colors ${
                   selectedMinutes === m
-                    ? 'bg-primary text-white border-primary'
+                    ? 'bg-primary text-white dark:bg-violet-700 border-primary'
                     : 'bg-surface text-navy border-border-hover hover:border-primary/30'
                 }`}
               >

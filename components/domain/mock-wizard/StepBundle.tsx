@@ -29,7 +29,7 @@ const DIFFICULTY_OPTIONS = [
 ];
 
 const RELEASE_OPTIONS = [
-  { value: 'instant', label: 'Instant — visible on publish' },
+  { value: 'instant', label: 'Instant (visible on publish)' },
   { value: 'scheduled', label: 'Scheduled' },
   { value: 'gated', label: 'Gated by entitlement' },
 ];
@@ -95,7 +95,7 @@ export function StepBundle() {
   return (
     <div className="space-y-4">
       <header className="space-y-1">
-        <h2 className="text-lg font-bold text-navy">Step 1 — Bundle metadata</h2>
+        <h2 className="text-lg font-bold text-navy">Step 1: Bundle metadata</h2>
         <p className="text-sm text-muted">
           Set the headline information for this mock. Provenance and difficulty drive the
           publish-gate downstream.
@@ -109,7 +109,7 @@ export function StepBundle() {
           label="Title *"
           value={form.title}
           onChange={(e) => setForm({ ...form, title: e.target.value })}
-          placeholder="Full mock — Cardiology Route 1"
+          placeholder="Full mock, Cardiology Route 1"
         />
         <Select
           label="Mock type"

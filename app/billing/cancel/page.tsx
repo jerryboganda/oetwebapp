@@ -91,7 +91,7 @@ export default function CancelSubscriptionPage() {
 
       {toast && <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} />}
 
-      <div className="space-y-4 rounded-2xl border border-border bg-card p-6 shadow-sm">
+      <div className="space-y-4 rounded-2xl border border-border bg-surface p-6 shadow-sm">
         {error && <InlineAlert variant="error">{error}</InlineAlert>}
 
         {step === 'reason' && (
@@ -107,10 +107,10 @@ export default function CancelSubscriptionPage() {
 
         {step === 'deflection' && intent?.offeredCouponCode && (
           <div className="space-y-4">
-            <div className="rounded-xl bg-emerald-50 p-5 text-emerald-900 dark:bg-emerald-950 dark:text-emerald-100">
-              <Tag className="mb-2 h-5 w-5" />
-              <p className="text-lg font-semibold">Wait — here’s a discount</p>
-              <p className="mt-1 text-sm">
+            <div className="rounded-xl border border-success/30 bg-success/10 p-5">
+              <Tag className="mb-2 h-5 w-5 text-success" aria-hidden="true" />
+              <p className="text-lg font-semibold text-success">Wait, here’s a discount</p>
+              <p className="mt-1 text-sm text-navy">
                 Stay with us and we’ll apply the coupon code <strong>{intent.offeredCouponCode}</strong> to your next renewal.
               </p>
             </div>
@@ -123,9 +123,9 @@ export default function CancelSubscriptionPage() {
 
         {step === 'confirm' && (
           <div className="space-y-4">
-            <div className="rounded-xl bg-rose-50 p-5 text-rose-900 dark:bg-rose-950 dark:text-rose-100">
-              <p className="text-lg font-semibold">Confirm cancellation</p>
-              <p className="mt-1 text-sm">
+            <div className="rounded-xl border border-danger/30 bg-danger/10 p-5">
+              <p className="text-lg font-semibold text-danger">Confirm cancellation</p>
+              <p className="mt-1 text-sm text-navy">
                 Your subscription will be cancelled. You keep access until the end of your current billing period.
                 After that, premium features lock; your account remains.
               </p>

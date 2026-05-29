@@ -258,7 +258,7 @@ export default function AdminLiveClassNewPage() {
                       className={inputClass}
                       value={form.title}
                       onChange={(e) => set('title', e.target.value)}
-                      placeholder="e.g. OET Speaking Masterclass — Medicine"
+                      placeholder="e.g. OET Speaking Masterclass: Medicine"
                       maxLength={200}
                       aria-invalid={!!fieldErrors.title}
                       aria-required="true"
@@ -466,7 +466,7 @@ export default function AdminLiveClassNewPage() {
 
                   <FieldWrapper
                     label="Tutor Profile ID"
-                    hint="Optional — leave blank if no specific tutor is assigned yet."
+                    hint="Optional. Leave blank if no specific tutor is assigned yet."
                     error={fieldErrors.tutorProfileId}
                   >
                     <input

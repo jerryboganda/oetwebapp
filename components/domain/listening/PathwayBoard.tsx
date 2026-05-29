@@ -58,11 +58,11 @@ function PathwayTile({ stage, index }: { stage: PathwayStageView; index: number 
   const body = (
     <div
       className={`flex min-h-[190px] flex-col rounded-2xl border p-5 shadow-sm transition ${tileClass(stage.status)} ${
-        canOpen ? 'hover:-translate-y-0.5 hover:shadow-clinical focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2' : ''
+        canOpen ? 'hoverable:-translate-y-0.5 hover:shadow-clinical focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2' : ''
       }`}
     >
       <div className="flex items-start justify-between gap-3">
-        <span className="rounded-lg bg-white/70 px-2.5 py-1 text-[11px] font-black uppercase tracking-[0.16em] text-muted">
+        <span className="rounded-lg bg-surface/70 px-2.5 py-1 text-[11px] font-black uppercase tracking-[0.16em] text-muted">
           Stage {index + 1}
         </span>
         <StatusBadge status={stage.status} />
@@ -81,7 +81,7 @@ function PathwayTile({ stage, index }: { stage: PathwayStageView; index: number 
           </span>
         ) : unlocked && !stage.actionHref ? (
           <span className="mt-4 text-xs text-muted">
-            Content coming soon — check back after your admin publishes a paper for this stage.
+            Content coming soon. Check back after your admin publishes a paper for this stage.
           </span>
         ) : null}
       </div>

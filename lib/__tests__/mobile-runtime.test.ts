@@ -39,6 +39,13 @@ describe('mobile runtime', () => {
         }),
         onWindowStateChange: () => () => undefined,
       },
+      speakingAudio: {
+        start: async (sessionId: string) => ({ ok: true, sessionId, mimeType: 'audio/webm', mode: 'ipc' }),
+        stop: async (sessionId: string) => ({ ok: true, sessionId }),
+        getBlob: async (sessionId: string) => ({ ok: true, sessionId }),
+        discard: async (sessionId: string) => ({ ok: true, sessionId }),
+        getPlatform: () => 'win32' as NodeJS.Platform,
+      },
       secureSecrets: {
         get: async () => null,
         set: async () => true,

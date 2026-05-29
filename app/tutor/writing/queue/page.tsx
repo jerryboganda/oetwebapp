@@ -83,7 +83,7 @@ export default function TutorWritingQueuePage() {
               type="button"
               onClick={() => setStatus(s.id)}
               aria-pressed={status === s.id}
-              className={`rounded-full border px-3 py-1.5 text-xs font-bold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${status === s.id ? 'border-primary bg-primary text-white' : 'border-border bg-background text-navy hover:border-primary/40'}`}
+              className={`rounded-full border px-3 py-1.5 text-xs font-bold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${status === s.id ? 'border-primary bg-primary text-white dark:bg-violet-700' : 'border-border bg-background text-navy hover:border-primary/40'}`}
             >
               {s.label}
             </button>

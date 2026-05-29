@@ -49,22 +49,22 @@ export interface CoachPanelProps {
 const CATEGORY_META: Record<WritingCoachHintCategory, { label: string; tone: string; icon: typeof Sparkles }> = {
   style: {
     label: 'Style',
-    tone: 'bg-red-50 text-red-700 border-red-200/60 dark:bg-red-950 dark:text-red-300 dark:border-red-800/60',
+    tone: 'bg-danger/10 text-danger border-danger/30',
     icon: AlertTriangle,
   },
   structure: {
     label: 'Structure',
-    tone: 'bg-amber-50 text-amber-800 border-amber-200/60 dark:bg-amber-950 dark:text-amber-300 dark:border-amber-800/60',
+    tone: 'bg-warning/10 text-warning border-warning/30',
     icon: BookOpen,
   },
   length: {
     label: 'Length',
-    tone: 'bg-amber-50 text-amber-800 border-amber-200/60 dark:bg-amber-950 dark:text-amber-300 dark:border-amber-800/60',
+    tone: 'bg-warning/10 text-warning border-warning/30',
     icon: Lightbulb,
   },
   encouragement: {
     label: 'Good job',
-    tone: 'bg-emerald-50 text-emerald-700 border-emerald-200/60 dark:bg-emerald-950 dark:text-emerald-300 dark:border-emerald-800/60',
+    tone: 'bg-success/10 text-success border-success/30',
     icon: CheckCircle2,
   },
 };
@@ -214,8 +214,8 @@ export function CoachPanel({
             className={cn(
               'text-[10px] uppercase tracking-wider font-bold rounded-full px-2 py-0.5',
               mode === 'on'
-                ? 'bg-emerald-50 text-emerald-700'
-                : 'bg-slate-100 text-slate-600',
+                ? 'bg-success/10 text-success'
+                : 'bg-background-light text-muted',
             )}
           >
             {mode}
@@ -235,7 +235,7 @@ export function CoachPanel({
           </p>
         ) : hints.length === 0 ? (
           <p className="text-sm text-muted py-8 text-center">
-            Keep writing — hints will appear here as you go.
+            Keep writing. Hints will appear here as you go.
           </p>
         ) : (
           hints.map((hint) => {
@@ -266,7 +266,7 @@ export function CoachPanel({
                   <button
                     type="button"
                     onClick={() => handleDismiss(hint.id)}
-                    className="shrink-0 -mt-1 -mr-1 rounded p-1 hover:bg-black/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                    className="shrink-0 -mt-1 -mr-1 rounded p-1 hover:bg-navy/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                     aria-label="Dismiss hint"
                   >
                     <X className="w-3.5 h-3.5" aria-hidden="true" />

@@ -716,7 +716,7 @@ function LiveSpeakingTaskContent() {
         <div className="flex items-center gap-3 min-w-0 overflow-hidden">
           <div className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest flex items-center gap-2 ${
             mode === 'self' ? 'bg-primary/10 text-primary border border-primary/30' :
-            'bg-amber-50 text-warning border border-warning/30'
+            'bg-warning/10 text-warning border border-warning/30'
           }`}>
             {mode === 'self' ? <User className="w-3 h-3" /> : <ShieldCheck className="w-3 h-3" />}
             {mode === 'self' ? 'Self Practice' : 'Exam Simulation'}
@@ -761,17 +761,17 @@ function LiveSpeakingTaskContent() {
         {/* Visualizer / AI State */}
         <div className="relative z-10 mb-24 flex flex-col items-center gap-10">
           <div className="relative">
-            <div className="absolute inset-0 -z-10 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-primary/10 via-transparent to-transparent opacity-80 blur-2xl scale-150"></div>
+            <div className="absolute inset-0 -z-10 rounded-full bg-primary/10 opacity-80 blur-2xl scale-150"></div>
             
             <motion.div 
               animate={recordingState === 'recording' && !reducedMotion ? { scale: [1, 1.05, 1] } : {}}
               transition={recordingPulseTransition}
-              className={`w-48 h-48 rounded-full border-2 flex items-center justify-center transition-all duration-500 ${
+              className={`w-48 h-48 rounded-full border-2 flex items-center justify-center transition-[color,background-color,border-color,box-shadow,transform,opacity,filter] duration-500 ${
                 recordingState === 'recording' ? 'border-danger/30 bg-danger/10 shadow-[0_0_40px_rgba(239,68,68,0.14)]' :
-                recordingState === 'paused' ? 'border-warning/30 bg-amber-50 shadow-[0_0_40px_rgba(245,158,11,0.14)]' : 'border-border bg-surface'
+                recordingState === 'paused' ? 'border-warning/30 bg-warning/10 shadow-[0_0_40px_rgba(245,158,11,0.14)]' : 'border-border bg-surface'
               }`}
             >
-              <div className={`w-40 h-40 rounded-full flex items-center justify-center transition-all duration-500 shadow-sm ${
+              <div className={`w-40 h-40 rounded-full flex items-center justify-center transition-[color,background-color,border-color,box-shadow,transform,opacity,filter] duration-500 shadow-sm ${
                 recordingState === 'recording' ? 'bg-danger/10 shadow-inner' :
                 recordingState === 'paused' ? 'bg-warning/10 shadow-inner' : 
                 'bg-surface border border-primary/10'
@@ -830,7 +830,7 @@ function LiveSpeakingTaskContent() {
               {card?.disclaimer ?? 'Practice estimate only. This is not an official OET score or result.'}
             </p>
             
-            <label className="mt-6 flex flex-col sm:flex-row items-center sm:items-start gap-4 rounded-2xl border border-primary/20 bg-primary/5 p-5 text-left text-sm leading-relaxed text-navy shadow-sm transition-all hover:border-primary/30 cursor-pointer group">
+            <label className="mt-6 flex flex-col sm:flex-row items-center sm:items-start gap-4 rounded-2xl border border-primary/20 bg-primary/5 p-5 text-left text-sm leading-relaxed text-navy shadow-sm transition-[color,background-color,border-color,box-shadow,transform,opacity,filter] duration-200 hover:border-primary/30 cursor-pointer group">
               <div className="bg-surface p-1 rounded-md border border-primary/20 shadow-sm shrink-0 group-hover:border-primary/40 transition-colors">
                 <input
                   type="checkbox"
@@ -859,7 +859,7 @@ function LiveSpeakingTaskContent() {
               <button
                 onClick={handleStartRecording}
                 disabled={!recordingConsentAccepted}
-                className="w-[72px] h-[72px] rounded-full bg-danger hover:bg-danger/90 disabled:opacity-50 disabled:hover:bg-danger flex items-center justify-center transition-all shadow-[0_0_30px_rgba(239,68,68,0.3)] hover:scale-105 active:scale-95"
+                className="w-[72px] h-[72px] rounded-full bg-danger hover:bg-danger/90 disabled:opacity-50 disabled:hover:bg-danger flex items-center justify-center transition-[color,background-color,border-color,box-shadow,transform,opacity,filter] duration-200 shadow-[0_0_30px_rgba(239,68,68,0.3)] hoverable:scale-105 active:scale-95"
                 aria-label="Start recording"
               >
                 <Mic className="w-8 h-8 text-white" />
@@ -868,7 +868,7 @@ function LiveSpeakingTaskContent() {
               <button
                 onClick={handleStartRecording}
                 disabled={!recordingConsentAccepted}
-                className="w-[72px] h-[72px] rounded-full bg-danger hover:bg-danger/90 disabled:opacity-50 disabled:hover:bg-danger flex items-center justify-center transition-all shadow-[0_0_30px_rgba(239,68,68,0.3)] hover:scale-105 active:scale-95"
+                className="w-[72px] h-[72px] rounded-full bg-danger hover:bg-danger/90 disabled:opacity-50 disabled:hover:bg-danger flex items-center justify-center transition-[color,background-color,border-color,box-shadow,transform,opacity,filter] duration-200 shadow-[0_0_30px_rgba(239,68,68,0.3)] hoverable:scale-105 active:scale-95"
                 aria-label="Resume recording"
               >
                 <Play className="w-8 h-8 text-white ml-1.5" />
@@ -876,7 +876,7 @@ function LiveSpeakingTaskContent() {
             ) : recordingState === 'recording' ? (
               <button
                 onClick={mode === 'exam' ? handleSubmit : handlePauseRecording}
-                className="w-[72px] h-[72px] rounded-full border-2 border-border bg-surface hover:bg-background-light hover:border-danger/30 flex items-center justify-center transition-all shadow-lg hover:scale-105 active:scale-95"
+                className="w-[72px] h-[72px] rounded-full border-2 border-border bg-surface hover:bg-background-light hover:border-danger/30 flex items-center justify-center transition-[color,background-color,border-color,box-shadow,transform,opacity,filter] duration-200 shadow-lg hoverable:scale-105 active:scale-95"
                 aria-label={mode === 'exam' ? 'Finish exam recording' : 'Pause recording'}
               >
                 {mode === 'exam' ? <Square className="w-8 h-8 text-danger fill-danger" /> : <Pause className="w-8 h-8 text-navy fill-navy" />}
@@ -886,10 +886,10 @@ function LiveSpeakingTaskContent() {
         </div>
 
         {/* Role Card & Notes Toggles (Glassmorphic Dock) */}
-        <div className="fixed bottom-24 sm:bottom-32 left-1/2 -translate-x-1/2 flex items-center gap-2 p-2 bg-surface/80 backdrop-blur-xl border border-border/50 rounded-full shadow-[0_8px_30px_rgba(0,0,0,0.06)] z-20 transition-all hover:shadow-[0_8px_40px_rgba(0,0,0,0.08)]">
+        <div className="fixed bottom-24 sm:bottom-32 left-1/2 -translate-x-1/2 flex items-center gap-2 p-2 bg-surface/80 backdrop-blur-xl border border-border/50 rounded-full shadow-[0_8px_30px_rgba(0,0,0,0.06)] z-20 transition-[color,background-color,border-color,box-shadow,transform,opacity,filter] duration-200 hover:shadow-[0_8px_40px_rgba(0,0,0,0.08)]">
           <button 
             onClick={() => setShowRoleCard(!showRoleCard)}
-            className={`px-5 py-2.5 min-h-[44px] rounded-full text-xs font-bold tracking-wide flex items-center gap-2 transition-all ${
+            className={`px-5 py-2.5 min-h-[44px] rounded-full text-xs font-bold tracking-wide flex items-center gap-2 transition-[color,background-color,border-color,box-shadow,transform,opacity,filter] duration-200 ${
               showRoleCard 
                 ? 'bg-navy text-white shadow-md' 
                 : 'bg-transparent text-navy/80 hover:bg-primary/5 hover:text-primary'
@@ -902,7 +902,7 @@ function LiveSpeakingTaskContent() {
           
           <button 
             onClick={() => setShowNotes(!showNotes)}
-            className={`px-5 py-2.5 min-h-[44px] rounded-full text-xs font-bold tracking-wide flex items-center gap-2 transition-all ${
+            className={`px-5 py-2.5 min-h-[44px] rounded-full text-xs font-bold tracking-wide flex items-center gap-2 transition-[color,background-color,border-color,box-shadow,transform,opacity,filter] duration-200 ${
               showNotes 
                 ? 'bg-navy text-white shadow-md' 
                 : 'bg-transparent text-navy/80 hover:bg-primary/5 hover:text-primary'
@@ -933,7 +933,7 @@ function LiveSpeakingTaskContent() {
             >
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-sm font-black uppercase tracking-widest text-muted">Role Card Reference</h3>
-                <button onClick={() => setShowRoleCard(false)} className="p-2.5 -m-1 rounded-lg text-muted hover:text-navy hover:bg-background-light"><Square className="w-4 h-4 rotate-45" /></button>
+                <button onClick={() => setShowRoleCard(false)} aria-label="Close role card reference" className="p-2.5 -m-1 rounded-lg text-muted hover:text-navy hover:bg-background-light"><Square className="w-4 h-4 rotate-45" aria-hidden /></button>
               </div>
               <div className="space-y-4">
                 <div>
@@ -968,7 +968,7 @@ function LiveSpeakingTaskContent() {
             >
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-sm font-black uppercase tracking-widest text-muted">Your Notes</h3>
-                <button onClick={() => setShowNotes(false)} className="p-2.5 -m-1 rounded-lg text-muted hover:text-navy hover:bg-background-light"><Square className="w-4 h-4 rotate-45" /></button>
+                <button onClick={() => setShowNotes(false)} aria-label="Close notes" className="p-2.5 -m-1 rounded-lg text-muted hover:text-navy hover:bg-background-light"><Square className="w-4 h-4 rotate-45" aria-hidden /></button>
               </div>
               <textarea 
                 placeholder="Type your notes here..."
@@ -987,10 +987,10 @@ function LiveSpeakingTaskContent() {
           <button 
             onClick={handleStop}
             ref={stopTriggerRef}
-            className="flex flex-col items-center gap-2 group transition-all"
+            className="flex flex-col items-center gap-2 group transition-[color,background-color,border-color,box-shadow,transform,opacity,filter] duration-200"
             aria-label="Cancel task"
           >
-            <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full border border-border bg-surface flex items-center justify-center group-hover:bg-danger/5 group-hover:border-danger/30 transition-all shadow-sm">
+            <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full border border-border bg-surface flex items-center justify-center group-hover:bg-danger/5 group-hover:border-danger/30 transition-[color,background-color,border-color,box-shadow,transform,opacity,filter] duration-200 shadow-sm">
               <RotateCcw className="w-5 h-5 sm:w-6 sm:h-6 text-muted group-hover:text-danger transition-colors" />
             </div>
             <span className="text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-muted group-hover:text-danger transition-colors">Cancel Task</span>
@@ -1001,10 +1001,10 @@ function LiveSpeakingTaskContent() {
               size="lg"
               onClick={handleSubmit}
               disabled={recordingState === 'idle' || isSubmitting}
-              className={`px-8 sm:px-14 py-6 sm:py-7 rounded-[1.25rem] font-black text-sm sm:text-lg transition-all duration-300 ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 ${
+              className={`px-8 sm:px-14 py-6 sm:py-7 rounded-[1.25rem] font-black text-sm sm:text-lg transition-[color,background-color,border-color,box-shadow,transform,opacity,filter] duration-300 ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 ${
                 recordingState === 'idle' 
                   ? 'bg-muted/10 text-muted pointer-events-none' 
-                  : 'bg-primary hover:bg-primary/90 text-white shadow-xl shadow-primary/25 hover:shadow-primary/40 hover:-translate-y-0.5'
+                  : 'bg-primary hover:bg-primary/90 active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600 text-white shadow-xl shadow-primary/25 hover:shadow-primary/40 hoverable:-translate-y-0.5'
               }`}
               ref={submitTriggerRef}
             >
@@ -1036,7 +1036,7 @@ function LiveSpeakingTaskContent() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="absolute inset-0 bg-black/80 backdrop-blur-sm"
+              className="absolute inset-0 bg-navy/80 backdrop-blur-sm"
               onClick={() => setShowStopConfirm(false)}
             />
             <motion.div 
@@ -1049,9 +1049,7 @@ function LiveSpeakingTaskContent() {
               aria-labelledby="speaking-stop-dialog-title"
               className="relative bg-surface border border-border rounded-2xl p-8 max-w-md w-full shadow-2xl"
             >
-              <div className="w-16 h-16 bg-danger/10 rounded-2xl flex items-center justify-center mb-6">
-                <AlertCircle className="w-8 h-8 text-danger" />
-              </div>
+              <AlertCircle className="w-8 h-8 text-danger mb-4" aria-hidden />
               <h3 id="speaking-stop-dialog-title" className="text-2xl font-black mb-2">Stop Practice?</h3>
               <p className="text-muted text-sm leading-relaxed mb-8">
                 Your current recording will be discarded. You will need to start the task again from the beginning.
@@ -1074,7 +1072,7 @@ function LiveSpeakingTaskContent() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="absolute inset-0 bg-black/80 backdrop-blur-sm"
+              className="absolute inset-0 bg-navy/80 backdrop-blur-sm"
               onClick={() => setShowSubmitConfirm(false)}
             />
             <motion.div 
@@ -1087,9 +1085,7 @@ function LiveSpeakingTaskContent() {
               aria-labelledby="speaking-submit-dialog-title"
               className="relative bg-surface border border-border rounded-2xl p-8 max-w-md w-full shadow-2xl"
             >
-              <div className="w-16 h-16 bg-success/10 rounded-2xl flex items-center justify-center mb-6">
-                <CheckCircle2 className="w-8 h-8 text-success" />
-              </div>
+              <CheckCircle2 className="w-8 h-8 text-success mb-4" aria-hidden />
               <h3 id="speaking-submit-dialog-title" className="text-2xl font-black mb-2">Finish Task?</h3>
               <p className="text-muted text-sm leading-relaxed mb-6">
                 Are you ready to submit your recording for evaluation? You won&apos;t be able to make changes after this.
@@ -1116,7 +1112,7 @@ function LiveSpeakingTaskContent() {
                 </p>
               ) : null}
 
-              <div className="mb-6 rounded-2xl border border-warning/30 bg-amber-50 p-4">
+              <div className="mb-6 rounded-2xl border border-warning/30 bg-warning/10 p-4">
                 <div className="flex items-start gap-3">
                   <Scissors className="mt-0.5 h-5 w-5 flex-shrink-0 text-warning" aria-hidden="true" />
                   <div className="flex-1">

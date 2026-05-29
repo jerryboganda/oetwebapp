@@ -1,7 +1,7 @@
 'use client';
 
-import { useMemo, useState } from 'react';
-import { ChevronLeft, ChevronRight, Eraser, FileText, Highlighter, Pencil, Printer } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { ChevronLeft, ChevronRight, Eraser, FileText, Highlighter, Pencil, Printer, ZoomIn, ZoomOut } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { fetchAuthorizedObjectUrl } from '@/lib/api';
@@ -43,15 +43,53 @@ export function ReadingPaperSimulation({
 }: ReadingPaperSimulationProps) {
   const [tool, setTool] = useState<PaperTool>('pencil');
   const [pageIndex, setPageIndex] = useState(0);
+  const [zoomLevel, setZoomLevel] = useState(100);
+  // Reset the zoom transform while printing so the printed booklet keeps its
+  // true 1:1 scale — the on-screen zoom is purely a reading aid.
+  const [printing, setPrinting] = useState(false);
   const phase = getReadingPaperPhase({ partADeadlineAt, partBCDeadlineAt }, nowMs);
   const partA = structure.parts.find((part) => part.partCode === 'A');
   const bcPages = useMemo(() => buildPartBCBookletPages(structure), [structure]);
   const partAPages = useMemo(() => buildPartABookletPages(structure), [structure]);
   const activePage = bcPages[Math.min(pageIndex, Math.max(0, bcPages.length - 1))];
 
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const before = () => setPrinting(true);
+    const after = () => setPrinting(false);
+    window.addEventListener('beforeprint', before);
+    window.addEventListener('afterprint', after);
+    return () => {
+      window.removeEventListener('beforeprint', before);
+      window.removeEventListener('afterprint', after);
+    };
+  }, []);
+
+  // Apply the active annotation tool when the learner finishes a text
+  // selection (highlighter/pencil) or release-clicks (eraser). All marks are
+  // ephemeral DOM marks scoped strictly to a booklet text — they never touch
+  // answers, autosave, or scoring.
+  const handleAnnotateMouseUp = (event: React.MouseEvent<HTMLDivElement>) => {
+    const scope = findPaperAnnotateScope(event.target as Node);
+    if (!scope) return;
+    if (tool === 'eraser') {
+      erasePaperSelection(scope);
+      return;
+    }
+    applyPaperAnnotation(scope, tool);
+  };
+
+  const handleAnnotateClick = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (tool !== 'eraser') return;
+    const mark = (event.target as HTMLElement).closest('mark[data-reading-annotation]');
+    if (mark) unwrapPaperMark(mark);
+  };
+
   if (phase === 'expired') {
     return <ReadingPaperCollectedNotice label="The Reading answer booklets have been collected." />;
   }
+
+  const zoomScale = printing ? 1 : zoomLevel / 100;
 
   return (
     <section className="space-y-4" aria-label="Paper-based Reading simulation">
@@ -62,28 +100,65 @@ export function ReadingPaperSimulation({
         />
         <div className="flex flex-wrap items-center gap-2">
           <ReadingPaperSourceControls assets={questionPaperAssets} />
+          <ReadingPaperZoomControls zoomLevel={zoomLevel} onZoomChange={setZoomLevel} />
           <ReadingPaperAnnotationToolbar value={tool} onChange={setTool} />
         </div>
       </div>
 
-      {phase === 'partA' && partA ? (
-        <div className="grid gap-4 xl:grid-cols-[minmax(0,1.15fr)_minmax(360px,0.85fr)]">
-          <ReadingPaperBooklet title="Part A Text Booklet" pages={partAPages} structure={structure} />
-          <ReadingPartAAnswerSheet part={partA} answers={answers} locked={locked} onAnswerChange={onAnswerChange} />
+      <div className="overflow-x-auto">
+        <div
+          onMouseUp={handleAnnotateMouseUp}
+          onClick={handleAnnotateClick}
+          style={{ transform: `scale(${zoomScale})`, transformOrigin: 'top left' }}
+          data-paper-tool={tool}
+        >
+          {phase === 'partA' && partA ? (
+            <div className="grid gap-4 xl:grid-cols-[minmax(0,1.15fr)_minmax(360px,0.85fr)]">
+              <ReadingPaperBooklet title="Part A Text Booklet" pages={partAPages} structure={structure} />
+              <ReadingPartAAnswerSheet part={partA} answers={answers} locked={locked} onAnswerChange={onAnswerChange} />
+            </div>
+          ) : (
+            <ReadingPartBCBooklet
+              structure={structure}
+              page={activePage}
+              pageIndex={pageIndex}
+              pageCount={bcPages.length}
+              answers={answers}
+              locked={locked}
+              onPageChange={setPageIndex}
+              onAnswerChange={onAnswerChange}
+            />
+          )}
         </div>
-      ) : (
-        <ReadingPartBCBooklet
-          structure={structure}
-          page={activePage}
-          pageIndex={pageIndex}
-          pageCount={bcPages.length}
-          answers={answers}
-          locked={locked}
-          onPageChange={setPageIndex}
-          onAnswerChange={onAnswerChange}
-        />
-      )}
+      </div>
     </section>
+  );
+}
+
+export function ReadingPaperZoomControls({ zoomLevel, onZoomChange }: { zoomLevel: number; onZoomChange: (next: number) => void }) {
+  const changeZoom = (next: number) => onZoomChange(Math.min(150, Math.max(75, next)));
+  return (
+    <div className="inline-flex items-center gap-1 rounded-lg border border-border bg-background-light p-1" aria-label="Paper zoom controls">
+      <button
+        type="button"
+        className="rounded-md p-2 text-muted hover:bg-surface hover:text-navy disabled:cursor-not-allowed disabled:opacity-50"
+        onClick={() => changeZoom(zoomLevel - 5)}
+        disabled={zoomLevel <= 75}
+        aria-label="Zoom out"
+      >
+        <ZoomOut className="h-4 w-4" aria-hidden="true" />
+      </button>
+      <span className="w-11 text-center font-mono text-xs font-bold text-navy" aria-live="polite">{zoomLevel}%</span>
+      <button
+        type="button"
+        className="rounded-md p-2 text-muted hover:bg-surface hover:text-navy disabled:cursor-not-allowed disabled:opacity-50"
+        onClick={() => changeZoom(zoomLevel + 5)}
+        disabled={zoomLevel >= 150}
+        aria-label="Zoom in"
+      >
+        <ZoomIn className="h-4 w-4" aria-hidden="true" />
+      </button>
+    </div>
   );
 }
 
@@ -220,7 +295,7 @@ export function ReadingPaperBookletPage({ page, textById }: { page: ReadingPaper
         return (
           <div key={text.id} className="space-y-2">
             <h4 className="text-base font-bold text-navy">{text.title}</h4>
-            <div className="prose prose-sm max-w-none text-navy selection:bg-warning/30" dangerouslySetInnerHTML={{ __html: sanitizeBodyHtml(text.bodyHtml) }} />
+            <div className="prose prose-sm max-w-none text-navy selection:bg-warning/30" data-reading-annotate-scope="paper-text" dangerouslySetInnerHTML={{ __html: sanitizeBodyHtml(text.bodyHtml) }} />
           </div>
         );
       })}
@@ -302,7 +377,7 @@ export function ReadingPartBCBooklet({
             return text ? (
               <article key={text.id} className="rounded-md border border-border/60 bg-surface p-4">
                 <h3 className="text-base font-bold text-navy">{text.title}</h3>
-                <div className="prose prose-sm mt-3 max-w-none text-navy selection:bg-warning/30" dangerouslySetInnerHTML={{ __html: sanitizeBodyHtml(text.bodyHtml) }} />
+                <div className="prose prose-sm mt-3 max-w-none text-navy selection:bg-warning/30" data-reading-annotate-scope="paper-text" dangerouslySetInnerHTML={{ __html: sanitizeBodyHtml(text.bodyHtml) }} />
               </article>
             ) : null;
           })}
@@ -396,3 +471,106 @@ function toPaperOptionList(options: unknown): Array<{ value: string; label: stri
     return { value: String.fromCharCode(65 + index), label: String(option ?? '') };
   });
 }
+
+// ─── Paper-mode annotations ──────────────────────────────────────────────────
+// Ephemeral DOM marks applied with the active toolbar tool over the printed
+// booklet text. Scoped strictly to `[data-reading-annotate-scope]` containers
+// so marks never leak into question/answer controls. Highlighter = yellow
+// fill, pencil = blue underline, eraser = remove marks. None of this touches
+// answers, autosave, or scoring.
+
+const PAPER_HIGHLIGHT_CLASS = 'rounded-[2px] bg-amber-200/80 text-navy dark:bg-amber-300/40 dark:text-amber-50';
+const PAPER_PENCIL_CLASS = 'bg-transparent underline decoration-2 decoration-sky-600 underline-offset-2 dark:decoration-sky-400';
+
+/** Climbs to the nearest annotation scope element, or null. */
+function findPaperAnnotateScope(node: Node | null): HTMLElement | null {
+  let current: Node | null = node;
+  while (current && current !== document.body) {
+    if (current instanceof HTMLElement && current.hasAttribute('data-reading-annotate-scope')) {
+      return current;
+    }
+    current = current.parentNode;
+  }
+  return null;
+}
+
+function unwrapPaperMark(mark: Element): void {
+  const parent = mark.parentNode;
+  if (!parent) return;
+  while (mark.firstChild) parent.insertBefore(mark.firstChild, mark);
+  parent.removeChild(mark);
+  parent.normalize();
+}
+
+/** Wraps the current scope-bound selection in a tool-styled mark. */
+function applyPaperAnnotation(scope: HTMLElement, tool: PaperTool): void {
+  if (typeof window === 'undefined') return;
+  const selection = window.getSelection();
+  if (!selection || selection.rangeCount === 0 || selection.isCollapsed) return;
+  const range = selection.getRangeAt(0);
+  if (!scope.contains(range.startContainer) || !scope.contains(range.endContainer)) return;
+
+  const offsetWithin = (node: Node, nodeOffset: number): number => {
+    const measure = document.createRange();
+    measure.selectNodeContents(scope);
+    try {
+      measure.setEnd(node, nodeOffset);
+    } catch {
+      return 0;
+    }
+    return (measure.cloneContents().textContent ?? '').length;
+  };
+
+  const a = offsetWithin(range.startContainer, range.startOffset);
+  const b = offsetWithin(range.endContainer, range.endOffset);
+  const start = Math.min(a, b);
+  const end = Math.max(a, b);
+  if (end - start < 1) return;
+
+  const className = tool === 'highlighter' ? PAPER_HIGHLIGHT_CLASS : PAPER_PENCIL_CLASS;
+  const segments: Array<{ node: Text; from: number; to: number }> = [];
+  const walker = document.createTreeWalker(scope, NodeFilter.SHOW_TEXT);
+  let offset = 0;
+  let node = walker.nextNode() as Text | null;
+  while (node) {
+    const len = node.textContent?.length ?? 0;
+    const from = Math.max(start, offset);
+    const to = Math.min(end, offset + len);
+    if (from < to) segments.push({ node, from: from - offset, to: to - offset });
+    offset += len;
+    node = walker.nextNode() as Text | null;
+  }
+  for (const segment of segments.reverse()) {
+    const markRange = document.createRange();
+    markRange.setStart(segment.node, segment.from);
+    markRange.setEnd(segment.node, segment.to);
+    const mark = document.createElement('mark');
+    mark.setAttribute('data-reading-annotation', tool);
+    mark.className = className;
+    try {
+      markRange.surroundContents(mark);
+    } catch {
+      // Segment crosses an element boundary — skip; remaining segments still apply.
+    }
+  }
+  selection.removeAllRanges();
+}
+
+/** Removes annotation marks intersected by the current selection. */
+function erasePaperSelection(scope: HTMLElement): void {
+  if (typeof window === 'undefined') return;
+  const selection = window.getSelection();
+  if (!selection || selection.rangeCount === 0 || selection.isCollapsed) return;
+  const range = selection.getRangeAt(0);
+  scope.querySelectorAll('mark[data-reading-annotation]').forEach((mark) => {
+    let intersects = false;
+    try {
+      intersects = range.intersectsNode(mark);
+    } catch {
+      intersects = false;
+    }
+    if (intersects) unwrapPaperMark(mark);
+  });
+  selection.removeAllRanges();
+}
+

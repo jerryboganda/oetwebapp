@@ -71,19 +71,19 @@ export default function QuestionDiscussionPage() {
       <main className="space-y-8 max-w-2xl">
         <Link
           href="/reading"
-          className="inline-flex items-center gap-1.5 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"
+          className="inline-flex items-center gap-1.5 text-sm text-muted hover:text-navy"
         >
           <ArrowLeft className="h-4 w-4" aria-hidden />
           Back to Reading
         </Link>
 
         <div className="flex items-center gap-3">
-          <MessageCircle className="h-6 w-6 text-blue-500" aria-hidden />
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Discussion</h1>
+          <MessageCircle className="h-6 w-6 text-primary" aria-hidden />
+          <h1 className="text-2xl font-bold text-navy">Discussion</h1>
         </div>
 
         {error ? (
-          <div className="rounded-lg border border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-900/20 px-4 py-3 text-sm text-red-700 dark:text-red-300">
+          <div className="rounded-lg border border-danger/30 bg-danger/10 px-4 py-3 text-sm text-danger">
             {error}
           </div>
         ) : null}
@@ -92,14 +92,14 @@ export default function QuestionDiscussionPage() {
         {loading ? (
           <div className="space-y-3">
             {[...Array(3)].map((_, i) => (
-              <div key={i} className="h-20 animate-pulse rounded-xl bg-gray-100 dark:bg-gray-800" />
+              <div key={i} className="h-20 motion-safe:animate-pulse rounded-xl bg-background-light" />
             ))}
           </div>
         ) : comments.length === 0 ? (
           <div className="rounded-xl border border-border bg-surface px-6 py-10 text-center">
-            <MessageCircle className="mx-auto h-8 w-8 text-gray-600 dark:text-gray-400 mb-3" aria-hidden />
-            <p className="text-sm font-medium text-gray-900 dark:text-white">Be the first to comment!</p>
-            <p className="mt-1 text-xs text-gray-600 dark:text-gray-400">Share your thoughts or ask a question below.</p>
+            <MessageCircle className="mx-auto h-8 w-8 text-muted mb-3" aria-hidden />
+            <p className="text-sm font-medium text-navy">Be the first to comment!</p>
+            <p className="mt-1 text-xs text-muted">Share your thoughts or ask a question below.</p>
           </div>
         ) : (
           <ul className="space-y-4">
@@ -107,7 +107,7 @@ export default function QuestionDiscussionPage() {
               <li key={comment.id} className="rounded-xl border border-border bg-surface p-4">
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex items-center gap-2">
-                    <span className="text-sm font-semibold text-gray-900 dark:text-white">
+                    <span className="text-sm font-semibold text-navy">
                       {comment.userDisplayName}
                     </span>
                     {comment.isExpert ? (
@@ -116,14 +116,14 @@ export default function QuestionDiscussionPage() {
                       </span>
                     ) : null}
                   </div>
-                  <span className="flex-shrink-0 text-xs text-gray-600 dark:text-gray-400">
+                  <span className="flex-shrink-0 text-xs text-muted">
                     {formatRelativeTime(comment.createdAt)}
                   </span>
                 </div>
-                <p className="mt-2 text-sm text-gray-900/80 dark:text-white/80 whitespace-pre-wrap">
+                <p className="mt-2 text-sm text-navy/80 whitespace-pre-wrap">
                   {comment.body}
                 </p>
-                <div className="mt-3 flex items-center gap-1.5 text-xs text-gray-600 dark:text-gray-400">
+                <div className="mt-3 flex items-center gap-1.5 text-xs text-muted">
                   <ThumbsUp className="h-3.5 w-3.5" aria-hidden />
                   <span>{comment.upvotes}</span>
                 </div>
@@ -134,9 +134,9 @@ export default function QuestionDiscussionPage() {
 
         {/* Post a comment */}
         <div className="rounded-xl border border-border bg-surface p-5">
-          <h2 className="mb-3 text-sm font-semibold text-gray-900 dark:text-white">Post a comment</h2>
+          <h2 className="mb-3 text-sm font-semibold text-navy">Post a comment</h2>
           {postError ? (
-            <p className="mb-2 text-xs text-red-600 dark:text-red-400">{postError}</p>
+            <p className="mb-2 text-xs text-danger">{postError}</p>
           ) : null}
           <form onSubmit={handlePost} className="space-y-3">
             <textarea
@@ -145,13 +145,13 @@ export default function QuestionDiscussionPage() {
               onChange={(e) => setBody(e.target.value)}
               rows={4}
               placeholder="Share your thoughts, ask a question, or explain your approach…"
-              className="w-full resize-none rounded-lg border border-border bg-background px-3 py-2.5 text-sm text-gray-900 dark:text-white placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-background-dark"
+              className="w-full resize-none rounded-lg border border-border bg-background px-3 py-2.5 text-sm text-navy placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-primary/40 dark:bg-background-dark"
             />
             <div className="flex justify-end">
               <button
                 type="submit"
                 disabled={posting || !body.trim()}
-                className="rounded-lg bg-blue-600 px-5 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className="rounded-lg bg-primary px-5 py-2 text-sm font-semibold text-white hover:bg-primary-dark active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600 disabled:opacity-50 disabled:cursor-not-allowed transition-[color,background-color,transform] duration-200"
               >
                 {posting ? 'Posting…' : 'Post'}
               </button>

@@ -76,7 +76,7 @@ const sections: Array<{
     ],
   },
   {
-    title: 'Realtime STT release evidence',
+    title: 'Realtime STT launch artifacts',
     description: 'Operational approvals that must exist before enabling real provider-backed speech for production audiences.',
     fields: [
       { key: 'realtimeLegalApprovalStatus', label: 'Legal approval status', kind: 'status' },

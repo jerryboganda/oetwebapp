@@ -149,9 +149,7 @@ function ExpertReviewRequestContent() {
           {/* Focus Areas */}
           <Card className="p-8">
             <div className="flex items-center gap-3 mb-6">
-              <div className="w-10 h-10 rounded-xl bg-primary/5 flex items-center justify-center">
-                <Target className="w-5 h-5 text-primary" />
-              </div>
+              <Target className="w-5 h-5 text-primary shrink-0" aria-hidden />
               <h2 className="text-lg font-black text-navy">Focus Areas</h2>
             </div>
             <p className="text-sm text-muted mb-6">Select specific criteria you want the reviewer to prioritize.</p>
@@ -162,11 +160,11 @@ function ExpertReviewRequestContent() {
                   key={area.id}
                   type="button"
                   onClick={() => toggleFocus(area.id)}
-                  className={`flex items-start gap-4 p-4 rounded-2xl border-2 transition-all text-left ${
+                  className={`flex items-start gap-4 p-4 rounded-2xl border-2 transition-[color,background-color,border-color,box-shadow,transform,opacity,filter] duration-200 text-left ${
                     selectedFocus.includes(area.id) ? 'border-primary bg-primary/5' : 'border-border hover:border-border-hover bg-surface'
                   }`}
                 >
-                  <div className={`w-5 h-5 rounded-md border-2 mt-0.5 flex items-center justify-center transition-all ${
+                  <div className={`w-5 h-5 rounded-md border-2 mt-0.5 flex items-center justify-center transition-[color,background-color,border-color,box-shadow,transform,opacity,filter] duration-200 ${
                     selectedFocus.includes(area.id) ? 'bg-primary border-primary' : 'border-border-hover'
                   }`}>
                     {selectedFocus.includes(area.id) && <CheckCircle2 className="w-4 h-4 text-white" />}
@@ -183,9 +181,7 @@ function ExpertReviewRequestContent() {
           {/* Reviewer Notes */}
           <Card className="p-8">
             <div className="flex items-center gap-3 mb-6">
-              <div className="w-10 h-10 rounded-xl bg-primary/5 flex items-center justify-center">
-                <MessageSquare className="w-5 h-5 text-primary" />
-              </div>
+              <MessageSquare className="w-5 h-5 text-primary shrink-0" aria-hidden />
               <h2 className="text-lg font-black text-navy">Reviewer Notes</h2>
             </div>
             <textarea
@@ -199,9 +195,7 @@ function ExpertReviewRequestContent() {
           {/* Priority & Turnaround */}
           <Card className="p-8">
             <div className="flex items-center gap-3 mb-6">
-              <div className="w-10 h-10 rounded-xl bg-primary/5 flex items-center justify-center">
-                <Clock className="w-5 h-5 text-primary" />
-              </div>
+              <Clock className="w-5 h-5 text-primary shrink-0" aria-hidden />
               <h2 className="text-lg font-black text-navy">Priority & Turnaround</h2>
             </div>
 
@@ -211,7 +205,7 @@ function ExpertReviewRequestContent() {
                   key={opt.id}
                   type="button"
                   onClick={() => setTurnaroundId(opt.id)}
-                  className={`p-6 rounded-2xl border-2 transition-all text-center ${
+                  className={`p-6 rounded-2xl border-2 transition-[color,background-color,border-color,box-shadow,transform,opacity,filter] duration-200 text-center ${
                     turnaroundId === opt.id ? 'border-primary bg-primary/5' : 'border-border hover:border-border-hover bg-surface'
                   }`}
                 >
@@ -226,9 +220,7 @@ function ExpertReviewRequestContent() {
           {/* Review Credits */}
           <Card className="p-8">
             <div className="flex items-center gap-3 mb-6">
-              <div className="w-10 h-10 rounded-xl bg-primary/5 flex items-center justify-center">
-                <CreditCard className="w-5 h-5 text-primary" />
-              </div>
+              <CreditCard className="w-5 h-5 text-primary shrink-0" aria-hidden />
               <h2 className="text-lg font-black text-navy">Review Credits</h2>
             </div>
 

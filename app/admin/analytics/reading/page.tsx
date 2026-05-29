@@ -317,12 +317,12 @@ export default function ReadingAnalyticsPage() {
                   <table className="min-w-full divide-y divide-admin-border text-sm">
                     <thead>
                       <tr className="text-left text-xs font-semibold uppercase tracking-[0.12em] text-admin-fg-muted">
-                        <th className="py-3 pr-4">Paper / question</th>
-                        <th className="px-4 py-3">Part</th>
-                        <th className="px-4 py-3">Option</th>
-                        <th className="px-4 py-3">Category</th>
-                        <th className="px-4 py-3">Selected</th>
-                        <th className="px-4 py-3">Trap rate</th>
+                        <th scope="col" className="py-3 pr-4">Paper / question</th>
+                        <th scope="col" className="px-4 py-3">Part</th>
+                        <th scope="col" className="px-4 py-3">Option</th>
+                        <th scope="col" className="px-4 py-3">Category</th>
+                        <th scope="col" className="px-4 py-3">Selected</th>
+                        <th scope="col" className="px-4 py-3">Trap rate</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-admin-border" data-testid="distractor-traps-rows">
@@ -373,12 +373,12 @@ export default function ReadingAnalyticsPage() {
                 <table className="min-w-full divide-y divide-admin-border text-sm">
                   <thead>
                     <tr className="text-left text-xs font-semibold uppercase tracking-[0.12em] text-admin-fg-muted">
-                      <th className="py-3 pr-4">Paper</th>
-                      <th className="px-4 py-3">Shape</th>
-                      <th className="px-4 py-3">Attempts</th>
-                      <th className="px-4 py-3">Avg scaled</th>
-                      <th className="px-4 py-3">Pass rate</th>
-                      <th className="px-4 py-3">Avg time</th>
+                      <th scope="col" className="py-3 pr-4">Paper</th>
+                      <th scope="col" className="px-4 py-3">Shape</th>
+                      <th scope="col" className="px-4 py-3">Attempts</th>
+                      <th scope="col" className="px-4 py-3">Avg scaled</th>
+                      <th scope="col" className="px-4 py-3">Pass rate</th>
+                      <th scope="col" className="px-4 py-3">Avg time</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-admin-border">

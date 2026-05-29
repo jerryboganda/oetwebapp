@@ -1,5 +1,7 @@
 # Speaking Module — Pre-Launch Security Checklist
 
+> **Current status (2026-05-29)**: pre-launch sign-off checklist. Unchecked items are security gates, not proof that the whole Speaking module is unimplemented. Cross-check active release ownership in [`../../STATUS/REMAINING-WORK.md`](../../STATUS/REMAINING-WORK.md).
+
 Sign off every box before the `Features__SpeakingV2` flag is enabled for production cohorts.
 
 ## Authentication + authorization

@@ -132,7 +132,9 @@ public static class ReadingAuthoringAdminEndpoints
                     dto.Id, dto.ReadingPartId, dto.ReadingTextId, dto.DisplayOrder,
                     dto.Points, dto.QuestionType, dto.Stem, dto.OptionsJson,
                     dto.CorrectAnswerJson, dto.AcceptedSynonymsJson, dto.CaseSensitive,
-                    dto.ExplanationMarkdown, dto.SkillTag), adminId, ct);
+                    dto.ExplanationMarkdown, dto.SkillTag,
+                    dto.Difficulty, dto.EvidenceSentence, dto.ParagraphIndex,
+                    dto.DistractorRationaleJson), adminId, ct);
                 return Results.Ok(q);
             }
             catch (InvalidOperationException ex)
@@ -424,6 +426,10 @@ public sealed record ReadingQuestionUpsertDto(
     string? AcceptedSynonymsJson,
     bool CaseSensitive,
     string? ExplanationMarkdown,
-    string? SkillTag);
+    string? SkillTag,
+    int? Difficulty = null,
+    string? EvidenceSentence = null,
+    int? ParagraphIndex = null,
+    string? DistractorRationaleJson = null);
 
 public sealed record ReorderDto(IReadOnlyList<string> OrderedIds);

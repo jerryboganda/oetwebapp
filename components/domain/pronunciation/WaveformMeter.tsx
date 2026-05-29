@@ -55,7 +55,7 @@ export function WaveformMeter({
         <div className="text-xs uppercase tracking-[0.15em] text-muted">
           {isRecording ? 'Recording' : 'Ready'}
         </div>
-        <div className="font-mono text-lg font-semibold text-navy dark:text-white" aria-live="polite">
+        <div className="font-mono text-lg font-semibold text-navy" aria-live="polite">
           {formatTime(elapsedSec)} / {formatTime(maxSec)}
         </div>
         <div className="mt-1 h-1 w-full overflow-hidden rounded-full bg-background-light">

@@ -111,7 +111,7 @@ export default function CalibrationCaseWorkspacePage() {
     ? 'Final submission is locked and preserved for reference only.'
     : isDraft
       ? `Draft is editable and resumes from your last save${draftLastSavedAt ? ` (${draftLastSavedAt})` : ''}.`
-      : 'No draft exists yet — use Save Draft to continue this benchmark later.';
+      : 'No draft exists yet. Use Save Draft to continue this benchmark later.';
   const alignmentDisplay = detail?.existingSubmission?.alignmentScore == null ? 'N/A' : `${detail.existingSubmission.alignmentScore.toFixed(1)}%`;
 
   const normalizedScores = useMemo(
@@ -245,17 +245,15 @@ export default function CalibrationCaseWorkspacePage() {
                   <ExpertRouteSectionHeader
                     eyebrow="Case Artifacts"
                     title="Benchmark evidence"
-                    description={`${detail.subTest} benchmark - ${detail.profession.replace(/_/g, ' ')} - ${detail.benchmarkLabel}`}
+                    description={`${detail.subTest} benchmark · ${detail.profession.replace(/_/g, ' ')} · ${detail.benchmarkLabel}`}
                   />
                   <Card className="border-border shadow-sm">
                     <CardContent className="space-y-4 p-5">
                       {detail.artifacts.map((artifact) => (
-                        <Card key={`${artifact.kind}-${artifact.title}`} className="border-border shadow-none">
-                          <CardContent className="space-y-2 p-4">
-                            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted">{artifact.title}</p>
-                            <p className="whitespace-pre-wrap text-sm leading-6 text-navy">{artifact.content}</p>
-                          </CardContent>
-                        </Card>
+                        <div key={`${artifact.kind}-${artifact.title}`} className="space-y-2 rounded-xl border border-border p-4">
+                          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted">{artifact.title}</p>
+                          <p className="whitespace-pre-wrap text-sm leading-6 text-navy">{artifact.content}</p>
+                        </div>
                       ))}
                     </CardContent>
                   </Card>

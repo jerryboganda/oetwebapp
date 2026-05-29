@@ -29,7 +29,7 @@ interface BillingScreenProps {
 export function BillingScreen({
   packages,
   heading = 'Choose your prep package',
-  subheading = 'Purchases happen on our secure website so 100% of your spend supports your prep — no app store fees.',
+  subheading = 'Purchases happen on our secure website so 100% of your spend supports your prep, with no app store fees.',
 }: BillingScreenProps) {
   const context = useMobileBillingContext();
   const [portalLoading, setPortalLoading] = useState(false);
@@ -75,62 +75,50 @@ export function BillingScreen({
       </section>
 
       <section className="mt-2 rounded-2xl border border-border bg-surface p-4">
-        <div className="flex items-start gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-            <Globe2 className="h-5 w-5" aria-hidden="true" />
-          </div>
-          <div className="min-w-0">
-            <h2 className="text-sm font-semibold text-navy">Manage your subscription on the web</h2>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Update payment methods, download invoices, change plans, or cancel any time from our
-              secure customer portal.
-            </p>
-            <Button
-              variant="secondary"
-              size="md"
-              className="mt-3"
-              onClick={() => void handleOpenPortal()}
-              loading={portalLoading}
-            >
-              Open subscription manager
-            </Button>
-            {portalError ? (
-              <p role="alert" className="mt-2 text-xs text-red-600">
-                {portalError}
-              </p>
-            ) : null}
-          </div>
-        </div>
+        <h2 className="flex items-center gap-2 text-sm font-semibold text-navy">
+          <Globe2 className="h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+          Manage your subscription on the web
+        </h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Update payment methods, download invoices, change plans, or cancel any time from our
+          secure customer portal.
+        </p>
+        <Button
+          variant="secondary"
+          size="md"
+          className="mt-3"
+          onClick={() => void handleOpenPortal()}
+          loading={portalLoading}
+        >
+          Open subscription manager
+        </Button>
+        {portalError ? (
+          <p role="alert" className="mt-2 text-xs text-red-600">
+            {portalError}
+          </p>
+        ) : null}
       </section>
 
       <section className="rounded-2xl border border-border bg-surface p-4">
-        <div className="flex items-start gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-700">
-            <ShieldCheck className="h-5 w-5" aria-hidden="true" />
-          </div>
-          <div className="min-w-0">
-            <h2 className="text-sm font-semibold text-navy">Why purchases happen on the web</h2>
-            <p className="mt-1 text-sm text-muted-foreground">
-              App stores charge 15–30% commission on in-app purchases. We process payments on our own
-              website so every dollar funds your prep — not platform fees.
-            </p>
-          </div>
-        </div>
+        <h2 className="flex items-center gap-2 text-sm font-semibold text-navy">
+          <ShieldCheck className="h-4 w-4 shrink-0 text-emerald-600" aria-hidden="true" />
+          Why purchases happen on the web
+        </h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          App stores charge 15 to 30% commission on in-app purchases. We process payments on our own
+          website so every dollar funds your prep, not platform fees.
+        </p>
       </section>
 
       <section className="rounded-2xl border border-border bg-surface p-4">
-        <div className="flex items-start gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-amber-100 text-amber-700">
-            <Sparkles className="h-5 w-5" aria-hidden="true" />
-          </div>
-          <div className="min-w-0">
-            <h2 className="text-sm font-semibold text-navy">Cross-device access</h2>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Purchases made on the web unlock immediately in your mobile app — no separate
-              subscription needed.
-            </p>
-          </div>
-        </div>
+        <h2 className="flex items-center gap-2 text-sm font-semibold text-navy">
+          <Sparkles className="h-4 w-4 shrink-0 text-amber-600" aria-hidden="true" />
+          Cross-device access
+        </h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Purchases made on the web unlock immediately in your mobile app, with no separate
+          subscription needed.
+        </p>
       </section>
     </div>
   );

@@ -56,7 +56,7 @@ export default function ProfileSetupProfessionPage() {
   };
 
   return (
-    <LearnerDashboardShell pageTitle="Writing Profile — Step 1">
+    <LearnerDashboardShell pageTitle="Writing Profile: Step 1">
       <div className="space-y-6">
         <LearnerPageHero
           eyebrow="Step 1 of 4"

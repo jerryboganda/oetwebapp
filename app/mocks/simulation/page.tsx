@@ -34,7 +34,7 @@ export default function ExamSimulationPage() {
 
   return (
     <LearnerDashboardShell>
-      <LearnerPageHero title="Exam Simulation Mode" description="Practice under real exam conditions — strict timing, no pauses, sequential subtests." />
+      <LearnerPageHero title="Exam Simulation Mode" description="Practice under real exam conditions: strict timing, no pauses, sequential subtests." />
 
       <MotionSection className="space-y-6">
         {loading ? (
@@ -47,8 +47,8 @@ export default function ExamSimulationPage() {
                   {config.unlocked ? <CheckCircle2 className="w-8 h-8 text-success flex-shrink-0" /> : <Lock className="w-8 h-8 text-warning flex-shrink-0" />}
                   <div>
                     <h3 className="text-lg font-semibold">{config.unlocked ? 'Simulation Mode Unlocked' : 'Simulation Mode Locked'}</h3>
-                    <p className="text-sm text-muted-foreground mt-1">{config.recommendation}</p>
-                    <p className="text-sm text-muted-foreground mt-1">Completed simulations: <strong>{config.completedSimulations}</strong></p>
+                    <p className="text-sm text-muted mt-1">{config.recommendation}</p>
+                    <p className="text-sm text-muted mt-1">Completed simulations: <strong>{config.completedSimulations}</strong></p>
                   </div>
                 </div>
               </Card>
@@ -59,7 +59,7 @@ export default function ExamSimulationPage() {
               {Object.entries(config.simulationMode).map(([key, val]) => (
                 <MotionItem key={key}>
                   <Card className="p-4 text-center">
-                    {val ? <Shield className="w-5 h-5 mx-auto mb-2 text-primary" /> : <AlertCircle className="w-5 h-5 mx-auto mb-2 text-muted-foreground" />}
+                    {val ? <Shield className="w-5 h-5 mx-auto mb-2 text-primary" /> : <AlertCircle className="w-5 h-5 mx-auto mb-2 text-muted" />}
                     <p className="text-sm font-medium capitalize">{key.replace(/([A-Z])/g, ' $1').trim()}</p>
                     <Badge variant={val ? 'default' : 'outline'} className="mt-1">{val ? 'Active' : 'Off'}</Badge>
                   </Card>
@@ -75,7 +75,7 @@ export default function ExamSimulationPage() {
                     <Timer className="w-5 h-5 mx-auto mb-2 text-info" />
                     <p className="text-lg font-bold">{timing.durationMinutes} min</p>
                     <p className="text-sm font-medium capitalize">{subtest}</p>
-                    <p className="text-xs text-muted-foreground">{timing.sections} section{timing.sections > 1 ? 's' : ''}</p>
+                    <p className="text-xs text-muted">{timing.sections} section{timing.sections > 1 ? 's' : ''}</p>
                   </Card>
                 </MotionItem>
               ))}
@@ -83,12 +83,12 @@ export default function ExamSimulationPage() {
 
             <MotionItem>
               <Card className="p-4 text-center bg-muted/50">
-                <p className="text-sm text-muted-foreground">Total exam duration: <strong>{config.totalDurationMinutes} minutes</strong></p>
+                <p className="text-sm text-muted">Total exam duration: <strong>{config.totalDurationMinutes} minutes</strong></p>
               </Card>
             </MotionItem>
           </>
         ) : (
-          <Card className="p-8 text-center text-muted-foreground"><p>Unable to load simulation configuration.</p></Card>
+          <Card className="p-8 text-center text-muted"><p>Unable to load simulation configuration.</p></Card>
         )}
       </MotionSection>
     </LearnerDashboardShell>

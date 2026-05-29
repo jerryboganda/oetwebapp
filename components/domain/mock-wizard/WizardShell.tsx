@@ -213,7 +213,7 @@ export function WizardShell({ bundle: initialBundle, children }: WizardShellProp
                     className={
                       'inline-flex items-center gap-2 rounded-xl px-3 py-1.5 text-xs font-bold transition-colors ' +
                       (isCurrent
-                        ? 'bg-primary text-white'
+                        ? 'bg-primary text-white dark:bg-violet-700'
                         : isComplete
                           ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'
                           : 'bg-background-light text-navy hover:bg-muted')

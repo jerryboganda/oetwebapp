@@ -136,12 +136,12 @@ export default function AdminSpeakingRecordingsAuditPage() {
           <table className="w-full text-sm">
             <thead className="bg-admin-bg-subtle text-left text-xs uppercase tracking-wide text-admin-fg-muted">
               <tr>
-                <th className="p-3">When</th>
-                <th className="p-3">Action</th>
-                <th className="p-3">Recording</th>
-                <th className="p-3">Learner</th>
-                <th className="p-3">Actor</th>
-                <th className="p-3">Purpose / reason</th>
+                <th scope="col" className="p-3">When</th>
+                <th scope="col" className="p-3">Action</th>
+                <th scope="col" className="p-3">Recording</th>
+                <th scope="col" className="p-3">Learner</th>
+                <th scope="col" className="p-3">Actor</th>
+                <th scope="col" className="p-3">Purpose / reason</th>
               </tr>
             </thead>
             <tbody>

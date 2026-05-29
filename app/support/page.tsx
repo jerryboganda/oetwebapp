@@ -6,10 +6,10 @@ const supportEmail = 'support@oetwithdrhesham.co.uk';
 
 export default function SupportPage() {
   return (
-    <main className="min-h-screen bg-background px-4 py-10 sm:px-6 lg:px-8">
+    <main className="min-h-screen bg-background-light px-4 py-10 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-4xl space-y-6">
         <div className="rounded-[2rem] bg-gradient-to-br from-primary/10 via-surface to-lavender/30 p-6 sm:p-8">
-          <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-primary text-white">
+          <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-primary text-white dark:bg-violet-700">
             <LifeBuoy className="h-7 w-7" />
           </div>
           <p className="text-xs font-bold uppercase tracking-[0.25em] text-primary">Support</p>
@@ -49,7 +49,7 @@ export default function SupportPage() {
             Account and billing requests are normally reviewed within 2 business days. Privacy and deletion requests are acknowledged within 7 days after identity verification.
           </p>
           <div className="mt-4 flex flex-wrap gap-3">
-            <Link className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary/90" href={`mailto:${supportEmail}`}>
+            <Link className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary/90 active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600" href={`mailto:${supportEmail}`}>
               Email support
             </Link>
             <Link className="rounded-lg border border-border px-4 py-2 text-sm font-medium text-navy hover:bg-surface" href="/privacy">

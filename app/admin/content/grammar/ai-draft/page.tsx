@@ -121,7 +121,7 @@ export default function GrammarAiDraftPage() {
           </CardHeader>
           <CardContent className="space-y-4">
             <p className="text-sm leading-6 text-admin-fg-muted">
-              This generates a draft lesson via the grounded AI gateway. Drafts are always stored as <strong>draft</strong> — review and edit before publishing. The gateway physically refuses ungrounded prompts.
+              This generates a draft lesson via the grounded AI gateway. Drafts are always stored as <strong>draft</strong>. Review and edit before publishing. The gateway physically refuses ungrounded prompts.
             </p>
 
             <div className="grid gap-3 sm:grid-cols-3">

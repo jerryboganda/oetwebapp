@@ -403,7 +403,7 @@ function AssetList({ assets, onRemove, canRemove }: { assets: ContentPaperAssetD
     return <p className="text-sm text-muted">No assets yet. Upload a file above.</p>;
   }
   return (
-    <ul className="divide-y divide-gray-100">
+    <ul className="divide-y divide-admin-border">
       {assets.map((a) => (
         <li key={a.id} className="py-3 flex items-center justify-between gap-4">
           <div className="min-w-0 flex-1">

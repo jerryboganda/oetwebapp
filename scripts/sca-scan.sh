@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SBOM_PATH="${SBOM_OUTPUT:-release-evidence/sbom.json}"
-OUTPUT_PATH="${SCA_OUTPUT:-release-evidence/sca.json}"
+SBOM_PATH="${SBOM_OUTPUT:-sbom-sca-artifacts/sbom.json}"
+OUTPUT_PATH="${SCA_OUTPUT:-sbom-sca-artifacts/sca.json}"
 FAIL_ON="${SCA_FAIL_ON:-high}"
 GRYPE_IMAGE="${GRYPE_IMAGE:-anchore/grype:v0.85.0}"
 

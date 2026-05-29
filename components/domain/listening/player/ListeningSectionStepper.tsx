@@ -56,7 +56,7 @@ export function ListeningSectionStepper({
           state === 'locked'
             ? 'bg-background-light text-muted/60'
             : state === 'active'
-              ? 'bg-primary text-white'
+              ? 'bg-primary text-white dark:bg-violet-700'
               : state === 'reviewing'
                 ? 'bg-warning/10 text-warning'
                 : state === 'available'
@@ -101,8 +101,8 @@ export function ListeningSectionStepper({
       })}
       <span className="ml-auto hidden text-[10px] normal-case tracking-normal text-muted sm:inline">
         {freeNavigation
-          ? 'Paper simulation — jump between available sections.'
-          : 'Forward-only — completed sections cannot be revisited.'}
+          ? 'Paper simulation. Jump between available sections.'
+          : 'Forward-only. Completed sections cannot be revisited.'}
       </span>
     </div>
   );

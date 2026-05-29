@@ -86,7 +86,7 @@ export function ReadinessForecastSimulator({ open, onClose, initialForecast }: R
                 <p className="text-xl font-bold text-navy">
                   {forecast.scenarios[0]?.projectedReadinessAtTarget != null
                     ? Math.round(forecast.scenarios[0].projectedReadinessAtTarget)
-                    : '—'}
+                    : 'N/A'}
                 </p>
               </div>
             </div>

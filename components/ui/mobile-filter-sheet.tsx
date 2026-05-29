@@ -40,7 +40,7 @@ function FilterOptionButton({
         <span
           className={cn(
             'flex h-5 w-5 shrink-0 items-center justify-center rounded border transition-colors',
-            selected ? 'border-primary bg-primary text-white' : 'border-border bg-surface',
+            selected ? 'border-primary bg-primary text-white dark:bg-violet-700' : 'border-border bg-surface',
           )}
         >
           {selected ? <Check className="h-3.5 w-3.5" aria-hidden="true" /> : null}
@@ -82,7 +82,7 @@ export function MobileFilterSheet({ groups, selected, onChange, onClear, classNa
         </span>
         <span className="flex items-center gap-2">
           {totalSelected > 0 && (
-            <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-white">
+            <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-white dark:bg-violet-700">
               {totalSelected}
             </span>
           )}

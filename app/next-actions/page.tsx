@@ -103,7 +103,7 @@ export default function NextActionsPage() {
                           {action.subtestCode && <Badge variant="outline" className="capitalize">{action.subtestCode}</Badge>}
                         </div>
                       </div>
-                      <a href={action.actionUrl} className="inline-flex items-center rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground hover:bg-primary/90 transition-colors">
+                      <a href={action.actionUrl} className="inline-flex items-center rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground hover:bg-primary/90 active:scale-[0.98] motion-reduce:active:scale-100 transition-[color,background-color,transform] duration-200">
                           Go <ArrowRight className="w-4 h-4 ml-1" />
                       </a>
                     </div>

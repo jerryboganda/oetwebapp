@@ -249,7 +249,7 @@ export default function AdminWritingReviewPage() {
               {paper.status === 'Draft' && canWriteContent && (
                 <Link
                   href="/admin/content/writing"
-                  className="mt-3 inline-flex min-h-9 items-center rounded-admin bg-[var(--admin-primary)] px-3 py-2 text-sm font-semibold text-white hover:bg-[var(--admin-primary-hover)]"
+                  className="mt-3 inline-flex min-h-9 items-center rounded-admin bg-[var(--admin-primary)] px-3 py-2 text-sm font-semibold text-[var(--admin-primary-fg)] hover:bg-[var(--admin-primary-hover)]"
                 >
                   Back to listing
                 </Link>

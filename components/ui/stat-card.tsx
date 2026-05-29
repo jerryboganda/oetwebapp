@@ -67,7 +67,7 @@ export function StatCard({
   // Define tone colors aligned to the modern high-contrast design system
   const toneMap = {
     default: {
-      border: 'border-l-4 border-l-primary border-y border-r border-border/80 dark:border-border/60',
+      border: 'border border-border dark:border-border/60',
       bg: 'bg-surface',
       text: 'text-navy dark:text-white',
       label: 'text-muted dark:text-muted',
@@ -79,7 +79,7 @@ export function StatCard({
       sparkline: 'text-primary/40 dark:text-primary/60',
     },
     success: {
-      border: 'border-l-4 border-l-success border-y border-r border-success/30 dark:border-success/30',
+      border: 'border border-success/30 dark:border-success/30',
       bg: 'bg-success/5 dark:bg-success/10',
       text: 'text-success dark:text-success',
       label: 'text-success/70 dark:text-success/70',
@@ -91,7 +91,7 @@ export function StatCard({
       sparkline: 'text-success/40 dark:text-success/50',
     },
     warning: {
-      border: 'border-l-4 border-l-warning border-y border-r border-warning/30 dark:border-warning/30',
+      border: 'border border-warning/30 dark:border-warning/30',
       bg: 'bg-warning/5 dark:bg-warning/10',
       text: 'text-warning dark:text-warning',
       label: 'text-warning/70 dark:text-warning/70',
@@ -103,7 +103,7 @@ export function StatCard({
       sparkline: 'text-warning/50 dark:text-warning/50',
     },
     danger: {
-      border: 'border-l-4 border-l-danger border-y border-r border-danger/30 dark:border-danger/30',
+      border: 'border border-danger/30 dark:border-danger/30',
       bg: 'bg-danger/5 dark:bg-danger/10',
       text: 'text-danger dark:text-danger',
       label: 'text-danger/70 dark:text-danger/70',
@@ -115,7 +115,7 @@ export function StatCard({
       sparkline: 'text-danger/40 dark:text-danger/50',
     },
     info: {
-      border: 'border-l-4 border-l-info border-y border-r border-info/30 dark:border-info/30',
+      border: 'border border-info/30 dark:border-info/30',
       bg: 'bg-info/5 dark:bg-info/10',
       text: 'text-info dark:text-info',
       label: 'text-info/70 dark:text-info/70',

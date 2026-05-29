@@ -292,7 +292,7 @@ export default function ListeningPolicyPage() {
         {/* §3 Audio Replay */}
         <SectionCard title="§3 Audio Replay">
           <div className="space-y-3">
-            <SwitchRow id="examReplayAllowed" checked={policy.examReplayAllowed} onChange={field('examReplayAllowed')} label="Exam mode replay allowed" description="Real OET is one-play — default off" />
+            <SwitchRow id="examReplayAllowed" checked={policy.examReplayAllowed} onChange={field('examReplayAllowed')} label="Exam mode replay allowed" description="Real OET is one-play; default off" />
             <SwitchRow id="learningReplayAllowed" checked={policy.learningReplayAllowed} onChange={field('learningReplayAllowed')} label="Learning mode replay allowed" description="Free replay in learning / drill modes" />
             <SwitchRow id="learningEvidenceLoopEnabled" checked={policy.learningEvidenceLoopEnabled} onChange={field('learningEvidenceLoopEnabled')} label="Learning evidence loop enabled" description="Jump-to-segment playback on review in learning mode" />
           </div>
@@ -303,7 +303,7 @@ export default function ListeningPolicyPage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <TextField label="Short answer normalisation" value={policy.shortAnswerNormalisation} onChange={field('shortAnswerNormalisation')} description="trim_collapse_case_insensitive | trim_only | exact" />
             <div className="pt-5">
-              <SwitchRow id="shortAnswerAcceptSynonyms" checked={policy.shortAnswerAcceptSynonyms} onChange={field('shortAnswerAcceptSynonyms')} label="Accept synonyms (non-standard)" description="OET grades on canonical + accepted variants only — default off" />
+              <SwitchRow id="shortAnswerAcceptSynonyms" checked={policy.shortAnswerAcceptSynonyms} onChange={field('shortAnswerAcceptSynonyms')} label="Accept synonyms (non-standard)" description="OET grades on canonical + accepted variants only; default off" />
             </div>
           </div>
         </SectionCard>
@@ -320,7 +320,7 @@ export default function ListeningPolicyPage() {
         {/* §6 Accessibility */}
         <SectionCard title="§6 Accessibility">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <NumericField label="Default extra time (%)" value={policy.defaultExtraTimePct} onChange={field('defaultExtraTimePct')} description="Global default — 0 means no extra time unless per-user override" />
+            <NumericField label="Default extra time (%)" value={policy.defaultExtraTimePct} onChange={field('defaultExtraTimePct')} description="Global default; 0 means no extra time unless per-user override" />
             <div className="pt-5">
               <SwitchRow id="screenReaderOptimised" checked={policy.screenReaderOptimised} onChange={field('screenReaderOptimised')} label="Screen reader optimised mode" description="Adds ARIA enhancements and focus management" />
             </div>
@@ -368,7 +368,7 @@ export default function ListeningPolicyPage() {
             {(override !== undefined && userIdInput.trim()) && (
               <div className="rounded-admin border border-admin-border bg-admin-bg-subtle p-4 space-y-4">
                 <p className="text-sm font-semibold text-admin-fg-strong">
-                  {override ? `Override for ${userIdInput.trim()}` : `No override found — create one for ${userIdInput.trim()}`}
+                  {override ? `Override for ${userIdInput.trim()}` : `No override found; create one for ${userIdInput.trim()}`}
                 </p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <NumericField

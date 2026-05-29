@@ -154,7 +154,7 @@ export default function WritingPracticeSessionPage() {
                 return (
                   <label
                     key={m}
-                    className={`cursor-pointer rounded-md px-3 py-1.5 text-xs font-bold transition-colors focus-within:ring-2 focus-within:ring-primary ${active ? 'bg-primary text-white' : 'text-navy hover:bg-primary/10'}`}
+                    className={`cursor-pointer rounded-md px-3 py-1.5 text-xs font-bold transition-colors focus-within:ring-2 focus-within:ring-primary ${active ? 'bg-primary text-white' : 'text-navy hover:bg-primary/10 dark:bg-violet-700 dark:hover:bg-violet-600'}`}
                   >
                     <input
                       type="radio"
@@ -237,7 +237,7 @@ export default function WritingPracticeSessionPage() {
         <div className="space-y-4">
           <p className="text-sm leading-6 text-muted">
             You have no AI grading credits remaining. AI Credits grade your Writing letters and Speaking
-            cards instantly — purchase a package to continue. Your draft has been saved.
+            cards instantly. Purchase a package to continue. Your draft has been saved.
           </p>
           <div className="flex flex-wrap justify-end gap-2">
             <Button variant="outline" onClick={() => setNoCreditsOpen(false)}>

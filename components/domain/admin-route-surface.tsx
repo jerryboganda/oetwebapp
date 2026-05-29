@@ -63,7 +63,7 @@ function renderAdminAction(action: LearnerSurfaceAction | undefined) {
             ? 'border border-admin-border text-admin-text hover:bg-admin-surface-raised'
             : action.variant === 'ghost'
               ? 'text-admin-text-muted hover:bg-admin-surface-raised'
-              : 'bg-primary text-white hover:bg-primary/90',
+              : 'bg-admin-primary text-admin-primary-fg hover:bg-admin-primary-hover',
         )}
       >
         {action.label}

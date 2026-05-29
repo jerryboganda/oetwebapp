@@ -1,5 +1,7 @@
 # Content Upload & Authoring — Implementation Plan
 
+> **Current status (2026-05-29)**: historical planning artifact plus useful domain analysis. The current source of open cross-project work is the active status index at [`STATUS/REMAINING-WORK.md`](STATUS/REMAINING-WORK.md). Do not treat this document's early planning language as proof that every content-upload slice is still pending.
+
 > **Status**: planning document, ready for implementation. Companion to
 > [`AGENTS.md`](../AGENTS.md), [`SCORING.md`](SCORING.md), [`RULEBOOKS.md`](RULEBOOKS.md),
 > [`AI-USAGE-POLICY.md`](AI-USAGE-POLICY.md), and the focused

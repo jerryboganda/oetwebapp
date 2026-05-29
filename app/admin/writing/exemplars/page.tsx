@@ -164,12 +164,12 @@ export default function AdminWritingExemplarsPage() {
           <table className="w-full text-sm" aria-label="Exemplar list">
             <thead>
               <tr className="border-b border-border text-xs uppercase tracking-wider text-muted">
-                <th className="py-2 text-left">Scenario</th>
-                <th className="text-left">Profession</th>
-                <th className="text-left">Letter</th>
-                <th className="text-left">Band</th>
-                <th className="text-left">Status</th>
-                <th className="text-right">Actions</th>
+                <th scope="col" className="py-2 text-left">Scenario</th>
+                <th scope="col" className="text-left">Profession</th>
+                <th scope="col" className="text-left">Letter</th>
+                <th scope="col" className="text-left">Band</th>
+                <th scope="col" className="text-left">Status</th>
+                <th scope="col" className="text-right">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -194,7 +194,7 @@ export default function AdminWritingExemplarsPage() {
       </Card>
 
       {editing ? (
-        <aside role="dialog" aria-modal="true" aria-label="Exemplar editor" className="fixed inset-0 z-50 flex items-stretch justify-end bg-black/40">
+        <aside role="dialog" aria-modal="true" aria-label="Exemplar editor" className="fixed inset-0 z-50 flex items-stretch justify-end bg-navy/40">
           <div className="flex h-full w-full max-w-3xl flex-col gap-3 overflow-y-auto bg-surface p-5 shadow-2xl">
             <header className="flex items-center justify-between gap-2">
               <h2 className="text-lg font-bold text-navy">{editing.id ? 'Edit exemplar' : 'New exemplar'}</h2>

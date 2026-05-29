@@ -440,7 +440,7 @@ function ResultSummary({ result }: { result: GrammarAttemptResult }) {
         <SafeRichText
           markdown={
             mastered
-              ? 'Brilliant work — mastery level reached. Tackle a related topic to build on this momentum.'
+              ? 'Brilliant work! Mastery level reached. Tackle a related topic to build on this momentum.'
               : 'Review the explanations below. Retry the incorrect items and your mastery score will climb.'
           }
           className="max-w-sm text-center text-sm leading-6 text-muted"

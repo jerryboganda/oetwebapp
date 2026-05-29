@@ -40,7 +40,7 @@ export default function RecallsLibraryPage() {
             <ul className="mt-2 grid grid-cols-1 gap-1 sm:grid-cols-2 lg:grid-cols-3">
               {today.weakTopics.map((t) => (
                 <li key={t.topic} className="text-muted">
-                  <span className="font-mono text-navy">{t.topic}</span> — {t.weakCount}/{t.total} weak
+                  <span className="font-mono text-navy">{t.topic}</span> · {t.weakCount}/{t.total} weak
                 </li>
               ))}
             </ul>

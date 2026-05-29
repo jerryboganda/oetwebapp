@@ -86,7 +86,7 @@ function DivergenceBanner({
       aria-label="AI vs tutor divergence summary"
       data-testid="divergence-banner"
     >
-      <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-white/60 dark:bg-black/20">
+      <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-surface/60 dark:bg-navy/20">
         {directionIcon}
       </span>
       <div className="flex flex-1 flex-col gap-0.5">
@@ -154,7 +154,7 @@ export function DualAssessmentLayout({
       >
         <ShieldAlert className="mt-0.5 h-5 w-5 shrink-0 text-warning" aria-hidden />
         <div>
-          <p className="font-bold">Both estimates are advisory — not an official OET score.</p>
+          <p className="font-bold">Both estimates are advisory, not an official OET score.</p>
           <p className="mt-0.5 text-xs leading-relaxed text-muted">
             Use this dual view to triangulate your readiness. Official OET results can only be obtained from an OET test session.
           </p>

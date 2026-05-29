@@ -531,3 +531,101 @@ public class NotificationTemplate
     public DateTimeOffset UpdatedAt { get; set; }
     public DateTimeOffset? PublishedAt { get; set; }
 }
+
+// ── Notification Campaigns (admin-managed bulk messaging) ──
+
+/// <summary>Campaign lifecycle: draft → scheduled → sending → sent → cancelled.</summary>
+public enum NotificationCampaignStatus
+{
+    Draft = 0,
+    Scheduled = 1,
+    Sending = 2,
+    Sent = 3,
+    Cancelled = 4,
+    Failed = 5,
+}
+
+/// <summary>A one-time or scheduled bulk notification sent to a segment of users.</summary>
+[Index(nameof(Status))]
+public class NotificationCampaign
+{
+    [Key]
+    public Guid Id { get; set; }
+
+    [MaxLength(256)]
+    public string Name { get; set; } = default!;
+
+    [MaxLength(256)]
+    public string Subject { get; set; } = default!;
+
+    /// <summary>Body content (Markdown or plain text). Rendered through the
+    /// campaign channel's template engine at send time.</summary>
+    public string Body { get; set; } = default!;
+
+    /// <summary>Optional HTML body for email campaigns.</summary>
+    public string? HtmlBody { get; set; }
+
+    public NotificationChannel Channel { get; set; } = NotificationChannel.Email;
+
+    public NotificationCampaignStatus Status { get; set; } = NotificationCampaignStatus.Draft;
+
+    /// <summary>JSON segment filter: e.g. {"roles":["learner"],"professions":["nursing"],"subscriptionStatus":"active"}</summary>
+    public string SegmentJson { get; set; } = "{}";
+
+    /// <summary>Resolved recipient count after segment evaluation.</summary>
+    public int? RecipientCount { get; set; }
+
+    /// <summary>Successfully delivered count.</summary>
+    public int DeliveredCount { get; set; }
+
+    /// <summary>Failed delivery count.</summary>
+    public int FailedCount { get; set; }
+
+    /// <summary>When the campaign should be sent. Null = send immediately on approval.</summary>
+    public DateTimeOffset? ScheduledAt { get; set; }
+
+    public DateTimeOffset? SentAt { get; set; }
+
+    /// <summary>A/B test variant label (null for non-A/B campaigns).</summary>
+    [MaxLength(32)]
+    public string? VariantLabel { get; set; }
+
+    /// <summary>Parent campaign ID for A/B variants.</summary>
+    public Guid? ParentCampaignId { get; set; }
+
+    [MaxLength(64)]
+    public string CreatedByAdminId { get; set; } = default!;
+
+    [MaxLength(64)]
+    public string? ApprovedByAdminId { get; set; }
+
+    public DateTimeOffset? ApprovedAt { get; set; }
+
+    public DateTimeOffset CreatedAt { get; set; }
+    public DateTimeOffset UpdatedAt { get; set; }
+}
+
+/// <summary>Per-recipient delivery record for a campaign.</summary>
+[Index(nameof(CampaignId))]
+[Index(nameof(RecipientUserId))]
+public class NotificationCampaignRecipient
+{
+    [Key]
+    public Guid Id { get; set; }
+
+    public Guid CampaignId { get; set; }
+
+    [MaxLength(64)]
+    public string RecipientUserId { get; set; } = default!;
+
+    [MaxLength(256)]
+    public string RecipientEmail { get; set; } = default!;
+
+    public NotificationDeliveryStatus DeliveryStatus { get; set; } = NotificationDeliveryStatus.Pending;
+
+    [MaxLength(512)]
+    public string? ErrorMessage { get; set; }
+
+    public DateTimeOffset? DeliveredAt { get; set; }
+    public DateTimeOffset CreatedAt { get; set; }
+}

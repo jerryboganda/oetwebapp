@@ -291,7 +291,7 @@ export default function AdminContentGenerationPage() {
               <button
                 type="submit"
                 disabled={submitting || !form.topic.trim()}
-                className="w-full flex items-center justify-center gap-2 py-3 bg-primary hover:bg-primary-dark text-white dark:bg-violet-700 dark:hover:bg-violet-600 rounded-xl font-semibold text-sm disabled:opacity-50 transition-colors"
+                className="w-full flex items-center justify-center gap-2 py-3 bg-primary hover:bg-primary-dark active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600 text-white rounded-xl font-semibold text-sm disabled:opacity-50 transition-[color,background-color,transform] duration-200"
               >
                 {submitting ? (
                   <><Loader2 className="w-4 h-4 animate-spin" /> Generating...</>

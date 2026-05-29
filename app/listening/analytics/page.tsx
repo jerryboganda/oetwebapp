@@ -18,15 +18,15 @@ import { getListeningStudentAnalytics, type ListeningStudentAnalytics } from '@/
 import { StatCard } from '@/components/ui/stat-card';
 
 function pct(value: number | null | undefined) {
-  if (value == null) return '--';
+  if (value == null) return '—';
   return Number.isInteger(value) ? `${value}%` : `${value.toFixed(1)}%`;
 }
 
 function AccuracyBar({ value }: { value: number | null | undefined }) {
   const w = value == null ? 0 : Math.max(0, Math.min(100, value));
   return (
-    <div className="h-2 w-full overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800">
-      <div className="h-full rounded-full bg-indigo-500" style={{ width: `${w}%` }} />
+    <div className="h-2 w-full overflow-hidden rounded-full bg-border">
+      <div className="h-full rounded-full bg-primary" style={{ width: `${w}%` }} />
     </div>
   );
 }
@@ -91,14 +91,14 @@ export default function ListeningAnalyticsPage() {
                 <StatCard
                   icon={<TrendingUp />}
                   label="Best score"
-                  value={data.bestScaledScore ?? '--'}
+                  value={data.bestScaledScore ?? '—'}
                   hint={data.likelyPassing ? 'Above 350' : 'Keep drilling'}
                   tone={data.likelyPassing ? 'success' : 'warning'}
                 />
                 <StatCard
                   icon={<Activity />}
                   label="Avg score"
-                  value={data.averageScaledScore ?? '--'}
+                  value={data.averageScaledScore ?? '—'}
                   hint={`Across ${data.completedAttempts} attempts`}
                   tone="info"
                 />
@@ -121,17 +121,17 @@ export default function ListeningAnalyticsPage() {
             </MotionItem>
 
             <MotionItem>
-              <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-                <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Accuracy by part</h2>
+              <div className="rounded-2xl border border-border bg-surface p-6 shadow-sm">
+                <h2 className="text-lg font-semibold text-navy">Accuracy by part</h2>
                 <div className="mt-4 space-y-3">
                   {data.partBreakdown.map((part) => (
                     <div key={part.partCode} className="grid grid-cols-[6rem_minmax(0,1fr)_5rem] items-center gap-3">
                       <div>
-                        <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">Part {part.partCode}</p>
-                        <p className="text-xs text-slate-500 dark:text-slate-400">{part.earned}/{part.max} pts</p>
+                        <p className="text-sm font-semibold text-navy">Part {part.partCode}</p>
+                        <p className="text-xs text-muted">{part.earned}/{part.max} pts</p>
                       </div>
                       <AccuracyBar value={part.accuracyPercent} />
-                      <p className="text-right text-sm font-semibold text-slate-900 dark:text-slate-100">{pct(part.accuracyPercent)}</p>
+                      <p className="text-right text-sm font-semibold text-navy">{pct(part.accuracyPercent)}</p>
                     </div>
                   ))}
                 </div>
@@ -140,14 +140,14 @@ export default function ListeningAnalyticsPage() {
 
             {data.weaknesses.length > 0 ? (
               <MotionItem>
-                <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-                  <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Top weaknesses</h2>
+                <div className="rounded-2xl border border-border bg-surface p-6 shadow-sm">
+                  <h2 className="text-lg font-semibold text-navy">Top weaknesses</h2>
                   <ul className="mt-4 space-y-2">
                     {data.weaknesses.map((w) => (
-                      <li key={w.errorType} className="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-800/50">
+                      <li key={w.errorType} className="flex items-center justify-between rounded-lg border border-border bg-background-light p-3">
                         <div className="flex items-center gap-2">
                           <AlertTriangle className="h-4 w-4 text-amber-600" aria-hidden />
-                          <span className="text-sm font-medium text-slate-900 dark:text-slate-100">{w.label}</span>
+                          <span className="text-sm font-medium text-navy">{w.label}</span>
                         </div>
                         <Badge variant="muted">{w.count}</Badge>
                       </li>
@@ -158,19 +158,19 @@ export default function ListeningAnalyticsPage() {
             ) : null}
 
             <MotionItem>
-              <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-                <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Your action plan</h2>
+              <div className="rounded-2xl border border-border bg-surface p-6 shadow-sm">
+                <h2 className="text-lg font-semibold text-navy">Your action plan</h2>
                 <ol className="mt-4 space-y-3">
                   {data.actionPlan.map((item, i) => (
                     <li key={i} className="flex gap-3">
-                      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-indigo-100 text-sm font-bold text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300">
+                      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-bold text-primary">
                         {i + 1}
                       </span>
                       <div className="min-w-0">
-                        <p className="font-semibold text-slate-900 dark:text-slate-100">{item.headline}</p>
-                        <p className="mt-0.5 text-sm text-slate-700 dark:text-slate-300">{item.detail}</p>
+                        <p className="font-semibold text-navy">{item.headline}</p>
+                        <p className="mt-0.5 text-sm text-muted">{item.detail}</p>
                         {item.route ? (
-                          <Link href={item.route} className="mt-1 inline-flex items-center gap-1 text-sm font-medium text-indigo-600 hover:text-indigo-500">
+                          <Link href={item.route} className="mt-1 inline-flex items-center gap-1 text-sm font-medium text-primary transition-colors hover:text-primary-dark">
                             Go now <ArrowRight className="h-3.5 w-3.5" aria-hidden />
                           </Link>
                         ) : null}

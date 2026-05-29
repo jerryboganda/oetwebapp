@@ -58,7 +58,7 @@ export async function ensurePaperWithAssets({
   } else {
     paper = await createPaperDraft({
       subtestCode: step,
-      title: `${bundle.title} — ${paperTitleSuffix}`,
+      title: `${bundle.title}: ${paperTitleSuffix}`,
       appliesToAllProfessions: bundle.appliesToAllProfessions,
       professionId: bundle.appliesToAllProfessions ? null : bundle.professionId,
       difficulty: bundle.difficulty ?? 'exam_ready',

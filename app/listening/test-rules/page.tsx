@@ -85,7 +85,7 @@ export default function ListeningTestRulesPage() {
           />
           <RuleCard
             icon={Pencil}
-            title={`Part A — gap-fill (${rules.partA.items} items)`}
+            title={`Part A gap-fill (${rules.partA.items} items)`}
             points={[
               'Listen for the exact word the speaker says. Re-using the words from the gap stem is the safest bet.',
               'Numbers, dosages, dates, and units count exactly: "5 mg" ≠ "5 g".',
@@ -94,11 +94,11 @@ export default function ListeningTestRulesPage() {
           />
           <RuleCard
             icon={Volume2}
-            title="Parts B & C — MCQs (3-option)"
+            title="Parts B & C: MCQs (3-option)"
             points={[
-              'Distractors are designed to sound like the right answer — watch for "too strong / too weak", opposite meaning, wrong speaker, or a re-used keyword.',
+              'Distractors are designed to sound like the right answer. Watch for "too strong / too weak", opposite meaning, wrong speaker, or a re-used keyword.',
               'In Part C, listen for the speaker\'s attitude (concerned / optimistic / doubtful / critical / neutral).',
-              'Read the stem and options before the audio starts — you have a short reading window.',
+              'Read the stem and options before the audio starts. You have a short reading window.',
             ]}
           />
           <RuleCard
@@ -106,7 +106,7 @@ export default function ListeningTestRulesPage() {
             title="Exam integrity (paper mode)"
             points={[
               'Once you enter paper mode the audio plays end-to-end and answers cannot be revised after submit.',
-              'Headphones recommended. Do not switch tabs — paper mode flags loss-of-focus.',
+              'Headphones recommended. Do not switch tabs; paper mode flags loss-of-focus.',
               'Transcripts are NOT shown during the attempt. They unlock per-item in your post-attempt review.',
             ]}
             tone="amber"
@@ -117,7 +117,7 @@ export default function ListeningTestRulesPage() {
             points={[
               'Predict the answer type before you listen (number? job title? medication?).',
               'If you miss an item, write your best guess and move on. The audio will not wait.',
-              'Use the post-attempt review to study why each distractor was wrong — that is where the score gain lives.',
+              'Use the post-attempt review to study why each distractor was wrong. That is where the score gain lives.',
             ]}
           />
         </div>
@@ -141,7 +141,7 @@ export default function ListeningTestRulesPage() {
           <Badge variant="muted">Static briefing · no data collected on this page</Badge>
           <Link
             href="/listening"
-            className="inline-flex items-center gap-1 text-sm font-medium text-indigo-600 hover:text-indigo-500"
+            className="inline-flex items-center gap-1 text-sm font-medium text-primary transition-colors hover:text-primary-dark"
           >
             Back to Listening <ArrowRight className="ml-1 h-4 w-4" aria-hidden />
           </Link>
@@ -162,20 +162,18 @@ function RuleCard({
   points: string[];
   tone?: 'amber';
 }) {
-  const accent = tone === 'amber' ? 'text-amber-600' : 'text-indigo-600';
+  const accent = tone === 'amber' ? 'text-amber-600' : 'text-primary';
   return (
     <MotionItem>
-      <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+      <div className="rounded-2xl border border-border bg-surface p-6 shadow-sm">
         <div className="flex items-start gap-3">
-          <div className={`rounded-lg bg-slate-100 p-2 dark:bg-slate-800 ${accent}`}>
-            <Icon className="h-5 w-5" aria-hidden />
-          </div>
-          <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">{title}</h2>
+          <Icon className={`h-5 w-5 shrink-0 ${accent}`} aria-hidden />
+          <h2 className="text-lg font-semibold text-navy">{title}</h2>
         </div>
-        <ul className="mt-4 space-y-2 text-sm text-slate-700 dark:text-slate-300">
+        <ul className="mt-4 space-y-2 text-sm text-muted">
           {points.map((point, i) => (
             <li key={i} className="flex gap-2">
-              <span className="mt-1 inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-slate-400" aria-hidden />
+              <span className="mt-1.5 inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-primary/40" aria-hidden />
               <span>{point}</span>
             </li>
           ))}

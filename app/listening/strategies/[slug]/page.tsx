@@ -66,7 +66,7 @@ export default function ListeningStrategyDetailPage() {
   if (loading) {
     return (
       <main className="mx-auto max-w-3xl px-4 py-12">
-        <p className="text-slate-500">Loading strategy…</p>
+        <p className="text-muted">Loading strategy…</p>
       </main>
     );
   }
@@ -74,8 +74,8 @@ export default function ListeningStrategyDetailPage() {
   if (!strategy) {
     return (
       <main className="mx-auto max-w-3xl px-4 py-12 space-y-4">
-        <h1 className="text-2xl font-bold">Strategy not found</h1>
-        <Link href="/listening/strategies" className="rounded-md bg-slate-900 px-4 py-2 text-white text-sm inline-block">
+        <h1 className="text-2xl font-bold text-navy">Strategy not found</h1>
+        <Link href="/listening/strategies" className="rounded-md bg-primary px-4 py-2 text-white text-sm inline-block transition-[color,background-color,transform] duration-200 hover:bg-primary-dark active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600">
           Back to library
         </Link>
       </main>
@@ -85,14 +85,14 @@ export default function ListeningStrategyDetailPage() {
   return (
     <main className="mx-auto max-w-3xl px-4 py-12 space-y-6">
       <header>
-        <span className="text-xs uppercase tracking-wide text-slate-500">
+        <span className="text-xs uppercase tracking-wide text-muted">
           {strategy.category.replace('_', ' ')}
         </span>
-        <h1 className="text-3xl font-bold tracking-tight">{strategy.title}</h1>
-        <p className="mt-1 text-sm text-slate-500">~{strategy.estimatedReadMinutes} min read</p>
+        <h1 className="text-3xl font-bold tracking-tight text-navy">{strategy.title}</h1>
+        <p className="mt-1 text-sm text-muted">~{strategy.estimatedReadMinutes} min read</p>
       </header>
 
-      <article className="prose prose-slate max-w-none rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+      <article className="prose prose-slate dark:prose-invert max-w-none rounded-2xl border border-border bg-surface p-6 shadow-sm">
         <pre className="whitespace-pre-wrap font-sans">{strategy.bodyMarkdownEn}</pre>
       </article>
 
@@ -100,19 +100,19 @@ export default function ListeningStrategyDetailPage() {
         <button
           onClick={markRead}
           disabled={strategy.progress?.markedAsRead}
-          className="rounded-md bg-slate-900 px-4 py-2 text-white disabled:opacity-60"
+          className="rounded-md bg-primary px-4 py-2 text-white transition-[color,background-color,transform] duration-200 hover:bg-primary-dark active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600 disabled:opacity-60"
         >
           {strategy.progress?.markedAsRead ? '✓ Marked as read' : 'Mark as read'}
         </button>
         <button
           onClick={toggleFavorite}
-          className="rounded-md border border-slate-300 px-4 py-2 text-slate-700"
+          className="rounded-md border border-border px-4 py-2 text-navy transition-colors hover:bg-background-light"
         >
           {strategy.progress?.favorited ? '⭐ Favorited' : '☆ Favorite'}
         </button>
       </div>
 
-      <Link href="/listening/strategies" className="text-sm text-blue-700 underline">
+      <Link href="/listening/strategies" className="text-sm text-primary underline transition-colors hover:text-primary-dark">
         ← All strategies
       </Link>
     </main>

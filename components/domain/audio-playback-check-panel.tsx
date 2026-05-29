@@ -135,17 +135,15 @@ export function AudioPlaybackCheckPanel({ onComplete, onFail, className }: Audio
       aria-live="polite"
     >
       <header className="flex items-center gap-3">
-        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
-          {status === 'passed' ? (
-            <CheckCircle2 className="h-5 w-5 text-success" />
-          ) : status === 'failed' ? (
-            <AlertCircle className="h-5 w-5 text-danger" />
-          ) : status === 'playing' ? (
-            <Loader2 className="h-5 w-5 animate-spin" />
-          ) : (
-            <Volume2 className="h-5 w-5" />
-          )}
-        </div>
+        {status === 'passed' ? (
+          <CheckCircle2 className="h-6 w-6 shrink-0 text-success" aria-hidden="true" />
+        ) : status === 'failed' ? (
+          <AlertCircle className="h-6 w-6 shrink-0 text-danger" aria-hidden="true" />
+        ) : status === 'playing' ? (
+          <Loader2 className="h-6 w-6 shrink-0 animate-spin text-primary" aria-hidden="true" />
+        ) : (
+          <Volume2 className="h-6 w-6 shrink-0 text-primary" aria-hidden="true" />
+        )}
         <div>
           <h3 className="text-sm font-bold text-navy">Audio playback check</h3>
           <p className="text-xs text-muted">

@@ -273,12 +273,12 @@ export default function AdminInterlocutorOnboardingPage() {
                 <table className="min-w-full divide-y divide-admin-border text-sm">
                   <thead>
                     <tr className="text-left text-xs font-bold uppercase tracking-[0.14em] text-admin-text-muted">
-                      <th className="py-3 pr-4">Trainee</th>
-                      <th className="px-4 py-3">Started</th>
-                      <th className="px-4 py-3 text-right">Role-plays</th>
-                      <th className="px-4 py-3 text-right">Calibration σ</th>
-                      <th className="px-4 py-3">Status</th>
-                      <th className="px-4 py-3 text-right">Actions</th>
+                      <th scope="col" className="py-3 pr-4">Trainee</th>
+                      <th scope="col" className="px-4 py-3">Started</th>
+                      <th scope="col" className="px-4 py-3 text-right">Role-plays</th>
+                      <th scope="col" className="px-4 py-3 text-right">Calibration σ</th>
+                      <th scope="col" className="px-4 py-3">Status</th>
+                      <th scope="col" className="px-4 py-3 text-right">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-admin-border/70">
@@ -369,11 +369,11 @@ function PracticeQueueList({ rows }: { rows: InterlocutorPracticeQueueRow[] }) {
       <table className="min-w-full divide-y divide-admin-border text-sm">
         <thead>
           <tr className="text-left text-xs font-bold uppercase tracking-[0.14em] text-admin-text-muted">
-            <th className="py-3 pr-4">Trainee</th>
-            <th className="px-4 py-3">Recording</th>
-            <th className="px-4 py-3">Submitted</th>
-            <th className="px-4 py-3 text-right">Duration</th>
-            <th className="px-4 py-3">Status</th>
+            <th scope="col" className="py-3 pr-4">Trainee</th>
+            <th scope="col" className="px-4 py-3">Recording</th>
+            <th scope="col" className="px-4 py-3">Submitted</th>
+            <th scope="col" className="px-4 py-3 text-right">Duration</th>
+            <th scope="col" className="px-4 py-3">Status</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-admin-border/70">

@@ -118,7 +118,7 @@ export default function WritingCanonRuleDetailPage() {
                   {rule.correctExamples.length === 0 ? <li className="text-xs text-muted">{t('writing.canon.detail.examples.empty')}</li> : null}
                   {/* Examples are authored English canon content (spec §32). */}
                   {rule.correctExamples.map((ex, idx) => (
-                    <li key={idx} className="rounded border border-emerald-200/60 bg-white p-2 text-xs text-emerald-900" dir="ltr">
+                    <li key={idx} className="rounded border border-emerald-200/60 bg-surface p-2 text-xs text-emerald-900" dir="ltr">
                       {ex}
                     </li>
                   ))}
@@ -133,7 +133,7 @@ export default function WritingCanonRuleDetailPage() {
                 <ul className="mt-2 space-y-2">
                   {rule.incorrectExamples.length === 0 ? <li className="text-xs text-muted">{t('writing.canon.detail.examples.empty')}</li> : null}
                   {rule.incorrectExamples.map((ex, idx) => (
-                    <li key={idx} className="rounded border border-red-200/60 bg-white p-2 text-xs text-red-900" dir="ltr">
+                    <li key={idx} className="rounded border border-red-200/60 bg-surface p-2 text-xs text-red-900" dir="ltr">
                       {ex}
                     </li>
                   ))}
@@ -169,7 +169,7 @@ export default function WritingCanonRuleDetailPage() {
                     {t('writing.canon.detail.history.submission', { id: v.submissionId.slice(0, 8) })}
                   </Link>
                   {/* Snippet is verbatim from the learner letter (English). */}
-                  <span className="ms-1 text-xs text-muted" dir="ltr">— line {v.lineNumber}: &quot;{v.snippet}&quot;</span>
+                  <span className="ms-1 text-xs text-muted" dir="ltr">· line {v.lineNumber}: &quot;{v.snippet}&quot;</span>
                 </li>
               ))}
             </ul>

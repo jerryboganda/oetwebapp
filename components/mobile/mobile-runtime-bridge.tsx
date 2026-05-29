@@ -11,6 +11,7 @@ import { registerPushNotifications } from '@/lib/mobile/push-notifications';
 import { initializeDeepLinkHandler } from '@/lib/mobile/deep-link-handler';
 import { removeAllDeliveredNotifications } from '@/lib/mobile/push-notifications';
 import { registerNativePushToken } from '@/lib/notifications-api';
+import { redeemDevicePairingCode } from '@/lib/device-pairing-api';
 import type { NativePushPlatform } from '@/lib/types/notifications';
 
 function currentPushPlatform(): NativePushPlatform {
@@ -39,7 +40,7 @@ interface BillingRouting {
 
 const BILLING_ROUTING: Record<BillingEvent, BillingRouting> = {
   'payment.success': {
-    message: 'Payment received — your credits are ready.',
+    message: 'Payment received. Your credits are ready.',
     variant: 'success',
     navigateTo: '/account/billing?paid=1',
   },
@@ -49,7 +50,7 @@ const BILLING_ROUTING: Record<BillingEvent, BillingRouting> = {
     navigateTo: '/account/billing/payment-methods',
   },
   'subscription.renewing': {
-    message: 'Heads up — your subscription renews soon.',
+    message: 'Heads up: your subscription renews soon.',
     variant: 'info',
     navigateTo: null,
   },
@@ -312,9 +313,30 @@ export function MobileRuntimeBridge() {
         return;
       }
 
-      // Deep link handler — accept https://app.* deep links plus writing://
-      // app-scheme deep links (writing://submissions/{id}/results, etc.).
+      // Deep link handler — app-open links are HTTPS-only; writing:// remains
+      // push-action-only and is normalised above before navigation.
       const deepLinkCleanup = await initializeDeepLinkHandler({
+        onPairing: async (code) => {
+          try {
+            const alreadySignedIn = authStateRef.current.isAuthenticated;
+            const confirmed = window.confirm(
+              alreadySignedIn
+                ? 'This pairing link will replace the account currently signed in on this device. Continue only if you just requested this pairing code.'
+                : 'Pair this device with the account that generated this code? Continue only if you just requested this pairing code.',
+            );
+            if (!confirmed) {
+              toast.info('Device pairing cancelled.');
+              return;
+            }
+
+            await redeemDevicePairingCode(code);
+            await authStateRef.current.refreshSession();
+            toast.success('Device paired successfully.');
+            router.push('/dashboard');
+          } catch (error) {
+            toast.error(error instanceof Error ? error.message : 'Device pairing failed.');
+          }
+        },
         onDeepLink: (event) => {
           // If the path looks like a writing:// fragment passed verbatim
           // (no leading slash, e.g. "submissions/abc/results"), prefix

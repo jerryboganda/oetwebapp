@@ -180,14 +180,14 @@ export function BCQuestionRenderer({
                   toggleStruck(option);
                 }}
                 disabled={locked}
-                className={`flex min-h-14 flex-1 items-center gap-4 rounded-xl border-2 p-4 text-left transition-all sm:p-5 ${
+                className={`flex min-h-14 flex-1 items-center gap-4 rounded-xl border-2 p-4 text-left transition-[color,background-color,border-color,box-shadow,transform,opacity,filter] duration-200 sm:p-5 ${
                   isSelected
                     ? 'border-primary bg-primary/5 font-medium text-primary'
                     : 'border-border text-navy hover:border-border-hover hover:bg-background-light'
                 } ${locked ? 'cursor-not-allowed opacity-60' : ''}`}
               >
                 <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full border-2 text-[0.75em] font-black transition-colors ${
-                  isSelected ? 'border-primary bg-primary text-white' : 'border-border-hover text-muted'
+                  isSelected ? 'border-primary bg-primary text-white dark:bg-violet-700' : 'border-border-hover text-muted'
                 }`}>
                   {optionLabel}
                 </span>

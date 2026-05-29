@@ -444,7 +444,7 @@ export default function MockCenter() {
           data-testid="mocks-integrity-reminder"
           role="note"
         >
-          OET test content is confidential — do not redistribute or share questions outside this practice context.
+          OET test content is confidential. Do not redistribute or share questions outside this practice context.
         </p>
 
         {/* Per the 2026-05-27 OET sample-test alignment, the Mocks tab is the
@@ -621,7 +621,7 @@ export default function MockCenter() {
                           onClick={() => setProfessionFilter(null)}
                           className={`pressable touch-target rounded-full border px-4 py-1.5 text-xs font-semibold transition-colors ${
                             professionFilter === null
-                              ? 'border-primary bg-primary text-white'
+                              ? 'border-primary bg-primary text-white dark:bg-violet-700'
                               : 'border-border bg-surface text-navy hover:border-border'
                           }`}
                         >
@@ -636,7 +636,7 @@ export default function MockCenter() {
                             onClick={() => setProfessionFilter(p.id)}
                             className={`pressable touch-target rounded-full border px-4 py-1.5 text-xs font-semibold transition-colors ${
                               professionFilter === p.id
-                                ? 'border-primary bg-primary text-white'
+                                ? 'border-primary bg-primary text-white dark:bg-violet-700'
                                 : 'border-border bg-surface text-navy hover:border-border'
                             }`}
                           >
@@ -672,10 +672,10 @@ export default function MockCenter() {
                             <MotionItem key={mock.id} delayIndex={idx}>
                               <Link
                                 href={href}
-                                className="group flex items-center gap-4 rounded-[24px] border border-border bg-surface p-5 transition-all hover:border-border hover:shadow-md"
+                                className="group flex items-center gap-4 rounded-[24px] border border-border bg-surface p-5 transition-[color,background-color,border-color,box-shadow,transform,opacity,filter] duration-200 hover:border-border hover:shadow-md"
                               >
                                 <div
-                                  className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl ${palette.bg} transition-transform group-hover:scale-105`}
+                                  className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl ${palette.bg} transition-transform group-hoverable:scale-105`}
                                 >
                                   <Icon className={`h-6 w-6 ${palette.fg}`} />
                                 </div>
@@ -794,7 +794,7 @@ export default function MockCenter() {
                       <LearnerSurfaceSectionHeader
                         eyebrow="Your Guarantee"
                         title="Score Guarantee progress"
-                        description="Read-only summary of your active pledge — manage activation and claims from billing."
+                        description="Read-only summary of your active pledge. Manage activation and claims from billing."
                         className="mb-4"
                       />
                       <LearnerSurfaceCard card={scoreGuaranteeCard} />

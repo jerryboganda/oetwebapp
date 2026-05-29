@@ -22,7 +22,7 @@ export function GuaranteeBanner({
   ctaHref = '/billing/score-guarantee',
 }: GuaranteeBannerProps) {
   return (
-    <section className="border-t border-border bg-[#0E2841] px-4 py-12 text-white">
+    <section className="border-t border-border bg-navy px-4 py-12 text-white">
       <div className="mx-auto flex max-w-5xl flex-col items-start gap-4 sm:flex-row sm:items-center">
         <span className="inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[#D4A44F]/15 text-[#D4A44F]">
           <ShieldCheck className="h-6 w-6" aria-hidden="true" />

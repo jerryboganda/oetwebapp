@@ -48,7 +48,7 @@ function missReasonChip(item: ListeningReviewDto['itemReview'][number]): {
   switch (key) {
     case 'spellingerror':
     case 'spelling':
-      return { label: 'Spelling', hint: 'Close to the answer — review medical spelling drills.' };
+      return { label: 'Spelling', hint: 'Close to the answer. Review medical spelling drills.' };
     case 'wrongnumber':
     case 'numbers_and_frequencies':
     case 'grammar_number':
@@ -60,7 +60,7 @@ function missReasonChip(item: ListeningReviewDto['itemReview'][number]): {
     case 'wrong_section':
       return { label: 'Right answer, wrong gap', hint: 'You wrote a correct phrase but for a different question.' };
     case 'paraphrase':
-      return { label: 'Paraphrase', hint: 'OET Part A grades on the exact words heard — avoid rewording.' };
+      return { label: 'Paraphrase', hint: 'OET Part A grades on the exact words heard, so avoid rewording.' };
     case 'empty':
       return { label: 'Unanswered', hint: 'No answer was recorded for this question.' };
     case 'distractor_confusion':
@@ -148,8 +148,8 @@ export default function ListeningReviewPage() {
                 className="mb-4"
               />
               <div className="grid gap-4 md:grid-cols-[1fr_auto] md:items-center">
-                <div className="rounded-2xl border border-border bg-background-light p-4 text-sm text-gray-600 dark:text-gray-400">
-                  <span className="font-bold text-gray-900 dark:text-gray-100">Policy:</span> {review.transcriptAccess.policy.replace(/_/g, ' ')}
+                <div className="rounded-2xl border border-border bg-background-light p-4 text-sm text-muted">
+                  <span className="font-bold text-navy">Policy:</span> {review.transcriptAccess.policy.replace(/_/g, ' ')}
                   <br />
                   {review.transcriptAccess.reason}
                 </div>
@@ -183,15 +183,15 @@ export default function ListeningReviewPage() {
                   {review.paper.extracts?.map((extract) => (
                     <div key={`${extract.partCode}-${extract.displayOrder}`} className="rounded-2xl border border-border bg-background-light p-4 text-sm">
                       <div className="flex items-center justify-between gap-2">
-                        <p className="font-bold text-gray-900 dark:text-gray-100">{extract.partCode} · {extract.title}</p>
-                        <p className="text-xs font-black uppercase tracking-widest text-gray-600 dark:text-gray-400">{extract.kind}</p>
+                        <p className="font-bold text-navy">{extract.partCode} · {extract.title}</p>
+                        <p className="text-xs font-black uppercase tracking-widest text-muted">{extract.kind}</p>
                       </div>
-                      <p className="mt-2 text-gray-600 dark:text-gray-400">{extract.accentCode ?? 'Accent not specified'}</p>
+                      <p className="mt-2 text-muted">{extract.accentCode ?? 'Accent not specified'}</p>
                       {extract.speakers.length > 0 ? (
-                        <p className="mt-1 text-gray-600 dark:text-gray-400">{extract.speakers.map((speaker) => speaker.role).join(', ')}</p>
+                        <p className="mt-1 text-muted">{extract.speakers.map((speaker) => speaker.role).join(', ')}</p>
                       ) : null}
                       {extract.audioStartMs != null || extract.audioEndMs != null ? (
-                        <p className="mt-1 text-gray-600 dark:text-gray-400">
+                        <p className="mt-1 text-muted">
                           {formatMilliseconds(extract.audioStartMs) ?? '0:00'} - {formatMilliseconds(extract.audioEndMs) ?? 'end'}
                         </p>
                       ) : null}
@@ -217,10 +217,10 @@ export default function ListeningReviewPage() {
                       onClick={() => playEvidence(segment.startMs, segment.endMs)}
                       className="block w-full rounded-xl border border-border bg-background-light p-3 text-left text-sm transition hover:border-border-hover hover:bg-surface"
                     >
-                      <span className="text-xs font-black uppercase tracking-widest text-gray-600 dark:text-gray-400">
+                      <span className="text-xs font-black uppercase tracking-widest text-muted">
                         {formatMilliseconds(segment.startMs)}-{formatMilliseconds(segment.endMs)} {segment.partCode ?? ''} {segment.speakerId ?? ''}
                       </span>
-                      <span className="mt-1 block text-gray-900 dark:text-gray-100">{segment.text}</span>
+                      <span className="mt-1 block text-navy">{segment.text}</span>
                     </button>
                   ))}
                 </div>
@@ -237,23 +237,23 @@ export default function ListeningReviewPage() {
                       <XCircle className="mt-1 h-5 w-5 shrink-0 text-danger" />
                     )}
                     <div>
-                      <p className="text-xs font-black uppercase tracking-widest text-gray-600 dark:text-gray-400">
+                      <p className="text-xs font-black uppercase tracking-widest text-muted">
                         Part {question.partCode} / Question {question.number}
                       </p>
-                      <h2 className="mt-2 text-lg font-bold text-gray-900 dark:text-gray-100">{question.prompt}</h2>
+                      <h2 className="mt-2 text-lg font-bold text-navy">{question.prompt}</h2>
                     </div>
                   </div>
                   <div className="mt-4 grid gap-3 md:grid-cols-2">
                     <div className="rounded-2xl border border-border bg-background-light p-4">
-                      <p className="text-xs font-black uppercase tracking-widest text-gray-600 dark:text-gray-400">Your answer</p>
-                      <p className="mt-2 text-sm text-gray-900 dark:text-gray-100">{question.learnerAnswer || 'No answer recorded'}</p>
+                      <p className="text-xs font-black uppercase tracking-widest text-muted">Your answer</p>
+                      <p className="mt-2 text-sm text-navy">{question.learnerAnswer || 'No answer recorded'}</p>
                     </div>
                     <div className="rounded-2xl border border-border bg-background-light p-4">
-                      <p className="text-xs font-black uppercase tracking-widest text-gray-600 dark:text-gray-400">Correct answer</p>
-                      <p className="mt-2 text-sm text-gray-900 dark:text-gray-100">{question.correctAnswer}</p>
+                      <p className="text-xs font-black uppercase tracking-widest text-muted">Correct answer</p>
+                      <p className="mt-2 text-sm text-navy">{question.correctAnswer}</p>
                     </div>
                   </div>
-                  <p className="mt-4 text-sm text-gray-600 dark:text-gray-400">{question.explanation}</p>
+                  <p className="mt-4 text-sm text-muted">{question.explanation}</p>
                   {(() => {
                     const chip = missReasonChip(question);
                     if (!chip) return null;
@@ -261,15 +261,15 @@ export default function ListeningReviewPage() {
                       <div className="mt-3 flex items-start gap-3 rounded-2xl border border-warning/30 bg-warning/10 p-4 text-sm text-warning">
                         <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
                         <div>
-                          <p className="font-bold uppercase tracking-widest text-xs">Missed because — {chip.label}</p>
+                          <p className="font-bold uppercase tracking-widest text-xs">Missed because: {chip.label}</p>
                           <p className="mt-1 text-warning/90">{chip.hint}</p>
                         </div>
                       </div>
                     );
                   })()}
-                  <div className="mt-4 flex flex-wrap items-center gap-2 text-xs text-gray-600 dark:text-gray-400">
+                  <div className="mt-4 flex flex-wrap items-center gap-2 text-xs text-muted">
                     {question.speakerAttitude ? (
-                      <span className="inline-flex items-center gap-1 rounded-lg bg-background-light px-3 py-2 font-semibold capitalize text-gray-900 dark:text-gray-100">
+                      <span className="inline-flex items-center gap-1 rounded-lg bg-background-light px-3 py-2 font-semibold capitalize text-navy">
                         <Quote className="h-4 w-4" /> {question.speakerAttitude.replace(/_/g, ' ')}
                       </span>
                     ) : null}
@@ -296,7 +296,7 @@ export default function ListeningReviewPage() {
                       </div>
                     </SelectionToVocab>
                   ) : (
-                    <div className="mt-4 flex items-start gap-3 rounded-2xl border border-border bg-background-light p-4 text-sm text-gray-600 dark:text-gray-400">
+                    <div className="mt-4 flex items-start gap-3 rounded-2xl border border-border bg-background-light p-4 text-sm text-muted">
                       <FileLock2 className="mt-0.5 h-4 w-4 shrink-0" />
                       Transcript excerpt restricted for this item.
                     </div>
@@ -313,7 +313,7 @@ export default function ListeningReviewPage() {
                           key={`${question.questionId}-${option.optionLabel}`}
                           className={`rounded-2xl border p-4 text-sm ${option.isCorrect ? 'border-success/30 bg-success/10 text-success' : 'border-warning/30 bg-warning/10 text-warning'}`}
                         >
-                          <p className="font-bold text-gray-900 dark:text-gray-100">{option.optionLabel}. {option.optionText}</p>
+                          <p className="font-bold text-navy">{option.optionLabel}. {option.optionText}</p>
                           <p className="mt-2 text-xs font-black uppercase tracking-widest">{option.isCorrect ? 'Correct' : option.distractorCategory?.replace(/_/g, ' ') ?? 'Distractor'}</p>
                           {option.whyMarkdown ? <p className="mt-2 text-xs leading-5">{option.whyMarkdown}</p> : null}
                         </div>
@@ -334,8 +334,8 @@ export default function ListeningReviewPage() {
                 />
                 <div className="flex flex-col gap-4 rounded-2xl border border-border bg-background-light p-4 md:flex-row md:items-center md:justify-between">
                   <div>
-                    <p className="font-bold text-gray-900 dark:text-gray-100">{review.recommendedNextDrill.title}</p>
-                    <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">{review.recommendedNextDrill.description}</p>
+                    <p className="font-bold text-navy">{review.recommendedNextDrill.title}</p>
+                    <p className="mt-1 text-sm text-muted">{review.recommendedNextDrill.description}</p>
                   </div>
                   <Button onClick={() => router.push(review.recommendedNextDrill.launchRoute)}>
                     <Target className="h-4 w-4" />
@@ -348,12 +348,10 @@ export default function ListeningReviewPage() {
             {tutorFeedback ? (
               <section className="rounded-2xl border border-primary/20 bg-primary/5 p-6 shadow-sm">
                 <div className="mb-5 flex items-center gap-3">
-                  <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/15 text-primary">
-                    <GraduationCap className="h-5 w-5" />
-                  </div>
+                  <GraduationCap className="h-6 w-6 shrink-0 text-primary" aria-hidden />
                   <div>
-                    <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100">Tutor Feedback</h2>
-                    <p className="text-xs text-gray-600 dark:text-gray-400">
+                    <h2 className="text-lg font-bold text-navy">Tutor Feedback</h2>
+                    <p className="text-xs text-muted">
                       Submitted{' '}
                       {new Date(tutorFeedback.submittedAt).toLocaleDateString(
                         undefined,
@@ -364,7 +362,7 @@ export default function ListeningReviewPage() {
                 </div>
 
                 {/* Overall feedback — rendered as pre-wrap to preserve markdown line breaks */}
-                <div className="rounded-2xl border border-primary/10 bg-surface p-5 text-sm leading-relaxed text-gray-900 dark:text-gray-100 whitespace-pre-wrap">
+                <div className="rounded-2xl border border-primary/10 bg-surface p-5 text-sm leading-relaxed text-navy whitespace-pre-wrap">
                   {tutorFeedback.overallFeedbackMarkdown}
                 </div>
 
@@ -379,7 +377,7 @@ export default function ListeningReviewPage() {
                   if (!Array.isArray(perQ) || perQ.length === 0) return null;
                   return (
                     <div className="mt-4">
-                      <h3 className="mb-3 text-xs font-bold uppercase tracking-widest text-gray-600 dark:text-gray-400">
+                      <h3 className="mb-3 text-xs font-bold uppercase tracking-widest text-muted">
                         Per-Question Comments
                       </h3>
                       <div className="space-y-2">
@@ -391,7 +389,7 @@ export default function ListeningReviewPage() {
                             <span className="shrink-0 font-bold text-primary">
                               Q{questionNumber}
                             </span>
-                            <span className="text-gray-900 dark:text-gray-100">{comment}</span>
+                            <span className="text-navy">{comment}</span>
                           </div>
                         ))}
                       </div>
@@ -410,7 +408,7 @@ export default function ListeningReviewPage() {
                   if (!Array.isArray(areas) || areas.length === 0) return null;
                   return (
                     <div className="mt-4">
-                      <h3 className="mb-2 text-xs font-bold uppercase tracking-widest text-gray-600 dark:text-gray-400">
+                      <h3 className="mb-2 text-xs font-bold uppercase tracking-widest text-muted">
                         Recommended Practice Areas
                       </h3>
                       <div className="flex flex-wrap gap-2">
@@ -430,11 +428,11 @@ export default function ListeningReviewPage() {
 
                 {/* Score override note */}
                 {tutorFeedback.rawScoreOverride != null && (
-                  <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                  <div className="mt-4 rounded-xl border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-warning">
                     <span className="font-semibold">Score adjusted by tutor: </span>
                     {tutorFeedback.rawScoreOverride}
                     {tutorFeedback.scoreOverrideReason
-                      ? ` — ${tutorFeedback.scoreOverrideReason}`
+                      ? `: ${tutorFeedback.scoreOverrideReason}`
                       : ''}
                   </div>
                 )}

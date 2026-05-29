@@ -75,8 +75,8 @@ function clearPersistedState(): void {
 function LoadingSpinner({ label }: { label: string }) {
   return (
     <div className="flex flex-col items-center gap-4">
-      <div className="h-10 w-10 animate-spin rounded-full border-4 border-violet-200 border-t-violet-600" />
-      <p className="text-sm text-gray-500">{label}</p>
+      <div className="h-10 w-10 animate-spin rounded-full border-4 border-lavender border-t-primary" />
+      <p className="text-sm text-muted">{label}</p>
     </div>
   );
 }
@@ -288,32 +288,30 @@ export default function ListeningDiagnosticPage() {
   }
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-gradient-to-b from-violet-50 to-white dark:from-slate-900 dark:to-slate-950 px-4 py-12">
+    <div className="flex min-h-screen flex-col items-center justify-center bg-background-light px-4 py-12">
       <div className="w-full max-w-2xl">
         {/* Brief / start screen */}
         {flowState === 'brief' && (
-          <div className="rounded-2xl border border-gray-100 bg-white dark:bg-slate-800 dark:border-slate-700 p-8 shadow-sm">
+          <div className="rounded-2xl border border-border bg-surface p-8 shadow-sm">
             <div className="mb-6 text-center">
-              <div className="mb-3 inline-flex h-14 w-14 items-center justify-center rounded-full bg-violet-100 text-violet-600">
-                <span className="text-2xl">🎧</span>
-              </div>
-              <h1 className="text-2xl font-extrabold text-gray-900">Listening diagnostic</h1>
+              <span className="mb-3 block text-3xl" aria-hidden>🎧</span>
+              <h1 className="text-2xl font-extrabold text-navy">Listening diagnostic</h1>
             </div>
-            <p className="mb-4 text-center text-gray-600">
+            <p className="mb-4 text-center text-muted">
               23 questions across Parts A, B and C. We&apos;ll use the result to map every sub-skill
               and accent and build your 12-week pathway.
             </p>
-            <ul className="mb-8 space-y-2 text-sm text-gray-600">
-              <li>• Each clip plays once — no replays during the diagnostic.</li>
+            <ul className="mb-8 space-y-2 text-sm text-muted">
+              <li>• Each clip plays once. No replays during the diagnostic.</li>
               <li>• Part A is gap-fill (type the missing word/phrase).</li>
               <li>• Parts B and C are multiple choice (3 options + &ldquo;I don&apos;t know&rdquo;).</li>
               <li>• You can take notes on Part A items.</li>
             </ul>
-            <p className="mb-8 text-center text-sm text-gray-600 dark:text-gray-400">Takes approximately 30 minutes.</p>
+            <p className="mb-8 text-center text-sm text-muted">Takes approximately 30 minutes.</p>
 
             {submitError && (
               <p
-                className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-center text-sm text-red-700"
+                className="mb-4 rounded-xl border border-danger/20 bg-danger/10 px-4 py-3 text-center text-sm text-danger"
                 role="alert"
               >
                 {submitError}
@@ -323,9 +321,9 @@ export default function ListeningDiagnosticPage() {
             <button
               type="button"
               onClick={() => void handleStart()}
-              className="w-full rounded-xl bg-violet-600 py-4 text-base font-bold text-white transition hover:bg-violet-700 active:scale-95"
+              className="w-full rounded-xl bg-primary py-4 text-base font-bold text-white transition-colors hover:bg-primary-dark dark:bg-violet-700 dark:hover:bg-violet-600 active:scale-95"
             >
-              I&apos;m ready — start diagnostic
+              I&apos;m ready to start the diagnostic
             </button>
           </div>
         )}
@@ -343,25 +341,25 @@ export default function ListeningDiagnosticPage() {
         {flowState === 'testing' && currentQuestion && sessionId && (
           <div className="space-y-6">
             {/* Header bar */}
-            <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-violet-100 bg-white px-5 py-3 shadow-sm">
-              <span className="text-sm font-semibold text-gray-700">
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-surface px-5 py-3 shadow-sm">
+              <span className="text-sm font-semibold text-navy">
                 Question {currentIndex + 1} of {totalQuestions}
               </span>
               <div className="flex items-center gap-2">
-                <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-bold text-gray-700">
+                <span className="rounded-full bg-background-light px-3 py-1 text-xs font-bold text-navy">
                   Part {currentQuestion.part === 'accent_test' ? 'Accent' : currentQuestion.part}
                 </span>
                 <AccentBadge accent={currentQuestion.accent} />
-                <span className="rounded-full bg-violet-100 px-3 py-1 text-xs font-bold text-violet-700">
+                <span className="rounded-full bg-lavender px-3 py-1 text-xs font-bold text-primary">
                   {elapsedLabel}
                 </span>
               </div>
             </div>
 
             {/* Progress bar */}
-            <div className="h-1.5 w-full overflow-hidden rounded-full bg-gray-100">
+            <div className="h-1.5 w-full overflow-hidden rounded-full bg-border">
               <div
-                className="h-full rounded-full bg-violet-600 transition-all duration-300"
+                className="h-full rounded-full bg-primary transition-[width,background-color] duration-300"
                 style={{ width: `${((currentIndex + 1) / totalQuestions) * 100}%` }}
                 role="progressbar"
                 aria-valuenow={currentIndex + 1}
@@ -371,14 +369,14 @@ export default function ListeningDiagnosticPage() {
 
             {/* Audio player */}
             {currentQuestion.audioPlaybackUrl && (
-              <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
+              <div className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
                 <DiagnosticPlayer audioUrl={currentQuestion.audioPlaybackUrl} allowReplay={false} onEnded={() => {}} />
               </div>
             )}
 
             {/* Question stem */}
-            <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
-              <p className="mb-6 text-base font-medium leading-relaxed text-gray-900">
+            <div className="rounded-2xl border border-border bg-surface p-6 shadow-sm">
+              <p className="mb-6 text-base font-medium leading-relaxed text-navy">
                 {currentQuestion.stem}
               </p>
 
@@ -387,7 +385,7 @@ export default function ListeningDiagnosticPage() {
                 <div className="space-y-3">
                   <label
                     htmlFor="gapFillAnswer"
-                    className="mb-1 block text-sm font-semibold text-gray-700"
+                    className="mb-1 block text-sm font-semibold text-navy"
                   >
                     Your answer
                   </label>
@@ -401,9 +399,9 @@ export default function ListeningDiagnosticPage() {
                     }}
                     disabled={isUnknown}
                     placeholder="Type the missing word or phrase"
-                    className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm text-gray-900 focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-200 disabled:cursor-not-allowed disabled:bg-gray-50 disabled:text-gray-400"
+                    className="w-full rounded-xl border border-border px-4 py-3 text-sm text-navy focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:cursor-not-allowed disabled:bg-background-light disabled:text-muted"
                   />
-                  <label className="flex cursor-pointer items-center gap-2 text-sm text-gray-600">
+                  <label className="flex cursor-pointer items-center gap-2 text-sm text-muted">
                     <input
                       type="checkbox"
                       checked={isUnknown}
@@ -411,7 +409,7 @@ export default function ListeningDiagnosticPage() {
                         setIsUnknown(event.target.checked);
                         if (event.target.checked) setLearnerAnswer('');
                       }}
-                      className="rounded border-gray-300 text-violet-600 focus:ring-violet-500"
+                      className="rounded border-border text-primary focus:ring-primary"
                     />
                     I don&apos;t know
                   </label>
@@ -432,15 +430,15 @@ export default function ListeningDiagnosticPage() {
                         }}
                         className={`flex w-full items-center gap-3 rounded-xl border px-4 py-3 text-left text-sm transition-colors ${
                           active
-                            ? 'border-violet-600 bg-violet-50 text-violet-900'
-                            : 'border-gray-200 bg-white text-gray-700 hover:border-violet-200 hover:bg-violet-50/50'
+                            ? 'border-primary bg-primary/5 text-primary'
+                            : 'border-border bg-surface text-navy hover:border-border-hover hover:bg-background-light'
                         }`}
                       >
                         <span
                           className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full border text-xs font-bold ${
                             active
-                              ? 'border-violet-600 bg-violet-600 text-white'
-                              : 'border-gray-300 text-gray-500'
+                              ? 'border-primary bg-primary text-white dark:bg-violet-700'
+                              : 'border-border-hover text-muted'
                           }`}
                         >
                           {key}
@@ -459,11 +457,11 @@ export default function ListeningDiagnosticPage() {
                     }}
                     className={`flex w-full items-center gap-3 rounded-xl border px-4 py-3 text-left text-sm transition-colors ${
                       isUnknown
-                        ? 'border-gray-400 bg-gray-100 text-gray-700'
-                        : 'border-dashed border-gray-300 bg-white text-gray-500 hover:bg-gray-50'
+                        ? 'border-border-hover bg-background-light text-navy'
+                        : 'border-dashed border-border bg-surface text-muted hover:bg-background-light'
                     }`}
                   >
-                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-gray-300 text-xs font-bold text-gray-500">
+                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-border-hover text-xs font-bold text-muted">
                       ?
                     </span>
                     I don&apos;t know
@@ -479,7 +477,7 @@ export default function ListeningDiagnosticPage() {
 
             {submitError && (
               <p
-                className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
+                className="rounded-xl border border-danger/20 bg-danger/10 px-4 py-3 text-sm text-danger"
                 role="alert"
               >
                 {submitError}
@@ -492,7 +490,7 @@ export default function ListeningDiagnosticPage() {
                 type="button"
                 onClick={() => void submitCurrentAnswer()}
                 disabled={!canSubmitAnswer || advancing}
-                className="flex-1 rounded-xl bg-violet-600 py-3 text-sm font-bold text-white transition hover:bg-violet-700 disabled:opacity-50"
+                className="flex-1 rounded-xl bg-primary py-3 text-sm font-bold text-white transition-[color,background-color,transform] duration-200 hover:bg-primary-dark active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600 disabled:opacity-50"
               >
                 {advancing
                   ? 'Saving…'

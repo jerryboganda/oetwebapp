@@ -33,7 +33,7 @@ function renderMarkdown(md: string): string {
     .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
     .replace(/\*(.+?)\*/g, '<em>$1</em>')
     // Inline code
-    .replace(/`(.+?)`/g, '<code class="rounded bg-slate-100 dark:bg-slate-800 px-1 py-0.5 text-xs font-mono">$1</code>')
+    .replace(/`(.+?)`/g, '<code class="rounded bg-border/60 px-1 py-0.5 text-xs font-mono">$1</code>')
     // Unordered lists
     .replace(/^\s*[-*] (.+)$/gm, '<li class="ml-4 list-disc">$1</li>')
     // Ordered lists
@@ -41,7 +41,7 @@ function renderMarkdown(md: string): string {
     // Wrap adjacent li's in ul/ol (simple heuristic)
     .replace(/(<li[^>]*>[\s\S]+?<\/li>)/g, '<ul class="my-2 space-y-1">$1</ul>')
     // Blockquotes
-    .replace(/^> (.+)$/gm, '<blockquote class="border-l-4 border-primary/30 pl-4 italic text-muted-foreground">$1</blockquote>')
+    .replace(/^> (.+)$/gm, '<blockquote class="rounded-lg bg-primary/5 px-4 py-2 italic text-muted">$1</blockquote>')
     // Paragraphs — blank-line separated blocks that aren't already HTML
     .replace(/\n\n(?!<)/g, '</p><p class="mt-2">')
     // Wrap top level
@@ -98,7 +98,7 @@ export default function StrategyDetailPage() {
         {/* Back link */}
         <Link
           href="/reading/strategies"
-          className="inline-flex items-center gap-1 text-sm font-medium text-muted-foreground hover:text-foreground"
+          className="inline-flex items-center gap-1 text-sm font-medium text-muted hover:text-foreground"
         >
           <ArrowLeft className="h-4 w-4" aria-hidden />
           Back to Strategy Library
@@ -123,7 +123,7 @@ export default function StrategyDetailPage() {
                 <Badge variant={data.strategy.difficulty === 'Advanced' ? 'warning' : 'default'}>
                   {data.strategy.difficulty}
                 </Badge>
-                <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                <span className="flex items-center gap-1 text-xs text-muted">
                   <Clock className="h-3 w-3" aria-hidden />
                   {data.strategy.estimatedReadMinutes} min read
                 </span>
@@ -174,7 +174,7 @@ export default function StrategyDetailPage() {
             {/* Related strategies */}
             {data.strategy.relatedSlugs.length > 0 && (
               <div className="space-y-2 rounded-xl border border-border bg-surface p-4">
-                <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Related strategies</h2>
+                <h2 className="text-xs font-semibold uppercase tracking-wide text-muted">Related strategies</h2>
                 <ul className="space-y-1">
                   {data.strategy.relatedSlugs.map((related) => (
                     <li key={related}>

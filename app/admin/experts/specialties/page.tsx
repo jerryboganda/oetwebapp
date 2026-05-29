@@ -138,7 +138,7 @@ export default function ExpertSpecialtiesPage() {
   return (
     <AdminSettingsLayout
       title="Expert specialties"
-      description="Curate per-expert profession lists. The auto-assigner uses these to route writing reviews to a competent reviewer. An empty list means 'generalist' — the expert is eligible for every profession."
+      description="Curate per-expert profession lists. The auto-assigner uses these to route writing reviews to a competent reviewer. An empty list means 'generalist': the expert is eligible for every profession."
       breadcrumbs={BREADCRUMBS}
       eyebrow="Experts"
       icon={<ShieldCheck className="h-5 w-5" />}

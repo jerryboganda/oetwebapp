@@ -195,7 +195,7 @@ export default function NewWritingTaskPage() {
   return (
     <AdminSettingsLayout
       title="Create Writing task"
-      description="Author an original OET Writing task. All content must be original or properly licensed — no recalled or leaked exam material."
+      description="Author an original OET Writing task. All content must be original or properly licensed. No recalled or leaked exam material."
       breadcrumbs={BREADCRUMBS}
       eyebrow="Writing"
       icon={<ShieldCheck className="h-5 w-5" />}
@@ -207,7 +207,7 @@ export default function NewWritingTaskPage() {
             label="Title *"
             value={form.title}
             onChange={(e) => update('title', e.target.value)}
-            placeholder="e.g. Medicine — Routine Referral (Acne to Dermatology)"
+            placeholder="e.g. Medicine: Routine Referral (Acne to Dermatology)"
             maxLength={200}
           />
           <Select

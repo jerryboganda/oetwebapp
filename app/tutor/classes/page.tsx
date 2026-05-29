@@ -151,7 +151,7 @@ export default function TutorClassesPage() {
                     <td className="px-4 py-3 text-muted">
                       {next
                         ? new Intl.DateTimeFormat('en-AU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }).format(new Date(next))
-                        : '—'}
+                        : 'N/A'}
                     </td>
                     <td className="px-4 py-3 text-muted">{item.sessions.length}</td>
                   </tr>

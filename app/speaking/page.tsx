@@ -43,7 +43,7 @@ const evidenceDateFormatter = new Intl.DateTimeFormat('en-US', {
   year: 'numeric',
 });
 
-const primaryLinkClasses = 'pressable inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2';
+const primaryLinkClasses = 'pressable inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-primary/90 active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2';
 
 export default function SpeakingHome() {
   const router = useRouter();
@@ -216,7 +216,7 @@ export default function SpeakingHome() {
               eyebrow: 'Resume Attempt',
               eyebrowIcon: RefreshCw,
               title: 'Continue your in-progress role play',
-              description: 'Your speaking attempt is saved — pick up exactly where you stopped. No credits are spent until you submit for review.',
+              description: 'Your speaking attempt is saved. Pick up exactly where you stopped. No credits are spent until you submit for review.',
               metaItems: [
                 { icon: Clock, label: 'Paused' },
                 { icon: RefreshCw, label: 'In progress' },
@@ -237,7 +237,7 @@ export default function SpeakingHome() {
               eyebrow: 'Rulebook',
               eyebrowIcon: BookOpen,
               title: 'Know exactly how your speaking is judged',
-              description: 'See the criteria your role-play feedback is built on — from conversational flow to the protocol for breaking bad news.',
+              description: 'See the criteria your role-play feedback is built on, from conversational flow to the protocol for breaking bad news.',
               metaItems: [
                 { icon: FileText, label: 'Speaking criteria' },
                 { icon: Heart, label: 'Breaking bad news' },
@@ -303,7 +303,7 @@ export default function SpeakingHome() {
                   {(home?.commonIssuesToImprove ?? ['Build smoother openings for role plays.', 'Keep the professional tone consistent.']).slice(0, 3).map((issue) => (
                     <div
                       key={issue}
-                      className="rounded-2xl border !border-amber-300 !bg-white px-3 py-2 text-sm font-bold !text-slate-950 shadow-sm shadow-amber-950/5 dark:!border-amber-300/30 dark:!bg-slate-950 dark:!text-amber-50 dark:shadow-none"
+                      className="rounded-2xl border border-warning/30 bg-warning/5 px-3 py-2 text-sm font-bold text-navy shadow-sm"
                     >
                       {issue}
                     </div>
@@ -378,10 +378,8 @@ export default function SpeakingHome() {
                       >
                         <Card className="border-border/70">
                           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                            <div className="flex items-start gap-4">
-                              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                                <Mic className="h-5 w-5" />
-                              </div>
+                            <div className="flex items-start gap-3">
+                              <Mic className="h-5 w-5 shrink-0 text-primary mt-0.5" aria-hidden />
                               <div className="min-w-0">
                                 <div className="flex flex-wrap items-center gap-2">
                                   <Badge variant="muted" size="sm">Speaking</Badge>
@@ -466,7 +464,7 @@ export default function SpeakingHome() {
                     <Link
                       key={entry.id}
                       href={entry.route}
-                      className="rounded-2xl border border-border/80 bg-surface p-4 shadow-sm transition-all duration-200 hover:border-primary/30 hover:bg-primary/5"
+                      className="rounded-2xl border border-border/80 bg-surface p-4 shadow-sm transition-[color,background-color,border-color,box-shadow,transform,opacity,filter] duration-200 hover:border-primary/30 hover:bg-primary/5"
                     >
                       <p className="text-sm font-bold text-navy">{entry.title}</p>
                       <p className="mt-2 text-xs leading-relaxed text-muted">{entry.description}</p>
@@ -482,7 +480,7 @@ export default function SpeakingHome() {
               <LearnerSurfaceSectionHeader
                 eyebrow="Evidence"
                 title="Recent Speaking Evidence"
-                description="Review your latest attempts to decide your next step — another role play, a focused drill, or tutor feedback."
+                description="Review your latest attempts to decide your next step: another role play, a focused drill, or tutor feedback."
                 action={<Link href="/submissions" className="text-sm font-bold text-primary hover:underline">View Full History</Link>}
                 className="mb-4"
               />
@@ -510,7 +508,7 @@ export default function SpeakingHome() {
                         <Link
                           key={sub.id}
                           href={`/speaking/results/${sub.evaluationId ?? sub.id}`}
-                           className="block rounded-2xl border border-border px-4 py-3 transition-all duration-200 hover:border-border-hover hover:bg-background-light"
+                           className="block rounded-2xl border border-border px-4 py-3 transition-[color,background-color,border-color,box-shadow,transform,opacity,filter] duration-200 hover:border-border-hover hover:bg-background-light"
                         >
                           <div className="flex items-start justify-between gap-3">
                             <div className="min-w-0">

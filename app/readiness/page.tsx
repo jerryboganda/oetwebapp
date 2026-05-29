@@ -302,7 +302,7 @@ export default function ReadinessCenter() {
             <LearnerSurfaceSectionHeader
               eyebrow="Evidence"
               title="What this is based on"
-              description="Readiness is computed from real practice — mocks, tutor reviews, vocabulary, and study-plan progress."
+              description="Readiness is computed from real practice: mocks, tutor reviews, vocabulary, and study-plan progress."
               className="mb-4"
             />
             <section className="bg-surface rounded-[24px] border border-border p-6 shadow-sm">

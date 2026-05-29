@@ -145,7 +145,7 @@ export default function AdminWritingScenariosPage() {
       <Card>
         <CardContent>
           <h2 className="text-base font-bold text-navy"><Sparkles className="mr-1 inline h-4 w-4 text-amber-600" aria-hidden="true" /> Generate with AI</h2>
-          <p className="mt-1 text-xs text-muted">Provide a short briefing — the model returns a draft scenario you can edit before publishing.</p>
+          <p className="mt-1 text-xs text-muted">Provide a short briefing. The model returns a draft scenario you can edit before publishing.</p>
           <div className="mt-3 flex flex-wrap items-end gap-2">
             <label className="flex flex-1 flex-col gap-1 text-xs font-bold uppercase tracking-wider text-muted">
               Briefing
@@ -167,12 +167,12 @@ export default function AdminWritingScenariosPage() {
           <table className="w-full text-sm" aria-label="Scenario list">
             <thead>
               <tr className="border-b border-border text-xs uppercase tracking-wider text-muted">
-                <th className="py-2 text-left">Title</th>
-                <th className="text-left">Profession</th>
-                <th className="text-left">Letter</th>
-                <th className="text-left">Difficulty</th>
-                <th className="text-left">Status</th>
-                <th className="text-right">Actions</th>
+                <th scope="col" className="py-2 text-left">Title</th>
+                <th scope="col" className="text-left">Profession</th>
+                <th scope="col" className="text-left">Letter</th>
+                <th scope="col" className="text-left">Difficulty</th>
+                <th scope="col" className="text-left">Status</th>
+                <th scope="col" className="text-right">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -198,7 +198,7 @@ export default function AdminWritingScenariosPage() {
       </Card>
 
       {editing ? (
-        <aside role="dialog" aria-modal="true" aria-label="Scenario editor" className="fixed inset-0 z-50 flex items-stretch justify-end bg-black/40">
+        <aside role="dialog" aria-modal="true" aria-label="Scenario editor" className="fixed inset-0 z-50 flex items-stretch justify-end bg-navy/40">
           <div className="flex h-full w-full max-w-2xl flex-col gap-3 overflow-y-auto bg-surface p-5 shadow-2xl">
             <header className="flex items-center justify-between gap-2">
               <h2 className="text-lg font-bold text-navy">{editing.id ? 'Edit scenario' : 'New scenario'}</h2>

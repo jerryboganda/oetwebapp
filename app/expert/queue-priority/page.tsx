@@ -23,9 +23,9 @@ interface QueueData {
 const apiRequest = apiClient.request;
 
 const PRIORITY_CONFIG: Record<string, { icon: typeof AlertOctagon; color: string; bg: string }> = {
-  critical: { icon: AlertOctagon, color: 'text-red-600', bg: 'bg-red-50 dark:bg-red-950 border-red-200 dark:border-red-800' },
-  high: { icon: AlertTriangle, color: 'text-amber-600', bg: 'bg-amber-50 dark:bg-amber-950 border-amber-200 dark:border-amber-800' },
-  normal: { icon: CheckCircle2, color: 'text-muted-foreground', bg: 'border-border' },
+  critical: { icon: AlertOctagon, color: 'text-danger', bg: 'bg-danger/10 dark:bg-danger/15 border-danger/30' },
+  high: { icon: AlertTriangle, color: 'text-warning', bg: 'bg-warning/10 dark:bg-warning/15 border-warning/30' },
+  normal: { icon: CheckCircle2, color: 'text-muted', bg: 'border-border' },
 };
 
 export default function QueuePriorityPage() {
@@ -41,22 +41,22 @@ export default function QueuePriorityPage() {
     <div className="min-h-screen bg-background">
       <div className="max-w-4xl mx-auto px-4 py-8">
         <div className="mb-8">
-          <h1 className="text-2xl font-bold">Review Queue — Priority View</h1>
-          <p className="text-muted-foreground mt-1">See why each review is prioritized and triage accordingly.</p>
+          <h1 className="text-2xl font-bold">Review Queue: Priority View</h1>
+          <p className="text-muted mt-1">See why each review is prioritized and triage accordingly.</p>
         </div>
 
         {loading ? (
           <div className="space-y-3">{Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-24 rounded-xl" />)}</div>
         ) : !data || data.items.length === 0 ? (
-          <Card className="p-8 text-center text-muted-foreground"><Inbox className="w-8 h-8 mx-auto mb-3 opacity-50" /><p>No assigned reviews in your queue.</p></Card>
+          <Card className="p-8 text-center text-muted"><Inbox className="w-8 h-8 mx-auto mb-3 opacity-50" /><p>No assigned reviews in your queue.</p></Card>
         ) : (
           <MotionSection className="space-y-6">
             {/* Summary */}
             <div className="grid grid-cols-4 gap-3">
-              <Card className="p-3 text-center"><p className="text-2xl font-bold">{data.summary.total}</p><p className="text-xs text-muted-foreground">Total</p></Card>
-              <Card className="p-3 text-center bg-red-50 dark:bg-red-950"><p className="text-2xl font-bold text-red-600">{data.summary.critical}</p><p className="text-xs text-red-600">Critical</p></Card>
-              <Card className="p-3 text-center bg-amber-50 dark:bg-amber-950"><p className="text-2xl font-bold text-amber-600">{data.summary.high}</p><p className="text-xs text-amber-600">High</p></Card>
-              <Card className="p-3 text-center"><p className="text-2xl font-bold">{data.summary.normal}</p><p className="text-xs text-muted-foreground">Normal</p></Card>
+              <Card className="p-3 text-center"><p className="text-2xl font-bold">{data.summary.total}</p><p className="text-xs text-muted">Total</p></Card>
+              <Card className="p-3 text-center bg-danger/10 dark:bg-danger/15"><p className="text-2xl font-bold text-danger">{data.summary.critical}</p><p className="text-xs text-danger">Critical</p></Card>
+              <Card className="p-3 text-center bg-warning/10 dark:bg-warning/15"><p className="text-2xl font-bold text-warning">{data.summary.high}</p><p className="text-xs text-warning">High</p></Card>
+              <Card className="p-3 text-center"><p className="text-2xl font-bold">{data.summary.normal}</p><p className="text-xs text-muted">Normal</p></Card>
             </div>
 
             {/* Queue items */}
@@ -74,12 +74,12 @@ export default function QueuePriorityPage() {
                             <Badge variant={item.priority === 'critical' ? 'danger' : item.priority === 'high' ? 'default' : 'outline'} className="uppercase text-[10px]">{item.priority}</Badge>
                             <span className="text-sm font-medium capitalize">{item.subtestCode}</span>
                             {item.isResubmission && <Badge variant="outline" className="text-[10px]">Re-submission</Badge>}
-                            {item.turnaround === 'express' && <Badge className="text-[10px] bg-purple-100 text-purple-700 dark:bg-purple-950 dark:text-purple-300">Express</Badge>}
+                            {item.turnaround === 'express' && <Badge className="text-[10px] bg-lavender text-primary dark:bg-primary/20 dark:text-primary">Express</Badge>}
                           </div>
                           <div className="mt-2 space-y-1">
-                            {item.reasons.map((reason, i) => <p key={i} className="text-sm text-muted-foreground">• {reason}</p>)}
+                            {item.reasons.map((reason, i) => <p key={i} className="text-sm text-muted">• {reason}</p>)}
                           </div>
-                          <div className="flex gap-4 mt-2 text-xs text-muted-foreground">
+                          <div className="flex gap-4 mt-2 text-xs text-muted">
                             <span><Clock className="w-3 h-3 inline mr-1" />{item.slaRemainingHours}h SLA remaining</span>
                             <span>Waiting: {item.hoursWaiting}h</span>
                             {item.daysToExam !== null && <span>Exam: {item.daysToExam}d away</span>}

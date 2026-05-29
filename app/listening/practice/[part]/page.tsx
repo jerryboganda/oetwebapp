@@ -9,11 +9,11 @@ import { InlineAlert } from '@/components/ui/alert';
 import { LearnerSkeleton } from '@/components/domain/learner-skeletons';
 import { LearnerPageHero } from '@/components/domain';
 import { analytics } from '@/lib/analytics';
+import { listeningV2Api, type ListeningPathwayStageView } from '@/lib/listening/v2-api';
 
 // Per the 2026-05-27 OET sample-test alignment, `/listening/practice/[part]`
-// is a thin candidate dispatcher: it surfaces all available listening papers
-// or mocks and lets the candidate start a part-scoped practice session by
-// handing `?part=<A|B|C>` to the existing `/listening/player/[id]` runner.
+// is a thin candidate dispatcher: it lets the candidate start a part-scoped
+// practice session on the matching server-authoritative V2 pathway stage.
 // Pages outside this clean entry point (drills, lessons, strategies,
 // pronunciation, dictation) remain on disk and reachable by URL but are
 // intentionally hidden from the candidate's primary path.
@@ -37,47 +37,21 @@ const PART_DETAILS: Record<PartCode, { title: string; subtitle: string; descript
     title: 'Practice Part C',
     subtitle: 'Healthcare presentations',
     description:
-      'Two longer extracts — an interview or presentation on a healthcare topic. You answer six four-option multiple-choice questions per extract (12 items total).',
+      'Two longer extracts: an interview or presentation on a healthcare topic. You answer six four-option multiple-choice questions per extract (12 items total).',
   },
 };
-
-interface MockTemplate {
-  id: string;
-  title: string;
-  difficulty?: number;
-  durationSeconds?: number;
-}
-
-async function listMocks(): Promise<MockTemplate[]> {
-  try {
-    const res = await fetch('/api/proxy?path=/v1/listening-pathway/mocks');
-    if (res.ok) return (await res.json()) as MockTemplate[];
-  } catch {
-    /* fall through */
-  }
-  try {
-    const alt = await fetch('/v1/listening-pathway/mocks');
-    if (alt.ok) return (await alt.json()) as MockTemplate[];
-  } catch {
-    /* ignore */
-  }
-  return [];
-}
-
-async function startMock(mockTemplateId: string): Promise<{ sessionId: string }> {
-  const res = await fetch('/v1/listening-pathway/mocks/start', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ MockTemplateId: mockTemplateId }),
-  });
-  if (!res.ok) throw new Error(`Failed to start practice session (${res.status})`);
-  return (await res.json()) as { sessionId: string };
-}
 
 function normalisePart(raw: string | undefined): PartCode | null {
   if (!raw) return null;
   const upper = raw.toUpperCase();
   return upper === 'A' || upper === 'B' || upper === 'C' ? upper : null;
+}
+
+function stageMatchesPart(stage: ListeningPathwayStageView, part: PartCode): boolean {
+  const normalized = stage.stage.toLowerCase().replace(/[-_\s]+/g, '');
+  if ((part === 'B' || part === 'C') && normalized.includes('partbc')) return true;
+  const partToken = part === 'A' ? 'parta' : part === 'B' ? 'partb' : 'partc';
+  return normalized.includes(partToken);
 }
 
 export default function ListeningPartPracticePage() {
@@ -89,19 +63,19 @@ export default function ListeningPartPracticePage() {
   }
 
   const router = useRouter();
-  const [mocks, setMocks] = useState<MockTemplate[]>([]);
+  const [stages, setStages] = useState<ListeningPathwayStageView[]>([]);
   const [loading, setLoading] = useState(true);
-  const [startingId, setStartingId] = useState<string | null>(null);
+  const [starting, setStarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!part) return;
     analytics.track('content_view', { page: 'listening-part-practice', part });
     let cancelled = false;
-    listMocks()
+    listeningV2Api.myPathway()
       .then((list) => {
         if (!cancelled) {
-          setMocks(list);
+          setStages(list);
           setLoading(false);
         }
       })
@@ -118,18 +92,26 @@ export default function ListeningPartPracticePage() {
   if (!part) return null;
 
   const meta = PART_DETAILS[part];
+  const diagnosticComplete = stages.some(
+    (stage) => stage.stage.toLowerCase().includes('diagnostic') && stage.status === 'Completed',
+  );
+  const launchStage = diagnosticComplete
+    ? stages.find((stage) => stage.actionHref && stage.status !== 'Locked' && stageMatchesPart(stage, part))
+    : null;
 
-  async function handleStart(id: string) {
+  function handleStart() {
     if (!part) return;
-    setStartingId(id);
-    setError(null);
-    try {
-      const { sessionId } = await startMock(id);
-      router.push(`/listening/player/${sessionId}?mode=practice&part=${part}`);
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Could not start practice session.');
-      setStartingId(null);
+    if (!launchStage?.actionHref) {
+      setError('Complete the listening diagnostic to unlock part-scoped practice.');
+      return;
     }
+    setStarting(true);
+    setError(null);
+    const target = new URL(launchStage.actionHref, window.location.origin);
+    target.searchParams.set('mode', 'practice');
+    target.searchParams.set('focus', part === 'A' ? 'part-a' : part === 'B' ? 'part-b' : 'part-c');
+    target.searchParams.set('part', part);
+    router.push(`${target.pathname}${target.search}`);
   }
 
   return (
@@ -155,52 +137,38 @@ export default function ListeningPartPracticePage() {
 
         {loading ? (
           <LearnerSkeleton variant="card-grid" />
-        ) : mocks.length === 0 ? (
+        ) : !launchStage ? (
           <InlineAlert variant="info">
-            No practice papers are available yet. Complete the diagnostic to unlock part-scoped
-            practice, or check back soon.
+            Complete the listening diagnostic to unlock part-scoped practice.
           </InlineAlert>
         ) : (
           <section aria-label={`Available Part ${part} practice papers`}>
             <div className="mb-3">
-              <h2 className="text-base font-bold text-gray-900 dark:text-gray-100">
+              <h2 className="text-base font-bold text-navy">
                 Pick a paper for Part {part} practice
               </h2>
-              <p className="mt-1 text-sm text-gray-500">
-                Each paper boots the listening player in practice mode. {meta.subtitle} only —
-                other parts are skipped.
+              <p className="mt-1 text-sm text-muted">
+                This opens your current V2 pathway paper in practice mode with Part {part} focus.
               </p>
             </div>
-            <ul className="grid gap-4 sm:grid-cols-2">
-              {mocks.map((mock) => {
-                const minutes = mock.durationSeconds ? Math.round(mock.durationSeconds / 60) : null;
-                return (
-                  <li key={mock.id}>
-                    <article className="flex h-full flex-col rounded-2xl border border-violet-100 bg-white p-5 shadow-sm dark:border-gray-800 dark:bg-gray-900">
-                      <h3 className="text-base font-bold text-gray-900 dark:text-gray-100">
-                        {mock.title}
-                      </h3>
-                      <p className="mt-1 text-xs text-gray-500">
-                        {mock.difficulty
-                          ? `Difficulty ${Math.max(1, Math.min(5, mock.difficulty))}/5`
-                          : 'Standard difficulty'}
-                        {minutes ? ` • ${minutes} min full paper` : ''}
-                      </p>
-                      <div className="mt-auto pt-4">
-                        <button
-                          type="button"
-                          disabled={startingId === mock.id}
-                          onClick={() => handleStart(mock.id)}
-                          className="rounded-md bg-violet-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-violet-700 disabled:opacity-60"
-                        >
-                          {startingId === mock.id ? 'Starting…' : `Start Part ${part} practice →`}
-                        </button>
-                      </div>
-                    </article>
-                  </li>
-                );
-              })}
-            </ul>
+            <article className="flex flex-col rounded-2xl border border-border bg-surface p-5 shadow-sm sm:max-w-xl">
+              <h3 className="text-base font-bold text-navy">
+                {meta.subtitle}
+              </h3>
+              <p className="mt-1 text-xs text-muted">
+                Current stage: {launchStage.stage.replace(/[-_]+/g, ' ')}
+              </p>
+              <div className="mt-4">
+                <button
+                  type="button"
+                  disabled={starting}
+                  onClick={handleStart}
+                  className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-white transition-[color,background-color,transform] duration-200 hover:bg-primary-dark active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600 disabled:opacity-60"
+                >
+                  {starting ? 'Starting…' : `Start Part ${part} practice`}
+                </button>
+              </div>
+            </article>
           </section>
         )}
       </main>

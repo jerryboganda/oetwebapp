@@ -28,6 +28,9 @@ export default defineConfig({
       '@': path.resolve(__dirname, '.'),
       'react-dom/test-utils': path.resolve(__dirname, 'tests/shims/react-dom-test-utils.ts'),
       'recharts': path.resolve(__dirname, 'tests/mocks/recharts.tsx'),
+      // Native-only plugin (migration pending, not installed). Stub so test
+      // collection can statically resolve the dynamic import; never invoked in jsdom.
+      '@aparajita/capacitor-secure-storage': path.resolve(__dirname, 'tests/mocks/capacitor-secure-storage.ts'),
     },
   },
 });

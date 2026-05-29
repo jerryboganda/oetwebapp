@@ -134,7 +134,7 @@ export function SpeakingConsentBanner({
       aria-modal="true"
       aria-labelledby={titleId}
       aria-describedby={descId}
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-4 sm:items-center"
+      className="fixed inset-0 z-50 flex items-end justify-center bg-navy/60 p-4 sm:items-center"
       data-testid="speaking-consent-banner"
     >
       <div className="w-full max-w-lg rounded-2xl bg-surface p-6 shadow-2xl">
@@ -146,7 +146,7 @@ export function SpeakingConsentBanner({
                 ? 'Consent to record live tutor session'
                 : 'Consent to record this practice session'}
             </h2>
-            <p className="mt-1 text-sm text-muted-foreground">
+            <p className="mt-1 text-sm text-muted">
               We need a one-time confirmation before recording starts.
             </p>
           </div>
@@ -183,7 +183,7 @@ export function SpeakingConsentBanner({
                 Saving consent…
               </>
             ) : (
-              'I consent — start recording'
+              'I consent, start recording'
             )}
           </Button>
         </div>

@@ -54,8 +54,8 @@ export default function ListeningStrategiesPage() {
   return (
     <main className="mx-auto max-w-5xl px-4 py-12 space-y-8">
       <header>
-        <h1 className="text-3xl font-bold tracking-tight">Strategy Library</h1>
-        <p className="mt-2 text-slate-600">
+        <h1 className="text-3xl font-bold tracking-tight text-navy">Strategy Library</h1>
+        <p className="mt-2 text-muted">
           Curated tactics for note-taking, gist, inference, time management, accents, and exam day.
         </p>
       </header>
@@ -67,8 +67,8 @@ export default function ListeningStrategiesPage() {
             onClick={() => setCategory(c.value)}
             className={
               category === c.value
-                ? 'rounded-full bg-slate-900 px-3 py-1 text-xs text-white'
-                : 'rounded-full border border-slate-300 px-3 py-1 text-xs text-slate-700'
+                ? 'rounded-full bg-primary px-3 py-1 text-xs text-white dark:bg-violet-700 transition-colors'
+                : 'rounded-full border border-border px-3 py-1 text-xs text-navy transition-colors hover:bg-background-light'
             }
           >
             {c.label}
@@ -77,9 +77,9 @@ export default function ListeningStrategiesPage() {
       </div>
 
       {loading ? (
-        <p className="text-slate-500">Loading strategies…</p>
+        <p className="text-muted">Loading strategies…</p>
       ) : strategies.length === 0 ? (
-        <div className="rounded-2xl border border-slate-200 bg-white p-6 text-slate-600">
+        <div className="rounded-2xl border border-border bg-surface p-6 text-muted">
           No strategies published for this category yet.
         </div>
       ) : (
@@ -87,11 +87,11 @@ export default function ListeningStrategiesPage() {
           {strategies.map((s) => (
             <li
               key={s.id}
-              className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm flex flex-col"
+              className="rounded-2xl border border-border bg-surface p-5 shadow-sm flex flex-col"
             >
-              <span className="text-xs uppercase tracking-wide text-slate-500">{s.category.replace('_', ' ')}</span>
-              <h2 className="mt-1 font-semibold">{s.title}</h2>
-              <p className="mt-1 text-xs text-slate-500">~{s.estimatedReadMinutes} min read</p>
+              <span className="text-xs uppercase tracking-wide text-muted">{s.category.replace('_', ' ')}</span>
+              <h2 className="mt-1 font-semibold text-navy">{s.title}</h2>
+              <p className="mt-1 text-xs text-muted">~{s.estimatedReadMinutes} min read</p>
               <div className="mt-2 flex items-center gap-2 text-xs">
                 {s.markedAsRead && (
                   <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-emerald-700">Read</span>
@@ -100,7 +100,7 @@ export default function ListeningStrategiesPage() {
               </div>
               <Link
                 href={`/listening/strategies/${s.slug}`}
-                className="mt-3 self-start text-sm text-blue-700 underline"
+                className="mt-3 self-start text-sm text-primary underline transition-colors hover:text-primary-dark"
               >
                 Open →
               </Link>

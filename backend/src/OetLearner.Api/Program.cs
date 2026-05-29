@@ -861,6 +861,7 @@ builder.Services.AddScoped<LearnerActionsService>();
 builder.Services.AddScoped<AdminService>();
 builder.Services.AddScoped<ILaunchReadinessService, LaunchReadinessService>();
 builder.Services.AddScoped<SponsorService>();
+builder.Services.AddScoped<ISponsorSeatPackService, SponsorSeatPackService>();
 builder.Services.AddScoped<ContentHierarchyService>();
 builder.Services.AddScoped<ContentDeduplicationService>();
 builder.Services.AddScoped<ContentAccessService>();
@@ -871,6 +872,11 @@ builder.Services.AddScoped<MediaNormalizationService>();
 builder.Services.AddScoped<VideoLessonService>();
 builder.Services.AddScoped<StrategyGuideService>();
 builder.Services.AddScoped<NotificationService>();
+builder.Services.AddScoped<INotificationCampaignService, NotificationCampaignService>();
+builder.Services.AddScoped<NotificationRuleEngine>();
+builder.Services.AddScoped<PeerReviewService>();
+builder.Services.Configure<OetLearner.Api.Configuration.SoketiOptions>(builder.Configuration.GetSection("Soketi"));
+builder.Services.AddHttpClient("Soketi");
 builder.Services.AddSingleton<OetLearner.Api.Services.DevicePairing.IDevicePairingCodeService, OetLearner.Api.Services.DevicePairing.InMemoryDevicePairingCodeService>();
 builder.Services.AddScoped<AnalyticsIngestionService>();
 builder.Services.AddSingleton<PlatformLinkService>();
@@ -1315,6 +1321,8 @@ builder.Services.AddScoped<OetLearner.Api.Services.Reading.IReadingGradingServic
     OetLearner.Api.Services.Reading.ReadingGradingService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Reading.IReadingAttemptService,
     OetLearner.Api.Services.Reading.ReadingAttemptService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Reading.IReadingTutorService,
+    OetLearner.Api.Services.Reading.ReadingTutorService>();
 // Reading Pathway subsystem (Reading Module Pathway Plan).
 builder.Services.AddScoped<OetLearner.Api.Services.Reading.IReadingLearnerPathwayService, OetLearner.Api.Services.Reading.ReadingLearnerPathwayService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Reading.ISkillScoringService, OetLearner.Api.Services.Reading.SkillScoringService>();
@@ -1964,6 +1972,7 @@ app.MapExpertCompensationEndpoints();
 app.MapAdminEndpoints();
 app.MapVoiceDesignAdminEndpoints();
 app.MapAdminAlertEndpoints();
+app.MapAdminCampaignEndpoints();
 app.MapAdminLaunchReadinessEndpoints();
 app.MapAiUsageAdminEndpoints();
 app.MapAiEscalationAdminEndpoints();
@@ -1997,6 +2006,7 @@ app.MapWritingV2Endpoints();
 app.MapListeningAuthoringAdminEndpoints();
 app.MapListeningAdminAnalyticsEndpoints();
 app.MapReadingLearnerEndpoints();
+app.MapReadingTutorAdminEndpoints();
 app.MapReadingPathwayEndpoints();
 app.MapListeningPathwayEndpoints();
 app.MapListeningLearnerEndpoints();
@@ -2028,6 +2038,8 @@ app.MapPredictionEndpoints();
 // ── Phase 3 new endpoints ──
 app.MapLearningContentEndpoints();
 app.MapCommunityEndpoints();
+app.MapPeerReviewEndpoints();
+app.MapNotificationRuleEndpoints();
 app.MapSocialEndpoints();
 
 // ── Phase 2 new endpoints ──

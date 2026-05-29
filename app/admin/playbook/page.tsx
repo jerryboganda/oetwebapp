@@ -21,7 +21,7 @@ const PLAYBOOK_SECTIONS = [
     title: 'Content Management',
     icon: FileText,
     workflows: [
-      { name: 'Publish New Content', steps: ['Create content item with metadata (subtest, difficulty, profession)', 'Add questions/prompts and answer keys', 'Set status to "Draft" for review', 'Run quality checks (spelling, rubric alignment)', 'Move to "Published" — immediately available to learners'] },
+      { name: 'Publish New Content', steps: ['Create content item with metadata (subtest, difficulty, profession)', 'Add questions/prompts and answer keys', 'Set status to "Draft" for review', 'Run quality checks (spelling, rubric alignment)', 'Move to "Published" (immediately available to learners)'] },
       { name: 'Retire Content', steps: ['Check usage analytics for active learners', 'Set status to "Archived" (soft delete)', 'Content no longer appears in practice pools', 'Historical attempts and scores are preserved'] },
       { name: 'Handle Content Complaints', steps: ['Review the flagged content item', 'Check recent scores for anomalies', 'Fix issues and republish, or archive if unfixable', 'Respond to learner feedback'] },
     ],

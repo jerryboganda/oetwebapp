@@ -96,7 +96,7 @@ export default function BillingProfilePage() {
 
       {toast && <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} />}
 
-      <div className="space-y-4 rounded-2xl border border-border bg-card p-6 shadow-sm">
+      <div className="space-y-4 rounded-2xl border border-border bg-surface p-6 shadow-sm">
         {error && <InlineAlert variant="error">{error}</InlineAlert>}
 
         {profile === null ? (
@@ -109,7 +109,7 @@ export default function BillingProfilePage() {
           <>
             <div className="rounded-lg bg-muted/40 p-4 text-sm">
               <p className="font-medium">Detected</p>
-              <p className="text-muted-foreground">
+              <p className="text-muted">
                 {profile.detectedCountry || '—'} · {profile.detectedRegion} · {profile.detectedCurrency}{' '}
                 <span className="text-xs">({profile.detectionSource})</span>
               </p>
@@ -121,7 +121,7 @@ export default function BillingProfilePage() {
               <Select label="Currency" value={currency} options={CURRENCY_OPTIONS} onChange={(e) => setCurrency(e.target.value)} />
             </div>
 
-            <p className="text-xs text-muted-foreground">
+            <p className="text-xs text-muted">
               Leave any field on “Auto-detect” to let the system pick based on your IP, browser, or default.
             </p>
 

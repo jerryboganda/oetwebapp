@@ -78,8 +78,8 @@ export function ListeningAudioTransport(props: ListeningAudioTransportProps) {
         </div>
         <div className="relative h-2.5 w-full overflow-hidden rounded-full bg-white/20">
           <div
-            className="absolute left-0 top-0 h-full bg-info transition-all duration-100 ease-linear"
-            style={{ width: `${widthPercent}%` }}
+            className="absolute left-0 top-0 h-full w-full origin-left bg-info transition-transform duration-100 ease-linear"
+            style={{ transform: `scaleX(${Math.max(0, Math.min(100, widthPercent)) / 100})` }}
           />
           {canScrub ? (
             <input

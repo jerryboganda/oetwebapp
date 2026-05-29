@@ -193,15 +193,15 @@ export default function AdminPronunciationDashboard() {
               <table className="min-w-full text-sm">
                 <thead className="bg-admin-bg-subtle text-left text-xs uppercase tracking-[0.15em] text-admin-fg-muted">
                   <tr>
-                    <th className="px-4 py-2">Label</th>
-                    <th className="px-4 py-2">Phoneme</th>
-                    <th className="px-4 py-2">Rule</th>
-                    <th className="px-4 py-2">Focus</th>
-                    <th className="px-4 py-2">Profession</th>
-                    <th className="px-4 py-2">Difficulty</th>
-                    <th className="px-4 py-2">Status</th>
-                    <th className="px-4 py-2">Audio</th>
-                    <th className="px-4 py-2 text-right">Actions</th>
+                    <th scope="col" className="px-4 py-2">Label</th>
+                    <th scope="col" className="px-4 py-2">Phoneme</th>
+                    <th scope="col" className="px-4 py-2">Rule</th>
+                    <th scope="col" className="px-4 py-2">Focus</th>
+                    <th scope="col" className="px-4 py-2">Profession</th>
+                    <th scope="col" className="px-4 py-2">Difficulty</th>
+                    <th scope="col" className="px-4 py-2">Status</th>
+                    <th scope="col" className="px-4 py-2">Audio</th>
+                    <th scope="col" className="px-4 py-2 text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody>

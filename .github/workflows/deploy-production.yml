@@ -8,7 +8,23 @@ on:
         required: true
         type: string
       target_sha:
-        description: "Full 40-character Git SHA to deploy. A release-evidence-<sha> artifact must already exist."
+        description: "Full 40-character Git SHA to deploy."
+        required: true
+        type: string
+      web_image:
+        description: "Immutable web image ref, including @sha256 digest."
+        required: true
+        type: string
+      api_image:
+        description: "Immutable API image ref, including @sha256 digest."
+        required: true
+        type: string
+      db_backup_image:
+        description: "Immutable DB backup image ref, including @sha256 digest."
+        required: true
+        type: string
+      router_image:
+        description: "Immutable router image ref, including @sha256 digest."
         required: true
         type: string
       reading_media_smoke_ack:
@@ -24,6 +40,7 @@ concurrency:
 permissions:
   actions: read
   contents: read
+  packages: read
 
 jobs:
   deploy:
@@ -68,47 +85,91 @@ jobs:
           VPS_APP_DIR: ${{ secrets.VPS_APP_DIR }}
           VPS_PORT: ${{ secrets.VPS_PORT }}
           VPS_SSH_FINGERPRINT: ${{ vars.VPS_SSH_FINGERPRINT }}
-          EVIDENCE_SIGNER_FINGERPRINT: ${{ vars.EVIDENCE_SIGNER_FINGERPRINT }}
         run: |
-          if [ -n "$VPS_HOST" ] && [ -n "$VPS_USER" ] && [ -n "$VPS_SSH_KEY" ] && [ -n "$VPS_APP_DIR" ] && [ -n "$VPS_SSH_FINGERPRINT" ] && [ -n "$EVIDENCE_SIGNER_FINGERPRINT" ]; then
+          if [ -n "$VPS_HOST" ] && [ -n "$VPS_USER" ] && [ -n "$VPS_SSH_KEY" ] && [ -n "$VPS_APP_DIR" ] && [ -n "$VPS_SSH_FINGERPRINT" ]; then
             echo "enabled=true" >> "$GITHUB_OUTPUT"
             echo "port=${VPS_PORT:-22}" >> "$GITHUB_OUTPUT"
           else
             echo "enabled=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Download exact-SHA release evidence
+      - name: Validate immutable image digest inputs
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
           TARGET_SHA: ${{ inputs.target_sha }}
+          WEB_IMAGE: ${{ inputs.web_image }}
+          API_IMAGE: ${{ inputs.api_image }}
+          DB_BACKUP_IMAGE: ${{ inputs.db_backup_image }}
+          ROUTER_IMAGE: ${{ inputs.router_image }}
         run: |
-          run_ids=$(gh run list \
-            --workflow verify-release-artifacts.yml \
-            --commit "$TARGET_SHA" \
-            --status success \
-            --limit 20 \
-            --json databaseId \
-            --jq '.[].databaseId')
-          if [ -z "$run_ids" ]; then
-            echo "No successful verify-release-artifacts.yml run found for $TARGET_SHA." >&2
+          require_digest_ref() {
+            local key="$1"
+            local value="${!key:-}"
+            local digest
+            case "$value" in
+              *@sha256:*) ;;
+              *) echo "$key must be an immutable @sha256 image ref." >&2; exit 1 ;;
+            esac
+            digest="${value##*@sha256:}"
+            case "$digest" in
+              *[!0-9a-fA-F]*) echo "$key digest must be hexadecimal." >&2; exit 1 ;;
+            esac
+            if [ "${#digest}" -ne 64 ]; then
+              echo "$key digest must be 64 hex characters." >&2
+              exit 1
+            fi
+          }
+          for key in WEB_IMAGE API_IMAGE DB_BACKUP_IMAGE ROUTER_IMAGE; do
+            require_digest_ref "$key"
+          done
+          require_successful_run() {
+            local workflow="$1"
+            if ! gh run list --workflow "$workflow" --commit "$TARGET_SHA" --status success --limit 1 --json databaseId --jq '.[0].databaseId' | grep -Eq '^[0-9]+$'; then
+              echo "No successful $workflow run found for $TARGET_SHA." >&2
+              exit 1
+            fi
+          }
+          require_successful_run qa-smoke.yml
+          sbom_run_id="$(gh run list --workflow sbom-sca.yml --commit "$TARGET_SHA" --status success --limit 1 --json databaseId --jq '.[0].databaseId')"
+          if ! printf '%s' "$sbom_run_id" | grep -Eq '^[0-9]+$'; then
+            echo "No successful sbom-sca.yml run found for $TARGET_SHA." >&2
             exit 1
           fi
+          rm -rf sbom-sca-refs
+          if ! gh run download "$sbom_run_id" --name "sbom-sca-${TARGET_SHA}" --dir sbom-sca-refs >/dev/null 2>&1; then
+            echo "No SBOM/SCA artifact found for $TARGET_SHA." >&2
+            exit 1
+          fi
+          artifact_name="release-images-${TARGET_SHA}"
           found=false
-          for run_id in $run_ids; do
-            rm -rf "release-evidence-${TARGET_SHA}"
-            if gh run download "$run_id" \
-              --name "release-evidence-production-${TARGET_SHA}" \
-              --dir "release-evidence-${TARGET_SHA}"; then
+          for run_id in $(gh run list --workflow build-release-images.yml --commit "$TARGET_SHA" --status success --limit 20 --json databaseId --jq '.[].databaseId'); do
+            rm -rf release-image-refs
+            if gh run download "$run_id" --name "$artifact_name" --dir release-image-refs >/dev/null 2>&1; then
               found=true
               break
             fi
           done
           if [ "$found" != "true" ]; then
-            echo "No production release evidence artifact found for $TARGET_SHA." >&2
+            echo "No successful build-release-images.yml artifact found for $TARGET_SHA." >&2
             exit 1
           fi
-          tar -czf "release-evidence-${TARGET_SHA}.tar.gz" "release-evidence-${TARGET_SHA}"
+          if [ ! -f release-image-refs/release-images.env ]; then
+            echo "$artifact_name is missing release-images.env." >&2
+            exit 1
+          fi
+          while IFS='=' read -r key value; do
+            case "$key" in
+              WEB_IMAGE|API_IMAGE|DB_BACKUP_IMAGE|ROUTER_IMAGE)
+                if [ "${!key:-}" != "$value" ]; then
+                  echo "$key does not match the immutable ref produced for $TARGET_SHA." >&2
+                  echo "Expected: $value" >&2
+                  echo "Received: ${!key:-}" >&2
+                  exit 1
+                fi
+                ;;
+            esac
+          done < release-image-refs/release-images.env
 
       - name: Fail deploy when secrets are missing
         if: steps.secrets.outputs.enabled != 'true'
@@ -116,42 +177,18 @@ jobs:
           echo "Production deploy secrets are not configured; refusing to produce a green no-op deploy." >&2
           exit 1
 
-      - name: Copy release evidence to VPS
-        if: steps.secrets.outputs.enabled == 'true'
-        shell: bash
-        env:
-          VPS_HOST: ${{ secrets.VPS_HOST }}
-          VPS_USER: ${{ secrets.VPS_USER }}
-          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
-          VPS_APP_DIR: ${{ secrets.VPS_APP_DIR }}
-          VPS_PORT: ${{ steps.secrets.outputs.port }}
-          VPS_SSH_FINGERPRINT: ${{ vars.VPS_SSH_FINGERPRINT }}
-          TARGET_SHA: ${{ inputs.target_sha }}
-        run: |
-          install -m 700 -d ~/.ssh
-          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/oet-production
-          chmod 600 ~/.ssh/oet-production
-          ssh-keyscan -p "$VPS_PORT" "$VPS_HOST" > ~/.ssh/known_hosts 2>/dev/null
-          if ! ssh-keygen -E sha256 -lf ~/.ssh/known_hosts | grep -F "$VPS_SSH_FINGERPRINT" >/dev/null; then
-            echo "VPS SSH fingerprint mismatch; refusing deploy." >&2
-            exit 1
-          fi
-          ssh -i ~/.ssh/oet-production -p "$VPS_PORT" -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" \
-            "set -euo pipefail; cd '$VPS_APP_DIR'; rm -rf 'release-evidence-${TARGET_SHA}' 'release-evidence-${TARGET_SHA}.tar.gz'"
-          scp -i ~/.ssh/oet-production -P "$VPS_PORT" -o StrictHostKeyChecking=yes \
-            "release-evidence-${TARGET_SHA}.tar.gz" \
-            "$VPS_USER@$VPS_HOST:$VPS_APP_DIR/release-evidence-${TARGET_SHA}.tar.gz"
-          ssh -i ~/.ssh/oet-production -p "$VPS_PORT" -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" \
-            "set -euo pipefail; cd '$VPS_APP_DIR'; tar -xzf 'release-evidence-${TARGET_SHA}.tar.gz'; rm -f 'release-evidence-${TARGET_SHA}.tar.gz'"
-
       - name: Deploy over SSH
         if: steps.secrets.outputs.enabled == 'true'
         uses: appleboy/ssh-action@029f5b4aeeeb58fdfe1410a5d17f967dacf36262
         env:
           VPS_APP_DIR: ${{ secrets.VPS_APP_DIR }}
           TARGET_SHA: ${{ inputs.target_sha }}
-          EVIDENCE_BUNDLE_DIR: release-evidence-${{ inputs.target_sha }}
-          EVIDENCE_SIGNER_FINGERPRINT: ${{ vars.EVIDENCE_SIGNER_FINGERPRINT }}
+          WEB_IMAGE: ${{ inputs.web_image }}
+          API_IMAGE: ${{ inputs.api_image }}
+          DB_BACKUP_IMAGE: ${{ inputs.db_backup_image }}
+          ROUTER_IMAGE: ${{ inputs.router_image }}
+          GHCR_USERNAME: ${{ github.actor }}
+          GHCR_TOKEN: ${{ github.token }}
           APP_PUBLIC_URL: https://app.oetwithdrhesham.co.uk
           API_PUBLIC_URL: https://api.oetwithdrhesham.co.uk
           READING_MEDIA_SMOKE_ACK: ${{ inputs.reading_media_smoke_ack }}
@@ -163,7 +200,7 @@ jobs:
           fingerprint: ${{ vars.VPS_SSH_FINGERPRINT }}
           command_timeout: 30m
           script_stop: true
-          envs: VPS_APP_DIR,TARGET_SHA,EVIDENCE_BUNDLE_DIR,EVIDENCE_SIGNER_FINGERPRINT,APP_PUBLIC_URL,API_PUBLIC_URL,READING_MEDIA_SMOKE_ACK
+          envs: VPS_APP_DIR,TARGET_SHA,WEB_IMAGE,API_IMAGE,DB_BACKUP_IMAGE,ROUTER_IMAGE,GHCR_USERNAME,GHCR_TOKEN,APP_PUBLIC_URL,API_PUBLIC_URL,READING_MEDIA_SMOKE_ACK
           script: |
             set -eo pipefail
             echo "[ci] SSH connected at $(date -u)"
@@ -172,7 +209,18 @@ jobs:
               echo "[ci] refusing deploy from stale/noncanonical checkout: $(pwd)" >&2
               exit 1
             fi
+            git fetch origin main --tags
+            if ! git cat-file -e "$TARGET_SHA^{commit}" 2>/dev/null; then
+              git fetch origin "$TARGET_SHA"
+            fi
+            rm -rf .deploy/incoming-driver
+            mkdir -p .deploy/incoming-driver
+            git archive "$TARGET_SHA" scripts | tar -x -C .deploy/incoming-driver
+            DOCKER_CONFIG="$(mktemp -d)"
+            export DOCKER_CONFIG
+            trap 'docker logout ghcr.io >/dev/null 2>&1 || true; rm -rf "$DOCKER_CONFIG"' EXIT
+            printf '%s' "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USERNAME" --password-stdin >/dev/null
             echo "[ci] running gated deploy wrapper..."
-            VPS_APP_DIR="$VPS_APP_DIR" DEPLOY_REF="$TARGET_SHA" EVIDENCE_DIR="$EVIDENCE_BUNDLE_DIR" EVIDENCE_SIGNER_FINGERPRINT="$EVIDENCE_SIGNER_FINGERPRINT" APP_PUBLIC_URL="$APP_PUBLIC_URL" API_PUBLIC_URL="$API_PUBLIC_URL" bash ./scripts/deploy/deploy-prod.sh
+            VPS_APP_DIR="$VPS_APP_DIR" DEPLOY_REF="$TARGET_SHA" WEB_IMAGE="$WEB_IMAGE" API_IMAGE="$API_IMAGE" DB_BACKUP_IMAGE="$DB_BACKUP_IMAGE" ROUTER_IMAGE="$ROUTER_IMAGE" APP_PUBLIC_URL="$APP_PUBLIC_URL" API_PUBLIC_URL="$API_PUBLIC_URL" bash .deploy/incoming-driver/scripts/deploy/deploy-prod.sh
             echo "[ci] deploy-gate Reading/media smoke acknowledgement: $READING_MEDIA_SMOKE_ACK"
             echo "[ci] SSH session complete at $(date -u)"

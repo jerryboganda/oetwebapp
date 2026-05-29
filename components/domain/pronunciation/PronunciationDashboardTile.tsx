@@ -28,7 +28,7 @@ export function PronunciationDashboardTile() {
             <CardTitle className="truncate">Recalls Audio</CardTitle>
           </div>
           <ChevronRight
-            className="h-4 w-4 shrink-0 text-muted transition group-hover:translate-x-0.5 group-hover:text-primary"
+            className="h-4 w-4 shrink-0 text-muted transition group-hoverable:translate-x-0.5 group-hover:text-primary"
             aria-hidden
           />
         </CardHeader>

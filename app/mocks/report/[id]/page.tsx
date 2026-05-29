@@ -431,7 +431,7 @@ function MockReportContent() {
                         Download practice PDF
                       </Button>
                       <p className="mt-2 text-[11px] leading-4 text-muted">
-                        Watermarked “Practice Copy”. For your own study only — not for resale or redistribution.
+                        Watermarked “Practice Copy”. For your own study only, not for resale or redistribution.
                       </p>
                       {pdfState === 'error' && pdfError ? (
                         <p className="mt-2 text-[11px] text-danger" role="alert">
@@ -497,7 +497,7 @@ function MockReportContent() {
                   return (
                     <div
                       key={task.id}
-                      className={`group flex flex-col rounded-2xl border bg-surface p-4 shadow-sm transition-all ${completed ? 'border-success/40 opacity-80' : 'border-border hover:border-primary/30 hover:shadow-md'}`}
+                      className={`group flex flex-col rounded-2xl border bg-surface p-4 shadow-sm transition-[color,background-color,border-color,box-shadow,transform,opacity,filter] duration-200 ${completed ? 'border-success/40 opacity-80' : 'border-border hover:border-primary/30 hover:shadow-md'}`}
                     >
                       <span className="text-[10px] font-black uppercase tracking-widest text-primary">Day {task.dayIndex}</span>
                       <h3 className="mt-2 text-sm font-black text-navy">{task.title}</h3>
@@ -532,7 +532,7 @@ function MockReportContent() {
                 <Link
                   key={`${item.day || 'day'}-${item.title || 'item'}-${index}`}
                   href={item.route}
-                  className="group rounded-2xl border border-border bg-surface p-4 shadow-sm transition-all hover:border-primary/30 hover:shadow-md"
+                  className="group rounded-2xl border border-border bg-surface p-4 shadow-sm transition-[color,background-color,border-color,box-shadow,transform,opacity,filter] duration-200 hover:border-primary/30 hover:shadow-md"
                 >
                   <span className="text-[10px] font-black uppercase tracking-widest text-primary">{item.day}</span>
                   <h3 className="mt-2 text-sm font-black text-navy transition-colors group-hover:text-primary">{item.title}</h3>

@@ -68,7 +68,7 @@ export function SpeakingRoleCard({
           </div>
         </div>
         
-        <div className="h-px w-full bg-gradient-to-r from-border/80 via-border to-transparent" />
+        <div className="h-px w-full bg-border" />
 
         <div className="grid gap-6 md:grid-cols-2">
           <div>
@@ -89,8 +89,8 @@ export function SpeakingRoleCard({
 
         {background && (
           <>
-            <div className="h-px w-full bg-gradient-to-r from-border/80 via-border to-transparent" />
-            <div className="bg-white/60 p-4 rounded-xl border border-primary/10">
+            <div className="h-px w-full bg-border" />
+            <div className="bg-surface p-4 rounded-xl border border-primary/10">
               <p className="text-[11px] font-bold text-primary/70 uppercase tracking-widest mb-2 flex items-center gap-1.5">
                 <span className="w-1 h-3 rounded-full bg-primary/40 inline-block" />
                 Background
@@ -108,8 +108,8 @@ export function SpeakingRoleCard({
             </p>
             <ul className="grid gap-3">
               {tasks.map((item, index) => (
-                <li key={`${item}-${index}`} className="flex items-start gap-3 bg-white/50 p-3 rounded-xl border border-primary/10">
-                  <span className="flex items-center justify-center w-6 h-6 rounded-full bg-primary text-white text-xs font-bold shrink-0 mt-0.5 shadow-sm">
+                <li key={`${item}-${index}`} className="flex items-start gap-3 bg-surface p-3 rounded-xl border border-primary/10">
+                  <span className="flex items-center justify-center w-6 h-6 rounded-full bg-primary text-white dark:bg-violet-700 text-xs font-bold shrink-0 mt-0.5 shadow-sm">
                     {index + 1}
                   </span>
                   <span className="text-sm font-medium text-navy/90 leading-relaxed">{item}</span>
@@ -120,7 +120,7 @@ export function SpeakingRoleCard({
         )}
         
         {(patientEmotion || communicationGoal || clinicalTopic) && (
-          <div className="grid gap-3 rounded-xl border border-primary/20 bg-white/80 p-4 shrink-0 sm:grid-cols-3 mt-4 shadow-sm">
+          <div className="grid gap-3 rounded-xl border border-primary/20 bg-surface p-4 shrink-0 sm:grid-cols-3 mt-4 shadow-sm">
             {patientEmotion && (
               <div>
                 <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-muted mb-1">Emotion</p>

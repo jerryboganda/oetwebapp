@@ -72,7 +72,7 @@ export function ReadingExtractionDraftCard({
           aria-label={`Select extraction draft ${draft.id}`}
         >
           <p className="truncate font-mono text-xs text-muted">{draft.id}</p>
-          <p className="text-sm font-semibold text-navy">
+          <p className="text-sm font-semibold text-admin-fg-strong">
             {draft.manifest ? `${partCounts.reduce((sum, p) => sum + p.questions, 0)} questions` : 'No manifest'}
           </p>
           <p className="text-xs text-muted">
@@ -105,7 +105,7 @@ export function ReadingExtractionDraftCard({
       </div>
 
       {draft.notes ? (
-        <p className="rounded-lg bg-background-light p-2 text-xs italic text-muted">
+        <p className="rounded-lg bg-admin-bg-subtle p-2 text-xs italic text-muted">
           {draft.notes}
         </p>
       ) : null}
@@ -142,7 +142,7 @@ export function ReadingExtractionDraftCard({
             </Button>
           </div>
           {showRejectForm ? (
-            <div className="space-y-2 rounded-lg border border-border bg-background-light p-3">
+            <div className="space-y-2 rounded-lg border border-border bg-admin-bg-subtle p-3">
               <Textarea
                 label="Reason for rejecting"
                 rows={2}

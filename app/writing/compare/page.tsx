@@ -171,7 +171,7 @@ function WritingCompareContent() {
                 <li>Compare the opening and closing paragraphs for tone and formality.</li>
                 <li>Note how the model answer organizes key clinical information.</li>
                 <li>Look at transition phrases and cohesive devices used in the model.</li>
-                <li>Notice how the model letter favours conciseness and reader-aware structure (target body length is 180–200 words — guidance only).</li>
+                <li>Notice how the model letter favours conciseness and reader-aware structure (target body length is 180-200 words, guidance only).</li>
               </ul>
             </div>
           </Card>

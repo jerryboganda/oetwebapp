@@ -55,7 +55,7 @@ export function LearnerSkillSwitcher({
                   : 'border-border/70 bg-background-light text-navy hover:border-border-hover hover:bg-muted',
               )}
             >
-              <span className={cn('flex h-8 w-8 shrink-0 items-center justify-center rounded-xl', active ? 'bg-primary text-white' : 'bg-surface text-muted ring-1 ring-border/70')}>
+              <span className={cn('flex h-8 w-8 shrink-0 items-center justify-center rounded-xl', active ? 'bg-primary text-white dark:bg-violet-700' : 'bg-surface text-muted ring-1 ring-border/70')}>
                 <Icon className="h-4 w-4" aria-hidden="true" />
               </span>
               <span className="min-w-0">

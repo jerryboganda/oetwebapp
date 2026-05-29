@@ -4,6 +4,7 @@ using System.Text.Json;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services;
+using OetLearner.Api.Services.Reading;
 
 namespace OetLearner.Api.Endpoints;
 
@@ -29,8 +30,44 @@ public static class ReadingAnalyticsAdminEndpoints
             return Results.Ok(analytics);
         }).WithAdminRead("AdminQualityAnalytics");
 
+        // Cohort analytics — class-level rollup for a named set of learners.
+        admin.MapGet("/reading/analytics/cohort", async (
+            [FromQuery] string paperId,
+            [FromQuery] string? userIds,
+            IReadingAnalyticsService analytics,
+            CancellationToken ct) =>
+        {
+            if (string.IsNullOrWhiteSpace(paperId))
+                return Results.BadRequest(new { error = "paperId is required." });
+            var ids = ParseUserIds(userIds);
+            return Results.Ok(await analytics.GetCohortAnalyticsAsync(paperId, ids, ct));
+        }).WithAdminRead("AdminQualityAnalytics");
+
+        // Expert mirror — same cohort rollup under the expert policy.
+        var expert = app.MapGroup("/v1/expert")
+            .RequireAuthorization("ExpertOnly")
+            .RequireRateLimiting("PerUser");
+        expert.MapGet("/reading/analytics/cohort", async (
+            [FromQuery] string paperId,
+            [FromQuery] string? userIds,
+            IReadingAnalyticsService analytics,
+            CancellationToken ct) =>
+        {
+            if (string.IsNullOrWhiteSpace(paperId))
+                return Results.BadRequest(new { error = "paperId is required." });
+            var ids = ParseUserIds(userIds);
+            return Results.Ok(await analytics.GetCohortAnalyticsAsync(paperId, ids, ct));
+        });
+
         return app;
     }
+
+    private static IReadOnlyCollection<string> ParseUserIds(string? userIds)
+        => string.IsNullOrWhiteSpace(userIds)
+            ? Array.Empty<string>()
+            : userIds.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Distinct(StringComparer.Ordinal)
+                .ToArray();
 
     public static async Task<ReadingAdminAnalyticsDto> BuildAnalyticsAsync(
         LearnerDbContext db,
@@ -50,7 +87,7 @@ public static class ReadingAnalyticsAdminEndpoints
             return new ReadingAdminAnalyticsDto(
                 now,
                 windowDays,
-                new ReadingAdminAnalyticsSummaryDto(0, 0, 0, 0, 0, 0, 0, null, null, null, null),
+                new ReadingAdminAnalyticsSummaryDto(0, 0, 0, 0, 0, 0, 0, null, null, null, null, 0.0, 0.0, 0.0, 0, 0.0),
                 Array.Empty<ReadingPaperAnalyticsDto>(),
                 EmptyPartBreakdown(),
                 Array.Empty<ReadingSkillAnalyticsDto>(),
@@ -64,7 +101,9 @@ public static class ReadingAnalyticsAdminEndpoints
                         "No Reading content papers exist yet, so analytics cannot accumulate evidence.",
                         "warning"),
                 },
-                Array.Empty<ReadingDistractorTrapDto>());
+                Array.Empty<ReadingDistractorTrapDto>(),
+                Array.Empty<ReadingQuestionDiscrimination>(),
+                Array.Empty<ReadingRiskLabel>());
         }
 
         var paperIds = papers.Select(p => p.Id).ToHashSet(StringComparer.Ordinal);
@@ -157,7 +196,23 @@ public static class ReadingAnalyticsAdminEndpoints
             AverageRawScore: AverageOrNull(submittedAttempts.Where(IsCanonicalScoreEligible).Where(a => a.RawScore.HasValue).Select(a => (double)a.RawScore!.Value)),
             AverageScaledScore: AverageOrNull(scaledScores),
             PassRatePercent: Percent(passedCount, passEligibleCount),
-            UnansweredRatePercent: Percent(Math.Max(0, totalOpportunities - totalAnswered), totalOpportunities));
+            UnansweredRatePercent: Percent(Math.Max(0, totalOpportunities - totalAnswered), totalOpportunities),
+            CompletionRatePercent: Percent(submittedAttempts.Count, attempts.Count) ?? 0.0,
+            AbandonmentRatePercent: Percent(
+                attempts.Count(a => a.Status is ReadingAttemptStatus.Expired or ReadingAttemptStatus.Abandoned),
+                attempts.Count) ?? 0.0,
+            AverageTimePerQuestionMs: ComputeAverageTimePerQuestionMs(analyticAnswers),
+            ManualOverrideCount: submittedAttempts.Count(a => a.ScoreOverrideRaw.HasValue || a.ScoreOverrideScaled.HasValue),
+            ManualOverrideRatePercent: Percent(
+                submittedAttempts.Count(a => a.ScoreOverrideRaw.HasValue || a.ScoreOverrideScaled.HasValue),
+                submittedAttempts.Count) ?? 0.0);
+
+        // Wave 2 depth — discrimination index (upper/lower 27%) and the
+        // surfaced too_hard / too_easy / low_discrimination risk labels.
+        var partCodeById = parts.ToDictionary(p => p.Id, p => p.PartCode.ToString(), StringComparer.Ordinal);
+        var discrimination = ReadingAnalyticsService.ComputeDiscrimination(
+            submittedAttempts, answersByQuestion, questions, partCodeById);
+        var riskLabels = BuildRiskLabels(questions, answersByQuestion, discrimination);
 
         return new ReadingAdminAnalyticsDto(
             now,
@@ -169,7 +224,60 @@ public static class ReadingAnalyticsAdminEndpoints
             hardestQuestions,
             modeBreakdown,
             BuildActionInsights(paperAnalytics, partBreakdown, skillBreakdown, hardestQuestions, summary),
-            distractorTraps);
+            distractorTraps,
+            discrimination,
+            riskLabels);
+    }
+
+    /// <summary>Average time per question derived from <c>TotalElapsedMs</c>:
+    /// per attempt take the furthest cumulative timestamp divided by answered
+    /// count, then average across attempts.</summary>
+    private static double ComputeAverageTimePerQuestionMs(IReadOnlyList<ReadingAnswer> answers)
+    {
+        var perAttempt = new List<double>();
+        foreach (var grp in answers.GroupBy(a => a.ReadingAttemptId))
+        {
+            var answered = grp.Count(a => a.TotalElapsedMs.HasValue);
+            if (answered == 0) continue;
+            var maxTotal = grp.Where(a => a.TotalElapsedMs.HasValue).Max(a => a.TotalElapsedMs!.Value);
+            perAttempt.Add((double)maxTotal / answered);
+        }
+        return perAttempt.Count == 0 ? 0.0 : Math.Round(perAttempt.Average(), 1);
+    }
+
+    /// <summary>Surface too_hard / too_easy / low_discrimination risk labels
+    /// using the same thresholds and minimum sample size as the per-paper
+    /// analytics service.</summary>
+    private static IReadOnlyList<ReadingRiskLabel> BuildRiskLabels(
+        IReadOnlyList<ReadingQuestion> questions,
+        IReadOnlyDictionary<string, List<ReadingAnswer>> answersByQuestion,
+        IReadOnlyList<ReadingQuestionDiscrimination> discrimination)
+    {
+        const int minSample = 5;
+        const double tooHard = 0.20;
+        const double tooEasy = 0.95;
+        const double lowDiscrimination = 0.20;
+
+        var labels = new List<ReadingRiskLabel>();
+        foreach (var q in questions)
+        {
+            if (!answersByQuestion.TryGetValue(q.Id, out var rows) || rows.Count < minSample) continue;
+            var correct = rows.Count(r => r.IsCorrect == true);
+            var rate = (double)correct / rows.Count;
+            if (rate <= tooHard)
+                labels.Add(new ReadingRiskLabel(q.Id, "too_hard",
+                    $"Only {correct}/{rows.Count} learners answered correctly ({rate:P0})."));
+            else if (rate >= tooEasy)
+                labels.Add(new ReadingRiskLabel(q.Id, "too_easy",
+                    $"{correct}/{rows.Count} learners ({rate:P0}) answered correctly — consider raising difficulty."));
+        }
+        foreach (var d in discrimination)
+        {
+            if (d.SampleSize >= minSample && d.DiscriminationIndex <= lowDiscrimination)
+                labels.Add(new ReadingRiskLabel(d.QuestionId, "low_discrimination",
+                    $"Discrimination index {d.DiscriminationIndex:F2} — weak separation between strong and weak learners."));
+        }
+        return labels;
     }
 
     /// <summary>
@@ -660,7 +768,9 @@ public sealed record ReadingAdminAnalyticsDto(
     IReadOnlyList<ReadingQuestionAnalyticsDto> HardestQuestions,
     IReadOnlyList<ReadingModeAnalyticsDto> ModeBreakdown,
     IReadOnlyList<ReadingActionInsightDto> ActionInsights,
-    IReadOnlyList<ReadingDistractorTrapDto> DistractorTraps);
+    IReadOnlyList<ReadingDistractorTrapDto> DistractorTraps,
+    IReadOnlyList<ReadingQuestionDiscrimination> Discrimination,
+    IReadOnlyList<ReadingRiskLabel> RiskLabels);
 
 /// <summary>
 /// Phase 2 closure — one row per question-option-category trap. Surfaces
@@ -692,7 +802,12 @@ public sealed record ReadingAdminAnalyticsSummaryDto(
     double? AverageRawScore,
     double? AverageScaledScore,
     double? PassRatePercent,
-    double? UnansweredRatePercent);
+    double? UnansweredRatePercent,
+    double CompletionRatePercent,
+    double AbandonmentRatePercent,
+    double AverageTimePerQuestionMs,
+    int ManualOverrideCount,
+    double ManualOverrideRatePercent);
 
 public sealed record ReadingPaperAnalyticsDto(
     string PaperId,

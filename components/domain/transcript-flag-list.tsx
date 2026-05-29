@@ -38,7 +38,7 @@ export function TranscriptFlagList({ flags, activeFlagId, onFlagClick, className
             type="button"
             onClick={() => onFlagClick?.(flag)}
             className={cn(
-              'flex items-start gap-3 p-3 rounded border text-left transition-all',
+              'flex items-start gap-3 p-3 rounded border text-left transition-[color,background-color,border-color,box-shadow,transform,opacity,filter] duration-200',
               isActive ? 'border-primary bg-primary/5 ring-1 ring-primary' : 'border-border hover:border-border',
             )}
           >

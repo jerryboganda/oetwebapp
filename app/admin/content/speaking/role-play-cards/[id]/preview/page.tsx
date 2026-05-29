@@ -79,7 +79,7 @@ export default function PreviewSpeakingRolePlayCardPage() {
 
   return (
     <AdminCatalogLayout
-      title={card ? `Preview — ${card.scenarioTitle}` : 'Preview role-play card'}
+      title={card ? `Preview: ${card.scenarioTitle}` : 'Preview role-play card'}
       description="Compare what a learner sees against what a tutor sees. The learner view confirms no interlocutor data leaks."
       breadcrumbs={breadcrumbs}
       eyebrow="CMS · Preview"

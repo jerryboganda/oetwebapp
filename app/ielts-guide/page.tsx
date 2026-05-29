@@ -31,7 +31,7 @@ export default function IeltsGuidePage() {
           IELTS content and practice routes are closed until their dedicated beta readiness, content, support, and billing gates are complete.
         </InlineAlert>
         <div className="flex flex-wrap gap-3">
-          <Link className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary/90" href="/support">
+          <Link className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary/90 active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600" href="/support">
             <Mail className="h-4 w-4" /> Contact support
           </Link>
           <Link className="rounded-lg border border-border px-4 py-2 text-sm font-medium text-navy hover:bg-background-light" href="/dashboard">

@@ -112,14 +112,14 @@ export default function AdminMockItemAnalysisPage() {
               <table className="w-full text-left text-sm">
                 <thead className="bg-admin-bg-subtle text-xs uppercase tracking-widest text-admin-fg-muted">
                   <tr>
-                    <th className="px-4 py-3">Item</th>
-                    <th className="px-4 py-3">Subtest</th>
-                    <th className="px-4 py-3">N</th>
-                    <th className="px-4 py-3">Correct</th>
-                    <th className="px-4 py-3">Difficulty</th>
-                    <th className="px-4 py-3">Discrimination</th>
-                    <th className="px-4 py-3">Flag</th>
-                    <th className="px-4 py-3">Actions</th>
+                    <th scope="col" className="px-4 py-3">Item</th>
+                    <th scope="col" className="px-4 py-3">Subtest</th>
+                    <th scope="col" className="px-4 py-3">N</th>
+                    <th scope="col" className="px-4 py-3">Correct</th>
+                    <th scope="col" className="px-4 py-3">Difficulty</th>
+                    <th scope="col" className="px-4 py-3">Discrimination</th>
+                    <th scope="col" className="px-4 py-3">Flag</th>
+                    <th scope="col" className="px-4 py-3">Actions</th>
                   </tr>
                 </thead>
                 <tbody>

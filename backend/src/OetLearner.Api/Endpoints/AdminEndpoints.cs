@@ -1,9 +1,12 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
+using OetLearner.Api.Configuration;
 using OetLearner.Api.Contracts;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Security;
 using OetLearner.Api.Services;
 using OetLearner.Api.Services.Billing;
 using OetLearner.Api.Services.Conversation.Tts;
@@ -1290,6 +1293,10 @@ public static class AdminEndpoints
                 OetLearner.Api.Contracts.AdminConversationSettingsRequest request,
                 OetLearner.Api.Data.LearnerDbContext db,
                 OetLearner.Api.Services.Conversation.IConversationOptionsProvider provider,
+                ILaunchReadinessService launchReadinessService,
+                IOptions<ConversationOptions> baseConversationOptions,
+                IWebHostEnvironment environment,
+                IConfiguration configuration,
                 CancellationToken ct) =>
             {
                 ValidateConversationSettingsRequest(request);
@@ -1398,6 +1405,58 @@ public static class AdminEndpoints
                 row.UpdatedAt = now;
                 row.UpdatedByUserId = http.AdminId();
                 row.UpdatedByUserName = http.AdminName();
+                var effectiveAllowRealProvider = row.RealtimeSttAllowRealProvider ?? baseConversationOptions.Value.RealtimeSttAllowRealProvider;
+                var effectiveProductionAuthorized = row.RealtimeSttRealProviderProductionAuthorized ?? baseConversationOptions.Value.RealtimeSttRealProviderProductionAuthorized;
+                var effectiveRealtimeEnabled = row.RealtimeSttEnabled ?? baseConversationOptions.Value.RealtimeSttEnabled;
+                var effectiveRealtimeProvider = NormalizeRealtimeAsrProvider(row.RealtimeAsrProvider ?? baseConversationOptions.Value.RealtimeAsrProvider);
+                var allowProductionMocks = configuration.GetValue<bool>(ProductionProviderSafetyValidator.AllowMockProvidersKey);
+                if (environment.IsProduction() && !allowProductionMocks && effectiveRealtimeEnabled && effectiveRealtimeProvider == "mock")
+                {
+                    throw ApiException.Validation(
+                        "REALTIME_PRODUCTION_MOCK_FORBIDDEN",
+                        "Production realtime STT cannot use the mock provider. Configure a real provider or disable realtime STT.");
+                }
+
+                if (effectiveAllowRealProvider || effectiveProductionAuthorized)
+                {
+                    if (RealtimeCriticalSettingsChanged(request))
+                    {
+                        throw ApiException.Validation(
+                            "REALTIME_LAUNCH_READINESS_STALE",
+                            "Disable realtime real-provider authorization before changing provider, model, region, spend, consent, topology, or audio-format settings; re-approve launch readiness after new evidence is attached.");
+                    }
+
+                    var effectiveBudgetCap = row.RealtimeSttMonthlyBudgetCapUsd ?? baseConversationOptions.Value.RealtimeSttMonthlyBudgetCapUsd;
+                    var effectiveDailySeconds = row.RealtimeSttDailyAudioSecondsPerUser ?? baseConversationOptions.Value.RealtimeSttDailyAudioSecondsPerUser;
+                    var effectiveCostPerMinute = row.RealtimeSttEstimatedCostUsdPerMinute ?? baseConversationOptions.Value.RealtimeSttEstimatedCostUsdPerMinute;
+                    var effectiveTopology = NormalizeRealtimeTopology(row.RealtimeSttProviderSessionTopology ?? baseConversationOptions.Value.RealtimeSttProviderSessionTopology);
+                    var effectiveRegion = row.RealtimeSttRegionId ?? baseConversationOptions.Value.RealtimeSttRegionId;
+                    var effectiveAdultAssumption = row.RealtimeSttAssumeLearnersAdult ?? baseConversationOptions.Value.RealtimeSttAssumeLearnersAdult;
+                    var effectiveManagedLearnerRealProvider = row.RealtimeSttAllowManagedLearnerRealProvider ?? baseConversationOptions.Value.RealtimeSttAllowManagedLearnerRealProvider;
+                    var effectiveElevenLabsSttKeyPresent = row.ElevenLabsSttApiKeyEncrypted is not null
+                                                           || !string.IsNullOrWhiteSpace(baseConversationOptions.Value.ElevenLabsSttApiKey);
+                    if (effectiveBudgetCap <= 0 || effectiveDailySeconds <= 0 || effectiveCostPerMinute <= 0)
+                    {
+                        throw ApiException.Validation(
+                            "REALTIME_SPEND_GATES_REQUIRED",
+                            "Realtime STT real-provider authorization requires positive monthly budget, daily seconds, and estimated cost-per-minute controls.");
+                    }
+
+                    if (effectiveRealtimeProvider is not ("elevenlabs" or "elevenlabs-stt" or "elevenlabs-scribe")
+                        || !effectiveElevenLabsSttKeyPresent
+                        || !effectiveAdultAssumption
+                        || effectiveManagedLearnerRealProvider
+                        || string.IsNullOrWhiteSpace(effectiveRegion)
+                        || !IsApprovedRealtimeTopology(effectiveTopology))
+                    {
+                        throw ApiException.Validation(
+                            "REALTIME_REAL_PROVIDER_GATES_REQUIRED",
+                            "Realtime STT real-provider authorization requires ElevenLabs STT credentials, adult-only learner assumption, managed-learner real-provider processing disabled, approved topology, and a region id.");
+                    }
+
+                    var readiness = await launchReadinessService.GetSettingsAsync(ct);
+                    ValidateRealtimeLaunchReadiness(readiness);
+                }
                 db.AuditEvents.Add(new AuditEvent
                 {
                     Id = Guid.NewGuid().ToString("N"),
@@ -2189,6 +2248,51 @@ public static class AdminEndpoints
             }
         }
     }
+
+    private static void ValidateRealtimeLaunchReadiness(AdminLaunchReadinessSettingsResponse readiness)
+    {
+        if (!IsLaunchApproved(readiness.RealtimeLegalApprovalStatus)
+            || !IsLaunchApproved(readiness.RealtimePrivacyApprovalStatus)
+            || !IsLaunchApproved(readiness.RealtimeProtectedSmokeStatus)
+            || !readiness.RealtimeSpendCapApproved
+            || !readiness.RealtimeTopologyApproved
+            || string.IsNullOrWhiteSpace(readiness.RealtimeEvidenceUrl))
+        {
+            throw ApiException.Validation(
+                "REALTIME_LAUNCH_READINESS_REQUIRED",
+                "Realtime STT real-provider authorization requires approved legal, privacy, protected-smoke, spend-cap, topology, and evidence URL launch-readiness gates.");
+        }
+    }
+
+    private static bool RealtimeCriticalSettingsChanged(AdminConversationSettingsRequest request)
+        => request.RealtimeAsrProvider is not null
+           || request.RealtimeSttMonthlyBudgetCapUsd.HasValue
+           || request.RealtimeSttEstimatedCostUsdPerMinute.HasValue
+           || request.RealtimeSttDailyAudioSecondsPerUser.HasValue
+           || request.RealtimeSttMaxAudioSecondsPerSession.HasValue
+           || request.MaxTurnDurationSeconds.HasValue
+           || request.RealtimeSttProviderSessionTopology is not null
+           || request.RealtimeSttRegionId is not null
+           || request.RealtimeSttAssumeLearnersAdult.HasValue
+           || request.RealtimeSttAllowManagedLearnerRealProvider.HasValue
+           || request.RealtimeSttConsentVersion is not null
+           || request.RealtimeSttAllowedMimeTypes is not null
+           || request.ElevenLabsSttBaseUrl is not null
+           || request.ElevenLabsSttModel is not null
+           || request.ElevenLabsSttLanguage is not null
+           || request.ElevenLabsSttAudioFormat is not null
+           || request.ElevenLabsSttCommitStrategy is not null
+           || request.ElevenLabsSttKeytermsCsv is not null
+           || request.ElevenLabsSttEnableProviderLogging.HasValue
+           || request.ElevenLabsSttTokenTtlSeconds.HasValue
+           || request.ElevenLabsSttApiKey is not null;
+
+    private static bool IsLaunchApproved(string? value)
+        => string.Equals(value?.Trim(), "approved", StringComparison.OrdinalIgnoreCase)
+           || string.Equals(value?.Trim(), "complete", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsApprovedRealtimeTopology(string? value)
+        => value is "single-instance" or "single-region-sticky" or "distributed";
 }
 
 public record AdminCommunityPinRequest(bool IsPinned);

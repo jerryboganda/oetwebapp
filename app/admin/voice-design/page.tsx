@@ -479,9 +479,9 @@ export default function AdminVoiceDesignPage() {
 
       {/* Global Voice Lock Indicator */}
       <div className="flex items-center gap-2 rounded-admin-lg border border-admin-border bg-admin-bg-surface px-4 py-2.5">
-        <Lock className="h-4 w-4 text-violet-400" />
+        <Lock className="h-4 w-4 text-[var(--admin-primary)]" />
         <span className="text-xs font-bold text-admin-text-muted">Global Voice:</span>
-        <Badge variant="violet" size="sm">{selectedVoice || 'Not configured'}</Badge>
+        <Badge variant="info" size="sm">{selectedVoice || 'Not configured'}</Badge>
         {voiceApproved && <Badge variant="success" size="sm">Approved</Badge>}
       </div>
 
@@ -502,14 +502,14 @@ export default function AdminVoiceDesignPage() {
                   <button
                     type="button"
                     onClick={() => setVariant('flash')}
-                    className={`rounded-lg px-4 py-2 text-sm font-bold transition-colors ${variant === 'flash' ? 'bg-violet-600 text-white' : 'bg-admin-surface-raised text-admin-text-muted hover:text-admin-text'}`}
+                    className={`rounded-lg px-4 py-2 text-sm font-bold transition-colors ${variant === 'flash' ? 'bg-[var(--admin-primary)] text-[var(--admin-primary-fg)]' : 'bg-admin-surface-raised text-admin-text-muted hover:text-admin-text'}`}
                   >
                     Flash (Presets)
                   </button>
                   <button
                     type="button"
                     onClick={() => setVariant('voicedesign')}
-                    className={`rounded-lg px-4 py-2 text-sm font-bold transition-colors ${variant === 'voicedesign' ? 'bg-violet-600 text-white' : 'bg-admin-surface-raised text-admin-text-muted hover:text-admin-text'}`}
+                    className={`rounded-lg px-4 py-2 text-sm font-bold transition-colors ${variant === 'voicedesign' ? 'bg-[var(--admin-primary)] text-[var(--admin-primary-fg)]' : 'bg-admin-surface-raised text-admin-text-muted hover:text-admin-text'}`}
                   >
                     Voice Design (Custom)
                   </button>
@@ -529,7 +529,7 @@ export default function AdminVoiceDesignPage() {
                       value={voiceInstructions}
                       onChange={(e) => setVoiceInstructions(e.target.value.slice(0, 1000))}
                       placeholder="Describe the voice: e.g., warm, professional female with a slight British accent..."
-                      className="w-full rounded-lg border border-admin-border bg-admin-surface-raised p-3 text-sm text-admin-text placeholder:text-admin-text-muted/50 focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
+                      className="w-full rounded-lg border border-admin-border bg-admin-surface-raised p-3 text-sm text-admin-text placeholder:text-admin-text-muted/50 focus:border-[var(--admin-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--admin-primary)]"
                       rows={4}
                     />
                     <div className="text-right text-xs text-admin-text-muted">{voiceInstructions.length}/1000</div>
@@ -542,7 +542,7 @@ export default function AdminVoiceDesignPage() {
                     {voices.map((voice) => (
                       <div
                         key={voice.id}
-                        className={`relative rounded-xl border p-3 transition-colors ${selectedVoice === voice.id ? 'border-violet-500 bg-violet-500/5' : 'border-admin-border bg-admin-surface-raised hover:border-admin-border/80'}`}
+                        className={`relative rounded-xl border p-3 transition-colors ${selectedVoice === voice.id ? 'border-[var(--admin-primary)] bg-[var(--admin-primary-tint)]' : 'border-admin-border bg-admin-surface-raised hover:border-admin-border/80'}`}
                       >
                         <div className="flex items-start justify-between">
                           <div className="min-w-0 flex-1">
@@ -554,7 +554,7 @@ export default function AdminVoiceDesignPage() {
                               {[1, 2, 3].map((bar) => (
                                 <motion.div
                                   key={bar}
-                                  className="w-0.5 rounded-full bg-violet-400"
+                                  className="w-0.5 rounded-full bg-[var(--admin-primary)]"
                                   animate={{ height: [8, 16, 8] }}
                                   transition={{ repeat: Infinity, duration: 0.6, delay: bar * 0.15 }}
                                 />
@@ -634,7 +634,7 @@ export default function AdminVoiceDesignPage() {
                     step={0.05}
                     value={speed}
                     onChange={(e) => setSpeed(parseFloat(e.target.value))}
-                    className="w-full accent-violet-500"
+                    className="w-full accent-[var(--admin-primary)]"
                   />
                   <div className="flex justify-between text-xs text-admin-text-muted">
                     <span>0.25x</span>
@@ -655,7 +655,7 @@ export default function AdminVoiceDesignPage() {
                     step={1}
                     value={pitch}
                     onChange={(e) => setPitch(parseInt(e.target.value, 10))}
-                    className="w-full accent-violet-500"
+                    className="w-full accent-[var(--admin-primary)]"
                   />
                   <div className="flex justify-between text-xs text-admin-text-muted">
                     <span>-100</span>
@@ -671,7 +671,7 @@ export default function AdminVoiceDesignPage() {
                     value={emotion}
                     onChange={(e) => setEmotion(e.target.value)}
                     placeholder="e.g., calm, professional, warm"
-                    className="w-full rounded-lg border border-admin-border bg-admin-surface-raised px-3 py-2 text-sm text-admin-text placeholder:text-admin-text-muted/50 focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
+                    className="w-full rounded-lg border border-admin-border bg-admin-surface-raised px-3 py-2 text-sm text-admin-text placeholder:text-admin-text-muted/50 focus:border-[var(--admin-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--admin-primary)]"
                   />
                 </div>
 
@@ -681,7 +681,7 @@ export default function AdminVoiceDesignPage() {
                   <div className="space-y-1.5">
                     {OET_SAMPLES.map((text, i) => (
                       <div key={i} className="flex items-center gap-2 rounded-lg border border-admin-border bg-admin-surface-raised px-3 py-2">
-                        <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-violet-500/10 text-xs font-bold text-violet-400">{i + 1}</span>
+                        <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[var(--admin-primary-tint)] text-xs font-bold text-[var(--admin-primary)]">{i + 1}</span>
                         <span className="text-xs text-admin-text">{text}</span>
                       </div>
                     ))}
@@ -695,7 +695,7 @@ export default function AdminVoiceDesignPage() {
                     value={customSampleText}
                     onChange={(e) => setCustomSampleText(e.target.value)}
                     placeholder="Type a custom sentence to test..."
-                    className="w-full rounded-lg border border-admin-border bg-admin-surface-raised p-3 text-sm text-admin-text placeholder:text-admin-text-muted/50 focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
+                    className="w-full rounded-lg border border-admin-border bg-admin-surface-raised p-3 text-sm text-admin-text placeholder:text-admin-text-muted/50 focus:border-[var(--admin-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--admin-primary)]"
                     rows={2}
                   />
                 </div>
@@ -751,7 +751,7 @@ export default function AdminVoiceDesignPage() {
                         <div className="flex items-center gap-3">
                           {sample.loading ? (
                             <div className="flex items-center gap-2">
-                              <Loader2 className="h-4 w-4 animate-spin text-violet-400" />
+                              <Loader2 className="h-4 w-4 animate-spin text-[var(--admin-primary)]" />
                               <span className="text-xs text-admin-text-muted">Generating...</span>
                             </div>
                           ) : sample.error ? (
@@ -761,7 +761,7 @@ export default function AdminVoiceDesignPage() {
                               <button
                                 type="button"
                                 onClick={() => playSample(sample.audioUrl!)}
-                                className="flex h-8 w-8 items-center justify-center rounded-full bg-violet-500/10 text-violet-400 hover:bg-violet-500/20"
+                                className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--admin-primary-tint)] text-[var(--admin-primary)] hover:bg-[var(--admin-primary-tint-strong)]"
                               >
                                 <Play className="h-3.5 w-3.5" />
                               </button>
@@ -770,7 +770,7 @@ export default function AdminVoiceDesignPage() {
                                 {Array.from({ length: 20 }).map((_, i) => (
                                   <div
                                     key={i}
-                                    className="w-1 rounded-full bg-violet-400/40"
+                                    className="w-1 rounded-full bg-[var(--admin-primary)]/40"
                                     style={{ height: `${Math.random() * 16 + 4}px` }}
                                   />
                                 ))}
@@ -841,7 +841,7 @@ export default function AdminVoiceDesignPage() {
                     <Badge variant={elevenSettings.apiKeyPresent ? 'success' : 'warning'} size="sm">
                       {elevenSettings.apiKeyPresent ? 'API key saved' : 'API key missing'}
                     </Badge>
-                    {elevenSettings.dictionaryId && <Badge variant="violet" size="sm">PLS linked</Badge>}
+                    {elevenSettings.dictionaryId && <Badge variant="info" size="sm">PLS linked</Badge>}
                   </div>
                   <label className="block space-y-1.5">
                     <span className="text-xs font-bold text-admin-text-muted">ElevenLabs API Key</span>
@@ -850,7 +850,7 @@ export default function AdminVoiceDesignPage() {
                       value={elevenSettings.apiKey}
                       onChange={(event) => updateElevenSettings('apiKey', event.target.value)}
                       placeholder={elevenSettings.apiKeyPresent ? 'Saved. Enter a new key to rotate.' : 'Paste API key'}
-                      className="w-full rounded-lg border border-admin-border bg-admin-surface-raised px-3 py-2 text-sm text-admin-text placeholder:text-admin-text-muted/50 focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
+                      className="w-full rounded-lg border border-admin-border bg-admin-surface-raised px-3 py-2 text-sm text-admin-text placeholder:text-admin-text-muted/50 focus:border-[var(--admin-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--admin-primary)]"
                     />
                   </label>
                   <label className="block space-y-1.5">
@@ -859,7 +859,7 @@ export default function AdminVoiceDesignPage() {
                       type="url"
                       value={elevenSettings.baseUrl}
                       onChange={(event) => updateElevenSettings('baseUrl', event.target.value)}
-                      className="w-full rounded-lg border border-admin-border bg-admin-surface-raised px-3 py-2 text-sm text-admin-text focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
+                      className="w-full rounded-lg border border-admin-border bg-admin-surface-raised px-3 py-2 text-sm text-admin-text focus:border-[var(--admin-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--admin-primary)]"
                     />
                   </label>
                   <div className="grid gap-3 sm:grid-cols-2">
@@ -869,7 +869,7 @@ export default function AdminVoiceDesignPage() {
                         type="text"
                         value={elevenSettings.voiceId}
                         onChange={(event) => updateElevenSettings('voiceId', event.target.value)}
-                        className="w-full rounded-lg border border-admin-border bg-admin-surface-raised px-3 py-2 text-sm text-admin-text focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
+                        className="w-full rounded-lg border border-admin-border bg-admin-surface-raised px-3 py-2 text-sm text-admin-text focus:border-[var(--admin-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--admin-primary)]"
                       />
                     </label>
                     <label className="block space-y-1.5">
@@ -878,7 +878,7 @@ export default function AdminVoiceDesignPage() {
                         type="text"
                         value={elevenSettings.model}
                         onChange={(event) => updateElevenSettings('model', event.target.value)}
-                        className="w-full rounded-lg border border-admin-border bg-admin-surface-raised px-3 py-2 text-sm text-admin-text focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
+                        className="w-full rounded-lg border border-admin-border bg-admin-surface-raised px-3 py-2 text-sm text-admin-text focus:border-[var(--admin-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--admin-primary)]"
                       />
                     </label>
                     <label className="block space-y-1.5">
@@ -887,7 +887,7 @@ export default function AdminVoiceDesignPage() {
                         type="text"
                         value={elevenSettings.outputFormat}
                         onChange={(event) => updateElevenSettings('outputFormat', event.target.value)}
-                        className="w-full rounded-lg border border-admin-border bg-admin-surface-raised px-3 py-2 text-sm text-admin-text focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
+                        className="w-full rounded-lg border border-admin-border bg-admin-surface-raised px-3 py-2 text-sm text-admin-text focus:border-[var(--admin-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--admin-primary)]"
                       />
                     </label>
                     <label className="block space-y-1.5">
@@ -896,7 +896,7 @@ export default function AdminVoiceDesignPage() {
                         type="text"
                         value={elevenSettings.dictionaryVersionId}
                         onChange={(event) => updateElevenSettings('dictionaryVersionId', event.target.value)}
-                        className="w-full rounded-lg border border-admin-border bg-admin-surface-raised px-3 py-2 text-sm text-admin-text focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
+                        className="w-full rounded-lg border border-admin-border bg-admin-surface-raised px-3 py-2 text-sm text-admin-text focus:border-[var(--admin-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--admin-primary)]"
                       />
                     </label>
                   </div>
@@ -906,7 +906,7 @@ export default function AdminVoiceDesignPage() {
                       type="text"
                       value={elevenSettings.dictionaryId}
                       onChange={(event) => updateElevenSettings('dictionaryId', event.target.value)}
-                      className="w-full rounded-lg border border-admin-border bg-admin-surface-raised px-3 py-2 text-sm text-admin-text focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
+                      className="w-full rounded-lg border border-admin-border bg-admin-surface-raised px-3 py-2 text-sm text-admin-text focus:border-[var(--admin-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--admin-primary)]"
                     />
                   </label>
                 </div>
@@ -929,7 +929,7 @@ export default function AdminVoiceDesignPage() {
                         step={step}
                         value={value}
                         onChange={(event) => updateElevenSettings(key, Number(event.target.value))}
-                        className="w-full accent-violet-500"
+                        className="w-full accent-[var(--admin-primary)]"
                       />
                     </label>
                   ))}
@@ -938,7 +938,7 @@ export default function AdminVoiceDesignPage() {
                       type="checkbox"
                       checked={elevenSettings.useSpeakerBoost}
                       onChange={(event) => updateElevenSettings('useSpeakerBoost', event.target.checked)}
-                      className="accent-violet-500"
+                      className="accent-[var(--admin-primary)]"
                     />
                     <span className="text-sm text-admin-text">Use speaker boost</span>
                   </label>
@@ -949,7 +949,7 @@ export default function AdminVoiceDesignPage() {
                         type="file"
                         accept=".pls,application/pls+xml,text/xml,application/xml"
                         onChange={(event) => setDictionaryFile(event.target.files?.[0] ?? null)}
-                        className="block w-full text-xs text-admin-text file:mr-3 file:rounded-md file:border-0 file:bg-violet-600 file:px-3 file:py-1.5 file:text-xs file:font-bold file:text-white"
+                        className="block w-full text-xs text-admin-text file:mr-3 file:rounded-md file:border-0 file:bg-[var(--admin-primary)] file:px-3 file:py-1.5 file:text-xs file:font-bold file:text-[var(--admin-primary-fg)]"
                       />
                     </label>
                     <Button variant="secondary" size="sm" loading={uploadingDictionary} disabled={!dictionaryFile} onClick={handleUploadDictionary}>
@@ -995,7 +995,7 @@ export default function AdminVoiceDesignPage() {
                           value={value}
                           checked={audioType === value}
                           onChange={() => { setAudioType(value); setDryRunResult(null); }}
-                          className="accent-violet-500"
+                          className="accent-[var(--admin-primary)]"
                         />
                         <span className="text-sm text-admin-text">{label}</span>
                       </label>
@@ -1019,7 +1019,7 @@ export default function AdminVoiceDesignPage() {
                           value={value}
                           checked={scope === value}
                           onChange={() => { setScope(value); setDryRunResult(null); }}
-                          className="accent-violet-500"
+                          className="accent-[var(--admin-primary)]"
                         />
                         <span className="text-sm text-admin-text">{label}</span>
                       </label>
@@ -1029,9 +1029,9 @@ export default function AdminVoiceDesignPage() {
 
                 {/* Dry Run Result */}
                 {dryRunResult && (
-                  <div className="rounded-xl border border-violet-500/20 bg-violet-500/5 p-4">
+                  <div className="rounded-xl border border-[var(--admin-primary)]/20 bg-[var(--admin-primary-tint)] p-4">
                     <p className="text-sm text-admin-text">
-                      <span className="font-bold text-violet-400">{dryRunResult.count.toLocaleString()}</span>{' '}
+                      <span className="font-bold text-[var(--admin-primary)]">{dryRunResult.count.toLocaleString()}</span>{' '}
                       audio items will be regenerated
                     </p>
                   </div>
@@ -1253,7 +1253,7 @@ function BatchCard({ batch, onCancel, onRetry }: { batch: AudioBatch; onCancel?:
       <div className="space-y-1">
         <div className="h-2 w-full overflow-hidden rounded-full bg-admin-surface">
           <div
-            className="h-full rounded-full bg-violet-500 transition-all duration-300"
+            className="h-full rounded-full bg-[var(--admin-primary)] transition-[width,background-color] duration-300"
             style={{ width: `${progress}%` }}
           />
         </div>

@@ -86,7 +86,7 @@ export function LiveTutorRoomShell({
     return (
       <div className={cn('grid gap-4 lg:grid-cols-[1fr_minmax(280px,420px)]', className)}>
         <div className="flex h-full min-h-[480px] items-center justify-center rounded-2xl border border-border bg-muted">
-          <span className="inline-flex items-center gap-2 text-sm text-muted-foreground">
+          <span className="inline-flex items-center gap-2 text-sm text-muted">
             <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> Connecting tutor room…
           </span>
         </div>
@@ -123,26 +123,26 @@ export function LiveTutorRoomShell({
     const camOn = local.localParticipant.isCameraEnabled;
 
     return (
-      <div className="relative h-full w-full overflow-hidden rounded-2xl bg-slate-950">
+      <div className="relative h-full w-full overflow-hidden rounded-2xl bg-background-dark">
         <div className="absolute inset-0 flex items-center justify-center">
           {remoteCamera ? (
             <VideoTrack trackRef={remoteCamera} className="h-full w-full object-cover" />
           ) : (
-            <div className="text-sm text-slate-400">Waiting for the candidate to join…</div>
+            <div className="text-sm text-white/70">Waiting for the candidate to join…</div>
           )}
         </div>
 
-        <div className="absolute bottom-4 right-4 h-32 w-44 overflow-hidden rounded-xl border border-white/20 bg-slate-900 shadow-lg sm:h-40 sm:w-56">
+        <div className="absolute bottom-4 right-4 h-32 w-44 overflow-hidden rounded-xl border border-white/20 bg-navy shadow-lg sm:h-40 sm:w-56">
           {localCamera ? (
             <VideoTrack trackRef={localCamera} className="h-full w-full object-cover" />
           ) : (
-            <div className="flex h-full items-center justify-center text-xs text-slate-500">
+            <div className="flex h-full items-center justify-center text-xs text-white/50">
               Camera off
             </div>
           )}
         </div>
 
-        <div className="absolute bottom-4 left-1/2 flex -translate-x-1/2 items-center gap-2 rounded-full bg-black/60 px-3 py-2 backdrop-blur">
+        <div className="absolute bottom-4 left-1/2 flex -translate-x-1/2 items-center gap-2 rounded-full bg-navy/60 px-3 py-2 backdrop-blur">
           <Button
             type="button"
             variant={micOn ? 'ghost' : 'destructive'}

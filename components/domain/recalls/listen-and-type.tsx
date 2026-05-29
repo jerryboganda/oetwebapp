@@ -29,7 +29,7 @@ const ERROR_LABELS: Record<RecallsListenTypeResponse['code'], string> = {
   transposition: 'Letters swapped',
   double_letter: 'Double letter',
   hyphen: 'Hyphen difference',
-  homophone: 'Sounds similar — different word',
+  homophone: 'Sounds similar, different word',
   unknown: 'Try again',
 };
 

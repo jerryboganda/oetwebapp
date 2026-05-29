@@ -46,9 +46,9 @@ export default function PeerReviewPage() {
 
         {data && (
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <Card className="p-4 text-center"><div className="text-2xl font-bold">{data.stats.reviewsGiven}</div><div className="text-xs text-muted-foreground">Reviews Given</div></Card>
-            <Card className="p-4 text-center"><div className="text-2xl font-bold">{data.stats.reviewsReceived}</div><div className="text-xs text-muted-foreground">Reviews Received</div></Card>
-            <Card className="p-4 text-center"><div className="text-2xl font-bold">{data.stats.averageHelpfulness > 0 ? data.stats.averageHelpfulness.toFixed(1) : '—'}</div><div className="text-xs text-muted-foreground">Avg Helpfulness</div></Card>
+            <Card className="p-4 text-center"><div className="text-2xl font-bold">{data.stats.reviewsGiven}</div><div className="text-xs text-muted">Reviews Given</div></Card>
+            <Card className="p-4 text-center"><div className="text-2xl font-bold">{data.stats.reviewsReceived}</div><div className="text-xs text-muted">Reviews Received</div></Card>
+            <Card className="p-4 text-center"><div className="text-2xl font-bold">{data.stats.averageHelpfulness > 0 ? data.stats.averageHelpfulness.toFixed(1) : 'N/A'}</div><div className="text-xs text-muted">Avg Helpfulness</div></Card>
           </div>
         )}
 
@@ -70,13 +70,13 @@ export default function PeerReviewPage() {
                 <Card className="p-4 flex items-center justify-between">
                   <div>
                     <Badge variant="outline" className="mr-2">{item.subtestCode}</Badge>
-                    <span className="text-sm text-muted-foreground">{item.createdAt ? new Date(item.createdAt).toLocaleDateString() : ''}</span>
+                    <span className="text-sm text-muted">{item.createdAt ? new Date(item.createdAt).toLocaleDateString() : ''}</span>
                   </div>
                   <Button size="sm" onClick={() => claim(item.id)}><MessageSquare className="w-4 h-4 mr-1" /> Claim & Review</Button>
                 </Card>
               </MotionItem>
             ))}
-            {data.availableToReview.length === 0 && <Card className="p-6 text-center text-muted-foreground"><Users className="w-10 h-10 mx-auto mb-2 opacity-30" />No submissions available right now.</Card>}
+            {data.availableToReview.length === 0 && <Card className="p-6 text-center text-muted"><Users className="w-10 h-10 mx-auto mb-2 opacity-30" />No submissions available right now.</Card>}
           </div>
         )}
 
@@ -103,7 +103,7 @@ export default function PeerReviewPage() {
                 </Card>
               </MotionItem>
             ))}
-            {data.mySubmissions.length === 0 && <Card className="p-6 text-center text-muted-foreground"><Send className="w-10 h-10 mx-auto mb-2 opacity-30" />Submit your writing or speaking attempts for peer feedback.</Card>}
+            {data.mySubmissions.length === 0 && <Card className="p-6 text-center text-muted"><Send className="w-10 h-10 mx-auto mb-2 opacity-30" />Submit your writing or speaking attempts for peer feedback.</Card>}
           </div>
         )}
 
@@ -117,11 +117,11 @@ export default function PeerReviewPage() {
                     <Badge variant="outline" className="mr-2">{item.subtestCode}</Badge>
                     <Badge variant={item.status === 'completed' ? 'default' : 'muted'}>{item.status}</Badge>
                   </div>
-                  <span className="text-xs text-muted-foreground">{item.completedAt ? new Date(item.completedAt).toLocaleDateString() : item.claimedAt ? 'In Progress' : ''}</span>
+                  <span className="text-xs text-muted">{item.completedAt ? new Date(item.completedAt).toLocaleDateString() : item.claimedAt ? 'In Progress' : ''}</span>
                 </Card>
               </MotionItem>
             ))}
-            {data.myReviews.length === 0 && <Card className="p-6 text-center text-muted-foreground">You haven&apos;t reviewed any peers yet.</Card>}
+            {data.myReviews.length === 0 && <Card className="p-6 text-center text-muted">You haven&apos;t reviewed any peers yet.</Card>}
           </div>
         )}
       </MotionSection>

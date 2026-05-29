@@ -146,8 +146,8 @@ export default function AiAssistantThreadsPage() {
             </Link>
           </Button>
           {row.status === 'active' && (
-            <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-[var(--admin-danger)]" onClick={() => setArchiveTarget(row)}>
-              <Archive className="h-3.5 w-3.5" />
+            <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-[var(--admin-danger)]" onClick={() => setArchiveTarget(row)} aria-label="Archive thread">
+              <Archive className="h-3.5 w-3.5" aria-hidden="true" />
             </Button>
           )}
         </div>

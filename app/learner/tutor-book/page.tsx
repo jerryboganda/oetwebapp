@@ -68,7 +68,7 @@ export default function TutorBookPage() {
           </p>
           <a
             href="/marketplace/packages/tutor-book"
-            className="mt-6 inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white"
+            className="mt-6 inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white dark:bg-violet-700"
           >
             View The Tutor Book
           </a>
@@ -83,7 +83,7 @@ export default function TutorBookPage() {
         <div className="mx-auto flex max-w-6xl flex-wrap items-end justify-between gap-4">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.3em] text-[#D4A44F]">OET 2026 · Reader</p>
-            <h1 className="mt-1 text-3xl font-bold">The Tutor Book — First Edition 2026</h1>
+            <h1 className="mt-1 text-3xl font-bold">The Tutor Book: First Edition 2026</h1>
             <p className="mt-1 text-sm text-white/75">Personalised PDF, audio scripts and live updates.</p>
           </div>
           <a

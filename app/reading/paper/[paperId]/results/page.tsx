@@ -3,19 +3,53 @@
 import { Suspense, use, useCallback, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { BookOpen, CheckCircle2, FileText, RefreshCw, Target, XCircle } from 'lucide-react';
+import { BookOpen, CheckCircle2, Clock, FileText, Lightbulb, MessageSquare, RefreshCw, SpellCheck, Target, XCircle } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero, LearnerSurfaceCard, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert, Toast } from '@/components/ui/alert';
-import { SafeRichText } from '@/components/domain/grammar/grammar-content-renderer';
 import { getReadingAttemptReview, type ReadingAttemptReviewDto } from '@/lib/reading-authoring-api';
 import { completeMockSection } from '@/lib/api';
 import { isListeningReadingPassByScaled } from '@/lib/scoring';
 import { readErrorMessage } from '@/lib/read-error-message';
 import type { LearnerSurfaceCardModel } from '@/lib/learner-surface';
+
+/**
+ * The backend post-submit review payload returns a few fields that are not
+ * yet in the shared {@link ReadingAttemptReviewDto} (policy-gated answer keys,
+ * timing, distractor + miss diagnostics, and tutor feedback). We extend the
+ * shape locally and only ever render a field when the API actually supplies
+ * it — never fabricated. Answer keys / explanations are gated server-side.
+ */
+type ReviewItem = ReadingAttemptReviewDto['items'][number] & {
+  correctAnswer?: string | null;
+  explanationMarkdown?: string | null;
+  selectedDistractorCategory?: string | null;
+  missReason?: string | null;
+  elapsedMs?: number | null;
+  totalElapsedMs?: number | null;
+};
+
+type PartBreakdownEntry = ReadingAttemptReviewDto['partBreakdown'][number] & {
+  accuracyPercent?: number | null;
+};
+
+interface TutorFeedbackEntry {
+  id: string;
+  scope: string;
+  targetRef: string | null;
+  feedbackText: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+type ReadingReviewData = Omit<ReadingAttemptReviewDto, 'items' | 'partBreakdown'> & {
+  items: ReviewItem[];
+  partBreakdown: PartBreakdownEntry[];
+  feedback?: TutorFeedbackEntry[];
+};
 
 interface PendingMockCompletion {
   mockAttemptId: string;
@@ -38,7 +72,7 @@ function ReadingPaperResultsContent({ params }: { params: Promise<{ paperId: str
   const { paperId } = use(params);
   const search = useSearchParams();
   const attemptId = search?.get('attemptId') ?? '';
-  const [review, setReview] = useState<ReadingAttemptReviewDto | null>(null);
+  const [review, setReview] = useState<ReadingReviewData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [errorBankToast, setErrorBankToast] = useState<string | null>(null);
@@ -56,7 +90,7 @@ function ReadingPaperResultsContent({ params }: { params: Promise<{ paperId: str
         setLoading(true);
         setError(null);
         const data = await getReadingAttemptReview(attemptId);
-        if (!cancelled) setReview(data);
+        if (!cancelled) setReview(data as ReadingReviewData);
       } catch (err) {
         if (!cancelled) setError(readErrorMessage(err, 'Failed to load Reading review.'));
       } finally {
@@ -176,7 +210,7 @@ function ReadingPaperResultsContent({ params }: { params: Promise<{ paperId: str
               </div>
             </div>
             {mockRetryError ? (
-              <p className="mt-2 text-xs text-red-600">{mockRetryError}</p>
+              <p className="mt-2 text-xs text-danger">{mockRetryError}</p>
             ) : null}
           </InlineAlert>
         ) : null}
@@ -210,14 +244,14 @@ function ReadingPaperResultsContent({ params }: { params: Promise<{ paperId: str
                   <Badge variant={isPracticeOnly ? 'info' : passed ? 'success' : 'warning'}>
                     {isPracticeOnly ? 'Practice-only review' : passed ? 'Reading pass evidence' : 'Below Reading pass anchor'}
                   </Badge>
-                  <p className="mt-3 text-sm leading-6 text-gray-600 dark:text-gray-400">
+                  <p className="mt-3 text-sm leading-6 text-muted">
                     {isPracticeOnly
                       ? 'This subset attempt reports practice marks only. Use the item review to choose the next focused route.'
                       : 'Reading pass evidence is anchored to 30/42 equalling 350/500. Use the item review to choose the next practice route.'}
                   </p>
                   {!isPracticeOnly ? (
                     <p
-                      className="mt-3 border-t border-border pt-3 text-xs font-semibold leading-5 text-gray-600 dark:text-gray-400"
+                      className="mt-3 border-t border-border pt-3 text-xs font-semibold leading-5 text-muted"
                       data-testid="reading-results-estimate-disclaimer"
                     >
                       This is an estimate, not an official OET conversion.
@@ -243,9 +277,19 @@ function ReadingPaperResultsContent({ params }: { params: Promise<{ paperId: str
               <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
                 {review.partBreakdown.map((part) => (
                   <div key={part.partCode} className="rounded-[20px] border border-border bg-surface p-5 shadow-sm">
-                    <p className="text-sm font-black uppercase tracking-[0.16em] text-gray-600 dark:text-gray-400">Part {part.partCode}</p>
-                    <p className="mt-2 text-2xl font-semibold text-gray-900 dark:text-gray-100">{part.rawScore}/{part.maxRawScore}</p>
-                    <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+                    <p className="text-sm font-black uppercase tracking-[0.16em] text-muted">Part {part.partCode}</p>
+                    <div className="mt-2 flex items-baseline gap-2">
+                      <p className="text-2xl font-semibold text-navy">{part.rawScore}/{part.maxRawScore}</p>
+                      {typeof part.accuracyPercent === 'number' ? (
+                        <span
+                          className="text-sm font-bold text-primary"
+                          data-testid={`reading-part-accuracy-${part.partCode}`}
+                        >
+                          {formatPercent(part.accuracyPercent)} correct
+                        </span>
+                      ) : null}
+                    </div>
+                    <p className="mt-1 text-sm text-muted">
                       {part.correctCount} correct | {part.incorrectCount} wrong | {part.unansweredCount} unanswered
                     </p>
                   </div>
@@ -264,10 +308,10 @@ function ReadingPaperResultsContent({ params }: { params: Promise<{ paperId: str
                 {review.skillBreakdown.map((skill) => (
                   <div key={skill.label} className="rounded-[20px] border border-border bg-surface p-5 shadow-sm">
                     <div className="flex items-center justify-between gap-3">
-                      <p className="text-sm font-black uppercase tracking-[0.16em] text-gray-600 dark:text-gray-400">{skill.label}</p>
+                      <p className="text-sm font-black uppercase tracking-[0.16em] text-muted">{skill.label}</p>
                       <Badge variant="muted">{skill.totalCount} item(s)</Badge>
                     </div>
-                    <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
+                    <p className="mt-2 text-sm text-muted">
                       {skill.correctCount} correct | {skill.incorrectCount} wrong | {skill.unansweredCount} unanswered
                     </p>
                   </div>
@@ -286,14 +330,14 @@ function ReadingPaperResultsContent({ params }: { params: Promise<{ paperId: str
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                   {review.clusters.map((cluster) => (
                     <div key={cluster.label} className="rounded-[20px] border border-border bg-surface p-5 shadow-sm">
-                      <p className="text-sm font-black uppercase tracking-[0.16em] text-gray-600 dark:text-gray-400">{cluster.label}</p>
-                      <p className="mt-2 text-2xl font-semibold text-gray-900 dark:text-gray-100">{cluster.incorrectCount} missed</p>
-                      <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">Questions {cluster.questions.map((question) => question.label).join(', ')}</p>
+                      <p className="text-sm font-black uppercase tracking-[0.16em] text-muted">{cluster.label}</p>
+                      <p className="mt-2 text-2xl font-semibold text-navy">{cluster.incorrectCount} missed</p>
+                      <p className="mt-1 text-sm text-muted">Questions {cluster.questions.map((question) => question.label).join(', ')}</p>
                     </div>
                   ))}
                 </div>
               ) : (
-                <div className="rounded-[20px] border border-border bg-surface p-5 text-sm font-semibold text-gray-600 dark:text-gray-400 shadow-sm">
+                <div className="rounded-[20px] border border-border bg-surface p-5 text-sm font-semibold text-muted shadow-sm">
                   No incorrect clusters on this attempt.
                 </div>
               )}
@@ -303,37 +347,43 @@ function ReadingPaperResultsContent({ params }: { params: Promise<{ paperId: str
               <LearnerSurfaceSectionHeader
                 eyebrow="Item Review"
                 title="Question-by-question review"
-                description="Correct answers and explanations appear once review is unlocked for this attempt."
+                description="Review shows your response and scoring outcome. Answer keys, explanations, and miss diagnostics appear only when the review policy releases them."
                 className="mb-5"
               />
               <div className="space-y-3">
                 {review.items.map((item) => (
-                  <details key={item.questionId} className="rounded-[16px] border border-border bg-surface p-4 shadow-sm">
-                    <summary className="cursor-pointer list-none">
-                      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                        <div>
-                          <p className="text-sm font-bold text-gray-900 dark:text-gray-100">Part {item.partCode} | Question {item.displayOrder}</p>
-                          <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">{item.stem}</p>
-                        </div>
-                        <div className="flex flex-wrap items-center gap-2">
-                          <Badge variant={item.isCorrect ? 'success' : 'danger'}>{item.isCorrect ? 'Correct' : 'Review'}</Badge>
-                          <Badge variant="muted">{item.pointsEarned}/{item.maxPoints}</Badge>
-                        </div>
-                      </div>
-                    </summary>
-                    <div className="mt-4 grid grid-cols-1 gap-3 text-sm md:grid-cols-2">
-                      <ReviewValue label="Your answer" value={item.userAnswer} />
-                      <ReviewValue label="Correct answer" value={item.correctAnswer ?? 'Hidden by review policy'} />
-                    </div>
-                    {item.explanationMarkdown ? (
-                      <div className="mt-4 rounded-xl bg-background-light p-3">
-                        <SafeRichText markdown={item.explanationMarkdown} className="text-sm leading-6 text-gray-600 dark:text-gray-400" />
-                      </div>
-                    ) : null}
-                  </details>
+                  <ReviewItemDetails key={item.questionId} item={item} />
                 ))}
               </div>
             </section>
+
+            {review.feedback && review.feedback.length ? (
+              <section id="tutor-feedback">
+                <LearnerSurfaceSectionHeader
+                  eyebrow="Tutor Feedback"
+                  title="Notes from your reviewer"
+                  description="Feedback left by an expert or admin on this attempt, scoped to the whole test, a section, a skill, or a single question."
+                  className="mb-5"
+                />
+                <div className="space-y-3">
+                  {review.feedback.map((entry) => (
+                    <div
+                      key={entry.id}
+                      className="rounded-[16px] border border-border bg-surface p-4 shadow-sm"
+                      data-testid="reading-tutor-feedback"
+                    >
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Badge variant="info" className="inline-flex items-center gap-1">
+                          <MessageSquare className="h-3.5 w-3.5" aria-hidden />
+                          {feedbackScopeLabel(entry.scope, entry.targetRef)}
+                        </Badge>
+                      </div>
+                      <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-navy">{entry.feedbackText}</p>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            ) : null}
           </>
         ) : null}
       </main>
@@ -385,10 +435,8 @@ function policyCard(review: ReadingAttemptReviewDto): LearnerSurfaceCardModel {
     accent: 'slate',
     eyebrow: 'Review Policy',
     eyebrowIcon: FileText,
-    title: review.policy.showCorrectAnswerOnReview ? 'Answers visible' : 'Answers hidden',
-    description: review.policy.showExplanationsAfterSubmit
-      ? 'Explanations are available according to the policy snapshot for this attempt.'
-      : 'Explanations are hidden for this attempt by policy.',
+    title: 'Answer keys redacted',
+    description: 'Learner review payloads show outcomes and clusters without exposing answer-key-only explanations or synonyms.',
     metaItems: [
       { icon: Target, label: review.policy.showExplanationsOnlyIfWrong ? 'Wrong-only explanations' : 'Policy-redacted review' },
     ],
@@ -398,8 +446,8 @@ function policyCard(review: ReadingAttemptReviewDto): LearnerSurfaceCardModel {
 function ReviewValue({ label, value }: { label: string; value: unknown }) {
   return (
     <div className="rounded-xl bg-background-light p-3">
-      <p className="text-xs font-black uppercase tracking-[0.16em] text-gray-600 dark:text-gray-400">{label}</p>
-      <p className="mt-1 break-words font-semibold text-gray-900 dark:text-gray-100">{formatReviewValue(value)}</p>
+      <p className="text-xs font-black uppercase tracking-[0.16em] text-muted">{label}</p>
+      <p className="mt-1 break-words font-semibold text-navy">{formatReviewValue(value)}</p>
     </div>
   );
 }
@@ -409,5 +457,155 @@ function formatReviewValue(value: unknown): string {
   if (Array.isArray(value)) return value.join(', ');
   if (typeof value === 'object') return JSON.stringify(value);
   return String(value);
+}
+
+function ReviewItemDetails({ item }: { item: ReviewItem }) {
+  const missReason = !item.isCorrect && item.missReason ? item.missReason : null;
+  const distractor = !item.isCorrect && item.selectedDistractorCategory
+    ? distractorCategoryLabel(item.selectedDistractorCategory)
+    : null;
+  const spellingMiss = missReason === 'spelling';
+
+  return (
+    <details
+      className="rounded-[16px] border border-border bg-surface p-4 shadow-sm"
+      data-testid={`reading-review-item-${item.questionId}`}
+    >
+      <summary className="cursor-pointer list-none">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-sm font-bold text-navy">Part {item.partCode} | Question {item.displayOrder}</p>
+            <p className="mt-1 text-sm text-muted">{item.stem}</p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {typeof item.elapsedMs === 'number' && item.elapsedMs > 0 ? (
+              <Badge variant="muted" className="inline-flex items-center gap-1">
+                <Clock className="h-3.5 w-3.5" aria-hidden />
+                {formatDuration(item.elapsedMs)}
+              </Badge>
+            ) : null}
+            <Badge variant={item.isCorrect ? 'success' : 'danger'}>{item.isCorrect ? 'Correct' : 'Review'}</Badge>
+            <Badge variant="muted">{item.pointsEarned}/{item.maxPoints}</Badge>
+          </div>
+        </div>
+      </summary>
+
+      {missReason ? (
+        <div
+          className={`mt-4 flex items-start gap-2 rounded-xl border p-3 text-sm ${
+            spellingMiss
+              ? 'border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-200'
+              : 'border-border bg-background-light text-navy'
+          }`}
+          data-testid={spellingMiss ? 'reading-miss-spelling' : 'reading-miss-reason'}
+        >
+          {spellingMiss ? (
+            <SpellCheck className="mt-0.5 h-4 w-4 flex-shrink-0" aria-hidden />
+          ) : (
+            <Lightbulb className="mt-0.5 h-4 w-4 flex-shrink-0" aria-hidden />
+          )}
+          <span>
+            <span className="font-bold">{missReasonLabel(missReason).title}</span>
+            {missReasonLabel(missReason).detail ? (
+              <span className="block text-xs leading-5 opacity-90">{missReasonLabel(missReason).detail}</span>
+            ) : null}
+          </span>
+        </div>
+      ) : null}
+
+      <div className="mt-4 grid grid-cols-1 gap-3 text-sm md:grid-cols-2">
+        <ReviewValue label="Your answer" value={item.userAnswer} />
+        {item.correctAnswer ? (
+          <ReviewValue label="Correct answer" value={item.correctAnswer} />
+        ) : (
+          <ReviewValue label="Review status" value={item.isCorrect ? 'Answered correctly' : 'Needs review'} />
+        )}
+        {distractor ? <ReviewValue label="Distractor type you chose" value={distractor} /> : null}
+        {typeof item.totalElapsedMs === 'number' && item.totalElapsedMs > 0 ? (
+          <ReviewValue label="Total time on this question" value={formatDuration(item.totalElapsedMs)} />
+        ) : null}
+      </div>
+
+      {item.explanationMarkdown ? (
+        <div
+          className="mt-3 rounded-xl border border-border bg-background-light p-3"
+          data-testid="reading-explanation"
+        >
+          <p className="text-xs font-black uppercase tracking-[0.16em] text-muted">Explanation</p>
+          <p className="mt-1 whitespace-pre-wrap text-sm leading-6 text-navy">{item.explanationMarkdown}</p>
+        </div>
+      ) : null}
+    </details>
+  );
+}
+
+function formatPercent(value: number): string {
+  return Number.isInteger(value) ? `${value}%` : `${value.toFixed(1)}%`;
+}
+
+function formatDuration(ms: number): string {
+  const totalSeconds = Math.round(ms / 1000);
+  if (totalSeconds < 60) return `${totalSeconds}s`;
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return seconds === 0 ? `${minutes}m` : `${minutes}m ${seconds}s`;
+}
+
+function missReasonLabel(reason: string): { title: string; detail?: string } {
+  switch (reason) {
+    case 'spelling':
+      return {
+        title: 'Spelling caused this miss',
+        detail: 'Your answer matched the meaning but the spelling did not match the accepted key. Reading answers are graded on exact spelling.',
+      };
+    case 'incomplete':
+      return { title: 'Incomplete answer', detail: 'Part of the required answer was missing.' };
+    case 'distractor':
+      return { title: 'Chose a distractor', detail: 'The option you selected was a deliberate trap rather than the correct answer.' };
+    case 'wrong_text':
+      return { title: 'Answer from the wrong text', detail: 'Your answer came from a different part or text than the question asked about.' };
+    case 'blank':
+      return { title: 'Left blank', detail: 'No answer was recorded for this question.' };
+    case 'wrong':
+      return { title: 'Incorrect answer' };
+    default:
+      return { title: 'Needs review' };
+  }
+}
+
+function distractorCategoryLabel(category: string): string {
+  switch (category) {
+    case 'Opposite':
+      return 'Opposite meaning';
+    case 'TooBroad':
+      return 'Too broad / over-generalised';
+    case 'TooSpecific':
+      return 'Too specific';
+    case 'WrongSpeaker':
+      return 'Wrong speaker or source';
+    case 'NotInText':
+      return 'Not in the text';
+    case 'DistortedDetail':
+      return 'Distorted detail';
+    case 'OutOfScope':
+      return 'Out of scope / off topic';
+    default:
+      return category;
+  }
+}
+
+function feedbackScopeLabel(scope: string, targetRef: string | null): string {
+  switch (scope) {
+    case 'test':
+      return 'Whole test';
+    case 'section':
+      return targetRef ? `Section ${targetRef}` : 'Section';
+    case 'skill':
+      return targetRef ? `Skill: ${targetRef}` : 'Skill';
+    case 'question':
+      return targetRef ? `Question ${targetRef}` : 'Question';
+    default:
+      return scope;
+  }
 }
 

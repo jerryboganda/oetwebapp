@@ -139,7 +139,7 @@ export function PrepCountdown({
       )}
       data-testid="prep-countdown"
     >
-      <p id={labelId} className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
+      <p id={labelId} className="text-sm font-medium uppercase tracking-wider text-muted">
         Preparation time
       </p>
 
@@ -164,7 +164,7 @@ export function PrepCountdown({
             stroke="currentColor"
             strokeWidth={strokeWidth}
             fill="none"
-            className="text-slate-200"
+            className="text-border"
           />
           <circle
             cx={ringSize / 2}
@@ -203,7 +203,7 @@ export function PrepCountdown({
           >
             {formatTime(remaining)}
           </span>
-          <span className="mt-1 text-xs uppercase tracking-wide text-muted-foreground">
+          <span className="mt-1 text-xs uppercase tracking-wide text-muted">
             {isWarning ? 'Wrap up' : 'minutes:seconds'}
           </span>
         </motion.div>
@@ -215,7 +215,7 @@ export function PrepCountdown({
           variant="ghost"
           size="sm"
           onClick={onCancel}
-          className="text-muted-foreground hover:text-foreground"
+          className="text-muted hover:text-foreground"
         >
           Skip prep
         </Button>

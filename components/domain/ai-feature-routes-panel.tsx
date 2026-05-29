@@ -216,14 +216,14 @@ export function AiFeatureRoutesPanel() {
           label="Feature"
           value={draftFeature}
           onChange={(e) => setDraftFeature(e.target.value)}
-          placeholder="— pick feature —"
+          placeholder="Pick a feature"
           options={knownCodes.map((c) => ({ value: c, label: c }))}
         />
         <Select
           label="Provider"
           value={draftProvider}
           onChange={(e) => setDraftProvider(e.target.value)}
-          placeholder="— pick provider —"
+          placeholder="Pick a provider"
           options={activeProviderCodes.map((c) => ({ value: c, label: c }))}
         />
         <Input

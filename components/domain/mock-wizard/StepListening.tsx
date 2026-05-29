@@ -157,7 +157,7 @@ export function StepListening() {
   return (
     <div className="space-y-6">
       <header className="space-y-1">
-        <h2 className="text-lg font-bold text-navy">Step 2 — Listening</h2>
+        <h2 className="text-lg font-bold text-navy">Step 2: Listening</h2>
         <p className="text-sm text-muted">
           Upload the four required assets, then author the 42-item map. Targets: Part A 24, Part B
           6, Part C 12.
@@ -216,7 +216,7 @@ export function StepListening() {
           <div>
             <h3 className="text-sm font-bold uppercase tracking-wider text-muted">Items</h3>
             <p className="text-xs text-muted">
-              Total {counts.total} of 42 — Part A {counts.A}/24, Part B {counts.B}/6, Part C{' '}
+              Total {counts.total} of 42 · Part A {counts.A}/24, Part B {counts.B}/6, Part C{' '}
               {counts.C}/12
             </p>
           </div>
@@ -228,7 +228,7 @@ export function StepListening() {
                 className={
                   'rounded-xl border px-3 py-1.5 text-xs font-bold ' +
                   (activeTab === t
-                    ? 'border-primary bg-primary text-white'
+                    ? 'border-primary bg-primary text-white dark:bg-violet-700'
                     : 'border-border bg-surface text-navy hover:bg-background-light')
                 }
               >

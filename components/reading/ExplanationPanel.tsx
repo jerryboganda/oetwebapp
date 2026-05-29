@@ -33,20 +33,20 @@ export default function ExplanationPanel({ isCorrect, explanation, onAddToReview
       {explanation ? (
         <dl className="space-y-2">
           <div>
-            <dt className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Why correct</dt>
-            <dd className="mt-0.5 text-foreground">{explanation.whyCorrect}</dd>
+            <dt className="text-xs font-semibold uppercase tracking-wide text-muted">Why correct</dt>
+            <dd className="mt-0.5 text-navy">{explanation.whyCorrect}</dd>
           </div>
           <div>
-            <dt className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Why wrong</dt>
-            <dd className="mt-0.5 text-foreground">{explanation.whyWrong}</dd>
+            <dt className="text-xs font-semibold uppercase tracking-wide text-muted">Why wrong</dt>
+            <dd className="mt-0.5 text-navy">{explanation.whyWrong}</dd>
           </div>
           <div>
-            <dt className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Trap</dt>
-            <dd className="mt-0.5 text-foreground">{explanation.trapName}</dd>
+            <dt className="text-xs font-semibold uppercase tracking-wide text-muted">Trap</dt>
+            <dd className="mt-0.5 text-navy">{explanation.trapName}</dd>
           </div>
           <div>
-            <dt className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Tip</dt>
-            <dd className="mt-0.5 text-foreground">{explanation.avoidTip}</dd>
+            <dt className="text-xs font-semibold uppercase tracking-wide text-muted">Tip</dt>
+            <dd className="mt-0.5 text-navy">{explanation.avoidTip}</dd>
           </div>
         </dl>
       ) : null}

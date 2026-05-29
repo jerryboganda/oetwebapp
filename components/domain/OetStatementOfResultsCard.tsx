@@ -408,7 +408,7 @@ function BandChart({ scores }: { scores: OetSorScores }) {
 function AccessibleTable({ data }: { data: OetStatementOfResults }) {
   return (
     <table className="sr-only">
-      <caption>OET Statement of Results — data table</caption>
+      <caption>OET Statement of Results: data table</caption>
       <thead>
         <tr>
           <th scope="col">Subtest</th>

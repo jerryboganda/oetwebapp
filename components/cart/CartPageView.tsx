@@ -222,7 +222,7 @@ export function CartPageView({ emptyStateHref = '/catalog' }: CartPageViewProps)
               {items.map((item) => (
                 <li
                   key={item.itemId}
-                  className="flex items-start gap-4 rounded-2xl border border-border bg-background p-4 shadow-sm"
+                  className="flex items-start gap-4 rounded-2xl border border-border bg-surface p-4 shadow-sm"
                 >
                   <div className="flex-1">
                     <p className="font-semibold text-navy">{item.productName}</p>
@@ -238,7 +238,7 @@ export function CartPageView({ emptyStateHref = '/catalog' }: CartPageViewProps)
                       <button
                         type="button"
                         aria-label="Decrease quantity"
-                        className="rounded-md p-1.5 text-navy hover:bg-background"
+                        className="rounded-md p-1.5 text-navy hover:bg-surface"
                         disabled={busy}
                         onClick={() => void onUpdateQuantity(item, item.quantity - 1)}
                       >
@@ -250,7 +250,7 @@ export function CartPageView({ emptyStateHref = '/catalog' }: CartPageViewProps)
                       <button
                         type="button"
                         aria-label="Increase quantity"
-                        className="rounded-md p-1.5 text-navy hover:bg-background"
+                        className="rounded-md p-1.5 text-navy hover:bg-surface"
                         disabled={busy}
                         onClick={() => void onUpdateQuantity(item, item.quantity + 1)}
                       >
@@ -264,7 +264,7 @@ export function CartPageView({ emptyStateHref = '/catalog' }: CartPageViewProps)
                       type="button"
                       onClick={() => void onRemoveItem(item)}
                       disabled={busy}
-                      className="inline-flex items-center gap-1 text-xs text-red-700 hover:text-red-800"
+                      className="inline-flex items-center gap-1 text-xs text-danger hover:text-danger/80"
                     >
                       <Trash2 className="h-3.5 w-3.5" /> Remove
                     </button>
@@ -275,7 +275,7 @@ export function CartPageView({ emptyStateHref = '/catalog' }: CartPageViewProps)
           </div>
 
           <aside className="space-y-4">
-            <div className="rounded-2xl border border-border bg-background p-5 shadow-sm">
+            <div className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
               <h2 className="text-sm font-semibold uppercase tracking-wider text-muted">
                 Order summary
               </h2>
@@ -317,7 +317,7 @@ export function CartPageView({ emptyStateHref = '/catalog' }: CartPageViewProps)
               </p>
             </div>
 
-            <div className="rounded-2xl border border-border bg-background p-5 shadow-sm">
+            <div className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
               <h2 className="text-sm font-semibold uppercase tracking-wider text-muted">
                 Promo code
               </h2>
@@ -341,7 +341,7 @@ export function CartPageView({ emptyStateHref = '/catalog' }: CartPageViewProps)
                 </Button>
               </form>
               {promoError ? (
-                <p className="mt-2 text-xs text-red-700" role="alert">
+                <p className="mt-2 text-xs text-danger" role="alert">
                   {promoError}
                 </p>
               ) : null}
@@ -359,7 +359,7 @@ export function CartPageView({ emptyStateHref = '/catalog' }: CartPageViewProps)
                         type="button"
                         onClick={() => void onRemovePromo(promo.code)}
                         disabled={busy}
-                        className="text-xs text-red-700 hover:text-red-800"
+                        className="text-xs text-danger hover:text-danger/80"
                       >
                         Remove
                       </button>
@@ -379,7 +379,7 @@ export function CartPageView({ emptyStateHref = '/catalog' }: CartPageViewProps)
             {recommendations.slice(0, 3).map((rec) => (
               <article
                 key={rec.productCode}
-                className="flex h-full flex-col rounded-2xl border border-border bg-background p-5 shadow-sm"
+                className="flex h-full flex-col rounded-2xl border border-border bg-surface p-5 shadow-sm"
               >
                 <h3 className="font-semibold text-navy">{rec.name}</h3>
                 {rec.description ? (
@@ -420,7 +420,7 @@ function Row({
       <span
         className={[
           'font-medium',
-          accent === 'success' ? 'text-emerald-700' : 'text-navy',
+          accent === 'success' ? 'text-success' : 'text-navy',
         ]
           .filter(Boolean)
           .join(' ')}

@@ -11,8 +11,8 @@ route when justified by scorecard evidence.
 Production deploy validation now requires Sentry DSNs in `.env.production`, an
 alerting webhook for the backup sidecar, and the deploy-time
 `scripts/observability-smoke.sh` health probe. External alert-provider dashboard
-IDs and alert-channel proof still need to be attached to release evidence for
-final launch approval.
+IDs and alert-channel proof still need to be attached to launch notes for final
+launch approval.
 
 | Area | Launch SLO | Primary signals |
 | --- | --- | --- |

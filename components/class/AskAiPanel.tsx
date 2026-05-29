@@ -103,7 +103,7 @@ export function AskAiPanel({ sessionId }: AskAiPanelProps) {
                   key={m.id}
                   className={
                     m.role === 'user'
-                      ? 'ml-auto max-w-[85%] rounded-2xl bg-primary px-3 py-2 text-sm text-white'
+                      ? 'ml-auto max-w-[85%] rounded-2xl bg-primary px-3 py-2 text-sm text-white dark:bg-violet-700'
                       : 'mr-auto max-w-[85%] rounded-2xl bg-surface px-3 py-2 text-sm text-navy shadow-sm'
                   }
                 >

@@ -82,7 +82,7 @@ export default function ListeningCurriculumPage() {
           <Link href="/listening/pathway" className="font-semibold underline">
             Listening Pathway
           </Link>{' '}
-          page. This catalog is a skill reference — every card jumps straight to the matching drill.
+          page. This catalog is a skill reference. Every card jumps straight to the matching drill.
         </InlineAlert>
 
         {loading && (
@@ -127,18 +127,18 @@ function StageCard({ stage }: { stage: CurriculumStage }) {
       : <Badge variant="info"><Play className="w-3 h-3 mr-1 inline" /> Available</Badge>;
 
   const body = (
-    <div className="rounded-2xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900 h-full flex flex-col gap-2">
+    <div className="rounded-2xl border border-border bg-surface p-5 h-full flex flex-col gap-2">
       <div className="flex items-center justify-between">
-        <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+        <span className="text-xs font-medium uppercase tracking-wide text-muted">
           Stage {stage.order} · {stage.partHint}
         </span>
         {stateBadge}
       </div>
-      <h3 className="font-semibold text-slate-900 dark:text-slate-100">{stage.title}</h3>
-      <p className="text-sm text-slate-600 dark:text-slate-300">{stage.focus}</p>
-      <span className="mt-auto text-xs text-muted-foreground">≈ {stage.estimatedMinutes} min</span>
+      <h3 className="font-semibold text-navy">{stage.title}</h3>
+      <p className="text-sm text-muted">{stage.focus}</p>
+      <span className="mt-auto text-xs text-muted">≈ {stage.estimatedMinutes} min</span>
       {!stage.locked && !stage.completed && stage.nextActionLabel && (
-        <span className="text-xs font-medium text-indigo-600 dark:text-indigo-300">
+        <span className="text-xs font-medium text-primary">
           {stage.nextActionLabel} →
         </span>
       )}

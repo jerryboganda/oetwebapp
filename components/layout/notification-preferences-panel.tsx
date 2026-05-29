@@ -59,7 +59,7 @@ function PreferenceToggle({
       <span
         className={cn(
           'inline-flex min-w-14 items-center justify-center rounded-full px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.12em]',
-          checked ? 'bg-primary text-white' : 'bg-background-light text-muted',
+          checked ? 'bg-primary text-white dark:bg-violet-700' : 'bg-background-light text-muted',
         )}
       >
         {checked ? 'On' : 'Off'}

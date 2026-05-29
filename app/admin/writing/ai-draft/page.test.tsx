@@ -142,6 +142,6 @@ describe('AdminWritingAiDraftPage', () => {
     setPrompt();
     await user.click(screen.getByRole('button', { name: /generate draft/i }));
 
-    expect(await screen.findByText(/ai quota exceeded — try again later/i)).toBeInTheDocument();
+    expect(await screen.findByText(/ai quota exceeded\. try again later/i)).toBeInTheDocument();
   });
 });

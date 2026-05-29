@@ -73,21 +73,21 @@ export default function CertificatePage() {
           <Card className="p-4 text-center">
             <Award className="h-5 w-5 mx-auto mb-1.5 text-primary" />
             <p className="text-2xl font-bold">{certificates.length}</p>
-            <p className="text-xs text-muted-foreground">Total Certificates</p>
+            <p className="text-xs text-muted">Total Certificates</p>
           </Card>
           <Card className="p-4 text-center">
-            <Download className="h-5 w-5 mx-auto mb-1.5 text-muted-foreground" />
+            <Download className="h-5 w-5 mx-auto mb-1.5 text-muted" />
             <p className="text-2xl font-bold">{certificates.filter(c => c.downloadUrl).length}</p>
-            <p className="text-xs text-muted-foreground">Downloads Available</p>
+            <p className="text-xs text-muted">Downloads Available</p>
           </Card>
           <Card className="p-4 text-center col-span-2 sm:col-span-1">
-            <Calendar className="h-5 w-5 mx-auto mb-1.5 text-muted-foreground" />
+            <Calendar className="h-5 w-5 mx-auto mb-1.5 text-muted" aria-hidden="true" />
             <p className="text-sm font-medium">
               {certificates.length > 0
                 ? new Date(certificates[0].issuedAt).toLocaleDateString()
-                : '—'}
+                : '–'}
             </p>
-            <p className="text-xs text-muted-foreground">Latest Issued</p>
+            <p className="text-xs text-muted">Latest Issued</p>
           </Card>
         </div>
 
@@ -111,12 +111,12 @@ export default function CertificatePage() {
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0 flex-1">
                             <h3 className="font-semibold text-sm mb-1">{cert.title}</h3>
-                            <p className="text-xs text-muted-foreground mb-2">{cert.description}</p>
+                            <p className="text-xs text-muted mb-2">{cert.description}</p>
                             <div className="flex items-center gap-2">
                               <Badge variant="outline" className="text-[10px] capitalize">
                                 {cert.type.replace(/_/g, ' ')}
                               </Badge>
-                              <span className="text-[10px] text-muted-foreground">
+                              <span className="text-[10px] text-muted">
                                 Issued {new Date(cert.issuedAt).toLocaleDateString()}
                               </span>
                             </div>
@@ -143,7 +143,7 @@ export default function CertificatePage() {
             })}
           </MotionSection>
         ) : (
-          <div className="text-center py-16 text-muted-foreground">
+          <div className="text-center py-16 text-muted">
             <Award className="h-12 w-12 mx-auto mb-4 opacity-20" />
             <h3 className="font-medium mb-1">No certificates yet</h3>
             <p className="text-sm max-w-sm mx-auto">

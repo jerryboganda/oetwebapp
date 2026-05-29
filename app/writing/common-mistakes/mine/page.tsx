@@ -67,7 +67,7 @@ export default function WritingMyMistakesPage() {
             <p className="mt-1 text-xs text-amber-800">{t('writing.mistakes.mine.top5.subtitle')}</p>
             <ol className="mt-3 space-y-2">
               {top5.map((row, idx) => (
-                <li key={row.id} className="flex items-center justify-between gap-3 rounded-lg border border-amber-200/60 bg-white p-3">
+                <li key={row.id} className="flex items-center justify-between gap-3 rounded-lg border border-amber-200/60 bg-surface p-3">
                   <div className="flex items-center gap-2">
                     <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-amber-600 text-xs font-bold text-white">#{idx + 1}</span>
                     <div>

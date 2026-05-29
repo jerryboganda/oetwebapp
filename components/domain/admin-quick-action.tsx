@@ -26,8 +26,8 @@ export function AdminQuickAction({
     'inline-flex w-full items-center justify-between gap-3 rounded-lg px-5 py-2 text-sm font-medium transition-[background-color,border-color,color,box-shadow,transform,opacity] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2';
   const styles =
     variant === 'primary'
-      ? 'bg-primary text-white shadow-sm hover:bg-primary/90'
-      : 'border border-border text-navy hover:bg-surface hover:border-border-hover';
+      ? 'bg-primary text-white shadow-sm hover:bg-primary/90 active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600'
+      : 'border border-border text-admin-fg-strong hover:bg-surface hover:border-border-hover';
   return (
     <Link {...rest} className={cn(base, styles, className)}>
       <span className="flex min-w-0 flex-col items-start text-left">

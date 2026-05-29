@@ -65,12 +65,12 @@ The Capacitor mobile integration is **70-80% complete**. Both Android and iOS na
 
 | Control Group | Relevance to OET Prep | Current Status | Gap |
 |---|---|---|---|
-| **MASVS-STORAGE** | Auth tokens, offline cached content, user preferences | ⚠️ Partial — Capacitor Preferences used, no encryption at rest | Need encrypted storage for tokens |
-| **MASVS-CRYPTO** | Token storage, potential biometric key binding | ❌ Not implemented | Evaluate Android Keystore / iOS Keychain usage |
-| **MASVS-AUTH** | JWT authentication, session management, potential biometrics | ⚠️ Partial — JWT auth works, session refresh on resume | Add biometric unlock option, secure token storage |
+| **MASVS-STORAGE** | Auth tokens, offline cached content, user preferences | ✅ Good — secure storage helper is wired for auth tokens | Native-device validation still required |
+| **MASVS-CRYPTO** | Token storage, potential biometric key binding | ✅ Implemented for secure storage / biometric helper surface | Native-device validation still required |
+| **MASVS-AUTH** | JWT authentication, session management, potential biometrics | ✅ Good — JWT auth, session refresh, secure storage, and biometric helper exist | Store-review proof still required |
 | **MASVS-NETWORK** | All API communication, WebView content loading | ✅ Good — HTTPS-only, production URL | Evaluate certificate pinning |
-| **MASVS-PLATFORM** | WebView security, deep link validation, IPC, permissions | ⚠️ Partial — WebView is Capacitor-managed | Add deep link validation, permission rationale |
-| **MASVS-CODE** | Dependency hygiene, enforced updating, ProGuard | ⚠️ Partial — deps tracked in package.json | Add forced update check, ProGuard/R8 for Android |
+| **MASVS-PLATFORM** | WebView security, deep link validation, IPC, permissions | ✅ Good — WebView is Capacitor-managed and deep-link validation is wired | Permission rationale/store proof still required |
+| **MASVS-CODE** | Dependency hygiene, enforced updating, ProGuard | ⚠️ Partial — deps tracked and forced-update helpers exist | Wire forced-update startup/backend policy and ProGuard/R8 for Android |
 | **MASVS-RESILIENCE** | Root/jailbreak detection, debuggable flag, obfuscation | ❌ Not implemented | Add root/jailbreak detection, disable debug in release |
 | **MASVS-PRIVACY** | Microphone permission, analytics, data collection | ⚠️ Partial — microphone permission declared with rationale | Add Privacy Manifest (iOS), data safety section (Play Store) |
 
@@ -105,11 +105,11 @@ The Capacitor mobile integration is **70-80% complete**. Both Android and iOS na
 | Achievements/gamification | ✅ | ✅ | None | — |
 | Billing/subscription | ✅ | ⚠️ Gap | Need IAP integration or web billing redirect | P1 |
 | Push notifications | ✅ (via browser) | ⚠️ Plugin installed, not integrated | Frontend integration needed | P1 |
-| Deep linking | N/A | ❌ Not configured | Full implementation needed | P1 |
+| Deep linking | N/A | ✅ Implemented | Native-device validation required | P1 |
 | Share functionality | N/A | ⚠️ Plugin installed, not integrated | Frontend integration needed | P2 |
 | Offline mode | ✅ (SW) | ✅ Partial | IndexedDB offline-sync exists, content caching works | P2 |
-| Biometric unlock | N/A | ❌ Not implemented | New capability for mobile | P2 |
-| Native notifications | N/A | ⚠️ Plugin installed | Need integration with backend push service | P1 |
+| Biometric unlock | N/A | ✅ Helper implemented | Product entry point/native validation required | P2 |
+| Native notifications | N/A | ✅ Runtime bridge integrated | Store/device validation required | P1 |
 
 ---
 

@@ -210,7 +210,7 @@ export default function NewMockBookingPage() {
       if (code === 'slot_taken' || code === 'conflict') {
         setToast({
           variant: 'error',
-          message: 'That slot was taken just now. We refreshed the calendar — please pick another time.',
+          message: 'That slot was taken just now. We refreshed the calendar, so please pick another time.',
         });
         await loadAvailability();
       } else {

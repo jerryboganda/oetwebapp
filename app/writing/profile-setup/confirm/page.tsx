@@ -80,7 +80,7 @@ export default function ProfileSetupConfirmPage() {
   };
 
   return (
-    <LearnerDashboardShell pageTitle="Writing Profile — Confirm">
+    <LearnerDashboardShell pageTitle="Writing Profile: Confirm">
       <div className="space-y-6">
         <LearnerPageHero
           eyebrow="Step 4 of 4"

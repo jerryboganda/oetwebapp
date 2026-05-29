@@ -17,7 +17,7 @@ export async function generateMetadata({
   try {
     const drill = getDrill(id);
     return {
-      title: `${drill.title} — Writing drill`,
+      title: `${drill.title} | Writing drill`,
       description: drill.brief,
     };
   } catch {
@@ -77,7 +77,7 @@ export default async function WritingDrillPlayerPage({
         <Card className="border-amber-200 bg-amber-50">
           <CardContent className="p-4 text-xs text-amber-900">
             <strong>Practice mode.</strong> This drill is graded automatically against an authored
-            answer key — it is not a substitute for teacher correction or the AI Writing Coach.
+            answer key. It is not a substitute for teacher correction or the AI Writing Coach.
           </CardContent>
         </Card>
         <DrillPlayer drill={drill} />

@@ -231,7 +231,7 @@ export default function AdminWritingAiDraftPage() {
 
       {quotaExceeded && (
         <InlineAlert variant="error" title="AI quota exceeded">
-          AI quota exceeded — try again later.
+          AI quota exceeded. Try again later.
         </InlineAlert>
       )}
 
@@ -242,12 +242,10 @@ export default function AdminWritingAiDraftPage() {
       )}
 
       {result && (
-        <SettingsSection title={result.title} description={`Generated draft — contentId ${result.contentId}`}>
+        <SettingsSection title={result.title} description={`Generated draft (contentId ${result.contentId})`}>
           <MotionItem>
             <div className="mb-4 flex items-start gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-admin-lg bg-admin-success-tint text-admin-success">
-                <CheckCircle2 className="h-5 w-5" aria-hidden="true" />
-              </div>
+              <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-admin-success" aria-hidden="true" />
               <div className="flex-1">
                 <p className="text-xs text-admin-fg-muted">
                   Content ID:{' '}

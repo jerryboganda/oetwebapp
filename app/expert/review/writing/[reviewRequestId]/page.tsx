@@ -591,7 +591,7 @@ export default function WritingReviewWorkspace() {
   const handleAiPreFill = useCallback(async () => {
     const attemptId = reviewDetail?.attemptId;
     if (!attemptId) {
-      setToast({ variant: 'error', message: 'AI pre-fill is unavailable — no attempt is linked to this review.' });
+      setToast({ variant: 'error', message: 'AI pre-fill is unavailable because no attempt is linked to this review.' });
       return;
     }
     setIsAiPreFilling(true);
@@ -756,7 +756,7 @@ export default function WritingReviewWorkspace() {
                   Uploaded pages and extracted text are evidence for paper-mode Writing reviews. Open the source file when handwriting legibility affects scoring.
                 </InlineAlert>
                 {(reviewDetail?.paperAssets ?? []).length === 0 ? (
-                  <div className="rounded-xl border border-dashed border-border bg-muted p-6 text-sm text-muted-foreground">No paper assets are attached to this review.</div>
+                  <div className="rounded-xl border border-dashed border-border bg-muted p-6 text-sm text-muted">No paper assets are attached to this review.</div>
                 ) : (
                   <div className="grid gap-3">
                     {(reviewDetail?.paperAssets ?? []).map((asset) => (
@@ -774,7 +774,7 @@ export default function WritingReviewWorkspace() {
                             <Button size="sm" variant="outline" onClick={() => paperAssetUrls[asset.id] && window.open(paperAssetUrls[asset.id], '_blank', 'noopener,noreferrer')} disabled={!paperAssetUrls[asset.id]}>Open</Button>
                           </div>
                         </div>
-                        {asset.extractionMessage ? <p className="mt-3 rounded-lg bg-muted p-3 text-xs text-muted-foreground">{asset.extractionMessage}</p> : null}
+                        {asset.extractionMessage ? <p className="mt-3 rounded-lg bg-muted p-3 text-xs text-muted">{asset.extractionMessage}</p> : null}
                       </div>
                     ))}
                   </div>
@@ -847,7 +847,7 @@ export default function WritingReviewWorkspace() {
                 </div>
 
                 {(reviewDetail?.voiceNotes ?? []).length === 0 ? (
-                  <div className="rounded-xl border border-dashed border-border bg-muted p-6 text-sm text-muted-foreground">No voice notes have been saved yet.</div>
+                  <div className="rounded-xl border border-dashed border-border bg-muted p-6 text-sm text-muted">No voice notes have been saved yet.</div>
                 ) : (
                   <div className="space-y-3">
                     {(reviewDetail?.voiceNotes ?? []).map((note) => (
@@ -861,7 +861,7 @@ export default function WritingReviewWorkspace() {
                         </div>
                         <audio controls src={voiceNoteUrls[note.id]} className="mt-3 w-full" preload="metadata" />
                         {note.writtenNotes ? <p className="mt-3 text-sm text-navy">{note.writtenNotes}</p> : null}
-                        {note.transcriptText ? <p className="mt-3 whitespace-pre-wrap rounded-lg bg-muted p-3 text-xs text-muted-foreground">{note.transcriptText}</p> : null}
+                        {note.transcriptText ? <p className="mt-3 whitespace-pre-wrap rounded-lg bg-muted p-3 text-xs text-muted">{note.transcriptText}</p> : null}
                       </div>
                     ))}
                   </div>
@@ -925,7 +925,7 @@ export default function WritingReviewWorkspace() {
                 </div>
                 {learnerContext.priorReviews[0] ? (
                   <div className="mt-3 rounded-lg bg-muted p-3">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Latest prior tutor feedback</p>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-muted">Latest prior tutor feedback</p>
                     <p className="mt-1 text-sm text-navy">{learnerContext.priorReviews[0].overallComment}</p>
                   </div>
                 ) : null}
@@ -955,7 +955,7 @@ export default function WritingReviewWorkspace() {
                 </div>
                 <div className="mt-3 space-y-2">
                   {reviewHistory.entries.slice(-4).reverse().map((entry) => (
-                    <div key={`${entry.timestamp}-${entry.action}`} className="rounded-lg bg-muted px-3 py-2 text-xs text-muted-foreground">
+                    <div key={`${entry.timestamp}-${entry.action}`} className="rounded-lg bg-muted px-3 py-2 text-xs text-muted">
                       <p className="font-medium text-foreground">{entry.action.replace(/_/g, ' ')}</p>
                       <p>{entry.actorName ?? 'System'} • {new Date(entry.timestamp).toLocaleString()}</p>
                       {entry.details ? <p className="mt-1">{entry.details}</p> : null}
@@ -965,13 +965,13 @@ export default function WritingReviewWorkspace() {
               </div>
             )}
 
-            <div className="rounded-xl border border-violet-200 bg-violet-50/60 p-3" role="region" aria-label="AI rubric pre-fill">
+            <div className="rounded-xl border border-primary/20 bg-lavender/40 p-3" role="region" aria-label="AI rubric pre-fill">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div className="min-w-0">
-                  <p className="flex items-center gap-2 text-sm font-semibold text-violet-900">
+                  <p className="flex items-center gap-2 text-sm font-semibold text-primary">
                     <Sparkles className="h-4 w-4" aria-hidden="true" /> AI rubric pre-fill
                   </p>
-                  <p className="mt-1 text-xs text-violet-800">
+                  <p className="mt-1 text-xs text-navy">
                     Generate provisional band scores for the six writing criteria. You remain responsible for the final judgement.
                   </p>
                 </div>
@@ -991,7 +991,7 @@ export default function WritingReviewWorkspace() {
                 <div className="mt-3 flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 p-2.5 text-xs text-amber-900" role="status">
                   <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
                   <p>
-                    <span className="font-semibold">Pre-fill only — review and adjust.</span> These AI-generated scores are advisory. Verify each band before submitting.
+                    <span className="font-semibold">Pre-fill only. Review and adjust.</span> These AI-generated scores are advisory. Verify each band before submitting.
                   </p>
                 </div>
               )}

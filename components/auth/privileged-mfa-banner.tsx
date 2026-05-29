@@ -31,14 +31,14 @@ export function PrivilegedMfaBanner() {
 
   return (
     <div>
-      <div className="absolute top-0 left-0 right-0 z-40 flex h-[30px] items-center justify-center bg-gradient-to-r from-orange-500 to-rose-600 px-4 text-xs font-medium text-white shadow-sm">
-        <ShieldCheck className="mr-2 h-3.5 w-3.5 opacity-90" />
+      <div className="absolute top-0 left-0 right-0 z-40 flex h-[30px] items-center justify-center bg-warning px-4 text-xs font-medium text-white shadow-sm">
+        <ShieldCheck className="mr-2 h-3.5 w-3.5 opacity-90" aria-hidden="true" />
         <span className="truncate">
           Security notice: Multi-factor authentication is recommended for privileged access.
         </span>
         <button
           onClick={() => router.push(setupHref)}
-          className="ml-3 shrink-0 rounded bg-white px-2 py-0.5 font-semibold text-rose-700 transition-colors hover:bg-rose-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-rose-600"
+          className="ml-3 shrink-0 rounded bg-surface px-2 py-0.5 font-semibold text-warning transition-colors hover:bg-warning/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-warning"
         >
           Set up MFA
         </button>

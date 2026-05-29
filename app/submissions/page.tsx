@@ -166,7 +166,7 @@ export default function SubmissionHistory() {
                           </div>
                         </div>
                       </div>
-                      <div className="flex items-center gap-3 pt-2 border-t border-gray-50">
+                      <div className="flex items-center gap-3 pt-2 border-t border-border">
                         <span className="text-sm font-medium text-muted">Review Status:</span>
                         <ReviewBadge status={sub.reviewStatus} />
                       </div>

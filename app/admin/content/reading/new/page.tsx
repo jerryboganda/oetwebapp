@@ -114,7 +114,7 @@ export default function AdminCreateReadingPaperPage() {
                 label="Title"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
-                placeholder="e.g. OET Reading Practice Test — Nursing 2024"
+                placeholder="e.g. OET Reading Practice Test, Nursing 2024"
                 required
               />
 

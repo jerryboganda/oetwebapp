@@ -635,6 +635,34 @@ public sealed class ListeningLearnerPathwayService : IListeningLearnerPathwaySer
 
         await _db.SaveChangesAsync(ct);
 
+        // ── 5b. Bridge Phase-1 diagnostic into Phase-2 ListeningAttempt ──
+        // The Phase-2 ListeningPathwayProgressService.RecomputeAsync queries
+        // only db.ListeningAttempts. Without this bridging row the diagnostic
+        // stage stays "Unlocked" (never "Completed") and all subsequent stages
+        // remain locked — even though the learner finished 6+ practice runs.
+        var bridgingAttemptId = $"diag-bridge-{session.Id}";
+        var existingBridge = await _db.ListeningAttempts
+            .AnyAsync(a => a.Id == bridgingAttemptId, ct);
+        if (!existingBridge)
+        {
+            _db.ListeningAttempts.Add(new ListeningAttempt
+            {
+                Id = bridgingAttemptId,
+                UserId = userId,
+                PaperId = DiagnosticPaperId,
+                StartedAt = session.StartedAt,
+                SubmittedAt = now,
+                LastActivityAt = now,
+                Status = ListeningAttemptStatus.Submitted,
+                Mode = ListeningAttemptMode.Diagnostic,
+                RawScore = grading.CorrectCount,
+                MaxRawScore = DiagnosticTotalQuestions,
+                ScaledScore = 0, // threshold is 0 — any value counts
+                ScopeJson = """{"pathwayStage":"diagnostic"}""",
+            });
+            await _db.SaveChangesAsync(ct);
+        }
+
         // ── 6. Seed the diagnostic baseline (L1..L8 + accent) ────────────
         // SetDiagnosticBaselineAsync owns its own SaveChangesAsync so we
         // call it after the session commit above. A failure here will

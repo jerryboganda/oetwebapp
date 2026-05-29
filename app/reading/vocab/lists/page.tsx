@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
@@ -112,7 +112,7 @@ export default function VocabListsPage() {
             <p className="mb-0.5 text-xs font-semibold uppercase tracking-widest text-violet-500">
               Curated Collections
             </p>
-            <h1 className="text-2xl font-bold text-neutral-900 dark:text-white">
+            <h1 className="text-2xl font-bold text-navy">
               Vocabulary Lists
             </h1>
           </div>
@@ -129,7 +129,7 @@ export default function VocabListsPage() {
             {[0, 1, 2, 3].map((i) => (
               <div
                 key={i}
-                className="h-48 animate-pulse rounded-2xl border border-neutral-200 bg-neutral-100 dark:border-neutral-700 dark:bg-neutral-800"
+                className="h-48 motion-safe:animate-pulse rounded-2xl border border-border bg-background-light"
               />
             ))}
           </div>
@@ -138,23 +138,23 @@ export default function VocabListsPage() {
             {displayLists.map((list) => (
               <div
                 key={list.slug}
-                className="flex flex-col rounded-2xl border border-neutral-200 bg-white px-6 py-5 dark:border-neutral-800 dark:bg-neutral-900"
+                className="flex flex-col rounded-2xl border border-border bg-surface px-6 py-5"
               >
                 {/* Header */}
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex-1 min-w-0">
-                    <h2 className="truncate text-base font-semibold text-neutral-900 dark:text-white">
+                    <h2 className="truncate text-base font-semibold text-navy">
                       {list.name}
                     </h2>
                     {list.wordCount > 0 ? (
-                      <p className="mt-0.5 text-xs text-neutral-400">
+                      <p className="mt-0.5 text-xs text-muted">
                         {list.wordCount.toLocaleString()} words
                       </p>
                     ) : null}
                   </div>
 
                   {list.isSubscribed ? (
-                    <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400">
+                    <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-success/10 px-3 py-1 text-xs font-semibold text-success">
                       <CheckCircle2 className="h-3.5 w-3.5" aria-hidden />
                       Subscribed
                     </span>
@@ -163,7 +163,7 @@ export default function VocabListsPage() {
                       type="button"
                       disabled={subscribing[list.slug]}
                       onClick={() => void handleSubscribe(list.slug)}
-                      className="shrink-0 rounded-lg bg-violet-600 px-4 py-1.5 text-xs font-semibold text-white transition hover:bg-violet-700 disabled:opacity-50"
+                      className="shrink-0 rounded-lg bg-primary px-4 py-1.5 text-xs font-semibold text-white transition-[color,background-color,transform] duration-200 hover:bg-primary-dark active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600 disabled:opacity-50"
                     >
                       {subscribing[list.slug] ? 'Subscribing…' : 'Subscribe'}
                     </button>
@@ -171,11 +171,11 @@ export default function VocabListsPage() {
                 </div>
 
                 {/* Description */}
-                <p className="mt-2 text-sm text-neutral-500 dark:text-neutral-400">
+                <p className="mt-2 text-sm text-muted">
                   {list.description}
                 </p>
 
-                {/* Preview words — only when subscribed and words available */}
+                {/* Preview words: only when subscribed and words available */}
                 {list.isSubscribed && list.previewWords.length > 0 ? (
                   <div className="mt-4 flex flex-wrap gap-2">
                     {list.previewWords.slice(0, 5).map((word) => (

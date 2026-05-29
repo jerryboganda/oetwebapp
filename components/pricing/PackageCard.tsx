@@ -28,7 +28,7 @@ export function PackageCard({ plan, detailsHref }: PackageCardProps) {
   const href = detailsHref ?? `/marketplace/packages/${encodeURIComponent(plan.code)}`;
 
   return (
-    <article className="flex h-full flex-col rounded-2xl border border-border bg-background p-6 shadow-sm">
+    <article className="flex h-full flex-col rounded-2xl border border-border bg-surface p-6 shadow-sm">
       <div className="flex items-start justify-between gap-3">
         <h4 className="text-lg font-bold leading-snug">{plan.name}</h4>
         <PriceCell price={plan.price} originalPrice={plan.originalPrice ?? null} />
@@ -51,33 +51,33 @@ export function PackageCard({ plan, detailsHref }: PackageCardProps) {
         <ul className="mt-4 space-y-1.5 text-sm">
           {plan.bundledWritingAssessments > 0 ? (
             <li className="flex items-center gap-2">
-              <CheckCircle2 className="h-4 w-4 flex-none text-emerald-600" />
+              <CheckCircle2 className="h-4 w-4 flex-none text-success" aria-hidden="true" />
               {plan.bundledWritingAssessments} bundled writing assessment
               {plan.bundledWritingAssessments === 1 ? '' : 's'}
             </li>
           ) : null}
           {plan.bundledSpeakingSessions > 0 ? (
             <li className="flex items-center gap-2">
-              <CheckCircle2 className="h-4 w-4 flex-none text-emerald-600" />
+              <CheckCircle2 className="h-4 w-4 flex-none text-success" aria-hidden="true" />
               {plan.bundledSpeakingSessions} bundled private speaking session
               {plan.bundledSpeakingSessions === 1 ? '' : 's'}
             </li>
           ) : null}
           {plan.bundledAiCredits > 0 ? (
             <li className="flex items-center gap-2">
-              <CheckCircle2 className="h-4 w-4 flex-none text-emerald-600" />
+              <CheckCircle2 className="h-4 w-4 flex-none text-success" aria-hidden="true" />
               {plan.bundledAiCredits} AI practice credits
             </li>
           ) : null}
           {plan.bundledTutorBook ? (
             <li className="flex items-center gap-2">
-              <CheckCircle2 className="h-4 w-4 flex-none text-emerald-600" />
+              <CheckCircle2 className="h-4 w-4 flex-none text-success" aria-hidden="true" />
               The Tutor Book - First Edition 2026 (PDF + Telegram)
             </li>
           ) : null}
           {plan.bundledBasicEnglish ? (
             <li className="flex items-center gap-2">
-              <CheckCircle2 className="h-4 w-4 flex-none text-emerald-600" />
+              <CheckCircle2 className="h-4 w-4 flex-none text-success" aria-hidden="true" />
               Basic English foundation course
             </li>
           ) : null}

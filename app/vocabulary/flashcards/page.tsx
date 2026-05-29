@@ -133,7 +133,7 @@ export default function FlashcardsPage() {
             <Link href="/vocabulary" className="rounded-xl border border-border bg-background-light px-5 py-2.5 text-sm font-medium text-navy shadow-sm transition-colors hover:border-primary/30 hover:bg-surface">
               Back to Vocabulary
             </Link>
-            <button onClick={() => { setCurrent(0); setFlipped(false); setDone(false); setStats({ reviewed: 0, easy: 0 }); }} className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-5 py-2.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-primary/90">
+            <button onClick={() => { setCurrent(0); setFlipped(false); setDone(false); setStats({ reviewed: 0, easy: 0 }); }} className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-5 py-2.5 text-sm font-medium text-white shadow-sm transition-[color,background-color,transform] duration-200 hover:bg-primary/90 active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600">
               <RotateCcw className="w-4 h-4" /> Review Again
             </button>
           </div>
@@ -157,7 +157,7 @@ export default function FlashcardsPage() {
             <span>{current + 1} / {cards.length}</span>
           </div>
           <div className="mb-6 h-1.5 w-full rounded-full bg-background-light">
-            <div className="h-1.5 rounded-full bg-primary transition-all" style={{ width: `${Math.min(100, ((current + 1) / cards.length) * 100)}%` }} />
+            <div className="h-1.5 rounded-full bg-primary transition-[width,background-color] duration-300" style={{ width: `${Math.min(100, ((current + 1) / cards.length) * 100)}%` }} />
           </div>
 
           <AnimatePresence mode="wait">

@@ -150,7 +150,7 @@ export default function AnnotationTemplatesPage() {
         errorMessage="Unable to load annotation templates."
         emptyContent={
           <EmptyState
-            icon={<FileEdit className="w-12 h-12 text-gray-400" />}
+            icon={<FileEdit className="w-12 h-12 text-muted" />}
             title="No templates yet"
             description="Create your first annotation template to speed up reviews."
           />
@@ -161,8 +161,8 @@ export default function AnnotationTemplatesPage() {
             <Card key={t.id} className="p-4 flex flex-col">
               <div className="flex items-start justify-between mb-2">
                 <div>
-                  <h3 className="font-semibold text-sm text-gray-900 dark:text-gray-100">{t.label}</h3>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                  <h3 className="font-semibold text-sm text-navy">{t.label}</h3>
+                  <p className="text-xs text-muted mt-0.5">
                     {t.subtestCode} &middot; {t.criterionCode.replace(/_/g, ' ')}
                   </p>
                 </div>
@@ -172,15 +172,15 @@ export default function AnnotationTemplatesPage() {
                   )}
                 </div>
               </div>
-              <p className="text-sm text-gray-700 dark:text-gray-300 flex-1 line-clamp-3">{t.templateText}</p>
+              <p className="text-sm text-navy flex-1 line-clamp-3">{t.templateText}</p>
               <div className="mt-3 flex items-center justify-between">
-                <span className="text-xs text-gray-400">Used {t.usageCount}×</span>
+                <span className="text-xs text-muted">Used {t.usageCount}×</span>
                 <div className="flex items-center gap-1">
                   <Button size="sm" variant="ghost" onClick={() => openEdit(t)}>
                     <Pencil className="w-3.5 h-3.5" />
                   </Button>
                   <Button size="sm" variant="ghost" onClick={() => handleDelete(t.id)} disabled={isMutating}>
-                    <Trash2 className="w-3.5 h-3.5 text-red-500" />
+                    <Trash2 className="w-3.5 h-3.5 text-danger" />
                   </Button>
                 </div>
               </div>
@@ -194,27 +194,27 @@ export default function AnnotationTemplatesPage() {
         <Modal open title={modalMode === 'create' ? 'New Template' : 'Edit Template'} onClose={() => setShowModal(false)}>
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Subtest</label>
+              <label className="block text-sm font-medium text-navy mb-1">Subtest</label>
               <Select value={form.subtestCode} onChange={(e) => setForm({ ...form, subtestCode: e.target.value, criterionCode: '' })} options={SUBTESTS.map((s) => ({ value: s, label: s.charAt(0).toUpperCase() + s.slice(1) }))} />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Criterion</label>
+              <label className="block text-sm font-medium text-navy mb-1">Criterion</label>
               <Select value={form.criterionCode} onChange={(e) => setForm({ ...form, criterionCode: e.target.value })} options={[{ value: '', label: 'Select criterion' }, ...criteriaOptions.map((c) => ({ value: c, label: c.replace(/_/g, ' ') }))]} />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Label</label>
+              <label className="block text-sm font-medium text-navy mb-1">Label</label>
               <Input value={form.label} onChange={(e) => setForm({ ...form, label: e.target.value })} placeholder="e.g., Cohesion Issue" />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Template Text</label>
+              <label className="block text-sm font-medium text-navy mb-1">Template Text</label>
               <textarea
-                className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 p-3 text-sm text-gray-700 dark:text-gray-300 min-h-[100px] focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                className="w-full rounded-lg border border-border bg-surface p-3 text-sm text-navy min-h-[100px] focus:ring-2 focus:ring-primary focus:border-transparent"
                 value={form.templateText}
                 onChange={(e) => setForm({ ...form, templateText: e.target.value })}
                 placeholder="The cohesive devices used here could be improved by…"
               />
             </div>
-            <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+            <label className="flex items-center gap-2 text-sm text-navy">
               <input
                 type="checkbox"
                 checked={form.isShared}

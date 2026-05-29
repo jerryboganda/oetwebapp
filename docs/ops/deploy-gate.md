@@ -15,41 +15,49 @@ Every production deploy must, at minimum, attach:
 
 1. Green CI run from the deploying SHA (lint, type-check, unit, backend
    tests, production build) — see `.github/workflows`.
-2. Latest SBOM + SCA bundle from `scripts/evidence-collect.sh` with
-    `scripts/evidence-verify.sh` exit 0. Production mode requires
-    `checksums.sha256`, detached `checksums.sha256.asc`, the expected signer
-    fingerprint from the protected GitHub `production` environment, a `git_sha`
-    matching the deployed `HEAD`, immutable image digests in
-    `image-digests.env` including the stable router image digest, and
-    checksum-covered accepted-risk notes.
-3. Pre-flight script success: `scripts/deploy/pre-flight.sh` against the
+2. Latest SBOM + SCA workflow artifacts for the deploying SHA, with any accepted
+   vulnerability risk explicitly owned and time-bounded.
+3. Successful protected `Build Release Images` workflow for the deploying SHA,
+   with `release-images-<sha>/release-images.env` recording immutable `@sha256`
+   refs for `WEB_IMAGE`, `API_IMAGE`, `DB_BACKUP_IMAGE`, and `ROUTER_IMAGE`.
+   The artifact is commit-scoped and retained for 90 days.
+4. Pre-flight script success: `scripts/deploy/pre-flight.sh` against the
    target host.
-4. `.env.production` validation — no missing keys, no `__placeholder__`
+5. `.env.production` validation — no missing keys, no `__placeholder__`
    values. The deploy/pre-flight scripts run
    `scripts/deploy/validate-production-env.sh` without printing secrets.
-5. Production mock/stub scan success from `scripts/deploy/mock-stub-scan.sh`.
-6. Approver acknowledgement (Dr Faisal Maqsood) recorded in the deploy
+6. Production mock/stub scan success from `scripts/deploy/mock-stub-scan.sh`.
+7. Approver acknowledgement (Dr Faisal Maqsood) recorded in the deploy
    commit message or release notes.
-7. Pinned SSH host fingerprint configured as `VPS_SSH_FINGERPRINT` on the
+8. Pinned SSH host fingerprint configured as `VPS_SSH_FINGERPRINT` on the
    protected GitHub `production` environment.
 
 ## Deploy Command (current)
 
-Production deploys are exact-SHA only. The protected GitHub deploy workflow must
-download artifact `release-evidence-<sha>` from the successful
-`verify-release-artifacts.yml` run for the same SHA, then run:
+Production deploys are exact-SHA only. First run the protected `Build Release
+Images` workflow for the target SHA. The protected `Deploy Production` workflow
+must then receive the same target SHA plus the immutable image digest refs from
+`release-images.env`; it downloads that artifact and rejects mismatched refs
+before SSH deploy. The VPS command shape is:
 
 ```bash
 ssh root@68.183.32.122
 cd /opt/oetwebapp
-DEPLOY_REF=<40-character-sha> bash ./scripts/deploy/deploy-prod.sh
+DEPLOY_REF=<40-character-sha> \
+WEB_IMAGE=<web-image@sha256:...> \
+API_IMAGE=<api-image@sha256:...> \
+DB_BACKUP_IMAGE=<db-backup-image@sha256:...> \
+ROUTER_IMAGE=<router-image@sha256:...> \
+bash ./scripts/deploy/deploy-prod.sh
 ```
 
 The active GitHub deploy checkout is `/opt/oetwebapp`. `/root/oetwebsite` is
-stale and must not be used for builds. The deploy gate preserves the signed
-evidence bundle, verifies that evidence and immutable image digests against the
-deployed SHA, runs pre-flight, starts digest-pinned images in the inactive
-blue/green slot, switches the stable `web` and `learner-api` router containers
+stale and must not be used for builds. The deploy gate validates immutable image
+digest refs against the release-image artifact, requires successful CI and
+SBOM/SCA runs for the exact SHA, logs the VPS into GHCR using a temporary Docker
+config for image pulls, runs pre-flight, starts digest-pinned images in the
+inactive blue/green slot, verifies each pulled image is labelled with the
+deploying SHA, switches the stable `web` and `learner-api` router containers
 only after internal slot health passes, then runs post-deploy verification,
 observability smoke, and the Reading/media smoke gate. It never runs
 volume-destructive commands.
@@ -88,10 +96,17 @@ windows above at the approver's discretion.
 ```bash
 ssh root@68.183.32.122
 cd /opt/oetwebapp
-# Identify the previous-good SHA/evidence/slot from .deploy/previous-good.env,
-# .deploy/active-slot.env, or the release record. The evidence bundle must be
-# signed for the selected SHA and include immutable image digests.
-DEPLOY_REF=<previous-good-sha> bash ./scripts/deploy/deploy-prod.sh
+# Identify the rollback SHA, image digests, and slot from
+# .deploy/rollback-target.env first, then .deploy/release-history.tsv if needed.
+# The current deploy driver is preserved under .deploy/deploy-driver before
+# resetting to older SHAs, so rollback can still use the digest-native rollout
+# scripts after the digest deployment migration.
+DEPLOY_REF=<previous-good-sha> \
+WEB_IMAGE=<previous-web-image@sha256:...> \
+API_IMAGE=<previous-api-image@sha256:...> \
+DB_BACKUP_IMAGE=<previous-db-backup-image@sha256:...> \
+ROUTER_IMAGE=<previous-router-image@sha256:...> \
+bash ./scripts/deploy/deploy-prod.sh
 # Verify
 scripts/deploy/post-deploy-verify.sh
 ```
@@ -110,8 +125,8 @@ If rollback itself fails, page the incident commander
    truth. Learner-uploaded media lives in `oetwebsite_oet_learner_storage`, and
    encrypted dumps live in `oetwebsite_oet_db_backups`.
 - A manual restore drill from a recent `pg_dump` snapshot must be performed
-  at least once per quarter; record the timestamp and the operator in
-  `docs/release/evidence-checklist.md`.
+   at least once per quarter; record the timestamp and the operator in the
+   release/deploy notes.
 - Destructive migrations require `DESTRUCTIVE_MIGRATION_APPROVAL`,
   `DESTRUCTIVE_MIGRATION_MAINTENANCE_WINDOW`,
   `DESTRUCTIVE_MIGRATION_BACKUP_ID`, and

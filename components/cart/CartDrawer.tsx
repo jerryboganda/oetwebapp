@@ -85,10 +85,10 @@ export function CartDrawer({ open, onClose }: CartDrawerProps) {
       <button
         type="button"
         aria-label="Close cart"
-        className="flex-1 bg-black/40 backdrop-blur-sm"
+        className="flex-1 bg-navy/40 backdrop-blur-sm"
         onClick={onClose}
       />
-      <div className="flex h-full w-full max-w-md flex-col overflow-hidden bg-background shadow-xl">
+      <div className="flex h-full w-full max-w-md flex-col overflow-hidden bg-surface shadow-xl">
         <header className="flex items-center justify-between border-b border-border px-4 py-3">
           <h2 id="cart-drawer-title" className="text-lg font-semibold text-navy">
             Your cart
@@ -118,7 +118,7 @@ export function CartDrawer({ open, onClose }: CartDrawerProps) {
               {items.map((item) => (
                 <li
                   key={item.itemId}
-                  className="rounded-xl border border-border bg-background p-3 shadow-sm"
+                  className="rounded-xl border border-border bg-surface p-3 shadow-sm"
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
@@ -155,7 +155,7 @@ export function CartDrawer({ open, onClose }: CartDrawerProps) {
                       type="button"
                       onClick={() => void onQty(item.itemId, 0)}
                       disabled={busy}
-                      className="ml-auto text-xs text-red-700 hover:text-red-800"
+                      className="ml-auto text-xs text-danger hover:text-danger/80"
                     >
                       Remove
                     </button>

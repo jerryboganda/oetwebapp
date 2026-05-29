@@ -120,7 +120,7 @@ export default function AdminContentImportPage() {
         banner={importResult ? (
           <InlineAlert
             variant={importResult.failed > 0 ? 'warning' : 'success'}
-            title={`Last import — batch ${importResult.batchId}`}
+            title={`Last import: batch ${importResult.batchId}`}
           >
             <div>
               Created: {importResult.created} · Failed: {importResult.failed}

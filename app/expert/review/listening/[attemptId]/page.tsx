@@ -43,11 +43,11 @@ function groupByPart(
 }
 
 const PART_LABELS: Record<string, string> = {
-  A1: 'Part A1 — Consultation',
-  A2: 'Part A2 — Consultation (continued)',
-  B: 'Part B — Short Extracts',
-  C1: 'Part C1 — Case Study',
-  C2: 'Part C2 — Case Study (continued)',
+  A1: 'Part A1: Consultation',
+  A2: 'Part A2: Consultation (continued)',
+  B: 'Part B: Short Extracts',
+  C1: 'Part C1: Case Study',
+  C2: 'Part C2: Case Study (continued)',
 };
 
 // ── Score override UI ──────────────────────────────────────────────────────
@@ -286,7 +286,7 @@ function QuestionCard({
     <button
       type="button"
       onClick={onSelect}
-      className={`w-full rounded-xl border p-4 text-left transition-all ${
+      className={`w-full rounded-xl border p-4 text-left transition-[color,background-color,border-color,box-shadow,transform,opacity,filter] duration-200 ${
         selected
           ? 'border-primary/40 bg-primary/5 shadow-sm'
           : 'border-border bg-surface hover:border-border-hover hover:bg-muted'
@@ -324,7 +324,7 @@ function QuestionCard({
                   item.isCorrect ? 'text-success' : 'text-danger'
                 }
               >
-                {item.userAnswer ?? '—'}
+                {item.userAnswer ?? 'N/A'}
               </span>
             </div>
             <div>
@@ -333,7 +333,7 @@ function QuestionCard({
             </div>
           </div>
           {item.transcriptEvidence && (
-            <blockquote className="mt-2 border-l-2 border-info/40 pl-3 text-xs italic text-info">
+            <blockquote className="mt-2 rounded-lg bg-info/5 px-2 py-1 text-xs italic text-info">
               {item.transcriptEvidence}
             </blockquote>
           )}
@@ -562,7 +562,7 @@ export default function ListeningReviewWorkspacePage() {
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-4">
           <div>
             <h1 className="text-base font-semibold text-navy">
-              Listening Feedback — {bundle.paperTitle}
+              Listening Feedback: {bundle.paperTitle}
             </h1>
             <p className="text-xs text-muted">
               {bundle.learnerDisplayName} · {bundle.rawScore}/{bundle.maxRawScore} raw · {bundle.scaledScore} scaled
@@ -645,7 +645,7 @@ export default function ListeningReviewWorkspacePage() {
             {selectedQuestion && (
               <div className="mb-4 rounded-xl border border-primary/20 bg-primary/5 p-4">
                 <p className="mb-2 text-xs font-semibold text-primary">
-                  Comment — Q{selectedQuestion.questionNumber}:{' '}
+                  Comment, Q{selectedQuestion.questionNumber}:{' '}
                   <span className="font-normal text-navy">
                     {selectedQuestion.stem.slice(0, 60)}
                     {selectedQuestion.stem.length > 60 ? '...' : ''}

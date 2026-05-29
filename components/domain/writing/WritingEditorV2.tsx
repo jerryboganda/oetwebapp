@@ -123,6 +123,7 @@ export function WritingEditorV2({
   } | null>(null);
   const [fallbackValue, setFallbackValue] = useState(initialContent);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const currentValueRef = useRef(initialContent);
   // Spell-check rules: ON in practice modes, OFF in mock per spec §11.4.
   // Caller can override via `spellCheck` prop.
   const effectiveSpellCheck =
@@ -164,6 +165,7 @@ export function WritingEditorV2({
   // Fallback textarea — fires onChange immediately.
   useEffect(() => {
     if (tiptap) return;
+    currentValueRef.current = fallbackValue;
     onChange?.(fallbackValue, countWords(fallbackValue));
   }, [fallbackValue, tiptap, onChange]);
 
@@ -172,8 +174,7 @@ export function WritingEditorV2({
     if (disabled || !onSubmit) return;
     function handleKey(e: KeyboardEvent) {
       if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
-        const current = tiptap ? fallbackValue /* TODO bridge once editor instance is exposed */ : fallbackValue;
-        onSubmit?.(current);
+        onSubmit?.(currentValueRef.current);
       }
     }
     window.addEventListener('keydown', handleKey);
@@ -211,6 +212,7 @@ export function WritingEditorV2({
             inputId={inputId}
             annotations={annotations}
             onChange={(content, wordCount) => {
+              currentValueRef.current = content;
               setFallbackValue(content);
               onChange?.(content, wordCount);
             }}
@@ -230,7 +232,10 @@ export function WritingEditorV2({
             spellCheck={effectiveSpellCheck}
             disabled={disabled}
             readOnly={disabled}
-            onChange={(e) => setFallbackValue(e.target.value)}
+            onChange={(e) => {
+              currentValueRef.current = e.target.value;
+              setFallbackValue(e.target.value);
+            }}
             aria-label="Writing editor"
           />
         )}
@@ -365,7 +370,7 @@ function useAnnotationOverlay(annotations: WritingEditorAnnotation[]): ReactNode
     if (!annotations || annotations.length === 0) return null;
     return (
       <ul
-        className="absolute bottom-0 left-0 right-0 max-h-32 overflow-y-auto bg-black/60 text-white text-[11px] px-3 py-2 space-y-1 backdrop-blur-sm"
+        className="absolute bottom-0 left-0 right-0 max-h-32 overflow-y-auto bg-navy/60 text-white text-[11px] px-3 py-2 space-y-1 backdrop-blur-sm"
         aria-label="Inline annotations"
         aria-live="polite"
         aria-atomic="false"

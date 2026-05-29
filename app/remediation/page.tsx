@@ -62,7 +62,7 @@ export default function RemediationPage() {
         method: 'POST',
         body: JSON.stringify({ subtestCode, criterionCode }),
       });
-      setToast({ variant: 'success', message: `Remediation session started for ${subtestCode} — ${criterionCode}` });
+      setToast({ variant: 'success', message: `Remediation session started for ${subtestCode} · ${criterionCode}` });
     } catch {
       setToast({ variant: 'error', message: 'Failed to start remediation session.' });
     } finally {
@@ -114,7 +114,7 @@ export default function RemediationPage() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="font-medium text-navy capitalize">
-                      {wa.subtestCode} — {wa.criterionCode}
+                      {wa.subtestCode} · {wa.criterionCode}
                     </p>
                     <div className="flex items-center gap-3 mt-1">
                       <span className="text-sm text-muted">Avg: {wa.averageScore}/6</span>

@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Domain.Billing;
+using OetLearner.Api.Services;
 
 namespace OetLearner.Api.Data;
 
@@ -203,6 +204,9 @@ public partial class LearnerDbContext(DbContextOptions<LearnerDbContext> options
     public DbSet<Cohort> Cohorts => Set<Cohort>();
     public DbSet<CohortMember> CohortMembers => Set<CohortMember>();
     public DbSet<Sponsorship> Sponsorships => Set<Sponsorship>();
+    public DbSet<SponsorSeatPack> SponsorSeatPacks => Set<SponsorSeatPack>();
+    public DbSet<SponsorSeatAssignment> SponsorSeatAssignments => Set<SponsorSeatAssignment>();
+    public DbSet<SponsorBillingEvent> SponsorBillingEvents => Set<SponsorBillingEvent>();
 
     // Marketplace / booking entities
     public DbSet<ExamBooking> ExamBookings => Set<ExamBooking>();
@@ -285,6 +289,11 @@ public partial class LearnerDbContext(DbContextOptions<LearnerDbContext> options
     public DbSet<ReadingErrorBankEntry> ReadingErrorBankEntries => Set<ReadingErrorBankEntry>();
     public DbSet<ReadingQuestionReviewLog> ReadingQuestionReviewLogs => Set<ReadingQuestionReviewLog>();
     public DbSet<ReadingExtractionDraft> ReadingExtractionDrafts => Set<ReadingExtractionDraft>();
+
+    // Reading Wave 1 — review feedback, changed-answer history, assignments.
+    public DbSet<ReadingAttemptFeedback> ReadingAttemptFeedbacks => Set<ReadingAttemptFeedback>();
+    public DbSet<ReadingAnswerRevision> ReadingAnswerRevisions => Set<ReadingAnswerRevision>();
+    public DbSet<ReadingAssignment> ReadingAssignments => Set<ReadingAssignment>();
 
     // Reading Pathway subsystem (Reading Module Pathway Plan).
     // New 5-stage learning pathway: onboarding, diagnostic, foundation, practice, mastery.
@@ -418,6 +427,9 @@ public partial class LearnerDbContext(DbContextOptions<LearnerDbContext> options
 
     // Admin content management entities
     public DbSet<NotificationTemplate> NotificationTemplates => Set<NotificationTemplate>();
+    public DbSet<NotificationCampaign> NotificationCampaigns => Set<NotificationCampaign>();
+    public DbSet<NotificationCampaignRecipient> NotificationCampaignRecipients => Set<NotificationCampaignRecipient>();
+    public DbSet<NotificationRule> NotificationRules => Set<NotificationRule>();
     public DbSet<ConversationTemplate> ConversationTemplates => Set<ConversationTemplate>();
     public DbSet<FreeTierConfig> FreeTierConfigs => Set<FreeTierConfig>();
 

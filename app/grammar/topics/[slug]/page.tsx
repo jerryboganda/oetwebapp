@@ -125,7 +125,7 @@ export default function GrammarTopicPage() {
           <LearnerSurfaceSectionHeader
             eyebrow="Lessons"
             title={`${topic.name} lessons`}
-            description={`${lessons.length} ${lessons.length === 1 ? 'lesson' : 'lessons'} — every completed lesson improves your readiness score.`}
+            description={`${lessons.length} ${lessons.length === 1 ? 'lesson' : 'lessons'}. Every completed lesson improves your readiness score.`}
           />
 
           {lessons.length === 0 ? (

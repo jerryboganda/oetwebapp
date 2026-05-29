@@ -59,7 +59,7 @@ export function BillingConfirmDialog({
         {phraseRequired ? (
           <label className="block text-sm">
             <span className="mb-1 block text-foreground">
-              Type <code className="rounded bg-background-light px-1 py-0.5 font-mono text-xs">{confirmPhrase}</code> to confirm
+              Type <code className="rounded bg-admin-bg-subtle px-1 py-0.5 font-mono text-xs">{confirmPhrase}</code> to confirm
             </span>
             <input
               type="text"

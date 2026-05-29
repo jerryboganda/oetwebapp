@@ -1,5 +1,7 @@
 # Mocks — Follow-Up Waves (post-V2 closure roadmap)
 
+> **Current status (2026-05-29)**: historical follow-up ledger. Do not use this as a standalone pending-work list; cross-check with [`../STATUS/REMAINING-WORK.md`](../STATUS/REMAINING-WORK.md) and the Mocks progress ledger.
+
 > Date: 2026-05-12
 > Owner: Mocks Platform team
 > Source: `docs/mocks/PROGRESS.md` § Follow-Up Waves
@@ -142,4 +144,4 @@ Medium — new BackgroundService + worker query + tests + notification template 
 - `docs/mocks/PROGRESS.md` — V2 closure ledger.
 - `docs/mocks/PRD.md` — module PRD.
 - `docs/MOCKS-RANDOMISATION.md` + `docs/MOCKS-OPTION-ID-MIGRATION.md` — Wave 8 randomisation prerequisites.
-- `docs/audits/rulebook-compliance-2026-05-11-closure.md` — broader 2026-05-12 closure manifest.
+- `docs/audits/rulebook-compliance-2026-05-10.md` — original rulebook compliance audit with inline resolution column.

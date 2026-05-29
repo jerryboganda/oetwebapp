@@ -106,7 +106,7 @@ export default function MockBookingsPage() {
       <LearnerPageHero
         eyebrow="Mocks"
         title="Your booked mocks"
-        description="Speaking and final-readiness mocks are scheduled with a tutor. Reschedule up to 3 times — at least 12 hours before the slot."
+        description="Speaking and final-readiness mocks are scheduled with a tutor. Reschedule up to 3 times, at least 12 hours before the slot."
         icon={CalendarClock}
       />
 
@@ -116,7 +116,7 @@ export default function MockBookingsPage() {
         </Button>
         <Link
           href="/mocks/setup"
-          className="inline-flex items-center rounded-md bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-500"
+          className="inline-flex items-center rounded-md bg-primary px-3 py-2 text-sm font-medium text-white hover:bg-primary/90 active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600"
         >
           <Plus className="h-4 w-4 mr-1" /> Book a mock
         </Link>
@@ -130,7 +130,7 @@ export default function MockBookingsPage() {
           <Skeleton className="h-32 w-full" />
         </div>
       ) : items.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-border p-12 text-center text-muted-foreground">
+        <div className="rounded-2xl border border-dashed border-border p-12 text-center text-muted">
           You have no upcoming bookings. Use the &quot;Book a mock&quot; button to schedule a Speaking or final-readiness mock.
         </div>
       ) : (
@@ -146,7 +146,7 @@ export default function MockBookingsPage() {
                     <div className="text-sm font-semibold text-foreground">
                       {formatScheduled(b.scheduledStartAt, b.timezoneIana)}
                     </div>
-                    <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
+                    <div className="mt-1 flex items-center gap-2 text-xs text-muted">
                       <MapPin className="h-3 w-3" /> {b.timezoneIana}
                       <span>·</span>
                       <span>{b.deliveryMode}</span>
@@ -160,7 +160,7 @@ export default function MockBookingsPage() {
                 {!isTerminal ? (
                   <div className="mt-4 flex flex-wrap items-end gap-2">
                     <div>
-                      <label className="block text-xs font-medium text-muted-foreground mb-1">
+                      <label className="block text-xs font-medium text-muted mb-1">
                         Reschedule to
                       </label>
                       <input

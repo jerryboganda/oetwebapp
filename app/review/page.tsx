@@ -110,7 +110,7 @@ export default function ReviewPage() {
     return (
       <LearnerDashboardShell>
         <div className="space-y-6">
-        <LearnerPageHero eyebrow="Daily Review" title="Lock in what you've already learned" description="Each card comes back exactly when you're about to forget it — the fastest way to keep weak areas from slipping back." icon={Brain} highlights={heroHighlights} />
+        <LearnerPageHero eyebrow="Daily Review" title="Lock in what you've already learned" description="Each card comes back exactly when you're about to forget it: the fastest way to keep weak areas from slipping back." icon={Brain} highlights={heroHighlights} />
         <div className="space-y-4">
           {Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-24 rounded-[24px]" />)}
         </div>
@@ -125,7 +125,7 @@ export default function ReviewPage() {
       <LearnerPageHero
         eyebrow="Daily Review"
         title="Lock in what you've already learned"
-        description="Each card comes back exactly when you're about to forget it — the fastest way to keep weak areas from slipping back."
+        description="Each card comes back exactly when you're about to forget it: the fastest way to keep weak areas from slipping back."
         icon={Brain}
         highlights={heroHighlights}
       />
@@ -160,7 +160,7 @@ export default function ReviewPage() {
             <p className="text-muted mb-6">You&apos;re all caught up. New items will appear here as you complete more practice activities.</p>
             <button
               onClick={() => { setLoading(true); setError(null); Promise.allSettled([fetchReviewSummary(), fetchDueReviewItems(20)]).then(([summaryR, itemsR]) => { if (summaryR.status === 'fulfilled') setSummary(summaryR.value as ReviewSummary); if (itemsR.status === 'fulfilled') { const loadedItems = Array.isArray(itemsR.value) ? itemsR.value : (itemsR.value?.items ?? []); setItems(loadedItems as ReviewItem[]); } setLoading(false); }); }}
-              className="inline-flex items-center gap-2 rounded-2xl bg-primary px-6 py-2.5 font-semibold text-white transition-colors hover:bg-primary-dark"
+              className="inline-flex items-center gap-2 rounded-2xl bg-primary px-6 py-2.5 font-semibold text-white transition-[color,background-color,transform] duration-200 hover:bg-primary-dark active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600"
             >
               <RotateCcw className="w-4 h-4" /> Refresh
             </button>
@@ -172,7 +172,7 @@ export default function ReviewPage() {
         <div className="flex justify-center">
           <button
             onClick={() => setStarted(true)}
-            className="inline-flex items-center gap-2 rounded-2xl bg-primary px-8 py-3 font-semibold text-white transition-colors hover:bg-primary-dark disabled:opacity-50"
+            className="inline-flex items-center gap-2 rounded-2xl bg-primary px-8 py-3 font-semibold text-white transition-[color,background-color,transform] duration-200 hover:bg-primary-dark active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600 disabled:opacity-50"
           >
             Start Review ({items.length} items) <ChevronRight className="w-5 h-5" />
           </button>
@@ -189,7 +189,7 @@ export default function ReviewPage() {
           </div>
           <div className="mb-6 h-2 w-full rounded-full bg-background-light">
             <div
-              className="h-2 rounded-full bg-primary transition-all"
+              className="h-2 rounded-full bg-primary transition-[width,background-color] duration-300"
               style={{ width: `${Math.min(100, ((current + 1) / items.length) * 100)}%` }}
             />
           </div>
@@ -246,7 +246,7 @@ export default function ReviewPage() {
           <p className="mb-6 text-muted">{sessionStats.reviewed} items reviewed · {sessionStats.correct} correct ({sessionStats.reviewed > 0 ? Math.round((sessionStats.correct / sessionStats.reviewed) * 100) : 0}%)</p>
           <button
             onClick={() => { setStarted(false); setDone(false); setCurrent(0); setRevealed(false); setSessionStats({ reviewed: 0, correct: 0 }); }}
-            className="mx-auto inline-flex items-center gap-2 rounded-2xl bg-primary px-6 py-2.5 font-medium text-white hover:bg-primary-dark"
+            className="mx-auto inline-flex items-center gap-2 rounded-2xl bg-primary px-6 py-2.5 font-medium text-white hover:bg-primary-dark active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600"
           >
             <RotateCcw className="w-4 h-4" /> Review Again
           </button>

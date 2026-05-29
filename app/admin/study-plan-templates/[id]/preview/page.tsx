@@ -116,7 +116,7 @@ export default function StudyPlanTemplatePreviewPage() {
   return (
     <AdminSettingsLayout
       title={template.name}
-      description="Preview — dry-run of the plan materialisation for a hypothetical learner"
+      description="Preview: dry-run of the plan materialisation for a hypothetical learner"
       breadcrumbs={breadcrumbs}
       eyebrow="Study planning"
       icon={<Eye className="h-5 w-5" />}

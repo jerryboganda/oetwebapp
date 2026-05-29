@@ -55,7 +55,7 @@ export function RecordingPlayer({
   return (
     <div className="space-y-4">
       {/* Video player */}
-      <div className="aspect-video w-full overflow-hidden rounded-xl bg-black shadow-sm">
+      <div className="aspect-video w-full overflow-hidden rounded-xl bg-background-dark shadow-sm">
         <video
           ref={videoRef}
           src={videoUrl}
@@ -119,7 +119,7 @@ export function RecordingPlayer({
                     onClick={() => setSummaryLang('en')}
                     className={`rounded-l-full px-2.5 py-1 transition-colors ${
                       summaryLang === 'en'
-                        ? 'bg-primary text-white'
+                        ? 'bg-primary text-white dark:bg-violet-700'
                         : 'text-muted hover:text-navy'
                     }`}
                   >
@@ -130,7 +130,7 @@ export function RecordingPlayer({
                     onClick={() => setSummaryLang('ar')}
                     className={`rounded-r-full px-2.5 py-1 transition-colors ${
                       summaryLang === 'ar'
-                        ? 'bg-primary text-white'
+                        ? 'bg-primary text-white dark:bg-violet-700'
                         : 'text-muted hover:text-navy'
                     }`}
                   >
@@ -174,7 +174,7 @@ export function RecordingPlayer({
                   aria-label={checkedItems.has(i) ? 'Mark incomplete' : 'Mark complete'}
                   className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors ${
                     checkedItems.has(i)
-                      ? 'border-primary bg-primary text-white'
+                      ? 'border-primary bg-primary text-white dark:bg-violet-700'
                       : 'border-border bg-background hover:border-primary/60'
                   }`}
                 >

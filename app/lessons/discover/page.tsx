@@ -140,7 +140,7 @@ export default function DiscoverPage() {
               key={value || 'all'}
               type="button"
               onClick={() => setSubtestFilter(value)}
-              className={`rounded-full px-3 py-2 text-xs font-medium transition-colors ${subtestFilter === value ? 'bg-primary text-white' : 'bg-muted text-muted-foreground'}`}
+              className={`rounded-full px-3 py-2 text-xs font-medium transition-colors ${subtestFilter === value ? 'bg-primary text-white dark:bg-violet-700' : 'bg-muted text-navy'}`}
             >
               {label}
             </button>
@@ -152,7 +152,7 @@ export default function DiscoverPage() {
           <button
             type="button"
             onClick={() => setDifficultyFilter('')}
-            className={`rounded-full px-3 py-2 text-xs font-medium transition-colors ${!difficultyFilter ? 'bg-primary text-white' : 'bg-muted text-muted-foreground'}`}
+            className={`rounded-full px-3 py-2 text-xs font-medium transition-colors ${!difficultyFilter ? 'bg-primary text-white dark:bg-violet-700' : 'bg-muted text-navy'}`}
           >
             All
           </button>
@@ -161,7 +161,7 @@ export default function DiscoverPage() {
               key={difficulty}
               type="button"
               onClick={() => setDifficultyFilter(difficulty)}
-              className={`rounded-full px-3 py-2 text-xs font-medium transition-colors ${difficultyFilter === difficulty ? 'bg-primary text-white' : 'bg-muted text-muted-foreground'}`}
+              className={`rounded-full px-3 py-2 text-xs font-medium transition-colors ${difficultyFilter === difficulty ? 'bg-primary text-white dark:bg-violet-700' : 'bg-muted text-navy'}`}
             >
               {labelFor(difficulty)}
             </button>

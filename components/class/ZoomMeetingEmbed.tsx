@@ -99,7 +99,7 @@ export function ZoomMeetingEmbed({ joinToken, onLeave }: Props) {
 
   return (
     <div
-      className="relative w-full h-[80vh] rounded-2xl overflow-hidden bg-gray-900"
+      className="relative w-full h-[80vh] rounded-2xl overflow-hidden bg-background-dark"
     >
       <div ref={containerRef} className="h-full w-full" />
       {fallbackUrl ? (
@@ -107,7 +107,7 @@ export function ZoomMeetingEmbed({ joinToken, onLeave }: Props) {
           href={fallbackUrl}
           target="_blank"
           rel="noreferrer"
-          className="absolute bottom-4 right-4 rounded-lg bg-white px-4 py-2 text-sm font-semibold text-gray-950 shadow-lg hover:bg-gray-100"
+          className="absolute bottom-4 right-4 rounded-lg bg-surface px-4 py-2 text-sm font-semibold text-navy shadow-lg hover:bg-background-light"
         >
           Open in Zoom
         </a>

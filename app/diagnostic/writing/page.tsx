@@ -135,7 +135,7 @@ export default function DiagnosticWritingPage() {
 
   return (
     <AppShell
-      pageTitle="Diagnostic — Writing"
+      pageTitle="Diagnostic: Writing"
       distractionFree
       navActions={
         <div className="flex flex-wrap items-center gap-2 sm:gap-3">
@@ -153,11 +153,9 @@ export default function DiagnosticWritingPage() {
     >
       <AsyncStateWrapper status={status} onRetry={load} errorMessage={error}>
         {task && (
-          <div className="flex flex-1 min-h-0 h-[calc(100dvh-4rem)] flex-col overflow-hidden md:flex-row bg-background/50 relative">
-            <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-primary/10 via-transparent to-transparent pointer-events-none -z-10 blur-3xl opacity-50" />
-            <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_bottom_left,_var(--tw-gradient-stops))] from-success/5 via-transparent to-transparent pointer-events-none -z-10 blur-3xl opacity-50" />
-            {/* Case Notes Panel — left side on desktop */}
-            <div className="hidden md:flex md:w-[320px] lg:w-[420px] shrink-0 border-r border-border/40 shadow-[8px_0_30px_-15px_rgba(0,0,0,0.05)] z-10 bg-white/40 backdrop-blur-2xl transition-all">
+          <div className="flex flex-1 min-h-0 h-[calc(100dvh-4rem)] flex-col overflow-hidden md:flex-row bg-background-light relative">
+            {/* Case Notes Panel: left side on desktop */}
+            <div className="hidden md:flex md:w-[320px] lg:w-[420px] shrink-0 border-r border-border z-10 bg-surface transition-[color,background-color,border-color,box-shadow,transform,opacity] duration-200">
               <WritingCaseNotesPanel
                 caseNotes={task.caseNotes}
                 scratchpad={scratchpad}
@@ -185,14 +183,14 @@ export default function DiagnosticWritingPage() {
               {/* Time warning */}
               {timerDone && (
                 <div className="px-4 pt-3 pb-1 z-20 relative">
-                  <InlineAlert variant="warning" className="shadow-lg shadow-warning/10 ring-1 ring-warning/20 border-0 bg-white/80 backdrop-blur-xl">
+                  <InlineAlert variant="warning" className="shadow-sm">
                     <span className="font-bold">Time is up!</span> You can still submit your response.
                   </InlineAlert>
                 </div>
               )}
 
               {/* Editor */}
-              <div className="flex-1 relative z-10 m-2 sm:m-4 md:m-6 rounded-3xl overflow-hidden shadow-[0_8px_30px_rgb(0,0,0,0.04)] ring-1 ring-primary/10 bg-white/70 backdrop-blur-3xl transition-all duration-300 hover:shadow-[0_8px_40px_rgb(0,0,0,0.08)]">
+              <div className="flex-1 relative z-10 m-2 sm:m-4 md:m-6 rounded-3xl overflow-hidden border border-border bg-surface shadow-sm transition-[color,background-color,border-color,box-shadow,transform,opacity] duration-300 hover:shadow-md">
                 <WritingEditor
                   value={content}
                   onChange={setContent}
@@ -203,7 +201,7 @@ export default function DiagnosticWritingPage() {
               </div>
 
               {/* Bottom Floating Bar */}
-              <div className="px-5 py-4 mb-4 mx-4 sm:mx-6 md:mx-auto md:max-w-2xl bg-white/80 backdrop-blur-2xl border border-primary/10 shadow-[0_16px_40px_-12px_rgba(0,0,0,0.15)] ring-1 ring-black/5 rounded-3xl flex items-center justify-between gap-4 shrink-0 relative z-20 hover:scale-[1.01] transition-transform duration-300">
+              <div className="px-5 py-4 mb-4 mx-4 sm:mx-6 md:mx-auto md:max-w-2xl bg-surface border border-border shadow-md rounded-3xl flex items-center justify-between gap-4 shrink-0 relative z-20">
                 <div className="flex items-center gap-3 text-xs font-bold text-navy/60 uppercase tracking-wider">
                   {saveStatus === 'saved' && (
                     <span className="flex items-center gap-1.5 text-success bg-success/5 px-2 py-1 rounded-md">
@@ -211,7 +209,7 @@ export default function DiagnosticWritingPage() {
                     </span>
                   )}
                   {saveStatus === 'saving' && (
-                    <span className="flex items-center gap-1.5 text-warning bg-warning/5 px-2 py-1 rounded-md animate-pulse">
+                    <span className="flex items-center gap-1.5 text-warning bg-warning/5 px-2 py-1 rounded-md motion-safe:animate-pulse">
                       <Save className="w-3.5 h-3.5" /> Saving…
                     </span>
                   )}
@@ -245,10 +243,9 @@ export default function DiagnosticWritingPage() {
                   onClick={handleSubmit}
                   loading={submitting}
                   disabled={!content.trim() || submitting}
-                  className="gap-2 rounded-full px-8 font-black shadow-primary/20 shadow-lg hover:shadow-primary/30 transition-all group overflow-hidden relative"
+                  className="gap-2 rounded-full px-8 font-black shadow-primary/20 shadow-lg hover:shadow-primary/30 transition-[color,background-color,border-color,box-shadow,transform,opacity] duration-200 group"
                 >
-                  <span className="absolute inset-0 w-full h-full bg-gradient-to-r from-white/0 via-white/20 to-white/0 -translate-x-[150%] group-hover:translate-x-[150%] transition-transform duration-700 ease-in-out" />
-                  <Send className="w-4 h-4 group-hover:-translate-y-1 group-hover:translate-x-1 group-hover:scale-110 transition-transform duration-300 drop-shadow-sm" /> 
+                  <Send className="w-4 h-4 group-hoverable:-translate-y-0.5 transition-transform duration-300" />
                   Submit Task
                 </Button>
               </div>

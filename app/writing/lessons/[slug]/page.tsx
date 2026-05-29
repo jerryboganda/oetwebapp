@@ -116,7 +116,7 @@ export default function WritingLessonPage() {
                       key={score}
                       type="button"
                       onClick={() => setSelectedScore(score)}
-                      className={`rounded-lg border px-3 py-2 text-sm font-bold ${selectedScore === score ? 'border-primary bg-primary text-white' : 'border-border bg-background text-navy'}`}
+                      className={`rounded-lg border px-3 py-2 text-sm font-bold ${selectedScore === score ? 'border-primary bg-primary text-white dark:bg-violet-700' : 'border-border bg-background text-navy'}`}
                     >
                       {t('writing.lessons.detail.quiz.optionLabel', { score })}
                     </button>

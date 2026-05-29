@@ -163,7 +163,7 @@ export default function AdminSpeakingRolePlayCardsPage() {
   return (
     <AdminCatalogLayout
       title="Speaking role-play cards"
-      description="Author the two-card OET Speaking scenarios — candidate card plus hidden interlocutor script. Publish only after both sides are written."
+      description="Author the two-card OET Speaking scenarios: candidate card plus hidden interlocutor script. Publish only after both sides are written."
       breadcrumbs={BREADCRUMBS}
       eyebrow="CMS"
       hideViewModeToggle

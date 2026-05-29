@@ -75,7 +75,7 @@ export function VocabularyForm({ mode, initial, onSubmit, onPublish, itemId }: P
         // fall back to canonical codes
         setRecallSetOptions([
           { code: 'old', displayName: 'Old Recalls + Most Common Words' },
-          { code: '2023-2025', displayName: 'January 2023 — End of 2025' },
+          { code: '2023-2025', displayName: 'January 2023 to End of 2025' },
           { code: '2026', displayName: 'January 2026 onwards' },
         ]);
       }
@@ -194,7 +194,7 @@ export function VocabularyForm({ mode, initial, onSubmit, onPublish, itemId }: P
             {/* Taxonomy — Exam + Category only (Profession and Difficulty removed per admin request) */}
             <div className="grid gap-4 md:grid-cols-2">
               <div>
-                <label className="mb-1 block text-sm font-medium text-navy">Exam</label>
+                <label className="mb-1 block text-sm font-medium text-admin-fg-strong">Exam</label>
                 <select aria-label="Exam" value={v.examTypeCode} onChange={(e) => setV({ ...v, examTypeCode: e.target.value })} className="w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm">
                   <option value="oet">OET</option>
                   <option value="ielts">IELTS</option>
@@ -202,7 +202,7 @@ export function VocabularyForm({ mode, initial, onSubmit, onPublish, itemId }: P
                 </select>
               </div>
               <div>
-                <label className="mb-1 block text-sm font-medium text-navy">Category <span className="text-danger">*</span></label>
+                <label className="mb-1 block text-sm font-medium text-admin-fg-strong">Category <span className="text-danger">*</span></label>
                 <select required aria-label="Category" value={v.category} onChange={(e) => setV({ ...v, category: e.target.value })} className="w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm capitalize">
                   {CATEGORIES.map(c => <option key={c} value={c}>{c.replace(/_/g, ' ')}</option>)}
                 </select>
@@ -211,7 +211,7 @@ export function VocabularyForm({ mode, initial, onSubmit, onPublish, itemId }: P
 
             {/* Recall set tags — keep per explicit admin instruction */}
             <div>
-              <label className="mb-1 block text-sm font-medium text-navy">Recall practice collection labels</label>
+              <label className="mb-1 block text-sm font-medium text-admin-fg-strong">Recall practice collection labels</label>
               <div className="flex flex-wrap gap-2">
                 {recallSetOptions.map(opt => {
                   const checked = v.recallSetCodes.includes(opt.code);
@@ -238,7 +238,7 @@ export function VocabularyForm({ mode, initial, onSubmit, onPublish, itemId }: P
 
             {/* Status */}
             <div>
-              <label className="mb-1 block text-sm font-medium text-navy">Status</label>
+              <label className="mb-1 block text-sm font-medium text-admin-fg-strong">Status</label>
               <div className="flex items-center gap-2">
                 <select
                   value={v.status}

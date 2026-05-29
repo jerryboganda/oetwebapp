@@ -106,7 +106,7 @@ export default function ReadingPartPracticePage() {
       <main className="space-y-8" data-testid={`reading-part-${part}-dispatcher`}>
         <Link
           href="/reading"
-          className="inline-flex items-center gap-2 text-sm font-semibold text-blue-700 hover:underline"
+          className="inline-flex items-center gap-2 text-sm font-semibold text-primary hover:underline"
         >
           <ArrowLeft className="h-4 w-4" aria-hidden />
           Back to Reading
@@ -132,10 +132,10 @@ export default function ReadingPartPracticePage() {
         ) : (
           <section aria-label={`Available Part ${part} reading papers`}>
             <div className="mb-3">
-              <h2 className="text-base font-bold text-gray-900 dark:text-gray-100">
+              <h2 className="text-base font-bold text-navy">
                 Pick a paper for Part {part} practice
               </h2>
-              <p className="mt-1 text-sm text-gray-500">
+              <p className="mt-1 text-sm text-muted">
                 Each paper boots the reading player in practice mode, scoped to {meta.subtitle}.
               </p>
             </div>
@@ -146,11 +146,11 @@ export default function ReadingPartPracticePage() {
                 const totalMinutes = paper.partATimerMinutes + paper.partBCTimerMinutes;
                 return (
                   <li key={paper.id}>
-                    <article className="flex h-full flex-col rounded-2xl border border-blue-100 bg-white p-5 shadow-sm dark:border-gray-800 dark:bg-gray-900">
-                      <h3 className="text-base font-bold text-gray-900 dark:text-gray-100">
+                    <article className="flex h-full flex-col rounded-2xl border border-blue-100 bg-surface p-5 shadow-sm dark:border-blue-900/40">
+                      <h3 className="text-base font-bold text-navy">
                         {paper.title}
                       </h3>
-                      <p className="mt-1 text-xs text-gray-500 flex flex-wrap items-center gap-x-3 gap-y-1">
+                      <p className="mt-1 text-xs text-muted flex flex-wrap items-center gap-x-3 gap-y-1">
                         <span className="inline-flex items-center gap-1">
                           <ListChecks className="h-3 w-3" aria-hidden />
                           {itemCount} Part {part} items
@@ -164,7 +164,7 @@ export default function ReadingPartPracticePage() {
                         <button
                           type="button"
                           onClick={() => handleStart(paper)}
-                          className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-blue-700"
+                          className="rounded-md bg-info px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-info/90"
                         >
                           Start Part {part} practice →
                         </button>

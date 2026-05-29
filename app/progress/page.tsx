@@ -260,7 +260,7 @@ export default function ProgressDashboard() {
                 <LearnerSurfaceSectionHeader
                   eyebrow="Completion Trend"
                   title="Keep task completion visible"
-                  description="Progress isn't just score movement — it's also how consistently you're completing planned work."
+                  description="Progress isn't just score movement; it's also how consistently you're completing planned work."
                   className="mb-6"
                 />
                 <div className="h-[220px] w-full sm:h-[240px] lg:h-[250px]" role="img" aria-label="Completion trend chart showing tasks completed over the last 7 days">
@@ -330,33 +330,30 @@ export default function ProgressDashboard() {
             {/* 5. Review Usage */}
             <MotionSection
               delayIndex={4}
-              className="rounded-2xl border border-slate-800 bg-slate-950 p-6 sm:p-8 text-white shadow-lg relative overflow-hidden dark:border-slate-700"
+              className="rounded-2xl border border-white/10 bg-background-dark p-6 sm:p-8 text-white shadow-lg relative overflow-hidden"
             >
               <div className="mb-6 relative z-10">
-                <p className="text-xs font-black uppercase tracking-widest text-slate-300 mb-2">Tutor Review Turnaround</p>
+                <p className="text-xs font-black uppercase tracking-widest text-white/70 mb-2">Tutor Review Turnaround</p>
                 <h2 className="text-xl font-black text-white">Keep human-feedback timing visible</h2>
-                <p className="text-sm text-slate-200 mt-1">
+                <p className="text-sm text-white/80 mt-1">
                   Tutor review should feel like part of the same learner system, with clear operational expectations.
                 </p>
               </div>
-              <div className="absolute top-0 right-0 w-64 h-64 bg-white opacity-5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/3" />
               <div className="relative z-10 flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center shrink-0">
-                  <Clock className="w-5 h-5 text-white" />
-                </div>
+                <Clock className="w-5 h-5 text-white shrink-0" aria-hidden="true" />
                 <div>
                   <h2 className="text-base font-black">Tutor Review Turnaround</h2>
-                  <p className="text-xs text-slate-200">Average time from submission to feedback</p>
+                  <p className="text-xs text-white/80">Average time from submission to feedback</p>
                 </div>
               </div>
               <div className="mt-6 bg-white/10 rounded-2xl p-5 border border-white/15 inline-block">
-                <h3 className="text-xs font-bold text-slate-200 uppercase tracking-widest mb-1">Avg Turnaround</h3>
+                <h3 className="text-xs font-bold text-white/80 uppercase tracking-widest mb-1">Avg Turnaround</h3>
                 <div className="flex items-baseline gap-2">
                   <span className="text-4xl font-black">{progressSummary?.reviewUsage.averageTurnaroundHours ?? 'Pending'}</span>
-                  <span className="text-sm font-bold text-slate-200">hours</span>
+                  <span className="text-sm font-bold text-white/80">hours</span>
                 </div>
               </div>
-              <p className="mt-4 text-xs text-slate-300">
+              <p className="mt-4 text-xs text-white/70">
                 {progressSummary?.freshness.usesFallbackSeries
                   ? 'Review timing is still based on limited data and will sharpen after more requests complete.'
                   : `Updated ${new Date(progressSummary?.freshness.generatedAt ?? new Date().toISOString()).toLocaleString()}.`}

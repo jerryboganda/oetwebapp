@@ -410,15 +410,15 @@ export default function UserDetailPage() {
                 <div className="grid gap-4 md:grid-cols-3">
                   <div className="rounded-2xl border border-border/60 bg-surface p-4 shadow-sm">
                     <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">{user.role === 'expert' ? 'Tasks Graded' : 'Tasks Completed'}</p>
-                    <p className="mt-1 text-2xl font-semibold text-navy">{(user.role === 'expert' ? user.tasksGraded : user.tasksCompleted) ?? 0}</p>
+                    <p className="mt-1 text-2xl font-semibold text-admin-fg-strong">{(user.role === 'expert' ? user.tasksGraded : user.tasksCompleted) ?? 0}</p>
                   </div>
                   <div className="rounded-2xl border border-border/60 bg-surface p-4 shadow-sm">
                     <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">Credit Balance</p>
-                    <p className="mt-1 text-2xl font-semibold text-navy">{user.creditBalance ?? 0}</p>
+                    <p className="mt-1 text-2xl font-semibold text-admin-fg-strong">{user.creditBalance ?? 0}</p>
                   </div>
                   <div className="rounded-2xl border border-border/60 bg-surface p-4 shadow-sm">
                     <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">Last Login</p>
-                    <p className="mt-1 text-sm font-semibold text-navy">{formatDate(user.lastLogin, 'Never')}</p>
+                    <p className="mt-1 text-sm font-semibold text-admin-fg-strong">{formatDate(user.lastLogin, 'Never')}</p>
                   </div>
                 </div>
 
@@ -434,7 +434,7 @@ export default function UserDetailPage() {
                         <p className="text-sm text-admin-text-muted">No granular permissions granted yet.</p>
                         <Link
                           href="/admin/users?tab=admins"
-                          className="inline-flex items-center gap-1.5 rounded-2xl border border-border/60 bg-surface px-3 py-1.5 text-xs font-semibold text-navy hover:bg-background-light"
+                          className="inline-flex items-center gap-1.5 rounded-2xl border border-border/60 bg-surface px-3 py-1.5 text-xs font-semibold text-admin-fg-strong hover:bg-admin-bg-subtle"
                         >
                           <KeyRound className="h-3.5 w-3.5" />
                           Manage permissions
@@ -451,7 +451,7 @@ export default function UserDetailPage() {
                         </div>
                         <Link
                           href="/admin/users?tab=admins"
-                          className="inline-flex items-center gap-1.5 rounded-2xl border border-border/60 bg-surface px-3 py-1.5 text-xs font-semibold text-navy hover:bg-background-light"
+                          className="inline-flex items-center gap-1.5 rounded-2xl border border-border/60 bg-surface px-3 py-1.5 text-xs font-semibold text-admin-fg-strong hover:bg-admin-bg-subtle"
                         >
                           <KeyRound className="h-3.5 w-3.5" />
                           Edit permissions
@@ -469,14 +469,14 @@ export default function UserDetailPage() {
                     <div className="flex flex-wrap gap-2">
                       <Link
                         href={`/admin/private-speaking?expertUserId=${encodeURIComponent(user.id)}`}
-                        className="inline-flex items-center gap-1.5 rounded-2xl border border-border/60 bg-surface px-3 py-1.5 text-xs font-semibold text-navy hover:bg-background-light"
+                        className="inline-flex items-center gap-1.5 rounded-2xl border border-border/60 bg-surface px-3 py-1.5 text-xs font-semibold text-admin-fg-strong hover:bg-admin-bg-subtle"
                       >
                         <Mic className="h-3.5 w-3.5" />
                         Private Speaking
                       </Link>
                       <Link
                         href={`/admin/review-ops?expertId=${encodeURIComponent(user.id)}`}
-                        className="inline-flex items-center gap-1.5 rounded-2xl border border-border/60 bg-surface px-3 py-1.5 text-xs font-semibold text-navy hover:bg-background-light"
+                        className="inline-flex items-center gap-1.5 rounded-2xl border border-border/60 bg-surface px-3 py-1.5 text-xs font-semibold text-admin-fg-strong hover:bg-admin-bg-subtle"
                       >
                         <ShieldCheck className="h-3.5 w-3.5" />
                         Review Ops
@@ -488,27 +488,27 @@ export default function UserDetailPage() {
                 <SettingsSection title="Security" description="MFA, lockout, and active sessions for this account.">
                   {user.security ? (
                     <div className="grid gap-3 md:grid-cols-2">
-                      <div className="rounded-2xl border border-border/60 bg-background-light p-4">
+                      <div className="rounded-2xl border border-border/60 bg-admin-bg-subtle p-4">
                         <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">MFA</p>
-                        <p className="mt-1 text-sm font-medium text-navy">{user.security.mfaEnabled ? 'Authenticator enrolled' : 'Not enrolled'}</p>
+                        <p className="mt-1 text-sm font-medium text-admin-fg-strong">{user.security.mfaEnabled ? 'Authenticator enrolled' : 'Not enrolled'}</p>
                       </div>
-                      <div className="rounded-2xl border border-border/60 bg-background-light p-4">
+                      <div className="rounded-2xl border border-border/60 bg-admin-bg-subtle p-4">
                         <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">Failed sign-ins</p>
-                        <p className="mt-1 text-sm font-medium text-navy">{user.security.failedSignInCount}</p>
+                        <p className="mt-1 text-sm font-medium text-admin-fg-strong">{user.security.failedSignInCount}</p>
                       </div>
-                      <div className="rounded-2xl border border-border/60 bg-background-light p-4">
+                      <div className="rounded-2xl border border-border/60 bg-admin-bg-subtle p-4">
                         <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">Lockout state</p>
-                        <p className="mt-1 text-sm font-medium text-navy">
+                        <p className="mt-1 text-sm font-medium text-admin-fg-strong">
                           {user.security.lockedOut ? `Locked until ${formatDate(user.security.lockoutUntil)}` : 'Not locked'}
                         </p>
                       </div>
-                      <div className="rounded-2xl border border-border/60 bg-background-light p-4">
+                      <div className="rounded-2xl border border-border/60 bg-admin-bg-subtle p-4">
                         <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">Active sessions</p>
-                        <p className="mt-1 text-sm font-medium text-navy">{user.security.activeSessionCount}</p>
+                        <p className="mt-1 text-sm font-medium text-admin-fg-strong">{user.security.activeSessionCount}</p>
                       </div>
-                      <div className="rounded-2xl border border-border/60 bg-background-light p-4 md:col-span-2">
+                      <div className="rounded-2xl border border-border/60 bg-admin-bg-subtle p-4 md:col-span-2">
                         <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">Last seen</p>
-                        <p className="mt-1 text-sm font-medium text-navy">
+                        <p className="mt-1 text-sm font-medium text-admin-fg-strong">
                           {formatDate(user.security.lastSessionAt, '-')}
                           {user.security.lastSessionIp ? ` - ${user.security.lastSessionIp}` : ''}
                         </p>
@@ -525,21 +525,21 @@ export default function UserDetailPage() {
                 {user.subscription ? (
                   <SettingsSection title="Subscription" description="Current billing relationship for this learner.">
                     <div className="grid gap-3 md:grid-cols-2">
-                      <div className="rounded-2xl border border-border/60 bg-background-light p-4">
+                      <div className="rounded-2xl border border-border/60 bg-admin-bg-subtle p-4">
                         <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">Plan</p>
-                        <p className="mt-1 text-sm font-medium text-navy">{subscriptionLabel}</p>
+                        <p className="mt-1 text-sm font-medium text-admin-fg-strong">{subscriptionLabel}</p>
                       </div>
-                      <div className="rounded-2xl border border-border/60 bg-background-light p-4">
+                      <div className="rounded-2xl border border-border/60 bg-admin-bg-subtle p-4">
                         <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">Status</p>
-                        <p className="mt-1 text-sm font-medium text-navy">{user.subscription.status}</p>
+                        <p className="mt-1 text-sm font-medium text-admin-fg-strong">{user.subscription.status}</p>
                       </div>
-                      <div className="rounded-2xl border border-border/60 bg-background-light p-4">
+                      <div className="rounded-2xl border border-border/60 bg-admin-bg-subtle p-4">
                         <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">Started</p>
-                        <p className="mt-1 text-sm font-medium text-navy">{formatDate(user.subscription.startedAt)}</p>
+                        <p className="mt-1 text-sm font-medium text-admin-fg-strong">{formatDate(user.subscription.startedAt)}</p>
                       </div>
-                      <div className="rounded-2xl border border-border/60 bg-background-light p-4">
+                      <div className="rounded-2xl border border-border/60 bg-admin-bg-subtle p-4">
                         <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">Next renewal</p>
-                        <p className="mt-1 text-sm font-medium text-navy">{formatDate(user.subscription.nextRenewalAt)}</p>
+                        <p className="mt-1 text-sm font-medium text-admin-fg-strong">{formatDate(user.subscription.nextRenewalAt)}</p>
                       </div>
                     </div>
                   </SettingsSection>
@@ -553,9 +553,9 @@ export default function UserDetailPage() {
                   {user.recentActivity && user.recentActivity.length > 0 ? (
                     <ol className="space-y-2">
                       {user.recentActivity.map((event) => (
-                        <li key={event.id} className="rounded-xl border border-border/60 bg-background-light px-3 py-2">
+                        <li key={event.id} className="rounded-xl border border-border/60 bg-admin-bg-subtle px-3 py-2">
                           <div className="flex flex-wrap items-baseline justify-between gap-2">
-                            <p className="text-sm font-medium text-navy">{event.action}</p>
+                            <p className="text-sm font-medium text-admin-fg-strong">{event.action}</p>
                             <p className="text-xs text-muted">{formatDate(event.occurredAt)}</p>
                           </div>
                           <p className="text-xs text-muted">By {event.actorName}</p>
@@ -600,7 +600,7 @@ export default function UserDetailPage() {
         title={lifecycleAction === 'delete' ? 'Delete Account' : 'Restore Account'}
       >
         <div className="space-y-4 py-2">
-          <div className="rounded-[20px] border border-border bg-background-light p-3 text-sm text-muted">
+          <div className="rounded-[20px] border border-border bg-admin-bg-subtle p-3 text-sm text-muted">
             {lifecycleAction === 'delete'
               ? 'Deleting the account removes it from active operation, blocks sign-in, and can be reversed later from this screen.'
               : 'Restoring the account removes the deleted marker and returns it to active operation.'}

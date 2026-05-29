@@ -151,18 +151,18 @@ export function WritingDualAssessmentSection({ evaluationId, tutorPollMs = 30000
         <table className="w-full text-sm">
           <thead>
             <tr className="bg-background-light text-xs uppercase tracking-wider text-muted">
-              <th className="px-4 py-2 text-left font-semibold">Criterion</th>
-              <th className="px-4 py-2 text-center font-semibold">
+              <th scope="col" className="px-4 py-2 text-left font-semibold">Criterion</th>
+              <th scope="col" className="px-4 py-2 text-center font-semibold">
                 <span className="inline-flex items-center gap-1.5">
-                  <Sparkles className="h-3.5 w-3.5" /> AI estimate
+                  <Sparkles className="h-3.5 w-3.5" aria-hidden="true" /> AI estimate
                 </span>
               </th>
-              <th className="px-4 py-2 text-center font-semibold">
+              <th scope="col" className="px-4 py-2 text-center font-semibold">
                 <span className="inline-flex items-center gap-1.5">
-                  <UserCheck className="h-3.5 w-3.5" /> Tutor score
+                  <UserCheck className="h-3.5 w-3.5" aria-hidden="true" /> Tutor score
                 </span>
               </th>
-              <th className="px-4 py-2 text-center font-semibold">Δ</th>
+              <th scope="col" className="px-4 py-2 text-center font-semibold" aria-label="Delta between AI and tutor scores">Δ</th>
             </tr>
           </thead>
           <tbody>
@@ -176,7 +176,7 @@ export function WritingDualAssessmentSection({ evaluationId, tutorPollMs = 30000
                 <td className="px-4 py-2 text-center">
                   {row.tutor ? (
                     <>
-                      <span className="font-bold tabular-nums text-emerald-700">{row.tutor.score}</span>
+                      <span className="font-bold tabular-nums text-success">{row.tutor.score}</span>
                       <span className="text-muted">/{row.tutor.maxScore}</span>
                     </>
                   ) : (
@@ -185,10 +185,10 @@ export function WritingDualAssessmentSection({ evaluationId, tutorPollMs = 30000
                 </td>
                 <td className="px-4 py-2 text-center text-xs">
                   {row.delta === null
-                    ? <span className="text-muted">—</span>
+                    ? <span className="text-muted">-</span>
                     : row.delta === 0
                       ? <span className="text-muted">0</span>
-                      : <span className={row.delta > 0 ? 'text-emerald-700 font-semibold' : 'text-danger font-semibold'}>
+                      : <span className={row.delta > 0 ? 'text-success font-semibold' : 'text-danger font-semibold'}>
                           {row.delta > 0 ? `+${row.delta}` : row.delta}
                         </span>}
                 </td>
@@ -199,9 +199,9 @@ export function WritingDualAssessmentSection({ evaluationId, tutorPollMs = 30000
       </div>
 
       {data.tutor && data.tutor.overallFeedback && (
-        <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50/40 p-4">
-          <p className="text-xs font-bold uppercase tracking-wider text-emerald-800">
-            Tutor feedback — {data.tutor.tutorName}
+        <div className="mt-4 rounded-xl border border-success/30 bg-success/10 p-4">
+          <p className="text-xs font-bold uppercase tracking-wider text-success">
+            Tutor feedback: {data.tutor.tutorName}
           </p>
           <p className="mt-2 whitespace-pre-line text-sm text-navy">{data.tutor.overallFeedback}</p>
         </div>

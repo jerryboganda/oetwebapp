@@ -175,7 +175,7 @@ export default function AdminConversationSettingsPage() {
     <>
       <AdminSettingsLayout
         eyebrow="Content"
-        title="AI Conversation — Runtime Settings"
+        title="AI Conversation: Runtime Settings"
         description="Admin-editable overrides for the AI Conversation subsystem. Saved values override env defaults and take effect within 30 seconds of save. API keys are encrypted via Data Protection; leave blank to keep the current key."
         breadcrumbs={[
           { label: 'Admin', href: '/admin' },
@@ -208,7 +208,7 @@ export default function AdminConversationSettingsPage() {
                     checked={Boolean(v('enabled') ?? true)}
                     onChange={(e) => setField('enabled', e.target.checked)}
                   />
-                  Enabled (kill-switch — false blocks all new sessions)
+                  Enabled (kill-switch; false blocks all new sessions)
                 </label>
                 <Input
                   label="Enabled Task Types (CSV)"
@@ -540,7 +540,7 @@ function Qwen3VoiceStudio({
       const res = await probeAdminQwen3Voices();
       setVoices(res.voices);
       const ok = res.voices.filter((v) => v.available).length;
-      onToast({ variant: 'success', message: `Probed ${res.voices.length} voices — ${ok} available.` });
+      onToast({ variant: 'success', message: `Probed ${res.voices.length} voices, ${ok} available.` });
     } catch (err) {
       onToast({ variant: 'error', message: err instanceof Error ? err.message : 'Voice probe failed.' });
     } finally {
@@ -599,7 +599,7 @@ function Qwen3VoiceStudio({
         <div className="flex items-start gap-2 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-900 dark:border-blue-800/60 dark:bg-blue-950/30 dark:text-blue-100">
           <Sparkles className="mt-0.5 h-4 w-4 shrink-0" />
           <span>
-            <strong>flash</strong> uses a fixed preset voice (deterministic, consistent — recommended). <strong>voicedesign</strong> is prompt-driven and outputs vary between calls; use only when no preset matches your need.
+            <strong>flash</strong> uses a fixed preset voice (deterministic, consistent; recommended). <strong>voicedesign</strong> is prompt-driven and outputs vary between calls; use only when no preset matches your need.
           </span>
         </div>
         <label className="block">
@@ -609,8 +609,8 @@ function Qwen3VoiceStudio({
             onChange={(e) => onChangeVariant(e.target.value as 'flash' | 'voicedesign')}
             className="w-full rounded-lg border border-admin-border bg-admin-bg-surface px-3 py-2 text-sm"
           >
-            <option value="flash">flash (preset voices — consistent)</option>
-            <option value="voicedesign">voicedesign (instructions — variable)</option>
+            <option value="flash">flash (preset voices, consistent)</option>
+            <option value="voicedesign">voicedesign (instructions, variable)</option>
           </select>
         </label>
 

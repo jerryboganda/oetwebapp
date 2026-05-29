@@ -1,5 +1,7 @@
 # PROGRESS — Recalls Real Content Pack v1
 
+> **Current status (2026-05-29)**: historical/live ledger awaiting reconciliation. Treat unchecked items here as candidate backlog only after verifying current code and [`../STATUS/REMAINING-WORK.md`](../STATUS/REMAINING-WORK.md); do not assume this file alone reflects project truth.
+
 > Live ledger. Update every phase. Newest first.
 
 ## 2026-05-05 — Wave 1 + Wave 2 kickoff

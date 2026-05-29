@@ -125,7 +125,7 @@ export default function AdminListeningStructurePage() {
 
   if (!isAuthenticated || role !== 'admin') {
     return (
-      <AdminSettingsLayout title="Listening — structure" breadcrumbs={breadcrumbs}>
+      <AdminSettingsLayout title="Listening: structure" breadcrumbs={breadcrumbs}>
         <Card><CardContent className="p-6"><p className="text-sm text-admin-fg-muted">Admin access required.</p></CardContent></Card>
       </AdminSettingsLayout>
     );
@@ -135,7 +135,7 @@ export default function AdminListeningStructurePage() {
     <AdminSettingsLayout
       eyebrow="Authoring"
       icon={<ListChecks className="h-5 w-5" />}
-      title="Listening — structure"
+      title="Listening: structure"
       description={`Paper ${paperId ?? ''}. 42-question canonical map (A1 + A2 + B + C1 + C2). Edit any question via the per-question form.`}
       breadcrumbs={breadcrumbs}
       actions={

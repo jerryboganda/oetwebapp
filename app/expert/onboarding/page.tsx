@@ -412,10 +412,10 @@ export default function ExpertOnboardingPage() {
 function WelcomeStep() {
   return (
     <>
-      <div className="w-14 h-14 rounded-xl bg-lavender flex items-center justify-center mb-6">
-        <BookOpen className="w-7 h-7 text-primary" />
-      </div>
-      <h2 className="text-2xl font-bold text-navy mb-3">Welcome to the Tutor Console</h2>
+      <h2 className="flex items-center gap-2.5 text-2xl font-bold text-navy mb-3">
+        <BookOpen className="w-6 h-6 text-primary shrink-0" aria-hidden="true" />
+        Welcome to the Tutor Console
+      </h2>
       <p className="text-muted leading-relaxed mb-6">
         Let&rsquo;s get your tutor profile set up so learners can find you and you can start reviewing submissions.
         This wizard will walk you through the essential steps.
@@ -449,10 +449,10 @@ function ProfileStep({
 }) {
   return (
     <>
-      <div className="w-14 h-14 rounded-xl bg-lavender flex items-center justify-center mb-6">
-        <User className="w-7 h-7 text-primary" />
-      </div>
-      <h2 className="text-2xl font-bold text-navy mb-3">Your Name &amp; Profile</h2>
+      <h2 className="flex items-center gap-2.5 text-2xl font-bold text-navy mb-3">
+        <User className="w-6 h-6 text-primary shrink-0" aria-hidden="true" />
+        Your Name &amp; Profile
+      </h2>
       <p className="text-muted leading-relaxed mb-6">
         Set up the name and bio that learners will see when they find your profile.
       </p>
@@ -490,10 +490,10 @@ function QualificationsStep({
 }) {
   return (
     <>
-      <div className="w-14 h-14 rounded-xl bg-lavender flex items-center justify-center mb-6">
-        <Award className="w-7 h-7 text-primary" />
-      </div>
-      <h2 className="text-2xl font-bold text-navy mb-3">Teaching Qualifications</h2>
+      <h2 className="flex items-center gap-2.5 text-2xl font-bold text-navy mb-3">
+        <Award className="w-6 h-6 text-primary shrink-0" aria-hidden="true" />
+        Teaching Qualifications
+      </h2>
       <p className="text-muted leading-relaxed mb-6">
         Help us verify your credentials and match you with the right learners.
       </p>
@@ -539,10 +539,10 @@ function ScheduleStep({
 }) {
   return (
     <>
-      <div className="w-14 h-14 rounded-xl bg-lavender flex items-center justify-center mb-6">
-        <CalendarClock className="w-7 h-7 text-primary" />
-      </div>
-      <h2 className="text-2xl font-bold text-navy mb-3">Weekly Availability</h2>
+      <h2 className="flex items-center gap-2.5 text-2xl font-bold text-navy mb-3">
+        <CalendarClock className="w-6 h-6 text-primary shrink-0" aria-hidden="true" />
+        Weekly Availability
+      </h2>
       <p className="text-muted leading-relaxed mb-6">
         Set the days and hours you&rsquo;re available for review work. You can adjust this anytime later.
       </p>
@@ -610,10 +610,10 @@ function RatesStep({
 }) {
   return (
     <>
-      <div className="w-14 h-14 rounded-xl bg-lavender flex items-center justify-center mb-6">
-        <CreditCard className="w-7 h-7 text-primary" />
-      </div>
-      <h2 className="text-2xl font-bold text-navy mb-3">Session Rates</h2>
+      <h2 className="flex items-center gap-2.5 text-2xl font-bold text-navy mb-3">
+        <CreditCard className="w-6 h-6 text-primary shrink-0" aria-hidden="true" />
+        Session Rates
+      </h2>
       <p className="text-muted leading-relaxed mb-6">
         Set your rates for private speaking sessions. These can be adjusted later from your profile.
       </p>
@@ -661,21 +661,21 @@ function ReviewStep({
 
   return (
     <>
-      <div className="w-14 h-14 rounded-xl bg-lavender flex items-center justify-center mb-6">
-        <FileCheck className="w-7 h-7 text-primary" />
-      </div>
-      <h2 className="text-2xl font-bold text-navy mb-3">Review &amp; Complete</h2>
+      <h2 className="flex items-center gap-2.5 text-2xl font-bold text-navy mb-3">
+        <FileCheck className="w-6 h-6 text-primary shrink-0" aria-hidden="true" />
+        Review &amp; Complete
+      </h2>
       <p className="text-muted leading-relaxed mb-6">
         Check everything looks right, then complete your setup to start receiving review work.
       </p>
       <div className="space-y-4">
         <SummarySection title="Profile">
-          <SummaryRow label="Display Name" value={profile.displayName || '—'} />
-          <SummaryRow label="Bio" value={profile.bio || '—'} />
+          <SummaryRow label="Display Name" value={profile.displayName || 'N/A'} />
+          <SummaryRow label="Bio" value={profile.bio || 'N/A'} />
         </SummarySection>
         <SummarySection title="Qualifications">
-          <SummaryRow label="Qualifications" value={qualifications.qualifications || '—'} />
-          <SummaryRow label="Certifications" value={qualifications.certifications || '—'} />
+          <SummaryRow label="Qualifications" value={qualifications.qualifications || 'N/A'} />
+          <SummaryRow label="Certifications" value={qualifications.certifications || 'N/A'} />
           <SummaryRow label="Experience" value={`${qualifications.experienceYears} years`} />
         </SummarySection>
         <SummarySection title="Schedule">

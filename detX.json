@@ -1,0 +1,38 @@
+[
+  {
+    "antipattern": "pure-black-white",
+    "name": "Pure black background",
+    "description": "Pure #000000 as a background color looks harsh and unnatural. Tint it slightly toward your brand hue (e.g., oklch(12% 0.01 250)) for a more refined feel.",
+    "severity": "warning",
+    "file": "C:\\Users\\Administrator\\Desktop\\New OET Web App\\app\\admin\\content\\reading\\[paperId]\\questions\\AcceptedVariantManager.tsx",
+    "line": 61,
+    "snippet": "bg-black",
+    "importedBy": [
+      "page.tsx"
+    ]
+  },
+  {
+    "antipattern": "gray-on-color",
+    "name": "Gray text on colored background",
+    "description": "Gray text looks washed out on colored backgrounds. Use a darker shade of the background color instead, or white/near-white for contrast.",
+    "severity": "warning",
+    "file": "C:\\Users\\Administrator\\Desktop\\New OET Web App\\components\\domain\\reading\\reading-feedback-panel.tsx",
+    "line": 272,
+    "snippet": "text-slate-500 on bg-red-100",
+    "importedBy": [
+      "reading-attempt-review-screen.tsx"
+    ]
+  },
+  {
+    "antipattern": "gray-on-color",
+    "name": "Gray text on colored background",
+    "description": "Gray text looks washed out on colored backgrounds. Use a darker shade of the background color instead, or white/near-white for contrast.",
+    "severity": "warning",
+    "file": "C:\\Users\\Administrator\\Desktop\\New OET Web App\\components\\domain\\reading\\reading-feedback-panel.tsx",
+    "line": 272,
+    "snippet": "text-slate-400 on bg-red-100",
+    "importedBy": [
+      "reading-attempt-review-screen.tsx"
+    ]
+  }
+]

@@ -169,9 +169,9 @@ const accentStyles: Record<LearnerSurfaceAccent, {
     toggleOn: 'bg-emerald-600',
   },
   slate: {
-    icon: 'bg-muted text-foreground',
-    badge: 'border-border bg-muted text-foreground',
-    softBadge: 'border-border bg-muted text-foreground',
+    icon: 'bg-muted text-navy',
+    badge: 'border-border bg-muted text-navy',
+    softBadge: 'border-border bg-muted text-navy',
     helperSurface: 'border-border bg-surface',
     helperGlow: 'from-slate-100 via-white to-white',
     inputFocus: 'focus:border-slate-400 focus:ring-2 focus:ring-slate-100',
@@ -191,7 +191,7 @@ const tagToneStyles: Record<Exclude<FieldTagTone, 'section'>, string> = {
 const SECTION_CONFIG: Record<SettingsSectionId, SectionConfig> = {
   profile: {
     title: 'Profile',
-    heroTitle: 'Keep profile settings clear before you change them',
+    heroTitle: 'Your Profile',
     description: 'Manage your name, email, profession, and identity details.',
     eyebrow: 'Account & Identity',
     icon: User,
@@ -670,7 +670,7 @@ function fieldStatus(field: FieldConfig, value: string | boolean): { label: stri
 
 function inputClasses(accent: LearnerSurfaceAccent) {
   return cn(
-    'w-full rounded-2xl border border-black/5 bg-surface/60 backdrop-blur-xl px-5 py-4 text-base font-bold text-navy outline-none transition-all shadow-inner focus:bg-surface focus:shadow-[0_4px_20px_rgb(0,0,0,0.08)] focus:border-primary focus:ring-4 focus:ring-primary/20',
+    'w-full rounded-2xl border border-border bg-surface px-5 py-4 text-base font-bold text-navy outline-none transition-[border-color,box-shadow] duration-200 shadow-inner focus:border-primary focus:ring-4 focus:ring-primary/20',
     accentStyles[accent].inputFocus,
   );
 }
@@ -701,25 +701,24 @@ function SettingsSectionHelperCard({
   const palette = accentStyles[accent];
 
   return (
-    <section className={cn('overflow-hidden rounded-[2rem] border/50 shadow-[0_8px_30px_rgb(0,0,0,0.04)] ring-1 ring-black/5 bg-white/60 backdrop-blur-3xl relative group', palette.helperSurface)}>
-      <div className="absolute inset-0 bg-[linear-gradient(45deg,transparent,rgba(255,255,255,0.4),transparent)] -translate-x-[150%] group-hover:translate-x-[150%] transition-transform duration-1000 ease-in-out pointer-events-none" />
-      <div className={cn('p-6 sm:p-8 relative z-10', palette.helperGlow)}>
+    <section className={cn('overflow-hidden rounded-[2rem] border shadow-sm bg-surface relative', palette.helperSurface)}>
+      <div className="p-6 sm:p-8 relative z-10">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div className="flex items-start gap-5">
-            <div className={cn('flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border shadow-md ring-1 ring-white/50 backdrop-blur-md', palette.softBadge)}>
-              <Icon className="h-6 w-6 drop-shadow-sm" />
+            <div className={cn('flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border', palette.softBadge)}>
+              <Icon className="h-6 w-6" />
             </div>
             <div>
               <div className="flex flex-wrap items-center gap-2">
                 <Badge className={cn('rounded-full px-3 py-1 text-xs font-black uppercase tracking-widest shadow-sm', palette.badge)}>
                   {helperBadge}
                 </Badge>
-                <Badge variant="muted" className="rounded-full px-3 py-1 text-xs font-bold uppercase tracking-widest bg-white/50 backdrop-blur-sm">
+                <Badge variant="muted" className="rounded-full px-3 py-1 text-xs font-bold uppercase tracking-widest">
                   {configuredFieldCount}/{totalFieldCount} configured
                 </Badge>
               </div>
               <h2 className="mt-4 text-xl font-black text-navy tracking-tight">{title}</h2>
-              <p className="mt-1.5 max-w-3xl text-sm leading-relaxed text-navy/70 font-bold">{body}</p>
+              <p className="mt-1.5 max-w-3xl text-sm leading-relaxed text-muted font-bold">{body}</p>
             </div>
           </div>
         </div>
@@ -743,8 +742,7 @@ function SettingsSectionForm({
 
   if (data.section === 'profile') {
     return (
-      <div className="rounded-[2.5rem] border border-black/5 bg-white/70 backdrop-blur-3xl shadow-[0_8px_40px_rgb(0,0,0,0.06)] relative overflow-hidden group">
-        <div className="absolute inset-0 bg-gradient-to-br from-white/60 to-transparent pointer-events-none" />
+      <div className="rounded-[2.5rem] border border-border bg-surface shadow-sm relative overflow-hidden">
         <div className="relative z-10 flex flex-col">
           {config.fields.map((field, i) => {
             const value = fieldValue(data.values, field);
@@ -752,10 +750,10 @@ function SettingsSectionForm({
             const FieldIcon = field.icon;
 
             return (
-              <div key={field.key} className={cn('p-6 sm:p-8 flex flex-col xl:flex-row xl:items-start gap-6 transition-colors duration-500 hover:bg-white/40', i !== config.fields.length - 1 && 'border-b border-black/5')}>
+              <div key={field.key} className={cn('p-6 sm:p-8 flex flex-col xl:flex-row xl:items-start gap-6 transition-colors duration-300 hover:bg-background-light', i !== config.fields.length - 1 && 'border-b border-border')}>
                 <div className="flex min-w-0 flex-1 items-start gap-5">
-                  <div className={cn('flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl border shadow-sm ring-1 ring-white/50 backdrop-blur-md', palette.softBadge)}>
-                    <FieldIcon className={cn('h-7 w-7 drop-shadow-sm', status.label === 'Set' ? 'text-primary' : '')} />
+                  <div className={cn('flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl border', palette.softBadge)}>
+                    <FieldIcon className={cn('h-7 w-7', status.label === 'Set' ? 'text-primary' : '')} />
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2 mb-1.5">
@@ -808,30 +806,27 @@ function SettingsSectionForm({
         const value = fieldValue(data.values, field);
         const status = fieldStatus(field, value);
         const FieldIcon = field.icon;
-        
-        const isStorageOrAudio = field.primaryTag === 'Storage' || field.secondaryTag === 'Audio evidence';
 
         return (
-          <div key={field.key} className={cn('rounded-[2rem] border/50 bg-white/70 backdrop-blur-2xl p-6 sm:p-8 shadow-[0_8px_30px_rgb(0,0,0,0.04)] ring-1 ring-black/5 transition-all duration-500 hover:shadow-[0_8px_40px_rgb(0,0,0,0.08)] hover:-translate-y-1 group relative', status.label === 'Not set' ? 'border-dashed border-border ring-transparent' : 'border-black/5', data.section === 'privacy' && 'backdrop-blur-xl bg-white/60')}>
-            <div className="absolute inset-0 bg-gradient-to-br from-white/40 to-transparent pointer-events-none rounded-[2rem]" />
+          <div key={field.key} className={cn('rounded-[2rem] bg-surface p-6 sm:p-8 shadow-sm border transition-[box-shadow,border-color,transform] duration-300 hover:shadow-clinical hover:border-border-hover hoverable:-translate-y-1 group relative', status.label === 'Not set' ? 'border-dashed border-border' : 'border-border')}>
             <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between relative z-10">
               <div className="flex min-w-0 flex-1 items-start gap-5">
-                <div className={cn('flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border shadow-sm transition-all duration-500 ease-out group-hover:scale-110 group-hover:shadow-md ring-1 ring-white/50 backdrop-blur-md', palette.softBadge)}>
-                  <FieldIcon className={cn('h-6 w-6 drop-shadow-sm transition-colors duration-500', Boolean(value) || status.label === 'Set' ? 'text-primary' : '')} />
+                <div className={cn('flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border transition-transform duration-300 ease-out group-hoverable:scale-110', palette.softBadge)}>
+                  <FieldIcon className={cn('h-6 w-6 transition-colors duration-300', Boolean(value) || status.label === 'Set' ? 'text-primary' : '')} />
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
                     <label className="text-xl font-black text-navy tracking-tight group-hover:text-primary transition-colors" htmlFor={field.key}>{field.label}</label>
-                    <div className={cn("inline-flex overflow-hidden rounded-full shadow-sm ring-1 ring-black/5", isStorageOrAudio && "animate-pulse")}>
+                    <div className="inline-flex overflow-hidden rounded-full shadow-sm border border-border">
                       {renderTag(field.primaryTag, accent, field.primaryTagTone ?? 'section')}
                     </div>
                     {field.secondaryTag ? (
-                      <div className={cn("inline-flex overflow-hidden rounded-full shadow-sm ring-1 ring-black/5", isStorageOrAudio && "animate-pulse")}>
+                      <div className="inline-flex overflow-hidden rounded-full shadow-sm border border-border">
                         {renderTag(field.secondaryTag, accent, field.secondaryTagTone ?? 'muted')}
                       </div>
                     ) : null}
                   </div>
-                  <p className="mt-2.5 max-w-2xl text-sm leading-relaxed text-navy/70 font-medium">{field.description}</p>
+                  <p className="mt-2.5 max-w-2xl text-sm leading-relaxed text-muted font-medium">{field.description}</p>
                 </div>
               </div>
 
@@ -841,7 +836,7 @@ function SettingsSectionForm({
                   type="button"
                   onClick={() => onChange(field.key, !Boolean(value))}
                   className={cn(
-                    'relative inline-flex h-10 w-20 shrink-0 items-center rounded-full transition-all duration-500 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-offset-2 overflow-hidden shadow-inner ring-1 ring-black/5',
+                    'relative inline-flex h-10 w-20 shrink-0 items-center rounded-full transition-colors duration-200 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-offset-2 overflow-hidden shadow-inner border border-border',
                     Boolean(value) ? palette.toggleOn : 'bg-navy/10 hover:bg-navy/15',
                     toggleFocusClasses(accent),
                   )}
@@ -849,10 +844,7 @@ function SettingsSectionForm({
                   aria-label={`Toggle ${field.label}`}
                   role="switch"
                 >
-                  <span className={cn('inline-block h-8 w-8 transform rounded-full bg-white shadow-[0_2px_10px_rgba(0,0,0,0.1)] transition-transform duration-500 ease-spring', Boolean(value) ? 'translate-x-10' : 'translate-x-1')} />
-                  {Boolean(value) && (
-                    <span className="absolute inset-0 bg-white/20 animate-pulse pointer-events-none" />
-                  )}
+                  <span className={cn('inline-block h-8 w-8 transform rounded-full bg-surface shadow-sm transition-transform duration-200 ease-out', Boolean(value) ? 'translate-x-10' : 'translate-x-1')} />
                 </button>
               ) : null}
             </div>
@@ -1090,8 +1082,7 @@ export default function LearnerSettingsSectionPage() {
           </Button>
 
           {config ? (
-            <div className="bg-white/60 backdrop-blur-2xl p-2 sm:p-2 border-0 shadow-[0_8px_30px_rgb(0,0,0,0.04)] ring-1 ring-primary/5 transition-all overflow-hidden relative group rounded-3xl">
-              <div className="absolute inset-0 bg-[linear-gradient(45deg,transparent,rgba(255,255,255,0.4),transparent)] -translate-x-[150%] group-hover:translate-x-[150%] transition-transform duration-1000 ease-in-out pointer-events-none" />
+            <div className="bg-surface p-2 sm:p-2 border border-border shadow-sm overflow-hidden relative rounded-3xl">
               <LearnerPageHero
                 eyebrow={config.eyebrow}
                 icon={config.icon}
@@ -1109,7 +1100,7 @@ export default function LearnerSettingsSectionPage() {
 
           {loading ? (
             <div className="space-y-4">
-              {[1, 2, 3].map((item) => <Skeleton key={item} className="h-40 rounded-3xl bg-white/40" />)}
+              {[1, 2, 3].map((item) => <Skeleton key={item} className="h-40 rounded-3xl" />)}
             </div>
           ) : null}
 
@@ -1164,23 +1155,22 @@ export default function LearnerSettingsSectionPage() {
 
               <SettingsSectionForm accent={config.accent} data={data} onChange={handleChange} />
 
-              <div className="rounded-[2rem] border border-black/5 bg-white/70 backdrop-blur-2xl px-6 py-5 shadow-lg relative group overflow-hidden mt-10">
-                <div className="absolute inset-0 bg-gradient-to-r from-primary/5 via-transparent to-primary/5 pointer-events-none" />
+              <div className="rounded-[2rem] border border-border bg-surface px-6 py-5 shadow-sm relative overflow-hidden mt-10">
                 <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between relative z-10">
                   <div className="space-y-3">
                     <div className="flex flex-wrap items-center gap-3">
                       <Badge className={cn('rounded-full px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.14em] shadow-sm', accentStyles[config.accent].badge)}>
                         {configuredFieldCount}/{config.fields.length} configured
                       </Badge>
-                      <Badge variant={successMessage ? 'success' : 'muted'} className="rounded-full px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.14em] bg-surface shadow-sm ring-1 ring-black/5">
+                      <Badge variant={successMessage ? 'success' : 'muted'} className="rounded-full px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.14em] bg-surface shadow-sm border border-border">
                         {saving ? 'Saving...' : successMessage ? 'Saved' : 'Ready to save'}
                       </Badge>
                     </div>
-                    <p className="text-sm font-medium text-navy/70 leading-relaxed max-w-xl">
+                    <p className="text-sm font-medium text-muted leading-relaxed max-w-xl">
                       Save when you are ready. Low-bandwidth, transcript, and reminder preferences will be used by the learner app after this update.
                     </p>
                   </div>
-                  <Button onClick={handleSave} loading={saving} size="lg" className="gap-2 rounded-full font-black px-8 shadow-primary/20 shadow-lg group hover:scale-105 transition-all border border-white/20 shrink-0">
+                  <Button onClick={handleSave} loading={saving} size="lg" className="gap-2 rounded-full font-black px-8 shadow-sm hoverable:scale-105 transition-[background-color,box-shadow,transform] duration-200 shrink-0">
                     <Save className="h-4 w-4" />
                     Save changes
                   </Button>

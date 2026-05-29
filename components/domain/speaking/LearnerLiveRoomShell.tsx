@@ -89,7 +89,7 @@ export function LearnerLiveRoomShell({
           className,
         )}
       >
-        <span className="inline-flex items-center gap-2 text-sm text-muted-foreground">
+        <span className="inline-flex items-center gap-2 text-sm text-muted">
           <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> Connecting to live room…
         </span>
       </div>
@@ -139,22 +139,22 @@ export function LearnerLiveRoomShell({
     const camOn = local.localParticipant.isCameraEnabled;
 
     return (
-      <div className="relative h-full w-full overflow-hidden rounded-2xl bg-slate-950">
+      <div className="relative h-full w-full overflow-hidden rounded-2xl bg-background-dark">
         {/* Large tile — tutor */}
         <div className="absolute inset-0 flex items-center justify-center">
           {remoteCamera ? (
             <VideoTrack trackRef={remoteCamera} className="h-full w-full object-cover" />
           ) : (
-            <div className="text-sm text-slate-400">Waiting for your tutor to join…</div>
+            <div className="text-sm text-white/70">Waiting for your tutor to join…</div>
           )}
         </div>
 
         {/* Small tile — self-view (muted) */}
-        <div className="absolute bottom-4 right-4 h-32 w-44 overflow-hidden rounded-xl border border-white/20 bg-slate-900 shadow-lg sm:h-40 sm:w-56">
+        <div className="absolute bottom-4 right-4 h-32 w-44 overflow-hidden rounded-xl border border-white/20 bg-navy shadow-lg sm:h-40 sm:w-56">
           {localCamera ? (
             <VideoTrack trackRef={localCamera} className="h-full w-full object-cover" />
           ) : (
-            <div className="flex h-full items-center justify-center text-xs text-slate-500">
+            <div className="flex h-full items-center justify-center text-xs text-white/50">
               Camera off
             </div>
           )}
@@ -162,13 +162,13 @@ export function LearnerLiveRoomShell({
 
         {/* Captions / extra slot */}
         {children ? (
-          <div className="absolute bottom-44 left-1/2 w-[min(90%,640px)] -translate-x-1/2 rounded-xl bg-black/60 px-4 py-2 text-sm text-white backdrop-blur">
+          <div className="absolute bottom-44 left-1/2 w-[min(90%,640px)] -translate-x-1/2 rounded-xl bg-navy/60 px-4 py-2 text-sm text-white backdrop-blur">
             {children}
           </div>
         ) : null}
 
         {/* Controls */}
-        <div className="absolute bottom-4 left-1/2 flex -translate-x-1/2 items-center gap-2 rounded-full bg-black/60 px-3 py-2 backdrop-blur">
+        <div className="absolute bottom-4 left-1/2 flex -translate-x-1/2 items-center gap-2 rounded-full bg-navy/60 px-3 py-2 backdrop-blur">
           <Button
             type="button"
             variant={micOn ? 'ghost' : 'destructive'}
@@ -255,10 +255,10 @@ export function LiveRoomPlaceholder({
       </h3>
       <p className="max-w-md text-sm text-amber-800">
         The LiveKit client package isn&apos;t installed in this build. Booking
-        details have been preserved — please refresh once the room is ready,
+        details have been preserved. Please refresh once the room is ready,
         or end this session.
       </p>
-      <code className="rounded bg-white/60 px-2 py-1 text-xs text-amber-700">
+      <code className="rounded bg-surface/60 px-2 py-1 text-xs text-amber-700">
         role={role} · server={livekitWssUrl} · token={tokenPresent ? 'present' : 'missing'}
       </code>
       <Button type="button" variant="destructive" onClick={onEnd}>

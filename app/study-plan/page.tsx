@@ -119,7 +119,7 @@ export default function StudyPlanPage() {
         animate={{ opacity: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.95 }}
         key={task.id}
-        className={`bg-surface border border-border rounded-2xl overflow-hidden shadow-sm transition-all duration-200 ${
+        className={`bg-surface border border-border rounded-2xl overflow-hidden shadow-sm transition-[color,background-color,border-color,box-shadow,transform,opacity,filter] duration-200 ${
           isCompleted ? 'opacity-60' : 'hover:shadow-md'
         }`}
       >

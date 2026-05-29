@@ -65,7 +65,7 @@ function RowsTable({ payload, emptyLabel }: { payload: Json; emptyLabel: string 
         <thead className="bg-admin-bg-subtle text-left text-xs uppercase tracking-wide text-admin-fg-muted">
           <tr>
             {columns.map((c) => (
-              <th key={c} className="p-2">{c}</th>
+              <th scope="col" key={c} className="p-2">{c}</th>
             ))}
           </tr>
         </thead>
@@ -217,7 +217,7 @@ export default function AdminSpeakingAnalyticsPage() {
                   ) : (
                     <RowsTable
                       payload={contentData}
-                      emptyLabel="No content-difficulty signal yet — need more attempts per card."
+                      emptyLabel="No content-difficulty signal yet. Need more attempts per card."
                     />
                   )}
                 </CardContent>

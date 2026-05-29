@@ -468,7 +468,7 @@ export default function BillingPage() {
           <ul className="mt-4 flex-1 space-y-2 text-sm text-navy">
             {pkg.features.map((feature, index) => (
               <li key={index} className="flex items-start gap-2">
-                <CheckCircle2 className="mt-0.5 h-4 w-4 flex-none text-emerald-600" />
+                <CheckCircle2 className="mt-0.5 h-4 w-4 flex-none text-success" />
                 <span>{feature}</span>
               </li>
             ))}
@@ -505,7 +505,7 @@ export default function BillingPage() {
           icon={CreditCard}
           accent="navy"
           title="Your billing center"
-          description="Review your plan, top up review credits, and download invoices — everything stays validated server-side before checkout opens."
+          description="Review your plan, top up review credits, and download invoices. Everything stays validated server-side before checkout opens."
           highlights={[
             { icon: ShieldCheck, label: 'Current plan', value: data.currentPlan },
             { icon: Wallet, label: 'Credit balance', value: walletLoading ? '—' : `${wallet?.balance ?? 0} credits` },
@@ -542,12 +542,12 @@ export default function BillingPage() {
 
         {/* Persistent quote bar — only when a validated quote is held */}
         {quote ? (
-          <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-emerald-900 shadow-sm dark:border-emerald-300/30 dark:bg-emerald-300/10 dark:text-emerald-100">
+          <div className="rounded-2xl border border-success/30 bg-success/10 p-4 text-success shadow-sm">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="flex items-center gap-3">
-                <CheckCircle2 className="h-5 w-5 text-emerald-700 dark:text-emerald-200" />
+                <CheckCircle2 className="h-5 w-5 text-success" />
                 <div>
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-emerald-800/80 dark:text-emerald-100/80">Validated quote</p>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-success/80">Validated quote</p>
                   <p className="mt-0.5 text-sm font-semibold">
                     {quoteLabel ?? 'Checkout'} · {formatCurrency(quote.totalAmount, quote.currency)}
                     {quote.discountAmount > 0 ? (
@@ -570,7 +570,7 @@ export default function BillingPage() {
                   setQuote(null);
                   setQuoteLabel(null);
                 }}
-                className="inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-bold text-emerald-800 transition-colors hover:bg-emerald-100 dark:text-emerald-100 dark:hover:bg-emerald-300/10"
+                className="inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-bold text-success transition-colors hover:bg-success/15"
               >
                 <X className="h-3 w-3" /> Dismiss
               </button>
@@ -600,8 +600,8 @@ export default function BillingPage() {
                     <p className="mt-3 max-w-md text-sm leading-6 text-muted">{data.planDescription}</p>
                   ) : null}
                 </div>
-                <span className="inline-flex items-center gap-2 text-sm font-extrabold text-green-900 dark:text-green-200">
-                  <span className="h-1.5 w-1.5 rounded-full bg-green-700" aria-hidden="true" />
+                <span className="inline-flex items-center gap-2 text-sm font-extrabold text-success">
+                  <span className="h-1.5 w-1.5 rounded-full bg-success" aria-hidden="true" />
                   {data.status}
                 </span>
               </div>
@@ -711,8 +711,8 @@ export default function BillingPage() {
                           </p>
                         </div>
                       </div>
-                      <span className="inline-flex items-center gap-1.5 text-sm font-extrabold text-green-900 dark:text-green-200">
-                        <span className="h-1.5 w-1.5 rounded-full bg-green-700" aria-hidden="true" />
+                      <span className="inline-flex items-center gap-1.5 text-sm font-extrabold text-success">
+                        <span className="h-1.5 w-1.5 rounded-full bg-success" aria-hidden="true" />
                         {invoice.status}
                       </span>
                     </li>
@@ -755,7 +755,7 @@ export default function BillingPage() {
                     >
                       <div className="flex items-center gap-3">
                         <div
-                          className={`rounded-lg p-1.5 ${tx.amount >= 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'}`}
+                          className={`rounded-lg p-1.5 ${tx.amount >= 0 ? 'bg-success/10 text-success' : 'bg-danger/10 text-danger'}`}
                         >
                           {tx.amount >= 0 ? (
                             <ArrowDownCircle className="h-4 w-4" />
@@ -829,7 +829,7 @@ export default function BillingPage() {
                       ) : plan.changeDirection === 'upgrade' ? (
                         <ArrowUpCircle className="h-5 w-5 text-success" />
                       ) : (
-                        <ArrowDownCircle className="h-5 w-5 text-amber-500" />
+                        <ArrowDownCircle className="h-5 w-5 text-warning" />
                       )}
                     </div>
 
@@ -847,7 +847,7 @@ export default function BillingPage() {
 
                     <ul className="mt-4 space-y-2 text-sm text-navy">
                       <li className="flex items-start gap-2">
-                        <CheckCircle2 className="mt-0.5 h-4 w-4 flex-none text-emerald-600" />
+                        <CheckCircle2 className="mt-0.5 h-4 w-4 flex-none text-success" />
                         <span>
                           Tutor reviews for{' '}
                           <strong>
@@ -859,19 +859,19 @@ export default function BillingPage() {
                       </li>
                       {plan.trialDays > 0 ? (
                         <li className="flex items-start gap-2">
-                          <CheckCircle2 className="mt-0.5 h-4 w-4 flex-none text-emerald-600" />
+                          <CheckCircle2 className="mt-0.5 h-4 w-4 flex-none text-success" />
                           <span>{plan.trialDays}-day trial</span>
                         </li>
                       ) : null}
                       {plan.isRenewable ? (
                         <li className="flex items-start gap-2">
-                          <CheckCircle2 className="mt-0.5 h-4 w-4 flex-none text-emerald-600" />
+                          <CheckCircle2 className="mt-0.5 h-4 w-4 flex-none text-success" />
                           <span>Auto-renewing</span>
                         </li>
                       ) : null}
                       {(plan.entitlements ?? {})['invoiceDownloadsAvailable'] === true ? (
                         <li className="flex items-start gap-2">
-                          <CheckCircle2 className="mt-0.5 h-4 w-4 flex-none text-emerald-600" />
+                          <CheckCircle2 className="mt-0.5 h-4 w-4 flex-none text-success" />
                           <span>Invoice downloads</span>
                         </li>
                       ) : null}
@@ -952,7 +952,7 @@ export default function BillingPage() {
                       key={gw}
                       type="button"
                       onClick={() => setSelectedGateway(gw)}
-                      className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-all ${
+                      className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-[color,background-color,box-shadow] duration-200 ${
                         selectedGateway === gw
                           ? 'bg-emerald-700 text-white shadow-sm'
                           : 'text-navy hover:bg-surface'
@@ -984,7 +984,7 @@ export default function BillingPage() {
                       aria-disabled={billingMutationsBlocked || undefined}
                       title={billingMutationsBlocked ? billingBlockedMessage : undefined}
                       onClick={() => handleTopUp(tier.amount)}
-                      className={`relative rounded-2xl border p-4 text-left transition-all disabled:cursor-not-allowed disabled:opacity-60 ${
+                      className={`relative rounded-2xl border p-4 text-left transition-[color,background-color,border-color,box-shadow,transform,opacity,filter] duration-200 disabled:cursor-not-allowed disabled:opacity-60 ${
                         tier.isPopular
                           ? 'border-emerald-300 bg-surface shadow-md'
                           : 'border-border bg-background-light hover:border-emerald-200 hover:shadow-sm'
@@ -1155,7 +1155,7 @@ export default function BillingPage() {
                     >
                       <div className="flex items-center gap-3">
                         <div
-                          className={`rounded-lg p-1.5 ${tx.amount >= 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'}`}
+                          className={`rounded-lg p-1.5 ${tx.amount >= 0 ? 'bg-success/10 text-success' : 'bg-danger/10 text-danger'}`}
                         >
                           {tx.amount >= 0 ? (
                             <ArrowDownCircle className="h-4 w-4" />
@@ -1192,7 +1192,7 @@ export default function BillingPage() {
           <LearnerSurfaceSectionHeader
             eyebrow="AI Credits"
             title="AI grading packages"
-            description="Credits grade your Writing letters and Speaking cards instantly with AI — 1 credit = 1 letter or card. Listening & Reading practice is always free. Credits are deducted when grading starts and automatically refunded if grading fails."
+            description="Credits grade your Writing letters and Speaking cards instantly with AI. 1 credit = 1 letter or card. Listening & Reading practice is always free. Credits are deducted when grading starts and automatically refunded if grading fails."
             className="mb-4"
           />
 
@@ -1219,7 +1219,7 @@ export default function BillingPage() {
                     key={view.id}
                     type="button"
                     onClick={() => setAiPackageView(view.id)}
-                    className={`rounded-lg px-4 py-1.5 text-sm font-medium transition-all ${
+                    className={`rounded-lg px-4 py-1.5 text-sm font-medium transition-[color,background-color,border-color,box-shadow,transform,opacity,filter] duration-200 ${
                       aiPackageView === view.id
                         ? 'bg-emerald-700 text-white shadow-sm'
                         : 'text-navy hover:bg-surface'
@@ -1269,7 +1269,7 @@ export default function BillingPage() {
                   <LearnerSurfaceSectionHeader
                     eyebrow="Mock exams"
                     title="Full mock exam packages"
-                    description="Each mock covers all 4 subtests — Writing & Speaking are AI-graded, Listening & Reading are auto-marked. Mock allowances are separate from AI credits."
+                    description="Each mock covers all 4 subtests: Writing & Speaking are AI-graded, Listening & Reading are auto-marked. Mock allowances are separate from AI credits."
                     className="mb-4"
                   />
                   <div className="grid gap-4 lg:grid-cols-3">{aiPackages.mock.map(renderAiPackageCard)}</div>
@@ -1316,8 +1316,8 @@ export default function BillingPage() {
                       </div>
                     </div>
                     <div className="flex items-center gap-3">
-                      <span className="inline-flex items-center gap-1.5 text-sm font-extrabold text-green-900 dark:text-green-200">
-                        <span className="h-1.5 w-1.5 rounded-full bg-green-700" aria-hidden="true" />
+                      <span className="inline-flex items-center gap-1.5 text-sm font-extrabold text-success">
+                        <span className="h-1.5 w-1.5 rounded-full bg-success" aria-hidden="true" />
                         {invoice.status}
                       </span>
                       <Button

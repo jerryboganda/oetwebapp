@@ -61,7 +61,7 @@ export function AccentBadge({ accent, size = 'md', className, style }: AccentBad
     <span
       className={[
         'inline-flex items-center rounded-full font-medium',
-        'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200',
+        'bg-background-light text-muted',
         sizeClasses,
         className ?? '',
       ]

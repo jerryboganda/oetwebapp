@@ -56,7 +56,7 @@ export default function TutorWritingCalibrationPage() {
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <p className="text-xs font-bold uppercase tracking-wider text-muted">Agreement coefficient</p>
-              <p className="text-4xl font-extrabold text-navy tabular-nums">{pct === null ? '—' : `${pct}%`}</p>
+              <p className="text-4xl font-extrabold text-navy tabular-nums">{pct === null ? 'N/A' : `${pct}%`}</p>
               {data?.lastCalibratedAt ? <p className="mt-1 text-xs text-muted">Last calibrated: {new Date(data.lastCalibratedAt).toLocaleString()}</p> : null}
             </div>
             <div>

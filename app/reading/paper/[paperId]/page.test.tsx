@@ -169,6 +169,41 @@ describe('Reading paper player page', () => {
     });
     expect(await screen.findByRole('timer', { name: /part a window/i })).toBeInTheDocument();
   });
+
+  it('highlights selected passage text and clears it without touching question text', async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+
+    await renderPlayer();
+    await user.click(await screen.findByRole('button', { name: /start attempt/i }));
+
+    const scope = document.querySelector('[data-reading-highlight-scope="passage"]') as HTMLElement | null;
+    expect(scope).not.toBeNull();
+
+    // Programmatically select the first word of the passage text.
+    const textNode = scope!.querySelector('p')!.firstChild as Text;
+    const range = document.createRange();
+    range.setStart(textNode, 0);
+    range.setEnd(textNode, 3);
+    const selection = window.getSelection()!;
+    selection.removeAllRanges();
+    selection.addRange(range);
+
+    fireEvent.click(screen.getByRole('button', { name: /highlight selected passage text/i }));
+
+    await waitFor(() => {
+      expect(scope!.querySelectorAll('mark[data-reading-highlight]').length).toBeGreaterThan(0);
+    });
+    // Highlights must stay scoped to the passage — never the question pane.
+    expect(document.querySelectorAll('mark[data-reading-highlight]').length).toBe(
+      scope!.querySelectorAll('mark[data-reading-highlight]').length,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /clear highlights in this part/i }));
+
+    await waitFor(() => {
+      expect(scope!.querySelectorAll('mark[data-reading-highlight]').length).toBe(0);
+    });
+  });
 });
 
 function buildAttempt() {

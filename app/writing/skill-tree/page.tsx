@@ -132,7 +132,7 @@ export default function WritingSkillTreePage() {
                         <span>{masteryValue}%</span>
                       </div>
                       <div
-                        className="h-2 overflow-hidden rounded-full bg-slate-200"
+                        className="h-2 overflow-hidden rounded-full bg-border"
                         role="progressbar"
                         aria-valuemin={0}
                         aria-valuemax={100}

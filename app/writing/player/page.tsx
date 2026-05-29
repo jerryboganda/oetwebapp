@@ -245,7 +245,7 @@ export default function WritingPlayer() {
         <span className="text-[11px] leading-snug text-muted">
           {bandState === 'drafting'
             ? 'Keep writing… word-count guidance shows once your draft passes 80 words.'
-            : 'Soft guideline — OET pass band 180–200 words.'}
+            : 'Soft guideline: OET pass band 180-200 words.'}
         </span>
       </div>
       <div role="status" aria-live="polite" className="sr-only">
@@ -853,7 +853,7 @@ export default function WritingPlayer() {
                       </div>
                       <p className="mt-1 text-xs leading-5 text-muted">Upload PDF or clear page photos for OCR before submission.</p>
                     </div>
-                    <label className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-bold text-white shadow-sm transition-colors hover:bg-primary-dark">
+                    <label className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-bold text-white shadow-sm transition-[color,background-color,transform] duration-200 hover:bg-primary-dark active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600">
                       {uploadingPaper ? 'Reading pages...' : 'Upload pages'}
                       <input
                         type="file"

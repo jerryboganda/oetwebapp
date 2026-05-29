@@ -113,12 +113,10 @@ export default function AchievementsPage() {
             <MotionItem delayIndex={0}>
               <Card>
                 <div className="flex items-center gap-2 mb-1">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10">
-                    <Zap className="w-4 h-4 text-primary" />
-                  </div>
+                  <Zap className="w-4 h-4 text-primary shrink-0" aria-hidden="true" />
                   <span className="text-sm font-semibold text-muted">Level</span>
                 </div>
-                <div className="text-3xl font-bold text-navy">{xp?.level ?? '—'}</div>
+                <div className="text-3xl font-bold text-navy">{xp?.level ?? '–'}</div>
                 <div className="text-xs text-muted mt-1">{xp?.totalXP?.toLocaleString() ?? '0'} total XP</div>
               </Card>
             </MotionItem>
@@ -126,9 +124,7 @@ export default function AchievementsPage() {
             <MotionItem delayIndex={1}>
               <Card>
                 <div className="flex items-center gap-2 mb-2">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10">
-                    <Zap className="w-4 h-4 text-primary" />
-                  </div>
+                  <Zap className="w-4 h-4 text-primary shrink-0" aria-hidden="true" />
                   <span className="text-sm font-semibold text-muted">XP Progress</span>
                 </div>
                 {xp && (
@@ -148,12 +144,10 @@ export default function AchievementsPage() {
             <MotionItem delayIndex={2}>
               <Card>
                 <div className="flex items-center gap-2 mb-1">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-warning/10">
-                    <Flame className="w-4 h-4 text-warning" />
-                  </div>
+                  <Flame className="w-4 h-4 text-warning shrink-0" aria-hidden="true" />
                   <span className="text-sm font-semibold text-muted">Streak</span>
                 </div>
-                <div className="text-3xl font-bold text-navy">{streak?.currentStreak ?? '—'} <span className="text-base font-normal text-muted">days</span></div>
+                <div className="text-3xl font-bold text-navy">{streak?.currentStreak ?? '–'} <span className="text-base font-normal text-muted">days</span></div>
                 <div className="text-xs text-muted mt-1">Best: {streak?.longestStreak ?? 0} days</div>
                 {streak && streak.streakFreezesAvailable > 0 && (
                   <div className="mt-2">

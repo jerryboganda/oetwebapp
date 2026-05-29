@@ -366,7 +366,7 @@ export default function ReadingTextsEditorPage() {
                     id="text-title"
                     value={editingForm.title}
                     onChange={(e) => setEditingForm({ ...editingForm, title: e.target.value })}
-                    placeholder="e.g. Text 1 — Patient Discharge"
+                    placeholder="e.g. Text 1: Patient Discharge"
                   />
                 </div>
 

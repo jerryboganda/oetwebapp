@@ -237,7 +237,7 @@ export default function VideoLessonPage() {
 
         <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
           <div className="space-y-6">
-            <div className="overflow-hidden rounded-2xl bg-black shadow-sm">
+            <div className="overflow-hidden rounded-2xl bg-background-dark shadow-sm">
               <div className="aspect-video">
                 {lesson.videoUrl ? (
                   <video
@@ -389,12 +389,12 @@ export default function VideoLessonPage() {
                   </Link>
                 )}
                 {lesson.nextLessonId ? (
-                  <Link href={`/lessons/${lesson.nextLessonId}`} className="inline-flex items-center justify-between rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-white hover:bg-primary-dark">
+                  <Link href={`/lessons/${lesson.nextLessonId}`} className="inline-flex items-center justify-between rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-white hover:bg-primary-dark active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600">
                     <span>Next lesson</span>
                     <ChevronRight className="h-4 w-4" />
                   </Link>
                 ) : (
-                  <Link href="/lessons" className="inline-flex items-center justify-between rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-white hover:bg-primary-dark">
+                  <Link href="/lessons" className="inline-flex items-center justify-between rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-white hover:bg-primary-dark active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600">
                     <span>Back to library</span>
                     <ChevronRight className="h-4 w-4" />
                   </Link>

@@ -176,7 +176,7 @@ export default function AdminSessionDetailPage() {
           <div className="mb-3 space-y-1">
             {criteria.map((c) => (
               <div key={c.id} className="text-xs">
-                <span className="font-semibold text-admin-fg-strong">{c.id}:</span> {c.score06}/{c.maxScore} — {c.evidence}
+                <span className="font-semibold text-admin-fg-strong">{c.id}:</span> {c.score06}/{c.maxScore}: {c.evidence}
               </div>
             ))}
           </div>

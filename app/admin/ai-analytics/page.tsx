@@ -257,7 +257,7 @@ export default function AdminAiAnalyticsPage() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <AlertTriangle className="h-4 w-4 text-[var(--admin-danger)]" aria-hidden="true" />
-                Churn risk — band: {bandFilter || 'all'}
+                Churn risk by band: {bandFilter || 'all'}
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -274,7 +274,7 @@ export default function AdminAiAnalyticsPage() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Users className="h-4 w-4 text-admin-fg-muted" aria-hidden="true" />
-                Usage forecast — top 50 by predicted cost
+                Usage forecast: top 50 by predicted cost
               </CardTitle>
             </CardHeader>
             <CardContent>

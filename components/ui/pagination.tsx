@@ -187,7 +187,7 @@ function PageNumbers({
             className={cn(
               'inline-flex h-8 min-w-8 items-center justify-center rounded-md px-2 text-sm font-medium transition-colors',
               item === currentPage
-                ? 'bg-primary text-white'
+                ? 'bg-primary text-white dark:bg-violet-700'
                 : 'text-muted hover:bg-muted/10 hover:text-foreground',
             )}
           >

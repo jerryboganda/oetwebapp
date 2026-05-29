@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-OUTPUT_PATH="${SBOM_OUTPUT:-release-evidence/sbom.json}"
+OUTPUT_PATH="${SBOM_OUTPUT:-sbom-sca-artifacts/sbom.json}"
 SYFT_IMAGE="${SYFT_IMAGE:-anchore/syft:v1.20.0}"
 mkdir -p "$(dirname "$OUTPUT_PATH")"
 

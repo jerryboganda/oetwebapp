@@ -184,7 +184,7 @@ export default function BulkImportPage() {
                 accept=".zip,application/zip"
                 disabled={uploading}
                 onChange={(e) => { const f = e.target.files?.[0]; if (f) void doUpload(f); }}
-                className="block text-sm text-admin-fg-strong file:mr-3 file:rounded-admin file:border-0 file:bg-[var(--admin-primary)] file:px-3 file:py-2 file:text-sm file:font-semibold file:text-white"
+                className="block text-sm text-admin-fg-strong file:mr-3 file:rounded-admin file:border-0 file:bg-[var(--admin-primary)] file:px-3 file:py-2 file:text-sm file:font-semibold file:text-[var(--admin-primary-fg)]"
               />
               {uploading && <span className="text-sm text-admin-fg-muted flex items-center gap-2"><Loader2 className="w-4 h-4 animate-spin" /> Staging…</span>}
             </div>

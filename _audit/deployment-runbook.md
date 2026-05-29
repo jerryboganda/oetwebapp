@@ -35,7 +35,7 @@ fetch → checkout → build → health-check → router swap → rollback-on-fa
 Do NOT run individual `docker compose` commands; use the script.
 
 ```bash
-# DEPLOY_REF must be an immutable 40-character commit SHA with release evidence.
+# DEPLOY_REF must be an immutable 40-character commit SHA with digest-pinned image refs.
 DEPLOY_SHA=<40-character-sha>
 ssh oet-dev "cd /opt/oetwebapp && nohup bash -lc 'DEPLOY_REF=$DEPLOY_SHA bash scripts/deploy/deploy-direct.sh' > /tmp/deploy-$DEPLOY_SHA.log 2>&1 < /dev/null &"
 ssh oet-dev "tail -n 120 /tmp/deploy-$DEPLOY_SHA.log"

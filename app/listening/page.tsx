@@ -36,19 +36,19 @@ interface HubCard {
 const HUB_CARDS: HubCard[] = [
   {
     title: 'Practice Part A',
-    subtitle: 'Patient consultations — note-taking from two consultations (24 items).',
+    subtitle: 'Patient consultations: note-taking from two consultations (24 items).',
     href: '/listening/practice/a',
     accent: 'partA',
   },
   {
     title: 'Practice Part B',
-    subtitle: 'Workplace extracts — six short workplace audio extracts (6 items).',
+    subtitle: 'Workplace extracts: six short workplace audio extracts (6 items).',
     href: '/listening/practice/b',
     accent: 'partB',
   },
   {
     title: 'Practice Part C',
-    subtitle: 'Healthcare presentations — two longer extracts with detailed questions (12 items).',
+    subtitle: 'Healthcare presentations: two longer extracts with detailed questions (12 items).',
     href: '/listening/practice/c',
     accent: 'partC',
   },
@@ -185,7 +185,7 @@ export default function ListeningHome() {
             </p>
             <Link
               href="/listening/welcome"
-              className="mt-5 inline-flex items-center gap-2 rounded-full bg-violet-600 px-8 py-3 text-sm font-bold text-white shadow-md transition hover:bg-violet-700"
+              className="mt-5 inline-flex items-center gap-2 rounded-full bg-primary px-8 py-3 text-sm font-bold text-white shadow-md transition-[color,background-color,transform] duration-200 hover:bg-primary-dark active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600"
             >
               Start your listening journey
               <ArrowRight className="h-4 w-4" aria-hidden />
@@ -254,7 +254,7 @@ export default function ListeningHome() {
             <p className="text-xs font-semibold uppercase tracking-widest text-violet-500">
               Choose how to practice
             </p>
-            <h2 id="listening-hub-heading" className="text-lg font-bold text-gray-900 dark:text-gray-100">
+            <h2 id="listening-hub-heading" className="text-lg font-bold text-navy">
               Practice by Part, or attempt the full exam
             </h2>
           </div>
@@ -270,21 +270,21 @@ export default function ListeningHome() {
                   <Link
                     href={card.href}
                     data-testid={`listening-hub-card-${card.accent}`}
-                    className={`group relative flex h-full items-start gap-4 rounded-2xl border bg-white p-5 transition-shadow hover:shadow-md dark:bg-gray-900 ${accent.ring}`}
+                    className={`group relative flex h-full items-start gap-4 rounded-2xl border bg-surface p-5 transition-shadow hover:shadow-md ${accent.ring}`}
                   >
                     <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${accent.icon}`}>
                       <Headphones className="h-5 w-5" aria-hidden />
                     </div>
                     <div className="flex-1">
                       <div className="flex items-center justify-between gap-2 flex-wrap">
-                        <h3 className="text-sm font-bold text-gray-900 dark:text-gray-100">
+                        <h3 className="text-sm font-bold text-navy">
                           {card.title}
                         </h3>
                         <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${accent.badge}`}>
                           {accent.chip}
                         </span>
                       </div>
-                      <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{card.subtitle}</p>
+                      <p className="mt-1 text-sm text-muted">{card.subtitle}</p>
                     </div>
                     <PlayCircle
                       className="h-4 w-4 self-center text-violet-400 opacity-0 transition-opacity group-hover:opacity-100"

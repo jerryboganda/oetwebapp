@@ -16,7 +16,7 @@ export function CheckoutSessionSummary({ session }: CheckoutSessionSummaryProps)
   const items = session.items ?? [];
 
   return (
-    <div className="rounded-2xl border border-border bg-background p-5 shadow-sm">
+    <div className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
       <h3 className="text-sm font-semibold uppercase tracking-wider text-muted">Order details</h3>
       {items.length === 0 ? (
         <p className="mt-3 text-sm text-muted">Receipt details are still being prepared.</p>

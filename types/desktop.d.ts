@@ -69,6 +69,33 @@ declare global {
     print: {
       printPage: (options?: Record<string, unknown>) => Promise<{ ok: boolean; error?: string }>;
     };
+    speakingAudio: {
+      start: (sessionId: string, mimeType?: string) => Promise<{
+        ok: boolean;
+        sessionId: string;
+        mimeType: string;
+        mode: string;
+      }>;
+      stop: (sessionId: string, chunks?: Array<ArrayBuffer | ArrayBufferView>) => Promise<{
+        ok: boolean;
+        sessionId?: string;
+        sizeBytes?: number;
+        mimeType?: string;
+        filePath?: string;
+        durationMs?: number;
+        error?: string;
+      }>;
+      getBlob: (sessionId: string) => Promise<{
+        ok: boolean;
+        sessionId?: string;
+        mimeType?: string;
+        sizeBytes?: number;
+        data?: ArrayBuffer;
+        error?: string;
+      }>;
+      discard: (sessionId: string) => Promise<{ ok: boolean; sessionId: string }>;
+      getPlatform: () => NodeJS.Platform;
+    };
   }
 
   interface Window {

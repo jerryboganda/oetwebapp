@@ -190,7 +190,7 @@ export default function MobileQuickSessionPage() {
               />
 
               <Card className="p-5 shadow-sm">
-                <div className="flex items-center justify-between text-xs text-muted-foreground">
+                <div className="flex items-center justify-between text-xs text-muted">
                   <span>Question {currentQ + 1} of {config.questions.length}</span>
                   <span className="flex items-center gap-1"><Timer className="h-3 w-3" />{formatTime(elapsed)}</span>
                 </div>
@@ -243,7 +243,7 @@ export default function MobileQuickSessionPage() {
               {revealed && (
                 <Card className="border-info/30 bg-info/10 p-4 shadow-sm">
                   <p className="text-xs font-medium text-info mb-1">Explanation</p>
-                  <p className="text-sm text-muted-foreground">{q.explanation}</p>
+                  <p className="text-sm text-muted">{q.explanation}</p>
                 </Card>
               )}
 
@@ -277,15 +277,15 @@ export default function MobileQuickSessionPage() {
               <div className="grid grid-cols-3 gap-4 text-center">
                 <div>
                   <p className="text-2xl font-bold text-primary">{correctCount}</p>
-                  <p className="text-xs text-muted-foreground">Correct</p>
+                  <p className="text-xs text-muted">Correct</p>
                 </div>
                 <div>
                   <p className="text-2xl font-bold">{config.questions.length - correctCount}</p>
-                  <p className="text-xs text-muted-foreground">Incorrect</p>
+                  <p className="text-xs text-muted">Incorrect</p>
                 </div>
                 <div>
                   <p className="text-2xl font-bold">{Math.round((correctCount / config.questions.length) * 100)}%</p>
-                  <p className="text-xs text-muted-foreground">Accuracy</p>
+                  <p className="text-xs text-muted">Accuracy</p>
                 </div>
                 </div>
               </Card>

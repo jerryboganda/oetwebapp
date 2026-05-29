@@ -169,7 +169,7 @@ export default function SessionsPage() {
               ) : (
                 <Trash2 className="w-4 h-4 mr-2" />
               )}
-              {confirmAll ? 'Confirm — Revoke All Other Sessions' : 'Revoke All Other Sessions'}
+              {confirmAll ? 'Confirm: Revoke All Other Sessions' : 'Revoke All Other Sessions'}
             </Button>
           </div>
         ) : null}

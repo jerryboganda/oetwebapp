@@ -22,7 +22,7 @@ const CATEGORY_ORDER: Array<{ key: string; label: string }> = [
   { key: 'writing_crash_bundle', label: 'Writing Bundles' },
   { key: 'speaking_crash', label: 'Speaking Crash Course' },
   { key: 'speaking_session', label: 'Private Speaking Sessions' },
-  { key: 'combo_double', label: 'Double Special — Writing + Speaking' },
+  { key: 'combo_double', label: 'Double Special: Writing + Speaking' },
   { key: 'combo_mega', label: 'Mega Special Package' },
   { key: 'foundation', label: 'Foundation' },
   { key: 'book', label: 'The Tutor Book' },
@@ -67,14 +67,14 @@ export default function CatalogPage() {
   }, [plans]);
 
   return (
-    <div className="min-h-screen bg-background text-navy">
+    <div className="min-h-screen bg-background-light text-navy">
       {/* Hero */}
-      <section className="relative overflow-hidden bg-gradient-to-br from-[#0E2841] via-[#0E2841] to-[#156082] px-4 pb-20 pt-24 text-white">
+      <section className="relative overflow-hidden bg-navy px-4 pb-20 pt-24 text-white">
         <div className="mx-auto max-w-5xl text-center">
           <p className="mb-2 text-xs font-semibold uppercase tracking-[0.3em] text-[#D4A44F]">OET with Dr. Ahmed Hesham · 2026 Portfolio</p>
           <h1 className="text-4xl font-bold tracking-tight sm:text-5xl">The complete OET 2026 catalogue</h1>
           <p className="mx-auto mt-4 max-w-2xl text-lg text-white/80">
-            Recorded courses, writing letter assessments, private speaking sessions and The Tutor Book — every SKU from the
+            Recorded courses, writing letter assessments, private speaking sessions and The Tutor Book. Every SKU from the
             2026 portfolio, with current and original pricing.
           </p>
           <div className="mt-6 flex flex-wrap items-center justify-center gap-2 text-sm">
@@ -90,8 +90,8 @@ export default function CatalogPage() {
         <div className="mx-auto max-w-6xl">
           <h2 className="text-2xl font-bold">Pricing matrix at a glance</h2>
           <p className="mt-1 text-sm text-muted">
-            Gold dot indicates the add-on is offered on that product. Grey dash means the section is hidden entirely — no card,
-            no upsell.
+            Gold dot indicates the add-on is offered on that product. Grey dash means the section is hidden entirely, with no card
+            and no upsell.
           </p>
 
           {loading ? (
@@ -176,7 +176,7 @@ export default function CatalogPage() {
             </p>
             <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {addOns.map((addon) => (
-                <div key={addon.code} className="rounded-2xl border border-border bg-background p-5">
+                <div key={addon.code} className="rounded-2xl border border-border bg-surface p-5">
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <h4 className="font-bold">{addon.name}</h4>
@@ -202,13 +202,13 @@ export default function CatalogPage() {
           <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
             <Link
               href="/register"
-              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-primary px-5 py-2.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-primary/90"
+              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-primary px-5 py-2.5 text-sm font-medium text-white shadow-sm transition-[color,background-color,transform] duration-200 hover:bg-primary/90 active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600"
             >
               Get started <ArrowRight className="h-4 w-4" />
             </Link>
             <Link
               href="/marketplace/packages"
-              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-border bg-background px-5 py-2.5 text-sm font-medium text-navy transition-colors hover:bg-background-light"
+              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-border bg-surface px-5 py-2.5 text-sm font-medium text-navy transition-colors hover:bg-background-light"
             >
               <FileText className="h-4 w-4" /> Browse the marketplace
             </Link>
@@ -221,7 +221,7 @@ export default function CatalogPage() {
 
 function CatalogCard({ plan }: { plan: PublicCatalogPlanRow }) {
   return (
-    <article className="flex h-full flex-col rounded-2xl border border-border bg-background p-6 shadow-sm">
+    <article className="flex h-full flex-col rounded-2xl border border-border bg-surface p-6 shadow-sm">
       <div className="flex items-start justify-between gap-3">
         <h4 className="text-lg font-bold leading-snug">{plan.name}</h4>
         <PriceCell price={plan.price} originalPrice={plan.originalPrice ?? null} />
@@ -242,31 +242,31 @@ function CatalogCard({ plan }: { plan: PublicCatalogPlanRow }) {
         <ul className="mt-4 space-y-1.5 text-sm">
           {plan.bundledWritingAssessments > 0 && (
             <li className="flex items-center gap-2">
-              <CheckCircle2 className="h-4 w-4 flex-none text-emerald-600" />
+              <CheckCircle2 className="h-4 w-4 flex-none text-success" />
               {plan.bundledWritingAssessments} bundled writing assessment{plan.bundledWritingAssessments === 1 ? '' : 's'}
             </li>
           )}
           {plan.bundledSpeakingSessions > 0 && (
             <li className="flex items-center gap-2">
-              <CheckCircle2 className="h-4 w-4 flex-none text-emerald-600" />
+              <CheckCircle2 className="h-4 w-4 flex-none text-success" />
               {plan.bundledSpeakingSessions} bundled private speaking session{plan.bundledSpeakingSessions === 1 ? '' : 's'}
             </li>
           )}
           {plan.bundledAiCredits > 0 && (
             <li className="flex items-center gap-2">
-              <CheckCircle2 className="h-4 w-4 flex-none text-emerald-600" />
+              <CheckCircle2 className="h-4 w-4 flex-none text-success" />
               {plan.bundledAiCredits} AI practice credits
             </li>
           )}
           {plan.bundledTutorBook && (
             <li className="flex items-center gap-2">
-              <CheckCircle2 className="h-4 w-4 flex-none text-emerald-600" />
-              The Tutor Book — First Edition 2026 (PDF + Telegram)
+              <CheckCircle2 className="h-4 w-4 flex-none text-success" />
+              The Tutor Book, First Edition 2026 (PDF + Telegram)
             </li>
           )}
           {plan.bundledBasicEnglish && (
             <li className="flex items-center gap-2">
-              <CheckCircle2 className="h-4 w-4 flex-none text-emerald-600" />
+              <CheckCircle2 className="h-4 w-4 flex-none text-success" />
               Basic English foundation course
             </li>
           )}

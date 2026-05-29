@@ -31,10 +31,10 @@ export function TodayPlan({ plan, onStartItem }: TodayPlanProps) {
       {/* Header */}
       <div className="flex items-center justify-between px-5 py-4 border-b border-border">
         <div>
-          <h2 className="text-sm font-semibold text-gray-900 dark:text-white">Today&apos;s Plan</h2>
-          <p className="text-xs text-gray-600 dark:text-gray-400 mt-0.5">{plan.totalMinutes} min total</p>
+          <h2 className="text-sm font-semibold text-navy">Today&apos;s Plan</h2>
+          <p className="text-xs text-muted mt-0.5">{plan.totalMinutes} min total</p>
         </div>
-        <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-100 dark:bg-blue-900/30 px-2.5 py-0.5 text-xs font-semibold text-blue-700 dark:text-blue-300">
+        <span className="inline-flex items-center gap-1.5 rounded-full bg-info/10 px-2.5 py-0.5 text-xs font-semibold text-info dark:text-info">
           {completed}/{total} done
         </span>
       </div>
@@ -49,7 +49,7 @@ export function TodayPlan({ plan, onStartItem }: TodayPlanProps) {
               <li key={item.id} className="flex items-center gap-3 px-5 py-3">
                 <span className="text-lg flex-shrink-0" aria-hidden="true">{icon}</span>
                 <div className="flex-1 min-w-0">
-                  <p className={`text-sm font-medium truncate ${isDone ? 'line-through text-gray-600 dark:text-gray-400' : 'text-gray-900 dark:text-white'}`}>
+                  <p className={`text-sm font-medium truncate ${isDone ? 'line-through text-muted' : 'text-navy'}`}>
                     {item.title}
                   </p>
                   <div className="flex items-center gap-2 mt-0.5">
@@ -58,19 +58,19 @@ export function TodayPlan({ plan, onStartItem }: TodayPlanProps) {
                         {item.skillCode}
                       </span>
                     ) : null}
-                    <span className="text-xs text-gray-600 dark:text-gray-400">{item.estimatedMinutes} min</span>
+                    <span className="text-xs text-muted">{item.estimatedMinutes} min</span>
                   </div>
                 </div>
                 {!isDone ? (
                   <button
                     type="button"
                     onClick={() => onStartItem(item)}
-                    className="flex-shrink-0 rounded-lg border border-blue-200 dark:border-blue-700 bg-blue-50 dark:bg-blue-900/30 px-3 py-1.5 text-xs font-semibold text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-800/50 transition-colors"
+                    className="flex-shrink-0 rounded-lg border border-info/30 bg-info/10 px-3 py-1.5 text-xs font-semibold text-info hover:bg-info/20 transition-colors"
                   >
                     Start
                   </button>
                 ) : (
-                  <span className="flex-shrink-0 text-xs text-gray-600 dark:text-gray-400 capitalize">{item.status}</span>
+                  <span className="flex-shrink-0 text-xs text-muted capitalize">{item.status}</span>
                 )}
               </li>
             );
@@ -78,8 +78,8 @@ export function TodayPlan({ plan, onStartItem }: TodayPlanProps) {
         </ul>
       ) : (
         <div className="px-5 py-8 text-center">
-          <p className="text-sm text-gray-600 dark:text-gray-400">No items planned for today.</p>
-          <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">Check back later or continue with a Reading paper.</p>
+          <p className="text-sm text-muted">No items planned for today.</p>
+          <p className="text-xs text-muted mt-1">Check back later or continue with a Reading paper.</p>
         </div>
       )}
     </div>

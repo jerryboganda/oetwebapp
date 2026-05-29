@@ -159,11 +159,11 @@ export default function PronunciationHubPage() {
           <p className="mb-1 text-xs font-semibold uppercase tracking-widest text-violet-500">
             SM-2 Spaced Repetition
           </p>
-          <h1 className="flex items-center gap-3 text-2xl font-bold text-neutral-900 dark:text-white">
+          <h1 className="flex items-center gap-3 text-2xl font-bold text-navy">
             <Headphones className="h-6 w-6 text-violet-500" aria-hidden />
             Pronunciation Library
           </h1>
-          <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">
+          <p className="mt-1 text-sm text-muted">
             Train your ear on healthcare vocabulary. Listen, repeat, and let SM-2 schedule the next
             review for maximum retention.
           </p>
@@ -176,7 +176,7 @@ export default function PronunciationHubPage() {
               {[0, 1, 2, 3].map((i) => (
                 <div
                   key={i}
-                  className="h-24 animate-pulse rounded-xl border border-neutral-200 bg-neutral-100 dark:border-neutral-700 dark:bg-neutral-800"
+                  className="h-24 motion-safe:animate-pulse rounded-xl border border-border bg-border/40"
                 />
               ))}
             </div>
@@ -202,7 +202,7 @@ export default function PronunciationHubPage() {
         <section className="flex flex-wrap gap-3">
           <Link
             href="/listening/pronunciation/review"
-            className="inline-flex items-center gap-2 rounded-xl bg-violet-600 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-violet-700 active:scale-95"
+            className="inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-primary-dark dark:bg-violet-700 dark:hover:bg-violet-600 active:scale-95"
           >
             <RefreshCw className="h-4 w-4" aria-hidden />
             Review Today&apos;s Cards
@@ -212,7 +212,7 @@ export default function PronunciationHubPage() {
           </Link>
           <Link
             href="/listening"
-            className="inline-flex items-center gap-2 rounded-xl border border-violet-200 bg-white px-5 py-3 text-sm font-semibold text-violet-700 transition hover:bg-violet-50 dark:border-violet-800/60 dark:bg-neutral-900 dark:text-violet-300 dark:hover:bg-violet-950/30"
+            className="inline-flex items-center gap-2 rounded-xl border border-violet-200 bg-surface px-5 py-3 text-sm font-semibold text-violet-700 transition-colors hover:bg-violet-50 dark:border-violet-800/60 dark:text-violet-300 dark:hover:bg-violet-950/30"
           >
             <BookOpen className="h-4 w-4" aria-hidden />
             Back to Listening Hub
@@ -220,8 +220,8 @@ export default function PronunciationHubPage() {
         </section>
 
         {/* Add a word */}
-        <section className="rounded-2xl border border-neutral-200 bg-white px-6 py-6 dark:border-neutral-800 dark:bg-neutral-900">
-          <h2 className="mb-3 text-base font-semibold text-neutral-900 dark:text-white">Add a Word</h2>
+        <section className="rounded-2xl border border-border bg-surface px-6 py-6">
+          <h2 className="mb-3 text-base font-semibold text-navy">Add a Word</h2>
           <div className="flex gap-3">
             <input
               ref={inputRef}
@@ -232,18 +232,18 @@ export default function PronunciationHubPage() {
                 if (e.key === 'Enter') void handleAdd();
               }}
               placeholder="e.g. dyspnoea"
-              className="flex-1 rounded-xl border border-neutral-200 bg-neutral-50 px-4 py-2.5 text-sm text-neutral-900 placeholder:text-neutral-400 focus:border-violet-400 focus:outline-none focus:ring-2 focus:ring-violet-200 dark:border-neutral-700 dark:bg-neutral-800 dark:text-white dark:placeholder:text-neutral-500"
+              className="flex-1 rounded-xl border border-border bg-background-light px-4 py-2.5 text-sm text-navy placeholder:text-muted focus:border-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
             />
             <button
               type="button"
               disabled={adding || !newWord.trim()}
               onClick={() => void handleAdd()}
-              className="rounded-xl bg-violet-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-violet-700 disabled:opacity-50"
+              className="rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-white transition-[color,background-color,transform] duration-200 hover:bg-primary-dark active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600 disabled:opacity-50"
             >
               {adding ? 'Adding…' : 'Add'}
             </button>
           </div>
-          <p className="mt-2 text-xs text-neutral-500 dark:text-neutral-400">
+          <p className="mt-2 text-xs text-muted">
             New cards are due immediately so you can practise them right after adding.
           </p>
         </section>
@@ -251,8 +251,8 @@ export default function PronunciationHubPage() {
         {/* Card grid */}
         <section>
           <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-base font-semibold text-neutral-900 dark:text-white">Your Cards</h2>
-            <p className="text-xs text-neutral-500 dark:text-neutral-400">
+            <h2 className="text-base font-semibold text-navy">Your Cards</h2>
+            <p className="text-xs text-muted">
               {cards.length === 0 ? '' : `${cards.length} total`}
             </p>
           </div>
@@ -262,23 +262,23 @@ export default function PronunciationHubPage() {
               {[0, 1, 2].map((i) => (
                 <div
                   key={i}
-                  className="h-32 animate-pulse rounded-xl border border-neutral-200 bg-neutral-100 dark:border-neutral-700 dark:bg-neutral-800"
+                  className="h-32 motion-safe:animate-pulse rounded-xl border border-border bg-border/40"
                 />
               ))}
             </div>
           ) : cards.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-neutral-300 bg-neutral-50/60 px-8 py-12 text-center dark:border-neutral-700 dark:bg-neutral-900/40">
+            <div className="rounded-2xl border border-dashed border-border bg-background-light/60 px-8 py-12 text-center">
               <Headphones className="mx-auto h-10 w-10 text-violet-400" aria-hidden />
-              <p className="mt-3 text-lg font-semibold text-neutral-900 dark:text-white">
+              <p className="mt-3 text-lg font-semibold text-navy">
                 No pronunciation cards yet
               </p>
-              <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">
+              <p className="mt-1 text-sm text-muted">
                 Add a word above to start training your ear on healthcare vocabulary.
               </p>
               <button
                 type="button"
                 onClick={() => inputRef.current?.focus()}
-                className="mt-5 inline-flex rounded-xl bg-violet-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-violet-700"
+                className="mt-5 inline-flex rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-white transition-[color,background-color,transform] duration-200 hover:bg-primary-dark active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600"
               >
                 Add Your First Word
               </button>
@@ -291,11 +291,11 @@ export default function PronunciationHubPage() {
                 return (
                   <article
                     key={card.id}
-                    className="group rounded-xl border border-neutral-200 bg-white px-4 py-4 transition hover:border-violet-300 hover:shadow-sm dark:border-neutral-700 dark:bg-neutral-900 dark:hover:border-violet-700"
+                    className="group rounded-xl border border-border bg-surface px-4 py-4 transition-colors hover:border-violet-300 hover:shadow-sm dark:hover:border-violet-700"
                   >
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0 flex-1">
-                        <h3 className="truncate text-lg font-semibold text-neutral-900 dark:text-white">
+                        <h3 className="truncate text-lg font-semibold text-navy">
                           {card.word}
                         </h3>
                         {card.pronunciationIpa ? (
@@ -303,7 +303,7 @@ export default function PronunciationHubPage() {
                             {card.pronunciationIpa}
                           </p>
                         ) : (
-                          <p className="mt-0.5 text-xs text-neutral-400 dark:text-neutral-600">
+                          <p className="mt-0.5 text-xs text-muted">
                             IPA pending
                           </p>
                         )}
@@ -321,7 +321,7 @@ export default function PronunciationHubPage() {
                         <button
                           type="button"
                           onClick={() => void handleRemove(card)}
-                          className="rounded-lg border border-neutral-200 bg-white p-1.5 text-neutral-400 opacity-0 transition hover:border-rose-300 hover:bg-rose-50 hover:text-rose-600 group-hover:opacity-100 dark:border-neutral-700 dark:bg-neutral-900 dark:hover:border-rose-800/60 dark:hover:bg-rose-950/30"
+                          className="rounded-lg border border-border bg-surface p-1.5 text-muted opacity-0 transition-colors hover:border-rose-300 hover:bg-rose-50 hover:text-rose-600 group-hover:opacity-100 dark:hover:border-rose-800/60 dark:hover:bg-rose-950/30"
                           aria-label={`Remove ${card.word} from deck`}
                         >
                           <Trash2 className="h-4 w-4" aria-hidden />
@@ -330,7 +330,7 @@ export default function PronunciationHubPage() {
                     </div>
 
                     {card.definitionEn ? (
-                      <p className="mt-2 line-clamp-2 text-xs text-neutral-500 dark:text-neutral-400">
+                      <p className="mt-2 line-clamp-2 text-xs text-muted">
                         {card.definitionEn}
                       </p>
                     ) : null}
@@ -338,18 +338,18 @@ export default function PronunciationHubPage() {
                     {/* Mastery progress */}
                     <div className="mt-3">
                       <div className="mb-1 flex items-center justify-between text-xs">
-                        <span className="font-medium text-neutral-500 dark:text-neutral-400">Mastery</span>
+                        <span className="font-medium text-muted">Mastery</span>
                         <span className="font-semibold text-violet-600 dark:text-violet-400">{mastery}%</span>
                       </div>
-                      <div className="h-1.5 w-full overflow-hidden rounded-full bg-neutral-200 dark:bg-neutral-700">
+                      <div className="h-1.5 w-full overflow-hidden rounded-full bg-border">
                         <div
-                          className="h-full rounded-full bg-violet-500 transition-all duration-300"
+                          className="h-full rounded-full bg-primary transition-[width,background-color] duration-300"
                           style={{ width: `${mastery}%` }}
                         />
                       </div>
                     </div>
 
-                    <div className="mt-3 flex items-center justify-between text-xs text-neutral-500 dark:text-neutral-400">
+                    <div className="mt-3 flex items-center justify-between text-xs text-muted">
                       <span>{card.repetitions} reviews</span>
                       <span>Next: {formatNextReview(card.nextReviewAt)}</span>
                     </div>

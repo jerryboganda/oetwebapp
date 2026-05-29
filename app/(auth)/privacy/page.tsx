@@ -9,7 +9,7 @@ import { AUTH_ROUTES } from '@/lib/auth/routes';
 export const metadata: Metadata = {
   title: 'Privacy Notice · OET with Dr Ahmed Hesham',
   description:
-    'How OET with Dr Ahmed Hesham collects, uses, retains, and protects your personal data — written under UK GDPR.',
+    'How OET with Dr Ahmed Hesham collects, uses, retains, and protects your personal data, written under UK GDPR.',
 };
 
 const LAST_UPDATED = '26 April 2026';
@@ -31,7 +31,7 @@ const sections: LegalSection[] = [
       'This Privacy Notice explains how OET with Dr Ahmed Hesham ("we", "us", "our") processes personal data when you use our learner platform, mobile and desktop apps, websites, marketing emails, and support channels.',
     bullets: [
       'We act as the data controller for personal data you give us directly (account details, submissions, payment metadata).',
-      'For some services we also process data on behalf of sponsors or institutions (e.g. employer-funded learners) — in those cases the sponsor is the controller and we are a processor under a written agreement.',
+      'For some services we also process data on behalf of sponsors or institutions (e.g. employer-funded learners). In those cases the sponsor is the controller and we are a processor under a written agreement.',
       'This notice is read alongside our Terms of Service.',
     ],
   },
@@ -40,26 +40,26 @@ const sections: LegalSection[] = [
     title: 'What we collect',
     bullets: [
       <>
-        <strong>Account data —</strong> name, email, mobile number, country,
+        <strong>Account data:</strong> name, email, mobile number, country,
         password hash, MFA secrets, profession, target exam date.
       </>,
       <>
-        <strong>Learning data —</strong> writing submissions, speaking and
+        <strong>Learning data:</strong> writing submissions, speaking and
         conversation audio recordings, mock-exam answers, AI feedback, expert
         review notes, study plan progress, predicted scores.
       </>,
       <>
-        <strong>Billing data —</strong> Stripe customer / subscription IDs,
-        plan, invoice history, partial card metadata (last 4, brand) — full
+        <strong>Billing data:</strong> Stripe customer / subscription IDs,
+        plan, invoice history, partial card metadata (last 4, brand). Full
         card numbers stay with Stripe.
       </>,
       <>
-        <strong>Device & technical data —</strong> IP address, user-agent,
+        <strong>Device & technical data:</strong> IP address, user-agent,
         device model, OS, app version, language, time zone, crash and
         performance traces.
       </>,
       <>
-        <strong>Communications —</strong> emails to support, feedback, in-app
+        <strong>Communications:</strong> emails to support, feedback, in-app
         chat, satisfaction surveys.
       </>,
     ],
@@ -68,10 +68,10 @@ const sections: LegalSection[] = [
     id: 'lawful-bases',
     title: 'Why we process it (lawful bases)',
     bullets: [
-      'Performance of contract — to provide the Service you signed up for, including AI feedback, tutor review, and mock scoring.',
-      'Legitimate interests — keeping the Service secure, preventing abuse, improving features, measuring product quality, and running de-identified analytics.',
-      'Legal obligation — accounting, tax, fraud prevention, response to lawful requests.',
-      'Consent — optional marketing emails, product research interviews, and any non-essential cookies. You can withdraw consent at any time without affecting prior processing.',
+      'Performance of contract: to provide the Service you signed up for, including AI feedback, tutor review, and mock scoring.',
+      'Legitimate interests: keeping the Service secure, preventing abuse, improving features, measuring product quality, and running de-identified analytics.',
+      'Legal obligation: accounting, tax, fraud prevention, response to lawful requests.',
+      'Consent: optional marketing emails, product research interviews, and any non-essential cookies. You can withdraw consent at any time without affecting prior processing.',
     ],
   },
   {
@@ -91,16 +91,16 @@ const sections: LegalSection[] = [
     lead:
       'We never sell personal data. We share it only with vetted processors and only as needed to run the Service:',
     bullets: [
-      'Stripe — payments and subscription billing.',
-      'Brevo — transactional and (where you opted in) marketing email delivery.',
-      'AI providers — Azure OpenAI, OpenAI, Whisper, ElevenLabs, Deepgram, and others, selected per feature. We send the minimum data required (e.g. your submission, our grounded prompt) and contractually prohibit training on your content where the provider supports it.',
-      'Sentry — application error reporting (no audio or full submissions are attached to error reports).',
-      'Cloud infrastructure — our hosting provider in the UK / EU.',
-      'Professional advisers, insurers, and authorities — when legally required.',
+      'Stripe: payments and subscription billing.',
+      'Brevo: transactional and (where you opted in) marketing email delivery.',
+      'AI providers: Azure OpenAI, OpenAI, Whisper, ElevenLabs, Deepgram, and others, selected per feature. We send the minimum data required (e.g. your submission, our grounded prompt) and contractually prohibit training on your content where the provider supports it.',
+      'Sentry: application error reporting (no audio or full submissions are attached to error reports).',
+      'Cloud infrastructure: our hosting provider in the UK / EU.',
+      'Professional advisers, insurers, and authorities: when legally required.',
     ],
     callout: (
       <>
-        <strong>International transfers —</strong> some providers operate
+        <strong>International transfers:</strong> some providers operate
         outside the UK / EEA. Where they do, we rely on UK IDTA / EU Standard
         Contractual Clauses and additional safeguards as required.
       </>
@@ -112,7 +112,7 @@ const sections: LegalSection[] = [
     bullets: [
       'Encryption in transit (TLS 1.2+) and at rest for sensitive learner content.',
       'Two-step verification (MFA) for all admin and expert accounts; offered to learners.',
-      'Granular role-based access — 16 distinct admin permissions; reviewers see only the submissions they are assigned.',
+      'Granular role-based access: 16 distinct admin permissions; reviewers see only the submissions they are assigned.',
       'Refresh-token rotation, short-lived access tokens, IP & device anomaly detection.',
       'Annual penetration tests and quarterly security reviews.',
     ],
@@ -143,9 +143,9 @@ const sections: LegalSection[] = [
     id: 'cookies',
     title: 'Cookies & similar technologies',
     bullets: [
-      'Strictly necessary cookies — used for authentication, CSRF protection, and session continuity. These cannot be disabled without breaking sign-in.',
-      'Functional storage — remembers your theme, language, and study-plan preferences locally.',
-      'Analytics — privacy-respecting, aggregated, IP-truncated. No cross-site tracking. No third-party advertising cookies are set.',
+      'Strictly necessary cookies: used for authentication, CSRF protection, and session continuity. These cannot be disabled without breaking sign-in.',
+      'Functional storage: remembers your theme, language, and study-plan preferences locally.',
+      'Analytics: privacy-respecting, aggregated, IP-truncated. No cross-site tracking. No third-party advertising cookies are set.',
     ],
   },
   {

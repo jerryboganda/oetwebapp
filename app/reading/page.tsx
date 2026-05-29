@@ -46,19 +46,19 @@ interface HubCard {
 const HUB_CARDS: HubCard[] = [
   {
     title: 'Practice Part A',
-    subtitle: 'Expeditious reading — match section headings to four short medical texts in 15 minutes.',
+    subtitle: 'Expeditious reading. Match section headings to four short medical texts in 15 minutes.',
     href: '/reading/parts/a',
     accent: 'partA',
   },
   {
     title: 'Practice Part B',
-    subtitle: 'Workplace texts — short workplace notices and excerpts, six 3-option items.',
+    subtitle: 'Workplace texts. Short workplace notices and excerpts, six 3-option items.',
     href: '/reading/parts/b',
     accent: 'partB',
   },
   {
     title: 'Practice Part C',
-    subtitle: 'Long-text comprehension — two longer texts with detailed 4-option questions.',
+    subtitle: 'Long-text comprehension. Two longer texts with detailed 4-option questions.',
     href: '/reading/parts/c',
     accent: 'partC',
   },
@@ -74,25 +74,25 @@ const ACCENT_STYLES: Record<HubCard['accent'], { ring: string; badge: string; ic
   partA: {
     ring: 'border-blue-200 hover:border-blue-300',
     badge: 'bg-blue-100 text-blue-800',
-    icon: 'bg-blue-100 text-blue-700',
+    icon: 'text-blue-600',
     chip: 'Part A',
   },
   partB: {
     ring: 'border-sky-200 hover:border-sky-300',
     badge: 'bg-sky-100 text-sky-800',
-    icon: 'bg-sky-100 text-sky-700',
+    icon: 'text-sky-600',
     chip: 'Part B',
   },
   partC: {
     ring: 'border-emerald-200 hover:border-emerald-300',
     badge: 'bg-emerald-100 text-emerald-800',
-    icon: 'bg-emerald-100 text-emerald-700',
+    icon: 'text-emerald-600',
     chip: 'Part C',
   },
   exam: {
     ring: 'border-amber-200 hover:border-amber-300',
     badge: 'bg-amber-100 text-amber-900',
-    icon: 'bg-amber-100 text-amber-800',
+    icon: 'text-amber-600',
     chip: 'Full exam',
   },
 };
@@ -181,7 +181,7 @@ export default function ReadingHome() {
         {profile?.currentStage === 'onboarding' ? (
           <Link
             href="/reading/profile-setup"
-            className="flex items-center justify-between rounded-xl border border-orange-300 bg-orange-50 px-5 py-3 text-sm font-semibold text-gray-900 shadow-sm hover:bg-orange-100 transition-colors dark:border-orange-500/40 dark:bg-orange-950/30 dark:text-white dark:hover:bg-orange-950/50"
+            className="flex items-center justify-between rounded-xl border border-orange-300 bg-orange-50 px-5 py-3 text-sm font-semibold text-navy shadow-sm hover:bg-orange-100 transition-colors dark:border-orange-500/40 dark:bg-orange-950/30 dark:hover:bg-orange-950/50"
           >
             <span>Complete your profile setup to unlock your personalised plan</span>
             <span aria-hidden="true">→</span>
@@ -189,16 +189,16 @@ export default function ReadingHome() {
         ) : null}
 
         {profile?.currentStage === 'diagnostic' ? (
-          <div className="rounded-xl border border-blue-200 bg-blue-50 px-5 py-4 dark:border-blue-700 dark:bg-blue-900/20">
-            <p className="mb-1 text-sm font-semibold text-blue-800 dark:text-blue-200">
+          <div className="rounded-xl border border-info/30 bg-info/10 px-5 py-4">
+            <p className="mb-1 text-sm font-semibold text-info">
               Start with your reading diagnostic
             </p>
-            <p className="mb-3 text-xs text-blue-700/70 dark:text-blue-300/70">
+            <p className="mb-3 text-xs text-muted">
               A short diagnostic calibrates your starting point.
             </p>
             <Link
               href="/reading/diagnostic"
-              className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-blue-700"
+              className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition-[color,background-color,transform] duration-200 hover:bg-primary-dark active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600"
             >
               Take the diagnostic
               <ArrowRight className="h-4 w-4" aria-hidden />
@@ -234,10 +234,10 @@ export default function ReadingHome() {
 
         <section aria-labelledby="reading-hub-heading">
           <div className="mb-4">
-            <p className="text-xs font-semibold uppercase tracking-widest text-blue-500">
+            <p className="text-xs font-semibold uppercase tracking-widest text-primary">
               Choose how to practice
             </p>
-            <h2 id="reading-hub-heading" className="text-lg font-bold text-gray-900 dark:text-gray-100">
+            <h2 id="reading-hub-heading" className="text-lg font-bold text-navy">
               Practice by Part, or attempt the full exam
             </h2>
           </div>
@@ -256,24 +256,22 @@ export default function ReadingHome() {
                     <Link
                       href={card.href}
                       data-testid={`reading-hub-card-${card.accent}`}
-                      className={`group relative flex h-full items-start gap-4 rounded-2xl border bg-white p-5 transition-shadow hover:shadow-md dark:bg-gray-900 ${accent.ring}`}
+                      className={`group relative flex h-full items-start gap-4 rounded-2xl border bg-surface p-5 transition-shadow hover:shadow-md ${accent.ring}`}
                     >
-                      <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${accent.icon}`}>
-                        <BookOpen className="h-5 w-5" aria-hidden />
-                      </div>
+                      <BookOpen className={`mt-0.5 h-6 w-6 shrink-0 ${accent.icon}`} aria-hidden />
                       <div className="flex-1">
                         <div className="flex items-center justify-between gap-2 flex-wrap">
-                          <h3 className="text-sm font-bold text-gray-900 dark:text-gray-100">
+                          <h3 className="text-sm font-bold text-navy">
                             {card.title}
                           </h3>
                           <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${accent.badge}`}>
                             {accent.chip}
                           </span>
                         </div>
-                        <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{card.subtitle}</p>
+                        <p className="mt-1 text-sm text-muted">{card.subtitle}</p>
                       </div>
                       <PlayCircle
-                        className="h-4 w-4 self-center text-blue-400 opacity-0 transition-opacity group-hover:opacity-100"
+                        className="h-4 w-4 self-center text-primary opacity-0 transition-opacity group-hover:opacity-100"
                         aria-hidden
                       />
                     </Link>
@@ -299,7 +297,7 @@ function ResumeBanner({ attempts }: { attempts: ReadingHomeAttemptDto[] }) {
         You have an open Reading attempt
       </p>
       <p className="mb-3 text-xs text-emerald-700/80 dark:text-emerald-300/70">
-        {resumable.paperTitle} — {resumable.answeredCount}/{resumable.totalQuestions} answered. Resume
+        {resumable.paperTitle}: {resumable.answeredCount}/{resumable.totalQuestions} answered. Resume
         before the timer window closes.
       </p>
       <Link

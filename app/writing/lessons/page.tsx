@@ -118,7 +118,7 @@ function WritingLessonsCatalogueInner() {
             type="button"
             onClick={() => applyFilter(null)}
             aria-pressed={filter === null}
-            className={`rounded-full border px-3 py-1.5 text-xs font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${filter === null ? 'border-primary bg-primary text-white' : 'border-border bg-background text-navy hover:border-primary/40'}`}
+            className={`rounded-full border px-3 py-1.5 text-xs font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${filter === null ? 'border-primary bg-primary text-white dark:bg-violet-700' : 'border-border bg-background text-navy hover:border-primary/40'}`}
           >
             {t('writing.lessons.filter.all')}
           </button>
@@ -128,7 +128,7 @@ function WritingLessonsCatalogueInner() {
               type="button"
               onClick={() => applyFilter(skill)}
               aria-pressed={filter === skill}
-              className={`rounded-full border px-3 py-1.5 text-xs font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${filter === skill ? 'border-primary bg-primary text-white' : 'border-border bg-background text-navy hover:border-primary/40'}`}
+              className={`rounded-full border px-3 py-1.5 text-xs font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${filter === skill ? 'border-primary bg-primary text-white dark:bg-violet-700' : 'border-border bg-background text-navy hover:border-primary/40'}`}
             >
               {skill}
             </button>

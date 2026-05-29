@@ -378,8 +378,6 @@ public static class ReadingLearnerEndpoints
                 .OrderBy(p => p.PartCode)
                 .ToListAsync(ct);
             var answers = attempt.Answers.ToDictionary(a => a.ReadingQuestionId);
-            var showCorrect = policy.ShowCorrectAnswerOnReview;
-            var showExplanations = policy.ShowExplanationsAfterSubmit;
             var scopeIds = ParseScopeQuestionIdsForPlayer(attempt.ScopeJson);
             var scopedQuestionIds = scopeIds is { Count: > 0 } ? scopeIds.ToHashSet(StringComparer.Ordinal) : null;
             var now = DateTimeOffset.UtcNow;
@@ -387,6 +385,17 @@ public static class ReadingLearnerEndpoints
             var breakWindowActive = attempt.Mode == ReadingAttemptMode.Exam
                 && !attempt.PartABreakUsed
                 && now < partADeadline.AddSeconds(ReadingAttemptService.PartABreakMaxSeconds);
+
+            // Wave 1 — post-submit disclosure gating. HARD GUARD: correct
+            // answers / explanations are only ever exposed when the attempt
+            // is Submitted AND the resolved policy permits each flag. If the
+            // attempt is not Submitted, force everything off regardless of
+            // policy (defence in depth — the endpoint already 400s above).
+            var isSubmitted = attempt.Status == ReadingAttemptStatus.Submitted;
+            var showCorrectAnswer = isSubmitted && policy.ShowCorrectAnswerOnReview;
+            var showExplanations = isSubmitted && policy.ShowExplanationsAfterSubmit;
+            var explanationsOnlyIfWrong = policy.ShowExplanationsOnlyIfWrong;
+
             var items = parts
                 .SelectMany(part => part.Questions
                     .Where(q => scopedQuestionIds is null || scopedQuestionIds.Contains(q.Id))
@@ -395,8 +404,8 @@ public static class ReadingLearnerEndpoints
                     {
                         answers.TryGetValue(q.Id, out var answer);
                         var isCorrect = answer?.IsCorrect ?? false;
-                        var explanationVisible = showExplanations
-                            && (!policy.ShowExplanationsOnlyIfWrong || !isCorrect);
+                        var includeExplanation = showExplanations
+                            && (!explanationsOnlyIfWrong || !isCorrect);
                         return new ReadingReviewItem(
                             QuestionId: q.Id,
                             PartCode: part.PartCode.ToString(),
@@ -408,8 +417,12 @@ public static class ReadingLearnerEndpoints
                             IsCorrect: isCorrect,
                             PointsEarned: answer?.PointsEarned ?? 0,
                             MaxPoints: q.Points,
-                            CorrectAnswer: showCorrect ? SafeParseJson(q.CorrectAnswerJson) : null,
-                            ExplanationMarkdown: explanationVisible ? q.ExplanationMarkdown : null);
+                            CorrectAnswer: showCorrectAnswer ? DecodeCorrectAnswer(q.CorrectAnswerJson) : null,
+                            ExplanationMarkdown: includeExplanation ? q.ExplanationMarkdown : null,
+                            SelectedDistractorCategory: answer?.SelectedDistractorCategory?.ToString(),
+                            MissReason: answer?.MissReason,
+                            ElapsedMs: answer?.ElapsedMs,
+                            TotalElapsedMs: answer?.TotalElapsedMs);
                     }))
                 .ToList();
 
@@ -448,6 +461,9 @@ public static class ReadingLearnerEndpoints
                         correctCount = partItems.Count(i => i.IsCorrect),
                         incorrectCount = partItems.Count(i => !i.IsCorrect && i.UserAnswer is not null),
                         unansweredCount = partItems.Count(i => i.UserAnswer is null),
+                        accuracyPercent = partItems.Count > 0
+                            ? Math.Round(100.0 * partItems.Count(i => i.IsCorrect) / partItems.Count, 1)
+                            : 0.0,
                     };
                 })
                 .Where(part => scopedQuestionIds is null || part.maxRawScore > 0)
@@ -470,6 +486,23 @@ public static class ReadingLearnerEndpoints
             var gradeLetter = attempt.ScaledScore is int scaledScore
                 ? OetScoring.OetGradeLetterFromScaled(scaledScore)
                 : "—";
+
+            // Wave 2 — tutor feedback is read-only here and always safe to
+            // surface once an attempt is submitted (no answer keys leak via
+            // free-text notes; authors are responsible for content).
+            var feedback = await db.ReadingAttemptFeedbacks.AsNoTracking()
+                .Where(f => f.ReadingAttemptId == attempt.Id)
+                .OrderBy(f => f.CreatedAt)
+                .Select(f => new
+                {
+                    f.Id,
+                    scope = f.Scope,
+                    f.TargetRef,
+                    f.FeedbackText,
+                    f.CreatedAt,
+                    f.UpdatedAt,
+                })
+                .ToListAsync(ct);
 
             return Results.Ok(new
             {
@@ -501,14 +534,18 @@ public static class ReadingLearnerEndpoints
                 paper = new { paper.Id, paper.Title, paper.Slug, paper.SubtestCode },
                 policy = new
                 {
-                    policy.ShowCorrectAnswerOnReview,
-                    policy.ShowExplanationsAfterSubmit,
+                    ShowCorrectAnswerOnReview = showCorrectAnswer,
+                    ShowExplanationsAfterSubmit = showExplanations,
                     policy.ShowExplanationsOnlyIfWrong,
+                    redactionReason = showCorrectAnswer || showExplanations
+                        ? "Answer keys / explanations are disclosed per the resolved post-submit review policy."
+                        : "Learner Reading review payloads do not serialize answer keys or explanations.",
                 },
                 items,
                 clusters,
                 partBreakdown,
                 skillBreakdown,
+                feedback,
             });
         });
 
@@ -1061,6 +1098,33 @@ public static class ReadingLearnerEndpoints
         }
     }
 
+    /// <summary>
+    /// Wave 1 — decode a stored <c>CorrectAnswerJson</c> value into a flat
+    /// display string for post-submit review. A JSON string yields its raw
+    /// value; a JSON array is joined with commas; anything else falls back to
+    /// the raw JSON text. Callers MUST policy-gate disclosure before invoking
+    /// this — it performs no gating of its own.
+    /// </summary>
+    private static string? DecodeCorrectAnswer(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return null;
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            return doc.RootElement.ValueKind switch
+            {
+                JsonValueKind.String => doc.RootElement.GetString(),
+                JsonValueKind.Array => string.Join(", ", doc.RootElement.EnumerateArray()
+                    .Select(e => e.ValueKind == JsonValueKind.String ? e.GetString() : e.GetRawText())),
+                _ => doc.RootElement.GetRawText(),
+            };
+        }
+        catch (JsonException)
+        {
+            return json;
+        }
+    }
+
     private static async Task<int> CountQuestionsForPaperAsync(
         LearnerDbContext db,
         string paperId,
@@ -1169,8 +1233,15 @@ public static class ReadingLearnerEndpoints
         bool IsCorrect,
         int PointsEarned,
         int MaxPoints,
-        object? CorrectAnswer,
-        string? ExplanationMarkdown);
+        // Wave 1 — post-submit review fields. CorrectAnswer / ExplanationMarkdown
+        // are policy-gated AND only ever populated when the attempt is
+        // Submitted (enforced at the projection site, never here).
+        string? CorrectAnswer = null,
+        string? ExplanationMarkdown = null,
+        string? SelectedDistractorCategory = null,
+        string? MissReason = null,
+        int? ElapsedMs = null,
+        int? TotalElapsedMs = null);
 
 }
 

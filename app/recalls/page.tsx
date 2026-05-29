@@ -107,7 +107,7 @@ export default function RecallsHomePage() {
         <LearnerSurfaceSectionHeader
           eyebrow="Today"
           title="Pick a mode to start your recall session"
-          description="Each tab routes into the same SM-2 engine — your progress is shared across vocabulary and review."
+          description="Each tab routes into the same SM-2 engine; your progress is shared across vocabulary and review."
           className="mb-4"
         />
 
@@ -123,7 +123,7 @@ export default function RecallsHomePage() {
               <Link key={t.href} href={t.href}>
                 <motion.div
                   whileHover={{ scale: 1.01 }}
-                  className="group flex h-full cursor-pointer items-start gap-4 rounded-2xl border border-border bg-surface p-5 shadow-sm transition-all hover:border-border-hover hover:shadow-md"
+                  className="group flex h-full cursor-pointer items-start gap-4 rounded-2xl border border-border bg-surface p-5 shadow-sm transition-[color,background-color,border-color,box-shadow,transform,opacity,filter] duration-200 hover:border-border-hover hover:shadow-md"
                 >
                   <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl ${t.tile}`}>
                     {t.icon}
@@ -140,7 +140,7 @@ export default function RecallsHomePage() {
                     </div>
                     <p className="mt-1 text-sm text-muted">{t.description}</p>
                   </div>
-                  <ArrowRight className="mt-1 h-5 w-5 shrink-0 text-muted transition-transform group-hover:translate-x-0.5" />
+                  <ArrowRight className="mt-1 h-5 w-5 shrink-0 text-muted transition-transform group-hoverable:translate-x-0.5" />
                 </motion.div>
               </Link>
             ))}

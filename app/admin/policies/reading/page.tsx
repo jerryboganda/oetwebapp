@@ -70,7 +70,7 @@ export default function AdminReadingGlobalPolicyPage() {
 
   return (
     <AdminSettingsLayout
-      title="Reading — global policy"
+      title="Reading global policy"
       description="These settings apply to all learners unless overridden per-user. Changes take effect immediately."
       breadcrumbs={BREADCRUMBS}
       eyebrow="Policies"
@@ -193,6 +193,42 @@ export default function AdminReadingGlobalPolicyPage() {
                     onChange={(e) => setField('matchingAllowPartialCredit', e.target.checked)}
                   />
                   Allow partial credit for matching questions
+                </label>
+                <label className="flex items-center gap-2 col-span-2 text-sm">
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 rounded border-border text-primary"
+                    checked={formData.normalizeSmartQuotes}
+                    onChange={(e) => setField('normalizeSmartQuotes', e.target.checked)}
+                  />
+                  Normalise smart quotes (curly → straight) before matching
+                </label>
+                <label className="flex items-center gap-2 col-span-2 text-sm">
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 rounded border-border text-primary"
+                    checked={formData.normalizeHyphenSpacing}
+                    onChange={(e) => setField('normalizeHyphenSpacing', e.target.checked)}
+                  />
+                  Normalise hyphen spacing (e.g. &ldquo;well-being&rdquo; ≈ &ldquo;well being&rdquo;)
+                </label>
+                <label className="flex items-center gap-2 col-span-2 text-sm">
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 rounded border-border text-primary"
+                    checked={formData.normalizeUnitSpacing}
+                    onChange={(e) => setField('normalizeUnitSpacing', e.target.checked)}
+                  />
+                  Normalise unit spacing (e.g. &ldquo;5mg&rdquo; ≈ &ldquo;5 mg&rdquo;)
+                </label>
+                <label className="flex items-center gap-2 col-span-2 text-sm">
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 rounded border-border text-primary"
+                    checked={formData.partACaseInsensitive}
+                    onChange={(e) => setField('partACaseInsensitive', e.target.checked)}
+                  />
+                  Part A matching is case-insensitive
                 </label>
               </div>
             </SettingsSection>

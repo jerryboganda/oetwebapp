@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
@@ -42,7 +42,7 @@ export default function VocabReviewPage() {
     <LearnerDashboardShell pageTitle="Vocab Review">
       <main className="mx-auto max-w-lg space-y-6">
         <div className="flex items-center justify-between">
-          <h1 className="text-xl font-bold text-neutral-900 dark:text-white">
+          <h1 className="text-xl font-bold text-navy">
             Review Session
           </h1>
           <Link
@@ -55,20 +55,20 @@ export default function VocabReviewPage() {
 
         {loading ? (
           <div className="flex h-64 items-center justify-center">
-            <div className="h-10 w-10 animate-spin rounded-full border-4 border-violet-200 border-t-violet-600" />
+            <div className="h-10 w-10 motion-safe:animate-spin rounded-full border-4 border-violet-200 border-t-violet-600" />
           </div>
         ) : items.length === 0 ? (
-          <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-8 py-12 text-center dark:border-emerald-900/50 dark:bg-emerald-950/30">
-            <p className="text-4xl">🎉</p>
-            <p className="mt-3 text-lg font-semibold text-neutral-900 dark:text-white">
+          <div className="rounded-2xl border border-success/30 bg-success/10 px-8 py-12 text-center">
+            <p className="text-4xl" aria-hidden="true">🎉</p>
+            <p className="mt-3 text-lg font-semibold text-navy">
               Nothing to review today!
             </p>
-            <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">
-              Come back tomorrow — your next session is scheduled by SM-2.
+            <p className="mt-1 text-sm text-muted">
+              Come back tomorrow. Your next session is scheduled by SM-2.
             </p>
             <Link
               href="/reading/vocab"
-              className="mt-5 inline-flex rounded-xl bg-violet-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-violet-700"
+              className="mt-5 inline-flex rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-white hover:bg-primary-dark active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600"
             >
               Back to Vocab Hub
             </Link>

@@ -115,7 +115,7 @@ npx vitest run lib/csv-export.test.ts
 # → 14 / 14 pass.
 ```
 
-The full Slice J adjacent test sweep runs as part of Track D's cross-track validation (see `docs/CLOSURE-2026-05-12.md`).
+The full Slice J adjacent test sweep ran as part of the May 2026 cross-track validation.
 
 ## 6-line summary
 

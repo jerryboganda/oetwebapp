@@ -293,17 +293,17 @@ export default function UsersPage() {
         {user.mfaEnabled ? <Badge variant="success">MFA</Badge> : null}
       </div>
       <div className="grid grid-cols-2 gap-3 text-sm">
-        <div className="rounded-2xl bg-background-light px-3 py-2">
+        <div className="rounded-2xl bg-admin-bg-subtle px-3 py-2">
           <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Last login</p>
-          <p className="mt-1 font-medium text-navy">{user.lastLogin ? new Date(user.lastLogin).toLocaleString() : 'Never'}</p>
+          <p className="mt-1 font-medium text-admin-fg-strong">{user.lastLogin ? new Date(user.lastLogin).toLocaleString() : 'Never'}</p>
         </div>
-        <div className="rounded-2xl bg-background-light px-3 py-2">
+        <div className="rounded-2xl bg-admin-bg-subtle px-3 py-2">
           <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Created</p>
-          <p className="mt-1 font-medium text-navy">{user.createdAt ? new Date(user.createdAt).toLocaleDateString() : '-'}</p>
+          <p className="mt-1 font-medium text-admin-fg-strong">{user.createdAt ? new Date(user.createdAt).toLocaleDateString() : '-'}</p>
         </div>
       </div>
       <div className="flex justify-end">
-        <Link href={`/admin/users/${user.id}`} className="inline-flex items-center justify-center rounded-2xl border border-border/60 bg-surface px-4 py-2 text-sm font-semibold text-navy shadow-sm hover:bg-surface">
+        <Link href={`/admin/users/${user.id}`} className="inline-flex items-center justify-center rounded-2xl border border-border/60 bg-surface px-4 py-2 text-sm font-semibold text-admin-fg-strong shadow-sm hover:bg-surface">
           View profile
         </Link>
       </div>
@@ -365,7 +365,7 @@ export default function UsersPage() {
       setIsInviteOpen(false);
       setInviteForm(defaultInviteForm);
       const successMsg = result.temporaryPassword
-        ? `Account created for ${result.email}. Email delivery failed — temporary password: ${result.temporaryPassword}`
+        ? `Account created for ${result.email}. Email delivery failed. Temporary password: ${result.temporaryPassword}`
         : `Invitation sent to ${result.email}. Setup expires ${new Date(result.invitation!.expiresAt).toLocaleString()}.`;
       setToast({ variant: 'success', message: successMsg });
     } catch (error) {
@@ -399,7 +399,7 @@ export default function UsersPage() {
 
       <AdminTableLayout
         title="User Management"
-        description="One hub for every account on the platform — learners, tutors, and admins. Invite, suspend, restore, audit, recover access, and manage admin permissions, all backed by the live admin API."
+        description="One hub for every account on the platform: learners, tutors, and admins. Invite, suspend, restore, audit, recover access, and manage admin permissions, all backed by the live admin API."
         breadcrumbs={[{ label: 'Admin', href: '/admin' }, { label: 'User Management' }]}
         actions={
           <>
@@ -522,7 +522,7 @@ export default function UsersPage() {
             />
           ) : null}
 
-          <div className="rounded-xl border border-border bg-background-light p-3 text-sm text-muted">
+          <div className="rounded-xl border border-border bg-admin-bg-subtle p-3 text-sm text-muted">
             The backend creates the account, sends a setup challenge, and logs the invitation in audit history.
           </div>
 
@@ -740,7 +740,7 @@ function AdminsAndPermissionsTab({ onToast }: { onToast: (t: ToastState) => void
 
       {/* Per-admin permission editor */}
       {selectedAdmin ? (
-        <Modal open={!!selectedAdmin} onClose={() => setSelectedAdmin(null)} title={`Permissions — ${selectedAdmin.name}`}>
+        <Modal open={!!selectedAdmin} onClose={() => setSelectedAdmin(null)} title={`Permissions: ${selectedAdmin.name}`}>
           <div className="space-y-4 max-h-[60vh] overflow-y-auto p-4">
             <div className="flex flex-wrap items-center gap-2 border-b border-border pb-3">
               <span className="text-xs font-semibold uppercase tracking-wide text-muted">Quick presets:</span>
@@ -817,12 +817,12 @@ function AdminsAndPermissionsTab({ onToast }: { onToast: (t: ToastState) => void
             </div>
             <div className="divide-y divide-border rounded-xl border border-border">
               {templates.length === 0 ? (
-                <p className="py-6 text-center text-sm text-muted">No templates yet — create one to standardize role bundles.</p>
+                <p className="py-6 text-center text-sm text-muted">No templates yet. Create one to standardize role bundles.</p>
               ) : null}
               {templates.map((tpl) => (
                 <div key={tpl.id} className="flex items-start justify-between gap-3 px-4 py-3">
                   <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium text-navy">{tpl.name}</p>
+                    <p className="text-sm font-medium text-admin-fg-strong">{tpl.name}</p>
                     {tpl.description ? <p className="text-xs text-muted">{tpl.description}</p> : null}
                     <div className="mt-1 flex flex-wrap gap-1">
                       {tpl.permissions.map((p) => (

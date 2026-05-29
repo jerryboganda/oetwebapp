@@ -44,7 +44,7 @@ export const buttonVariants = cva(
     variants: {
       variant: {
         primary: [
-          'bg-[var(--admin-primary)] text-white',
+          'bg-[var(--admin-primary)] text-[var(--admin-primary-fg)]',
           'border border-[var(--admin-primary)]',
           '[@media(hover:hover)]:hover:bg-[var(--admin-primary-hover)]',
           '[@media(hover:hover)]:hover:border-[var(--admin-primary-hover)]',
@@ -61,7 +61,7 @@ export const buttonVariants = cva(
           'bg-transparent text-[var(--admin-primary)]',
           'border border-[var(--admin-primary)]',
           '[@media(hover:hover)]:hover:bg-[var(--admin-primary)]',
-          '[@media(hover:hover)]:hover:text-white',
+          '[@media(hover:hover)]:hover:text-[var(--admin-primary-fg)]',
           'active:bg-[var(--admin-primary-active)]',
         ],
         ghost: [
@@ -71,7 +71,7 @@ export const buttonVariants = cva(
           'active:bg-[var(--admin-state-active)]',
         ],
         destructive: [
-          'bg-[var(--admin-danger)] text-white',
+          'bg-[var(--admin-danger)] text-[var(--admin-danger-fg)]',
           'border border-[var(--admin-danger)]',
           '[@media(hover:hover)]:hover:bg-[var(--admin-danger-hover)]',
           '[@media(hover:hover)]:hover:border-[var(--admin-danger-hover)]',

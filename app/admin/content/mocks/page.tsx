@@ -332,13 +332,13 @@ export default function AdminMockBundlesPage() {
           <div className="mb-6 flex flex-wrap gap-3">
             <Link
               href="/admin/content/mocks/item-analysis"
-              className="inline-flex items-center rounded-admin border border-admin-border bg-admin-bg-surface px-4 py-2 text-sm font-bold text-admin-fg-strong hover:bg-background-light"
+              className="inline-flex items-center rounded-admin border border-admin-border bg-admin-bg-surface px-4 py-2 text-sm font-bold text-admin-fg-strong hover:bg-admin-bg-subtle"
             >
               <BarChart3 className="mr-2 h-4 w-4" /> Item analysis
             </Link>
             <Link
               href="/admin/content/mocks/operations"
-              className="inline-flex items-center rounded-admin border border-admin-border bg-admin-bg-surface px-4 py-2 text-sm font-bold text-admin-fg-strong hover:bg-background-light"
+              className="inline-flex items-center rounded-admin border border-admin-border bg-admin-bg-surface px-4 py-2 text-sm font-bold text-admin-fg-strong hover:bg-admin-bg-subtle"
             >
               <CalendarClock className="mr-2 h-4 w-4" /> Mock operations
             </Link>
@@ -530,7 +530,7 @@ export default function AdminMockBundlesPage() {
                     <div className="flex flex-wrap gap-2">
                       <Link
                         href={`/admin/content/mocks/${encodeURIComponent(row.id)}/item-analysis`}
-                        className="inline-flex items-center rounded-lg border border-border px-3 py-2 text-sm font-medium text-admin-fg-strong hover:bg-background-light"
+                        className="inline-flex items-center rounded-lg border border-border px-3 py-2 text-sm font-medium text-admin-fg-strong hover:bg-admin-bg-subtle"
                       >
                         <BarChart3 className="mr-1 h-4 w-4" /> Analysis
                       </Link>
@@ -562,7 +562,7 @@ export default function AdminMockBundlesPage() {
                   ) : (
                     <div className="mt-4 grid gap-2">
                       {row.sections.slice().sort((a, b) => a.sectionOrder - b.sectionOrder).map((section, index, orderedSections) => (
-                        <div key={section.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-background-light px-3 py-2 text-sm">
+                        <div key={section.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-admin-bg-subtle px-3 py-2 text-sm">
                           <div>
                             <span className="font-semibold text-admin-fg-strong">{section.sectionOrder}. {section.subtestCode}</span>
                             <span className="ml-2 text-admin-fg-muted">{section.contentPaperTitle ?? section.contentPaperId}</span>
@@ -721,7 +721,7 @@ function LeakReportsLink() {
   return (
     <Link
       href="/admin/content/mocks/leak-reports"
-      className="inline-flex items-center rounded-admin border border-admin-border bg-admin-bg-surface px-4 py-2 text-sm font-bold text-admin-fg-strong hover:bg-background-light"
+      className="inline-flex items-center rounded-admin border border-admin-border bg-admin-bg-surface px-4 py-2 text-sm font-bold text-admin-fg-strong hover:bg-admin-bg-subtle"
     >
       <ShieldAlert className="mr-2 h-4 w-4" /> Leak reports
       {openCount !== null && openCount > 0 ? (

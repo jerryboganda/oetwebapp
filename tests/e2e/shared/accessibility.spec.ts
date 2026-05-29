@@ -63,7 +63,7 @@ test.describe('Accessibility smoke @a11y', () => {
 
     const diagnostics = observePage(page);
     await page.goto('/settings/profile', { waitUntil: 'domcontentloaded' });
-    await expect(page.getByRole('heading', { name: /keep profile settings clear before you change them/i })).toBeVisible();
+    await expect(page.getByRole('heading', { name: /your profile/i })).toBeVisible();
     await expectNoSeriousAxeViolations(page);
 
     expectNoSevereClientIssues(diagnostics);

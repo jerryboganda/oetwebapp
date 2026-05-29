@@ -129,7 +129,7 @@ export function SpeakingDeviceProbe({ onResult }: SpeakingDeviceProbeProps) {
           <DeviceList title="Webcams" entries={result.videoInputs} />
           {result.multipleMonitors === true ? (
             <p className="text-error" role="alert">
-              ⚠ Multiple monitors detected. RULE_60 requires a single monitor only — disconnect or disable the second display before exam start.
+              Multiple monitors detected. RULE_60 requires a single monitor only. Disconnect or disable the second display before exam start.
             </p>
           ) : null}
           {result.ok ? (

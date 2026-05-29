@@ -95,12 +95,12 @@ export function CheckoutSuccessPoller({
     case 'fulfilled':
       return (
         <div className="space-y-6">
-          <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-6 text-emerald-900">
+          <div className="rounded-2xl border border-success/30 bg-success/10 p-6">
             <div className="flex items-start gap-3">
-              <CheckCircle2 className="mt-0.5 h-6 w-6 flex-none text-emerald-600" aria-hidden="true" />
+              <CheckCircle2 className="mt-0.5 h-6 w-6 flex-none text-success" aria-hidden="true" />
               <div>
-                <h2 className="text-lg font-semibold">Payment received</h2>
-                <p className="mt-1 text-sm">
+                <h2 className="text-lg font-semibold text-success">Payment received</h2>
+                <p className="mt-1 text-sm text-navy">
                   Thanks for your purchase. We have added the new entitlements to your account.
                 </p>
               </div>
@@ -123,12 +123,12 @@ export function CheckoutSuccessPoller({
     case 'failed':
       return (
         <div className="space-y-6">
-          <div className="rounded-2xl border border-red-200 bg-red-50 p-6 text-red-900">
+          <div className="rounded-2xl border border-danger/30 bg-danger/10 p-6">
             <div className="flex items-start gap-3">
-              <AlertCircle className="mt-0.5 h-6 w-6 flex-none text-red-600" aria-hidden="true" />
+              <AlertCircle className="mt-0.5 h-6 w-6 flex-none text-danger" aria-hidden="true" />
               <div>
-                <h2 className="text-lg font-semibold">Checkout did not complete</h2>
-                <p className="mt-1 text-sm">{state.reason}</p>
+                <h2 className="text-lg font-semibold text-danger">Checkout did not complete</h2>
+                <p className="mt-1 text-sm text-navy">{state.reason}</p>
               </div>
             </div>
           </div>
@@ -146,12 +146,12 @@ export function CheckoutSuccessPoller({
     case 'timeout':
       return (
         <div className="space-y-6">
-          <div className="rounded-2xl border border-amber-200 bg-amber-50 p-6 text-amber-900">
+          <div className="rounded-2xl border border-warning/30 bg-warning/10 p-6">
             <div className="flex items-start gap-3">
-              <Mail className="mt-0.5 h-6 w-6 flex-none text-amber-600" aria-hidden="true" />
+              <Mail className="mt-0.5 h-6 w-6 flex-none text-warning" aria-hidden="true" />
               <div>
-                <h2 className="text-lg font-semibold">We will email when ready</h2>
-                <p className="mt-1 text-sm">
+                <h2 className="text-lg font-semibold text-warning">We will email when ready</h2>
+                <p className="mt-1 text-sm text-navy">
                   Your payment may still be processing. You will receive a confirmation email as
                   soon as your purchase is fulfilled - usually within a few minutes.
                 </p>

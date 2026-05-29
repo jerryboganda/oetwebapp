@@ -885,7 +885,7 @@ The detailed sections below still describe the original core preparation loop. T
   - learner answers
 - Outputs / Results:
   - submitted attempt
-  - score and review metadata; answer-key-only field exposure remains an unresolved release-blocking issue tracked as PM-001
+  - score and review metadata; answer-key-only field exposure was reconciled locally on 2026-05-29 and remains protected by regression coverage
 - Main user actions:
   - open reading task
   - navigate questions
@@ -903,8 +903,8 @@ The detailed sections below still describe the original core preparation loop. T
   - practice vs exam mode in player
 - Notes:
   - Reading results are objective and review-driven rather than human reviewed.
-  - Current post-submit correct-answer/explanation exposure conflicts with the learner-safe DTO invariant and must be reconciled by the Reading owner before release sign-off.
-  - Per the AGENTS hard ban, learner-facing endpoints must never serialize `CorrectAnswerJson`, `ExplanationMarkdown`, or `AcceptedSynonymsJson` in any pre- or post-attempt projection. PM-001 tracks the open backend conflict where this can occur today.
+  - Post-submit review now exposes learner-safe outcome data without correct-answer or explanation payload fields.
+  - Per the AGENTS hard ban, learner-facing endpoints must never serialize `CorrectAnswerJson`, `ExplanationMarkdown`, or `AcceptedSynonymsJson` in any pre- or post-attempt projection. PM-001 was reconciled locally on 2026-05-29 by redacting submitted-review answer/explanation fields.
   - Reading authoring remains canonical 42-item structure: 20 Part A, 6 Part B, and 16 Part C items.
 
 ## 9. Listening Module

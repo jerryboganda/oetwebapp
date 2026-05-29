@@ -141,7 +141,7 @@ describe('OetStatementOfResultsCard rendering', () => {
 
   it('exposes an accessible data table for screen readers', () => {
     render(<OetStatementOfResultsCard data={SOR_FIXTURE_MEDICINE_UK} />);
-    const caption = screen.getByText(/Statement of Results — data table/i);
+    const caption = screen.getByText(/Statement of Results: data table/i);
     expect(caption).toBeInTheDocument();
   });
 });

@@ -102,7 +102,7 @@ function DataTableColumnHeader<TData, TValue>({
     <button
       type="button"
       onClick={() => column.toggleSorting(sorted === 'asc')}
-      aria-label={`${typeof title === 'string' ? title : 'Column'} — ${sortLabel}`}
+      aria-label={`${typeof title === 'string' ? title : 'Column'}: ${sortLabel}`}
       className={cn(
         'inline-flex items-center gap-1.5 rounded-md',
         'px-2 py-1 -mx-2 -my-1', // hit area

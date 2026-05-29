@@ -240,7 +240,7 @@ export function TutorCuePanel({
       {/* Timer header */}
       <header className="flex items-center justify-between border-b border-border pb-3">
         <div className="flex items-center gap-2">
-          <Clock className={cn('h-4 w-4', isTimerWarning ? 'text-rose-600' : 'text-muted-foreground')} aria-hidden />
+          <Clock className={cn('h-4 w-4', isTimerWarning ? 'text-rose-600' : 'text-muted')} aria-hidden />
           <span className="font-medium text-foreground">Role-play time</span>
         </div>
         <span
@@ -255,7 +255,7 @@ export function TutorCuePanel({
       </header>
 
       {loading ? (
-        <div className="flex items-center gap-2 text-muted-foreground">
+        <div className="flex items-center gap-2 text-muted">
           <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> Loading interlocutor script...
         </div>
       ) : forbidden ? (
@@ -282,7 +282,7 @@ export function TutorCuePanel({
           <ResistancePill resistance={resistance} />
 
           <section>
-            <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            <h4 className="text-xs font-semibold uppercase tracking-wide text-muted">
               Opening response
             </h4>
             <p className="mt-1 whitespace-pre-wrap rounded-md bg-muted p-3 leading-relaxed text-foreground">
@@ -293,7 +293,7 @@ export function TutorCuePanel({
               variant="ghost"
               size="sm"
               onClick={() => setReading((v) => !v)}
-              className="mt-2 text-muted-foreground"
+              className="mt-2 text-muted"
               aria-pressed={reading}
             >
               {reading ? (
@@ -309,15 +309,15 @@ export function TutorCuePanel({
           </section>
 
           <section>
-            <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            <h4 className="text-xs font-semibold uppercase tracking-wide text-muted">
               Cue prompts
             </h4>
-            <p className="mt-1 text-xs text-muted-foreground">
+            <p className="mt-1 text-xs text-muted">
               Tap a prompt to deliver it. Delivered cues are highlighted; click again to re-broadcast.
             </p>
             <ul className="mt-2 space-y-2">
               {cues.length === 0 ? (
-                <li className="text-xs italic text-muted-foreground">No cue prompts recorded for this card.</li>
+                <li className="text-xs italic text-muted">No cue prompts recorded for this card.</li>
               ) : null}
               {cues.map((cue) => {
                 const delivered = deliveredCues.has(cue.index);
@@ -337,7 +337,7 @@ export function TutorCuePanel({
                       <MessageSquareQuote
                         className={cn(
                           'mt-0.5 h-4 w-4 shrink-0',
-                          delivered ? 'text-emerald-600' : 'text-muted-foreground',
+                          delivered ? 'text-emerald-600' : 'text-muted',
                         )}
                         aria-hidden
                       />
@@ -357,7 +357,7 @@ export function TutorCuePanel({
               className="flex w-full items-center justify-between rounded-md border border-border bg-muted px-3 py-2 text-left text-sm font-medium text-foreground hover:bg-muted/80"
             >
               <span className="inline-flex items-center gap-2">
-                <EyeOff className="h-4 w-4 text-muted-foreground" aria-hidden />
+                <EyeOff className="h-4 w-4 text-muted" aria-hidden />
                 Hidden information (reveal only when probed)
               </span>
               <ChevronDown
@@ -368,33 +368,33 @@ export function TutorCuePanel({
             {hiddenOpen ? (
               <p className="mt-2 whitespace-pre-wrap rounded-md border border-border bg-surface p-3 leading-relaxed text-foreground">
                 {script.hiddenInformation || (
-                  <span className="italic text-muted-foreground">No hidden information for this card.</span>
+                  <span className="italic text-muted">No hidden information for this card.</span>
                 )}
               </p>
             ) : null}
           </section>
 
           <section>
-            <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            <h4 className="text-xs font-semibold uppercase tracking-wide text-muted">
               Closing cue
             </h4>
             <p className="mt-1 whitespace-pre-wrap rounded-md bg-muted p-3 leading-relaxed text-foreground">
               {script.closingCue || (
-                <span className="italic text-muted-foreground">No closing cue recorded.</span>
+                <span className="italic text-muted">No closing cue recorded.</span>
               )}
             </p>
           </section>
 
           {script.layLanguageTriggers && script.layLanguageTriggers.length > 0 ? (
             <section>
-              <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              <h4 className="text-xs font-semibold uppercase tracking-wide text-muted">
                 Lay-language triggers
               </h4>
               <ul className="mt-1 flex flex-wrap gap-1.5">
                 {script.layLanguageTriggers.map((t) => (
                   <li
                     key={t}
-                    className="rounded-full border border-border bg-surface px-2 py-0.5 text-xs text-muted-foreground"
+                    className="rounded-full border border-border bg-surface px-2 py-0.5 text-xs text-muted"
                   >
                     {t}
                   </li>
@@ -404,7 +404,7 @@ export function TutorCuePanel({
           ) : null}
         </>
       ) : (
-        <p className="text-xs italic text-muted-foreground">
+        <p className="text-xs italic text-muted">
           No interlocutor script published for this card yet.
         </p>
       )}

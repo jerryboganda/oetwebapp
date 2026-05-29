@@ -96,7 +96,7 @@ export function BandHistoryChart({ data, targetBand, className }: BandHistoryCha
         role="img"
         aria-label="Band history chart: no data yet"
       >
-        No graded letters yet — your band history will appear here.
+        No graded letters yet. Your band history will appear here.
       </div>
     );
   }

@@ -27,7 +27,7 @@ export function AddOnsGrid({ addOns }: AddOnsGridProps) {
         </p>
         <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {addOns.map((addon) => (
-            <div key={addon.code} className="rounded-2xl border border-border bg-background p-5">
+            <div key={addon.code} className="rounded-2xl border border-border bg-surface p-5">
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <h4 className="font-bold">{addon.name}</h4>

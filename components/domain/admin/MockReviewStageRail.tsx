@@ -85,21 +85,21 @@ function StageTimeline({
           <li
             key={stage}
             className={cn(
-              'relative flex gap-3 rounded-2xl border bg-surface p-4 transition-colors',
+              'relative flex gap-3 rounded-2xl border bg-admin-bg-surface p-4 transition-colors',
               isCurrent
-                ? 'border-primary bg-primary/5 shadow-sm'
+                ? 'border-admin-primary bg-admin-primary-tint shadow-sm'
                 : isPast
-                ? 'border-emerald-200/60 bg-emerald-50/40 dark:border-emerald-800/60 dark:bg-emerald-950/40'
-                : 'border-border',
+                ? 'border-admin-success/40 bg-admin-success-tint'
+                : 'border-admin-border',
             )}
             data-stage={stage}
             data-current={isCurrent ? 'true' : undefined}
           >
             <div className="flex h-9 w-9 shrink-0 items-center justify-center">
               {isPast ? (
-                <CheckCircle2 className="h-7 w-7 text-emerald-600 dark:text-emerald-400" aria-hidden />
+                <CheckCircle2 className="h-7 w-7 text-admin-success" aria-hidden />
               ) : isCurrent ? (
-                <div className="flex h-7 w-7 items-center justify-center rounded-full bg-primary text-white">
+                <div className="flex h-7 w-7 items-center justify-center rounded-full bg-admin-primary text-admin-primary-fg">
                   <ChevronRight className="h-4 w-4" aria-hidden />
                 </div>
               ) : (
@@ -108,27 +108,27 @@ function StageTimeline({
             </div>
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">
-                <p className="font-bold text-navy">{STAGE_LABELS[stage]}</p>
+                <p className="font-bold text-admin-fg-strong">{STAGE_LABELS[stage]}</p>
                 {isCurrent ? <Badge variant="info">Current</Badge> : null}
                 {isPast ? <Badge variant="success">Passed</Badge> : null}
               </div>
               <p className="mt-1 text-xs text-muted">{STAGE_DESCRIPTIONS[stage]}</p>
               {transition ? (
-                <dl className="mt-3 grid gap-1 rounded-xl border border-border/70 bg-background-light/80 p-3 text-xs">
+                <dl className="mt-3 grid gap-1 rounded-xl border border-border/70 bg-admin-bg-subtle/80 p-3 text-xs">
                   <div className="flex flex-wrap gap-x-3 gap-y-1">
                     <dt className="font-semibold text-muted">Transitioned at</dt>
-                    <dd className="text-navy">{new Date(transition.createdAt).toLocaleString()}</dd>
+                    <dd className="text-admin-fg-strong">{new Date(transition.createdAt).toLocaleString()}</dd>
                   </div>
                   {transition.resolvedByAdminId ? (
                     <div className="flex flex-wrap gap-x-3 gap-y-1">
                       <dt className="font-semibold text-muted">Reviewer</dt>
-                      <dd className="text-navy">{transition.resolvedByAdminId}</dd>
+                      <dd className="text-admin-fg-strong">{transition.resolvedByAdminId}</dd>
                     </div>
                   ) : null}
                   {transition.notes ? (
                     <div className="flex flex-col gap-1">
                       <dt className="font-semibold text-muted">Notes</dt>
-                      <dd className="whitespace-pre-wrap text-navy">{transition.notes}</dd>
+                      <dd className="whitespace-pre-wrap text-admin-fg-strong">{transition.notes}</dd>
                     </div>
                   ) : null}
                 </dl>
@@ -201,7 +201,7 @@ function AdvanceStageForm({
 
   if (allDone) {
     return (
-      <div className="rounded-2xl border border-emerald-200/60 bg-emerald-50/40 p-4 text-sm text-emerald-700 dark:border-emerald-800/60 dark:bg-emerald-950/30 dark:text-emerald-300">
+      <div className="rounded-2xl border border-admin-success/40 bg-admin-success-tint p-4 text-sm text-admin-success">
         Bundle is already published. No further stage transitions are possible.
       </div>
     );
@@ -209,7 +209,7 @@ function AdvanceStageForm({
 
   return (
     <form
-      className="space-y-3 rounded-2xl border border-border bg-surface p-4"
+      className="space-y-3 rounded-2xl border border-admin-border bg-admin-bg-surface p-4"
       onSubmit={(event) => {
         event.preventDefault();
         void submit();
@@ -308,7 +308,7 @@ export function MockReviewStageRail({ bundleId }: MockReviewStageRailProps) {
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <p className="text-xs font-bold uppercase tracking-widest text-muted">Current stage</p>
-          <p className="mt-0.5 text-lg font-bold text-navy">
+          <p className="mt-0.5 text-lg font-bold text-admin-fg-strong">
             {summary?.currentStage ? stageLabel(summary.currentStage) : 'Not started'}
           </p>
           {summary?.publishedAt ? (

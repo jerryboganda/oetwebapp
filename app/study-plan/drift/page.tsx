@@ -77,7 +77,7 @@ export default function StudyPlanDriftPage() {
         {loading ? (
           <div className="space-y-4">{Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-32 rounded-xl" />)}</div>
         ) : !data?.hasPlan ? (
-          <Card className="p-8 text-center text-muted-foreground"><Calendar className="w-8 h-8 mx-auto mb-3 opacity-50" /><p>No study plan found. Generate one from your dashboard.</p></Card>
+          <Card className="p-8 text-center text-muted"><Calendar className="w-8 h-8 mx-auto mb-3 opacity-50" /><p>No study plan found. Generate one from your dashboard.</p></Card>
         ) : data.drift ? (
           <>
             {/* Main drift card */}
@@ -95,7 +95,7 @@ export default function StudyPlanDriftPage() {
                     </div>
                     {data.drift.autoRegenQueued && (
                       <p className="mt-2 text-xs italic">
-                        Auto-recovery already queued — your plan will refresh shortly.
+                        Auto-recovery already queued. Your plan will refresh shortly.
                       </p>
                     )}
                     {data.drift.shouldRegenerate && !data.drift.autoRegenQueued && (
@@ -123,7 +123,7 @@ export default function StudyPlanDriftPage() {
                         <div className="h-2 rounded-full bg-muted mt-2 overflow-hidden">
                           <div className="h-full rounded-full bg-primary" style={{ width: `${s.completionRate}%` }} />
                         </div>
-                        <div className="flex justify-between mt-1 text-xs text-muted-foreground">
+                        <div className="flex justify-between mt-1 text-xs text-muted">
                           <span>{s.completed}/{s.total} done</span>
                           {s.overdue > 0 && <span className="text-danger">{s.overdue} overdue</span>}
                         </div>
@@ -144,7 +144,7 @@ export default function StudyPlanDriftPage() {
                       <Card className="p-3 flex items-center justify-between">
                         <div>
                           <p className="text-sm font-medium">{item.title}</p>
-                          <p className="text-xs text-muted-foreground capitalize">{item.subtestCode} • Due: {item.dueDate}</p>
+                          <p className="text-xs text-muted capitalize">{item.subtestCode} • Due: {item.dueDate}</p>
                         </div>
                         <Badge variant="danger">{item.daysOverdue}d overdue</Badge>
                       </Card>

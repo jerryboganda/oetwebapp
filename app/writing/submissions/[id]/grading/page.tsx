@@ -127,8 +127,8 @@ export default function WritingSubmissionGradingPage() {
                 const tone = done
                   ? 'bg-emerald-100 text-emerald-700 border-emerald-300'
                   : active
-                    ? 'bg-amber-100 text-amber-700 border-amber-300 animate-pulse'
-                    : 'bg-slate-100 text-slate-500 border-slate-200';
+                    ? 'bg-amber-100 text-amber-700 border-amber-300 motion-safe:animate-pulse'
+                    : 'bg-background-light text-muted border-border';
                 return (
                   <li key={step.code as StepCode} className={`flex items-center gap-3 rounded-lg border p-3 ${tone}`}>
                     <Icon className="h-5 w-5 shrink-0" aria-hidden="true" />

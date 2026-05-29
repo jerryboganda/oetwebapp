@@ -120,7 +120,8 @@ const SelectContent = React.forwardRef<
         'bg-[var(--admin-bg-elevated)] text-[var(--admin-fg-default)]',
         'font-[var(--admin-font-body)]',
         'border border-[var(--admin-border)] shadow-lg',
-        // open/close animations
+        // open/close animations — scale from the trigger, not the menu's center
+        'origin-[var(--radix-select-content-transform-origin)]',
         'data-[state=open]:animate-in data-[state=closed]:animate-out',
         'data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0',
         'data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95',

@@ -87,7 +87,7 @@ export function ContentScopePanel({
 
   return (
     <div className="rounded-md border border-border bg-muted/20 p-4">
-      <div className="mb-2 text-sm font-semibold text-navy">Content access scope</div>
+      <div className="mb-2 text-sm font-semibold text-admin-fg-strong">Content access scope</div>
       <p className="mb-3 text-xs text-muted">
         Controls which paid Listening / Reading / Writing / Speaking papers this plan unlocks via
         <code className="mx-1 rounded bg-muted px-1 py-0.5 text-[11px]">ContentEntitlementService</code>.
@@ -100,7 +100,7 @@ export function ContentScopePanel({
           onChange={(e) => update({ tier: (e.target.value === 'free' ? 'free' : 'premium') })}
           options={[
             { value: 'premium', label: 'Premium (grants any subtest selected below)' },
-            { value: 'free', label: 'Free (no subscription tier — papers must be in the lists below)' },
+            { value: 'free', label: 'Free (no subscription tier; papers must be in the lists below)' },
           ]}
         />
         <div>

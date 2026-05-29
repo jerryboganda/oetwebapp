@@ -90,12 +90,12 @@ export default function DiagnosticHubPage() {
                 <p className="text-sm text-muted">
                   {allComplete
                     ? 'View your diagnostic results below.'
-                    : `${completedCount} of ${totalCount} completed — complete them in any order.`}
+                    : `${completedCount} of ${totalCount} completed. Complete them in any order.`}
                 </p>
                 {/* Progress bar */}
                 <div className="w-full max-w-sm mx-auto h-2 bg-border rounded-full overflow-hidden">
                   <div
-                    className="h-full bg-primary rounded-full transition-all duration-500"
+                    className="h-full bg-primary rounded-full transition-[width,background-color] duration-500"
                     style={{ width: `${(completedCount / totalCount) * 100}%` }}
                   />
                 </div>
@@ -171,7 +171,7 @@ export default function DiagnosticHubPage() {
               {/* Resume warning */}
               {session.subTests.some((s) => s.status === 'in_progress') && (
                 <InlineAlert variant="info" dismissible>
-                  You have a sub-test in progress. Your work has been saved — pick up where you left off.
+                  You have a sub-test in progress. Your work has been saved, so you can pick up where you left off.
                 </InlineAlert>
               )}
 

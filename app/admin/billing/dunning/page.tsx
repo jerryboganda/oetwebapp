@@ -101,7 +101,7 @@ export default function AdminDunningPage() {
   return (
     <AdminTableLayout
       title="Dunning campaigns"
-      description="Failed renewal recovery — Day 0→21 retry schedule + access state."
+      description="Failed renewal recovery. Day 0 to 21 retry schedule plus access state."
       breadcrumbs={[
         { label: 'Admin', href: '/admin' },
         { label: 'Billing', href: '/admin/billing' },
@@ -142,7 +142,7 @@ export default function AdminDunningPage() {
           <EmptyState
             illustration={<CheckCircle2 />}
             title="No active dunning campaigns"
-            description="Nothing to recover right now — all renewals are healthy."
+            description="Nothing to recover right now. All renewals are healthy."
           />
         </div>
       ) : (

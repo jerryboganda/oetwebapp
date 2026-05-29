@@ -269,7 +269,7 @@ function FilterChip({
       type="button"
       onClick={onClick}
       className={cn(
-        'inline-flex items-center rounded-full border px-4 py-1.5 text-sm font-semibold transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 active:scale-95',
+        'inline-flex items-center rounded-full border px-4 py-1.5 text-sm font-semibold transition-[color,background-color,border-color,box-shadow,transform,opacity,filter] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 active:scale-95',
         active
           ? 'border-primary/20 bg-primary/10 text-primary shadow-sm'
           : 'border-border bg-surface text-muted hover:border-primary/20 hover:bg-lavender/30 hover:text-navy',

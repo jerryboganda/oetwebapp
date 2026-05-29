@@ -52,7 +52,7 @@ export function FilterBar({ groups, selected, onChange, onClear, className }: Fi
                 <Popover.Trigger asChild>
                   <button
                     className={cn(
-                      'flex items-center gap-2 rounded-xl border px-3.5 py-2 text-sm font-medium shadow-sm transition-all duration-200 active:scale-95',
+                      'flex items-center gap-2 rounded-xl border px-3.5 py-2 text-sm font-medium shadow-sm transition-[color,background-color,border-color,box-shadow,transform] duration-200 active:scale-95',
                       isActive
                         ? 'border-primary/25 bg-primary/6 text-primary'
                         : 'border-border bg-surface text-navy hover:border-border hover:bg-surface',
@@ -62,7 +62,7 @@ export function FilterBar({ groups, selected, onChange, onClear, className }: Fi
                   >
                     {group.label}
                     {isActive && (
-                      <span className="ml-1 inline-flex h-4 w-4 items-center justify-center rounded-full bg-primary text-xs font-bold text-white">
+                      <span className="ml-1 inline-flex h-4 w-4 items-center justify-center rounded-full bg-primary text-xs font-bold text-white dark:bg-violet-700">
                         {selectedCount}
                       </span>
                     )}
@@ -71,7 +71,7 @@ export function FilterBar({ groups, selected, onChange, onClear, className }: Fi
                 </Popover.Trigger>
                 <Popover.Portal>
                   <Popover.Content
-                    className="z-50 w-60 rounded-2xl border border-border bg-surface p-2 shadow-xl data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-[0.98] data-[state=open]:slide-in-from-top-1 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-[0.98] data-[state=closed]:slide-out-to-top-1 duration-200"
+                    className="z-50 w-60 origin-[var(--radix-popover-content-transform-origin)] rounded-2xl border border-border bg-surface p-2 shadow-xl data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-[0.98] data-[state=open]:slide-in-from-top-1 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-[0.98] data-[state=closed]:slide-out-to-top-1 duration-200"
                     sideOffset={4}
                     align="start"
                   >
@@ -93,7 +93,7 @@ export function FilterBar({ groups, selected, onChange, onClear, className }: Fi
                               <div
                                 className={cn(
                                   'flex h-4 w-4 items-center justify-center rounded border transition-colors',
-                                  isOptionSelected ? 'border-primary bg-primary text-white' : 'border-border',
+                                  isOptionSelected ? 'border-primary bg-primary text-white dark:bg-violet-700' : 'border-border',
                                 )}
                               >
                                 {isOptionSelected && <Check className="h-3 w-3" />}

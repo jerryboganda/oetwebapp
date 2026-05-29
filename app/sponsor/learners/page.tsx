@@ -111,7 +111,7 @@ export default function SponsorLearnersPage() {
           <button
             type="submit"
             disabled={inviteLoading}
-            className="inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-medium text-white hover:bg-primary/90 disabled:opacity-50 transition-colors"
+            className="inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-medium text-white hover:bg-primary/90 active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600 disabled:opacity-50 transition-[color,background-color,transform] duration-200"
           >
             {inviteLoading ? (
               <Loader2 className="h-4 w-4 animate-spin" />

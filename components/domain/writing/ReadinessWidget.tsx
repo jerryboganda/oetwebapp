@@ -30,24 +30,24 @@ const SUB_BARS: SubBarSpec[] = [
 function scoreTone(score: number): { text: string; bg: string; ring: string; label: string } {
   if (score >= 85) {
     return {
-      text: 'text-emerald-700 dark:text-emerald-300',
-      bg: 'bg-emerald-50 dark:bg-emerald-950/40',
-      ring: 'border-emerald-300/70 dark:border-emerald-800/60',
+      text: 'text-success',
+      bg: 'bg-success/10',
+      ring: 'border-success/30',
       label: 'Exam-ready',
     };
   }
   if (score >= 65) {
     return {
-      text: 'text-amber-700 dark:text-amber-300',
-      bg: 'bg-amber-50 dark:bg-amber-950/40',
-      ring: 'border-amber-300/70 dark:border-amber-800/60',
+      text: 'text-warning',
+      bg: 'bg-warning/10',
+      ring: 'border-warning/30',
       label: 'Building',
     };
   }
   return {
-    text: 'text-red-700 dark:text-red-300',
-    bg: 'bg-red-50 dark:bg-red-950/40',
-    ring: 'border-red-300/70 dark:border-red-800/60',
+    text: 'text-danger',
+    bg: 'bg-danger/10',
+    ring: 'border-danger/30',
     label: 'Foundation',
   };
 }
@@ -66,9 +66,9 @@ export function ReadinessWidget({ score, subScores, deltaVsLastWeek, predictedBa
   const deltaTone = delta === null
     ? 'text-muted'
     : delta > 0
-      ? 'text-emerald-600 dark:text-emerald-300'
+      ? 'text-success'
       : delta < 0
-        ? 'text-red-600 dark:text-red-300'
+        ? 'text-danger'
         : 'text-muted';
 
   return (
@@ -112,7 +112,7 @@ export function ReadinessWidget({ score, subScores, deltaVsLastWeek, predictedBa
               <li key={key} className="flex items-center gap-2 text-xs">
                 <span className="w-32 shrink-0 font-bold text-muted">{label}</span>
                 <div
-                  className="flex-1 h-1.5 rounded-full bg-slate-200/60 dark:bg-slate-800/60 overflow-hidden"
+                  className="flex-1 h-1.5 rounded-full bg-border overflow-hidden"
                   role="progressbar"
                   aria-valuemin={0}
                   aria-valuemax={100}

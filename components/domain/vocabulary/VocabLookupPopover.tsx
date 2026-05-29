@@ -211,7 +211,7 @@ export function VocabLookupPopover({
               <button
                 onClick={() => handleAdd(lookup.term!.id)}
                 disabled={adding}
-                className="inline-flex items-center gap-1 rounded-full bg-primary px-3 py-1 text-xs font-medium text-white hover:bg-primary/90 disabled:opacity-50"
+                className="inline-flex items-center gap-1 rounded-full bg-primary px-3 py-1 text-xs font-medium text-white hover:bg-primary/90 active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600 disabled:opacity-50"
               >
                 <Plus className="h-3 w-3" /> Add to my list
               </button>
@@ -235,7 +235,7 @@ export function VocabLookupPopover({
                         >
                           {s.term}
                         </button>
-                        {' — '}
+                        {': '}
                         <span className="text-muted">{s.definition.slice(0, 60)}{s.definition.length > 60 ? '…' : ''}</span>
                       </li>
                     ))}
@@ -265,7 +265,7 @@ export function VocabLookupPopover({
               <button
                 onClick={() => handleAdd(gloss.existingTermId!)}
                 disabled={adding}
-                className="mt-2 inline-flex items-center gap-1 rounded-full bg-primary px-3 py-1 text-xs font-medium text-white hover:bg-primary/90 disabled:opacity-50"
+                className="mt-2 inline-flex items-center gap-1 rounded-full bg-primary px-3 py-1 text-xs font-medium text-white hover:bg-primary/90 active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600 disabled:opacity-50"
               >
                 <Plus className="h-3 w-3" /> Add existing match
               </button>

@@ -7,9 +7,11 @@ import { createAudioRecorder, type AudioRecorder } from '@/lib/native/audio-reco
 
 interface DesktopBridge {
   speakingAudio?: {
-    start(): Promise<void>;
-    stop(): Promise<{ base64: string; mimeType: string }>;
-    getPlatform(): 'win32' | 'darwin' | 'linux';
+    start(sessionId: string, mimeType?: string): Promise<{ ok: boolean; mimeType: string }>;
+    stop(sessionId: string, chunks?: Array<ArrayBuffer | ArrayBufferView>): Promise<{ ok: boolean; error?: string }>;
+    getBlob(sessionId: string): Promise<{ ok: boolean; data?: ArrayBuffer; mimeType?: string; error?: string }>;
+    discard(sessionId: string): Promise<{ ok: boolean }>;
+    getPlatform(): NodeJS.Platform;
   };
 }
 
@@ -20,14 +22,30 @@ function getDesktopBridge(): DesktopBridge | undefined {
 
 class ElectronRecorder implements AudioRecorder {
   private recording = false;
+  private sessionId: string | null = null;
+  private mimeType = 'audio/webm';
+
   constructor(private readonly bridge: NonNullable<DesktopBridge['speakingAudio']>) {}
 
-  async start(): Promise<void> { await this.bridge.start(); this.recording = true; }
+  async start(): Promise<void> {
+    this.sessionId = `speaking-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const result = await this.bridge.start(this.sessionId, this.mimeType);
+    if (!result.ok) throw new Error('Desktop speaking audio bridge failed to start.');
+    this.mimeType = result.mimeType || this.mimeType;
+    this.recording = true;
+  }
+
   async stop(): Promise<Blob> {
-    const res = await this.bridge.stop();
+    if (!this.sessionId) throw new Error('Desktop speaking audio bridge was not started.');
+    const sessionId = this.sessionId;
+    const res = await this.bridge.stop(sessionId);
     this.recording = false;
-    const bytes = Uint8Array.from(atob(res.base64), (c) => c.charCodeAt(0));
-    return new Blob([bytes], { type: res.mimeType });
+    if (!res.ok) throw new Error(res.error || 'Desktop speaking audio bridge failed to stop.');
+    const blob = await this.bridge.getBlob(sessionId);
+    if (!blob.ok || !blob.data) throw new Error(blob.error || 'Desktop speaking audio blob was unavailable.');
+    await this.bridge.discard(sessionId);
+    this.sessionId = null;
+    return new Blob([blob.data], { type: blob.mimeType || this.mimeType });
   }
   async pause(): Promise<void> { /* not yet supported via IPC */ }
   async resume(): Promise<void> { /* not yet supported via IPC */ }
@@ -35,7 +53,8 @@ class ElectronRecorder implements AudioRecorder {
 }
 
 export function createSpeakingAudioRecorder(): AudioRecorder {
-  const bridge = getDesktopBridge()?.speakingAudio;
-  if (bridge) return new ElectronRecorder(bridge);
+  // The Electron IPC surface is exposed for future native capture, but current
+  // production recording still depends on Chromium MediaRecorder chunks.
+  // Falling back here avoids producing zero-byte desktop recordings.
   return createAudioRecorder();
 }

@@ -65,7 +65,7 @@ export default function ReadingPaperPreviewPage({ params }: { params: Promise<{ 
     <AdminSettingsLayout
       eyebrow="CMS"
       title="Paper Preview"
-      description="Read-only view — this is how learners see the paper."
+      description="Read-only view. This is how learners see the paper."
       breadcrumbs={breadcrumbs}
       actions={
         <Button variant="ghost" size="sm" asChild>
@@ -77,7 +77,7 @@ export default function ReadingPaperPreviewPage({ params }: { params: Promise<{ 
       }
     >
       <InlineAlert variant="warning">
-        Admin Preview — This is how learners see the paper. Not scored.
+        Admin Preview. This is how learners see the paper. Not scored.
       </InlineAlert>
 
       <AsyncStateWrapper status={status} errorMessage={error ?? undefined} onRetry={load}>

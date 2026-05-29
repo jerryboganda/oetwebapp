@@ -157,7 +157,7 @@ export function SubscriptionManager({ subscription, loading, recentEvent }: Subs
                     ? 'bg-red-100 text-red-700'
                     : STATUS_VARIANTS[subscription.status] === 'warning'
                       ? 'bg-amber-100 text-amber-700'
-                      : 'bg-slate-100 text-slate-700'
+                      : 'bg-background-light text-muted'
               }`}
             >
               {STATUS_LABELS[subscription.status]}
@@ -200,34 +200,28 @@ export function SubscriptionManager({ subscription, loading, recentEvent }: Subs
       )}
 
       <Card padding="lg">
-        <div className="flex items-start gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-            <Globe2 className="h-5 w-5" aria-hidden="true" />
-          </div>
-          <div className="min-w-0">
-            <h2 className="text-sm font-semibold text-navy">
-              {context?.copy.messageTitle ?? 'Manage on the web'}
-            </h2>
-            <p className="mt-1 text-sm text-muted-foreground">
-              {context?.copy.messageBody ??
-                'Update payment methods, change plans, or cancel from our secure portal.'}
-            </p>
-            <Button
-              variant="primary"
-              size="md"
-              className="mt-3"
-              onClick={() => void handleOpenPortal()}
-              loading={portalLoading}
-            >
-              {context?.copy.ctaLabel ?? 'Manage on website'}
-            </Button>
-            {portalError ? (
-              <p role="alert" className="mt-2 text-xs text-red-600">
-                {portalError}
-              </p>
-            ) : null}
-          </div>
-        </div>
+        <h2 className="flex items-center gap-2 text-sm font-semibold text-navy">
+          <Globe2 className="h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+          {context?.copy.messageTitle ?? 'Manage on the web'}
+        </h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          {context?.copy.messageBody ??
+            'Update payment methods, change plans, or cancel from our secure portal.'}
+        </p>
+        <Button
+          variant="primary"
+          size="md"
+          className="mt-3"
+          onClick={() => void handleOpenPortal()}
+          loading={portalLoading}
+        >
+          {context?.copy.ctaLabel ?? 'Manage on website'}
+        </Button>
+        {portalError ? (
+          <p role="alert" className="mt-2 text-xs text-red-600">
+            {portalError}
+          </p>
+        ) : null}
       </Card>
     </div>
   );

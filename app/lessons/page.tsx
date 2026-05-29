@@ -171,7 +171,7 @@ export default function LessonsPage() {
                   key={key}
                   type="button"
                   onClick={() => setView(key)}
-                  className={`px-3 py-2 transition-colors ${view === key ? 'bg-primary text-white' : 'hover:bg-lavender/30'}`}
+                  className={`px-3 py-2 transition-colors ${view === key ? 'bg-primary text-white dark:bg-violet-700' : 'hover:bg-lavender/30'}`}
                 >
                   {label}
                 </button>

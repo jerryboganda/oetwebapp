@@ -150,7 +150,7 @@ export default function AdminVocabularyImportPage() {
   async function handlePreview() {
     if (!file) return;
     if (!recallSetCode) {
-      setToast({ variant: 'error', message: 'Pick a practice-collection (recall set) label before previewing — it is mandatory for the bulk upload.' });
+      setToast({ variant: 'error', message: 'Pick a practice-collection (recall set) label before previewing. It is mandatory for the bulk upload.' });
       return;
     }
     const batchId = importBatchId.trim() || makeImportBatchId();
@@ -382,7 +382,7 @@ export default function AdminVocabularyImportPage() {
       <AdminSettingsLayout
         eyebrow="CMS"
         title="Import vocabulary (CSV)"
-        description="Upload any CSV — only the Term column is required. Re-importing an exported CSV works seamlessly (Id column enables upsert). Header-less CSVs (one term per line) are accepted. Column matching is case-insensitive and accepts aliases."
+        description="Upload any CSV. Only the Term column is required. Re-importing an exported CSV works seamlessly (Id column enables upsert). Header-less CSVs (one term per line) are accepted. Column matching is case-insensitive and accepts aliases."
         breadcrumbs={[
           { label: 'Admin', href: '/admin' },
           { label: 'Content', href: '/admin/content' },
@@ -420,7 +420,7 @@ export default function AdminVocabularyImportPage() {
                 aria-required="true"
                 className="w-full max-w-md rounded-lg border border-border bg-background-light px-3 py-2 text-sm text-navy focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:opacity-70"
               >
-                <option value="" disabled>— Select a practice-collection label —</option>
+                <option value="" disabled>Select a practice-collection label…</option>
                 {recallSetTags.map((t) => (
                   <option key={t.code} value={t.code}>{t.displayName} ({t.code})</option>
                 ))}
@@ -524,7 +524,7 @@ export default function AdminVocabularyImportPage() {
                         </div>
                         <div className="h-4 w-full rounded-full bg-navy/10 overflow-hidden">
                           <div
-                            className="h-full rounded-full bg-gradient-to-r from-primary to-emerald-500 transition-all duration-500 ease-out"
+                            className="h-full rounded-full bg-primary transition-[width,background-color] duration-500 ease-out"
                             style={{ width: `${percentage}%` }}
                           />
                         </div>
@@ -618,14 +618,14 @@ export default function AdminVocabularyImportPage() {
                     <table className="w-full text-sm">
                       <thead className="bg-background-light text-left text-xs text-muted">
                         <tr>
-                          <th className="px-3 py-2">Manifest line</th>
-                          <th className="px-3 py-2">Status</th>
-                          <th className="px-3 py-2">Key</th>
-                          <th className="px-3 py-2">Mismatch</th>
-                          <th className="px-3 py-2">Error</th>
+                          <th scope="col" className="px-3 py-2">Manifest line</th>
+                          <th scope="col" className="px-3 py-2">Status</th>
+                          <th scope="col" className="px-3 py-2">Key</th>
+                          <th scope="col" className="px-3 py-2">Mismatch</th>
+                          <th scope="col" className="px-3 py-2">Error</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-gray-100">
+                      <tbody className="divide-y divide-admin-border">
                         {reconciliationRowsToDisplay.map((row, index) => {
                           const statusTone = row.status === 'matched' ? 'success' : row.status.includes('invalid') || row.status.includes('duplicate') ? 'danger' : 'warning';
                           return (
@@ -684,16 +684,16 @@ export default function AdminVocabularyImportPage() {
                   <table className="w-full text-sm">
                     <thead className="bg-background-light text-left text-xs text-muted">
                       <tr>
-                        <th className="px-3 py-2">#</th>
-                        <th className="px-3 py-2">Status</th>
-                        <th className="px-3 py-2">Term</th>
-                        <th className="px-3 py-2">Definition</th>
-                        <th className="px-3 py-2">American</th>
-                        <th className="px-3 py-2">Category</th>
-                        <th className="px-3 py-2">Error</th>
+                        <th scope="col" className="px-3 py-2">#</th>
+                        <th scope="col" className="px-3 py-2">Status</th>
+                        <th scope="col" className="px-3 py-2">Term</th>
+                        <th scope="col" className="px-3 py-2">Definition</th>
+                        <th scope="col" className="px-3 py-2">American</th>
+                        <th scope="col" className="px-3 py-2">Category</th>
+                        <th scope="col" className="px-3 py-2">Error</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-gray-100">
+                    <tbody className="divide-y divide-admin-border">
                       {preview.rows.slice(0, 100).map(r => {
                         const isDuplicateInCsv = !r.valid && !!r.error && r.error.startsWith('duplicate-in-csv');
                         return (

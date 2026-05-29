@@ -50,7 +50,7 @@ function renderInline(text: string): ReactNode[] {
     if (match.index > cursor) nodes.push(text.slice(cursor, match.index));
     if (match[1]) {
       nodes.push(
-        <code key={`c-${idx++}`} className="rounded bg-slate-100 dark:bg-slate-800 px-1 py-0.5 text-xs">
+        <code key={`c-${idx++}`} className="rounded bg-background-light px-1 py-0.5 text-xs">
           {match[2]}
         </code>,
       );
@@ -145,7 +145,7 @@ function renderMarkdown(md: string): ReactNode {
       blocks.push(
         <blockquote
           key={`bq-${key++}`}
-          className="border-l-4 border-primary/40 bg-primary/5 pl-3 py-1 italic my-2 text-sm"
+          className="rounded-lg border border-primary/20 bg-primary/5 px-3 py-1 italic my-2 text-sm"
         >
           {renderInline(quoted.join(' '))}
         </blockquote>,
@@ -198,7 +198,7 @@ export function LessonViewer({ lesson, onComplete, bodyConsumed, className }: Le
           </span>
         </header>
         {lesson.videoUrl ? (
-          <div className="my-4 aspect-video w-full overflow-hidden rounded-lg border border-border bg-black">
+          <div className="my-4 aspect-video w-full overflow-hidden rounded-lg border border-border bg-background-dark">
             <iframe
               src={lesson.videoUrl}
               title={`${lesson.title} video lesson`}
@@ -215,7 +215,7 @@ export function LessonViewer({ lesson, onComplete, bodyConsumed, className }: Le
         </article>
         <footer className="mt-5 flex items-center justify-end">
           {isConsumed ? (
-            <span className="inline-flex items-center gap-1.5 text-sm font-bold text-emerald-700 dark:text-emerald-300">
+            <span className="inline-flex items-center gap-1.5 text-sm font-bold text-success">
               <CheckCircle2 className="w-4 h-4" aria-hidden="true" /> Marked as read
             </span>
           ) : (

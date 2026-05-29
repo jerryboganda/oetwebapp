@@ -27,14 +27,14 @@ function StrategyCard({ strategy }: { strategy: ReadingStrategyDto }) {
   return (
     <Link
       href={`/reading/strategies/${strategy.slug}`}
-      className="block rounded-2xl border border-border bg-surface p-4 shadow-sm transition-all hover:border-primary/30 hover:shadow-md"
+      className="block rounded-2xl border border-border bg-surface p-4 shadow-sm transition-[color,background-color,border-color,box-shadow,transform,opacity,filter] duration-200 hover:border-primary/30 hover:shadow-md"
     >
       <div className="flex items-start justify-between gap-2">
         <h3 className="flex-1 text-sm font-semibold leading-snug text-foreground">{strategy.title}</h3>
         {strategy.isRead ? (
           <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-500" aria-label="Read" />
         ) : (
-          <BookOpen className="h-4 w-4 shrink-0 text-muted-foreground" aria-label="Unread" />
+          <BookOpen className="h-4 w-4 shrink-0 text-muted" aria-label="Unread" />
         )}
       </div>
 
@@ -43,7 +43,7 @@ function StrategyCard({ strategy }: { strategy: ReadingStrategyDto }) {
         <Badge variant={strategy.difficulty === 'Advanced' ? 'warning' : 'default'}>
           {strategy.difficulty}
         </Badge>
-        <span className="flex items-center gap-1 text-xs text-muted-foreground">
+        <span className="flex items-center gap-1 text-xs text-muted">
           <Clock className="h-3 w-3" aria-hidden />
           {strategy.estimatedReadMinutes} min
         </span>
@@ -89,7 +89,7 @@ export default function StrategiesPage() {
       <div className="space-y-8">
         <div>
           <h1 className="text-2xl font-bold text-foreground">Strategy Library</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
+          <p className="mt-1 text-sm text-muted">
             Evidence-based reading strategies to improve accuracy and speed in OET Part A, B, and C.
           </p>
         </div>
@@ -105,7 +105,7 @@ export default function StrategiesPage() {
                 'rounded-full border px-4 py-1.5 text-xs font-semibold transition-colors',
                 activeCategory === cat
                   ? 'border-primary bg-primary text-white dark:border-violet-600 dark:bg-violet-700'
-                  : 'border-border bg-surface text-muted-foreground hover:border-primary/40 hover:bg-primary/5',
+                  : 'border-border bg-surface text-muted hover:border-primary/40 hover:bg-primary/5',
               )}
             >
               {cat}

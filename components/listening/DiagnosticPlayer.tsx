@@ -158,8 +158,8 @@ export function DiagnosticPlayer({
           .filter(Boolean)
           .join(' ')}
       >
-        <p className="text-sm font-medium text-gray-900 dark:text-slate-100">Audio coming soon</p>
-        <p className="mt-1 text-xs text-gray-600 dark:text-gray-400">
+        <p className="text-sm font-medium text-navy">Audio coming soon</p>
+        <p className="mt-1 text-xs text-muted">
           This question does not have audio attached yet. You can skip ahead to the question
           prompt.
         </p>
@@ -169,8 +169,8 @@ export function DiagnosticPlayer({
           disabled={disabled}
           className={[
             'mt-3 inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-semibold',
-            'bg-primary text-white shadow-sm transition-colors',
-            'hover:bg-primary-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary',
+            'bg-primary text-white dark:bg-violet-700 shadow-sm transition-colors',
+            'hover:bg-primary-dark active:scale-[0.98] motion-reduce:active:scale-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary',
             'disabled:cursor-not-allowed disabled:opacity-60',
           ].join(' ')}
         >
@@ -209,8 +209,8 @@ export function DiagnosticPlayer({
             disabled={disabled}
             className={[
               'inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold',
-              'bg-primary text-white shadow-md transition-colors',
-              'hover:bg-primary-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary',
+              'bg-primary text-white dark:bg-violet-700 shadow-md transition-colors',
+              'hover:bg-primary-dark active:scale-[0.98] motion-reduce:active:scale-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary',
               'disabled:cursor-not-allowed disabled:opacity-60',
             ].join(' ')}
           >
@@ -224,8 +224,7 @@ export function DiagnosticPlayer({
             disabled={disabled}
             className={[
               'inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold',
-              'bg-slate-100 text-gray-900 hover:bg-slate-200 transition-colors',
-              'dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700',
+              'bg-background-light text-navy transition-colors hover:bg-border',
               'disabled:cursor-not-allowed disabled:opacity-60',
             ].join(' ')}
           >
@@ -234,7 +233,7 @@ export function DiagnosticPlayer({
           </button>
         ) : (
           <div
-            className="inline-flex items-center gap-2 rounded-xl bg-slate-100 px-4 py-2.5 text-sm font-medium text-gray-600 dark:text-gray-400 dark:bg-slate-800"
+            className="inline-flex items-center gap-2 rounded-xl bg-background-light px-4 py-2.5 text-sm font-medium text-muted"
             aria-live="polite"
           >
             {isPlaying ? (
@@ -252,7 +251,7 @@ export function DiagnosticPlayer({
 
         <div className="flex-1">
           <div
-            className="h-2 w-full overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800"
+            className="h-2 w-full overflow-hidden rounded-full bg-border"
             role="progressbar"
             aria-valuemin={0}
             aria-valuemax={100}
@@ -260,11 +259,11 @@ export function DiagnosticPlayer({
             aria-label="Audio progress"
           >
             <div
-              className="h-full bg-gradient-to-r from-primary to-primary-dark transition-[width] duration-150"
+              className="h-full bg-primary transition-[width] duration-150"
               style={{ width: `${progressPct}%` }}
             />
           </div>
-          <div className="mt-1 flex items-center justify-between text-[11px] tabular-nums text-gray-600 dark:text-gray-400">
+          <div className="mt-1 flex items-center justify-between text-[11px] tabular-nums text-muted">
             <span aria-hidden="true">{formatSeconds(currentTime)}</span>
             <span aria-label="Time remaining">-{formatSeconds(remaining)}</span>
           </div>
@@ -274,7 +273,7 @@ export function DiagnosticPlayer({
           <div
             role="radiogroup"
             aria-label="Playback speed"
-            className="flex items-center gap-1 rounded-full bg-slate-100 p-0.5 dark:bg-slate-800"
+            className="flex items-center gap-1 rounded-full bg-background-light p-0.5"
           >
             {SPEED_OPTIONS.map((option) => {
               const active = option === speed;
@@ -289,8 +288,8 @@ export function DiagnosticPlayer({
                   className={[
                     'rounded-full px-2 py-1 text-[11px] font-semibold transition-colors',
                     active
-                      ? 'bg-primary text-white shadow-sm'
-                      : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100',
+                      ? 'bg-primary text-white dark:bg-violet-700 shadow-sm'
+                      : 'text-muted hover:text-navy',
                     'disabled:cursor-not-allowed disabled:opacity-60',
                   ].join(' ')}
                 >
@@ -303,8 +302,8 @@ export function DiagnosticPlayer({
       </div>
 
       {!allowReplay ? (
-        <p className="mt-3 text-[11px] text-gray-600 dark:text-gray-400">
-          You will hear this audio only once. Take notes — replays are not available in the
+        <p className="mt-3 text-[11px] text-muted">
+          You will hear this audio only once. Take notes; replays are not available in the
           diagnostic.
         </p>
       ) : null}

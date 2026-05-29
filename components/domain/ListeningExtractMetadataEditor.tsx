@@ -234,7 +234,7 @@ export function ListeningExtractMetadataEditor({ paperId }: { paperId: string })
       {toast ? <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} /> : null}
 
       {status === 'loading' ? (
-        <div className="flex items-center gap-3 rounded-lg border border-border bg-background-light px-4 py-3 text-sm text-muted">
+        <div className="flex items-center gap-3 rounded-lg border border-border bg-admin-bg-subtle px-4 py-3 text-sm text-muted">
           <Loader2 className="h-4 w-4 animate-spin" /> Loading extract metadata...
         </div>
       ) : status === 'error' ? (
@@ -304,16 +304,16 @@ export function ListeningExtractMetadataEditor({ paperId }: { paperId: string })
 
               <div className="space-y-3">
                 <div className="flex items-center justify-between gap-3">
-                  <h3 className="text-sm font-semibold text-navy">Speakers</h3>
+                  <h3 className="text-sm font-semibold text-admin-fg-strong">Speakers</h3>
                   <Button variant="outline" size="sm" onClick={() => addSpeaker(index)} className="gap-2">
                     <Plus className="h-4 w-4" /> Speaker
                   </Button>
                 </div>
                 {extract.speakers.length === 0 ? (
-                  <p className="rounded-lg border border-dashed border-border bg-background-light px-4 py-3 text-sm text-muted">No speakers authored for this extract.</p>
+                  <p className="rounded-lg border border-dashed border-border bg-admin-bg-subtle px-4 py-3 text-sm text-muted">No speakers authored for this extract.</p>
                 ) : null}
                 {extract.speakers.map((speaker, speakerIndex) => (
-                  <div key={`${speaker.id}-${speakerIndex}`} className="grid gap-3 rounded-lg border border-border bg-background-light p-3 md:grid-cols-5">
+                  <div key={`${speaker.id}-${speakerIndex}`} className="grid gap-3 rounded-lg border border-border bg-admin-bg-subtle p-3 md:grid-cols-5">
                     <Input
                       label="ID"
                       value={speaker.id}

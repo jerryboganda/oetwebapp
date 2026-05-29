@@ -61,7 +61,7 @@ function ragClasses(rag: 'green' | 'amber' | 'red' | 'grey') {
       return 'bg-red-100 text-red-800 border-red-200 dark:bg-red-900/30 dark:text-red-200 dark:border-red-800';
     case 'grey':
     default:
-      return 'bg-slate-100 text-slate-500 border-border dark:bg-slate-800/40 dark:text-slate-300';
+      return 'bg-background-light text-muted border-border dark:bg-background-dark dark:text-muted';
   }
 }
 
@@ -142,7 +142,7 @@ export function MockBatchHeatmap({ rows, columns = DEFAULT_COLUMNS, className }:
                       aria-label={tooltip}
                       data-rag={rag}
                     >
-                      {cell?.score != null ? cell.score : '—'}
+                      {cell?.score != null ? cell.score : 'N/A'}
                     </span>
                   </td>
                 );

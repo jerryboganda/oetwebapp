@@ -191,7 +191,7 @@ export function TranscriptPlayerWithComments({
         <button
           type="button"
           onClick={togglePlay}
-          className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-primary text-white shadow-sm transition-transform active:scale-95"
+          className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-primary text-white dark:bg-violet-700 shadow-sm transition-transform active:scale-95"
           aria-label={isPlaying ? 'Pause recording' : 'Play recording'}
           disabled={!recordingUrl}
         >
@@ -265,7 +265,7 @@ export function TranscriptPlayerWithComments({
               </div>
 
               {expanded && segComments.length > 0 && (
-                <ul className="mt-2 space-y-1.5 border-l-2 border-info/40 pl-3">
+                <ul className="mt-2 space-y-1.5 rounded-lg border border-info/20 bg-info/5 p-3">
                   {segComments.map((c) => {
                     const severity = SEVERITY_OPTIONS.find((opt) => opt.value === c.severity);
                     return (
@@ -345,7 +345,7 @@ export function TranscriptPlayerWithComments({
                     className={cn(
                       'inline-flex flex-1 items-center justify-center rounded-full border px-3 py-2 text-xs font-bold transition-colors',
                       composerSeverity === opt.value
-                        ? 'border-primary bg-primary text-white'
+                        ? 'border-primary bg-primary text-white dark:bg-violet-700'
                         : 'border-border bg-background-light text-navy hover:border-primary/40',
                     )}
                     aria-pressed={composerSeverity === opt.value}

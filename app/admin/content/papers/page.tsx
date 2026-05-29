@@ -186,7 +186,7 @@ export default function ContentPapersListPage() {
         <div className="flex gap-2">
           <Link
             href={`/admin/content/papers/${p.id}`}
-            className="inline-flex min-h-9 items-center rounded px-3 py-2 text-sm font-semibold text-navy hover:bg-background-light"
+            className="inline-flex min-h-9 items-center rounded px-3 py-2 text-sm font-semibold text-admin-fg-strong hover:bg-admin-bg-subtle"
           >
             Edit
           </Link>

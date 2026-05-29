@@ -258,7 +258,7 @@ export default function WritingOptionsPage() {
                 onChange={(e) =>
                   setDraft((d) => ({ ...d, killSwitchReason: e.target.value }))
                 }
-                placeholder="e.g. Provider incident — fall back to human review until resolved."
+                placeholder="e.g. Provider incident: fall back to human review until resolved."
                 rows={3}
                 className="mt-1 w-full rounded-admin border border-admin-border bg-admin-bg-subtle px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--admin-primary)]"
                 aria-label="Kill-switch reason"

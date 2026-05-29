@@ -19,9 +19,9 @@ interface WritingIssueListProps {
 }
 
 const issueConfig: Record<IssueType, { label: string; icon: typeof AlertCircle; color: string }> = {
-  omission: { label: 'Omission', icon: MinusCircle, color: 'text-amber-600 bg-amber-50' },
-  unnecessary: { label: 'Unnecessary Detail', icon: AlertCircle, color: 'text-red-600 bg-red-50' },
-  suggestion: { label: 'Revision Suggestion', icon: Lightbulb, color: 'text-blue-600 bg-blue-50' },
+  omission: { label: 'Omission', icon: MinusCircle, color: 'text-warning' },
+  unnecessary: { label: 'Unnecessary Detail', icon: AlertCircle, color: 'text-danger' },
+  suggestion: { label: 'Revision Suggestion', icon: Lightbulb, color: 'text-info' },
 };
 
 export function WritingIssueList({ issues, activeIssueId, onIssueClick, className }: WritingIssueListProps) {
@@ -37,13 +37,11 @@ export function WritingIssueList({ issues, activeIssueId, onIssueClick, classNam
             type="button"
             onClick={() => onIssueClick?.(issue)}
             className={cn(
-              'flex items-start gap-3 p-3 rounded border text-left transition-all',
+              'flex items-start gap-3 p-3 rounded border text-left transition-[color,background-color,border-color,box-shadow,transform,opacity,filter] duration-200',
               isActive ? 'border-primary bg-primary/5 ring-1 ring-primary' : 'border-border hover:border-border',
             )}
           >
-            <div className={cn('w-8 h-8 rounded-full flex items-center justify-center shrink-0', config.color)}>
-              <Icon className="w-4 h-4" />
-            </div>
+            <Icon className={cn('w-5 h-5 mt-0.5 shrink-0', config.color)} aria-hidden="true" />
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 mb-0.5">
                 <span className="text-xs font-semibold text-muted">{config.label}</span>

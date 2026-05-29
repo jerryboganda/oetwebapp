@@ -23,7 +23,7 @@ import {
 } from '@/lib/listening-authoring-api';
 
 const DISTRACTOR_OPTIONS: { value: ListeningDistractorCategory | ''; label: string }[] = [
-  { value: '', label: '— Not tagged —' },
+  { value: '', label: 'Not tagged' },
   { value: 'too_strong', label: 'Too strong' },
   { value: 'too_weak', label: 'Too weak' },
   { value: 'wrong_speaker', label: 'Wrong speaker' },
@@ -33,7 +33,7 @@ const DISTRACTOR_OPTIONS: { value: ListeningDistractorCategory | ''; label: stri
 ];
 
 const ATTITUDE_OPTIONS: { value: ListeningSpeakerAttitude | ''; label: string }[] = [
-  { value: '', label: '— Unspecified —' },
+  { value: '', label: 'Unspecified' },
   { value: 'concerned', label: 'Concerned' },
   { value: 'optimistic', label: 'Optimistic' },
   { value: 'doubtful', label: 'Doubtful' },
@@ -268,7 +268,7 @@ export default function AdminListeningQuestionEditorPage() {
 
   if (!isAuthenticated || role !== 'admin') {
     return (
-      <AdminSettingsLayout title="Listening — question editor" breadcrumbs={breadcrumbs}>
+      <AdminSettingsLayout title="Listening: question editor" breadcrumbs={breadcrumbs}>
         <Card><CardContent className="p-6"><p className="text-sm text-admin-fg-muted">Admin access required.</p></CardContent></Card>
       </AdminSettingsLayout>
     );
@@ -278,7 +278,7 @@ export default function AdminListeningQuestionEditorPage() {
     <AdminSettingsLayout
       eyebrow="Authoring"
       icon={<Save className="w-5 h-5" />}
-      title="Listening — question editor"
+      title="Listening: question editor"
       description={target
         ? `Paper ${paperId}. Editing Q${target.number} (${target.partCode}).`
         : 'Loading question…'}
@@ -413,7 +413,7 @@ export default function AdminListeningQuestionEditorPage() {
               {isPartA && (
                 <div className="rounded-admin border border-admin-border bg-admin-bg-subtle p-4">
                   <p className="text-xs font-black uppercase tracking-widest text-admin-fg-muted">Accepted variants</p>
-                  <p className="mt-1 text-xs text-admin-fg-muted">UK/US spelling, abbreviations, plurals. Keep tight — OET expects exact wording.</p>
+                  <p className="mt-1 text-xs text-admin-fg-muted">UK/US spelling, abbreviations, plurals. Keep tight; OET expects exact wording.</p>
                   <div className="mt-3 flex flex-wrap gap-2">
                     {form.acceptedAnswers.map((v) => (
                       <span key={v} className="inline-flex items-center gap-1 rounded-full bg-[var(--admin-primary)]/10 px-3 py-1 text-sm text-[var(--admin-primary)]">

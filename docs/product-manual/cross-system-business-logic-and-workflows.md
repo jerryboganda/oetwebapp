@@ -104,9 +104,9 @@ Private-speaking branch:
 
 ### 3.4 Reading objective-skill loop
 
-`Reading Home/Practice/Paper -> Submit -> PM-001-tracked Results -> Error Patterns/Analytics`
+`Reading Home/Practice/Paper -> Submit -> Learner-safe Results -> Error Patterns/Analytics`
 
-Reading review visibility must stay aligned with the AGENTS hard ban: learner-facing endpoints must never serialize `CorrectAnswerJson`, `ExplanationMarkdown`, or `AcceptedSynonymsJson`. The projection layer in `ReadingLearnerEndpoints.cs` is the enforcement point. The current backend ability to emit `CorrectAnswer` and `ExplanationMarkdown` after submit when policy permits is an unresolved release-blocking conflict tracked as PM-001 and must be reconciled (either by removing the policy switch or by updating the AGENTS invariant with sign-off) before release.
+Reading review visibility must stay aligned with the AGENTS hard ban: learner-facing endpoints must never serialize `CorrectAnswerJson`, `ExplanationMarkdown`, or `AcceptedSynonymsJson`. The projection layer in `ReadingLearnerEndpoints.cs` is the enforcement point. PM-001 was reconciled locally on 2026-05-29 by redacting submitted-review answer/explanation fields from learner payloads.
 
 ### 3.5 Listening objective-skill loop
 
@@ -249,7 +249,7 @@ The canonical content-paper upload pipeline and the legacy media upload route bo
 
 ### 6.5 Learner-safe Reading review contract
 
-Reading review output must be validated against the AGENTS hard ban that learner-facing DTOs must never serialize `CorrectAnswerJson`, `ExplanationMarkdown`, or `AcceptedSynonymsJson`. Any backend code path that exposes those fields to a learner is a release-blocking regression and must be reconciled per PM-001 before release.
+Reading review output must be validated against the AGENTS hard ban that learner-facing DTOs must never serialize `CorrectAnswerJson`, `ExplanationMarkdown`, or `AcceptedSynonymsJson`. Any backend code path that exposes those fields to a learner is a release-blocking regression.
 
 ### 6.6 Platform parity and offline behavior
 
@@ -272,7 +272,7 @@ Privileged backend APIs enforce role policies, while portal page access also dep
 - onboarding -> goals -> diagnostics -> study plan -> next actions
 - Writing attempt -> result -> feedback -> revision -> expert review -> learner visibility
 - Speaking task -> transcript/phrasing -> expert review or private-speaking booking
-- Reading paper authoring -> publish -> learner attempt -> PM-001 review DTO reconciliation -> analytics
+- Reading paper authoring -> publish -> learner attempt -> learner-safe review DTO -> analytics
 - Listening authoring -> learner player -> review/drills/pathway -> analytics
 - Grammar/pronunciation/conversation admin draft -> publish -> learner usage -> policy/retention behavior
 - sponsor invite -> learner sponsorship state -> sponsor billing snapshot

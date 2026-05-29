@@ -75,11 +75,13 @@ function formatDate(value?: string) {
 function MetricCard({ icon: Icon, label, value, detail }: { icon: LucideIcon; label: string; value: string; detail?: string }) {
   return (
     <div className="rounded-admin border border-admin-border bg-admin-bg-surface p-4">
-      <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-admin bg-[var(--admin-primary-tint)] text-[var(--admin-primary)]">
-        <Icon className="h-5 w-5" />
+      <div className="flex items-center gap-2.5">
+        <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[var(--admin-primary-tint)] text-[var(--admin-primary)]" aria-hidden="true">
+          <Icon className="h-4 w-4" />
+        </span>
+        <p className="min-w-0 truncate text-xs font-black uppercase tracking-widest text-admin-fg-muted">{label}</p>
       </div>
-      <p className="text-xs font-black uppercase tracking-widest text-admin-fg-muted">{label}</p>
-      <p className="mt-1 text-2xl font-black text-admin-fg-strong">{value}</p>
+      <p className="mt-3 text-2xl font-black text-admin-fg-strong">{value}</p>
       {detail ? <p className="mt-1 text-xs text-admin-fg-muted">{detail}</p> : null}
     </div>
   );

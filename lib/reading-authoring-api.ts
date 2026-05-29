@@ -69,6 +69,14 @@ export interface ReadingQuestionAdminDto {
   optionDistractorsJson?: string | null;
   reviewState?: ReadingReviewState;
   latestReviewNote?: string | null;
+  /** Authoring difficulty hint, 1 (easiest) – 5 (hardest). */
+  difficulty?: number | null;
+  /** Verbatim evidence sentence supporting the correct answer. */
+  evidenceSentence?: string | null;
+  /** Source paragraph order, drives the R07.6 paragraph-order lint. */
+  paragraphIndex?: number | null;
+  /** Per-option rationale map, serialised as JSON on the entity. */
+  distractorRationaleJson?: string | null;
 }
 
 export interface ReadingReviewLogEntryDto {
@@ -411,6 +419,10 @@ export interface ReadingPolicyDto {
   matchingAllowPartialCredit: boolean;
   sentenceCompletionStrictness: string;
   unknownTypeFallbackPolicy: string;
+  normalizeSmartQuotes: boolean;
+  normalizeHyphenSpacing: boolean;
+  normalizeUnitSpacing: boolean;
+  partACaseInsensitive: boolean;
   showExplanationsAfterSubmit: boolean;
   showExplanationsOnlyIfWrong: boolean;
   showCorrectAnswerOnReview: boolean;
@@ -481,8 +493,6 @@ export interface ReadingAttemptReviewDto {
     isCorrect: boolean;
     pointsEarned: number;
     maxPoints: number;
-    correctAnswer: unknown | null;
-    explanationMarkdown: string | null;
   }>;
   clusters: Array<{
     label: string;
@@ -774,9 +784,27 @@ export const upsertReadingQuestion = (paperId: string, body: {
   stem: string; optionsJson: string; correctAnswerJson: string;
   acceptedSynonymsJson?: string | null; caseSensitive: boolean;
   explanationMarkdown?: string | null; skillTag?: string | null;
-}) => api<ReadingQuestionAdminDto>(`/v1/admin/papers/${paperId}/reading/questions`, {
-  method: 'POST', body: JSON.stringify(body),
-});
+  difficulty?: number | null;
+  evidenceSentence?: string | null;
+  paragraphIndex?: number | null;
+  /** Per-option rationale map; serialised to the `distractorRationaleJson`
+   *  string column the backend stores. */
+  distractorRationale?: Record<string, string> | null;
+}) => {
+  const { distractorRationale, ...rest } = body;
+  const payload = {
+    ...rest,
+    ...(distractorRationale !== undefined
+      ? {
+          distractorRationaleJson:
+            distractorRationale === null ? null : JSON.stringify(distractorRationale),
+        }
+      : {}),
+  };
+  return api<ReadingQuestionAdminDto>(`/v1/admin/papers/${paperId}/reading/questions`, {
+    method: 'POST', body: JSON.stringify(payload),
+  });
+};
 
 export const removeReadingQuestion = (paperId: string, questionId: string) =>
   api<void>(`/v1/admin/papers/${paperId}/reading/questions/${questionId}`, { method: 'DELETE' });

@@ -181,7 +181,7 @@ export default function ExpertMockBookingsPage() {
           <ExpertRouteSummaryCard
             label="Learners in batch"
             value={totalLearners}
-            hint="Synthetic preview — wire to /v1/expert/mock-batches/:id/readiness."
+            hint="Synthetic preview. Wire to /v1/expert/mock-batches/:id/readiness."
             accent="navy"
             icon={ClipboardList}
           />
@@ -203,7 +203,7 @@ export default function ExpertMockBookingsPage() {
 
         <InlineAlert variant="info" title="Preview data">
           The readiness heatmap, marking queue, and consistency widgets below use synthetic data. Replace each block with
-          its live API once the teacher batch endpoints land — search the file for
+          its live API once the teacher batch endpoints land. Search the file for
           {' '}<code className="rounded bg-background-light px-1 py-0.5 text-xs">TODO(api)</code> to find the hookup points.
         </InlineAlert>
 
@@ -211,7 +211,7 @@ export default function ExpertMockBookingsPage() {
           <ExpertRouteSectionHeader
             eyebrow="Batch readiness"
             title="Mock batch readiness heatmap"
-            description="Each row is a learner in the current mock batch. Cells track sub-test readiness via a RAG signal — hover for the latest score."
+            description="Each row is a learner in the current mock batch. Cells track sub-test readiness via a RAG signal. Hover for the latest score."
           />
           <MockBatchHeatmap rows={MOCK_HEATMAP_ROWS} />
         </section>

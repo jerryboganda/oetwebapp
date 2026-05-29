@@ -1,5 +1,7 @@
 # Listening Module — Production E2E Audit Report
 
+> **Current status (2026-05-29)**: point-in-time production evidence. Listening code paths have continued to change after this audit; use this report as evidence for content/pathway gaps, then verify against [`STATUS/REMAINING-WORK.md`](STATUS/REMAINING-WORK.md) before treating a finding as open.
+
 **Date**: 2026-05-24
 **Tested on**: `app.oetwithdrhesham.co.uk` (production)
 **Tested by**: Automated QA Agent

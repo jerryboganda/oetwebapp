@@ -46,6 +46,7 @@ const TooltipContent = React.forwardRef<
         'bg-[var(--admin-fg-strong)] text-[var(--admin-bg-surface)]',
         'px-3 py-1.5 text-xs font-medium font-[var(--admin-font-body)]',
         'shadow-[var(--admin-shadow-md)]',
+        'origin-[var(--radix-tooltip-content-transform-origin)]',
         'data-[state=delayed-open]:animate-in data-[state=closed]:animate-out',
         'data-[state=delayed-open]:fade-in-0 data-[state=closed]:fade-out-0',
         'data-[state=delayed-open]:zoom-in-95 data-[state=closed]:zoom-out-95',

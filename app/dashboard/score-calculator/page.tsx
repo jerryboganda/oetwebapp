@@ -96,30 +96,30 @@ export default function ScoreCalculatorPage() {
               className="w-full h-2 accent-primary"
             />
             <div className="flex items-center justify-between">
-              <span className="text-xs text-muted-foreground">0</span>
+              <span className="text-xs text-muted">0</span>
               <span className="text-2xl font-bold text-primary">{oetScore}</span>
-              <span className="text-xs text-muted-foreground">500</span>
+              <span className="text-xs text-muted">500</span>
             </div>
           </div>
 
           {matchedRow && (
             <div className="mt-6 grid grid-cols-2 sm:grid-cols-4 gap-3">
               <div className="text-center p-3 rounded-lg bg-muted/30">
-                <p className="text-xs text-muted-foreground mb-1">OET Grade</p>
+                <p className="text-xs text-muted mb-1">OET Grade</p>
                 <Badge className={`text-base px-3 py-1 ${GRADE_COLORS[matchedRow.oetGrade] || ''}`}>
                   {matchedRow.oetGrade}
                 </Badge>
               </div>
               <div className="text-center p-3 rounded-lg bg-muted/30">
-                <p className="text-xs text-muted-foreground mb-1">IELTS</p>
+                <p className="text-xs text-muted mb-1">IELTS</p>
                 <p className="text-xl font-bold">{matchedRow.ielts}</p>
               </div>
               <div className="text-center p-3 rounded-lg bg-muted/30">
-                <p className="text-xs text-muted-foreground mb-1">PTE</p>
+                <p className="text-xs text-muted mb-1">PTE</p>
                 <p className="text-xl font-bold">{matchedRow.pte}</p>
               </div>
               <div className="text-center p-3 rounded-lg bg-muted/30">
-                <p className="text-xs text-muted-foreground mb-1">CEFR</p>
+                <p className="text-xs text-muted mb-1">CEFR</p>
                 <p className="text-xl font-bold">{matchedRow.cefr}</p>
               </div>
             </div>
@@ -129,7 +129,7 @@ export default function ScoreCalculatorPage() {
         {/* ── Equivalence Table ──────────────── */}
         <Card className="overflow-hidden">
           <div className="p-4 border-b flex items-center gap-2">
-            <ArrowLeftRight className="h-4 w-4 text-muted-foreground" />
+            <ArrowLeftRight className="h-4 w-4 text-muted" />
             <h2 className="font-semibold text-sm">Full Equivalence Table</h2>
           </div>
           <div className="overflow-x-auto">
@@ -169,7 +169,7 @@ export default function ScoreCalculatorPage() {
         <div>
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
-              <Globe className="h-5 w-5 text-muted-foreground" />
+              <Globe className="h-5 w-5 text-muted" />
               <h2 className="font-semibold">Institution Requirements</h2>
             </div>
             <div className="flex gap-2 flex-wrap">
@@ -200,11 +200,11 @@ export default function ScoreCalculatorPage() {
                     <div className="flex items-center justify-between">
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2 mb-1">
-                          <GraduationCap className="h-4 w-4 text-muted-foreground shrink-0" />
+                          <GraduationCap className="h-4 w-4 text-muted shrink-0" />
                           <span className="font-medium text-sm">{req.body}</span>
                           <Badge variant="outline" className="text-[10px]">{req.country}</Badge>
                         </div>
-                        <p className="text-xs text-muted-foreground ml-6">
+                        <p className="text-xs text-muted ml-6">
                           Min OET: <strong>{req.oetMinGrade}</strong> ({req.oetMinScore}) · Min IELTS: <strong>{req.ieltsMin}</strong>
                         </p>
                       </div>
@@ -220,7 +220,7 @@ export default function ScoreCalculatorPage() {
         </div>
 
         {/* disclaimer */}
-        <div className="flex items-start gap-2 text-xs text-muted-foreground bg-muted/30 rounded-lg p-3">
+        <div className="flex items-start gap-2 text-xs text-muted bg-muted/30 rounded-lg p-3">
           <Info className="h-4 w-4 mt-0.5 shrink-0" />
           <p>Score equivalences are approximate and based on publicly available official guidance. Always verify requirements directly with the accepting institution or regulatory body.</p>
         </div>

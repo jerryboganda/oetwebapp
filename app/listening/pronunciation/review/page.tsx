@@ -183,7 +183,7 @@ export default function PronunciationReviewPage() {
       <LearnerDashboardShell pageTitle="Pronunciation Review">
         <main className="mx-auto max-w-xl space-y-6">
           <div className="flex items-center justify-between">
-            <h1 className="text-xl font-bold text-neutral-900 dark:text-white">Review Session</h1>
+            <h1 className="text-xl font-bold text-navy">Review Session</h1>
             <Link
               href="/listening/pronunciation"
               className="inline-flex items-center gap-1 text-sm font-medium text-violet-600 hover:underline dark:text-violet-400"
@@ -194,15 +194,15 @@ export default function PronunciationReviewPage() {
           </div>
           <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-8 py-12 text-center dark:border-emerald-900/50 dark:bg-emerald-950/30">
             <Sparkles className="mx-auto h-10 w-10 text-emerald-500" aria-hidden />
-            <p className="mt-3 text-lg font-semibold text-neutral-900 dark:text-white">
+            <p className="mt-3 text-lg font-semibold text-navy">
               Nothing to review today!
             </p>
-            <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">
-              Come back tomorrow — SM-2 has scheduled your next session.
+            <p className="mt-1 text-sm text-muted">
+              Come back tomorrow. SM-2 has scheduled your next session.
             </p>
             <Link
               href="/listening/pronunciation"
-              className="mt-5 inline-flex rounded-xl bg-violet-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-violet-700"
+              className="mt-5 inline-flex rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-white transition-[color,background-color,transform] duration-200 hover:bg-primary-dark active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600"
             >
               Back to Library
             </Link>
@@ -219,8 +219,8 @@ export default function PronunciationReviewPage() {
         <main className="mx-auto max-w-xl space-y-6">
           <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-8 py-12 text-center dark:border-emerald-900/50 dark:bg-emerald-950/30">
             <Trophy className="mx-auto h-12 w-12 text-emerald-500" aria-hidden />
-            <p className="mt-3 text-2xl font-bold text-neutral-900 dark:text-white">All done!</p>
-            <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">
+            <p className="mt-3 text-2xl font-bold text-navy">All done!</p>
+            <p className="mt-1 text-sm text-muted">
               You reviewed {completed} {completed === 1 ? 'card' : 'cards'}. SM-2 has scheduled the next
               round for each one.
             </p>
@@ -228,13 +228,13 @@ export default function PronunciationReviewPage() {
               <button
                 type="button"
                 onClick={handleFinish}
-                className="inline-flex rounded-xl bg-violet-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-violet-700"
+                className="inline-flex rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-white transition-[color,background-color,transform] duration-200 hover:bg-primary-dark active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600"
               >
                 Back to Library
               </button>
               <Link
                 href="/listening"
-                className="inline-flex rounded-xl border border-violet-200 bg-white px-5 py-2.5 text-sm font-semibold text-violet-700 hover:bg-violet-50 dark:border-violet-800/60 dark:bg-neutral-900 dark:text-violet-300"
+                className="inline-flex rounded-xl border border-violet-200 bg-surface px-5 py-2.5 text-sm font-semibold text-violet-700 transition-colors hover:bg-violet-50 dark:border-violet-800/60 dark:text-violet-300"
               >
                 Listening Hub
               </Link>
@@ -251,7 +251,7 @@ export default function PronunciationReviewPage() {
     <LearnerDashboardShell pageTitle="Pronunciation Review">
       <main className="mx-auto max-w-xl space-y-6">
         <div className="flex items-center justify-between">
-          <h1 className="text-xl font-bold text-neutral-900 dark:text-white">Pronunciation Review</h1>
+          <h1 className="text-xl font-bold text-navy">Pronunciation Review</h1>
           <Link
             href="/listening/pronunciation"
             className="inline-flex items-center gap-1 text-sm font-medium text-violet-600 hover:underline dark:text-violet-400"
@@ -263,42 +263,42 @@ export default function PronunciationReviewPage() {
 
         {/* Progress bar */}
         <div className="space-y-1">
-          <div className="flex justify-between text-xs font-medium text-neutral-500 dark:text-neutral-400">
+          <div className="flex justify-between text-xs font-medium text-muted">
             <span>
               {completed} of {total} reviewed
             </span>
             <span>{Math.round(progressPct)}%</span>
           </div>
-          <div className="h-2 w-full overflow-hidden rounded-full bg-violet-100 dark:bg-violet-900/40">
+          <div className="h-2 w-full overflow-hidden rounded-full bg-primary/15">
             <div
-              className="h-full rounded-full bg-violet-600 transition-all duration-300"
+              className="h-full rounded-full bg-primary transition-[width,background-color] duration-300"
               style={{ width: `${progressPct}%` }}
             />
           </div>
         </div>
 
         {/* Flashcard */}
-        <article className="rounded-2xl border border-neutral-200 bg-white px-6 py-8 shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
+        <article className="rounded-2xl border border-border bg-surface px-6 py-8 shadow-sm">
           {/* Audio + Word */}
           <div className="flex flex-col items-center gap-4">
             <button
               type="button"
               disabled={!audioUrl}
               onClick={handlePlay}
-              className="group flex h-20 w-20 items-center justify-center rounded-full border-2 border-violet-200 bg-violet-50 text-violet-600 transition hover:scale-105 hover:border-violet-400 hover:bg-violet-100 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 dark:border-violet-900/50 dark:bg-violet-950/40 dark:text-violet-400 dark:hover:border-violet-700"
+              className="group flex h-20 w-20 items-center justify-center rounded-full border-2 border-violet-200 bg-violet-50 text-violet-600 transition hoverable:scale-105 hover:border-violet-400 hover:bg-violet-100 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 dark:border-violet-900/50 dark:bg-violet-950/40 dark:text-violet-400 dark:hover:border-violet-700"
               aria-label={`Play pronunciation of ${currentCard.word}`}
             >
               <Volume2 className="h-9 w-9" aria-hidden />
             </button>
             {!audioUrl ? (
-              <p className="text-xs text-neutral-400 dark:text-neutral-600">
+              <p className="text-xs text-muted">
                 Audio asset not yet available
               </p>
             ) : null}
 
             {revealed ? (
               <div className="w-full text-center">
-                <h2 className="text-3xl font-bold text-neutral-900 dark:text-white">
+                <h2 className="text-3xl font-bold text-navy">
                   {currentCard.word}
                 </h2>
                 {currentCard.pronunciationIpa ? (
@@ -307,17 +307,17 @@ export default function PronunciationReviewPage() {
                   </p>
                 ) : null}
                 {currentCard.definitionEn ? (
-                  <p className="mt-3 text-sm text-neutral-600 dark:text-neutral-400">
+                  <p className="mt-3 text-sm text-muted">
                     {currentCard.definitionEn}
                   </p>
                 ) : null}
               </div>
             ) : (
               <div className="w-full text-center">
-                <p className="text-xs uppercase tracking-widest text-neutral-400 dark:text-neutral-600">
+                <p className="text-xs uppercase tracking-widest text-muted">
                   Listen, then rate yourself
                 </p>
-                <p className="mt-2 text-lg font-semibold text-neutral-400 dark:text-neutral-600">
+                <p className="mt-2 text-lg font-semibold text-muted">
                   • • • • •
                 </p>
               </div>
@@ -330,7 +330,7 @@ export default function PronunciationReviewPage() {
           <button
             type="button"
             onClick={() => setRevealed(true)}
-            className="w-full rounded-xl bg-violet-600 px-6 py-3 text-sm font-semibold text-white transition hover:bg-violet-700 active:scale-95"
+            className="w-full rounded-xl bg-primary px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-primary-dark dark:bg-violet-700 dark:hover:bg-violet-600 active:scale-95"
           >
             Reveal Word
           </button>
@@ -355,7 +355,7 @@ export default function PronunciationReviewPage() {
         )}
 
         {/* Footer hint icons (decorative) */}
-        <div className="flex justify-center gap-4 text-xs text-neutral-400 dark:text-neutral-600">
+        <div className="flex justify-center gap-4 text-xs text-muted">
           <span className="flex items-center gap-1">
             <Frown className="h-3 w-3" aria-hidden /> Reset
           </span>

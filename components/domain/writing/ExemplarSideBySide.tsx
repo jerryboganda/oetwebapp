@@ -136,8 +136,8 @@ function DiffPanel({
     if (side === 'right' && op === -1) return; // skip deletes on right
 
     let tone = '';
-    if (op === -1 && side === 'left') tone = 'bg-red-100/80 text-red-800 dark:bg-red-950/60 dark:text-red-200 rounded px-0.5';
-    if (op === 1 && side === 'right') tone = 'bg-emerald-100/80 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-200 rounded px-0.5';
+    if (op === -1 && side === 'left') tone = 'bg-danger/15 text-danger rounded px-0.5';
+    if (op === 1 && side === 'right') tone = 'bg-success/15 text-success rounded px-0.5';
 
     if (side === 'right' && annoByStart.size > 0) {
       // Split the token text whenever an annotation start falls inside it.

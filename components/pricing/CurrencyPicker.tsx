@@ -26,7 +26,7 @@ export function CurrencyPicker({ value, onChange, className }: CurrencyPickerPro
       <select
         value={value}
         onChange={(event) => onChange(event.target.value as DisplayCurrency)}
-        className="rounded-lg border border-border bg-background px-2 py-1.5 text-sm font-medium text-navy shadow-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+        className="rounded-lg border border-border bg-surface px-2 py-1.5 text-sm font-medium text-navy shadow-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
       >
         {SUPPORTED_DISPLAY_CURRENCIES.map((currency) => (
           <option key={currency} value={currency}>

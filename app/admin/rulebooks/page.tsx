@@ -175,7 +175,7 @@ export default function AdminRulebooksListPage() {
     <>
       <AdminCatalogLayout
         title="Rulebooks"
-        description="Create, edit, version, publish, import & export grading rules — fully managed from this UI."
+        description="Create, edit, version, publish, import and export grading rules, fully managed from this UI."
         eyebrow="CMS"
         breadcrumbs={[{ label: 'Admin', href: '/admin' }, { label: 'Rulebooks' }]}
         actions={actions}
@@ -318,8 +318,8 @@ export default function AdminRulebooksListPage() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="create">Create — fail if version exists</SelectItem>
-                  <SelectItem value="replace">Replace — overwrite existing version</SelectItem>
+                  <SelectItem value="create">Create (fail if version exists)</SelectItem>
+                  <SelectItem value="replace">Replace (overwrite existing version)</SelectItem>
                 </SelectContent>
               </Select>
             </div>

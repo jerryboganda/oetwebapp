@@ -9,6 +9,26 @@
    .dark class is present on an ancestor (managed by next-themes). */
 @custom-variant dark (&:where(.dark, .dark *));
 
+/* ─── `hoverable:` / `group-hoverable:` variants — real hover pointers only ─── */
+/* Gates hover-driven transforms (scale, translate) behind a true hover +
+   fine pointer, so they don't "stick" after a tap on touch devices.
+   `:active` press feedback is intentionally left ungated (touch still presses).
+   Usage: hoverable:scale-105  hoverable:-translate-y-0.5  group-hoverable:scale-110 */
+@custom-variant hoverable {
+  @media (hover: hover) and (pointer: fine) {
+    &:hover {
+      @slot;
+    }
+  }
+}
+@custom-variant group-hoverable {
+  @media (hover: hover) and (pointer: fine) {
+    &:is(:where(.group):hover *) {
+      @slot;
+    }
+  }
+}
+
 @theme {
   --color-primary: #7c3aed;
   --color-primary-dark: #6d28d9;
@@ -31,6 +51,10 @@
   --color-admin-border: #27272a;
   --color-admin-text: #fafafa;
   --color-admin-text-muted: #a1a1aa;
+
+  /* Decisive ease-out for toggles and controls: no overshoot or bounce
+     (motion law), ease-out-quint, matching the safe-area and hover curves. */
+  --ease-spring: cubic-bezier(0.22, 1, 0.36, 1);
 
   --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
   --shadow-clinical: 0 4px 6px -1px rgb(15 23 42 / 0.08), 0 2px 4px -2px rgb(15 23 42 / 0.04);
@@ -103,6 +127,38 @@
   --font-admin-display:            var(--admin-font-display);
   --font-admin-body:               var(--admin-font-body);
   --font-admin-mono:               var(--admin-font-mono);
+}
+
+/* ----------------------------------------------------------------------
+ * shadcn-convention aliases -> brand tokens.
+ *
+ * Classes like `bg-background`, `text-foreground`, `bg-card`,
+ * `text-muted-foreground`, `bg-accent`, `border-input`, `ring-ring`,
+ * `bg-destructive` are used across the learner UI but were never defined
+ * in this project's @theme, so they silently rendered with no value.
+ * These aliases map them onto the existing brand tokens. `@theme inline`
+ * preserves the var() reference at runtime, so each one re-evaluates under
+ * `.dark` exactly like the token it points at (no frozen light value).
+ * primary-foreground is a fixed near-white: it sits on the violet primary
+ * fill in both themes, so it must not flip.
+ * ---------------------------------------------------------------------- */
+@theme inline {
+  --color-background:            var(--color-background-light);
+  --color-foreground:            var(--color-navy);
+  --color-card:                  var(--color-surface);
+  --color-card-foreground:       var(--color-navy);
+  --color-popover:               var(--color-surface);
+  --color-popover-foreground:    var(--color-navy);
+  --color-muted-foreground:      var(--color-muted);
+  --color-accent:                var(--color-lavender);
+  --color-accent-foreground:     var(--color-primary-dark);
+  --color-primary-foreground:    #fffefb;
+  --color-secondary:             var(--color-lavender);
+  --color-secondary-foreground:  var(--color-primary-dark);
+  --color-destructive:           var(--color-danger);
+  --color-destructive-foreground: #fffefb;
+  --color-input:                 var(--color-border);
+  --color-ring:                  var(--color-primary);
 }
 
 @layer utilities {
@@ -193,6 +249,13 @@
 
   .pressable:active {
     transform: translateY(0) scale(var(--pressable-active-scale, 0.98));
+  }
+
+  /* Snappier spinners — a faster rotation reads as "loads faster" (design-eng,
+     perceived performance). Applies to every Tailwind `animate-spin` loader;
+     the reduced-motion block below still neutralizes it for those users. */
+  .animate-spin {
+    animation-duration: 0.7s;
   }
 
   /* ── Admin workspace neutral theme (light + dark parity) ──
@@ -352,10 +415,9 @@
     transition-duration: 80ms;
   }
 
-  /* Mobile: ensure safe-area padding during motion transitions */
-  html[data-runtime-kind='capacitor-native'] .safe-area-inset-bottom {
-    transition: padding-bottom 0.14s cubic-bezier(0.22, 1, 0.36, 1);
-  }
+  /* Mobile: safe-area padding (defined above) updates instantly. We deliberately
+     do NOT transition padding-bottom: animating a layout property janks on
+     keyboard show/hide on low-end devices (motion law: no layout animation). */
   body {
     position: relative;
     transform: none;

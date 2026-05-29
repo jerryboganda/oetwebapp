@@ -55,7 +55,7 @@ export function CartIcon({ className, href = '/cart', autoRefresh = true }: Cart
       href={href}
       aria-label={`Cart (${itemCount} item${itemCount === 1 ? '' : 's'})`}
       className={[
-        'relative inline-flex h-10 w-10 items-center justify-center rounded-full border border-border bg-background text-navy transition-colors hover:bg-background-light',
+        'relative inline-flex h-10 w-10 items-center justify-center rounded-full border border-border bg-surface text-navy transition-colors hover:bg-background-light',
         className,
       ]
         .filter(Boolean)
@@ -63,7 +63,7 @@ export function CartIcon({ className, href = '/cart', autoRefresh = true }: Cart
     >
       <ShoppingCart className="h-5 w-5" aria-hidden="true" />
       {itemCount > 0 ? (
-        <span className="absolute -right-1 -top-1 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-[10px] font-semibold text-white">
+        <span className="absolute -right-1 -top-1 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-[10px] font-semibold text-white dark:bg-violet-700">
           {itemCount > 99 ? '99+' : itemCount}
         </span>
       ) : null}

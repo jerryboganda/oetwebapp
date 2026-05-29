@@ -47,18 +47,18 @@ export interface DualAssessmentColumnProps {
 
 const KIND_STYLES: Record<DualAssessmentColumnKind, { header: string; ring: string; bar: string; chip: string; icon: ReactNode; tooltip: string }> = {
   ai: {
-    header: 'bg-gradient-to-br from-indigo-50 to-blue-50 dark:from-indigo-950/30 dark:to-blue-950/30 border-indigo-200/60 dark:border-indigo-800/40',
+    header: 'bg-indigo-50 dark:bg-indigo-950/30 border-indigo-200/60 dark:border-indigo-800/40',
     ring: 'ring-1 ring-indigo-200/60 dark:ring-indigo-800/40',
-    bar: 'bg-gradient-to-r from-indigo-500 to-blue-500',
+    bar: 'bg-indigo-500',
     chip: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900/40 dark:text-indigo-200',
     icon: <Sparkles className="h-4 w-4" aria-hidden />,
     tooltip:
-      'AI-generated estimate based on the recorded transcript. Advisory only — not an official OET score.',
+      'AI-generated estimate based on the recorded transcript. Advisory only, not an official OET score.',
   },
   tutor: {
-    header: 'bg-gradient-to-br from-emerald-50 to-green-50 dark:from-emerald-950/30 dark:to-green-950/30 border-emerald-200/60 dark:border-emerald-800/40',
+    header: 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200/60 dark:border-emerald-800/40',
     ring: 'ring-1 ring-emerald-200/60 dark:ring-emerald-800/40',
-    bar: 'bg-gradient-to-r from-emerald-500 to-green-500',
+    bar: 'bg-emerald-500',
     chip: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200',
     icon: <UserRound className="h-4 w-4" aria-hidden />,
     tooltip:

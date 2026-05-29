@@ -126,8 +126,8 @@ export function MockItemAnalysisActions({
             </div>
           </div>
 
-          <div className="rounded-2xl border border-border bg-background-light/60 p-3 text-sm">
-            <p className="font-semibold text-navy">{itemLabel ?? itemId}</p>
+          <div className="rounded-2xl border border-border bg-admin-bg-subtle/60 p-3 text-sm">
+            <p className="font-semibold text-admin-fg-strong">{itemLabel ?? itemId}</p>
             <p className="font-mono text-xs text-muted">{itemId}</p>
             {bundleId ? (
               <p className="mt-1 text-xs text-muted">

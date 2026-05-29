@@ -25,9 +25,9 @@ export function ReadingManifestPreview({ manifest }: { manifest: ReadingStructur
   return (
     <div className="space-y-6">
       {manifest.parts.map((part) => (
-        <section key={part.partCode} className="rounded-2xl border border-border bg-background-light p-4">
+        <section key={part.partCode} className="rounded-2xl border border-border bg-admin-bg-subtle p-4">
           <header className="mb-3 flex flex-wrap items-center justify-between gap-2">
-            <h4 className="text-sm font-bold uppercase tracking-[0.14em] text-navy">
+            <h4 className="text-sm font-bold uppercase tracking-[0.14em] text-admin-fg-strong">
               Part {part.partCode}
               <span className="ml-2 text-xs font-normal normal-case text-muted">
                 {part.timeLimitMinutes ?? '—'} min · {part.questions.length} Qs · {part.texts.length} texts
@@ -45,7 +45,7 @@ export function ReadingManifestPreview({ manifest }: { manifest: ReadingStructur
                 <div key={`${part.partCode}-text-${text.displayOrder}`} className="rounded-xl bg-surface p-3 text-sm">
                   <div className="mb-1 flex items-center gap-2">
                     <Badge variant="info" className="text-[10px]">Text #{text.displayOrder}</Badge>
-                    <span className="font-semibold text-navy">{text.title || '(untitled)'}</span>
+                    <span className="font-semibold text-admin-fg-strong">{text.title || '(untitled)'}</span>
                     <span className="text-xs text-muted">· {text.wordCount} words</span>
                   </div>
                   {text.source ? (
@@ -108,7 +108,7 @@ export function ReadingManifestPreview({ manifest }: { manifest: ReadingStructur
                     ) : null}
                     <p className="mt-2 text-xs">
                       <span className="font-semibold text-emerald-700">Answer:</span>{' '}
-                      <span className="font-mono text-navy">{Array.isArray(correct) ? correct.join(', ') : String(correct)}</span>
+                      <span className="font-mono text-admin-fg-strong">{Array.isArray(correct) ? correct.join(', ') : String(correct)}</span>
                     </p>
                     {synonyms.length > 0 ? (
                       <p className="mt-1 text-xs text-muted">

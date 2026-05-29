@@ -85,7 +85,7 @@ export default function AdminSpeakingDrillAiDraftPage() {
   return (
     <AdminCatalogLayout
       title="Speaking · AI-assisted drill draft"
-      description="Generate a Draft drill from a profession + weak-criterion seed. The backend builds a grounded prompt against the canonical rulebook + scoring and persists the draft automatically. Review and publish from the drill bank list — the admin remains accountable for the published content."
+      description="Generate a Draft drill from a profession + weak-criterion seed. The backend builds a grounded prompt against the canonical rulebook + scoring and persists the draft automatically. Review and publish from the drill bank list. The admin remains accountable for the published content."
       breadcrumbs={BREADCRUMBS}
       eyebrow="Content · AI"
       backHref="/admin/content/speaking/drills"

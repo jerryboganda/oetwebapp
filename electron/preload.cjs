@@ -44,4 +44,11 @@ contextBridge.exposeInMainWorld('desktopBridge', {
   print: {
     printPage: (options) => ipcRenderer.invoke('desktop:print-page', options),
   },
+  speakingAudio: {
+    start: (sessionId, mimeType) => ipcRenderer.invoke('speaking:audio:start', { sessionId, mimeType }),
+    stop: (sessionId, chunks) => ipcRenderer.invoke('speaking:audio:stop', { sessionId, chunks }),
+    getBlob: (sessionId) => ipcRenderer.invoke('speaking:audio:get-blob', { sessionId }),
+    discard: (sessionId) => ipcRenderer.invoke('speaking:audio:discard', { sessionId }),
+    getPlatform: () => process.platform,
+  },
 });

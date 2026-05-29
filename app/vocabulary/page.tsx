@@ -125,7 +125,7 @@ export default function VocabularyPage() {
       <LearnerSurfaceSectionHeader
         eyebrow="Quick access"
         title="Jump into a vocabulary mode"
-        description="Flashcards, quiz, browse, and history — all in one place."
+        description="Flashcards, quiz, browse, and history, all in one place."
         className="mb-4"
       />
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -133,7 +133,7 @@ export default function VocabularyPage() {
           <Link key={link.href} href={link.href}>
             <motion.div
               whileHover={microHover}
-              className="flex cursor-pointer items-center gap-3 rounded-2xl border border-border bg-surface p-4 shadow-sm transition-all hover:border-border-hover hover:shadow-md"
+              className="flex cursor-pointer items-center gap-3 rounded-2xl border border-border bg-surface p-4 shadow-sm transition-[color,background-color,border-color,box-shadow,transform,opacity,filter] duration-200 hover:border-border-hover hover:shadow-md"
             >
               <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${link.iconTile}`}>
                 {link.icon}
@@ -186,7 +186,7 @@ export default function VocabularyPage() {
             </div>
             <Link
               href="/vocabulary/flashcards"
-              className="inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-primary/90"
+              className="inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-medium text-white shadow-sm transition-[color,background-color,transform] duration-200 hover:bg-primary/90 active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600"
             >
               <Layers className="h-4 w-4" />
               Start today&apos;s set

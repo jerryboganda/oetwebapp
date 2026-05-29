@@ -175,7 +175,7 @@ export function SpeakingStructureEditor({ paperId }: { paperId: string }) {
           />
         </div>
 
-        <div className="space-y-4 rounded-2xl border border-warning/25 bg-amber-50/70 p-4">
+        <div className="space-y-4 rounded-2xl border border-warning/25 bg-warning/10 p-4">
           <h3 className="font-bold text-navy">Hidden interlocutor card (admin/tutor only)</h3>
           <Textarea
             label="Patient profile / hidden information"

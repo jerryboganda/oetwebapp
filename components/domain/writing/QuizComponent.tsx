@@ -89,9 +89,9 @@ export function QuizComponent({ questions, passPercent = 80, onSubmit, className
                     let optTone = 'border-border hover:border-primary/50';
                     if (submitted) {
                       if (isThisCorrect) {
-                        optTone = 'border-emerald-400 bg-emerald-50 dark:bg-emerald-950/40';
+                        optTone = 'border-success/40 bg-success/10';
                       } else if (isThisSelected && !isThisCorrect) {
-                        optTone = 'border-red-400 bg-red-50 dark:bg-red-950/40';
+                        optTone = 'border-danger/40 bg-danger/10';
                       } else {
                         optTone = 'border-border opacity-70';
                       }
@@ -119,10 +119,10 @@ export function QuizComponent({ questions, passPercent = 80, onSubmit, className
                         />
                         <span className="text-sm flex-1">{opt}</span>
                         {submitted && isThisCorrect ? (
-                          <CheckCircle2 className="w-4 h-4 text-emerald-600" aria-label="Correct answer" />
+                          <CheckCircle2 className="w-4 h-4 text-success" aria-label="Correct answer" />
                         ) : null}
                         {submitted && isThisSelected && !isThisCorrect ? (
-                          <XCircle className="w-4 h-4 text-red-600" aria-label="Your answer" />
+                          <XCircle className="w-4 h-4 text-danger" aria-label="Your answer" />
                         ) : null}
                       </label>
                     );
@@ -130,7 +130,7 @@ export function QuizComponent({ questions, passPercent = 80, onSubmit, className
                 </div>
                 {submitted ? (
                   <div className="mt-3 rounded border border-border bg-surface p-2 text-xs">
-                    <span className={cn('font-bold mr-1', isCorrect ? 'text-emerald-700' : 'text-red-700')}>
+                    <span className={cn('font-bold mr-1', isCorrect ? 'text-success' : 'text-danger')}>
                       {isCorrect ? 'Correct.' : 'Incorrect.'}
                     </span>
                     <span>{q.explanation}</span>
@@ -143,10 +143,10 @@ export function QuizComponent({ questions, passPercent = 80, onSubmit, className
       })}
 
       {submitted ? (
-        <Card padding="md" className={cn(passed ? 'border-emerald-400' : 'border-amber-400')}>
+        <Card padding="md" className={cn(passed ? 'border-success' : 'border-warning')}>
           <CardContent>
             <p className="font-bold text-sm">
-              Score: <span className="text-lg">{score}%</span> — {passed ? 'Passed!' : `Need ${passPercent}% to mark this lesson complete. Retake the quiz to try again.`}
+              Score: <span className="text-lg">{score}%</span>. {passed ? 'Passed!' : `Need ${passPercent}% to mark this lesson complete. Retake the quiz to try again.`}
             </p>
           </CardContent>
         </Card>

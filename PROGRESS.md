@@ -92,11 +92,10 @@ Status: **Done** — candidate workspace collapsed to match the official OET com
 - `tests/e2e/learner/oet-sample-test-alignment.spec.ts` — new comprehensive acceptance spec.
 - `tests/e2e/learner/learner-smoke.spec.ts` — heading expectations updated for `/listening`, `/reading`.
 
-### VALIDATION RESULTS (placeholder — final numbers appended at run completion)
-- `npm run docker:tsc` → _pending background completion; final exit code and any diagnostics appended below._
-- `npm run docker:build:check` → _pending background completion; web image rebuild + Next.js production compile in flight._
-- `npm run docker:lint` → exit 1 (pre-existing errors only; no new findings in touched files).
-- Playwright targeted run → _to run against the rebuilt stack once the web image is published, then summarised here._
+### VALIDATION RESULTS
+- Superseded by the latest Docker validation ledger at the top of this file.
+- Older background `docker:tsc` / web build placeholders are intentionally removed because they no longer represent active validation state.
+- Keep final validation evidence near the top continuation block so stale pending lines do not read as current blockers.
 
 ### What's intentionally NOT changed
 - Writing module (V2 shipped commit `f432bc79`; out of scope per owner).

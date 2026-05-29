@@ -50,11 +50,11 @@ export default function PackageDetailPage() {
   );
 
   if (loading) {
-    return <div className="min-h-screen bg-background p-12"><div className="mx-auto h-96 max-w-5xl animate-pulse rounded-2xl bg-surface" /></div>;
+    return <div className="min-h-screen bg-background-light p-12"><div className="mx-auto h-96 max-w-5xl animate-pulse rounded-2xl bg-surface" /></div>;
   }
   if (error || !plan) {
     return (
-      <div className="min-h-screen bg-background p-12">
+      <div className="min-h-screen bg-background-light p-12">
         <div className="mx-auto max-w-2xl rounded-2xl border border-border bg-surface p-8 text-center">
           <h1 className="text-xl font-bold text-navy">Package not available</h1>
           <p className="mt-2 text-sm text-muted">{error ?? 'This product is not currently published. Please check back soon.'}</p>
@@ -67,9 +67,9 @@ export default function PackageDetailPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background text-navy">
+    <div className="min-h-screen bg-background-light text-navy">
       {/* Hero */}
-      <section className="bg-gradient-to-br from-[#0E2841] to-[#156082] px-4 py-16 text-white">
+      <section className="bg-navy px-4 py-16 text-white">
         <div className="mx-auto max-w-5xl">
           <Link href="/catalog" className="inline-flex items-center gap-1 text-xs text-white/70 hover:text-white">
             <ArrowLeft className="h-3 w-3" /> All packages
@@ -87,7 +87,7 @@ export default function PackageDetailPage() {
                 {plan.tutorBookDiscountEnabled && <HeroTag gold>Tutor Book £32</HeroTag>}
               </div>
             </div>
-            <div className="rounded-2xl border border-white/15 bg-white/5 p-6 text-right backdrop-blur">
+            <div className="rounded-2xl border border-white/15 bg-white/10 p-6 text-right">
               <div className="text-4xl font-bold">£{plan.price.toFixed(0)}</div>
               {plan.originalPrice !== null && plan.originalPrice !== undefined && plan.originalPrice > plan.price && (
                 <div className="mt-1 text-sm text-white/70 line-through">was £{plan.originalPrice.toFixed(0)}</div>
@@ -113,7 +113,7 @@ export default function PackageDetailPage() {
             <ul className="mt-4 space-y-2">
               {plan.dashboardModules.map((module) => (
                 <li key={module} className="flex items-start gap-2 text-sm">
-                  <CheckCircle2 className="mt-0.5 h-4 w-4 flex-none text-emerald-600" />
+                  <CheckCircle2 className="mt-0.5 h-4 w-4 flex-none text-success" />
                   <span>{prettyModule(module)}</span>
                 </li>
               ))}
@@ -136,7 +136,7 @@ export default function PackageDetailPage() {
                     <li>· {plan.bundledSpeakingSessions} private speaking session{plan.bundledSpeakingSessions === 1 ? '' : 's'}</li>
                   )}
                   {plan.bundledAiCredits > 0 && <li>· {plan.bundledAiCredits} AI practice credits</li>}
-                  {plan.bundledTutorBook && <li>· The Tutor Book — First Edition 2026 + private Telegram channel</li>}
+                  {plan.bundledTutorBook && <li>· The Tutor Book, First Edition 2026 + private Telegram channel</li>}
                   {plan.bundledBasicEnglish && <li>· Basic English foundation course (11+ hours)</li>}
                 </ul>
               </div>
@@ -148,7 +148,7 @@ export default function PackageDetailPage() {
               {formatAccess(plan.accessDurationDays)} from purchase.
             </SidebarBlock>
             <SidebarBlock title="Profession">{labelForProfession(plan.profession)}</SidebarBlock>
-            <SidebarBlock title="Format">Recorded video + materials. Assessments are reviewed by Dr Ahmed (48–72h turnaround, Friday off).</SidebarBlock>
+            <SidebarBlock title="Format">Recorded video + materials. Assessments are reviewed by Dr Ahmed (48-72h turnaround, Friday off).</SidebarBlock>
           </aside>
         </div>
       </section>
@@ -158,7 +158,7 @@ export default function PackageDetailPage() {
         <section className="border-t border-border bg-surface px-4 py-14">
           <div className="mx-auto max-w-5xl">
             <h2 className="text-xl font-bold">Available add-ons</h2>
-            <p className="mt-1 text-sm text-muted">Add these alongside this package — applied automatically to your enrolment.</p>
+            <p className="mt-1 text-sm text-muted">Add these alongside this package, applied automatically to your enrolment.</p>
 
             {writingAddons.length > 0 && (
               <AddonGroup title="Writing letter assessments" addons={writingAddons} onSelect={setModalAddOn} />
@@ -167,7 +167,7 @@ export default function PackageDetailPage() {
               <AddonGroup title="Extra private speaking sessions" addons={speakingAddons} onSelect={setModalAddOn} />
             )}
             {tutorBookAddon && (
-              <AddonGroup title="The Tutor Book (£32 — discount for enrolled students)" addons={[tutorBookAddon]} onSelect={setModalAddOn} />
+              <AddonGroup title="The Tutor Book (£32, discount for enrolled students)" addons={[tutorBookAddon]} onSelect={setModalAddOn} />
             )}
           </div>
         </section>
@@ -198,7 +198,7 @@ function AddonGroup({
       <h3 className="text-sm font-semibold uppercase tracking-wider text-muted">{title}</h3>
       <div className="mt-3 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {addons.map((addon) => (
-          <div key={addon.code} className="rounded-2xl border border-border bg-background p-5">
+          <div key={addon.code} className="rounded-2xl border border-border bg-surface p-5">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <h4 className="font-bold">{addon.name}</h4>

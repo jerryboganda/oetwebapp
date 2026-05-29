@@ -7,8 +7,8 @@
  *   - app/listening/results — diagnostic results page accent breakdown.
  *   - app/listening/dashboard — accent progress block on the dashboard.
  *
- * Pure-Tailwind implementation (no chart library) — each row is a label, a
- * gradient progress bar, and a numeric percentage. Rows under 60% accuracy
+ * Pure-Tailwind implementation (no chart library). Each row is a label, a
+ * solid progress bar, and a numeric percentage. Rows under 60% accuracy
  * surface a "Needs work" warning chip.
  */
 
@@ -63,7 +63,7 @@ export function AccentBarChart({
       <div
         className={[
           'flex h-32 items-center justify-center rounded-xl border border-dashed border-border',
-          'text-sm text-gray-600 dark:text-gray-400',
+          'text-sm text-muted',
           className ?? '',
         ]
           .filter(Boolean)
@@ -93,7 +93,7 @@ export function AccentBarChart({
           <li key={row.accent} className="grid grid-cols-[minmax(0,1fr)_3rem] items-center gap-3">
             <div className="min-w-0">
               <div className="mb-1 flex items-center justify-between gap-2">
-                <span className="inline-flex items-center gap-1.5 text-sm font-medium text-gray-900 dark:text-slate-100">
+                <span className="inline-flex items-center gap-1.5 text-sm font-medium text-navy">
                   <span aria-hidden="true">{flag}</span>
                   <span className="truncate">{label}</span>
                 </span>
@@ -101,7 +101,7 @@ export function AccentBarChart({
                   <span
                     className={[
                       'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold',
-                      'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300',
+                      'bg-warning/10 text-warning',
                     ].join(' ')}
                   >
                     <AlertTriangle aria-hidden="true" className="h-3 w-3" />
@@ -110,7 +110,7 @@ export function AccentBarChart({
                 ) : null}
               </div>
               <div
-                className="h-2.5 w-full overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800"
+                className="h-2.5 w-full overflow-hidden rounded-full bg-border"
                 role="progressbar"
                 aria-valuenow={pct}
                 aria-valuemin={0}
@@ -121,14 +121,14 @@ export function AccentBarChart({
                   className={[
                     'h-full rounded-full transition-[width] duration-500 ease-out',
                     needsWork
-                      ? 'bg-gradient-to-r from-amber-400 to-orange-500'
-                      : 'bg-gradient-to-r from-emerald-400 to-cyan-500',
+                      ? 'bg-warning'
+                      : 'bg-success',
                   ].join(' ')}
                   style={{ width: `${pct}%` }}
                 />
               </div>
             </div>
-            <span className="text-right text-sm font-semibold tabular-nums text-gray-900 dark:text-slate-100">
+            <span className="text-right text-sm font-semibold tabular-nums text-navy">
               {pct}%
             </span>
           </li>

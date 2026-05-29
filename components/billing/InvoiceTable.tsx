@@ -37,16 +37,16 @@ export function InvoiceTable({ invoices, loading, emptyMessage }: InvoiceTablePr
   }
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-border bg-background shadow-sm">
+    <div className="overflow-hidden rounded-2xl border border-border bg-surface shadow-sm">
       <table className="min-w-full divide-y divide-border text-sm">
         <thead className="bg-background-light text-left text-xs font-medium uppercase tracking-wider text-muted">
           <tr>
-            <th className="px-4 py-3">Date</th>
-            <th className="px-4 py-3">Number</th>
-            <th className="px-4 py-3">Description</th>
-            <th className="px-4 py-3">Status</th>
-            <th className="px-4 py-3 text-right">Amount</th>
-            <th className="px-4 py-3 text-right">Actions</th>
+            <th scope="col" className="px-4 py-3">Date</th>
+            <th scope="col" className="px-4 py-3">Number</th>
+            <th scope="col" className="px-4 py-3">Description</th>
+            <th scope="col" className="px-4 py-3">Status</th>
+            <th scope="col" className="px-4 py-3 text-right">Amount</th>
+            <th scope="col" className="px-4 py-3 text-right">Actions</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-border">
@@ -99,11 +99,11 @@ function StatusPill({ status }: { status: string }) {
   const normalized = status.toLowerCase();
   const tone =
     normalized === 'paid'
-      ? 'bg-emerald-50 text-emerald-700'
+      ? 'bg-success/10 text-success'
       : normalized === 'pending' || normalized === 'open'
-        ? 'bg-amber-50 text-amber-700'
+        ? 'bg-warning/10 text-warning'
         : normalized === 'failed' || normalized === 'void' || normalized === 'uncollectible'
-          ? 'bg-red-50 text-red-700'
+          ? 'bg-danger/10 text-danger'
           : 'bg-background-light text-muted';
   return (
     <span

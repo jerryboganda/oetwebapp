@@ -97,7 +97,7 @@ All admin endpoints require `AdminContentWrite` or `AdminContentPublish` per exi
 - VPS migrated from `185.252.233.186` (decommissioned) → `68.183.32.122` (`oet-dev`).
 - Phase 2-7 code already on the new VPS at commit `e3fa70dd "feat: Phase 2-7 — AI Assistant, Content Admin UIs, Production Readiness"` plus DI fix `b8025272` — but containers were running an older image (endpoints returned 404).
 - TTS swap commit `305d675d` (DO Qwen3 Voice Design British male) lives on `cleanup/remove-demo-dummy-seed-placeholder-data` and a clean cherry-pick on `deploy/phase-2-7` (pushed to origin).
-- Historical deploy attempt used `scripts/deploy/deploy-direct.sh`; current production deploys must use an immutable 40-character `DEPLOY_REF` SHA with release evidence. SSH alias is now `oet-dev`.
+- Historical deploy attempt used `scripts/deploy/deploy-direct.sh`; current production deploys must use an immutable 40-character `DEPLOY_REF` SHA with digest-pinned image refs. SSH alias is now `oet-dev`.
 - Local zip of `Project Real Content/` prepared at `_audit/Project-Real-Content.zip` (120 MB) — ready to drag-drop into the new importer wizard once endpoints are live. This is a local-only artifact and is ignored by git.
 
 ## What's *not* yet done (post-deploy)

@@ -13,7 +13,7 @@ import { CheckoutSuccessPoller } from '@/components/checkout';
  */
 export default function CheckoutSuccessPage() {
   return (
-    <div className="min-h-screen bg-background text-navy">
+    <div className="min-h-screen bg-background-light text-navy">
       <div className="mx-auto max-w-3xl space-y-6 px-4 py-12">
         <header>
           <h1 className="text-3xl font-bold">Thank you</h1>

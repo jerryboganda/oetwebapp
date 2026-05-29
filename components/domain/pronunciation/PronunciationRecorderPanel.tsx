@@ -80,7 +80,7 @@ export function PronunciationRecorderPanel({
       <div className="flex items-center justify-between">
         <div>
           <div className="text-xs uppercase tracking-[0.18em] text-muted">Practice</div>
-          <h2 id="pronunciation-recorder-heading" className="text-lg font-semibold text-navy dark:text-white">
+          <h2 id="pronunciation-recorder-heading" className="text-lg font-semibold text-navy">
             Record your attempt
           </h2>
           <p className="text-sm text-muted">

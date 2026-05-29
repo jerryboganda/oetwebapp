@@ -206,7 +206,7 @@ function WritingDetailedFeedbackContent() {
                             : null;
                           return (
                             <button key={comment.id} type="button" onClick={() => setActiveComment(isActive ? null : comment.id)}
-                              className={`w-full cursor-pointer rounded-2xl border p-4 text-left transition-all ${isActive ? 'border-primary/20 bg-primary/5 shadow-sm' : 'border-border bg-background-light hover:border-border-hover'}`}>
+                              className={`w-full cursor-pointer rounded-2xl border p-4 text-left transition-[color,background-color,border-color,box-shadow,transform,opacity,filter] duration-200 ${isActive ? 'border-primary/20 bg-primary/5 shadow-sm' : 'border-border bg-background-light hover:border-border-hover'}`}>
                                {(comment.ruleId || comment.severity || sourceLabel) && (
                                  <div className="mb-2 flex flex-wrap items-center gap-2">
                                    {comment.ruleId ? (

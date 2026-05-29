@@ -25,13 +25,13 @@ const DEFAULT_BADGES: PricingHeroBadge[] = [
 ];
 
 export function Hero({
-  eyebrow = 'OET with Dr. Ahmed Hesham - 2026 Portfolio',
+  eyebrow = 'OET with Dr. Ahmed Hesham, 2026 Portfolio',
   title = 'The complete OET 2026 catalogue',
-  subtitle = 'Recorded courses, writing letter assessments, private speaking sessions and The Tutor Book - every SKU from the 2026 portfolio, with current and original pricing.',
+  subtitle = 'Recorded courses, writing letter assessments, private speaking sessions and The Tutor Book. Every SKU from the 2026 portfolio, with current and original pricing.',
   badges = DEFAULT_BADGES,
 }: PricingHeroProps) {
   return (
-    <section className="relative overflow-hidden bg-gradient-to-br from-[#0E2841] via-[#0E2841] to-[#156082] px-4 pb-20 pt-24 text-white">
+    <section className="relative overflow-hidden bg-navy px-4 pb-20 pt-24 text-white">
       <div className="mx-auto max-w-5xl text-center">
         <p className="mb-2 text-xs font-semibold uppercase tracking-[0.3em] text-[#D4A44F]">{eyebrow}</p>
         <h1 className="text-4xl font-bold tracking-tight sm:text-5xl">{title}</h1>

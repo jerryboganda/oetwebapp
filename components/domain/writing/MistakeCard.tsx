@@ -42,21 +42,21 @@ export function MistakeCard({ mistake, personalStat, className }: MistakeCardPro
       <CardContent>
         <header className="flex items-start justify-between gap-2 mb-2">
           <div className="flex items-center gap-2 min-w-0">
-            <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" aria-hidden="true" />
+            <AlertCircle className="w-4 h-4 text-warning shrink-0" aria-hidden="true" />
             <h3 className="font-extrabold text-sm truncate">{mistake.summary}</h3>
           </div>
           <Badge variant="muted" size="sm">{mistake.category}</Badge>
         </header>
 
         <dl className="grid grid-cols-1 md:grid-cols-2 gap-2 mt-2">
-          <div className="rounded border border-red-200/60 bg-red-50/60 dark:bg-red-950/40 p-2">
-            <dt className="text-[10px] uppercase tracking-wider font-bold text-red-700 dark:text-red-300 mb-0.5">
+          <div className="rounded border border-danger/30 bg-danger/10 p-2">
+            <dt className="text-[10px] uppercase tracking-wider font-bold text-danger mb-0.5">
               Wrong
             </dt>
             <dd className="text-xs leading-snug">{mistake.exampleWrong}</dd>
           </div>
-          <div className="rounded border border-emerald-200/60 bg-emerald-50/60 dark:bg-emerald-950/40 p-2">
-            <dt className="text-[10px] uppercase tracking-wider font-bold text-emerald-700 dark:text-emerald-300 mb-0.5">
+          <div className="rounded border border-success/30 bg-success/10 p-2">
+            <dt className="text-[10px] uppercase tracking-wider font-bold text-success mb-0.5">
               Right
             </dt>
             <dd className="text-xs leading-snug">{mistake.exampleRight}</dd>

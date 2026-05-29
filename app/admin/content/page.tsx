@@ -126,7 +126,7 @@ const hubSections: HubSection[] = [
   {
     id: 'lessons',
     title: 'Lessons & micro-content',
-    description: 'Authoring surfaces for the supporting modules that wrap practice papers — vocabulary, conversation, grammar, pronunciation, strategies.',
+    description: 'Authoring surfaces for the supporting modules that wrap practice papers: vocabulary, conversation, grammar, pronunciation, strategies.',
     links: [
       {
         href: '/admin/content/vocabulary',
@@ -330,7 +330,7 @@ export default function AdminContentHubPage() {
                   <Link
                     key={link.href}
                     href={link.href}
-                    className="group flex h-full flex-col justify-between gap-3 rounded-admin border border-admin-border bg-admin-bg-subtle p-4 transition hover:-translate-y-0.5 hover:border-[var(--admin-primary)] hover:shadow-admin-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--admin-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--admin-bg-page)]"
+                    className="group flex h-full flex-col justify-between gap-3 rounded-admin border border-admin-border bg-admin-bg-subtle p-4 transition hoverable:-translate-y-0.5 hover:border-[var(--admin-primary)] hover:shadow-admin-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--admin-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--admin-bg-page)]"
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex items-center gap-3">

@@ -288,7 +288,7 @@ export function Sidebar({
               onClick={() => { void triggerImpactHaptic('LIGHT'); }}
               className="pressable flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-semibold text-muted hover:bg-white/70 hover:text-navy dark:hover:bg-white/5"
             >
-              <Settings className="h-4 w-4" />
+              <Settings className="h-4 w-4" aria-hidden="true" />
               Settings
             </Link>
           </li>
@@ -298,7 +298,7 @@ export function Sidebar({
               onClick={() => { void triggerImpactHaptic('LIGHT'); }}
               className="pressable flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-sm font-semibold text-muted hover:bg-white/70 hover:text-navy dark:hover:bg-white/5"
             >
-              <HelpCircle className="h-4 w-4" />
+              <HelpCircle className="h-4 w-4" aria-hidden="true" />
               Help & Support
             </a>
           </li>

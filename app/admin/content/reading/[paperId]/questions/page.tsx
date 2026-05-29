@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, ArrowRight, Plus, Trash2, Save, Code, FormInput, ArrowUp, ArrowDown } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Plus, Trash2, Save, Code, FormInput, ArrowUp, ArrowDown, ClipboardCheck, ShieldCheck } from 'lucide-react';
 
 import { AdminTableLayout } from '@/components/admin/layout/admin-table-layout';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/admin/ui/card';
@@ -19,12 +19,23 @@ import {
   upsertReadingQuestion,
   removeReadingQuestion,
   reorderReadingQuestions,
+  setReadingQuestionDistractors,
   type ReadingPartCode,
   type ReadingQuestionType,
   type ReadingQuestionAdminDto,
   type ReadingPartAdminDto,
   type ReadingTextDto,
+  type ReadingReviewState,
+  type ReadingDistractorCategory,
 } from '@/lib/reading-authoring-api';
+import { AcceptedVariantManager } from './AcceptedVariantManager';
+import { ReadingReviewPanel } from './ReadingReviewPanel';
+import { REVIEW_STATE_LABELS, reviewStateTone } from './review-state';
+import {
+  parseAcceptedVariants,
+  serializeAcceptedVariants,
+  type AcceptedVariant,
+} from './accepted-variants';
 
 // ── Constants ──────────────────────────────────────────────────────────
 
@@ -42,6 +53,40 @@ const TYPE_LABELS: Record<ReadingQuestionType, string> = {
   MultipleChoice4: 'Multiple Choice (4)',
 };
 
+const DIFFICULTY_OPTIONS: Array<{ value: string; label: string }> = [
+  { value: '', label: 'Not set' },
+  { value: '1', label: '1 — Easiest' },
+  { value: '2', label: '2' },
+  { value: '3', label: '3 — Medium' },
+  { value: '4', label: '4' },
+  { value: '5', label: '5 — Hardest' },
+];
+
+const DISTRACTOR_CATEGORIES: ReadingDistractorCategory[] = [
+  'Opposite',
+  'TooBroad',
+  'TooSpecific',
+  'WrongSpeaker',
+  'NotInText',
+  'DistortedDetail',
+  'OutOfScope',
+];
+
+function parseStringMap(json: string | null | undefined): Record<string, string> {
+  if (!json) return {};
+  try {
+    const parsed = JSON.parse(json);
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      const out: Record<string, string> = {};
+      for (const [k, v] of Object.entries(parsed)) {
+        if (typeof v === 'string') out[k] = v;
+      }
+      return out;
+    }
+  } catch { /* ignore */ }
+  return {};
+}
+
 // ── Form state interfaces ──────────────────────────────────────────────
 
 interface QuestionFormState {
@@ -54,10 +99,17 @@ interface QuestionFormState {
   stem: string;
   caseSensitive: boolean;
   correctAnswer: string;
-  acceptedSynonyms: string;
+  acceptedVariants: AcceptedVariant[];
   options: string[];
   explanationMarkdown: string;
   skillTag: string;
+  difficulty: number | null;
+  evidenceSentence: string;
+  paragraphIndex: number | null;
+  /** Per-option-key rationale (A/B/C/D → text). */
+  distractorRationale: Record<string, string>;
+  /** Per-option-key distractor category (A/B/C/D → category). */
+  optionDistractors: Record<string, ReadingDistractorCategory | ''>;
 }
 
 type EditorMode = 'form' | 'json';
@@ -75,17 +127,21 @@ function emptyFormState(partId: string, partCode: ReadingPartCode, nextOrder: nu
     stem: '',
     caseSensitive: false,
     correctAnswer: '',
-    acceptedSynonyms: '',
+    acceptedVariants: [],
     options: Array(optionCount).fill(''),
     explanationMarkdown: '',
     skillTag: '',
+    difficulty: null,
+    evidenceSentence: '',
+    paragraphIndex: null,
+    distractorRationale: {},
+    optionDistractors: {},
   };
 }
 
 function questionToFormState(q: ReadingQuestionAdminDto): QuestionFormState {
   let options: string[] = [];
   let correctAnswer = '';
-  let acceptedSynonyms = '';
 
   try {
     const parsed = JSON.parse(q.optionsJson);
@@ -98,11 +154,12 @@ function questionToFormState(q: ReadingQuestionAdminDto): QuestionFormState {
     correctAnswer = q.correctAnswerJson ?? '';
   }
 
-  if (q.acceptedSynonymsJson) {
-    try {
-      const arr = JSON.parse(q.acceptedSynonymsJson);
-      if (Array.isArray(arr)) acceptedSynonyms = arr.join(', ');
-    } catch { /* empty */ }
+  const distractorRaw = parseStringMap(q.optionDistractorsJson);
+  const optionDistractors: Record<string, ReadingDistractorCategory | ''> = {};
+  for (const [key, value] of Object.entries(distractorRaw)) {
+    optionDistractors[key] = (DISTRACTOR_CATEGORIES as string[]).includes(value)
+      ? (value as ReadingDistractorCategory)
+      : '';
   }
 
   return {
@@ -115,10 +172,15 @@ function questionToFormState(q: ReadingQuestionAdminDto): QuestionFormState {
     stem: q.stem,
     caseSensitive: q.caseSensitive,
     correctAnswer,
-    acceptedSynonyms,
+    acceptedVariants: parseAcceptedVariants(q.acceptedSynonymsJson),
     options,
     explanationMarkdown: q.explanationMarkdown ?? '',
     skillTag: q.skillTag ?? '',
+    difficulty: q.difficulty ?? null,
+    evidenceSentence: q.evidenceSentence ?? '',
+    paragraphIndex: q.paragraphIndex ?? null,
+    distractorRationale: parseStringMap(q.distractorRationaleJson),
+    optionDistractors,
   };
 }
 
@@ -158,6 +220,9 @@ export default function ReadingQuestionsEditorPage() {
   const [jsonText, setJsonText] = useState('');
   const [saving, setSaving] = useState(false);
 
+  // Review-state workflow
+  const [reviewing, setReviewing] = useState<ReadingQuestionAdminDto | null>(null);
+
   const activePart = parts.find((p) => p.partCode === activeTab) ?? null;
 
   const fetchData = useCallback(async () => {
@@ -183,6 +248,12 @@ export default function ReadingQuestionsEditorPage() {
     B: parts.find((p) => p.partCode === 'B')?.questions.length ?? 0,
     C: parts.find((p) => p.partCode === 'C')?.questions.length ?? 0,
   };
+
+  // Paper-level publish readiness: every authored question must reach Published.
+  const allQuestions = parts.flatMap((p) => p.questions);
+  const totalQuestions = allQuestions.length;
+  const publishedCount = allQuestions.filter((q) => q.reviewState === 'Published').length;
+  const allPublished = totalQuestions > 0 && publishedCount === totalQuestions;
 
   // ── Handlers ─────────────────────────────────────────────────────────
 
@@ -210,6 +281,7 @@ export default function ReadingQuestionsEditorPage() {
   }
 
   function startEdit(q: ReadingQuestionAdminDto) {
+    setReviewing(null);
     setForm(questionToFormState(q));
     setJsonText(questionToJson(q));
     setEditorMode('form');
@@ -220,6 +292,11 @@ export default function ReadingQuestionsEditorPage() {
     setEditing(false);
     setForm(null);
     setJsonText('');
+  }
+
+  function startReview(q: ReadingQuestionAdminDto) {
+    cancelEdit();
+    setReviewing(q);
   }
 
   function handleTypeChange(newType: ReadingQuestionType) {
@@ -237,11 +314,11 @@ export default function ReadingQuestionsEditorPage() {
     const isMultiChoice = f.questionType === 'MultipleChoice3' || f.questionType === 'MultipleChoice4';
     const optionsJson = isMultiChoice ? JSON.stringify(f.options) : '[]';
     const correctAnswerJson = JSON.stringify(f.correctAnswer);
-    const synonymsArr = f.acceptedSynonyms
-      .split(',')
-      .map((s) => s.trim())
-      .filter(Boolean);
-    const acceptedSynonymsJson = synonymsArr.length > 0 ? JSON.stringify(synonymsArr) : null;
+    const acceptedSynonymsJson = serializeAcceptedVariants(f.acceptedVariants);
+    const rationaleEntries = Object.entries(f.distractorRationale).filter(([, v]) => v.trim());
+    const distractorRationale = rationaleEntries.length > 0
+      ? Object.fromEntries(rationaleEntries.map(([k, v]) => [k, v.trim()]))
+      : null;
 
     return {
       id: f.id,
@@ -257,6 +334,10 @@ export default function ReadingQuestionsEditorPage() {
       caseSensitive: f.caseSensitive,
       explanationMarkdown: f.explanationMarkdown || null,
       skillTag: f.skillTag || null,
+      difficulty: f.difficulty,
+      evidenceSentence: f.evidenceSentence.trim() || null,
+      paragraphIndex: f.paragraphIndex,
+      distractorRationale,
     };
   }
 
@@ -283,7 +364,23 @@ export default function ReadingQuestionsEditorPage() {
     setSaving(true);
     try {
       const payload = buildPayload(form);
-      await upsertReadingQuestion(paperId, payload);
+      const saved = await upsertReadingQuestion(paperId, payload);
+      // Persist per-option distractor categories via the dedicated endpoint.
+      if (isMulti) {
+        const optionLabels = form.questionType === 'MultipleChoice4' ? ['A', 'B', 'C', 'D'] : ['A', 'B', 'C'];
+        const distractors: Partial<Record<string, ReadingDistractorCategory>> = {};
+        let hasDistractor = false;
+        for (const key of optionLabels) {
+          const category = form.optionDistractors[key];
+          if (category) {
+            distractors[key] = category;
+            hasDistractor = true;
+          }
+        }
+        if (hasDistractor) {
+          await setReadingQuestionDistractors(paperId, saved.id, distractors);
+        }
+      }
       setToast({ variant: 'success', message: form.id ? 'Question updated' : 'Question created' });
       cancelEdit();
       await fetchData();
@@ -417,8 +514,14 @@ export default function ReadingQuestionsEditorPage() {
             <Badge variant="primary" className="shrink-0 text-xs">
               {TYPE_LABELS[q.questionType] ?? q.questionType}
             </Badge>
+            <Badge variant={reviewStateTone(q.reviewState)} size="sm" className="shrink-0">
+              {REVIEW_STATE_LABELS[q.reviewState ?? 'Draft']}
+            </Badge>
             <span className="text-xs text-admin-fg-muted shrink-0">{q.points}pt</span>
             <div className="flex gap-1 shrink-0">
+              <Button variant="ghost" size="sm" onClick={() => startReview(q)} aria-label="Review state">
+                <ClipboardCheck className="h-3.5 w-3.5" />
+              </Button>
               <Button variant="ghost" size="sm" onClick={() => startEdit(q)} aria-label="Edit question">
                 <FormInput className="h-3.5 w-3.5" />
               </Button>
@@ -465,7 +568,7 @@ export default function ReadingQuestionsEditorPage() {
             value={form.readingTextId ?? ''}
             onChange={(e) => setForm({ ...form, readingTextId: e.target.value || null })}
             options={[
-              { value: '', label: '— None —' },
+              { value: '', label: 'None' },
               ...activePart.texts.map((txt: ReadingTextDto) => ({
                 value: txt.id,
                 label: `${txt.displayOrder}. ${txt.title}`,
@@ -507,25 +610,64 @@ export default function ReadingQuestionsEditorPage() {
         {isMultiChoice && (
           <div className="space-y-2">
             <p className="text-xs font-medium text-admin-fg-muted uppercase tracking-wide">Options</p>
-            {form.options.map((opt, idx) => (
-              <Input
-                key={idx}
-                label={`Option ${optionLabels[idx]}`}
-                value={opt}
-                onChange={(e) => {
-                  const updated = [...form.options];
-                  updated[idx] = e.target.value;
-                  setForm({ ...form, options: updated });
-                }}
-                placeholder={`Option ${optionLabels[idx]} text...`}
-              />
-            ))}
+            {form.options.map((opt, idx) => {
+              const key = optionLabels[idx];
+              return (
+                <div key={idx} className="space-y-2 rounded-lg border border-admin-border bg-admin-bg-subtle/40 p-3">
+                  <Input
+                    label={`Option ${key}`}
+                    value={opt}
+                    onChange={(e) => {
+                      const updated = [...form.options];
+                      updated[idx] = e.target.value;
+                      setForm({ ...form, options: updated });
+                    }}
+                    placeholder={`Option ${key} text...`}
+                  />
+                  {key !== form.correctAnswer && (
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      <Select
+                        label="Distractor category"
+                        value={form.optionDistractors[key] ?? ''}
+                        onChange={(e) =>
+                          setForm({
+                            ...form,
+                            optionDistractors: {
+                              ...form.optionDistractors,
+                              [key]: e.target.value as ReadingDistractorCategory | '',
+                            },
+                          })
+                        }
+                        options={[
+                          { value: '', label: 'None' },
+                          ...DISTRACTOR_CATEGORIES.map((c) => ({ value: c, label: c })),
+                        ]}
+                      />
+                      <Input
+                        label="Distractor rationale"
+                        value={form.distractorRationale[key] ?? ''}
+                        onChange={(e) =>
+                          setForm({
+                            ...form,
+                            distractorRationale: {
+                              ...form.distractorRationale,
+                              [key]: e.target.value,
+                            },
+                          })
+                        }
+                        placeholder="Why a learner might pick this"
+                      />
+                    </div>
+                  )}
+                </div>
+              );
+            })}
             <Select
               label="Correct Answer"
               value={form.correctAnswer}
               onChange={(e) => setForm({ ...form, correctAnswer: e.target.value })}
               options={[
-                { value: '', label: '— Select correct answer —' },
+                { value: '', label: 'Select correct answer…' },
                 ...form.options.map((opt, idx) => ({
                   value: optionLabels[idx],
                   label: `${optionLabels[idx]}: ${opt || '(empty)'}`,
@@ -537,19 +679,16 @@ export default function ReadingQuestionsEditorPage() {
 
         {/* Short Answer / Sentence Completion */}
         {isShortOrSentence && (
-          <div className="space-y-2">
+          <div className="space-y-3">
             <Input
               label="Correct Answer"
               value={form.correctAnswer}
               onChange={(e) => setForm({ ...form, correctAnswer: e.target.value })}
               placeholder="The expected answer..."
             />
-            <Textarea
-              label="Accepted Synonyms (comma-separated)"
-              value={form.acceptedSynonyms}
-              onChange={(e) => setForm({ ...form, acceptedSynonyms: e.target.value })}
-              rows={2}
-              placeholder="synonym1, synonym2, synonym3"
+            <AcceptedVariantManager
+              variants={form.acceptedVariants}
+              onChange={(acceptedVariants) => setForm({ ...form, acceptedVariants })}
             />
           </div>
         )}
@@ -562,7 +701,7 @@ export default function ReadingQuestionsEditorPage() {
               value={form.correctAnswer}
               onChange={(e) => setForm({ ...form, correctAnswer: e.target.value })}
               options={[
-                { value: '', label: '— Select matching text —' },
+                { value: '', label: 'Select matching text…' },
                 ...activePart.texts.map((txt: ReadingTextDto) => ({
                   value: String(txt.displayOrder),
                   label: `Text ${txt.displayOrder}: ${txt.title}`,
@@ -573,9 +712,39 @@ export default function ReadingQuestionsEditorPage() {
         )}
 
         {/* Common fields */}
-        <div className="space-y-2 border-t border-admin-border pt-4">
+        <div className="space-y-3 border-t border-admin-border pt-4">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Select
+              label="Difficulty (1–5)"
+              value={form.difficulty != null ? String(form.difficulty) : ''}
+              onChange={(e) =>
+                setForm({ ...form, difficulty: e.target.value ? Number(e.target.value) : null })
+              }
+              options={DIFFICULTY_OPTIONS}
+            />
+            <Input
+              label="Paragraph index (optional)"
+              type="number"
+              min={0}
+              value={form.paragraphIndex != null ? form.paragraphIndex : ''}
+              onChange={(e) =>
+                setForm({
+                  ...form,
+                  paragraphIndex: e.target.value === '' ? null : Math.max(0, parseInt(e.target.value) || 0),
+                })
+              }
+              hint="Source paragraph order (drives paragraph-order lint)."
+            />
+          </div>
           <Textarea
-            label="Explanation (optional — shown on review)"
+            label="Evidence sentence (optional)"
+            value={form.evidenceSentence}
+            onChange={(e) => setForm({ ...form, evidenceSentence: e.target.value })}
+            rows={2}
+            placeholder="Verbatim sentence from the text that supports the correct answer..."
+          />
+          <Textarea
+            label="Explanation (optional, shown on review)"
             value={form.explanationMarkdown}
             onChange={(e) => setForm({ ...form, explanationMarkdown: e.target.value })}
             rows={2}
@@ -674,9 +843,64 @@ export default function ReadingQuestionsEditorPage() {
 
           {!loading && !error && (
             <div className="space-y-4">
+              {totalQuestions > 0 && (
+                <div
+                  className={`flex flex-wrap items-center gap-2 rounded-lg border px-3 py-2 ${
+                    allPublished
+                      ? 'border-[var(--admin-success)]/40 bg-[var(--admin-success-tint)]'
+                      : 'border-admin-border bg-admin-bg-subtle'
+                  }`}
+                >
+                  <ShieldCheck
+                    className={`h-4 w-4 shrink-0 ${
+                      allPublished ? 'text-[var(--admin-success)]' : 'text-admin-fg-muted'
+                    }`}
+                  />
+                  <span className="text-sm font-medium text-admin-fg-strong">
+                    Publish readiness
+                  </span>
+                  <Badge variant={allPublished ? 'success' : 'warning'} size="sm">
+                    {publishedCount} / {totalQuestions} published
+                  </Badge>
+                  <span className="text-xs text-admin-fg-muted">
+                    {allPublished
+                      ? 'All questions are Published.'
+                      : 'Every question must reach the Published review state before the paper can be published.'}
+                  </span>
+                </div>
+              )}
+
               <ReadingPartTabs activeTab={activeTab} onTabChange={setActiveTab} counts={counts} />
 
-              {!editing && renderQuestionList()}
+              {!editing && !reviewing && renderQuestionList()}
+
+              {reviewing && (
+                <Card surface="tinted-primary">
+                  <CardHeader>
+                    <div className="min-w-0">
+                      <CardTitle className="text-sm">Review workflow</CardTitle>
+                      <CardDescription className="truncate">{reviewing.stem}</CardDescription>
+                    </div>
+                    <div className="ml-auto">
+                      <Button variant="ghost" size="sm" onClick={() => setReviewing(null)}>
+                        Close
+                      </Button>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    <ReadingReviewPanel
+                      paperId={paperId}
+                      questionId={reviewing.id}
+                      currentState={reviewing.reviewState ?? 'Draft'}
+                      onTransitioned={(toState: ReadingReviewState) => {
+                        setReviewing((prev) => (prev ? { ...prev, reviewState: toState } : prev));
+                        void fetchData();
+                      }}
+                      onNotify={(variant, message) => setToast({ variant, message })}
+                    />
+                  </CardContent>
+                </Card>
+              )}
 
               {editing && (
                 <Card surface="tinted-primary">

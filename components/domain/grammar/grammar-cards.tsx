@@ -200,7 +200,7 @@ export function GrammarRecommendationStrip({
               onClick={() => onOpen?.(rec)}
               className="block h-full focus-visible:outline-none"
             >
-              <div className="flex h-full flex-col rounded-2xl border border-primary/15 bg-surface p-4 shadow-sm transition-transform hover:-translate-y-0.5 hover:border-primary/35">
+              <div className="flex h-full flex-col rounded-2xl border border-primary/15 bg-surface p-4 shadow-sm transition-transform hoverable:-translate-y-0.5 hover:border-primary/35">
                 <div className="flex items-start gap-3">
                   <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-primary/15 text-primary">
                     <Target className="h-4 w-4" />

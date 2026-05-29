@@ -211,7 +211,7 @@ export default function AdminUserAiPage({ params }: { params: Promise<{ userId: 
                   <SlidersHorizontal className="h-4 w-4" />
                   {override
                     ? <>Override active since {new Date(override.createdAt).toLocaleDateString()}{override.expiresAt ? `, expires ${new Date(override.expiresAt).toLocaleDateString()}` : ''}.</>
-                    : <>No override — user is on their plan defaults.</>}
+                    : <>No override. User is on their plan defaults.</>}
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -223,7 +223,7 @@ export default function AdminUserAiPage({ params }: { params: Promise<{ userId: 
                     value={forcePlan}
                     onChange={(e) => setForcePlan(e.target.value)}
                     options={[
-                      { value: '', label: '— none —' },
+                      { value: '', label: 'None' },
                       ...plans.map((p) => ({ value: p.code, label: `${p.code} (${p.name})` })),
                     ]}
                   />

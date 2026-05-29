@@ -53,7 +53,7 @@ export default function FeedbackGuidePage() {
             <MotionItem key={c.code}>
               <Card className="p-5 shadow-sm">
                 <div className="flex items-center justify-between mb-2"><h3 className="font-semibold">{c.label}</h3><Badge variant="outline">Bands {c.bands}</Badge></div>
-                <p className="text-sm text-muted-foreground">{c.description}</p>
+                <p className="text-sm text-muted">{c.description}</p>
                 <div className="mt-3 bg-success/10 rounded-lg p-3">
                   <p className="text-sm"><TrendingUp className="w-4 h-4 inline mr-1 text-success" /><strong>How to improve:</strong> {c.improve}</p>
                 </div>
@@ -72,7 +72,7 @@ export default function FeedbackGuidePage() {
             <MotionItem key={c.code}>
               <Card className="p-5 shadow-sm">
                 <div className="flex items-center justify-between mb-2"><h3 className="font-semibold">{c.label}</h3><Badge variant="outline">Bands {c.bands}</Badge></div>
-                <p className="text-sm text-muted-foreground">{c.description}</p>
+                <p className="text-sm text-muted">{c.description}</p>
                 <div className="mt-3 bg-success/10 rounded-lg p-3">
                   <p className="text-sm"><TrendingUp className="w-4 h-4 inline mr-1 text-success" /><strong>How to improve:</strong> {c.improve}</p>
                 </div>

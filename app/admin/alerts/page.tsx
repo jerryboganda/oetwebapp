@@ -7,7 +7,7 @@ import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
 import { AdminTableLayout } from '@/components/admin/layout/admin-table-layout';
 import { Badge } from '@/components/admin/ui/badge';
 import { Button } from '@/components/admin/ui/button';
-import { Card, CardContent } from '@/components/admin/ui/card';
+import { CardContent } from '@/components/admin/ui/card';
 import { EmptyState } from '@/components/admin/ui/empty-state';
 import { KpiTile } from '@/components/admin/ui/kpi-tile';
 import { Skeleton } from '@/components/admin/ui/skeleton';
@@ -134,17 +134,12 @@ export default function AdminAlertsPage() {
             {data.alerts.map((alert, i) => {
               const sev = SEVERITY_BADGE[alert.severity];
               return (
-                <Card
+                <button
                   key={`${alert.alertType}-${i}`}
-                  interactive
-                  asChild
-                  className="border-admin-border"
+                  type="button"
+                  onClick={() => router.push(alert.actionRoute)}
+                  className="flex w-full items-start gap-3 rounded-admin-lg border border-admin-border bg-admin-bg-surface p-4 text-left transition-[border-color,background-color] duration-[var(--admin-dur-base)] ease-[var(--admin-ease-out)] hover:border-admin-border-strong hover:bg-[var(--admin-state-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--admin-primary)]"
                 >
-                  <button
-                    type="button"
-                    onClick={() => router.push(alert.actionRoute)}
-                    className="flex w-full items-start gap-3 p-4 text-left"
-                  >
                     <div className="mt-0.5 shrink-0">{severityIcon(alert.severity)}</div>
                     <div className="min-w-0 flex-1">
                       <div className="mb-1 flex flex-wrap items-center gap-2">
@@ -156,9 +151,8 @@ export default function AdminAlertsPage() {
                         {new Date(alert.detectedAt).toLocaleString()}
                       </p>
                     </div>
-                    <ChevronRight className="mt-1 h-4 w-4 shrink-0 text-admin-fg-muted" />
-                  </button>
-                </Card>
+                    <ChevronRight className="mt-1 h-4 w-4 shrink-0 text-admin-fg-muted" aria-hidden="true" />
+                </button>
               );
             })}
           </CardContent>

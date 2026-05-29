@@ -355,10 +355,10 @@ function MicEnvironmentCheckContent() {
         />
 
           {/* Step 0: Computer-based exam environment acknowledgement (at-home rule + paper rule) */}
-          <section className={`rounded-3xl border bg-surface p-6 shadow-sm transition-all ${cbtEnvConfirmed && cbtPaperAcknowledged ? 'border-success/30' : 'border-warning/30'}`}>
+          <section className={`rounded-3xl border bg-surface p-6 shadow-sm transition-[color,background-color,border-color,box-shadow,transform,opacity,filter] duration-200 ${cbtEnvConfirmed && cbtPaperAcknowledged ? 'border-success/30' : 'border-warning/30'}`}>
             <div className="flex items-start justify-between mb-6">
               <div className="flex items-center gap-4">
-                <div className={`flex h-12 w-12 items-center justify-center rounded-2xl transition-colors ${cbtEnvConfirmed && cbtPaperAcknowledged ? 'bg-success/10' : 'bg-amber-50'}`}>
+                <div className={`flex h-12 w-12 items-center justify-center rounded-2xl transition-colors ${cbtEnvConfirmed && cbtPaperAcknowledged ? 'bg-success/10' : 'bg-warning/10'}`}>
                   <Home className={`h-6 w-6 ${cbtEnvConfirmed && cbtPaperAcknowledged ? 'text-success' : 'text-warning'}`} />
                 </div>
                 <div>
@@ -373,13 +373,13 @@ function MicEnvironmentCheckContent() {
               <div>
                 <p className="text-xs font-bold text-muted uppercase tracking-widest mb-2">Environment requirements</p>
                 <ul className="grid grid-cols-1 gap-y-1.5 text-sm text-navy sm:grid-cols-2 sm:gap-x-6">
-                  <li className="flex gap-2"><span className="text-primary">•</span><span><strong>Location:</strong> at home only — never at a test centre.</span></li>
+                  <li className="flex gap-2"><span className="text-primary">•</span><span><strong>Location:</strong> at home only, never at a test centre.</span></li>
                   <li className="flex gap-2"><span className="text-primary">•</span><span><strong>Room:</strong> indoors, well-lit, solid walls (no glass panels or transparent partitions).</span></li>
-                  <li className="flex gap-2"><span className="text-primary">•</span><span><strong>Completely alone</strong> — if anyone enters the room, the exam is stopped.</span></li>
+                  <li className="flex gap-2"><span className="text-primary">•</span><span><strong>Completely alone.</strong> If anyone enters the room, the exam is stopped.</span></li>
                   <li className="flex gap-2"><span className="text-primary">•</span><span><strong>Single monitor</strong> only. Dual monitors are not allowed.</span></li>
                   <li className="flex gap-2"><span className="text-primary">•</span><span><strong>Webcam:</strong> wired or built-in that can move. Bluetooth webcam not permitted.</span></li>
                   <li className="flex gap-2"><span className="text-primary">•</span><span><strong>Microphone &amp; speakers:</strong> built-in or USB plug-in only. Bluetooth not allowed. No headsets during Speaking.</span></li>
-                  <li className="flex gap-2"><span className="text-primary">•</span><span><strong>Power:</strong> device plugged directly into a power source — no docking station, no battery only.</span></li>
+                  <li className="flex gap-2"><span className="text-primary">•</span><span><strong>Power:</strong> device plugged directly into a power source (no docking station, no battery only).</span></li>
                   <li className="flex gap-2"><span className="text-primary">•</span><span><strong>VPN / virtual machines</strong> fully disabled before the exam starts.</span></li>
                   <li className="flex gap-2"><span className="text-primary">•</span><span><strong>Extra screens</strong> (TV, second monitor) unplugged.</span></li>
                 </ul>
@@ -414,7 +414,7 @@ function MicEnvironmentCheckContent() {
                 </div>
               </div>
 
-              <div className="rounded-2xl border border-warning/30 bg-amber-50 p-4">
+              <div className="rounded-2xl border border-warning/30 bg-warning/10 p-4">
                 <div className="flex items-start gap-3">
                   <ShieldCheck className="h-5 w-5 text-warning shrink-0 mt-0.5" />
                   <div className="space-y-1">
@@ -444,7 +444,7 @@ function MicEnvironmentCheckContent() {
             </div>
           </section>
 
-          <section className={`rounded-3xl border bg-surface p-6 shadow-sm transition-all ${recordingConsentAccepted ? 'border-success/30' : 'border-border'}`}>
+          <section className={`rounded-3xl border bg-surface p-6 shadow-sm transition-[color,background-color,border-color,box-shadow,transform,opacity,filter] duration-200 ${recordingConsentAccepted ? 'border-success/30' : 'border-border'}`}>
             <div className="flex items-start justify-between mb-4">
               <div className="flex items-center gap-4">
                 <div className={`flex h-12 w-12 items-center justify-center rounded-2xl transition-colors ${recordingConsentAccepted ? 'bg-success/10' : 'bg-primary/10'}`}>
@@ -475,7 +475,7 @@ function MicEnvironmentCheckContent() {
           </section>
 
           {/* Step 1: Permission */}
-          <section className={`rounded-3xl border bg-surface p-6 shadow-sm transition-all ${permissionStatus === 'success' ? 'border-success/30' : 'border-border'}`}>
+          <section className={`rounded-3xl border bg-surface p-6 shadow-sm transition-[color,background-color,border-color,box-shadow,transform,opacity,filter] duration-200 ${permissionStatus === 'success' ? 'border-success/30' : 'border-border'}`}>
             <div className="flex items-start justify-between mb-6">
               <div className="flex items-center gap-4">
                 <div className={`flex h-12 w-12 items-center justify-center rounded-2xl transition-colors ${permissionStatus === 'success' ? 'bg-success/10' : 'bg-info/10'}`}>
@@ -503,7 +503,7 @@ function MicEnvironmentCheckContent() {
           </section>
 
           {/* Step 2: Recording & Playback Test */}
-          <section className={`rounded-3xl border bg-surface p-6 shadow-sm transition-all ${recordingStatus === 'finished' ? 'border-success/30' : 'border-border'} ${permissionStatus !== 'success' ? 'pointer-events-none opacity-50' : ''}`}>
+          <section className={`rounded-3xl border bg-surface p-6 shadow-sm transition-[color,background-color,border-color,box-shadow,transform,opacity,filter] duration-200 ${recordingStatus === 'finished' ? 'border-success/30' : 'border-border'} ${permissionStatus !== 'success' ? 'pointer-events-none opacity-50' : ''}`}>
             <div className="flex items-start justify-between mb-6">
               <div className="flex items-center gap-4">
                 <div className={`flex h-12 w-12 items-center justify-center rounded-2xl transition-colors ${recordingStatus === 'finished' ? 'bg-success/10' : 'bg-primary/10'}`}>
@@ -541,10 +541,10 @@ function MicEnvironmentCheckContent() {
           </section>
 
           {/* Step 3: Environment Check */}
-          <section className={`rounded-3xl border bg-surface p-6 shadow-sm transition-all ${isNoisy ? 'border-warning/30' : 'border-border'} ${permissionStatus !== 'success' ? 'pointer-events-none opacity-50' : ''}`}>
+          <section className={`rounded-3xl border bg-surface p-6 shadow-sm transition-[color,background-color,border-color,box-shadow,transform,opacity,filter] duration-200 ${isNoisy ? 'border-warning/30' : 'border-border'} ${permissionStatus !== 'success' ? 'pointer-events-none opacity-50' : ''}`}>
             <div className="flex items-center justify-between mb-6">
               <div className="flex items-center gap-4">
-                <div className={`flex h-12 w-12 items-center justify-center rounded-2xl transition-colors ${isNoisy ? 'bg-amber-50' : 'bg-info/10'}`}>
+                <div className={`flex h-12 w-12 items-center justify-center rounded-2xl transition-colors ${isNoisy ? 'bg-warning/10' : 'bg-info/10'}`}>
                   <BarChart3 className={`h-6 w-6 ${isNoisy ? 'text-warning' : 'text-info'}`} />
                 </div>
                 <div>
@@ -573,7 +573,7 @@ function MicEnvironmentCheckContent() {
             </div>
 
             <MotionCollapse open={isNoisy} className="mt-4">
-                <div className="flex items-start gap-3 rounded-2xl border border-warning/30 bg-amber-50 p-3">
+                <div className="flex items-start gap-3 rounded-2xl border border-warning/30 bg-warning/10 p-3">
                   <AlertTriangle className="w-5 h-5 text-warning shrink-0" />
                   <p className="text-xs text-warning leading-relaxed">
                     <strong>High background noise detected.</strong> For the best results, please move to a quieter location or use a headset with a microphone.

@@ -59,7 +59,7 @@ export default function ProfileSetupFocusPage() {
   };
 
   return (
-    <LearnerDashboardShell pageTitle="Writing Profile — Step 3">
+    <LearnerDashboardShell pageTitle="Writing Profile: Step 3">
       <div className="space-y-6">
         <LearnerPageHero
           eyebrow="Step 3 of 4"

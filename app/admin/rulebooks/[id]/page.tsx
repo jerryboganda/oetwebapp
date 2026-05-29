@@ -470,7 +470,7 @@ export default function AdminRulebookDetailPage() {
               value={filterSection}
               onChange={(e) => setFilterSection(e.target.value)}
               className="w-48"
-              options={[{ value: '', label: 'All sections' }, ...data.sections.map((s) => ({ value: s.code, label: `${s.code} — ${s.title}` }))]}
+              options={[{ value: '', label: 'All sections' }, ...data.sections.map((s) => ({ value: s.code, label: `${s.code}: ${s.title}` }))]}
             />
             <Button onClick={() => openRuleEditor()}><Plus className="h-4 w-4 mr-1" /> New Rule</Button>
           </div>
@@ -507,7 +507,7 @@ export default function AdminRulebookDetailPage() {
 
       {/* Rule Editor Modal */}
       {ruleForm && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50" onClick={() => setRuleForm(null)}>
+        <div className="fixed inset-0 bg-navy/50 flex items-center justify-center p-4 z-50" onClick={() => setRuleForm(null)}>
           <Card className="p-6 max-w-3xl w-full max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-bold">{editingRuleId ? 'Edit Rule' : 'New Rule'}</h3>

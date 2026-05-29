@@ -111,7 +111,7 @@ export function StepReview() {
           setBlockedAt(c.key);
           setError(
             err instanceof Error
-              ? `Publishing ${c.key} paper failed: ${err.message}. Earlier subtests may already be published — the page will refresh so you can retry from the right spot.`
+              ? `Publishing ${c.key} paper failed: ${err.message}. Earlier subtests may already be published, so the page will refresh so you can retry from the right spot.`
               : `Publishing ${c.key} paper failed.`,
           );
           // Refresh bundle + paper snapshots so the UI reflects what published
@@ -135,7 +135,7 @@ export function StepReview() {
   return (
     <div className="space-y-6">
       <header className="space-y-1">
-        <h2 className="text-lg font-bold text-navy">Step 6 — Review &amp; publish</h2>
+        <h2 className="text-lg font-bold text-navy">Step 6: Review &amp; publish</h2>
         <p className="text-sm text-muted">
           Each subtest must satisfy the publish gate before the bundle can release. Publish runs
           per-paper first, then the bundle.

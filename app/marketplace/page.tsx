@@ -177,7 +177,7 @@ export default function MarketplacePage() {
               <option value="reading">Reading</option>
               <option value="listening">Listening</option>
             </select>
-            <button onClick={loadBrowse} className="px-4 py-2.5 bg-primary hover:bg-primary/90 text-white rounded-xl text-sm font-semibold flex items-center gap-1">
+            <button onClick={loadBrowse} className="px-4 py-2.5 bg-primary hover:bg-primary/90 active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600 text-white rounded-xl text-sm font-semibold flex items-center gap-1">
               <Filter className="w-4 h-4" /> Filter
             </button>
           </div>
@@ -197,7 +197,7 @@ export default function MarketplacePage() {
                   const SubIcon = SUBTEST_ICONS[item.subtestCode] ?? BookOpen;
                   return (
                     <MotionItem key={item.id} delayIndex={i}
-                      className="rounded-2xl border border-border bg-surface p-4 shadow-sm transition-all hover:border-primary/30 hover:shadow-md">
+                      className="rounded-2xl border border-border bg-surface p-4 shadow-sm transition-[border-color,box-shadow] duration-200 hover:border-primary/30 hover:shadow-md">
                       <div className="flex items-start gap-3">
                         <div className="p-2 rounded-lg bg-primary/10 text-primary">
                           <SubIcon className="w-5 h-5" />
@@ -279,7 +279,7 @@ export default function MarketplacePage() {
                 className="w-full px-4 py-2.5 bg-surface border border-border rounded-xl text-sm text-navy focus:ring-2 focus:ring-primary outline-none" />
             </div>
             <button type="submit" disabled={submitting || !submitForm.title.trim()}
-              className="w-full py-3 bg-primary hover:bg-primary/90 disabled:opacity-50 text-white rounded-xl font-semibold flex items-center justify-center gap-2 transition-colors">
+              className="w-full py-3 bg-primary hover:bg-primary/90 active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600 disabled:opacity-50 text-white rounded-xl font-semibold flex items-center justify-center gap-2 transition-[color,background-color,transform] duration-200">
               {submitting ? <><Loader2 className="w-4 h-4 animate-spin" /> Submitting...</> : <><Upload className="w-4 h-4" /> Submit for Review</>}
             </button>
           </form>

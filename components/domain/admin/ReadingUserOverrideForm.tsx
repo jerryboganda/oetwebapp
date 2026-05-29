@@ -105,7 +105,7 @@ export function ReadingUserOverrideForm() {
 
   return (
     <div className="space-y-5">
-      <div className="rounded-2xl border border-border bg-background-light p-4">
+      <div className="rounded-2xl border border-border bg-admin-bg-subtle p-4">
         <p className="mb-2 text-xs font-bold uppercase tracking-[0.14em] text-muted">
           Lookup learner
         </p>
@@ -165,14 +165,14 @@ export function ReadingUserOverrideForm() {
         />
       </div>
 
-      <label className="flex items-center gap-2 rounded-2xl border border-border bg-background-light p-3">
+      <label className="flex items-center gap-2 rounded-2xl border border-border bg-admin-bg-subtle p-3">
         <input
           type="checkbox"
           className="h-4 w-4 rounded border-border text-primary focus:ring-primary/20"
           checked={blockAttempts}
           onChange={(e) => setBlockAttempts(e.target.checked)}
         />
-        <span className="text-sm font-semibold text-navy">
+        <span className="text-sm font-semibold text-admin-fg-strong">
           Block this learner from starting new Reading attempts
         </span>
       </label>

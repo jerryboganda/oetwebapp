@@ -36,7 +36,7 @@ interface ChartRow {
 export function SkillRadarChartInner({ scores }: SkillRadarChartInnerProps) {
   if (!scores.length) {
     return (
-      <div className="flex h-64 items-center justify-center text-sm text-gray-600 dark:text-gray-400">
+      <div className="flex h-64 items-center justify-center text-sm text-muted">
         No skill data available yet.
       </div>
     );

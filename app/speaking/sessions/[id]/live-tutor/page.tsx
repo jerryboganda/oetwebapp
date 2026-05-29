@@ -125,7 +125,7 @@ export default function SpeakingSessionLiveTutorPage() {
   if (loading) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
-        <span className="inline-flex items-center gap-2 text-sm text-muted-foreground">
+        <span className="inline-flex items-center gap-2 text-sm text-muted">
           <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> Connecting to the tutor room...
         </span>
       </div>
@@ -134,7 +134,7 @@ export default function SpeakingSessionLiveTutorPage() {
 
   if (error || !session) {
     return (
-      <div className="mx-auto max-w-xl rounded-2xl border border-rose-200 bg-rose-50 p-6 text-sm text-rose-900">
+      <div className="mx-auto max-w-xl rounded-2xl border border-danger/30 bg-danger/10 p-6 text-sm text-danger">
         <h2 className="text-base font-semibold">Could not start the live tutor session</h2>
         <p className="mt-1">{error ?? 'Session not available.'}</p>
         <Button
@@ -162,16 +162,16 @@ export default function SpeakingSessionLiveTutorPage() {
 
       <header className="flex flex-wrap items-baseline justify-between gap-2">
         <div>
-          <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+          <p className="text-xs font-medium uppercase tracking-wider text-muted">
             Speaking - Live tutor
           </p>
           <h1 className="text-2xl font-bold text-foreground">{card.scenarioTitle}</h1>
-          <p className="text-sm text-muted-foreground">
+          <p className="text-sm text-muted">
             {card.setting} - {card.candidateRole}
           </p>
         </div>
         {ending ? (
-          <span className="inline-flex items-center gap-2 text-sm text-muted-foreground">
+          <span className="inline-flex items-center gap-2 text-sm text-muted">
             <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> Wrapping up...
           </span>
         ) : null}
@@ -188,7 +188,7 @@ export default function SpeakingSessionLiveTutorPage() {
             />
           ) : (
             <div className="flex h-full min-h-[480px] items-center justify-center rounded-2xl border border-border bg-muted">
-              <span className="inline-flex items-center gap-2 text-sm text-muted-foreground">
+              <span className="inline-flex items-center gap-2 text-sm text-muted">
                 <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
                 {consentAccepted ? 'Setting up the room...' : 'Waiting for consent...'}
               </span>
@@ -198,7 +198,7 @@ export default function SpeakingSessionLiveTutorPage() {
 
         {/* Candidate card recap */}
         <aside className="rounded-2xl border border-border bg-surface p-5 text-sm text-foreground shadow-sm">
-          <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          <h2 className="text-xs font-semibold uppercase tracking-wide text-muted">
             Candidate card
           </h2>
           <p className="mt-2 whitespace-pre-wrap leading-relaxed text-foreground">
@@ -211,7 +211,7 @@ export default function SpeakingSessionLiveTutorPage() {
               ))}
             </ol>
           ) : null}
-          <p className="mt-3 text-xs text-muted-foreground">
+          <p className="mt-3 text-xs text-muted">
             Goal: <span className="text-foreground">{card.communicationGoal}</span>
           </p>
         </aside>

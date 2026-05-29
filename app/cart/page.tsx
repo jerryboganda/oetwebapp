@@ -10,7 +10,7 @@ import { CartPageView } from '@/components/cart';
  */
 export default function CartPage() {
   return (
-    <div className="min-h-screen bg-background text-navy">
+    <div className="min-h-screen bg-background-light text-navy">
       <CartPageView />
     </div>
   );

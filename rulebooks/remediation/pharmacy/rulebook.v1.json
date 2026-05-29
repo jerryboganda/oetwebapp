@@ -5,7 +5,7 @@
   "publishedAt": "2026-05-28T00:00:00Z",
   "authoritySource": "OET Platform — Remediation Rulebook (V0 stub for the AI-personalisation feature flag). — Pharmacy variant derived from medicine; the rule bodies are profession-agnostic and identical, only the profession field changes.",
   "stubMarker": true,
-  "stubExplanation": "This file is a placeholder so the rulebook directory exists alongside writing/, speaking/, grammar/, etc. The RemediationPlanService.EnableAiPersonalisation flag is gated false until: (1) RuleKind.Remediation is added to the .NET enum + folder switch, (2) the AiGatewayService prompt builder gets a Remediation branch, (3) this file is replaced with real grounded content (see docs/MOCKS-RANDOMISATION.md and docs/audits/rulebook-compliance-2026-05-11-closure.md for the schedule).",
+  "stubExplanation": "This file is a placeholder so the rulebook directory exists alongside writing/, speaking/, grammar/, etc. The RemediationPlanService.EnableAiPersonalisation flag is gated false until: (1) RuleKind.Remediation is added to the .NET enum + folder switch, (2) the AiGatewayService prompt builder gets a Remediation branch, (3) this file is replaced with real grounded content (see docs/MOCKS-RANDOMISATION.md and docs/STATUS/REMAINING-WORK.md for the schedule).",
   "sections": [
     {
       "id": "RM01",

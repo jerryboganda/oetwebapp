@@ -79,9 +79,7 @@ export function ListeningIntroCard(props: ListeningIntroCardProps) {
       className="mt-8 rounded-2xl border border-border bg-surface p-8 text-center shadow-sm sm:p-12"
       data-testid="listening-intro-card"
     >
-      <div className="mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-primary/10">
-        <Volume2 className="h-10 w-10 text-primary" />
-      </div>
+      <Volume2 className="mx-auto mb-4 h-9 w-9 text-primary" aria-hidden="true" />
       <p className="mb-2 text-xs font-black uppercase tracking-widest text-muted">{modeLabel}</p>
       <h2 className="mb-4 text-2xl font-black text-navy">{session.paper.title}</h2>
       {drillId ? (

@@ -22,7 +22,7 @@ export function ReadinessTrendChart({ data, series = 'overall', target = 70 }: R
   if (!data || data.length === 0) {
     return (
       <div className="h-56 flex items-center justify-center text-sm text-muted">
-        No history yet — keep practicing and your trend will appear here.
+        No history yet. Keep practicing and your trend will appear here.
       </div>
     );
   }

@@ -3,7 +3,7 @@ set -euo pipefail
 
 BASE_URL="${BASE_URL:-http://localhost:3000}"
 API_BASE_URL="${API_BASE_URL:-}"
-OUT_PATH="${OBSERVABILITY_SMOKE_OUTPUT:-release-evidence/observability-smoke.json}"
+OUT_PATH="${OBSERVABILITY_SMOKE_OUTPUT:-smoke-artifacts/observability-smoke.json}"
 CURL_CONNECT_TIMEOUT_SECONDS="${CURL_CONNECT_TIMEOUT_SECONDS:-5}"
 CURL_MAX_TIME_SECONDS="${CURL_MAX_TIME_SECONDS:-15}"
 mkdir -p "$(dirname "$OUT_PATH")"

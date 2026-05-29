@@ -221,13 +221,13 @@ export default function AdminMockLeakReportsPage() {
                 </caption>
                 <thead className="bg-admin-bg-subtle">
                   <tr className="text-left text-xs font-black uppercase tracking-widest text-admin-fg-muted">
-                    <th className="px-4 py-3">Bundle</th>
-                    <th className="px-4 py-3">Severity</th>
-                    <th className="px-4 py-3">Reason</th>
-                    <th className="px-4 py-3">Reporter</th>
-                    <th className="px-4 py-3">Created</th>
-                    <th className="px-4 py-3">Status</th>
-                    <th className="px-4 py-3">Actions</th>
+                    <th scope="col" className="px-4 py-3">Bundle</th>
+                    <th scope="col" className="px-4 py-3">Severity</th>
+                    <th scope="col" className="px-4 py-3">Reason</th>
+                    <th scope="col" className="px-4 py-3">Reporter</th>
+                    <th scope="col" className="px-4 py-3">Created</th>
+                    <th scope="col" className="px-4 py-3">Status</th>
+                    <th scope="col" className="px-4 py-3">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-admin-border bg-admin-bg-surface">

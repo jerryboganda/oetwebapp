@@ -23,7 +23,7 @@ function findItemLabel(drill: Drill, itemId: string): string {
       return drill.items.find((i) => i.id === itemId)?.informal ?? itemId;
     case 'abbreviation': {
       const item = drill.items.find((i) => i.id === itemId);
-      return item ? `${item.abbreviation} — ${item.context}` : itemId;
+      return item ? `${item.abbreviation}: ${item.context}` : itemId;
     }
     default:
       return itemId;
@@ -48,8 +48,8 @@ export function DrillResultPanel({ drill, result }: DrillResultPanelProps) {
         </div>
 
         {result.errorTags.length > 0 && (
-          <div className="rounded-lg border border-amber-300 bg-amber-50 p-3">
-            <p className="text-xs uppercase tracking-wide font-semibold text-amber-900 mb-2">
+          <div className="rounded-lg border border-warning/30 bg-warning/10 p-3">
+            <p className="text-xs uppercase tracking-wide font-semibold text-warning mb-2">
               Areas to work on
             </p>
             <div className="flex flex-wrap gap-2">
@@ -66,12 +66,12 @@ export function DrillResultPanel({ drill, result }: DrillResultPanelProps) {
           {result.findings.map((f) => (
             <li
               key={f.itemId}
-              className={`rounded-lg border p-3 ${f.correct ? 'border-emerald-200 bg-emerald-50' : 'border-rose-200 bg-rose-50'}`}
+              className={`rounded-lg border p-3 ${f.correct ? 'border-success/30 bg-success/10' : 'border-danger/30 bg-danger/10'}`}
             >
               <p className="text-xs font-medium text-muted mb-1">
                 {findItemLabel(drill, f.itemId)}
               </p>
-              <p className={`text-sm ${f.correct ? 'text-emerald-900' : 'text-rose-900'}`}>
+              <p className="text-sm text-navy">
                 {f.feedback}
               </p>
             </li>

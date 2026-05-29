@@ -125,8 +125,8 @@ export default function PracticeSessionPage() {
     return (
       <LearnerDashboardShell pageTitle="Practice">
         <div className="flex h-64 flex-col items-center justify-center gap-4">
-          <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" aria-hidden />
-          <p className="text-sm text-muted-foreground">Saving your answers…</p>
+          <div className="h-8 w-8 motion-safe:animate-spin rounded-full border-4 border-primary border-t-transparent" aria-hidden />
+          <p className="text-sm text-muted">Saving your answers…</p>
         </div>
       </LearnerDashboardShell>
     );

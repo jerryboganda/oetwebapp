@@ -130,7 +130,7 @@ export default function AdminConversationSessionsPage() {
     <>
       <AdminCatalogLayout
         eyebrow="Operations"
-        title="AI Conversation — Sessions"
+        title="AI Conversation: Sessions"
         description="Operational view of conversation sessions. Filter by user, state, or task type. Click a row to see full transcript + evaluation."
         breadcrumbs={[
           { label: 'Admin', href: '/admin' },

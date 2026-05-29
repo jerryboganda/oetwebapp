@@ -3,20 +3,11 @@
 set -euo pipefail
 
 APP_DIR="${VPS_APP_DIR:-/opt/oetwebapp}"
-EVIDENCE_DIR="${EVIDENCE_DIR:-release-evidence}"
 APP_PUBLIC_URL="${APP_PUBLIC_URL:-https://app.oetwithdrhesham.co.uk}"
 API_PUBLIC_URL="${API_PUBLIC_URL:-https://api.oetwithdrhesham.co.uk}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+DRIVER_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 cd "$APP_DIR"
-
-if [ ! -s "$EVIDENCE_DIR/image-digests.env" ]; then
-  echo "[rollout] missing image digest evidence: $EVIDENCE_DIR/image-digests.env" >&2
-  exit 1
-fi
-
-set -a
-# shellcheck disable=SC1090
-. "$EVIDENCE_DIR/image-digests.env"
-set +a
 
 require_digest_ref() {
   local key="$1"
@@ -73,18 +64,30 @@ healthcheck_container() {
 }
 
 public_gates() {
-  APP_PUBLIC_URL="$APP_PUBLIC_URL" API_PUBLIC_URL="$API_PUBLIC_URL" bash ./scripts/deploy/post-deploy-verify.sh
-  BASE_URL="$APP_PUBLIC_URL" API_BASE_URL="$API_PUBLIC_URL" OBSERVABILITY_SMOKE_OUTPUT="/tmp/observability-smoke-production.json" bash ./scripts/observability-smoke.sh
-  API_PUBLIC_URL="$API_PUBLIC_URL" bash ./scripts/deploy/reading-media-smoke.sh
+  APP_PUBLIC_URL="$APP_PUBLIC_URL" API_PUBLIC_URL="$API_PUBLIC_URL" bash "$SCRIPT_DIR/post-deploy-verify.sh"
+  BASE_URL="$APP_PUBLIC_URL" API_BASE_URL="$API_PUBLIC_URL" OBSERVABILITY_SMOKE_OUTPUT="/tmp/observability-smoke-production.json" bash "$DRIVER_ROOT/observability-smoke.sh"
+  API_PUBLIC_URL="$API_PUBLIC_URL" bash "$SCRIPT_DIR/reading-media-smoke.sh"
+}
+
+verify_image_revision() {
+  local key="$1"
+  local expected_revision="$2"
+  local image="${!key:-}"
+  local actual_revision
+  actual_revision="$(docker image inspect --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}' "$image" 2>/dev/null || true)"
+  if [ "$actual_revision" != "$expected_revision" ]; then
+    echo "[rollout] $key is not labelled for deploy SHA $expected_revision." >&2
+    echo "[rollout] image: $image" >&2
+    echo "[rollout] org.opencontainers.image.revision: ${actual_revision:-<missing>}" >&2
+    exit 1
+  fi
 }
 
 mkdir -p .deploy
 previous_sha=""
 previous_slot=""
-previous_evidence_dir=""
 if [ -s .deploy/previous-good.env ]; then
   previous_sha=$(awk -F= '$1 == "PREVIOUS_GOOD_SHA" { print $2 }' .deploy/previous-good.env | tail -n 1)
-  previous_evidence_dir=$(awk -F= '$1 == "PREVIOUS_GOOD_EVIDENCE_DIR" { print $2 }' .deploy/previous-good.env | tail -n 1)
   cp .deploy/previous-good.env .deploy/rollback-target.env
 fi
 if [ -s .deploy/active-slot.env ]; then
@@ -104,11 +107,15 @@ esac
 echo "[rollout] active slot before rollout: ${previous_slot:-none}; target slot: $target_slot"
 
 echo "[rollout] validating production env"
-bash scripts/deploy/validate-production-env.sh .env.production
-bash scripts/deploy/mock-stub-scan.sh .env.production
+bash "$SCRIPT_DIR/validate-production-env.sh" .env.production
+bash "$SCRIPT_DIR/mock-stub-scan.sh" .env.production
 
 echo "[rollout] pulling immutable images"
 ACTIVE_SLOT="$target_slot" compose pull "learner-api-$target_slot" "web-$target_slot" learner-api web db-backup
+deploy_sha="$(git rev-parse HEAD)"
+for key in WEB_IMAGE API_IMAGE DB_BACKUP_IMAGE ROUTER_IMAGE; do
+  verify_image_revision "$key" "$deploy_sha"
+done
 
 echo "[rollout] starting target slot from digest images"
 ACTIVE_SLOT="$target_slot" compose up -d --no-build --force-recreate "learner-api-$target_slot" "web-$target_slot" db-backup
@@ -142,16 +149,23 @@ if ! public_gates; then
   echo "[rollout] public gates failed after traffic switch." >&2
   if [ -n "$previous_slot" ]; then
     echo "[rollout] rolling stable routers back to $previous_slot" >&2
-    ACTIVE_SLOT="$previous_slot" compose up -d --no-build --force-recreate learner-api web || true
+    ACTIVE_SLOT="$previous_slot" compose up -d --no-build --force-recreate learner-api web
+    api_router=$(ACTIVE_SLOT="$previous_slot" compose ps -q learner-api)
+    web_router=$(ACTIVE_SLOT="$previous_slot" compose ps -q web)
+    if [ -z "$api_router" ] || [ -z "$web_router" ]; then
+      echo "[rollout] SEV-1: failed to resolve router containers while rolling back to $previous_slot." >&2
+      exit 1
+    fi
+    healthcheck_container "$api_router" "wget -qO- http://127.0.0.1:8080/health/ready" "rollback API router"
+    healthcheck_container "$web_router" "wget -qO- http://127.0.0.1:3000/api/health" "rollback web router"
   fi
   exit 1
 fi
 
-current_sha=$(git rev-parse HEAD)
+current_sha="$deploy_sha"
 {
   echo "PREVIOUS_GOOD_SHA=$current_sha"
   echo "PREVIOUS_GOOD_SLOT=$target_slot"
-  echo "PREVIOUS_GOOD_EVIDENCE_DIR=$EVIDENCE_DIR"
   echo "PREVIOUS_GOOD_WEB_IMAGE=$WEB_IMAGE"
   echo "PREVIOUS_GOOD_API_IMAGE=$API_IMAGE"
   echo "PREVIOUS_GOOD_DB_BACKUP_IMAGE=$DB_BACKUP_IMAGE"
@@ -160,7 +174,6 @@ current_sha=$(git rev-parse HEAD)
   if [ -n "$previous_sha" ]; then
     echo "ROLLED_FROM_SHA=$previous_sha"
     echo "ROLLED_FROM_SLOT=$previous_slot"
-    echo "ROLLED_FROM_EVIDENCE_DIR=$previous_evidence_dir"
   fi
 } > .deploy/previous-good.env
 
@@ -169,10 +182,10 @@ current_sha=$(git rev-parse HEAD)
     "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
     "$current_sha" \
     "$target_slot" \
-    "$EVIDENCE_DIR" \
     "$WEB_IMAGE" \
     "$API_IMAGE" \
-    "$DB_BACKUP_IMAGE"
+    "$DB_BACKUP_IMAGE" \
+    "$ROUTER_IMAGE"
 } >> .deploy/release-history.tsv
 
 echo "ACTIVE_SLOT=$target_slot" > .deploy/active-slot.env

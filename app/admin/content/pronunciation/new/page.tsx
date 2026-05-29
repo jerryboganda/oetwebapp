@@ -116,7 +116,7 @@ function PronunciationDrillForm({
               value={form.word}
               onChange={(e) => set('word', e.target.value)}
               className="mt-1 w-full rounded-admin border border-admin-border bg-admin-bg-surface px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--admin-primary)]"
-              placeholder="e.g. th (voiceless) — as in 'think'"
+              placeholder="e.g. th (voiceless), as in 'think'"
               required
             />
           </label>

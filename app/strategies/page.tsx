@@ -69,7 +69,7 @@ function StrategyCard({ guide, compact = false }: { guide: StrategyGuideListItem
 
   return (
     <Link href={`/strategies/${encodeURIComponent(guide.id)}`} className="block h-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 rounded-2xl">
-      <Card hoverable className={cn('h-full transition-transform hover:-translate-y-0.5', locked && 'opacity-85')}>
+      <Card hoverable className={cn('h-full transition-transform hoverable:-translate-y-0.5', locked && 'opacity-85')}>
         <div className="flex h-full flex-col justify-between gap-5">
           <div className="space-y-4">
             <div className="flex items-start justify-between gap-3">
@@ -182,7 +182,7 @@ function DisabledState() {
             <h2 className="text-lg font-bold text-navy">Use practice modules while this opens</h2>
             <p className="mt-1 text-sm leading-6 text-muted">Recommended strategies will appear here once the release flag is enabled.</p>
           </div>
-          <Link href="/dashboard" className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-primary px-5 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-primary/90">
+          <Link href="/dashboard" className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-primary px-5 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-primary/90 active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600">
             Back to dashboard
             <ChevronRight className="h-4 w-4" aria-hidden="true" />
           </Link>

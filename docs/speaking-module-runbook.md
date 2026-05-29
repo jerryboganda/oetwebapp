@@ -33,15 +33,15 @@ No restart required — provider cache TTL is 30 s.
 
 ## 2. Pre-flight checks
 
-Run on `oet-dev`:
+Run locally in Docker Desktop before deploy. The production VPS is deployment-only and must not run builds, lint, type-checks, or tests.
 
-```bash
-ssh oet-dev "cd /opt/oetwebapp && npx tsc --noEmit"
-ssh oet-dev "cd /opt/oetwebapp && npm run lint"
-ssh oet-dev "cd /opt/oetwebapp && npm test"
-ssh oet-dev "cd /opt/oetwebapp && npm run build"
-ssh oet-dev "cd /opt/oetwebapp && npm run backend:build"
-ssh oet-dev "cd /opt/oetwebapp && npm run backend:test"
+```powershell
+npm run docker:tsc
+npm run docker:lint
+npm run docker:test
+docker exec oet-local-web npm run build
+docker exec oet-local-api dotnet build
+docker exec oet-local-api dotnet test
 ```
 
 Required: zero TypeScript errors, zero ESLint errors, all Vitest suites green,
@@ -50,10 +50,10 @@ all backend tests green except the pre-existing baseline failures tracked in
 
 ## 3. Smoke E2E
 
-Run the four Speaking smokes locally against `oet-dev`:
+Run the four Speaking smokes from the local Docker web container, targeting the deployed environment by configuration when needed. Do not execute Playwright on the VPS.
 
-```bash
-ssh oet-dev "cd /opt/oetwebapp && npm run test:e2e:smoke -- --grep speaking"
+```powershell
+docker exec oet-local-web npm run test:e2e:smoke -- --grep speaking
 ```
 
 Smokes cover: warm-up timer enforcement, self-practice happy path, two-roleplay
@@ -61,18 +61,23 @@ mock with assessment seeding, and live-tutor calibration banner.
 
 ## 4. Production deploy
 
-Production deploys are exact-SHA only. After CI publishes the
-`release-evidence-<sha>` artifact:
+Production deploys are exact-SHA only. After CI publishes immutable digest image
+refs for the target SHA:
 
 ```bash
 ssh root@68.183.32.122
 cd /opt/oetwebapp
-DEPLOY_REF=<40-char-sha> bash ./scripts/deploy/deploy-prod.sh
+DEPLOY_REF=<40-char-sha> \
+WEB_IMAGE=<web-image@sha256:...> \
+API_IMAGE=<api-image@sha256:...> \
+DB_BACKUP_IMAGE=<db-backup-image@sha256:...> \
+ROUTER_IMAGE=<router-image@sha256:...> \
+bash ./scripts/deploy/deploy-prod.sh
 ```
 
 The blue/green rollout will:
 
-1. Pull the immutable image digest from release evidence.
+1. Pull the immutable image digest supplied by the deploy workflow.
 2. Roll the inactive web slot forward; run health probes.
 3. Switch the stable router only after `GET /api/health` returns 200.
 4. Preserve at least one previous-good release for rollback.

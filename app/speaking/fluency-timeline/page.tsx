@@ -60,10 +60,10 @@ export default function FluencyTimelinePage() {
       <MotionSection className="space-y-6 max-w-5xl mx-auto">
         <div className="flex gap-3 items-end">
           <div className="flex-1">
-            <label className="text-sm font-medium text-muted-foreground mb-1 block">Speaking Attempt ID</label>
+            <label className="text-sm font-medium text-muted mb-1 block">Speaking Attempt ID</label>
             <input className="w-full border rounded-lg px-3 py-2 text-sm" placeholder="Enter attempt ID..." value={attemptId} onChange={e => setAttemptId(e.target.value)} />
           </div>
-          <button onClick={() => load(attemptId)} className="px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:bg-primary/90">Analyze</button>
+          <button onClick={() => load(attemptId)} className="px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:bg-primary/90 active:scale-[0.98] motion-reduce:active:scale-100">Analyze</button>
         </div>
 
         {loading && !data && <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">{Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-24 rounded-xl" />)}</div>}
@@ -72,10 +72,10 @@ export default function FluencyTimelinePage() {
           <>
             <LearnerSurfaceSectionHeader title="Overview Metrics" />
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <MotionItem><Card className="p-4 text-center"><Gauge className="w-5 h-5 mx-auto mb-2 text-primary" /><p className="text-2xl font-bold">{data.averageWordsPerMinute}</p><p className="text-xs text-muted-foreground">Avg WPM</p><p className="text-xs text-muted-foreground/70">Ideal: {data.benchmarks.idealWordsPerMinute.min}–{data.benchmarks.idealWordsPerMinute.max}</p></Card></MotionItem>
-              <MotionItem><Card className="p-4 text-center"><AlertTriangle className="w-5 h-5 mx-auto mb-2 text-warning" /><p className="text-2xl font-bold">{data.totalFillerWords}</p><p className="text-xs text-muted-foreground">Filler Words</p><p className="text-xs text-muted-foreground/70">{data.fillerRatio}% ratio</p></Card></MotionItem>
-              <MotionItem><Card className="p-4 text-center"><Clock className="w-5 h-5 mx-auto mb-2 text-info" /><p className="text-2xl font-bold">{data.pauseCount}</p><p className="text-xs text-muted-foreground">Long Pauses</p></Card></MotionItem>
-              <MotionItem><Card className="p-4 text-center"><Mic className="w-5 h-5 mx-auto mb-2 text-primary" /><p className="text-2xl font-bold">{Math.round(data.totalDurationSeconds)}s</p><p className="text-xs text-muted-foreground">Total Duration</p><p className="text-xs text-muted-foreground/70">{data.totalWords} words</p></Card></MotionItem>
+              <MotionItem><Card className="p-4 text-center"><Gauge className="w-5 h-5 mx-auto mb-2 text-primary" /><p className="text-2xl font-bold">{data.averageWordsPerMinute}</p><p className="text-xs text-muted">Avg WPM</p><p className="text-xs text-muted/70">Ideal: {data.benchmarks.idealWordsPerMinute.min}–{data.benchmarks.idealWordsPerMinute.max}</p></Card></MotionItem>
+              <MotionItem><Card className="p-4 text-center"><AlertTriangle className="w-5 h-5 mx-auto mb-2 text-warning" /><p className="text-2xl font-bold">{data.totalFillerWords}</p><p className="text-xs text-muted">Filler Words</p><p className="text-xs text-muted/70">{data.fillerRatio}% ratio</p></Card></MotionItem>
+              <MotionItem><Card className="p-4 text-center"><Clock className="w-5 h-5 mx-auto mb-2 text-info" /><p className="text-2xl font-bold">{data.pauseCount}</p><p className="text-xs text-muted">Long Pauses</p></Card></MotionItem>
+              <MotionItem><Card className="p-4 text-center"><Mic className="w-5 h-5 mx-auto mb-2 text-primary" /><p className="text-2xl font-bold">{Math.round(data.totalDurationSeconds)}s</p><p className="text-xs text-muted">Total Duration</p><p className="text-xs text-muted/70">{data.totalWords} words</p></Card></MotionItem>
             </div>
 
             <LearnerSurfaceSectionHeader title="Segment Timeline" />
@@ -84,13 +84,13 @@ export default function FluencyTimelinePage() {
                 <MotionItem key={seg.index}>
                   <Card className="p-3 flex items-start gap-3">
                     <div className="flex-shrink-0 w-16 text-center">
-                      <p className="text-xs font-mono text-muted-foreground">{seg.startTime.toFixed(1)}s</p>
+                      <p className="text-xs font-mono text-muted">{seg.startTime.toFixed(1)}s</p>
                       <Badge className={`mt-1 text-[10px] ${RATING_COLORS[seg.fluencyRating]}`}>{seg.fluencyRating}</Badge>
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm">{seg.text}</p>
                       <div className="flex gap-3 mt-1">
-                        <span className="text-xs text-muted-foreground">{seg.wordsPerMinute} WPM</span>
+                        <span className="text-xs text-muted">{seg.wordsPerMinute} WPM</span>
                         {seg.fillerCount > 0 && <span className="text-xs text-warning">{seg.fillerCount} filler{seg.fillerCount > 1 ? 's' : ''}</span>}
                         {seg.isPause && <span className="text-xs text-danger">{seg.pauseBefore}s pause</span>}
                       </div>

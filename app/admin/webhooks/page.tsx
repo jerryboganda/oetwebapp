@@ -195,7 +195,7 @@ export default function WebhooksPage() {
                     {summary.recentFailures.map((f) => (
                       <div
                         key={f.id}
-                        className="text-xs text-admin-fg-muted border-l-2 border-[var(--admin-danger)]/40 pl-3"
+                        className="rounded-admin-sm border border-[var(--admin-danger)]/30 bg-[var(--admin-danger-tint)] px-3 py-2 text-xs text-admin-fg-muted"
                       >
                         <span className="font-mono">{f.eventType}</span>
                         {f.errorMessage && (

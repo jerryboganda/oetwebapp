@@ -257,7 +257,7 @@ export default function WritingRevisionMode() {
               <Link href={`/writing/feedback?id=${resultId}`} className="inline-flex items-center justify-center gap-2 rounded-xl border border-border bg-surface px-4 py-2 text-sm font-medium text-navy shadow-sm transition-colors hover:border-primary/30 hover:bg-background-light">
                 <ChevronLeft className="w-4 h-4" /> Back to feedback
               </Link>
-              <Link href="/writing" className="inline-flex items-center justify-center rounded-xl bg-primary px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-primary/90">
+              <Link href="/writing" className="inline-flex items-center justify-center rounded-xl bg-primary px-4 py-2 text-sm font-medium text-white shadow-sm transition-[color,background-color,transform] duration-200 hover:bg-primary/90 active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600">
                 Done
               </Link>
               <Button type="button" onClick={handleSubmitRevision} loading={submitting} disabled={!revisedText.trim() || Boolean(entitlementBlock)}>
@@ -272,7 +272,7 @@ export default function WritingRevisionMode() {
             variant="warning"
             title={entitlementTitle}
             action={(
-              <Link href="/billing/subscribe" className="inline-flex items-center justify-center rounded-xl bg-primary px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-primary/90">
+              <Link href="/billing/subscribe" className="inline-flex items-center justify-center rounded-xl bg-primary px-4 py-2 text-sm font-medium text-white shadow-sm transition-[color,background-color,transform] duration-200 hover:bg-primary/90 active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600">
                 Upgrade
               </Link>
             )}

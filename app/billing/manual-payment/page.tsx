@@ -140,7 +140,7 @@ export default function ManualPaymentPage() {
         </section>
       )}
 
-      <div className="space-y-4 rounded-2xl border border-border bg-card p-6 shadow-sm">
+      <div className="space-y-4 rounded-2xl border border-border bg-surface p-6 shadow-sm">
         {error && <InlineAlert variant="error">{error}</InlineAlert>}
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -173,14 +173,14 @@ export default function ManualPaymentPage() {
         {history === null ? (
           <Skeleton className="h-24 w-full" />
         ) : history.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No submissions yet.</p>
+          <p className="text-sm text-muted">No submissions yet.</p>
         ) : (
           <div className="space-y-2">
             {history.map((row) => (
-              <div key={row.id} className="flex items-center justify-between rounded-lg border border-border bg-card p-3 text-sm">
+              <div key={row.id} className="flex items-center justify-between rounded-lg border border-border bg-surface p-3 text-sm">
                 <div>
                   <p className="font-medium">{row.method.replace('_', ' ')} · {row.amountAmount.toFixed(2)} {row.currency}</p>
-                  <p className="text-xs text-muted-foreground">Ref: {row.reference || '—'} · {new Date(row.submittedAt).toLocaleString()}</p>
+                  <p className="text-xs text-muted">Ref: {row.reference || '—'} · {new Date(row.submittedAt).toLocaleString()}</p>
                 </div>
                 <Badge variant={statusVariant(row.status)}>{row.status}</Badge>
               </div>

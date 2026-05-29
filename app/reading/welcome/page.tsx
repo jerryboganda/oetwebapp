@@ -64,30 +64,28 @@ export default function ReadingWelcomePage() {
 
   if (authLoading || checking) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-white">
-        <div className="h-8 w-8 animate-spin rounded-full border-4 border-violet-200 border-t-violet-600" />
+      <div className="flex min-h-screen items-center justify-center bg-background-light">
+        <div className="h-8 w-8 motion-safe:animate-spin rounded-full border-4 border-violet-200 border-t-violet-600" />
       </div>
     );
   }
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-gradient-to-b from-violet-50 to-white dark:from-slate-900 dark:to-slate-950 px-4 py-16">
+    <div className="flex min-h-screen flex-col items-center justify-center bg-background-light px-4 py-16">
       <div className="w-full max-w-2xl">
         {/* Hero */}
         <div className="mb-10 text-center">
-          <div className="mb-4 inline-flex h-16 w-16 items-center justify-center rounded-2xl bg-violet-600 shadow-lg">
-            <Star className="h-8 w-8 text-white" aria-hidden />
-          </div>
-          <h1 className="mb-3 text-4xl font-extrabold tracking-tight text-gray-900">
+          <Star className="mb-4 inline-block h-10 w-10 text-primary" aria-hidden />
+          <h1 className="mb-3 text-4xl font-extrabold tracking-tight text-navy">
             Master OET Reading
           </h1>
-          <p className="text-lg text-gray-600">
+          <p className="text-lg text-muted">
             Your personalised 12-week pathway to OET success
           </p>
         </div>
 
         {/* Journey steps */}
-        <div className="mb-10 rounded-2xl border border-violet-100 bg-white p-6 shadow-sm">
+        <div className="mb-10 rounded-2xl border border-violet-100 bg-surface p-6 shadow-sm">
           <p className="mb-5 text-sm font-semibold uppercase tracking-widest text-violet-500">
             Your journey
           </p>
@@ -102,8 +100,8 @@ export default function ReadingWelcomePage() {
                   <div className="flex items-start gap-3">
                     <Icon className="mt-0.5 h-5 w-5 shrink-0 text-violet-500" aria-hidden />
                     <div>
-                      <p className="font-semibold text-gray-900">{step.label}</p>
-                      <p className="text-sm text-gray-500">{step.description}</p>
+                      <p className="font-semibold text-navy">{step.label}</p>
+                      <p className="text-sm text-muted">{step.description}</p>
                     </div>
                   </div>
                 </li>
@@ -117,11 +115,11 @@ export default function ReadingWelcomePage() {
           <button
             type="button"
             onClick={() => router.push('/reading/profile-setup')}
-            className="inline-flex items-center gap-2 rounded-full bg-violet-600 px-10 py-4 text-base font-bold tracking-wide text-white shadow-lg transition hover:bg-violet-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-2 active:scale-95"
+            className="inline-flex items-center gap-2 rounded-full bg-primary px-10 py-4 text-base font-bold tracking-wide text-white shadow-lg transition-colors hover:bg-primary-dark dark:bg-violet-700 dark:hover:bg-violet-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 active:scale-95"
           >
             LET&apos;S BEGIN
           </button>
-          <p className="mt-4 text-sm text-gray-400">Takes about 5 minutes to set up</p>
+          <p className="mt-4 text-sm text-muted">Takes about 5 minutes to set up</p>
         </div>
       </div>
     </div>

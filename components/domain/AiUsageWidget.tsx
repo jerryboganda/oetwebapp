@@ -43,7 +43,7 @@ export function AiUsageWidget() {
         <Cpu className="w-4 h-4" /> AI credits · {snap.planName}
       </div>
       <div className="w-full h-1.5 bg-background-light rounded-full overflow-hidden mb-2">
-        <div className={`h-full transition-all ${barClass}`} style={{ width: `${pct}%` }} />
+        <div className={`h-full transition-[width,background-color] duration-300 ${barClass}`} style={{ width: `${pct}%` }} />
       </div>
       <div className="flex items-center justify-between text-xs text-muted">
         <span>{remaining.toLocaleString()} tokens left</span>

@@ -120,13 +120,13 @@ export default function SpeakingWarmupPage() {
     <LearnerDashboardShell>
       <div className="mx-auto max-w-2xl space-y-6 py-8">
         <header className="space-y-2">
-          <p className="text-sm font-medium uppercase tracking-wide text-blue-600">
+          <p className="text-sm font-medium uppercase tracking-wide text-primary">
             Step 1 of 4 · Warm-up
           </p>
           <h1 className="text-2xl font-semibold text-foreground">
             Quick warm-up before your role-play
           </h1>
-          <p className="text-muted-foreground">
+          <p className="text-muted">
             We&apos;ll have a relaxed 90-second chat to settle your voice and microphone.
             Nothing here is scored.
           </p>
@@ -139,7 +139,7 @@ export default function SpeakingWarmupPage() {
         ) : (
           <Card className="space-y-6 p-6">
             <div className="flex items-center justify-between">
-              <div className="text-sm text-muted-foreground">Time remaining</div>
+              <div className="text-sm text-muted">Time remaining</div>
               <div className="text-3xl font-mono font-semibold tabular-nums text-foreground">
                 {String(Math.floor(secondsLeft / 60)).padStart(2, '0')}:
                 {String(secondsLeft % 60).padStart(2, '0')}

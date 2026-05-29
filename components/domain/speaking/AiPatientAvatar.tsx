@@ -38,7 +38,7 @@ export function AiPatientAvatar({
     <div className={['flex flex-col items-center gap-2', className].filter(Boolean).join(' ')}>
       <div
         className={[
-          'relative flex h-24 w-24 items-center justify-center rounded-full bg-gradient-to-br from-primary/70 to-primary/30 text-2xl font-semibold text-primary-foreground shadow-lg ring-2 transition-all',
+          'relative flex h-24 w-24 items-center justify-center rounded-full bg-primary text-2xl font-semibold text-primary-foreground shadow-sm ring-2 transition-[color,background-color,border-color,box-shadow,transform,opacity,filter] duration-200',
           isSpeaking ? 'ring-primary' : 'ring-transparent',
         ].join(' ')}
         aria-live="polite"
@@ -50,7 +50,7 @@ export function AiPatientAvatar({
       >
         <span aria-hidden>{initials}</span>
         {isSpeaking ? (
-          <span className="absolute inset-0 animate-ping rounded-full bg-primary/20" aria-hidden />
+          <span className="absolute inset-0 motion-safe:animate-ping rounded-full bg-primary/20" aria-hidden />
         ) : null}
       </div>
 
@@ -60,12 +60,12 @@ export function AiPatientAvatar({
         ) : null}
         <div className="flex flex-wrap items-center justify-center gap-1">
           {typeof patientAge === 'number' ? (
-            <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+            <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted">
               {patientAge}
             </span>
           ) : null}
           {interlocutorRole ? (
-            <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+            <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted">
               {interlocutorRole}
             </span>
           ) : null}
@@ -81,8 +81,8 @@ export function AiPatientAvatar({
       >
         <div
           className={[
-            'h-full rounded-full bg-emerald-500 transition-all',
-            learnerIsSpeaking ? 'w-3/4 animate-pulse' : 'w-0',
+            'h-full rounded-full bg-success transition-[width] duration-300',
+            learnerIsSpeaking ? 'w-3/4 motion-safe:animate-pulse' : 'w-0',
           ].join(' ')}
         />
       </div>

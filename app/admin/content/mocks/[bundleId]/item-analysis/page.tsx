@@ -125,13 +125,13 @@ export default function MockBundleItemAnalysisPage() {
               <table className="min-w-full divide-y divide-admin-border text-sm">
                 <thead className="bg-admin-bg-subtle">
                   <tr className="text-left text-admin-fg-muted">
-                    <th className="px-3 py-2 font-medium">Item</th>
-                    <th className="px-3 py-2 font-medium">Subtest</th>
-                    <th className="px-3 py-2 font-medium">N</th>
-                    <th className="px-3 py-2 font-medium">% correct</th>
-                    <th className="px-3 py-2 font-medium">Discrimination</th>
-                    <th className="px-3 py-2 font-medium">Flag</th>
-                    <th className="px-3 py-2 font-medium">Top distractors</th>
+                    <th scope="col" className="px-3 py-2 font-medium">Item</th>
+                    <th scope="col" className="px-3 py-2 font-medium">Subtest</th>
+                    <th scope="col" className="px-3 py-2 font-medium">N</th>
+                    <th scope="col" className="px-3 py-2 font-medium">% correct</th>
+                    <th scope="col" className="px-3 py-2 font-medium">Discrimination</th>
+                    <th scope="col" className="px-3 py-2 font-medium">Flag</th>
+                    <th scope="col" className="px-3 py-2 font-medium">Top distractors</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-admin-border">

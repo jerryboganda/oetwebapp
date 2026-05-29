@@ -13,7 +13,7 @@ import { analytics } from '@/lib/analytics';
 type LeaderboardEntry = { rank: number; displayName: string; totalXp: number; level: number; isCurrentUser?: boolean };
 type MyPosition = { rank: number | null; totalXp: number; level: number; optedIn: boolean };
 
-const MEDAL_COLORS = ['text-yellow-500', 'text-gray-400', 'text-orange-600'];
+const MEDAL_COLORS = ['text-yellow-500', 'text-muted', 'text-orange-600'];
 
 export default function LeaderboardPage() {
   const [entries, setEntries] = useState<LeaderboardEntry[]>([]);
@@ -76,7 +76,7 @@ export default function LeaderboardPage() {
             <button
               key={p}
               onClick={() => setPeriod(p)}
-              className={`px-4 py-2 text-sm font-medium capitalize ${period === p ? 'bg-primary text-white' : 'bg-surface text-muted hover:bg-background-light'}`}
+              className={`px-4 py-2 text-sm font-medium capitalize ${period === p ? 'bg-primary text-white dark:bg-violet-700' : 'bg-surface text-muted hover:bg-background-light'}`}
             >
               {p === 'alltime' ? 'All Time' : p}
             </button>
@@ -104,7 +104,7 @@ export default function LeaderboardPage() {
           <button
             onClick={toggleOptIn}
             disabled={toggling}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${myPos.optedIn ? 'bg-surface text-navy border border-border-hover' : 'bg-primary text-white hover:bg-primary/90'}`}
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-[color,background-color,transform] duration-200 ${myPos.optedIn ? 'bg-surface text-navy border border-border-hover' : 'bg-primary text-white hover:bg-primary/90 active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600'}`}
           >
             {myPos.optedIn ? 'Opt Out' : 'Join Rankings'}
           </button>
@@ -128,8 +128,8 @@ export default function LeaderboardPage() {
             >
               <div className="w-8 text-center">
                 {entry.rank <= 3 ? (
-                  <span className={MEDAL_COLORS[entry.rank - 1]}>
-                    {entry.rank === 1 ? <Crown className="w-5 h-5 mx-auto" /> : <Medal className="w-5 h-5 mx-auto" />}
+                  <span className={MEDAL_COLORS[entry.rank - 1]} aria-label={`Rank ${entry.rank}`}>
+                    {entry.rank === 1 ? <Crown className="w-5 h-5 mx-auto" aria-hidden="true" /> : <Medal className="w-5 h-5 mx-auto" aria-hidden="true" />}
                   </span>
                 ) : (
                   <span className="text-sm font-semibold text-muted/60">#{entry.rank}</span>

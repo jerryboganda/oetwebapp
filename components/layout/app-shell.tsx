@@ -43,9 +43,7 @@ function ShellFallback() {
   return (
     <div className="flex min-h-screen items-center justify-center px-6">
       <div className="page-surface w-full max-w-sm rounded-[2rem] px-6 py-8 text-center shadow-lg" role="status" aria-live="polite">
-        <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-          <div className="h-5 w-5 rounded-full border-2 border-current border-t-transparent animate-spin" aria-hidden="true" />
-        </div>
+        <div className="mx-auto mb-4 h-8 w-8 rounded-full border-2 border-primary/30 border-t-primary animate-spin" aria-hidden="true" />
         <p className="text-sm font-semibold text-navy">Loading workspace...</p>
         <p className="mt-1 text-xs text-muted">Preparing your authenticated session.</p>
       </div>

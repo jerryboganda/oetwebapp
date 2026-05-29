@@ -300,6 +300,24 @@ public class ReadingQuestion
     [MaxLength(32)]
     public string? SkillTag { get; set; }
 
+    /// <summary>Authoring difficulty hint, 1 (easiest) – 5 (hardest).
+    /// Nullable for back-compat with rows authored before the column
+    /// existed. Drives analytics and adaptive drill assembly.</summary>
+    public int? Difficulty { get; set; }
+
+    /// <summary>The single sentence from the linked text that proves the
+    /// correct answer. Surfaced on post-submit review (policy-gated). Never
+    /// serialised while an attempt is InProgress.</summary>
+    [MaxLength(1024)]
+    public string? EvidenceSentence { get; set; }
+
+    /// <summary>Per-option free-text rationale map keyed by option letter,
+    /// e.g. <c>{"A":"...","B":"..."}</c>, explaining why each distractor is
+    /// wrong. Authoring-only; never serialised to learner DTOs while an
+    /// attempt is InProgress. Capped at 4096 chars.</summary>
+    [MaxLength(4096)]
+    public string? DistractorRationaleJson { get; set; }
+
     /// <summary>Phase 4 — JSON map keyed by option key, value is the
     /// <see cref="ReadingDistractorCategory"/> name. Example for an MCQ4:
     /// <c>{"A":"Opposite","B":"DistortedDetail","D":"NotInText"}</c>.
@@ -443,6 +461,23 @@ public class ReadingAttempt
     [MaxLength(32)]
     public string? RulebookVersion { get; set; }
 
+    /// <summary>Phase Wave 1 — manual score override applied by an expert /
+    /// admin after review. When set, the override raw/scaled take display
+    /// precedence over the machine-graded <see cref="RawScore"/> /
+    /// <see cref="ScaledScore"/>. Null = no override. The scaled value MUST
+    /// still be produced via <c>OetScoring</c> at the call site.</summary>
+    public int? ScoreOverrideRaw { get; set; }
+
+    public int? ScoreOverrideScaled { get; set; }
+
+    [MaxLength(2000)]
+    public string? ScoreOverrideReason { get; set; }
+
+    [MaxLength(64)]
+    public string? OverriddenByUserId { get; set; }
+
+    public DateTimeOffset? OverriddenAt { get; set; }
+
     public ICollection<ReadingAnswer> Answers { get; set; } = new List<ReadingAnswer>();
 }
 
@@ -479,6 +514,17 @@ public class ReadingAnswer
     /// when the question isn't an MCQ, or when no distractor metadata was
     /// authored for the picked option.</summary>
     public ReadingDistractorCategory? SelectedDistractorCategory { get; set; }
+
+    /// <summary>Phase Wave 1 — classification of why a graded answer was
+    /// missed. One of: <c>spelling</c>, <c>wrong_text</c>,
+    /// <c>incomplete</c>, <c>distractor</c>, <c>blank</c>, <c>wrong</c>.
+    /// Null when the answer is correct (or not yet graded).</summary>
+    [MaxLength(64)]
+    public string? MissReason { get; set; }
+
+    /// <summary>Phase Wave 1 — learner-set flag to revisit this question on
+    /// post-submit review. Defaults false.</summary>
+    public bool FlaggedForReview { get; set; }
 
     public DateTimeOffset AnsweredAt { get; set; }
 
@@ -552,6 +598,27 @@ public class ReadingPolicy
     public string SentenceCompletionStrictness { get; set; } = "exact_from_bank";
     [MaxLength(32)]
     public string UnknownTypeFallbackPolicy { get; set; } = "skip_with_zero";
+
+    /// <summary>Wave 1 — when true, smart/curly quotes and apostrophes in
+    /// both the correct answer and the learner's answer are folded to ASCII
+    /// before comparison. OET-faithful and safe; default true.</summary>
+    public bool NormalizeSmartQuotes { get; set; } = true;
+
+    /// <summary>Wave 1 — when true, spaces around hyphens are collapsed
+    /// (<c>"x - y"</c> → <c>"x-y"</c>) before comparison. Default false to
+    /// stay strict.</summary>
+    public bool NormalizeHyphenSpacing { get; set; } = false;
+
+    /// <summary>Wave 1 — when true, the space between a number and its unit
+    /// is removed (<c>"500 mg"</c> → <c>"500mg"</c>) before comparison.
+    /// Default false to stay strict.</summary>
+    public bool NormalizeUnitSpacing { get; set; } = false;
+
+    /// <summary>Wave 1 — when true (default), Part A typed answers compare
+    /// case-insensitively after normalisation. When false, Part A typed
+    /// answers compare ordinally. Spelling stays strict either way (no
+    /// Levenshtein, no synonyms for Part A).</summary>
+    public bool PartACaseInsensitive { get; set; } = true;
 
     // §4 — Explanation + review policy
     public bool ShowExplanationsAfterSubmit { get; set; } = true;
@@ -766,4 +833,115 @@ public class ReadingExtractionDraft
 
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset? ResolvedAt { get; set; }
+}
+
+/// <summary>
+/// Wave 1 — expert / admin free-text feedback attached to a graded Reading
+/// attempt. Scoped at the whole test, a section (part), a single question,
+/// or a skill tag so the reviewer can comment at the right granularity.
+/// </summary>
+[Index(nameof(ReadingAttemptId))]
+public class ReadingAttemptFeedback
+{
+    [Key]
+    [MaxLength(64)]
+    public string Id { get; set; } = default!;
+
+    [MaxLength(64)]
+    public string ReadingAttemptId { get; set; } = default!;
+
+    /// <summary>One of: <c>test</c>, <c>section</c>, <c>question</c>,
+    /// <c>skill</c>.</summary>
+    [MaxLength(16)]
+    public string Scope { get; set; } = "test";
+
+    /// <summary>Target reference within the scope — a part code, question
+    /// id, or skill tag. Null for whole-test feedback.</summary>
+    [MaxLength(128)]
+    public string? TargetRef { get; set; }
+
+    [MaxLength(64)]
+    public string AuthorUserId { get; set; } = default!;
+
+    [MaxLength(4000)]
+    public string FeedbackText { get; set; } = string.Empty;
+
+    public DateTimeOffset CreatedAt { get; set; }
+    public DateTimeOffset UpdatedAt { get; set; }
+}
+
+/// <summary>
+/// Wave 1 — append-only history of a learner's changed answers. One row is
+/// written each time a save changes the stored <see cref="ReadingAnswer.UserAnswerJson"/>
+/// for a question during an InProgress attempt, so the post-submit review
+/// can show "you changed your answer from X to Y".
+/// </summary>
+[Index(nameof(ReadingAttemptId), nameof(ReadingQuestionId))]
+public class ReadingAnswerRevision
+{
+    [Key]
+    [MaxLength(64)]
+    public string Id { get; set; } = default!;
+
+    [MaxLength(64)]
+    public string ReadingAttemptId { get; set; } = default!;
+
+    [MaxLength(64)]
+    public string ReadingQuestionId { get; set; } = default!;
+
+    [MaxLength(2048)]
+    public string UserAnswerJson { get; set; } = "\"\"";
+
+    public DateTimeOffset RecordedAt { get; set; }
+}
+
+/// <summary>
+/// Wave 1 — an expert / admin assignment that directs a learner to take a
+/// specific Reading paper (or a scoped subset of it). Used to power coach
+/// "assign retake / drill" workflows.
+/// </summary>
+[Index(nameof(AssignedToUserId))]
+[Index(nameof(AssignedByUserId))]
+public class ReadingAssignment
+{
+    [Key]
+    [MaxLength(64)]
+    public string Id { get; set; } = default!;
+
+    [MaxLength(64)]
+    public string AssignedByUserId { get; set; } = default!;
+
+    [MaxLength(64)]
+    public string AssignedToUserId { get; set; } = default!;
+
+    [MaxLength(64)]
+    public string PaperId { get; set; } = default!;
+
+    /// <summary>One of: <c>retake</c>, <c>part_a</c>, <c>part_bc</c>,
+    /// <c>drill</c>, <c>full</c>.</summary>
+    [MaxLength(24)]
+    public string Kind { get; set; } = "full";
+
+    /// <summary>Optional JSON describing the in-scope subset (question ids /
+    /// skill tags) when <see cref="Kind"/> is a scoped variant.</summary>
+    [MaxLength(8192)]
+    public string? ScopeJson { get; set; }
+
+    [MaxLength(1000)]
+    public string? Note { get; set; }
+
+    public DateTimeOffset? DueAt { get; set; }
+
+    /// <summary>The attempt that fulfilled this assignment, set when the
+    /// learner completes it.</summary>
+    [MaxLength(64)]
+    public string? CompletedAttemptId { get; set; }
+
+    /// <summary>One of: <c>assigned</c>, <c>completed</c>,
+    /// <c>cancelled</c>.</summary>
+    [MaxLength(16)]
+    public string Status { get; set; } = "assigned";
+
+    public DateTimeOffset CreatedAt { get; set; }
+    public DateTimeOffset UpdatedAt { get; set; }
 }

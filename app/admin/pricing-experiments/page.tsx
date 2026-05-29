@@ -447,19 +447,19 @@ export default function AdminPricingExperimentsPage() {
                     <table className="w-full text-sm">
                       <thead className="bg-admin-bg-subtle">
                         <tr>
-                          <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-admin-fg-muted">
+                          <th scope="col" className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-admin-fg-muted">
                             Variant
                           </th>
-                          <th className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wide text-admin-fg-muted">
+                          <th scope="col" className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wide text-admin-fg-muted">
                             Assignments
                           </th>
-                          <th className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wide text-admin-fg-muted">
+                          <th scope="col" className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wide text-admin-fg-muted">
                             Conversions
                           </th>
-                          <th className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wide text-admin-fg-muted">
+                          <th scope="col" className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wide text-admin-fg-muted">
                             Conv. rate
                           </th>
-                          <th className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wide text-admin-fg-muted">
+                          <th scope="col" className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wide text-admin-fg-muted">
                             Revenue
                           </th>
                         </tr>
@@ -499,22 +499,22 @@ export default function AdminPricingExperimentsPage() {
                         <table className="w-full text-sm">
                           <thead className="bg-admin-bg-subtle">
                             <tr>
-                              <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-admin-fg-muted">
+                              <th scope="col" className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-admin-fg-muted">
                                 Variant
                               </th>
-                              <th className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wide text-admin-fg-muted">
+                              <th scope="col" className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wide text-admin-fg-muted">
                                 Δ rate
                               </th>
-                              <th className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wide text-admin-fg-muted">
+                              <th scope="col" className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wide text-admin-fg-muted">
                                 95% CI
                               </th>
-                              <th className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wide text-admin-fg-muted">
+                              <th scope="col" className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wide text-admin-fg-muted">
                                 z
                               </th>
-                              <th className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wide text-admin-fg-muted">
+                              <th scope="col" className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wide text-admin-fg-muted">
                                 p-value
                               </th>
-                              <th className="px-3 py-2 text-center text-xs font-semibold uppercase tracking-wide text-admin-fg-muted">
+                              <th scope="col" className="px-3 py-2 text-center text-xs font-semibold uppercase tracking-wide text-admin-fg-muted">
                                 Sig.
                               </th>
                             </tr>

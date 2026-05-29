@@ -29,7 +29,7 @@ export function PronunciationDrillForm({ form, onChange }: PronunciationDrillFor
       <Card className="p-5 space-y-3">
         <h2 className="text-sm font-semibold uppercase tracking-[0.15em] text-muted">Metadata</h2>
         <label className="block">
-          <span className="text-sm text-navy dark:text-white">Label <span className="text-rose-500">*</span></span>
+          <span className="text-sm text-navy">Label <span className="text-danger">*</span></span>
           <input
             type="text"
             value={form.word}
@@ -40,7 +40,7 @@ export function PronunciationDrillForm({ form, onChange }: PronunciationDrillFor
           />
         </label>
         <label className="block">
-          <span className="text-sm text-navy dark:text-white">Target phoneme (IPA) <span className="text-rose-500">*</span></span>
+          <span className="text-sm text-navy">Target phoneme (IPA) <span className="text-danger">*</span></span>
           <input
             type="text"
             value={form.phoneticTranscription}
@@ -51,7 +51,7 @@ export function PronunciationDrillForm({ form, onChange }: PronunciationDrillFor
         </label>
         <div className="grid grid-cols-2 gap-3">
           <label className="block">
-            <span className="text-sm text-navy dark:text-white">Profession</span>
+            <span className="text-sm text-navy">Profession</span>
             <select
               value={form.profession}
               onChange={(event) => set('profession', event.target.value)}
@@ -68,7 +68,7 @@ export function PronunciationDrillForm({ form, onChange }: PronunciationDrillFor
             </select>
           </label>
           <label className="block">
-            <span className="text-sm text-navy dark:text-white">Focus</span>
+            <span className="text-sm text-navy">Focus</span>
             <select
               value={form.focus}
               onChange={(event) => set('focus', event.target.value)}
@@ -84,7 +84,7 @@ export function PronunciationDrillForm({ form, onChange }: PronunciationDrillFor
         </div>
         <div className="grid grid-cols-2 gap-3">
           <label className="block">
-            <span className="text-sm text-navy dark:text-white">Difficulty</span>
+            <span className="text-sm text-navy">Difficulty</span>
             <select
               value={form.difficulty}
               onChange={(event) => set('difficulty', event.target.value)}
@@ -96,7 +96,7 @@ export function PronunciationDrillForm({ form, onChange }: PronunciationDrillFor
             </select>
           </label>
           <label className="block">
-            <span className="text-sm text-navy dark:text-white">Primary rule ID</span>
+            <span className="text-sm text-navy">Primary rule ID</span>
             <input
               type="text"
               value={form.primaryRuleId}
@@ -107,7 +107,7 @@ export function PronunciationDrillForm({ form, onChange }: PronunciationDrillFor
           </label>
         </div>
         <label className="block">
-          <span className="text-sm text-navy dark:text-white">Model audio URL</span>
+          <span className="text-sm text-navy">Model audio URL</span>
           <input
             type="url"
             value={form.audioUrl}
@@ -121,7 +121,7 @@ export function PronunciationDrillForm({ form, onChange }: PronunciationDrillFor
       <Card className="p-5 space-y-3">
         <h2 className="text-sm font-semibold uppercase tracking-[0.15em] text-muted">Content</h2>
         <label className="block">
-          <span className="text-sm text-navy dark:text-white">Tips (HTML)</span>
+          <span className="text-sm text-navy">Tips (HTML)</span>
           <textarea
             value={form.tipsHtml}
             onChange={(event) => set('tipsHtml', event.target.value)}
@@ -131,7 +131,7 @@ export function PronunciationDrillForm({ form, onChange }: PronunciationDrillFor
           />
         </label>
         <label className="block">
-          <span className="text-sm text-navy dark:text-white">Example words (JSON array of strings)</span>
+          <span className="text-sm text-navy">Example words (JSON array of strings)</span>
           <textarea
             value={form.exampleWordsJson}
             onChange={(event) => set('exampleWordsJson', event.target.value)}
@@ -141,7 +141,7 @@ export function PronunciationDrillForm({ form, onChange }: PronunciationDrillFor
           />
         </label>
         <label className="block">
-          <span className="text-sm text-navy dark:text-white">Minimal pairs (JSON)</span>
+          <span className="text-sm text-navy">Minimal pairs (JSON)</span>
           <textarea
             value={form.minimalPairsJson}
             onChange={(event) => set('minimalPairsJson', event.target.value)}
@@ -151,7 +151,7 @@ export function PronunciationDrillForm({ form, onChange }: PronunciationDrillFor
           />
         </label>
         <label className="block">
-          <span className="text-sm text-navy dark:text-white">Practice sentences (JSON array of strings)</span>
+          <span className="text-sm text-navy">Practice sentences (JSON array of strings)</span>
           <textarea
             value={form.sentencesJson}
             onChange={(event) => set('sentencesJson', event.target.value)}

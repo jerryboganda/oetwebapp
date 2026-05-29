@@ -121,7 +121,7 @@ export default function WritingAiDraftPage() {
       <SettingsSection title="Draft generator" description="The grounded AI gateway physically refuses ungrounded prompts. Drafts are always stored as Draft and must be reviewed before publishing.">
         <p className="text-sm leading-6 text-admin-fg-muted">
           This generates a draft Writing task via the grounded AI gateway. Drafts are always stored
-          as <strong>draft</strong> — review and edit before publishing. The gateway physically refuses
+          as <strong>draft</strong> and must be reviewed and edited before publishing. The gateway physically refuses
           ungrounded prompts.
         </p>
 

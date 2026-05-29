@@ -257,7 +257,7 @@ export default function MockReadinessPage() {
                       <li key={task.id} className="flex items-start gap-2">
                         <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-success" aria-hidden />
                         <span>
-                          <span className="font-semibold text-navy">Day {task.dayIndex} — {task.title}</span>
+                          <span className="font-semibold text-navy">Day {task.dayIndex}: {task.title}</span>
                           {task.completedAt ? (
                             <span className="ml-1 text-xs">
                               ({new Date(task.completedAt).toLocaleDateString()})

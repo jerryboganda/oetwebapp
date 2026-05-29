@@ -455,7 +455,7 @@ export default function MockSetup() {
                       ) : null}
                     </div>
                     <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-border/60" role="progressbar" aria-valuenow={usedPct} aria-valuemin={0} aria-valuemax={100} aria-label={`${item.label} usage`}>
-                      <div className={`h-full ${barColor} transition-all`} style={{ width: `${usedPct}%` }} />
+                      <div className={`h-full ${barColor} transition-[width,background-color] duration-300`} style={{ width: `${usedPct}%` }} />
                     </div>
                   </div>
                 );
@@ -471,7 +471,7 @@ export default function MockSetup() {
                 <div>
                   <p className="text-sm font-black text-navy">You&apos;ve used all available mocks in at least one bucket.</p>
                   <p className="mt-1 text-xs leading-5 text-muted">
-                    Top up your mocks to keep practising — billing add-ons unlock additional attempts immediately.
+                    Top up your mocks to keep practising. Billing add-ons unlock additional attempts immediately.
                   </p>
                 </div>
               </div>
@@ -549,12 +549,12 @@ export default function MockSetup() {
                         onClick={() => !disabled && handleMockTypeChange(id)}
                         disabled={disabled}
                         aria-disabled={disabled}
-                        className={`relative rounded-2xl border-2 p-5 text-left transition-all ${
+                        className={`relative rounded-2xl border-2 p-5 text-left transition-[color,background-color,border-color,box-shadow,transform,opacity,filter] duration-200 ${
                           isSelected ? 'border-primary bg-primary/5 ring-4 ring-primary/10' : 'border-border hover:border-border-hover hover:bg-background-light'
                         } ${disabled ? 'cursor-not-allowed opacity-60 hover:border-border hover:bg-transparent' : ''}`}
                       >
                         <div className="mb-3 flex items-center justify-between">
-                          <span className={`flex h-10 w-10 items-center justify-center rounded-full ${isSelected ? 'bg-primary text-white' : 'bg-background-light text-muted'}`}>
+                          <span className={`flex h-10 w-10 items-center justify-center rounded-full ${isSelected ? 'bg-primary text-white dark:bg-violet-700' : 'bg-background-light text-muted'}`}>
                             <Icon className="h-5 w-5" />
                           </span>
                           {isSelected ? <Check className="h-5 w-5 text-primary" /> : null}
@@ -971,7 +971,7 @@ export default function MockSetup() {
               </Button>
               <p className="mt-3 text-center text-xs text-muted">
                 {entitlementBlocked
-                  ? 'No remaining attempts for this mock type — top up from billing to continue.'
+                  ? 'No remaining attempts for this mock type. Top up from billing to continue.'
                   : selectedBundle
                     ? `${selectedBundle.title} / ${selectedBundle.estimatedDurationMinutes} minutes`
                     : 'Select a published bundle to continue.'}

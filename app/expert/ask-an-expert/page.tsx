@@ -81,7 +81,7 @@ export default function AskAnExpertPage() {
             <h1 className="text-3xl font-bold flex items-center gap-2">
               <MessageSquareText className="w-8 h-8" /> Ask a Tutor
             </h1>
-            <p className="text-muted-foreground mt-1">
+            <p className="text-muted mt-1">
               Answer learner questions with verified expert responses.
             </p>
           </div>
@@ -115,10 +115,10 @@ export default function AskAnExpertPage() {
                         ) : (
                           <Badge variant="outline" className="gap-1 border-amber-500 text-amber-700 dark:text-amber-400"><Clock className="w-3 h-3" /> Needs Answer</Badge>
                         )}
-                        <span className="text-xs text-muted-foreground">{thread.replyCount} replies · {thread.viewCount} views</span>
+                        <span className="text-xs text-muted">{thread.replyCount} replies · {thread.viewCount} views</span>
                       </div>
                       <h3 className="font-semibold">{thread.title}</h3>
-                      <p className="text-xs text-muted-foreground mt-1">
+                      <p className="text-xs text-muted mt-1">
                         by {thread.authorDisplayName} · {new Date(thread.createdAt).toLocaleDateString()}
                       </p>
                     </div>
@@ -128,7 +128,7 @@ export default function AskAnExpertPage() {
                       </Button>
                     )}
                     {thread.hasExpertAnswer && (
-                      <ChevronRight className="w-5 h-5 text-muted-foreground flex-shrink-0" />
+                      <ChevronRight className="w-5 h-5 text-muted flex-shrink-0" />
                     )}
                   </div>
 
@@ -142,7 +142,7 @@ export default function AskAnExpertPage() {
                         onChange={(e) => setReplyBody(e.target.value)}
                       />
                       <div className="flex items-center justify-between">
-                        <p className="text-xs text-muted-foreground">Your reply will be marked as &quot;Expert Verified&quot;</p>
+                        <p className="text-xs text-muted">Your reply will be marked as &quot;Expert Verified&quot;</p>
                         <div className="flex gap-2">
                           <Button variant="ghost" size="sm" onClick={() => setReplyingTo(null)}>Cancel</Button>
                           <Button size="sm" onClick={() => submitReply(thread.id)} disabled={submitting || !replyBody.trim()}>
@@ -157,7 +157,7 @@ export default function AskAnExpertPage() {
             ))}
 
             {data.threads.length === 0 && (
-              <Card className="p-8 text-center text-muted-foreground">
+              <Card className="p-8 text-center text-muted">
                 <MessageSquareText className="w-12 h-12 mx-auto mb-3 opacity-30" />
                 <p>No questions yet. Learners will post questions in the &quot;Ask a Tutor&quot; forum category.</p>
               </Card>

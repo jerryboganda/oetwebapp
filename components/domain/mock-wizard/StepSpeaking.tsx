@@ -110,7 +110,7 @@ export function StepSpeaking() {
   return (
     <div className="space-y-6">
       <header className="space-y-1">
-        <h2 className="text-lg font-bold text-navy">Step 5 — Speaking</h2>
+        <h2 className="text-lg font-bold text-navy">Step 5: Speaking</h2>
         <p className="text-sm text-muted">
           Upload the role card, assessment criteria and warm-up question sheet, then author the
           interlocutor + candidate cards.

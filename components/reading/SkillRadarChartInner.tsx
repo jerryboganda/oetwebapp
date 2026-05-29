@@ -41,24 +41,24 @@ export function SkillRadarChartInner({ data }: SkillRadarChartInnerProps) {
           <Radar
             name="Baseline"
             dataKey="Baseline"
-            stroke="#9ca3af"
-            fill="#9ca3af"
+            stroke="var(--color-muted)"
+            fill="var(--color-muted)"
             fillOpacity={0.1}
             strokeDasharray="4 4"
           />
           <Radar
             name="Target"
             dataKey="Target"
-            stroke="#3b82f6"
-            fill="#3b82f6"
+            stroke="var(--color-info)"
+            fill="var(--color-info)"
             fillOpacity={0.1}
             strokeDasharray="4 4"
           />
           <Radar
             name="Current"
             dataKey="Current"
-            stroke="#7c3aed"
-            fill="#7c3aed"
+            stroke="var(--color-primary)"
+            fill="var(--color-primary)"
             fillOpacity={0.25}
           />
           <Legend wrapperStyle={{ paddingTop: 8, fontSize: 12 }} />

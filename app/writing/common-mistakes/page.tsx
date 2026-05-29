@@ -67,7 +67,7 @@ export default function WritingCommonMistakesPage() {
               type="button"
               onClick={() => setSubSkill(null)}
               aria-pressed={subSkill === null}
-              className={`rounded-full border px-3 py-1.5 text-xs font-bold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${subSkill === null ? 'border-primary bg-primary text-white' : 'border-border bg-background text-navy hover:border-primary/40'}`}
+              className={`rounded-full border px-3 py-1.5 text-xs font-bold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${subSkill === null ? 'border-primary bg-primary text-white dark:bg-violet-700' : 'border-border bg-background text-navy hover:border-primary/40'}`}
             >
               {t('writing.mistakes.library.filters.all')}
             </button>
@@ -77,7 +77,7 @@ export default function WritingCommonMistakesPage() {
                 type="button"
                 onClick={() => setSubSkill(skill)}
                 aria-pressed={subSkill === skill}
-                className={`rounded-full border px-3 py-1.5 text-xs font-bold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${subSkill === skill ? 'border-primary bg-primary text-white' : 'border-border bg-background text-navy hover:border-primary/40'}`}
+                className={`rounded-full border px-3 py-1.5 text-xs font-bold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${subSkill === skill ? 'border-primary bg-primary text-white dark:bg-violet-700' : 'border-border bg-background text-navy hover:border-primary/40'}`}
               >
                 {skill}
               </button>

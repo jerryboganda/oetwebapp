@@ -126,16 +126,16 @@ export default function PhraseSuggestionsPage() {
               value={attemptId}
               onChange={e => setAttemptId(e.target.value)}
               placeholder="Enter your writing attempt ID"
-              className="flex-1 bg-muted/30 border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+              className="flex-1 bg-background-light border border-border rounded-lg px-3 py-2 text-sm text-navy focus:outline-none focus:ring-2 focus:ring-primary/50"
             />
             <Button onClick={runCheck} disabled={loading || !attemptId.trim()}>
-              {loading ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4 mr-1.5" />}
+              {loading ? <RefreshCw className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Sparkles className="h-4 w-4 mr-1.5" aria-hidden="true" />}
               {loading ? 'Checking…' : 'Check'}
             </Button>
           </div>
 
           <label htmlFor="input-text" className="text-sm font-medium block mb-2">
-            Paste text <span className="text-muted-foreground font-normal">(optional — overrides stored attempt)</span>
+            Paste text <span className="text-muted font-normal">(optional, overrides stored attempt)</span>
           </label>
           <textarea
             id="input-text"
@@ -143,7 +143,7 @@ export default function PhraseSuggestionsPage() {
             onChange={e => setInputText(e.target.value)}
             rows={4}
             placeholder="Optionally paste writing text to check for phrase suggestions…"
-            className="w-full border bg-muted/30 rounded-lg p-3 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/50"
+            className="w-full border border-border bg-background-light rounded-lg p-3 text-sm text-navy resize-none focus:outline-none focus:ring-2 focus:ring-primary/50"
           />
         </Card>
 
@@ -157,9 +157,9 @@ export default function PhraseSuggestionsPage() {
               { label: 'Acceptance', value: `${Math.round(stats.acceptanceRate)}%`, icon: BarChart3 },
             ].map(s => (
               <Card key={s.label} className="p-3 text-center">
-                <s.icon className="h-4 w-4 mx-auto mb-1 text-muted-foreground" />
-                <p className="text-lg font-bold">{s.value}</p>
-                <p className="text-xs text-muted-foreground">{s.label}</p>
+                <s.icon className="h-4 w-4 mx-auto mb-1 text-muted" aria-hidden="true" />
+                <p className="text-lg font-bold text-navy">{s.value}</p>
+                <p className="text-xs text-muted">{s.label}</p>
               </Card>
             ))}
           </div>
@@ -171,7 +171,7 @@ export default function PhraseSuggestionsPage() {
             <button
               onClick={() => setFilter(null)}
               className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors
-                ${!filter ? 'bg-primary text-primary-foreground border-primary' : 'bg-muted/30 border-border hover:border-primary/50'}`}
+                ${!filter ? 'bg-primary text-white dark:bg-violet-700 border-primary' : 'bg-background-light text-navy border-border hover:border-primary/50'}`}
             >
               All ({suggestions.length})
             </button>
@@ -183,7 +183,7 @@ export default function PhraseSuggestionsPage() {
                   key={key}
                   onClick={() => setFilter(filter === key ? null : key)}
                   className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors
-                    ${filter === key ? `${cfg.bg} ${cfg.color} border-current` : 'bg-muted/30 border-border hover:border-primary/50'}`}
+                    ${filter === key ? `${cfg.bg} ${cfg.color} border-current` : 'bg-background-light text-navy border-border hover:border-primary/50'}`}
                 >
                   {cfg.label} ({count})
                 </button>
@@ -205,9 +205,15 @@ export default function PhraseSuggestionsPage() {
                       <div className="flex items-start justify-between gap-2 mb-3">
                         <Badge variant="outline" className={`${cfg.color} text-[10px] shrink-0`}>{cfg.label}</Badge>
                         <div className="flex items-center gap-1">
-                          <span className="text-[10px] text-muted-foreground">{Math.round(s.confidence * 100)}%</span>
-                          <button onClick={() => setExpandedId(expanded ? null : s.id)} className="p-2.5 -m-1">
-                            {expanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                          <span className="text-[10px] text-muted">{Math.round(s.confidence * 100)}%</span>
+                          <button
+                            type="button"
+                            onClick={() => setExpandedId(expanded ? null : s.id)}
+                            className="p-2.5 -m-1"
+                            aria-expanded={expanded}
+                            aria-label={expanded ? `Hide explanation for ${cfg.label} suggestion` : `Show explanation for ${cfg.label} suggestion`}
+                          >
+                            {expanded ? <ChevronUp className="h-3.5 w-3.5" aria-hidden="true" /> : <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" />}
                           </button>
                         </div>
                       </div>
@@ -215,20 +221,20 @@ export default function PhraseSuggestionsPage() {
                       {/* original → suggested */}
                       <div className="space-y-2 mb-3">
                         <div className="flex items-start gap-2">
-                          <span className="text-[10px] text-muted-foreground mt-1 shrink-0 w-12">Before</span>
-                          <p className="text-sm line-through text-muted-foreground">{s.originalText}</p>
+                          <span className="text-[10px] text-muted mt-1 shrink-0 w-12">Before</span>
+                          <p className="text-sm line-through text-muted">{s.originalText}</p>
                         </div>
                         <div className="flex items-start gap-2">
                           <span className="text-[10px] text-primary mt-1 shrink-0 w-12">After</span>
-                          <p className="text-sm font-medium">{s.suggestedText}</p>
+                          <p className="text-sm font-medium text-navy">{s.suggestedText}</p>
                         </div>
                       </div>
 
                       {/* explanation (expanded) */}
                       {expanded && (
-                        <div className="bg-background/60 rounded-lg p-3 mb-3">
-                          <p className="text-xs text-muted-foreground flex items-start gap-2">
-                            <BookOpen className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                        <div className="bg-background-light rounded-lg p-3 mb-3">
+                          <p className="text-xs text-muted flex items-start gap-2">
+                            <BookOpen className="h-3.5 w-3.5 mt-0.5 shrink-0" aria-hidden="true" />
                             {s.explanation}
                           </p>
                         </div>
@@ -243,7 +249,7 @@ export default function PhraseSuggestionsPage() {
                           onClick={() => resolve(s.id, 'accepted')}
                           className="flex-1 h-8 text-xs"
                         >
-                          <Check className="h-3.5 w-3.5 mr-1" />Accept
+                          <Check className="h-3.5 w-3.5 mr-1" aria-hidden="true" />Accept
                         </Button>
                         <Button
                           size="sm"
@@ -252,7 +258,7 @@ export default function PhraseSuggestionsPage() {
                           onClick={() => resolve(s.id, 'dismissed')}
                           className="flex-1 h-8 text-xs"
                         >
-                          <X className="h-3.5 w-3.5 mr-1" />Dismiss
+                          <X className="h-3.5 w-3.5 mr-1" aria-hidden="true" />Dismiss
                         </Button>
                       </div>
                     </div>
@@ -265,8 +271,8 @@ export default function PhraseSuggestionsPage() {
 
         {/* empty states */}
         {!loading && suggestions.length === 0 && stats && (
-          <div className="text-center py-12 text-muted-foreground">
-            <Sparkles className="h-10 w-10 mx-auto mb-3 opacity-30" />
+          <div className="text-center py-12 text-muted">
+            <Sparkles className="h-10 w-10 mx-auto mb-3 opacity-30" aria-hidden="true" />
             <p className="text-sm">No active suggestions. Run a check to generate phrase improvements.</p>
           </div>
         )}

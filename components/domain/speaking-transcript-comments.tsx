@@ -50,7 +50,7 @@ export function SpeakingTranscriptComments({
   if (lineComments.length === 0) return null;
 
   return (
-    <ul className="mt-1 flex flex-col gap-1 border-l-2 border-info pl-3">
+    <ul className="mt-1 flex flex-col gap-1 rounded-lg border border-info/20 bg-info/5 p-3">
       {lineComments.map((c) => (
         <li key={c.commentId} className="flex flex-col gap-0.5">
           <span className="flex items-center gap-2 text-xs">

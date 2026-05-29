@@ -28,24 +28,24 @@ export function WordCounter({ count, target, ariaLabelPrefix, className }: WordC
   const amberLowStart = Math.max(0, min - 30);
   const amberHighEnd = max + 30;
 
-  let toneClass = 'text-slate-500';
+  let toneClass = 'text-muted';
   let labelHint = '';
   if (safeCount === 0) {
-    toneClass = 'text-slate-500';
+    toneClass = 'text-muted';
   } else if (safeCount >= min && safeCount <= max) {
-    toneClass = 'text-emerald-600 dark:text-emerald-400';
+    toneClass = 'text-success';
     labelHint = 'in target range';
   } else if (
     (safeCount >= amberLowStart && safeCount < min)
     || (safeCount > max && safeCount <= amberHighEnd)
   ) {
-    toneClass = 'text-amber-600 dark:text-amber-400';
+    toneClass = 'text-warning';
     labelHint = safeCount < min ? 'approaching target' : 'over target';
   } else if (safeCount > amberHighEnd) {
-    toneClass = 'text-red-600 dark:text-red-400';
+    toneClass = 'text-danger';
     labelHint = 'over-length';
   } else {
-    toneClass = 'text-slate-500';
+    toneClass = 'text-muted';
     labelHint = 'keep writing';
   }
 

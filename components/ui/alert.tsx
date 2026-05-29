@@ -42,9 +42,7 @@ export function InlineAlert({ variant = 'info', title, children, dismissible, cl
           {...motionProps}
           className={cn('flex items-start gap-3 rounded-2xl border px-4 py-4 shadow-sm', config.bgClass, config.borderClass, className)}
         >
-          <div className={cn('mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-white/70 dark:bg-white/10', config.textClass)}>
-            <Icon className="h-5 w-5" aria-hidden="true" />
-          </div>
+          <Icon className={cn('mt-0.5 h-5 w-5 shrink-0', config.textClass)} aria-hidden="true" />
           <div className="flex-1 min-w-0">
             {title && <p className={cn('font-semibold text-sm', config.textClass)}>{title}</p>}
             <div className={cn('text-sm leading-6', config.textClass, title && 'mt-0.5')}>{children}</div>
@@ -57,10 +55,10 @@ export function InlineAlert({ variant = 'info', title, children, dismissible, cl
                 void triggerImpactHaptic('LIGHT');
                 setVisible(false);
               }}
-              className={cn('rounded-xl p-2.5 -m-1', config.textClass, 'hover:bg-white/70 dark:hover:bg-white/10')}
+              className={cn('rounded-xl p-2.5 -m-1 transition-colors', config.textClass, 'hover:bg-navy/5 dark:hover:bg-white/10')}
               aria-label="Dismiss"
             >
-              <X className="w-4 h-4" />
+              <X className="w-4 h-4" aria-hidden="true" />
             </button>
           )}
         </motion.div>
@@ -96,9 +94,7 @@ export function Toast({ variant = 'info', message, onClose, className, duration 
       {...celebrateProps}
       className={cn('fixed bottom-[calc(var(--bottom-nav-height,6rem)+env(safe-area-inset-bottom)+0.75rem)] right-4 left-4 sm:left-auto sm:right-6 sm:bottom-6 sm:max-w-sm z-[100] flex items-center gap-3 rounded-2xl border px-5 py-3.5 shadow-xl', config.bgClass, config.borderClass, className)}
     >
-      <div className={cn('flex h-10 w-10 items-center justify-center rounded-2xl bg-white/70', config.textClass)}>
-        <Icon className="h-5 w-5" aria-hidden="true" />
-      </div>
+      <Icon className={cn('h-5 w-5 shrink-0', config.textClass)} aria-hidden="true" />
       <span className={cn('text-sm font-medium', config.textClass)}>{message}</span>
       {onClose && (
         <button
@@ -107,7 +103,7 @@ export function Toast({ variant = 'info', message, onClose, className, duration 
             void triggerImpactHaptic('LIGHT');
             onClose();
           }}
-          className={cn('rounded-xl p-2.5 -m-1', config.textClass, 'hover:bg-white/70')}
+          className={cn('rounded-xl p-2.5 -m-1 transition-colors', config.textClass, 'hover:bg-navy/5 dark:hover:bg-white/10')}
           aria-label="Dismiss"
         >
           <X className="w-4 h-4" aria-hidden="true" />

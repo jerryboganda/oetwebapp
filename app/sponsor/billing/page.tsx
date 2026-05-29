@@ -98,7 +98,7 @@ export default function SponsorBillingPage() {
           </div>
           <div>
             <dt className="text-sm font-medium text-muted">Account</dt>
-            <dd className="mt-1 text-sm text-navy">{data?.sponsorName ?? '—'}</dd>
+            <dd className="mt-1 text-sm text-navy">{data?.sponsorName ?? 'N/A'}</dd>
           </div>
         </dl>
       </Card>

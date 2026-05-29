@@ -26,12 +26,12 @@ import {
 } from '@/lib/scoring';
 
 const GRADE_COLORS: Record<string, string> = {
-  A: 'from-emerald-400 to-green-500',
-  B: 'from-violet-400 to-purple-500',
-  'C+': 'from-yellow-400 to-amber-500',
-  C: 'from-orange-400 to-amber-500',
-  D: 'from-red-400 to-rose-500',
-  E: 'from-red-500 to-rose-600',
+  A: 'bg-success',
+  B: 'bg-info',
+  'C+': 'bg-warning',
+  C: 'bg-warning',
+  D: 'bg-danger',
+  E: 'bg-danger',
 };
 
 export default function ConversationResultsPage() {
@@ -112,7 +112,7 @@ export default function ConversationResultsPage() {
       <LearnerDashboardShell>
         <MotionSection className="max-w-md mx-auto text-center py-16">
           <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-4">
-            <BarChart3 className="w-8 h-8 text-primary animate-pulse" />
+            <BarChart3 className="w-8 h-8 text-primary motion-safe:animate-pulse" aria-hidden />
           </div>
           <h2 className="text-xl font-bold text-navy mb-2">Evaluating conversation…</h2>
           <p className="text-muted text-sm">This usually takes a few seconds. The page will update automatically.</p>
@@ -124,7 +124,7 @@ export default function ConversationResultsPage() {
   if (!evaluation) return null;
 
   const grade: OetGrade = ((evaluation.overallGrade as OetGrade) ?? 'E');
-  const gradeGradient = GRADE_COLORS[grade] ?? 'from-gray-400 to-gray-500';
+  const gradeColor = GRADE_COLORS[grade] ?? 'bg-muted';
   const scaled = evaluation.scaledScore ?? 0;
   const criteria = evaluation.criteria ?? [];
   const strengths = evaluation.strengths ?? [];
@@ -146,7 +146,7 @@ export default function ConversationResultsPage() {
           <div className="mb-3 text-sm font-bold uppercase tracking-wider text-muted">
             OET Speaking practice · Scaled score
           </div>
-          <div className={`mx-auto mb-3 inline-flex h-24 w-24 items-center justify-center rounded-full bg-gradient-to-br ${gradeGradient} text-3xl font-bold text-white shadow-lg`}>
+          <div className={`mx-auto mb-3 inline-flex h-24 w-24 items-center justify-center rounded-full ${gradeColor} text-3xl font-bold text-white shadow-sm`}>
             {grade}
           </div>
           <div className="mb-1 text-3xl font-bold text-navy">
@@ -187,7 +187,7 @@ export default function ConversationResultsPage() {
                       </span>
                     </div>
                     <div className="mb-1.5 h-2.5 w-full rounded-full bg-background-light">
-                      <div className={`h-2.5 rounded-full transition-all duration-700 ${
+                      <div className={`h-2.5 rounded-full transition-[width,background-color] duration-700 ${
                         criterionPassed ? 'bg-success' : pct >= 50 ? 'bg-warning' : 'bg-danger'}`}
                         style={{ width: `${pct}%` }} />
                     </div>
@@ -310,7 +310,7 @@ export default function ConversationResultsPage() {
 
         <div className="flex flex-wrap items-center justify-center gap-4 py-6">
           <Link href="/conversation"
-            className="flex items-center gap-2 rounded-xl bg-primary px-6 py-2.5 font-semibold text-white transition-colors hover:bg-primary/90">
+            className="flex items-center gap-2 rounded-xl bg-primary px-6 py-2.5 font-semibold text-white transition-[color,background-color,transform] duration-200 hover:bg-primary/90 active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600">
             <RotateCcw className="h-4 w-4" /> Practice again
           </Link>
           <Link href="/review"

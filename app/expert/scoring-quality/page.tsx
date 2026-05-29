@@ -119,10 +119,10 @@ export default function ScoringQualityPage() {
                     </ResponsiveContainer>
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mt-4">
                       {data.scoringDistribution.map((sd) => (
-                        <div key={sd.criterion} className="text-xs p-2 rounded-lg bg-gray-50 dark:bg-gray-800">
+                        <div key={sd.criterion} className="text-xs p-2 rounded-lg bg-background-light">
                           <p className="font-medium capitalize">{sd.criterion}</p>
-                          <p className="text-muted-foreground">μ={sd.mean} σ={sd.stdDev} n={sd.count}</p>
-                          <p className="text-muted-foreground">Range: {sd.min}–{sd.max}</p>
+                          <p className="text-muted">μ={sd.mean} σ={sd.stdDev} n={sd.count}</p>
+                          <p className="text-muted">Range: {sd.min}–{sd.max}</p>
                         </div>
                       ))}
                     </div>
@@ -157,19 +157,19 @@ export default function ScoringQualityPage() {
               <CardContent className="pt-4">
                 <div className="grid grid-cols-3 gap-4 text-center">
                   <div>
-                    <p className="text-xs text-muted-foreground">Comparisons</p>
-                    <p className="text-xl font-bold text-indigo-600 dark:text-indigo-400">{data.aiHumanAgreement.comparisons}</p>
+                    <p className="text-xs text-muted">Comparisons</p>
+                    <p className="text-xl font-bold text-primary">{data.aiHumanAgreement.comparisons}</p>
                   </div>
                   <div>
-                    <p className="text-xs text-muted-foreground">Avg Difference</p>
-                    <p className="text-xl font-bold text-indigo-600 dark:text-indigo-400">{data.aiHumanAgreement.averageDifference.toFixed(2)}</p>
+                    <p className="text-xs text-muted">Avg Difference</p>
+                    <p className="text-xl font-bold text-primary">{data.aiHumanAgreement.averageDifference.toFixed(2)}</p>
                   </div>
                   <div>
-                    <p className="text-xs text-muted-foreground">Max Difference</p>
-                    <p className="text-xl font-bold text-indigo-600 dark:text-indigo-400">{data.aiHumanAgreement.maxDifference.toFixed(2)}</p>
+                    <p className="text-xs text-muted">Max Difference</p>
+                    <p className="text-xl font-bold text-primary">{data.aiHumanAgreement.maxDifference.toFixed(2)}</p>
                   </div>
                 </div>
-                <p className="text-xs text-muted-foreground mt-3 text-center">
+                <p className="text-xs text-muted mt-3 text-center">
                   Agreement is measured as the percentage of reviews where the tutor-AI score difference ≤ 1.0 point.
                 </p>
               </CardContent>

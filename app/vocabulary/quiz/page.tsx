@@ -193,7 +193,7 @@ function VocabQuizContent() {
               onClick={() => setFormat(fmt.id)}
               className={`rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
                 format === fmt.id
-                  ? 'bg-primary text-white'
+                  ? 'bg-primary text-white dark:bg-violet-700'
                   : 'border border-border bg-background-light text-navy hover:border-primary/30'
               }`}
             >
@@ -245,7 +245,7 @@ function VocabQuizContent() {
               <Link href="/vocabulary/quiz/history" className="rounded-xl border border-border bg-background-light px-5 py-2.5 text-sm font-medium text-navy shadow-sm transition-colors hover:border-primary/30 hover:bg-surface">
                 See history
               </Link>
-              <button onClick={() => loadQuiz(format)} className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-5 py-2.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-primary/90">
+              <button onClick={() => loadQuiz(format)} className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-5 py-2.5 text-sm font-medium text-white shadow-sm transition-[color,background-color,transform] duration-200 hover:bg-primary/90 active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600">
                 <RotateCcw className="w-4 h-4" /> New Quiz
               </button>
             </div>
@@ -269,7 +269,7 @@ function VocabQuizContent() {
             <span>Question {current + 1} of {questions.length}</span>
           </div>
           <div className="mb-6 h-1.5 w-full rounded-full bg-background-light">
-            <div className="h-1.5 rounded-full bg-primary transition-all" style={{ width: `${Math.min(100, ((current + 1) / questions.length) * 100)}%` }} />
+            <div className="h-1.5 rounded-full bg-primary transition-[width,background-color] duration-300" style={{ width: `${Math.min(100, ((current + 1) / questions.length) * 100)}%` }} />
           </div>
 
           <Card className="mb-4 border-border bg-surface p-6">
@@ -335,7 +335,7 @@ function VocabQuizContent() {
                 <button
                   onClick={handleTextSubmit}
                   disabled={!textAnswer.trim()}
-                  className="rounded-xl bg-primary px-6 py-2.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-primary/90 disabled:opacity-50"
+                  className="rounded-xl bg-primary px-6 py-2.5 text-sm font-medium text-white shadow-sm transition-[color,background-color,transform] duration-200 hover:bg-primary/90 active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600 disabled:opacity-50"
                 >
                   Submit answer
                 </button>
@@ -355,7 +355,7 @@ function VocabQuizContent() {
               <button
                 onClick={nextQuestion}
                 disabled={submitting}
-                className="rounded-xl bg-primary px-6 py-2.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-primary/90 disabled:opacity-50"
+                className="rounded-xl bg-primary px-6 py-2.5 text-sm font-medium text-white shadow-sm transition-[color,background-color,transform] duration-200 hover:bg-primary/90 active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600 disabled:opacity-50"
                 autoFocus
               >
                 {current + 1 >= questions.length ? 'Finish Quiz' : 'Next Question →'}

@@ -139,7 +139,7 @@ export default async function SpeakingRulebookIndexPage() {
                             <p className="mt-1 line-clamp-3 text-sm leading-6 text-muted">{rule.body}</p>
                           </div>
                           <ChevronRight
-                            className="mt-1 h-4 w-4 shrink-0 text-muted transition group-hover:translate-x-0.5 group-hover:text-primary"
+                            className="mt-1 h-4 w-4 shrink-0 text-muted transition group-hoverable:translate-x-0.5 group-hover:text-primary"
                             aria-hidden
                           />
                         </div>

@@ -63,7 +63,7 @@ export default function ProgramBrowserPage() {
       <div className="flex gap-2 mb-6 flex-wrap">
         <button
           onClick={() => changeFilter('')}
-          className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${!typeFilter ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:bg-muted/80'}`}
+          className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${!typeFilter ? 'bg-primary text-primary-foreground' : 'bg-muted text-navy hover:bg-muted/80'}`}
         >
           All
         </button>
@@ -71,7 +71,7 @@ export default function ProgramBrowserPage() {
           <button
             key={key}
             onClick={() => changeFilter(key)}
-            className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${typeFilter === key ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:bg-muted/80'}`}
+            className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${typeFilter === key ? 'bg-primary text-primary-foreground' : 'bg-muted text-navy hover:bg-muted/80'}`}
           >
             {label}
           </button>
@@ -87,7 +87,7 @@ export default function ProgramBrowserPage() {
           ))}
         </div>
       ) : programs.length === 0 ? (
-        <div className="text-center py-12 text-muted-foreground">
+        <div className="text-center py-12 text-muted">
           <BookOpen className="w-12 h-12 mx-auto mb-3 opacity-40" />
           <p className="text-lg font-medium">No programs available</p>
           <p className="text-sm mt-1">Check back soon for new learning programs.</p>
@@ -117,12 +117,12 @@ export default function ProgramBrowserPage() {
                   </h3>
 
                   {program.description && (
-                    <p className="text-sm text-muted-foreground line-clamp-2 mb-3">
+                    <p className="text-sm text-muted line-clamp-2 mb-3">
                       {program.description}
                     </p>
                   )}
 
-                  <div className="flex items-center gap-3 text-xs text-muted-foreground mt-auto">
+                  <div className="flex items-center gap-3 text-xs text-muted mt-auto">
                     <span className="flex items-center gap-1">
                       <BookOpen className="w-3.5 h-3.5" /> {program.trackCount} track{program.trackCount !== 1 ? 's' : ''}
                     </span>

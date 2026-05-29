@@ -34,7 +34,7 @@ const CHECKLIST: ChecklistItem[] = [
   { id: 'o1', label: 'Light, balanced breakfast', description: 'Avoid heavy meals. Stay hydrated.', category: 'on_the_day' },
   { id: 'o2', label: 'Arrive 30 minutes early', description: 'Registration can take time. Don\'t add stress.', category: 'on_the_day' },
   { id: 'o3', label: 'Bring water (clear bottle) and snacks', description: 'Most centres allow clear water bottles.', category: 'on_the_day' },
-  { id: 'o4', label: 'Read all instructions carefully', description: 'Don\'t rush through the rubric — note word limits and task requirements.', category: 'on_the_day' },
+  { id: 'o4', label: 'Read all instructions carefully', description: 'Don\'t rush through the rubric. Note word limits and task requirements.', category: 'on_the_day' },
 ];
 
 const CATEGORY_META: Record<string, { label: string; icon: React.ReactNode; color: string }> = {
@@ -79,7 +79,7 @@ export default function TestDayPrepPage() {
           </div>
           <div className="w-full bg-background-light rounded-full h-3">
             <div
-              className="bg-gradient-to-r from-indigo-500 to-purple-500 h-3 rounded-full transition-all duration-500"
+              className="bg-primary h-3 rounded-full transition-[width,background-color] duration-500"
               style={{ width: `${progressPct}%` }}
             />
           </div>

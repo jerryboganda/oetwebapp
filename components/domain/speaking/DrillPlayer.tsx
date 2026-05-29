@@ -241,7 +241,7 @@ export function DrillPlayer({ drill, attemptId, maxSeconds = DEFAULT_MAX_SECONDS
         )}
         {state === 'submitting' && (
           <InlineAlert variant="info">
-            Scoring your drill — this only takes a few seconds.
+            Scoring your drill. This only takes a few seconds.
           </InlineAlert>
         )}
       </section>

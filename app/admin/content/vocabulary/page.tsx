@@ -473,25 +473,25 @@ export default function AdminVocabularyPage() {
                 </div>
                 <div className="h-3 w-full overflow-hidden rounded-full bg-[var(--admin-bg-inset)]">
                   <div
-                    className="h-full rounded-full transition-all duration-500 ease-out"
+                    className="h-full rounded-full transition-[width,background-color] duration-500 ease-out"
                     style={{
                       width: `${audioProgress.percentComplete}%`,
                       background: audioProgress.percentComplete === 100
                         ? 'var(--admin-success)'
                         : audioStalled
                           ? 'var(--admin-warning)'
-                          : 'linear-gradient(90deg, var(--admin-primary), var(--admin-primary-strong))',
+                          : 'var(--admin-primary)',
                     }}
                   />
                 </div>
                 {audioProgress.pending > 0 && audioStalled && (
                   <p className="text-xs text-[var(--admin-danger)]">
-                    Generation stalled — {audioProgress.pending} terms still need audio. Click &quot;Resume generation&quot; to continue.
+                    Generation stalled. {audioProgress.pending} terms still need audio. Click &quot;Resume generation&quot; to continue.
                   </p>
                 )}
                 {audioProgress.pending > 0 && !audioStalled && (
                   <p className="text-xs text-admin-fg-muted animate-pulse">
-                    Audio generation in progress — ElevenLabs TTS is processing {audioProgress.pending} remaining terms...
+                    Audio generation in progress. ElevenLabs TTS is processing {audioProgress.pending} remaining terms...
                   </p>
                 )}
               </div>
@@ -520,7 +520,7 @@ export default function AdminVocabularyPage() {
                     key={s.code}
                     type="button"
                     onClick={() => { setRecallSet(s.code); setPage(1); }}
-                    title={`${s.description} — active ${s.active}, draft ${s.draft}, archived ${s.archived}`}
+                    title={`${s.description}: active ${s.active}, draft ${s.draft}, archived ${s.archived}`}
                     className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
                       recallSet === s.code
                         ? 'border-[var(--admin-primary)] bg-[var(--admin-primary-tint)] text-[var(--admin-primary)]'

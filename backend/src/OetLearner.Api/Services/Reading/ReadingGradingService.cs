@@ -24,6 +24,16 @@ namespace OetLearner.Api.Services.Reading;
 public interface IReadingGradingService
 {
     Task<ReadingGradingResult> GradeAttemptAsync(string attemptId, CancellationToken ct);
+
+    /// <summary>
+    /// Wave 2 — re-grade an already-Submitted attempt in place from its
+    /// stored answers (used by accepted-answer recalculation after an admin
+    /// edits a question's correct answer / accepted synonyms). Re-derives
+    /// raw + scaled via <see cref="OetScoring"/>, persists, and bumps
+    /// RowVersion WITHOUT changing <see cref="ReadingAttempt.SubmittedAt"/>.
+    /// Returns null when the attempt is missing or not Submitted.
+    /// </summary>
+    Task<ReadingGradingResult?> RegradeSubmittedAsync(string attemptId, CancellationToken ct);
 }
 
 public sealed record ReadingGradingResult(
@@ -67,6 +77,30 @@ public sealed class ReadingGradingService(
             }
         }
 
+        return await GradeAndPersistAsync(attempt, "ReadingAttemptGraded", ct);
+    }
+
+    /// <summary>
+    /// Wave 2 — force a re-grade of an already-Submitted attempt in place.
+    /// Bypasses the idempotent short-circuit in <see cref="GradeAttemptAsync"/>
+    /// so an accepted-answer edit can be propagated to historical attempts.
+    /// Writes no audit row of its own — the caller (ReadingTutorService)
+    /// records the recalculation audit so the action is logged once with
+    /// full context.
+    /// </summary>
+    public async Task<ReadingGradingResult?> RegradeSubmittedAsync(string attemptId, CancellationToken ct)
+    {
+        var attempt = await db.ReadingAttempts
+            .Include(a => a.Answers)
+            .FirstOrDefaultAsync(a => a.Id == attemptId, ct);
+        if (attempt is null || attempt.Status != ReadingAttemptStatus.Submitted)
+            return null;
+        return await GradeAndPersistAsync(attempt, auditAction: null, ct);
+    }
+
+    private async Task<ReadingGradingResult> GradeAndPersistAsync(
+        ReadingAttempt attempt, string? auditAction, CancellationToken ct)
+    {
         // Load all questions for the paper (single round-trip)
         var partIds = await db.ReadingParts
             .Where(p => p.PaperId == attempt.PaperId)
@@ -113,6 +147,7 @@ public sealed class ReadingGradingService(
             answer.SelectedDistractorCategory = isCorrect
                 ? null
                 : ResolveSelectedDistractor(q, answer);
+            answer.MissReason = ClassifyMiss(q, answer, policy, partCode, isCorrect);
             raw += pts;
             if (isCorrect) correctCount++; else incorrectCount++;
             details.Add(new(q.Id, q.QuestionType.ToString(), isCorrect, pts, q.Points));
@@ -137,17 +172,20 @@ public sealed class ReadingGradingService(
 
         await UpdateErrorBankAsync(attempt, questionById, ct);
 
-        db.AuditEvents.Add(new AuditEvent
+        if (auditAction is not null)
         {
-            Id = Guid.NewGuid().ToString("N"),
-            OccurredAt = DateTimeOffset.UtcNow,
-            ActorId = attempt.UserId,
-            ActorName = attempt.UserId,
-            Action = "ReadingAttemptGraded",
-            ResourceType = "ReadingAttempt",
-            ResourceId = attempt.Id,
-            Details = $"raw={raw}/{attempt.MaxRawScore} scaled={attempt.ScaledScore?.ToString() ?? "n/a"} mode={attempt.Mode}",
-        });
+            db.AuditEvents.Add(new AuditEvent
+            {
+                Id = Guid.NewGuid().ToString("N"),
+                OccurredAt = DateTimeOffset.UtcNow,
+                ActorId = attempt.UserId,
+                ActorName = attempt.UserId,
+                Action = auditAction,
+                ResourceType = "ReadingAttempt",
+                ResourceId = attempt.Id,
+                Details = $"raw={raw}/{attempt.MaxRawScore} scaled={attempt.ScaledScore?.ToString() ?? "n/a"} mode={attempt.Mode}",
+            });
+        }
 
         try
         {
@@ -159,10 +197,10 @@ public sealed class ReadingGradingService(
             // result the winner persisted instead of overwriting it.
             logger.LogInformation(
                 "Reading attempt {AttemptId} grade lost concurrency race; returning winner's stored result.",
-                attemptId);
+                attempt.Id);
             db.ChangeTracker.Clear();
             var winner = await db.ReadingAttempts.AsNoTracking()
-                .FirstOrDefaultAsync(a => a.Id == attemptId, ct)
+                .FirstOrDefaultAsync(a => a.Id == attempt.Id, ct)
                 ?? throw new InvalidOperationException("Attempt vanished after concurrency conflict.");
             if (winner.RawScore is int winnerRaw)
             {
@@ -232,7 +270,7 @@ public sealed class ReadingGradingService(
 
                 ReadingQuestionType.ShortAnswer or
                 ReadingQuestionType.SentenceCompletion => strictPartA
-                    ? GradeStrictTextAnswer(q, a)
+                    ? GradeStrictTextAnswer(q, a, policy)
                     : GradeShortAnswer(q, a, policy),
 
                 _ => ApplyUnknownFallback(q, a, policy),
@@ -253,8 +291,38 @@ public sealed class ReadingGradingService(
         string user;
         try { user = JsonSerializer.Deserialize<string>(a.UserAnswerJson)?.Trim().ToUpperInvariant() ?? ""; }
         catch (JsonException) { user = (a.UserAnswerJson ?? "").Trim().ToUpperInvariant(); }
+
+        // Wave 1.1.1 dual-read: if user answer looks like an option ID, resolve to letter
+        if (user.StartsWith("OPT-", StringComparison.OrdinalIgnoreCase))
+            user = ResolveOptionIdToLetter(q.OptionsJson, user) ?? user;
+
         var ok = !string.IsNullOrEmpty(correct) && correct == user;
         return (ok, ok ? q.Points : 0);
+    }
+
+    /// <summary>
+    /// Resolves an option ID (e.g. "opt-abc123def456") to its letter (e.g. "A")
+    /// by searching the enriched OptionsJson. Returns null if not found.
+    /// </summary>
+    private static string? ResolveOptionIdToLetter(string optionsJson, string optionId)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(optionsJson);
+            if (doc.RootElement.ValueKind != JsonValueKind.Array) return null;
+            foreach (var opt in doc.RootElement.EnumerateArray())
+            {
+                if (opt.ValueKind != JsonValueKind.Object) continue;
+                if (opt.TryGetProperty("id", out var idProp)
+                    && string.Equals(idProp.GetString(), optionId, StringComparison.OrdinalIgnoreCase)
+                    && opt.TryGetProperty("letter", out var letterProp))
+                {
+                    return letterProp.GetString()?.Trim().ToUpperInvariant();
+                }
+            }
+        }
+        catch (JsonException) { /* malformed options — cannot resolve */ }
+        return null;
     }
 
     /// <summary>
@@ -322,12 +390,22 @@ public sealed class ReadingGradingService(
         return (ok, ok ? q.Points : 0);
     }
 
-    private static (bool, int) GradeStrictTextAnswer(ReadingQuestion q, ReadingAnswer a)
+    private static (bool, int) GradeStrictTextAnswer(ReadingQuestion q, ReadingAnswer a, ReadingResolvedPolicy policy)
     {
         var correct = ParseJsonString(q.CorrectAnswerJson);
         var user = ParseJsonString(a.UserAnswerJson);
         if (correct is null || user is null) return (false, 0);
-        var ok = string.Equals(user.Trim(), correct.Trim(), StringComparison.Ordinal);
+
+        // STRICT spelling: normalise + collapse whitespace + (optional)
+        // smart-quote / hyphen / unit folding, then compare. NO Levenshtein
+        // and NO synonyms for Part A — real OET answers are copied
+        // word-for-word from the text. Case-insensitivity is policy-gated.
+        var nc = CollapseWhitespace(ApplyTextNormalization(correct.Trim(), policy));
+        var nu = CollapseWhitespace(ApplyTextNormalization(user.Trim(), policy));
+
+        var ok = policy.PartACaseInsensitive
+            ? string.Equals(nu, nc, StringComparison.OrdinalIgnoreCase)
+            : string.Equals(nu, nc, StringComparison.Ordinal);
         return (ok, ok ? q.Points : 0);
     }
 
@@ -354,7 +432,11 @@ public sealed class ReadingGradingService(
 
         foreach (var c in candidates)
         {
-            if (StringsMatch(user, c, q.CaseSensitive, policy.ShortAnswerNormalisation))
+            if (StringsMatch(
+                    ApplyTextNormalization(user, policy),
+                    ApplyTextNormalization(c, policy),
+                    q.CaseSensitive,
+                    policy.ShortAnswerNormalisation))
                 return (true, q.Points);
         }
         return (false, 0);
@@ -455,6 +537,124 @@ public sealed class ReadingGradingService(
             else { sb.Append(ch); prevSpace = false; }
         }
         return sb.ToString();
+    }
+
+    // ── Wave 1 — text normalisation shared by Part A and B/C grading ─────
+
+    /// <summary>
+    /// Applies the policy-gated text-normalisation toggles (smart quotes,
+    /// hyphen spacing, unit spacing) to a single string. Used by BOTH the
+    /// Part A strict-text path and the B/C short-answer path so the same
+    /// rules govern every typed comparison.
+    /// </summary>
+    private static string ApplyTextNormalization(string s, ReadingResolvedPolicy policy)
+    {
+        if (string.IsNullOrEmpty(s)) return s ?? string.Empty;
+        var result = s;
+        if (policy.NormalizeSmartQuotes) result = FoldSmartQuotes(result);
+        if (policy.NormalizeHyphenSpacing) result = FoldHyphenSpacing(result);
+        if (policy.NormalizeUnitSpacing) result = FoldUnitSpacing(result);
+        return result;
+    }
+
+    /// <summary>Maps curly/typographic apostrophes and quotes to their ASCII
+    /// equivalents: ’ ‘ ‛ ` ´ → ' and “ ” „ → ". En/em dashes are left
+    /// untouched (hyphen normalisation handles spacing only).</summary>
+    private static string FoldSmartQuotes(string s)
+    {
+        var sb = new StringBuilder(s.Length);
+        foreach (var ch in s)
+        {
+            switch (ch)
+            {
+                case '\u2019': // ’ right single quote
+                case '\u2018': // ‘ left single quote
+                case '\u201B': // ‛ single high-reversed-9
+                case '`':      // grave accent
+                case '\u00B4': // ´ acute accent
+                    sb.Append('\'');
+                    break;
+                case '\u201C': // “ left double quote
+                case '\u201D': // ” right double quote
+                case '\u201E': // „ low double quote
+                    sb.Append('"');
+                    break;
+                default:
+                    sb.Append(ch);
+                    break;
+            }
+        }
+        return sb.ToString();
+    }
+
+    /// <summary>Collapses whitespace around a hyphen: <c>"x - y"</c> →
+    /// <c>"x-y"</c>.</summary>
+    private static string FoldHyphenSpacing(string s)
+        => System.Text.RegularExpressions.Regex.Replace(s, @"\s*-\s*", "-");
+
+    /// <summary>Removes the space between a number and a following unit /
+    /// percent token: <c>"500 mg"</c> → <c>"500mg"</c>.</summary>
+    private static string FoldUnitSpacing(string s)
+        => System.Text.RegularExpressions.Regex.Replace(s, @"(?<=\d)\s+(?=[A-Za-z%])", "");
+
+    /// <summary>
+    /// Wave 1 — classify why a graded answer was missed. Returns null for a
+    /// correct answer. Priority order mirrors the documented decision list:
+    /// blank → spelling → distractor → wrong_text → incomplete → wrong.
+    /// </summary>
+    private static string? ClassifyMiss(
+        ReadingQuestion q,
+        ReadingAnswer a,
+        ReadingResolvedPolicy policy,
+        ReadingPartCode partCode,
+        bool isCorrect)
+    {
+        if (isCorrect) return null;
+
+        var userRaw = ParseJsonString(a.UserAnswerJson) ?? a.UserAnswerJson ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(userRaw)) return "blank";
+
+        var isPartATyped = partCode == ReadingPartCode.A
+            && q.QuestionType is ReadingQuestionType.ShortAnswer
+                or ReadingQuestionType.SentenceCompletion;
+
+        string? nu = null, nc = null;
+        if (isPartATyped)
+        {
+            var correctRaw = ParseJsonString(q.CorrectAnswerJson) ?? string.Empty;
+            nu = CollapseWhitespace(ApplyTextNormalization(userRaw.Trim(), policy));
+            nc = CollapseWhitespace(ApplyTextNormalization(correctRaw.Trim(), policy));
+
+            // "spelling": would have been right but for case/spelling — a
+            // case-insensitive normalised match or a single-edit typo.
+            if (!string.IsNullOrEmpty(nc)
+                && (string.Equals(nu, nc, StringComparison.OrdinalIgnoreCase)
+                    || LevenshteinDistanceAtMostOne(nu.ToUpperInvariant(), nc.ToUpperInvariant())))
+            {
+                return "spelling";
+            }
+        }
+
+        if ((q.QuestionType is ReadingQuestionType.MultipleChoice3
+                or ReadingQuestionType.MultipleChoice4)
+            && a.SelectedDistractorCategory is not null)
+        {
+            return "distractor";
+        }
+
+        if (q.QuestionType == ReadingQuestionType.MatchingTextReference)
+        {
+            return "wrong_text";
+        }
+
+        if (isPartATyped && nu is not null && nc is not null
+            && nu.Length > 0 && nc.Length > nu.Length
+            && nc.Contains(nu, StringComparison.OrdinalIgnoreCase))
+        {
+            return "incomplete";
+        }
+
+        return "wrong";
     }
 
     private static HashSet<string> ParseStringSet(string json)

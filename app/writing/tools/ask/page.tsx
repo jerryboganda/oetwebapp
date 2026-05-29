@@ -151,7 +151,7 @@ export default function WritingAskToolPage() {
               {messages.map((m, idx) => (
                 <li
                   key={idx}
-                  className={`max-w-prose rounded-2xl px-3 py-2 text-sm ${m.role === 'learner' ? 'ml-auto bg-primary text-white' : 'bg-slate-100 text-navy'}`}
+                  className={`max-w-prose rounded-2xl px-3 py-2 text-sm ${m.role === 'learner' ? 'ml-auto bg-primary text-white dark:bg-violet-700' : 'bg-background-light text-navy'}`}
                 >
                   {/* Message content (learner question and AI answer) is English content per spec. */}
                   <p className="whitespace-pre-wrap" dir="ltr">{m.content}</p>

@@ -66,7 +66,7 @@ export default function SpeakingPathwayPage() {
           <h1 className="text-2xl font-semibold text-foreground">
             {data?.title ?? 'Your Speaking pathway'}
           </h1>
-          <p className="text-muted-foreground">
+          <p className="text-muted">
             A guided sequence of warm-ups, drills, and full role-plays. Complete each stage to
             unlock the next.
           </p>
@@ -81,18 +81,18 @@ export default function SpeakingPathwayPage() {
             <Card className="p-4">
               <div className="flex items-center justify-between gap-4">
                 <div>
-                  <div className="text-sm text-muted-foreground">Progress</div>
+                  <div className="text-sm text-muted">Progress</div>
                   <div className="text-lg font-semibold text-foreground">
                     {data.completedStageCount} / {data.totalStages} stages
                   </div>
                 </div>
-                <div className="text-3xl font-mono font-semibold text-blue-600">
+                <div className="text-3xl font-mono font-semibold text-primary">
                   {Math.round(data.progressPercent)}%
                 </div>
               </div>
-              <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-200">
+              <div className="mt-3 h-2 overflow-hidden rounded-full bg-background-light">
                 <div
-                  className="h-full bg-blue-500 transition-all"
+                  className="h-full bg-primary transition-[width,background-color] duration-300"
                   style={{ width: `${Math.min(100, Math.max(0, data.progressPercent))}%` }}
                 />
               </div>
@@ -105,14 +105,14 @@ export default function SpeakingPathwayPage() {
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                       <div className="space-y-1">
                         <div className="flex flex-wrap items-center gap-2">
-                          <span className="text-xs font-mono text-muted-foreground">
+                          <span className="text-xs font-mono text-muted">
                             {String(idx + 1).padStart(2, '0')}
                           </span>
                           <span className="font-medium text-foreground">{stage.title}</span>
                           {stateBadge(stage.state)}
                           <Badge variant="outline">{stage.activityKind}</Badge>
                         </div>
-                        <p className="text-sm text-muted-foreground">{stage.description}</p>
+                        <p className="text-sm text-muted">{stage.description}</p>
                       </div>
                       {stage.actionHref && stage.state !== 'locked' ? (
                         <Button asChild variant={stage.state === 'in_progress' ? 'primary' : 'outline'} size="sm">

@@ -41,7 +41,7 @@ export function WritingCaseNotesPanel({
     : {};
 
   return (
-    <div className={cn('flex flex-col h-full bg-white/70 backdrop-blur-2xl border-r border-border/50 shadow-[4px_0_24px_-12px_rgba(0,0,0,0.05)] relative z-10', className)}>
+    <div className={cn('flex flex-col h-full bg-surface border-r border-border shadow-sm relative z-10', className)}>
       {/* Premium Tabs */}
       <div className="flex p-2 gap-1 border-b border-border/50 shrink-0 bg-navy/5" role="tablist" aria-label="Case notes tabs">
         {(['notes', 'scratchpad', 'checklist'] as const).map((tab) => (
@@ -51,10 +51,10 @@ export function WritingCaseNotesPanel({
             role="tab"
             aria-selected={activeTab === tab}
             className={cn(
-              'flex-1 py-2 text-xs font-bold capitalize transition-all duration-300 rounded-lg relative',
-              activeTab === tab 
-                ? 'text-primary bg-surface shadow-sm ring-1 ring-black/5 dark:ring-white/10' 
-                : 'text-navy/60 hover:text-navy hover:bg-white/50',
+              'flex-1 py-2 text-xs font-bold capitalize transition-[color,background-color,border-color,box-shadow,transform,opacity,filter] duration-300 rounded-lg relative',
+              activeTab === tab
+                ? 'text-primary bg-surface shadow-sm border border-border'
+                : 'text-navy/60 hover:text-navy hover:bg-background-light',
             )}
           >
             {tab === 'notes' ? 'Case Notes' : tab === 'scratchpad' ? 'Scratchpad' : 'Checklist'}

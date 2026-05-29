@@ -51,7 +51,7 @@ function TutorReviewCta() {
         variant="outline"
         disabled
         aria-disabled
-        title="Coming soon — credit gating not yet enabled."
+        title="Coming soon. Credit gating not yet enabled."
       >
         <UserPlus className="mr-1.5 h-3.5 w-3.5" aria-hidden />
         Request tutor review (uses 1 credit)

@@ -100,7 +100,7 @@ export default function ExamBookingPage() {
         />
         <button
           onClick={() => setShowCreate(true)}
-          className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary/90 text-white rounded-xl text-sm font-medium transition-colors"
+          className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary/90 active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600 text-white rounded-xl text-sm font-medium transition-[color,background-color,transform] duration-200"
         >
           <Plus className="w-4 h-4" /> Add Booking
         </button>
@@ -127,7 +127,7 @@ export default function ExamBookingPage() {
             <input type="text" placeholder="Booking reference (optional)" value={form.bookingReference} onChange={e => setForm(p => ({ ...p, bookingReference: e.target.value }))} className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-surface text-navy" />
             <input type="url" placeholder="External booking URL (optional)" value={form.externalUrl} onChange={e => setForm(p => ({ ...p, externalUrl: e.target.value }))} className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-surface text-navy" />
             <div className="flex gap-2 pt-1">
-              <button type="submit" disabled={creating} className="px-5 py-2 bg-primary hover:bg-primary/90 text-white rounded-lg text-sm font-medium disabled:opacity-50">
+              <button type="submit" disabled={creating} className="px-5 py-2 bg-primary hover:bg-primary/90 active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600 text-white rounded-lg text-sm font-medium disabled:opacity-50">
                 {creating ? 'Saving...' : 'Save Booking'}
               </button>
               <button type="button" onClick={() => setShowCreate(false)} className="px-5 py-2 border border-border-hover rounded-lg text-sm text-muted">Cancel</button>
@@ -155,8 +155,8 @@ export default function ExamBookingPage() {
                     <MotionItem key={booking.id} delayIndex={i}
                       className="bg-surface rounded-xl border border-border p-4 flex items-center gap-4"
                     >
-                      <div className={`flex-shrink-0 w-14 h-14 rounded-xl flex flex-col items-center justify-center text-white text-xs font-bold ${days <= 7 ? 'bg-danger' : days <= 30 ? 'bg-warning' : 'bg-primary'}`}>
-                        <div className="text-2xl font-bold leading-none">{days > 0 ? days : '—'}</div>
+                      <div className={`flex-shrink-0 w-14 h-14 rounded-xl flex flex-col items-center justify-center text-white text-xs font-bold ${days <= 7 ? 'bg-danger' : days <= 30 ? 'bg-warning' : 'bg-primary dark:bg-violet-700'}`}>
+                        <div className="text-2xl font-bold leading-none">{days > 0 ? days : 'N/A'}</div>
                         <div>days</div>
                       </div>
                       <div className="flex-1 min-w-0">

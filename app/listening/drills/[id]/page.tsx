@@ -70,7 +70,7 @@ function ListeningDrillContent() {
               />
               <div className="space-y-3">
                 {drill.highlights.map((highlight) => (
-                  <div key={highlight} className="rounded-2xl border border-border bg-background-light p-4 text-sm text-gray-900 dark:text-gray-100">
+                  <div key={highlight} className="rounded-2xl border border-border bg-background-light p-4 text-sm text-navy">
                     {highlight}
                   </div>
                 ))}

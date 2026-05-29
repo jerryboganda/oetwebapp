@@ -28,7 +28,7 @@ export interface TimeAnalyticsBreakdownProps {
 }
 
 function formatDuration(seconds: number | null | undefined): string {
-  if (seconds == null || !Number.isFinite(seconds) || seconds < 0) return '—';
+  if (seconds == null || !Number.isFinite(seconds) || seconds < 0) return 'N/A';
   const total = Math.round(seconds);
   const mins = Math.floor(total / 60);
   const secs = total % 60;

@@ -91,7 +91,7 @@ export default function EditInterlocutorScriptPage() {
 
   return (
     <AdminCatalogLayout
-      title={card ? `Interlocutor script — ${card.scenarioTitle}` : 'Interlocutor script'}
+      title={card ? `Interlocutor script: ${card.scenarioTitle}` : 'Interlocutor script'}
       description="Hidden card never shown to learners. Drives the AI patient persona and the tutor cue panel."
       breadcrumbs={breadcrumbs}
       eyebrow="CMS · Hidden"

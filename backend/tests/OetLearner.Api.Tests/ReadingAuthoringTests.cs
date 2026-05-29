@@ -1644,6 +1644,173 @@ public class ReadingAuthoringTests
     }
 
     // ════════════════════════════════════════════════════════════════════
+    // Wave 1 — Part A normalisation toggles + miss-reason classification
+    // ════════════════════════════════════════════════════════════════════
+
+    private static async Task<(LearnerDbContext db, ReadingGradingService grader, string answerId)>
+        GradePartAShortAnswerAsync(string correctJson, string userJson)
+    {
+        var (db, structure, policy, grader, _) = Build();
+        await SeedPaperAsync(db, "p1");
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        var partA = await db.ReadingParts.FirstAsync(p => p.PaperId == "p1" && p.PartCode == ReadingPartCode.A);
+        var q = await structure.UpsertQuestionAsync(new ReadingQuestionUpsert(
+            null, partA.Id, null, 1, 1, ReadingQuestionType.ShortAnswer,
+            "Part A typed item", "[]", correctJson, null, false, null, null), "admin", default);
+
+        var snapshot = await policy.ResolveForUserAsync("u1", default);
+        db.ReadingAttempts.Add(new ReadingAttempt
+        {
+            Id = "wave1-a1", UserId = "u1", PaperId = "p1",
+            StartedAt = DateTimeOffset.UtcNow, LastActivityAt = DateTimeOffset.UtcNow,
+            Status = ReadingAttemptStatus.InProgress, MaxRawScore = 42,
+            PolicySnapshotJson = JsonSerializer.Serialize(snapshot),
+        });
+        db.ReadingAnswers.Add(new ReadingAnswer
+        {
+            Id = "wave1-ans1", ReadingAttemptId = "wave1-a1", ReadingQuestionId = q.Id,
+            UserAnswerJson = userJson, AnsweredAt = DateTimeOffset.UtcNow,
+        });
+        await db.SaveChangesAsync();
+
+        await grader.GradeAttemptAsync("wave1-a1", default);
+        return (db, grader, "wave1-ans1");
+    }
+
+    [Fact]
+    public async Task PartA_strict_text_is_case_insensitive_by_default()
+    {
+        var (db, _, answerId) = await GradePartAShortAnswerAsync("\"insulin\"", "\"INSULIN\"");
+        var answer = await db.ReadingAnswers.AsNoTracking().FirstAsync(a => a.Id == answerId);
+        Assert.True(answer.IsCorrect);
+        Assert.Null(answer.MissReason);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task PartA_strict_text_folds_smart_quotes_by_default()
+    {
+        // Authored answer carries a typographic apostrophe; the learner types
+        // a straight ASCII apostrophe. Default NormalizeSmartQuotes folds both.
+        var (db, _, answerId) = await GradePartAShortAnswerAsync("\"patient\u2019s chart\"", "\"patient's chart\"");
+        var answer = await db.ReadingAnswers.AsNoTracking().FirstAsync(a => a.Id == answerId);
+        Assert.True(answer.IsCorrect);
+        Assert.Null(answer.MissReason);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task PartA_single_edit_typo_is_classified_as_spelling_miss()
+    {
+        var (db, _, answerId) = await GradePartAShortAnswerAsync("\"insulin\"", "\"insilin\"");
+        var answer = await db.ReadingAnswers.AsNoTracking().FirstAsync(a => a.Id == answerId);
+        Assert.False(answer.IsCorrect); // strict spelling — single-edit typo still fails
+        Assert.Equal("spelling", answer.MissReason);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task PartA_proper_substring_is_classified_as_incomplete_miss()
+    {
+        var (db, _, answerId) = await GradePartAShortAnswerAsync("\"antibiotics\"", "\"anti\"");
+        var answer = await db.ReadingAnswers.AsNoTracking().FirstAsync(a => a.Id == answerId);
+        Assert.False(answer.IsCorrect);
+        Assert.Equal("incomplete", answer.MissReason);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task PartA_empty_answer_is_classified_as_blank_miss()
+    {
+        var (db, _, answerId) = await GradePartAShortAnswerAsync("\"insulin\"", "\"\"");
+        var answer = await db.ReadingAnswers.AsNoTracking().FirstAsync(a => a.Id == answerId);
+        Assert.False(answer.IsCorrect);
+        Assert.Equal("blank", answer.MissReason);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task SaveAnswer_records_a_revision_only_when_the_value_changes()
+    {
+        var (db, structure, _, _, attemptSvc) = Build();
+        await SeedPaperAsync(db, "p1");
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        await FullyAuthorPaperAsync(db, structure, "p1");
+
+        var started = await attemptSvc.StartInModeAsync("u1", "p1", ReadingAttemptMode.Learning, null, default);
+        var q = await db.ReadingQuestions.Include(x => x.Part)
+            .FirstAsync(x => x.Part!.PaperId == "p1" && x.Part.PartCode == ReadingPartCode.A
+                && x.QuestionType == ReadingQuestionType.ShortAnswer);
+
+        await attemptSvc.SaveAnswerAsync("u1", started.AttemptId, q.Id, "\"first\"", default);
+        await attemptSvc.SaveAnswerAsync("u1", started.AttemptId, q.Id, "\"second\"", default);
+        await attemptSvc.SaveAnswerAsync("u1", started.AttemptId, q.Id, "\"second\"", default); // unchanged — no revision
+
+        var revisions = await db.ReadingAnswerRevisions.AsNoTracking()
+            .Where(r => r.ReadingAttemptId == started.AttemptId && r.ReadingQuestionId == q.Id)
+            .OrderBy(r => r.RecordedAt)
+            .ToListAsync();
+        Assert.Equal(2, revisions.Count);
+        Assert.Equal("\"first\"", revisions[0].UserAnswerJson);
+        Assert.Equal("\"second\"", revisions[1].UserAnswerJson);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Review_endpoint_discloses_correct_answer_only_when_policy_allows()
+    {
+        using var factory = new TestWebApplicationFactory();
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        await db.Database.EnsureCreatedAsync();
+        var structure = new ReadingStructureService(db);
+        const string paperId = "review-policy-paper";
+
+        await SeedPaperAsync(db, paperId);
+        await structure.EnsureCanonicalPartsAsync(paperId, default);
+        await FullyAuthorPaperAsync(db, structure, paperId);
+
+        // Disclosure must be enabled BEFORE the attempt starts — the policy
+        // is snapshotted onto the attempt at start time.
+        db.ReadingPolicies.Add(new ReadingPolicy
+        {
+            Id = "global",
+            ShowCorrectAnswerOnReview = true,
+            ShowExplanationsAfterSubmit = true,
+            ShowExplanationsOnlyIfWrong = false,
+            UpdatedAt = DateTimeOffset.UtcNow,
+        });
+        var firstShortAnswer = await db.ReadingQuestions
+            .Where(q => q.Part!.PaperId == paperId && q.QuestionType == ReadingQuestionType.ShortAnswer)
+            .OrderBy(q => q.DisplayOrder)
+            .FirstAsync();
+        firstShortAnswer.ExplanationMarkdown = "DISCLOSED-EXPLANATION";
+        await db.SaveChangesAsync();
+
+        var attemptSvc = scope.ServiceProvider.GetRequiredService<IReadingAttemptService>();
+        var started = await attemptSvc.StartInModeAsync("mock-user-001", paperId, ReadingAttemptMode.Learning, null, default);
+        await attemptSvc.SaveAnswerAsync("mock-user-001", started.AttemptId, firstShortAnswer.Id, "\"WRONG\"", default);
+        await attemptSvc.SubmitAsync("mock-user-001", started.AttemptId, default);
+
+        using var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Debug-UserId", "mock-user-001");
+        var response = await client.GetAsync($"/v1/reading-papers/attempts/{started.AttemptId}/review");
+        response.EnsureSuccessStatusCode();
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+
+        var policyNode = json.RootElement.GetProperty("policy");
+        Assert.True(policyNode.GetProperty("showCorrectAnswerOnReview").GetBoolean());
+        Assert.True(policyNode.GetProperty("showExplanationsAfterSubmit").GetBoolean());
+
+        var item = json.RootElement.GetProperty("items").EnumerateArray()
+            .First(i => i.GetProperty("questionId").GetString() == firstShortAnswer.Id);
+        Assert.Equal(
+            JsonSerializer.Deserialize<string>(firstShortAnswer.CorrectAnswerJson),
+            item.GetProperty("correctAnswer").GetString());
+        Assert.Equal("DISCLOSED-EXPLANATION", item.GetProperty("explanationMarkdown").GetString());
+    }
+
+    // ════════════════════════════════════════════════════════════════════
     // Attempt lifecycle
     // ════════════════════════════════════════════════════════════════════
 
@@ -2903,6 +3070,16 @@ public class ReadingAuthoringTests
         await structure.EnsureCanonicalPartsAsync(paperId, default);
         await FullyAuthorPaperAsync(db, structure, paperId);
 
+        var firstQuestion = await db.ReadingQuestions
+            .Where(q => q.Part!.PaperId == paperId)
+            .OrderBy(q => q.Part!.PartCode)
+            .ThenBy(q => q.DisplayOrder)
+            .FirstAsync();
+        firstQuestion.CorrectAnswerJson = "\"SECRET-REVIEW-ANSWER\"";
+        firstQuestion.AcceptedSynonymsJson = "[\"SECRET-REVIEW-SYNONYM\"]";
+        firstQuestion.ExplanationMarkdown = "SECRET-REVIEW-EXPLANATION";
+        await db.SaveChangesAsync();
+
         var scopedQuestions = await db.ReadingQuestions
             .Where(q => q.Part!.PaperId == paperId && q.Part.PartCode == ReadingPartCode.A)
             .OrderBy(q => q.DisplayOrder)
@@ -2927,7 +3104,14 @@ public class ReadingAuthoringTests
         client.DefaultRequestHeaders.Add("X-Debug-UserId", userId);
         var reviewResponse = await client.GetAsync($"/v1/reading-papers/attempts/{run.AttemptId}/review");
         reviewResponse.EnsureSuccessStatusCode();
-        var review = await reviewResponse.Content.ReadFromJsonAsync<JsonElement>();
+        var reviewPayload = await reviewResponse.Content.ReadAsStringAsync();
+        Assert.DoesNotContain("\"correctAnswer\"", reviewPayload, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("\"explanationMarkdown\"", reviewPayload, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("acceptedSynonyms", reviewPayload, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("SECRET-REVIEW-ANSWER", reviewPayload, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("SECRET-REVIEW-SYNONYM", reviewPayload, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("SECRET-REVIEW-EXPLANATION", reviewPayload, StringComparison.OrdinalIgnoreCase);
+        var review = JsonSerializer.Deserialize<JsonElement>(reviewPayload);
 
         var attemptJson = review.GetProperty("attempt");
         Assert.Equal("Drill", attemptJson.GetProperty("mode").GetString());
@@ -3497,6 +3681,247 @@ public class ReadingAuthoringTests
         Assert.DoesNotContain("acceptedSynonymsJson", json, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("explanationMarkdown", json, StringComparison.OrdinalIgnoreCase);
 
+        await db.DisposeAsync();
+    }
+
+    // ════════════════════════════════════════════════════════════════════
+    // Wave 2 — privileged tutor tooling (override / recalc / review /
+    // feedback / assignments) + analytics depth.
+    // ════════════════════════════════════════════════════════════════════
+
+    private static async Task<string> SubmitFullAttemptAsync(
+        LearnerDbContext db, ReadingStructureService structure, ReadingAttemptService attemptSvc,
+        string userId, bool correct)
+    {
+        var started = await attemptSvc.StartAsync(userId, "p1", default);
+        await AnswerAllReadingQuestionsAsync(db, attemptSvc, userId, started.AttemptId, correct);
+        await attemptSvc.SubmitAsync(userId, started.AttemptId, idempotencyKey: null, default);
+        return started.AttemptId;
+    }
+
+    [Fact]
+    public async Task Tutor_override_persists_derives_scaled_via_scoring_and_audits()
+    {
+        var (db, structure, _, grader, attemptSvc) = Build();
+        await SeedPaperAsync(db, "p1");
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        await FullyAuthorPaperAsync(db, structure, "p1");
+        var attemptId = await SubmitFullAttemptAsync(db, structure, attemptSvc, "u1", correct: true);
+
+        var tutor = new ReadingTutorService(db, grader, NullLogger<ReadingTutorService>.Instance);
+        var review = await tutor.ApplyScoreOverrideAsync(
+            attemptId, new ReadingScoreOverrideRequest(RawScore: 30, ScaledScore: null, Reason: "remark"),
+            "admin-1", default);
+
+        Assert.NotNull(review);
+        Assert.True(review!.HasOverride);
+        Assert.Equal(30, review.OverrideRaw);
+        Assert.Equal(OetScoring.OetRawToScaled(30), review.OverrideScaled);
+        Assert.Equal(OetScoring.OetRawToScaled(30), review.EffectiveScaledScore);
+
+        var attempt = await db.ReadingAttempts.AsNoTracking().FirstAsync(a => a.Id == attemptId);
+        Assert.Equal(30, attempt.ScoreOverrideRaw);
+        Assert.Equal(OetScoring.OetRawToScaled(30), attempt.ScoreOverrideScaled);
+        Assert.Equal("admin-1", attempt.OverriddenByUserId);
+        Assert.NotNull(attempt.OverriddenAt);
+
+        Assert.True(await db.AuditEvents.AnyAsync(e =>
+            e.Action == "ReadingAttemptScoreOverridden" && e.ResourceId == attemptId));
+
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Tutor_override_clamps_explicit_scaled_score()
+    {
+        var (db, structure, _, grader, attemptSvc) = Build();
+        await SeedPaperAsync(db, "p1");
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        await FullyAuthorPaperAsync(db, structure, "p1");
+        var attemptId = await SubmitFullAttemptAsync(db, structure, attemptSvc, "u1", correct: true);
+
+        var tutor = new ReadingTutorService(db, grader, NullLogger<ReadingTutorService>.Instance);
+        var review = await tutor.ApplyScoreOverrideAsync(
+            attemptId, new ReadingScoreOverrideRequest(RawScore: null, ScaledScore: 9999, Reason: "manual"),
+            "admin-1", default);
+
+        Assert.Equal(500, review!.OverrideScaled);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Tutor_recalc_skips_attempts_with_manual_override()
+    {
+        var (db, structure, _, grader, attemptSvc) = Build();
+        await SeedPaperAsync(db, "p1");
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        await FullyAuthorPaperAsync(db, structure, "p1");
+        var attemptId = await SubmitFullAttemptAsync(db, structure, attemptSvc, "u1", correct: true);
+
+        var tutor = new ReadingTutorService(db, grader, NullLogger<ReadingTutorService>.Instance);
+        await tutor.ApplyScoreOverrideAsync(
+            attemptId, new ReadingScoreOverrideRequest(35, null, "fixed"), "admin-1", default);
+
+        var result = await tutor.RecalcAsync(
+            "p1", new ReadingRecalcRequest("allAttemptsForPaper", null), "admin-1", default);
+
+        Assert.Equal(1, result.TotalConsidered);
+        Assert.Equal(1, result.SkippedOverrideCount);
+        Assert.Equal(0, result.RecalculatedCount);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Tutor_recalc_regrades_stored_answers_and_updates_scaled()
+    {
+        var (db, structure, _, grader, attemptSvc) = Build();
+        await SeedPaperAsync(db, "p1");
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        await FullyAuthorPaperAsync(db, structure, "p1");
+
+        // Learner submits with every answer "WRONG" → raw 0.
+        var attemptId = await SubmitFullAttemptAsync(db, structure, attemptSvc, "u1", correct: false);
+        var before = await db.ReadingAttempts.AsNoTracking().FirstAsync(a => a.Id == attemptId);
+        Assert.Equal(0, before.RawScore);
+        var submittedAt = before.SubmittedAt;
+
+        // Author corrects the key so the stored "WRONG" answers are now right.
+        var questions = await db.ReadingQuestions
+            .Where(q => q.Part!.PaperId == "p1")
+            .ToListAsync();
+        foreach (var q in questions) q.CorrectAnswerJson = "\"WRONG\"";
+        await db.SaveChangesAsync();
+
+        var tutor = new ReadingTutorService(db, grader, NullLogger<ReadingTutorService>.Instance);
+        var result = await tutor.RecalcAsync(
+            "p1", new ReadingRecalcRequest("thisAttempt", attemptId), "admin-1", default);
+
+        Assert.Equal(1, result.RecalculatedCount);
+        var after = await db.ReadingAttempts.AsNoTracking().FirstAsync(a => a.Id == attemptId);
+        Assert.Equal(42, after.RawScore);
+        Assert.Equal(OetScoring.OetRawToScaled(42), after.ScaledScore);
+        Assert.Equal(submittedAt, after.SubmittedAt); // SubmittedAt preserved.
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Tutor_privileged_review_exposes_correct_answers()
+    {
+        var (db, structure, _, grader, attemptSvc) = Build();
+        await SeedPaperAsync(db, "p1");
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        await FullyAuthorPaperAsync(db, structure, "p1");
+        var attemptId = await SubmitFullAttemptAsync(db, structure, attemptSvc, "u1", correct: true);
+
+        var tutor = new ReadingTutorService(db, grader, NullLogger<ReadingTutorService>.Instance);
+        var review = await tutor.GetPrivilegedReviewAsync(attemptId, default);
+
+        Assert.NotNull(review);
+        Assert.Equal(42, review!.Questions.Count);
+        Assert.All(review.Questions, q => Assert.NotNull(q.CorrectAnswer));
+        Assert.Equal(3, review.Sections.Count); // Parts A, B, C.
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Tutor_feedback_crud_round_trips()
+    {
+        var (db, structure, _, grader, attemptSvc) = Build();
+        await SeedPaperAsync(db, "p1");
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        await FullyAuthorPaperAsync(db, structure, "p1");
+        var attemptId = await SubmitFullAttemptAsync(db, structure, attemptSvc, "u1", correct: true);
+
+        var tutor = new ReadingTutorService(db, grader, NullLogger<ReadingTutorService>.Instance);
+
+        var created = await tutor.CreateFeedbackAsync(
+            attemptId, new ReadingFeedbackRequest("test", null, "Good work"), "admin-1", default);
+        Assert.NotNull(created);
+        Assert.Single(await tutor.ListFeedbackAsync(attemptId, default));
+
+        var updated = await tutor.UpdateFeedbackAsync(
+            attemptId, created!.Id, new ReadingFeedbackRequest("section", "A", "Revise Part A"), "admin-1", default);
+        Assert.Equal("Revise Part A", updated!.FeedbackText);
+        Assert.Equal("section", updated.Scope);
+
+        Assert.True(await tutor.DeleteFeedbackAsync(attemptId, created.Id, "admin-1", default));
+        Assert.Empty(await tutor.ListFeedbackAsync(attemptId, default));
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Submitting_matching_attempt_auto_completes_assignment()
+    {
+        var (db, structure, _, grader, attemptSvc) = Build();
+        await SeedPaperAsync(db, "p1");
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        await FullyAuthorPaperAsync(db, structure, "p1");
+
+        var tutor = new ReadingTutorService(db, grader, NullLogger<ReadingTutorService>.Instance);
+        var assignment = await tutor.CreateAssignmentAsync(
+            new ReadingAssignmentCreateRequest("u1", "p1", "full", null, "Do this", null), "admin-1", default);
+        Assert.NotNull(assignment);
+
+        var attemptId = await SubmitFullAttemptAsync(db, structure, attemptSvc, "u1", correct: true);
+
+        var refreshed = await db.ReadingAssignments.AsNoTracking().FirstAsync(a => a.Id == assignment!.Id);
+        Assert.Equal("completed", refreshed.Status);
+        Assert.Equal(attemptId, refreshed.CompletedAttemptId);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Analytics_discrimination_index_separates_strong_and_weak_learners()
+    {
+        var (db, structure, _, _, attemptSvc) = Build();
+        await SeedPaperAsync(db, "p1");
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        await FullyAuthorPaperAsync(db, structure, "p1");
+
+        // Four perfect scorers, four zero scorers → a question every strong
+        // learner gets right and every weak learner gets wrong has D = 1.0.
+        for (var i = 0; i < 4; i++)
+            await SubmitFullAttemptAsync(db, structure, attemptSvc, $"high-{i}", correct: true);
+        for (var i = 0; i < 4; i++)
+            await SubmitFullAttemptAsync(db, structure, attemptSvc, $"low-{i}", correct: false);
+
+        var analytics = new ReadingAnalyticsService(db);
+        var result = await analytics.GetPaperAnalyticsAsync("p1", default);
+
+        Assert.NotEmpty(result.Discrimination);
+        Assert.Contains(result.Discrimination, d => d.DiscriminationIndex >= 0.99);
+        Assert.True(result.CompletionRate > 0.0);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Analytics_cohort_reports_per_student_rag_and_assignment_completion()
+    {
+        var (db, structure, _, grader, attemptSvc) = Build();
+        await SeedPaperAsync(db, "p1");
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        await FullyAuthorPaperAsync(db, structure, "p1");
+
+        var tutor = new ReadingTutorService(db, grader, NullLogger<ReadingTutorService>.Instance);
+        await tutor.CreateAssignmentAsync(
+            new ReadingAssignmentCreateRequest("pass-1", "p1", "full", null, null, null), "admin-1", default);
+
+        await SubmitFullAttemptAsync(db, structure, attemptSvc, "pass-1", correct: true);
+        await SubmitFullAttemptAsync(db, structure, attemptSvc, "fail-1", correct: false);
+
+        var analytics = new ReadingAnalyticsService(db);
+        var cohort = await analytics.GetCohortAnalyticsAsync(
+            "p1", new[] { "pass-1", "fail-1", "absent-1" }, default);
+
+        Assert.Equal(3, cohort.StudentCount);
+        var pass = cohort.Students.Single(s => s.UserId == "pass-1");
+        Assert.Equal("green", pass.Rag);
+        Assert.Equal(1, pass.AssignmentsCompleted);
+        var fail = cohort.Students.Single(s => s.UserId == "fail-1");
+        Assert.Equal("red", fail.Rag);
+        var absent = cohort.Students.Single(s => s.UserId == "absent-1");
+        Assert.False(absent.HasAttempt);
+        Assert.Equal("none", absent.Rag);
         await db.DisposeAsync();
     }
 }

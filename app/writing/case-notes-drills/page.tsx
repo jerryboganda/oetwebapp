@@ -82,7 +82,7 @@ export default function WritingCaseNoteDrillsPage() {
           icon={ClipboardList}
           accent="amber"
           title="Train relevance triage on real case notes"
-          description="Picking the right notes is half of W1 mastery — these drills score every sentence against the gold-standard tag."
+          description="Picking the right notes is half of W1 mastery. These drills score every sentence against the gold-standard tag."
           highlights={[
             { icon: Layers, label: 'Drills', value: `${drills.length}` },
           ]}
@@ -97,7 +97,7 @@ export default function WritingCaseNoteDrillsPage() {
             type="button"
             onClick={() => setProfession(null)}
             aria-pressed={profession === null}
-            className={`rounded-full border px-3 py-1.5 text-xs font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${profession === null ? 'border-primary bg-primary text-white' : 'border-border bg-background text-navy hover:border-primary/40'}`}
+            className={`rounded-full border px-3 py-1.5 text-xs font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${profession === null ? 'border-primary bg-primary text-white dark:bg-violet-700' : 'border-border bg-background text-navy hover:border-primary/40'}`}
           >
             All
           </button>
@@ -107,7 +107,7 @@ export default function WritingCaseNoteDrillsPage() {
               type="button"
               onClick={() => setProfession(p.id)}
               aria-pressed={profession === p.id}
-              className={`rounded-full border px-3 py-1.5 text-xs font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${profession === p.id ? 'border-primary bg-primary text-white' : 'border-border bg-background text-navy hover:border-primary/40'}`}
+              className={`rounded-full border px-3 py-1.5 text-xs font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${profession === p.id ? 'border-primary bg-primary text-white dark:bg-violet-700' : 'border-border bg-background text-navy hover:border-primary/40'}`}
             >
               {p.label}
             </button>

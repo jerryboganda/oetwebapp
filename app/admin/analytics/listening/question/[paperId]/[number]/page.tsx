@@ -102,7 +102,7 @@ export default function ListeningQuestionDeepDivePage() {
         ]}
         primaryGrid={
           <InlineAlert variant="warning">
-            Invalid question route — provide both paperId and a numeric question number.
+            Invalid question route. Provide both paperId and a numeric question number.
           </InlineAlert>
         }
       />

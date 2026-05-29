@@ -71,27 +71,27 @@ export function AddonPurchaseModal({
     <div
       role="dialog"
       aria-modal="true"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-navy/40 p-4"
       onClick={onClose}
     >
       <div
-        className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl dark:bg-slate-900"
+        className="w-full max-w-lg rounded-2xl bg-surface p-6 shadow-2xl border border-border"
         onClick={(e) => e.stopPropagation()}
       >
         <header className="flex items-start justify-between gap-3">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#996F1F]">Add-on</p>
-            <h2 className="text-xl font-bold text-slate-900 dark:text-slate-50">
+            <h2 className="text-xl font-bold text-navy">
               {addOnLabel ?? addOnCode ?? 'Add-on purchase'}
             </h2>
             {typeof addOnPriceGbp === 'number' && (
-              <p className="mt-1 text-2xl font-bold text-slate-900 dark:text-slate-50">£{addOnPriceGbp.toFixed(0)}</p>
+              <p className="mt-1 text-2xl font-bold text-navy">£{addOnPriceGbp.toFixed(0)}</p>
             )}
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
+            className="text-muted hover:text-navy"
             aria-label="Close"
           >
             ✕
@@ -100,26 +100,26 @@ export function AddonPurchaseModal({
 
         <div className="mt-5 min-h-[160px]">
           {status === 'loading' && (
-            <div className="flex items-center gap-3 text-sm text-slate-600 dark:text-slate-300">
+            <div className="flex items-center gap-3 text-sm text-muted">
               <Loader2 className="h-4 w-4 animate-spin" /> Checking eligibility…
             </div>
           )}
 
           {status === 'error' && (
-            <div className="rounded-lg border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800 dark:border-rose-900/40 dark:bg-rose-900/20 dark:text-rose-200">
+            <div className="rounded-lg border border-danger/30 bg-danger/10 p-4 text-sm text-danger">
               {errorMessage ?? 'Unable to verify eligibility.'}
             </div>
           )}
 
           {status === 'ineligible' && quote && (
             <div className="space-y-4">
-              <div className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-900/40 dark:bg-amber-900/15 dark:text-amber-200">
+              <div className="flex items-start gap-3 rounded-lg border border-warning/30 bg-warning/10 p-4 text-sm text-warning">
                 <AlertCircle className="mt-0.5 h-4 w-4 flex-none" />
                 <div>
-                  <p className="font-medium">You need an eligible course first.</p>
-                  <p className="mt-1 text-xs">
+                  <p className="font-medium text-navy">You need an eligible course first.</p>
+                  <p className="mt-1 text-xs text-muted">
                     This add-on requires a parent enrolment with{' '}
-                    <code className="rounded bg-amber-100 px-1 dark:bg-amber-900/40">{quote.requiredFlag ?? 'required flag'}</code> set.
+                    <code className="rounded bg-warning/15 text-warning px-1">{quote.requiredFlag ?? 'required flag'}</code> set.
                   </p>
                 </div>
               </div>
@@ -142,7 +142,7 @@ export function AddonPurchaseModal({
             <div className="space-y-4">
               {quote.eligibleParents.length > 1 ? (
                 <>
-                  <p className="text-sm text-slate-600 dark:text-slate-300">
+                  <p className="text-sm text-muted">
                     Which enrolment should this add-on apply to?
                   </p>
                   <ul className="space-y-2">
@@ -157,16 +157,16 @@ export function AddonPurchaseModal({
                   </ul>
                 </>
               ) : quote.eligibleParents.length === 1 ? (
-                <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm dark:border-emerald-900/40 dark:bg-emerald-900/15">
-                  <div className="flex items-center gap-2 font-medium text-emerald-900 dark:text-emerald-200">
+                <div className="rounded-lg border border-success/30 bg-success/10 p-4 text-sm">
+                  <div className="flex items-center gap-2 font-medium text-success">
                     <Check className="h-4 w-4" /> Will apply to:
                   </div>
-                  <div className="mt-1 text-sm text-emerald-800 dark:text-emerald-300">
+                  <div className="mt-1 text-sm text-navy">
                     {quote.eligibleParents[0].planName}
                   </div>
                 </div>
               ) : (
-                <p className="text-sm text-slate-600 dark:text-slate-300">No parent selector available.</p>
+                <p className="text-sm text-muted">No parent selector available.</p>
               )}
 
               <button
@@ -180,7 +180,7 @@ export function AddonPurchaseModal({
                   router.push(`${checkoutPath}?${query.toString()}`);
                   onClose();
                 }}
-                className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-[#0E2841] px-4 py-2.5 text-sm font-bold text-white transition-colors hover:bg-[#156082] disabled:cursor-not-allowed disabled:opacity-60"
+                className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-navy px-4 py-2.5 text-sm font-bold text-white transition-colors hover:bg-navy/90 dark:text-slate-900 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <ShoppingBag className="h-4 w-4" /> Continue to checkout
               </button>
@@ -208,14 +208,14 @@ function ParentRow({
         onClick={onSelect}
         className={`flex w-full items-center justify-between gap-3 rounded-lg border px-3 py-2.5 text-left text-sm transition-colors ${
           selected
-            ? 'border-[#D4A44F] bg-[#D4A44F]/10 text-slate-900 dark:text-slate-100'
-            : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300'
+            ? 'border-[#D4A44F] bg-[#D4A44F]/10 text-navy'
+            : 'border-border bg-surface text-navy hover:border-border-hover'
         }`}
       >
         <div>
           <div className="font-medium">{parent.planName}</div>
           {parent.expiresAt && (
-            <div className="text-xs text-slate-500 dark:text-slate-400">
+            <div className="text-xs text-muted">
               Access until {new Date(parent.expiresAt).toLocaleDateString()}
             </div>
           )}

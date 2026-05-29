@@ -60,8 +60,8 @@ export function TechReadinessCheck({ audioProbeUrl, onReady, onSkip }: TechReadi
 
   return (
     <div className="rounded-lg border border-border bg-surface p-6 shadow-sm">
-      <h2 className="mb-1 text-lg font-semibold text-foreground">Audio readiness check</h2>
-      <p className="mb-4 text-sm text-muted-foreground">
+      <h2 className="mb-1 text-lg font-semibold text-navy">Audio readiness check</h2>
+      <p className="mb-4 text-sm text-muted">
         Before the test begins, we&apos;ll play a short audio clip to confirm your speakers or
         headphones are working. You will not be able to replay the test audio later.
       </p>
@@ -72,18 +72,18 @@ export function TechReadinessCheck({ audioProbeUrl, onReady, onSkip }: TechReadi
           </Button>
         )}
         {status === 'running' && (
-          <span role="status" className="inline-flex items-center gap-2 text-sm text-muted-foreground">
+          <span role="status" className="inline-flex items-center gap-2 text-sm text-muted">
             <Loader2 aria-hidden="true" className="h-4 w-4 animate-spin" /> Playing probe…
           </span>
         )}
         {status === 'ok' && (
-          <span role="status" className="inline-flex items-center gap-2 text-sm text-green-700">
+          <span role="status" className="inline-flex items-center gap-2 text-sm text-success">
             <CheckCircle2 aria-hidden="true" className="h-4 w-4" /> Audio confirmed.
           </span>
         )}
         {status === 'failed' && (
           <div className="space-y-2">
-            <span role="alert" className="inline-flex items-center gap-2 text-sm text-red-700">
+            <span role="alert" className="inline-flex items-center gap-2 text-sm text-danger">
               <AlertTriangle aria-hidden="true" className="h-4 w-4" /> {error ?? 'Probe failed.'}
             </span>
             <div className="flex gap-2">

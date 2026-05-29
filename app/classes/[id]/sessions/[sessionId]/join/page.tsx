@@ -67,7 +67,7 @@ export default function LiveClassJoinPage() {
       <LearnerDashboardShell>
         <div className="flex flex-col gap-4">
           <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-navy">Live class — Zoom meeting {token.meetingNumber}</h2>
+            <h2 className="text-lg font-semibold text-navy">Live class: Zoom meeting {token.meetingNumber}</h2>
             <Button type="button" variant="outline" onClick={handleLeave}>
               Leave meeting
             </Button>

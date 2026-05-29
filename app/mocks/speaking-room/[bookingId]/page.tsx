@@ -185,7 +185,7 @@ export default function SpeakingLiveRoomPage() {
   const startRecorder = useCallback(async () => {
     if (!booking) return;
     if (!booking.consentToRecording) {
-      setError('Recording consent has not been granted on this booking — recording cannot start.');
+      setError('Recording consent has not been granted on this booking. Recording cannot start.');
       return;
     }
     setError(null);
@@ -211,7 +211,7 @@ export default function SpeakingLiveRoomPage() {
               const ack = await appendMockBookingRecordingChunk(bookingId, part, blob);
               setChunkCount(ack.chunkCount);
             } catch (err) {
-              setError(err instanceof Error ? err.message : 'Chunk upload failed — recording will keep trying.');
+              setError(err instanceof Error ? err.message : 'Chunk upload failed. Recording will keep trying.');
             } finally {
               setUploading(false);
             }
@@ -333,7 +333,7 @@ export default function SpeakingLiveRoomPage() {
   return (
     <LearnerDashboardShell
       pageTitle="Speaking Live Room"
-      subtitle="Audio-only role-play — timed flow with chunked recording."
+      subtitle="Audio-only role-play with a timed flow and chunked recording."
       backHref="/mocks/bookings"
     >
       <div className="space-y-6">
@@ -355,7 +355,7 @@ export default function SpeakingLiveRoomPage() {
               title={booking.title ?? 'OET Speaking Mock'}
               description={`Audio-only delivery with OET timing: ${Math.round(prepSeconds / 60)}-minute prep, ${Math.round(speakSeconds / 60)}-minute role-play${roleplayCount === 2 ? ', twice' : ''}. Your audio is captured client-side and uploaded in small chunks while you speak.`}
               highlights={[
-                { icon: CalendarClock, label: 'Scheduled', value: scheduledStart ?? '—' },
+                { icon: CalendarClock, label: 'Scheduled', value: scheduledStart ?? 'N/A' },
                 {
                   icon: ShieldCheck,
                   label: 'Recording consent',
@@ -453,13 +453,13 @@ function phaseLabel(phase: Phase): string {
     case 'pre':
       return 'Pre-room';
     case 'rp1-prep':
-      return 'Role-play 1 — preparation';
+      return 'Role-play 1: preparation';
     case 'rp1-speak':
-      return 'Role-play 1 — speaking';
+      return 'Role-play 1: speaking';
     case 'rp2-prep':
-      return 'Role-play 2 — preparation';
+      return 'Role-play 2: preparation';
     case 'rp2-speak':
-      return 'Role-play 2 — speaking';
+      return 'Role-play 2: speaking';
     case 'submitting':
       return 'Submitting';
     case 'done':
@@ -551,7 +551,7 @@ function PreRoom({
             I consent to the audio capture for this Speaking mock.
             {!booking.consentToRecording ? (
               <span className="ml-1 text-warning">
-                (Recording was not enabled on this booking — recording cannot start.)
+                (Recording was not enabled on this booking, so recording cannot start.)
               </span>
             ) : null}
           </span>
@@ -598,7 +598,7 @@ function PrepPanel({
     <section className="rounded-3xl border border-border bg-surface p-6 shadow-sm">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <Badge variant="info" size="sm">Role-play {roleplayIndex} — preparation</Badge>
+          <Badge variant="info" size="sm">Role-play {roleplayIndex}: preparation</Badge>
           <h3 className="mt-2 text-lg font-black text-foreground">{durationLabel(seconds)} to read your card</h3>
           <p className="mt-1 text-sm leading-6 text-muted">
             Read the candidate card below. The interlocutor card is intentionally not shown to
@@ -617,7 +617,7 @@ function PrepPanel({
       <CandidateCardPanel booking={booking} />
       <div className="mt-4 flex justify-end">
         <Button variant="secondary" onClick={onAdvance}>
-          I&apos;m ready — start speaking
+          I&apos;m ready, start speaking
         </Button>
       </div>
     </section>

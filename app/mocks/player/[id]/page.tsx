@@ -320,7 +320,7 @@ export default function MockPlayerPage() {
               icon={FileText}
               accent="navy"
               title={session.config.title}
-              description="Your mock setup — exam mode, timer, and review selection — stays in effect throughout."
+              description="Your mock setup (exam mode, timer, and review selection) stays in effect throughout."
               highlights={[
                 { icon: FileText, label: 'Profession', value: session.config.profession },
                 { icon: Clock, label: 'Mode', value: session.config.mode === 'exam' ? 'Exam simulation' : 'Practice simulation' },
@@ -408,7 +408,7 @@ export default function MockPlayerPage() {
                         <p className="mt-1 text-sm leading-6 text-muted">{selectedSectionPolicy.reviewRule}</p>
                         {session.config.mode === 'exam' && modePolicy ? (() => {
                           const lockRules: string[] = [];
-                          if (!modePolicy.listeningReplayAllowed) lockRules.push('Audio plays once — no replay');
+                          if (!modePolicy.listeningReplayAllowed) lockRules.push('Audio plays once, no replay');
                           if (!modePolicy.pauseAllowed) lockRules.push('Timer cannot be paused');
                           if (!modePolicy.hintsAllowed) lockRules.push('No hints during attempt');
                           if (!modePolicy.transcriptDuringAttemptAllowed) lockRules.push('Transcript hidden until submission');

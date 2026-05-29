@@ -1,5 +1,9 @@
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Hosting;
 using OetLearner.Api.Configuration;
+using OetLearner.Api.Contracts;
+using OetLearner.Api.Security;
 
 namespace OetLearner.Api.Services.Conversation.Asr;
 
@@ -13,6 +17,9 @@ public sealed class ConversationAsrProviderSelector(
     IEnumerable<IConversationAsrProvider> providers,
     IEnumerable<IConversationRealtimeAsrProvider> realtimeProviders,
     IConversationOptionsProvider optionsProvider,
+    ILaunchReadinessService launchReadinessService,
+    IWebHostEnvironment environment,
+    IConfiguration configuration,
     ILogger<ConversationAsrProviderSelector> logger) : IConversationAsrProviderSelector
 {
     public async Task<IConversationAsrProvider> SelectAsync(CancellationToken ct = default)
@@ -56,6 +63,11 @@ public sealed class ConversationAsrProviderSelector(
         if (!options.RealtimeSttEnabled) return null;
 
         var requested = (options.RealtimeAsrProvider ?? "mock").Trim().ToLowerInvariant();
+        if (IsProductionMockForbidden() && requested == "mock")
+        {
+            throw new InvalidOperationException("Production realtime Conversation ASR cannot use the mock provider. Configure a real provider or disable realtime STT.");
+        }
+
         var all = realtimeProviders.ToList();
         IConversationRealtimeAsrProvider? Find(string name) =>
             all.FirstOrDefault(p => string.Equals(p.Name, name, StringComparison.OrdinalIgnoreCase));
@@ -63,7 +75,7 @@ public sealed class ConversationAsrProviderSelector(
         if (requested is "mock" or "elevenlabs" or "elevenlabs-stt" or "elevenlabs-scribe")
         {
             var lookup = requested.StartsWith("elevenlabs", StringComparison.Ordinal) ? "elevenlabs-stt" : requested;
-            if (lookup != "mock" && !CanUseRealProvider(options, lookup))
+            if (lookup != "mock" && !await CanUseRealProviderAsync(options, lookup, ct))
             {
                 logger.LogWarning("Conversation realtime ASR provider {Provider} is configured but real-provider readiness gates are incomplete.", lookup);
                 return null;
@@ -76,7 +88,7 @@ public sealed class ConversationAsrProviderSelector(
 
         foreach (var provider in all.Where(provider => provider.IsConfigured))
         {
-            if (!IsMockProvider(provider.Name) && !CanUseRealProvider(options, provider.Name))
+            if (!IsMockProvider(provider.Name) && !await CanUseRealProviderAsync(options, provider.Name, ct))
             {
                 logger.LogWarning("Conversation realtime ASR auto skipped provider {Provider} because real-provider readiness gates are incomplete.", provider.Name);
                 continue;
@@ -92,17 +104,38 @@ public sealed class ConversationAsrProviderSelector(
     private static bool IsMockProvider(string providerName)
         => string.Equals(providerName, "mock", StringComparison.OrdinalIgnoreCase);
 
-    private static bool CanUseRealProvider(ConversationOptions options, string providerName)
+    private bool IsProductionMockForbidden()
+        => environment.IsProduction()
+           && !configuration.GetValue<bool>(ProductionProviderSafetyValidator.AllowMockProvidersKey);
+
+    private async Task<bool> CanUseRealProviderAsync(ConversationOptions options, string providerName, CancellationToken ct)
     {
         if (!options.RealtimeSttAllowRealProvider) return false;
         if (!options.RealtimeSttRealProviderProductionAuthorized) return false;
-        if (options.RealtimeSttMonthlyBudgetCapUsd > 0 && options.RealtimeSttEstimatedCostUsdPerMinute <= 0) return false;
+        if (options.RealtimeSttMonthlyBudgetCapUsd <= 0) return false;
+        if (options.RealtimeSttDailyAudioSecondsPerUser <= 0) return false;
+        if (options.RealtimeSttEstimatedCostUsdPerMinute <= 0) return false;
         if (!options.RealtimeSttAssumeLearnersAdult) return false;
 
         var topology = (options.RealtimeSttProviderSessionTopology ?? string.Empty).Trim().ToLowerInvariant();
         if (topology is not ("single-instance" or "single-region-sticky" or "distributed")) return false;
         if (string.IsNullOrWhiteSpace(options.RealtimeSttRegionId)) return false;
 
-        return !string.IsNullOrWhiteSpace(providerName);
+        if (string.IsNullOrWhiteSpace(providerName)) return false;
+
+        var readiness = await launchReadinessService.GetSettingsAsync(ct);
+        return IsRealtimeLaunchReady(readiness);
     }
+
+    private static bool IsRealtimeLaunchReady(AdminLaunchReadinessSettingsResponse readiness)
+        => IsLaunchApproved(readiness.RealtimeLegalApprovalStatus)
+           && IsLaunchApproved(readiness.RealtimePrivacyApprovalStatus)
+           && IsLaunchApproved(readiness.RealtimeProtectedSmokeStatus)
+           && readiness.RealtimeSpendCapApproved
+           && readiness.RealtimeTopologyApproved
+           && !string.IsNullOrWhiteSpace(readiness.RealtimeEvidenceUrl);
+
+    private static bool IsLaunchApproved(string? value)
+        => string.Equals(value?.Trim(), "approved", StringComparison.OrdinalIgnoreCase)
+           || string.Equals(value?.Trim(), "complete", StringComparison.OrdinalIgnoreCase);
 }

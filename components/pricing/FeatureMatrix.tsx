@@ -64,13 +64,13 @@ export function FeatureMatrix({ plans, loading, error, emptyMessage }: FeatureMa
         <table className="min-w-full divide-y divide-border text-sm">
           <thead className="bg-background-light text-left text-xs font-medium uppercase tracking-wide text-muted">
             <tr>
-              <th className="px-4 py-3">Product</th>
-              <th className="px-4 py-3">Category</th>
-              <th className="px-4 py-3">Access</th>
-              <th className="px-4 py-3 text-center">W</th>
-              <th className="px-4 py-3 text-center">S</th>
-              <th className="px-4 py-3 text-center">TB GBP32</th>
-              <th className="px-4 py-3 text-right">Price</th>
+              <th scope="col" className="px-4 py-3">Product</th>
+              <th scope="col" className="px-4 py-3">Category</th>
+              <th scope="col" className="px-4 py-3">Access</th>
+              <th scope="col" className="px-4 py-3 text-center">W</th>
+              <th scope="col" className="px-4 py-3 text-center">S</th>
+              <th scope="col" className="px-4 py-3 text-center">TB GBP32</th>
+              <th scope="col" className="px-4 py-3 text-right">Price</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border">

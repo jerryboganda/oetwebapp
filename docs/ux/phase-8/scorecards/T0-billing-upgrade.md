@@ -35,7 +35,7 @@ For each dimension, record score 0-5, evidence link, and notes.
 - Responsive/visual quality: 4; billing mobile motion smoke exists.
 - Performance/reliability: 3; production perf smoke includes billing; current artifact pending.
 - Observability/alerts: 2; billing webhook/checkout alert ownership pending.
-- Security/privacy: 3; payment secrets stay server-side; release evidence and webhook proof pending.
+- Security/privacy: 3; payment secrets stay server-side; webhook proof pending.
 
 ## Acceptance Checks
 

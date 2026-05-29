@@ -142,7 +142,7 @@ export default function SpeakingSessionPrepPage() {
   if (loading) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
-        <span className="inline-flex items-center gap-2 text-sm text-muted-foreground">
+        <span className="inline-flex items-center gap-2 text-sm text-muted">
           <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> Loading session…
         </span>
       </div>
@@ -151,7 +151,7 @@ export default function SpeakingSessionPrepPage() {
 
   if (loadError || !session) {
     return (
-      <div className="mx-auto max-w-xl rounded-2xl border border-rose-200 bg-rose-50 p-6 text-sm text-rose-900">
+      <div className="mx-auto max-w-xl rounded-2xl border border-danger/30 bg-danger/10 p-6 text-sm text-danger">
         <h2 className="text-base font-semibold">Could not load this session</h2>
         <p className="mt-1">{loadError ?? 'Session not available.'}</p>
         <Button
@@ -172,11 +172,11 @@ export default function SpeakingSessionPrepPage() {
     <div className="mx-auto max-w-6xl space-y-6 p-4 sm:p-6">
       <header className="flex flex-wrap items-baseline justify-between gap-2">
         <div>
-          <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+          <p className="text-xs font-medium uppercase tracking-wider text-muted">
             Speaking · Prep
           </p>
           <h1 className="text-2xl font-bold text-foreground">{card.scenarioTitle}</h1>
-          <p className="text-sm text-muted-foreground">
+          <p className="text-sm text-muted">
             {card.setting} · {card.candidateRole}
           </p>
         </div>
@@ -198,10 +198,10 @@ export default function SpeakingSessionPrepPage() {
           className="rounded-2xl border border-border bg-surface p-6 shadow-sm"
         >
           <div className="flex items-center gap-2">
-            <BookOpen className="h-4 w-4 text-muted-foreground" aria-hidden />
+            <BookOpen className="h-4 w-4 text-muted" aria-hidden />
             <h2
               id="candidate-card-heading"
-              className="text-sm font-semibold uppercase tracking-wide text-muted-foreground"
+              className="text-sm font-semibold uppercase tracking-wide text-muted"
             >
               Candidate card
             </h2>
@@ -228,7 +228,7 @@ export default function SpeakingSessionPrepPage() {
             ) : null}
             <Row label="Communication goal">{card.communicationGoal}</Row>
             {card.disclaimer ? (
-              <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+              <p className="rounded-md border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-warning">
                 {card.disclaimer}
               </p>
             ) : null}
@@ -244,14 +244,14 @@ export default function SpeakingSessionPrepPage() {
 
           <div className="rounded-2xl border border-border bg-surface p-4 shadow-sm">
             <div className="mb-2 flex items-center gap-2">
-              <NotebookPen className="h-4 w-4 text-muted-foreground" aria-hidden />
+              <NotebookPen className="h-4 w-4 text-muted" aria-hidden />
               <h2 className="text-sm font-semibold text-foreground">
                 {card.allowedNotes ? 'Your notes' : 'Mental prep'}
               </h2>
             </div>
             {!card.allowedNotes ? (
-              <p className="mb-2 rounded-md bg-muted px-2 py-1 text-xs text-muted-foreground">
-                This card simulates exam conditions — notes will not be visible during the role-play.
+              <p className="mb-2 rounded-md bg-muted px-2 py-1 text-xs text-muted">
+                This card simulates exam conditions, so notes will not be visible during the role-play.
               </p>
             ) : null}
             <div className="flex flex-wrap gap-1.5">
@@ -274,7 +274,7 @@ export default function SpeakingSessionPrepPage() {
               className="mt-3 h-32 w-full resize-y rounded-md border border-border bg-surface px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
               aria-label="Prep notes"
             />
-            <p className="mt-1 text-xs text-muted-foreground">
+            <p className="mt-1 text-xs text-muted">
               Notes are local to this device and never sent to the server.
             </p>
           </div>
@@ -282,7 +282,7 @@ export default function SpeakingSessionPrepPage() {
           {transitionError ? (
             <p
               role="alert"
-              className="rounded-md border border-rose-300 bg-rose-50 p-2 text-xs text-rose-800"
+              className="rounded-md border border-danger/30 bg-danger/10 p-2 text-xs text-danger"
             >
               {transitionError}
             </p>
@@ -299,7 +299,7 @@ export default function SpeakingSessionPrepPage() {
       >
         <p className="text-sm text-foreground">
           You&apos;ll move straight to the role-play with no further chance to plan. Some
-          candidates find this useful for exam practice — but a quick pause is usually
+          candidates find this useful for exam practice, but a quick pause is usually
           worth it.
         </p>
         <div className="mt-4 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
@@ -335,7 +335,7 @@ export default function SpeakingSessionPrepPage() {
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="flex flex-col gap-1 sm:flex-row sm:gap-3">
-      <dt className="w-40 shrink-0 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+      <dt className="w-40 shrink-0 text-xs font-semibold uppercase tracking-wide text-muted">
         {label}
       </dt>
       <dd className="flex-1 text-sm text-foreground">{children}</dd>

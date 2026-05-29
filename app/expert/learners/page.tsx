@@ -97,7 +97,7 @@ export default function LearnersIndexPage() {
         errorMessage={errorMessage ?? undefined}
         emptyContent={
           <EmptyState
-            icon={<Users className="h-12 w-12 text-slate-400" />}
+            icon={<Users className="h-12 w-12 text-muted" />}
             title="No learners match the current expert scope"
             description="Try broadening the filters or remove one of the relevance constraints."
           />

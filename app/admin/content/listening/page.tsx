@@ -265,7 +265,7 @@ export default function AdminListeningPapersPage() {
     <AdminTableLayout
       eyebrow="CMS"
       title="Listening Papers"
-      description="Author and publish OET Listening papers (Part A 24 items, Part B 6 items, Part C 12 items — total 42 items per paper). Upload audio + question paper + audio script + answer key. AI extraction proposes the question map; you review and approve."
+      description="Author and publish OET Listening papers (Part A 24 items, Part B 6 items, Part C 12 items; total 42 items per paper). Upload audio + question paper + audio script + answer key. AI extraction proposes the question map; you review and approve."
       breadcrumbs={[
         { label: 'Admin', href: '/admin' },
         { label: 'Content', href: '/admin/content' },
@@ -326,18 +326,18 @@ export default function AdminListeningPapersPage() {
                 <div>
                   <strong className="text-admin-fg-strong">Canonical structure (42 items total):</strong>
                   <ul className="ml-5 mt-1 list-disc space-y-1">
-                    <li><strong>Part A</strong> — 2 patient consultations × 12 short-answer items = <strong>24 items</strong></li>
-                    <li><strong>Part B</strong> — 6 short workplace extracts × 1 multiple-choice (3-option) item = <strong>6 items</strong></li>
-                    <li><strong>Part C</strong> — 2 longer presentations × 6 multiple-choice (3-option) items = <strong>12 items</strong></li>
+                    <li><strong>Part A</strong>: 2 patient consultations × 12 short-answer items = <strong>24 items</strong></li>
+                    <li><strong>Part B</strong>: 6 short workplace extracts × 1 multiple-choice (3-option) item = <strong>6 items</strong></li>
+                    <li><strong>Part C</strong>: 2 longer presentations × 6 multiple-choice (3-option) items = <strong>12 items</strong></li>
                   </ul>
                 </div>
                 <div>
                   <strong className="text-admin-fg-strong">Required asset roles (4):</strong>
                   <ul className="ml-5 mt-1 list-disc space-y-1">
-                    <li><code>Audio</code> — single combined MP3/WAV for the full paper</li>
-                    <li><code>QuestionPaper</code> — learner-facing PDF</li>
-                    <li><code>AudioScript</code> — full transcript PDF (admin/marker reference)</li>
-                    <li><code>AnswerKey</code> — official key PDF</li>
+                    <li><code>Audio</code>: single combined MP3/WAV for the full paper</li>
+                    <li><code>QuestionPaper</code>: learner-facing PDF</li>
+                    <li><code>AudioScript</code>: full transcript PDF (admin/marker reference)</li>
+                    <li><code>AnswerKey</code>: official key PDF</li>
                   </ul>
                 </div>
                 <div>

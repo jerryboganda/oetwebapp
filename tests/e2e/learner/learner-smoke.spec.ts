@@ -46,7 +46,7 @@ const learnerRoutes = [
   },
   {
     path: '/settings/profile',
-    heading: /keep profile settings clear before you change them/i,
+    heading: /your profile/i,
   },
   {
     path: '/billing',

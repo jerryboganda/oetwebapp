@@ -291,7 +291,7 @@ The verbatim engineering wording is held in the [Reference Appendix, Section 1](
 - Rulebook enforcement routes through rulebook engines, not direct JSON access from UI or endpoint code.
 - AI calls route through grounded gateway and usage recording (`PromptNotGroundedException` physically refuses ungrounded prompts; `IAiUsageRecorder` writes one row per call including failures and refusals).
 - Content upload uses `ContentPaper -> ContentPaperAsset -> MediaAsset`, source provenance, publish gates, audit events, and storage abstraction.
-- Reading authoring remains exact-match with canonical 42-item structure. The AGENTS hard ban is that learner-facing endpoints must never serialize `CorrectAnswerJson`, `ExplanationMarkdown`, or `AcceptedSynonymsJson`. PM-001 tracks the unresolved backend conflict.
+- Reading authoring remains exact-match with canonical 42-item structure. The AGENTS hard ban is that learner-facing endpoints must never serialize `CorrectAnswerJson`, `ExplanationMarkdown`, or `AcceptedSynonymsJson`. PM-001 was reconciled locally on 2026-05-29 by redacting submitted-review answer/explanation fields from learner payloads.
 - Grammar, Pronunciation, and Conversation remain server-authoritative modules with rulebook-grounded AI drafting and provider-selector enforcement.
 - The Statement of Results card remains bound to its design/spec contract and practice disclaimer.
 
@@ -301,7 +301,7 @@ The verbatim engineering wording is held in the [Reference Appendix, Section 1](
 - Speaking `ai` mode is not functionally available and is downgraded to self-guided behavior.
 - Sponsor billing is currently heuristic.
 - Learner Writing analytics currently uses deterministic seed data until a learner-specific backend endpoint ships.
-- Reading review output: backend can currently expose `CorrectAnswer` and `ExplanationMarkdown` after submit when policy permits, in conflict with the AGENTS hard ban. PM-001 must be reconciled before release sign-off.
+- Reading review output: submitted learner review payloads now expose outcome/cluster data without `CorrectAnswer` or `ExplanationMarkdown`; keep regression coverage before release sign-off.
 - The legacy admin media upload route and canonical content-paper upload pipeline coexist and need release-level validation.
 - Service-worker/offline/mobile/desktop support exists, but queued replay and parity should be validated by scenario.
 - UI copy includes visible encoding artifacts on several pages.

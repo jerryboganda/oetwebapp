@@ -31,7 +31,7 @@ export default function AdminReadingUserPolicyPage() {
 
   return (
     <AdminSettingsLayout
-      title="Reading — per-user overrides"
+      title="Reading per-user overrides"
       description="Grant accessibility extra-time entitlements or block individual learners from starting new Reading attempts. The global Reading policy is unaffected."
       breadcrumbs={BREADCRUMBS}
       eyebrow="Policies"

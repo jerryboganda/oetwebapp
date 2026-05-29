@@ -111,7 +111,7 @@ export default function WritingBuddyPage() {
         await loadPair();
         setNotice(`Paired with ${r.partnerDisplayName ?? 'a buddy'}!`);
       } else {
-        setNotice('No buddy available yet — we will keep looking.');
+        setNotice('No buddy available yet. We will keep looking.');
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not find a buddy.');
@@ -255,12 +255,12 @@ export default function WritingBuddyPage() {
                   </div>
                   <div className="space-y-2 max-h-80 overflow-y-auto" role="log" aria-live="polite">
                     {messages.length === 0 ? (
-                      <p className="text-sm text-muted">No messages yet — say hi.</p>
+                      <p className="text-sm text-muted">No messages yet. Say hi.</p>
                     ) : null}
                     {messages.map((m) => (
                       <article
                         key={m.id}
-                        className={`max-w-[80%] rounded-2xl px-3 py-2 text-sm ${m.mineMessage ? 'ml-auto bg-primary text-white' : 'bg-surface text-navy'}`}
+                        className={`max-w-[80%] rounded-2xl px-3 py-2 text-sm ${m.mineMessage ? 'ml-auto bg-primary text-white dark:bg-violet-700' : 'bg-surface text-navy'}`}
                       >
                         <p className="whitespace-pre-wrap">{m.bodyMarkdown}</p>
                         <time

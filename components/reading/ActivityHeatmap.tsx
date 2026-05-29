@@ -10,7 +10,7 @@ interface ActivityHeatmapProps {
 }
 
 function getColor(minutes: number): string {
-  if (minutes === 0) return 'bg-gray-100 dark:bg-gray-800';
+  if (minutes === 0) return 'bg-border';
   if (minutes < 15) return 'bg-violet-200 dark:bg-violet-800';
   if (minutes < 30) return 'bg-violet-400 dark:bg-violet-600';
   return 'bg-violet-600 dark:bg-violet-400';
@@ -81,7 +81,7 @@ export function ActivityHeatmap({ days }: ActivityHeatmapProps) {
       {/* Legend */}
       <div className="flex items-center gap-2 mt-3 text-xs text-muted">
         <span>Less</span>
-        <div className="w-3 h-3 rounded-sm bg-gray-100 dark:bg-gray-800" />
+        <div className="w-3 h-3 rounded-sm bg-border" />
         <div className="w-3 h-3 rounded-sm bg-violet-200 dark:bg-violet-800" />
         <div className="w-3 h-3 rounded-sm bg-violet-400 dark:bg-violet-600" />
         <div className="w-3 h-3 rounded-sm bg-violet-600 dark:bg-violet-400" />

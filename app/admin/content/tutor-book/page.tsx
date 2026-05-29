@@ -155,7 +155,7 @@ export default function AdminTutorBookPage() {
 
   return (
     <AdminSettingsLayout
-      title="The Tutor Book — Admin"
+      title="The Tutor Book"
       description="Manage recall updates + audio scripts surfaced inside the /learner/tutor-book reader. Telegram invite URL is configured via TutorBook:TelegramInviteUrl in appsettings."
       eyebrow="Content"
       breadcrumbs={[
@@ -263,7 +263,7 @@ export default function AdminTutorBookPage() {
               scripts.map((row) => (
                 <li key={row.id} className="flex items-start justify-between gap-3 py-3">
                   <div className="min-w-0 flex-1">
-                    <div className="font-semibold text-admin-fg-strong">{row.chapter} — {row.title}</div>
+                    <div className="font-semibold text-admin-fg-strong">{row.chapter}: {row.title}</div>
                     <div className="truncate text-xs text-admin-fg-muted">{row.audioUrl}</div>
                     <div className="text-xs text-admin-fg-muted">order #{row.displayOrder} · {row.isPublished ? 'published' : 'draft'}</div>
                   </div>

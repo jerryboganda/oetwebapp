@@ -1,8 +1,10 @@
 # Mocks Module Progress
 
+> **Current status (2026-05-29)**: implementation ledger, not the live release backlog. The active cross-project backlog is [`../STATUS/REMAINING-WORK.md`](../STATUS/REMAINING-WORK.md); this file is retained for mocks traceability.
+
 > Last updated: 2026-05-13 (closure hardening)
 > Source of truth: `docs/mocks/PRD.md`
-> Closure manifest: `docs/CLOSURE-2026-05-12.md`
+> Closure state: May 2026 V2 hardening closed; remaining items are release QA breadth and product-defined polish.
 
 ## Status Summary
 

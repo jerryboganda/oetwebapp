@@ -19,6 +19,16 @@ public interface ILaunchReadinessService
 
 public sealed class LaunchReadinessService(LearnerDbContext db) : ILaunchReadinessService
 {
+    private static readonly HashSet<string> AllowedStatusValues = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "pending",
+        "blocked",
+        "evidence-required",
+        "approved",
+        "complete",
+        "failed",
+    };
+
     private static readonly Regex VersionPattern = new(
         @"^\d+(?:\.\d+){0,3}(?:[-+][0-9A-Za-z.-]+)?$",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
@@ -109,6 +119,21 @@ public sealed class LaunchReadinessService(LearnerDbContext db) : ILaunchReadine
         ValidateHttpsUrl(request.DesktopUpdateFeedUrl, nameof(request.DesktopUpdateFeedUrl));
         ValidateHttpsUrl(request.DeviceValidationEvidenceUrl, nameof(request.DeviceValidationEvidenceUrl));
         ValidateHttpsUrl(request.RealtimeEvidenceUrl, nameof(request.RealtimeEvidenceUrl));
+
+        ValidateStatus(request.AppleAssociatedDomainStatus, nameof(request.AppleAssociatedDomainStatus));
+        ValidateStatus(request.AppleUniversalLinksStatus, nameof(request.AppleUniversalLinksStatus));
+        ValidateStatus(request.IosIapStatus, nameof(request.IosIapStatus));
+        ValidateStatus(request.IosPushStatus, nameof(request.IosPushStatus));
+        ValidateStatus(request.AndroidAssetLinksStatus, nameof(request.AndroidAssetLinksStatus));
+        ValidateStatus(request.AndroidIapStatus, nameof(request.AndroidIapStatus));
+        ValidateStatus(request.AndroidPushStatus, nameof(request.AndroidPushStatus));
+        ValidateStatus(request.WindowsSigningStatus, nameof(request.WindowsSigningStatus));
+        ValidateStatus(request.MacSigningStatus, nameof(request.MacSigningStatus));
+        ValidateStatus(request.LinuxSigningStatus, nameof(request.LinuxSigningStatus));
+        ValidateStatus(request.RealtimeLegalApprovalStatus, nameof(request.RealtimeLegalApprovalStatus));
+        ValidateStatus(request.RealtimePrivacyApprovalStatus, nameof(request.RealtimePrivacyApprovalStatus));
+        ValidateStatus(request.RealtimeProtectedSmokeStatus, nameof(request.RealtimeProtectedSmokeStatus));
+        ValidateStatus(request.ReleaseOwnerApprovalStatus, nameof(request.ReleaseOwnerApprovalStatus));
     }
 
     private static void ValidateVersion(string? value, string field)
@@ -129,6 +154,13 @@ public sealed class LaunchReadinessService(LearnerDbContext db) : ILaunchReadine
         {
             throw ApiException.Validation("INVALID_RELEASE_URL", $"{field} must be an external https:// URL.");
         }
+    }
+
+    private static void ValidateStatus(string? value, string field)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return;
+        if (!AllowedStatusValues.Contains(value.Trim()))
+            throw ApiException.Validation("INVALID_LAUNCH_STATUS", $"{field} must be pending, blocked, evidence-required, approved, complete, or failed.");
     }
 
     private static void Apply(AdminLaunchReadinessSettingsRequest r, LaunchReadinessSettings row)

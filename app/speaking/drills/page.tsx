@@ -80,7 +80,7 @@ export default function SpeakingDrillsPage() {
           <h1 className="text-2xl font-black text-navy">Speaking drills</h1>
           <p className="text-sm text-muted">
             Short, focused practice tasks targeting one criterion at a time. Drills
-            are not graded — they exist to build the muscle memory that powers your
+            are not graded. They exist to build the muscle memory that powers your
             full role-plays.
           </p>
         </header>

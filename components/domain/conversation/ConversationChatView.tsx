@@ -38,13 +38,13 @@ export function ConversationChatView({ turns, aiThinking, aiSpeakingTurn, partia
               className={`flex ${isLearner ? 'justify-end' : 'justify-start'}`}>
               <div className={`max-w-[75%] rounded-2xl px-4 py-3 ${
                 isLearner
-                  ? 'bg-purple-600 text-white rounded-br-sm'
-                  : 'bg-background-light dark:bg-gray-800 text-navy dark:text-white rounded-bl-sm border border-border dark:border-gray-700'
+                  ? 'bg-primary text-white dark:bg-violet-700 rounded-br-sm'
+                  : 'bg-background-light text-navy rounded-bl-sm border border-border'
               }`}>
                 <div className="mb-1 flex items-center justify-between gap-2 text-xs font-semibold opacity-70">
                   <span>{isLearner ? 'You' : 'AI Partner'}</span>
                   {isSpeaking && (
-                    <span className="flex items-center gap-1 text-purple-200">
+                    <span className="flex items-center gap-1 text-white/80">
                       <Volume2 className="h-3 w-3" /> speaking…
                     </span>
                   )}
@@ -53,7 +53,7 @@ export function ConversationChatView({ turns, aiThinking, aiSpeakingTurn, partia
                 {turn.audioUrl && !isLearner && onReplay && (
                   <button type="button" onClick={() => onReplay(turn)}
                     aria-label={`Replay AI partner turn ${turn.turnNumber}`}
-                    className="mt-2 inline-flex items-center gap-1 rounded-full bg-black/10 px-2 py-0.5 text-xs font-medium hover:bg-black/20 dark:bg-white/10">
+                    className="mt-2 inline-flex items-center gap-1 rounded-full bg-white/15 px-2 py-0.5 text-xs font-medium hover:bg-white/25">
                     <Volume2 className="h-3 w-3" /> Replay
                   </button>
                 )}
@@ -71,8 +71,8 @@ export function ConversationChatView({ turns, aiThinking, aiSpeakingTurn, partia
             animate={{ opacity: 1, y: 0 }}
             className="flex justify-end"
             aria-live="off">
-            <div className="max-w-[75%] rounded-2xl rounded-br-sm border border-purple-200 bg-purple-50/90 px-4 py-3 text-purple-950 shadow-sm dark:border-purple-800/60 dark:bg-purple-950/30 dark:text-purple-100">
-              <div className="mb-1 flex items-center justify-between gap-2 text-xs font-semibold text-purple-600 dark:text-purple-300">
+            <div className="max-w-[75%] rounded-2xl rounded-br-sm border border-primary/20 bg-primary/5 px-4 py-3 text-navy shadow-sm">
+              <div className="mb-1 flex items-center justify-between gap-2 text-xs font-semibold text-primary">
                 <span>You</span>
                 <span>{turnState === 'listening' ? 'live transcript' : 'not submitted yet'}</span>
               </div>
@@ -83,7 +83,7 @@ export function ConversationChatView({ turns, aiThinking, aiSpeakingTurn, partia
         )}
         {aiThinking && (
           <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="flex justify-start" aria-hidden="true">
-            <div className="rounded-2xl rounded-bl-sm border border-border bg-background-light px-4 py-3 dark:border-gray-700 dark:bg-gray-800">
+            <div className="rounded-2xl rounded-bl-sm border border-border bg-background-light px-4 py-3">
               <div className="flex items-center gap-2 text-sm text-muted">
                 <Loader2 className="h-4 w-4 animate-spin" />AI is thinking…
               </div>

@@ -52,7 +52,7 @@ export function Testimonials({ items = DEFAULT_ITEMS }: TestimonialsProps) {
           {items.map((item) => (
             <figure
               key={item.name}
-              className="rounded-2xl border border-border bg-background p-5 shadow-sm"
+              className="rounded-2xl border border-border bg-surface p-5 shadow-sm"
             >
               <Quote className="h-5 w-5 text-[#D4A44F]" aria-hidden="true" />
               <blockquote className="mt-3 text-sm text-navy">{item.quote}</blockquote>

@@ -408,7 +408,7 @@ const LEVEL_META: Record<DiagnosticRecommendedLevel, { label: string; variant: '
   improver: {
     label: 'Improver',
     variant: 'warning',
-    blurb: 'You can pass parts of the exam — focus on lifting your weakest sub-test first.',
+    blurb: 'You can pass parts of the exam. Focus on lifting your weakest sub-test first.',
   },
   intermediate: {
     label: 'Intermediate',
@@ -418,7 +418,7 @@ const LEVEL_META: Record<DiagnosticRecommendedLevel, { label: string; variant: '
   advanced: {
     label: 'Advanced',
     variant: 'success',
-    blurb: 'Strong readiness signal — polish for consistency and time pressure.',
+    blurb: 'Strong readiness signal. Polish for consistency and time pressure.',
   },
 };
 
@@ -621,7 +621,7 @@ function ResultState({
         <CardContent className="space-y-3">
           {studyPath.items.length === 0 ? (
             <p className="text-sm text-muted">
-              No drills are queued yet — your study path will populate as soon as the diagnostic is
+              No drills are queued yet. Your study path will populate as soon as the diagnostic is
               fully marked.
             </p>
           ) : (

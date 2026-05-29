@@ -470,7 +470,7 @@ export default function StudyPlanTemplateEditorPage() {
 
                 <div className="space-y-2 ml-4">
                   {week.days.map((day, dayIdx) => (
-                    <div key={dayIdx} className="border-l-2 border-border pl-3">
+                    <div key={dayIdx} className="border-l border-border pl-3">
                       <div className="flex items-center gap-2 mb-2">
                         <select
                           value={day.dayOfWeek}

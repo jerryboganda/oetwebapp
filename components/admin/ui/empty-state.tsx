@@ -156,7 +156,7 @@ type ActionRenderOpts = {
 
 function ActionButton({ action, variant, size, titleContext }: ActionRenderOpts) {
   const buttonSize = size === 'sm' ? 'sm' : 'md';
-  const ariaLabel = `${action.label} — ${titleContext}`;
+  const ariaLabel = `${action.label}: ${titleContext}`;
   // Only the primary action supports loading state.
   const loading =
     'loading' in action && variant === 'primary' ? Boolean(action.loading) : false;

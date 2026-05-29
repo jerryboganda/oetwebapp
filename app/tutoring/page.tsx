@@ -83,7 +83,7 @@ export default function TutoringPage() {
             >
               <div className="flex-1">
                 <div className="flex items-center gap-2 mb-1">
-                  <span className="font-medium text-navy text-sm">{session.examTypeCode.toUpperCase()} {session.subtestFocus ? `— ${session.subtestFocus}` : ''}</span>
+                  <span className="font-medium text-navy text-sm">{session.examTypeCode.toUpperCase()} {session.subtestFocus ? `· ${session.subtestFocus}` : ''}</span>
                   <span className={`text-xs px-2 py-0.5 rounded-full capitalize ${STATE_COLORS[session.state] ?? 'bg-background-light text-muted'}`}>{session.state}</span>
                 </div>
                 <div className="flex items-center gap-3 text-xs text-muted/60">

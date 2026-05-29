@@ -17,13 +17,13 @@ Or add to a local-only `.env.local.prod` (already covered by `.gitignore`).
 ## 2. Install Playwright browsers (once)
 
 ```powershell
-npm run test:e2e:install
+docker exec oet-local-web npm run test:e2e:install
 ```
 
 ## 3. Run the smoke
 
 ```powershell
-npx playwright test tests/e2e/prod-smoke.spec.ts --project=chromium-unauth --workers=1
+docker exec -e PROD_LEARNER_EMAIL="$env:PROD_LEARNER_EMAIL" -e PROD_LEARNER_PASSWORD="$env:PROD_LEARNER_PASSWORD" oet-local-web npx playwright test tests/e2e/prod-smoke.spec.ts --project=chromium-unauth --workers=1
 ```
 
 > The `chromium-unauth` project has no saved auth state, which matches what the
@@ -34,7 +34,7 @@ npx playwright test tests/e2e/prod-smoke.spec.ts --project=chromium-unauth --wor
 ## 4. Read the report
 
 ```powershell
-npx playwright show-report
+docker exec oet-local-web npx playwright show-report
 ```
 
 Screenshots of each learner surface will be written to `playwright-report-prod/`.
@@ -53,10 +53,10 @@ Screenshots of each learner surface will be written to `playwright-report-prod/`
 ## If it fails
 
 1. Open `playwright-report-prod/` screenshots to identify which surface broke.
-2. Check live server logs on the VPS:
+2. Incident/deploy operators may check live server logs on the VPS with read-only commands only. Do not run builds, tests, installs, or validation suites on the VPS.
    ```bash
    docker compose --env-file .env.production -f docker-compose.production.yml logs --tail=300 web learner-api
    ```
 3. If the issue is a deployment regression, follow the rollback procedure in
    [ops/deploy-gate.md](ops/deploy-gate.md#rollback-procedure) using the latest
-   approved previous-good SHA from release evidence.
+   approved previous-good SHA and image digest record.

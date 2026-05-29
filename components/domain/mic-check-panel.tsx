@@ -325,24 +325,19 @@ export function MicCheckPanel({ onComplete, className }: MicCheckPanelProps) {
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: index * 0.1 }}
                 className={cn(
-                  'flex items-center gap-4 p-4 rounded-xl border transition-all duration-300 relative overflow-hidden',
-                  status === 'active' && 'border-primary/40 bg-gradient-to-r from-primary/10 to-transparent shadow-sm',
+                  'flex items-center gap-4 p-4 rounded-xl border transition-[color,background-color,border-color,box-shadow,transform,opacity,filter] duration-300 relative overflow-hidden',
+                  status === 'active' && 'border-primary/40 bg-primary/5 shadow-sm',
                   status === 'checking' && 'border-primary bg-primary/5 shadow-md',
-                  status === 'passed' && 'border-emerald-200 bg-emerald-50/50',
-                  status === 'failed' && 'border-red-200 bg-red-50/50',
+                  status === 'passed' && 'border-success/30 bg-success/10',
+                  status === 'failed' && 'border-danger/30 bg-danger/10',
                   status === 'pending' && 'border-border bg-background-light opacity-50'
                 )}
               >
-                {/* Active Indicator Bar */}
-                {(status === 'active' || status === 'checking') && (
-                  <motion.div layoutId="activeStep" className="absolute left-0 top-0 bottom-0 w-1 bg-primary" />
-                )}
-
                 <div className={cn(
                   'w-10 h-10 rounded-full flex items-center justify-center shrink-0 shadow-sm transition-transform duration-300',
-                  status === 'passed' && 'bg-emerald-100 text-emerald-600',
-                  status === 'failed' && 'bg-red-100 text-red-600',
-                  (status === 'active' || status === 'checking') && 'bg-primary text-white scale-110',
+                  status === 'passed' && 'bg-success/15 text-success',
+                  status === 'failed' && 'bg-danger/15 text-danger',
+                  (status === 'active' || status === 'checking') && 'bg-primary text-white dark:bg-violet-700 scale-110',
                   status === 'pending' && 'bg-muted/20 text-muted'
                 )}>
                   {status === 'passed' ? <CheckCircle2 className="w-5 h-5" /> :
@@ -356,15 +351,15 @@ export function MicCheckPanel({ onComplete, className }: MicCheckPanelProps) {
                     (status === 'active' || status === 'checking') ? "text-primary" : "text-navy"
                   )}>{config.label}</p>
                   
-                  {status === 'passed' && <p className="text-xs text-emerald-600 font-medium tracking-wide">Passed</p>}
+                  {status === 'passed' && <p className="text-xs text-success font-medium tracking-wide">Passed</p>}
                   
                   {status === 'checking' && step === 'record' && (
                     <div className="flex items-center gap-2 mt-1">
                       <span className="relative flex h-2 w-2">
-                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-                        <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
+                        <span className="motion-safe:animate-ping absolute inline-flex h-full w-full rounded-full bg-danger/70 opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-2 w-2 bg-danger"></span>
                       </span>
-                      <p className="text-xs font-semibold text-red-600">Recording... {recordCountdown}s</p>
+                      <p className="text-xs font-semibold text-danger">Recording... {recordCountdown}s</p>
                     </div>
                   )}
                   
@@ -378,7 +373,7 @@ export function MicCheckPanel({ onComplete, className }: MicCheckPanelProps) {
                             key={i}
                             animate={{ height: ['20%', '100%', '20%'] }}
                             transition={{ repeat: Infinity, duration: 0.5 + Math.random() * 0.5 }}
-                            className={cn('w-1 rounded-full', (noiseLevel ?? 0) > NOISE_WARNING_THRESHOLD ? 'bg-red-500' : 'bg-primary/60')}
+                            className={cn('w-1 rounded-full', (noiseLevel ?? 0) > NOISE_WARNING_THRESHOLD ? 'bg-danger' : 'bg-primary/60')}
                           />
                         ))}
                       </div>
@@ -387,7 +382,7 @@ export function MicCheckPanel({ onComplete, className }: MicCheckPanelProps) {
                   )}
                   
                   {status === 'checking' && step === 'permission' && <p className="text-xs text-primary font-medium">Waiting for browser permission…</p>}
-                  {status === 'failed' && <p className="text-xs text-red-600 font-medium">Failed — please try again</p>}
+                  {status === 'failed' && <p className="text-xs text-danger font-medium">Failed, please try again</p>}
                 </div>
                 
                 {(status === 'active' || status === 'failed') && (
@@ -404,7 +399,7 @@ export function MicCheckPanel({ onComplete, className }: MicCheckPanelProps) {
       <AnimatePresence>
         {error && (
           <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}>
-            <InlineAlert variant="error" dismissible className="shadow-sm rounded-xl mt-2 border-red-200">
+            <InlineAlert variant="error" dismissible className="shadow-sm rounded-xl mt-2">
               {error}
             </InlineAlert>
           </motion.div>

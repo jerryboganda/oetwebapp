@@ -308,9 +308,9 @@ export default function AssessSpeakingSessionPage() {
             </div>
             <ul className="ml-4 list-disc space-y-1 text-sm leading-relaxed text-navy">
               <li>Score the 9 criteria independently. Use the AI column for reference, not anchoring.</li>
-              <li>Add timestamped comments on weak/strong moments — they appear in the learner&apos;s transcript.</li>
+              <li>Add timestamped comments on weak/strong moments. They appear in the learner&apos;s transcript.</li>
               <li>Save drafts often; submission is final and visible to the learner.</li>
-              <li>Strengths + improvements are user-facing — keep them specific and actionable.</li>
+              <li>Strengths and improvements are user-facing, so keep them specific and actionable.</li>
             </ul>
           </Card>
         </div>

@@ -111,7 +111,7 @@ export default function ConversationPage() {
         <LearnerPageHero
           eyebrow="AI Conversation"
           title="Rehearse a real OET roleplay before exam day"
-          description="Speak with an AI patient partner — every session is graded against the OET Speaking rubric and projected to the 0–500 scale (pass = 350). Advisory only."
+          description="Speak with an AI patient partner. Every session is graded against the OET Speaking rubric and projected to the 0–500 scale (pass = 350). Advisory only."
           icon={MessageSquare}
           accent="purple"
           highlights={heroHighlights}

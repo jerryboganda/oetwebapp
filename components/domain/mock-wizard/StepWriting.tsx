@@ -109,10 +109,10 @@ export function StepWriting() {
   return (
     <div className="space-y-6">
       <header className="space-y-1">
-        <h2 className="text-lg font-bold text-navy">Step 4 — Writing</h2>
+        <h2 className="text-lg font-bold text-navy">Step 4: Writing</h2>
         <p className="text-sm text-muted">
           Upload the case notes (and optional model answer), then author the prompt and metadata.
-          Country is informational only — the actual pass threshold (350 for UK/IE/AU/NZ/CA, 300 for US/QA)
+          Country is informational only. The actual pass threshold (350 for UK/IE/AU/NZ/CA, 300 for US/QA)
           is resolved per learner at scoring time via OetScoring.
         </p>
       </header>
@@ -133,7 +133,7 @@ export function StepWriting() {
           <UploadSlot
             paperId={existingPaperId}
             role="ModelAnswer"
-            label="Model answer (PDF) — required by publish gate"
+            label="Model answer (PDF), required by publish gate"
             accept="application/pdf"
             deferAttach={!existingPaperId}
             onAttached={(id) => setPending((p) => ({ ...p, ModelAnswer: id }))}

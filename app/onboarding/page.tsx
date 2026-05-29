@@ -17,7 +17,7 @@ const STEPS = [
     icon: BookOpen,
     heading: 'What is the OET?',
     description:
-      'The Occupational English Test (OET) assesses the English proficiency of healthcare professionals. It has four sub-tests: Listening, Reading, Writing, and Speaking — each designed around real healthcare workplace scenarios.',
+      'The Occupational English Test (OET) assesses the English proficiency of healthcare professionals. It has four sub-tests: Listening, Reading, Writing, and Speaking, each designed around real healthcare workplace scenarios.',
     details: [
       'Recognised by regulatory bodies in Australia, New Zealand, UK, Ireland, Singapore, Dubai & more',
       'Available for 12 healthcare professions',

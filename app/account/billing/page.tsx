@@ -76,7 +76,7 @@ export default function AccountBillingPage() {
       ) : null}
 
       <section className="grid gap-4 md:grid-cols-3">
-        <div className="rounded-2xl border border-border bg-background p-5 shadow-sm">
+        <div className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
           <div className="flex items-center gap-2 text-xs uppercase tracking-wider text-muted">
             <Wallet className="h-4 w-4" /> Current plan
           </div>
@@ -102,7 +102,7 @@ export default function AccountBillingPage() {
           )}
         </div>
 
-        <div className="rounded-2xl border border-border bg-background p-5 shadow-sm">
+        <div className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
           <div className="flex items-center gap-2 text-xs uppercase tracking-wider text-muted">
             <Receipt className="h-4 w-4" /> Wallet
           </div>
@@ -123,7 +123,7 @@ export default function AccountBillingPage() {
           )}
         </div>
 
-        <div className="rounded-2xl border border-border bg-background p-5 shadow-sm">
+        <div className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
           <div className="flex items-center gap-2 text-xs uppercase tracking-wider text-muted">
             <CreditCard className="h-4 w-4" /> Payment method
           </div>
@@ -150,7 +150,7 @@ export default function AccountBillingPage() {
             recentInvoices.map((invoice) => (
               <div
                 key={invoice.invoiceId}
-                className="flex items-center justify-between rounded-lg border border-border bg-background px-4 py-3 text-sm"
+                className="flex items-center justify-between rounded-lg border border-border bg-surface px-4 py-3 text-sm"
               >
                 <div>
                   <p className="font-medium text-navy">{invoice.number ?? invoice.invoiceId}</p>
@@ -170,14 +170,14 @@ export default function AccountBillingPage() {
       <section className="grid gap-3 sm:grid-cols-2">
         <Link
           href="/account/billing/invoices"
-          className="rounded-2xl border border-border bg-background p-5 shadow-sm transition-colors hover:bg-background-light"
+          className="rounded-2xl border border-border bg-surface p-5 shadow-sm transition-colors hover:bg-background-light"
         >
           <h3 className="font-semibold text-navy">All invoices</h3>
           <p className="mt-1 text-sm text-muted">Download PDFs or revisit receipts.</p>
         </Link>
         <Link
           href="/account/billing/payment-methods"
-          className="rounded-2xl border border-border bg-background p-5 shadow-sm transition-colors hover:bg-background-light"
+          className="rounded-2xl border border-border bg-surface p-5 shadow-sm transition-colors hover:bg-background-light"
         >
           <h3 className="font-semibold text-navy">Payment methods</h3>
           <p className="mt-1 text-sm text-muted">Manage cards via Stripe Customer Portal.</p>

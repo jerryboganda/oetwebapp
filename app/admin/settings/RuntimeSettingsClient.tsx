@@ -283,7 +283,7 @@ const ZOOM_FIELDS: FieldDef<ZoomSettings>[] = [
 
 const SPEAKING_WHISPER_FIELDS: FieldDef<SpeakingWhisperSettings>[] = [
   { key: 'apiKey', label: 'OpenAI Whisper API Key', secret: true, hint: 'Used by the Speaking RULE_40 tone pipeline. Starts with sk-…' },
-  { key: 'baseUrl', label: 'Whisper API Base URL', type: 'url', hint: 'Default: https://api.openai.com/v1 — change only for self-hosted gateways.' },
+  { key: 'baseUrl', label: 'Whisper API Base URL', type: 'url', hint: 'Default: https://api.openai.com/v1. Change only for self-hosted gateways.' },
   { key: 'model', label: 'Whisper Model', hint: 'Default: whisper-1.' },
 ];
 
@@ -331,12 +331,12 @@ const SECTION_META: { id: SectionId; title: string; description: string }[] = [
   { id: 'push', title: 'Push (Browser + APNs + FCM)', description: 'Browser VAPID and native mobile push notifications via Apple and Firebase.' },
   { id: 'uploadScanner', title: 'Upload Scanner (ClamAV)', description: 'Antivirus scanning for learner/admin uploads.' },
   { id: 'zoom', title: 'Zoom Live Classes', description: 'Server-to-server OAuth, Meeting SDK, and webhook verification.' },
-  { id: 'speakingWhisper', title: 'Speaking — Whisper Transcription', description: 'OpenAI Whisper API for speaking session transcription and RULE_40 tone pipeline.' },
-  { id: 'speakingLiveKit', title: 'Speaking — LiveKit (Live Rooms)', description: 'LiveKit Cloud WebRTC for live tutor rooms and egress recording.' },
-  { id: 'speakingAi', title: 'Speaking — AI Providers', description: 'Anthropic (Claude scoring + patient turns) and ElevenLabs (AI patient TTS voice).' },
-  { id: 'speakingStorage', title: 'Speaking — Recording Storage (AWS S3)', description: 'AWS S3 bucket for speaking session recording archive.' },
-  { id: 'speakingCompliance', title: 'Speaking — Compliance & Retention', description: 'Consent versioning, recording retention windows, and audit log retention.' },
-  { id: 'speakingFeatures', title: 'Speaking — Feature Flags', description: 'Controls the Speaking v2 module rollout to learners.' },
+  { id: 'speakingWhisper', title: 'Speaking: Whisper Transcription', description: 'OpenAI Whisper API for speaking session transcription and RULE_40 tone pipeline.' },
+  { id: 'speakingLiveKit', title: 'Speaking: LiveKit (Live Rooms)', description: 'LiveKit Cloud WebRTC for live tutor rooms and egress recording.' },
+  { id: 'speakingAi', title: 'Speaking: AI Providers', description: 'Anthropic (Claude scoring + patient turns) and ElevenLabs (AI patient TTS voice).' },
+  { id: 'speakingStorage', title: 'Speaking: Recording Storage (AWS S3)', description: 'AWS S3 bucket for speaking session recording archive.' },
+  { id: 'speakingCompliance', title: 'Speaking: Compliance & Retention', description: 'Consent versioning, recording retention windows, and audit log retention.' },
+  { id: 'speakingFeatures', title: 'Speaking: Feature Flags', description: 'Controls the Speaking v2 module rollout to learners.' },
 ];
 
 /* ───────────────────────── Helpers ───────────────────────── */

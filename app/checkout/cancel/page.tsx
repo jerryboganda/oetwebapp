@@ -12,7 +12,7 @@ import { Button } from '@/components/ui/button';
  */
 export default function CheckoutCancelPage() {
   return (
-    <div className="min-h-screen bg-background text-navy">
+    <div className="min-h-screen bg-background-light text-navy">
       <div className="mx-auto max-w-3xl space-y-6 px-4 py-16 text-center">
         <ShoppingCart className="mx-auto h-10 w-10 text-muted" aria-hidden="true" />
         <h1 className="text-3xl font-bold">Checkout cancelled</h1>

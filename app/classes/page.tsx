@@ -137,7 +137,7 @@ export default function LiveClassesPage() {
                       className={cn(
                         'min-h-10 rounded-full border px-4 text-sm font-medium transition-colors',
                         filter === track
-                          ? 'border-primary bg-primary text-white'
+                          ? 'border-primary bg-primary text-white dark:bg-violet-700'
                           : 'border-border bg-background text-muted hover:border-primary/50 hover:text-navy',
                       )}
                     >

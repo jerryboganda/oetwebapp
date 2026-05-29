@@ -109,7 +109,7 @@ export default function LearningPathsPage() {
               <span className="text-2xl font-bold text-primary">{data.overallProgress}%</span>
             </div>
             <div className="h-3 bg-border rounded-full overflow-hidden">
-              <div className="h-full bg-primary rounded-full transition-all" style={{ width: `${data.overallProgress}%` }} />
+              <div className="h-full bg-primary rounded-full transition-[width,background-color] duration-300" style={{ width: `${data.overallProgress}%` }} />
             </div>
             <p className="text-xs text-muted mt-2">{data.totalContent} total content items across all subtests</p>
           </Card>
@@ -171,7 +171,7 @@ export default function LearningPathsPage() {
           />
           <div className="flex items-center gap-3 mt-2 mb-4">
             <div className="flex-1 h-2 bg-border rounded-full overflow-hidden">
-              <div className="h-full bg-primary rounded-full transition-all" style={{ width: `${sp.progressPercent}%` }} />
+              <div className="h-full bg-primary rounded-full transition-[width,background-color] duration-300" style={{ width: `${sp.progressPercent}%` }} />
             </div>
             <span className="text-sm font-medium text-muted">{sp.completedItems}/{sp.totalItems}</span>
           </div>

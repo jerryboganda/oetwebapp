@@ -112,11 +112,11 @@ function TutorTable({ tutors }: { tutors: BucketedTutor[] }) {
       <table className="min-w-full divide-y divide-admin-border text-sm">
         <thead>
           <tr className="text-left text-xs font-bold uppercase tracking-[0.14em] text-admin-text-muted">
-            <th className="py-3 pr-4">Tutor</th>
-            <th className="px-4 py-3">Last calibration</th>
-            <th className="px-4 py-3 text-right">Submissions</th>
-            <th className="px-4 py-3 text-right">σ (mean abs. error)</th>
-            <th className="px-4 py-3 text-right">Drift</th>
+            <th scope="col" className="py-3 pr-4">Tutor</th>
+            <th scope="col" className="px-4 py-3">Last calibration</th>
+            <th scope="col" className="px-4 py-3 text-right">Submissions</th>
+            <th scope="col" className="px-4 py-3 text-right">σ (mean abs. error)</th>
+            <th scope="col" className="px-4 py-3 text-right">Drift</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-admin-border/70">
@@ -164,12 +164,12 @@ function SetsTable({
       <table className="min-w-full divide-y divide-admin-border text-sm">
         <thead>
           <tr className="text-left text-xs font-bold uppercase tracking-[0.14em] text-admin-text-muted">
-            <th className="py-3 pr-4">Set</th>
-            <th className="px-4 py-3">Profession</th>
-            <th className="px-4 py-3 text-right">Tutors scored</th>
-            <th className="px-4 py-3 text-right">Mean σ</th>
-            <th className="px-4 py-3">Status</th>
-            <th className="px-4 py-3 text-right">Detail</th>
+            <th scope="col" className="py-3 pr-4">Set</th>
+            <th scope="col" className="px-4 py-3">Profession</th>
+            <th scope="col" className="px-4 py-3 text-right">Tutors scored</th>
+            <th scope="col" className="px-4 py-3 text-right">Mean σ</th>
+            <th scope="col" className="px-4 py-3">Status</th>
+            <th scope="col" className="px-4 py-3 text-right">Detail</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-admin-border/70">
@@ -205,7 +205,7 @@ function SetsTable({
                 <td className="px-4 py-3 text-right">
                   <Link
                     href={`/admin/calibration/speaking/${encodeURIComponent(set.sampleId)}`}
-                    className="text-xs font-semibold text-violet-300 hover:text-violet-200"
+                    className="text-xs font-semibold text-[var(--admin-primary)] hover:text-[var(--admin-primary-hover)]"
                   >
                     View detail
                   </Link>

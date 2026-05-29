@@ -33,14 +33,14 @@ export default function VocabCard({ item, onFlip }: VocabCardProps) {
       >
         {/* Front face */}
         <div
-          className="absolute inset-0 flex flex-col items-center justify-center rounded-2xl border border-violet-100 bg-white px-8 py-10 shadow-md dark:border-violet-900/40 dark:bg-neutral-900"
+          className="absolute inset-0 flex flex-col items-center justify-center rounded-2xl border border-violet-100 bg-surface px-8 py-10 shadow-md dark:border-violet-900/40"
           style={{ backfaceVisibility: 'hidden' }}
         >
-          <p className="mb-3 text-4xl font-bold tracking-tight text-neutral-900 dark:text-white">
+          <p className="mb-3 text-4xl font-bold tracking-tight text-navy">
             {item.word}
           </p>
           {item.pronunciationIpa ? (
-            <p className="text-base italic text-neutral-400 dark:text-neutral-500">
+            <p className="text-base italic text-muted">
               /{item.pronunciationIpa}/
             </p>
           ) : null}
@@ -59,31 +59,31 @@ export default function VocabCard({ item, onFlip }: VocabCardProps) {
         >
           {/* Word + IPA compact header */}
           <div className="flex items-baseline gap-2">
-            <span className="text-sm font-semibold text-neutral-700 dark:text-neutral-200">
+            <span className="text-sm font-semibold text-navy">
               {item.word}
             </span>
             {item.pronunciationIpa ? (
-              <span className="text-xs italic text-neutral-400">
+              <span className="text-xs italic text-muted">
                 /{item.pronunciationIpa}/
               </span>
             ) : null}
           </div>
 
           {/* English definition */}
-          <p className="text-base font-bold text-neutral-900 dark:text-white">
+          <p className="text-base font-bold text-navy">
             {item.definitionEn}
           </p>
 
           {/* Arabic definition */}
           {item.definitionAr ? (
-            <p className="text-sm text-neutral-500 dark:text-neutral-400" dir="auto">
+            <p className="text-sm text-muted" dir="auto">
               {item.definitionAr}
             </p>
           ) : null}
 
           {/* English example */}
           {item.exampleEn ? (
-            <p className="text-sm italic text-neutral-600 dark:text-neutral-300">
+            <p className="text-sm italic text-muted">
               &ldquo;{item.exampleEn}&rdquo;
             </p>
           ) : null}
@@ -98,7 +98,7 @@ export default function VocabCard({ item, onFlip }: VocabCardProps) {
           {/* Arabic example — RTL */}
           {item.exampleAr ? (
             <p
-              className="mt-auto text-xs text-neutral-400 dark:text-neutral-500"
+              className="mt-auto text-xs text-muted"
               dir="rtl"
               lang="ar"
             >

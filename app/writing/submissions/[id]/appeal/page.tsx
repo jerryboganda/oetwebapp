@@ -269,7 +269,7 @@ export default function WritingAppealPage() {
                     <p className="text-xs text-muted">
                       {wasAdjusted
                         ? 'Score updated to the average (Δ > 3).'
-                        : 'No change — within tolerance.'}
+                        : 'No change, within tolerance.'}
                     </p>
                   </div>
                 </div>

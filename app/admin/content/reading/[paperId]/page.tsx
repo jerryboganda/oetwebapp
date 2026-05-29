@@ -1,9 +1,9 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { ArrowRight, BookOpen, FileText, HelpCircle, ShieldCheck, Pencil } from 'lucide-react';
+import { ArrowRight, BookOpen, FileText, HelpCircle, ShieldCheck, Pencil, Eye } from 'lucide-react';
 import { AdminSettingsLayout, SettingsSection } from '@/components/admin/layout/admin-settings-layout';
 import { KpiTile } from '@/components/admin/ui/kpi-tile';
 import { Button } from '@/components/admin/ui/button';
@@ -12,6 +12,7 @@ import { Skeleton } from '@/components/admin/ui/skeleton';
 import { Input, Select } from '@/components/ui/form-controls';
 import { InlineAlert, Toast } from '@/components/ui/alert';
 import { ReadingWizardSteps } from '@/components/domain/admin/reading/ReadingWizardSteps';
+import { ReadingManifestPanel } from './ReadingManifestPanel';
 import {
   getReadingStructureAdmin,
   validateReadingPaper,
@@ -81,6 +82,18 @@ export default function AdminReadingPaperOverviewPage() {
         sourceProvenance: p.sourceProvenance ?? '',
       });
     }).catch(() => { /* paper may not exist yet */ });
+  }, [paperId]);
+
+  const reloadStructure = useCallback(async () => {
+    if (!paperId) return;
+    try {
+      const structureData = await getReadingStructureAdmin(paperId);
+      setStructure(structureData);
+    } catch { /* ignore */ }
+    try {
+      const report = await validateReadingPaper(paperId);
+      setValidation(report);
+    } catch { /* validation may fail for drafts */ }
   }, [paperId]);
 
   async function handleSaveMeta() {
@@ -249,7 +262,7 @@ export default function AdminReadingPaperOverviewPage() {
                         value={metaForm.difficulty}
                         onChange={(e) => setMetaForm({ ...metaForm, difficulty: e.target.value })}
                         options={[
-                          { value: '', label: '— Select —' },
+                          { value: '', label: 'Select…' },
                           { value: 'easy', label: 'Easy' },
                           { value: 'medium', label: 'Medium' },
                           { value: 'hard', label: 'Hard' },
@@ -292,11 +305,21 @@ export default function AdminReadingPaperOverviewPage() {
                   <Button asChild variant="primary" size="sm" endIcon={<ArrowRight className="h-4 w-4" />}>
                     <Link href={`/admin/content/reading/${paperId}/questions`}>Edit Questions</Link>
                   </Button>
+                  <Button asChild variant="secondary" size="sm" startIcon={<Eye className="h-4 w-4" />}>
+                    <Link href={`/admin/content/reading/${paperId}/preview`}>Preview as student</Link>
+                  </Button>
                   <Button asChild variant="primary" size="sm" endIcon={<ArrowRight className="h-4 w-4" />}>
                     <Link href={`/admin/content/reading/${paperId}/validate`}>Validate &amp; Publish</Link>
                   </Button>
                 </div>
               </SettingsSection>
+
+              <ReadingManifestPanel
+                paperId={paperId}
+                paperTitle={paper?.title ?? ''}
+                onImported={() => { void reloadStructure(); }}
+                onNotify={(variant, message) => setToast({ message, variant })}
+              />
             </>
           ) : null}
         </div>

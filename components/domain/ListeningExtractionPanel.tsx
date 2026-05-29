@@ -197,7 +197,7 @@ export function ListeningExtractionPanel({ paperId, onApplied }: ListeningExtrac
     try {
       await approveListeningExtractionDraft(paperId, activeDraft.id, '');
       setConfirmApprove(false);
-      setToast({ variant: 'success', message: 'Draft approved — structure replaced and audit logged.' });
+      setToast({ variant: 'success', message: 'Draft approved. Structure replaced and audit logged.' });
       await Promise.all([refreshList(), refreshCurrent()]);
       onApplied?.();
     } catch (e) {
@@ -219,7 +219,7 @@ export function ListeningExtractionPanel({ paperId, onApplied }: ListeningExtrac
       await rejectListeningExtractionDraft(paperId, activeDraft.id, trimmed);
       setRejectOpen(false);
       setRejectReason('');
-      setToast({ variant: 'success', message: 'Draft rejected — audit logged.' });
+      setToast({ variant: 'success', message: 'Draft rejected. Audit logged.' });
       await refreshList();
     } catch (e) {
       const { status, message } = readApiError(e, 'Reject failed.');
@@ -329,7 +329,7 @@ export function ListeningExtractionPanel({ paperId, onApplied }: ListeningExtrac
 
                     <DiffTable rows={diffRows} />
 
-                    <div className="flex flex-wrap items-center justify-end gap-2 border-t border-gray-100 pt-4">
+                    <div className="flex flex-wrap items-center justify-end gap-2 border-t border-admin-border pt-4">
                       <Button
                         variant="secondary"
                         size="sm"
@@ -371,7 +371,7 @@ export function ListeningExtractionPanel({ paperId, onApplied }: ListeningExtrac
         size="md"
       >
         <div className="space-y-4">
-          <p className="text-sm text-navy">
+          <p className="text-sm text-admin-fg-strong">
             This will replace the current authored structure with{' '}
             <strong>{activeDraft?.questions.length ?? 0}</strong> questions from this draft.
             The change is audit-logged.
@@ -420,10 +420,10 @@ export function ListeningExtractionPanel({ paperId, onApplied }: ListeningExtrac
 
 function EmptyState({ onPropose, disabled }: { onPropose: () => void; disabled: boolean }) {
   return (
-    <div className="flex flex-col items-center justify-center gap-4 rounded-2xl border border-dashed border-border bg-background-light px-6 py-12 text-center">
+    <div className="flex flex-col items-center justify-center gap-4 rounded-2xl border border-dashed border-border bg-admin-bg-subtle px-6 py-12 text-center">
       <Sparkles className="h-8 w-8 text-primary" aria-hidden="true" />
       <div className="space-y-1">
-        <p className="text-base font-semibold text-navy">No AI proposals yet</p>
+        <p className="text-base font-semibold text-admin-fg-strong">No AI proposals yet</p>
         <p className="max-w-md text-sm text-muted">
           Run the grounded AI gateway against this paper&apos;s Question Paper + Audio Script to draft a
           42-item Listening structure. The proposal lands here as a Pending draft for diff &amp; review.
@@ -438,7 +438,7 @@ function EmptyState({ onPropose, disabled }: { onPropose: () => void; disabled: 
 
 function DraftHeader({ draft }: { draft: ListeningExtractionDraftDto }) {
   return (
-    <div className="flex flex-wrap items-start justify-between gap-3 rounded-2xl border border-gray-100 bg-surface px-4 py-3">
+    <div className="flex flex-wrap items-start justify-between gap-3 rounded-2xl border border-admin-border bg-surface px-4 py-3">
       <div className="space-y-1">
         <div className="flex items-center gap-2">
           {statusBadge(draft.status, draft.isStub)}
@@ -448,7 +448,7 @@ function DraftHeader({ draft }: { draft: ListeningExtractionDraftDto }) {
           </span>
         </div>
         {draft.summary && (
-          <p className="max-w-3xl text-sm text-navy">{draft.summary}</p>
+          <p className="max-w-3xl text-sm text-admin-fg-strong">{draft.summary}</p>
         )}
         {draft.status !== 'Pending' && draft.decisionReason && (
           <p className="text-xs italic text-muted">
@@ -519,13 +519,13 @@ const DIFF_LABEL: Record<ReturnType<typeof diffKindForRow>, string> = {
 function DiffTable({ rows }: { rows: DiffRow[] }) {
   return (
     <div className="overflow-x-auto rounded-2xl border border-border">
-      <div className="flex flex-wrap gap-2 border-b border-gray-100 bg-background-light px-3 py-2 text-xs text-muted">
+      <div className="flex flex-wrap gap-2 border-b border-admin-border bg-admin-bg-subtle px-3 py-2 text-xs text-muted">
         {(['changed', 'added', 'removed', 'unchanged'] as const).map((kind) => (
           <span key={kind} className={cn('rounded px-2 py-1', DIFF_TONE[kind])}>{DIFF_LABEL[kind]}</span>
         ))}
       </div>
       <table className="w-full table-fixed text-sm">
-        <thead className="bg-background-light text-left text-xs uppercase tracking-wide text-muted">
+        <thead className="bg-admin-bg-subtle text-left text-xs uppercase tracking-wide text-muted">
           <tr>
             <th className="w-12 px-3 py-2">#</th>
             <th className="px-3 py-2">Current authored</th>
@@ -547,9 +547,9 @@ function DiffTable({ rows }: { rows: DiffRow[] }) {
                 key={row.number}
                 data-testid={`diff-row-${row.number}`}
                 data-diff-kind={kind}
-                className={cn('border-t border-gray-100 align-top', DIFF_TONE[kind])}
+                className={cn('border-t border-admin-border align-top', DIFF_TONE[kind])}
               >
-                <td className="px-3 py-2 text-xs font-semibold text-navy">
+                <td className="px-3 py-2 text-xs font-semibold text-admin-fg-strong">
                   <div>{row.number}</div>
                   <div className="mt-1 font-normal text-muted">{DIFF_LABEL[kind]}</div>
                 </td>
@@ -566,7 +566,7 @@ function DiffTable({ rows }: { rows: DiffRow[] }) {
 
 function DiffCell({ q }: { q: ListeningAuthoredQuestion | null }) {
   if (!q) {
-    return <td className="px-3 py-2 text-xs italic text-muted">— missing —</td>;
+    return <td className="px-3 py-2 text-xs italic text-muted">missing</td>;
   }
   const stem = truncate(q.stem ?? '', 80);
   const answer = q.correctAnswer ?? '';
@@ -575,16 +575,16 @@ function DiffCell({ q }: { q: ListeningAuthoredQuestion | null }) {
       <div className="space-y-1">
         <div className="text-xs text-muted">{q.partCode} · {q.type}</div>
         {stem.truncated ? (
-          <details className="text-sm text-navy">
+          <details className="text-sm text-admin-fg-strong">
             <summary className="cursor-pointer">{stem.display}</summary>
-            <p className="mt-1 whitespace-pre-wrap text-sm text-navy">{q.stem}</p>
+            <p className="mt-1 whitespace-pre-wrap text-sm text-admin-fg-strong">{q.stem}</p>
           </details>
         ) : (
-          <p className="text-sm text-navy">{stem.display || <span className="italic text-muted">(empty stem)</span>}</p>
+          <p className="text-sm text-admin-fg-strong">{stem.display || <span className="italic text-muted">(empty stem)</span>}</p>
         )}
         <p className="text-xs">
-          <span className="font-semibold text-navy">Answer:</span>{' '}
-          <span className="text-navy">{answer || <span className="italic text-muted">(none)</span>}</span>
+          <span className="font-semibold text-admin-fg-strong">Answer:</span>{' '}
+          <span className="text-admin-fg-strong">{answer || <span className="italic text-muted">(none)</span>}</span>
         </p>
       </div>
     </td>

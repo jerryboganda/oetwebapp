@@ -58,7 +58,14 @@ public sealed record ReadingResolvedPolicy(
     // global ReadingPolicy row.
     bool FontScaleUserControl = true,
     bool HighContrastMode = true,
-    bool ScreenReaderOptimised = true);
+    bool ScreenReaderOptimised = true,
+    // Wave 1 — grading normalisation toggles. Threaded into the grader so
+    // they are insulated by the per-attempt policy snapshot. Defaults match
+    // the OET-faithful ReadingPolicy column defaults.
+    bool NormalizeSmartQuotes = true,
+    bool NormalizeHyphenSpacing = false,
+    bool NormalizeUnitSpacing = false,
+    bool PartACaseInsensitive = true);
 
 public sealed class ReadingPolicyService(LearnerDbContext db, Microsoft.Extensions.Caching.Memory.IMemoryCache cache)
     : IReadingPolicyService
@@ -127,7 +134,11 @@ public sealed class ReadingPolicyService(LearnerDbContext db, Microsoft.Extensio
             AllowPaperReadingMode: g.AllowPaperReadingMode,
             FontScaleUserControl: g.FontScaleUserControl,
             HighContrastMode: g.HighContrastMode,
-            ScreenReaderOptimised: g.ScreenReaderOptimised);
+            ScreenReaderOptimised: g.ScreenReaderOptimised,
+            NormalizeSmartQuotes: g.NormalizeSmartQuotes,
+            NormalizeHyphenSpacing: g.NormalizeHyphenSpacing,
+            NormalizeUnitSpacing: g.NormalizeUnitSpacing,
+            PartACaseInsensitive: g.PartACaseInsensitive);
     }
 
     public async Task<ReadingPolicy> UpsertGlobalAsync(ReadingPolicy next, string adminId, CancellationToken ct)
@@ -157,6 +168,10 @@ public sealed class ReadingPolicyService(LearnerDbContext db, Microsoft.Extensio
         row.MatchingAllowPartialCredit = next.MatchingAllowPartialCredit;
         row.SentenceCompletionStrictness = next.SentenceCompletionStrictness;
         row.UnknownTypeFallbackPolicy = next.UnknownTypeFallbackPolicy;
+        row.NormalizeSmartQuotes = next.NormalizeSmartQuotes;
+        row.NormalizeHyphenSpacing = next.NormalizeHyphenSpacing;
+        row.NormalizeUnitSpacing = next.NormalizeUnitSpacing;
+        row.PartACaseInsensitive = next.PartACaseInsensitive;
         row.ShowExplanationsAfterSubmit = next.ShowExplanationsAfterSubmit;
         row.ShowExplanationsOnlyIfWrong = next.ShowExplanationsOnlyIfWrong;
         row.ShowCorrectAnswerOnReview = next.ShowCorrectAnswerOnReview;

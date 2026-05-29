@@ -139,10 +139,8 @@ function BetterPhrasingContent() {
                 </p>
 
                 <div className="mt-8 pt-8 border-t border-border">
-                  <div className="flex items-start gap-4">
-                    <div className="w-10 h-10 rounded-xl bg-warning/10 flex items-center justify-center shrink-0">
-                      <AlertCircle className="w-5 h-5 text-warning" />
-                    </div>
+                  <div className="flex items-start gap-3">
+                    <AlertCircle className="w-5 h-5 text-warning shrink-0 mt-0.5" aria-hidden />
                     <div>
                       <h3 className="text-xs font-bold text-warning uppercase tracking-widest mb-1">Issue Explanation</h3>
                       <p className="text-sm text-muted leading-relaxed">{currentSegment.issueExplanation}</p>
@@ -153,14 +151,12 @@ function BetterPhrasingContent() {
 
               {/* Stronger Alternative Card */}
               <section className="bg-navy rounded-3xl p-8 text-white shadow-xl relative overflow-hidden">
-                <div className="absolute top-0 right-0 p-8 opacity-10">
+                <div className="absolute top-0 right-0 p-8 opacity-10" aria-hidden>
                   <Zap className="w-32 h-32" />
                 </div>
                 <div className="relative z-10">
                   <div className="flex items-center gap-3 mb-6">
-                    <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center">
-                      <Zap className="w-5 h-5 text-primary" />
-                    </div>
+                    <Zap className="w-5 h-5 text-primary shrink-0" aria-hidden />
                     <h2 className="text-xs font-bold text-primary uppercase tracking-widest">Stronger Alternative</h2>
                   </div>
                   <p className="text-2xl font-black mb-8 leading-tight tracking-tight">
@@ -184,17 +180,20 @@ function BetterPhrasingContent() {
                     whileHover={microHover}
                     whileTap={microTap}
                     onClick={toggleRecording}
-                    className={`w-20 h-20 rounded-full flex items-center justify-center transition-all shadow-lg ${isRecording ? 'bg-danger animate-pulse' : 'bg-primary hover:bg-primary/90'}`}
+                    aria-label={isRecording ? 'Stop recording' : 'Start recording your drill'}
+                    aria-pressed={isRecording}
+                    className={`w-20 h-20 rounded-full flex items-center justify-center transition-[color,background-color,border-color,box-shadow,transform,opacity,filter] duration-200 shadow-lg ${isRecording ? 'bg-danger motion-safe:animate-pulse' : 'bg-primary hover:bg-primary/90 active:scale-[0.98] motion-reduce:active:scale-100'}`}
                   >
-                    <Mic className={`w-8 h-8 text-white ${isRecording ? 'animate-bounce' : ''}`} />
+                    <Mic className={`w-8 h-8 text-white ${isRecording ? 'motion-safe:animate-pulse' : ''}`} aria-hidden />
                   </motion.button>
                   {hasRecorded && (
                     <motion.button
                       {...celebrateMotion}
                       onClick={() => setPlaybackActive(!playbackActive)}
-                      className="w-14 h-14 rounded-full bg-background-light text-muted flex items-center justify-center hover:bg-border transition-all"
+                      aria-label={playbackActive ? 'Restart playback' : 'Play your recording'}
+                      className="w-14 h-14 rounded-full bg-background-light text-muted flex items-center justify-center hover:bg-border transition-[color,background-color,border-color,box-shadow,transform,opacity,filter] duration-200"
                     >
-                      {playbackActive ? <RotateCcw className="w-6 h-6" /> : <Play className="w-6 h-6 fill-current ml-1" />}
+                      {playbackActive ? <RotateCcw className="w-6 h-6" aria-hidden /> : <Play className="w-6 h-6 fill-current ml-1" aria-hidden />}
                     </motion.button>
                   )}
                 </div>
@@ -217,7 +216,7 @@ function BetterPhrasingContent() {
             {segments.map((_, i) => (
               <div
                 key={i}
-                className={`w-2 h-2 rounded-full transition-all ${i === currentIndex ? 'bg-primary w-6' : 'bg-border'}`}
+                className={`w-2 h-2 rounded-full transition-[width,background-color] duration-300 ${i === currentIndex ? 'bg-primary w-6' : 'bg-border'}`}
               />
             ))}
           </div>

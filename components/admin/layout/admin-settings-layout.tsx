@@ -102,10 +102,9 @@ const SettingsNav = React.forwardRef<HTMLElement, SettingsNavProps>(
               active
                 ? [
                     'bg-[var(--admin-state-selected)] text-admin-fg-strong',
-                    'border-l-2 border-[var(--admin-primary)] pl-[10px]',
                   ]
                 : [
-                    'text-admin-fg-default border-l-2 border-transparent',
+                    'text-admin-fg-default',
                     '[@media(hover:hover)]:hover:bg-[var(--admin-state-hover)]',
                     '[@media(hover:hover)]:hover:text-admin-fg-strong',
                   ],

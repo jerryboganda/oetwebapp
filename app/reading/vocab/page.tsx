@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
@@ -64,10 +64,10 @@ export default function VocabHubPage() {
   }
 
   const statCards = [
-    { label: 'Total Words', value: stats?.total ?? '—', icon: BookOpen, accent: 'violet' },
-    { label: 'Mastered',    value: stats?.mastered ?? '—', icon: Trophy, accent: 'emerald' },
-    { label: 'Due Today',   value: stats?.dueToday ?? '—', icon: CalendarCheck, accent: 'amber' },
-    { label: 'Avg Retention', value: stats ? `${Math.round(stats.averageRetention)}%` : '—', icon: Brain, accent: 'blue' },
+    { label: 'Total Words', value: stats?.total ?? '–', icon: BookOpen, accent: 'violet' },
+    { label: 'Mastered',    value: stats?.mastered ?? '–', icon: Trophy, accent: 'emerald' },
+    { label: 'Due Today',   value: stats?.dueToday ?? '–', icon: CalendarCheck, accent: 'amber' },
+    { label: 'Avg Retention', value: stats ? `${Math.round(stats.averageRetention)}%` : '–', icon: Brain, accent: 'blue' },
   ] as const;
 
   const accentMap: Record<string, string> = {
@@ -85,10 +85,10 @@ export default function VocabHubPage() {
           <p className="mb-1 text-xs font-semibold uppercase tracking-widest text-violet-500">
             SM-2 Spaced Repetition
           </p>
-          <h1 className="text-2xl font-bold text-neutral-900 dark:text-white">
+          <h1 className="text-2xl font-bold text-navy">
             Vocabulary Builder
           </h1>
-          <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">
+          <p className="mt-1 text-sm text-muted">
             Build your OET medical vocabulary with evidence-based spaced repetition. Review daily to maximise retention.
           </p>
         </div>
@@ -100,7 +100,7 @@ export default function VocabHubPage() {
               {[0, 1, 2, 3].map((i) => (
                 <div
                   key={i}
-                  className="h-24 animate-pulse rounded-xl border border-neutral-200 bg-neutral-100 dark:border-neutral-700 dark:bg-neutral-800"
+                  className="h-24 motion-safe:animate-pulse rounded-xl border border-border bg-background-light"
                 />
               ))}
             </div>
@@ -128,7 +128,7 @@ export default function VocabHubPage() {
         <section className="flex flex-wrap gap-3">
           <Link
             href="/reading/vocab/review"
-            className="inline-flex items-center gap-2 rounded-xl bg-violet-600 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-violet-700 active:scale-95"
+            className="inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-primary-dark dark:bg-violet-700 dark:hover:bg-violet-600 active:scale-95"
           >
             <RefreshCw className="h-4 w-4" aria-hidden />
             Review Today&apos;s Cards
@@ -140,14 +140,14 @@ export default function VocabHubPage() {
           </Link>
           <Link
             href="/reading/vocab/lists"
-            className="inline-flex items-center gap-2 rounded-xl border border-violet-200 bg-white px-5 py-3 text-sm font-semibold text-violet-700 transition hover:bg-violet-50 dark:border-violet-800/60 dark:bg-neutral-900 dark:text-violet-300 dark:hover:bg-violet-950/30"
+            className="inline-flex items-center gap-2 rounded-xl border border-violet-200 bg-surface px-5 py-3 text-sm font-semibold text-violet-700 transition-colors hover:bg-violet-50 dark:border-violet-800/60 dark:text-violet-300 dark:hover:bg-violet-950/30"
           >
             <BookOpen className="h-4 w-4" aria-hidden />
             Browse Lists
           </Link>
           <Link
             href="/reading/vocab/stats"
-            className="inline-flex items-center gap-2 rounded-xl border border-neutral-200 bg-white px-5 py-3 text-sm font-semibold text-neutral-700 transition hover:bg-neutral-50 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-300"
+            className="inline-flex items-center gap-2 rounded-xl border border-border bg-surface px-5 py-3 text-sm font-semibold text-navy transition-colors hover:bg-background-light"
           >
             <Brain className="h-4 w-4" aria-hidden />
             View Stats
@@ -155,8 +155,8 @@ export default function VocabHubPage() {
         </section>
 
         {/* Add a word */}
-        <section className="rounded-2xl border border-neutral-200 bg-white px-6 py-6 dark:border-neutral-800 dark:bg-neutral-900">
-          <h2 className="mb-3 text-base font-semibold text-neutral-900 dark:text-white">
+        <section className="rounded-2xl border border-border bg-surface px-6 py-6">
+          <h2 className="mb-3 text-base font-semibold text-navy">
             Add a Word
           </h2>
           <div className="flex gap-3">
@@ -167,13 +167,13 @@ export default function VocabHubPage() {
               onChange={(e) => setNewWord(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter') void handleAddWord(); }}
               placeholder="e.g. haemoglobin"
-              className="flex-1 rounded-xl border border-neutral-200 bg-neutral-50 px-4 py-2.5 text-sm text-neutral-900 placeholder:text-neutral-400 focus:border-violet-400 focus:outline-none focus:ring-2 focus:ring-violet-200 dark:border-neutral-700 dark:bg-neutral-800 dark:text-white dark:placeholder:text-neutral-500"
+              className="flex-1 rounded-xl border border-border bg-background-light px-4 py-2.5 text-sm text-navy placeholder:text-muted focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
             />
             <button
               type="button"
               disabled={addingWord || !newWord.trim()}
               onClick={() => void handleAddWord()}
-              className="rounded-xl bg-violet-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-violet-700 disabled:opacity-50"
+              className="rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-white transition-[color,background-color,transform] duration-200 hover:bg-primary-dark active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600 disabled:opacity-50"
             >
               {addingWord ? 'Adding…' : 'Add'}
             </button>
@@ -184,7 +184,7 @@ export default function VocabHubPage() {
         {dueItems.length > 0 ? (
           <section>
             <div className="mb-4 flex items-center justify-between">
-              <h2 className="text-base font-semibold text-neutral-900 dark:text-white">
+              <h2 className="text-base font-semibold text-navy">
                 Words Due Today
               </h2>
               <Link
@@ -200,8 +200,8 @@ export default function VocabHubPage() {
                   key={item.id}
                   className="rounded-xl border border-violet-100 bg-violet-50/60 px-4 py-3 dark:border-violet-900/40 dark:bg-violet-950/20"
                 >
-                  <p className="font-semibold text-neutral-900 dark:text-white">{item.word}</p>
-                  <p className="mt-0.5 line-clamp-2 text-xs text-neutral-500 dark:text-neutral-400">
+                  <p className="font-semibold text-navy">{item.word}</p>
+                  <p className="mt-0.5 line-clamp-2 text-xs text-muted">
                     {item.definitionEn}
                   </p>
                 </div>

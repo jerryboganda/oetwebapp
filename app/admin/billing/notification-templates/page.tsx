@@ -230,7 +230,7 @@ export default function AdminNotificationTemplatesPage() {
                 label="Body template"
                 value={editing.bodyTemplate}
                 onChange={(e) => update('bodyTemplate', e.target.value)}
-                placeholder="Body — use {{variableName}} for substitutions"
+                placeholder="Body: use {{variableName}} for substitutions"
                 rows={6}
               />
               <Input
