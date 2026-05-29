@@ -70,6 +70,12 @@ public sealed class ClamAvUploadScannerTests
             Zoom: new ZoomSettings(false, null, null, null, "https://api.zoom.us/v2", "https://zoom.us/oauth/token", null, null, null, null, 300, false),
             Stripe: new StripeSettings(null, null, null, true, Array.Empty<string>(), null, false, null),
             LiveClasses: new LiveClassSettings(AiRecordingProcessingEnabled: false),
+            SpeakingWhisper: SpeakingSettingsTestDefaults.Whisper(),
+            SpeakingLiveKit: SpeakingSettingsTestDefaults.LiveKit(),
+            SpeakingAi: SpeakingSettingsTestDefaults.Ai(),
+            SpeakingStorage: SpeakingSettingsTestDefaults.Storage(),
+            SpeakingCompliance: SpeakingSettingsTestDefaults.Compliance(),
+            SpeakingFeatures: SpeakingSettingsTestDefaults.Features(),
             UpdatedByUserId: null,
             UpdatedByUserName: null,
             UpdatedAt: null));

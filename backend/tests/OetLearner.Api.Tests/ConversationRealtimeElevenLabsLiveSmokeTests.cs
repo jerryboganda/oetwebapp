@@ -35,6 +35,7 @@ public sealed class ConversationRealtimeElevenLabsLiveSmokeTests
         };
         var provider = new ElevenLabsConversationRealtimeAsrProvider(
             new StubConversationOptionsProvider(options),
+            FakeLaunchReadinessService.Approved(),
             NullLogger<ElevenLabsConversationRealtimeAsrProvider>.Instance);
 
         var sink = new CapturingTranscriptSink();

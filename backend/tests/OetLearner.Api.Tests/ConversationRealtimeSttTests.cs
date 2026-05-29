@@ -1,5 +1,8 @@
 using System.Net.WebSockets;
 using System.Reflection;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Logging.Abstractions;
 using OetLearner.Api.Configuration;
 using OetLearner.Api.Services.Conversation;
@@ -66,8 +69,11 @@ public sealed class ConversationRealtimeSttTests
         var optionsProvider = new StubConversationOptionsProvider(options);
         var selector = new ConversationAsrProviderSelector(
             [new MockConversationAsrProvider()],
-            [new MockConversationRealtimeAsrProvider(), new ElevenLabsConversationRealtimeAsrProvider(optionsProvider, NullLogger<ElevenLabsConversationRealtimeAsrProvider>.Instance)],
+            [new MockConversationRealtimeAsrProvider(), new ElevenLabsConversationRealtimeAsrProvider(optionsProvider, FakeLaunchReadinessService.Approved(), NullLogger<ElevenLabsConversationRealtimeAsrProvider>.Instance)],
             optionsProvider,
+            FakeLaunchReadinessService.Approved(),
+            new TestWebHostEnvironment("Development"),
+            new ConfigurationBuilder().Build(),
             NullLogger<ConversationAsrProviderSelector>.Instance);
 
         var provider = await selector.TrySelectRealtimeAsync();
@@ -96,8 +102,11 @@ public sealed class ConversationRealtimeSttTests
         var optionsProvider = new StubConversationOptionsProvider(options);
         var selector = new ConversationAsrProviderSelector(
             [new MockConversationAsrProvider()],
-            [new MockConversationRealtimeAsrProvider(), new ElevenLabsConversationRealtimeAsrProvider(optionsProvider, NullLogger<ElevenLabsConversationRealtimeAsrProvider>.Instance)],
+            [new MockConversationRealtimeAsrProvider(), new ElevenLabsConversationRealtimeAsrProvider(optionsProvider, FakeLaunchReadinessService.Approved(), NullLogger<ElevenLabsConversationRealtimeAsrProvider>.Instance)],
             optionsProvider,
+            FakeLaunchReadinessService.Approved(),
+            new TestWebHostEnvironment("Development"),
+            new ConfigurationBuilder().Build(),
             NullLogger<ConversationAsrProviderSelector>.Instance);
 
         var provider = await selector.TrySelectRealtimeAsync();
@@ -123,8 +132,11 @@ public sealed class ConversationRealtimeSttTests
         var optionsProvider = new StubConversationOptionsProvider(options);
         var selector = new ConversationAsrProviderSelector(
             [new MockConversationAsrProvider()],
-            [new MockConversationRealtimeAsrProvider(), new ElevenLabsConversationRealtimeAsrProvider(optionsProvider, NullLogger<ElevenLabsConversationRealtimeAsrProvider>.Instance)],
+            [new MockConversationRealtimeAsrProvider(), new ElevenLabsConversationRealtimeAsrProvider(optionsProvider, FakeLaunchReadinessService.Approved(), NullLogger<ElevenLabsConversationRealtimeAsrProvider>.Instance)],
             optionsProvider,
+            FakeLaunchReadinessService.Approved(),
+            new TestWebHostEnvironment("Development"),
+            new ConfigurationBuilder().Build(),
             NullLogger<ConversationAsrProviderSelector>.Instance);
 
         var provider = await selector.TrySelectRealtimeAsync();
@@ -148,8 +160,11 @@ public sealed class ConversationRealtimeSttTests
         var optionsProvider = new StubConversationOptionsProvider(options);
         var selector = new ConversationAsrProviderSelector(
             [new MockConversationAsrProvider()],
-            [new MockConversationRealtimeAsrProvider(), new ElevenLabsConversationRealtimeAsrProvider(optionsProvider, NullLogger<ElevenLabsConversationRealtimeAsrProvider>.Instance)],
+            [new MockConversationRealtimeAsrProvider(), new ElevenLabsConversationRealtimeAsrProvider(optionsProvider, FakeLaunchReadinessService.Approved(), NullLogger<ElevenLabsConversationRealtimeAsrProvider>.Instance)],
             optionsProvider,
+            FakeLaunchReadinessService.Approved(),
+            new TestWebHostEnvironment("Development"),
+            new ConfigurationBuilder().Build(),
             NullLogger<ConversationAsrProviderSelector>.Instance);
 
         var provider = await selector.TrySelectRealtimeAsync();
@@ -174,8 +189,11 @@ public sealed class ConversationRealtimeSttTests
         var optionsProvider = new StubConversationOptionsProvider(options);
         var selector = new ConversationAsrProviderSelector(
             [new MockConversationAsrProvider()],
-            [new MockConversationRealtimeAsrProvider(), new ElevenLabsConversationRealtimeAsrProvider(optionsProvider, NullLogger<ElevenLabsConversationRealtimeAsrProvider>.Instance)],
+            [new MockConversationRealtimeAsrProvider(), new ElevenLabsConversationRealtimeAsrProvider(optionsProvider, FakeLaunchReadinessService.Approved(), NullLogger<ElevenLabsConversationRealtimeAsrProvider>.Instance)],
             optionsProvider,
+            FakeLaunchReadinessService.Approved(),
+            new TestWebHostEnvironment("Development"),
+            new ConfigurationBuilder().Build(),
             NullLogger<ConversationAsrProviderSelector>.Instance);
 
         var provider = await selector.TrySelectRealtimeAsync();
@@ -197,8 +215,11 @@ public sealed class ConversationRealtimeSttTests
         var optionsProvider = new StubConversationOptionsProvider(options);
         var selector = new ConversationAsrProviderSelector(
             [new MockConversationAsrProvider()],
-            [new ElevenLabsConversationRealtimeAsrProvider(optionsProvider, NullLogger<ElevenLabsConversationRealtimeAsrProvider>.Instance)],
+            [new ElevenLabsConversationRealtimeAsrProvider(optionsProvider, FakeLaunchReadinessService.Approved(), NullLogger<ElevenLabsConversationRealtimeAsrProvider>.Instance)],
             optionsProvider,
+            FakeLaunchReadinessService.Approved(),
+            new TestWebHostEnvironment("Development"),
+            new ConfigurationBuilder().Build(),
             NullLogger<ConversationAsrProviderSelector>.Instance);
 
         var provider = await selector.TrySelectRealtimeAsync();
@@ -212,9 +233,16 @@ public sealed class ConversationRealtimeSttTests
         var provider = new ElevenLabsConversationRealtimeAsrProvider(
             new StubConversationOptionsProvider(new ConversationOptions
             {
+                RealtimeSttAllowRealProvider = true,
+                RealtimeSttRealProviderProductionAuthorized = true,
+                RealtimeSttEstimatedCostUsdPerMinute = 0.01m,
+                RealtimeSttProviderSessionTopology = "single-instance",
+                RealtimeSttRegionId = "test-region",
+                RealtimeSttAssumeLearnersAdult = true,
                 ElevenLabsSttApiKey = "dev-only-test-key",
                 ElevenLabsSttAudioFormat = "pcm_16000",
             }),
+            FakeLaunchReadinessService.Approved(),
             NullLogger<ElevenLabsConversationRealtimeAsrProvider>.Instance);
 
         var error = await Assert.ThrowsAsync<ConversationAsrException>(() => provider.StartAsync(
@@ -238,10 +266,17 @@ public sealed class ConversationRealtimeSttTests
         var provider = new ElevenLabsConversationRealtimeAsrProvider(
             new StubConversationOptionsProvider(new ConversationOptions
             {
+                RealtimeSttAllowRealProvider = true,
+                RealtimeSttRealProviderProductionAuthorized = true,
+                RealtimeSttEstimatedCostUsdPerMinute = 0.01m,
+                RealtimeSttProviderSessionTopology = "single-instance",
+                RealtimeSttRegionId = "test-region",
+                RealtimeSttAssumeLearnersAdult = true,
                 ElevenLabsSttApiKey = "dev-only-test-key",
                 ElevenLabsSttBaseUrl = "https://example.com/v1",
                 ElevenLabsSttAudioFormat = "pcm_16000",
             }),
+            FakeLaunchReadinessService.Approved(),
             NullLogger<ElevenLabsConversationRealtimeAsrProvider>.Instance);
 
         var error = await Assert.ThrowsAsync<ConversationAsrException>(() => provider.StartAsync(
@@ -265,10 +300,17 @@ public sealed class ConversationRealtimeSttTests
         var provider = new ElevenLabsConversationRealtimeAsrProvider(
             new StubConversationOptionsProvider(new ConversationOptions
             {
+                RealtimeSttAllowRealProvider = true,
+                RealtimeSttRealProviderProductionAuthorized = true,
+                RealtimeSttEstimatedCostUsdPerMinute = 0.01m,
+                RealtimeSttProviderSessionTopology = "single-instance",
+                RealtimeSttRegionId = "test-region",
+                RealtimeSttAssumeLearnersAdult = true,
                 ElevenLabsSttApiKey = "dev-only-test-key",
                 ElevenLabsSttBaseUrl = "https://example.com/v1",
                 ElevenLabsSttAudioFormat = "pcm_16000",
             }),
+            FakeLaunchReadinessService.Approved(),
             NullLogger<ElevenLabsConversationRealtimeAsrProvider>.Instance);
 
         var error = await Assert.ThrowsAsync<ConversationAsrException>(() => provider.StartAsync(
@@ -501,12 +543,25 @@ public sealed class ConversationRealtimeSttTests
             [new MockConversationAsrProvider()],
             [new MockConversationRealtimeAsrProvider()],
             new StubConversationOptionsProvider(options),
+            FakeLaunchReadinessService.Approved(),
+            new TestWebHostEnvironment("Development"),
+            new ConfigurationBuilder().Build(),
             NullLogger<ConversationAsrProviderSelector>.Instance);
 
     private sealed class StubConversationOptionsProvider(ConversationOptions options) : IConversationOptionsProvider
     {
         public Task<ConversationOptions> GetAsync(CancellationToken ct = default) => Task.FromResult(options);
         public void Invalidate() { }
+    }
+
+    private sealed class TestWebHostEnvironment(string environmentName) : IWebHostEnvironment
+    {
+        public string ApplicationName { get; set; } = "OetLearner.Api.Tests";
+        public IFileProvider WebRootFileProvider { get; set; } = new NullFileProvider();
+        public string WebRootPath { get; set; } = string.Empty;
+        public string EnvironmentName { get; set; } = environmentName;
+        public string ContentRootPath { get; set; } = AppContext.BaseDirectory;
+        public IFileProvider ContentRootFileProvider { get; set; } = new NullFileProvider();
     }
 
     private sealed class NoopRealtimeSession : IConversationRealtimeAsrSession

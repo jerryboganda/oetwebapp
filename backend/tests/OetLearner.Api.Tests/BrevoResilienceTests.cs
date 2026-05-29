@@ -149,6 +149,12 @@ public class BrevoResilienceTests
                 RadarHighRiskCountryAllowReview: false,
                 RadarBlockEmailDomainsCsv: null),
             LiveClasses: new LiveClassSettings(AiRecordingProcessingEnabled: false),
+            SpeakingWhisper: SpeakingSettingsTestDefaults.Whisper(),
+            SpeakingLiveKit: SpeakingSettingsTestDefaults.LiveKit(),
+            SpeakingAi: SpeakingSettingsTestDefaults.Ai(),
+            SpeakingStorage: SpeakingSettingsTestDefaults.Storage(),
+            SpeakingCompliance: SpeakingSettingsTestDefaults.Compliance(),
+            SpeakingFeatures: SpeakingSettingsTestDefaults.Features(),
             UpdatedByUserId: null,
             UpdatedByUserName: null,
             UpdatedAt: null);
