@@ -135,7 +135,7 @@ export function ReadinessBlockers() {
             <div className="min-w-0 flex-1">
               <h3 className="text-base font-semibold text-navy">Exam Readiness</h3>
               {topBlockers.length === 0 ? (
-                <p className="mt-2 text-sm text-muted">No blockers. You're on track!</p>
+                <p className="mt-2 text-sm text-muted">No blockers. You&apos;re on track!</p>
               ) : (
                 <ul className="mt-3 space-y-3">
                   {topBlockers.map((blocker) => {

@@ -29,7 +29,6 @@ type AdminErrorProps = {
 export default function AdminError({ error, reset }: AdminErrorProps) {
   useEffect(() => {
     // Always log to the console — keeps local dev debuggable.
-    // eslint-disable-next-line no-console
     console.error('[Admin Error]', error);
 
     // Best-effort Sentry capture. We dynamic-import so this file does not

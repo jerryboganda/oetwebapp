@@ -78,7 +78,7 @@ export function NextActionCard() {
       <Card padding="md">
         <div className="flex flex-col items-center py-4 text-center">
           <Zap className="mb-2 h-8 w-8 text-muted" />
-          <p className="text-sm text-muted">No actions right now. You're all caught up!</p>
+          <p className="text-sm text-muted">No actions right now. You&apos;re all caught up!</p>
         </div>
       </Card>
     );

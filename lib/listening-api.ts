@@ -439,9 +439,45 @@ export const heartbeatListeningAttempt = (attemptId: string, elapsedSeconds: num
     },
   );
 
+/**
+ * Listening attempt / integrity event-type union (spec §17.11). The first
+ * group are the OET@Home integrity-lock events recorded only when
+ * `modePolicy.integrityLockRequired` is set (window focus/blur, fullscreen,
+ * blocked audio gestures). The second group are the §17.11 attempt-event
+ * stream, recorded for any graded attempt — audio lifecycle, reading-time
+ * windows, answer changes, annotations, and the timer auto-submit.
+ *
+ * The string is left open (`| (string & {})`) so callers can still pass an
+ * ad-hoc event type during incremental rollout without a type error; the
+ * server clamps unknown types to a length-limited passthrough.
+ */
+export type ListeningIntegrityEventType =
+  // OET@Home integrity-lock events (existing semantics — unchanged).
+  | 'fullscreen_enter'
+  | 'fullscreen_exit'
+  | 'fullscreen_request_failed'
+  | 'page_hidden'
+  | 'page_visible'
+  | 'window_blur'
+  | 'window_focus'
+  | 'audio_seek_blocked'
+  | 'audio_pause_blocked'
+  | 'audio_replay_blocked'
+  // §17.11 attempt-event stream (recorded for any graded attempt).
+  | 'audio_started'
+  | 'audio_ended'
+  | 'audio_error'
+  | 'reading_time_started'
+  | 'reading_time_ended'
+  | 'answer_changed'
+  | 'highlight'
+  | 'strikethrough'
+  | 'auto_submit'
+  | (string & {});
+
 export const recordListeningIntegrityEvent = (
   attemptId: string,
-  eventType: string,
+  eventType: ListeningIntegrityEventType,
   details?: string,
   occurredAt = new Date().toISOString(),
 ) =>
