@@ -38,6 +38,15 @@ build-*.txt
 server*.log
 dev*.log
 dev-output.txt
+# Validation / CI scratch (Docker build logs, generated diffs, vitest dumps)
+_ws_*.txt
+backend/_ws_*.txt
+_gh_*.txt
+_tsc_*.txt
+_gen_*.diff
+_review_focus.diff
+vitest-output.txt
+vitest-verbose-output.txt
 tsconfig.tsbuildinfo
 .env*
 !.env.example
