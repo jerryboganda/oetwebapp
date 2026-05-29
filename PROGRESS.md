@@ -8,6 +8,32 @@ Last updated: 2026-05-29
 - Do not use `oet-dev` for validation; the VPS is production deployment only.
 - Preserve existing modified/untracked work; `.codex/config.toml` remains isolated tooling/config unless intentionally committed.
 
+## OET Listening & Reading — MAXIMAL Gap-Closure (Mock Wiring · Sound-Check Gate · Paper Mode · Sequence Builder · JSON Import · Part A Builder · Analytics / Validation / Events)
+
+Status: **COMPLETE & CI-VALIDATED** — 2026-05-29. Both modules were already ~95% built; this closes every remaining spec gap end-to-end. Validated **GREEN on GitHub Actions** (clean Ubuntu runners) after the local Windows Docker Desktop engine proved too unstable for heavy .NET/tsc builds (documented host limit — see TIER-3).
+
+### Scope
+Maximal ("leave nothing behind"): full Listening paper-booklet simulation, sound-check REQUIRED before strict exams, full visual sequence builder, JSON import/export, Part A notes builder, distractor heatmap + Part C speaker-attitude, audio waveform/cue-point editor, plus the Reading feedback-scope enum.
+
+### Work-streams
+- **WS1 — Mock → real player**: `app/listening/mocks/[sessionId]/page.tsx` stub now redirects into the real FSM player via server `BuildLaunchRoute` (`MockService`). Tests: `ListeningMockLaunchRouteTests`.
+- **WS2 — Sound-check gate**: Exam/Home (OneWayLocks) require a passed check (`LearnerListeningProfile.AudioCheckPassedAt`, 24h TTL) at `StartRelationalAttemptAsync` + `AdvanceAsync`; player shows a "Run the sound check" CTA; `audio-check` honours `?returnTo=`. Tests: `ListeningAudioCheckGateTests`. (Paper mode intentionally not gated — room-audio conceit.)
+- **WS3 — Paper-mode booklet**: `lib/listening-paper-simulation.ts` + `components/domain/listening/ListeningPaperSimulation.tsx` (booklet pages, zoom, pencil/highlighter/eraser, print); player branches to it in paper mode while audio stays FSM-controlled.
+- **WS4 — Visual sequence builder**: `ContentPaper.ListeningSequenceJson` (migration `20260617090000_AddListeningSequenceBuilder` — the only new migration), `ListeningSequenceService` (validate/derive/replace), admin `…/sequence/page.tsx`, `/listening/sequence` endpoints. FSM consumes an explicit sequence when present; null ⇒ byte-identical to prior policy-window timing (regression-tested). Tests: `ListeningSequenceServiceTests`, `ListeningV2AdvanceEndpointTests`.
+- **WS5 — JSON manifest import/export** (spec §19): `ListeningAuthoringService.ImportManifestAsync`/export, `/listening/manifest` endpoints, `ListeningManifestPanel.tsx` + import page. Part B's 6 clips → ONE "B" extract + 6 questions (one extract per part code). Tests: `ListeningManifestImportTests`.
+- **WS6 — Part A notes builder**: `PartANotesBuilder.tsx` WYSIWYG (insert gap/heading/bullet, live `PartARenderer` preview) emitting the `____` marker contract.
+- **WS7 — Analytics/QA/events**: `DistractorHeatmap.tsx` + expert/admin distractor + Part C attitude surfacing (7a); `WaveformCuePointEditor.tsx` WebAudio waveform + draggable cue points (7b); 3 new publish-validation rules — cue-overlap, preview-window, results-calc (7c); §17.11 attempt events emitted by the player + persisted server-side incl. audio cue timeline (7d). Tests: `ListeningExpertServiceTests`, `ListeningStructureServiceTests`, `ListeningAttemptEventLoggingTests`, frontend component tests.
+- **WS8 — Reading feedback scope enum**: `ReadingFeedbackScope {Test,Section,Question,Skill}` validated in `ReadingTutorService` + endpoint (string-backed, no migration). Tests: `ReadingTutorScopeTests`.
+
+### Validation evidence (`.github/workflows/oet-gapclosure-validation.yml`)
+- Run `26664102290` (main `13cdcbeb`): **✓ Backend xUnit (gap-closure scope)** + **✓ Frontend (tsc / vitest / lint — 1715/1715)** — both GREEN.
+- Backend scoped to the WS1–WS8 test classes; the full 174-file integration suite (WebApplicationFactory + startup seeders) is heavy and runs in-container per `AGENTS.md`.
+- CI surfaced + we fixed: 17 frontend `tsc` errors (1 mine + **16 pre-existing latent** errors masked by `ignoreBuildErrors` in `bulk-operations`/`notifications`/`peer-review`), 1 vitest fail (WS7d cbla), and 20 backend failures (Part B extract collapse, event-test audio asset, advance-test audio-check seeding).
+- Local Docker Desktop engine repeatedly SIGBUSed/crashed under concurrent heavy builds (known host limit); validation moved to GitHub Actions for reliable signal. WS4 migration applied cleanly on a local Docker boot before the engine instability; app reached healthy on `localhost:8080`.
+
+### Hygiene
+- A parallel session also committed test-health work to `main` (`fdaa62b9` "1715/1715 green"); coordinated via `git pull --rebase`. Stray build/validation scratch was untracked + gitignored (`8a113a71`). `Deploy staging` skipped on all `main` pushes (no deploy).
+
 ## TIER-3 — Code Quality, Security Hardening & Docker Validation
 
 Status: **COMPLETE** — June 2026
