@@ -734,15 +734,40 @@ public sealed class ListeningLearnerService(
             ? await GetAttemptOwnedByUserAsync(userId, attemptId, ct)
             : null;
 
-        var eventType = string.IsNullOrWhiteSpace(request.EventType)
+        var rawEventType = string.IsNullOrWhiteSpace(request.EventType)
             ? "unknown"
             : request.EventType.Trim();
-        if (eventType.Length > 64) eventType = eventType[..64];
+        if (rawEventType.Length > 64) rawEventType = rawEventType[..64];
+        // §17.11 — recognise the attempt-event stream alongside the existing
+        // OET@Home integrity-lock events. Unrecognised types are still
+        // recorded (as a length-clamped passthrough) so a client rollout that
+        // adds a new event never silently drops data; the `recognized` flag is
+        // captured in the payload for downstream filtering.
+        var recognized = RecognizedIntegrityEventTypes.Contains(rawEventType);
+        var eventType = rawEventType;
+
+        // §17.11 — the new attempt events carry their structured fields
+        // (cuePointMs, questionId, …) as a compact JSON `details` string. Pull
+        // them back out so they land as first-class fields on the AuditEvent
+        // payload, while still preserving the raw details for forward-compat.
+        var cuePointMs = ReadJsonInt(request.Details, "cuePointMs");
+        var questionId = ReadJsonProperty(request.Details, "questionId");
 
         var now = DateTimeOffset.UtcNow;
         if (relationalAttempt is not null)
         {
             relationalAttempt.LastActivityAt = now;
+            // §17.11 — audio lifecycle events also append to the per-attempt
+            // audio cue timeline (the column already exists). Append, never
+            // overwrite, so the full replay log accumulates across sections.
+            if (eventType is "audio_started" or "audio_ended")
+            {
+                relationalAttempt.AudioCueTimelineJson = AppendAudioCueTimelineEntry(
+                    relationalAttempt.AudioCueTimelineJson,
+                    cue: eventType,
+                    atMs: cuePointMs,
+                    occurredAt: request.OccurredAt ?? now);
+            }
         }
         else if (attempt is not null)
         {
@@ -761,12 +786,79 @@ public sealed class ListeningLearnerService(
             Details = JsonSupport.Serialize(new
             {
                 eventType,
+                recognized,
                 mode = relationalAttempt is not null ? ToApiMode(relationalAttempt.Mode) : attempt!.Mode,
+                cuePointMs,
+                questionId,
                 request.Details,
                 serverRecordedAt = now,
             }),
         });
         await db.SaveChangesAsync(ct);
+    }
+
+    // §17.11 — full recognised event-type set: existing OET@Home integrity
+    // lock events plus the attempt-event stream emitted by the player.
+    private static readonly HashSet<string> RecognizedIntegrityEventTypes = new(StringComparer.Ordinal)
+    {
+        // OET@Home integrity-lock events.
+        "fullscreen_enter",
+        "fullscreen_exit",
+        "fullscreen_request_failed",
+        "page_hidden",
+        "page_visible",
+        "window_blur",
+        "window_focus",
+        "audio_seek_blocked",
+        "audio_pause_blocked",
+        "audio_replay_blocked",
+        // §17.11 attempt-event stream.
+        "audio_started",
+        "audio_ended",
+        "audio_error",
+        "reading_time_started",
+        "reading_time_ended",
+        "answer_changed",
+        "highlight",
+        "strikethrough",
+        "auto_submit",
+    };
+
+    /// <summary>§17.11 — append one compact entry to the attempt's audio cue
+    /// timeline (<c>[{"cue":"audio_started","atMs":1234,"at":"..."}]</c>),
+    /// preserving any prior entries. Tolerates a null / malformed existing
+    /// column by starting a fresh array.</summary>
+    private static string AppendAudioCueTimelineEntry(string? existingJson, string cue, int? atMs, DateTimeOffset occurredAt)
+    {
+        var entries = new List<JsonElement>();
+        if (!string.IsNullOrWhiteSpace(existingJson))
+        {
+            try
+            {
+                using var doc = JsonDocument.Parse(existingJson);
+                if (doc.RootElement.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var item in doc.RootElement.EnumerateArray())
+                    {
+                        entries.Add(item.Clone());
+                    }
+                }
+            }
+            catch (JsonException)
+            {
+                // Malformed prior timeline — start fresh rather than 500.
+                entries.Clear();
+            }
+        }
+
+        var appended = JsonSerializer.SerializeToElement(new
+        {
+            cue,
+            atMs,
+            at = occurredAt,
+        });
+        entries.Add(appended);
+        return JsonSerializer.Serialize(entries);
     }
 
     private async Task<object> StartRelationalAttemptAsync(string userId, ListeningSource source, string normalizedMode, string? normalizedPathwayStage, bool forceNewAttempt, CancellationToken ct)
@@ -1721,6 +1813,51 @@ public sealed class ListeningLearnerService(
         catch (JsonException)
         {
             return json;
+        }
+    }
+
+    /// <summary>§17.11 — read a string property from a JSON-object `details`
+    /// string (e.g. <c>questionId</c>). Returns null when the details is not a
+    /// JSON object, the property is absent, or parsing fails.</summary>
+    private static string? ReadJsonProperty(string? json, string property)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return null;
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            if (doc.RootElement.ValueKind != JsonValueKind.Object) return null;
+            if (!doc.RootElement.TryGetProperty(property, out var value)) return null;
+            return value.ValueKind switch
+            {
+                JsonValueKind.String => value.GetString(),
+                JsonValueKind.Null or JsonValueKind.Undefined => null,
+                _ => value.ToString(),
+            };
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>§17.11 — read an integer property (e.g. <c>cuePointMs</c>) from
+    /// a JSON-object `details` string. Returns null when absent or non-numeric.</summary>
+    private static int? ReadJsonInt(string? json, string property)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return null;
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            if (doc.RootElement.ValueKind != JsonValueKind.Object) return null;
+            if (!doc.RootElement.TryGetProperty(property, out var value)) return null;
+            if (value.ValueKind == JsonValueKind.Number && value.TryGetInt32(out var asInt)) return asInt;
+            if (value.ValueKind == JsonValueKind.String
+                && int.TryParse(value.GetString(), out var parsed)) return parsed;
+            return null;
+        }
+        catch (JsonException)
+        {
+            return null;
         }
     }
 
