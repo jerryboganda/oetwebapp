@@ -58,7 +58,7 @@ export function AcceptedVariantManager({ variants, onChange }: AcceptedVariantMa
                 <button
                   type="button"
                   onClick={() => onChange(removeVariant(variants, variant.id))}
-                  className="ml-0.5 rounded-full p-0.5 hover:bg-black/10 focus:outline-none focus:ring-2 focus:ring-primary/40"
+                  className="ml-0.5 rounded-full p-0.5 hover:bg-navy/10 focus:outline-none focus:ring-2 focus:ring-primary/40"
                   aria-label={`Remove ${variant.value}`}
                 >
                   <X className="h-3 w-3" />

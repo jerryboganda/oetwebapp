@@ -742,6 +742,12 @@ public partial class LearnerDbContext(DbContextOptions<LearnerDbContext> options
         // (same file may be referenced by other papers under SHA dedup).
         modelBuilder.Entity<ContentPaper>()
             .Property(e => e.RowVersion).IsConcurrencyToken();
+        // ListeningSequenceJson (WS4 — admin sequence builder) deliberately
+        // has NO explicit HasColumnType: it follows the same convention as the
+        // sibling ExtractedTextJson column on ContentPaper, which maps to plain
+        // `text` (the ContentPaper JSON columns are NOT in the jsonb block
+        // above — only ListeningAttempt's hot columns are). Nullable ⇒ the FSM
+        // falls back to the derived canonical sequence when absent.
         modelBuilder.Entity<ContentPaperAsset>()
             .HasOne(x => x.Paper)
             .WithMany(p => p.Assets)

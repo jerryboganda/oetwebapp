@@ -1,7 +1,8 @@
 import { render, screen, within } from '@testing-library/react';
 
-const { mockGetReadingHome, mockTrack, mockUseAuth, mockUseReadingProfile } = vi.hoisted(() => ({
+const { mockGetReadingHome, mockListMyReadingAssignments, mockTrack, mockUseAuth, mockUseReadingProfile } = vi.hoisted(() => ({
   mockGetReadingHome: vi.fn(),
+  mockListMyReadingAssignments: vi.fn(),
   mockTrack: vi.fn(),
   mockUseAuth: vi.fn(),
   mockUseReadingProfile: vi.fn(),
@@ -33,6 +34,10 @@ vi.mock('@/lib/reading-authoring-api', () => ({
   getReadingHome: mockGetReadingHome,
 }));
 
+vi.mock('@/lib/reading-tutor-api', () => ({
+  listMyReadingAssignments: mockListMyReadingAssignments,
+}));
+
 vi.mock('@/hooks/useReadingProfile', () => ({
   useReadingProfile: () => mockUseReadingProfile(),
 }));
@@ -56,11 +61,9 @@ vi.mock('@/components/domain', () => ({
 
 import ReadingPage from './page';
 
-// Per the 2026-05-27 OET sample-test alignment, the Reading hub is intentionally
-// stripped to four primary cards (Practice Part A/B/C + Full Reading Exam). The
-// older Structured-Papers / Safe-Drills / Recent-Results / Mock-Reports surfaces
-// remain reachable by URL (and are still covered by their own dedicated tests)
-// but they are no longer rendered on the candidate hub.
+// The primary Reading hub still starts with exactly four candidate-facing cards
+// (Practice Part A/B/C + Full Reading Exam), while secondary panels below the
+// grid surface assignments, available papers, and recent results.
 
 const READING_HOME_FIXTURE = {
   intro: 'Reading practice uses full structured papers.',
@@ -85,6 +88,7 @@ describe('Reading hub', () => {
     mockUseAuth.mockReturnValue({ isAuthenticated: true, loading: false });
     mockUseReadingProfile.mockReturnValue({ profile: { examDate: null, currentStage: 'ready' } });
     mockGetReadingHome.mockResolvedValue(READING_HOME_FIXTURE);
+    mockListMyReadingAssignments.mockResolvedValue([]);
   });
 
   it('renders exactly four hub cards in the canonical OET sample-test order', async () => {
@@ -107,7 +111,7 @@ describe('Reading hub', () => {
     expect(screen.getByTestId('reading-hub-card-exam')).toBeInTheDocument();
   });
 
-  it('does not surface the legacy dashboard collage (papers / drills / mock reports)', async () => {
+  it('keeps the four primary cards and renders secondary workspace context', async () => {
     mockGetReadingHome.mockResolvedValueOnce({
       ...READING_HOME_FIXTURE,
       papers: [
@@ -128,26 +132,45 @@ describe('Reading hub', () => {
           lastAttempt: null,
         },
       ],
-      safeDrills: [
+      recentResults: [
         {
-          id: 'review-attempt-1-part-A',
-          title: 'Repair Part A score loss',
-          description: 'Review where most Reading marks were lost.',
-          focusLabel: 'Part A',
-          estimatedMinutes: 15,
-          launchRoute: '/reading/paper/paper-1/results?attemptId=attempt-1#part-breakdown',
-          highlights: ['12/20 marks in Part A'],
+          attemptId: 'attempt-1',
+          paperId: 'paper-1',
+          paperTitle: 'Reading Sample Paper 1',
+          rawScore: 30,
+          maxRawScore: 42,
+          scaledScore: 350,
+          gradeLetter: 'B',
+          submittedAt: '2026-05-12T11:00:00Z',
+          route: '/reading/paper/paper-1/results?attemptId=attempt-1',
         },
       ],
     });
+    mockListMyReadingAssignments.mockResolvedValueOnce([
+      {
+        id: 'assignment-1',
+        assignedByUserId: 'expert-1',
+        assignedToUserId: 'learner-1',
+        paperId: 'paper-1',
+        kind: 'full',
+        scopeJson: null,
+        note: 'Retake after feedback',
+        dueAt: '2026-05-31T00:00:00Z',
+        completedAttemptId: null,
+        status: 'assigned',
+        createdAt: '2026-05-20T00:00:00Z',
+        updatedAt: '2026-05-20T00:00:00Z',
+      },
+    ]);
 
     render(<ReadingPage />);
 
-    await screen.findByTestId('reading-hub-cards');
-    expect(screen.queryByText('Reading Sample Paper 1')).not.toBeInTheDocument();
-    expect(screen.queryByText('Targeted Reading practice')).not.toBeInTheDocument();
-    expect(screen.queryByText('Recent Mock Reports')).not.toBeInTheDocument();
-    expect(screen.queryByText('Track Reading impact inside full mocks')).not.toBeInTheDocument();
+    const grid = await screen.findByTestId('reading-hub-cards');
+    expect(within(grid).getAllByRole('link')).toHaveLength(4);
+    expect(await screen.findByText('Tutor tasks')).toBeInTheDocument();
+    expect(screen.getAllByText('Reading Sample Paper 1').length).toBeGreaterThan(0);
+    expect(screen.getByText('Retake after feedback')).toBeInTheDocument();
+    expect(screen.getByText(/30\/42/)).toBeInTheDocument();
   });
 
   it('shows a Resume banner when the learner has an active resumable Reading attempt', async () => {

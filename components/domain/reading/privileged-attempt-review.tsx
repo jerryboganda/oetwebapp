@@ -34,22 +34,22 @@ import type {
  */
 
 function formatValue(value: unknown): string {
-  if (value === null || value === undefined) return '—';
-  if (typeof value === 'string') return value.length > 0 ? value : '—';
+  if (value === null || value === undefined) return '-';
+  if (typeof value === 'string') return value.length > 0 ? value : '-';
   if (typeof value === 'number' || typeof value === 'boolean') return String(value);
   if (Array.isArray(value)) {
-    const parts = value.map((v) => formatValue(v)).filter((v) => v !== '—');
-    return parts.length > 0 ? parts.join(', ') : '—';
+    const parts = value.map((v) => formatValue(v)).filter((v) => v !== '-');
+    return parts.length > 0 ? parts.join(', ') : '-';
   }
   try {
     return JSON.stringify(value);
   } catch {
-    return '—';
+    return '-';
   }
 }
 
 function formatMs(ms: number | null): string {
-  if (ms === null || Number.isNaN(ms)) return '—';
+  if (ms === null || Number.isNaN(ms)) return '-';
   if (ms < 1000) return `${ms} ms`;
   const seconds = ms / 1000;
   if (seconds < 60) return `${seconds.toFixed(1)} s`;
@@ -59,8 +59,8 @@ function formatMs(ms: number | null): string {
 }
 
 function formatScore(raw: number | null, scaled: number | null, gradeLetter: string): string {
-  const rawText = raw === null ? '—' : String(raw);
-  const scaledText = scaled === null ? '—' : String(scaled);
+  const rawText = raw === null ? '-' : String(raw);
+  const scaledText = scaled === null ? '-' : String(scaled);
   const grade = gradeLetter ? ` · Grade ${gradeLetter}` : '';
   return `${rawText} raw · ${scaledText} scaled${grade}`;
 }
@@ -178,7 +178,7 @@ function SectionTable({ sections }: { sections: ReadingPrivilegedSection[] }) {
                 {section.rawScore}/{section.maxRawScore}
               </td>
               <td className="px-4 py-2.5 text-right tabular-nums text-slate-700 dark:text-slate-300">
-                {section.accuracyPercent === null ? '—' : `${section.accuracyPercent}%`}
+                {section.accuracyPercent === null ? '-' : `${section.accuracyPercent}%`}
               </td>
               <td className="px-4 py-2.5 text-right tabular-nums text-emerald-700 dark:text-emerald-400">
                 {section.correctCount}
@@ -266,7 +266,7 @@ function QuestionCard({ question }: { question: ReadingPrivilegedQuestion }) {
             </div>
             <div>
               <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Skill tag</dt>
-              <dd className="mt-0.5 text-slate-800 dark:text-slate-200">{question.skillTag ?? '—'}</dd>
+              <dd className="mt-0.5 text-slate-800 dark:text-slate-200">{question.skillTag ?? '-'}</dd>
             </div>
             <div className="flex items-center gap-1.5">
               <Clock className="h-3.5 w-3.5 text-slate-400" aria-hidden="true" />
@@ -293,7 +293,7 @@ function QuestionCard({ question }: { question: ReadingPrivilegedQuestion }) {
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                 Distractor: {question.selectedDistractorCategory}
               </p>
-              {formatValue(question.distractorRationale) !== '—' ? (
+              {formatValue(question.distractorRationale) !== '-' ? (
                 <p className="mt-0.5 text-slate-700 dark:text-slate-300">
                   {formatValue(question.distractorRationale)}
                 </p>

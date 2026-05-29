@@ -55,6 +55,21 @@ public sealed class WritingCoachServiceV2(
     public async Task<WritingCoachResponse> RequestHintAsync(WritingCoachRequest request, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(request);
+
+        // §8 mock-mode suppression: refuse hints if the user has an active mock writing attempt.
+        // Defense-in-depth — the mock writing UI never calls this endpoint, but a user could
+        // invoke it directly via DevTools during a mock exam to gain unfair AI assistance.
+        var hasActiveMockWriting = await db.Attempts.AsNoTracking().AnyAsync(
+            a => a.UserId == request.UserId
+                && a.SubtestCode == "writing"
+                && (a.Context == "mock" || a.Context == "mock_set")
+                && a.SubmittedAt == null, ct);
+        if (hasActiveMockWriting)
+        {
+            return new WritingCoachResponse(request.SessionId, Array.Empty<WritingCoachHint>(),
+                Throttled: false, DailyCapReached: true,
+                HintsRemainingInSession: 0, SecondsUntilNextHint: 0);
+        }
         var opts = options.Value;
         if (!opts.CoachEnabled)
         {

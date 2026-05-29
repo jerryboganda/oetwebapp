@@ -105,6 +105,16 @@ public class ContentPaper
     [MaxLength(64)]
     public string? LetterType { get; set; }
 
+    /// <summary>Listening only. Optional explicit exam-sequence authored by
+    /// admins (the ordered list of FSM phases — instruction / reading_time /
+    /// audio_extract / check_time / section_transition / auto_submit — with
+    /// per-phase window durations). Null ⇒ the session FSM derives the
+    /// canonical sequence from the effective policy, behaving byte-identically
+    /// to the policy-only timing it shipped with. Stored as a JSON document
+    /// (see <c>ListeningSequenceService</c>); mapped to <c>text</c> via the
+    /// same convention as <see cref="ExtractedTextJson"/>.</summary>
+    public string? ListeningSequenceJson { get; set; }
+
     /// <summary>Editorial weighting. Higher = surfaced first. "MOST
     /// IMPORTANT TYPE" folders map to 100; default 0.</summary>
     public int Priority { get; set; }

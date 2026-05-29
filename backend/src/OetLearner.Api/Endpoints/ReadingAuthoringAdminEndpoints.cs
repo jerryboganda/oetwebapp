@@ -30,11 +30,74 @@ public static class ReadingAuthoringAdminEndpoints
             return Results.Ok(ProjectStructure(structure));
         });
 
+        group.MapGet("/preview-structure", async (
+            string paperId,
+            IReadingStructureService svc,
+            LearnerDbContext db,
+            CancellationToken ct) =>
+        {
+            var paper = await db.ContentPapers.AsNoTracking()
+                .FirstOrDefaultAsync(p => p.Id == paperId && p.SubtestCode == "reading", ct);
+            if (paper is null) return Results.NotFound();
+
+            var questionPaperAssets = await db.ContentPaperAssets.AsNoTracking()
+                .Where(a => a.PaperId == paperId
+                    && a.Role == PaperAssetRole.QuestionPaper
+                    && a.IsPrimary
+                    && a.MediaAsset != null
+                    && a.MediaAsset.Status == MediaAssetStatus.Ready)
+                .Include(a => a.MediaAsset)
+                .OrderBy(a => a.DisplayOrder)
+                .ThenBy(a => a.Part)
+                .Select(a => new
+                {
+                    a.Id,
+                    a.Part,
+                    title = a.Title ?? a.MediaAsset!.OriginalFilename,
+                    downloadPath = $"/v1/media/{a.MediaAssetId}/content",
+                })
+                .ToListAsync(ct);
+
+            var structure = await svc.GetAdminStructureAsync(paperId, ct);
+            return Results.Ok(ProjectLearnerSafePreview(paper, questionPaperAssets, structure));
+        });
+
         group.MapGet("/manifest", async (
             string paperId, IReadingStructureService svc, CancellationToken ct) =>
         {
             var manifest = await svc.ExportManifestAsync(paperId, ct);
             return Results.Ok(manifest);
+        });
+
+        group.MapPost("/clone", async (
+            string paperId,
+            ReadingPaperCloneRequest? dto,
+            IReadingStructureService svc,
+            HttpContext http,
+            CancellationToken ct) =>
+        {
+            var adminId = http.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "system";
+            try
+            {
+                var cloned = await svc.ClonePaperAsync(
+                    paperId,
+                    dto ?? new ReadingPaperCloneRequest(null, null),
+                    adminId,
+                    ct);
+                return Results.Created($"/v1/admin/papers/{cloned.PaperId}/reading/structure", new
+                {
+                    cloned.SourcePaperId,
+                    cloned.PaperId,
+                    cloned.Title,
+                    cloned.Slug,
+                    adminRoute = $"/admin/content/reading/{cloned.PaperId}",
+                    structure = ProjectStructure(cloned.Structure),
+                });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Results.BadRequest(new { error = ex.Message });
+            }
         });
 
         group.MapPost("/manifest", async (
@@ -381,6 +444,50 @@ public static class ReadingAuthoringAdminEndpoints
                 question.OptionDistractorsJson,
                 question.ReviewState,
                 question.LatestReviewNote,
+            }),
+        }),
+    };
+
+    private static object ProjectLearnerSafePreview(
+        ContentPaper paper,
+        IReadOnlyList<object> questionPaperAssets,
+        ReadingStructure structure) => new
+    {
+        paper = new
+        {
+            paper.Id,
+            paper.Title,
+            paper.Slug,
+            paper.SubtestCode,
+            allowPaperReadingMode = true,
+            questionPaperAssets,
+        },
+        parts = structure.Parts.Select(part => new
+        {
+            part.Id,
+            partCode = part.PartCode.ToString(),
+            part.TimeLimitMinutes,
+            part.MaxRawScore,
+            part.Instructions,
+            texts = part.Texts.Select(text => new
+            {
+                text.Id,
+                text.DisplayOrder,
+                text.Title,
+                text.Source,
+                text.BodyHtml,
+                text.WordCount,
+                text.TopicTag,
+            }),
+            questions = part.Questions.Select(question => new
+            {
+                question.Id,
+                question.ReadingTextId,
+                question.DisplayOrder,
+                question.Points,
+                questionType = question.QuestionType.ToString(),
+                question.Stem,
+                options = ReadingLearnerSafeProjection.ProjectOptions(question.OptionsJson),
             }),
         }),
     };

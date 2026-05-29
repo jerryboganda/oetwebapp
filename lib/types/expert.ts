@@ -615,6 +615,20 @@ export interface ListeningExpertAttemptSummary {
   hasFeedback: boolean;
 }
 
+/**
+ * Per-option distractor breakdown surfaced on the tutor/expert review for MCQ
+ * (Part B/C) items. Mirrors the backend `ListeningExpertOptionAnalysisItem`
+ * record (camelCased on the wire) and the learner review's option-analysis
+ * shape so both consoles read identically.
+ */
+export interface ListeningExpertOptionAnalysisItem {
+  key: string; // 'A' | 'B' | 'C'
+  text: string;
+  isCorrect: boolean;
+  distractorCategory: string | null; // too_strong | too_weak | wrong_speaker | opposite_meaning | reused_keyword | out_of_scope
+  whyWrong: string | null;
+}
+
 export interface ListeningExpertAnswerItem {
   questionNumber: number;
   partCode: string; // 'A1'|'A2'|'B'|'C1'|'C2'
@@ -624,6 +638,10 @@ export interface ListeningExpertAnswerItem {
   isCorrect: boolean;
   transcriptEvidence: string | null;
   existingComment?: string;
+  // WORK-STREAM 7a — distractor taxonomy + Part C speaker-attitude.
+  selectedDistractorCategory?: string | null; // the category of the distractor the learner chose (MCQ misses only)
+  speakerAttitude?: string | null; // Part C only: concerned | optimistic | doubtful | critical | neutral | other
+  optionAnalysis?: ListeningExpertOptionAnalysisItem[] | null;
 }
 
 export interface ListeningExpertBundle {

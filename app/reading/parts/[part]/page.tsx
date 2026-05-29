@@ -9,16 +9,21 @@ import { InlineAlert } from '@/components/ui/alert';
 import { LearnerSkeleton } from '@/components/domain/learner-skeletons';
 import { LearnerPageHero } from '@/components/domain';
 import { analytics } from '@/lib/analytics';
-import { getReadingHome, type ReadingHomeDto, type ReadingHomePaperDto } from '@/lib/reading-authoring-api';
+import {
+  getReadingHome,
+  startReadingPartPracticeAttempt,
+  type ReadingHomeDto,
+  type ReadingHomePaperDto,
+} from '@/lib/reading-authoring-api';
 import { readErrorMessage } from '@/lib/read-error-message';
 
 // Per the 2026-05-27 OET sample-test alignment, `/reading/parts/[part]` is
 // a thin candidate dispatcher: it lists the published Reading papers that
-// contain questions for the requested part (A, B, or C) and hands the user
-// straight into the existing `/reading/paper/[paperId]` exam runner with a
-// `?part=<A|B|C>&mode=practice` hint. The legacy /reading/practice hub
-// (Learning / Drills / Mini-Tests / Error Bank) stays on disk and reachable by
-// URL but is no longer surfaced from the simplified candidate hub.
+// contain questions for the requested part (A, B, or C), creates a scoped
+// backend practice attempt, and hands the user to the existing paper player.
+// The legacy /reading/practice hub (Learning / Drills / Mini-Tests / Error
+// Bank) stays on disk and reachable by URL but is no longer surfaced from the
+// simplified candidate hub.
 
 type PartCode = 'A' | 'B' | 'C';
 
@@ -66,6 +71,7 @@ export default function ReadingPartPracticePage() {
   const router = useRouter();
   const [home, setHome] = useState<ReadingHomeDto | null>(null);
   const [loading, setLoading] = useState(true);
+  const [startingPaperId, setStartingPaperId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -96,9 +102,18 @@ export default function ReadingPartPracticePage() {
   const eligiblePapers =
     home?.papers?.filter((paper) => countForPart(paper, part) > 0) ?? [];
 
-  function handleStart(paper: ReadingHomePaperDto) {
+  async function handleStart(paper: ReadingHomePaperDto) {
     if (!part) return;
-    router.push(`${paper.route}?mode=practice&part=${part}`);
+    setStartingPaperId(paper.id);
+    setError(null);
+    try {
+      const started = await startReadingPartPracticeAttempt(paper.id, part);
+      router.push(started.playerRoute);
+    } catch (caught) {
+      setError(readErrorMessage(caught, `Could not start Part ${part} practice.`));
+    } finally {
+      setStartingPaperId(null);
+    }
   }
 
   return (
@@ -164,9 +179,10 @@ export default function ReadingPartPracticePage() {
                         <button
                           type="button"
                           onClick={() => handleStart(paper)}
+                          disabled={startingPaperId === paper.id}
                           className="rounded-md bg-info px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-info/90"
                         >
-                          Start Part {part} practice →
+                          {startingPaperId === paper.id ? 'Starting...' : `Start Part ${part} practice`}
                         </button>
                       </div>
                     </article>

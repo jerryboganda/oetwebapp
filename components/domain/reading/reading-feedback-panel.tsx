@@ -260,7 +260,7 @@ export function ReadingFeedbackPanel({ attemptId, area, className }: ReadingFeed
                       type="button"
                       onClick={() => startEdit(item)}
                       aria-label="Edit feedback"
-                      className="rounded-md p-1.5 text-slate-500 transition-colors hover:bg-slate-200 hover:text-slate-700 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-slate-200"
+                      className="rounded-md p-1.5 text-muted transition-colors hover:bg-slate-200 hover:text-slate-700 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-slate-200"
                     >
                       <Pencil className="h-4 w-4" aria-hidden="true" />
                     </button>
@@ -269,7 +269,7 @@ export function ReadingFeedbackPanel({ attemptId, area, className }: ReadingFeed
                       onClick={() => handleDelete(item.id)}
                       disabled={deletingId === item.id}
                       aria-label="Delete feedback"
-                      className="rounded-md p-1.5 text-slate-500 transition-colors hover:bg-red-100 hover:text-red-600 disabled:opacity-50 dark:text-slate-400 dark:hover:bg-red-950/50 dark:hover:text-red-400"
+                      className="rounded-md p-1.5 text-muted transition-colors hover:bg-red-100 hover:text-red-600 disabled:opacity-50 dark:text-muted dark:hover:bg-red-950/50 dark:hover:text-red-400"
                     >
                       {deletingId === item.id ? (
                         <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />

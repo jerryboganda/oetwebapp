@@ -38,6 +38,7 @@ import {
 import { ContentLockedNotice, isContentLockedError, readContentLockedMessage } from '@/components/domain/ContentLockedNotice';
 import { BCQuestionRenderer } from '@/components/domain/listening/BCQuestionRenderer';
 import { PartARenderer } from '@/components/domain/listening/PartARenderer';
+import { ListeningPaperSimulation } from '@/components/domain/listening/ListeningPaperSimulation';
 import { ZoomControls } from '@/components/domain/listening/ZoomControls';
 import { ListeningIntroCard } from '@/components/domain/listening/player/ListeningIntroCard';
 import { ListeningAudioTransport } from '@/components/domain/listening/player/ListeningAudioTransport';
@@ -52,6 +53,13 @@ import { ListeningPlayerSkinShell } from '@/components/domain/listening/player/s
 import { NotePanel } from '@/components/domain/listening/NotePanel';
 
 const FIRST_STRICT_STATE: ListeningFsmState = 'a1_preview';
+
+// WS2 — the strict sound-check gate surfaces two ways: the server `advance`
+// rejects intro→a1_preview with this reason, OR `startListeningAttempt` throws
+// a 400 carrying this error code. Either one routes the learner to the sound
+// check rather than showing a generic error.
+const AUDIO_CHECK_REJECTION_REASON = 'audio-check-required';
+const AUDIO_CHECK_START_CODE = 'listening_audio_check_required';
 
 type ListeningPlayerMode = 'practice' | 'exam' | 'home' | 'paper' | 'diagnostic';
 
@@ -118,15 +126,43 @@ function advanceRejectionMessage(result: AdvanceResult) {
   return result.rejectionDetail ?? result.rejectionReason ?? 'The server rejected the Listening start transition.';
 }
 
+// Error thrown by a rejected strict transition. Carries the server's machine
+// rejection reason (e.g. `audio-check-required`) alongside the human message so
+// the caller can route specific rejections — like the sound-check gate — to a
+// dedicated recovery path instead of a generic error banner.
+class StrictAdvanceError extends Error {
+  readonly reason: string | null;
+  constructor(result: AdvanceResult) {
+    super(advanceRejectionMessage(result));
+    this.name = 'StrictAdvanceError';
+    this.reason = result.rejectionReason;
+  }
+}
+
+// True when an error from `startTask` / `advanceStrictStart` is the WS2
+// sound-check gate — whether it arrived as a strict-advance rejection
+// (`audio-check-required`) or a `startListeningAttempt` validation 400
+// (`listening_audio_check_required`).
+function isAudioCheckRequiredError(err: unknown): boolean {
+  if (err instanceof StrictAdvanceError && err.reason === AUDIO_CHECK_REJECTION_REASON) {
+    return true;
+  }
+  const detail = (err as { detail?: unknown } | null)?.detail;
+  if (detail && typeof detail === 'object' && 'code' in detail) {
+    return (detail as { code?: unknown }).code === AUDIO_CHECK_START_CODE;
+  }
+  return false;
+}
+
 async function advanceStrictTransition(attemptId: string, toState: ListeningFsmState): Promise<ListeningV2SessionState> {
   const first = await listeningV2Api.advance(attemptId, toState, null);
   if (first.outcome === 'applied') return first.state ?? listeningV2Api.getState(attemptId);
   if (first.outcome === 'confirm-required' && first.confirmToken) {
     const confirmed = await listeningV2Api.advance(attemptId, toState, first.confirmToken);
     if (confirmed.outcome === 'applied') return confirmed.state ?? listeningV2Api.getState(attemptId);
-    throw new Error(advanceRejectionMessage(confirmed));
+    throw new StrictAdvanceError(confirmed);
   }
-  throw new Error(advanceRejectionMessage(first));
+  throw new StrictAdvanceError(first);
 }
 
 async function advanceStrictStart(attemptId: string) {
@@ -220,6 +256,9 @@ function PlayerContent() {
   const [showSubmitConfirm, setShowSubmitConfirm] = useState(false);
   const [techReadiness, setTechReadiness] = useState<{ audioOk: boolean; durationMs: number } | null>(null);
   const [startError, setStartError] = useState<string | null>(null);
+  // WS2 — set true when the server blocks this strict attempt for a missing /
+  // expired sound check. Drives the "Run the sound check" CTA on the intro card.
+  const [audioCheckRequired, setAudioCheckRequired] = useState(false);
   const [currentSectionIndex, setCurrentSectionIndex] = useState(0);
   // C8f — pre-audio reading window precedes the audio of every section so
   // candidates can read the questions before audio playback starts. Initial
@@ -262,6 +301,33 @@ function PlayerContent() {
     || mode === 'home'
     || session?.modePolicy.mode === 'exam'
     || session?.modePolicy.mode === 'home';
+
+  // WS2 — sound-check destination. After a passed check the learner returns to
+  // this exact player URL (mode + launch params preserved) so they can start
+  // the exam without re-navigating. Only the launch params the player itself
+  // restores are carried; transient attemptId is intentionally dropped since a
+  // gated attempt was never created.
+  const audioCheckHref = useMemo(() => {
+    if (!id) return '/listening/audio-check';
+    const returnParams = new URLSearchParams();
+    if (rawMode) returnParams.set('mode', rawMode);
+    if (focusParam) returnParams.set('focus', focusParam);
+    if (partFocus) returnParams.set('part', partFocus.toUpperCase());
+    if (pathwayStage) returnParams.set('pathwayStage', pathwayStage);
+    if (drillId) returnParams.set('drill', drillId);
+    if (mockAttemptId) returnParams.set('mockAttemptId', mockAttemptId);
+    if (mockSectionId) returnParams.set('mockSectionId', mockSectionId);
+    if (mockMode) returnParams.set('mockMode', mockMode);
+    if (mockStrictness) returnParams.set('strictness', mockStrictness);
+    if (mockDeliveryMode) returnParams.set('deliveryMode', mockDeliveryMode);
+    if (mockStrictTimer) returnParams.set('strictTimer', mockStrictTimer);
+    const query = returnParams.toString();
+    const returnTo = `/listening/player/${encodeURIComponent(id)}${query ? `?${query}` : ''}`;
+    return `/listening/audio-check?returnTo=${encodeURIComponent(returnTo)}`;
+  }, [
+    id, rawMode, focusParam, partFocus, pathwayStage, drillId,
+    mockAttemptId, mockSectionId, mockMode, mockStrictness, mockDeliveryMode, mockStrictTimer,
+  ]);
 
   useEffect(() => {
     if (!id) return;
@@ -477,6 +543,7 @@ function PlayerContent() {
     }
     setIsStarting(true);
     setStartError(null);
+    setAudioCheckRequired(false);
     try {
       const started = await ensureAttempt();
       if (strictReadinessRequired) {
@@ -521,6 +588,13 @@ function PlayerContent() {
     } catch (err) {
       if (isContentLockedError(err)) {
         setContentLockedMessage(readContentLockedMessage(err));
+        return;
+      }
+      if (isAudioCheckRequiredError(err)) {
+        // WS2 — gate hit (start or first advance). Surface the recovery CTA
+        // instead of a dead-end error so the learner can run the sound check.
+        setAudioCheckRequired(true);
+        setStartError(err instanceof Error ? err.message : 'Pass the Listening sound check before starting this exam.');
         return;
       }
       setStartError(err instanceof Error ? err.message : 'Could not start this Listening attempt.');
@@ -642,6 +716,13 @@ function PlayerContent() {
   const currentSection: ListeningSectionCode | null = sectionsInPaper[currentSectionIndex] ?? null;
   const freeNavigationEnabled = session?.modePolicy.freeNavigation === true;
   const allPartsReviewEnabled = freeNavigationEnabled && session?.modePolicy.printableBooklet === true;
+  // WS3 — paper/booklet simulation. When the server marks this attempt as a
+  // printable booklet (mode === 'paper' / presentationStyle ===
+  // 'printable_booklet'), the answer surface is the ListeningPaperSimulation
+  // booklet instead of the inline renderer map. Audio + FSM stay untouched.
+  const paperBookletActive = mode === 'paper'
+    || session?.modePolicy.mode === 'paper'
+    || session?.modePolicy.presentationStyle === 'printable_booklet';
   const paperFinalReviewSeconds = session?.modePolicy.finalReviewAllPartsSeconds ?? null;
   const paperFinalReviewActive = allPartsReviewEnabled
     && paperFinalReviewSeconds !== null
@@ -1193,6 +1274,8 @@ function PlayerContent() {
             isStarting={isStarting}
             audioError={audioError}
             startError={startError}
+            audioCheckRequired={audioCheckRequired}
+            audioCheckHref={audioCheckHref}
             onTechReadinessReady={(result) => {
               setTechReadiness(result);
               setStartError(null);
@@ -1381,51 +1464,67 @@ function PlayerContent() {
                     </div>
                   ) : null}
 
-                  <ZoomControls value={questionZoomPercent} onChange={setQuestionZoomPercent} />
+                  {paperBookletActive ? (
+                    // WS3 — paper/booklet answer surface. Renders INSTEAD of
+                    // the inline renderer map below. Audio + transport + FSM
+                    // phase banners + final-review logic above stay intact;
+                    // this component is purely the answer booklet.
+                    <ListeningPaperSimulation
+                      session={session}
+                      answers={answers}
+                      attemptSecondsRemaining={attemptSecondsRemaining}
+                      freeNavigationActive={allPartsReviewEnabled}
+                      onAnswerChange={handleAnswerChange}
+                    />
+                  ) : (
+                    <>
+                      <ZoomControls value={questionZoomPercent} onChange={setQuestionZoomPercent} />
 
-                  <div data-testid="listening-question-surface" className="space-y-6" style={{ fontSize: `${questionZoomPercent}%` }}>
-                    {visibleQuestionSections.map(({ section, questions }) => (
-                      <section key={section} className="space-y-4" aria-label={LISTENING_SECTION_LABEL[section]}>
-                        {allPartsReviewEnabled ? (
-                          <h2 className="rounded-2xl border border-border bg-surface px-4 py-3 text-sm font-black uppercase tracking-widest text-muted">
-                            {LISTENING_SECTION_LABEL[section]}
-                          </h2>
-                        ) : null}
-                        {questions.map((question) => {
-                          const canEdit = true;
-                          if (question.options.length === 0) {
-                            return (
-                              <div id={`listening-question-${question.id}`} key={question.id} className="scroll-mt-48">
-                                <PartARenderer
-                                  questionNumber={question.number}
-                                  partLabel={LISTENING_SECTION_LABEL[section]}
-                                  prompt={question.text}
-                                  inputId={`listening-answer-${question.id}`}
-                                  value={answers[question.id] ?? ''}
-                                  onChange={(value) => handleAnswerChange(question.id, value)}
-                                  locked={!canEdit}
-                                />
-                              </div>
-                            );
-                          }
+                      <div data-testid="listening-question-surface" className="space-y-6" style={{ fontSize: `${questionZoomPercent}%` }}>
+                        {visibleQuestionSections.map(({ section, questions }) => (
+                          <section key={section} className="space-y-4" aria-label={LISTENING_SECTION_LABEL[section]}>
+                            {allPartsReviewEnabled ? (
+                              <h2 className="rounded-2xl border border-border bg-surface px-4 py-3 text-sm font-black uppercase tracking-widest text-muted">
+                                {LISTENING_SECTION_LABEL[section]}
+                              </h2>
+                            ) : null}
+                            {questions.map((question) => {
+                              const canEdit = true;
+                              if (question.options.length === 0) {
+                                return (
+                                  <div id={`listening-question-${question.id}`} key={question.id} className="scroll-mt-48">
+                                    <PartARenderer
+                                      questionNumber={question.number}
+                                      partLabel={LISTENING_SECTION_LABEL[section]}
+                                      prompt={question.text}
+                                      inputId={`listening-answer-${question.id}`}
+                                      value={answers[question.id] ?? ''}
+                                      onChange={(value) => handleAnswerChange(question.id, value)}
+                                      locked={!canEdit}
+                                    />
+                                  </div>
+                                );
+                              }
 
-                          return (
-                            <div id={`listening-question-${question.id}`} key={question.id} className="scroll-mt-48">
-                              <BCQuestionRenderer
-                                questionNumber={question.number}
-                                partLabel={LISTENING_SECTION_LABEL[section]}
-                                prompt={question.text}
-                                options={question.options}
-                                value={answers[question.id] ?? ''}
-                                onChange={(value) => handleAnswerChange(question.id, value)}
-                                locked={!canEdit}
-                              />
-                            </div>
-                          );
-                        })}
-                      </section>
-                    ))}
-                  </div>
+                              return (
+                                <div id={`listening-question-${question.id}`} key={question.id} className="scroll-mt-48">
+                                  <BCQuestionRenderer
+                                    questionNumber={question.number}
+                                    partLabel={LISTENING_SECTION_LABEL[section]}
+                                    prompt={question.text}
+                                    options={question.options}
+                                    value={answers[question.id] ?? ''}
+                                    onChange={(value) => handleAnswerChange(question.id, value)}
+                                    locked={!canEdit}
+                                  />
+                                </div>
+                              );
+                            })}
+                          </section>
+                        ))}
+                      </div>
+                    </>
+                  )}
                 </>
               )}
             </div>
@@ -1519,7 +1618,11 @@ function PlayerContent() {
           </motion.div>
         )}
 
-        {session.modePolicy.printableBooklet ? (
+        {/* WS3 — when the paper simulation is mounted it owns print (toolbar
+            Print button + beforeprint/afterprint 1:1 scaling), so this legacy
+            answer-number list is superseded. It remains as a fallback for any
+            other printableBooklet surface where the booklet is not rendered. */}
+        {session.modePolicy.printableBooklet && !paperBookletActive ? (
           <div className="hidden print:block print:p-6">
             <h1 className="text-2xl font-bold text-navy">{session.paper.title}</h1>
             <p className="mt-2 text-sm text-muted">Listening paper-mode answer sheet</p>

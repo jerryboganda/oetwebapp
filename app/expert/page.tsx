@@ -233,6 +233,9 @@ export default function ExpertDashboardPage() {
                     <Button fullWidth variant="secondary" onClick={() => router.push('/expert/calibration')}>
                       Open Calibration
                     </Button>
+                    <Button fullWidth variant="outline" onClick={() => router.push('/expert/reading')}>
+                      Reading Queue
+                    </Button>
                   </div>
                   <div className="flex items-center gap-2 text-xs text-muted">
                     <Clock3 className="h-4 w-4" />

@@ -96,3 +96,58 @@ describe('ListeningAnalyticsPage — Audit export', () => {
     expect(clickSpy).not.toHaveBeenCalled();
   });
 });
+
+const successAnalytics = {
+  days: 30,
+  completedAttempts: 42,
+  averageScaledScore: 360,
+  percentLikelyPassing: 61,
+  classPartAverages: [
+    { partCode: 'A', earned: 0, max: 0, accuracyPercent: 78 },
+    { partCode: 'B', earned: 0, max: 0, accuracyPercent: 64 },
+    { partCode: 'C', earned: 0, max: 0, accuracyPercent: 58 },
+  ],
+  hardestQuestions: [],
+  distractorHeat: [
+    {
+      paperId: 'lt-001',
+      questionNumber: 12,
+      correctAnswer: 'C',
+      wrongAnswerHistogram: { A: 7, B: 12 },
+    },
+  ],
+  commonMisspellings: [],
+};
+
+describe('ListeningAnalyticsPage — distractor heatmap', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockUseAdminAuth.mockReturnValue({ isAuthenticated: true, role: 'admin' });
+  });
+
+  it('renders the DistractorHeatmap (not the old histogram list) when there is heat data', async () => {
+    mockGetAnalytics.mockResolvedValue(successAnalytics);
+    render(<ListeningAnalyticsPage />);
+
+    // Heatmap card title.
+    expect(await screen.findByText(/MCQ distractor heatmap/i)).toBeInTheDocument();
+    // The heatmap renders an accessible table with a row per question.
+    expect(
+      await screen.findByRole('table', { name: /distractor heatmap/i }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('rowheader', { name: 'Q12' })).toBeInTheDocument();
+    // Correct option (C) is marked, and the noisy distractor count is shown.
+    expect(screen.getByLabelText('C — correct answer')).toBeInTheDocument();
+    expect(screen.getByLabelText('B — 12 learners chose this')).toBeInTheDocument();
+  });
+
+  it('shows the heatmap empty state when there is no distractor noise', async () => {
+    mockGetAnalytics.mockResolvedValue({ ...successAnalytics, distractorHeat: [] });
+    render(<ListeningAnalyticsPage />);
+
+    expect(await screen.findByText(/MCQ distractor heatmap/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/no mcq distractor noise detected in this window/i),
+    ).toBeInTheDocument();
+  });
+});

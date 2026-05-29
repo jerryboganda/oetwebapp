@@ -54,13 +54,13 @@ export function ReadingCohortTable({ students, className }: ReadingCohortTablePr
                 )}
               </td>
               <td className="px-4 py-2.5 text-right tabular-nums text-slate-700 dark:text-slate-300">
-                {student.rawScore ?? '—'}
+                {student.rawScore ?? '-'}
               </td>
               <td className="px-4 py-2.5 text-right tabular-nums text-slate-700 dark:text-slate-300">
-                {student.scaledScore ?? '—'}
+                {student.scaledScore ?? '-'}
               </td>
               <td className="px-4 py-2.5 text-center text-slate-700 dark:text-slate-300">
-                {student.gradeLetter || '—'}
+                {student.gradeLetter || '-'}
               </td>
               <td className="px-4 py-2.5 text-right tabular-nums text-slate-700 dark:text-slate-300">
                 {student.assignmentsCompleted}/{student.assignmentsAssigned}

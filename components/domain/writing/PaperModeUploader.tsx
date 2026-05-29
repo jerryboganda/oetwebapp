@@ -97,7 +97,7 @@ export function PaperModeUploader({
     },
     [pollIntervalMs],
   );
-  pollOnceRef.current = pollOnce;
+  useEffect(() => { pollOnceRef.current = pollOnce; });
 
   const handleFiles = useCallback(
     async (files: FileList | null) => {

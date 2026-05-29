@@ -2,6 +2,7 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services;
 using OetLearner.Api.Services.Listening;
 
 namespace OetLearner.Api.Tests;
@@ -603,5 +604,242 @@ public class ListeningStructureServiceTests
 
         Assert.True(report.IsPublishReady);
         Assert.Equal("json", report.Source);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // WS-7c — three additive Listening publish rules
+    //   listening_extract_cue_overlap
+    //   listening_preview_window_missing
+    //   listening_results_calc
+    // All three fire on the relational source. The seeded fixture below is the
+    // canonical 24/6/12 = 42 well-formed paper (no ListeningPolicy row, so the
+    // preview windows resolve to ListeningPolicyDefaults); each failure test
+    // perturbs exactly one input.
+    // ─────────────────────────────────────────────────────────────────────
+
+    /// <summary>Per-part extract cue windows in display order. One window per
+    /// part for A/B; C keeps its single windows too — the canonical paper has
+    /// one extract per part code.</summary>
+    private sealed record RelationalSeed(
+        ContentPaper Paper,
+        IReadOnlyDictionary<ListeningPartCode, ListeningPart> Parts,
+        IReadOnlyDictionary<ListeningPartCode, ListeningExtract> Extracts,
+        IReadOnlyList<ListeningQuestion> Questions);
+
+    /// <summary>
+    /// Seed a canonical, fully-valid relational Listening paper (Part A = 24,
+    /// Part B = 6, Part C = 12) into <paramref name="db"/> WITHOUT saving, so a
+    /// test can mutate the returned entities before <c>SaveChangesAsync</c>.
+    /// Every field that any publish rule inspects is populated to a passing
+    /// value.
+    /// </summary>
+    private static async Task<RelationalSeed> SeedCanonicalRelationalAsync(LearnerDbContext db)
+    {
+        var paper = await AddPaperAsync(db, null);
+        var now = DateTimeOffset.UtcNow;
+
+        ListeningPart AddPart(ListeningPartCode code, int max)
+        {
+            var part = new ListeningPart
+            {
+                Id = Guid.NewGuid().ToString("N"),
+                PaperId = paper.Id,
+                PartCode = code,
+                MaxRawScore = max,
+                CreatedAt = now,
+                UpdatedAt = now,
+            };
+            db.Set<ListeningPart>().Add(part);
+            return part;
+        }
+
+        var parts = new Dictionary<ListeningPartCode, ListeningPart>
+        {
+            [ListeningPartCode.A1] = AddPart(ListeningPartCode.A1, 12),
+            [ListeningPartCode.A2] = AddPart(ListeningPartCode.A2, 12),
+            [ListeningPartCode.B] = AddPart(ListeningPartCode.B, 6),
+            [ListeningPartCode.C1] = AddPart(ListeningPartCode.C1, 6),
+            [ListeningPartCode.C2] = AddPart(ListeningPartCode.C2, 6),
+        };
+
+        ListeningExtract AddExtract(ListeningPart part, int startMs, int endMs)
+        {
+            var extract = new ListeningExtract
+            {
+                Id = Guid.NewGuid().ToString("N"),
+                ListeningPartId = part.Id,
+                DisplayOrder = 1,
+                Kind = part.PartCode == ListeningPartCode.B
+                    ? ListeningExtractKind.Workplace
+                    : part.PartCode is ListeningPartCode.C1 or ListeningPartCode.C2
+                        ? ListeningExtractKind.Presentation
+                        : ListeningExtractKind.Consultation,
+                Title = $"Extract {part.PartCode}",
+                SpeakersJson = "[]",
+                TranscriptSegmentsJson = "[]",
+                AudioStartMs = startMs,
+                AudioEndMs = endMs,
+                DifficultyRating = 3,
+                CreatedAt = now,
+                UpdatedAt = now,
+            };
+            db.Set<ListeningExtract>().Add(extract);
+            return extract;
+        }
+
+        var extracts = new Dictionary<ListeningPartCode, ListeningExtract>
+        {
+            [ListeningPartCode.A1] = AddExtract(parts[ListeningPartCode.A1], 0, 60_000),
+            [ListeningPartCode.A2] = AddExtract(parts[ListeningPartCode.A2], 60_000, 120_000),
+            [ListeningPartCode.B] = AddExtract(parts[ListeningPartCode.B], 120_000, 180_000),
+            [ListeningPartCode.C1] = AddExtract(parts[ListeningPartCode.C1], 180_000, 240_000),
+            [ListeningPartCode.C2] = AddExtract(parts[ListeningPartCode.C2], 240_000, 300_000),
+        };
+
+        var questions = new List<ListeningQuestion>();
+        var qNum = 1;
+        void AddQuestions(ListeningPartCode code, int count, ListeningQuestionType qType)
+        {
+            var part = parts[code];
+            for (var i = 0; i < count; i++)
+            {
+                var q = new ListeningQuestion
+                {
+                    Id = Guid.NewGuid().ToString("N"),
+                    PaperId = paper.Id,
+                    ListeningPartId = part.Id,
+                    ListeningExtractId = extracts[code].Id,
+                    QuestionNumber = qNum++,
+                    DisplayOrder = i + 1,
+                    Points = 1,
+                    QuestionType = qType,
+                    Stem = "stem",
+                    CorrectAnswerJson = qType == ListeningQuestionType.MultipleChoice3 ? "\"A\"" : "\"x\"",
+                    SkillTag = qType == ListeningQuestionType.MultipleChoice3 ? "detail" : "note_completion",
+                    TranscriptEvidenceText = "evidence",
+                    TranscriptEvidenceStartMs = qNum * 1000,
+                    TranscriptEvidenceEndMs = qNum * 1000 + 500,
+                    DifficultyLevel = 3,
+                    CreatedAt = now,
+                    UpdatedAt = now,
+                };
+                db.Set<ListeningQuestion>().Add(q);
+                questions.Add(q);
+                if (qType == ListeningQuestionType.MultipleChoice3)
+                {
+                    for (var k = 0; k < 3; k++)
+                    {
+                        db.Set<ListeningQuestionOption>().Add(new ListeningQuestionOption
+                        {
+                            Id = Guid.NewGuid().ToString("N"),
+                            ListeningQuestionId = q.Id,
+                            OptionKey = ((char)('A' + k)).ToString(),
+                            Text = $"opt-{k}",
+                            DisplayOrder = k + 1,
+                            IsCorrect = k == 0,
+                            DistractorCategory = k == 0 ? null : ListeningDistractorCategory.ReusedKeyword,
+                        });
+                    }
+                }
+            }
+        }
+
+        AddQuestions(ListeningPartCode.A1, 12, ListeningQuestionType.ShortAnswer);
+        AddQuestions(ListeningPartCode.A2, 12, ListeningQuestionType.ShortAnswer);
+        AddQuestions(ListeningPartCode.B, 6, ListeningQuestionType.MultipleChoice3);
+        AddQuestions(ListeningPartCode.C1, 6, ListeningQuestionType.MultipleChoice3);
+        AddQuestions(ListeningPartCode.C2, 6, ListeningQuestionType.MultipleChoice3);
+
+        return new RelationalSeed(paper, parts, extracts, questions);
+    }
+
+    [Fact]
+    public async Task CanonicalRelationalPaper_PassesAllThreeWs7cRules()
+    {
+        var (db, svc) = Build();
+        var seed = await SeedCanonicalRelationalAsync(db);
+        await db.SaveChangesAsync();
+
+        var report = await svc.ValidatePaperAsync(seed.Paper.Id, default);
+
+        Assert.True(report.IsPublishReady, string.Join("; ", report.Issues.Select(issue => $"{issue.Code}:{issue.Message}")));
+        Assert.Equal("relational", report.Source);
+        // None of the three new rules should fire on the canonical paper.
+        Assert.DoesNotContain(report.Issues, i => i.Code == "listening_extract_cue_overlap");
+        Assert.DoesNotContain(report.Issues, i => i.Code == "listening_preview_window_missing");
+        Assert.DoesNotContain(report.Issues, i => i.Code == "listening_results_calc");
+    }
+
+    [Fact]
+    public async Task OverlappingExtractCues_BlockPublish()
+    {
+        var (db, svc) = Build();
+        var seed = await SeedCanonicalRelationalAsync(db);
+        // Add a second A1 extract whose window starts before the first A1
+        // extract's window [0, 60_000) ends → an overlapping (non-monotonic)
+        // cue ordering within Part A1's extracts. The validator only loads
+        // extracts that at least one question links to, so repoint an A1
+        // question (questions[0..11] are A1) onto the new extract.
+        var a1Part = seed.Parts[ListeningPartCode.A1];
+        var overlappingExtract = new ListeningExtract
+        {
+            Id = Guid.NewGuid().ToString("N"),
+            ListeningPartId = a1Part.Id,
+            DisplayOrder = 2,
+            Kind = ListeningExtractKind.Consultation,
+            Title = "A1 overlap",
+            SpeakersJson = "[]",
+            TranscriptSegmentsJson = "[]",
+            AudioStartMs = 30_000,   // < first A1 extract end (60_000) → overlap
+            AudioEndMs = 90_000,
+            DifficultyRating = 3,
+            CreatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow,
+        };
+        db.Set<ListeningExtract>().Add(overlappingExtract);
+        seed.Questions[0].ListeningExtractId = overlappingExtract.Id;
+        await db.SaveChangesAsync();
+
+        var report = await svc.ValidatePaperAsync(seed.Paper.Id, default);
+
+        Assert.False(report.IsPublishReady);
+        Assert.Contains(report.Issues, i => i.Code == "listening_extract_cue_overlap" && i.Severity == "error");
+    }
+
+    [Fact]
+    public async Task MissingPreviewWindow_BlocksPublish()
+    {
+        var (db, svc) = Build();
+        var seed = await SeedCanonicalRelationalAsync(db);
+        // Author a policy row that zeroes the A1 preview window. The effective
+        // resolution (policy column ?? default) then yields 0 for a present
+        // part, which must block publish.
+        db.ListeningPolicies.Add(new ListeningPolicy
+        {
+            Id = "global",
+            PreviewWindowMsA1 = 0,
+            UpdatedAt = DateTimeOffset.UtcNow,
+        });
+        await db.SaveChangesAsync();
+
+        var report = await svc.ValidatePaperAsync(seed.Paper.Id, default);
+
+        Assert.False(report.IsPublishReady);
+        Assert.Contains(report.Issues, i => i.Code == "listening_preview_window_missing" && i.Severity == "error");
+    }
+
+    [Fact]
+    public async Task AuthoredPointsNotSummingTo42_BlocksPublish()
+    {
+        var (db, svc) = Build();
+        var seed = await SeedCanonicalRelationalAsync(db);
+        // Knock one item's Points to 0 → authored points sum to 41, not 42.
+        seed.Questions[0].Points = 0;
+        await db.SaveChangesAsync();
+
+        var report = await svc.ValidatePaperAsync(seed.Paper.Id, default);
+
+        Assert.False(report.IsPublishReady);
+        Assert.Contains(report.Issues, i => i.Code == "listening_results_calc" && i.Severity == "error");
     }
 }

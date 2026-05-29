@@ -5,6 +5,14 @@ import type {
   SubmitListeningFeedbackRequest,
 } from './types/expert';
 
+// WORK-STREAM 7a — re-export the per-answer review types (incl. the new
+// distractor-category / speaker-attitude / option-analysis fields) so callers
+// of this client module can import them from a single surface.
+export type {
+  ListeningExpertAnswerItem,
+  ListeningExpertOptionAnalysisItem,
+} from './types/expert';
+
 export async function getListeningExpertAttempts(params?: {
   page?: number;
   learnerId?: string;

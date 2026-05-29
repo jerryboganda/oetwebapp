@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using System.Security.Claims;
 using System.Text.Json;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
@@ -51,11 +52,27 @@ public static class ReadingAnalyticsAdminEndpoints
             [FromQuery] string paperId,
             [FromQuery] string? userIds,
             IReadingAnalyticsService analytics,
+            LearnerDbContext db,
+            HttpContext http,
             CancellationToken ct) =>
         {
             if (string.IsNullOrWhiteSpace(paperId))
                 return Results.BadRequest(new { error = "paperId is required." });
-            var ids = ParseUserIds(userIds);
+            var expertUserId = CurrentUserId(http);
+            var assignedLearners = await db.ReadingAssignments.AsNoTracking()
+                .Where(a => a.AssignedByUserId == expertUserId
+                    && a.PaperId == paperId
+                    && a.Status != "cancelled")
+                .Select(a => a.AssignedToUserId)
+                .Distinct()
+                .ToListAsync(ct);
+
+            var requestedIds = ParseUserIds(userIds);
+            IReadOnlyCollection<string> ids = requestedIds.Count == 0
+                ? assignedLearners
+                : assignedLearners
+                    .Where(id => requestedIds.Contains(id, StringComparer.Ordinal))
+                    .ToArray();
             return Results.Ok(await analytics.GetCohortAnalyticsAsync(paperId, ids, ct));
         });
 
@@ -68,6 +85,10 @@ public static class ReadingAnalyticsAdminEndpoints
             : userIds.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
                 .Distinct(StringComparer.Ordinal)
                 .ToArray();
+
+    private static string CurrentUserId(HttpContext http)
+        => http.User.FindFirstValue(ClaimTypes.NameIdentifier)
+           ?? throw new InvalidOperationException("Authenticated user id is required.");
 
     public static async Task<ReadingAdminAnalyticsDto> BuildAnalyticsAsync(
         LearnerDbContext db,

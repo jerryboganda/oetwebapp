@@ -116,11 +116,13 @@ export default function ListeningHome() {
     }
   }, [authLoading, isLoading, isAuthenticated, profile, router]);
 
-  const daysToExam: number | null = useMemo(() => {
+  // Cheap derivation — not memoized because wall-clock time is inherently impure.
+  const daysToExam: number | null = (() => {
     if (!profile?.examDate) return null;
+    // eslint-disable-next-line react-hooks/purity -- intentional: must use wall-clock time
     const diff = new Date(profile.examDate).getTime() - Date.now();
     return Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)));
-  }, [profile]);
+  })();
 
   const heroHighlights = useMemo(
     () => [

@@ -26,6 +26,101 @@ import { attachDiagnostics, expectNoSevereClientIssues, observePage } from './fi
  */
 
 test.describe('Reading learner flow @reading @learner', () => {
+  test('launch gate renders canonical Reading hub from deterministic API data', async ({ page }, testInfo) => {
+    if (!testInfo.project.name.includes('learner')) {
+      test.skip();
+    }
+
+    const diagnostics = observePage(page);
+
+    await page.route('**/api/backend/v1/reading-papers/home', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          intro: 'Deterministic Reading launch gate',
+          papers: [
+            {
+              id: 'paper-launch-gate',
+              title: 'Reading Launch Gate Paper',
+              route: '/reading/paper/paper-launch-gate',
+              estimatedDurationMinutes: 60,
+              partACount: 20,
+              partBCount: 6,
+              partCCount: 16,
+              partATimerMinutes: 15,
+              partBCTimerMinutes: 45,
+              lastAttempt: null,
+            },
+          ],
+          activeAttempts: [],
+          recentResults: [
+            {
+              attemptId: 'attempt-launch-gate',
+              paperId: 'paper-launch-gate',
+              paperTitle: 'Reading Launch Gate Paper',
+              rawScore: 30,
+              maxRawScore: 42,
+              scaledScore: 350,
+              gradeLetter: 'B',
+              submittedAt: '2026-05-20T10:00:00Z',
+              route: '/reading/paper/paper-launch-gate/results?attemptId=attempt-launch-gate',
+            },
+          ],
+          policy: {
+            partATimerMinutes: 15,
+            partBCTimerMinutes: 45,
+            allowPausingAttempt: false,
+            allowResumeAfterExpiry: false,
+            showCorrectAnswerOnReview: false,
+            showExplanationsAfterSubmit: false,
+            allowPaperReadingMode: true,
+          },
+          safeDrills: [],
+        }),
+      });
+    });
+
+    await page.route('**/api/backend/v1/reading/assignments', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify([
+          {
+            id: 'assignment-launch-gate',
+            assignedByUserId: 'expert-1',
+            assignedToUserId: 'learner-1',
+            paperId: 'paper-launch-gate',
+            kind: 'full',
+            scopeJson: null,
+            note: 'Complete this launch-gate reading paper',
+            dueAt: '2026-05-31T00:00:00Z',
+            completedAttemptId: null,
+            status: 'assigned',
+            createdAt: '2026-05-20T00:00:00Z',
+            updatedAt: '2026-05-20T00:00:00Z',
+          },
+        ]),
+      });
+    });
+
+    await page.goto('/reading');
+
+    const primaryCards = page.getByTestId('reading-hub-cards').getByRole('link');
+    await expect(primaryCards).toHaveCount(4);
+    await expect(page.getByRole('link', { name: /practice part a/i })).toBeVisible();
+    await expect(page.getByRole('link', { name: /practice part b/i })).toBeVisible();
+    await expect(page.getByRole('link', { name: /practice part c/i })).toBeVisible();
+    await expect(page.getByRole('link', { name: /full reading exam/i })).toBeVisible();
+    await expect(page.getByText('Tutor tasks')).toBeVisible();
+    await expect(page.getByText('Complete this launch-gate reading paper')).toBeVisible();
+    await expect(page.getByText(/30\/42/)).toBeVisible();
+
+    expectNoSevereClientIssues(diagnostics, { allowNextDevNoise: true });
+    diagnostics.detach();
+    await attachDiagnostics(testInfo, diagnostics);
+  });
+
   test('learner can open the Reading practice hub and see the pathway card', async ({ page }, testInfo) => {
     if (!testInfo.project.name.includes('learner')) {
       test.skip();

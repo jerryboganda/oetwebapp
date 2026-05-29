@@ -59,6 +59,9 @@ public static class ReadingTutorAdminEndpoints
             if (!body.RawScore.HasValue && !body.ScaledScore.HasValue)
                 return Results.BadRequest(new { error = "rawScore or scaledScore is required." });
 
+            if (!isAdmin && !await svc.CanExpertAccessAttemptAsync(attemptId, CurrentUserId(http), ct))
+                return Results.NotFound();
+
             var review = await svc.ApplyScoreOverrideAsync(attemptId, body, CurrentUserId(http), ct);
             return review is null ? Results.NotFound() : Results.Ok(review);
         }), isAdmin);
@@ -66,6 +69,9 @@ public static class ReadingTutorAdminEndpoints
         Write(group.MapDelete("/attempts/{attemptId}/override", async (
             string attemptId, HttpContext http, IReadingTutorService svc, CancellationToken ct) =>
         {
+            if (!isAdmin && !await svc.CanExpertAccessAttemptAsync(attemptId, CurrentUserId(http), ct))
+                return Results.NotFound();
+
             var review = await svc.ClearScoreOverrideAsync(attemptId, CurrentUserId(http), ct);
             return review is null ? Results.NotFound() : Results.Ok(review);
         }), isAdmin);
@@ -80,6 +86,18 @@ public static class ReadingTutorAdminEndpoints
         {
             try
             {
+                if (!isAdmin)
+                {
+                    if (!string.Equals(body.Scope, "thisAttempt", StringComparison.OrdinalIgnoreCase)
+                        || string.IsNullOrWhiteSpace(body.AttemptId))
+                    {
+                        return Results.BadRequest(new { error = "Expert recalculation requires scope 'thisAttempt' and attemptId." });
+                    }
+
+                    if (!await svc.CanExpertAccessAttemptAsync(body.AttemptId, CurrentUserId(http), ct))
+                        return Results.NotFound();
+                }
+
                 var result = await svc.RecalcAsync(paperId, body, CurrentUserId(http), ct);
                 return Results.Ok(result);
             }
@@ -91,16 +109,22 @@ public static class ReadingTutorAdminEndpoints
 
         // ── Privileged (non-redacted) attempt review ─────────────────────
         Read(group.MapGet("/attempts/{attemptId}", async (
-            string attemptId, IReadingTutorService svc, CancellationToken ct) =>
+            string attemptId, HttpContext http, IReadingTutorService svc, CancellationToken ct) =>
         {
+            if (!isAdmin && !await svc.CanExpertAccessAttemptAsync(attemptId, CurrentUserId(http), ct))
+                return Results.NotFound();
+
             var review = await svc.GetPrivilegedReviewAsync(attemptId, ct);
             return review is null ? Results.NotFound() : Results.Ok(review);
         }), isAdmin);
 
         // ── Feedback CRUD ────────────────────────────────────────────────
         Read(group.MapGet("/attempts/{attemptId}/feedback", async (
-            string attemptId, IReadingTutorService svc, CancellationToken ct) =>
+            string attemptId, HttpContext http, IReadingTutorService svc, CancellationToken ct) =>
         {
+            if (!isAdmin && !await svc.CanExpertAccessAttemptAsync(attemptId, CurrentUserId(http), ct))
+                return Results.NotFound();
+
             return Results.Ok(await svc.ListFeedbackAsync(attemptId, ct));
         }), isAdmin);
 
@@ -113,6 +137,11 @@ public static class ReadingTutorAdminEndpoints
         {
             if (body is null || string.IsNullOrWhiteSpace(body.FeedbackText))
                 return Results.BadRequest(new { error = "feedbackText is required." });
+            if (!ReadingFeedbackScopeExtensions.IsValidScope(body.Scope))
+                return Results.BadRequest(new { error = "scope must be one of: test, section, question, skill." });
+
+            if (!isAdmin && !await svc.CanExpertAccessAttemptAsync(attemptId, CurrentUserId(http), ct))
+                return Results.NotFound();
 
             var created = await svc.CreateFeedbackAsync(attemptId, body, CurrentUserId(http), ct);
             return created is null ? Results.NotFound() : Results.Ok(created);
@@ -128,6 +157,11 @@ public static class ReadingTutorAdminEndpoints
         {
             if (body is null || string.IsNullOrWhiteSpace(body.FeedbackText))
                 return Results.BadRequest(new { error = "feedbackText is required." });
+            if (!ReadingFeedbackScopeExtensions.IsValidScope(body.Scope))
+                return Results.BadRequest(new { error = "scope must be one of: test, section, question, skill." });
+
+            if (!isAdmin && !await svc.CanExpertAccessAttemptAsync(attemptId, CurrentUserId(http), ct))
+                return Results.NotFound();
 
             var updated = await svc.UpdateFeedbackAsync(attemptId, feedbackId, body, CurrentUserId(http), ct);
             return updated is null ? Results.NotFound() : Results.Ok(updated);
@@ -136,47 +170,64 @@ public static class ReadingTutorAdminEndpoints
         Write(group.MapDelete("/attempts/{attemptId}/feedback/{feedbackId}", async (
             string attemptId, string feedbackId, HttpContext http, IReadingTutorService svc, CancellationToken ct) =>
         {
+            if (!isAdmin && !await svc.CanExpertAccessAttemptAsync(attemptId, CurrentUserId(http), ct))
+                return Results.NotFound();
+
             var removed = await svc.DeleteFeedbackAsync(attemptId, feedbackId, CurrentUserId(http), ct);
             return removed ? Results.NoContent() : Results.NotFound();
         }), isAdmin);
 
         // ── Assignment workflow ──────────────────────────────────────────
-        Write(group.MapPost("/assignments", async (
-            ReadingAssignmentCreateRequest body,
-            HttpContext http,
-            IReadingTutorService svc,
-            CancellationToken ct) =>
+        if (isAdmin)
         {
-            if (body is null
-                || string.IsNullOrWhiteSpace(body.AssignedToUserId)
-                || string.IsNullOrWhiteSpace(body.PaperId))
+            Write(group.MapPost("/assignments", async (
+                ReadingAssignmentCreateRequest body,
+                HttpContext http,
+                IReadingTutorService svc,
+                CancellationToken ct) =>
             {
-                return Results.BadRequest(new { error = "assignedToUserId and paperId are required." });
-            }
+                if (body is null
+                    || string.IsNullOrWhiteSpace(body.AssignedToUserId)
+                    || string.IsNullOrWhiteSpace(body.PaperId))
+                {
+                    return Results.BadRequest(new { error = "assignedToUserId and paperId are required." });
+                }
 
-            try
-            {
-                var created = await svc.CreateAssignmentAsync(body, CurrentUserId(http), ct);
-                return created is null ? Results.NotFound() : Results.Ok(created);
-            }
-            catch (InvalidOperationException ex)
-            {
-                return Results.BadRequest(new { error = ex.Message });
-            }
-        }), isAdmin);
+                try
+                {
+                    var created = await svc.CreateAssignmentAsync(body, CurrentUserId(http), ct);
+                    return created is null ? Results.NotFound() : Results.Ok(created);
+                }
+                catch (InvalidOperationException ex)
+                {
+                    return Results.BadRequest(new { error = ex.Message });
+                }
+            }), isAdmin);
 
-        Read(group.MapGet("/assignments", async (
-            IReadingTutorService svc, CancellationToken ct, [FromQuery] string? assignedToUserId = null) =>
+            Read(group.MapGet("/assignments", async (
+                IReadingTutorService svc, CancellationToken ct, [FromQuery] string? assignedToUserId = null) =>
+            {
+                return Results.Ok(await svc.ListAssignmentsAsync(assignedToUserId, ct));
+            }), isAdmin);
+
+            Write(group.MapDelete("/assignments/{id}", async (
+                string id, HttpContext http, IReadingTutorService svc, CancellationToken ct) =>
+            {
+                var cancelled = await svc.CancelAssignmentAsync(id, CurrentUserId(http), ct);
+                return cancelled ? Results.NoContent() : Results.NotFound();
+            }), isAdmin);
+        }
+        else
         {
-            return Results.Ok(await svc.ListAssignmentsAsync(assignedToUserId, ct));
-        }), isAdmin);
-
-        Write(group.MapDelete("/assignments/{id}", async (
-            string id, HttpContext http, IReadingTutorService svc, CancellationToken ct) =>
-        {
-            var cancelled = await svc.CancelAssignmentAsync(id, CurrentUserId(http), ct);
-            return cancelled ? Results.NoContent() : Results.NotFound();
-        }), isAdmin);
+            Read(group.MapGet("/assignments", async (
+                HttpContext http,
+                IReadingTutorService svc,
+                CancellationToken ct,
+                [FromQuery] string? assignedToUserId = null) =>
+            {
+                return Results.Ok(await svc.ListAssignmentsForExpertAsync(CurrentUserId(http), assignedToUserId, ct));
+            }), isAdmin);
+        }
     }
 
     /// <summary>Apply the write-endpoint policy for the given route group:

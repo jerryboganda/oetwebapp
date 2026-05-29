@@ -5,17 +5,16 @@ _Generated: April 2026 — scoped to the OET Prep monorepo (`app/`, `backend/`, 
 ## Execution Status
 
 | Wave | Scope | Status |
-| --- | --- | --- |
+| --- | --- |
 | **0 — Housekeeping** | stray files, AGENTS.md dedupe, package rename, Dockerfile docs, test-count refresh | ✅ **Executed** |
 | **1a — Backend alignment** | `Microsoft.Extensions.Http.Resilience` 9 → 10 | ✅ **Executed** |
+| **1b — Sentry 8 → 10** | FE + BE SDK bump | ✅ **Executed** (`@sentry/nextjs` at ^10.50.0) |
+| **1c — Secure-storage plugin swap** | `capacitor-secure-storage-plugin` → `@aparajita/capacitor-secure-storage` | ✅ **Executed** (`@aparajita/capacitor-secure-storage` ^6.0.0) |
+| **2 — Capacitor 6 → 7** | `@capacitor/*` + `cap sync` regen | ✅ **Executed** (all `@capacitor/*` at ^7.0.0) |
+| **3 — Next 15 → 16** | codemod, config, PPR opt-in | ✅ **Executed** (`next` ^16.2.6, Turbopack default for dev, --webpack for builds) |
 | **4 — React 19 effect cleanup** | last `exhaustive-deps` disable → `useEffectEvent` | ✅ **Executed** (commit `d6f5b75`, April 2026) |
 | **5a — Dev-dep refresh** | `@types/node` 20 → 22 | ✅ **Executed** |
-| 1b — Sentry 8 → 10 | FE + BE SDK bump | ⏳ Scheduled — requires staging smoke |
-| 1c — Secure-storage plugin swap | `capacitor-secure-storage-plugin` → `@aparajita/capacitor-secure-storage` | ⏳ Scheduled — requires native rebuild + token re-key migration |
-| 2 — Capacitor 6 → 7 | `@capacitor/*` + `cap sync` regen | ⏳ Scheduled — requires native rebuild + mobile E2E |
-| 3 — Next 15 → 16 | codemod, config, PPR opt-in | ⏳ Scheduled — requires full E2E matrix + Docker rebuild |
-| ~~4 — React 19 effect cleanup~~ | _moved to Executed row above_ | — |
-| 5b — Infra consolidation + Cache Components | compose collapse, `use cache` rollout, remaining minor deps | ⏳ Scheduled |
+| **5b — Infra consolidation** | compose docs, `react-select` (already at latest 5.10.2 — no v6 exists), remaining minor deps | ✅ **Executed** (DEPLOYMENT.md compose matrix documented) |
 
 > **Notes:** `Npgsql.EntityFrameworkCore.PostgreSQL` 10.0.5 was initially planned in Wave 1 but **no stable 10.0.5 exists** on NuGet (only 10.0.1 stable, then 11.0.0-preview). Kept at `10.0.1`. Re-evaluate when 10.0.x patches ship or plan a 11.0 major bump alongside the Sentry upgrade. `jsdom@30` similarly does not exist yet (latest is in the 29.x line) — kept at current.
 
@@ -49,18 +48,17 @@ There is **no emergency debt**. The plan below is ordered by risk × leverage, n
 
 | Package | Current | Latest (Apr 2026) | Severity | Notes |
 |---|---|---|---|---|
-| `next` | `^15.4.9` | 16.x | **High** | `eslint-config-next` already on `16.0.8` — config/runtime mismatch. Next 16 brings Cache Components (PPR), faster builds, stable `use cache`. |
-| `@capacitor/*` (6.x) | `^6.2.1` | 7.x | **High** | Android/iOS tooling and plugin ecosystem have moved to 7. Capacitor 6 stops receiving security patches. Risk compounds with `@revenuecat/purchases-capacitor ^8.0.0` and `@aparajita/capacitor-biometric-auth ^7.2.0` already expecting a newer core. |
-| `@sentry/nextjs` | `^8.55.1` | 10.x | **High** | v9 introduced OTel instrumentation; v10 is current. Pair with backend `Sentry.AspNetCore 5.10.0` (also behind). |
-| `capacitor-secure-storage-plugin` | `^0.10.0` | (unmaintained community plugin) | **High** | Abandoned. Holds JWT/refresh tokens on mobile. Migrate to `@aparajita/capacitor-secure-storage` (same author as the biometric plugin you already use) or `@capacitor-community/secure-storage`. |
-| `react-select` | `^5.10.2` | 6.x | Medium | Breaking but straightforward. Only ~a handful of callers. |
+| `next` | `^16.2.6` | 16.x | **OK** | ✅ Upgraded from 15.5.15. Turbopack default for dev, `--webpack` for production builds (custom webpack plugin requires it). `eslint-config-next` aligned at `16.2.6`. |
+| `@capacitor/*` (7.x) | `^7.0.0` | 8.x | **Medium** | ✅ Upgraded from 6.x. Capacitor 8 is available but requires native project regeneration + mobile E2E. |
+| `@sentry/nextjs` | `^10.50.0` | 10.x | **OK** | ✅ Upgraded from 8.x. PII scrubbing verified. |
+| `@aparajita/capacitor-secure-storage` | `^6.0.0` | 8.x | Low | ✅ Swapped from abandoned community plugin. Latest 8.0.0 available for future bump. |
+| `react-select` | `^5.10.2` | 5.10.2 | **OK** | ✅ Already at latest. No v6 exists on npm. |
 | `@google/genai` | `^1.17.0` | newer | Medium | AI gateway is centralized (`AiGatewayService`), so upgrade blast radius is small. |
-| `jsdom` | `^29.0.1` | 30.x | Low | Dev-only. |
-| `@types/node` | `^20` | `^22` | Low | Bump to match Node 22 LTS runtime. |
+| `jsdom` | `^29.0.1` | 29.x | OK | Dev-only. At latest stable. |
+| `@types/node` | `^22` | `^22` | OK | ✅ Aligned with Node 22 LTS runtime. |
 | `electron` | `^41.1.0` | 41 | OK | On track — verify Fuses + electron-builder pair still hold for code signing. |
-| `Microsoft.Extensions.Http.Resilience` | `9.0.0` | 10.x | **Medium** | Backend is otherwise on .NET 10 / EF Core 10.0.5. Single-package version skew. |
-| `Npgsql.EntityFrameworkCore.PostgreSQL` | `10.0.1` | 10.0.5+ | Low | Align with EF Core patch line. |
-| `WebPush` | `1.0.12` | check | Low | Used by notifications; verify no CVEs. |
+| `Microsoft.Extensions.Http.Resilience` | `10.x` | 10.x | **OK** | ✅ Aligned with .NET 10. |
+| `Npgsql.EntityFrameworkCore.PostgreSQL` | `10.0.1` | 10.0.1 | OK | Stable; no further patches available. |
 
 **Backend alignment is strong** (ASP.NET Core 10, EF Core 10.0.5, JwtBearer 10.0.5) — only `Http.Resilience` is off-track.
 

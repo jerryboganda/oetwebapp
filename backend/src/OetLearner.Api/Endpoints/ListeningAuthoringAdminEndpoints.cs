@@ -32,6 +32,10 @@ public static class ListeningAuthoringAdminEndpoints
 {
     public sealed record ReplaceStructureBody(IReadOnlyList<ListeningAuthoredQuestion> Questions);
     public sealed record ReplaceExtractsBody(IReadOnlyList<ListeningAuthoredExtract> Extracts);
+
+    /// <summary>WS5: import body — a spec §19 manifest plus the replace toggle.</summary>
+    public sealed record ImportManifestBody(bool ReplaceExisting, ListeningStructureManifest Manifest);
+
     public sealed record ApproveDraftBody(string? Reason);
     public sealed record RejectDraftBody(string? Reason);
     public sealed record BackfillRequestBody(string? ConfirmationToken);
@@ -249,6 +253,68 @@ public static class ListeningAuthoringAdminEndpoints
             await db.Entry(paper).ReloadAsync(ct);
             SetETag(http, paper);
             return Results.Ok(new { extracts = doc });
+        });
+
+        // ─── WS5: spec §19 manifest import / export ────────────────────────
+        //
+        // GET  /v1/admin/papers/{id}/listening/manifest — export the current
+        //      authored structure + extracts as a §19 manifest (round-trips).
+        // POST /v1/admin/papers/{id}/listening/manifest — import a complete
+        //      Listening test from a §19 manifest. Reuses the same auth
+        //      (AdminContentWrite) + rate-limit (PerUserWrite) + publish-gate +
+        //      If-Match helpers as the structure/extracts routes. Validation
+        //      failures map to 400; learner-attempt / already-authored conflicts
+        //      map to 409. Mirrors ReadingAuthoringAdminEndpoints' /manifest pair.
+        group.MapGet("/manifest", async (
+            string paperId,
+            IListeningAuthoringService svc,
+            CancellationToken ct) =>
+        {
+            try
+            {
+                var manifest = await svc.ExportManifestAsync(paperId, ct);
+                return Results.Ok(manifest);
+            }
+            catch (ApiException ex)
+            {
+                return Results.Json(new { error = ex.Message, errorCode = ex.ErrorCode }, statusCode: ex.StatusCode);
+            }
+        });
+
+        group.MapPost("/manifest", async (
+            string paperId,
+            ImportManifestBody body,
+            IListeningAuthoringService svc,
+            LearnerDbContext db,
+            HttpContext http,
+            CancellationToken ct) =>
+        {
+            if (body?.Manifest is null)
+                return Results.BadRequest(new { error = "Request body must contain a manifest.", errorCode = "listening_manifest_required" });
+
+            var paper = await db.ContentPapers.FirstOrDefaultAsync(p => p.Id == paperId, ct);
+            if (paper is null) return Results.NotFound();
+            var forbidden = EnforcePublishGate(paper, http);
+            if (forbidden is not null) return forbidden;
+            var conflict = CheckIfMatch(http, paper);
+            if (conflict is not null) return conflict;
+
+            var adminId = http.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "system";
+            try
+            {
+                var result = await svc.ImportManifestAsync(paperId, body.Manifest, body.ReplaceExisting, adminId, ct);
+                await db.Entry(paper).ReloadAsync(ct);
+                SetETag(http, paper);
+                return Results.Ok(new { structure = result.Structure, report = result.Report });
+            }
+            catch (ApiException ex)
+            {
+                return Results.Json(new { error = ex.Message, errorCode = ex.ErrorCode }, statusCode: ex.StatusCode);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Results.BadRequest(new { error = ex.Message });
+            }
         });
 
         // Gap B7 — AI extraction draft lifecycle. Reads gated to
@@ -651,6 +717,103 @@ public static class ListeningAuthoringAdminEndpoints
         .RequireAuthorization("AdminContentRead")
         .WithName("BulkValidateListeningPapers")
         .WithSummary("Validate multiple papers for publish readiness.");
+
+        // ─── WS4: Admin Sequence Builder ───────────────────────────────────
+        //
+        // Optional explicit exam-sequence (ordered FSM phases + per-phase
+        // window durations) authored per paper. Consumed by the session FSM
+        // when present; absent ⇒ derived canonical fallback (byte-identical to
+        // the prior policy-only timing). Reuses the same auth / rate-limit /
+        // publish-gate / If-Match helpers as the structure routes.
+        var seqGroup = app.MapGroup("/v1/admin/papers/{paperId}/listening/sequence")
+            .RequireAuthorization("AdminContentWrite")
+            .RequireRateLimiting("PerUserWrite");
+
+        seqGroup.MapGet("", async (
+            string paperId,
+            ListeningSequenceService svc,
+            LearnerDbContext db,
+            HttpContext http,
+            CancellationToken ct) =>
+        {
+            var paper = await db.ContentPapers.AsNoTracking()
+                .FirstOrDefaultAsync(p => p.Id == paperId, ct);
+            if (paper is null) return Results.NotFound();
+            SetETag(http, paper);
+            var sequence = await svc.GetAsync(paperId, ct);
+            return Results.Ok(new { sequence, isAuthored = sequence is not null });
+        });
+
+        seqGroup.MapPut("", async (
+            string paperId,
+            ListeningSequence body,
+            ListeningSequenceService svc,
+            LearnerDbContext db,
+            HttpContext http,
+            CancellationToken ct) =>
+        {
+            if (body?.Items is null)
+                return Results.BadRequest(new { errorCode = "listening_sequence_missing_body", message = "Request body must contain an items array." });
+            var paper = await db.ContentPapers.FirstOrDefaultAsync(p => p.Id == paperId, ct);
+            if (paper is null) return Results.NotFound();
+            var forbidden = EnforcePublishGate(paper, http);
+            if (forbidden is not null) return forbidden;
+            var conflict = CheckIfMatch(http, paper);
+            if (conflict is not null) return conflict;
+
+            var adminId = http.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "system";
+            var report = await svc.ReplaceAsync(paperId, body, adminId, ct);
+            await db.Entry(paper).ReloadAsync(ct);
+            SetETag(http, paper);
+            var sequence = await svc.GetAsync(paperId, ct);
+            return Results.Ok(new { sequence, report });
+        });
+
+        // Returns the canonical sequence derived from the effective policy for
+        // the requested mode (default Exam). Powers the "Reset to canonical"
+        // affordance in the builder UI. Read-only — does not persist.
+        seqGroup.MapPost("/derive", async (
+            string paperId,
+            string? mode,
+            ListeningSequenceService svc,
+            ListeningModePolicyResolver modes,
+            LearnerDbContext db,
+            CancellationToken ct) =>
+        {
+            var paper = await db.ContentPapers.AsNoTracking()
+                .FirstOrDefaultAsync(p => p.Id == paperId, ct);
+            if (paper is null) return Results.NotFound();
+
+            var policyRow = await db.ListeningPolicies.AsNoTracking()
+                .FirstOrDefaultAsync(p => p.Id == "global", ct);
+            var policy = ListeningPolicyResolver.Resolve(policyRow, null);
+            var attemptMode = Enum.TryParse<ListeningAttemptMode>(mode, ignoreCase: true, out var m)
+                ? m
+                : ListeningAttemptMode.Exam;
+            var modePolicy = modes.For(attemptMode);
+
+            var sequence = svc.DeriveFromPolicy(policy, modePolicy);
+            return Results.Ok(new { sequence, mode = modePolicy.Mode });
+        });
+
+        // Validates a candidate sequence against the paper's authored structure
+        // (1:1 phase mapping, audio-extract resolution, 42-question coverage)
+        // without persisting it. Powers the live validation banner.
+        seqGroup.MapPost("/validate", async (
+            string paperId,
+            ListeningSequence body,
+            ListeningSequenceService svc,
+            LearnerDbContext db,
+            CancellationToken ct) =>
+        {
+            if (body?.Items is null)
+                return Results.BadRequest(new { errorCode = "listening_sequence_missing_body", message = "Request body must contain an items array." });
+            var paper = await db.ContentPapers.AsNoTracking()
+                .FirstOrDefaultAsync(p => p.Id == paperId, ct);
+            if (paper is null) return Results.NotFound();
+            var report = await svc.ValidateForPaperAsync(paperId, body, ct);
+            return Results.Ok(report);
+        });
 
         return app;
     }

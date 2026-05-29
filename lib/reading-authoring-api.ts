@@ -157,6 +157,21 @@ export interface ReadingStructureImportResultDto {
   report: ReadingValidationReport;
 }
 
+export interface ReadingPaperCloneRequestDto {
+  title?: string | null;
+  slug?: string | null;
+  resetReviewState?: boolean;
+}
+
+export interface ReadingPaperCloneResultDto {
+  sourcePaperId: string;
+  paperId: string;
+  title: string;
+  slug: string;
+  adminRoute: string;
+  structure: ReadingStructureAdminDto;
+}
+
 export type ReadingExtractionStatus = 'Pending' | 'Approved' | 'Rejected' | 'Failed';
 
 export interface ReadingExtractionDraftDto {
@@ -666,6 +681,9 @@ export const ensureCanonicalParts = (paperId: string) =>
 export const getReadingStructureAdmin = (paperId: string) =>
   api<ReadingStructureAdminDto>(`/v1/admin/papers/${paperId}/reading/structure`);
 
+export const getReadingStructureAdminPreview = (paperId: string) =>
+  api<ReadingLearnerStructureDto>(`/v1/admin/papers/${paperId}/reading/preview-structure`);
+
 export const exportReadingStructureManifest = (paperId: string) =>
   api<ReadingStructureManifestDto>(`/v1/admin/papers/${paperId}/reading/manifest`);
 
@@ -673,6 +691,13 @@ export const importReadingStructureManifest = (
   paperId: string,
   body: { replaceExisting: boolean; manifest: ReadingStructureManifestDto },
 ) => api<ReadingStructureImportResultDto>(`/v1/admin/papers/${paperId}/reading/manifest`, {
+  method: 'POST', body: JSON.stringify(body),
+});
+
+export const cloneReadingPaper = (
+  paperId: string,
+  body: ReadingPaperCloneRequestDto = {},
+) => api<ReadingPaperCloneResultDto>(`/v1/admin/papers/${paperId}/reading/clone`, {
   method: 'POST', body: JSON.stringify(body),
 });
 
@@ -1043,6 +1068,8 @@ export interface ReadingPracticeStartedDto {
   questionCount?: number;
   /** Drill mode only. */
   drill?: { code: string; title: string; partCode: 'A' | 'B' | 'C' };
+  /** Part practice mode only. */
+  partPractice?: { partCode: ReadingPartCode; title: string };
   playerRoute: string;
 }
 
@@ -1084,6 +1111,12 @@ export interface ReadingErrorBankDto {
 export const startReadingLearningAttempt = (paperId: string) =>
   api<ReadingPracticeStartedDto>(
     `/v1/reading-papers/papers/${paperId}/practice/learning`,
+    { method: 'POST' },
+  );
+
+export const startReadingPartPracticeAttempt = (paperId: string, partCode: ReadingPartCode) =>
+  api<ReadingPracticeStartedDto>(
+    `/v1/reading-papers/papers/${paperId}/practice/parts/${partCode}`,
     { method: 'POST' },
   );
 

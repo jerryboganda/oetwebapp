@@ -3,23 +3,49 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, Eye } from 'lucide-react';
+import { ArrowLeft, Clock3, Eye, FileText, Monitor, Play, RotateCcw } from 'lucide-react';
 
 import { AdminSettingsLayout, SettingsSection } from '@/components/admin/layout/admin-settings-layout';
 import { Button } from '@/components/admin/ui/button';
 import { Badge } from '@/components/admin/ui/badge';
 import { Skeleton } from '@/components/admin/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
+import { fetchAuthorizedObjectUrl } from '@/lib/api';
+import { sanitizeBodyHtml } from '@/lib/wizard/sanitize-html';
 import {
-  getReadingStructureLearner,
+  getReadingStructureAdminPreview,
   type ReadingLearnerStructureDto,
 } from '@/lib/reading-authoring-api';
 
 const OPTION_LABELS = ['A', 'B', 'C', 'D', 'E', 'F'];
 
+type PreviewMode = 'computer' | 'paper';
+type PreviewPartCode = 'A' | 'B' | 'C';
+type PreviewTimerWindow = 'A' | 'BC';
+
+function timerWindowForPart(partCode: PreviewPartCode): PreviewTimerWindow {
+  return partCode === 'A' ? 'A' : 'BC';
+}
+
+function initialTimerSeconds(timerWindow: PreviewTimerWindow): number {
+  return timerWindow === 'A' ? 15 * 60 : 45 * 60;
+}
+
+function formatTimer(seconds: number): string {
+  const minutes = Math.floor(Math.max(0, seconds) / 60);
+  const remainder = Math.max(0, seconds) % 60;
+  return `${minutes}:${String(remainder).padStart(2, '0')}`;
+}
+
 function asOptionList(options: unknown): string[] {
   if (Array.isArray(options)) {
-    return options.map((o) => (typeof o === 'string' ? o : String(o)));
+    return options.map((option) => {
+      if (typeof option === 'string') return option;
+      if (option && typeof option === 'object' && 'label' in option) {
+        return String((option as { label?: unknown }).label ?? '');
+      }
+      return String(option);
+    }).filter(Boolean);
   }
   return [];
 }
@@ -31,13 +57,20 @@ export default function ReadingPreviewAsStudentPage() {
   const [structure, setStructure] = useState<ReadingLearnerStructureDto | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [previewStarted, setPreviewStarted] = useState(false);
+  const [previewMode, setPreviewMode] = useState<PreviewMode>('computer');
+  const [activePart, setActivePart] = useState<PreviewPartCode>('A');
+  const activeTimerWindow = timerWindowForPart(activePart);
+  const [remainingSeconds, setRemainingSeconds] = useState(initialTimerSeconds('A'));
+  const [openingAssetId, setOpeningAssetId] = useState<string | null>(null);
+  const [assetError, setAssetError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!paperId) return;
     let cancelled = false;
     setLoading(true);
     setError(null);
-    getReadingStructureLearner(paperId)
+    getReadingStructureAdminPreview(paperId)
       .then((data) => {
         if (!cancelled) setStructure(data);
       })
@@ -49,6 +82,41 @@ export default function ReadingPreviewAsStudentPage() {
       });
     return () => { cancelled = true; };
   }, [paperId]);
+
+  useEffect(() => {
+    setPreviewStarted(false);
+    setRemainingSeconds(initialTimerSeconds(activeTimerWindow));
+  }, [activeTimerWindow]);
+
+  useEffect(() => {
+    if (!previewStarted || remainingSeconds <= 0) return;
+    const timerId = window.setInterval(() => {
+      setRemainingSeconds((seconds) => Math.max(0, seconds - 1));
+    }, 1000);
+    return () => window.clearInterval(timerId);
+  }, [previewStarted, remainingSeconds]);
+
+  async function handleOpenAsset(asset: NonNullable<ReadingLearnerStructureDto['paper']['questionPaperAssets']>[number]) {
+    setOpeningAssetId(asset.id);
+    setAssetError(null);
+    const openedWindow = window.open('about:blank', '_blank');
+    if (openedWindow) openedWindow.opener = null;
+    try {
+      const objectUrl = await fetchAuthorizedObjectUrl(asset.downloadPath);
+      if (openedWindow && !openedWindow.closed) {
+        openedWindow.location.assign(objectUrl);
+      } else {
+        const fallbackWindow = window.open(objectUrl, '_blank', 'noopener,noreferrer');
+        if (!fallbackWindow) throw new Error('The browser blocked the PDF popup.');
+      }
+      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 10_000);
+    } catch (err) {
+      if (openedWindow && !openedWindow.closed) openedWindow.close();
+      setAssetError(err instanceof Error ? err.message : 'Unable to open original paper.');
+    } finally {
+      setOpeningAssetId(null);
+    }
+  }
 
   return (
     <AdminSettingsLayout
@@ -71,8 +139,7 @@ export default function ReadingPreviewAsStudentPage() {
     >
       <div className="space-y-6">
         <InlineAlert variant="info">
-          This is a read-only preview built from the same data a learner receives. It does not start
-          an attempt and shows no correct answers, explanations, or accepted variants.
+          This preview is built from the same learner-safe projection used in the student player. It never exposes correct answers, explanations, or accepted variants.
         </InlineAlert>
 
         {error && <InlineAlert variant="error">{error}</InlineAlert>}
@@ -88,6 +155,118 @@ export default function ReadingPreviewAsStudentPage() {
               <h2 className="text-lg font-semibold text-admin-fg-strong">{structure.paper.title}</h2>
               <p className="text-sm text-admin-fg-muted">{structure.paper.subtestCode}</p>
             </div>
+
+            <SettingsSection
+              title="Timed preview console"
+              description="Exercise the learner layout with official Reading timing and paper/computer mode controls before publishing. This does not create a learner attempt."
+            >
+              <div className="space-y-4">
+                <div className="grid gap-3 md:grid-cols-4">
+                  <PreviewTimerTile label="Part A window" value="15:00" detail="Hard lock" />
+                  <PreviewTimerTile label="Parts B+C window" value="45:00" detail="Shared timer" />
+                  <PreviewTimerTile
+                    label="Active timer"
+                    value={formatTimer(remainingSeconds)}
+                    detail={activePart === 'A' ? 'Part A active' : 'Parts B+C active'}
+                  />
+                  <PreviewTimerTile
+                    label="Question count"
+                    value={String(structure.parts.reduce((sum, part) => sum + part.questions.length, 0))}
+                    detail="Expected 42"
+                  />
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button
+                    type="button"
+                    variant={previewStarted ? 'secondary' : 'primary'}
+                    size="sm"
+                    onClick={() => {
+                      if (previewStarted) {
+                        setPreviewStarted(false);
+                        setRemainingSeconds(initialTimerSeconds(activeTimerWindow));
+                        return;
+                      }
+                      setPreviewStarted(true);
+                    }}
+                    startIcon={previewStarted ? <RotateCcw className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+                  >
+                    {previewStarted ? 'Reset timed preview' : 'Start timed preview'}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={previewMode === 'computer' ? 'primary' : 'secondary'}
+                    size="sm"
+                    onClick={() => setPreviewMode('computer')}
+                    startIcon={<Monitor className="h-4 w-4" />}
+                  >
+                    Computer mode
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={previewMode === 'paper' ? 'primary' : 'secondary'}
+                    size="sm"
+                    onClick={() => setPreviewMode('paper')}
+                    startIcon={<FileText className="h-4 w-4" />}
+                  >
+                    Paper mode
+                  </Button>
+                </div>
+
+                <div className="rounded-lg border border-admin-border bg-admin-bg-subtle p-4">
+                  <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wider text-admin-fg-muted">
+                        {previewStarted ? 'Preview running' : 'Preview idle'}
+                      </p>
+                      <p className="text-sm text-admin-fg-default">
+                        {previewStarted
+                          ? `Active timer ${formatTimer(remainingSeconds)} for ${activePart === 'A' ? 'Part A' : 'Parts B+C'}.`
+                          : previewMode === 'paper'
+                          ? 'Paper simulation shows source PDFs first and uses answer-sheet style entry.'
+                          : 'Computer simulation shows texts, questions, and inline response controls together.'}
+                      </p>
+                    </div>
+                    <div className="inline-flex rounded-admin-lg border border-admin-border bg-admin-bg-surface p-1">
+                      {(['A', 'B', 'C'] as const).map((partCode) => (
+                        <button
+                          key={partCode}
+                          type="button"
+                          onClick={() => setActivePart(partCode)}
+                          className={`rounded-admin-md px-3 py-1.5 text-xs font-semibold transition-colors ${activePart === partCode ? 'bg-[var(--admin-primary)] text-[var(--admin-primary-fg)]' : 'text-admin-fg-muted hover:bg-admin-bg-subtle'}`}
+                        >
+                          Part {partCode}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {previewMode === 'paper' && structure.paper.questionPaperAssets?.length ? (
+                    <div className="mb-4 rounded-admin-lg border border-admin-border bg-admin-bg-surface p-3">
+                      <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-admin-fg-muted">Question paper assets</p>
+                      <div className="flex flex-wrap gap-2">
+                        {structure.paper.questionPaperAssets.map((asset) => (
+                          <Button
+                            key={asset.id}
+                            type="button"
+                            variant="secondary"
+                            size="sm"
+                            onClick={() => void handleOpenAsset(asset)}
+                            disabled={openingAssetId === asset.id}
+                            startIcon={<FileText className="h-4 w-4" />}
+                          >
+                            {asset.part ?? 'Paper'} · {asset.title}
+                          </Button>
+                        ))}
+                      </div>
+                      {assetError ? <p className="mt-2 text-xs font-medium text-[var(--admin-danger)]" role="alert">{assetError}</p> : null}
+                    </div>
+                  ) : null}
+
+                  <PreviewAnswerSheet structure={structure} activePart={activePart} />
+                </div>
+              </div>
+            </SettingsSection>
 
             {structure.parts.map((part) => (
               <SettingsSection
@@ -112,7 +291,7 @@ export default function ReadingPreviewAsStudentPage() {
                           <div
                             className="prose prose-sm mt-3 max-w-none text-admin-fg-default"
                             // Learner-facing body HTML, identical to the student player.
-                            dangerouslySetInnerHTML={{ __html: text.bodyHtml }}
+                            dangerouslySetInnerHTML={{ __html: sanitizeBodyHtml(text.bodyHtml) }}
                           />
                         </article>
                       ))}
@@ -154,5 +333,54 @@ export default function ReadingPreviewAsStudentPage() {
         ) : null}
       </div>
     </AdminSettingsLayout>
+  );
+}
+
+function PreviewTimerTile({ label, value, detail }: { label: string; value: string; detail: string }) {
+  return (
+    <div className="rounded-admin-lg border border-admin-border bg-admin-bg-surface p-3">
+      <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-admin-fg-muted">
+        <Clock3 className="h-3.5 w-3.5" aria-hidden />
+        {label}
+      </p>
+      <p className="mt-1 text-2xl font-bold text-admin-fg-strong">{value}</p>
+      <p className="text-xs text-admin-fg-muted">{detail}</p>
+    </div>
+  );
+}
+
+function PreviewAnswerSheet({ structure, activePart }: { structure: ReadingLearnerStructureDto; activePart: PreviewPartCode }) {
+  const part = structure.parts.find((item) => item.partCode === activePart);
+  if (!part) return null;
+
+  return (
+    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      {part.questions.map((question) => {
+        const options = asOptionList(question.options);
+        return (
+          <label key={question.id} className="rounded-admin-lg border border-admin-border bg-admin-bg-surface p-3 text-sm">
+            <span className="mb-2 block text-xs font-semibold text-admin-fg-muted">
+              Part {part.partCode} · Q{question.displayOrder}
+            </span>
+            {options.length > 0 ? (
+              <select className="w-full rounded-admin-md border border-admin-border bg-admin-bg-surface px-2 py-2 text-sm text-admin-fg-default">
+                <option value="">Select answer</option>
+                {options.map((option, index) => (
+                  <option key={`${question.id}-${index}`} value={OPTION_LABELS[index] ?? String(index + 1)}>
+                    {OPTION_LABELS[index] ?? index + 1}. {option}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <input
+                type="text"
+                placeholder="Type answer"
+                className="w-full rounded-admin-md border border-admin-border bg-admin-bg-surface px-2 py-2 text-sm text-admin-fg-default"
+              />
+            )}
+          </label>
+        );
+      })}
+    </div>
   );
 }

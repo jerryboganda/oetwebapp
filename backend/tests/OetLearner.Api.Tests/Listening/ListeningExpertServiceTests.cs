@@ -153,6 +153,183 @@ public class ListeningExpertServiceTests
     }
 
     [Fact]
+    public async Task GetReviewBundleAsync_PopulatesDistractorCategorySpeakerAttitudeAndOptionAnalysis()
+    {
+        // Arrange — a Part C MCQ with an authored speaker attitude, a tagged
+        // wrong distractor, and an answer that selected that distractor.
+        await using var db = NewDb();
+        db.Set<ContentPaper>().Add(SeedPaper());
+        db.Users.Add(SeedUser());
+        db.ListeningAttempts.Add(SeedAttempt());
+
+        var part = new ListeningPart
+        {
+            Id = "part-c1",
+            PaperId = "paper-1",
+            PartCode = ListeningPartCode.C1,
+            MaxRawScore = 6,
+            CreatedAt = Now,
+            UpdatedAt = Now,
+        };
+        db.Set<ListeningPart>().Add(part);
+
+        var question = new ListeningQuestion
+        {
+            Id = "q-1",
+            PaperId = "paper-1",
+            ListeningPartId = part.Id,
+            QuestionNumber = 31,
+            DisplayOrder = 0,
+            Points = 1,
+            QuestionType = ListeningQuestionType.MultipleChoice3,
+            Stem = "What is the speaker's overall view of the new protocol?",
+            CorrectAnswerJson = "\"B\"",
+            SpeakerAttitude = ListeningSpeakerAttitude.Doubtful,
+            TranscriptEvidenceText = "I'm not convinced it changes much.",
+            CreatedAt = Now,
+            UpdatedAt = Now,
+        };
+        db.Set<ListeningQuestion>().Add(question);
+
+        db.Set<ListeningQuestionOption>().AddRange(
+            new ListeningQuestionOption
+            {
+                Id = "opt-a",
+                ListeningQuestionId = question.Id,
+                OptionKey = "A",
+                DisplayOrder = 0,
+                Text = "It will transform outcomes.",
+                IsCorrect = false,
+                DistractorCategory = ListeningDistractorCategory.TooStrong,
+                WhyWrongMarkdown = "Overstates the speaker's tentative wording.",
+            },
+            new ListeningQuestionOption
+            {
+                Id = "opt-b",
+                ListeningQuestionId = question.Id,
+                OptionKey = "B",
+                DisplayOrder = 1,
+                Text = "It makes little practical difference.",
+                IsCorrect = true,
+            },
+            new ListeningQuestionOption
+            {
+                Id = "opt-c",
+                ListeningQuestionId = question.Id,
+                OptionKey = "C",
+                DisplayOrder = 2,
+                Text = "It will harm patients.",
+                IsCorrect = false,
+                DistractorCategory = ListeningDistractorCategory.OppositeMeaning,
+                WhyWrongMarkdown = "The speaker is sceptical, not alarmed.",
+            });
+
+        db.ListeningAnswers.Add(new ListeningAnswer
+        {
+            Id = "ans-1",
+            ListeningAttemptId = "attempt-1",
+            ListeningQuestionId = question.Id,
+            UserAnswerJson = "\"A\"",
+            IsCorrect = false,
+            PointsEarned = 0,
+            SelectedDistractorCategory = ListeningDistractorCategory.TooStrong,
+            AnsweredAt = Now,
+        });
+        await db.SaveChangesAsync();
+
+        var svc = CreateService(db);
+
+        // Act
+        var bundle = await svc.GetReviewBundleAsync("expert-1", "attempt-1", CancellationToken.None);
+
+        // Assert
+        var item = Assert.Single(bundle.Answers);
+        Assert.Equal("too_strong", item.SelectedDistractorCategory);
+        Assert.Equal("doubtful", item.SpeakerAttitude);
+
+        Assert.NotNull(item.OptionAnalysis);
+        Assert.Equal(3, item.OptionAnalysis!.Count);
+
+        // Ordered by DisplayOrder: A, B, C.
+        var optA = item.OptionAnalysis[0];
+        Assert.Equal("A", optA.Key);
+        Assert.False(optA.IsCorrect);
+        Assert.Equal("too_strong", optA.DistractorCategory);
+        Assert.Equal("Overstates the speaker's tentative wording.", optA.WhyWrong);
+
+        var optB = item.OptionAnalysis[1];
+        Assert.Equal("B", optB.Key);
+        Assert.True(optB.IsCorrect);
+        Assert.Null(optB.DistractorCategory);
+        Assert.Null(optB.WhyWrong);
+
+        var optC = item.OptionAnalysis[2];
+        Assert.Equal("C", optC.Key);
+        Assert.Equal("opposite_meaning", optC.DistractorCategory);
+    }
+
+    [Fact]
+    public async Task GetReviewBundleAsync_ShortAnswerItem_LeavesDistractorFieldsNull()
+    {
+        // Arrange — Part A short-answer item: no options, no speaker attitude,
+        // no selected distractor. The new fields must all stay null.
+        await using var db = NewDb();
+        db.Set<ContentPaper>().Add(SeedPaper());
+        db.Users.Add(SeedUser());
+        db.ListeningAttempts.Add(SeedAttempt());
+
+        var part = new ListeningPart
+        {
+            Id = "part-a1",
+            PaperId = "paper-1",
+            PartCode = ListeningPartCode.A1,
+            MaxRawScore = 12,
+            CreatedAt = Now,
+            UpdatedAt = Now,
+        };
+        db.Set<ListeningPart>().Add(part);
+
+        var question = new ListeningQuestion
+        {
+            Id = "q-2",
+            PaperId = "paper-1",
+            ListeningPartId = part.Id,
+            QuestionNumber = 1,
+            DisplayOrder = 0,
+            Points = 1,
+            QuestionType = ListeningQuestionType.ShortAnswer,
+            Stem = "Record the dosage prescribed.",
+            CorrectAnswerJson = "\"5mg\"",
+            CreatedAt = Now,
+            UpdatedAt = Now,
+        };
+        db.Set<ListeningQuestion>().Add(question);
+
+        db.ListeningAnswers.Add(new ListeningAnswer
+        {
+            Id = "ans-2",
+            ListeningAttemptId = "attempt-1",
+            ListeningQuestionId = question.Id,
+            UserAnswerJson = "\"5 mg\"",
+            IsCorrect = true,
+            PointsEarned = 1,
+            AnsweredAt = Now,
+        });
+        await db.SaveChangesAsync();
+
+        var svc = CreateService(db);
+
+        // Act
+        var bundle = await svc.GetReviewBundleAsync("expert-1", "attempt-1", CancellationToken.None);
+
+        // Assert
+        var item = Assert.Single(bundle.Answers);
+        Assert.Null(item.SelectedDistractorCategory);
+        Assert.Null(item.SpeakerAttitude);
+        Assert.Null(item.OptionAnalysis);
+    }
+
+    [Fact]
     public async Task SubmitFeedbackAsync_WithRawScoreOverride_Zero_ScaledIsZero()
     {
         // Arrange — edge case: expert overrides to 0

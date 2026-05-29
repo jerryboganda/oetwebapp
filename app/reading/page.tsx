@@ -5,12 +5,14 @@ import {
   ArrowRight,
   BookOpen,
   CalendarDays,
+  ClipboardCheck,
   Clock,
   ListChecks,
   PlayCircle,
   Target,
   TrendingUp,
 } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import Link from 'next/link';
 import { LearnerDashboardShell } from '@/components/layout';
 import { InlineAlert } from '@/components/ui/alert';
@@ -20,21 +22,21 @@ import {
   getReadingHome,
   type ReadingHomeAttemptDto,
   type ReadingHomeDto,
+  type ReadingHomePaperDto,
+  type ReadingHomeResultDto,
 } from '@/lib/reading-authoring-api';
+import { listMyReadingAssignments, type ReadingAssignmentDto } from '@/lib/reading-tutor-api';
 import { readErrorMessage } from '@/lib/read-error-message';
 import { LearnerPageHero } from '@/components/domain';
 import { LearnerSkillSwitcher } from '@/components/domain/learner-skill-switcher';
 import { LearnerSkeleton } from '@/components/domain/learner-skeletons';
 import { useReadingProfile } from '@/hooks/useReadingProfile';
 
-// Per the 2026-05-27 OET sample-test alignment directive, the Reading hub
-// shows exactly four candidate-facing entries — three Practice-by-Part cards
-// (A / B / C) plus one Full Reading Exam card. Pathway dashboards, daily
-// plans, structured paper listings, drill catalogues, mock-report widgets,
-// and the existing Reading "Practice Hub" remain on disk and reachable by
-// direct URL (`/reading/practice`, `/reading/pathway`, etc.) but are
-// intentionally hidden from the learner's primary path so the workspace
-// mirrors the simplicity of oet.com/ready/sample-tests/oet-test-on-computer.
+// The primary decision surface stays aligned with the OET sample-test pattern:
+// three Practice-by-Part cards plus one Full Reading Exam card. Operational
+// context such as assigned work, available papers, and recent results appears
+// below that grid so learners can resume and review without diluting the first
+// choice they need to make.
 
 interface HubCard {
   title: string;
@@ -102,6 +104,7 @@ export default function ReadingHome() {
   const { profile } = useReadingProfile();
 
   const [home, setHome] = useState<ReadingHomeDto | null>(null);
+  const [assignments, setAssignments] = useState<ReadingAssignmentDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [retryCount, setRetryCount] = useState(0);
@@ -120,9 +123,13 @@ export default function ReadingHome() {
       try {
         setLoading(true);
         setError(null);
-        const readingHome = await getReadingHome();
+        const [readingHome, readingAssignments] = await Promise.all([
+          getReadingHome(),
+          listMyReadingAssignments().catch(() => [] as ReadingAssignmentDto[]),
+        ]);
         if (cancelled) return;
         setHome(readingHome);
+        setAssignments(readingAssignments);
       } catch (err) {
         if (!cancelled) setError(readErrorMessage(err, 'Failed to load Reading workspace.'));
       } finally {
@@ -158,7 +165,7 @@ export default function ReadingHome() {
         value: latestResult
           ? latestResult.scaledScore == null
             ? `${latestResult.rawScore}/${latestResult.maxRawScore} practice`
-            : `${latestResult.rawScore}/42 • ${latestResult.scaledScore}/500`
+            : `${latestResult.rawScore}/${latestResult.maxRawScore} • ${latestResult.scaledScore}/500`
           : 'No result yet',
       },
       {
@@ -281,9 +288,150 @@ export default function ReadingHome() {
             </ul>
           )}
         </section>
+
+        {!loading && home ? (
+          <ReadingSecondaryDashboard
+            assignments={assignments}
+            papers={home.papers}
+            recentResults={home.recentResults}
+          />
+        ) : null}
       </main>
     </LearnerDashboardShell>
   );
+}
+
+function ReadingSecondaryDashboard({
+  assignments,
+  papers,
+  recentResults,
+}: {
+  assignments: ReadingAssignmentDto[];
+  papers: ReadingHomePaperDto[];
+  recentResults: ReadingHomeResultDto[];
+}) {
+  return (
+    <section aria-labelledby="reading-workspace-heading" className="grid gap-4 lg:grid-cols-3">
+      <div className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
+        <DashboardPanelHeader
+          icon={ClipboardCheck}
+          eyebrow="Assigned work"
+          title="Tutor tasks"
+          href="/reading/practice"
+        />
+        {assignments.length > 0 ? (
+          <ul className="mt-4 space-y-3">
+            {assignments.slice(0, 3).map((assignment) => (
+              <li key={assignment.id} className="rounded-xl border border-border/70 bg-white p-3 text-sm dark:bg-surface">
+                <p className="font-semibold text-navy">{assignment.kind.replace(/_/g, ' ')}</p>
+                <p className="mt-1 text-xs text-muted">
+                  Due {formatOptionalDate(assignment.dueAt)} · {assignment.status}
+                </p>
+                {assignment.note ? <p className="mt-2 text-xs text-muted">{assignment.note}</p> : null}
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="mt-4 rounded-xl border border-dashed border-border px-3 py-4 text-sm text-muted">
+            No active Reading assignments.
+          </p>
+        )}
+      </div>
+
+      <div className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
+        <DashboardPanelHeader
+          icon={Target}
+          eyebrow="Paper library"
+          title="Available papers"
+          href="/reading/exam"
+        />
+        {papers.length > 0 ? (
+          <ul className="mt-4 space-y-3">
+            {papers.slice(0, 3).map((paper) => (
+              <li key={paper.id}>
+                <Link href={paper.route} className="block rounded-xl border border-border/70 bg-white p-3 text-sm transition-colors hover:border-primary/40 dark:bg-surface">
+                  <span className="font-semibold text-navy">{paper.title}</span>
+                  <span className="mt-1 block text-xs text-muted">
+                    {paper.partACount}+{paper.partBCount}+{paper.partCCount} items · {paper.estimatedDurationMinutes} min
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="mt-4 rounded-xl border border-dashed border-border px-3 py-4 text-sm text-muted">
+            Published Reading papers will appear here.
+          </p>
+        )}
+      </div>
+
+      <div className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
+        <DashboardPanelHeader
+          icon={TrendingUp}
+          eyebrow="Review"
+          title="Recent results"
+          href="/reading/stats"
+        />
+        {recentResults.length > 0 ? (
+          <ul className="mt-4 space-y-3">
+            {recentResults.slice(0, 3).map((result) => (
+              <li key={result.attemptId}>
+                <Link href={result.route} className="block rounded-xl border border-border/70 bg-white p-3 text-sm transition-colors hover:border-primary/40 dark:bg-surface">
+                  <span className="font-semibold text-navy">{result.paperTitle}</span>
+                  <span className="mt-1 block text-xs text-muted">
+                    {result.rawScore}/{result.maxRawScore}
+                    {result.scaledScore == null ? ' practice' : ` · ${result.scaledScore}/500 · ${result.gradeLetter}`}
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="mt-4 rounded-xl border border-dashed border-border px-3 py-4 text-sm text-muted">
+            Submit a Reading attempt to unlock review.
+          </p>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function DashboardPanelHeader({
+  icon: Icon,
+  eyebrow,
+  title,
+  href,
+}: {
+  icon: LucideIcon;
+  eyebrow: string;
+  title: string;
+  href: string;
+}) {
+  return (
+    <div className="flex items-start justify-between gap-3">
+      <div>
+        <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-widest text-primary">
+          <Icon className="h-3.5 w-3.5" aria-hidden />
+          {eyebrow}
+        </p>
+        <h2 id={title === 'Tutor tasks' ? 'reading-workspace-heading' : undefined} className="mt-1 text-base font-bold text-navy">
+          {title}
+        </h2>
+      </div>
+      <Link href={href} className="text-xs font-semibold text-primary hover:text-primary-dark">
+        View
+      </Link>
+    </div>
+  );
+}
+
+function formatOptionalDate(iso: string | null): string {
+  if (!iso) return 'not set';
+  try {
+    return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+  } catch {
+    return iso;
+  }
 }
 
 function ResumeBanner({ attempts }: { attempts: ReadingHomeAttemptDto[] }) {

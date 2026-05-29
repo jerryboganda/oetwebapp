@@ -24,20 +24,32 @@ public sealed class ListeningSessionService
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
+    /// <summary>WS2 — how long a passed pathway sound-check
+    /// (<see cref="Domain.LearnerListeningProfile.AudioCheckPassedAt"/>) stays
+    /// valid as the gate for strict Listening exams. Sized to comfortably span
+    /// a single exam sitting + the lead-up; a learner who passed the check
+    /// within this window may start without re-running it. Independent of the
+    /// per-attempt <c>TechReadinessTtlMs</c>, which gates a separate device
+    /// probe.</summary>
+    public const int AudioCheckTtlMs = 24 * 60 * 60 * 1000; // 24 hours
+
     private readonly LearnerDbContext _db;
     private readonly ListeningModePolicyResolver _modes;
     private readonly ListeningConfirmTokenService _tokens;
+    private readonly ListeningSequenceService _sequences;
     private readonly TimeProvider _clock;
 
     public ListeningSessionService(
         LearnerDbContext db,
         ListeningModePolicyResolver modes,
         ListeningConfirmTokenService tokens,
+        ListeningSequenceService sequences,
         TimeProvider clock)
     {
         _db = db;
         _modes = modes;
         _tokens = tokens;
+        _sequences = sequences;
         _clock = clock;
     }
 
@@ -56,7 +68,7 @@ public sealed class ListeningSessionService
         {
             attempt.NavigationStateJson = JsonSerializer.Serialize(nav);
             attempt.WindowStartedAt = _clock.GetUtcNow();
-            attempt.WindowDurationMs = ComputeWindowMs(nav.State, policy, mode);
+            attempt.WindowDurationMs = await ComputeWindowMsAsync(attempt.PaperId, nav.State, policy, mode, ct);
             await _db.SaveChangesAsync(ct);
         }
 
@@ -93,6 +105,20 @@ public sealed class ListeningSessionService
             return AdvanceResultDto.Rejected(
                 "tech-readiness-required",
                 readinessReason);
+        }
+
+        // WS2 — strict Listening exams (Exam / OET@Home, OneWayLocks) require a
+        // passed sound-check from the pathway onboarding before the learner can
+        // leave intro. Practice / Learning / Paper / Diagnostic modes stay
+        // ungated. Mirrors the tech-readiness gate above but reads the
+        // learner's LearnerListeningProfile.AudioCheckPassedAt instead of the
+        // per-attempt readiness snapshot.
+        if (RequiresAudioCheck(nav.State, cmd.ToState, mode)
+            && !await HasValidAudioCheckAsync(userId, now, ct))
+        {
+            return AdvanceResultDto.Rejected(
+                "audio-check-required",
+                "Pass the Listening sound check before starting this exam. Run the sound check, then return here to begin.");
         }
 
         // Free-nav modes (Paper / Learning / Diagnostic): direct apply, no token.
@@ -420,29 +446,70 @@ public sealed class ListeningSessionService
         return true;
     }
 
-    private static int ComputeWindowMs(string state, EffectiveListeningPolicy p, IListeningModePolicy mode)
+    /// <summary>WS2 — the sound-check gate only fires on the very first
+    /// strict transition (<c>intro → a1_preview</c>) for OneWayLocks modes
+    /// (Exam / OET@Home). Free-nav modes (Paper / Learning / Diagnostic) are
+    /// never gated.</summary>
+    private static bool RequiresAudioCheck(
+        string fromState,
+        string toState,
+        IListeningModePolicy mode)
+        => mode.OneWayLocks
+           && string.Equals(fromState, ListeningFsmTransitions.Intro, StringComparison.Ordinal)
+           && string.Equals(toState, ListeningFsmTransitions.A1Preview, StringComparison.Ordinal);
+
+    /// <summary>WS2 — true when the learner has a pathway sound-check that
+    /// passed within <see cref="AudioCheckTtlMs"/>. Reads the same
+    /// <see cref="Domain.LearnerListeningProfile"/> row the pathway onboarding
+    /// writes <c>AudioCheckPassedAt</c> onto. A missing profile (learner who
+    /// never onboarded the Listening pathway) fails closed.</summary>
+    private async Task<bool> HasValidAudioCheckAsync(
+        string userId, DateTimeOffset now, CancellationToken ct)
     {
-        // Apply extra-time entitlement to all windows.
-        int Apply(int ms) => p.ExtraTimePct > 0
+        var passedAt = await _db.LearnerListeningProfiles
+            .AsNoTracking()
+            .Where(p => p.UserId == userId)
+            .Select(p => p.AudioCheckPassedAt)
+            .FirstOrDefaultAsync(ct);
+
+        return passedAt is { } at && at.AddMilliseconds(AudioCheckTtlMs) >= now;
+    }
+
+    /// <summary>
+    /// Resolve the per-state window in milliseconds.
+    ///
+    /// WS4: the window is read from the paper's authored exam-sequence when one
+    /// exists; otherwise it is read from the canonical sequence the
+    /// <see cref="ListeningSequenceService"/> derives from the effective policy.
+    /// The derived sequence carries the SAME base durations the legacy switch
+    /// produced, so a paper with a null <c>ListeningSequenceJson</c> is
+    /// byte-identical to the prior behaviour. The <c>ExtraTimePct</c>
+    /// multiplier is applied here exactly as it was before — once, on top of
+    /// the base value — so neither the authored nor the derived path
+    /// double-counts entitlement.
+    /// </summary>
+    private async Task<int> ComputeWindowMsAsync(
+        string paperId, string state,
+        EffectiveListeningPolicy p, IListeningModePolicy mode, CancellationToken ct)
+    {
+        var sequence = await _sequences.GetAsync(paperId, ct)
+                       ?? _sequences.DeriveFromPolicy(p, mode);
+
+        // The matching sequence item's duration is the base (pre extra-time)
+        // window. If a hand-edited sequence somehow lacks the state, fall back
+        // to the canonical base value so a live attempt can never stall.
+        var baseMs = ListeningSequenceService.WindowMsForState(sequence, state)
+                     ?? ListeningSequenceService.BaseWindowMs(state, p, mode);
+
+        return ApplyExtraTime(p, baseMs);
+    }
+
+    /// <summary>Extra-time entitlement multiplier — byte-identical to the
+    /// legacy inline <c>Apply</c> in the old <c>ComputeWindowMs</c>.</summary>
+    private static int ApplyExtraTime(EffectiveListeningPolicy p, int ms)
+        => p.ExtraTimePct > 0
             ? (int)Math.Round(ms * (1.0 + p.ExtraTimePct / 100.0))
             : ms;
-
-        return state switch
-        {
-            ListeningFsmTransitions.A1Preview => Apply(p.PreviewMsA1),
-            ListeningFsmTransitions.A2Preview => Apply(p.PreviewMsA2),
-            ListeningFsmTransitions.C1Preview => Apply(p.PreviewMsC1),
-            ListeningFsmTransitions.C2Preview => Apply(p.PreviewMsC2),
-            ListeningFsmTransitions.A1Review => Apply(p.ReviewMsA1),
-            ListeningFsmTransitions.A2Review => Apply(p.ReviewMsA2),
-            ListeningFsmTransitions.C1Review => Apply(p.ReviewMsC1),
-            ListeningFsmTransitions.C2Review => Apply(p.ReviewMsC2FinalCbt),
-            ListeningFsmTransitions.C2FinalReview => Apply(
-                mode.FinalReviewAllPartsMs ?? p.ReviewMsC2FinalCbt),
-            ListeningFsmTransitions.BIntro => Apply(p.BetweenSectionTransitionMs),
-            _ => 0,
-        };
-    }
 
     private async Task PersistNavigationAsync(
         ListeningAttempt attempt, NavigationState nav,
@@ -451,7 +518,7 @@ public sealed class ListeningSessionService
     {
         attempt.NavigationStateJson = JsonSerializer.Serialize(nav);
         attempt.WindowStartedAt = now;
-        attempt.WindowDurationMs = ComputeWindowMs(nav.State, policy, mode);
+        attempt.WindowDurationMs = await ComputeWindowMsAsync(attempt.PaperId, nav.State, policy, mode, ct);
         attempt.LastActivityAt = now;
         await _db.SaveChangesAsync(ct);
     }

@@ -17,9 +17,13 @@ right pair for the scenario:
 | --- | --- |
 | `Dockerfile` | Primary multi-stage image — builds Next.js (`output: 'standalone'`) + .NET API from source. Used by every `docker-compose.production*.yml`. |
 | `Dockerfile.prebuilt` | Thin image that copies an already-built `.next/standalone` tree. Pair with `docker-compose.production.prebuilt-web.yml` when CI builds the web app and the VPS only needs to run it. |
+| `docker-compose.local.yml` | Full local stack (postgres + API + web) for Docker Desktop development. Mirrors production topology with simplified networking. Use with `--env-file .env.docker-local`. |
+| `docker-compose.dev.yml` | Backend-only (postgres + API) in Docker; run Next.js on the host with `npm run dev` for hot-reload. Use with `--env-file .env.docker-local`. |
 | `docker-compose.production.yml` | Default VPS stack: stable `web`/`learner-api` router containers plus blue/green app slots, Postgres, ClamAV, and backup sidecar joined to the external `npm_proxy` network for Nginx Proxy Manager. This is the one deployed at `app.oetwithdrhesham.co.uk`. |
-| `docker-compose.production.hostports.yml` | Same as above but exposes ports on the host (no reverse proxy) — use for bare-metal / single-host installs without NPM. |
-| `docker-compose.production.prebuilt-web.yml` | Production variant that pulls the prebuilt web image instead of building on the VPS. Use when VPS CPU/RAM is too small to build. |
+| `docker-compose.production.hostports.yml` | Override — exposes ports on the host (no reverse proxy). Use for bare-metal / single-host installs without NPM. |
+| `docker-compose.production.prebuilt-web.yml` | Override — uses prebuilt web image instead of building on the VPS. Use when VPS CPU/RAM is too small to build. |
+| `docker-compose.production.build.yml` | Override — emergency/local source-build when immutable image refs are unavailable. |
+| `docker-compose.staging.yml` | Full staging stack with pg_stat_statements. Use with `--env-file .env.staging`. |
 | `docker-compose.backend.yml` | Backend API + postgres only — for running the .NET API in Docker while developing the frontend locally via `npm run dev`. |
 | `docker-compose.desktop.yml` | Local full-stack with demo accounts for Electron/Playwright E2E. Not production-safe. |
 

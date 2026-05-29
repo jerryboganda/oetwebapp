@@ -49,9 +49,14 @@ public interface IReadingTutorService
 
     Task<IReadOnlyList<ReadingAssignmentDto>> ListAssignmentsAsync(string? assignedToUserId, CancellationToken ct);
 
+    Task<IReadOnlyList<ReadingAssignmentDto>> ListAssignmentsForExpertAsync(
+        string expertUserId, string? assignedToUserId, CancellationToken ct);
+
     Task<bool> CancelAssignmentAsync(string assignmentId, string actorUserId, CancellationToken ct);
 
     Task<IReadOnlyList<ReadingAssignmentDto>> ListActiveAssignmentsForLearnerAsync(string userId, CancellationToken ct);
+
+    Task<bool> CanExpertAccessAttemptAsync(string attemptId, string expertUserId, CancellationToken ct);
 }
 
 public sealed record ReadingScoreOverrideRequest(int? RawScore, int? ScaledScore, string Reason);
@@ -61,6 +66,68 @@ public sealed record ReadingRecalcRequest(string Scope, string? AttemptId);
 public sealed record ReadingRecalcResult(int RecalculatedCount, int SkippedOverrideCount, int TotalConsidered);
 
 public sealed record ReadingFeedbackRequest(string Scope, string? TargetRef, string FeedbackText);
+
+/// <summary>
+/// Granularity a piece of expert / admin attempt feedback is attached to.
+/// Persisted as the lowercase enum name in
+/// <see cref="OetLearner.Api.Domain.ReadingAttemptFeedback.Scope"/> (a
+/// string column — no integer values reach the DB), and round-tripped via
+/// <see cref="ReadingFeedbackScopeExtensions"/>.
+/// </summary>
+public enum ReadingFeedbackScope
+{
+    Test,
+    Section,
+    Question,
+    Skill,
+}
+
+internal static class ReadingFeedbackScopeExtensions
+{
+    /// <summary>Parse a client-supplied scope case-insensitively against
+    /// <see cref="ReadingFeedbackScope"/>, returning the normalized lowercase
+    /// canonical name (e.g. <c>"test"</c>, <c>"section"</c>). Throws
+    /// <see cref="ApiException"/> (400, code <c>reading_feedback_scope_invalid</c>)
+    /// for any unknown value, so the persisted column can only ever hold one
+    /// of the four known names.</summary>
+    public static string NormalizeScope(string? scope)
+    {
+        if (TryNormalize(scope, out var normalized))
+            return normalized;
+
+        throw ApiException.Validation(
+            "reading_feedback_scope_invalid",
+            "Feedback scope must be one of: test, section, question, skill.",
+            new[] { new ApiFieldError("scope", "reading_feedback_scope_invalid", "Unknown feedback scope.") });
+    }
+
+    /// <summary>Boundary check used by the endpoint layer: true when
+    /// <paramref name="scope"/> names a known <see cref="ReadingFeedbackScope"/>
+    /// (case-insensitive).</summary>
+    public static bool IsValidScope(string? scope) => TryNormalize(scope, out _);
+
+    /// <summary>Case-insensitive parse against <see cref="ReadingFeedbackScope"/>.
+    /// Only the four scope <em>names</em> are accepted — numeric strings such as
+    /// <c>"0"</c> (which <see cref="Enum.TryParse{TEnum}(string, bool, out TEnum)"/>
+    /// would otherwise bind to the underlying value) are rejected, so the stored
+    /// column only ever holds <c>test</c> / <c>section</c> / <c>question</c> /
+    /// <c>skill</c>.</summary>
+    private static bool TryNormalize(string? scope, out string normalized)
+    {
+        var raw = (scope ?? string.Empty).Trim();
+        if (raw.Length > 0
+            && char.IsLetter(raw[0])
+            && Enum.TryParse<ReadingFeedbackScope>(raw, ignoreCase: true, out var parsed)
+            && Enum.IsDefined(parsed))
+        {
+            normalized = parsed.ToString().ToLowerInvariant();
+            return true;
+        }
+
+        normalized = string.Empty;
+        return false;
+    }
+}
 
 public sealed record ReadingFeedbackDto(
     string Id,
@@ -407,7 +474,7 @@ public sealed class ReadingTutorService(
         {
             Id = Guid.NewGuid().ToString("N"),
             ReadingAttemptId = attemptId,
-            Scope = NormaliseScope(request.Scope),
+            Scope = ReadingFeedbackScopeExtensions.NormalizeScope(request.Scope),
             TargetRef = request.TargetRef,
             AuthorUserId = actorUserId,
             FeedbackText = request.FeedbackText,
@@ -431,7 +498,7 @@ public sealed class ReadingTutorService(
             .FirstOrDefaultAsync(f => f.Id == feedbackId && f.ReadingAttemptId == attemptId, ct);
         if (feedback is null) return null;
 
-        feedback.Scope = NormaliseScope(request.Scope);
+        feedback.Scope = ReadingFeedbackScopeExtensions.NormalizeScope(request.Scope);
         feedback.TargetRef = request.TargetRef;
         feedback.FeedbackText = request.FeedbackText;
         feedback.UpdatedAt = DateTimeOffset.UtcNow;
@@ -504,6 +571,23 @@ public sealed class ReadingTutorService(
             .ToListAsync(ct);
     }
 
+    public async Task<IReadOnlyList<ReadingAssignmentDto>> ListAssignmentsForExpertAsync(
+        string expertUserId, string? assignedToUserId, CancellationToken ct)
+    {
+        var query = db.ReadingAssignments.AsNoTracking()
+            .Where(a => a.AssignedByUserId == expertUserId)
+            .AsQueryable();
+        if (!string.IsNullOrWhiteSpace(assignedToUserId))
+            query = query.Where(a => a.AssignedToUserId == assignedToUserId);
+
+        return await query
+            .OrderByDescending(a => a.CreatedAt)
+            .Select(a => new ReadingAssignmentDto(
+                a.Id, a.AssignedByUserId, a.AssignedToUserId, a.PaperId, a.Kind, a.ScopeJson,
+                a.Note, a.DueAt, a.CompletedAttemptId, a.Status, a.CreatedAt, a.UpdatedAt))
+            .ToListAsync(ct);
+    }
+
     public async Task<bool> CancelAssignmentAsync(string assignmentId, string actorUserId, CancellationToken ct)
     {
         var assignment = await db.ReadingAssignments
@@ -531,17 +615,29 @@ public sealed class ReadingTutorService(
             .ToListAsync(ct);
     }
 
+    public async Task<bool> CanExpertAccessAttemptAsync(string attemptId, string expertUserId, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(expertUserId)) return false;
+
+        return await (
+            from attempt in db.ReadingAttempts.AsNoTracking()
+            join assignment in db.ReadingAssignments.AsNoTracking()
+                on new { attempt.UserId, attempt.PaperId }
+                equals new { UserId = assignment.AssignedToUserId, assignment.PaperId }
+            where attempt.Id == attemptId
+                && attempt.Status == ReadingAttemptStatus.Submitted
+                && assignment.AssignedByUserId == expertUserId
+                && assignment.CompletedAttemptId == attempt.Id
+                && assignment.Status != "cancelled"
+            select attempt.Id)
+            .AnyAsync(ct);
+    }
+
     // ── Helpers ─────────────────────────────────────────────────────────────
 
     private static ReadingAssignmentDto ToDto(ReadingAssignment a) => new(
         a.Id, a.AssignedByUserId, a.AssignedToUserId, a.PaperId, a.Kind, a.ScopeJson,
         a.Note, a.DueAt, a.CompletedAttemptId, a.Status, a.CreatedAt, a.UpdatedAt);
-
-    private static string NormaliseScope(string? scope)
-    {
-        var s = (scope ?? string.Empty).Trim().ToLowerInvariant();
-        return s is "test" or "section" or "question" or "skill" ? s : "test";
-    }
 
     private static string Fmt(int? value) => value?.ToString() ?? "null";
 

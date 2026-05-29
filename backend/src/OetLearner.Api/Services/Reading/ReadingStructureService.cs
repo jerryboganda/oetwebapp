@@ -37,6 +37,11 @@ public interface IReadingStructureService
     Task<ReadingStructure> GetAdminStructureAsync(string paperId, CancellationToken ct);
 
     Task<ReadingStructureManifest> ExportManifestAsync(string paperId, CancellationToken ct);
+    Task<ReadingPaperCloneResult> ClonePaperAsync(
+        string sourcePaperId,
+        ReadingPaperCloneRequest request,
+        string adminId,
+        CancellationToken ct);
     Task<ReadingStructureImportResult> ImportManifestAsync(
         string paperId,
         ReadingStructureManifest manifest,
@@ -150,6 +155,18 @@ public sealed record ReadingQuestionManifest(
 public sealed record ReadingStructureImportResult(
     ReadingStructure Structure,
     ReadingValidationReport Report);
+
+public sealed record ReadingPaperCloneRequest(
+    string? Title,
+    string? Slug,
+    bool ResetReviewState = true);
+
+public sealed record ReadingPaperCloneResult(
+    string SourcePaperId,
+    string PaperId,
+    string Title,
+    string Slug,
+    ReadingStructure Structure);
 
 public sealed class ReadingStructureService : IReadingStructureService
 {
@@ -491,6 +508,166 @@ public sealed class ReadingStructureService : IReadingStructureService
                         .ToList());
             })
             .ToList());
+    }
+
+    public async Task<ReadingPaperCloneResult> ClonePaperAsync(
+        string sourcePaperId,
+        ReadingPaperCloneRequest request,
+        string adminId,
+        CancellationToken ct)
+    {
+        request ??= new ReadingPaperCloneRequest(null, null);
+
+        var source = await db.ContentPapers
+            .Include(p => p.Assets)
+            .AsNoTracking()
+            .FirstOrDefaultAsync(p => p.Id == sourcePaperId, ct)
+            ?? throw new InvalidOperationException("Source paper not found.");
+
+        if (!string.Equals(source.SubtestCode, "reading", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException($"Paper subtest is '{source.SubtestCode}', expected 'reading'.");
+
+        var sourceParts = await db.ReadingParts.AsNoTracking()
+            .Where(p => p.PaperId == sourcePaperId)
+            .Include(p => p.Texts)
+            .Include(p => p.Questions)
+            .OrderBy(p => p.PartCode)
+            .ToListAsync(ct);
+
+        if (sourceParts.Count == 0)
+            throw new InvalidOperationException("Source paper has no Reading structure to clone.");
+
+        await using var tx = await db.Database.BeginTransactionAsync(ct);
+
+        var now = DateTimeOffset.UtcNow;
+        var title = string.IsNullOrWhiteSpace(request.Title)
+            ? $"{source.Title} (Draft revision)"
+            : request.Title.Trim();
+        var slug = await UniqueCloneSlugAsync(
+            string.IsNullOrWhiteSpace(request.Slug) ? $"{source.Slug}-revision" : request.Slug,
+            ct);
+
+        var clone = new ContentPaper
+        {
+            Id = Guid.NewGuid().ToString("N"),
+            SubtestCode = source.SubtestCode,
+            Title = title,
+            Slug = slug,
+            ProfessionId = source.ProfessionId,
+            AppliesToAllProfessions = source.AppliesToAllProfessions,
+            Difficulty = source.Difficulty,
+            EstimatedDurationMinutes = source.EstimatedDurationMinutes,
+            Status = ContentStatus.Draft,
+            PublishedRevisionId = null,
+            CardType = source.CardType,
+            LetterType = source.LetterType,
+            Priority = source.Priority,
+            TagsCsv = AppendCloneTag(source.TagsCsv, source.Id),
+            SourceProvenance = source.SourceProvenance,
+            ExtractedTextJson = source.ExtractedTextJson,
+            CreatedByAdminId = adminId,
+            CreatedAt = now,
+            UpdatedAt = now,
+            IntegrityAcknowledgedByAdminId = source.IntegrityAcknowledgedByAdminId,
+            IntegrityAcknowledgedAt = source.IntegrityAcknowledgedAt,
+        };
+        db.ContentPapers.Add(clone);
+
+        foreach (var asset in source.Assets.OrderBy(a => a.DisplayOrder))
+        {
+            db.ContentPaperAssets.Add(new ContentPaperAsset
+            {
+                Id = Guid.NewGuid().ToString("N"),
+                PaperId = clone.Id,
+                Role = asset.Role,
+                Part = asset.Part,
+                MediaAssetId = asset.MediaAssetId,
+                Title = asset.Title,
+                DisplayOrder = asset.DisplayOrder,
+                IsPrimary = asset.IsPrimary,
+                CreatedAt = now,
+            });
+        }
+
+        var textIdBySourceId = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var sourcePart in sourceParts)
+        {
+            var part = new ReadingPart
+            {
+                Id = Guid.NewGuid().ToString("N"),
+                PaperId = clone.Id,
+                PartCode = sourcePart.PartCode,
+                TimeLimitMinutes = sourcePart.TimeLimitMinutes,
+                MaxRawScore = sourcePart.MaxRawScore,
+                Instructions = sourcePart.Instructions,
+                CreatedAt = now,
+                UpdatedAt = now,
+            };
+            db.ReadingParts.Add(part);
+
+            foreach (var sourceText in sourcePart.Texts.OrderBy(t => t.DisplayOrder))
+            {
+                var text = new ReadingText
+                {
+                    Id = Guid.NewGuid().ToString("N"),
+                    ReadingPartId = part.Id,
+                    DisplayOrder = sourceText.DisplayOrder,
+                    Title = sourceText.Title,
+                    Source = sourceText.Source,
+                    BodyHtml = sourceText.BodyHtml,
+                    WordCount = sourceText.WordCount,
+                    TopicTag = sourceText.TopicTag,
+                    CreatedAt = now,
+                    UpdatedAt = now,
+                };
+                db.ReadingTexts.Add(text);
+                textIdBySourceId[sourceText.Id] = text.Id;
+            }
+
+            foreach (var sourceQuestion in sourcePart.Questions.OrderBy(q => q.DisplayOrder))
+            {
+                db.ReadingQuestions.Add(new ReadingQuestion
+                {
+                    Id = Guid.NewGuid().ToString("N"),
+                    ReadingPartId = part.Id,
+                    ReadingTextId = sourceQuestion.ReadingTextId is not null
+                        && textIdBySourceId.TryGetValue(sourceQuestion.ReadingTextId, out var textId)
+                            ? textId
+                            : null,
+                    DisplayOrder = sourceQuestion.DisplayOrder,
+                    Points = sourceQuestion.Points,
+                    QuestionType = sourceQuestion.QuestionType,
+                    Stem = sourceQuestion.Stem,
+                    OptionsJson = sourceQuestion.OptionsJson,
+                    CorrectAnswerJson = sourceQuestion.CorrectAnswerJson,
+                    ParagraphIndex = sourceQuestion.ParagraphIndex,
+                    AcceptedSynonymsJson = sourceQuestion.AcceptedSynonymsJson,
+                    CaseSensitive = sourceQuestion.CaseSensitive,
+                    ExplanationMarkdown = sourceQuestion.ExplanationMarkdown,
+                    SkillTag = sourceQuestion.SkillTag,
+                    Difficulty = sourceQuestion.Difficulty,
+                    EvidenceSentence = sourceQuestion.EvidenceSentence,
+                    DistractorRationaleJson = sourceQuestion.DistractorRationaleJson,
+                    OptionDistractorsJson = sourceQuestion.OptionDistractorsJson,
+                    ReviewState = request.ResetReviewState ? ReadingReviewState.Draft : sourceQuestion.ReviewState,
+                    LatestReviewNote = request.ResetReviewState ? null : sourceQuestion.LatestReviewNote,
+                    CreatedAt = now,
+                    UpdatedAt = now,
+                });
+            }
+        }
+
+        await WriteAuditAsync("ReadingPaperCloned", clone.Id,
+            $"sourcePaperId={source.Id}; resetReviewState={request.ResetReviewState}", adminId, ct);
+        await db.SaveChangesAsync(ct);
+        await tx.CommitAsync(ct);
+
+        return new ReadingPaperCloneResult(
+            source.Id,
+            clone.Id,
+            clone.Title,
+            clone.Slug,
+            await GetAdminStructureAsync(clone.Id, ct));
     }
 
     public async Task<ReadingStructureImportResult> ImportManifestAsync(
@@ -1081,6 +1258,39 @@ public sealed class ReadingStructureService : IReadingStructureService
             .AnyAsync(p => p.Id == partId && p.PaperId == paperId, ct);
         if (!exists)
             throw new InvalidOperationException("Reading part does not belong to this paper.");
+    }
+
+    private async Task<string> UniqueCloneSlugAsync(string? requestedSlug, CancellationToken ct)
+    {
+        var baseSlug = NormalizeSlug(requestedSlug ?? "reading-paper-revision");
+        var slug = baseSlug;
+        var suffix = 2;
+        while (await db.ContentPapers.AsNoTracking().AnyAsync(p => p.Slug == slug, ct))
+        {
+            slug = $"{baseSlug}-{suffix}";
+            suffix++;
+        }
+        return slug;
+    }
+
+    private static string NormalizeSlug(string value)
+    {
+        var chars = value.Trim().ToLowerInvariant()
+            .Select(ch => char.IsLetterOrDigit(ch) ? ch : '-')
+            .ToArray();
+        var collapsed = string.Join('-', new string(chars)
+            .Split('-', StringSplitOptions.RemoveEmptyEntries));
+        return string.IsNullOrWhiteSpace(collapsed) ? "reading-paper-revision" : collapsed[..Math.Min(collapsed.Length, 180)];
+    }
+
+    private static string AppendCloneTag(string? tagsCsv, string sourcePaperId)
+    {
+        var tags = (tagsCsv ?? string.Empty)
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Where(tag => tag.Length > 0)
+            .ToList();
+        tags.Add($"cloned-from:{sourcePaperId}");
+        return string.Join(',', tags.Distinct(StringComparer.OrdinalIgnoreCase));
     }
 
     private Task WriteAuditAsync(string action, string resourceId, string? details, string adminId, CancellationToken ct)

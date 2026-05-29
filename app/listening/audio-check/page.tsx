@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { Suspense, useEffect, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Headphones, Volume2, AlertTriangle, RotateCcw, LifeBuoy } from 'lucide-react';
 import { useAuth } from '@/contexts/auth-context';
 import { submitAudioCheck, type AudioCheckPayload } from '@/lib/listening-pathway-api';
@@ -10,6 +10,8 @@ import { AudioCheck } from '@/components/listening/AudioCheck';
 type CheckPhase = 'intro' | 'checking' | 'result';
 type CheckOutcome = AudioCheckPayload['outcome'];
 
+const DEFAULT_NEXT = '/listening/diagnostic';
+
 const TROUBLESHOOTING_TIPS = [
   'Make sure your volume is turned up on both the device and your headphones.',
   'Try a different pair of headphones or switch from speakers to headphones.',
@@ -17,9 +19,28 @@ const TROUBLESHOOTING_TIPS = [
   'Check that the right output device is selected in your system settings.',
 ];
 
-export default function ListeningAudioCheckPage() {
+/**
+ * Resolve the post-check destination. WS2 — a strict Listening exam that was
+ * blocked by the sound-check gate links here with `?returnTo=<player URL>` so
+ * a passed check sends the learner straight back to start the exam. Anything
+ * that is not a same-origin absolute path (guards against open-redirect via
+ * `//evil.com`, `/\evil.com`, or absolute `https://…` values) falls back to
+ * the default diagnostic route.
+ */
+function resolveNextDestination(returnTo: string | null): string {
+  if (!returnTo) return DEFAULT_NEXT;
+  if (!returnTo.startsWith('/')) return DEFAULT_NEXT;
+  // Reject protocol-relative ("//host") and backslash-smuggled ("/\host")
+  // targets — both can navigate off-origin once the browser normalises them.
+  if (returnTo.startsWith('//') || returnTo.startsWith('/\\')) return DEFAULT_NEXT;
+  return returnTo;
+}
+
+function ListeningAudioCheckContent() {
   const { isAuthenticated, loading: authLoading } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const nextDestination = resolveNextDestination(searchParams?.get('returnTo') ?? null);
 
   const [phase, setPhase] = useState<CheckPhase>('intro');
   const [outcome, setOutcome] = useState<CheckOutcome | null>(null);
@@ -50,7 +71,7 @@ export default function ListeningAudioCheckPage() {
       const response = await submitAudioCheck(payload);
       setPhase('result');
       if (response.success) {
-        router.push('/listening/diagnostic');
+        router.push(nextDestination);
       }
     } catch {
       setError('We could not save your audio check. Please try again.');
@@ -139,7 +160,9 @@ export default function ListeningAudioCheckPage() {
                 <Volume2 className="mx-auto mb-4 h-8 w-8 text-success" aria-hidden />
                 <h2 className="text-2xl font-extrabold text-navy">All clear</h2>
                 <p className="mt-2 text-sm text-muted">
-                  Audio is working. Taking you to the diagnostic…
+                  {nextDestination === DEFAULT_NEXT
+                    ? 'Audio is working. Taking you to the diagnostic…'
+                    : 'Audio is working. Taking you back to your exam…'}
                 </p>
               </div>
             )}
@@ -200,5 +223,19 @@ export default function ListeningAudioCheckPage() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function ListeningAudioCheckPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-screen items-center justify-center bg-background-light">
+          <div className="h-8 w-8 animate-spin rounded-full border-4 border-lavender border-t-primary" />
+        </div>
+      }
+    >
+      <ListeningAudioCheckContent />
+    </Suspense>
   );
 }

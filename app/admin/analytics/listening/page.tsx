@@ -13,6 +13,7 @@ import { Input } from '@/components/ui/form-controls';
 import { KpiTile } from '@/components/admin/ui/kpi-tile';
 import { Skeleton } from '@/components/admin/ui/skeleton';
 import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
+import { DistractorHeatmap } from '@/components/domain/listening/DistractorHeatmap';
 import {
   getListeningAdminAnalytics,
   exportListeningAdminAttempt,
@@ -235,33 +236,9 @@ export default function ListeningAnalyticsPage() {
               <BentoGrid>
                 <BentoCell span={{ default: 12, xl: 6 }}>
                   <Card>
-                    <CardHeader><CardTitle>MCQ distractor heat (top 10 noisiest items)</CardTitle></CardHeader>
+                    <CardHeader><CardTitle>MCQ distractor heatmap (top 10 noisiest items)</CardTitle></CardHeader>
                     <CardContent>
-                      {analytics.distractorHeat.length === 0 ? (
-                        <p className="text-sm text-admin-fg-muted">No MCQ distractor noise detected in this window.</p>
-                      ) : (
-                        <div className="space-y-2">
-                          {analytics.distractorHeat.map((d) => (
-                            <div key={`${d.paperId}-${d.questionNumber}`} className="rounded-admin border border-admin-border bg-admin-bg-surface p-3">
-                              <div className="flex items-center justify-between">
-                                <p className="text-sm font-semibold text-admin-fg-strong">Q{d.questionNumber}</p>
-                                <Badge variant="success" intensity="tinted">Correct: {d.correctAnswer || '-'}</Badge>
-                              </div>
-                              <ul className="mt-2 space-y-1 text-xs text-admin-fg-muted">
-                                {Object.entries(d.wrongAnswerHistogram)
-                                  .sort((a, b) => b[1] - a[1])
-                                  .slice(0, 5)
-                                  .map(([wrong, n]) => (
-                                    <li key={wrong} className="flex justify-between">
-                                      <span className="truncate">{wrong}</span>
-                                      <span className="font-mono">×{n}</span>
-                                    </li>
-                                  ))}
-                              </ul>
-                            </div>
-                          ))}
-                        </div>
-                      )}
+                      <DistractorHeatmap rows={analytics.distractorHeat} />
                     </CardContent>
                   </Card>
                 </BentoCell>

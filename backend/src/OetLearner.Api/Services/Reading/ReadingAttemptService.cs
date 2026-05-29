@@ -122,6 +122,8 @@ public sealed class ReadingAttemptService(
 {
     public const int PartABreakMaxSeconds = 600;
     private const int MaxIdempotencyRecordKeyLength = 128;
+    private const string ReadingExamModeRulebookProfession = "_exam-mode";
+    private const string FallbackReadingRulebookVersion = "1.0.0";
 
     public Task<ReadingAttemptStarted> StartAsync(string userId, string paperId, CancellationToken ct)
         => StartInModeAsync(userId, paperId, ReadingAttemptMode.Exam, scopeJson: null, ct);
@@ -262,6 +264,7 @@ public sealed class ReadingAttemptService(
         var initialDeadline = mode == ReadingAttemptMode.Exam
             ? partBCDeadline.AddSeconds(PartABreakMaxSeconds + graceSeconds)
             : partBCDeadline.AddSeconds(graceSeconds);
+        var rulebookVersion = await ResolveReadingRulebookVersionAsync(ct);
         var attempt = new ReadingAttempt
         {
             Id = Guid.NewGuid().ToString("N"),
@@ -277,6 +280,7 @@ public sealed class ReadingAttemptService(
             MaxRawScore = maxRaw,
             PolicySnapshotJson = JsonSerializer.Serialize(policy),
             PaperRevisionId = paper.PublishedRevisionId,
+            RulebookVersion = rulebookVersion,
             Mode = mode,
             ScopeJson = scopeJson,
         };
@@ -312,6 +316,19 @@ public sealed class ReadingAttemptService(
             PartBCTimerPausedAt: attempt.PartBCTimerPausedAt,
             PartBCPausedSeconds: attempt.PartBCPausedSeconds,
             PartABreakMaxSeconds: mode == ReadingAttemptMode.Exam ? PartABreakMaxSeconds : 0);
+    }
+
+    private async Task<string> ResolveReadingRulebookVersionAsync(CancellationToken ct)
+    {
+        var version = await db.RulebookVersions.AsNoTracking()
+            .Where(rulebook => rulebook.Kind == "reading"
+                && rulebook.Profession == ReadingExamModeRulebookProfession
+                && rulebook.Status == RulebookStatus.Published)
+            .OrderByDescending(rulebook => rulebook.PublishedAt ?? rulebook.UpdatedAt)
+            .Select(rulebook => rulebook.Version)
+            .FirstOrDefaultAsync(ct);
+
+        return string.IsNullOrWhiteSpace(version) ? FallbackReadingRulebookVersion : version;
     }
 
     private static int? TryReadMinutesFromScope(string? scopeJson)
@@ -669,7 +686,7 @@ public sealed class ReadingAttemptService(
 
         // Wave 2 — best-effort: fulfil any open assignment that targets this
         // paper for this learner. Never block submit on failure.
-        await TryCompleteMatchingAssignmentsAsync(userId, attemptId, attempt.PaperId, ct);
+        await TryCompleteMatchingAssignmentsAsync(userId, attempt, ct);
 
         // Persist the cache row AFTER grading succeeded so transient failures
         // do not lock us out of retrying. On unique-index collision (two
@@ -686,23 +703,23 @@ public sealed class ReadingAttemptService(
     /// failure is logged and swallowed so it never blocks the submit.
     /// </summary>
     private async Task TryCompleteMatchingAssignmentsAsync(
-        string userId, string attemptId, string paperId, CancellationToken ct)
+        string userId, ReadingAttempt attempt, CancellationToken ct)
     {
         try
         {
             var open = await db.ReadingAssignments
                 .Where(x => x.AssignedToUserId == userId
-                    && x.PaperId == paperId
+                    && x.PaperId == attempt.PaperId
                     && x.Status == "assigned")
                 .OrderBy(x => x.CreatedAt)
                 .ToListAsync(ct);
             if (open.Count == 0) return;
 
             var now = DateTimeOffset.UtcNow;
-            foreach (var assignment in open)
+            foreach (var assignment in open.Where(assignment => AssignmentMatchesAttempt(assignment, attempt)))
             {
                 assignment.Status = "completed";
-                assignment.CompletedAttemptId = attemptId;
+                assignment.CompletedAttemptId = attempt.Id;
                 assignment.UpdatedAt = now;
                 db.AuditEvents.Add(new AuditEvent
                 {
@@ -713,7 +730,7 @@ public sealed class ReadingAttemptService(
                     Action = "ReadingAssignmentCompleted",
                     ResourceType = "ReadingAssignment",
                     ResourceId = assignment.Id,
-                    Details = $"attemptId={attemptId} paperId={paperId}",
+                    Details = $"attemptId={attempt.Id} paperId={attempt.PaperId}",
                 });
             }
             await db.SaveChangesAsync(ct);
@@ -721,7 +738,47 @@ public sealed class ReadingAttemptService(
         catch (Exception ex)
         {
             logger.LogWarning(ex,
-                "Reading assignment auto-completion failed for attempt {AttemptId}; ignoring.", attemptId);
+                "Reading assignment auto-completion failed for attempt {AttemptId}; ignoring.", attempt.Id);
+        }
+    }
+
+    private static bool AssignmentMatchesAttempt(ReadingAssignment assignment, ReadingAttempt attempt)
+    {
+        var kind = (assignment.Kind ?? "full").Trim().ToLowerInvariant();
+        if (kind is "full" or "exam" or "retake")
+            return attempt.Mode == ReadingAttemptMode.Exam;
+
+        if (kind is "learning") return attempt.Mode == ReadingAttemptMode.Learning;
+        if (kind is "mini-test" or "minitest") return attempt.Mode == ReadingAttemptMode.MiniTest;
+        if (kind is "error-bank" or "errorbank") return attempt.Mode == ReadingAttemptMode.ErrorBank;
+        if (kind is "drill") return attempt.Mode == ReadingAttemptMode.Drill;
+
+        if (kind is "part" or "part-practice")
+        {
+            return attempt.Mode == ReadingAttemptMode.Drill
+                && string.Equals(
+                    TryReadPartCode(assignment.ScopeJson),
+                    TryReadPartCode(attempt.ScopeJson),
+                    StringComparison.OrdinalIgnoreCase);
+        }
+
+        return false;
+    }
+
+    private static string? TryReadPartCode(string? scopeJson)
+    {
+        if (string.IsNullOrWhiteSpace(scopeJson)) return null;
+        try
+        {
+            using var doc = JsonDocument.Parse(scopeJson);
+            return doc.RootElement.TryGetProperty("partCode", out var part)
+                && part.ValueKind == JsonValueKind.String
+                ? part.GetString()
+                : null;
+        }
+        catch (JsonException)
+        {
+            return null;
         }
     }
 

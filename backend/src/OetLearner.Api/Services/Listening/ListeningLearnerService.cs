@@ -792,6 +792,21 @@ public sealed class ListeningLearnerService(
         var now = DateTimeOffset.UtcNow;
         var isExamLike = IsExamMode(normalizedMode);
 
+        // WS2: Strict, one-way-lock Listening exams (Exam / OET@Home) require a
+        // passed pathway sound-check before the attempt can be created — so the
+        // gate also blocks `startListeningAttempt`, not just the first FSM
+        // advance. Practice / Paper / Diagnostic stay ungated even though they
+        // are "exam-like" for one-play/audio-asset purposes: only Exam + Home
+        // carry OneWayLocks. Mirrors ListeningSessionService's advance gate and
+        // shares its TTL.
+        if (relationalMode is ListeningAttemptMode.Exam or ListeningAttemptMode.Home
+            && !await HasValidAudioCheckAsync(userId, now, ct))
+        {
+            throw ApiException.Validation(
+                "listening_audio_check_required",
+                "Pass the Listening sound check before starting this exam. Run the sound check, then return here to begin.");
+        }
+
         // H11: Server-verify audio asset exists before allowing exam-mode attempt start.
         // The client shows audioAvailable but a race or stale cache could let a learner
         // start an attempt for a paper whose audio has been deleted or never uploaded.
@@ -2406,6 +2421,23 @@ public sealed class ListeningLearnerService(
         {
             throw ApiException.Forbidden("account_suspended", "Your account is suspended and cannot start or submit Listening attempts.");
         }
+    }
+
+    /// <summary>WS2 — true when the learner has a pathway sound-check that
+    /// passed within <see cref="ListeningSessionService.AudioCheckTtlMs"/>.
+    /// Reads <see cref="LearnerListeningProfile.AudioCheckPassedAt"/>, the same
+    /// row the Listening pathway onboarding stamps on a passed check. A learner
+    /// with no Listening profile (never onboarded the pathway) fails closed so
+    /// strict exams cannot be started without a check.</summary>
+    private async Task<bool> HasValidAudioCheckAsync(string userId, DateTimeOffset now, CancellationToken ct)
+    {
+        var passedAt = await db.LearnerListeningProfiles
+            .AsNoTracking()
+            .Where(p => p.UserId == userId)
+            .Select(p => p.AudioCheckPassedAt)
+            .FirstOrDefaultAsync(ct);
+
+        return passedAt is { } at && at.AddMilliseconds(ListeningSessionService.AudioCheckTtlMs) >= now;
     }
 
     private static void EnsureAttemptCanMutate(Attempt attempt)

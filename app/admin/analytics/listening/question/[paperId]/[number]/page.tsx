@@ -13,6 +13,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/admin/ui/
 import { KpiTile } from '@/components/admin/ui/kpi-tile';
 import { Skeleton } from '@/components/admin/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
+import { DistractorHeatmap } from '@/components/domain/listening/DistractorHeatmap';
 import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
 import {
   getListeningAdminAnalytics,
@@ -179,18 +180,25 @@ export default function ListeningQuestionDeepDivePage() {
             <BentoGrid>
               <BentoCell span={{ default: 12, xl: 6 }}>
                 <Card>
-                  <CardHeader><CardTitle>Wrong-answer histogram</CardTitle></CardHeader>
+                  <CardHeader><CardTitle>Distractor heatmap &amp; wrong-answer histogram</CardTitle></CardHeader>
                   <CardContent>
                     {wrongHistogramRows.length === 0 ? (
                       <p className="text-sm text-admin-fg-muted">No wrong answers recorded for this question in the window.</p>
                     ) : (
-                      <div className="space-y-2" data-testid="listening-question-distractor-list">
-                        {wrongHistogramRows.map(([wrong, count]) => (
-                          <div key={wrong} className="flex items-center justify-between rounded-admin border border-admin-border bg-admin-bg-surface p-3">
-                            <span className="truncate text-sm font-semibold text-admin-fg-strong">{wrong || '(blank)'}</span>
-                            <Badge variant="default" intensity="tinted">×{count}</Badge>
-                          </div>
-                        ))}
+                      <div className="space-y-4">
+                        {/* WORK-STREAM 7a — per-option heat for this single item. */}
+                        {distractor ? (
+                          <DistractorHeatmap rows={[distractor]} />
+                        ) : null}
+                        {/* Exact counts, sorted by frequency, retained below the heat grid. */}
+                        <div className="space-y-2" data-testid="listening-question-distractor-list">
+                          {wrongHistogramRows.map(([wrong, count]) => (
+                            <div key={wrong} className="flex items-center justify-between rounded-admin border border-admin-border bg-admin-bg-surface p-3">
+                              <span className="truncate text-sm font-semibold text-admin-fg-strong">{wrong || '(blank)'}</span>
+                              <Badge variant="default" intensity="tinted">×{count}</Badge>
+                            </div>
+                          ))}
+                        </div>
                       </div>
                     )}
                   </CardContent>

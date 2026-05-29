@@ -66,10 +66,6 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
   const { paperId } = use(params);
   const search = useSearchParams();
   const resumeAttemptId = search?.get('attemptId') ?? '';
-  // Phase 3: optional URL hint for the practice mode (the canonical source
-  // is the resumed attempt itself — we read this only to render
-  // pre-resume context like "starting Drill…").
-  const urlMode = search?.get('mode') ?? '';
   const requestedPresentation = search?.get('presentation') === 'paper' ? 'paper' : 'computer';
   // Mocks V2 — BuildLaunchRoute attaches mockAttemptId/mockSectionId when
   // this paper is launched as a section of a mock attempt. Submission then
@@ -249,19 +245,6 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
   useEffect(() => {
     void load();
   }, [load]);
-
-  // Auto-start: when the URL specifies a non-exam practice mode and there
-  // is no attemptId to resume, automatically kick off the attempt once the
-  // paper structure finishes loading.
-  const autoStartFired = useRef(false);
-  useEffect(() => {
-    if (autoStartFired.current) return;
-    if (loading || !structure || attempt || resumeAttemptId) return;
-    if (!urlMode || urlMode === 'exam') return;
-    autoStartFired.current = true;
-    void start();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loading, structure, attempt, resumeAttemptId, urlMode]);
 
   // Phase 3: when a subset attempt is in progress, restrict the rendered
   // questions to the in-scope set so the player only shows what the
@@ -705,9 +688,7 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
             <Clock className="mx-auto h-7 w-7 text-info" aria-hidden="true" />
             <h1 className="mt-4 text-2xl font-semibold tracking-tight text-navy">{structure.paper.title}</h1>
             <p className="mx-auto mt-2 max-w-2xl text-sm leading-6 text-muted">
-              {urlMode && urlMode !== 'exam'
-                ? `Starting your ${urlMode === 'practice' ? 'practice' : `${urlMode.replace('-', ' ')} practice`} attempt…`
-                : 'Start a server-authoritative Reading attempt. Part A locks after its window, then Parts B and C share the remaining timer.'}
+              Start a server-authoritative Reading attempt. Part A locks after its window, then Parts B and C share the remaining timer.
             </p>
             <p
               className="mx-auto mt-4 max-w-2xl rounded-2xl border border-border bg-background-light px-4 py-3 text-xs font-semibold leading-5 text-muted"
@@ -716,13 +697,11 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
             >
               OET test content is confidential. Do not redistribute or share questions outside this practice context.
             </p>
-            {!urlMode || urlMode === 'exam' ? (
-              <div className="mt-5 flex justify-center">
-                <Button variant="primary" onClick={() => void start()} loading={starting}>
-                  Start attempt
-                </Button>
-              </div>
-            ) : null}
+            <div className="mt-5 flex justify-center">
+              <Button variant="primary" onClick={() => void start()} loading={starting}>
+                Start attempt
+              </Button>
+            </div>
           </section>
         ) : (
           <>
@@ -1762,11 +1741,17 @@ function toMatchingOptions(
   texts: ReadingLearnerStructureDto['parts'][number]['texts'],
 ): Array<{ value: string; label: string }> {
   const parsed = toOptionList(options).map((option, index) => ({
-    value: option.value || String(index + 1),
+    value: option.value || String.fromCharCode(65 + index),
     label: option.label,
   }));
   if (parsed.length > 0) return parsed;
-  return texts.map((text) => ({ value: String(text.displayOrder), label: text.title }));
+  return texts
+    .slice()
+    .sort((a, b) => a.displayOrder - b.displayOrder)
+    .map((text, index) => {
+      const value = String.fromCharCode(65 + index);
+      return { value, label: `Text ${value}: ${text.title}` };
+    });
 }
 
 function parseAnswer(valueJson: string): unknown {

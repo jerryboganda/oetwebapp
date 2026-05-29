@@ -50,6 +50,12 @@ const PART_LABELS: Record<string, string> = {
   C2: 'Part C2: Case Study (continued)',
 };
 
+// Human-readable label for a snake_case distractor / attitude tag, e.g.
+// "wrong_speaker" → "wrong speaker". Matches the learner review wording.
+function humaniseTag(tag: string): string {
+  return tag.replace(/_/g, ' ');
+}
+
 // ── Score override UI ──────────────────────────────────────────────────────
 
 function ScoreOverrideSection({
@@ -332,6 +338,60 @@ function QuestionCard({
               <span className="text-navy">{item.correctAnswer}</span>
             </div>
           </div>
+
+          {/* WORK-STREAM 7a — distractor taxonomy + Part C speaker-attitude */}
+          {(item.selectedDistractorCategory || item.speakerAttitude) && (
+            <div className="mt-2 flex flex-wrap items-center gap-1.5">
+              {item.selectedDistractorCategory && (
+                <Badge variant="warning" className="text-[10px] capitalize">
+                  Trap: {humaniseTag(item.selectedDistractorCategory)}
+                </Badge>
+              )}
+              {item.speakerAttitude && (
+                <Badge variant="violet" className="text-[10px] capitalize">
+                  Attitude: {humaniseTag(item.speakerAttitude)}
+                </Badge>
+              )}
+            </div>
+          )}
+
+          {/* WORK-STREAM 7a — per-option distractor breakdown (Part B/C) */}
+          {item.optionAnalysis && item.optionAnalysis.length > 0 && (
+            <ul className="mt-2 space-y-1.5">
+              {item.optionAnalysis.map((opt) => (
+                <li
+                  key={opt.key}
+                  className={`rounded-lg border px-2 py-1.5 text-xs ${
+                    opt.isCorrect
+                      ? 'border-success/30 bg-success/5'
+                      : 'border-border bg-muted'
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-semibold text-navy">
+                      {opt.key}. {opt.text}
+                    </span>
+                    {opt.isCorrect ? (
+                      <Badge variant="success" className="shrink-0 text-[10px]">
+                        Correct
+                      </Badge>
+                    ) : opt.distractorCategory ? (
+                      <Badge
+                        variant="muted"
+                        className="shrink-0 text-[10px] capitalize"
+                      >
+                        {humaniseTag(opt.distractorCategory)}
+                      </Badge>
+                    ) : null}
+                  </div>
+                  {!opt.isCorrect && opt.whyWrong && (
+                    <p className="mt-1 leading-5 text-muted">{opt.whyWrong}</p>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+
           {item.transcriptEvidence && (
             <blockquote className="mt-2 rounded-lg bg-info/5 px-2 py-1 text-xs italic text-info">
               {item.transcriptEvidence}

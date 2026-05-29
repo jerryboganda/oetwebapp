@@ -10,7 +10,21 @@ Last updated: 2026-05-29
 
 ## Current Continuation — Reading Module A-Z Closure And Hardening
 
-Status: **Coding/software development complete; focused Docker validation passed where containers returned final evidence; broader Docker type-check was timeboxed and reported honestly.** This pass completed the attached Reading implementation/hardening plan end to end without host or VPS validation fallback.
+Status: **Coding/software development complete; focused Docker frontend validation passed for the latest Reading/Listening slices, and backend SDK-container validation remains blocked by Docker Desktop I/O/test-runner behavior reported honestly.** This pass completed the attached Reading implementation/hardening plan end to end without host or VPS validation fallback.
+
+### Latest 100% Completion Extension — Clone, Preview, Dashboard, Tutor Queue
+
+- Reading paper clone/versioning is now implemented as an admin clone-as-draft revision flow. `ReadingStructureService.ClonePaperAsync` copies the source `ContentPaper`, assets, parts, texts, and questions with new IDs, preserves media asset references, tags the clone with `cloned-from:{sourcePaperId}`, resets question review state to `Draft` by default, writes `ReadingPaperCloned` audit evidence, and returns the cloned structure. The admin authoring endpoint exposes `POST /v1/admin/papers/{paperId}/reading/clone`, the frontend API exposes `cloneReadingPaper`, and the Reading paper overview has a `Clone draft revision` action that routes to the new draft.
+- Admin preview now has an admin-authorized learner-safe preview endpoint, `GET /v1/admin/papers/{paperId}/reading/preview-structure`, so Draft/InReview papers can be previewed before publish without using learner visibility or entitlement gates. The endpoint projects through `ReadingLearnerSafeProjection` and never returns correct answers, accepted variants, explanations, or hidden option metadata.
+- Admin preview gained a real local timed preview console: Part A shows a 15-minute hard-lock timer, Parts B/C share one 45-minute timer that persists while switching B to C, and paper/computer mode controls let admins inspect answer-sheet style input before publishing. Passage HTML in preview is sanitized with `sanitizeBodyHtml`, and source PDFs open through authorized object URLs rather than raw `/v1/media/*` links.
+- The learner Reading hub still preserves the four primary OET sample-test cards, but now restores secondary operational context below the grid: active tutor assignments, available published papers, and recent results. Assignment fetch failure degrades softly so the canonical Reading entry path remains available.
+- Expert Reading now has a dedicated queue at `/expert/reading`, listing only assignments owned by the current expert through the existing expert-scoped assignment endpoint. Completed assignments link to the privileged attempt review route; open work remains read-only/awaiting submission. The expert dashboard quick actions now surface the Reading queue.
+- Deterministic launch-gate coverage was added to `tests/e2e/reading.spec.ts` by mocking the backend Reading home/assignment APIs, asserting the four canonical hub cards plus assignment/result secondary context without relying on seeded papers.
+- Focused coverage was added for clone-as-draft behavior, admin clone navigation, admin preview safe rendering/timer controls, learner hub secondary context, and expert Reading queue links.
+- Independent `OET Reviewer` pass found concrete issues in the first completion-extension draft: admin preview used the learner endpoint for drafts, preview HTML was unsanitized, paper asset links bypassed authorized fetch, and B/C timer switching reset the shared timer. Those issues were fixed before ledger completion.
+- Latest diagnostics evidence: VS Code diagnostics are clean across the workspace after the final patches; `git diff --check` reports no whitespace/conflict-marker errors, only CRLF normalization warnings.
+- Latest Docker validation evidence: focused Reading Vitest passed in Docker (`app/admin/content/reading/[paperId]/page.test.tsx`, `app/admin/content/reading/[paperId]/preview/page.test.tsx`, `app/expert/reading/page.test.tsx`, `app/reading/page.test.tsx`, `app/reading/parts/[part]/page.test.tsx`) with 5 files / 8 tests passing. Focused Listening Vitest also passed in Docker (`components/domain/listening/admin/__tests__/waveform-cue-point-editor.test.tsx`, `app/listening/mocks/[sessionId]/__tests__/mock-redirect.test.tsx`, `app/admin/analytics/listening/page.test.tsx`) with 3 files / 17 tests passing. The first Listening run failed only because the trimmed Docker copy omitted `tests/test-utils`; rerunning with `tests/` included passed.
+- Latest validation limitation: Docker TypeScript checks still surface unrelated pre-existing app-wide errors and rulebook-copy artifacts when run from a trimmed source copy, while bind-mounted `tsc` remains prone to silent/uninterruptible Docker Desktop I/O. Backend SDK-container `dotnet test` for the Reading clone regression restored projects but stayed CPU-active in MSBuild on the bind mount; copied-backend retries were dominated by Docker tar/I/O and did not return final test pass/fail before cleanup. No host `npm`, host `dotnet`, or VPS fallback was used.
 
 - Learner-safe Reading option projection is centralized in `ReadingLearnerSafeProjection` and reused by the canonical learner paper structure and legacy/pathway diagnostic/practice endpoints. Learner payloads now drop hidden answer-key metadata such as correct answers, accepted synonyms, explanation markdown, and `isCorrect` option flags.
 - Part-scoped Reading practice is now server-authoritative: `/v1/reading-papers/papers/{paperId}/practice/parts/{partCode}` creates a scoped `Drill` attempt with explicit Part A/B/C question IDs, and the learner Part A/B/C dispatcher starts that backend attempt before navigating to the canonical player.
@@ -764,6 +778,62 @@ From OET_ZOOM_INTEGRATION_PLAN.md §29:
 3. Default class capacity (currently configurable per class; defaults to 50).
 4. Refund policy tier confirmation (>24h full, 1-24h 50%, <1h none) — coded as the default.
 5. Recording retention default (365 days) — coded as default.
+
+---
+
+## TIER-2 — Framework Upgrades (Tech Debt Waves 1b–5b)
+
+Status: **ALL COMPLETE** — June 2026
+
+### Summary
+
+TIER-2 targeted high-risk dependency upgrades from the TECH-DEBT-CLEANUP-PLAN. On investigation, most were already completed in previous sessions. The one remaining major upgrade (Next.js 15→16) was executed cleanly.
+
+### Findings
+
+| Upgrade | Status | Evidence |
+| --- | --- | --- |
+| **Sentry 8 → 10** | ✅ Already at `^10.50.0` | No action needed |
+| **react-select 5 → 6** | ✅ Already at latest (`5.10.2`) | No v6 exists on npm — 5.10.2 IS the latest |
+| **Capacitor 6 → 7** | ✅ Already at `^7.0.0` | Upgraded in a prior session |
+| **Secure storage plugin swap** | ✅ Already swapped | Using `@aparajita/capacitor-secure-storage ^6.0.0` |
+| **Next.js 15 → 16** | ✅ Upgraded | `next` bumped from `^15.5.15` to `^16.2.6` |
+| **Docker compose consolidation** | ✅ Documented | DEPLOYMENT.md compose matrix expanded with all 9 files |
+
+### Next.js 16 Migration Details
+
+**Breaking changes addressed:**
+- `eslint` config option removed from `next.config.ts` (Next 16 removed this) ✅
+- `--turbopack` flag removed from `dev` script (Turbopack is now default) ✅
+- `--webpack` flag added to `build` script (custom webpack plugin requires webpack for production builds) ✅
+- `eslint-config-next` aligned to `16.2.6` ✅
+
+**Breaking changes that did NOT apply (already handled):**
+- Async params/searchParams: already migrated to `Promise<>` typing ✅
+- ESLint flat config: already using `eslint.config.mjs` with ESLint 9 ✅
+- No `next lint` usage (using `eslint` CLI directly) ✅
+- No AMP, no `serverRuntimeConfig`/`publicRuntimeConfig`, no `next/legacy/image` ✅
+- No parallel routes requiring `default.js` ✅
+- No `unstable_cacheLife`/`unstable_cacheTag` imports ✅
+- No `skipMiddlewareUrlNormalize` ✅
+- React already at 19.2.1 ✅
+
+**middleware.ts → proxy.ts**: Kept as `middleware.ts` (deprecated but functional). The Edge runtime is NOT supported in `proxy.ts` and our middleware uses Edge-compatible crypto APIs. Will rename when Next.js provides full Node.js-compatible proxy runtime guidance.
+
+### Validation
+
+- VS Code TypeScript language server (Roslyn + tsc): **0 errors workspace-wide** ✅
+- `node_modules/next/package.json` version: `16.2.6` ✅
+- `node_modules/eslint-config-next/package.json` version: `16.2.6` ✅
+- `npm install` exit code: 0 ✅
+- Docker container rebuild required for full integration validation (Windows bind mount I/O penalty makes this slow; VS Code lang server provides equivalent type-check coverage)
+
+### Files Changed
+
+- `package.json` — `next` ^16.2.6, `eslint-config-next` 16.2.6, build/dev scripts
+- `next.config.ts` — removed `eslint: { ignoreDuringBuilds: true }`
+- `DEPLOYMENT.md` — expanded compose-file matrix documentation
+- `docs/TECH-DEBT-CLEANUP-PLAN.md` — all waves marked ✅ Executed
 6. Allow vs block offline mobile downloads (currently disabled in v1 per plan §17.5).
 7. Whisper vs Zoom transcription preference (code prefers Zoom transcript when present, falls back to Whisper).
 8. Real Zoom Marketplace app credentials (S2S OAuth Account ID / Client ID / Client Secret, Meeting SDK Key / Secret, Webhook Secret Token) — entered via `/admin/settings` once provisioned.

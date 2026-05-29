@@ -293,6 +293,132 @@ public class ListeningV2AdvanceEndpointTests : IClassFixture<TestWebApplicationF
         Assert.Equal(ListeningAttemptStatus.Submitted, attempt.Status);
     }
 
+    // WS4 regression — a paper WITHOUT an authored sequence must yield the
+    // exact same window duration the legacy policy-only timing produced.
+    [Fact]
+    public async Task Advance_without_authored_sequence_uses_legacy_policy_window()
+    {
+        var userId = $"listener-{Guid.NewGuid():N}";
+        var attemptId = $"att-{Guid.NewGuid():N}";
+        await _factory.EnsureLearnerProfileAsync(userId, $"{userId}@example.test", userId);
+        // SeedStrictAttemptAsync uses a paper id that does NOT exist in
+        // ContentPapers, so ListeningSequenceService.GetAsync returns null and
+        // the FSM falls back to the policy-derived canonical sequence.
+        await SeedStrictAttemptAsync(userId, attemptId);
+
+        using var client = _factory.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Debug-UserId", userId);
+        client.DefaultRequestHeaders.Add("X-Debug-Role", "learner");
+
+        await client.PostAsJsonAsync(
+            $"/v1/listening/v2/attempts/{attemptId}/tech-readiness",
+            new { audioOk = true, durationMs = 1500 });
+
+        var applied = await AdvanceToA1PreviewAsync(client, attemptId);
+
+        // Default PreviewMsA1 is 30_000 with no extra-time entitlement — the
+        // byte-identical legacy value for the a1_preview window.
+        Assert.Equal(ListeningFsmTransitions.A1Preview, applied.State?.State);
+        Assert.Equal(30_000, applied.State?.WindowDurationMs);
+    }
+
+    // WS4 — a paper WITH an authored sequence must use the sequence's duration
+    // for the matching state instead of the policy default.
+    [Fact]
+    public async Task Advance_with_authored_sequence_uses_sequence_window()
+    {
+        var userId = $"listener-{Guid.NewGuid():N}";
+        var attemptId = $"att-{Guid.NewGuid():N}";
+        const int sentinelMs = 7_777;
+        await _factory.EnsureLearnerProfileAsync(userId, $"{userId}@example.test", userId);
+        await SeedAttemptWithSequenceAsync(userId, attemptId, a1PreviewMs: sentinelMs);
+
+        using var client = _factory.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Debug-UserId", userId);
+        client.DefaultRequestHeaders.Add("X-Debug-Role", "learner");
+
+        await client.PostAsJsonAsync(
+            $"/v1/listening/v2/attempts/{attemptId}/tech-readiness",
+            new { audioOk = true, durationMs = 1500 });
+
+        var applied = await AdvanceToA1PreviewAsync(client, attemptId);
+
+        Assert.Equal(ListeningFsmTransitions.A1Preview, applied.State?.State);
+        Assert.Equal(sentinelMs, applied.State?.WindowDurationMs);
+    }
+
+    private static async Task<AdvanceResultDto> AdvanceToA1PreviewAsync(HttpClient client, string attemptId)
+    {
+        var first = await client.PostAsJsonAsync(
+            $"/v1/listening/v2/attempts/{attemptId}/advance",
+            new { toState = ListeningFsmTransitions.A1Preview, confirmToken = (string?)null });
+        var confirm = await first.Content.ReadFromJsonAsync<AdvanceResultDto>(JsonSupport.Options);
+
+        var second = await client.PostAsJsonAsync(
+            $"/v1/listening/v2/attempts/{attemptId}/advance",
+            new { toState = ListeningFsmTransitions.A1Preview, confirmToken = confirm!.ConfirmToken });
+        second.EnsureSuccessStatusCode();
+        var applied = await second.Content.ReadFromJsonAsync<AdvanceResultDto>(JsonSupport.Options);
+        Assert.NotNull(applied);
+        return applied!;
+    }
+
+    /// <summary>Seed an in-progress Exam attempt whose paper carries an authored
+    /// exam-sequence. The sequence is the canonical phase list with the
+    /// a1_preview window overridden to a sentinel value so the test can prove
+    /// the FSM honored the authored duration.</summary>
+    private async Task SeedAttemptWithSequenceAsync(string userId, string attemptId, int a1PreviewMs)
+    {
+        await using var scope = _factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        await db.Database.EnsureCreatedAsync();
+
+        var now = DateTimeOffset.UtcNow;
+        var paperId = $"paper-{Guid.NewGuid():N}";
+
+        var sequenceSvc = scope.ServiceProvider.GetRequiredService<ListeningSequenceService>();
+        var modes = scope.ServiceProvider.GetRequiredService<ListeningModePolicyResolver>();
+        var policy = ListeningPolicyResolver.Resolve(null, null);
+        var canonical = sequenceSvc.DeriveFromPolicy(policy, modes.For(ListeningAttemptMode.Exam));
+        var items = canonical.Items
+            .Select(i => i.Label == ListeningFsmTransitions.A1Preview ? i with { DurationMs = a1PreviewMs } : i)
+            .ToList();
+        var sequenceJson = System.Text.Json.JsonSerializer.Serialize(
+            canonical with { Items = items },
+            new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web));
+
+        db.ContentPapers.Add(new ContentPaper
+        {
+            Id = paperId,
+            SubtestCode = "listening",
+            Title = "WS4 Sequenced Paper",
+            Slug = $"ws4-seq-{Guid.NewGuid():N}",
+            Status = ContentStatus.Draft,
+            Difficulty = "standard",
+            AppliesToAllProfessions = true,
+            EstimatedDurationMinutes = 45,
+            CreatedAt = now,
+            UpdatedAt = now,
+            ExtractedTextJson = "{}",
+            ListeningSequenceJson = sequenceJson,
+        });
+        db.ListeningAttempts.Add(new ListeningAttempt
+        {
+            Id = attemptId,
+            UserId = userId,
+            PaperId = paperId,
+            StartedAt = now,
+            LastActivityAt = now,
+            Status = ListeningAttemptStatus.InProgress,
+            Mode = ListeningAttemptMode.Exam,
+            MaxRawScore = 42,
+            PolicySnapshotJson = "{}",
+            LastQuestionVersionMapJson = "{}",
+        });
+
+        await db.SaveChangesAsync();
+    }
+
     private async Task SeedStrictAttemptAsync(
         string userId,
         string attemptId,

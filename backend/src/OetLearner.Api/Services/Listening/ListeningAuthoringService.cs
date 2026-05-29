@@ -77,6 +77,30 @@ public interface IListeningAuthoringService
         ListeningExtractPatch patch,
         string adminId,
         CancellationToken ct);
+
+    /// <summary>
+    /// WS5: import a complete Listening test from a spec §19 JSON manifest
+    /// (<c>testTitle</c> / <c>partA</c> / <c>partB</c> / <c>partC</c>). Normalises
+    /// the manifest into the authored question + extract shapes and writes them
+    /// through <see cref="ReplaceStructureAsync"/> + <see cref="ReplaceExtractsAsync"/>.
+    /// Mirrors Reading's <c>ImportManifestAsync</c>: rejects when learner attempts
+    /// already exist, and (when <paramref name="replaceExisting"/> is false) rejects
+    /// rather than clobbering a paper that already has authored questions. Returns
+    /// the re-read structure plus the publish-gate report.
+    /// </summary>
+    Task<ListeningStructureImportResult> ImportManifestAsync(
+        string paperId,
+        ListeningStructureManifest manifest,
+        bool replaceExisting,
+        string adminId,
+        CancellationToken ct);
+
+    /// <summary>
+    /// WS5: export the current authored structure (questions + extract metadata)
+    /// as a spec §19 manifest suitable for round-tripping back through
+    /// <see cref="ImportManifestAsync"/>.
+    /// </summary>
+    Task<ListeningStructureManifest> ExportManifestAsync(string paperId, CancellationToken ct);
 }
 
 /// <summary>
@@ -166,6 +190,76 @@ public sealed record ListeningAuthoredSpeaker(
     string Role,
     string? Gender,                                    // m | f | nb | null
     string? Accent);
+
+// ── WS5: spec §19 import/export manifest ────────────────────────────────────
+//
+// Mirrors `ReadingStructureManifest` but follows the §19 Listening shape:
+// a test-level header plus per-part extract arrays. Part A extracts carry
+// note-completion gap questions; Part B/C extracts carry single MCQ-3 items.
+// The manifest is the round-trip contract between the admin import UI and the
+// authored question + extract documents under ContentPaper.ExtractedTextJson.
+
+public sealed record ListeningStructureManifest(
+    string? TestTitle,
+    IReadOnlyList<string>? ModeSupport,
+    bool? StrictMock,
+    ListeningPartManifest? PartA,
+    ListeningPartManifest? PartB,
+    ListeningPartManifest? PartC);
+
+public sealed record ListeningPartManifest(
+    IReadOnlyList<ListeningExtractManifest> Extracts);
+
+public sealed record ListeningExtractManifest(
+    int ExtractNumber,                                 // 1-based within the part
+    string? QuestionNumber,                            // Part B convenience (e.g. "25")
+    string? QuestionRange,                             // Part C convenience (e.g. "31-36")
+    string? PatientName,                               // Part A
+    string? ProfessionalRole,                          // Part A
+    string? Context,                                   // Part B
+    string? Topic,                                     // Part C
+    string? Format,                                    // Part C — interview | presentation
+    string? AudioFile,
+    int? ReadingTimeSeconds,
+    string? Transcript,
+    string? AccentCode,
+    string? SpeakerAttitude,                           // Part C — concerned | optimistic | …
+    IReadOnlyList<ListeningTranscriptSegmentManifest>? TranscriptSegments,
+    IReadOnlyList<ListeningAuthoredSpeaker>? Speakers,
+    IReadOnlyList<ListeningQuestionManifest> Questions);
+
+public sealed record ListeningTranscriptSegmentManifest(
+    int StartMs,
+    int EndMs,
+    string? SpeakerId,
+    string? Text);
+
+public sealed record ListeningQuestionManifest(
+    int Number,
+    string? Type,                                      // gap_fill | short_answer | multiple_choice_3
+    string? NoteTextBeforeGap,                         // Part A note-completion lead-in
+    string? Stem,                                      // Part B/C question stem
+    ListeningOptionsManifest? Options,                 // Part B/C A/B/C options
+    string? CorrectAnswer,
+    IReadOnlyList<string>? AcceptedAnswers,
+    string? Explanation,
+    string? DistractorExplanation,
+    string? SkillTag,
+    string? Timestamp,                                 // legacy single timestamp ("mm:ss")
+    int? TranscriptEvidenceStartMs,
+    int? TranscriptEvidenceEndMs,
+    string? TranscriptExcerpt,
+    IReadOnlyList<string?>? OptionDistractorWhy,
+    IReadOnlyList<string?>? OptionDistractorCategory);
+
+public sealed record ListeningOptionsManifest(
+    string? A,
+    string? B,
+    string? C);
+
+public sealed record ListeningStructureImportResult(
+    ListeningAuthoredQuestionList Structure,
+    ListeningValidationReport Report);
 
 public sealed class ListeningAuthoringService(
     LearnerDbContext db,
@@ -324,6 +418,370 @@ public sealed class ListeningAuthoringService(
             if (tx is not null) await tx.RollbackAsync(ct);
             throw;
         }
+    }
+
+    // ── WS5: spec §19 manifest import / export ───────────────────────────
+
+    public async Task<ListeningStructureImportResult> ImportManifestAsync(
+        string paperId,
+        ListeningStructureManifest manifest,
+        bool replaceExisting,
+        string adminId,
+        CancellationToken ct)
+    {
+        if (manifest is null)
+            throw ApiException.Validation("listening_manifest_required", "Listening manifest is required.");
+
+        var paper = await db.ContentPapers.AsNoTracking()
+            .FirstOrDefaultAsync(p => p.Id == paperId, ct)
+            ?? throw ApiException.NotFound("listening_paper_not_found", "Paper not found.");
+        if (!string.Equals(paper.SubtestCode, "listening", StringComparison.OrdinalIgnoreCase))
+            throw ApiException.Validation(
+                "listening_wrong_subtest",
+                $"Paper subtest is '{paper.SubtestCode}', expected 'listening'.");
+
+        var (questions, extracts) = NormalizeManifest(manifest);
+        if (questions.Count == 0)
+            throw ApiException.Validation(
+                "listening_manifest_empty",
+                "Listening manifest must contain at least one question across partA / partB / partC.");
+
+        // Mirror Reading: a full-test manifest cannot be re-imported on top of a
+        // paper that learners have already attempted — retire it and import into
+        // a new revision instead.
+        var hasAttempts = await db.ListeningAttempts.AnyAsync(a => a.PaperId == paperId, ct);
+        if (hasAttempts)
+            throw ApiException.Conflict(
+                "listening_manifest_attempts_exist",
+                "Cannot import a Listening manifest after learner attempts exist. Retire this paper and import into a new revision instead.");
+
+        // Additive-vs-reject contract (Reading parity): the Listening manifest is
+        // a whole-test document and ReplaceStructureAsync rewrites the entire
+        // question array, so when replaceExisting is false we refuse rather than
+        // clobber an already-authored paper. With replaceExisting=true we proceed
+        // and the replace path overwrites the structure wholesale.
+        if (!replaceExisting)
+        {
+            var existing = ReadQuestionsArray(paper.ExtractedTextJson);
+            if (existing.Count > 0)
+                throw ApiException.Conflict(
+                    "listening_manifest_already_authored",
+                    "This paper already has an authored Listening structure. Enable \"replace existing\" to overwrite it with this manifest.");
+        }
+
+        // ReplaceStructureAsync + ReplaceExtractsAsync each manage their own
+        // transaction, enforce SourceProvenance, bump RowVersion, write their own
+        // audit events, and resync the relational projection. Calling them in
+        // sequence keeps the §19 import path on exactly the same write contract as
+        // hand-editing the structure + extracts.
+        var structure = await ReplaceStructureAsync(paperId, questions, adminId, ct);
+        await ReplaceExtractsAsync(paperId, extracts, adminId, ct);
+
+        db.AuditEvents.Add(new AuditEvent
+        {
+            Id = $"audit_{Guid.NewGuid():N}",
+            OccurredAt = DateTimeOffset.UtcNow,
+            ActorId = adminId,
+            ActorAuthAccountId = adminId,
+            ActorName = adminId,
+            Action = "ListeningManifestImported",
+            ResourceType = "ContentPaper",
+            ResourceId = paperId,
+            Details = JsonSerializer.Serialize(new
+            {
+                replaceExisting,
+                testTitle = manifest.TestTitle,
+                questions = questions.Count,
+                extracts = extracts.Count,
+            }),
+        });
+        await db.SaveChangesAsync(ct);
+
+        var report = await new ListeningStructureService(db).ValidatePaperAsync(paperId, ct);
+        return new ListeningStructureImportResult(structure, report);
+    }
+
+    public async Task<ListeningStructureManifest> ExportManifestAsync(string paperId, CancellationToken ct)
+    {
+        var paper = await db.ContentPapers.AsNoTracking()
+            .FirstOrDefaultAsync(p => p.Id == paperId, ct)
+            ?? throw ApiException.NotFound("listening_paper_not_found", "Paper not found.");
+
+        var structure = await GetStructureAsync(paperId, ct);
+        var extracts = await GetExtractsAsync(paperId, ct);
+        return BuildManifest(paper.Title, structure.Questions, extracts);
+    }
+
+    // ── WS5: manifest ↔ authored-shape normalisation ─────────────────────
+
+    /// <summary>
+    /// Flatten a §19 manifest into the authored question + extract lists the
+    /// existing replace paths consume. Part A note-completion gaps fold their
+    /// <c>noteTextBeforeGap</c> into the stem with a trailing <c>____</c> marker;
+    /// Part B/C options A/B/C become a 3-element option list and the correct
+    /// answer is normalised to a single letter.
+    /// </summary>
+    private static (List<ListeningAuthoredQuestion> Questions, List<ListeningAuthoredExtract> Extracts)
+        NormalizeManifest(ListeningStructureManifest manifest)
+    {
+        var questions = new List<ListeningAuthoredQuestion>();
+        var extracts = new List<ListeningAuthoredExtract>();
+
+        void Project(ListeningPartManifest? part, string partGroup)
+        {
+            if (part?.Extracts is null) return;
+            // partGroup is "A" | "B" | "C"; the two A/C extracts split into
+            // A1/A2 and C1/C2 by extract ordinal, B stays B.
+            var ordered = part.Extracts.OrderBy(e => e.ExtractNumber).ToList();
+            for (var i = 0; i < ordered.Count; i++)
+            {
+                var extract = ordered[i];
+                var partCode = ResolvePartCode(partGroup, extract.ExtractNumber, i);
+                foreach (var qm in extract.Questions ?? [])
+                {
+                    // Part C carries speaker-attitude at the extract level; fold it
+                    // onto each of the extract's questions so the per-question field
+                    // (the authored-shape home for attitude) is populated.
+                    questions.Add(NormalizeManifestQuestion(
+                        qm, partCode, partCode.StartsWith('C') ? extract.SpeakerAttitude : null));
+                }
+                extracts.Add(NormalizeManifestExtract(extract, partCode, i));
+            }
+        }
+
+        Project(manifest.PartA, "A");
+        Project(manifest.PartB, "B");
+        Project(manifest.PartC, "C");
+
+        return (questions, extracts);
+    }
+
+    /// <summary>A/C split into A1/A2 and C1/C2 by extract ordinal; B is flat.
+    /// Prefer the authored <c>extractNumber</c> (1 → first slot) but fall back to
+    /// positional order so a manifest that numbers Part C 1/2 or 31/37 still
+    /// maps cleanly.</summary>
+    private static string ResolvePartCode(string partGroup, int extractNumber, int positionalIndex)
+    {
+        if (partGroup == "B") return "B";
+        var slot = extractNumber is 1 or 2 ? extractNumber - 1 : positionalIndex;
+        var which = slot <= 0 ? 1 : 2;
+        return $"{partGroup}{which}";
+    }
+
+    private static ListeningAuthoredQuestion NormalizeManifestQuestion(
+        ListeningQuestionManifest qm, string partCode, string? speakerAttitude)
+    {
+        var isMcq = partCode.StartsWith('B') || partCode.StartsWith('C');
+        var type = NormalizeManifestQuestionType(qm.Type, isMcq);
+
+        // Part A: fold the note lead-in into the stem with a gap marker so the
+        // note-completion player has a renderable prompt. Part B/C: use the stem.
+        string stem;
+        if (!isMcq)
+        {
+            var lead = (qm.NoteTextBeforeGap ?? qm.Stem ?? string.Empty).Trim();
+            stem = string.IsNullOrEmpty(lead)
+                ? "____"
+                : lead.Contains("____", StringComparison.Ordinal) ? lead : $"{lead} ____";
+        }
+        else
+        {
+            stem = (qm.Stem ?? qm.NoteTextBeforeGap ?? string.Empty).Trim();
+        }
+
+        var options = isMcq && qm.Options is not null
+            ? new List<string>
+            {
+                qm.Options.A ?? string.Empty,
+                qm.Options.B ?? string.Empty,
+                qm.Options.C ?? string.Empty,
+            }
+            : new List<string>();
+
+        // Evidence start/end: prefer explicit ms; otherwise derive a start from a
+        // legacy "mm:ss" timestamp so round-tripped excerpts keep a cue point.
+        var evidenceStart = qm.TranscriptEvidenceStartMs ?? ParseTimestampMs(qm.Timestamp);
+        var evidenceEnd = qm.TranscriptEvidenceEndMs;
+
+        return new ListeningAuthoredQuestion(
+            Id: $"lq-{qm.Number}",
+            Number: qm.Number,
+            PartCode: partCode,
+            Type: type,
+            Stem: stem,
+            Options: options,
+            CorrectAnswer: NormalizeManifestCorrectAnswer(qm.CorrectAnswer, isMcq),
+            AcceptedAnswers: (qm.AcceptedAnswers ?? []).ToList(),
+            Explanation: qm.Explanation,
+            SkillTag: qm.SkillTag,
+            TranscriptExcerpt: qm.TranscriptExcerpt,
+            DistractorExplanation: qm.DistractorExplanation,
+            Points: 1,
+            OptionDistractorWhy: qm.OptionDistractorWhy?.ToList(),
+            OptionDistractorCategory: qm.OptionDistractorCategory?.ToList(),
+            SpeakerAttitude: speakerAttitude,
+            TranscriptEvidenceStartMs: evidenceStart,
+            TranscriptEvidenceEndMs: evidenceEnd);
+    }
+
+    private static ListeningAuthoredExtract NormalizeManifestExtract(
+        ListeningExtractManifest extract, string partCode, int positionalIndex)
+    {
+        // Build a sensible title from the §19 per-part identity fields.
+        var title = (extract.Topic
+            ?? extract.Context
+            ?? (string.IsNullOrWhiteSpace(extract.PatientName) ? null : $"{extract.PatientName} consultation")
+            ?? $"{partCode} extract").Trim();
+
+        var kind = partCode switch
+        {
+            "B" => "workplace",
+            "C1" or "C2" => "presentation",
+            _ => "consultation",
+        };
+
+        var speakers = (extract.Speakers ?? []).ToList();
+
+        return new ListeningAuthoredExtract(
+            PartCode: partCode,
+            DisplayOrder: positionalIndex,
+            Kind: kind,
+            Title: title,
+            AccentCode: extract.AccentCode,
+            Speakers: speakers,
+            AudioStartMs: null,
+            AudioEndMs: null);
+    }
+
+    private static string NormalizeManifestQuestionType(string? raw, bool isMcq)
+    {
+        var n = (raw ?? string.Empty).Trim().ToLowerInvariant();
+        if (n is "multiple_choice_3" or "mcq" or "mcq3") return "multiple_choice_3";
+        if (n is "short_answer" or "gap_fill" or "gapfill" or "note_completion") return "short_answer";
+        return isMcq ? "multiple_choice_3" : "short_answer";
+    }
+
+    private static string NormalizeManifestCorrectAnswer(string? raw, bool isMcq)
+    {
+        var value = (raw ?? string.Empty).Trim();
+        if (!isMcq) return value;
+        // Part B/C answers are an option letter; uppercase a single A/B/C.
+        return value.Length == 1 ? value.ToUpperInvariant() : value;
+    }
+
+    private static int? ParseTimestampMs(string? timestamp)
+    {
+        if (string.IsNullOrWhiteSpace(timestamp)) return null;
+        var parts = timestamp.Trim().Split(':');
+        try
+        {
+            return parts.Length switch
+            {
+                1 when int.TryParse(parts[0], out var s) => s * 1000,
+                2 when int.TryParse(parts[0], out var m) && int.TryParse(parts[1], out var s) => (m * 60 + s) * 1000,
+                3 when int.TryParse(parts[0], out var h) && int.TryParse(parts[1], out var m) && int.TryParse(parts[2], out var s)
+                    => ((h * 60 + m) * 60 + s) * 1000,
+                _ => (int?)null,
+            };
+        }
+        catch (OverflowException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Rebuild a §19 manifest from the authored question + extract documents.
+    /// Questions group under their extract by part code (A1/A2 → partA,
+    /// B → partB, C1/C2 → partC); Part A questions emit <c>noteTextBeforeGap</c>,
+    /// Part B/C emit the stem + A/B/C options.
+    /// </summary>
+    private static ListeningStructureManifest BuildManifest(
+        string? testTitle,
+        IReadOnlyList<ListeningAuthoredQuestion> questions,
+        IReadOnlyList<ListeningAuthoredExtract> extracts)
+    {
+        ListeningPartManifest? BuildPart(params string[] partCodes)
+        {
+            var manifestExtracts = new List<ListeningExtractManifest>();
+            var extractNumber = 0;
+            foreach (var code in partCodes)
+            {
+                var extract = extracts.FirstOrDefault(e =>
+                    string.Equals(e.PartCode, code, StringComparison.OrdinalIgnoreCase));
+                var partQuestions = questions
+                    .Where(q => string.Equals(q.PartCode, code, StringComparison.OrdinalIgnoreCase))
+                    .OrderBy(q => q.Number)
+                    .ToList();
+                if (extract is null && partQuestions.Count == 0) continue;
+
+                extractNumber++;
+                var isMcq = code.StartsWith('B') || code.StartsWith('C');
+                var manifestQuestions = partQuestions
+                    .Select(q => BuildManifestQuestion(q, isMcq))
+                    .ToList();
+
+                var numbers = partQuestions.Select(q => q.Number).ToList();
+                manifestExtracts.Add(new ListeningExtractManifest(
+                    ExtractNumber: extractNumber,
+                    QuestionNumber: code == "B" && numbers.Count > 0 ? numbers[0].ToString() : null,
+                    QuestionRange: code.StartsWith('C') && numbers.Count > 0
+                        ? $"{numbers[0]}-{numbers[^1]}"
+                        : null,
+                    PatientName: null,
+                    ProfessionalRole: null,
+                    Context: code == "B" ? extract?.Title : null,
+                    Topic: code.StartsWith('C') ? extract?.Title : null,
+                    Format: code.StartsWith('C') ? "presentation" : null,
+                    AudioFile: null,
+                    ReadingTimeSeconds: code.StartsWith('C') ? 90 : code == "B" ? 0 : 30,
+                    Transcript: null,
+                    AccentCode: extract?.AccentCode,
+                    SpeakerAttitude: code.StartsWith('C')
+                        ? partQuestions.Select(q => q.SpeakerAttitude).FirstOrDefault(a => !string.IsNullOrWhiteSpace(a))
+                        : null,
+                    TranscriptSegments: null,
+                    Speakers: extract?.Speakers,
+                    Questions: manifestQuestions));
+            }
+            return manifestExtracts.Count == 0 ? null : new ListeningPartManifest(manifestExtracts);
+        }
+
+        return new ListeningStructureManifest(
+            TestTitle: testTitle,
+            ModeSupport: new[] { "paper", "computer" },
+            StrictMock: true,
+            PartA: BuildPart("A1", "A2"),
+            PartB: BuildPart("B"),
+            PartC: BuildPart("C1", "C2"));
+    }
+
+    private static ListeningQuestionManifest BuildManifestQuestion(ListeningAuthoredQuestion q, bool isMcq)
+    {
+        var options = isMcq && q.Options is { Count: >= 1 }
+            ? new ListeningOptionsManifest(
+                q.Options.ElementAtOrDefault(0),
+                q.Options.ElementAtOrDefault(1),
+                q.Options.ElementAtOrDefault(2))
+            : null;
+
+        return new ListeningQuestionManifest(
+            Number: q.Number,
+            Type: q.Type,
+            NoteTextBeforeGap: isMcq ? null : q.Stem,
+            Stem: isMcq ? q.Stem : null,
+            Options: options,
+            CorrectAnswer: q.CorrectAnswer,
+            AcceptedAnswers: q.AcceptedAnswers?.ToList(),
+            Explanation: q.Explanation,
+            DistractorExplanation: q.DistractorExplanation,
+            SkillTag: q.SkillTag,
+            Timestamp: null,
+            TranscriptEvidenceStartMs: q.TranscriptEvidenceStartMs,
+            TranscriptEvidenceEndMs: q.TranscriptEvidenceEndMs,
+            TranscriptExcerpt: q.TranscriptExcerpt,
+            OptionDistractorWhy: q.OptionDistractorWhy?.ToList(),
+            OptionDistractorCategory: q.OptionDistractorCategory?.ToList());
     }
 
     // ── Phase 5 tail: extract metadata (accent + speakers) ──────────────

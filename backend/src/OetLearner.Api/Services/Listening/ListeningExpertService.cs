@@ -53,7 +53,27 @@ public sealed record ListeningExpertAnswerItem(
     string? UserAnswer,
     string CorrectAnswer,
     bool? IsCorrect,
-    string? TranscriptEvidence);
+    string? TranscriptEvidence,
+    // WORK-STREAM 7a — surface the distractor taxonomy + Part C speaker-attitude
+    // to the tutor/expert review. Mirrors the learner review DTO field shapes in
+    // lib/listening-api.ts so the expert and learner views read identically.
+    // All three are null for items where the data was not authored / not applicable.
+    string? SelectedDistractorCategory,
+    string? SpeakerAttitude,
+    IReadOnlyList<ListeningExpertOptionAnalysisItem>? OptionAnalysis);
+
+/// <summary>
+/// Per-option distractor breakdown for an MCQ (Part B / Part C) item. Mirrors
+/// the learner review's option-analysis shape (key/text/isCorrect/category/why)
+/// so the tutor can explain why each distractor is wrong. Null collection for
+/// short-answer items or items with no authored per-option metadata.
+/// </summary>
+public sealed record ListeningExpertOptionAnalysisItem(
+    string Key,
+    string Text,
+    bool IsCorrect,
+    string? DistractorCategory,
+    string? WhyWrong);
 
 public sealed record ListeningExpertFeedbackDto(
     string FeedbackId,
@@ -282,7 +302,7 @@ public sealed class ListeningExpertService(LearnerDbContext db, ILogger<Listenin
             .Select(u => new { u.Id, u.DisplayName })
             .FirstOrDefaultAsync(ct);
 
-        // Answers joined with questions
+        // Answers joined with questions + their part.
         var answers = await db.ListeningAnswers
             .AsNoTracking()
             .Where(a => a.ListeningAttemptId == attemptId)
@@ -297,6 +317,18 @@ public sealed class ListeningExpertService(LearnerDbContext db, ILogger<Listenin
             .OrderBy(x => x.Question.QuestionNumber)
             .ToListAsync(ct);
 
+        // WORK-STREAM 7a — load MCQ options for the answered questions in one
+        // round-trip so the per-option distractor breakdown can be built
+        // without an Include-through-Join (which EF can silently drop) or an
+        // N+1 per item. Keyed by questionId; grouped client-side.
+        var questionIds = answers.Select(x => x.Question.Id).Distinct().ToList();
+        var optionsByQuestion = (await db.Set<ListeningQuestionOption>()
+                .AsNoTracking()
+                .Where(o => questionIds.Contains(o.ListeningQuestionId))
+                .ToListAsync(ct))
+            .GroupBy(o => o.ListeningQuestionId)
+            .ToDictionary(g => g.Key, g => (IReadOnlyList<ListeningQuestionOption>)g.ToList());
+
         var answerItems = answers.Select(x => new ListeningExpertAnswerItem(
             QuestionId: x.Question.Id,
             QuestionNumber: x.Question.QuestionNumber,
@@ -305,7 +337,15 @@ public sealed class ListeningExpertService(LearnerDbContext db, ILogger<Listenin
             UserAnswer: x.Answer.UserAnswerJson,
             CorrectAnswer: x.Question.CorrectAnswerJson,
             IsCorrect: x.Answer.IsCorrect,
-            TranscriptEvidence: x.Question.TranscriptEvidenceText
+            TranscriptEvidence: x.Question.TranscriptEvidenceText,
+            SelectedDistractorCategory: x.Answer.SelectedDistractorCategory is null
+                ? null
+                : DistractorCategoryString(x.Answer.SelectedDistractorCategory.Value),
+            SpeakerAttitude: x.Question.SpeakerAttitude is null
+                ? null
+                : SpeakerAttitudeString(x.Question.SpeakerAttitude.Value),
+            OptionAnalysis: BuildOptionAnalysis(
+                optionsByQuestion.GetValueOrDefault(x.Question.Id))
         )).ToList();
 
         // Existing feedback (latest by SubmittedAt)
@@ -495,4 +535,57 @@ public sealed class ListeningExpertService(LearnerDbContext db, ILogger<Listenin
         try { return JsonSerializer.Deserialize<T>(json, JsonOpts); }
         catch { return default; }
     }
+
+    // ── WORK-STREAM 7a: distractor / speaker-attitude surfacing ───────────────
+
+    /// <summary>
+    /// Builds the per-option distractor breakdown for an MCQ question. Returns
+    /// null for short-answer items (no options) so the tutor UI can skip the
+    /// section entirely. Options are ordered by <c>DisplayOrder</c> to match the
+    /// order the candidate saw them, and the option key (A/B/C) is taken from the
+    /// authored <c>OptionKey</c>.
+    /// </summary>
+    private static IReadOnlyList<ListeningExpertOptionAnalysisItem>? BuildOptionAnalysis(
+        IReadOnlyList<ListeningQuestionOption>? options)
+    {
+        if (options is null || options.Count == 0) return null;
+
+        return options
+            .OrderBy(option => option.DisplayOrder)
+            .Select(option => new ListeningExpertOptionAnalysisItem(
+                Key: option.OptionKey,
+                Text: option.Text,
+                IsCorrect: option.IsCorrect,
+                DistractorCategory: option.DistractorCategory is null
+                    ? null
+                    : DistractorCategoryString(option.DistractorCategory.Value),
+                WhyWrong: string.IsNullOrWhiteSpace(option.WhyWrongMarkdown)
+                    ? null
+                    : option.WhyWrongMarkdown))
+            .ToList();
+    }
+
+    // Snake_case projections mirror ListeningLearnerService so the expert and
+    // learner reviews use an identical vocabulary on the wire.
+    private static string DistractorCategoryString(ListeningDistractorCategory category) => category switch
+    {
+        ListeningDistractorCategory.TooStrong => "too_strong",
+        ListeningDistractorCategory.TooWeak => "too_weak",
+        ListeningDistractorCategory.WrongSpeaker => "wrong_speaker",
+        ListeningDistractorCategory.OppositeMeaning => "opposite_meaning",
+        ListeningDistractorCategory.ReusedKeyword => "reused_keyword",
+        ListeningDistractorCategory.OutOfScope => "out_of_scope",
+        _ => category.ToString(),
+    };
+
+    private static string SpeakerAttitudeString(ListeningSpeakerAttitude attitude) => attitude switch
+    {
+        ListeningSpeakerAttitude.Concerned => "concerned",
+        ListeningSpeakerAttitude.Optimistic => "optimistic",
+        ListeningSpeakerAttitude.Doubtful => "doubtful",
+        ListeningSpeakerAttitude.Critical => "critical",
+        ListeningSpeakerAttitude.Neutral => "neutral",
+        ListeningSpeakerAttitude.Other => "other",
+        _ => "other",
+    };
 }

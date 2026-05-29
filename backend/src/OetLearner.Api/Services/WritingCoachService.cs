@@ -33,13 +33,26 @@ public class WritingCoachService(
 {
     public async Task<object> CheckTextAsync(string userId, string attemptId, WritingCoachCheckRequest request, CancellationToken ct)
     {
-        var attemptExists = await db.Attempts.AsNoTracking()
-            .AnyAsync(attempt => attempt.Id == attemptId
-                && attempt.UserId == userId
-                && attempt.SubtestCode == "writing", ct);
-        if (!attemptExists)
+        var attempt = await db.Attempts.AsNoTracking()
+            .Where(a => a.Id == attemptId && a.UserId == userId && a.SubtestCode == "writing")
+            .Select(a => new { a.Context })
+            .FirstOrDefaultAsync(ct);
+        if (attempt is null)
         {
             throw ApiException.NotFound("WRITING_ATTEMPT_NOT_FOUND", "Writing attempt not found.");
+        }
+
+        // §8 mock-mode suppression: grammar AI is never available in mock exams
+        if (string.Equals(attempt.Context, "mock", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(attempt.Context, "mock_set", StringComparison.OrdinalIgnoreCase))
+        {
+            return BuildResponse(new WritingCoachSession
+            {
+                Id = $"wcs-{Guid.NewGuid():N}",
+                AttemptId = attemptId,
+                UserId = userId,
+                StartedAt = DateTimeOffset.UtcNow
+            }, Array.Empty<WritingCoachSuggestion>());
         }
 
         // Ensure or create coach session

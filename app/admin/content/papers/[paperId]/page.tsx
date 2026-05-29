@@ -1,6 +1,6 @@
 'use client';
 
-import { use, useCallback, useEffect, useRef, useState } from 'react';
+import { use, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { ArrowLeft, CloudUpload, Eye, Loader2, Trash2 } from 'lucide-react';
 import { AdminSettingsLayout } from '@/components/admin/layout/admin-settings-layout';
@@ -126,6 +126,18 @@ export default function ContentPaperEditorPage({ params }: { params: Promise<{ p
     if (!canViewContent) return;
     queueMicrotask(() => { void load(); });
   }, [canViewContent, load]);
+
+  // Authorized media path for the paper's section audio, used by the Listening
+  // waveform cue-point editor. Prefer the primary Audio asset, else the first
+  // attached one. Returns null when no audio is attached yet.
+  const listeningAudioUrl = useMemo<string | null>(() => {
+    const assets = paper?.assets ?? [];
+    const audioAsset =
+      assets.find((a) => a.role === 'Audio' && a.isPrimary && a.media?.id) ??
+      assets.find((a) => a.role === 'Audio' && a.media?.id);
+    const mediaId = audioAsset?.media?.id;
+    return mediaId ? `/v1/media/${encodeURIComponent(mediaId)}/content` : null;
+  }, [paper?.assets]);
 
   const saveMetadata = async () => {
     if (!paper || !canWriteContent) return;
@@ -373,7 +385,7 @@ export default function ContentPaperEditorPage({ params }: { params: Promise<{ p
 
             {canWriteContent && paper.subtestCode === 'listening' && (
               <>
-                <ListeningExtractMetadataEditor paperId={paper.id} />
+                <ListeningExtractMetadataEditor paperId={paper.id} audioUrl={listeningAudioUrl} />
                 <ListeningExtractionPanel
                   paperId={paper.id}
                   onApplied={() => setListeningStructureVersion((value) => value + 1)}

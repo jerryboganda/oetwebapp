@@ -159,15 +159,31 @@ describe('Reading paper player page', () => {
     expect(screen.getByRole('tabpanel', { name: /part a/i })).toBeInTheDocument();
   });
 
-  it('auto-starts the attempt when mode=practice is set in URL without attemptId', async () => {
+  it('does not auto-start a full attempt from legacy mode=practice URL hints', async () => {
     mockSearchParams.current = new URLSearchParams('mode=practice&part=A');
 
     await renderPlayer();
 
-    await waitFor(() => {
-      expect(mockStartReadingAttempt).toHaveBeenCalledWith('paper-1', { mockAttemptId: null, mockSectionId: null });
+    expect(await screen.findByRole('button', { name: /start attempt/i })).toBeInTheDocument();
+    expect(mockStartReadingAttempt).not.toHaveBeenCalled();
+  });
+
+  it('saves fallback matching text references as A-D values', async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    mockGetReadingStructureLearner.mockResolvedValueOnce(buildStructure({ partAMatching: true }));
+
+    await renderPlayer();
+    await user.click(await screen.findByRole('button', { name: /start attempt/i }));
+    await user.click(await screen.findByRole('button', { name: /text a.*triage extract/i }));
+
+    await act(async () => {
+      vi.advanceTimersByTime(450);
+      await Promise.resolve();
     });
-    expect(await screen.findByRole('timer', { name: /part a window/i })).toBeInTheDocument();
+
+    await waitFor(() => {
+      expect(mockSaveReadingAnswer).toHaveBeenCalledWith('attempt-1', 'q-a-1', '"A"', expect.any(Number));
+    });
   });
 
   it('highlights selected passage text and clears it without touching question text', async () => {
@@ -248,7 +264,23 @@ function resolvedParams<T>(value: T): Promise<T> {
   return promise;
 }
 
-function buildStructure(opts?: { allowPaperReadingMode?: boolean }): ReadingLearnerStructureDto {
+function buildStructure(opts?: { allowPaperReadingMode?: boolean; partAMatching?: boolean }): ReadingLearnerStructureDto {
+  const partATexts = opts?.partAMatching
+    ? [
+      { id: 'text-a-2', displayOrder: 2, title: 'Medication extract', source: 'Clinic', bodyHtml: '<p>Use aspirin carefully.</p>', wordCount: 4, topicTag: null },
+      { id: 'text-a-1', displayOrder: 1, title: 'Triage extract', source: 'Clinic', bodyHtml: '<p>Assess urgent referrals.</p>', wordCount: 3, topicTag: null },
+    ]
+    : [
+      { id: 'text-a-1', displayOrder: 1, title: 'Text A', source: 'Clinic', bodyHtml: '<p>Use aspirin carefully.</p>', wordCount: 4, topicTag: null },
+    ];
+  const partAQuestions = opts?.partAMatching
+    ? [
+      { id: 'q-a-1', readingTextId: 'text-a-1', displayOrder: 1, points: 1, questionType: 'MatchingTextReference' as const, stem: 'Which text discusses triage?', options: [] },
+    ]
+    : [
+      { id: 'q-a-1', readingTextId: 'text-a-1', displayOrder: 1, points: 1, questionType: 'ShortAnswer' as const, stem: 'Name the medication.', options: [] },
+    ];
+
   return {
     paper: {
       id: 'paper-1',
@@ -267,12 +299,8 @@ function buildStructure(opts?: { allowPaperReadingMode?: boolean }): ReadingLear
         timeLimitMinutes: 15,
         maxRawScore: 1,
         instructions: null,
-        texts: [
-          { id: 'text-a-1', displayOrder: 1, title: 'Text A', source: 'Clinic', bodyHtml: '<p>Use aspirin carefully.</p>', wordCount: 4, topicTag: null },
-        ],
-        questions: [
-          { id: 'q-a-1', readingTextId: 'text-a-1', displayOrder: 1, points: 1, questionType: 'ShortAnswer', stem: 'Name the medication.', options: [] },
-        ],
+        texts: partATexts,
+        questions: partAQuestions,
       },
       {
         id: 'part-b',

@@ -89,7 +89,7 @@ public static class ReadingPathwayEndpoints
                     QuestionType: q.QuestionType.ToString(),
                     DisplayOrder: q.DisplayOrder,
                     Stem: q.Stem,
-                    Options: ParseJsonElement(q.OptionsJson),
+                    Options: ReadingLearnerSafeProjection.ProjectOptionsElement(q.OptionsJson),
                     TextTitle: q.Text?.Title,
                     TextHtml: q.Text?.BodyHtml,
                     SkillCode: q.SkillTag))
@@ -452,7 +452,7 @@ public static class ReadingPathwayEndpoints
                     Id: q.Id,
                     PassageId: q.Text?.Id ?? q.ReadingTextId ?? string.Empty,
                     Stem: q.Stem,
-                    Options: ParseJsonElement(q.OptionsJson),
+                    Options: ReadingLearnerSafeProjection.ProjectOptionsElement(q.OptionsJson),
                     QuestionType: q.QuestionType.ToString(),
                     PartCode: (int)(q.Part?.PartCode ?? ReadingPartCode.A),
                     SkillCode: q.SkillTag))
@@ -1046,22 +1046,6 @@ public static class ReadingPathwayEndpoints
             PredictedScore: profile?.PredictedScore,
             GeneratedAt: pathway?.GeneratedAt,
             Weeks: weeks);
-    }
-
-    private static JsonElement ParseJsonElement(string? json)
-    {
-        if (string.IsNullOrWhiteSpace(json))
-            return JsonSerializer.SerializeToElement(new Dictionary<string, string>());
-
-        try
-        {
-            using var doc = JsonDocument.Parse(json);
-            return doc.RootElement.Clone();
-        }
-        catch (JsonException)
-        {
-            return JsonSerializer.SerializeToElement(new Dictionary<string, string>());
-        }
     }
 
     private static Guid StableGuidFromQuestionId(string questionId)

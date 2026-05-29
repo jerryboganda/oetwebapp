@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/admin/ui/
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/admin/ui/button';
 import { Input, Select, Textarea } from '@/components/ui/form-controls';
+import { PartANotesBuilder } from '@/components/domain/listening/admin/PartANotesBuilder';
 import { Skeleton } from '@/components/admin/ui/skeleton';
 import { InlineAlert, Toast } from '@/components/ui/alert';
 import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
@@ -316,13 +317,23 @@ export default function AdminListeningQuestionEditorPage() {
             <CardHeader><CardTitle>Stem + answer</CardTitle></CardHeader>
             <CardContent>
             <div className="grid gap-4">
-              <Textarea
-                label="Stem"
-                rows={3}
-                value={form.stem}
-                onChange={(e) => setField('stem', e.target.value)}
-                placeholder={isMcq ? 'What does the speaker imply about…?' : 'Patient reports pain located in the ____'}
-              />
+              {isPartA && !isMcq ? (
+                <PartANotesBuilder
+                  value={form.stem}
+                  onChange={(next) => setField('stem', next)}
+                  questionNumber={target.number}
+                  partLabel={`Part ${target.partCode}`}
+                  disabled={save === 'saving'}
+                />
+              ) : (
+                <Textarea
+                  label="Stem"
+                  rows={3}
+                  value={form.stem}
+                  onChange={(e) => setField('stem', e.target.value)}
+                  placeholder={isMcq ? 'What does the speaker imply about…?' : 'Patient reports pain located in the ____'}
+                />
+              )}
 
               <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
                 <Input

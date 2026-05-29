@@ -72,6 +72,17 @@ const DISTRACTOR_CATEGORIES: ReadingDistractorCategory[] = [
   'OutOfScope',
 ];
 
+const TEXT_REFERENCE_LABELS = ['A', 'B', 'C', 'D'];
+
+function normaliseMatchingTextAnswer(answer: string, questionType: ReadingQuestionType): string {
+  if (questionType !== 'MatchingTextReference') return answer;
+  const trimmed = answer.trim();
+  if (/^[1-4]$/.test(trimmed)) {
+    return TEXT_REFERENCE_LABELS[Number(trimmed) - 1] ?? trimmed;
+  }
+  return trimmed.toUpperCase();
+}
+
 function parseStringMap(json: string | null | undefined): Record<string, string> {
   if (!json) return {};
   try {
@@ -153,6 +164,7 @@ function questionToFormState(q: ReadingQuestionAdminDto): QuestionFormState {
   } catch {
     correctAnswer = q.correctAnswerJson ?? '';
   }
+  correctAnswer = normaliseMatchingTextAnswer(correctAnswer, q.questionType);
 
   const distractorRaw = parseStringMap(q.optionDistractorsJson);
   const optionDistractors: Record<string, ReadingDistractorCategory | ''> = {};
@@ -548,6 +560,16 @@ export default function ReadingQuestionsEditorPage() {
     const isShortOrSentence = form.questionType === 'ShortAnswer' || form.questionType === 'SentenceCompletion';
     const isMatching = form.questionType === 'MatchingTextReference';
     const optionLabels = form.questionType === 'MultipleChoice4' ? ['A', 'B', 'C', 'D'] : ['A', 'B', 'C'];
+    const matchingTextOptions = activePart.texts
+      .slice()
+      .sort((a, b) => a.displayOrder - b.displayOrder)
+      .map((txt: ReadingTextDto, index) => {
+        const label = TEXT_REFERENCE_LABELS[index] ?? String(index + 1);
+        return {
+          value: label,
+          label: `Text ${label}: ${txt.title}`,
+        };
+      });
 
     return (
       <div className="space-y-4">
@@ -702,10 +724,7 @@ export default function ReadingQuestionsEditorPage() {
               onChange={(e) => setForm({ ...form, correctAnswer: e.target.value })}
               options={[
                 { value: '', label: 'Select matching text…' },
-                ...activePart.texts.map((txt: ReadingTextDto) => ({
-                  value: String(txt.displayOrder),
-                  label: `Text ${txt.displayOrder}: ${txt.title}`,
-                })),
+                ...matchingTextOptions,
               ]}
             />
           </div>

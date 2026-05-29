@@ -139,7 +139,7 @@ public static class ReadingLearnerEndpoints
                         questionType = q.QuestionType.ToString(),
                         q.Stem,
                         // options visible; correct answer + explanation + synonyms NOT.
-                        options = SafeProjectOptions(q.OptionsJson),
+                        options = ReadingLearnerSafeProjection.ProjectOptions(q.OptionsJson),
                     }),
                 }),
             });
@@ -607,6 +607,99 @@ public static class ReadingLearnerEndpoints
             }
         }).RequireRateLimiting("PerUserWrite");
 
+        // ── Start a Part-scoped practice attempt against a paper ─────────
+        group.MapPost("/papers/{paperId}/practice/parts/{partCode}", async (
+            string paperId,
+            string partCode,
+            IReadingAttemptService svc,
+            LearnerDbContext db,
+            IReadingPolicyService policyService,
+            IContentEntitlementService contentEntitlements,
+            HttpContext http,
+            CancellationToken ct) =>
+        {
+            var userId = http.User.FindFirstValue(ClaimTypes.NameIdentifier)
+                ?? throw new InvalidOperationException("auth required");
+
+            if (!Enum.TryParse<ReadingPartCode>(partCode, ignoreCase: true, out var parsedPart)
+                || parsedPart is not (ReadingPartCode.A or ReadingPartCode.B or ReadingPartCode.C))
+            {
+                return Results.BadRequest(new
+                {
+                    code = "part_code_invalid",
+                    error = "partCode must be A, B, or C.",
+                    message = "partCode must be A, B, or C.",
+                });
+            }
+
+            var globalPolicy = await policyService.GetGlobalAsync(ct);
+            var paper = await db.ContentPapers.AsNoTracking()
+                .FirstOrDefaultAsync(p => p.Id == paperId
+                    && p.SubtestCode == "reading"
+                    && (p.Status == ContentStatus.Published
+                        || (globalPolicy.AllowAttemptOnArchivedPaper && p.Status == ContentStatus.Archived)), ct);
+            if (paper is null || !await CanLearnerSeePaperAsync(db, http, userId, paper, ct))
+                return Results.NotFound();
+
+            await contentEntitlements.RequireAccessAsync(userId, paper, ct);
+
+            var questionIds = await db.ReadingQuestions.AsNoTracking()
+                .Where(q => q.Part!.PaperId == paperId && q.Part.PartCode == parsedPart)
+                .OrderBy(q => q.DisplayOrder)
+                .Select(q => q.Id)
+                .ToListAsync(ct);
+            if (questionIds.Count == 0)
+                return Results.BadRequest(new
+                {
+                    code = "part_practice_no_questions",
+                    error = $"No Part {parsedPart} questions are authored for this paper.",
+                    message = $"No Part {parsedPart} questions are authored for this paper.",
+                });
+
+            var minutes = parsedPart switch
+            {
+                ReadingPartCode.A => 15,
+                ReadingPartCode.B => 12,
+                ReadingPartCode.C => 33,
+                _ => 15,
+            };
+            var scope = new
+            {
+                kind = "part-practice",
+                label = $"Part {parsedPart} practice",
+                partCode = parsedPart.ToString(),
+                minutes,
+                questionIds,
+            };
+
+            try
+            {
+                var started = await svc.StartInModeAsync(
+                    userId, paperId, ReadingAttemptMode.Drill,
+                    JsonSerializer.Serialize(scope), ct);
+                return Results.Ok(new
+                {
+                    mode = "Drill",
+                    started.AttemptId,
+                    started.StartedAt,
+                    started.DeadlineAt,
+                    started.PaperTitle,
+                    minutes,
+                    questionCount = questionIds.Count,
+                    partPractice = new { partCode = parsedPart.ToString(), title = $"Part {parsedPart} practice" },
+                    playerRoute = $"/reading/paper/{paperId}?attemptId={started.AttemptId}&mode=part-practice&part={parsedPart}",
+                });
+            }
+            catch (ReadingAttemptException ex)
+            {
+                return Results.BadRequest(new { code = ex.Code, error = ex.Message, message = ex.Message });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Results.BadRequest(new { code = "reading_attempt_rejected", error = ex.Message, message = ex.Message });
+            }
+        }).RequireRateLimiting("PerUserWrite");
+
         // ── List the learner's current Error Bank ────────────────────────
         group.MapGet("/practice/error-bank", async (
             HttpContext http,
@@ -1025,63 +1118,6 @@ public static class ReadingLearnerEndpoints
         }
 
         return null;
-    }
-
-    private static IReadOnlyList<object> SafeProjectOptions(string json)
-    {
-        if (string.IsNullOrWhiteSpace(json)) return Array.Empty<object>();
-        try
-        {
-            using var doc = JsonDocument.Parse(json);
-            if (doc.RootElement.ValueKind != JsonValueKind.Array)
-            {
-                return Array.Empty<object>();
-            }
-
-            var options = new List<object>();
-            foreach (var option in doc.RootElement.EnumerateArray())
-            {
-                if (option.ValueKind == JsonValueKind.String)
-                {
-                    options.Add(option.GetString() ?? string.Empty);
-                    continue;
-                }
-
-                if (option.ValueKind != JsonValueKind.Object)
-                {
-                    continue;
-                }
-
-                var value = ReadSafeOptionText(option, "value")
-                    ?? ReadSafeOptionText(option, "label")
-                    ?? ReadSafeOptionText(option, "text")
-                    ?? ReadSafeOptionText(option, "title");
-                var label = ReadSafeOptionText(option, "label")
-                    ?? ReadSafeOptionText(option, "text")
-                    ?? ReadSafeOptionText(option, "title")
-                    ?? value;
-                if (!string.IsNullOrWhiteSpace(label))
-                {
-                    options.Add(new { value = string.IsNullOrWhiteSpace(value) ? label : value, label });
-                }
-            }
-
-            return options;
-        }
-        catch (JsonException)
-        {
-            return Array.Empty<object>();
-        }
-    }
-
-    private static string? ReadSafeOptionText(JsonElement option, string propertyName)
-    {
-        if (!option.TryGetProperty(propertyName, out var property) || property.ValueKind != JsonValueKind.String)
-        {
-            return null;
-        }
-
-        return property.GetString();
     }
 
     private static object? SafeParseJson(string? json)

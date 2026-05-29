@@ -835,6 +835,9 @@ builder.Services.AddScoped<OetLearner.Api.Services.Listening.IListeningPathwaySe
 // ── Listening V2 — strategy + FSM + version-pinned grading + pathway + classes ──
 builder.Services.AddSingleton<OetLearner.Api.Services.Listening.ListeningModePolicyResolver>();
 builder.Services.AddSingleton<OetLearner.Api.Services.Listening.ListeningConfirmTokenService>();
+// WS4 — admin sequence builder. Consumed by ListeningSessionService for
+// per-state window resolution (null sequence ⇒ derived canonical fallback).
+builder.Services.AddScoped<OetLearner.Api.Services.Listening.ListeningSequenceService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Listening.ListeningSessionService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Listening.ListeningGradingService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Listening.ListeningPathwayProgressService>();

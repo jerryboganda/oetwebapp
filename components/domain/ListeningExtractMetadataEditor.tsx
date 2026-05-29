@@ -6,6 +6,7 @@ import { AdminRoutePanel } from '@/components/domain/admin-route-surface';
 import { InlineAlert, Toast } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Input, Select } from '@/components/ui/form-controls';
+import { WaveformCuePointEditor } from '@/components/domain/listening/admin/WaveformCuePointEditor';
 import {
   backfillListeningPaper,
   getListeningExtracts,
@@ -65,13 +66,18 @@ const buildDefaultExtracts = (): ListeningAuthoredExtract[] =>
     audioEndMs: null,
   }));
 
-const normalizeNumber = (value: string): number | null => {
-  if (value.trim() === '') return null;
-  const parsed = Number(value);
-  return Number.isFinite(parsed) && parsed >= 0 ? Math.round(parsed) : null;
-};
+export interface ListeningExtractMetadataEditorProps {
+  paperId: string;
+  /**
+   * Authorized media path for the paper's section audio (e.g.
+   * `/v1/media/{mediaId}/content`). Passed by the host page from the paper's
+   * attached Audio asset. When omitted the waveform cue-point editor shows an
+   * "attach audio" hint instead of a waveform.
+   */
+  audioUrl?: string | null;
+}
 
-export function ListeningExtractMetadataEditor({ paperId }: { paperId: string }) {
+export function ListeningExtractMetadataEditor({ paperId, audioUrl = null }: ListeningExtractMetadataEditorProps) {
   const [status, setStatus] = useState<LoadStatus>('loading');
   const [extracts, setExtracts] = useState<ListeningAuthoredExtract[]>([]);
   const [saving, setSaving] = useState(false);
@@ -287,20 +293,15 @@ export function ListeningExtractMetadataEditor({ paperId }: { paperId: string })
                 </div>
               </div>
 
-              <div className="grid gap-3 md:grid-cols-2">
-                <Input
-                  label="Audio start ms"
-                  inputMode="numeric"
-                  value={extract.audioStartMs ?? ''}
-                  onChange={(event) => updateExtract(index, { audioStartMs: normalizeNumber(event.target.value) })}
-                />
-                <Input
-                  label="Audio end ms"
-                  inputMode="numeric"
-                  value={extract.audioEndMs ?? ''}
-                  onChange={(event) => updateExtract(index, { audioEndMs: normalizeNumber(event.target.value) })}
-                />
-              </div>
+              <WaveformCuePointEditor
+                paperId={paperId}
+                extractCode={extract.partCode}
+                audioUrl={audioUrl}
+                audioStartMs={extract.audioStartMs}
+                audioEndMs={extract.audioEndMs}
+                onChange={(next) => updateExtract(index, next)}
+              />
+
 
               <div className="space-y-3">
                 <div className="flex items-center justify-between gap-3">

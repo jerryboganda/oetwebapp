@@ -29,6 +29,7 @@ public class ListeningAnnotationsServiceTests
             {
                 AccessTokenSigningKey = "test-signing-key-1234567890123456789012",
             })),
+            new ListeningSequenceService(db),
             TimeProvider.System);
 
     private static ListeningAttempt SeedInProgressAttempt(LearnerDbContext db, string userId = "learner-1")

@@ -299,6 +299,72 @@ public class ReadingAuthoringTests
     }
 
     [Fact]
+    public async Task ClonePaper_creates_draft_revision_with_copied_assets_and_structure()
+    {
+        var (db, structure, _, _, _) = Build();
+        await SeedPaperAsync(db, "source");
+        await structure.EnsureCanonicalPartsAsync("source", default);
+        await FullyAuthorPaperAsync(db, structure, "source");
+
+        db.MediaAssets.Add(new MediaAsset
+        {
+            Id = "media-question-paper",
+            OriginalFilename = "reading.pdf",
+            MimeType = "application/pdf",
+            Format = "pdf",
+            SizeBytes = 1024,
+            StoragePath = "media/reading.pdf",
+            Status = MediaAssetStatus.Ready,
+            MediaKind = "document",
+            UploadedAt = DateTimeOffset.UtcNow,
+        });
+        db.ContentPaperAssets.Add(new ContentPaperAsset
+        {
+            Id = "asset-source",
+            PaperId = "source",
+            Role = PaperAssetRole.QuestionPaper,
+            Part = "A",
+            MediaAssetId = "media-question-paper",
+            Title = "Part A paper",
+            DisplayOrder = 1,
+            IsPrimary = true,
+            CreatedAt = DateTimeOffset.UtcNow,
+        });
+        await db.SaveChangesAsync();
+
+        var cloned = await structure.ClonePaperAsync(
+            "source",
+            new ReadingPaperCloneRequest("Reading Sample 1 v2", null),
+            "admin",
+            default);
+
+        var paper = await db.ContentPapers.Include(p => p.Assets).SingleAsync(p => p.Id == cloned.PaperId);
+        Assert.NotEqual("source", cloned.PaperId);
+        Assert.Equal(ContentStatus.Draft, paper.Status);
+        Assert.Equal("Reading Sample 1 v2", paper.Title);
+        Assert.StartsWith("reading-sample-1-revision", paper.Slug);
+        Assert.Contains($"cloned-from:source", paper.TagsCsv);
+        Assert.Single(paper.Assets);
+        Assert.Equal("media-question-paper", paper.Assets.Single().MediaAssetId);
+
+        var sourceQuestionIds = await db.ReadingQuestions
+            .Where(q => q.Part!.PaperId == "source")
+            .Select(q => q.Id)
+            .ToHashSetAsync();
+        var clonedQuestions = await db.ReadingQuestions
+            .Where(q => q.Part!.PaperId == cloned.PaperId)
+            .ToListAsync();
+        Assert.Equal(42, clonedQuestions.Count);
+        Assert.DoesNotContain(clonedQuestions, q => sourceQuestionIds.Contains(q.Id));
+        Assert.All(clonedQuestions, q => Assert.Equal(ReadingReviewState.Draft, q.ReviewState));
+
+        var clonedPartA = cloned.Structure.Parts.Single(p => p.PartCode == ReadingPartCode.A);
+        Assert.Equal(20, clonedPartA.Questions.Count);
+        Assert.All(clonedPartA.Questions, q => Assert.NotNull(q.ReadingTextId));
+        await db.DisposeAsync();
+    }
+
+    [Fact]
     public async Task Reading_home_safe_drills_include_unanswered_skills_and_prefer_unattempted_paper()
     {
         var (db, structure, policy, _, attemptSvc) = Build();
@@ -2678,6 +2744,34 @@ public class ReadingAuthoringTests
     }
 
     [Fact]
+    public async Task Attempt_start_pins_published_reading_exam_mode_rulebook_version()
+    {
+        var (db, structure, _, _, attemptSvc) = Build();
+        await SeedPaperAsync(db, "p1");
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        await FullyAuthorPaperAsync(db, structure, "p1");
+        db.RulebookVersions.Add(new RulebookVersion
+        {
+            Id = "rb_reading__exam-mode_1.2.3",
+            Kind = "reading",
+            Profession = "_exam-mode",
+            Version = "1.2.3",
+            Status = RulebookStatus.Published,
+            CreatedAt = DateTimeOffset.UtcNow.AddDays(-2),
+            UpdatedAt = DateTimeOffset.UtcNow.AddDays(-2),
+            PublishedAt = DateTimeOffset.UtcNow.AddDays(-2),
+            UpdatedByUserId = "test-admin",
+        });
+        await db.SaveChangesAsync();
+
+        var started = await attemptSvc.StartAsync("u1", "p1", default);
+
+        var attempt = await db.ReadingAttempts.AsNoTracking().SingleAsync(a => a.Id == started.AttemptId);
+        Assert.Equal("1.2.3", attempt.RulebookVersion);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
     public async Task Learning_mode_does_not_hard_lock_part_a_after_15_minutes()
     {
         var (db, structure, _, _, attemptSvc) = Build();
@@ -2821,6 +2915,105 @@ public class ReadingAuthoringTests
         Assert.Equal(3, attempt.MaxRawScore);
         Assert.Equal(2, attempt.RawScore);
         await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Part_practice_endpoint_creates_scoped_attempt_for_requested_part()
+    {
+        using var factory = new TestWebApplicationFactory();
+        await using var seedScope = factory.Services.CreateAsyncScope();
+        var db = seedScope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        await db.Database.EnsureCreatedAsync();
+        var structure = new ReadingStructureService(db);
+        var paperId = "part-practice-paper";
+        await SeedPaperAsync(db, paperId);
+        await structure.EnsureCanonicalPartsAsync(paperId, default);
+        await FullyAuthorPaperAsync(db, structure, paperId);
+
+        using var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Debug-UserId", "part-practice-learner");
+        client.DefaultRequestHeaders.Add("X-Debug-Role", "learner");
+        var response = await client.PostAsync(
+            $"/v1/reading-papers/papers/{paperId}/practice/parts/B",
+            new StringContent(string.Empty, Encoding.UTF8, "application/json"));
+
+        response.EnsureSuccessStatusCode();
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var attemptId = json.RootElement.GetProperty("attemptId").GetString();
+        Assert.False(string.IsNullOrWhiteSpace(attemptId));
+        Assert.Equal("Drill", json.RootElement.GetProperty("mode").GetString());
+        Assert.Equal(6, json.RootElement.GetProperty("questionCount").GetInt32());
+        Assert.Contains($"/reading/paper/{paperId}?attemptId={attemptId}&mode=part-practice&part=B",
+            json.RootElement.GetProperty("playerRoute").GetString());
+
+        var stored = await db.ReadingAttempts.AsNoTracking().SingleAsync(a => a.Id == attemptId);
+        Assert.Equal(ReadingAttemptMode.Drill, stored.Mode);
+        Assert.NotNull(stored.ScopeJson);
+        using var scopeJson = JsonDocument.Parse(stored.ScopeJson!);
+        Assert.Equal("part-practice", scopeJson.RootElement.GetProperty("kind").GetString());
+        Assert.Equal("B", scopeJson.RootElement.GetProperty("partCode").GetString());
+        Assert.Equal(6, scopeJson.RootElement.GetProperty("questionIds").GetArrayLength());
+    }
+
+    [Fact]
+    public async Task Part_practice_endpoint_hides_unpublished_paper_before_question_probe()
+    {
+        using var factory = new TestWebApplicationFactory();
+        await using var seedScope = factory.Services.CreateAsyncScope();
+        var db = seedScope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        await db.Database.EnsureCreatedAsync();
+        var paperId = "part-practice-draft-paper";
+        await SeedPaperAsync(db, paperId);
+        var paper = await db.ContentPapers.SingleAsync(p => p.Id == paperId);
+        paper.Status = ContentStatus.Draft;
+        await db.SaveChangesAsync();
+
+        using var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Debug-UserId", "part-practice-learner");
+        client.DefaultRequestHeaders.Add("X-Debug-Role", "learner");
+        var response = await client.PostAsync(
+            $"/v1/reading-papers/papers/{paperId}/practice/parts/A",
+            new StringContent(string.Empty, Encoding.UTF8, "application/json"));
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        Assert.DoesNotContain("part_practice_no_questions", await response.Content.ReadAsStringAsync());
+    }
+
+    [Fact]
+    public async Task Part_practice_endpoint_hides_profession_mismatch_before_question_probe()
+    {
+        using var factory = new TestWebApplicationFactory();
+        await using var seedScope = factory.Services.CreateAsyncScope();
+        var db = seedScope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        await db.Database.EnsureCreatedAsync();
+        var paperId = "part-practice-profession-paper";
+        await SeedPaperAsync(db, paperId);
+        var paper = await db.ContentPapers.SingleAsync(p => p.Id == paperId);
+        paper.AppliesToAllProfessions = false;
+        paper.ProfessionId = "nursing";
+        db.Users.Add(new LearnerUser
+        {
+            Id = "part-practice-learner",
+            DisplayName = "Part Practice Learner",
+            Email = "part-practice-learner@example.test",
+            ActiveProfessionId = "medicine",
+            AccountStatus = "active",
+            Timezone = "UTC",
+            Locale = "en-AU",
+            CreatedAt = DateTimeOffset.UtcNow,
+            LastActiveAt = DateTimeOffset.UtcNow,
+        });
+        await db.SaveChangesAsync();
+
+        using var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Debug-UserId", "part-practice-learner");
+        client.DefaultRequestHeaders.Add("X-Debug-Role", "learner");
+        var response = await client.PostAsync(
+            $"/v1/reading-papers/papers/{paperId}/practice/parts/A",
+            new StringContent(string.Empty, Encoding.UTF8, "application/json"));
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        Assert.DoesNotContain("part_practice_no_questions", await response.Content.ReadAsStringAsync());
     }
 
     [Fact]
@@ -3824,6 +4017,37 @@ public class ReadingAuthoringTests
     }
 
     [Fact]
+    public async Task Tutor_expert_access_is_limited_to_assignments_the_expert_created()
+    {
+        var (db, structure, _, grader, attemptSvc) = Build();
+        await SeedPaperAsync(db, "p1");
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        await FullyAuthorPaperAsync(db, structure, "p1");
+
+        var tutor = new ReadingTutorService(db, grader, NullLogger<ReadingTutorService>.Instance);
+        await tutor.CreateAssignmentAsync(
+            new ReadingAssignmentCreateRequest("learner-1", "p1", "full", null, null, null),
+            "expert-1", default);
+        await tutor.CreateAssignmentAsync(
+            new ReadingAssignmentCreateRequest("learner-2", "p1", "full", null, null, null),
+            "expert-2", default);
+
+        var started = await attemptSvc.StartAsync("learner-1", "p1", default);
+        Assert.False(await tutor.CanExpertAccessAttemptAsync(started.AttemptId, "expert-1", default));
+
+        await AnswerAllReadingQuestionsAsync(db, attemptSvc, "learner-1", started.AttemptId, correct: true);
+        await attemptSvc.SubmitAsync("learner-1", started.AttemptId, idempotencyKey: null, default);
+
+        Assert.True(await tutor.CanExpertAccessAttemptAsync(started.AttemptId, "expert-1", default));
+        Assert.False(await tutor.CanExpertAccessAttemptAsync(started.AttemptId, "expert-2", default));
+
+        var ownAssignments = await tutor.ListAssignmentsForExpertAsync("expert-1", null, default);
+        var own = Assert.Single(ownAssignments);
+        Assert.Equal("learner-1", own.AssignedToUserId);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
     public async Task Tutor_feedback_crud_round_trips()
     {
         var (db, structure, _, grader, attemptSvc) = Build();
@@ -3867,6 +4091,42 @@ public class ReadingAuthoringTests
         var refreshed = await db.ReadingAssignments.AsNoTracking().FirstAsync(a => a.Id == assignment!.Id);
         Assert.Equal("completed", refreshed.Status);
         Assert.Equal(attemptId, refreshed.CompletedAttemptId);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Part_practice_submit_does_not_complete_full_assignment()
+    {
+        var (db, structure, _, grader, attemptSvc) = Build();
+        await SeedPaperAsync(db, "p1");
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        await FullyAuthorPaperAsync(db, structure, "p1");
+
+        var tutor = new ReadingTutorService(db, grader, NullLogger<ReadingTutorService>.Instance);
+        var assignment = await tutor.CreateAssignmentAsync(
+            new ReadingAssignmentCreateRequest("u1", "p1", "full", null, "Complete the full paper", null),
+            "admin-1", default);
+        Assert.NotNull(assignment);
+
+        var partAQuestionIds = await db.ReadingQuestions.AsNoTracking()
+            .Where(q => q.Part!.PaperId == "p1" && q.Part.PartCode == ReadingPartCode.A)
+            .OrderBy(q => q.DisplayOrder)
+            .Select(q => q.Id)
+            .ToListAsync();
+        var scope = JsonSerializer.Serialize(new
+        {
+            kind = "part-practice",
+            partCode = "A",
+            questionIds = partAQuestionIds,
+            timeLimitMinutes = 15,
+        });
+
+        var run = await attemptSvc.StartInModeAsync("u1", "p1", ReadingAttemptMode.Drill, scope, default);
+        await attemptSvc.SubmitAsync("u1", run.AttemptId, idempotencyKey: null, default);
+
+        var refreshed = await db.ReadingAssignments.AsNoTracking().FirstAsync(a => a.Id == assignment!.Id);
+        Assert.Equal("assigned", refreshed.Status);
+        Assert.Null(refreshed.CompletedAttemptId);
         await db.DisposeAsync();
     }
 

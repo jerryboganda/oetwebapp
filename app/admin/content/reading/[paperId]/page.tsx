@@ -2,8 +2,8 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
-import { useParams } from 'next/navigation';
-import { ArrowRight, BookOpen, FileText, HelpCircle, ShieldCheck, Pencil, Eye } from 'lucide-react';
+import { useParams, useRouter } from 'next/navigation';
+import { ArrowRight, BookOpen, Copy, FileText, HelpCircle, Loader2, ShieldCheck, Pencil, Eye } from 'lucide-react';
 import { AdminSettingsLayout, SettingsSection } from '@/components/admin/layout/admin-settings-layout';
 import { KpiTile } from '@/components/admin/ui/kpi-tile';
 import { Button } from '@/components/admin/ui/button';
@@ -15,6 +15,7 @@ import { ReadingWizardSteps } from '@/components/domain/admin/reading/ReadingWiz
 import { ReadingManifestPanel } from './ReadingManifestPanel';
 import {
   getReadingStructureAdmin,
+  cloneReadingPaper,
   validateReadingPaper,
   type ReadingStructureAdminDto,
   type ReadingValidationReport,
@@ -27,6 +28,7 @@ import {
 
 export default function AdminReadingPaperOverviewPage() {
   const params = useParams<{ paperId: string }>();
+  const router = useRouter();
   const paperId = params?.paperId ?? '';
 
   const [structure, setStructure] = useState<ReadingStructureAdminDto | null>(null);
@@ -37,6 +39,7 @@ export default function AdminReadingPaperOverviewPage() {
   const [editingMeta, setEditingMeta] = useState(false);
   const [metaForm, setMetaForm] = useState({ title: '', difficulty: '', estimatedDurationMinutes: 60, sourceProvenance: '' });
   const [savingMeta, setSavingMeta] = useState(false);
+  const [cloning, setCloning] = useState(false);
   const [toast, setToast] = useState<{ message: string; variant: 'success' | 'error' } | null>(null);
 
   useEffect(() => {
@@ -112,6 +115,19 @@ export default function AdminReadingPaperOverviewPage() {
       setToast({ message: err instanceof Error ? err.message : 'Save failed', variant: 'error' });
     } finally {
       setSavingMeta(false);
+    }
+  }
+
+  async function handleClonePaper() {
+    if (!paperId || cloning) return;
+    setCloning(true);
+    try {
+      const cloned = await cloneReadingPaper(paperId, { resetReviewState: true });
+      setToast({ message: 'Draft revision created', variant: 'success' });
+      router.push(cloned.adminRoute);
+    } catch (err) {
+      setToast({ message: err instanceof Error ? err.message : 'Clone failed', variant: 'error' });
+      setCloning(false);
     }
   }
 
@@ -234,11 +250,11 @@ export default function AdminReadingPaperOverviewPage() {
                   <dl className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
                     <div>
                       <dt className="text-xs uppercase tracking-wider text-admin-fg-muted">Title</dt>
-                      <dd className="mt-1 text-admin-fg-strong">{paper?.title ?? '—'}</dd>
+                      <dd className="mt-1 text-admin-fg-strong">{paper?.title ?? '-'}</dd>
                     </div>
                     <div>
                       <dt className="text-xs uppercase tracking-wider text-admin-fg-muted">Difficulty</dt>
-                      <dd className="mt-1 text-admin-fg-strong capitalize">{paper?.difficulty ?? '—'}</dd>
+                      <dd className="mt-1 text-admin-fg-strong capitalize">{paper?.difficulty ?? '-'}</dd>
                     </div>
                     <div>
                       <dt className="text-xs uppercase tracking-wider text-admin-fg-muted">Duration</dt>
@@ -246,7 +262,7 @@ export default function AdminReadingPaperOverviewPage() {
                     </div>
                     <div>
                       <dt className="text-xs uppercase tracking-wider text-admin-fg-muted">Source</dt>
-                      <dd className="mt-1 text-admin-fg-strong">{paper?.sourceProvenance ?? '—'}</dd>
+                      <dd className="mt-1 text-admin-fg-strong">{paper?.sourceProvenance ?? '-'}</dd>
                     </div>
                   </dl>
                 ) : (
@@ -307,6 +323,15 @@ export default function AdminReadingPaperOverviewPage() {
                   </Button>
                   <Button asChild variant="secondary" size="sm" startIcon={<Eye className="h-4 w-4" />}>
                     <Link href={`/admin/content/reading/${paperId}/preview`}>Preview as student</Link>
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={handleClonePaper}
+                    disabled={cloning}
+                    startIcon={cloning ? <Loader2 className="h-4 w-4 animate-spin" /> : <Copy className="h-4 w-4" />}
+                  >
+                    Clone draft revision
                   </Button>
                   <Button asChild variant="primary" size="sm" endIcon={<ArrowRight className="h-4 w-4" />}>
                     <Link href={`/admin/content/reading/${paperId}/validate`}>Validate &amp; Publish</Link>

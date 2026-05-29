@@ -231,6 +231,29 @@ export const replaceListeningExtracts = (
     body: JSON.stringify({ extracts }),
   });
 
+export interface ListeningExtractPatchBody {
+  displayOrder?: number;
+  kind?: ListeningExtractKind;
+  title?: string;
+  accentCode?: string | null;
+  speakers?: ListeningAuthoredSpeaker[];
+  audioStartMs?: number | null;
+  audioEndMs?: number | null;
+}
+
+export const patchListeningExtract = (
+  paperId: string,
+  extractCode: ListeningPartCode,
+  patch: ListeningExtractPatchBody,
+) =>
+  api<ListeningAuthoredExtractList>(
+    `/v1/admin/papers/${paperId}/listening/extracts/${encodeURIComponent(extractCode)}`,
+    {
+      method: 'PATCH',
+      body: JSON.stringify(patch),
+    },
+  );
+
 export const backfillListeningPaper = (paperId: string) =>
   api<ListeningBackfillReport>(`/v1/admin/papers/${paperId}/listening/backfill`, {
     method: 'POST',
@@ -570,3 +593,189 @@ export function buildCanonicalListeningSkeleton(): ListeningAuthoredQuestion[] {
   for (let i = 37; i <= 42; i++) items.push(blank(i, 'C2', 'multiple_choice_3'));
   return items;
 }
+
+// ── WS4: Admin Sequence Builder ────────────────────────────────────────
+//
+// Optional explicit exam-sequence for a Listening paper. Mirrors
+// `ListeningSequence` / `ListeningSequenceItem` in
+// `Services/Listening/ListeningSequenceService.cs`. When a paper has no
+// authored sequence the session FSM derives the canonical one from policy,
+// so the builder UI fetches the derived shape via `deriveListeningSequence`.
+
+/** One ordered FSM phase in a Listening exam-sequence. */
+export type ListeningSequenceItemType =
+  | 'instruction'
+  | 'reading_time'
+  | 'beep'
+  | 'audio_extract'
+  | 'local_check_time'
+  | 'global_check_time'
+  | 'section_transition'
+  | 'auto_submit';
+
+export interface ListeningSequenceItem {
+  index: number;
+  type: ListeningSequenceItemType;
+  partCode: ListeningPartCode | null;
+  extractDisplayOrder: number | null;
+  durationMs: number | null;
+  label: string | null;
+}
+
+export interface ListeningSequence {
+  items: ListeningSequenceItem[];
+  version: number;
+}
+
+/** Structured validation result; mirrors `ListeningSequenceValidationReport`. */
+export interface ListeningSequenceValidationReport {
+  isValid: boolean;
+  issues: ListeningValidationIssue[];
+  counts: ListeningValidationCounts;
+}
+
+/** GET shape: the authored sequence (null when none) plus an `isAuthored` flag. */
+export interface ListeningSequenceState {
+  sequence: ListeningSequence | null;
+  isAuthored: boolean;
+}
+
+/** PUT response: the persisted sequence plus the validation report. */
+export interface ListeningSequenceSaveResult {
+  sequence: ListeningSequence | null;
+  report: ListeningSequenceValidationReport;
+}
+
+/** POST /derive response: the canonical sequence for a mode (default Exam). */
+export interface ListeningSequenceDeriveResult {
+  sequence: ListeningSequence;
+  mode: string;
+}
+
+export const getListeningSequence = (paperId: string) =>
+  api<ListeningSequenceState>(`/v1/admin/papers/${paperId}/listening/sequence`);
+
+export const replaceListeningSequence = (
+  paperId: string,
+  sequence: ListeningSequence,
+) =>
+  api<ListeningSequenceSaveResult>(`/v1/admin/papers/${paperId}/listening/sequence`, {
+    method: 'PUT',
+    body: JSON.stringify(sequence),
+  });
+
+export const deriveListeningSequence = (paperId: string, mode?: string) => {
+  const qs = mode ? `?mode=${encodeURIComponent(mode)}` : '';
+  return api<ListeningSequenceDeriveResult>(
+    `/v1/admin/papers/${paperId}/listening/sequence/derive${qs}`,
+    { method: 'POST', body: JSON.stringify({}) },
+  );
+};
+
+export const validateListeningSequence = (
+  paperId: string,
+  sequence: ListeningSequence,
+) =>
+  api<ListeningSequenceValidationReport>(
+    `/v1/admin/papers/${paperId}/listening/sequence/validate`,
+    { method: 'POST', body: JSON.stringify(sequence) },
+  );
+
+// ── WS5: spec §19 full-test JSON manifest import / export ───────────────
+//
+// Mirrors `lib/reading-authoring-api.ts`'s `importReadingStructureManifest` /
+// `exportReadingStructureManifest`. The manifest is the §19 Listening shape
+// (`testTitle` + `partA` / `partB` / `partC`, each holding `extracts[]`). It is
+// the round-trip contract with `ListeningStructureManifest` in
+// `Services/Listening/ListeningAuthoringService.cs`. Part A extracts carry
+// note-completion gap questions (`noteTextBeforeGap`); Part B/C extracts carry
+// single MCQ-3 items (`questionStem` / `options.{A,B,C}`).
+
+export interface ListeningManifestOptions {
+  A?: string | null;
+  B?: string | null;
+  C?: string | null;
+}
+
+export interface ListeningManifestTranscriptSegment {
+  startMs: number;
+  endMs: number;
+  speakerId?: string | null;
+  text?: string | null;
+}
+
+export interface ListeningManifestQuestion {
+  number: number;
+  type?: string | null;                 // gap_fill | short_answer | multiple_choice_3
+  noteTextBeforeGap?: string | null;     // Part A note lead-in
+  stem?: string | null;                  // Part B/C question stem
+  options?: ListeningManifestOptions | null;
+  correctAnswer?: string | null;
+  acceptedAnswers?: string[] | null;
+  explanation?: string | null;
+  distractorExplanation?: string | null;
+  skillTag?: string | null;
+  timestamp?: string | null;             // legacy "mm:ss"
+  transcriptEvidenceStartMs?: number | null;
+  transcriptEvidenceEndMs?: number | null;
+  transcriptExcerpt?: string | null;
+  optionDistractorWhy?: (string | null)[] | null;
+  optionDistractorCategory?: (ListeningDistractorCategory | null)[] | null;
+}
+
+export interface ListeningManifestExtract {
+  extractNumber: number;
+  questionNumber?: string | null;        // Part B convenience
+  questionRange?: string | null;         // Part C convenience
+  patientName?: string | null;           // Part A
+  professionalRole?: string | null;      // Part A
+  context?: string | null;               // Part B
+  topic?: string | null;                 // Part C
+  format?: string | null;                // Part C — interview | presentation
+  audioFile?: string | null;
+  readingTimeSeconds?: number | null;
+  transcript?: string | null;
+  accentCode?: string | null;
+  speakerAttitude?: ListeningSpeakerAttitude | null; // Part C
+  transcriptSegments?: ListeningManifestTranscriptSegment[] | null;
+  speakers?: ListeningAuthoredSpeaker[] | null;
+  questions: ListeningManifestQuestion[];
+}
+
+export interface ListeningManifestPart {
+  extracts: ListeningManifestExtract[];
+}
+
+export interface ListeningStructureManifestDto {
+  testTitle?: string | null;
+  modeSupport?: string[] | null;
+  strictMock?: boolean | null;
+  partA?: ListeningManifestPart | null;
+  partB?: ListeningManifestPart | null;
+  partC?: ListeningManifestPart | null;
+}
+
+export interface ListeningStructureImportResultDto {
+  structure: ListeningAuthoredQuestionList;
+  report: ListeningValidationReport;
+}
+
+/** Export the current authored structure + extracts as a §19 manifest. */
+export const exportListeningManifest = (paperId: string) =>
+  api<ListeningStructureManifestDto>(`/v1/admin/papers/${paperId}/listening/manifest`);
+
+/**
+ * Import a complete Listening test from a §19 manifest. When
+ * `replaceExisting` is false the server refuses to overwrite an already-authored
+ * paper (409); it always refuses once learner attempts exist (409). Returns the
+ * re-read structure plus the publish-gate validation report.
+ */
+export const importListeningManifest = (
+  paperId: string,
+  manifest: ListeningStructureManifestDto,
+  replaceExisting: boolean,
+) =>
+  api<ListeningStructureImportResultDto>(`/v1/admin/papers/${paperId}/listening/manifest`, {
+    method: 'POST',
+    body: JSON.stringify({ replaceExisting, manifest }),
+  });
