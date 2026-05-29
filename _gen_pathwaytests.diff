@@ -1,0 +1,53 @@
+commit 2e68bd9503d42a48497074e3fc7b6f1ce3106524
+Author: jerryboganda <jerryboganda@users.noreply.github.com>
+Date:   Fri May 29 22:46:15 2026 +0500
+
+    feat: complete reading and listening workflows
+
+diff --git a/backend/tests/OetLearner.Api.Tests/ReadingPathwayEndpointTests.cs b/backend/tests/OetLearner.Api.Tests/ReadingPathwayEndpointTests.cs
+index de5602e1..5b3308c0 100644
+--- a/backend/tests/OetLearner.Api.Tests/ReadingPathwayEndpointTests.cs
++++ b/backend/tests/OetLearner.Api.Tests/ReadingPathwayEndpointTests.cs
+@@ -38,11 +38,13 @@ public class ReadingPathwayEndpointTests : IClassFixture<TestWebApplicationFacto
+         Assert.Equal("MultipleChoice3", question.GetProperty("questionType").GetString());
+         Assert.Equal("Clinical notice", question.GetProperty("textTitle").GetString());
+         Assert.Contains("Review the policy notice", question.GetProperty("textHtml").GetString());
++        Assert.Contains("Check the policy", body);
+ 
+         Assert.DoesNotContain("correctAnswer", body, StringComparison.OrdinalIgnoreCase);
+         Assert.DoesNotContain("acceptedSynonyms", body, StringComparison.OrdinalIgnoreCase);
+         Assert.DoesNotContain("explanationMarkdown", body, StringComparison.OrdinalIgnoreCase);
+         Assert.DoesNotContain("Do not leak this explanation", body, StringComparison.OrdinalIgnoreCase);
++        Assert.DoesNotContain("SECRET-OPTION", body, StringComparison.OrdinalIgnoreCase);
+     }
+ 
+     [Fact]
+@@ -132,11 +134,13 @@ public class ReadingPathwayEndpointTests : IClassFixture<TestWebApplicationFacto
+         var passage = Assert.Single(json.RootElement.GetProperty("passages").EnumerateArray());
+         Assert.Equal(questionId, question.GetProperty("id").GetString());
+         Assert.Equal("Clinical notice", passage.GetProperty("title").GetString());
++        Assert.Contains("Check the policy", body);
+ 
+         Assert.DoesNotContain("correctAnswer", body, StringComparison.OrdinalIgnoreCase);
+         Assert.DoesNotContain("acceptedSynonyms", body, StringComparison.OrdinalIgnoreCase);
+         Assert.DoesNotContain("explanationMarkdown", body, StringComparison.OrdinalIgnoreCase);
+         Assert.DoesNotContain("Do not leak this explanation", body, StringComparison.OrdinalIgnoreCase);
++        Assert.DoesNotContain("SECRET-OPTION", body, StringComparison.OrdinalIgnoreCase);
+     }
+ 
+     [Fact]
+@@ -400,7 +404,13 @@ public class ReadingPathwayEndpointTests : IClassFixture<TestWebApplicationFacto
+             Points = 1,
+             QuestionType = ReadingQuestionType.MultipleChoice3,
+             Stem = "What should the nurse do first?",
+-            OptionsJson = "{\"A\":\"Check the policy\",\"B\":\"Call reception\",\"C\":\"Ignore the update\"}",
++                        OptionsJson = """
++                                [
++                                    {"value":"A","label":"Check the policy","correctAnswer":"SECRET-OPTION","acceptedSynonyms":["SECRET-OPTION-SYNONYM"],"explanationMarkdown":"SECRET-OPTION-EXPLANATION","isCorrect":true},
++                                    {"value":"B","label":"Call reception"},
++                                    {"value":"C","label":"Ignore the update"}
++                                ]
++                                """,
+             CorrectAnswerJson = "\"A\"",
+             AcceptedSynonymsJson = "[\"policy check\"]",
+             ExplanationMarkdown = "Do not leak this explanation to diagnostic clients.",

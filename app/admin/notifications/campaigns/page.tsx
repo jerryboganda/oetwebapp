@@ -332,7 +332,7 @@ export default function AdminCampaignsPage() {
                   <Pause className="h-3.5 w-3.5" />
                 </Button>
                 <Button
-                  variant="danger"
+                  variant="destructive"
                   size="sm"
                   onClick={() => handleAction(campaign.id, 'cancel')}
                   disabled={isLoading}
@@ -343,7 +343,7 @@ export default function AdminCampaignsPage() {
             )}
             {campaign.status === 'sending' && (
               <Button
-                variant="danger"
+                variant="destructive"
                 size="sm"
                 onClick={() => handleAction(campaign.id, 'cancel')}
                 disabled={isLoading}
@@ -389,15 +389,16 @@ export default function AdminCampaignsPage() {
                 <Select
                   value={statusFilter}
                   onChange={(e) => setStatusFilter(e.target.value as '' | CampaignStatus)}
-                >
-                  <option value="">All statuses</option>
-                  <option value="draft">Draft</option>
-                  <option value="scheduled">Scheduled</option>
-                  <option value="sending">Sending</option>
-                  <option value="sent">Sent</option>
-                  <option value="cancelled">Cancelled</option>
-                  <option value="failed">Failed</option>
-                </Select>
+                  options={[
+                    { value: '', label: 'All statuses' },
+                    { value: 'draft', label: 'Draft' },
+                    { value: 'scheduled', label: 'Scheduled' },
+                    { value: 'sending', label: 'Sending' },
+                    { value: 'sent', label: 'Sent' },
+                    { value: 'cancelled', label: 'Cancelled' },
+                    { value: 'failed', label: 'Failed' },
+                  ]}
+                />
               </div>
               <div className="relative w-full min-w-[240px] sm:w-80">
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-admin-fg-muted" />
@@ -423,7 +424,7 @@ export default function AdminCampaignsPage() {
           />
         ) : pageStatus === 'empty' ? (
           <EmptyState
-            variant="empty"
+            variant="default"
             illustration={<Megaphone className="h-10 w-10" />}
             title="No campaigns yet"
             description="Create your first notification campaign to reach learners."
@@ -484,11 +485,12 @@ export default function AdminCampaignsPage() {
                   onChange={(e) =>
                     setForm((f) => ({ ...f, channel: e.target.value as CampaignChannel }))
                   }
-                >
-                  <option value="email">Email</option>
-                  <option value="inApp">In-App</option>
-                  <option value="push">Push</option>
-                </Select>
+                  options={[
+                    { value: 'email', label: 'Email' },
+                    { value: 'inApp', label: 'In-App' },
+                    { value: 'push', label: 'Push' },
+                  ]}
+                />
               </div>
 
               <div className="space-y-2">
@@ -543,9 +545,7 @@ export default function AdminCampaignsPage() {
       )}
 
       {toast && (
-        <Toast variant={toast.variant} onClose={() => setToast(null)}>
-          {toast.message}
-        </Toast>
+        <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} />
       )}
     </AdminRouteWorkspace>
   );

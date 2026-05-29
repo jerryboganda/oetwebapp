@@ -1,0 +1,1107 @@
+commit 2e68bd9503d42a48497074e3fc7b6f1ce3106524
+Author: jerryboganda <jerryboganda@users.noreply.github.com>
+Date:   Fri May 29 22:46:15 2026 +0500
+
+    feat: complete reading and listening workflows
+
+diff --git a/backend/src/OetLearner.Api/Endpoints/ReadingAnalyticsAdminEndpoints.cs b/backend/src/OetLearner.Api/Endpoints/ReadingAnalyticsAdminEndpoints.cs
+index 926bac48..1b2667d2 100644
+--- a/backend/src/OetLearner.Api/Endpoints/ReadingAnalyticsAdminEndpoints.cs
++++ b/backend/src/OetLearner.Api/Endpoints/ReadingAnalyticsAdminEndpoints.cs
+@@ -1,5 +1,6 @@
+ using Microsoft.AspNetCore.Mvc;
+ using Microsoft.EntityFrameworkCore;
++using System.Security.Claims;
+ using System.Text.Json;
+ using OetLearner.Api.Data;
+ using OetLearner.Api.Domain;
+@@ -51,11 +52,27 @@ public static class ReadingAnalyticsAdminEndpoints
+             [FromQuery] string paperId,
+             [FromQuery] string? userIds,
+             IReadingAnalyticsService analytics,
++            LearnerDbContext db,
++            HttpContext http,
+             CancellationToken ct) =>
+         {
+             if (string.IsNullOrWhiteSpace(paperId))
+                 return Results.BadRequest(new { error = "paperId is required." });
+-            var ids = ParseUserIds(userIds);
++            var expertUserId = CurrentUserId(http);
++            var assignedLearners = await db.ReadingAssignments.AsNoTracking()
++                .Where(a => a.AssignedByUserId == expertUserId
++                    && a.PaperId == paperId
++                    && a.Status != "cancelled")
++                .Select(a => a.AssignedToUserId)
++                .Distinct()
++                .ToListAsync(ct);
++
++            var requestedIds = ParseUserIds(userIds);
++            IReadOnlyCollection<string> ids = requestedIds.Count == 0
++                ? assignedLearners
++                : assignedLearners
++                    .Where(id => requestedIds.Contains(id, StringComparer.Ordinal))
++                    .ToArray();
+             return Results.Ok(await analytics.GetCohortAnalyticsAsync(paperId, ids, ct));
+         });
+ 
+@@ -69,6 +86,10 @@ public static class ReadingAnalyticsAdminEndpoints
+                 .Distinct(StringComparer.Ordinal)
+                 .ToArray();
+ 
++    private static string CurrentUserId(HttpContext http)
++        => http.User.FindFirstValue(ClaimTypes.NameIdentifier)
++           ?? throw new InvalidOperationException("Authenticated user id is required.");
++
+     public static async Task<ReadingAdminAnalyticsDto> BuildAnalyticsAsync(
+         LearnerDbContext db,
+         int? days,
+diff --git a/backend/src/OetLearner.Api/Endpoints/ReadingAuthoringAdminEndpoints.cs b/backend/src/OetLearner.Api/Endpoints/ReadingAuthoringAdminEndpoints.cs
+index a6a0e51f..0721ecac 100644
+--- a/backend/src/OetLearner.Api/Endpoints/ReadingAuthoringAdminEndpoints.cs
++++ b/backend/src/OetLearner.Api/Endpoints/ReadingAuthoringAdminEndpoints.cs
+@@ -30,6 +30,38 @@ public static class ReadingAuthoringAdminEndpoints
+             return Results.Ok(ProjectStructure(structure));
+         });
+ 
++        group.MapGet("/preview-structure", async (
++            string paperId,
++            IReadingStructureService svc,
++            LearnerDbContext db,
++            CancellationToken ct) =>
++        {
++            var paper = await db.ContentPapers.AsNoTracking()
++                .FirstOrDefaultAsync(p => p.Id == paperId && p.SubtestCode == "reading", ct);
++            if (paper is null) return Results.NotFound();
++
++            var questionPaperAssets = await db.ContentPaperAssets.AsNoTracking()
++                .Where(a => a.PaperId == paperId
++                    && a.Role == PaperAssetRole.QuestionPaper
++                    && a.IsPrimary
++                    && a.MediaAsset != null
++                    && a.MediaAsset.Status == MediaAssetStatus.Ready)
++                .Include(a => a.MediaAsset)
++                .OrderBy(a => a.DisplayOrder)
++                .ThenBy(a => a.Part)
++                .Select(a => new
++                {
++                    a.Id,
++                    a.Part,
++                    title = a.Title ?? a.MediaAsset!.OriginalFilename,
++                    downloadPath = $"/v1/media/{a.MediaAssetId}/content",
++                })
++                .ToListAsync(ct);
++
++            var structure = await svc.GetAdminStructureAsync(paperId, ct);
++            return Results.Ok(ProjectLearnerSafePreview(paper, questionPaperAssets, structure));
++        });
++
+         group.MapGet("/manifest", async (
+             string paperId, IReadingStructureService svc, CancellationToken ct) =>
+         {
+@@ -37,6 +69,37 @@ public static class ReadingAuthoringAdminEndpoints
+             return Results.Ok(manifest);
+         });
+ 
++        group.MapPost("/clone", async (
++            string paperId,
++            ReadingPaperCloneRequest? dto,
++            IReadingStructureService svc,
++            HttpContext http,
++            CancellationToken ct) =>
++        {
++            var adminId = http.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "system";
++            try
++            {
++                var cloned = await svc.ClonePaperAsync(
++                    paperId,
++                    dto ?? new ReadingPaperCloneRequest(null, null),
++                    adminId,
++                    ct);
++                return Results.Created($"/v1/admin/papers/{cloned.PaperId}/reading/structure", new
++                {
++                    cloned.SourcePaperId,
++                    cloned.PaperId,
++                    cloned.Title,
++                    cloned.Slug,
++                    adminRoute = $"/admin/content/reading/{cloned.PaperId}",
++                    structure = ProjectStructure(cloned.Structure),
++                });
++            }
++            catch (InvalidOperationException ex)
++            {
++                return Results.BadRequest(new { error = ex.Message });
++            }
++        });
++
+         group.MapPost("/manifest", async (
+             string paperId,
+             ReadingStructureManifestImportDto dto,
+@@ -384,6 +447,50 @@ public static class ReadingAuthoringAdminEndpoints
+             }),
+         }),
+     };
++
++    private static object ProjectLearnerSafePreview(
++        ContentPaper paper,
++        IReadOnlyList<object> questionPaperAssets,
++        ReadingStructure structure) => new
++    {
++        paper = new
++        {
++            paper.Id,
++            paper.Title,
++            paper.Slug,
++            paper.SubtestCode,
++            allowPaperReadingMode = true,
++            questionPaperAssets,
++        },
++        parts = structure.Parts.Select(part => new
++        {
++            part.Id,
++            partCode = part.PartCode.ToString(),
++            part.TimeLimitMinutes,
++            part.MaxRawScore,
++            part.Instructions,
++            texts = part.Texts.Select(text => new
++            {
++                text.Id,
++                text.DisplayOrder,
++                text.Title,
++                text.Source,
++                text.BodyHtml,
++                text.WordCount,
++                text.TopicTag,
++            }),
++            questions = part.Questions.Select(question => new
++            {
++                question.Id,
++                question.ReadingTextId,
++                question.DisplayOrder,
++                question.Points,
++                questionType = question.QuestionType.ToString(),
++                question.Stem,
++                options = ReadingLearnerSafeProjection.ProjectOptions(question.OptionsJson),
++            }),
++        }),
++    };
+ }
+ 
+ public sealed record ReadingExtractionRequestDto(string? MediaAssetId);
+diff --git a/backend/src/OetLearner.Api/Endpoints/ReadingLearnerEndpoints.cs b/backend/src/OetLearner.Api/Endpoints/ReadingLearnerEndpoints.cs
+index 1aa304c6..ea4974a3 100644
+--- a/backend/src/OetLearner.Api/Endpoints/ReadingLearnerEndpoints.cs
++++ b/backend/src/OetLearner.Api/Endpoints/ReadingLearnerEndpoints.cs
+@@ -139,7 +139,7 @@ public static class ReadingLearnerEndpoints
+                         questionType = q.QuestionType.ToString(),
+                         q.Stem,
+                         // options visible; correct answer + explanation + synonyms NOT.
+-                        options = SafeProjectOptions(q.OptionsJson),
++                        options = ReadingLearnerSafeProjection.ProjectOptions(q.OptionsJson),
+                     }),
+                 }),
+             });
+@@ -607,6 +607,99 @@ public static class ReadingLearnerEndpoints
+             }
+         }).RequireRateLimiting("PerUserWrite");
+ 
++        // ── Start a Part-scoped practice attempt against a paper ─────────
++        group.MapPost("/papers/{paperId}/practice/parts/{partCode}", async (
++            string paperId,
++            string partCode,
++            IReadingAttemptService svc,
++            LearnerDbContext db,
++            IReadingPolicyService policyService,
++            IContentEntitlementService contentEntitlements,
++            HttpContext http,
++            CancellationToken ct) =>
++        {
++            var userId = http.User.FindFirstValue(ClaimTypes.NameIdentifier)
++                ?? throw new InvalidOperationException("auth required");
++
++            if (!Enum.TryParse<ReadingPartCode>(partCode, ignoreCase: true, out var parsedPart)
++                || parsedPart is not (ReadingPartCode.A or ReadingPartCode.B or ReadingPartCode.C))
++            {
++                return Results.BadRequest(new
++                {
++                    code = "part_code_invalid",
++                    error = "partCode must be A, B, or C.",
++                    message = "partCode must be A, B, or C.",
++                });
++            }
++
++            var globalPolicy = await policyService.GetGlobalAsync(ct);
++            var paper = await db.ContentPapers.AsNoTracking()
++                .FirstOrDefaultAsync(p => p.Id == paperId
++                    && p.SubtestCode == "reading"
++                    && (p.Status == ContentStatus.Published
++                        || (globalPolicy.AllowAttemptOnArchivedPaper && p.Status == ContentStatus.Archived)), ct);
++            if (paper is null || !await CanLearnerSeePaperAsync(db, http, userId, paper, ct))
++                return Results.NotFound();
++
++            await contentEntitlements.RequireAccessAsync(userId, paper, ct);
++
++            var questionIds = await db.ReadingQuestions.AsNoTracking()
++                .Where(q => q.Part!.PaperId == paperId && q.Part.PartCode == parsedPart)
++                .OrderBy(q => q.DisplayOrder)
++                .Select(q => q.Id)
++                .ToListAsync(ct);
++            if (questionIds.Count == 0)
++                return Results.BadRequest(new
++                {
++                    code = "part_practice_no_questions",
++                    error = $"No Part {parsedPart} questions are authored for this paper.",
++                    message = $"No Part {parsedPart} questions are authored for this paper.",
++                });
++
++            var minutes = parsedPart switch
++            {
++                ReadingPartCode.A => 15,
++                ReadingPartCode.B => 12,
++                ReadingPartCode.C => 33,
++                _ => 15,
++            };
++            var scope = new
++            {
++                kind = "part-practice",
++                label = $"Part {parsedPart} practice",
++                partCode = parsedPart.ToString(),
++                minutes,
++                questionIds,
++            };
++
++            try
++            {
++                var started = await svc.StartInModeAsync(
++                    userId, paperId, ReadingAttemptMode.Drill,
++                    JsonSerializer.Serialize(scope), ct);
++                return Results.Ok(new
++                {
++                    mode = "Drill",
++                    started.AttemptId,
++                    started.StartedAt,
++                    started.DeadlineAt,
++                    started.PaperTitle,
++                    minutes,
++                    questionCount = questionIds.Count,
++                    partPractice = new { partCode = parsedPart.ToString(), title = $"Part {parsedPart} practice" },
++                    playerRoute = $"/reading/paper/{paperId}?attemptId={started.AttemptId}&mode=part-practice&part={parsedPart}",
++                });
++            }
++            catch (ReadingAttemptException ex)
++            {
++                return Results.BadRequest(new { code = ex.Code, error = ex.Message, message = ex.Message });
++            }
++            catch (InvalidOperationException ex)
++            {
++                return Results.BadRequest(new { code = "reading_attempt_rejected", error = ex.Message, message = ex.Message });
++            }
++        }).RequireRateLimiting("PerUserWrite");
++
+         // ── List the learner's current Error Bank ────────────────────────
+         group.MapGet("/practice/error-bank", async (
+             HttpContext http,
+@@ -1027,63 +1120,6 @@ public static class ReadingLearnerEndpoints
+         return null;
+     }
+ 
+-    private static IReadOnlyList<object> SafeProjectOptions(string json)
+-    {
+-        if (string.IsNullOrWhiteSpace(json)) return Array.Empty<object>();
+-        try
+-        {
+-            using var doc = JsonDocument.Parse(json);
+-            if (doc.RootElement.ValueKind != JsonValueKind.Array)
+-            {
+-                return Array.Empty<object>();
+-            }
+-
+-            var options = new List<object>();
+-            foreach (var option in doc.RootElement.EnumerateArray())
+-            {
+-                if (option.ValueKind == JsonValueKind.String)
+-                {
+-                    options.Add(option.GetString() ?? string.Empty);
+-                    continue;
+-                }
+-
+-                if (option.ValueKind != JsonValueKind.Object)
+-                {
+-                    continue;
+-                }
+-
+-                var value = ReadSafeOptionText(option, "value")
+-                    ?? ReadSafeOptionText(option, "label")
+-                    ?? ReadSafeOptionText(option, "text")
+-                    ?? ReadSafeOptionText(option, "title");
+-                var label = ReadSafeOptionText(option, "label")
+-                    ?? ReadSafeOptionText(option, "text")
+-                    ?? ReadSafeOptionText(option, "title")
+-                    ?? value;
+-                if (!string.IsNullOrWhiteSpace(label))
+-                {
+-                    options.Add(new { value = string.IsNullOrWhiteSpace(value) ? label : value, label });
+-                }
+-            }
+-
+-            return options;
+-        }
+-        catch (JsonException)
+-        {
+-            return Array.Empty<object>();
+-        }
+-    }
+-
+-    private static string? ReadSafeOptionText(JsonElement option, string propertyName)
+-    {
+-        if (!option.TryGetProperty(propertyName, out var property) || property.ValueKind != JsonValueKind.String)
+-        {
+-            return null;
+-        }
+-
+-        return property.GetString();
+-    }
+-
+     private static object? SafeParseJson(string? json)
+     {
+         if (string.IsNullOrWhiteSpace(json)) return null;
+diff --git a/backend/src/OetLearner.Api/Endpoints/ReadingTutorAdminEndpoints.cs b/backend/src/OetLearner.Api/Endpoints/ReadingTutorAdminEndpoints.cs
+index 07763303..cdf10518 100644
+--- a/backend/src/OetLearner.Api/Endpoints/ReadingTutorAdminEndpoints.cs
++++ b/backend/src/OetLearner.Api/Endpoints/ReadingTutorAdminEndpoints.cs
+@@ -59,6 +59,9 @@ public static class ReadingTutorAdminEndpoints
+             if (!body.RawScore.HasValue && !body.ScaledScore.HasValue)
+                 return Results.BadRequest(new { error = "rawScore or scaledScore is required." });
+ 
++            if (!isAdmin && !await svc.CanExpertAccessAttemptAsync(attemptId, CurrentUserId(http), ct))
++                return Results.NotFound();
++
+             var review = await svc.ApplyScoreOverrideAsync(attemptId, body, CurrentUserId(http), ct);
+             return review is null ? Results.NotFound() : Results.Ok(review);
+         }), isAdmin);
+@@ -66,6 +69,9 @@ public static class ReadingTutorAdminEndpoints
+         Write(group.MapDelete("/attempts/{attemptId}/override", async (
+             string attemptId, HttpContext http, IReadingTutorService svc, CancellationToken ct) =>
+         {
++            if (!isAdmin && !await svc.CanExpertAccessAttemptAsync(attemptId, CurrentUserId(http), ct))
++                return Results.NotFound();
++
+             var review = await svc.ClearScoreOverrideAsync(attemptId, CurrentUserId(http), ct);
+             return review is null ? Results.NotFound() : Results.Ok(review);
+         }), isAdmin);
+@@ -80,6 +86,18 @@ public static class ReadingTutorAdminEndpoints
+         {
+             try
+             {
++                if (!isAdmin)
++                {
++                    if (!string.Equals(body.Scope, "thisAttempt", StringComparison.OrdinalIgnoreCase)
++                        || string.IsNullOrWhiteSpace(body.AttemptId))
++                    {
++                        return Results.BadRequest(new { error = "Expert recalculation requires scope 'thisAttempt' and attemptId." });
++                    }
++
++                    if (!await svc.CanExpertAccessAttemptAsync(body.AttemptId, CurrentUserId(http), ct))
++                        return Results.NotFound();
++                }
++
+                 var result = await svc.RecalcAsync(paperId, body, CurrentUserId(http), ct);
+                 return Results.Ok(result);
+             }
+@@ -91,16 +109,22 @@ public static class ReadingTutorAdminEndpoints
+ 
+         // ── Privileged (non-redacted) attempt review ─────────────────────
+         Read(group.MapGet("/attempts/{attemptId}", async (
+-            string attemptId, IReadingTutorService svc, CancellationToken ct) =>
++            string attemptId, HttpContext http, IReadingTutorService svc, CancellationToken ct) =>
+         {
++            if (!isAdmin && !await svc.CanExpertAccessAttemptAsync(attemptId, CurrentUserId(http), ct))
++                return Results.NotFound();
++
+             var review = await svc.GetPrivilegedReviewAsync(attemptId, ct);
+             return review is null ? Results.NotFound() : Results.Ok(review);
+         }), isAdmin);
+ 
+         // ── Feedback CRUD ────────────────────────────────────────────────
+         Read(group.MapGet("/attempts/{attemptId}/feedback", async (
+-            string attemptId, IReadingTutorService svc, CancellationToken ct) =>
++            string attemptId, HttpContext http, IReadingTutorService svc, CancellationToken ct) =>
+         {
++            if (!isAdmin && !await svc.CanExpertAccessAttemptAsync(attemptId, CurrentUserId(http), ct))
++                return Results.NotFound();
++
+             return Results.Ok(await svc.ListFeedbackAsync(attemptId, ct));
+         }), isAdmin);
+ 
+@@ -113,6 +137,11 @@ public static class ReadingTutorAdminEndpoints
+         {
+             if (body is null || string.IsNullOrWhiteSpace(body.FeedbackText))
+                 return Results.BadRequest(new { error = "feedbackText is required." });
++            if (!ReadingFeedbackScopeExtensions.IsValidScope(body.Scope))
++                return Results.BadRequest(new { error = "scope must be one of: test, section, question, skill." });
++
++            if (!isAdmin && !await svc.CanExpertAccessAttemptAsync(attemptId, CurrentUserId(http), ct))
++                return Results.NotFound();
+ 
+             var created = await svc.CreateFeedbackAsync(attemptId, body, CurrentUserId(http), ct);
+             return created is null ? Results.NotFound() : Results.Ok(created);
+@@ -128,6 +157,11 @@ public static class ReadingTutorAdminEndpoints
+         {
+             if (body is null || string.IsNullOrWhiteSpace(body.FeedbackText))
+                 return Results.BadRequest(new { error = "feedbackText is required." });
++            if (!ReadingFeedbackScopeExtensions.IsValidScope(body.Scope))
++                return Results.BadRequest(new { error = "scope must be one of: test, section, question, skill." });
++
++            if (!isAdmin && !await svc.CanExpertAccessAttemptAsync(attemptId, CurrentUserId(http), ct))
++                return Results.NotFound();
+ 
+             var updated = await svc.UpdateFeedbackAsync(attemptId, feedbackId, body, CurrentUserId(http), ct);
+             return updated is null ? Results.NotFound() : Results.Ok(updated);
+@@ -136,47 +170,64 @@ public static class ReadingTutorAdminEndpoints
+         Write(group.MapDelete("/attempts/{attemptId}/feedback/{feedbackId}", async (
+             string attemptId, string feedbackId, HttpContext http, IReadingTutorService svc, CancellationToken ct) =>
+         {
++            if (!isAdmin && !await svc.CanExpertAccessAttemptAsync(attemptId, CurrentUserId(http), ct))
++                return Results.NotFound();
++
+             var removed = await svc.DeleteFeedbackAsync(attemptId, feedbackId, CurrentUserId(http), ct);
+             return removed ? Results.NoContent() : Results.NotFound();
+         }), isAdmin);
+ 
+         // ── Assignment workflow ──────────────────────────────────────────
+-        Write(group.MapPost("/assignments", async (
+-            ReadingAssignmentCreateRequest body,
+-            HttpContext http,
+-            IReadingTutorService svc,
+-            CancellationToken ct) =>
++        if (isAdmin)
+         {
+-            if (body is null
+-                || string.IsNullOrWhiteSpace(body.AssignedToUserId)
+-                || string.IsNullOrWhiteSpace(body.PaperId))
+-            {
+-                return Results.BadRequest(new { error = "assignedToUserId and paperId are required." });
+-            }
+-
+-            try
++            Write(group.MapPost("/assignments", async (
++                ReadingAssignmentCreateRequest body,
++                HttpContext http,
++                IReadingTutorService svc,
++                CancellationToken ct) =>
+             {
+-                var created = await svc.CreateAssignmentAsync(body, CurrentUserId(http), ct);
+-                return created is null ? Results.NotFound() : Results.Ok(created);
+-            }
+-            catch (InvalidOperationException ex)
++                if (body is null
++                    || string.IsNullOrWhiteSpace(body.AssignedToUserId)
++                    || string.IsNullOrWhiteSpace(body.PaperId))
++                {
++                    return Results.BadRequest(new { error = "assignedToUserId and paperId are required." });
++                }
++
++                try
++                {
++                    var created = await svc.CreateAssignmentAsync(body, CurrentUserId(http), ct);
++                    return created is null ? Results.NotFound() : Results.Ok(created);
++                }
++                catch (InvalidOperationException ex)
++                {
++                    return Results.BadRequest(new { error = ex.Message });
++                }
++            }), isAdmin);
++
++            Read(group.MapGet("/assignments", async (
++                IReadingTutorService svc, CancellationToken ct, [FromQuery] string? assignedToUserId = null) =>
+             {
+-                return Results.BadRequest(new { error = ex.Message });
+-            }
+-        }), isAdmin);
+-
+-        Read(group.MapGet("/assignments", async (
+-            IReadingTutorService svc, CancellationToken ct, [FromQuery] string? assignedToUserId = null) =>
+-        {
+-            return Results.Ok(await svc.ListAssignmentsAsync(assignedToUserId, ct));
+-        }), isAdmin);
++                return Results.Ok(await svc.ListAssignmentsAsync(assignedToUserId, ct));
++            }), isAdmin);
+ 
+-        Write(group.MapDelete("/assignments/{id}", async (
+-            string id, HttpContext http, IReadingTutorService svc, CancellationToken ct) =>
++            Write(group.MapDelete("/assignments/{id}", async (
++                string id, HttpContext http, IReadingTutorService svc, CancellationToken ct) =>
++            {
++                var cancelled = await svc.CancelAssignmentAsync(id, CurrentUserId(http), ct);
++                return cancelled ? Results.NoContent() : Results.NotFound();
++            }), isAdmin);
++        }
++        else
+         {
+-            var cancelled = await svc.CancelAssignmentAsync(id, CurrentUserId(http), ct);
+-            return cancelled ? Results.NoContent() : Results.NotFound();
+-        }), isAdmin);
++            Read(group.MapGet("/assignments", async (
++                HttpContext http,
++                IReadingTutorService svc,
++                CancellationToken ct,
++                [FromQuery] string? assignedToUserId = null) =>
++            {
++                return Results.Ok(await svc.ListAssignmentsForExpertAsync(CurrentUserId(http), assignedToUserId, ct));
++            }), isAdmin);
++        }
+     }
+ 
+     /// <summary>Apply the write-endpoint policy for the given route group:
+diff --git a/backend/src/OetLearner.Api/Services/Reading/ReadingAttemptService.cs b/backend/src/OetLearner.Api/Services/Reading/ReadingAttemptService.cs
+index cb976dff..3a5a5703 100644
+--- a/backend/src/OetLearner.Api/Services/Reading/ReadingAttemptService.cs
++++ b/backend/src/OetLearner.Api/Services/Reading/ReadingAttemptService.cs
+@@ -122,6 +122,8 @@ public sealed class ReadingAttemptService(
+ {
+     public const int PartABreakMaxSeconds = 600;
+     private const int MaxIdempotencyRecordKeyLength = 128;
++    private const string ReadingExamModeRulebookProfession = "_exam-mode";
++    private const string FallbackReadingRulebookVersion = "1.0.0";
+ 
+     public Task<ReadingAttemptStarted> StartAsync(string userId, string paperId, CancellationToken ct)
+         => StartInModeAsync(userId, paperId, ReadingAttemptMode.Exam, scopeJson: null, ct);
+@@ -262,6 +264,7 @@ public sealed class ReadingAttemptService(
+         var initialDeadline = mode == ReadingAttemptMode.Exam
+             ? partBCDeadline.AddSeconds(PartABreakMaxSeconds + graceSeconds)
+             : partBCDeadline.AddSeconds(graceSeconds);
++        var rulebookVersion = await ResolveReadingRulebookVersionAsync(ct);
+         var attempt = new ReadingAttempt
+         {
+             Id = Guid.NewGuid().ToString("N"),
+@@ -277,6 +280,7 @@ public sealed class ReadingAttemptService(
+             MaxRawScore = maxRaw,
+             PolicySnapshotJson = JsonSerializer.Serialize(policy),
+             PaperRevisionId = paper.PublishedRevisionId,
++            RulebookVersion = rulebookVersion,
+             Mode = mode,
+             ScopeJson = scopeJson,
+         };
+@@ -314,6 +318,19 @@ public sealed class ReadingAttemptService(
+             PartABreakMaxSeconds: mode == ReadingAttemptMode.Exam ? PartABreakMaxSeconds : 0);
+     }
+ 
++    private async Task<string> ResolveReadingRulebookVersionAsync(CancellationToken ct)
++    {
++        var version = await db.RulebookVersions.AsNoTracking()
++            .Where(rulebook => rulebook.Kind == "reading"
++                && rulebook.Profession == ReadingExamModeRulebookProfession
++                && rulebook.Status == RulebookStatus.Published)
++            .OrderByDescending(rulebook => rulebook.PublishedAt ?? rulebook.UpdatedAt)
++            .Select(rulebook => rulebook.Version)
++            .FirstOrDefaultAsync(ct);
++
++        return string.IsNullOrWhiteSpace(version) ? FallbackReadingRulebookVersion : version;
++    }
++
+     private static int? TryReadMinutesFromScope(string? scopeJson)
+     {
+         if (string.IsNullOrWhiteSpace(scopeJson)) return null;
+@@ -669,7 +686,7 @@ public sealed class ReadingAttemptService(
+ 
+         // Wave 2 — best-effort: fulfil any open assignment that targets this
+         // paper for this learner. Never block submit on failure.
+-        await TryCompleteMatchingAssignmentsAsync(userId, attemptId, attempt.PaperId, ct);
++        await TryCompleteMatchingAssignmentsAsync(userId, attempt, ct);
+ 
+         // Persist the cache row AFTER grading succeeded so transient failures
+         // do not lock us out of retrying. On unique-index collision (two
+@@ -686,23 +703,23 @@ public sealed class ReadingAttemptService(
+     /// failure is logged and swallowed so it never blocks the submit.
+     /// </summary>
+     private async Task TryCompleteMatchingAssignmentsAsync(
+-        string userId, string attemptId, string paperId, CancellationToken ct)
++        string userId, ReadingAttempt attempt, CancellationToken ct)
+     {
+         try
+         {
+             var open = await db.ReadingAssignments
+                 .Where(x => x.AssignedToUserId == userId
+-                    && x.PaperId == paperId
++                    && x.PaperId == attempt.PaperId
+                     && x.Status == "assigned")
+                 .OrderBy(x => x.CreatedAt)
+                 .ToListAsync(ct);
+             if (open.Count == 0) return;
+ 
+             var now = DateTimeOffset.UtcNow;
+-            foreach (var assignment in open)
++            foreach (var assignment in open.Where(assignment => AssignmentMatchesAttempt(assignment, attempt)))
+             {
+                 assignment.Status = "completed";
+-                assignment.CompletedAttemptId = attemptId;
++                assignment.CompletedAttemptId = attempt.Id;
+                 assignment.UpdatedAt = now;
+                 db.AuditEvents.Add(new AuditEvent
+                 {
+@@ -713,7 +730,7 @@ public sealed class ReadingAttemptService(
+                     Action = "ReadingAssignmentCompleted",
+                     ResourceType = "ReadingAssignment",
+                     ResourceId = assignment.Id,
+-                    Details = $"attemptId={attemptId} paperId={paperId}",
++                    Details = $"attemptId={attempt.Id} paperId={attempt.PaperId}",
+                 });
+             }
+             await db.SaveChangesAsync(ct);
+@@ -721,7 +738,47 @@ public sealed class ReadingAttemptService(
+         catch (Exception ex)
+         {
+             logger.LogWarning(ex,
+-                "Reading assignment auto-completion failed for attempt {AttemptId}; ignoring.", attemptId);
++                "Reading assignment auto-completion failed for attempt {AttemptId}; ignoring.", attempt.Id);
++        }
++    }
++
++    private static bool AssignmentMatchesAttempt(ReadingAssignment assignment, ReadingAttempt attempt)
++    {
++        var kind = (assignment.Kind ?? "full").Trim().ToLowerInvariant();
++        if (kind is "full" or "exam" or "retake")
++            return attempt.Mode == ReadingAttemptMode.Exam;
++
++        if (kind is "learning") return attempt.Mode == ReadingAttemptMode.Learning;
++        if (kind is "mini-test" or "minitest") return attempt.Mode == ReadingAttemptMode.MiniTest;
++        if (kind is "error-bank" or "errorbank") return attempt.Mode == ReadingAttemptMode.ErrorBank;
++        if (kind is "drill") return attempt.Mode == ReadingAttemptMode.Drill;
++
++        if (kind is "part" or "part-practice")
++        {
++            return attempt.Mode == ReadingAttemptMode.Drill
++                && string.Equals(
++                    TryReadPartCode(assignment.ScopeJson),
++                    TryReadPartCode(attempt.ScopeJson),
++                    StringComparison.OrdinalIgnoreCase);
++        }
++
++        return false;
++    }
++
++    private static string? TryReadPartCode(string? scopeJson)
++    {
++        if (string.IsNullOrWhiteSpace(scopeJson)) return null;
++        try
++        {
++            using var doc = JsonDocument.Parse(scopeJson);
++            return doc.RootElement.TryGetProperty("partCode", out var part)
++                && part.ValueKind == JsonValueKind.String
++                ? part.GetString()
++                : null;
++        }
++        catch (JsonException)
++        {
++            return null;
+         }
+     }
+ 
+diff --git a/backend/src/OetLearner.Api/Services/Reading/ReadingStructureService.cs b/backend/src/OetLearner.Api/Services/Reading/ReadingStructureService.cs
+index ed490b1d..98380e06 100644
+--- a/backend/src/OetLearner.Api/Services/Reading/ReadingStructureService.cs
++++ b/backend/src/OetLearner.Api/Services/Reading/ReadingStructureService.cs
+@@ -37,6 +37,11 @@ public interface IReadingStructureService
+     Task<ReadingStructure> GetAdminStructureAsync(string paperId, CancellationToken ct);
+ 
+     Task<ReadingStructureManifest> ExportManifestAsync(string paperId, CancellationToken ct);
++    Task<ReadingPaperCloneResult> ClonePaperAsync(
++        string sourcePaperId,
++        ReadingPaperCloneRequest request,
++        string adminId,
++        CancellationToken ct);
+     Task<ReadingStructureImportResult> ImportManifestAsync(
+         string paperId,
+         ReadingStructureManifest manifest,
+@@ -151,6 +156,18 @@ public sealed record ReadingStructureImportResult(
+     ReadingStructure Structure,
+     ReadingValidationReport Report);
+ 
++public sealed record ReadingPaperCloneRequest(
++    string? Title,
++    string? Slug,
++    bool ResetReviewState = true);
++
++public sealed record ReadingPaperCloneResult(
++    string SourcePaperId,
++    string PaperId,
++    string Title,
++    string Slug,
++    ReadingStructure Structure);
++
+ public sealed class ReadingStructureService : IReadingStructureService
+ {
+     private readonly LearnerDbContext db;
+@@ -493,6 +510,166 @@ public sealed class ReadingStructureService : IReadingStructureService
+             .ToList());
+     }
+ 
++    public async Task<ReadingPaperCloneResult> ClonePaperAsync(
++        string sourcePaperId,
++        ReadingPaperCloneRequest request,
++        string adminId,
++        CancellationToken ct)
++    {
++        request ??= new ReadingPaperCloneRequest(null, null);
++
++        var source = await db.ContentPapers
++            .Include(p => p.Assets)
++            .AsNoTracking()
++            .FirstOrDefaultAsync(p => p.Id == sourcePaperId, ct)
++            ?? throw new InvalidOperationException("Source paper not found.");
++
++        if (!string.Equals(source.SubtestCode, "reading", StringComparison.OrdinalIgnoreCase))
++            throw new InvalidOperationException($"Paper subtest is '{source.SubtestCode}', expected 'reading'.");
++
++        var sourceParts = await db.ReadingParts.AsNoTracking()
++            .Where(p => p.PaperId == sourcePaperId)
++            .Include(p => p.Texts)
++            .Include(p => p.Questions)
++            .OrderBy(p => p.PartCode)
++            .ToListAsync(ct);
++
++        if (sourceParts.Count == 0)
++            throw new InvalidOperationException("Source paper has no Reading structure to clone.");
++
++        await using var tx = await db.Database.BeginTransactionAsync(ct);
++
++        var now = DateTimeOffset.UtcNow;
++        var title = string.IsNullOrWhiteSpace(request.Title)
++            ? $"{source.Title} (Draft revision)"
++            : request.Title.Trim();
++        var slug = await UniqueCloneSlugAsync(
++            string.IsNullOrWhiteSpace(request.Slug) ? $"{source.Slug}-revision" : request.Slug,
++            ct);
++
++        var clone = new ContentPaper
++        {
++            Id = Guid.NewGuid().ToString("N"),
++            SubtestCode = source.SubtestCode,
++            Title = title,
++            Slug = slug,
++            ProfessionId = source.ProfessionId,
++            AppliesToAllProfessions = source.AppliesToAllProfessions,
++            Difficulty = source.Difficulty,
++            EstimatedDurationMinutes = source.EstimatedDurationMinutes,
++            Status = ContentStatus.Draft,
++            PublishedRevisionId = null,
++            CardType = source.CardType,
++            LetterType = source.LetterType,
++            Priority = source.Priority,
++            TagsCsv = AppendCloneTag(source.TagsCsv, source.Id),
++            SourceProvenance = source.SourceProvenance,
++            ExtractedTextJson = source.ExtractedTextJson,
++            CreatedByAdminId = adminId,
++            CreatedAt = now,
++            UpdatedAt = now,
++            IntegrityAcknowledgedByAdminId = source.IntegrityAcknowledgedByAdminId,
++            IntegrityAcknowledgedAt = source.IntegrityAcknowledgedAt,
++        };
++        db.ContentPapers.Add(clone);
++
++        foreach (var asset in source.Assets.OrderBy(a => a.DisplayOrder))
++        {
++            db.ContentPaperAssets.Add(new ContentPaperAsset
++            {
++                Id = Guid.NewGuid().ToString("N"),
++                PaperId = clone.Id,
++                Role = asset.Role,
++                Part = asset.Part,
++                MediaAssetId = asset.MediaAssetId,
++                Title = asset.Title,
++                DisplayOrder = asset.DisplayOrder,
++                IsPrimary = asset.IsPrimary,
++                CreatedAt = now,
++            });
++        }
++
++        var textIdBySourceId = new Dictionary<string, string>(StringComparer.Ordinal);
++        foreach (var sourcePart in sourceParts)
++        {
++            var part = new ReadingPart
++            {
++                Id = Guid.NewGuid().ToString("N"),
++                PaperId = clone.Id,
++                PartCode = sourcePart.PartCode,
++                TimeLimitMinutes = sourcePart.TimeLimitMinutes,
++                MaxRawScore = sourcePart.MaxRawScore,
++                Instructions = sourcePart.Instructions,
++                CreatedAt = now,
++                UpdatedAt = now,
++            };
++            db.ReadingParts.Add(part);
++
++            foreach (var sourceText in sourcePart.Texts.OrderBy(t => t.DisplayOrder))
++            {
++                var text = new ReadingText
++                {
++                    Id = Guid.NewGuid().ToString("N"),
++                    ReadingPartId = part.Id,
++                    DisplayOrder = sourceText.DisplayOrder,
++                    Title = sourceText.Title,
++                    Source = sourceText.Source,
++                    BodyHtml = sourceText.BodyHtml,
++                    WordCount = sourceText.WordCount,
++                    TopicTag = sourceText.TopicTag,
++                    CreatedAt = now,
++                    UpdatedAt = now,
++                };
++                db.ReadingTexts.Add(text);
++                textIdBySourceId[sourceText.Id] = text.Id;
++            }
++
++            foreach (var sourceQuestion in sourcePart.Questions.OrderBy(q => q.DisplayOrder))
++            {
++                db.ReadingQuestions.Add(new ReadingQuestion
++                {
++                    Id = Guid.NewGuid().ToString("N"),
++                    ReadingPartId = part.Id,
++                    ReadingTextId = sourceQuestion.ReadingTextId is not null
++                        && textIdBySourceId.TryGetValue(sourceQuestion.ReadingTextId, out var textId)
++                            ? textId
++                            : null,
++                    DisplayOrder = sourceQuestion.DisplayOrder,
++                    Points = sourceQuestion.Points,
++                    QuestionType = sourceQuestion.QuestionType,
++                    Stem = sourceQuestion.Stem,
++                    OptionsJson = sourceQuestion.OptionsJson,
++                    CorrectAnswerJson = sourceQuestion.CorrectAnswerJson,
++                    ParagraphIndex = sourceQuestion.ParagraphIndex,
++                    AcceptedSynonymsJson = sourceQuestion.AcceptedSynonymsJson,
++                    CaseSensitive = sourceQuestion.CaseSensitive,
++                    ExplanationMarkdown = sourceQuestion.ExplanationMarkdown,
++                    SkillTag = sourceQuestion.SkillTag,
++                    Difficulty = sourceQuestion.Difficulty,
++                    EvidenceSentence = sourceQuestion.EvidenceSentence,
++                    DistractorRationaleJson = sourceQuestion.DistractorRationaleJson,
++                    OptionDistractorsJson = sourceQuestion.OptionDistractorsJson,
++                    ReviewState = request.ResetReviewState ? ReadingReviewState.Draft : sourceQuestion.ReviewState,
++                    LatestReviewNote = request.ResetReviewState ? null : sourceQuestion.LatestReviewNote,
++                    CreatedAt = now,
++                    UpdatedAt = now,
++                });
++            }
++        }
++
++        await WriteAuditAsync("ReadingPaperCloned", clone.Id,
++            $"sourcePaperId={source.Id}; resetReviewState={request.ResetReviewState}", adminId, ct);
++        await db.SaveChangesAsync(ct);
++        await tx.CommitAsync(ct);
++
++        return new ReadingPaperCloneResult(
++            source.Id,
++            clone.Id,
++            clone.Title,
++            clone.Slug,
++            await GetAdminStructureAsync(clone.Id, ct));
++    }
++
+     public async Task<ReadingStructureImportResult> ImportManifestAsync(
+         string paperId,
+         ReadingStructureManifest manifest,
+@@ -1083,6 +1260,39 @@ public sealed class ReadingStructureService : IReadingStructureService
+             throw new InvalidOperationException("Reading part does not belong to this paper.");
+     }
+ 
++    private async Task<string> UniqueCloneSlugAsync(string? requestedSlug, CancellationToken ct)
++    {
++        var baseSlug = NormalizeSlug(requestedSlug ?? "reading-paper-revision");
++        var slug = baseSlug;
++        var suffix = 2;
++        while (await db.ContentPapers.AsNoTracking().AnyAsync(p => p.Slug == slug, ct))
++        {
++            slug = $"{baseSlug}-{suffix}";
++            suffix++;
++        }
++        return slug;
++    }
++
++    private static string NormalizeSlug(string value)
++    {
++        var chars = value.Trim().ToLowerInvariant()
++            .Select(ch => char.IsLetterOrDigit(ch) ? ch : '-')
++            .ToArray();
++        var collapsed = string.Join('-', new string(chars)
++            .Split('-', StringSplitOptions.RemoveEmptyEntries));
++        return string.IsNullOrWhiteSpace(collapsed) ? "reading-paper-revision" : collapsed[..Math.Min(collapsed.Length, 180)];
++    }
++
++    private static string AppendCloneTag(string? tagsCsv, string sourcePaperId)
++    {
++        var tags = (tagsCsv ?? string.Empty)
++            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
++            .Where(tag => tag.Length > 0)
++            .ToList();
++        tags.Add($"cloned-from:{sourcePaperId}");
++        return string.Join(',', tags.Distinct(StringComparer.OrdinalIgnoreCase));
++    }
++
+     private Task WriteAuditAsync(string action, string resourceId, string? details, string adminId, CancellationToken ct)
+     {
+         db.AuditEvents.Add(new AuditEvent
+diff --git a/backend/src/OetLearner.Api/Services/Reading/ReadingTutorService.cs b/backend/src/OetLearner.Api/Services/Reading/ReadingTutorService.cs
+index 7972c2e9..b96dc81c 100644
+--- a/backend/src/OetLearner.Api/Services/Reading/ReadingTutorService.cs
++++ b/backend/src/OetLearner.Api/Services/Reading/ReadingTutorService.cs
+@@ -49,9 +49,14 @@ public interface IReadingTutorService
+ 
+     Task<IReadOnlyList<ReadingAssignmentDto>> ListAssignmentsAsync(string? assignedToUserId, CancellationToken ct);
+ 
++    Task<IReadOnlyList<ReadingAssignmentDto>> ListAssignmentsForExpertAsync(
++        string expertUserId, string? assignedToUserId, CancellationToken ct);
++
+     Task<bool> CancelAssignmentAsync(string assignmentId, string actorUserId, CancellationToken ct);
+ 
+     Task<IReadOnlyList<ReadingAssignmentDto>> ListActiveAssignmentsForLearnerAsync(string userId, CancellationToken ct);
++
++    Task<bool> CanExpertAccessAttemptAsync(string attemptId, string expertUserId, CancellationToken ct);
+ }
+ 
+ public sealed record ReadingScoreOverrideRequest(int? RawScore, int? ScaledScore, string Reason);
+@@ -62,6 +67,68 @@ public sealed record ReadingRecalcResult(int RecalculatedCount, int SkippedOverr
+ 
+ public sealed record ReadingFeedbackRequest(string Scope, string? TargetRef, string FeedbackText);
+ 
++/// <summary>
++/// Granularity a piece of expert / admin attempt feedback is attached to.
++/// Persisted as the lowercase enum name in
++/// <see cref="OetLearner.Api.Domain.ReadingAttemptFeedback.Scope"/> (a
++/// string column — no integer values reach the DB), and round-tripped via
++/// <see cref="ReadingFeedbackScopeExtensions"/>.
++/// </summary>
++public enum ReadingFeedbackScope
++{
++    Test,
++    Section,
++    Question,
++    Skill,
++}
++
++internal static class ReadingFeedbackScopeExtensions
++{
++    /// <summary>Parse a client-supplied scope case-insensitively against
++    /// <see cref="ReadingFeedbackScope"/>, returning the normalized lowercase
++    /// canonical name (e.g. <c>"test"</c>, <c>"section"</c>). Throws
++    /// <see cref="ApiException"/> (400, code <c>reading_feedback_scope_invalid</c>)
++    /// for any unknown value, so the persisted column can only ever hold one
++    /// of the four known names.</summary>
++    public static string NormalizeScope(string? scope)
++    {
++        if (TryNormalize(scope, out var normalized))
++            return normalized;
++
++        throw ApiException.Validation(
++            "reading_feedback_scope_invalid",
++            "Feedback scope must be one of: test, section, question, skill.",
++            new[] { new ApiFieldError("scope", "reading_feedback_scope_invalid", "Unknown feedback scope.") });
++    }
++
++    /// <summary>Boundary check used by the endpoint layer: true when
++    /// <paramref name="scope"/> names a known <see cref="ReadingFeedbackScope"/>
++    /// (case-insensitive).</summary>
++    public static bool IsValidScope(string? scope) => TryNormalize(scope, out _);
++
++    /// <summary>Case-insensitive parse against <see cref="ReadingFeedbackScope"/>.
++    /// Only the four scope <em>names</em> are accepted — numeric strings such as
++    /// <c>"0"</c> (which <see cref="Enum.TryParse{TEnum}(string, bool, out TEnum)"/>
++    /// would otherwise bind to the underlying value) are rejected, so the stored
++    /// column only ever holds <c>test</c> / <c>section</c> / <c>question</c> /
++    /// <c>skill</c>.</summary>
++    private static bool TryNormalize(string? scope, out string normalized)
++    {
++        var raw = (scope ?? string.Empty).Trim();
++        if (raw.Length > 0
++            && char.IsLetter(raw[0])
++            && Enum.TryParse<ReadingFeedbackScope>(raw, ignoreCase: true, out var parsed)
++            && Enum.IsDefined(parsed))
++        {
++            normalized = parsed.ToString().ToLowerInvariant();
++            return true;
++        }
++
++        normalized = string.Empty;
++        return false;
++    }
++}
++
+ public sealed record ReadingFeedbackDto(
+     string Id,
+     string ReadingAttemptId,
+@@ -407,7 +474,7 @@ public sealed class ReadingTutorService(
+         {
+             Id = Guid.NewGuid().ToString("N"),
+             ReadingAttemptId = attemptId,
+-            Scope = NormaliseScope(request.Scope),
++            Scope = ReadingFeedbackScopeExtensions.NormalizeScope(request.Scope),
+             TargetRef = request.TargetRef,
+             AuthorUserId = actorUserId,
+             FeedbackText = request.FeedbackText,
+@@ -431,7 +498,7 @@ public sealed class ReadingTutorService(
+             .FirstOrDefaultAsync(f => f.Id == feedbackId && f.ReadingAttemptId == attemptId, ct);
+         if (feedback is null) return null;
+ 
+-        feedback.Scope = NormaliseScope(request.Scope);
++        feedback.Scope = ReadingFeedbackScopeExtensions.NormalizeScope(request.Scope);
+         feedback.TargetRef = request.TargetRef;
+         feedback.FeedbackText = request.FeedbackText;
+         feedback.UpdatedAt = DateTimeOffset.UtcNow;
+@@ -504,6 +571,23 @@ public sealed class ReadingTutorService(
+             .ToListAsync(ct);
+     }
+ 
++    public async Task<IReadOnlyList<ReadingAssignmentDto>> ListAssignmentsForExpertAsync(
++        string expertUserId, string? assignedToUserId, CancellationToken ct)
++    {
++        var query = db.ReadingAssignments.AsNoTracking()
++            .Where(a => a.AssignedByUserId == expertUserId)
++            .AsQueryable();
++        if (!string.IsNullOrWhiteSpace(assignedToUserId))
++            query = query.Where(a => a.AssignedToUserId == assignedToUserId);
++
++        return await query
++            .OrderByDescending(a => a.CreatedAt)
++            .Select(a => new ReadingAssignmentDto(
++                a.Id, a.AssignedByUserId, a.AssignedToUserId, a.PaperId, a.Kind, a.ScopeJson,
++                a.Note, a.DueAt, a.CompletedAttemptId, a.Status, a.CreatedAt, a.UpdatedAt))
++            .ToListAsync(ct);
++    }
++
+     public async Task<bool> CancelAssignmentAsync(string assignmentId, string actorUserId, CancellationToken ct)
+     {
+         var assignment = await db.ReadingAssignments
+@@ -531,18 +615,30 @@ public sealed class ReadingTutorService(
+             .ToListAsync(ct);
+     }
+ 
++    public async Task<bool> CanExpertAccessAttemptAsync(string attemptId, string expertUserId, CancellationToken ct)
++    {
++        if (string.IsNullOrWhiteSpace(expertUserId)) return false;
++
++        return await (
++            from attempt in db.ReadingAttempts.AsNoTracking()
++            join assignment in db.ReadingAssignments.AsNoTracking()
++                on new { attempt.UserId, attempt.PaperId }
++                equals new { UserId = assignment.AssignedToUserId, assignment.PaperId }
++            where attempt.Id == attemptId
++                && attempt.Status == ReadingAttemptStatus.Submitted
++                && assignment.AssignedByUserId == expertUserId
++                && assignment.CompletedAttemptId == attempt.Id
++                && assignment.Status != "cancelled"
++            select attempt.Id)
++            .AnyAsync(ct);
++    }
++
+     // ── Helpers ─────────────────────────────────────────────────────────────
+ 
+     private static ReadingAssignmentDto ToDto(ReadingAssignment a) => new(
+         a.Id, a.AssignedByUserId, a.AssignedToUserId, a.PaperId, a.Kind, a.ScopeJson,
+         a.Note, a.DueAt, a.CompletedAttemptId, a.Status, a.CreatedAt, a.UpdatedAt);
+ 
+-    private static string NormaliseScope(string? scope)
+-    {
+-        var s = (scope ?? string.Empty).Trim().ToLowerInvariant();
+-        return s is "test" or "section" or "question" or "skill" ? s : "test";
+-    }
+-
+     private static string Fmt(int? value) => value?.ToString() ?? "null";
+ 
+     private void AddAudit(string actorUserId, string action, string resourceType, string resourceId, string details)

@@ -398,7 +398,7 @@ export default function AdminBulkOperationsPage() {
           />
         ) : pageStatus === 'empty' ? (
           <EmptyState
-            variant="empty"
+            variant="default"
             illustration={<Package className="h-10 w-10" />}
             title="No content papers"
             description="Import papers via ZIP or create them from the content library."
@@ -444,7 +444,7 @@ export default function AdminBulkOperationsPage() {
                 Cancel
               </Button>
               <Button
-                variant={confirmAction.type === 'retire' ? 'danger' : 'primary'}
+                variant={confirmAction.type === 'retire' ? 'destructive' : 'primary'}
                 onClick={handleConfirmAction}
                 disabled={isBulkRunning}
               >
@@ -534,9 +534,7 @@ export default function AdminBulkOperationsPage() {
       )}
 
       {toast && (
-        <Toast variant={toast.variant} onClose={() => setToast(null)}>
-          {toast.message}
-        </Toast>
+        <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} />
       )}
     </AdminRouteWorkspace>
   );

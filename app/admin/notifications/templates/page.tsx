@@ -359,7 +359,7 @@ export default function AdminNotificationTemplatesPage() {
               )}
             </Button>
             <Button
-              variant={template.status === 'active' ? 'danger' : 'primary'}
+              variant={template.status === 'active' ? 'destructive' : 'primary'}
               size="sm"
               onClick={() => handleToggleStatus(template)}
               disabled={isLoading}
@@ -409,20 +409,22 @@ export default function AdminNotificationTemplatesPage() {
                 <Select
                   value={channelFilter}
                   onChange={(e) => setChannelFilter(e.target.value as '' | TemplateChannel)}
-                >
-                  <option value="">All channels</option>
-                  <option value="email">Email</option>
-                  <option value="inApp">In-App</option>
-                  <option value="push">Push</option>
-                </Select>
+                  options={[
+                    { value: '', label: 'All channels' },
+                    { value: 'email', label: 'Email' },
+                    { value: 'inApp', label: 'In-App' },
+                    { value: 'push', label: 'Push' },
+                  ]}
+                />
                 <Select
                   value={statusFilter}
                   onChange={(e) => setStatusFilter(e.target.value as '' | TemplateStatus)}
-                >
-                  <option value="">All statuses</option>
-                  <option value="active">Active</option>
-                  <option value="inactive">Inactive</option>
-                </Select>
+                  options={[
+                    { value: '', label: 'All statuses' },
+                    { value: 'active', label: 'Active' },
+                    { value: 'inactive', label: 'Inactive' },
+                  ]}
+                />
               </div>
               <div className="relative w-full min-w-[240px] sm:w-80">
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-admin-fg-muted" />
@@ -448,7 +450,7 @@ export default function AdminNotificationTemplatesPage() {
           />
         ) : pageStatus === 'empty' ? (
           <EmptyState
-            variant="empty"
+            variant="default"
             illustration={<FileText className="h-10 w-10" />}
             title="No templates yet"
             description="Create your first notification template."
@@ -499,11 +501,12 @@ export default function AdminNotificationTemplatesPage() {
                   onChange={(e) =>
                     setForm((f) => ({ ...f, channel: e.target.value as TemplateChannel }))
                   }
-                >
-                  <option value="email">Email</option>
-                  <option value="inApp">In-App</option>
-                  <option value="push">Push</option>
-                </Select>
+                  options={[
+                    { value: 'email', label: 'Email' },
+                    { value: 'inApp', label: 'In-App' },
+                    { value: 'push', label: 'Push' },
+                  ]}
+                />
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-medium text-admin-fg-strong">Locale</label>
@@ -675,9 +678,7 @@ export default function AdminNotificationTemplatesPage() {
       )}
 
       {toast && (
-        <Toast variant={toast.variant} onClose={() => setToast(null)}>
-          {toast.message}
-        </Toast>
+        <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} />
       )}
     </AdminRouteWorkspace>
   );
