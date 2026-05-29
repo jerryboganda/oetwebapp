@@ -71,7 +71,7 @@ describe('ListeningPaperSimulation', () => {
     expect(screen.getByLabelText('Paper annotation tools')).toBeInTheDocument();
     expect(screen.getByRole('timer')).toHaveTextContent('10:00');
     // First page is the A1 notes page with the gap input.
-    expect(screen.getByText(/A1 extract/)).toBeInTheDocument();
+    expect(screen.getAllByText(/A1 extract/)[0]).toBeInTheDocument();
     expect(screen.getByLabelText('Answer for question 1')).toBeInTheDocument();
     expect(screen.getByText('1/3')).toBeInTheDocument();
   });

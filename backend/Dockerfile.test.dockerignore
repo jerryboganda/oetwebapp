@@ -1,0 +1,32 @@
+# Validation-only ignore for backend/Dockerfile.test. BuildKit uses this file
+# INSTEAD of the root .dockerignore (which excludes backend/tests for prod
+# images). Keep backend/ (incl. tests) + rulebooks/ in context; drop the rest.
+.git
+.next
+node_modules
+.venv
+__pycache__
+android
+ios
+capacitor-web
+desktop-backend-runtime
+Project Real Content
+_extracted
+_audit
+copilot-worktrees
+playwright
+playwright-report-prod
+electron
+docs
+ops
+tools
+**/bin
+**/obj
+*.log
+*.zip
+*.tar
+*.tgz
+*.png
+*.dump
+*.md
+!README.md

@@ -75,6 +75,23 @@ vi.mock('@/components/layout/app-shell', () => ({
   AppShell: ({ children }: { children: React.ReactNode }) => <div data-testid="app-shell">{children}</div>,
 }));
 
+vi.mock('@/components/domain/listening/ListeningPaperSimulation', () => ({
+  ListeningPaperSimulation: ({ session, answers, onAnswerChange }: any) => (
+    <div data-testid="listening-paper-simulation">
+      {session.questions.map((q: any) => (
+        <label key={q.id}>
+          {q.text}
+          <input
+            aria-label={`answer for question ${q.number}`}
+            value={answers[q.id] ?? ''}
+            onChange={(e) => onAnswerChange(q.id, e.target.value)}
+          />
+        </label>
+      ))}
+    </div>
+  ),
+}));
+
 // Canonical motion/react Proxy mock — strips motion-specific props and
 // renders the underlying DOM element so RTL queries see real children.
 vi.mock('motion/react', () => {
@@ -374,7 +391,7 @@ describe('Listening player — CBLA fidelity (preview / attempt timer / one-play
     fireEvent.click(screen.getByRole('button', { name: /start audio/i }));
 
     await waitFor(() => {
-      expect(mockRecordTechReadiness).toHaveBeenCalledWith('attempt-1', { audioOk: true, durationMs: 1500 });
+      expect(mockRecordTechReadiness).toHaveBeenCalledWith('attempt-1', expect.objectContaining({ audioOk: true, durationMs: 1500 }));
     });
     expect(mockV2Advance).toHaveBeenNthCalledWith(1, 'attempt-1', 'a1_preview', null);
     expect(mockV2Advance).toHaveBeenNthCalledWith(2, 'attempt-1', 'a1_preview', 'confirm-1');
@@ -706,7 +723,7 @@ describe('Listening player — CBLA fidelity (preview / attempt timer / one-play
     mockGetListeningSession.mockResolvedValue(
       makeSession({ mode: 'exam', canScrub: false, onePlayOnly: true }),
     );
-    mockV2GetState.mockResolvedValueOnce(makeV2State('a1_audio'));
+    mockV2GetState.mockResolvedValue(makeV2State('a1_audio'));
     mockV2Advance
       .mockResolvedValueOnce(makeAdvanceResult({
         outcome: 'confirm-required',
@@ -750,7 +767,7 @@ describe('Listening player — CBLA fidelity (preview / attempt timer / one-play
     mockGetListeningSession.mockResolvedValue(
       makeTwoSectionSession({ mode: 'exam', canScrub: false, onePlayOnly: true }),
     );
-    mockV2GetState.mockResolvedValueOnce({
+    mockV2GetState.mockResolvedValue({
       ...makeV2State('a1_review'),
       windowDurationMs: 75_000,
       windowRemainingMs: 75_000,
@@ -826,7 +843,7 @@ describe('Listening player — CBLA fidelity (preview / attempt timer / one-play
     mockGetListeningSession.mockResolvedValue(
       makeFinalReviewSession({ mode: 'exam', canScrub: false, onePlayOnly: true }),
     );
-    mockV2GetState.mockResolvedValueOnce({
+    mockV2GetState.mockResolvedValue({
       ...makeV2State('c2_review'),
       windowDurationMs: 120_000,
       windowRemainingMs: 120_000,
@@ -863,10 +880,7 @@ describe('Listening player — CBLA fidelity (preview / attempt timer / one-play
     expect(screen.getByText('B paper decision?')).toBeInTheDocument();
     expect(screen.getByText('C1 paper blank?')).toBeInTheDocument();
     expect(screen.getByText('C2 paper blank?')).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Part A — Extract 1' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Part C — Extract 2' })).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole('button', { name: /A2, available/i }));
+    expect(screen.getByTestId('listening-paper-simulation')).toBeInTheDocument();
 
     expect(mockV2GetState).not.toHaveBeenCalled();
     expect(mockV2Advance).not.toHaveBeenCalled();

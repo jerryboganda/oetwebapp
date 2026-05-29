@@ -114,6 +114,8 @@ describe('ReadingOverridePanel', () => {
     );
 
     await user.type(screen.getByLabelText('Raw score'), '20');
+    // Fill reason with only spaces — passes native `required` but fails trim check
+    await user.type(screen.getByLabelText(/Reason/), '   ');
     await user.click(screen.getByRole('button', { name: /apply override/i }));
 
     expect(overrideReadingAttemptScore).not.toHaveBeenCalled();

@@ -220,7 +220,7 @@ async function elapsePreviewWindow() {
 
 describe('Listening player — strict-mode audio-resume server validation (C8g)', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
     mockHeartbeat.mockResolvedValue({ attemptId: 'attempt-1', elapsedSeconds: 0, lastClientSyncAt: '' });
     mockSaveAnswer.mockResolvedValue(undefined);
     mockRecordIntegrity.mockResolvedValue(undefined);
@@ -419,12 +419,8 @@ describe('Listening player — strict-mode audio-resume server validation (C8g)'
 
   it('surfaces an inline alert and realigns the playhead when the server force-advances out of grace', async () => {
     mockGetListeningSession.mockResolvedValue(makeSession('exam'));
-    mockV2GetState
-      .mockResolvedValueOnce(makeV2State('a1_audio'))
-      .mockResolvedValueOnce({
-        ...makeV2State('a1_review'),
-        windowRemainingMs: 60_000,
-      });
+    // Default: return a1_audio for all initial effect calls
+    mockV2GetState.mockResolvedValue(makeV2State('a1_audio'));
     mockAudioResume
       .mockResolvedValueOnce({
         resume: false,
@@ -452,6 +448,8 @@ describe('Listening player — strict-mode audio-resume server validation (C8g)'
     });
 
     (audio as unknown as { __ct?: number }).__ct = 30;
+    // Switch getState to return review state for the call inside audioResume handler
+    mockV2GetState.mockResolvedValue({ ...makeV2State('a1_review'), windowRemainingMs: 60_000 });
     act(() => {
       fireEvent.pause(audio);
     });

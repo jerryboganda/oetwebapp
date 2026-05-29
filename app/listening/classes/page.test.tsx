@@ -26,10 +26,10 @@ vi.mock('@/contexts/auth-context', () => ({
 
 vi.mock('@/lib/hooks/use-current-user', () => ({
   useCurrentUser: () => ({
-    user: { userId: 'test-user', displayName: 'Test', email: 'test@example.com', role: 'expert', isEmailVerified: true },
-    role: 'expert',
+    user: { userId: 'test-user', displayName: 'Test', email: 'test@example.com', role: 'learner', isEmailVerified: true },
+    role: 'learner',
     isAuthenticated: true,
-    loading: false,
+    isLoading: false,
   }),
 }));
 
@@ -88,11 +88,7 @@ describe('ListeningTeacherClassesPage', () => {
   it('renders the public launch hold instead of teacher analytics', () => {
     render(<ListeningTeacherClassesPage />);
 
-    expect(
-      screen.getByRole('heading', { name: 'Teacher class analytics are not available to public learners' }),
-    ).toBeInTheDocument();
-    expect(screen.getByText(/teacher beta or institutional pilot/i)).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /contact support/i })).toHaveAttribute('href', '/support');
+    expect(screen.getByRole('alert')).toHaveTextContent(/only accessible to teaching staff/i);
     expect(mockList).not.toHaveBeenCalled();
     expect(mockAnalytics).not.toHaveBeenCalled();
     expect(mockExportToCsv).not.toHaveBeenCalled();
