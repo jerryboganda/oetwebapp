@@ -415,7 +415,10 @@ function PlayerContent() {
     const detail: Record<string, unknown> = { ...payload };
     if (cuePointMs != null && Number.isFinite(cuePointMs)) detail.cuePointMs = cuePointMs;
     const details = Object.keys(detail).length > 0 ? JSON.stringify(detail) : undefined;
-    void recordListeningIntegrityEvent(attempt.attemptId, eventType, details).catch(() => undefined);
+    // Promise.resolve() wrapper keeps this fire-and-forget even if a caller's
+    // transport returns a non-thenable; the event stream must never throw into
+    // a render / effect path.
+    void Promise.resolve(recordListeningIntegrityEvent(attempt.attemptId, eventType, details)).catch(() => undefined);
   }, [attempt?.attemptId]);
 
   const pauseAudio = useCallback(() => {
