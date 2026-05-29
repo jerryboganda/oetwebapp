@@ -958,8 +958,12 @@ describe('Listening player — CBLA fidelity (preview / attempt timer / one-play
       makeSession({ mode: 'exam', canScrub: false, onePlayOnly: true }),
     );
     // Hydrate directly into the audio phase so onPlay is not short-circuited
-    // by the pre-audio reading window.
-    mockV2GetState.mockResolvedValueOnce(makeV2State('a1_audio'));
+    // by the pre-audio reading window. Must be persistent (not -Once): the
+    // player re-fetches FSM state on heartbeat, and a -Once mock would let
+    // subsequent fetches fall back to the beforeEach default (an early
+    // preview-phase state), reverting `phase` to 'preview' and blocking the
+    // audio_started emission. Mirrors the sibling strict-review test.
+    mockV2GetState.mockResolvedValue(makeV2State('a1_audio'));
 
     const { container } = render(<ListeningPlayer />);
 
