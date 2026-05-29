@@ -9,7 +9,9 @@ import { WaveformCuePointEditor, type WaveformCuePointEditorProps } from '../Wav
 
 const { mockFetchAuthorizedObjectUrl, mockPatchListeningExtract } = vi.hoisted(() => ({
   mockFetchAuthorizedObjectUrl: vi.fn(async (url: string) => `blob:${url}`),
-  mockPatchListeningExtract: vi.fn(async () => ({ extracts: [] })),
+  mockPatchListeningExtract: vi.fn(
+    async (_paperId: string, _extractCode: string, _patch: unknown) => ({ extracts: [] }),
+  ),
 }));
 
 vi.mock('@/lib/api', () => ({

@@ -273,9 +273,9 @@ export function Sidebar({
             AI Conversation) is intentionally hidden from the learner workspace per the
             sample-test-alignment directive — those surfaces remain addressable by URL but
             are off the candidate's primary path. Recalls is promoted to the main Practice
-            group. We keep the Learn group available to non-learner workspaces so internal
-            users can still navigate to them. */}
-        {!isLearnerWorkspace ? (
+            group. We keep the Learn group available to non-learner workspaces that do NOT
+            provide their own custom groups (e.g. the admin panel defines its own nav). */}
+        {!isLearnerWorkspace && !(groups && groups.length > 0) ? (
           <NavSection label="Learn" items={visibleLearnNavItems} pathname={pathname} reducedMotion={reducedMotion} />
         ) : null}
       </nav>

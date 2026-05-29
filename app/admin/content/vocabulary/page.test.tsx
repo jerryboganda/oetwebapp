@@ -80,9 +80,10 @@ describe('AdminVocabularyPage bulk selection', () => {
     expect(screen.getByTestId('bulk-action-bar')).toBeInTheDocument();
     expect(screen.getByText('1 item selected')).toBeInTheDocument();
 
-    await user.click(screen.getByRole('button', { name: 'Delete selected' }));
+    const bulkBar = screen.getByTestId('bulk-action-bar');
+    await user.click(within(bulkBar).getByRole('button', { name: /Delete/i }));
     const dialog = screen.getByRole('dialog', { name: 'Delete selected vocabulary terms' });
-    await user.click(within(dialog).getByRole('button', { name: 'Delete selected' }));
+    await user.click(within(dialog).getByRole('button', { name: /Delete selected/i }));
 
     await waitFor(() => {
       expect(api.deleteAdminVocabularyItems).toHaveBeenCalledWith(['VOC-1']);

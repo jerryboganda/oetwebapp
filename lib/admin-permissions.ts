@@ -250,6 +250,11 @@ export const adminRoutePermissionMap: Record<string, string[]> = {
   '/admin/learners': [AdminPermission.UsersRead],
   '/admin/learners/:param': [AdminPermission.UsersRead],
   '/admin/policies/reading': [AdminPermission.UsersWrite],
+  // Reading admin surfaces
+  '/admin/reading/assignments': [AdminPermission.ContentRead],
+  '/admin/reading/attempts/:param': [AdminPermission.ContentRead],
+  '/admin/reading/cohort': [AdminPermission.QualityAnalytics],
+  '/admin/reading/papers/:param': [AdminPermission.ContentRead, AdminPermission.ContentWrite],
 };
 
 function normalizeAdminPath(pathname: string | null | undefined): string {

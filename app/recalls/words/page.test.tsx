@@ -113,6 +113,7 @@ describe('Recalls words page audio playback', () => {
     mockFetchVocabularyRecallSets.mockResolvedValue({ sets: [] });
     mockFetchVocabularyTerms.mockResolvedValue({ total: 1, terms: [catalogTerm] });
     mockFetchRecallsAudio.mockResolvedValue({ url: '/v1/recalls/audio/term-dyspnoea?speed=normal' });
+    mockPlayTransientAudio.mockReturnValue({ addEventListener: vi.fn() });
   });
 
   it('plays catalog pronunciations through the authenticated recalls audio endpoint', async () => {

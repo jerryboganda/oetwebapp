@@ -48,6 +48,19 @@ vi.mock('@/components/domain/writing-improvement-banner', () => ({
   WritingImprovementBanner: () => <div data-testid="improvement-banner" />,
 }));
 
+vi.mock('@/components/ui/motion-primitives', () => ({
+  MotionSection: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  MotionPage: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  MotionItem: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  MotionList: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+}));
+
+vi.mock('@/components/ui/alert', () => ({
+  InlineAlert: ({ children, title }: { children?: React.ReactNode; title?: string }) => (
+    <div role="alert">{title && <strong>{title}</strong>}{children}</div>
+  ),
+}));
+
 vi.mock('@/lib/analytics', () => ({ analytics: { track: mockTrack } }));
 
 vi.mock('@/lib/api', () => ({

@@ -48,7 +48,7 @@ describe('AdminMockLeakReportsPage', () => {
 
     await waitFor(() => expect(mockListLeakReports).toHaveBeenCalledWith({ status: 'open', limit: 50 }));
 
-    expect(screen.getByRole('button', { name: 'Open reports (1 loaded)' })).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Open reports (1 loaded)' })).toBeInTheDocument());
     expect(screen.getByRole('button', { name: 'Investigating reports' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Investigating reports \(0/ })).not.toBeInTheDocument();
 

@@ -1,0 +1,36 @@
+# syntax=docker/dockerfile:1.7
+# Validation-only image: compiles + runs the xUnit suite inside the container's
+# fast overlay filesystem (COPY, not a Windows bind mount) to avoid the
+# pathologically slow `-v .:/src` dotnet build I/O on Docker Desktop / Windows.
+# Uses backend/Dockerfile.test.dockerignore (keeps backend/tests in context).
+# Build with: docker build -f backend/Dockerfile.test -t oet-be-test .
+# A non-zero build exit == test/compile failure (output shows which test failed).
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS test
+WORKDIR /src
+
+# Constrain MSBuild/Roslyn memory: this host's Docker WSL2 VM SIGBUSes (Bus
+# error / MSB4166 child node exited prematurely) when MSBuild fans out parallel
+# nodes + shared compilation servers during the large solution build. Single
+# node + no shared compilation + workstation GC keeps the footprint flat.
+ENV DOTNET_gcServer=0 \
+    DOTNET_CLI_TELEMETRY_OPTOUT=1 \
+    MSBUILDDISABLENODEREUSE=1 \
+    DOTNET_USE_POLLING_FILE_WATCHER=1
+
+# Copy all backend source first so every project the test project references
+# (the API project) is present. rulebooks/ + backend/scripts/ hold embedded
+# resources referenced by the .csproj. bin/obj excluded via the ignore file.
+COPY backend/ backend/
+COPY rulebooks/ rulebooks/
+
+# Target the test project directly (not the .sln) so the StripeProductSeeder
+# tool project in the solution is not required to restore.
+# Split restore → build → test into separate cached layers so a retry reuses
+# the expensive compile and a failure cleanly distinguishes compile vs test.
+# Single MSBuild node + no shared compilation server avoids the SIGBUS.
+RUN dotnet restore backend/tests/OetLearner.Api.Tests/OetLearner.Api.Tests.csproj -maxcpucount:1
+RUN dotnet build backend/tests/OetLearner.Api.Tests/OetLearner.Api.Tests.csproj \
+    -c Debug --no-restore --nologo -maxcpucount:1 \
+    -p:UseSharedCompilation=false -p:BuildInParallel=false
+RUN dotnet test backend/tests/OetLearner.Api.Tests/OetLearner.Api.Tests.csproj \
+    -c Debug --no-build --nologo --logger "console;verbosity=minimal"
