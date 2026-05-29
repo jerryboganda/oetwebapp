@@ -1,6 +1,6 @@
 ﻿# PROGRESS — Ultrawork Completion
 
-Last updated: 2026-05-29
+Last updated: 2026-05-29 (final Docker validation + commits)
 
 ## Guardrails
 - No destructive git actions.
@@ -11,6 +11,20 @@ Last updated: 2026-05-29
 ## Current Continuation — Reading Module A-Z Closure And Hardening
 
 Status: **Coding/software development complete; focused Docker frontend validation passed for the latest Reading/Listening slices, and backend SDK-container validation remains blocked by Docker Desktop I/O/test-runner behavior reported honestly.** This pass completed the attached Reading implementation/hardening plan end to end without host or VPS validation fallback.
+
+### Final Docker Validation And Commit — 2026-05-29
+
+- Focused Reading Docker Vitest passed for the latest completion slice: admin clone navigation, admin safe/timed preview, expert Reading queue, learner Reading hub, and server-authoritative part-practice dispatch (5 files / 8 tests).
+- Focused Listening Docker Vitest passed for the committed Listening UI slice: waveform cue-point editor, mock redirect, and admin analytics heatmap/export tests (3 files / 17 tests). The first run failed only because the trimmed Docker copy omitted `tests/test-utils`; rerunning with the shared test utilities included passed.
+- VS Code diagnostics were clean on the final files checked after the last patches. `git diff --check` produced no whitespace or conflict-marker errors, only CRLF normalization warnings.
+- Backend SDK-container validation remained blocked by Docker Desktop I/O/test-runner behavior: the runtime API container has no SDK, SDK containers repeatedly restored/build/test-ran into long CPU-active or I/O-stalled states, and copied-workspace retries were dominated by tar/restore churn. No host `npm`, host `dotnet`, or VPS fallback was used.
+- Final commits were pushed to `origin/main`, ending with the Listening attempt-event backend/test follow-ups and PROGRESS ledger update.
+
+#### Follow-ups carried forward
+
+- Re-run backend `dotnet test` in Docker when the Docker Desktop/WSL2 restore/build environment is stable enough to return output.
+- Re-run broad TypeScript when Docker Desktop bind-mount I/O is stable; trimmed-copy checks currently report unrelated pre-existing app-wide errors and copy artifacts.
+- Keep the latest focused frontend Docker tests as the current green evidence for Reading and Listening UI behavior.
 
 ### Latest 100% Completion Extension — Clone, Preview, Dashboard, Tutor Queue
 
