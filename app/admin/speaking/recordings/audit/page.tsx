@@ -29,7 +29,7 @@ import {
 } from '@/lib/api/speaking-compliance';
 
 function formatDate(iso: string | null): string {
-  if (!iso) return '—';
+  if (!iso) return '-';
   try {
     return new Date(iso).toLocaleString();
   } catch {
@@ -156,12 +156,12 @@ export default function AdminSpeakingRecordingsAuditPage() {
                     </Badge>
                   </td>
                   <td className="p-3 text-xs font-mono">
-                    {row.recordingId ?? '—'}
+                    {row.recordingId ?? '-'}
                     {row.sessionId && (
                       <div className="text-[10px] text-admin-fg-muted">session {row.sessionId}</div>
                     )}
                   </td>
-                  <td className="p-3 text-xs font-mono">{row.learnerUserId ?? '—'}</td>
+                  <td className="p-3 text-xs font-mono">{row.learnerUserId ?? '-'}</td>
                   <td className="p-3">
                     <div className="text-sm text-admin-fg-strong">{row.actorName}</div>
                     <div className="text-[10px] text-admin-fg-muted">
@@ -169,7 +169,7 @@ export default function AdminSpeakingRecordingsAuditPage() {
                     </div>
                   </td>
                   <td className="p-3 text-xs text-admin-fg-muted">
-                    {row.purpose || row.reason || '—'}
+                    {row.purpose || row.reason || '-'}
                   </td>
                 </tr>
               ))}

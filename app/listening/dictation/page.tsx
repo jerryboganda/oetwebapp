@@ -267,17 +267,17 @@ export default function DictationDrillPage() {
 
 function StatsStrip({ stats, loading }: { stats: DictationStats | null; loading: boolean }) {
   const cards = [
-    { label: 'Mastered', value: stats?.mastered ?? '—', icon: Trophy, accent: 'emerald' },
-    { label: 'Struggling', value: stats?.struggling ?? '—', icon: AlertCircle, accent: 'amber' },
+    { label: 'Mastered', value: stats?.mastered ?? '-', icon: Trophy, accent: 'emerald' },
+    { label: 'Struggling', value: stats?.struggling ?? '-', icon: AlertCircle, accent: 'amber' },
     {
       label: 'Accuracy',
-      value: stats ? `${Math.round(stats.accuracyPercentage)}%` : '—',
+      value: stats ? `${Math.round(stats.accuracyPercentage)}%` : '-',
       icon: CheckCircle2,
       accent: 'violet',
     },
     {
       label: 'Total attempts',
-      value: stats?.totalAttempted ?? '—',
+      value: stats?.totalAttempted ?? '-',
       icon: Sparkles,
       accent: 'blue',
     },

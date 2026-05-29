@@ -230,7 +230,7 @@ export default function ContentPaperEditorPage({ params }: { params: Promise<{ p
       eyebrow="CMS"
       icon={<CloudUpload className="w-5 h-5" />}
       title={paper?.title ?? 'Paper editor'}
-      description={paper ? `${paper.subtestCode.toUpperCase()} · ${paper.appliesToAllProfessions ? 'All professions' : (paper.professionId ?? '—')} · ${paper.status}` : undefined}
+      description={paper ? `${paper.subtestCode.toUpperCase()} · ${paper.appliesToAllProfessions ? 'All professions' : (paper.professionId ?? '-')} · ${paper.status}` : undefined}
       breadcrumbs={breadcrumbs}
       actions={
         <div className="flex flex-wrap items-center gap-2">
@@ -414,7 +414,7 @@ function AssetList({ assets, onRemove, canRemove }: { assets: ContentPaperAssetD
               <span className="font-medium truncate">{a.media?.originalFilename ?? '(no file)'}</span>
             </div>
             <div className="text-xs text-muted mt-1">
-              {a.media?.mediaKind} · {a.media ? formatBytes(a.media.sizeBytes) : '—'}
+              {a.media?.mediaKind} · {a.media ? formatBytes(a.media.sizeBytes) : '-'}
               {a.media?.sha256 && ` · SHA ${a.media.sha256.slice(0, 10)}…`}
             </div>
           </div>

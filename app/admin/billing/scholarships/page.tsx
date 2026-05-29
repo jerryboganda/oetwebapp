@@ -112,7 +112,7 @@ export default function AdminScholarshipsPage() {
     {
       id: 'expires',
       header: 'Expires',
-      cell: ({ row }) => (row.original.expiresAt ? new Date(row.original.expiresAt).toLocaleDateString() : '—'),
+      cell: ({ row }) => (row.original.expiresAt ? new Date(row.original.expiresAt).toLocaleDateString() : '-'),
     },
     {
       id: 'status',

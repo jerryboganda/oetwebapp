@@ -35,7 +35,7 @@ type PageStatus = 'loading' | 'success' | 'empty' | 'error';
 type RowActionState = 'idle' | 'starting' | 'marking';
 
 function formatDate(iso: string | null): string {
-  if (!iso) return '—';
+  if (!iso) return '-';
   try {
     return new Date(iso).toLocaleDateString(undefined, {
       year: 'numeric',
@@ -48,7 +48,7 @@ function formatDate(iso: string | null): string {
 }
 
 function formatSigma(sigma: number | null): string {
-  if (sigma === null || !Number.isFinite(sigma)) return '—';
+  if (sigma === null || !Number.isFinite(sigma)) return '-';
   return sigma.toFixed(2);
 }
 
@@ -389,7 +389,7 @@ function PracticeQueueList({ rows }: { rows: InterlocutorPracticeQueueRow[] }) {
                 </code>
               </td>
               <td className="px-4 py-3 text-admin-text-muted">
-                {row.submittedAt ? new Date(row.submittedAt).toLocaleDateString() : '—'}
+                {row.submittedAt ? new Date(row.submittedAt).toLocaleDateString() : '-'}
               </td>
               <td className="px-4 py-3 text-right tabular-nums text-admin-text">
                 {Math.round(row.durationSeconds)}s

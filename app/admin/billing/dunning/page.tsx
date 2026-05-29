@@ -81,7 +81,7 @@ export default function AdminDunningPage() {
     {
       id: 'failure',
       header: 'Last failure',
-      cell: ({ row }) => row.original.lastFailureCode ?? row.original.lastFailureReason ?? '—',
+      cell: ({ row }) => row.original.lastFailureCode ?? row.original.lastFailureReason ?? '-',
     },
     {
       id: 'steps',

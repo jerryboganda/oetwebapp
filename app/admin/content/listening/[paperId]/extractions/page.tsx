@@ -38,7 +38,7 @@ function firstParam(value: string | string[] | undefined): string | undefined {
 }
 
 function formatDate(iso: string | null | undefined): string {
-  if (!iso) return '—';
+  if (!iso) return '-';
   try {
     return new Date(iso).toLocaleString(undefined, {
       dateStyle: 'medium',
@@ -259,7 +259,7 @@ function DraftCard({ draft, paperId: _paperId, onApprove, onReject }: DraftCardP
                                       : 'bg-admin-bg-subtle text-admin-fg-muted'
                                   }`}
                                 >
-                                  {String.fromCharCode(65 + i)}. {o || '—'}
+                                  {String.fromCharCode(65 + i)}. {o || '-'}
                                 </span>
                               ))
                             : q.correctAnswer || <em className="text-admin-fg-muted">empty</em>}

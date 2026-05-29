@@ -164,13 +164,13 @@ function UsagePanel({ onToast }: { onToast: (t: ToastState) => void }) {
   const logColumns: Column<AiUsagePage['rows'][number]>[] = [
     { key: 't', header: 'Time', render: (r) => new Date(r.createdAt).toLocaleString() },
     { key: 'f', header: 'Feature', render: (r) => <span className="font-mono text-xs">{r.featureCode}</span> },
-    { key: 'p', header: 'Provider', render: (r) => r.providerId ?? '—' },
+    { key: 'p', header: 'Provider', render: (r) => r.providerId ?? '-' },
     {
       key: 'a',
       header: 'Account',
       render: (r) => (
         <span className="font-mono text-xs">
-          {r.accountId ? r.accountId.slice(0, 8) : '—'}
+          {r.accountId ? r.accountId.slice(0, 8) : '-'}
           {r.failoverTrace && (
             <span className="ml-1 text-[10px] text-admin-fg-muted">⤳</span>
           )}
@@ -194,7 +194,7 @@ function UsagePanel({ onToast }: { onToast: (t: ToastState) => void }) {
 
   const accountColumns: Column<AiUsageSummaryRow>[] = [
     { key: 'a', header: 'Account', render: (r) => <span className="font-mono text-xs">{r.key.slice(0, 12)}…</span> },
-    { key: 'p', header: 'Provider', render: (r) => r.providerId ?? '—' },
+    { key: 'p', header: 'Provider', render: (r) => r.providerId ?? '-' },
     { key: 'calls', header: 'Calls', render: (r) => fmt(r.calls) },
     { key: 'tokens', header: 'Tokens', render: (r) => fmt(r.totalTokens) },
     {

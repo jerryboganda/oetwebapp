@@ -51,7 +51,7 @@ export default function MockBundleReviewPipelinePage() {
       <Card>
         <CardContent className="p-5">
           <div className="mb-4 text-xs text-admin-fg-muted">
-            Bundle ID: <span className="font-mono text-admin-fg-strong">{bundleId || '—'}</span>
+            Bundle ID: <span className="font-mono text-admin-fg-strong">{bundleId || '-'}</span>
           </div>
           {bundleId ? (
             <MockReviewStageRail bundleId={bundleId} />

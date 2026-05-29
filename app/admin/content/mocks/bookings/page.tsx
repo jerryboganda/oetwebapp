@@ -453,7 +453,7 @@ export default function AdminMockBookingsCalendarPage() {
               </div>
               <div className="rounded-xl border border-border bg-admin-bg-subtle p-3">
                 <p className="text-xs font-black uppercase tracking-widest text-muted">Delivery</p>
-                <p className="font-bold text-admin-fg-strong">{activeBooking.deliveryMode ?? '—'}</p>
+                <p className="font-bold text-admin-fg-strong">{activeBooking.deliveryMode ?? '-'}</p>
                 {activeBooking.consentToRecording ? (
                   <p className="mt-1 text-xs text-muted">Consent to record: yes</p>
                 ) : null}

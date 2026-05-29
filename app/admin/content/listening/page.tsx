@@ -183,7 +183,7 @@ export default function AdminListeningPapersPage() {
     {
       key: 'scope', header: 'Profession scope', render: (p) => p.appliesToAllProfessions
         ? <Badge variant="muted">All professions</Badge>
-        : <Badge variant="info">{p.professionId ?? '—'}</Badge>,
+        : <Badge variant="info">{p.professionId ?? '-'}</Badge>,
     },
     {
       key: 'status', header: 'Status', render: (p) => <Badge variant={

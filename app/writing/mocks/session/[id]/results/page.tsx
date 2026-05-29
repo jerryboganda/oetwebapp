@@ -95,7 +95,7 @@ export default function WritingMockResultsPage() {
           title={grade?.bandLabel ? t('writing.mocks.results.heroTitle', { band: grade.bandLabel }) : t('writing.mocks.results.heroTitleFallback')}
           description={t('writing.mocks.results.description')}
           highlights={[
-            { icon: Award, label: t('writing.mocks.results.highlights.raw'), value: grade ? `${grade.rawTotal}/38` : '—' },
+            { icon: Award, label: t('writing.mocks.results.highlights.raw'), value: grade ? `${grade.rawTotal}/38` : '-' },
             { icon: TrendingUp, label: t('writing.mocks.results.highlights.delta'), value: delta === null ? t('writing.mocks.results.highlights.firstMock') : (delta > 0 ? `+${delta.toFixed(1)}` : delta.toFixed(1)) },
           ]}
         />

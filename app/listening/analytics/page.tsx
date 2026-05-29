@@ -18,7 +18,7 @@ import { getListeningStudentAnalytics, type ListeningStudentAnalytics } from '@/
 import { StatCard } from '@/components/ui/stat-card';
 
 function pct(value: number | null | undefined) {
-  if (value == null) return '—';
+  if (value == null) return '-';
   return Number.isInteger(value) ? `${value}%` : `${value.toFixed(1)}%`;
 }
 
@@ -91,14 +91,14 @@ export default function ListeningAnalyticsPage() {
                 <StatCard
                   icon={<TrendingUp />}
                   label="Best score"
-                  value={data.bestScaledScore ?? '—'}
+                  value={data.bestScaledScore ?? '-'}
                   hint={data.likelyPassing ? 'Above 350' : 'Keep drilling'}
                   tone={data.likelyPassing ? 'success' : 'warning'}
                 />
                 <StatCard
                   icon={<Activity />}
                   label="Avg score"
-                  value={data.averageScaledScore ?? '—'}
+                  value={data.averageScaledScore ?? '-'}
                   hint={`Across ${data.completedAttempts} attempts`}
                   tone="info"
                 />

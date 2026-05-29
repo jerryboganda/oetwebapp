@@ -243,7 +243,7 @@ export default function BulkImportUsersPage() {
                     {result.errors.map((err, i) => (
                       <tr key={i} className="border-b border-admin-border last:border-b-0">
                         <td className="px-4 py-2 text-admin-fg-muted">{err.row}</td>
-                        <td className="px-4 py-2 font-mono text-xs text-admin-fg-strong">{err.email || '—'}</td>
+                        <td className="px-4 py-2 font-mono text-xs text-admin-fg-strong">{err.email || '-'}</td>
                         <td className="px-4 py-2 text-admin-danger">{err.error}</td>
                       </tr>
                     ))}

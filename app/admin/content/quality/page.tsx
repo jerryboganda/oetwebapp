@@ -103,12 +103,12 @@ export default function ContentQualityPage() {
       key: 'score',
       header: 'Quality Score',
       render: (r) => {
-        if (!r.performanceMetrics) return <span className="text-admin-fg-muted">—</span>;
+        if (!r.performanceMetrics) return <span className="text-admin-fg-muted">-</span>;
         try {
           const pm = JSON.parse(r.performanceMetrics);
           return <span className="font-mono text-sm">{pm.qualityScore}/100</span>;
         } catch {
-          return <span className="text-admin-fg-muted">—</span>;
+          return <span className="text-admin-fg-muted">-</span>;
         }
       },
     },

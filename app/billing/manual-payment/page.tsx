@@ -180,7 +180,7 @@ export default function ManualPaymentPage() {
               <div key={row.id} className="flex items-center justify-between rounded-lg border border-border bg-surface p-3 text-sm">
                 <div>
                   <p className="font-medium">{row.method.replace('_', ' ')} · {row.amountAmount.toFixed(2)} {row.currency}</p>
-                  <p className="text-xs text-muted">Ref: {row.reference || '—'} · {new Date(row.submittedAt).toLocaleString()}</p>
+                  <p className="text-xs text-muted">Ref: {row.reference || '-'} · {new Date(row.submittedAt).toLocaleString()}</p>
                 </div>
                 <Badge variant={statusVariant(row.status)}>{row.status}</Badge>
               </div>

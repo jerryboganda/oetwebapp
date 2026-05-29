@@ -75,7 +75,7 @@ function RowsTable({ payload, emptyLabel }: { payload: Json; emptyLabel: string 
               {columns.map((c) => {
                 const v = row[c];
                 let display: string;
-                if (v === null || v === undefined) display = '—';
+                if (v === null || v === undefined) display = '-';
                 else if (typeof v === 'object') display = JSON.stringify(v);
                 else if (typeof v === 'number') display = Number.isInteger(v) ? String(v) : v.toFixed(2);
                 else display = String(v);

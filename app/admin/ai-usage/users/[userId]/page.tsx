@@ -155,7 +155,7 @@ export default function AdminUserAiPage({ params }: { params: Promise<{ userId: 
         </span>
       ),
     },
-    { key: 'ex', header: 'Expires', render: (r) => r.expiresAt ? new Date(r.expiresAt).toLocaleDateString() : '—' },
+    { key: 'ex', header: 'Expires', render: (r) => r.expiresAt ? new Date(r.expiresAt).toLocaleDateString() : '-' },
     { key: 'x', header: 'State', render: (r) => r.expiredByEntryId ? <Badge variant="default" intensity="tinted" size="sm">Expired</Badge> : <Badge variant="success" intensity="tinted" size="sm">Active</Badge> },
     { key: 'desc', header: 'Description', render: (r) => <span className="text-xs text-admin-fg-muted">{r.description ?? ''}</span> },
   ];

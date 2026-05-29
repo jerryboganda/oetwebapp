@@ -48,7 +48,7 @@ function letterTypeLabel(v: string | null): string {
 }
 
 function professionLabel(v: string | null): string {
-  if (!v) return '—';
+  if (!v) return '-';
   return v.replace(/-/g, ' ').replace(/\b\w/g, (m) => m.toUpperCase());
 }
 
@@ -167,7 +167,7 @@ export default function AdminWritingReviewPage() {
                 ) as any}>{paper.status}</Badge>
               } />
               <MetadataRow label="Duration" value={`${paper.estimatedDurationMinutes} min`} />
-              <MetadataRow label="Source provenance" value={paper.sourceProvenance ?? '—'} />
+              <MetadataRow label="Source provenance" value={paper.sourceProvenance ?? '-'} />
               <MetadataRow label="Created" value={new Date(paper.createdAt).toLocaleString()} />
             </dl>
           </SettingsSection>
@@ -183,7 +183,7 @@ export default function AdminWritingReviewPage() {
                   <div className="text-xs text-admin-fg-muted">
                     {paper.integrityAcknowledgedAt
                       ? new Date(paper.integrityAcknowledgedAt).toLocaleString()
-                      : '—'}
+                      : '-'}
                   </div>
                 </div>
               </div>

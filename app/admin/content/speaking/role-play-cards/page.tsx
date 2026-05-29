@@ -219,7 +219,7 @@ export default function AdminSpeakingRolePlayCardsPage() {
                       {row.setting} - {row.clinicalTopic}
                       {' - '}
                       Published:{' '}
-                      {row.publishedAt ? new Date(row.publishedAt).toLocaleDateString() : '—'}
+                      {row.publishedAt ? new Date(row.publishedAt).toLocaleDateString() : '-'}
                     </p>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">

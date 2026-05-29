@@ -60,7 +60,7 @@ export default function WritingCanonRuleDetailPage() {
     <LearnerDashboardShell pageTitle={rule?.id ?? t('writing.canon.detail.pageTitleFallback')}>
       <div className="space-y-6" aria-busy={!rule}>
         <LearnerPageHero
-          eyebrow={t('writing.canon.detail.eyebrow', { version: rule?.version ?? '—' })}
+          eyebrow={t('writing.canon.detail.eyebrow', { version: rule?.version ?? '-' })}
           icon={BookOpen}
           accent="amber"
           // Rule id is a canonical identifier (e.g. "PURPOSE-01") — keep verbatim.

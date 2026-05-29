@@ -150,15 +150,15 @@ export default function MockBundleItemAnalysisPage() {
                         <td className="px-3 py-2 capitalize">{row.subtest}</td>
                         <td className="px-3 py-2 tabular-nums">{row.totalAttempts}</td>
                         <td className="px-3 py-2 tabular-nums">{pct}%</td>
-                        <td className="px-3 py-2 tabular-nums">{typeof row.discriminationIndex === 'number' ? row.discriminationIndex.toFixed(2) : '—'}</td>
+                        <td className="px-3 py-2 tabular-nums">{typeof row.discriminationIndex === 'number' ? row.discriminationIndex.toFixed(2) : '-'}</td>
                         <td className="px-3 py-2">
                           {row.flag === 'too_easy' ? <Badge variant="warning">Too easy</Badge>
                             : row.flag === 'too_hard' ? <Badge variant="danger">Too hard</Badge>
                             : row.flag === 'tempting_distractor' ? <Badge variant="warning">Tempting distractor</Badge>
-                            : <span className="text-admin-fg-muted">—</span>}
+                            : <span className="text-admin-fg-muted">-</span>}
                         </td>
                         <td className="px-3 py-2 text-xs text-admin-fg-muted">
-                          {distractors.length === 0 ? '—' : distractors.map(([k, v]) => `${k}: ${v}`).join(' · ')}
+                          {distractors.length === 0 ? '-' : distractors.map(([k, v]) => `${k}: ${v}`).join(' · ')}
                         </td>
                       </tr>
                     );

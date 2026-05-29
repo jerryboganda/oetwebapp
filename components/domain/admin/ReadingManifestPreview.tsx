@@ -30,7 +30,7 @@ export function ReadingManifestPreview({ manifest }: { manifest: ReadingStructur
             <h4 className="text-sm font-bold uppercase tracking-[0.14em] text-admin-fg-strong">
               Part {part.partCode}
               <span className="ml-2 text-xs font-normal normal-case text-muted">
-                {part.timeLimitMinutes ?? '—'} min · {part.questions.length} Qs · {part.texts.length} texts
+                {part.timeLimitMinutes ?? '-'} min · {part.questions.length} Qs · {part.texts.length} texts
               </span>
             </h4>
             {part.instructions ? (

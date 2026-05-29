@@ -616,7 +616,7 @@ export default function AdminContentHierarchyPage() {
         </button>
       ),
     },
-    { key: 'subtestCode', header: 'Subtest', render: (row) => row.subtestCode ?? '—' },
+    { key: 'subtestCode', header: 'Subtest', render: (row) => row.subtestCode ?? '-' },
     { key: 'displayOrder', header: 'Order', render: (row) => row.displayOrder },
     { key: 'status', header: 'Status', render: (row) => <Badge variant={row.status === 'Published' ? 'success' : row.status === 'Archived' ? 'danger' : 'muted'}>{row.status}</Badge> },
     {
@@ -660,8 +660,8 @@ export default function AdminContentHierarchyPage() {
   const lessonColumns: Column<ContentLesson>[] = [
     { key: 'title', header: 'Title', render: (row) => <span className="font-medium">{row.title}</span> },
     { key: 'lessonType', header: 'Type', render: (row) => <Badge variant="info">{row.lessonType}</Badge> },
-    { key: 'mediaAssetId', header: 'Media Asset', render: (row) => row.mediaAssetId ? <span className="text-xs text-muted">{row.mediaAssetId}</span> : '—' },
-    { key: 'contentItemId', header: 'Content Item', render: (row) => row.contentItemId ? <span className="text-xs text-muted">{row.contentItemId}</span> : '—' },
+    { key: 'mediaAssetId', header: 'Media Asset', render: (row) => row.mediaAssetId ? <span className="text-xs text-muted">{row.mediaAssetId}</span> : '-' },
+    { key: 'contentItemId', header: 'Content Item', render: (row) => row.contentItemId ? <span className="text-xs text-muted">{row.contentItemId}</span> : '-' },
     { key: 'displayOrder', header: 'Order', render: (row) => row.displayOrder },
     { key: 'status', header: 'Status', render: (row) => <Badge variant={row.status === 'Published' ? 'success' : row.status === 'Archived' ? 'danger' : 'muted'}>{row.status}</Badge> },
     {

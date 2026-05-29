@@ -251,7 +251,7 @@ export default function AdminGrammarDashboard() {
                     {lessons.map((l) => (
                       <tr key={l.id} className="border-t border-admin-border">
                         <td className="p-3 font-medium text-admin-fg-strong">{l.title}</td>
-                        <td className="p-3 text-admin-fg-muted">{l.topicId ? (topicMap.get(l.topicId)?.name ?? '—') : '—'}</td>
+                        <td className="p-3 text-admin-fg-muted">{l.topicId ? (topicMap.get(l.topicId)?.name ?? '-') : '-'}</td>
                         <td className="p-3 text-admin-fg-muted">{l.level}</td>
                         <td className="p-3 text-admin-fg-muted">{l.estimatedMinutes}</td>
                         <td className="p-3">

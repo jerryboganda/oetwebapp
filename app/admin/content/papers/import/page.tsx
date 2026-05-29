@@ -145,9 +145,9 @@ export default function BulkImportPage() {
     {
       key: 'sc', header: 'Scope', render: (p) => p.appliesToAllProfessions
         ? <Badge variant="muted">All</Badge>
-        : <Badge variant="info">{p.professionId ?? '—'}</Badge>,
+        : <Badge variant="info">{p.professionId ?? '-'}</Badge>,
     },
-    { key: 'tag', header: 'Card / Letter', render: (p) => p.cardType ?? p.letterType ?? '—' },
+    { key: 'tag', header: 'Card / Letter', render: (p) => p.cardType ?? p.letterType ?? '-' },
     { key: 'cnt', header: 'Assets', render: (p) => p.assets.length },
     {
       key: 'roles', header: 'Roles', render: (p) => (

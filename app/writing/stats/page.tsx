@@ -109,9 +109,9 @@ export default function WritingStatsPage() {
           title={t('writing.stats.title')}
           description={t('writing.stats.description')}
           highlights={[
-            { icon: Flame, label: t('writing.stats.highlights.streak'), value: dashboard ? t('writing.stats.highlights.streakDays', { days: dashboard.streakDays }) : '—' },
-            { icon: Target, label: t('writing.stats.highlights.latestBand'), value: dashboard?.latestBand ?? '—' },
-            { icon: Calendar, label: t('writing.stats.highlights.daysToExam'), value: dashboard?.daysToExam === null ? '—' : `${dashboard?.daysToExam ?? '—'}` },
+            { icon: Flame, label: t('writing.stats.highlights.streak'), value: dashboard ? t('writing.stats.highlights.streakDays', { days: dashboard.streakDays }) : '-' },
+            { icon: Target, label: t('writing.stats.highlights.latestBand'), value: dashboard?.latestBand ?? '-' },
+            { icon: Calendar, label: t('writing.stats.highlights.daysToExam'), value: dashboard?.daysToExam === null ? '-' : `${dashboard?.daysToExam ?? '-'}` },
           ]}
         />
 

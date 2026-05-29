@@ -398,7 +398,7 @@ function ResultPanel({ title, value, accent = 'default' }: { title: string; valu
       )}
     >
       <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted">{title}</p>
-      <p className="mt-1 whitespace-pre-wrap leading-6">{value || '—'}</p>
+      <p className="mt-1 whitespace-pre-wrap leading-6">{value || '-'}</p>
     </div>
   );
 }
@@ -433,11 +433,11 @@ function formatAnswer(answer: unknown, exerciseType: GrammarExerciseLearner['typ
         .join('\n');
     }
 
-    return '—';
+    return '-';
   }
 
-  if (typeof answer === 'string') return answer || '—';
-  if (answer == null) return '—';
+  if (typeof answer === 'string') return answer || '-';
+  if (answer == null) return '-';
   return JSON.stringify(answer);
 }
 

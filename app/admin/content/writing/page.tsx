@@ -197,7 +197,7 @@ export default function AdminWritingPapersPage() {
       header: 'Profession scope',
       render: (paper) => paper.appliesToAllProfessions
         ? <Badge variant="default" intensity="tinted">All professions</Badge>
-        : <Badge variant="info" intensity="tinted">{paper.professionId ?? '—'}</Badge>,
+        : <Badge variant="info" intensity="tinted">{paper.professionId ?? '-'}</Badge>,
     },
     {
       key: 'status',

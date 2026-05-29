@@ -199,7 +199,7 @@ function AnalyticsPanel({
           <p className="mt-1 text-2xl font-bold text-navy">
             {analytics.averageScore !== null && analytics.averageScore !== undefined
               ? analytics.averageScore.toFixed(1)
-              : '—'}
+              : '-'}
           </p>
         </div>
       </div>
@@ -234,7 +234,7 @@ function AnalyticsPanel({
                     <td className="py-2 pr-3 text-sm text-navy">
                       {l.averageScore !== null && l.averageScore !== undefined
                         ? l.averageScore.toFixed(1)
-                        : '—'}
+                        : '-'}
                     </td>
                   </tr>
                 ))}

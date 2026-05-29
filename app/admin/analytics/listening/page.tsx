@@ -245,7 +245,7 @@ export default function ListeningAnalyticsPage() {
                             <div key={`${d.paperId}-${d.questionNumber}`} className="rounded-admin border border-admin-border bg-admin-bg-surface p-3">
                               <div className="flex items-center justify-between">
                                 <p className="text-sm font-semibold text-admin-fg-strong">Q{d.questionNumber}</p>
-                                <Badge variant="success" intensity="tinted">Correct: {d.correctAnswer || '—'}</Badge>
+                                <Badge variant="success" intensity="tinted">Correct: {d.correctAnswer || '-'}</Badge>
                               </div>
                               <ul className="mt-2 space-y-1 text-xs text-admin-fg-muted">
                                 {Object.entries(d.wrongAnswerHistogram)

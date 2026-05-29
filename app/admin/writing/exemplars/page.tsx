@@ -176,7 +176,7 @@ export default function AdminWritingExemplarsPage() {
               {items.length === 0 ? <tr><td colSpan={6} className="py-4 text-center text-xs text-muted">No exemplars yet.</td></tr> : null}
               {items.map((ex) => (
                 <tr key={ex.id} className="border-b border-border/60">
-                  <td className="py-2 text-xs">{ex.scenarioId ?? '—'}</td>
+                  <td className="py-2 text-xs">{ex.scenarioId ?? '-'}</td>
                   <td className="capitalize">{ex.profession}</td>
                   <td>{ex.letterType}</td>
                   <td><Badge variant="success" size="sm">{ex.targetBand}</Badge></td>

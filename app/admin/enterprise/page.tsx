@@ -150,7 +150,7 @@ export default function EnterprisePage() {
     { key: 'name', header: 'Name', render: (r) => <span className="font-medium text-admin-fg-strong">{r.name}</span> },
     { key: 'type', header: 'Type', render: (r) => <Badge variant="default" intensity="tinted" className="capitalize">{r.type}</Badge> },
     { key: 'contactEmail', header: 'Email', render: (r) => <span className="text-sm text-admin-fg-default">{r.contactEmail}</span> },
-    { key: 'organizationName', header: 'Organization', render: (r) => <span className="text-sm text-admin-fg-default">{r.organizationName || '—'}</span> },
+    { key: 'organizationName', header: 'Organization', render: (r) => <span className="text-sm text-admin-fg-default">{r.organizationName || '-'}</span> },
     { key: 'status', header: 'Status', render: (r) => { const b = STATUS_BADGE[r.status] ?? { label: r.status, variant: 'default' as const }; return <Badge variant={b.variant} intensity="tinted">{b.label}</Badge>; } },
     { key: 'createdAt', header: 'Created', render: (r) => <span className="text-xs text-admin-fg-muted">{new Date(r.createdAt).toLocaleDateString()}</span> },
   ];
@@ -160,7 +160,7 @@ export default function EnterprisePage() {
     { key: 'examTypeCode', header: 'Exam', render: (r) => <span className="text-sm uppercase text-admin-fg-default">{r.examTypeCode}</span> },
     { key: 'seats', header: 'Seats', render: (r) => <span className="text-sm tabular-nums text-admin-fg-default">{r.enrolledCount}/{r.maxSeats}</span> },
     { key: 'status', header: 'Status', render: (r) => { const b = STATUS_BADGE[r.status] ?? { label: r.status, variant: 'default' as const }; return <Badge variant={b.variant} intensity="tinted">{b.label}</Badge>; } },
-    { key: 'dates', header: 'Period', render: (r) => <span className="text-xs text-admin-fg-muted">{r.startDate || '—'} → {r.endDate || '—'}</span> },
+    { key: 'dates', header: 'Period', render: (r) => <span className="text-xs text-admin-fg-muted">{r.startDate || '-'} → {r.endDate || '-'}</span> },
   ];
 
   const breadcrumbs = [

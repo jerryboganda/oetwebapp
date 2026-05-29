@@ -154,11 +154,11 @@ export default function AdminSessionDetailPage() {
           <div><span className="text-admin-fg-muted">State:</span> <Badge variant={s.state === 'evaluated' ? 'success' : s.state === 'failed' ? 'danger' : 'info'} size="sm">{s.state}</Badge></div>
           <div><span className="text-admin-fg-muted">Turns:</span> {s.turnCount}</div>
           <div><span className="text-admin-fg-muted">Duration:</span> {s.durationSeconds}s</div>
-          <div><span className="text-admin-fg-muted">Template:</span> {s.templateId ?? '—'}</div>
+          <div><span className="text-admin-fg-muted">Template:</span> {s.templateId ?? '-'}</div>
           <div><span className="text-admin-fg-muted">Created:</span> {new Date(s.createdAt).toLocaleString()}</div>
-          <div><span className="text-admin-fg-muted">Started:</span> {s.startedAt ? new Date(s.startedAt).toLocaleString() : '—'}</div>
-          <div><span className="text-admin-fg-muted">Completed:</span> {s.completedAt ? new Date(s.completedAt).toLocaleString() : '—'}</div>
-          <div><span className="text-admin-fg-muted">Last error:</span> {s.lastErrorCode ?? '—'}</div>
+          <div><span className="text-admin-fg-muted">Started:</span> {s.startedAt ? new Date(s.startedAt).toLocaleString() : '-'}</div>
+          <div><span className="text-admin-fg-muted">Completed:</span> {s.completedAt ? new Date(s.completedAt).toLocaleString() : '-'}</div>
+          <div><span className="text-admin-fg-muted">Last error:</span> {s.lastErrorCode ?? '-'}</div>
         </div>
       </SettingsSection>
 

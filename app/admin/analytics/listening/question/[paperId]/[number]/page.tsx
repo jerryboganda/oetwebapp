@@ -146,8 +146,8 @@ export default function ListeningQuestionDeepDivePage() {
         status === 'success' && (hardest || distractor) ? (
           <KpiStrip>
             <KpiTile label="Accuracy" value={formatPercent(hardest?.accuracyPercent ?? null)} icon={<BarChart3 className="h-4 w-4" />} tone="primary" />
-            <KpiTile label="Part" value={hardest?.partCode ?? '—'} icon={<Headphones className="h-4 w-4" />} tone="info" />
-            <KpiTile label="Correct answer" value={distractor?.correctAnswer ?? '—'} icon={<ListChecks className="h-4 w-4" />} tone="success" />
+            <KpiTile label="Part" value={hardest?.partCode ?? '-'} icon={<Headphones className="h-4 w-4" />} tone="info" />
+            <KpiTile label="Correct answer" value={distractor?.correctAnswer ?? '-'} icon={<ListChecks className="h-4 w-4" />} tone="success" />
             <KpiTile label="Attempts" value={hardest ? hardest.attemptCount : 0} icon={<Target className="h-4 w-4" />} tone="default" />
           </KpiStrip>
         ) : null
@@ -203,7 +203,7 @@ export default function ListeningQuestionDeepDivePage() {
                   <CardContent>
                     {misspellings.length === 0 ? (
                       <p className="text-sm text-admin-fg-muted">
-                        <AlertTriangle className="mr-1 inline h-4 w-4" /> No spelling-near-miss patterns detected for &ldquo;{distractor?.correctAnswer ?? '—'}&rdquo; in the last {days} days.
+                        <AlertTriangle className="mr-1 inline h-4 w-4" /> No spelling-near-miss patterns detected for &ldquo;{distractor?.correctAnswer ?? '-'}&rdquo; in the last {days} days.
                       </p>
                     ) : (
                       <div className="grid gap-2 md:grid-cols-2" data-testid="listening-question-misspellings">

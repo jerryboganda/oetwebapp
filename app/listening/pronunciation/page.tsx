@@ -145,10 +145,10 @@ export default function PronunciationHubPage() {
   }
 
   const statCards = [
-    { label: 'Total Cards', value: stats?.total ?? '—', icon: BookOpen, accent: 'violet' as const },
-    { label: 'Mastered', value: stats?.mastered ?? '—', icon: Trophy, accent: 'emerald' as const },
-    { label: 'Due Today', value: stats?.dueToday ?? '—', icon: CalendarCheck, accent: 'amber' as const },
-    { label: 'Struggling', value: stats?.struggling ?? '—', icon: Brain, accent: 'rose' as const },
+    { label: 'Total Cards', value: stats?.total ?? '-', icon: BookOpen, accent: 'violet' as const },
+    { label: 'Mastered', value: stats?.mastered ?? '-', icon: Trophy, accent: 'emerald' as const },
+    { label: 'Due Today', value: stats?.dueToday ?? '-', icon: CalendarCheck, accent: 'amber' as const },
+    { label: 'Struggling', value: stats?.struggling ?? '-', icon: Brain, accent: 'rose' as const },
   ];
 
   return (

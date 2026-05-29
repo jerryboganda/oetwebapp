@@ -257,7 +257,7 @@ export default function AdminEligibilityMatrixPage() {
                       </td>
                       <td className="px-4 py-3">
                         {row.eligibleAddOnCodes.length === 0 ? (
-                          <span className="text-xs text-admin-fg-muted">—</span>
+                          <span className="text-xs text-admin-fg-muted">-</span>
                         ) : (
                           <div className="flex flex-wrap gap-1">
                             {row.eligibleAddOnCodes.map((code) => (

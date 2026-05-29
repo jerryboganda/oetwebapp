@@ -43,12 +43,12 @@ function bucketForSigma(sigma: number): DriftBucket {
 }
 
 function formatSigma(sigma: number | null | undefined): string {
-  if (sigma === null || sigma === undefined || !Number.isFinite(sigma)) return '—';
+  if (sigma === null || sigma === undefined || !Number.isFinite(sigma)) return '-';
   return sigma.toFixed(2);
 }
 
 function formatDate(iso: string | null | undefined): string {
-  if (!iso) return '—';
+  if (!iso) return '-';
   try {
     return new Date(iso).toLocaleDateString(undefined, {
       year: 'numeric',

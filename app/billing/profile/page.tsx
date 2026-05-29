@@ -110,7 +110,7 @@ export default function BillingProfilePage() {
             <div className="rounded-lg bg-muted/40 p-4 text-sm">
               <p className="font-medium">Detected</p>
               <p className="text-muted">
-                {profile.detectedCountry || '—'} · {profile.detectedRegion} · {profile.detectedCurrency}{' '}
+                {profile.detectedCountry || '-'} · {profile.detectedRegion} · {profile.detectedCurrency}{' '}
                 <span className="text-xs">({profile.detectionSource})</span>
               </p>
             </div>

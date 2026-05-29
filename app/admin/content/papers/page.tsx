@@ -170,9 +170,9 @@ export default function ContentPapersListPage() {
     {
       key: 'sc', header: 'Scope', render: (p) => p.appliesToAllProfessions
         ? <Badge variant="muted">All professions</Badge>
-        : <Badge variant="info">{p.professionId ?? '—'}</Badge>,
+        : <Badge variant="info">{p.professionId ?? '-'}</Badge>,
     },
-    { key: 'cl', header: 'Card / Letter', render: (p) => p.cardType ?? p.letterType ?? '—' },
+    { key: 'cl', header: 'Card / Letter', render: (p) => p.cardType ?? p.letterType ?? '-' },
     {
       key: 'st2', header: 'Status', render: (p) => <Badge variant={
         p.status === 'Published' ? 'success'

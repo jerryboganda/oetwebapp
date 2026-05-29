@@ -212,8 +212,8 @@ export default function PronunciationAiDraftPage() {
                 <DraftRow label="Phoneme" value={`/${draft.targetPhoneme}/`} mono />
                 <DraftRow label="Focus" value={draft.focus} />
                 <DraftRow label="Difficulty" value={draft.difficulty} />
-                <DraftRow label="Applied rule IDs" value={draft.appliedRuleIds.join(', ') || '—'} mono />
-                <DraftRow label="Primary rule" value={draft.primaryRuleId ?? '—'} mono />
+                <DraftRow label="Applied rule IDs" value={draft.appliedRuleIds.join(', ') || '-'} mono />
+                <DraftRow label="Primary rule" value={draft.primaryRuleId ?? '-'} mono />
               </dl>
               <div>
                 <span className="text-xs uppercase tracking-[0.15em] text-admin-fg-muted">Example words</span>

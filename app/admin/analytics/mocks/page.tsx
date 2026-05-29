@@ -192,12 +192,12 @@ function LowQualityPanel({ rows }: { rows: AdminMocksAnalyticsLowQualityRow[] })
 }
 
 function formatPercent(value: number | null): string {
-  if (value === null || Number.isNaN(value)) return '—';
+  if (value === null || Number.isNaN(value)) return '-';
   return `${Math.round(value * 100)}%`;
 }
 
 function formatHours(value: number): string {
-  if (!Number.isFinite(value)) return '—';
+  if (!Number.isFinite(value)) return '-';
   if (value >= 100) return `${Math.round(value)}h`;
   return `${value.toFixed(1)}h`;
 }
@@ -252,7 +252,7 @@ function AverageReadinessPanel({ data }: { data: AdminMocksAnalyticsAverageReadi
     <div className="space-y-3">
       <div className="flex flex-wrap items-baseline gap-2">
         <span className="text-2xl font-semibold tabular-nums text-admin-text">
-          {data.averageScore !== null ? data.averageScore.toFixed(1) : '—'}
+          {data.averageScore !== null ? data.averageScore.toFixed(1) : '-'}
         </span>
         <span className="text-xs text-admin-text-muted">average overall ({data.sampleSize} report{data.sampleSize === 1 ? '' : 's'})</span>
       </div>
@@ -408,7 +408,7 @@ function ReadingSectionPanel({ data }: { data: AdminMocksAnalyticsReadingSection
       <div className="rounded-2xl border border-admin-border bg-admin-surface-raised/40 p-3">
         <p className="text-xs font-bold uppercase tracking-[0.14em] text-admin-text-muted">Avg scaled</p>
         <p className="mt-1 text-lg font-semibold tabular-nums text-admin-text">
-          {data.averageScaledScore != null ? data.averageScaledScore.toFixed(0) : '—'}
+          {data.averageScaledScore != null ? data.averageScaledScore.toFixed(0) : '-'}
         </p>
         {data.averageRawScore != null ? (
           <p className="mt-1 text-xs text-admin-text-muted tabular-nums">
@@ -421,7 +421,7 @@ function ReadingSectionPanel({ data }: { data: AdminMocksAnalyticsReadingSection
         <p className="mt-1 text-lg font-semibold tabular-nums text-admin-text">
           {data.averageCompletionSeconds != null
             ? `${Math.round(data.averageCompletionSeconds / 60)}m`
-            : '—'}
+            : '-'}
         </p>
       </div>
     </div>
@@ -613,7 +613,7 @@ export default function AdminMocksAnalyticsPage() {
                   value={
                     analytics.averageReadiness.averageScore !== null
                       ? analytics.averageReadiness.averageScore.toFixed(0)
-                      : '—'
+                      : '-'
                   }
                   icon={<Gauge className="h-4 w-4" />}
                   tone={
@@ -647,7 +647,7 @@ export default function AdminMocksAnalyticsPage() {
                               analytics.markingDelay.perSubtest.reduce((acc, row) => acc + row.sampleSize, 0),
                             ),
                         )
-                      : '—'
+                      : '-'
                   }
                   icon={<Clock className="h-4 w-4" />}
                   tone={

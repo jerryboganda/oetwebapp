@@ -273,7 +273,7 @@ export default function AdminBulkOperationsPage() {
             )}
           </div>
         ) : (
-          <span className="text-xs text-admin-fg-muted">—</span>
+          <span className="text-xs text-admin-fg-muted">-</span>
         ),
       hideOnMobile: true,
     },

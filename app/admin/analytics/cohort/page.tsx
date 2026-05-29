@@ -96,7 +96,7 @@ export default function CohortAnalysisPage() {
                       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                         <div>
                           <p className="text-xs uppercase tracking-wider text-admin-fg-muted">Avg score</p>
-                          <p className="mt-1 text-xl font-bold tabular-nums text-admin-fg-strong">{c.averageScore ?? '—'}</p>
+                          <p className="mt-1 text-xl font-bold tabular-nums text-admin-fg-strong">{c.averageScore ?? '-'}</p>
                         </div>
                         <div>
                           <p className="text-xs uppercase tracking-wider text-admin-fg-muted">Evaluations</p>

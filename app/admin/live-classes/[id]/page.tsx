@@ -624,7 +624,7 @@ export default function AdminLiveClassDetailPage({ params }: { params: Promise<{
                                 </Button>
                               </div>
                             ) : (
-                              <span className="text-xs text-admin-fg-muted">—</span>
+                              <span className="text-xs text-admin-fg-muted">-</span>
                             )}
                           </td>
 

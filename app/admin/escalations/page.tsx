@@ -147,7 +147,7 @@ export default function EscalationsPage() {
         return <Badge variant={badge.variant}>{badge.label}</Badge>;
       },
     },
-    { key: 'finalScore', header: 'Final', render: (e) => e.finalScore != null ? <span className="font-mono font-semibold text-admin-fg-strong">{e.finalScore}</span> : <span className="text-admin-fg-muted">—</span> },
+    { key: 'finalScore', header: 'Final', render: (e) => e.finalScore != null ? <span className="font-mono font-semibold text-admin-fg-strong">{e.finalScore}</span> : <span className="text-admin-fg-muted">-</span> },
     {
       key: 'actions',
       header: '',

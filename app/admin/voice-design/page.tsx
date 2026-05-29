@@ -1155,12 +1155,12 @@ export default function AdminVoiceDesignPage() {
             </div>
             <div className="flex justify-between text-sm">
               <span className="text-admin-text-muted">Items:</span>
-              <span className="font-bold text-admin-text">{dryRunResult?.count.toLocaleString() ?? '—'}</span>
+              <span className="font-bold text-admin-text">{dryRunResult?.count.toLocaleString() ?? '-'}</span>
             </div>
             <div className="flex justify-between text-sm">
               <span className="text-admin-text-muted">Est. time:</span>
               <span className="font-bold text-admin-text">
-                {dryRunResult ? `~${Math.ceil(dryRunResult.count * 3 / 60)} min` : '—'}
+                {dryRunResult ? `~${Math.ceil(dryRunResult.count * 3 / 60)} min` : '-'}
               </span>
             </div>
           </div>

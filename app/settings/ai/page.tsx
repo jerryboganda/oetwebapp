@@ -127,8 +127,8 @@ export default function AiSettingsPage() {
               title="AI Settings"
               description="Bring your own AI provider key or use your platform allowance. Keys are encrypted at rest; we only ever show the last 4 characters."
               highlights={[
-                { icon: Cpu, label: 'Plan', value: usage?.planName ?? (loading ? '…' : '—') },
-                { icon: Shield, label: 'Mode', value: prefs?.mode ?? (loading ? '…' : '—') },
+                { icon: Cpu, label: 'Plan', value: usage?.planName ?? (loading ? '…' : '-') },
+                { icon: Shield, label: 'Mode', value: prefs?.mode ?? (loading ? '…' : '-') },
               ]}
             />
           </div>

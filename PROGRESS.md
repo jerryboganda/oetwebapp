@@ -1,12 +1,31 @@
 ﻿# PROGRESS — Ultrawork Completion
 
-Last updated: 2026-05-28
+Last updated: 2026-05-29
 
 ## Guardrails
 - No destructive git actions.
 - Heavy validation/build/test commands run only inside local Docker Desktop containers per `AGENTS.md`.
 - Do not use `oet-dev` for validation; the VPS is production deployment only.
 - Preserve existing modified/untracked work; `.codex/config.toml` remains isolated tooling/config unless intentionally committed.
+
+## Current Continuation — Reading Module A-Z Closure And Hardening
+
+Status: **Coding/software development complete; focused Docker validation passed where containers returned final evidence; broader Docker type-check was timeboxed and reported honestly.** This pass completed the attached Reading implementation/hardening plan end to end without host or VPS validation fallback.
+
+- Learner-safe Reading option projection is centralized in `ReadingLearnerSafeProjection` and reused by the canonical learner paper structure and legacy/pathway diagnostic/practice endpoints. Learner payloads now drop hidden answer-key metadata such as correct answers, accepted synonyms, explanation markdown, and `isCorrect` option flags.
+- Part-scoped Reading practice is now server-authoritative: `/v1/reading-papers/papers/{paperId}/practice/parts/{partCode}` creates a scoped `Drill` attempt with explicit Part A/B/C question IDs, and the learner Part A/B/C dispatcher starts that backend attempt before navigating to the canonical player.
+- Legacy `?mode=practice&part=A` paper-player auto-start behavior is removed, so old URL hints no longer create accidental full Reading attempts. The player now renders an explicit `Start attempt` CTA until a server attempt exists.
+- Part A matching answer contracts are aligned to `A-D`: admin authoring normalizes old `1-4` values and saves `Text A-D`, while learner fallback matching choices also emit `A-D` even when no authored options are present.
+- Reading attempt starts now pin `RulebookVersion` from the published `reading/_exam-mode` rulebook, with a stable fallback when no published row exists.
+- Expert/tutor privileged Reading routes are least-privilege hardened. Expert review, override, recalc, and feedback routes now require `CanExpertAccessAttemptAsync`; that predicate requires a submitted attempt explicitly linked through `ReadingAssignment.CompletedAttemptId`, preventing answer-key exposure for in-progress, unrelated, or merely same-paper attempts.
+- Reading assignment completion is scoped to the submitted attempt mode and assignment kind. Full/exam/retake assignments only complete from `Exam` attempts, part-practice assignments compare `partCode`, and Part A/B/C `Drill` practice can no longer close a full-paper assignment.
+- Expert cohort analytics is narrowed to learners assigned by the current expert for the requested paper. Expert assignment creation/cancellation remains unavailable from expert routes; admin assignment workflow remains the admin-owned surface.
+- Part-practice starts now hide papers before question probing: published/archived policy, profession visibility, and entitlement are checked before querying `ReadingQuestions`, with regression coverage for draft/unpublished and profession-mismatch papers returning 404 without `part_practice_no_questions` leakage.
+- Focused regression coverage added/updated in `ReadingAuthoringTests`, `ReadingPathwayEndpointTests`, `app/reading/parts/[part]/page.test.tsx`, and `app/reading/paper/[paperId]/page.test.tsx` for option redaction, rulebook pinning, part-practice dispatch, matching `A-D`, explicit expert assignment access, assignment completion scope, and hidden paper probing.
+- Independent `OET Reviewer` and `OET Security Reviewer` passes were run. Initial blockers (`urlMode`, numeric matching fallback, broad expert access, coarse assignment completion, and part-practice probing) were fixed; final reviewer confirmation found no remaining blocker after the profession-visibility regression test was adjusted to use `LearnerUser.ActiveProfessionId`.
+- Validation evidence: VS Code diagnostics are clean on the touched Reading backend/frontend/test files checked; `git diff --check` returned no whitespace/conflict-marker errors, only existing CRLF normalization warnings on a few tracked files; local Docker Desktop containers were available and healthy; Docker Vitest passed for `app/reading/parts/[part]` (1 file, 1 test) and `app/reading/paper/[paperId]` (2 files, 11 tests); focused backend Docker test-project command for `ReadingAuthoringTests|ReadingPathwayEndpointTests` completed with exit code 0.
+- Validation limitation: Docker TypeScript check (`docker run --rm -v .:/src:ro -v oet_web_node_modules_node22:/src/node_modules -w /src node:22-alpine npx tsc --noEmit`) stayed CPU-active/silent on the Windows bind mount until it was stopped; its recorded non-zero exit is SIGTERM cleanup, not TypeScript diagnostics. No host or VPS fallback was used.
+- Existing unrelated dirty worktree entries were preserved and not reverted, including prior edits in `AcceptedVariantManager.tsx`, `reading-feedback-panel.tsx`, and the pre-existing `detX.json` deletion.
 
 ## Current Continuation — Speaking Diagnostic, Payments, PDF Export, Recorder, Analytics
 

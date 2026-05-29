@@ -216,7 +216,7 @@ export default function AdminPronunciationDashboard() {
                         </Link>
                       </td>
                       <td className="px-4 py-2 font-mono text-xs">/{r.targetPhoneme}/</td>
-                      <td className="px-4 py-2 font-mono text-xs text-admin-fg-muted">{r.primaryRuleId ?? '—'}</td>
+                      <td className="px-4 py-2 font-mono text-xs text-admin-fg-muted">{r.primaryRuleId ?? '-'}</td>
                       <td className="px-4 py-2 text-xs capitalize">{r.focus}</td>
                       <td className="px-4 py-2 text-xs capitalize">{r.profession.replace('-', ' ')}</td>
                       <td className="px-4 py-2 text-xs capitalize">{r.difficulty}</td>
@@ -229,7 +229,7 @@ export default function AdminPronunciationDashboard() {
                         {r.audioModelUrl ? (
                           <span className="text-xs text-[var(--admin-success)]">ok</span>
                         ) : (
-                          <span className="text-xs text-admin-fg-muted">—</span>
+                          <span className="text-xs text-admin-fg-muted">-</span>
                         )}
                       </td>
                       <td className="px-4 py-2 text-right">

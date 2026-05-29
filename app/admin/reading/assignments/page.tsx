@@ -26,7 +26,7 @@ const KIND_LABELS: Record<string, string> = Object.fromEntries(
 );
 
 function formatDate(iso: string | null): string {
-  if (!iso) return '—';
+  if (!iso) return '-';
   try {
     return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
   } catch {
@@ -338,7 +338,7 @@ export default function AdminReadingAssignmentsPage() {
                       <td className="px-4 py-2.5 text-admin-fg-muted">{formatDate(item.createdAt)}</td>
                       <td className="px-4 py-2.5 text-right">
                         {cancelled || completed ? (
-                          <span className="text-xs text-admin-fg-muted">—</span>
+                          <span className="text-xs text-admin-fg-muted">-</span>
                         ) : (
                           <button
                             type="button"

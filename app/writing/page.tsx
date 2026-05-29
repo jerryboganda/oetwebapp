@@ -549,7 +549,7 @@ export default function WritingHome() {
               metaItems: [
                 ...(latestEvaluation.grade ? [{ label: `Grade ${latestEvaluation.grade}` }] : []),
                 ...(latestEvaluation.criterionScores?.slice(0, 3) ?? []).map((c) => ({
-                  label: `${c.criterionLabel ?? c.criterionCode ?? 'Criterion'}: ${c.scoreRange ?? '—'}`,
+                  label: `${c.criterionLabel ?? c.criterionCode ?? 'Criterion'}: ${c.scoreRange ?? '-'}`,
                 })),
               ],
               primaryAction: latestEvaluation.evaluationId

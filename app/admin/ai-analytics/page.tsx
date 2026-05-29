@@ -136,7 +136,7 @@ export default function AdminAiAnalyticsPage() {
         </Badge>
       ),
     },
-    { key: 'action', header: 'Action', render: (r) => r.recommendedAction ?? '—' },
+    { key: 'action', header: 'Action', render: (r) => r.recommendedAction ?? '-' },
     { key: 'disp', header: 'Dispatched', render: (r) => (r.actionDispatched ? 'Yes' : 'No') },
   ];
 
@@ -146,7 +146,7 @@ export default function AdminAiAnalyticsPage() {
     { key: 'credits', header: 'Credits/30d', render: (r) => r.forecastCredits.toLocaleString() },
     { key: 'cost', header: 'Cost USD/30d', render: (r) => `$${r.forecastCostUsd.toFixed(2)}` },
     { key: 'ema', header: 'EMA daily calls', render: (r) => r.ema30DailyCalls.toFixed(2) },
-    { key: 'topup', header: 'Top-up suggested', render: (r) => (r.suggestedTopUpCredits ? `${r.suggestedTopUpCredits} cr` : '—') },
+    { key: 'topup', header: 'Top-up suggested', render: (r) => (r.suggestedTopUpCredits ? `${r.suggestedTopUpCredits} cr` : '-') },
   ];
 
   const breadcrumbs = [

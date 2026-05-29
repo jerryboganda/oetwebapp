@@ -456,15 +456,15 @@ export default function AdminPrivateSpeakingPage() {
                   {bookings.map(b => (
                     <tr key={b.id} className="border-b border-admin-border">
                       <td className="py-2 pr-3 font-mono text-xs">{b.id.slice(0, 12)}…</td>
-                      <td className="py-2 pr-3">{b.tutorName ?? '—'}</td>
+                      <td className="py-2 pr-3">{b.tutorName ?? '-'}</td>
                       <td className="py-2 pr-3">{new Date(b.sessionStartUtc).toLocaleString('en-AU', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</td>
                       <td className="py-2 pr-3"><Badge variant="default" intensity="tinted" size="sm">{b.status}</Badge></td>
                       <td className="py-2 pr-3 text-xs">{b.paymentStatus}</td>
                       <td className="py-2 pr-3 text-xs">
                         {b.entitlementConsumed ? (b.entitlementRestoredAt ? 'Restored' : 'Consumed') : 'Legacy payment'}
                       </td>
-                      <td className="py-2 pr-3 text-xs">{b.zoomStatus ?? '—'}</td>
-                      <td className="py-2 pr-3 text-xs">{b.googleCalendarSyncStatus ?? '—'}</td>
+                      <td className="py-2 pr-3 text-xs">{b.zoomStatus ?? '-'}</td>
+                      <td className="py-2 pr-3 text-xs">{b.googleCalendarSyncStatus ?? '-'}</td>
                       <td className="py-2 flex items-center gap-1.5">
                         {(b.status === 'Confirmed' || b.status === 'ZoomCreated') && (
                           <>

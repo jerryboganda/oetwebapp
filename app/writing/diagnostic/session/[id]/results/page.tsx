@@ -90,7 +90,7 @@ export default function WritingDiagnosticResultsPage() {
           highlights={grade ? [
             { icon: Award, label: t('writing.diagnostic.results.highlights.raw'), value: `${grade.rawTotal}/38` },
             { icon: Sparkles, label: t('writing.diagnostic.results.highlights.confidence'), value: grade.confidenceFlag },
-            { icon: Route, label: t('writing.diagnostic.results.highlights.pathway'), value: data?.pathwayPreview.currentStage ?? '—' },
+            { icon: Route, label: t('writing.diagnostic.results.highlights.pathway'), value: data?.pathwayPreview.currentStage ?? '-' },
           ] : []}
         />
 

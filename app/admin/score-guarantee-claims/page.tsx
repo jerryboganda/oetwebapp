@@ -176,7 +176,7 @@ export default function ScoreGuaranteeClaimsPage() {
         header: 'Actual',
         cell: ({ row }) => (
           <span className="tabular-nums text-admin-fg-default">
-            {row.original.actualScore ?? '—'}
+            {row.original.actualScore ?? '-'}
           </span>
         ),
       },
@@ -365,7 +365,7 @@ export default function ScoreGuaranteeClaimsPage() {
                     Actual
                   </div>
                   <div className="mt-1 text-base font-semibold tabular-nums text-admin-fg-strong">
-                    {reviewTarget.actualScore ?? '—'}
+                    {reviewTarget.actualScore ?? '-'}
                   </div>
                 </div>
                 <div className="rounded-admin border border-admin-border bg-admin-bg-subtle p-3">

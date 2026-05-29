@@ -236,7 +236,7 @@ export default function PublishRequestsPage() {
       header: 'Stage',
       render: (r) => {
         const badge = stageBadge[r.stage];
-        return badge ? <Badge variant={badge.variant}>{badge.label}</Badge> : <span className="text-xs text-[var(--admin-fg-muted)]">—</span>;
+        return badge ? <Badge variant={badge.variant}>{badge.label}</Badge> : <span className="text-xs text-[var(--admin-fg-muted)]">-</span>;
       },
     },
     {

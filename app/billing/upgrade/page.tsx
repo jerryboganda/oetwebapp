@@ -84,7 +84,7 @@ export default function BillingUpgradePage() {
     const planLabel = data.currentPlan?.planName ?? 'No active plan';
     const monthlyCost = data.currentPlan
       ? formatPrice(data.currentPlan.price, data.plans[0]?.currency ?? 'AUD')
-      : '—';
+      : '-';
     return [
       { icon: Layers, label: 'Current plan', value: planLabel },
       { icon: CreditCard, label: 'Monthly cost', value: monthlyCost },
@@ -173,7 +173,7 @@ export default function BillingUpgradePage() {
                           data.currentPlan.price,
                           data.plans[0]?.currency ?? 'AUD',
                         )
-                      : '—'}
+                      : '-'}
                   </dd>
                 </div>
               </dl>

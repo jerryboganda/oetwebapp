@@ -116,7 +116,7 @@ export default function AdminBankAccountsPage() {
     {
       id: 'iban',
       header: 'IBAN',
-      cell: ({ row }) => row.original.iban ?? '—',
+      cell: ({ row }) => row.original.iban ?? '-',
     },
     {
       id: 'active',

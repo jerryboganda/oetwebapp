@@ -508,7 +508,7 @@ export default function BillingPage() {
           description="Review your plan, top up review credits, and download invoices. Everything stays validated server-side before checkout opens."
           highlights={[
             { icon: ShieldCheck, label: 'Current plan', value: data.currentPlan },
-            { icon: Wallet, label: 'Credit balance', value: walletLoading ? '—' : `${wallet?.balance ?? 0} credits` },
+            { icon: Wallet, label: 'Credit balance', value: walletLoading ? '-' : `${wallet?.balance ?? 0} credits` },
             { icon: ShoppingCart, label: 'Active add-ons', value: `${activeAddOns.length}` },
             { icon: Calendar, label: 'Next renewal', value: formatOptionalDate(data.nextRenewal) },
           ]}
@@ -654,7 +654,7 @@ export default function BillingPage() {
                 <div>
                   <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">Credit wallet</p>
                   <h3 className="mt-2 text-4xl font-semibold tracking-tight text-navy tabular-nums">
-                    {walletLoading ? '—' : (wallet?.balance ?? 0)}
+                    {walletLoading ? '-' : (wallet?.balance ?? 0)}
                   </h3>
                   <p className="mt-1 text-sm text-muted">review credits available</p>
                 </div>

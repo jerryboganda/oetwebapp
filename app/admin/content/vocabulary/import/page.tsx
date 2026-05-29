@@ -545,7 +545,7 @@ export default function AdminVocabularyImportPage() {
                           <div className="text-[10px] text-admin-fg-muted uppercase tracking-wide">Remaining</div>
                         </div>
                         <div className="rounded-lg bg-surface p-2">
-                          <div className="text-lg font-bold text-navy">{remaining > 0 ? `${etaMin}m ${etaSec}s` : '—'}</div>
+                          <div className="text-lg font-bold text-navy">{remaining > 0 ? `${etaMin}m ${etaSec}s` : '-'}</div>
                           <div className="text-[10px] text-admin-fg-muted uppercase tracking-wide">ETA</div>
                         </div>
                       </div>
@@ -630,13 +630,13 @@ export default function AdminVocabularyImportPage() {
                           const statusTone = row.status === 'matched' ? 'success' : row.status.includes('invalid') || row.status.includes('duplicate') ? 'danger' : 'warning';
                           return (
                             <tr key={`${row.key}-${row.lineNumber ?? index}`} className={row.status === 'matched' ? '' : 'bg-warning/10'}>
-                              <td className="px-3 py-1.5 text-xs text-muted">{row.lineNumber ?? '—'}</td>
+                              <td className="px-3 py-1.5 text-xs text-muted">{row.lineNumber ?? '-'}</td>
                               <td className="px-3 py-1.5"><Badge variant={statusTone}>{row.status}</Badge></td>
                               <td className="px-3 py-1.5 font-mono text-xs text-navy">{row.key}</td>
                               <td className="px-3 py-1.5 text-xs text-muted">
                                 {row.mismatches.length > 0
                                   ? row.mismatches.map((m) => `${m.field}: expected ${m.expected ?? 'blank'} / stored ${m.actual ?? 'blank'}`).join('; ')
-                                  : '—'}
+                                  : '-'}
                               </td>
                               <td className="px-3 py-1.5 text-xs text-danger">{row.error ?? ''}</td>
                             </tr>
@@ -707,10 +707,10 @@ export default function AdminVocabularyImportPage() {
                                 : <Badge variant="danger"><AlertTriangle className="mr-1 h-3 w-3" />Error</Badge>
                             }
                           </td>
-                          <td className="px-3 py-1.5 font-medium">{r.term ?? '—'}</td>
-                          <td className="px-3 py-1.5 text-xs text-muted line-clamp-1 max-w-xs">{r.definition ?? '—'}</td>
-                          <td className="px-3 py-1.5 text-xs">{r.americanSpelling ?? '—'}</td>
-                          <td className="px-3 py-1.5 text-xs">{r.category ?? '—'}</td>
+                          <td className="px-3 py-1.5 font-medium">{r.term ?? '-'}</td>
+                          <td className="px-3 py-1.5 text-xs text-muted line-clamp-1 max-w-xs">{r.definition ?? '-'}</td>
+                          <td className="px-3 py-1.5 text-xs">{r.americanSpelling ?? '-'}</td>
+                          <td className="px-3 py-1.5 text-xs">{r.category ?? '-'}</td>
                           <td className={`px-3 py-1.5 text-xs ${isDuplicateInCsv ? 'text-warning' : 'text-danger'}`}>{r.error ?? ''}</td>
                         </tr>
                         );

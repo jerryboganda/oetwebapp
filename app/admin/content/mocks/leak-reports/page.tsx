@@ -51,7 +51,7 @@ const ACTION_LABELS: Record<ActionMode, string> = {
 };
 
 function formatDateTime(value: string | null): string {
-  if (!value) return '—';
+  if (!value) return '-';
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
   return date.toLocaleString();
@@ -245,7 +245,7 @@ export default function AdminMockLeakReportsPage() {
                               {row.bundleTitle ?? row.bundleId}
                             </Link>
                           ) : (
-                            <span className="text-admin-fg-muted">—</span>
+                            <span className="text-admin-fg-muted">-</span>
                           )}
                           {row.attemptId ? (
                             <p className="text-xs text-admin-fg-muted">Attempt: {row.attemptId}</p>
@@ -257,7 +257,7 @@ export default function AdminMockLeakReportsPage() {
                           </Badge>
                         </td>
                         <td className="px-4 py-3">
-                          <p className="font-medium text-admin-fg-strong">{row.reasonCode ?? '—'}</p>
+                          <p className="font-medium text-admin-fg-strong">{row.reasonCode ?? '-'}</p>
                           {row.pageOrQuestion ? (
                             <p className="text-xs text-admin-fg-muted">@ {row.pageOrQuestion}</p>
                           ) : null}
@@ -273,7 +273,7 @@ export default function AdminMockLeakReportsPage() {
                           ) : null}
                         </td>
                         <td className="px-4 py-3 text-admin-fg-strong">
-                          {row.reportedByUserDisplayName ?? row.reportedByUserId ?? '—'}
+                          {row.reportedByUserDisplayName ?? row.reportedByUserId ?? '-'}
                         </td>
                         <td className="px-4 py-3 text-admin-fg-muted">{formatDateTime(row.createdAt)}</td>
                         <td className="px-4 py-3">
@@ -336,7 +336,7 @@ export default function AdminMockLeakReportsPage() {
           {actionTarget ? (
             <div className="rounded-admin border border-admin-border bg-admin-bg-subtle p-3 text-sm">
               <p className="font-bold text-admin-fg-strong">
-                {actionTarget.bundleTitle ?? actionTarget.bundleId ?? '—'}
+                {actionTarget.bundleTitle ?? actionTarget.bundleId ?? '-'}
               </p>
               <p className="text-xs text-admin-fg-muted">Reported by {actionTarget.reportedByUserDisplayName ?? actionTarget.reportedByUserId ?? 'unknown'}</p>
               {actionTarget.reasonCode ? (

@@ -71,7 +71,7 @@ export default function WritingDiagnosticBriefingPage() {
           description={t('writing.diagnostic.briefing.hero.description')}
           highlights={[
             { icon: Clock, label: t('writing.diagnostic.briefing.highlights.totalTime'), value: t('writing.diagnostic.briefing.highlights.totalTimeValue') },
-            { icon: Route, label: t('writing.diagnostic.briefing.highlights.stage'), value: profile?.currentStage ?? '—' },
+            { icon: Route, label: t('writing.diagnostic.briefing.highlights.stage'), value: profile?.currentStage ?? '-' },
             { icon: ClipboardCheck, label: t('writing.diagnostic.briefing.highlights.status'), value: profile?.diagnosticCompleted ? t('writing.diagnostic.briefing.status.completed') : t('writing.diagnostic.briefing.status.pending') },
           ]}
         />

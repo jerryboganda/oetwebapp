@@ -205,21 +205,21 @@ export default function AdminLiveClassesPage() {
         >
           <KpiTile
             label="Total Classes"
-            value={loading ? '—' : String(analytics?.totalClasses ?? 0)}
+            value={loading ? '-' : String(analytics?.totalClasses ?? 0)}
             icon={<Video className="h-4 w-4" aria-hidden="true" />}
             loading={loading}
             size="sm"
           />
           <KpiTile
             label="Upcoming"
-            value={loading ? '—' : String(analytics?.upcomingSessions ?? 0)}
+            value={loading ? '-' : String(analytics?.upcomingSessions ?? 0)}
             icon={<CalendarClock className="h-4 w-4" aria-hidden="true" />}
             loading={loading}
             size="sm"
           />
           <KpiTile
             label="Live Now"
-            value={loading ? '—' : String(analytics?.liveSessions ?? 0)}
+            value={loading ? '-' : String(analytics?.liveSessions ?? 0)}
             icon={<Radio className="h-4 w-4" aria-hidden="true" />}
             tone={(analytics?.liveSessions ?? 0) > 0 ? 'danger' : 'default'}
             loading={loading}
@@ -227,7 +227,7 @@ export default function AdminLiveClassesPage() {
           />
           <KpiTile
             label="Completed"
-            value={loading ? '—' : String(analytics?.completedSessions ?? 0)}
+            value={loading ? '-' : String(analytics?.completedSessions ?? 0)}
             icon={<CheckCircle2 className="h-4 w-4" aria-hidden="true" />}
             tone="success"
             loading={loading}
@@ -235,14 +235,14 @@ export default function AdminLiveClassesPage() {
           />
           <KpiTile
             label="Enrollments"
-            value={loading ? '—' : String(analytics?.totalEnrollments ?? 0)}
+            value={loading ? '-' : String(analytics?.totalEnrollments ?? 0)}
             icon={<Users className="h-4 w-4" aria-hidden="true" />}
             loading={loading}
             size="sm"
           />
           <KpiTile
             label="Attendance Rate"
-            value={loading ? '—' : `${analytics?.attendanceRate ?? 0}%`}
+            value={loading ? '-' : `${analytics?.attendanceRate ?? 0}%`}
             icon={<Globe2 className="h-4 w-4" aria-hidden="true" />}
             tone={(analytics?.attendanceRate ?? 0) < 60 ? 'warning' : 'success'}
             loading={loading}

@@ -83,7 +83,7 @@ export default function AdminReadinessLearnersPage() {
       accessorKey: 'targetExamDate',
       header: 'Target date',
       cell: ({ row }) => (
-        <span className="text-admin-fg-muted">{row.original.targetExamDate ?? '—'}</span>
+        <span className="text-admin-fg-muted">{row.original.targetExamDate ?? '-'}</span>
       ),
     },
     {
@@ -108,7 +108,7 @@ export default function AdminReadinessLearnersPage() {
       accessorKey: 'weakestSubtest',
       header: 'Weakest',
       cell: ({ row }) => (
-        <span className="text-admin-fg-muted">{row.original.weakestSubtest ?? '—'}</span>
+        <span className="text-admin-fg-muted">{row.original.weakestSubtest ?? '-'}</span>
       ),
     },
     {
@@ -118,7 +118,7 @@ export default function AdminReadinessLearnersPage() {
         <span className="text-admin-fg-muted tabular-nums">
           {row.original.targetDateProbability != null
             ? `${Math.round(row.original.targetDateProbability)}%`
-            : '—'}
+            : '-'}
         </span>
       ),
     },

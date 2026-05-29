@@ -109,7 +109,7 @@ export default function WritingAnalyticsPage() {
           highlights={summary
             ? [
                 { icon: AlertTriangle, label: 'Observations (14d)', value: `${summary.totalObservations}` },
-                { icon: Target, label: 'Top weakness', value: summary.topTags[0]?.label ?? '—' },
+                { icon: Target, label: 'Top weakness', value: summary.topTags[0]?.label ?? '-' },
                 { icon: TrendingDown, label: 'Tracked tags', value: `${summary.topTags.length}` },
               ]
             : []}

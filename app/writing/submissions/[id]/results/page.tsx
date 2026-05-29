@@ -146,7 +146,7 @@ export default function WritingSubmissionResultsPage() {
           highlights={grade ? [
             { icon: Award, label: t('writing.submissions.results.highlights.raw'), value: `${grade.rawTotal}/38` },
             { icon: Sparkles, label: t('writing.submissions.results.highlights.confidence'), value: grade.confidenceFlag },
-            { icon: FileText, label: t('writing.submissions.results.highlights.mode'), value: submission?.mode ?? '—' },
+            { icon: FileText, label: t('writing.submissions.results.highlights.mode'), value: submission?.mode ?? '-' },
           ] : []}
         />
 

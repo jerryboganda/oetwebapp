@@ -87,7 +87,7 @@ export default function AdminCouponsPage() {
       header: 'Window',
       cell: ({ row }) => (
         <div className="text-xs text-admin-fg-muted">
-          <p>{row.original.startsAt ? new Date(row.original.startsAt).toLocaleDateString() : '—'}</p>
+          <p>{row.original.startsAt ? new Date(row.original.startsAt).toLocaleDateString() : '-'}</p>
           <p>{row.original.endsAt ? new Date(row.original.endsAt).toLocaleDateString() : 'No expiry'}</p>
         </div>
       ),

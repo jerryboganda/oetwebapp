@@ -85,7 +85,7 @@ export default function AdminReadinessLearnerDetailPage() {
   return (
     <AdminOperationsLayout
       title={data.displayName ?? data.userId}
-      description={`Target date: ${data.targetExamDate ?? '—'}`}
+      description={`Target date: ${data.targetExamDate ?? '-'}`}
       breadcrumbs={breadcrumbs}
       eyebrow="Readiness"
       icon={<Gauge className="h-5 w-5" />}
@@ -100,7 +100,7 @@ export default function AdminReadinessLearnerDetailPage() {
         <KpiStrip>
           <KpiTile label="Overall" value={`${Math.round(overall)}`} tone="primary" />
           <KpiTile label="Risk" value={risk} tone={riskTone} />
-          <KpiTile label="Target-date probability" value={probability != null ? `${Math.round(probability)}%` : '—'} />
+          <KpiTile label="Target-date probability" value={probability != null ? `${Math.round(probability)}%` : '-'} />
           <KpiTile label="Confidence" value={`${confidence} · ${dataPoints} pts`} />
         </KpiStrip>
       )}

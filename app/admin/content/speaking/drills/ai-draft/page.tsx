@@ -152,11 +152,11 @@ export default function AdminSpeakingDrillAiDraftPage() {
               </div>
               <div>
                 <dt className="font-medium text-admin-fg-muted">Profession</dt>
-                <dd className="text-admin-fg-strong">{result.professionId ?? '—'}</dd>
+                <dd className="text-admin-fg-strong">{result.professionId ?? '-'}</dd>
               </div>
               <div>
                 <dt className="font-medium text-admin-fg-muted">Target criteria</dt>
-                <dd className="text-admin-fg-strong">{result.targetCriteria.join(', ') || '—'}</dd>
+                <dd className="text-admin-fg-strong">{result.targetCriteria.join(', ') || '-'}</dd>
               </div>
               <div className="sm:col-span-2">
                 <dt className="font-medium text-admin-fg-muted">Instruction</dt>

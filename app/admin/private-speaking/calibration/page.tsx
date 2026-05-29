@@ -92,7 +92,7 @@ export default function AdminSpeakingCalibrationPage() {
       header: 'Last submission',
       render: (row) => (
         <span className="text-xs text-muted">
-          {row.lastSubmittedAt ? new Date(row.lastSubmittedAt).toLocaleString() : '—'}
+          {row.lastSubmittedAt ? new Date(row.lastSubmittedAt).toLocaleString() : '-'}
         </span>
       ),
     },

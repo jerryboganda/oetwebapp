@@ -383,7 +383,7 @@ export default function AiProvidersPage() {
             {p.lastTestedAt && <span className="text-[10px] text-admin-fg-muted">{new Date(p.lastTestedAt).toLocaleString()}</span>}
           </div>
         )
-        : <span className="text-xs text-admin-fg-muted">—</span>,
+        : <span className="text-xs text-admin-fg-muted">-</span>,
     },
     {
       key: 'acts', header: 'Actions', render: (p) => (

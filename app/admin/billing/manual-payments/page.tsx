@@ -110,7 +110,7 @@ export default function AdminManualPaymentsPage() {
     {
       id: 'reference',
       header: 'Reference',
-      cell: ({ row }) => row.original.reference || '—',
+      cell: ({ row }) => row.original.reference || '-',
     },
     {
       id: 'status',

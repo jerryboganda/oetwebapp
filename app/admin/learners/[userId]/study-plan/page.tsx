@@ -357,7 +357,7 @@ export default function AdminLearnerStudyPlanPage() {
                           ? '✅ OK'
                           : item.feedbackRating === 3
                           ? '😓 Hard'
-                          : '—'}
+                          : '-'}
                       </td>
                     </tr>
                   ))

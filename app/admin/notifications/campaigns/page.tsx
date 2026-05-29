@@ -282,7 +282,7 @@ export default function AdminCampaignsPage() {
             {new Date(campaign.scheduledAt).toLocaleString()}
           </span>
         ) : (
-          <span className="text-xs text-admin-fg-muted">—</span>
+          <span className="text-xs text-admin-fg-muted">-</span>
         ),
       hideOnMobile: true,
     },

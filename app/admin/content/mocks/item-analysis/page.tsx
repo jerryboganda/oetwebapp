@@ -130,7 +130,7 @@ export default function AdminMockItemAnalysisPage() {
                       <td className="px-4 py-3 text-admin-fg-muted">{item.totalAttempts}</td>
                       <td className="px-4 py-3 text-admin-fg-muted">{item.correctCount}</td>
                       <td className="px-4 py-3 text-admin-fg-muted">{Math.round(item.difficulty * 100)}%</td>
-                      <td className="px-4 py-3 text-admin-fg-muted">{typeof item.discriminationIndex === 'number' ? item.discriminationIndex.toFixed(2) : '—'}</td>
+                      <td className="px-4 py-3 text-admin-fg-muted">{typeof item.discriminationIndex === 'number' ? item.discriminationIndex.toFixed(2) : '-'}</td>
                       <td className="px-4 py-3">{item.flag ? <Badge variant="warning">{item.flag}</Badge> : <Badge variant="success">ok</Badge>}</td>
                       <td className="px-4 py-3">
                         <MockItemAnalysisActions

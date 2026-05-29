@@ -218,7 +218,7 @@ export default function AiAssistantAnalyticsPage() {
                         <div className="rounded-admin bg-admin-bg-subtle p-3">
                           <p className="text-xs text-admin-fg-muted">7-Day Retention</p>
                           <p className="mt-1 text-xl font-bold tabular-nums text-admin-fg-strong">
-                            {analytics.totalUsers > 0 ? `${((analytics.activeUsers7d / analytics.totalUsers) * 100).toFixed(1)}%` : '—'}
+                            {analytics.totalUsers > 0 ? `${((analytics.activeUsers7d / analytics.totalUsers) * 100).toFixed(1)}%` : '-'}
                           </p>
                         </div>
                       </div>
