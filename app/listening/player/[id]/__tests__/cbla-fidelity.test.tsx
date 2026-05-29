@@ -932,6 +932,84 @@ describe('Listening player — CBLA fidelity (preview / attempt timer / one-play
     }
   });
 
+  it('emits §17.11 audio_started and audio_ended attempt events with cuePointMs', async () => {
+    mockUseSearchParams.mockReturnValue({
+      get: (key: string) => {
+        if (key === 'attemptId') return 'attempt-1';
+        if (key === 'mode') return 'exam';
+        return null;
+      },
+    });
+    mockGetListeningSession.mockResolvedValue(
+      makeSession({ mode: 'exam', canScrub: false, onePlayOnly: true }),
+    );
+    // Hydrate directly into the audio phase so onPlay is not short-circuited
+    // by the pre-audio reading window.
+    mockV2GetState.mockResolvedValueOnce(makeV2State('a1_audio'));
+
+    const { container } = render(<ListeningPlayer />);
+
+    const audio = await waitFor(() => {
+      const el = container.querySelector('audio');
+      if (!el) throw new Error('audio not yet rendered');
+      return el as HTMLAudioElement;
+    });
+
+    // Drive the playhead forward and fire a real play → audio_started fires once.
+    (audio as unknown as { __ct?: number }).__ct = 12;
+    fireEvent.play(audio);
+
+    await waitFor(() => {
+      expect(mockRecordIntegrity).toHaveBeenCalledWith('attempt-1', 'audio_started', expect.any(String));
+    });
+    const startedCall = mockRecordIntegrity.mock.calls.find((call) => call[1] === 'audio_started');
+    expect(JSON.parse(startedCall![2] as string)).toMatchObject({ cuePointMs: 12000 });
+
+    // A second play while still in the same run must NOT re-emit audio_started.
+    fireEvent.play(audio);
+    expect(mockRecordIntegrity.mock.calls.filter((call) => call[1] === 'audio_started')).toHaveLength(1);
+
+    // Ending the audio emits audio_ended.
+    (audio as unknown as { __ct?: number }).__ct = 240;
+    fireEvent.ended(audio);
+
+    await waitFor(() => {
+      expect(mockRecordIntegrity).toHaveBeenCalledWith('attempt-1', 'audio_ended', expect.any(String));
+    });
+    const endedCall = mockRecordIntegrity.mock.calls.find((call) => call[1] === 'audio_ended');
+    expect(JSON.parse(endedCall![2] as string)).toMatchObject({ cuePointMs: 240000 });
+  });
+
+  it('emits an auto_submit attempt event when the whole-attempt timer expires', async () => {
+    vi.useFakeTimers();
+    try {
+      const expiresAt = new Date(Date.now() + 5_000).toISOString();
+      mockGetListeningSession.mockResolvedValue(
+        makeSession({ mode: 'exam', canScrub: false, onePlayOnly: true, expiresAt }),
+      );
+      mockSubmit.mockResolvedValue({ attemptId: 'attempt-1' });
+
+      render(<ListeningPlayer />);
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+
+      await act(async () => {
+        vi.setSystemTime(Date.now() + 6_000);
+        await vi.advanceTimersByTimeAsync(2_000);
+      });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+
+      expect(mockRecordIntegrity).toHaveBeenCalledWith('attempt-1', 'auto_submit', expect.any(String));
+      expect(mockSubmit).toHaveBeenCalledWith('attempt-1', {});
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('snaps a backwards seek back to the last known forward time in exam mode', async () => {
     mockGetListeningSession.mockResolvedValue(
       makeSession({ mode: 'exam', canScrub: false, onePlayOnly: true }),
