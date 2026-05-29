@@ -532,6 +532,14 @@ public sealed class ListeningAuthoringService(
             if (part?.Extracts is null) return;
             // partGroup is "A" | "B" | "C"; the two A/C extracts split into
             // A1/A2 and C1/C2 by extract ordinal, B stays B.
+            //
+            // Part B is a single "B" part holding 6 question/clip items. The §19
+            // manifest lists each Part B item as its own `extract` entry (so each
+            // can carry its own audio file / context / accent), but the authored
+            // shape models Part B as exactly ONE extract row carrying all 6
+            // questions. So for Part B we map every entry's questions under code
+            // "B" yet emit a single collapsed extract row (from the first entry);
+            // A/C still emit one extract row per entry.
             var ordered = part.Extracts.OrderBy(e => e.ExtractNumber).ToList();
             for (var i = 0; i < ordered.Count; i++)
             {
@@ -545,6 +553,10 @@ public sealed class ListeningAuthoringService(
                     questions.Add(NormalizeManifestQuestion(
                         qm, partCode, partCode.StartsWith('C') ? extract.SpeakerAttitude : null));
                 }
+                // Collapse Part B to one extract row: only the first entry emits
+                // the "B" extract; the rest contribute questions only. A/C emit
+                // one extract row each, keyed by positional index.
+                if (partGroup == "B" && i > 0) continue;
                 extracts.Add(NormalizeManifestExtract(extract, partCode, i));
             }
         }

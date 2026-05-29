@@ -54,6 +54,21 @@ public class ListeningAttemptEventLoggingTests
             LastActiveAt = now,
             AccountStatus = "active",
         };
+        // WS2 — exam/Home-mode attempt start also server-verifies a primary
+        // audio asset exists (ListeningLearnerService.StartRelationalAttemptAsync).
+        // Seed one so the integrity-locked `home` attempt clears the audio-asset
+        // guard once the sound-check gate has passed.
+        var media = new MediaAsset
+        {
+            Id = "media-audio-7d",
+            OriginalFilename = "paper-7d.mp3",
+            MimeType = "audio/mpeg",
+            Format = "mp3",
+            SizeBytes = 1024,
+            StoragePath = "content/paper-7d.mp3",
+            Status = MediaAssetStatus.Ready,
+            MediaKind = "audio",
+        };
         var paper = new ContentPaper
         {
             Id = "paper-7d",
@@ -68,6 +83,18 @@ public class ListeningAttemptEventLoggingTests
             UpdatedAt = now,
             PublishedAt = now,
             ExtractedTextJson = "{}",
+            Assets =
+            [
+                new ContentPaperAsset
+                {
+                    Id = "asset-audio-7d",
+                    PaperId = "paper-7d",
+                    Role = PaperAssetRole.Audio,
+                    MediaAssetId = media.Id,
+                    MediaAsset = media,
+                    IsPrimary = true,
+                },
+            ],
         };
         var part = new ListeningPart
         {
@@ -114,6 +141,7 @@ public class ListeningAttemptEventLoggingTests
             UpdatedAt = now,
         };
         db.Users.Add(user);
+        db.MediaAssets.Add(media);
         db.ContentPapers.Add(paper);
         db.ListeningParts.Add(part);
         db.ListeningExtracts.Add(extract);

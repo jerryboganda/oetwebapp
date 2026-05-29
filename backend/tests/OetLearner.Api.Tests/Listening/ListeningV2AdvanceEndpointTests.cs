@@ -402,6 +402,8 @@ public class ListeningV2AdvanceEndpointTests : IClassFixture<TestWebApplicationF
             ExtractedTextJson = "{}",
             ListeningSequenceJson = sequenceJson,
         });
+        // WS2 — strict advance sound-check gate (see SeedStrictAttemptAsync).
+        await EnsureAudioCheckProfileAsync(db, userId, now);
         db.ListeningAttempts.Add(new ListeningAttempt
         {
             Id = attemptId,
@@ -432,6 +434,13 @@ public class ListeningV2AdvanceEndpointTests : IClassFixture<TestWebApplicationF
         await db.Database.EnsureCreatedAsync();
 
         var now = DateTimeOffset.UtcNow;
+        // WS2 — strict (Exam / OET@Home, OneWayLocks) advance is gated on a recent
+        // pathway sound-check at intro → a1_preview, which fires before the
+        // confirm-token protocol. Seed a fresh AudioCheckPassedAt so the gate
+        // passes and the confirm/window-timing assertions below exercise their
+        // intended path (the tech-readiness gate runs first and is asserted
+        // independently by the tech-readiness cases).
+        await EnsureAudioCheckProfileAsync(db, userId, now);
         db.ListeningAttempts.Add(new ListeningAttempt
         {
             Id = attemptId,
@@ -448,6 +457,28 @@ public class ListeningV2AdvanceEndpointTests : IClassFixture<TestWebApplicationF
             LastQuestionVersionMapJson = "{}",
         });
 
+        await db.SaveChangesAsync();
+    }
+
+    /// <summary>WS2 — upsert a Listening pathway profile carrying a fresh
+    /// <see cref="LearnerListeningProfile.AudioCheckPassedAt"/> so the strict
+    /// advance sound-check gate (TTL = <see cref="ListeningSessionService.AudioCheckTtlMs"/>,
+    /// 24h) passes for <paramref name="userId"/>. The service resolves "now" via
+    /// the DI-registered <c>TimeProvider.System</c>, so a UtcNow stamp is fresh.</summary>
+    private static async Task EnsureAudioCheckProfileAsync(LearnerDbContext db, string userId, DateTimeOffset now)
+    {
+        if (await db.LearnerListeningProfiles.AnyAsync(p => p.UserId == userId)) return;
+        db.LearnerListeningProfiles.Add(new LearnerListeningProfile
+        {
+            Id = Guid.NewGuid(),
+            UserId = userId,
+            TargetBand = "B",
+            Profession = "medicine",
+            CurrentStage = "practice",
+            OnboardingCompletedAt = now.AddDays(-2),
+            AudioCheckPassedAt = now,
+            UpdatedAt = now,
+        });
         await db.SaveChangesAsync();
     }
 
