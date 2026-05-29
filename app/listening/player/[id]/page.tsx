@@ -52,6 +52,7 @@ import { buildTechReadinessProbe } from '@/lib/listening/tech-readiness-probe';
 import { presentationModeFromSession } from '@/lib/listening/modes';
 import { ListeningPlayerSkinShell } from '@/components/domain/listening/player/skins/ListeningPlayerSkinShell';
 import { NotePanel } from '@/components/domain/listening/NotePanel';
+import type { ListeningQuestionAnnotation } from '@/hooks/use-listening-annotations';
 
 const FIRST_STRICT_STATE: ListeningFsmState = 'a1_preview';
 
@@ -283,6 +284,11 @@ function PlayerContent() {
   // C8c — tracks which extracts have been listened-to-completion so the
   // section panel can render a checkmark next to each.
   const [completedExtractIds, setCompletedExtractIds] = useState<Set<string>>(() => new Set());
+  // R08 annotations (highlight + strikethrough) for Part B/C questions. Kept
+  // as light controlled state here purely so the §17.11 attempt-event stream
+  // can emit `highlight` / `strikethrough` on each toggle (durable annotation
+  // persistence is handled separately by useListeningAnnotations).
+  const [questionAnnotations, setQuestionAnnotations] = useState<Record<string, ListeningQuestionAnnotation>>({});
   const reducedMotion = prefersReducedMotion(useReducedMotion());
   const sectionMotion = getSurfaceMotion('section', reducedMotion);
   const listMotion = getSurfaceMotion('list', reducedMotion);
@@ -669,6 +675,31 @@ function PlayerContent() {
   const handleAnswerChange = (questionId: string, answer: string) => {
     setAnswers((current) => ({ ...current, [questionId]: answer }));
     persistAnswer(questionId, answer, attempt);
+  };
+
+  // §17.11 — diff the annotation mutation to emit highlight / strikethrough.
+  // A highlight toggle (stem) emits `highlight`; an option strike toggle emits
+  // `strikethrough`. Each toggle is a single discrete user gesture, so this is
+  // already self-throttled (no debounce needed).
+  const handleAnnotationChange = (
+    questionId: string,
+    mutator: (current: ListeningQuestionAnnotation) => ListeningQuestionAnnotation,
+  ) => {
+    setQuestionAnnotations((current) => {
+      const previous = current[questionId] ?? {};
+      const next = mutator(previous);
+      const prevStruck = new Set(previous.struckOptions ?? []);
+      const nextStruck = new Set(next.struckOptions ?? []);
+      if (Boolean(next.stemHighlighted) !== Boolean(previous.stemHighlighted)) {
+        logAttemptEvent('highlight', { questionId, target: 'stem', active: Boolean(next.stemHighlighted) });
+      }
+      if (prevStruck.size !== nextStruck.size) {
+        const added = next.struckOptions?.find((option) => !prevStruck.has(option));
+        const removed = previous.struckOptions?.find((option) => !nextStruck.has(option));
+        logAttemptEvent('strikethrough', { questionId, option: added ?? removed, active: nextStruck.size > prevStruck.size });
+      }
+      return { ...current, [questionId]: next };
+    });
   };
 
   const handleSubmit = async ({ skipFinalSave = false }: { skipFinalSave?: boolean } = {}) => {
@@ -1563,6 +1594,8 @@ function PlayerContent() {
                                     options={question.options}
                                     value={answers[question.id] ?? ''}
                                     onChange={(value) => handleAnswerChange(question.id, value)}
+                                    annotation={questionAnnotations[question.id] ?? {}}
+                                    onAnnotationChange={(mutator) => handleAnnotationChange(question.id, mutator)}
                                     locked={!canEdit}
                                   />
                                 </div>
