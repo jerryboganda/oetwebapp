@@ -17,6 +17,7 @@
  */
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import {
   AlertTriangle,
   ArrowRight,
@@ -471,7 +472,7 @@ function DashboardContent({ data: d }: { data: AdminDashboardData }) {
                     endIcon={<ArrowRight className="h-3.5 w-3.5" />}
                     aria-label="Open content hub"
                   >
-                    <a href="/admin/content">Open</a>
+                    <Link href="/admin/content">Open</Link>
                   </Button>
                 </CardAction>
               </CardHeader>
