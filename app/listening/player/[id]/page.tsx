@@ -19,6 +19,7 @@ import {
   recordListeningIntegrityEvent,
   startListeningAttempt,
   type ListeningAttemptDto,
+  type ListeningIntegrityEventType,
   type ListeningSessionDto,
 } from '@/lib/listening-api';
 import {
@@ -231,6 +232,11 @@ function PlayerContent() {
   // protector). The next `play` event reads & clears this and triggers a
   // server-side `audio-resume` call so the backend grace window is honoured.
   const wasPausedRef = useRef<boolean>(false);
+  // §17.11 — true once an `audio_started` event has been logged for the
+  // current audio run, so a pause→resume cycle does not re-emit it. Cleared
+  // by `onEnded` and whenever a new section's audio arms (preview/section
+  // effects below), so each section logs one audio_started / audio_ended pair.
+  const audioStartedLoggedRef = useRef<boolean>(false);
   const audioResumeInFlightRef = useRef<boolean>(false);
   const applyStrictServerStateRef = useRef<((state: ListeningV2SessionState) => void) | null>(null);
   const strictAdvanceTargetRef = useRef<ListeningFsmState | null>(null);
@@ -382,10 +388,29 @@ function PlayerContent() {
     return () => window.clearInterval(interval);
   }, [attempt?.attemptId, hasStarted, isSubmitting, progress]);
 
-  const logIntegrityEvent = useCallback((eventType: string, details?: string) => {
+  const logIntegrityEvent = useCallback((eventType: ListeningIntegrityEventType, details?: string) => {
     if (!attempt?.attemptId || !session?.modePolicy.integrityLockRequired) return;
     void recordListeningIntegrityEvent(attempt.attemptId, eventType, details).catch(() => undefined);
   }, [attempt?.attemptId, session?.modePolicy.integrityLockRequired]);
+
+  // §17.11 — attempt-event stream. Unlike `logIntegrityEvent` (gated to
+  // OET@Home integrity-lock attempts), these audio-lifecycle / reading-time /
+  // answer / annotation events are recorded for ANY graded attempt that has an
+  // attempt id. The structured `cuePointMs` (current audio position) and
+  // `questionId` ride along inside the string `details` payload as compact
+  // JSON; the server parses them back out into the AuditEvent details.
+  const logAttemptEvent = useCallback((
+    eventType: ListeningIntegrityEventType,
+    payload?: { cuePointMs?: number; questionId?: string; [key: string]: unknown },
+  ) => {
+    if (!attempt?.attemptId) return;
+    const cuePointMs = payload?.cuePointMs
+      ?? (audioRef.current ? Math.round(audioRef.current.currentTime * 1000) : undefined);
+    const detail: Record<string, unknown> = { ...payload };
+    if (cuePointMs != null && Number.isFinite(cuePointMs)) detail.cuePointMs = cuePointMs;
+    const details = Object.keys(detail).length > 0 ? JSON.stringify(detail) : undefined;
+    void recordListeningIntegrityEvent(attempt.attemptId, eventType, details).catch(() => undefined);
+  }, [attempt?.attemptId]);
 
   const pauseAudio = useCallback(() => {
     const audio = audioRef.current;
@@ -634,6 +659,10 @@ function PlayerContent() {
       listeningV2Api.saveAnswer(currentAttempt.attemptId, questionId, value)
         .then(() => setSaveState('saved'))
         .catch(() => setSaveState('error'));
+      // §17.11 — log one answer_changed per question settle (piggybacks on the
+      // 500ms autosave debounce above, so a burst of keystrokes coalesces into
+      // a single event rather than one per character).
+      logAttemptEvent('answer_changed', { questionId });
     }, 500);
   };
 
@@ -877,12 +906,15 @@ function PlayerContent() {
     if (allPartsReviewEnabled) return;
     if (strictReadinessRequired && strictServerState) return;
     if (phase === 'review') return;
-    // Reset per-section forward-only end-of-extract latch.
+    // Reset per-section forward-only end-of-extract latch + audio-run latch.
     hasReachedEndRef.current = false;
+    audioStartedLoggedRef.current = false;
     if (currentSectionPreviewSeconds > 0) {
       previewArmedRef.current = true;
       setPhase('preview');
       setPreviewSecondsRemaining(currentSectionPreviewSeconds);
+      // §17.11 — the pre-audio reading window for this section just armed.
+      logAttemptEvent('reading_time_started', { section: currentSection, durationSeconds: currentSectionPreviewSeconds });
     } else {
       previewArmedRef.current = false;
       setPhase('audio');
@@ -933,6 +965,8 @@ function PlayerContent() {
     if (!hasStarted || !currentSection) return;
     if (!previewArmedRef.current) return;
     previewArmedRef.current = false;
+    // §17.11 — reading window elapsed; audio is about to start for this section.
+    logAttemptEvent('reading_time_ended', { section: currentSection });
     const targetState = listeningStateForPosition(currentSection, 'audio');
     void (async () => {
       if (targetState) {
@@ -948,7 +982,7 @@ function PlayerContent() {
         }
       }
     })();
-  }, [advanceStrictPhaseIfNeeded, phase, previewSecondsRemaining, hasStarted, currentSection]);
+  }, [advanceStrictPhaseIfNeeded, logAttemptEvent, phase, previewSecondsRemaining, hasStarted, currentSection]);
 
   // C8d — whole-attempt 40-minute countdown. Driven by attempt.expiresAt.
   // Auto-submits in exam/home modes (canScrub === false) when the timer
@@ -979,6 +1013,8 @@ function PlayerContent() {
     if (autoSubmittedRef.current) return;
     if (session.modePolicy.canScrub) return; // practice mode → no auto-submit
     autoSubmittedRef.current = true;
+    // §17.11 — the whole-attempt timer expired and forced submission.
+    logAttemptEvent('auto_submit', { reason: 'attempt_timer_expired' });
     void handleSubmit({ skipFinalSave: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [attemptSecondsRemaining, hasStarted, session]);
@@ -1226,6 +1262,13 @@ function PlayerContent() {
               return;
             }
             setIsPlaying(true);
+            // §17.11 — one audio_started per audio run (a pause→resume cycle
+            // re-enters onPlay but must not re-emit). Reset on onEnded / new
+            // section so each section logs a single start/end pair.
+            if (!audioStartedLoggedRef.current) {
+              audioStartedLoggedRef.current = true;
+              logAttemptEvent('audio_started', currentSection ? { section: currentSection } : undefined);
+            }
             // C8g — validate the resume against the server grace window.
             handleAudioResume();
           }}
@@ -1254,10 +1297,15 @@ function PlayerContent() {
           onEnded={() => {
             if (session?.modePolicy.onePlayOnly) hasReachedEndRef.current = true;
             setIsPlaying(false);
+            // §17.11 — close the audio run and arm the next section's start.
+            logAttemptEvent('audio_ended', currentSection ? { section: currentSection } : undefined);
+            audioStartedLoggedRef.current = false;
           }}
           onError={() => {
             setAudioState('error');
             setAudioError('Audio failed to load. Reload the audio or return to Listening if the media asset is still processing.');
+            // §17.11 — surface the media error into the attempt-event stream.
+            logAttemptEvent('audio_error');
           }}
           preload="metadata"
         />
