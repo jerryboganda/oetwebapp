@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Mvc;
 using OetLearner.Api.Contracts;
 using OetLearner.Api.Services;
+using OetLearner.Api.Services.Entitlements;
 
 namespace OetLearner.Api.Endpoints;
 
@@ -22,7 +23,9 @@ public static class VocabularyEndpoints
             [FromQuery] string? recallSet,
             [FromQuery] int page,
             [FromQuery] int pageSize,
-            VocabularyService svc, CancellationToken ct) =>
+            VocabularyService svc,
+            IEffectiveEntitlementResolver entitlements,
+            CancellationToken ct) =>
             Results.Ok(await svc.GetTermsAsync(
                 string.IsNullOrWhiteSpace(examTypeCode) ? "oet" : examTypeCode,
                 category, profession, search,
@@ -30,7 +33,7 @@ public static class VocabularyEndpoints
                 pageSize <= 0 ? 20 : Math.Min(pageSize, 100),
                 ct,
                 recallSet,
-                http.IsPremium())));
+                await http.IsPremiumAsync(entitlements, ct))));
 
         // Recall-set registry (year/source dimension). Public to authenticated
         // learners so the browse + recalls UI can render filter chips.
@@ -44,11 +47,13 @@ public static class VocabularyEndpoints
             HttpContext http,
             [FromQuery] string q,
             [FromQuery] string? examTypeCode,
-            VocabularyService svc, CancellationToken ct) =>
-            Results.Ok(await svc.LookupAsync(q, examTypeCode, ct, http.IsPremium())));
+            VocabularyService svc,
+            IEffectiveEntitlementResolver entitlements,
+            CancellationToken ct) =>
+            Results.Ok(await svc.LookupAsync(q, examTypeCode, ct, await http.IsPremiumAsync(entitlements, ct))));
 
-        vocab.MapGet("/terms/{termId}", async (HttpContext http, string termId, VocabularyService svc, CancellationToken ct) =>
-            Results.Ok(await svc.GetTermAsync(termId, ct, http.IsPremium())));
+        vocab.MapGet("/terms/{termId}", async (HttpContext http, string termId, VocabularyService svc, IEffectiveEntitlementResolver entitlements, CancellationToken ct) =>
+            Results.Ok(await svc.GetTermAsync(termId, ct, await http.IsPremiumAsync(entitlements, ct))));
 
         vocab.MapGet("/categories", async (
             [FromQuery] string? examTypeCode,
@@ -57,12 +62,12 @@ public static class VocabularyEndpoints
             Results.Ok(await svc.GetCategoriesAsync(examTypeCode, profession, ct)));
 
         // ── Learner list ─────────────────────────────────────────────────
-        vocab.MapGet("/my-list", async (HttpContext http, [FromQuery] string? mastery, VocabularyService svc, CancellationToken ct) =>
-            Results.Ok(await svc.GetMyVocabularyAsync(http.UserId(), mastery, ct, http.IsPremium())));
+        vocab.MapGet("/my-list", async (HttpContext http, [FromQuery] string? mastery, VocabularyService svc, IEffectiveEntitlementResolver entitlements, CancellationToken ct) =>
+            Results.Ok(await svc.GetMyVocabularyAsync(http.UserId(), mastery, ct, await http.IsPremiumAsync(entitlements, ct))));
 
-        vocab.MapPost("/my-list/{termId}", async (HttpContext http, string termId, AddToMyVocabularyRequest? body, VocabularyService svc, CancellationToken ct) =>
+        vocab.MapPost("/my-list/{termId}", async (HttpContext http, string termId, AddToMyVocabularyRequest? body, VocabularyService svc, IEffectiveEntitlementResolver entitlements, CancellationToken ct) =>
         {
-            var isPremium = http.IsPremium();
+            var isPremium = await http.IsPremiumAsync(entitlements, ct);
             return Results.Ok(await svc.AddToMyVocabularyAsync(http.UserId(), termId, body?.SourceRef, isPremium, ct));
         });
 
@@ -70,25 +75,26 @@ public static class VocabularyEndpoints
             Results.Ok(await svc.RemoveFromMyVocabularyAsync(http.UserId(), termId, ct)));
 
         // ── Flashcards ───────────────────────────────────────────────────
-        vocab.MapGet("/flashcards/due", async (HttpContext http, [FromQuery] int limit, VocabularyService svc, CancellationToken ct) =>
-            Results.Ok(await svc.GetDueFlashcardsAsync(http.UserId(), limit <= 0 ? 20 : Math.Min(limit, 100), ct, http.IsPremium())));
+        vocab.MapGet("/flashcards/due", async (HttpContext http, [FromQuery] int limit, VocabularyService svc, IEffectiveEntitlementResolver entitlements, CancellationToken ct) =>
+            Results.Ok(await svc.GetDueFlashcardsAsync(http.UserId(), limit <= 0 ? 20 : Math.Min(limit, 100), ct, await http.IsPremiumAsync(entitlements, ct))));
 
         vocab.MapPost("/flashcards/{lvId}/review", async (HttpContext http, Guid lvId, FlashcardReviewRequestV2 request, VocabularyService svc, CancellationToken ct) =>
             Results.Ok(await svc.SubmitFlashcardReviewAsync(http.UserId(), lvId, request.Quality, ct)));
 
         // ── Daily set ────────────────────────────────────────────────────
-        vocab.MapGet("/daily-set", async (HttpContext http, [FromQuery] int count, VocabularyService svc, CancellationToken ct) =>
-            Results.Ok(await svc.GetDailySetAsync(http.UserId(), count <= 0 ? 10 : Math.Min(count, 50), ct, http.IsPremium())));
+        vocab.MapGet("/daily-set", async (HttpContext http, [FromQuery] int count, VocabularyService svc, IEffectiveEntitlementResolver entitlements, CancellationToken ct) =>
+            Results.Ok(await svc.GetDailySetAsync(http.UserId(), count <= 0 ? 10 : Math.Min(count, 50), ct, await http.IsPremiumAsync(entitlements, ct))));
 
         // ── Stats ────────────────────────────────────────────────────────
         vocab.MapGet("/stats", async (HttpContext http, VocabularyService svc, CancellationToken ct) =>
             Results.Ok(await svc.GetStatsAsync(http.UserId(), ct)));
 
         // ── Quiz ─────────────────────────────────────────────────────────
-        vocab.MapGet("/quiz", async (HttpContext http, [FromQuery] int count, [FromQuery] string? format, VocabularyService svc, CancellationToken ct) =>
+        vocab.MapGet("/quiz", async (HttpContext http, [FromQuery] int count, [FromQuery] string? format, VocabularyService svc, IEffectiveEntitlementResolver entitlements, CancellationToken ct) =>
         {
             var resolvedFormat = string.IsNullOrWhiteSpace(format) ? "definition_match" : format.ToLowerInvariant();
-            if (!http.IsPremium() && resolvedFormat != "definition_match")
+            var isPremium = await http.IsPremiumAsync(entitlements, ct);
+            if (!isPremium && resolvedFormat != "definition_match")
             {
                 return Results.Json(new
                 {
@@ -97,7 +103,7 @@ public static class VocabularyEndpoints
                     freeFormat = "definition_match",
                 }, statusCode: 402);
             }
-            return Results.Ok(await svc.GetQuizAsync(http.UserId(), count <= 0 ? 10 : Math.Min(count, 25), resolvedFormat, ct, http.IsPremium()));
+            return Results.Ok(await svc.GetQuizAsync(http.UserId(), count <= 0 ? 10 : Math.Min(count, 25), resolvedFormat, ct, isPremium));
         });
 
         vocab.MapPost("/quiz/submit", async (HttpContext http, VocabQuizSubmissionV2 submission, VocabularyService svc, CancellationToken ct) =>
@@ -144,5 +150,25 @@ file static class VocabularyHttpContextExtensions
             .Select(s => s.Trim())
             .ToList();
         return entitlements.Contains("vocabulary_premium", StringComparer.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// Authoritative async premium check. First tries the fast JWT claim path;
+    /// if the claim is absent (sessions predating the subscription_tier JWT fix)
+    /// it falls back to a real-time DB lookup via <see cref="IEffectiveEntitlementResolver"/>.
+    /// This ensures paid subscribers are never locked out regardless of session age.
+    /// </summary>
+    internal static async Task<bool> IsPremiumAsync(
+        this HttpContext httpContext,
+        IEffectiveEntitlementResolver resolver,
+        CancellationToken ct)
+    {
+        // Fast path: admin bypass and JWT claim check (no DB hit)
+        if (httpContext.IsPremium()) return true;
+
+        // Authoritative fallback: real-time DB subscription check
+        // (covers existing sessions that predate the subscription_tier JWT claim)
+        var snapshot = await resolver.ResolveAsync(httpContext.UserId(), ct);
+        return snapshot.HasEligibleSubscription && !snapshot.IsFrozen;
     }
 }
