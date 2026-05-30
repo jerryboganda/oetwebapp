@@ -424,6 +424,7 @@ public sealed class WritingExamClosureTests
                 ScenarioId = scenarioId,
                 Status = "submitted",
                 LetterContent = "Dear Dr, learner letter body. Yours sincerely.",
+                LetterContentHash = "test-hash",
                 WordCount = 8,
                 SubmittedAt = now,
                 CreatedAt = now,
