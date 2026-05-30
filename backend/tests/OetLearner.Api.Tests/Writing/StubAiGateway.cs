@@ -1,4 +1,4 @@
-using OetLearner.Api.Services.AiGateway;
+using OetLearner.Api.Services.Rulebook;
 
 namespace OetLearner.Api.Tests.Writing;
 
@@ -14,28 +14,9 @@ internal sealed class StubAiGateway : IAiGatewayService
     private static InvalidOperationException Fail(string member) =>
         new($"StubAiGateway.{member} must not be called (the AI gateway is disabled in these tests).");
 
-    public Task<string> GenerateTextAsync(
-        string prompt,
-        string? systemPrompt = null,
-        double? temperature = null,
-        int? maxTokens = null,
-        CancellationToken ct = default)
-        => throw Fail(nameof(GenerateTextAsync));
+    public Task<AiGatewayResult> CompleteAsync(AiGatewayRequest request, CancellationToken ct = default)
+        => throw Fail(nameof(CompleteAsync));
 
-    public Task<T?> GenerateJsonAsync<T>(
-        string prompt,
-        string? systemPrompt = null,
-        double? temperature = null,
-        int? maxTokens = null,
-        CancellationToken ct = default) where T : class
-        => throw Fail(nameof(GenerateJsonAsync));
-
-    public Task GenerateStreamAsync(
-        string prompt,
-        Func<string, Task> onToken,
-        string? systemPrompt = null,
-        double? temperature = null,
-        int? maxTokens = null,
-        CancellationToken ct = default)
-        => throw Fail(nameof(GenerateStreamAsync));
+    public AiGroundedPrompt BuildGroundedPrompt(AiGroundingContext context)
+        => throw Fail(nameof(BuildGroundedPrompt));
 }
