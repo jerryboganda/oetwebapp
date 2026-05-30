@@ -18,7 +18,7 @@ public static class WritingAttemptEventEndpoints
             .RequireAuthorization("LearnerOnly")
             .RequireRateLimiting("PerUser");
 
-        group.MapPost("/", async (
+        group.MapPost("", async (
             WritingAttemptEventBatchRequest request,
             HttpContext http,
             IWritingAttemptEventService service,

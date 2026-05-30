@@ -725,6 +725,9 @@ builder.Services.AddScoped<OetLearner.Api.Services.Writing.WritingPreScoreServic
 builder.Services.AddScoped<OetLearner.Api.Services.Speaking.SpeakingReviewVoiceNoteService>();
 // Phase 2 (B.3) — typed Speaking session lifecycle service.
 builder.Services.AddScoped<OetLearner.Api.Services.Speaking.SpeakingSessionService>();
+// WS6 — Speaking result-visibility config (§10).
+builder.Services.AddScoped<OetLearner.Api.Services.Speaking.ISpeakingResultVisibilityService,
+    OetLearner.Api.Services.Speaking.SpeakingResultVisibilityService>();
 // Phase 7 (B.8) — Speaking compliance / consent / GDPR erasure service.
 builder.Services.AddScoped<OetLearner.Api.Services.Speaking.SpeakingComplianceService>();
 // Phase 2 (B.3) — AI-side speaking assessment scorer.
@@ -854,6 +857,9 @@ builder.Services.AddScoped<OetLearner.Api.Services.Reading.IReadingPathwayServic
 builder.Services.AddScoped<OetLearner.Api.Services.Reading.IReadingReviewService, OetLearner.Api.Services.Reading.ReadingReviewService>();
 builder.Services.AddScoped<OetLearner.Api.Services.IWritingPdfService, OetLearner.Api.Services.WritingPdfService>();
 builder.Services.AddScoped<OetLearner.Api.Services.ISpeakingPdfService, OetLearner.Api.Services.SpeakingPdfService>();
+// WS9 (SPK-007) — scanned/text PDF import → structured Speaking draft.
+builder.Services.AddScoped<OetLearner.Api.Services.Speaking.ISpeakingContentImportService,
+    OetLearner.Api.Services.Speaking.SpeakingContentImportService>();
 builder.Services.AddScoped<ISpeakingEvaluationPipeline, SpeakingEvaluationPipeline>();
 builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingEvaluationPipeline, OetLearner.Api.Services.Writing.WritingEvaluationPipeline>();
 builder.Services.AddHostedService<OetLearner.Api.Services.Speaking.SpeakingAudioRetentionWorker>();
@@ -1537,6 +1543,14 @@ builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingHeuristicPreA
     OetLearner.Api.Services.Writing.WritingHeuristicPreAssessmentService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingAdminAnalyticsService,
     OetLearner.Api.Services.Writing.WritingAdminAnalyticsService>();
+// OET Writing exam-faithful closure: unified task authoring + JSON import/export,
+// the ContentPaper→Scenario publish bridge, and learner attempt-event ingestion.
+builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingTaskAuthoringService,
+    OetLearner.Api.Services.Writing.WritingTaskAuthoringService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingTaskProjectionService,
+    OetLearner.Api.Services.Writing.WritingTaskProjectionService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingAttemptEventService,
+    OetLearner.Api.Services.Writing.WritingAttemptEventService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingTutorReviewService,
     OetLearner.Api.Services.Writing.WritingTutorReviewService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingAppealService,
@@ -2022,6 +2036,13 @@ app.MapWritingPathwayEndpoints();
 // routes across 20 endpoint files). See WritingRouteBuilderExtensions.cs.
 app.MapWritingV2Endpoints();
 app.MapWritingResultVisibilityEndpoints();
+// OET Writing exam-faithful closure endpoint groups (spec §3-§6 task builder +
+// §18 import/export, §17.7 attempt events, §12-§14 tutor marking + moderation,
+// §16 admin analytics + marking quality control).
+app.MapWritingTaskAdminEndpoints();
+app.MapWritingAttemptEventEndpoints();
+app.MapWritingMarkingEndpoints();
+app.MapWritingExamAnalyticsAdminEndpoints();
 app.MapListeningAuthoringAdminEndpoints();
 app.MapListeningAdminAnalyticsEndpoints();
 app.MapReadingLearnerEndpoints();
@@ -2087,6 +2108,8 @@ app.MapLearnerSpeakingRolePlayCardEndpoints();
 app.MapSpeakingComplianceEndpoints();
 // Phase 2 — typed Speaking session lifecycle (prep → active → finished).
 app.MapSpeakingSessionEndpoints();
+// WS6 — Speaking result-visibility (learner read + admin upsert, §10).
+app.MapSpeakingResultVisibilityEndpoints();
 // Phase 3 — live-tutor rooms + LiveKit webhook ingestion.
 app.MapSpeakingLiveRoomEndpoints();
 app.MapLiveKitWebhookEndpoint();
