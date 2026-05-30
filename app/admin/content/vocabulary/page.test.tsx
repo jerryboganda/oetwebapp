@@ -6,6 +6,7 @@ const api = vi.hoisted(() => ({
   fetchAdminVocabularyItems: vi.fn(),
   deleteAdminVocabularyItem: vi.fn(),
   deleteAdminVocabularyItems: vi.fn(),
+  setAdminVocabularyFreePreview: vi.fn(),
   fetchAdminVocabularyCategories: vi.fn(),
   fetchAdminVocabularyRecallSets: vi.fn(),
   push: vi.fn(),
@@ -31,6 +32,7 @@ vi.mock('@/lib/api', () => ({
   fetchAdminVocabularyItems: api.fetchAdminVocabularyItems,
   deleteAdminVocabularyItem: api.deleteAdminVocabularyItem,
   deleteAdminVocabularyItems: api.deleteAdminVocabularyItems,
+  setAdminVocabularyFreePreview: api.setAdminVocabularyFreePreview,
   fetchAdminVocabularyCategories: api.fetchAdminVocabularyCategories,
   fetchAdminVocabularyRecallSets: api.fetchAdminVocabularyRecallSets,
 }));
@@ -65,6 +67,7 @@ describe('AdminVocabularyPage bulk selection', () => {
     api.fetchAdminVocabularyRecallSets.mockResolvedValue({ sets: [] });
     api.fetchAdminVocabularyItems.mockResolvedValue({ total: rows.length, page: 1, pageSize: 25, items: rows });
     api.deleteAdminVocabularyItems.mockResolvedValue({ totalRequested: 1, deleted: 1, archived: 0, failed: 0, errors: [] });
+    api.setAdminVocabularyFreePreview.mockResolvedValue({ totalRequested: 1, updated: 1, failed: 0, freePreviewTotal: 1, errors: [] });
   });
 
   it('selects vocabulary rows and bulk deletes selected terms', async () => {
@@ -93,4 +96,44 @@ describe('AdminVocabularyPage bulk selection', () => {
       expect(within(table).queryByText('Cusco speculum')).not.toBeInTheDocument();
     });
   });
+
+  it('bulk adds selected vocabulary terms to the free preview', async () => {
+    const user = userEvent.setup();
+
+    render(<AdminVocabularyPage />);
+
+    expect((await screen.findAllByText('Cusco speculum')).length).toBeGreaterThan(0);
+    const table = screen.getByRole('table');
+
+    await user.click(within(table).getByLabelText('Select row VOC-1'));
+
+    const bulkBar = screen.getByTestId('bulk-action-bar');
+    await user.click(within(bulkBar).getByRole('button', { name: /Add to free preview/i }));
+
+    await waitFor(() => {
+      expect(api.setAdminVocabularyFreePreview).toHaveBeenCalledWith(['VOC-1'], true);
+    });
+    expect(await screen.findByText(/Added 1 term to the free preview/i)).toBeInTheDocument();
+  });
+
+  it('bulk removes selected vocabulary terms from the free preview', async () => {
+    const user = userEvent.setup();
+    api.setAdminVocabularyFreePreview.mockResolvedValueOnce({ totalRequested: 1, updated: 1, failed: 0, freePreviewTotal: 0, errors: [] });
+
+    render(<AdminVocabularyPage />);
+
+    expect((await screen.findAllByText('Cusco speculum')).length).toBeGreaterThan(0);
+    const table = screen.getByRole('table');
+
+    await user.click(within(table).getByLabelText('Select row VOC-1'));
+
+    const bulkBar = screen.getByTestId('bulk-action-bar');
+    await user.click(within(bulkBar).getByRole('button', { name: /Remove from free preview/i }));
+
+    await waitFor(() => {
+      expect(api.setAdminVocabularyFreePreview).toHaveBeenCalledWith(['VOC-1'], false);
+    });
+    expect(await screen.findByText(/Removed 1 term from the free preview/i)).toBeInTheDocument();
+  });
+
 });

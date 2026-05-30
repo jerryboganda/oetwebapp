@@ -32,6 +32,7 @@ type Detail = {
   commonMistakesJson: string;
   similarSoundingJson: string;
   sourceProvenance: string | null;
+  isFreePreview?: boolean;
   status: 'draft' | 'active' | 'archived';
 };
 
@@ -100,6 +101,7 @@ export default function AdminVocabularyEditPage() {
     commonMistakes: parseJsonArray(detail.commonMistakesJson),
     similarSounding: parseJsonArray(detail.similarSoundingJson),
     sourceProvenance: detail.sourceProvenance ?? '',
+    isFreePreview: detail.isFreePreview ?? false,
     status: detail.status,
   };
 
@@ -126,13 +128,38 @@ export default function AdminVocabularyEditPage() {
       commonMistakes: values.commonMistakes,
       similarSounding: values.similarSounding,
       sourceProvenance: values.sourceProvenance,
+      isFreePreview: values.isFreePreview,
       status: values.status,
     });
   }
 
-  async function handlePublish() {
-    await updateAdminVocabularyItem(id, { status: 'active' });
-    setDetail(prev => prev ? { ...prev, status: 'active' } : prev);
+  async function handlePublish(values: VocabFormValues) {
+    await updateAdminVocabularyItem(id, {
+      term: values.term,
+      definition: values.definition,
+      exampleSentence: values.exampleSentence,
+      contextNotes: values.contextNotes,
+      examTypeCode: values.examTypeCode,
+      professionId: values.professionId || null,
+      category: values.category,
+      ipaPronunciation: values.ipaPronunciation,
+      americanSpelling: values.americanSpelling,
+      audioUrl: values.audioUrl,
+      audioSlowUrl: values.audioSlowUrl,
+      audioSentenceUrl: values.audioSentenceUrl,
+      audioMediaAssetId: values.audioMediaAssetId,
+      imageUrl: values.imageUrl,
+      synonyms: values.synonyms,
+      collocations: values.collocations,
+      relatedTerms: values.relatedTerms,
+      recallSetCodes: values.recallSetCodes,
+      commonMistakes: values.commonMistakes,
+      similarSounding: values.similarSounding,
+      sourceProvenance: values.sourceProvenance,
+      isFreePreview: values.isFreePreview,
+      status: 'active',
+    });
+    setDetail(prev => prev ? { ...prev, isFreePreview: values.isFreePreview, status: 'active' } : prev);
   }
 
   return (

@@ -150,7 +150,7 @@ public class VocabularyService(
         return Map(term, isLocked: !isPremium && !term.IsFreePreview);
     }
 
-    public async Task<VocabularyLookupResult> LookupAsync(string query, string? examTypeCode, CancellationToken ct)
+    public async Task<VocabularyLookupResult> LookupAsync(string query, string? examTypeCode, CancellationToken ct, bool isPremium = true)
     {
         if (string.IsNullOrWhiteSpace(query))
             return new VocabularyLookupResult(false, null, Array.Empty<VocabularyTermSummary>());
@@ -163,10 +163,19 @@ public class VocabularyService(
         // Exact match first (case-insensitive).
         var exact = await baseQuery.FirstOrDefaultAsync(t => t.Term.ToLower() == normalised, ct);
         if (exact is not null)
-            return new VocabularyLookupResult(true, Map(exact), Array.Empty<VocabularyTermSummary>());
+            return new VocabularyLookupResult(
+                true,
+                Map(exact, isLocked: !isPremium && !exact.IsFreePreview),
+                Array.Empty<VocabularyTermSummary>());
 
         // Prefix + contains suggestions (top 10 by prefix match first).
-        var suggestions = await baseQuery
+        var suggestionsQuery = baseQuery;
+        if (!isPremium)
+        {
+            suggestionsQuery = suggestionsQuery.Where(t => t.IsFreePreview);
+        }
+
+        var suggestions = await suggestionsQuery
             .Where(t => t.Term.StartsWith(normalised) || t.Term.Contains(normalised))
             .OrderBy(t => t.Term)
             .Take(10)
@@ -208,7 +217,8 @@ public class VocabularyService(
     public async Task<IReadOnlyList<MyVocabularyItem>> GetMyVocabularyAsync(
         string userId,
         string? mastery,
-        CancellationToken ct)
+        CancellationToken ct,
+        bool isPremium = true)
     {
         var query = db.LearnerVocabularies
             .Where(lv => lv.UserId == userId)
@@ -216,6 +226,9 @@ public class VocabularyService(
 
         if (!string.IsNullOrEmpty(mastery))
             query = query.Where(x => x.lv.Mastery == mastery);
+
+        if (!isPremium)
+            query = query.Where(x => x.t.IsFreePreview);
 
         var items = await query.OrderBy(x => x.lv.NextReviewDate).ToListAsync(ct);
         return items.Select(x => new MyVocabularyItem(
@@ -304,7 +317,8 @@ public class VocabularyService(
     public async Task<IReadOnlyList<VocabularyFlashcardDto>> GetDueFlashcardsAsync(
         string userId,
         int limit,
-        CancellationToken ct)
+        CancellationToken ct,
+        bool isPremium = true)
     {
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
         var due = await db.LearnerVocabularies
@@ -312,6 +326,7 @@ public class VocabularyService(
                 && lv.Mastery != "mastered"
                 && (lv.NextReviewDate == null || lv.NextReviewDate <= today))
             .Join(db.VocabularyTerms, lv => lv.TermId, t => t.Id, (lv, t) => new { lv, t })
+            .Where(x => isPremium || x.t.IsFreePreview)
             .OrderBy(x => x.lv.NextReviewDate)
             .Take(limit)
             .ToListAsync(ct);
@@ -362,7 +377,8 @@ public class VocabularyService(
     public async Task<VocabularyDailySetResponse> GetDailySetAsync(
         string userId,
         int count,
-        CancellationToken ct)
+        CancellationToken ct,
+        bool isPremium = true)
     {
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
 
@@ -372,6 +388,7 @@ public class VocabularyService(
                 && lv.Mastery != "mastered"
                 && (lv.NextReviewDate == null || lv.NextReviewDate <= today))
             .Join(db.VocabularyTerms, lv => lv.TermId, t => t.Id, (lv, t) => new { lv, t })
+            .Where(x => isPremium || x.t.IsFreePreview)
             .OrderBy(x => x.lv.NextReviewDate)
             .Take(count)
             .ToListAsync(ct);
@@ -385,6 +402,7 @@ public class VocabularyService(
             var newCards = await db.LearnerVocabularies
                 .Where(lv => lv.UserId == userId && lv.ReviewCount == 0 && lv.Mastery == "new")
                 .Join(db.VocabularyTerms, lv => lv.TermId, t => t.Id, (lv, t) => new { lv, t })
+                .Where(x => isPremium || x.t.IsFreePreview)
                 .Where(x => !due.Select(d => d.lv.Id).Contains(x.lv.Id))
                 .OrderBy(x => x.lv.AddedAt)
                 .Take(remainder)
@@ -477,12 +495,14 @@ public class VocabularyService(
         string userId,
         int count,
         string format,
-        CancellationToken ct)
+        CancellationToken ct,
+        bool isPremium = true)
     {
         var normalisedFormat = NormaliseFormat(format);
 
         var allTerms = await db.VocabularyTerms
             .Where(t => t.Status == "active")
+            .Where(t => isPremium || t.IsFreePreview)
             .ToListAsync(ct);
 
         if (allTerms.Count == 0)

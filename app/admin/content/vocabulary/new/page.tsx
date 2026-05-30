@@ -27,6 +27,7 @@ export default function AdminVocabularyNewPage() {
       commonMistakes: values.commonMistakes,
       similarSounding: values.similarSounding,
       sourceProvenance: values.sourceProvenance || undefined,
+      isFreePreview: values.isFreePreview,
       status: values.status,
     });
   }

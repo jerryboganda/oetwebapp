@@ -41,10 +41,11 @@ public static class VocabularyEndpoints
             Results.Ok(await svc.GetRecallSetsAsync(examTypeCode, profession, ct)));
 
         vocab.MapGet("/terms/lookup", async (
+            HttpContext http,
             [FromQuery] string q,
             [FromQuery] string? examTypeCode,
             VocabularyService svc, CancellationToken ct) =>
-            Results.Ok(await svc.LookupAsync(q, examTypeCode, ct)));
+            Results.Ok(await svc.LookupAsync(q, examTypeCode, ct, http.IsPremium())));
 
         vocab.MapGet("/terms/{termId}", async (HttpContext http, string termId, VocabularyService svc, CancellationToken ct) =>
             Results.Ok(await svc.GetTermAsync(termId, ct, http.IsPremium())));
@@ -57,7 +58,7 @@ public static class VocabularyEndpoints
 
         // ── Learner list ─────────────────────────────────────────────────
         vocab.MapGet("/my-list", async (HttpContext http, [FromQuery] string? mastery, VocabularyService svc, CancellationToken ct) =>
-            Results.Ok(await svc.GetMyVocabularyAsync(http.UserId(), mastery, ct)));
+            Results.Ok(await svc.GetMyVocabularyAsync(http.UserId(), mastery, ct, http.IsPremium())));
 
         vocab.MapPost("/my-list/{termId}", async (HttpContext http, string termId, AddToMyVocabularyRequest? body, VocabularyService svc, CancellationToken ct) =>
         {
@@ -70,14 +71,14 @@ public static class VocabularyEndpoints
 
         // ── Flashcards ───────────────────────────────────────────────────
         vocab.MapGet("/flashcards/due", async (HttpContext http, [FromQuery] int limit, VocabularyService svc, CancellationToken ct) =>
-            Results.Ok(await svc.GetDueFlashcardsAsync(http.UserId(), limit <= 0 ? 20 : Math.Min(limit, 100), ct)));
+            Results.Ok(await svc.GetDueFlashcardsAsync(http.UserId(), limit <= 0 ? 20 : Math.Min(limit, 100), ct, http.IsPremium())));
 
         vocab.MapPost("/flashcards/{lvId}/review", async (HttpContext http, Guid lvId, FlashcardReviewRequestV2 request, VocabularyService svc, CancellationToken ct) =>
             Results.Ok(await svc.SubmitFlashcardReviewAsync(http.UserId(), lvId, request.Quality, ct)));
 
         // ── Daily set ────────────────────────────────────────────────────
         vocab.MapGet("/daily-set", async (HttpContext http, [FromQuery] int count, VocabularyService svc, CancellationToken ct) =>
-            Results.Ok(await svc.GetDailySetAsync(http.UserId(), count <= 0 ? 10 : Math.Min(count, 50), ct)));
+            Results.Ok(await svc.GetDailySetAsync(http.UserId(), count <= 0 ? 10 : Math.Min(count, 50), ct, http.IsPremium())));
 
         // ── Stats ────────────────────────────────────────────────────────
         vocab.MapGet("/stats", async (HttpContext http, VocabularyService svc, CancellationToken ct) =>
@@ -96,7 +97,7 @@ public static class VocabularyEndpoints
                     freeFormat = "definition_match",
                 }, statusCode: 402);
             }
-            return Results.Ok(await svc.GetQuizAsync(http.UserId(), count <= 0 ? 10 : Math.Min(count, 25), resolvedFormat, ct));
+            return Results.Ok(await svc.GetQuizAsync(http.UserId(), count <= 0 ? 10 : Math.Min(count, 25), resolvedFormat, ct, http.IsPremium()));
         });
 
         vocab.MapPost("/quiz/submit", async (HttpContext http, VocabQuizSubmissionV2 submission, VocabularyService svc, CancellationToken ct) =>

@@ -37,6 +37,7 @@ export type VocabFormValues = {
   commonMistakes: string[];
   similarSounding: string[];
   sourceProvenance: string;
+  isFreePreview: boolean;
   status: 'draft' | 'active' | 'archived';
 };
 
@@ -44,7 +45,7 @@ type Props = {
   mode: 'create' | 'edit';
   initial?: Partial<VocabFormValues>;
   onSubmit: (values: VocabFormValues) => Promise<void>;
-  onPublish?: () => Promise<void>;
+  onPublish?: (values: VocabFormValues) => Promise<void>;
   itemId?: string;
 };
 
@@ -113,6 +114,7 @@ export function VocabularyForm({ mode, initial, onSubmit, onPublish, itemId }: P
     // can run without the field being rendered. Preserves the existing
     // initial-value behaviour when the API returns an explicit value.
     sourceProvenance: initial?.sourceProvenance ?? 'generated:platform-authored:admin-entry',
+    isFreePreview: initial?.isFreePreview ?? false,
     status: (initial?.status as VocabFormValues['status']) ?? 'draft',
   });
   const [submitting, setSubmitting] = useState(false);
@@ -138,8 +140,9 @@ export function VocabularyForm({ mode, initial, onSubmit, onPublish, itemId }: P
     if (!onPublish) return;
     setSubmitting(true);
     try {
-      await onPublish();
-      setV({ ...v, status: 'active' });
+      const next = { ...v, status: 'active' as const };
+      await onPublish(next);
+      setV(next);
       setToast({ variant: 'success', message: 'Term published.' });
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Failed to publish.';
@@ -234,6 +237,23 @@ export function VocabularyForm({ mode, initial, onSubmit, onPublish, itemId }: P
                 })}
               </div>
               <p className="mt-1 text-xs text-muted">Tag this term with one or more practice collection labels. A label is not source-backed unless the term provenance explicitly says so.</p>
+            </div>
+
+            <div className="rounded-xl border border-border bg-surface px-4 py-3">
+              <label className="flex items-start gap-3 text-sm text-admin-fg-strong">
+                <input
+                  type="checkbox"
+                  checked={v.isFreePreview}
+                  onChange={(e) => setV({ ...v, isFreePreview: e.target.checked })}
+                  className="mt-1 h-4 w-4 rounded border-border text-primary focus:ring-primary"
+                />
+                <span>
+                  <span className="block font-medium">Free preview word</span>
+                  <span className="mt-1 block text-xs text-muted">
+                    Let free learners view this term in the Recall Vocabulary Bank. Leave unchecked to keep it locked behind subscription.
+                  </span>
+                </span>
+              </label>
             </div>
 
             {/* Status */}

@@ -17,7 +17,7 @@ public class VocabularyServiceTests
         return (db, new VocabularyService(db, new Sm2Scheduler()));
     }
 
-    private static async Task SeedAsync(LearnerDbContext db, int count = 5, string category = "medical")
+    private static async Task SeedAsync(LearnerDbContext db, int count = 5, string category = "medical", bool isFreePreview = true)
     {
         var offset = await db.VocabularyTerms.CountAsync();
         for (var i = 1; i <= count; i++)
@@ -32,6 +32,7 @@ public class VocabularyServiceTests
                 ExamTypeCode = "oet",
                 Category = category,
                 Status = "active",
+                IsFreePreview = isFreePreview,
             });
         }
         await db.SaveChangesAsync();
@@ -67,6 +68,39 @@ public class VocabularyServiceTests
     }
 
     [Fact]
+    public async Task AddToMyVocabulary_blocks_non_preview_terms_for_non_premium()
+    {
+        var (db, svc) = Build();
+        await SeedAsync(db, 1, isFreePreview: false);
+
+        var ex = await Assert.ThrowsAsync<ApiException>(() =>
+            svc.AddToMyVocabularyAsync("user-locked", "vt-001", null, false, default));
+
+        Assert.Equal("RECALL_PREVIEW_LOCKED", ex.ErrorCode);
+        Assert.Equal(402, ex.StatusCode);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task GetTerms_redacts_non_preview_terms_for_non_premium()
+    {
+        var (db, svc) = Build();
+        await SeedAsync(db, 1, isFreePreview: true);
+        await SeedAsync(db, 1, isFreePreview: false);
+
+        var page = await svc.GetTermsAsync("oet", null, null, null, 1, 20, default, isPremium: false);
+
+        var preview = Assert.Single(page.Terms.Where(t => t.Id == "vt-001"));
+        var locked = Assert.Single(page.Terms.Where(t => t.Id == "vt-002"));
+        Assert.False(preview.IsLocked);
+        Assert.Equal("definition of term1", preview.Definition);
+        Assert.True(locked.IsLocked);
+        Assert.Null(locked.Definition);
+        Assert.Empty(locked.ExampleSentence);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
     public async Task AddToMyVocabulary_enforces_free_tier_cap_for_non_premium()
     {
         var (db, svc) = Build();
@@ -83,6 +117,47 @@ public class VocabularyServiceTests
 
         Assert.Equal("VOCAB_FREE_CAP_REACHED", ex.ErrorCode);
         Assert.Equal(402, ex.StatusCode);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task NonPremiumPracticeSurfaces_return_only_free_preview_terms()
+    {
+        var (db, svc) = Build();
+        await SeedAsync(db, 1, isFreePreview: true);
+        await SeedAsync(db, 1, isFreePreview: false);
+        await svc.AddToMyVocabularyAsync("user-mixed", "vt-001", null, true, default);
+        await svc.AddToMyVocabularyAsync("user-mixed", "vt-002", null, true, default);
+
+        var myList = await svc.GetMyVocabularyAsync("user-mixed", null, default, isPremium: false);
+        var due = await svc.GetDueFlashcardsAsync("user-mixed", 10, default, isPremium: false);
+        var daily = await svc.GetDailySetAsync("user-mixed", 10, default, isPremium: false);
+
+        var myItem = Assert.Single(myList);
+        var dueCard = Assert.Single(due);
+        var dailyCard = Assert.Single(daily.Cards);
+        Assert.Equal("vt-001", myItem.TermId);
+        Assert.Equal("vt-001", dueCard.TermId);
+        Assert.Equal("vt-001", dailyCard.TermId);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task PremiumPracticeSurfaces_return_preview_and_non_preview_terms()
+    {
+        var (db, svc) = Build();
+        await SeedAsync(db, 1, isFreePreview: true);
+        await SeedAsync(db, 1, isFreePreview: false);
+        await svc.AddToMyVocabularyAsync("user-premium-mixed", "vt-001", null, true, default);
+        await svc.AddToMyVocabularyAsync("user-premium-mixed", "vt-002", null, true, default);
+
+        var myList = await svc.GetMyVocabularyAsync("user-premium-mixed", null, default, isPremium: true);
+        var due = await svc.GetDueFlashcardsAsync("user-premium-mixed", 10, default, isPremium: true);
+        var daily = await svc.GetDailySetAsync("user-premium-mixed", 10, default, isPremium: true);
+
+        Assert.Equal(2, myList.Count);
+        Assert.Equal(2, due.Count);
+        Assert.Equal(2, daily.Cards.Count);
         await db.DisposeAsync();
     }
 
@@ -165,6 +240,20 @@ public class VocabularyServiceTests
     }
 
     [Fact]
+    public async Task GetQuiz_for_non_premium_uses_only_free_preview_terms()
+    {
+        var (db, svc) = Build();
+        await SeedAsync(db, 2, isFreePreview: true);
+        await SeedAsync(db, 3, isFreePreview: false);
+
+        var res = await svc.GetQuizAsync("u1", 10, "definition_match", default, isPremium: false);
+
+        Assert.NotEmpty(res.Questions);
+        Assert.All(res.Questions, q => Assert.Contains(q.TermId, new[] { "vt-001", "vt-002" }));
+        await db.DisposeAsync();
+    }
+
+    [Fact]
     public async Task GetCategories_groups_counts_by_category()
     {
         var (db, svc) = Build();
@@ -216,6 +305,28 @@ public class VocabularyServiceTests
     }
 
     [Fact]
+    public async Task LookupAsync_redacts_exact_non_preview_match_for_non_premium()
+    {
+        var (db, svc) = Build();
+        db.VocabularyTerms.Add(new VocabularyTerm
+        {
+            Id = "vt-locked", Term = "hypertension",
+            Definition = "High BP.", ExampleSentence = "He has hypertension.",
+            ExamTypeCode = "oet", Category = "medical", Status = "active",
+            IsFreePreview = false,
+        });
+        await db.SaveChangesAsync();
+
+        var lookup = await svc.LookupAsync("Hypertension", "oet", default, isPremium: false);
+
+        Assert.True(lookup.Found);
+        Assert.NotNull(lookup.Term);
+        Assert.True(lookup.Term!.IsLocked);
+        Assert.Null(lookup.Term.Definition);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
     public async Task LookupAsync_returns_suggestions_for_near_match()
     {
         var (db, svc) = Build();
@@ -237,6 +348,34 @@ public class VocabularyServiceTests
 
         Assert.False(lookup.Found);
         Assert.Equal(2, lookup.Suggestions.Count);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task LookupAsync_filters_non_preview_suggestions_for_non_premium()
+    {
+        var (db, svc) = Build();
+        db.VocabularyTerms.Add(new VocabularyTerm
+        {
+            Id = "vt-a", Term = "hypertension",
+            Definition = "High BP.", ExampleSentence = "x.",
+            ExamTypeCode = "oet", Category = "medical", Status = "active",
+            IsFreePreview = false,
+        });
+        db.VocabularyTerms.Add(new VocabularyTerm
+        {
+            Id = "vt-b", Term = "hypoxia",
+            Definition = "Low O2.", ExampleSentence = "x.",
+            ExamTypeCode = "oet", Category = "medical", Status = "active",
+            IsFreePreview = true,
+        });
+        await db.SaveChangesAsync();
+
+        var lookup = await svc.LookupAsync("hyp", "oet", default, isPremium: false);
+
+        Assert.False(lookup.Found);
+        var suggestion = Assert.Single(lookup.Suggestions);
+        Assert.Equal("hypoxia", suggestion.Term);
         await db.DisposeAsync();
     }
 
