@@ -5,7 +5,7 @@ argument-hint: "Describe the goal, or type ultrawork / ulw."
 tools: [vscode, execute, read, agent, edit, search, web, 'mcp_docker/*', browser, ms-azuretools.vscode-containers/containerToolsConfig, todo]
 user-invocable: true
 disable-model-invocation: false
-agents: ["OET Explorer", "OET Planner", "OET Implementer", "OET Reviewer", "OET QA Validator", "OET Security Reviewer", "RalphCoordinator", "RalphPlanner", "RalphCopilot", "Oh My OpenAgent"]
+agents: ["Atlas Prime Planner", "OET Explorer", "OET Planner", "OET Implementer", "OET Reviewer", "OET QA Validator", "OET Security Reviewer", "RalphCoordinator", "RalphPlanner", "RalphCopilot", "Oh My OpenAgent"]
 ---
 
 You are the repo-local coordinator for the already-installed user-level Oh My OpenAgent in VS Code Copilot.

@@ -28,6 +28,7 @@ import {
   endSpeakingSession,
   getSpeakingSession,
   runAiAssessment,
+  submitSpeakingSessionForMarking,
   type SpeakingSessionDetail,
   type SpeakingSessionMode,
 } from '@/lib/api/speaking-sessions';
@@ -36,10 +37,33 @@ import { trackSpeaking } from '@/lib/analytics/speaking-events';
 
 const ROLE_PLAY_HARD_LIMIT_SECONDS = 5 * 60;
 
+/** AI patient / interlocutor utterance pushed by the hub (WS2). */
+interface PatientUtterance {
+  speaker: 'patient' | 'interlocutor';
+  phase: 'warmup' | 'roleplay';
+  text: string;
+  audioUrl?: string | null;
+  emotionHint?: string | null;
+  shouldEnd?: boolean;
+  timestamp?: string;
+}
+
+/** Recognised learner speech echoed back by the hub (WS2). */
+interface LearnerCaption {
+  speaker: 'candidate';
+  text: string;
+  confidence?: number;
+  timestamp?: string;
+}
+
 interface ConversationHubBridge {
   start: (sessionId: string) => Promise<void>;
   stop: () => Promise<void>;
-  onCaption: (cb: (text: string, speaker: 'candidate' | 'interlocutor') => void) => void;
+  sendTurn: (sessionId: string, audioBase64: string, mimeType: string) => Promise<void>;
+  onUtterance: (cb: (utterance: PatientUtterance) => void) => void;
+  onLearnerCaption: (cb: (caption: LearnerCaption) => void) => void;
+  onShouldEnd: (cb: () => void) => void;
+  onError: (cb: (code: string, message: string) => void) => void;
 }
 
 async function loadConversationHub(): Promise<ConversationHubBridge | null> {
@@ -54,9 +78,22 @@ async function loadConversationHub(): Promise<ConversationHubBridge | null> {
       .withAutomaticReconnect([0, 2_000, 5_000])
       .build();
 
-    let captionHandler: ((text: string, speaker: 'candidate' | 'interlocutor') => void) | null = null;
-    connection.on('SpeakingCaption', (text: string, speaker: 'candidate' | 'interlocutor') => {
-      captionHandler?.(text, speaker);
+    let utteranceHandler: ((u: PatientUtterance) => void) | null = null;
+    let learnerCaptionHandler: ((c: LearnerCaption) => void) | null = null;
+    let shouldEndHandler: (() => void) | null = null;
+    let errorHandler: ((code: string, message: string) => void) | null = null;
+
+    // The hub seeds the opening line + every AI reply on `PatientUtterance`.
+    connection.on('PatientUtterance', (payload: PatientUtterance) => {
+      if (payload?.text) utteranceHandler?.(payload);
+    });
+    // Recognised learner speech is echoed back on `LearnerCaption`.
+    connection.on('LearnerCaption', (payload: LearnerCaption) => {
+      if (payload?.text) learnerCaptionHandler?.(payload);
+    });
+    connection.on('SpeakingShouldEnd', () => shouldEndHandler?.());
+    connection.on('SpeakingRoleplayError', (code: string, message: string) => {
+      errorHandler?.(code, message);
     });
 
     return {
@@ -71,13 +108,66 @@ async function loadConversationHub(): Promise<ConversationHubBridge | null> {
           /* ignore */
         }
       },
-      onCaption: (cb) => {
-        captionHandler = cb;
+      sendTurn: async (sessionId, audioBase64, mimeType) => {
+        await connection.invoke('SendSpeakingRoleplayTurn', sessionId, audioBase64, mimeType);
+      },
+      onUtterance: (cb) => {
+        utteranceHandler = cb;
+      },
+      onLearnerCaption: (cb) => {
+        learnerCaptionHandler = cb;
+      },
+      onShouldEnd: (cb) => {
+        shouldEndHandler = cb;
+      },
+      onError: (cb) => {
+        errorHandler = cb;
       },
     };
   } catch {
     return null;
   }
+}
+
+/** Strips the `data:<mime>;base64,` prefix from a FileReader data URL. */
+function dataUrlToBase64(dataUrl: string): string {
+  const comma = dataUrl.indexOf(',');
+  return comma >= 0 ? dataUrl.slice(comma + 1) : dataUrl;
+}
+
+/** Resolves a (possibly relative) media URL to one the browser can fetch. */
+function resolveMediaUrl(url: string): string {
+  if (/^https?:\/\//i.test(url)) return url;
+  if (url.startsWith('/api/backend')) return url;
+  if (url.startsWith('/')) return `/api/backend${url}`;
+  return `/api/backend/${url}`;
+}
+
+/** Plays the AI patient's synthesised reply audio, best-effort. */
+function playUtteranceAudio(url: string): void {
+  try {
+    const audio = new Audio(resolveMediaUrl(url));
+    void audio.play().catch(() => undefined);
+  } catch {
+    /* ignore — captions still render the reply text */
+  }
+}
+
+/** Picks a MediaRecorder MIME type the browser + backend ASR both accept. */
+function pickRecorderMime(): string | undefined {
+  if (typeof MediaRecorder === 'undefined') return undefined;
+  const candidates = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg'];
+  return candidates.find((c) => MediaRecorder.isTypeSupported(c));
+}
+
+/** Reads a recorded Blob into a base64 data URL. */
+function blobToDataUrl(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => resolve(String(reader.result));
+    reader.onerror = () => reject(new Error('Could not read audio.'));
+    reader.readAsDataURL(blob);
+  });
 }
 
 function isAiMode(mode: string | SpeakingSessionMode): boolean {
@@ -108,6 +198,8 @@ export default function SpeakingSessionRecordingPage() {
   const [micLevel, setMicLevel] = useState(0);
   const [ending, setEnding] = useState(false);
   const [endError, setEndError] = useState<string | null>(null);
+  const [recording, setRecording] = useState(false);
+  const [sending, setSending] = useState(false);
 
   const hubRef = useRef<ConversationHubBridge | null>(null);
   const endedRef = useRef(false);
@@ -115,6 +207,10 @@ export default function SpeakingSessionRecordingPage() {
   const roleplayStartedAtRef = useRef<number | null>(null);
   const trackedRoleplayStartRef = useRef(false);
   const trackedTimeWarningRef = useRef(false);
+  const handleFinalizeRef = useRef<((reason?: 'manual' | 'timer') => Promise<void>) | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const recordChunksRef = useRef<Blob[]>([]);
+  const recordStreamRef = useRef<MediaStream | null>(null);
 
   // ── Load session ─────────────────────────────────────────────────────────
   useEffect(() => {
@@ -177,12 +273,30 @@ export default function SpeakingSessionRecordingPage() {
         return;
       }
       hubRef.current = hub;
-      hub.onCaption((text, speaker) => {
+      hub.onLearnerCaption((caption) => {
         setCaptions((prev) => {
-          const next = [...prev, { id: `${Date.now()}-${prev.length}`, text, speaker }];
-          // Keep only the last ~10 lines so the screen doesn't drift forever.
+          const next = [
+            ...prev,
+            { id: `${Date.now()}-${prev.length}`, text: caption.text, speaker: 'candidate' },
+          ];
           return next.slice(-10);
         });
+      });
+      hub.onUtterance((utterance) => {
+        setCaptions((prev) => {
+          const next = [
+            ...prev,
+            { id: `${Date.now()}-${prev.length}`, text: utterance.text, speaker: 'patient' },
+          ];
+          return next.slice(-10);
+        });
+        if (utterance.audioUrl) playUtteranceAudio(utterance.audioUrl);
+      });
+      hub.onShouldEnd(() => {
+        if (!endedRef.current) void handleFinalizeRef.current?.('timer');
+      });
+      hub.onError((_code, message) => {
+        setHubError(message);
       });
       try {
         await hub.start(session.sessionId);
@@ -213,12 +327,25 @@ export default function SpeakingSessionRecordingPage() {
   // ── Local 5-min hard timer ───────────────────────────────────────────────
   const handleFinalize = useCallback(async (reason: 'manual' | 'timer' = 'manual') => {
     if (!session || endedRef.current) return;
+    if (reason === 'manual' && (recording || sending)) {
+      setEndError('Finish sending your current turn before ending the session.');
+      return;
+    }
     endedRef.current = true;
     setEnding(true);
     setEndError(null);
     try {
       await hubRef.current?.stop().catch(() => undefined);
       await endSpeakingSession(session.sessionId);
+      // WS4 (§14.2) — commit the finished role-play for marking. Best-effort:
+      // the backend gate stamps `submittedAt` only when assessable evidence
+      // (a recording or non-empty transcript) exists, so a session the
+      // learner ended without speaking simply skips the stamp.
+      try {
+        await submitSpeakingSessionForMarking(session.sessionId);
+      } catch {
+        // Non-blocking: results page does not depend on the submit stamp.
+      }
       if (isAiMode(session.mode)) {
         // Kick off scoring; non-blocking — server returns the in-flight job.
         try {
@@ -248,7 +375,69 @@ export default function SpeakingSessionRecordingPage() {
       endedRef.current = false;
       setEnding(false);
     }
-  }, [router, session]);
+  }, [recording, router, sending, session]);
+  handleFinalizeRef.current = handleFinalize;
+
+  // ── Push-to-talk: record one learner turn, send it to the AI ───────────────
+  const toggleRecording = useCallback(async () => {
+    if (!session || !hubReady) return;
+    const recorder = mediaRecorderRef.current;
+    if (recording && recorder) {
+      recorder.stop();
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      recordStreamRef.current = stream;
+      const mimeType = pickRecorderMime();
+      const rec = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+      recordChunksRef.current = [];
+      rec.ondataavailable = (e) => {
+        if (e.data.size > 0) recordChunksRef.current.push(e.data);
+      };
+      rec.onstop = async () => {
+        setRecording(false);
+        recordStreamRef.current?.getTracks().forEach((t) => t.stop());
+        recordStreamRef.current = null;
+        const chunks = recordChunksRef.current;
+        recordChunksRef.current = [];
+        if (chunks.length === 0) return;
+        const blob = new Blob(chunks, { type: rec.mimeType || 'audio/webm' });
+        if (blob.size === 0) return;
+        setSending(true);
+        try {
+          const dataUrl = await blobToDataUrl(blob);
+          await hubRef.current?.sendTurn(
+            session.sessionId,
+            dataUrlToBase64(dataUrl),
+            blob.type || 'audio/webm',
+          );
+        } catch (err) {
+          setHubError(err instanceof Error ? err.message : 'Could not send your turn.');
+        } finally {
+          setSending(false);
+        }
+      };
+      mediaRecorderRef.current = rec;
+      rec.start();
+      setRecording(true);
+    } catch {
+      setHubError('Microphone access is required to speak. Please enable it and try again.');
+    }
+  }, [session, hubReady, recording]);
+
+  // Stop any in-flight recorder when the page unmounts.
+  useEffect(() => {
+    return () => {
+      try {
+        mediaRecorderRef.current?.stop();
+      } catch {
+        /* ignore */
+      }
+      recordStreamRef.current?.getTracks().forEach((t) => t.stop());
+      recordStreamRef.current = null;
+    };
+  }, []);
 
   useEffect(() => {
     if (!session || !consentAccepted || !isAiMode(session.mode)) return;
@@ -403,7 +592,7 @@ export default function SpeakingSessionRecordingPage() {
             variant="destructive"
             size="md"
             onClick={() => void handleFinalize('manual')}
-            disabled={ending}
+            disabled={ending || recording || sending}
             data-testid="speaking-session-end-early"
           >
             {ending ? (
@@ -446,6 +635,35 @@ export default function SpeakingSessionRecordingPage() {
             <MicLevelMeter level={micLevel} />
             <p className="mt-2 text-xs text-muted">
               {hubReady ? 'AI partner connected.' : 'Connecting AI partner…'}
+            </p>
+            <Button
+              type="button"
+              variant={recording ? 'destructive' : 'primary'}
+              size="md"
+              className="mt-3 w-full"
+              onClick={() => void toggleRecording()}
+              disabled={!hubReady || sending}
+              aria-pressed={recording}
+              data-testid="speaking-session-record-turn"
+            >
+              {recording ? (
+                <>
+                  <Activity className="mr-2 h-4 w-4 animate-pulse" aria-hidden /> Stop & send
+                </>
+              ) : sending ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden /> Sending…
+                </>
+              ) : (
+                <>
+                  <Mic className="mr-2 h-4 w-4" aria-hidden /> Record turn
+                </>
+              )}
+            </Button>
+            <p className="mt-2 text-[11px] leading-snug text-muted">
+              Tap <span className="font-medium">Record turn</span>, speak to the patient, then tap{' '}
+              <span className="font-medium">Stop &amp; send</span>. The patient replies in
+              character.
             </p>
             {hubError ? (
               <p

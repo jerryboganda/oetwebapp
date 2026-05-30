@@ -277,6 +277,7 @@ public sealed class WritingTaskAuthoringService(LearnerDbContext db, ILogger<Wri
             MarkingMode = source.MarkingMode,
             RetakePolicyJson = source.RetakePolicyJson,
             SourceProvenance = source.SourceProvenance,
+            AuthorId = GetUserId(user) ?? source.AuthorId ?? "system",
             ContentOwnerId = GetUserId(user) ?? source.ContentOwnerId,
             CreatedAt = now,
             UpdatedAt = now,

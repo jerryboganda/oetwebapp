@@ -68,6 +68,8 @@ export interface SpeakingSessionTimingDetail {
   rolePlayEndsAt: string;
   rolePlayStartedAt: string | null;
   endedAt: string | null;
+  /** WS4 (§14.2) — stamped once the learner submits the role-play for marking. */
+  submittedAt: string | null;
   consentVersion: string;
   card: RolePlayCardLearnerDetail;
 }
@@ -143,6 +145,52 @@ export async function getSpeakingSession(sessionId: string): Promise<SpeakingSes
   );
 }
 
+/**
+ * WS1 — the authoritative server-computed session clock. The client
+ * NEVER trusts its own countdown; it polls this endpoint (and re-polls on
+ * reconnect) so prep/role-play timing cannot be gamed by a skewed or
+ * paused client clock. `secondsRemaining` is null for untimed stages
+ * (warmup/finished). `stage` is one of warmup | prep | active | finished
+ * | cancelled | expired.
+ */
+export type SpeakingClockStage =
+  | 'warmup'
+  | 'prep'
+  | 'active'
+  | 'finished'
+  | 'cancelled'
+  | 'expired';
+
+export interface SpeakingSessionClock {
+  stage: SpeakingClockStage;
+  roleplayIndex: number;
+  serverNow: string;
+  stageStartedAt: string | null;
+  stageEndsAt: string | null;
+  secondsRemaining: number | null;
+  expired: boolean;
+  canAdvanceTo: string[];
+}
+
+export async function getSpeakingSessionClock(
+  sessionId: string,
+): Promise<SpeakingSessionClock> {
+  return apiClient.get<SpeakingSessionClock>(
+    `/v1/speaking/sessions/${encodeURIComponent(sessionId)}/clock`,
+  );
+}
+
+/** WS1 / §22.5 — flag a technical issue on the session (never affects scoring). */
+export async function reportSpeakingTechnicalIssue(
+  sessionId: string,
+  note?: string,
+): Promise<SpeakingSessionDetail> {
+  return apiClient.post<SpeakingSessionDetail>(
+    `/v1/speaking/sessions/${encodeURIComponent(sessionId)}/technical-issue`,
+    { note: note ?? null },
+  );
+}
+
 export async function startRolePlay(sessionId: string): Promise<SpeakingSessionDetail> {
   return apiClient.post<SpeakingSessionDetail>(
     `/v1/speaking/sessions/${encodeURIComponent(sessionId)}/start-roleplay`,
@@ -169,6 +217,21 @@ export async function finishSpeakingWarmup(sessionId: string): Promise<SpeakingS
 export async function endSpeakingSession(sessionId: string): Promise<SpeakingSessionDetail> {
   return apiClient.post<SpeakingSessionDetail>(
     `/v1/speaking/sessions/${encodeURIComponent(sessionId)}/end`,
+    {},
+  );
+}
+
+/**
+ * WS4 (§14.2) — submit the finished role-play for marking. The backend
+ * enforces the recording gate: the session must be finished and have
+ * assessable role-play evidence (a recording or non-empty transcript)
+ * before `submittedAt` is stamped. Idempotent.
+ */
+export async function submitSpeakingSessionForMarking(
+  sessionId: string,
+): Promise<SpeakingSessionDetail> {
+  return apiClient.post<SpeakingSessionDetail>(
+    `/v1/speaking/sessions/${encodeURIComponent(sessionId)}/submit`,
     {},
   );
 }

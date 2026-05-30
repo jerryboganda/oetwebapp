@@ -78,7 +78,12 @@ export class RolePlayCardApiError extends Error {
   }
 }
 
-async function request<T>(path: string, init?: RequestInit, opts?: { acceptedStatuses?: number[] }): Promise<T> {
+type RequestOptions = {
+  acceptedStatuses?: number[];
+  timeoutMs?: number;
+};
+
+async function request<T>(path: string, init?: RequestInit, opts?: RequestOptions): Promise<T> {
   let lastError: Error | null = null;
 
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
@@ -86,7 +91,7 @@ async function request<T>(path: string, init?: RequestInit, opts?: { acceptedSta
       const response = await fetchWithTimeout(resolveApiUrl(path), {
         ...init,
         headers: await buildHeaders(init),
-      });
+      }, opts?.timeoutMs);
 
       const accepted = opts?.acceptedStatuses ?? [];
       if (!response.ok && accepted.includes(response.status)) {
@@ -382,6 +387,62 @@ export async function draftSpeakingRolePlayCard(
   return request<AdminRolePlayCardAiDraftResponse>(
     '/v1/admin/speaking/role-play-cards/ai-draft',
     { method: 'POST', body: JSON.stringify(input) },
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// WS9 (SPK-007) — scanned/text PDF import → structured draft
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** One field-presence check from the import builder-validation report. */
+export interface SpeakingImportFieldCheck {
+  field: string;
+  detected: boolean;
+  required: boolean;
+  note?: string | null;
+}
+
+/** Builder-validation report for an imported source PDF. */
+export interface SpeakingImportValidationReport {
+  isPublishable: boolean;
+  checks: SpeakingImportFieldCheck[];
+  blockers: string[];
+}
+
+/** Result of `POST /v1/admin/speaking/role-play-cards/import`. */
+export interface SpeakingContentImportResult {
+  sourceAssetKey: string;
+  sourceBytes: number;
+  extractedChars: number;
+  likelyScanned: boolean;
+  validation: SpeakingImportValidationReport;
+  draftCardId?: string | null;
+  draft?: RolePlayCardDetail | null;
+  warning?: string | null;
+}
+
+/**
+ * Imports a source paper (scanned or text PDF). The source asset is always
+ * persisted server-side for provenance; when `autoDraft` is true and usable
+ * text is extracted, the grounded AI-draft path produces a reviewable Draft
+ * card. A scanned PDF with no OCR provider returns the validation report and
+ * the saved source asset for manual structuring.
+ */
+export async function importSpeakingRolePlayCard(input: {
+  file: File;
+  professionId: string;
+  topic?: string | null;
+  autoDraft?: boolean;
+}): Promise<SpeakingContentImportResult> {
+  const form = new FormData();
+  form.append('file', input.file);
+  form.append('professionId', input.professionId);
+  if (input.topic) form.append('topic', input.topic);
+  form.append('autoDraft', String(input.autoDraft ?? false));
+  return request<SpeakingContentImportResult>(
+    '/v1/admin/speaking/role-play-cards/import',
+    { method: 'POST', body: form },
+    { timeoutMs: 180_000 },
   );
 }
 

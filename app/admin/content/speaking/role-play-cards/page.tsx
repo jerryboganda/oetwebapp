@@ -14,7 +14,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Copy, Plus, RotateCcw, Sparkles } from 'lucide-react';
+import { Copy, Plus, RotateCcw, Sparkles, Upload } from 'lucide-react';
 
 import { AdminCatalogLayout } from '@/components/admin/layout/admin-catalog-layout';
 import { Badge } from '@/components/admin/ui/badge';
@@ -169,9 +169,14 @@ export default function AdminSpeakingRolePlayCardsPage() {
       hideViewModeToggle
       filters={filtersNode}
       actions={
-        <Button onClick={() => router.push('/admin/content/speaking/role-play-cards/new')}>
-          <Plus className="mr-1 h-4 w-4" /> New role-play card
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={() => router.push('/admin/content/speaking/role-play-cards/import')}>
+            <Upload className="mr-1 h-4 w-4" /> Import PDF
+          </Button>
+          <Button onClick={() => router.push('/admin/content/speaking/role-play-cards/new')}>
+            <Plus className="mr-1 h-4 w-4" /> New role-play card
+          </Button>
+        </div>
       }
     >
       <p className="col-span-full text-xs text-admin-fg-muted">

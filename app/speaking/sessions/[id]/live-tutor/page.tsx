@@ -17,6 +17,7 @@ import { LearnerLiveRoomShell } from '@/components/domain/speaking/LearnerLiveRo
 import {
   endSpeakingSession,
   getSpeakingSession,
+  submitSpeakingSessionForMarking,
   type SpeakingSessionDetail,
 } from '@/lib/api/speaking-sessions';
 import {
@@ -105,6 +106,13 @@ export default function SpeakingSessionLiveTutorPage() {
     setEnding(true);
     try {
       await endSpeakingSession(session.sessionId);
+      // WS4 (§14.2) — commit the recorded role-play for marking. Best-effort;
+      // the backend gate stamps `submittedAt` only when a recording exists.
+      try {
+        await submitSpeakingSessionForMarking(session.sessionId);
+      } catch {
+        // Non-blocking: tutor side also finalizes.
+      }
       trackSpeaking('live_room_ended', {
         liveRoomId: room?.liveRoomId ?? session.sessionId,
         durationSeconds: joinedAtRef.current
