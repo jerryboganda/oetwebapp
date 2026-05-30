@@ -161,7 +161,8 @@ public sealed record WritingSubmissionCreateRequest(
     [property: Required] string LetterContent,
     [property: Range(0, 5000)] int WordCount,
     [property: Range(0, 7200)] int TimeSpentSeconds,
-    [property: StringLength(16)] string? InputSource);
+    [property: StringLength(16)] string? InputSource,
+    [property: StringLength(32)] string? SimulationMode);
 
 public sealed record WritingReviseRequest(
     [property: Required] string LetterContent,
