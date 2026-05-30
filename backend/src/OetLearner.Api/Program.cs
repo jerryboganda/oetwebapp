@@ -1565,6 +1565,11 @@ builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingSubmissionEva
     OetLearner.Api.Services.Writing.WritingSubmissionEvaluationPipeline>();
 builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingSubmissionService,
     OetLearner.Api.Services.Writing.WritingSubmissionService>();
+// Result-visibility config + learner-facing gated feedback (spec §15.2/§15.3, WS-B4 Section D/E).
+builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingResultVisibilityService,
+    OetLearner.Api.Services.Writing.WritingResultVisibilityService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingResultFeedbackService,
+    OetLearner.Api.Services.Writing.WritingResultFeedbackService>();
 // Buddy System (spec §23.5) — opt-in matching + chat + weekly check-ins.
 builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingBuddyService,
     OetLearner.Api.Services.Writing.WritingBuddyService>();
@@ -2016,6 +2021,7 @@ app.MapWritingPathwayEndpoints();
 // admin content, tutor portal + native WebSocket coach fallback (~60+
 // routes across 20 endpoint files). See WritingRouteBuilderExtensions.cs.
 app.MapWritingV2Endpoints();
+app.MapWritingResultVisibilityEndpoints();
 app.MapListeningAuthoringAdminEndpoints();
 app.MapListeningAdminAnalyticsEndpoints();
 app.MapReadingLearnerEndpoints();
