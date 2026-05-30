@@ -58,6 +58,8 @@ function WritingMockSessionInner() {
   const [scratch, setScratch] = useState('');
   const startedAtRef = useRef<number>(Date.now());
   const lastAutosaveContent = useRef('');
+  // Throttle `response_typed` to at most one event per 10s window (spec §17.7).
+  const lastTypedEventAt = useRef(0);
 
   // ----- Attempt-event emission (computer mode; fire-and-forget) -----
   const contentRef = useRef(content);
@@ -175,6 +177,22 @@ function WritingMockSessionInner() {
     [emitEvent],
   );
 
+  // Editor change handler. Updates content + word count and emits a throttled
+  // `response_typed` (first keystroke per 10s window) only while writing.
+  const handleEditorChange = useCallback(
+    (text: string, words: number) => {
+      setContent(text);
+      setWordCount(words);
+      if (phase !== 'writing') return;
+      const now = Date.now();
+      if (now - lastTypedEventAt.current >= 10_000) {
+        lastTypedEventAt.current = now;
+        emitEvent('response_typed', { wordCount: words });
+      }
+    },
+    [phase, emitEvent],
+  );
+
   const canSubmit = phase === 'writing' && wordCount >= 100 && !submitting;
   const helperText = useMemo(() => {
     if (phase !== 'writing') return t('writing.mocks.session.helper.notStarted');
@@ -252,9 +270,9 @@ function WritingMockSessionInner() {
               <p className="text-xs font-bold uppercase tracking-wider text-muted">{t('writing.mocks.session.eyebrow')}</p>
               {/* Scenario title is OET-authored English content. */}
               <h1 className="text-base font-bold text-navy" dir="ltr">{scenario?.title ?? t('writing.mocks.session.scenarioLoading')}</h1>
-              <div className="mt-1 flex flex-wrap gap-1">
+              <div className="mt-1 flex flex-wrap items-center gap-1">
                 <Badge variant={strict ? 'warning' : 'info'} size="sm">
-                  {strict ? 'Strict mock' : 'Practice'}
+                  {strict ? 'Strict mock' : 'Practice mode'}
                 </Badge>
                 {scenario ? (
                   <>
@@ -262,6 +280,17 @@ function WritingMockSessionInner() {
                     <Badge variant="info" size="sm" className="capitalize">{scenario.profession}</Badge>
                   </>
                 ) : null}
+                {strict ? (
+                  // Exam-fidelity disclosure (spec §20): make the strict
+                  // constraints explicit so learners know what is withheld.
+                  <span className="text-[11px] font-medium text-muted">
+                    No spellcheck · no hints · no AI · no model answer
+                  </span>
+                ) : (
+                  <span className="text-[11px] font-medium text-muted">
+                    Spellcheck + planning notes on · not exam-timed pressure
+                  </span>
+                )}
               </div>
             </div>
           </div>
@@ -288,6 +317,9 @@ function WritingMockSessionInner() {
           >
             <CaseNotePdfViewer
               caseNotesMarkdown={scenario?.caseNotesMarkdown ?? t('writing.mocks.session.caseNotesLoading')}
+              caseNoteSections={scenario?.caseNoteSections}
+              recipient={scenario?.recipient ?? null}
+              taskPrompt={scenario?.taskPromptMarkdown ?? null}
               title={scenario?.title ?? t('writing.mocks.session.caseNotesLabel')}
               readingWindowLocked={phase === 'reading'}
             />
@@ -334,11 +366,11 @@ function WritingMockSessionInner() {
                 initialContent=""
                 disabled={phase !== 'writing'}
                 blockPaste={strict}
+                // Strict mock forces spell-check off; the relaxed practice
+                // variant (?practice=1) keeps it on (spec §20.2).
+                spellCheck={!strict}
                 onPasteBlocked={handlePasteBlocked}
-                onChange={(text, words) => {
-                  setContent(text);
-                  setWordCount(words);
-                }}
+                onChange={handleEditorChange}
                 placeholder={phase === 'reading' ? t('writing.mocks.session.editorPlaceholder.reading') : t('writing.mocks.session.editorPlaceholder.writing')}
                 inputId="mock-editor"
               />

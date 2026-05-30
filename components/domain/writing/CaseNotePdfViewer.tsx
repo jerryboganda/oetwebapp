@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
+import type { WritingCaseNoteSectionDto, WritingRecipientDto } from '@/lib/writing/types';
 
 /** A pre-parsed case-note section (alternative to raw markdown). */
 export interface CaseNoteSection {
@@ -12,20 +13,45 @@ export interface CaseNoteSection {
 }
 
 export interface CaseNotePdfViewerProps {
-  /** Raw case-notes markdown. Provide this OR `sections`. */
+  /** Raw case-notes markdown. Provide this OR `sections`/`caseNoteSections`. */
   caseNotesMarkdown?: string;
-  /** Pre-parsed sections. Provide this OR `caseNotesMarkdown`. */
+  /** Pre-parsed sections (internal shape — `lines`). */
   sections?: CaseNoteSection[];
+  /**
+   * Authored case-note sections from the task DTO (spec §4/§5 — `items`).
+   * Preferred over `caseNotesMarkdown` when present; rendered as a bulleted
+   * list under each heading.
+   */
+  caseNoteSections?: WritingCaseNoteSectionDto[];
+  /**
+   * Optional recipient block (To: …) rendered as the document letterhead so
+   * the computer-mode viewer matches the paper booklet (spec §10.1).
+   */
+  recipient?: WritingRecipientDto | null;
+  /** Optional task prompt / instruction shown above the case notes. */
+  taskPrompt?: string | null;
   /** Document title shown on the toolbar strip. */
   title?: string;
   /**
    * When true the document body is non-selectable and copy/cut/context-menu
    * are blocked — used to honour the OET 5-minute reading-window lock while
-   * still letting the learner scroll + zoom. Defaults to false.
+   * still letting the learner scroll + zoom. Defaults to false. `locked` is a
+   * spec-named alias for the same behaviour.
    */
   readingWindowLocked?: boolean;
+  /** Spec-named alias for `readingWindowLocked`. */
+  locked?: boolean;
   /** Optional extra className for the outer container. */
   className?: string;
+}
+
+/** Convert authored `{ heading, items }` sections to the internal shape. */
+function fromDtoSections(dto: WritingCaseNoteSectionDto[]): CaseNoteSection[] {
+  return dto.map((s) => ({
+    heading: s.heading,
+    // Render each item as a bullet line so `renderSectionBody` lists them.
+    lines: s.items.map((item) => (/^[-*]\s+/.test(item) ? item : `- ${item}`)),
+  }));
 }
 
 /** Discrete zoom stops (percent). */
@@ -108,24 +134,35 @@ function renderSectionBody(lines: string[]): React.ReactNode[] {
  * Renders the case notes inside a scrollable "document page" with a soft
  * shadow + border to evoke a printed sheet, plus discrete zoom controls
  * (90 / 100 / 115 / 130%) and ctrl/⌘ + wheel zoom. Scrolls independently of
- * its surroundings. No editing or timing logic lives here — the host owns the
- * reading-window lock and passes `readingWindowLocked` to gate selection.
+ * its surroundings. Accepts raw markdown (`caseNotesMarkdown`), authored
+ * `caseNoteSections` ({ heading, items }), and an optional `recipient` +
+ * `taskPrompt` so the computer-mode left pane mirrors the paper booklet.
+ * No editing or timing logic lives here — the host owns the reading-window
+ * lock and passes `readingWindowLocked` / `locked` to gate selection.
  */
 export function CaseNotePdfViewer({
   caseNotesMarkdown,
   sections,
+  caseNoteSections,
+  recipient,
+  taskPrompt,
   title = 'Case notes',
   readingWindowLocked = false,
+  locked = false,
   className,
 }: CaseNotePdfViewerProps) {
   const [zoomIndex, setZoomIndex] = useState(DEFAULT_ZOOM_INDEX);
   const scrollRef = useRef<HTMLDivElement>(null);
 
+  // `locked` is the spec-named alias; either one engages the reading-window lock.
+  const isLocked = readingWindowLocked || locked;
+
   const resolvedSections = useMemo<CaseNoteSection[]>(() => {
     if (sections) return sections;
+    if (caseNoteSections && caseNoteSections.length > 0) return fromDtoSections(caseNoteSections);
     if (caseNotesMarkdown) return parseMarkdownSections(caseNotesMarkdown);
     return [];
-  }, [sections, caseNotesMarkdown]);
+  }, [sections, caseNoteSections, caseNotesMarkdown]);
 
   const zoom = ZOOM_STOPS[zoomIndex];
   const canZoomOut = zoomIndex > 0;
@@ -153,7 +190,7 @@ export function CaseNotePdfViewer({
     return () => node.removeEventListener('wheel', onWheel);
   }, []);
 
-  const lockProps = readingWindowLocked
+  const lockProps = isLocked
     ? {
         onCopy: (e: React.ClipboardEvent) => e.preventDefault(),
         onCut: (e: React.ClipboardEvent) => e.preventDefault(),
@@ -208,12 +245,35 @@ export function CaseNotePdfViewer({
           {...lockProps}
           className={cn(
             'mx-auto origin-top rounded-sm border border-border bg-white px-8 py-9 text-navy shadow-[0_1px_3px_rgba(15,23,42,0.08),0_8px_24px_-12px_rgba(15,23,42,0.25)] transition-transform duration-150 motion-reduce:transition-none',
-            readingWindowLocked && 'select-none',
+            isLocked && 'select-none',
           )}
           style={{ width: '100%', maxWidth: '640px', transform: `scale(${zoom / 100})` }}
         >
+          {recipient && (recipient.name || recipient.role || recipient.organisation || recipient.address) ? (
+            <header className="mb-6 border-b border-border/70 pb-4">
+              <p className="text-[10px] font-bold uppercase tracking-wide text-muted">To</p>
+              <div className="mt-1 space-y-0.5 text-[15px] leading-6">
+                {recipient.name ? <p className="font-bold">{recipient.name}</p> : null}
+                {recipient.role ? <p>{recipient.role}</p> : null}
+                {recipient.organisation ? <p>{recipient.organisation}</p> : null}
+                {recipient.address ? <p className="whitespace-pre-line text-muted">{recipient.address}</p> : null}
+              </div>
+            </header>
+          ) : null}
+
+          {taskPrompt ? (
+            <section className="mb-6 space-y-2">
+              <h3 className="border-b border-border/70 pb-1 text-sm font-bold uppercase tracking-wide text-navy">
+                Writing task
+              </h3>
+              <div className="space-y-2 text-[15px]">{renderSectionBody(taskPrompt.split('\n'))}</div>
+            </section>
+          ) : null}
+
           {resolvedSections.length === 0 ? (
-            <p className="text-sm italic text-muted">No case notes available.</p>
+            taskPrompt || recipient ? null : (
+              <p className="text-sm italic text-muted">No case notes available.</p>
+            )
           ) : (
             <div className="space-y-6 text-[15px]">
               {resolvedSections.map((section, i) => (

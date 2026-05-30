@@ -285,6 +285,19 @@ export function WritingEditorV2({
             value={fallbackValue}
             placeholder={placeholder}
             spellCheck={effectiveSpellCheck}
+            // Exam-fidelity hardening (spec §11.4/§19.1): when spell-check is
+            // off (strict modes) also disable browser autocorrect/autocaps and
+            // suppress Grammarly so no external assistance leaks into the mock.
+            autoCorrect={effectiveSpellCheck ? 'on' : 'off'}
+            autoCapitalize={effectiveSpellCheck ? 'sentences' : 'off'}
+            autoComplete={effectiveSpellCheck ? undefined : 'off'}
+            {...(effectiveSpellCheck
+              ? {}
+              : {
+                  'data-gramm': 'false',
+                  'data-gramm_editor': 'false',
+                  'data-enable-grammarly': 'false',
+                })}
             disabled={disabled}
             readOnly={disabled}
             onChange={(e) => {
@@ -343,6 +356,20 @@ function TiptapEditor({
   // ProseMirror plugin maps decorations through doc changes between renders.
   const decorations = useMemo(() => toDecorations(annotations), [annotations]);
 
+  // When spell-check is off (strict exam modes) we also disable autocorrect/
+  // autocapitalise and tell Grammarly to stay out of the contenteditable
+  // (spec §11.4/§19.1). These attributes are rendered onto the ProseMirror DOM.
+  const hardeningAttrs = spellCheck
+    ? { autocorrect: 'on', autocapitalize: 'sentences' }
+    : {
+        autocorrect: 'off',
+        autocapitalize: 'off',
+        autocomplete: 'off',
+        'data-gramm': 'false',
+        'data-gramm_editor': 'false',
+        'data-enable-grammarly': 'false',
+      };
+
   const editor = useEditor({
     extensions: [
       StarterKit.configure({ heading: { levels: [2, 3] } }),
@@ -354,6 +381,8 @@ function TiptapEditor({
       attributes: {
         id: inputId ?? 'writing-editor-v2',
         'aria-label': 'Writing editor',
+        spellcheck: String(spellCheck),
+        ...hardeningAttrs,
         class: 'prose prose-sm dark:prose-invert max-w-none focus:outline-none px-4 py-4 min-h-[20rem]',
       },
     },

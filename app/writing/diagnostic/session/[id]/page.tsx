@@ -7,6 +7,7 @@ import { useTranslations } from 'next-intl';
 import { ClipboardCheck, Lock } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout/learner-dashboard-shell';
 import { InlineAlert } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { WritingEditorV2 } from '@/components/domain/writing/WritingEditorV2';
 import { WritingTimerV2 } from '@/components/domain/writing/WritingTimerV2';
@@ -46,6 +47,8 @@ export default function WritingDiagnosticSessionPage() {
   const [frozenLetter, setFrozenLetter] = useState('');
   const startedAtRef = useRef<number>(Date.now());
   const lastAutosaveContent = useRef<string>('');
+  // Throttle `response_typed` to at most one event per 10s window (spec §17.7).
+  const lastTypedEventAt = useRef(0);
 
   // ----- Attempt-event emission (computer mode; fire-and-forget) -----
   const contentRef = useRef(content);
@@ -169,6 +172,22 @@ export default function WritingDiagnosticSessionPage() {
     [emitEvent],
   );
 
+  // Editor change handler. Emits a throttled `response_typed` (first keystroke
+  // per 10s window) while writing, in addition to tracking content/word count.
+  const handleEditorChange = useCallback(
+    (text: string, words: number) => {
+      setContent(text);
+      setWordCount(words);
+      if (phase !== 'writing') return;
+      const now = Date.now();
+      if (now - lastTypedEventAt.current >= 10_000) {
+        lastTypedEventAt.current = now;
+        emitEvent('response_typed', { wordCount: words });
+      }
+    },
+    [phase, emitEvent],
+  );
+
   const helperText = useMemo(() => {
     if (phase !== 'writing') return t('writing.diagnostic.session.helper.notStarted');
     if (wordCount < 50) return t('writing.diagnostic.session.helper.tooShort');
@@ -250,6 +269,19 @@ export default function WritingDiagnosticSessionPage() {
                 fallback placeholder is the only translated string here.
               */}
               <h1 className="text-base font-bold text-navy">{scenario?.title ?? t('writing.diagnostic.session.scenarioLoading')}</h1>
+              <div className="mt-1 flex flex-wrap items-center gap-1">
+                {/* Diagnostic is always strict (spec §20). */}
+                <Badge variant="warning" size="sm">Strict diagnostic</Badge>
+                {scenario ? (
+                  <>
+                    <Badge variant="muted" size="sm">{scenario.letterType}</Badge>
+                    <Badge variant="info" size="sm" className="capitalize">{scenario.profession}</Badge>
+                  </>
+                ) : null}
+                <span className="text-[11px] font-medium text-muted">
+                  No spellcheck · no hints · no AI · no model answer
+                </span>
+              </div>
             </div>
           </div>
           <div className="flex items-center gap-4">
@@ -277,6 +309,9 @@ export default function WritingDiagnosticSessionPage() {
           >
             <CaseNotePdfViewer
               caseNotesMarkdown={scenario?.caseNotesMarkdown ?? t('writing.diagnostic.session.caseNotesLoading')}
+              caseNoteSections={scenario?.caseNoteSections}
+              recipient={scenario?.recipient ?? null}
+              taskPrompt={scenario?.taskPromptMarkdown ?? null}
               title={scenario?.title ?? t('writing.diagnostic.session.caseNotesLabel')}
               readingWindowLocked={phase === 'reading'}
             />
@@ -322,10 +357,7 @@ export default function WritingDiagnosticSessionPage() {
                 disabled={phase !== 'writing'}
                 blockPaste
                 onPasteBlocked={handlePasteBlocked}
-                onChange={(text, words) => {
-                  setContent(text);
-                  setWordCount(words);
-                }}
+                onChange={handleEditorChange}
                 placeholder={
                   phase === 'reading'
                     ? t('writing.diagnostic.session.placeholderReading')

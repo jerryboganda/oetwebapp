@@ -13,6 +13,7 @@ import { WritingEditorV2 } from '@/components/domain/writing/WritingEditorV2';
 import { WordCounter } from '@/components/domain/writing/WordCounter';
 import { SubmitBar } from '@/components/domain/writing/SubmitBar';
 import { CoachPanel } from '@/components/domain/writing/CoachPanel';
+import { PracticeScratchpad } from '@/components/domain/writing/PracticeScratchpad';
 import { WritingCaseNotesPanel } from '@/components/domain/writing-case-notes-panel';
 import {
   createWritingSubmission,
@@ -41,6 +42,8 @@ export default function WritingPracticeSessionPage() {
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [noCreditsOpen, setNoCreditsOpen] = useState(false);
+  // Local-only planning notes (spec §20.2) — never submitted or graded.
+  const [scratch, setScratch] = useState('');
   const startedAtRef = useRef<number>(Date.now());
   const lastAutosaveContent = useRef<string>('');
   const coachSessionId = useMemo(() => `practice-${scenarioId}`, [scenarioId]);
@@ -136,7 +139,10 @@ export default function WritingPracticeSessionPage() {
               <p className="text-xs font-bold uppercase tracking-wider text-muted">{t('writing.practice.session.eyebrow')}</p>
               {/* Scenario title is OET-authored English content. */}
               <h1 className="text-base font-bold text-navy" dir="ltr">{scenario?.title ?? t('writing.practice.session.scenarioLoading')}</h1>
-              <div className="mt-1 flex flex-wrap gap-1">
+              <div className="mt-1 flex flex-wrap items-center gap-1">
+                {/* Relaxed practice surface — spellcheck, coach + planning notes
+                    are all available (spec §20.2). */}
+                <Badge variant="info" size="sm">Practice mode</Badge>
                 {scenario ? (
                   <>
                     <Badge variant="muted" size="sm">{scenario.letterType}</Badge>
@@ -189,8 +195,10 @@ export default function WritingPracticeSessionPage() {
 
           <section
             aria-label={t('writing.practice.session.editorLabel')}
-            className={`rounded-2xl border border-border bg-surface p-4 ${mode === 'coached' ? 'lg:col-span-5' : ''}`}
+            className={`flex flex-col gap-3 rounded-2xl border border-border bg-surface p-4 ${mode === 'coached' ? 'lg:col-span-5' : ''}`}
           >
+            {/* Practice-only local planning area; never submitted. */}
+            <PracticeScratchpad value={scratch} onChange={setScratch} />
             <WritingEditorV2
               mode={mode}
               initialContent={initialContent}
