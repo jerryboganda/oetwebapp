@@ -3,7 +3,7 @@
 import { useCallback, useState } from 'react';
 import { useRouter } from 'next/navigation';
 
-import { Modal } from '@/components/admin/ui/modal';
+import { Modal } from '@/components/ui/modal';
 import { Button } from '@/components/admin/ui/button';
 import { importWritingTask } from '@/lib/writing/exam-api';
 import type { WritingTaskImportJson } from '@/lib/writing/types';
