@@ -45,6 +45,7 @@ public record SpeakingSessionDetail(
     DateTimeOffset? PrepStartedAt,
     DateTimeOffset? RolePlayStartedAt,
     DateTimeOffset? EndedAt,
+    DateTimeOffset? SubmittedAt,
     int ElapsedSeconds,
     string ConsentVersion,
     object Card);
@@ -80,3 +81,22 @@ public record SpeakingAiAssessmentProjection(
 /// confirms a specific consent version which the session and any
 /// downstream <c>SpeakingRecording</c> rows are stamped with.</summary>
 public record SpeakingConsentRequest(string ConsentVersion);
+
+/// <summary>Response from <c>GET /v1/speaking/sessions/{id}/clock</c> (WS1,
+/// §1.2/§13.3/§22.5). The single authoritative source of session timing —
+/// computed entirely server-side from persisted timestamps plus the card's
+/// prep/role-play windows, so a reconnecting or clock-skewed client cannot
+/// gain or lose time. The hub's <c>TimeNearlyUp</c>/<c>TimeUp</c> broadcasts
+/// are convenience signals only; this endpoint is authoritative.</summary>
+public record SpeakingSessionClock(
+    string Stage,
+    int RoleplayIndex,
+    DateTimeOffset ServerNow,
+    DateTimeOffset? StageStartedAt,
+    DateTimeOffset? StageEndsAt,
+    int? SecondsRemaining,
+    bool Expired,
+    string[] CanAdvanceTo);
+
+/// <summary>POST /v1/speaking/sessions/{id}/technical-issue body (§22.5).</summary>
+public record SpeakingTechnicalIssueRequest(string? Note);

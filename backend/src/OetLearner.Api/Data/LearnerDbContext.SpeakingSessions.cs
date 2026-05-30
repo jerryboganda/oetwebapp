@@ -8,6 +8,7 @@ public partial class LearnerDbContext
     public DbSet<SpeakingSession> SpeakingSessions => Set<SpeakingSession>();
     public DbSet<SpeakingRecording> SpeakingRecordings => Set<SpeakingRecording>();
     public DbSet<SpeakingTranscript> SpeakingTranscripts => Set<SpeakingTranscript>();
+    public DbSet<SpeakingResultVisibilityConfig> SpeakingResultVisibilityConfigs => Set<SpeakingResultVisibilityConfig>();
 
     partial void OnModelCreatingSpeakingSessions(ModelBuilder modelBuilder)
     {
@@ -38,6 +39,12 @@ public partial class LearnerDbContext
                 .WithMany()
                 .HasForeignKey(x => x.SpeakingSessionId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<SpeakingResultVisibilityConfig>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.HasIndex(x => x.RolePlayCardId);
         });
     }
 }

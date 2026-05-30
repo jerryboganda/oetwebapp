@@ -199,6 +199,7 @@ public sealed class SpeakingSessionService(LearnerDbContext db)
             PrepStartedAt: session.PrepStartedAt,
             RolePlayStartedAt: session.RolePlayStartedAt,
             EndedAt: session.EndedAt,
+            SubmittedAt: session.SubmittedAt,
             ElapsedSeconds: session.ElapsedSeconds,
             ConsentVersion: session.ConsentVersion,
             Card: ProjectLearnerCard(card));
@@ -272,6 +273,68 @@ public sealed class SpeakingSessionService(LearnerDbContext db)
         return await GetSessionForLearnerAsync(userId, sessionId, ct);
     }
 
+    /// <summary>
+    /// WS4 — submit-for-marking gate (§14.2). The learner explicitly commits
+    /// the finished role-play for official assessment. Guards:
+    ///   * the session must already be <c>Finished</c> (role-play ended), and
+    ///   * assessable role-play evidence must exist — at least one
+    ///     non-warm-up recording OR a non-warm-up transcript with content.
+    /// Without recorded/transcribed role-play audio there is nothing for an
+    /// assessor to mark, so the gate refuses to stamp <see cref="SpeakingSession.SubmittedAt"/>.
+    /// Idempotent: re-submitting a session that already carries a
+    /// <c>SubmittedAt</c> simply returns the current detail.
+    /// </summary>
+    public async Task<SpeakingSessionDetail> SubmitForMarkingAsync(
+        string userId,
+        string sessionId,
+        CancellationToken ct)
+    {
+        var session = await LoadOwnedSessionAsync(userId, sessionId, ct, tracking: true);
+
+        // Idempotent: already submitted → no-op.
+        if (session.SubmittedAt is not null)
+        {
+            return await GetSessionForLearnerAsync(userId, sessionId, ct);
+        }
+
+        if (session.State != SpeakingSessionState.Finished)
+        {
+            throw ApiException.Conflict("speaking_session_not_finished",
+                $"End the role-play before submitting for marking (current: {SpeakingSessionStates.ToCode(session.State)}).");
+        }
+
+        // Evidence gate: an assessor needs real role-play audio/transcript.
+        var hasRecording = await db.SpeakingRecordings.AsNoTracking()
+            .AnyAsync(r => r.SpeakingSessionId == sessionId && !r.IsWarmup && !r.IsArchived, ct);
+        var hasTranscript = await db.SpeakingTranscripts.AsNoTracking()
+            .AnyAsync(t => t.SpeakingSessionId == sessionId && t.WordCount > 0, ct);
+
+        if (!hasRecording && !hasTranscript)
+        {
+            throw ApiException.Conflict("speaking_session_no_recording",
+                "There is no recorded role-play to submit for marking. Complete the role-play first.");
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        session.SubmittedAt = now;
+        session.UpdatedAt = now;
+
+        // Mirror to the legacy Attempt so existing marking queues see the
+        // submission timestamp even if /end ran before recordings landed.
+        if (!string.IsNullOrWhiteSpace(session.AttemptId))
+        {
+            var attempt = await db.Attempts.FirstOrDefaultAsync(a => a.Id == session.AttemptId, ct);
+            if (attempt is not null)
+            {
+                attempt.State = AttemptState.Submitted;
+                attempt.SubmittedAt ??= now;
+            }
+        }
+
+        await db.SaveChangesAsync(ct);
+        return await GetSessionForLearnerAsync(userId, sessionId, ct);
+    }
+
     public async Task<SpeakingSessionDetail> MarkConsentAsync(
         string userId,
         string sessionId,
@@ -293,6 +356,134 @@ public sealed class SpeakingSessionService(LearnerDbContext db)
 
         return await GetSessionForLearnerAsync(userId, sessionId, ct);
     }
+
+    // ─────────────────────────────────────────────────────────────────
+    // WS1 — server-authoritative clock & technical-issue reporting
+    // ─────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Computes the authoritative session clock entirely server-side from
+    /// persisted timestamps plus the card's prep/role-play windows. The
+    /// client never supplies "seconds remaining"; on reconnect it simply
+    /// re-reads this endpoint. Terminal states (finished/cancelled/expired)
+    /// report no deadline. When a timed stage's deadline has passed the
+    /// response carries <c>Expired=true</c> and <c>SecondsRemaining=0</c>,
+    /// but the persisted state is NOT mutated here (read-only): the strict
+    /// transition endpoints remain the only writers.
+    /// </summary>
+    public async Task<SpeakingSessionClock> GetClockAsync(
+        string userId,
+        string sessionId,
+        CancellationToken ct)
+    {
+        var session = await LoadOwnedSessionAsync(userId, sessionId, ct);
+        var card = await db.RolePlayCards.AsNoTracking()
+            .FirstOrDefaultAsync(x => x.Id == session.RolePlayCardId, ct)
+            ?? throw ApiException.NotFound("role_play_card_not_found",
+                "That role-play card does not exist.");
+
+        var now = DateTimeOffset.UtcNow;
+        // Strict-mock defaults are 180s prep + 300s role-play; the card is
+        // authoritative and the publish gate enforces those values for exam
+        // content, so we read straight off the card.
+        var prepSeconds = card.PrepTimeSeconds > 0 ? card.PrepTimeSeconds : 180;
+        var rolePlaySeconds = card.RolePlayTimeSeconds > 0 ? card.RolePlayTimeSeconds : 300;
+
+        string stage;
+        DateTimeOffset? stageStartedAt = null;
+        DateTimeOffset? stageEndsAt = null;
+        string[] canAdvanceTo;
+
+        switch (session.State)
+        {
+            case SpeakingSessionState.WarmUp:
+                stage = "warmup";
+                stageStartedAt = session.WarmupStartedAt;
+                canAdvanceTo = ["prep"]; // via /finish-warmup
+                break;
+            case SpeakingSessionState.Prep:
+                stage = "prep";
+                stageStartedAt = session.PrepStartedAt;
+                stageEndsAt = stageStartedAt?.AddSeconds(prepSeconds);
+                canAdvanceTo = ["active"]; // via /start-roleplay
+                break;
+            case SpeakingSessionState.Active:
+                stage = "active";
+                stageStartedAt = session.RolePlayStartedAt;
+                stageEndsAt = stageStartedAt?.AddSeconds(rolePlaySeconds);
+                canAdvanceTo = ["finished"]; // via /end
+                break;
+            case SpeakingSessionState.Finished:
+                stage = "finished";
+                stageStartedAt = session.RolePlayStartedAt;
+                stageEndsAt = session.EndedAt;
+                canAdvanceTo = [];
+                break;
+            case SpeakingSessionState.Cancelled:
+                stage = "cancelled";
+                canAdvanceTo = [];
+                break;
+            case SpeakingSessionState.Expired:
+                stage = "expired";
+                canAdvanceTo = [];
+                break;
+            default:
+                stage = SpeakingSessionStates.ToCode(session.State);
+                canAdvanceTo = [];
+                break;
+        }
+
+        int? secondsRemaining = null;
+        var expired = false;
+        if (stageEndsAt is { } ends && session.State is SpeakingSessionState.Prep or SpeakingSessionState.Active)
+        {
+            var remaining = (int)Math.Floor((ends - now).TotalSeconds);
+            secondsRemaining = Math.Max(0, remaining);
+            expired = remaining <= 0;
+        }
+
+        return new SpeakingSessionClock(
+            Stage: stage,
+            RoleplayIndex: session.MockSessionId is null ? 1 : ResolveRoleplayIndex(session),
+            ServerNow: now,
+            StageStartedAt: stageStartedAt,
+            StageEndsAt: stageEndsAt,
+            SecondsRemaining: secondsRemaining,
+            Expired: expired,
+            CanAdvanceTo: canAdvanceTo);
+    }
+
+    /// <summary>
+    /// Flags a technical issue on the session (§22.5). Never alters scoring
+    /// or the state machine; only records the flag + optional note for the
+    /// assessor console and the analytics technical-issue rate.
+    /// </summary>
+    public async Task<SpeakingSessionDetail> ReportTechnicalIssueAsync(
+        string userId,
+        string sessionId,
+        string? note,
+        CancellationToken ct)
+    {
+        var session = await LoadOwnedSessionAsync(userId, sessionId, ct, tracking: true);
+        var now = DateTimeOffset.UtcNow;
+        session.TechnicalIssueFlag = true;
+        var trimmed = note?.Trim();
+        if (!string.IsNullOrWhiteSpace(trimmed))
+        {
+            session.TechnicalIssueNote = trimmed.Length > 1000 ? trimmed[..1000] : trimmed;
+        }
+        session.UpdatedAt = now;
+        await db.SaveChangesAsync(ct);
+
+        return await GetSessionForLearnerAsync(userId, sessionId, ct);
+    }
+
+    /// <summary>
+    /// Resolves which half of a two-role-play mock is currently live from the
+    /// per-role-play timestamps. Defaults to 1 until RP2 prep/active begins.
+    /// </summary>
+    private static int ResolveRoleplayIndex(SpeakingSession session)
+        => session.Rp2PrepStartedAt is not null || session.Rp2StartedAt is not null ? 2 : 1;
 
     // ─────────────────────────────────────────────────────────────────
     // Helpers

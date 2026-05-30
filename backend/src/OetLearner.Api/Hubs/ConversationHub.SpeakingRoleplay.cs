@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.IO;
 using System.Security.Claims;
 using System.Text;
 using System.Text.Json;
@@ -6,6 +7,10 @@ using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services.Conversation;
+using OetLearner.Api.Services.Conversation.Asr;
+using OetLearner.Api.Services.Conversation.Tts;
+using OetLearner.Api.Services.Rulebook;
 using OetLearner.Api.Services.Seeding;
 using OetLearner.Api.Services.Speaking;
 
@@ -171,6 +176,301 @@ public partial class ConversationHub
             text = script.OpeningResponse,
             timestamp = DateTimeOffset.UtcNow,
         });
+    }
+
+    // ════════════════════════════════════════════════════════════════════
+    // WS2 — HEADLINE realtime AI role-player turn loop.
+    //
+    // The student talks to a realtime AI that listens (speech-to-text),
+    // interprets, and replies *in character* as the patient/relative per
+    // the hidden interlocutor card. This is the loop that turns the
+    // "seed an opening line" bridge above into a genuine back-and-forth
+    // conversation:
+    //
+    //   learner audio (or text) ──▶ STT (Conversation ASR, mock-fallback)
+    //                          ──▶ grounded in-character LLM reply
+    //                              (IConversationAiOrchestrator → gateway,
+    //                               mock-fallback when no API key)
+    //                          ──▶ TTS (Conversation TTS, mock-fallback)
+    //                          ──▶ persist both turns into the session
+    //                              transcript (SpeakingTranscript)
+    //                          ──▶ stream caption + patient utterance back.
+    //
+    // CANDIDATE-SAFETY INVARIANT: the hidden `InterlocutorScript` / role
+    // card never leaves the server. Only the AI's spoken reply text and a
+    // TTS audio URL are emitted to the learner.
+    // ════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Receives one learner turn as recorded audio (base64) for the active
+    /// role-play or warm-up, transcribes it, generates the AI patient's
+    /// in-character reply, synthesises speech, persists the exchange, and
+    /// streams the caption + patient utterance back to the caller.
+    /// </summary>
+    public Task SendSpeakingRoleplayTurn(string speakingSessionId, string audioBase64, string? mimeType)
+        => ProcessSpeakingTurnAsync(speakingSessionId, audioBase64, transcribedText: null, mimeType);
+
+    /// <summary>
+    /// Text-input variant of <see cref="SendSpeakingRoleplayTurn"/> for
+    /// keyboard accessibility and automated tests — bypasses STT and feeds
+    /// the supplied text straight into the in-character AI reply loop.
+    /// </summary>
+    public Task SendSpeakingRoleplayText(string speakingSessionId, string text)
+        => ProcessSpeakingTurnAsync(speakingSessionId, audioBase64: null, transcribedText: text, mimeType: null);
+
+    private async Task ProcessSpeakingTurnAsync(
+        string speakingSessionId,
+        string? audioBase64,
+        string? transcribedText,
+        string? mimeType)
+    {
+        var userId = Context.User?.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (string.IsNullOrWhiteSpace(userId))
+        {
+            await Clients.Caller.SendAsync("SpeakingRoleplayError", "UNAUTHORIZED",
+                "Please sign in again before speaking.");
+            return;
+        }
+        if (string.IsNullOrWhiteSpace(speakingSessionId))
+        {
+            await Clients.Caller.SendAsync("SpeakingRoleplayError", "SESSION_ID_REQUIRED",
+                "A Speaking session id is required.");
+            return;
+        }
+
+        var ct = Context.ConnectionAborted;
+        await using var scope = scopeFactory.CreateAsyncScope();
+        var sp = scope.ServiceProvider;
+        var db = sp.GetRequiredService<LearnerDbContext>();
+
+        var session = await db.SpeakingSessions
+            .FirstOrDefaultAsync(s => s.Id == speakingSessionId, ct);
+        if (session is null || !string.Equals(session.UserId, userId, StringComparison.Ordinal))
+        {
+            // Avoid leaking session ids that belong to other learners.
+            await Clients.Caller.SendAsync("SpeakingRoleplayError", "SESSION_NOT_FOUND",
+                "That Speaking session does not exist.");
+            return;
+        }
+        if (session.State != SpeakingSessionState.WarmUp
+            && session.State != SpeakingSessionState.Active)
+        {
+            await Clients.Caller.SendAsync("SpeakingRoleplayError", "INVALID_STATE",
+                $"You can only speak while the role-play is active (current: '{SpeakingSessionStates.ToCode(session.State)}').");
+            return;
+        }
+
+        var card = await db.RolePlayCards.AsNoTracking()
+            .FirstOrDefaultAsync(c => c.Id == session.RolePlayCardId, ct);
+        if (card is null)
+        {
+            await Clients.Caller.SendAsync("SpeakingRoleplayError", "CARD_NOT_FOUND",
+                "The role-play card linked to this session is missing.");
+            return;
+        }
+
+        var isWarmUp = session.State == SpeakingSessionState.WarmUp;
+        InterlocutorScript? script = null;
+        if (!isWarmUp)
+        {
+            script = await db.InterlocutorScripts.AsNoTracking()
+                .FirstOrDefaultAsync(s => s.RolePlayCardId == card.Id, ct);
+            if (script is null)
+            {
+                await Clients.Caller.SendAsync("SpeakingRoleplayError", "INTERLOCUTOR_SCRIPT_MISSING",
+                    "This role-play card has not been wired with an interlocutor script.");
+                return;
+            }
+        }
+
+        // ── 1. Resolve the learner utterance (STT or supplied text) ──
+        string learnerText;
+        var learnerConfidence = 1.0;
+        if (!string.IsNullOrWhiteSpace(transcribedText))
+        {
+            learnerText = transcribedText.Trim();
+        }
+        else if (!string.IsNullOrWhiteSpace(audioBase64))
+        {
+            byte[] audioBytes;
+            try { audioBytes = Convert.FromBase64String(audioBase64); }
+            catch (FormatException)
+            {
+                await Clients.Caller.SendAsync("SpeakingRoleplayError", "AUDIO_DECODE",
+                    "Audio payload was not valid base64.");
+                return;
+            }
+            if (audioBytes.Length == 0)
+            {
+                await Clients.Caller.SendAsync("SpeakingRoleplayError", "AUDIO_EMPTY",
+                    "No audio was received.");
+                return;
+            }
+            var audioMime = string.IsNullOrWhiteSpace(mimeType) ? "audio/webm" : mimeType;
+            try
+            {
+                var asrSelector = sp.GetRequiredService<IConversationAsrProviderSelector>();
+                var asrProvider = await asrSelector.SelectAsync(ct);
+                using var asrStream = new MemoryStream(audioBytes);
+                var asr = await asrProvider.TranscribeAsync(
+                    new ConversationAsrRequest(asrStream, audioMime, "en-GB", audioBytes.LongLength, EnableDiarization: false),
+                    ct);
+                learnerText = (asr.Text ?? string.Empty).Trim();
+                learnerConfidence = asr.Confidence;
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Speaking STT failed for session {SessionId}.", speakingSessionId);
+                await Clients.Caller.SendAsync("SpeakingRoleplayError", "STT_ERROR",
+                    "We could not transcribe your speech. Please try again.");
+                return;
+            }
+        }
+        else
+        {
+            await Clients.Caller.SendAsync("SpeakingRoleplayError", "TURN_EMPTY",
+                "Send either recorded audio or text.");
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(learnerText))
+        {
+            await Clients.Caller.SendAsync("SpeakingRoleplayError", "STT_EMPTY",
+                "We couldn't hear you clearly. Please try again.");
+            return;
+        }
+
+        // Echo the learner caption immediately so the transcript renders.
+        await Clients.Caller.SendAsync("LearnerCaption", new
+        {
+            speaker = "candidate",
+            text = learnerText,
+            confidence = learnerConfidence,
+            timestamp = DateTimeOffset.UtcNow,
+        }, ct);
+
+        // ── 2. Load + extend the running transcript ──
+        var transcriptRow = await db.SpeakingTranscripts
+            .Where(t => t.SpeakingSessionId == speakingSessionId && t.IsLatest)
+            .OrderByDescending(t => t.GeneratedAt)
+            .FirstOrDefaultAsync(ct);
+        var segments = ParseSpeakingSegments(transcriptRow?.SegmentsJson);
+
+        var startedAt = isWarmUp ? session.WarmupStartedAt : (session.RolePlayStartedAt ?? session.PrepStartedAt);
+        var nowMs = startedAt.HasValue
+            ? (long)Math.Max(0, (DateTimeOffset.UtcNow - startedAt.Value).TotalMilliseconds)
+            : 0L;
+        segments.Add(new SpeakingTurnSegment("candidate", nowMs, nowMs, learnerText, learnerConfidence));
+        var learnerTurnCount = segments.Count(s => string.Equals(s.Speaker, "candidate", StringComparison.Ordinal));
+
+        // ── 3. Ask the grounded AI to reply in character ──
+        var personaPrompt = isWarmUp
+            ? BuildWarmUpPersonaPrompt(card)
+            : BuildPatientPersonaPrompt(card, script!);
+        var scenarioJson = JsonSerializer.Serialize(new
+        {
+            mode = isWarmUp ? "warmup" : "roleplay",
+            persona = personaPrompt,
+            role = card.InterlocutorRole,
+            setting = card.Setting,
+            scenarioTitle = card.ScenarioTitle,
+        });
+        var transcriptJson = JsonSerializer.Serialize(segments.Select(s => new
+        {
+            role = string.Equals(s.Speaker, "candidate", StringComparison.Ordinal) ? "learner" : "ai",
+            text = s.Text,
+        }));
+
+        var elapsedSeconds = (int)(nowMs / 1000);
+        var rolePlaySeconds = card.RolePlayTimeSeconds > 0 ? card.RolePlayTimeSeconds : 300;
+        var remainingSeconds = Math.Max(0, rolePlaySeconds - elapsedSeconds);
+
+        ConversationAiReply reply;
+        try
+        {
+            var orchestrator = sp.GetRequiredService<IConversationAiOrchestrator>();
+            var aiCtx = new ConversationAiContext(
+                SessionId: speakingSessionId,
+                UserId: userId,
+                AuthAccountId: null,
+                TenantId: null,
+                Profession: ParseProfessionCode(card.ProfessionId),
+                TaskTypeCode: isWarmUp ? "speaking_warmup" : "speaking_roleplay",
+                ScenarioJson: scenarioJson,
+                TranscriptJson: transcriptJson,
+                TurnIndex: learnerTurnCount,
+                ElapsedSeconds: elapsedSeconds,
+                RemainingSeconds: remainingSeconds,
+                CandidateCountry: null);
+            reply = await orchestrator.GenerateReplyAsync(aiCtx, ct);
+        }
+        catch (PromptNotGroundedException)
+        {
+            await Clients.Caller.SendAsync("SpeakingRoleplayError", "UNGROUNDED",
+                "AI grounding failed. Please contact support.");
+            return;
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Speaking AI reply failed for session {SessionId}.", speakingSessionId);
+            await Clients.Caller.SendAsync("SpeakingRoleplayError", "AI_ERROR",
+                "The patient could not respond. Please try again.");
+            return;
+        }
+
+        var replyText = string.IsNullOrWhiteSpace(reply.Text)
+            ? "Sorry, could you say that again?"
+            : reply.Text.Trim();
+
+        // ── 4. Synthesise the reply + persist both turns ──
+        var replyMs = nowMs + 800;
+        segments.Add(new SpeakingTurnSegment(
+            isWarmUp ? "interlocutor" : "patient", replyMs, replyMs, replyText, 1.0));
+
+        string? replyAudioUrl = null;
+        try
+        {
+            var ttsSelector = sp.GetRequiredService<IConversationTtsProviderSelector>();
+            var tts = await ttsSelector.TrySelectAsync(ct);
+            if (tts is not null)
+            {
+                var ttsResult = await tts.SynthesizeAsync(
+                    new ConversationTtsRequest(replyText, string.Empty, "en-GB"), ct);
+                if (ttsResult.Audio.Length > 0)
+                {
+                    var audio = sp.GetRequiredService<IConversationAudioService>();
+                    var aref = await audio.WriteAsync(ttsResult.Audio, ttsResult.MimeType, ct);
+                    replyAudioUrl = aref.Url;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Speaking reply TTS failed for session {SessionId}.", speakingSessionId);
+        }
+
+        await PersistSpeakingSegmentsAsync(db, transcriptRow, speakingSessionId, segments, ct);
+
+        // ── 5. Stream the patient utterance back (hidden card stays server-side) ──
+        await Clients.Caller.SendAsync("PatientUtterance", new
+        {
+            speaker = isWarmUp ? "interlocutor" : "patient",
+            phase = isWarmUp ? "warmup" : "roleplay",
+            text = replyText,
+            audioUrl = replyAudioUrl,
+            emotionHint = reply.EmotionHint,
+            shouldEnd = reply.ShouldEnd,
+            timestamp = DateTimeOffset.UtcNow,
+        }, ct);
+
+        if (reply.ShouldEnd)
+        {
+            await Clients.Caller.SendAsync("SpeakingShouldEnd", new
+            {
+                reason = "ai_closed",
+                at = DateTimeOffset.UtcNow,
+            }, ct);
+        }
     }
 
     /// <summary>
@@ -457,5 +757,114 @@ public partial class ConversationHub
             });
         }
         return JsonSerializer.Serialize(blocks);
+    }
+
+    // ── WS2 turn-loop helpers ───────────────────────────────────────────
+
+    /// <summary>One transcript segment in the canonical
+    /// <c>{speaker, startMs, endMs, text, confidence, words[]}</c> shape the
+    /// Speaking analytics + assessment layers read back.</summary>
+    private sealed record SpeakingTurnSegment(
+        string Speaker, long StartMs, long EndMs, string Text, double Confidence);
+
+    /// <summary>Maps a free-form profession id (e.g. <c>"occupational-therapy"</c>)
+    /// to the <see cref="ExamProfession"/> enum, mirroring
+    /// <c>SpeakingAiAssessmentService.ParseProfession</c> so AI grounding is
+    /// consistent between the live loop and post-hoc assessment.</summary>
+    private static ExamProfession ParseProfessionCode(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw)) return ExamProfession.Medicine;
+        var normalised = raw
+            .Replace("-", "", StringComparison.Ordinal)
+            .Replace("_", "", StringComparison.Ordinal)
+            .Replace(" ", "", StringComparison.Ordinal);
+        return Enum.TryParse<ExamProfession>(normalised, ignoreCase: true, out var parsed)
+            ? parsed
+            : ExamProfession.Medicine;
+    }
+
+    /// <summary>Parses an existing <c>SpeakingTranscript.SegmentsJson</c>
+    /// array into the typed segment list, tolerating malformed / failure
+    /// envelopes by returning an empty list.</summary>
+    private static List<SpeakingTurnSegment> ParseSpeakingSegments(string? segmentsJson)
+    {
+        var list = new List<SpeakingTurnSegment>();
+        if (string.IsNullOrWhiteSpace(segmentsJson)) return list;
+        try
+        {
+            using var doc = JsonDocument.Parse(segmentsJson);
+            if (doc.RootElement.ValueKind != JsonValueKind.Array) return list;
+            foreach (var s in doc.RootElement.EnumerateArray())
+            {
+                if (s.ValueKind != JsonValueKind.Object) continue;
+                var speaker = s.TryGetProperty("speaker", out var sp) ? sp.GetString() ?? "candidate" : "candidate";
+                var startMs = s.TryGetProperty("startMs", out var st) && st.ValueKind == JsonValueKind.Number ? st.GetInt64() : 0L;
+                var endMs = s.TryGetProperty("endMs", out var en) && en.ValueKind == JsonValueKind.Number ? en.GetInt64() : startMs;
+                var text = s.TryGetProperty("text", out var tx) ? tx.GetString() ?? string.Empty : string.Empty;
+                var conf = s.TryGetProperty("confidence", out var cf) && cf.ValueKind == JsonValueKind.Number ? cf.GetDouble() : 1.0;
+                list.Add(new SpeakingTurnSegment(speaker, startMs, endMs, text, conf));
+            }
+        }
+        catch (JsonException)
+        {
+            // Malformed or failure-envelope JSON — start a fresh transcript.
+            list.Clear();
+        }
+        return list;
+    }
+
+    /// <summary>Upserts the running role-play transcript so the latest row
+    /// always holds the full ordered exchange. The AI assessment + analytics
+    /// layers consume this single latest <see cref="SpeakingTranscript"/>.</summary>
+    private static async Task PersistSpeakingSegmentsAsync(
+        LearnerDbContext db,
+        SpeakingTranscript? existing,
+        string speakingSessionId,
+        List<SpeakingTurnSegment> segments,
+        CancellationToken ct)
+    {
+        var serialised = JsonSerializer.Serialize(segments.Select(s => new
+        {
+            speaker = s.Speaker,
+            startMs = s.StartMs,
+            endMs = s.EndMs,
+            text = s.Text,
+            confidence = s.Confidence,
+            words = Array.Empty<string>(),
+        }));
+        var wordCount = segments.Sum(s => s.Text.Split(
+            (char[]?)null, StringSplitOptions.RemoveEmptyEntries).Length);
+        var meanConfidence = segments.Count > 0 ? segments.Average(s => s.Confidence) : 0.0;
+        var now = DateTimeOffset.UtcNow;
+
+        if (existing is not null && string.Equals(existing.Provider, "live-roleplay", StringComparison.Ordinal))
+        {
+            existing.SegmentsJson = serialised;
+            existing.WordCount = wordCount;
+            existing.MeanConfidence = meanConfidence;
+            existing.GeneratedAt = now;
+        }
+        else
+        {
+            // Demote any prior latest row from a different provider, then
+            // start the live-roleplay transcript row.
+            if (existing is not null)
+            {
+                existing.IsLatest = false;
+            }
+            db.SpeakingTranscripts.Add(new SpeakingTranscript
+            {
+                Id = Guid.NewGuid().ToString("n"),
+                SpeakingSessionId = speakingSessionId,
+                Provider = "live-roleplay",
+                Language = "en",
+                SegmentsJson = serialised,
+                IsLatest = true,
+                WordCount = wordCount,
+                MeanConfidence = meanConfidence,
+                GeneratedAt = now,
+            });
+        }
+        await db.SaveChangesAsync(ct);
     }
 }

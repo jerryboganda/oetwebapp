@@ -76,6 +76,12 @@ public static class SpeakingSessionEndpoints
             .Produces(StatusCodes.Status404NotFound)
             .Produces(StatusCodes.Status409Conflict);
 
+        learner.MapPost("/{id}/submit", SubmitForMarkingAsync)
+            .WithSummary("Submit the finished role-play for marking (WS4 two-recording gate, §14.2).")
+            .Produces<SpeakingSessionDetail>(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status409Conflict);
+
         learner.MapPost("/{id}/consent", ConsentAsync)
             .WithSummary("Stamp the session with the consent version the learner accepted.")
             .Produces<SpeakingSessionDetail>(StatusCodes.Status200OK)
@@ -96,6 +102,16 @@ public static class SpeakingSessionEndpoints
         learner.MapGet("/{id}/transcript", GetTranscriptAsync)
             .WithSummary("Get the latest transcript revision for the caller's own session.")
             .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status404NotFound);
+
+        learner.MapGet("/{id}/clock", GetClockAsync)
+            .WithSummary("Authoritative server-computed session clock (WS1, §1.2/§22.5).")
+            .Produces<SpeakingSessionClock>(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status404NotFound);
+
+        learner.MapPost("/{id}/technical-issue", ReportTechnicalIssueAsync)
+            .WithSummary("Flag a technical issue on the session (§22.5); never affects scoring.")
+            .Produces<SpeakingSessionDetail>(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status404NotFound);
 
         return app;
@@ -182,6 +198,20 @@ public static class SpeakingSessionEndpoints
     {
         var userId = ResolveUserId(http);
         var detail = await sessions.EndSessionAsync(userId, id, ct);
+        return Results.Ok(detail);
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    // POST /v1/speaking/sessions/{id}/submit
+    // ─────────────────────────────────────────────────────────────────
+    private static async Task<IResult> SubmitForMarkingAsync(
+        HttpContext http,
+        string id,
+        SpeakingSessionService sessions,
+        CancellationToken ct)
+    {
+        var userId = ResolveUserId(http);
+        var detail = await sessions.SubmitForMarkingAsync(userId, id, ct);
         return Results.Ok(detail);
     }
 
@@ -302,6 +332,35 @@ public static class SpeakingSessionEndpoints
             using var fallback = JsonDocument.Parse("[]");
             return fallback.RootElement.Clone();
         }
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    // GET /v1/speaking/sessions/{id}/clock
+    // ─────────────────────────────────────────────────────────────────
+    private static async Task<IResult> GetClockAsync(
+        HttpContext http,
+        string id,
+        SpeakingSessionService sessions,
+        CancellationToken ct)
+    {
+        var userId = ResolveUserId(http);
+        var clock = await sessions.GetClockAsync(userId, id, ct);
+        return Results.Ok(clock);
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    // POST /v1/speaking/sessions/{id}/technical-issue
+    // ─────────────────────────────────────────────────────────────────
+    private static async Task<IResult> ReportTechnicalIssueAsync(
+        HttpContext http,
+        string id,
+        [FromBody] SpeakingTechnicalIssueRequest? body,
+        SpeakingSessionService sessions,
+        CancellationToken ct)
+    {
+        var userId = ResolveUserId(http);
+        var detail = await sessions.ReportTechnicalIssueAsync(userId, id, body?.Note, ct);
+        return Results.Ok(detail);
     }
 
     private static string ResolveUserId(HttpContext http)

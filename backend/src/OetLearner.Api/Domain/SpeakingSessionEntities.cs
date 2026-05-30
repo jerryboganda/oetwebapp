@@ -153,6 +153,42 @@ public class SpeakingSession
     [MaxLength(1024)]
     public string? RecommendedDrillIdsJson { get; set; }
 
+    // ─────────────────────────────────────────────────────────────────
+    // WS1 — server-authoritative clock & two-role-play mock pairing
+    // (Developer Implementation Notes §1.2, §13.3, §22.5).
+    //
+    // The single-role-play timestamps above (PrepStartedAt /
+    // RolePlayStartedAt / EndedAt) remain the authoritative source for a
+    // standalone session. The per-role-play timestamps below let a
+    // two-role-play mock record both halves on the SAME session row for
+    // post-hoc audit of strict-mock timing, without forking the schema.
+    // They are null for non-mock sessions and for the half that has not
+    // started yet.
+    // ─────────────────────────────────────────────────────────────────
+
+    public DateTimeOffset? Rp1PrepStartedAt { get; set; }
+    public DateTimeOffset? Rp1StartedAt { get; set; }
+    public DateTimeOffset? Rp1EndedAt { get; set; }
+
+    public DateTimeOffset? Rp2PrepStartedAt { get; set; }
+    public DateTimeOffset? Rp2StartedAt { get; set; }
+    public DateTimeOffset? Rp2EndedAt { get; set; }
+
+    /// <summary>When the learner submitted both recordings for marking
+    /// (two-recording gate, §14.2). Distinct from <see cref="EndedAt"/>,
+    /// which marks the end of the active role-play window.</summary>
+    public DateTimeOffset? SubmittedAt { get; set; }
+
+    /// <summary>Set when the interlocutor/learner reports a technical
+    /// issue during the session (§22.5). Surfaces in the assessor console
+    /// and analytics technical-issue rate; never affects scoring.</summary>
+    public bool TechnicalIssueFlag { get; set; }
+
+    /// <summary>Free-text note describing the reported technical issue.
+    /// Null unless <see cref="TechnicalIssueFlag"/> is set.</summary>
+    [MaxLength(1000)]
+    public string? TechnicalIssueNote { get; set; }
+
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
 }
