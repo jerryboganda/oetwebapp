@@ -177,7 +177,12 @@ public record AdminRolePlayCardAiDraftRequest(
     string? Setting,
     string? CandidateRole,
     string? InterlocutorRole,
-    string? CommunicationGoal);
+    string? CommunicationGoal,
+    // WS9 (SPK-007) — OCR/text extracted from an imported source PDF. When
+    // present, the grounded prompt receives it as reference material so the
+    // draft is structured from the admin's own source paper rather than fully
+    // synthesised. Never copied verbatim (originality guard still applies).
+    string? SourceMaterial = null);
 
 /// <summary>Response from a single-shot AI draft. Contains the persisted
 /// draft card id so the admin UI can deep-link to the editor, plus the
@@ -257,4 +262,39 @@ public record AdminSpeakingMockSetAutoPairResponse(
     string RolePlay1Title,
     string RolePlay2ContentId,
     string RolePlay2Title,
+    string? Warning);
+
+// ── WS9 (SPK-007) — scanned/text PDF import → structured draft ──────────────
+
+/// <summary>One field-presence check in the import builder-validation report.
+/// <c>Required</c> checks that fail are publish blockers; advisory checks are
+/// surfaced as warnings only.</summary>
+public record SpeakingImportFieldCheck(
+    string Field,
+    bool Detected,
+    bool Required,
+    string? Note);
+
+/// <summary>Builder-validation report produced after extracting text from an
+/// imported source PDF. <c>IsPublishable</c> is true only when every required
+/// field was detected in the extracted text. Mirrors the publish-gate intent
+/// so an admin sees the same blockers before a draft is even created.</summary>
+public record SpeakingImportValidationReport(
+    bool IsPublishable,
+    IReadOnlyList<SpeakingImportFieldCheck> Checks,
+    IReadOnlyList<string> Blockers);
+
+/// <summary>Result of importing a source PDF. The source asset is always
+/// persisted (provenance) even when extraction yields no text (scanned PDF
+/// with no OCR provider configured) so the admin can attach it for manual
+/// structuring. <c>DraftCardId</c> is set only when <c>autoDraft</c> was
+/// requested and extraction produced usable text.</summary>
+public record SpeakingContentImportResult(
+    string SourceAssetKey,
+    long SourceBytes,
+    int ExtractedChars,
+    bool LikelyScanned,
+    SpeakingImportValidationReport Validation,
+    string? DraftCardId,
+    AdminRolePlayCardDetail? Draft,
     string? Warning);

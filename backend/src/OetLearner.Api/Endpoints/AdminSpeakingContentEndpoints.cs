@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using OetLearner.Api.Contracts;
 using OetLearner.Api.Services;
 using OetLearner.Api.Services.Rulebook;
+using OetLearner.Api.Services.Speaking;
 
 namespace OetLearner.Api.Endpoints;
 
@@ -109,6 +110,52 @@ public static class AdminSpeakingContentEndpoints
             CancellationToken ct) =>
             Results.Ok(await service.AiDraftRolePlayCardAsync(
                 gateway, AdminId(http), AdminName(http), request, ct)))
+            .WithAdminWrite("AdminContentWrite");
+
+        // ── WS9 (SPK-007) — scanned/text PDF import → structured draft ─────
+        //
+        // Admin uploads a source paper (scanned or text PDF). The source is
+        // persisted via IFileStorage (provenance) and text is extracted; a
+        // builder-validation report mirrors the publish gate. When
+        // `autoDraft=true` and usable text was extracted, the grounded
+        // AI-draft path produces a reviewable Draft card. Mock-safe: a scanned
+        // PDF with no OCR provider simply returns the validation report + the
+        // saved source asset for manual structuring.
+        group.MapPost("/import", async (
+            IFormFile file,
+            [FromForm] string professionId,
+            [FromForm] string? topic,
+            [FromForm] bool? autoDraft,
+            ISpeakingContentImportService importer,
+            IAiGatewayService gateway,
+            HttpContext http,
+            CancellationToken ct) =>
+        {
+            if (file is null || file.Length <= 0)
+            {
+                return Results.BadRequest(new { code = "speaking_import_file_required" });
+            }
+            // Bound the upload (PDFs only; 25 MB ceiling matches admin imports).
+            if (file.Length > 25 * 1024 * 1024)
+            {
+                return Results.BadRequest(new { code = "speaking_import_file_too_large" });
+            }
+            await using var stream = file.OpenReadStream();
+            var result = await importer.ImportAsync(
+                gateway,
+                AdminId(http),
+                AdminName(http),
+                professionId,
+                topic,
+                autoDraft ?? false,
+                file.FileName,
+                file.ContentType ?? "application/pdf",
+                stream,
+                ct);
+            return Results.Ok(result);
+        })
+            .DisableAntiforgery()
+            .RequireRateLimiting("PerUserWrite")
             .WithAdminWrite("AdminContentWrite");
 
         // ── Hidden interlocutor script ────────────────────────────────────

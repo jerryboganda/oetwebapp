@@ -716,7 +716,7 @@ public partial class AdminService
             CardType = "role_play",
         });
 
-        var userInput = BuildCardDraftUserMessage(profession, topic, emotion, difficulty, candidateRole, interlocutorRole, communicationGoal, setting);
+        var userInput = BuildCardDraftUserMessage(profession, topic, emotion, difficulty, candidateRole, interlocutorRole, communicationGoal, setting, request.SourceMaterial);
 
         AiGatewayResult? aiResult = null;
         ParsedCardDraft? parsed = null;
@@ -1045,7 +1045,8 @@ public partial class AdminService
         string candidateRole,
         string interlocutorRole,
         string communicationGoal,
-        string? setting)
+        string? setting,
+        string? sourceMaterial = null)
     {
         var sb = new StringBuilder();
         sb.AppendLine("You are drafting an original OET Speaking role-play card. Produce a strict JSON object — no markdown, no commentary. The shape MUST be:");
@@ -1091,6 +1092,20 @@ public partial class AdminService
         sb.AppendLine("- Use the same OET Speaking style: 4-5 short task bullets that name the candidate's responsibilities.");
         sb.AppendLine("- Criteria focus codes MUST be drawn from: intelligibility, fluency, appropriateness, grammarExpression, relationshipBuilding, patientPerspective, structure, informationGathering, informationGiving.");
         sb.AppendLine("- The interlocutor script MUST stay hidden from the candidate at runtime.");
+        if (!string.IsNullOrWhiteSpace(sourceMaterial))
+        {
+            // WS9 (SPK-007) — ground the draft in OCR/text extracted from an
+            // imported source PDF. Truncate to keep the prompt bounded; the
+            // model uses this as reference, NOT a verbatim source (the
+            // originality guard still rejects near-duplicates of published cards).
+            var trimmed = sourceMaterial.Trim();
+            if (trimmed.Length > 6000) trimmed = trimmed[..6000];
+            sb.AppendLine();
+            sb.AppendLine("SOURCE MATERIAL (extracted from the admin's own imported paper — use as reference to structure the card; do NOT reproduce verbatim):");
+            sb.AppendLine("\"\"\"");
+            sb.AppendLine(trimmed);
+            sb.AppendLine("\"\"\"");
+        }
         sb.AppendLine();
         sb.AppendLine("Return ONLY the JSON object.");
         return sb.ToString();
