@@ -82,10 +82,18 @@ const PROFESSION_OPTIONS = WRITING_PROFESSIONS.map((p) => ({
   value: p,
   label: WRITING_PROFESSION_LABELS[p],
 }));
-const LETTER_TYPE_OPTIONS = WRITING_LETTER_TYPES.map((lt) => ({
-  value: lt,
-  label: WRITING_LETTER_TYPE_LABELS[lt],
-}));
+
+/**
+ * Letter types available for a given profession. Veterinary disallows the
+ * non-medical referral (LT-NM) per the OET content rules, so we filter it out
+ * of the dropdown when the profession is veterinary.
+ */
+function letterTypeOptionsFor(profession: WritingProfession) {
+  const allowed = WRITING_LETTER_TYPES.filter(
+    (lt) => !(profession === 'veterinary' && lt === 'LT-NM'),
+  );
+  return allowed.map((lt) => ({ value: lt, label: WRITING_LETTER_TYPE_LABELS[lt] }));
+}
 const SIMULATION_OPTIONS = WRITING_SIMULATION_MODES.map((m) => ({
   value: m,
   label: WRITING_SIMULATION_MODE_LABELS[m],
@@ -167,6 +175,20 @@ export function WritingTaskBuilder({ taskId, mode }: WritingTaskBuilderProps) {
     setForm((prev) => (prev ? { ...prev, ...p } : prev));
     setDirty(true);
   }, []);
+
+  // Letter-type options depend on the chosen profession (veterinary excludes
+  // the non-medical referral). If the current selection becomes invalid after a
+  // profession change, fall back to the first allowed type.
+  const letterTypeOptions = useMemo(
+    () => letterTypeOptionsFor(form?.profession ?? 'medicine'),
+    [form?.profession],
+  );
+  useEffect(() => {
+    if (!form) return;
+    if (!letterTypeOptions.some((o) => o.value === form.letterType)) {
+      patch({ letterType: letterTypeOptions[0]?.value as WritingLetterType });
+    }
+  }, [form, letterTypeOptions, patch]);
 
   /**
    * Persist the form. Creates on first save in "new" mode (then redirects into
@@ -594,7 +616,7 @@ export function WritingTaskBuilder({ taskId, mode }: WritingTaskBuilderProps) {
               onChange={(e) =>
                 patch({ letterType: e.target.value as WritingLetterType })
               }
-              options={LETTER_TYPE_OPTIONS}
+              options={letterTypeOptions}
             />
           </div>
 

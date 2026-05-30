@@ -46,6 +46,7 @@ import {
   WRITING_LETTER_TYPES,
   WRITING_LETTER_TYPE_LABELS,
   WRITING_SIMULATION_MODE_LABELS,
+  WritingTaskImportDialog,
 } from '@/components/domain/writing/admin';
 
 const STATUS_TABS = ['all', 'draft', 'published', 'archived'] as const;
@@ -86,6 +87,7 @@ export default function WritingTasksPage() {
   const [professionFilter, setProfessionFilter] = useState<WritingProfession | 'all'>('all');
   const [letterTypeFilter, setLetterTypeFilter] = useState<WritingLetterType | 'all'>('all');
   const [statusTab, setStatusTab] = useState<StatusTab>('all');
+  const [importOpen, setImportOpen] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -198,9 +200,14 @@ export default function WritingTasksPage() {
   }, []);
 
   const headerActions = canWrite ? (
-    <Button size="sm" onClick={() => router.push('/admin/writing/tasks/new')}>
-      + New task
-    </Button>
+    <>
+      <Button variant="secondary" size="sm" onClick={() => setImportOpen(true)}>
+        Import JSON
+      </Button>
+      <Button size="sm" onClick={() => router.push('/admin/writing/tasks/new')}>
+        + New task
+      </Button>
+    </>
   ) : undefined;
 
   return (
@@ -422,6 +429,13 @@ export default function WritingTasksPage() {
           </div>
         )}
       </SettingsSection>
+
+      <WritingTaskImportDialog
+        open={importOpen}
+        onClose={() => setImportOpen(false)}
+        onError={(message) => setToast({ message, variant: 'error' })}
+        onSuccess={(message) => setToast({ message, variant: 'success' })}
+      />
 
       {toast && (
         <Toast
