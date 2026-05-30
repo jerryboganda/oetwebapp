@@ -1058,3 +1058,28 @@ From OET_BILLING_SUBSCRIPTION_PLAN.md §30:
 ?? tests/a11y/
 ?? tests/load/
 ````
+
+## OET Writing Module — Exam-Faithful Closure (Extend & Unify)
+
+Status: **CODE-COMPLETE & PUSHED to main** — 2026-05-31. Commits `9b2734d7` (wiring + migration) and `50c8e51c` (seeder, admin pages, tests).
+
+### Scope
+Closed the full OET Writing spec on top of the existing Writing V2 module (extend-and-unify, no parallel rebuild). `WritingScenario` is now the single authoritative authored task; a published writing `ContentPaper` projects into a learner-attemptable scenario via the publish bridge.
+
+### Work-streams
+- **Schema** (`AddWritingExamModuleClosure` migration): 5 new tables — `WritingContentChecklistItems`, `WritingAttemptEvents`, `WritingFeedbackAnnotations`, `WritingModerations`, `WritingResultVisibilityConfigs` — plus enriched `WritingScenario` authored fields (InternalCode, recipient JSON, word guide, fixed instructions, simulation/marking modes, model-answer exemplar link, provenance/integrity, ContentPaper bridge) and `WritingTutorReview` double-marking columns.
+- **Authoring** (`WritingTaskAuthoringService` + `WritingTaskAdminEndpoints`, `/v1/admin/writing/tasks/*`): create/update/validate/publish/archive/clone + JSON import/export (spec §18); publish gate requires recipient, model answer, ≥1 key checklist item; 12 professions unified backend↔frontend.
+- **Bridge** (`WritingTaskProjectionService`): writing ContentPaper publish → idempotent `WritingScenario` upsert (keyed on `SourceContentPaperId`).
+- **Attempt lifecycle** (`WritingAttemptEventService`, `POST /v1/writing/attempt-events`): forensic event trail (reading/writing/paste/focus-lost/timer/lock); paper|computer mode; submission lock.
+- **Marking** (`WritingMarkingEndpoints`, `/v1/writing/tutor/reviews/*`): persisted span annotations (offset-based), task-linked content-checklist verdicts, six-criteria rubric (Purpose 0–3; others 0–7; max 38), double-marking + variance + senior moderation, `WritingHeuristicPreAssessmentService` (deterministic offline baseline + optional LLM enrichment when `Writing:PreAssessmentLlmEnabled`).
+- **Results/visibility** (`WritingResultVisibilityService` + `WritingResultFeedbackService`): admin-gated learner feedback (annotated response, missing/irrelevant content, model answer after release, next steps), rewrite original-vs-rewrite comparison.
+- **Analytics** (`WritingAdminAnalyticsService` + `WritingExamAnalyticsAdminEndpoints`): criterion averages by profession/task-type, hardest tasks, common missing/irrelevant content, language errors, tutor consistency, AI-vs-tutor variance, turnaround, word-count distribution, abandonment, resubmission improvement.
+- **Frontend**: admin Writing Task Builder + import dialog + result-visibility settings; student paper-mode visual booklet simulation (lined answer booklet, reading-lock, paste-block, attempt events) + computer-mode PDF case-note viewer; tutor marking workspace (annotation layer + moderation panel); gated student feedback + rewrite compare. 12 professions in `lib/writing/types.ts`; contract in `lib/writing/exam-api.ts`.
+- **Seed**: `WritingV2ContentSeeder` adds structured demo tasks (MED-WR-S01, NUR-WR-S01, PHA-WR-S01) with case-note sections, recipient, model answer, key/irrelevant checklists.
+
+### Validation
+- Backend `dotnet build` (API + test projects): **succeeded** (net10.0).
+- Frontend `npx tsc --noEmit`: **0 errors**; `npm run lint`: **0 errors**.
+- EF migration generates cleanly; snapshot updated.
+- Known host limit (per TIER-3): Windows Docker Desktop WSL2 unstable under heavy concurrent .NET builds — full Docker-localhost walkthrough deferred to a clean run, mirroring the Listening/Reading gap-closure approach.
+- xUnit `WritingExamClosureTests` is currently a compile-level scaffold; the full 7-scenario matrix (authoring validation, import/export, clone, attempt events, heuristic, moderation, visibility) is the one remaining follow-up.
