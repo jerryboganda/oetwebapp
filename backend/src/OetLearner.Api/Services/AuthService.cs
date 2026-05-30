@@ -1319,7 +1319,7 @@ public sealed class AuthService(
         return value.Trim();
     }
 
-    private Task<AuthenticatedSessionSubject> BuildSubjectAsync(
+    private async Task<AuthenticatedSessionSubject> BuildSubjectAsync(
         ApplicationUserAccount account,
         string userId,
         string displayName,
@@ -1337,7 +1337,23 @@ public sealed class AuthService(
             requiresMfa = false;
         }
 
-        return Task.FromResult(new AuthenticatedSessionSubject(
+        // Resolve subscription tier so that the vocabulary premium gate works
+        // correctly without a per-request DB round-trip. The claim is stamped
+        // into the JWT at session creation time; it reflects the state at login.
+        string? subscriptionTier = null;
+        if (account.Role == "learner")
+        {
+            var now = timeProvider.GetUtcNow();
+            var hasActiveSub = await db.Subscriptions
+                .AsNoTracking()
+                .AnyAsync(s => s.UserId == userId
+                    && (s.Status == Domain.SubscriptionStatus.Active || s.Status == Domain.SubscriptionStatus.Trial)
+                    && (s.ExpiresAt == null || s.ExpiresAt > now),
+                    cancellationToken);
+            if (hasActiveSub) subscriptionTier = "paid";
+        }
+
+        return new AuthenticatedSessionSubject(
             userId,
             account.Id,
             account.Email,
@@ -1351,7 +1367,8 @@ public sealed class AuthService(
             account.AuthenticatorEnabledAt,
             AdminPermissions: adminPermissions,
             ActiveProfessionId: activeProfessionId,
-            ActiveProfessionLabel: activeProfessionLabel));
+            ActiveProfessionLabel: activeProfessionLabel,
+            SubscriptionTier: subscriptionTier);
     }
 
     private static CurrentUserResponse BuildCurrentUserResponse(AuthenticatedSessionSubject subject)

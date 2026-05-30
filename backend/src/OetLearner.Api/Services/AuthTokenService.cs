@@ -23,7 +23,8 @@ public sealed record AuthenticatedSessionSubject(
     DateTimeOffset? AuthenticatorEnabledAt,
     string[]? AdminPermissions = null,
     string? ActiveProfessionId = null,
-    string? ActiveProfessionLabel = null);
+    string? ActiveProfessionLabel = null,
+    string? SubscriptionTier = null);
 
 public sealed record IssuedAuthSession(
     string AccessToken,
@@ -83,6 +84,11 @@ public sealed class AuthTokenService(IOptions<AuthTokenOptions> authTokenOptions
         if (subject.AdminPermissions is { Length: > 0 })
         {
             claims.Add(new Claim(AdminPermissionsClaimType, string.Join(",", subject.AdminPermissions)));
+        }
+
+        if (!string.IsNullOrEmpty(subject.SubscriptionTier))
+        {
+            claims.Add(new Claim("subscription_tier", subject.SubscriptionTier));
         }
 
         if (sessionId is not null)
