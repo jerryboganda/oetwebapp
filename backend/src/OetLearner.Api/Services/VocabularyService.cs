@@ -30,7 +30,8 @@ public class VocabularyService(
         int page,
         int pageSize,
         CancellationToken ct,
-        string? recallSet = null)
+        string? recallSet = null,
+        bool isPremium = true)
     {
         examTypeCode = ExamCodes.NormalizeOrNull(examTypeCode);
         var query = db.VocabularyTerms.Where(t => t.Status == "active");
@@ -58,7 +59,10 @@ public class VocabularyService(
         var items = await query.OrderBy(t => t.Term)
             .Skip((page - 1) * pageSize).Take(pageSize).ToListAsync(ct);
 
-        var mapped = items.Select(Map).ToList();
+        // Free learners only get full content for curated free-preview terms.
+        // All other terms are returned locked (content redacted) so the UI can
+        // render a blurred placeholder + subscribe prompt without leaking data.
+        var mapped = items.Select(t => Map(t, isLocked: !isPremium && !t.IsFreePreview)).ToList();
         return new VocabularyTermsPageResponse(total, page, pageSize, mapped, mapped);
     }
 
@@ -139,11 +143,11 @@ public class VocabularyService(
         return new RecallSetsListResponse(resolvedExam, profession, sets.ToList());
     }
 
-    public async Task<VocabularyTermResponse> GetTermAsync(string termId, CancellationToken ct)
+    public async Task<VocabularyTermResponse> GetTermAsync(string termId, CancellationToken ct, bool isPremium = true)
     {
         var term = await db.VocabularyTerms.FindAsync([termId], ct)
             ?? throw ApiException.NotFound("TERM_NOT_FOUND", "Vocabulary term not found.");
-        return Map(term);
+        return Map(term, isLocked: !isPremium && !term.IsFreePreview);
     }
 
     public async Task<VocabularyLookupResult> LookupAsync(string query, string? examTypeCode, CancellationToken ct)
@@ -240,6 +244,14 @@ public class VocabularyService(
     {
         var term = await db.VocabularyTerms.FindAsync([termId], ct)
             ?? throw ApiException.NotFound("TERM_NOT_FOUND", "Term not found.");
+
+        // Free learners may only add curated free-preview terms. Locked terms are
+        // gated until they subscribe.
+        if (!isPremium && !term.IsFreePreview)
+        {
+            throw ApiException.PaymentRequired("RECALL_PREVIEW_LOCKED",
+                "Subscribe to unlock the full Recall Vocabulary Bank.");
+        }
 
         var existing = await db.LearnerVocabularies.FirstOrDefaultAsync(
             lv => lv.UserId == userId && lv.TermId == termId, ct);
@@ -776,29 +788,67 @@ public class VocabularyService(
         }
     }
 
-    private static VocabularyTermResponse Map(VocabularyTerm t) => new(
-        Id: t.Id,
-        Term: t.Term,
-        Definition: t.Definition,
-        ExampleSentence: t.ExampleSentence,
-        ContextNotes: t.ContextNotes,
-        ExamTypeCode: t.ExamTypeCode,
-        ProfessionId: t.ProfessionId,
-        Category: t.Category,
-        IpaPronunciation: t.IpaPronunciation,
-        AmericanSpelling: t.AmericanSpelling,
-        AudioUrl: IsInternalAudioReference(t.AudioUrl) ? null : t.AudioUrl,
-        AudioSlowUrl: IsInternalAudioReference(t.AudioSlowUrl) ? null : t.AudioSlowUrl,
-        AudioSentenceUrl: IsInternalAudioReference(t.AudioSentenceUrl) ? null : t.AudioSentenceUrl,
-        AudioMediaAssetId: null,
-        ImageUrl: t.ImageUrl,
-        Synonyms: ParseStringArray(t.SynonymsJson).ToArray(),
-        Collocations: ParseStringArray(t.CollocationsJson).ToArray(),
-        RelatedTerms: ParseStringArray(t.RelatedTermsJson).ToArray(),
-        SourceProvenance: t.SourceProvenance,
-        Status: t.Status,
-        RecallSetCodes: ParseStringArray(t.RecallSetCodesJson).ToArray(),
-        ExamFrequencyCount: t.ExamFrequencyCount);
+    private static VocabularyTermResponse Map(VocabularyTerm t, bool isLocked = false)
+    {
+        if (isLocked)
+        {
+            // Redacted projection for free learners on non-preview terms. Only
+            // non-sensitive scaffolding is returned so the UI can render a
+            // blurred placeholder + subscribe prompt. No definition, example,
+            // audio, IPA, synonyms or provenance ever leaves the server.
+            return new VocabularyTermResponse(
+                Id: t.Id,
+                Term: t.Term,
+                Definition: null,
+                ExampleSentence: string.Empty,
+                ContextNotes: null,
+                ExamTypeCode: t.ExamTypeCode,
+                ProfessionId: t.ProfessionId,
+                Category: t.Category,
+                IpaPronunciation: null,
+                AmericanSpelling: null,
+                AudioUrl: null,
+                AudioSlowUrl: null,
+                AudioSentenceUrl: null,
+                AudioMediaAssetId: null,
+                ImageUrl: null,
+                Synonyms: Array.Empty<string>(),
+                Collocations: Array.Empty<string>(),
+                RelatedTerms: Array.Empty<string>(),
+                SourceProvenance: null,
+                Status: t.Status,
+                RecallSetCodes: ParseStringArray(t.RecallSetCodesJson).ToArray(),
+                ExamFrequencyCount: t.ExamFrequencyCount,
+                IsFreePreview: false,
+                IsLocked: true);
+        }
+
+        return new(
+            Id: t.Id,
+            Term: t.Term,
+            Definition: t.Definition,
+            ExampleSentence: t.ExampleSentence,
+            ContextNotes: t.ContextNotes,
+            ExamTypeCode: t.ExamTypeCode,
+            ProfessionId: t.ProfessionId,
+            Category: t.Category,
+            IpaPronunciation: t.IpaPronunciation,
+            AmericanSpelling: t.AmericanSpelling,
+            AudioUrl: IsInternalAudioReference(t.AudioUrl) ? null : t.AudioUrl,
+            AudioSlowUrl: IsInternalAudioReference(t.AudioSlowUrl) ? null : t.AudioSlowUrl,
+            AudioSentenceUrl: IsInternalAudioReference(t.AudioSentenceUrl) ? null : t.AudioSentenceUrl,
+            AudioMediaAssetId: null,
+            ImageUrl: t.ImageUrl,
+            Synonyms: ParseStringArray(t.SynonymsJson).ToArray(),
+            Collocations: ParseStringArray(t.CollocationsJson).ToArray(),
+            RelatedTerms: ParseStringArray(t.RelatedTermsJson).ToArray(),
+            SourceProvenance: t.SourceProvenance,
+            Status: t.Status,
+            RecallSetCodes: ParseStringArray(t.RecallSetCodesJson).ToArray(),
+            ExamFrequencyCount: t.ExamFrequencyCount,
+            IsFreePreview: t.IsFreePreview,
+            IsLocked: false);
+    }
 
     private static bool IsInternalAudioReference(string? audioUrl)
         => !string.IsNullOrWhiteSpace(audioUrl)

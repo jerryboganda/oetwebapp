@@ -31,6 +31,18 @@ export interface VocabularyTerm {
    * Higher count = higher exam importance.
    */
   examFrequencyCount?: number;
+  /**
+   * Admin-curated flag marking this term as part of the free preview a
+   * non-subscribed learner may access in the Recall Vocabulary Bank.
+   */
+  isFreePreview?: boolean;
+  /**
+   * Backend-authoritative paywall flag. When `true` the server has redacted
+   * the term's content (definition, example, audio, IPA, synonyms, …) for a
+   * non-subscribed learner — the UI must render a blurred/locked placeholder
+   * and prompt the learner to subscribe rather than display partial data.
+   */
+  isLocked?: boolean;
 }
 
 export interface VocabularyTermSummary {

@@ -220,6 +220,54 @@ public sealed class WritingDualAssessmentService(LearnerDbContext db)
             .Where(s => !string.IsNullOrWhiteSpace(s))
             .ToList();
     }
+
+    /// <summary>
+    /// Parse a tutor score-override JSON blob (as persisted on
+    /// <c>WritingTutorReview.ScoreOverrideJson</c>) into a canonical
+    /// <c>c1</c>..<c>c6</c> → score map. Tolerates short (<c>c1</c>..<c>c6</c>),
+    /// long (<c>c1Purpose</c>..<c>c6Language</c>) and criterion-name
+    /// (<c>purpose</c>..<c>language</c>) key forms, and either a numeric value or
+    /// an object carrying a <c>score</c> property. Returns an empty map for
+    /// null/blank/malformed input or when no recognised criterion is present.
+    /// </summary>
+    public static Dictionary<string, int> ParseOverride(string? json)
+    {
+        var result = new Dictionary<string, int>(StringComparer.Ordinal);
+        if (string.IsNullOrWhiteSpace(json)) return result;
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            if (doc.RootElement.ValueKind != JsonValueKind.Object) return result;
+            foreach (var prop in doc.RootElement.EnumerateObject())
+            {
+                var canonical = CanonicalCriterionKey(prop.Name);
+                if (canonical is null) continue;
+                int? score = prop.Value.ValueKind switch
+                {
+                    JsonValueKind.Number when prop.Value.TryGetInt32(out var n) => n,
+                    JsonValueKind.Object => TryReadInt(prop.Value, "score"),
+                    _ => null,
+                };
+                if (score.HasValue) result[canonical] = score.Value;
+            }
+        }
+        catch (JsonException) { /* malformed — return what parsed so far */ }
+        return result;
+    }
+
+    /// <summary>Sum of the canonical c1..c6 override scores (0 when none present).</summary>
+    public static int SumOverride(string? json) => ParseOverride(json).Values.Sum();
+
+    private static string? CanonicalCriterionKey(string key) => key.Trim().ToLowerInvariant() switch
+    {
+        "c1" or "c1purpose" or "purpose" => "c1",
+        "c2" or "c2content" or "content" => "c2",
+        "c3" or "c3conciseness" or "conciseness" => "c3",
+        "c4" or "c4genre" or "genre" => "c4",
+        "c5" or "c5organisation" or "c5organization" or "organisation" or "organization" => "c5",
+        "c6" or "c6language" or "language" => "c6",
+        _ => null,
+    };
 }
 
 public sealed record WritingDualAssessmentDto(

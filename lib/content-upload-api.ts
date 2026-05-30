@@ -204,6 +204,30 @@ export interface WritingAuthoringStructure {
   }>;
   criteriaFocus?: string[];
   authoringNotes?: string;
+  // OET exam closure additions (read by the ContentPaper→Scenario bridge and
+  // the enriched admin builder). All optional for backward compatibility.
+  internalCode?: string;
+  expectedAction?: string;
+  wordGuideMin?: number;
+  wordGuideMax?: number;
+  fixedInstructions?: string[];
+  simulationModes?: 'paper' | 'computer' | 'both';
+  markingMode?: 'tutor' | 'ai_assisted' | 'double';
+  retakePolicy?: { maxAttempts?: number; cooldownHours?: number };
+  keyContentChecklist?: Array<{
+    itemText?: string;
+    category?: string;
+    importance?: 'high' | 'medium' | 'low';
+    requiredStatus?: 'required' | 'optional' | 'irrelevant';
+    linkedCaseNoteSection?: string;
+    expectedRepresentation?: string;
+    commonError?: string;
+  }>;
+  irrelevantContentChecklist?: Array<{
+    itemText?: string;
+    category?: string;
+    commonError?: string;
+  }>;
 }
 
 export interface WritingStructureResponse {

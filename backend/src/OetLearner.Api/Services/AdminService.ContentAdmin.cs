@@ -160,6 +160,7 @@ public partial class AdminService
         }
 
         var total = await query.CountAsync(ct);
+        var freePreviewTotal = await db.VocabularyTerms.CountAsync(v => v.IsFreePreview, ct);
         var items = await ToOrderedListDescendingAsync(query, v => v.Id, ct, skip: (page - 1) * pageSize, take: pageSize);
 
         return new
@@ -167,6 +168,7 @@ public partial class AdminService
             total,
             page,
             pageSize,
+            freePreviewTotal,
             items = items.Select(v => new
             {
                 v.Id,
@@ -177,6 +179,7 @@ public partial class AdminService
                 v.ExampleSentence,
                 v.AmericanSpelling,
                 v.Status,
+                v.IsFreePreview,
                 hasAudio = v.AudioMediaAssetId != null || !string.IsNullOrWhiteSpace(v.AudioUrl),
             })
         };
@@ -212,6 +215,7 @@ public partial class AdminService
             v.SimilarSoundingJson,
             v.SourceProvenance,
             v.Status,
+            v.IsFreePreview,
             v.CreatedAt,
             v.UpdatedAt
         };
@@ -250,6 +254,7 @@ public partial class AdminService
             SimilarSoundingJson = JsonSupport.Serialize(request.SimilarSounding ?? Array.Empty<string>()),
             SourceProvenance = request.SourceProvenance,
             Status = string.IsNullOrWhiteSpace(request.Status) ? "draft" : request.Status,
+            IsFreePreview = request.IsFreePreview ?? false,
             CreatedAt = DateTimeOffset.UtcNow,
             UpdatedAt = DateTimeOffset.UtcNow,
         };
@@ -288,6 +293,7 @@ public partial class AdminService
         if (request.CommonMistakes is not null) entity.CommonMistakesJson = JsonSupport.Serialize(request.CommonMistakes);
         if (request.SimilarSounding is not null) entity.SimilarSoundingJson = JsonSupport.Serialize(request.SimilarSounding);
         if (request.SourceProvenance is not null) entity.SourceProvenance = request.SourceProvenance;
+        if (request.IsFreePreview is not null) entity.IsFreePreview = request.IsFreePreview.Value;
 
         if (request.Status is not null)
         {
@@ -611,6 +617,56 @@ public partial class AdminService
             await db.SaveChangesAsync(ct);
 
         return new { totalRequested = itemIds.Count, activated, skipped, failed = errors.Count, errors };
+    }
+
+    // ── Bulk free-preview toggle ────────────────────────────────────────
+
+    /// <summary>
+    /// Bulk set or clear the free-preview flag on the given vocabulary terms.
+    /// Free-preview terms are the only terms a non-subscribed learner can
+    /// access in the Recall Vocabulary Bank. Admin-curated — no automatic cap.
+    /// </summary>
+    public async Task<AdminVocabularyBulkPreviewResponse> SetVocabularyFreePreviewBulkAsync(
+        string adminId, string adminName, AdminVocabularyBulkPreviewRequest request, CancellationToken ct)
+    {
+        var errors = new List<string>();
+        var ids = (request.ItemIds ?? Array.Empty<string>())
+            .Select(id => id?.Trim() ?? string.Empty)
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (ids.Count > 5000)
+            throw ApiException.Validation("VOCABULARY_BULK_PREVIEW_LIMIT", "Bulk free-preview is limited to 5000 vocabulary items at a time.");
+
+        var updated = 0;
+        if (ids.Count > 0)
+        {
+            var entities = await db.VocabularyTerms.Where(t => ids.Contains(t.Id)).ToListAsync(ct);
+            var found = entities.Select(e => e.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            foreach (var missing in ids.Where(id => !found.Contains(id)))
+                errors.Add($"Item '{missing}' not found.");
+
+            foreach (var entity in entities)
+            {
+                if (entity.IsFreePreview == request.IsFreePreview) continue;
+                entity.IsFreePreview = request.IsFreePreview;
+                entity.UpdatedAt = DateTimeOffset.UtcNow;
+                updated++;
+            }
+
+            if (updated > 0)
+            {
+                await db.SaveChangesAsync(ct);
+                await LogAuditAsync(adminId, adminName,
+                    request.IsFreePreview ? "EnabledFreePreview" : "DisabledFreePreview",
+                    "VocabularyTerm", string.Join(",", found.Take(50)),
+                    $"Bulk free-preview={request.IsFreePreview} applied to {updated} term(s).", ct);
+            }
+        }
+
+        var freePreviewTotal = await db.VocabularyTerms.CountAsync(t => t.IsFreePreview, ct);
+        return new AdminVocabularyBulkPreviewResponse(ids.Count, updated, errors.Count, freePreviewTotal, errors);
     }
 
     // ── Bulk archive ────────────────────────────────────────────────────

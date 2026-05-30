@@ -26,7 +26,6 @@
   "writing.welcome.stages.practiceDescription": "Daily letters, coach hints, exemplar comparison, revisions.",
   "writing.welcome.stages.mastery": "Mastery",
   "writing.welcome.stages.masteryDescription": "Mocks, tutor reviews, and exam-day readiness.",
-
   "writing.profileSetup.profession.title": "Tell us who you are",
   "writing.profileSetup.profession.subtitle": "Your profession decides letter types we drill and scenarios we surface.",
   "writing.profileSetup.profession.fieldLabel": "Profession",
@@ -44,7 +43,6 @@
   "writing.profileSetup.confirm.cta": "Save and continue",
   "writing.profileSetup.actions.continue": "Continue",
   "writing.profileSetup.actions.back": "Back",
-
   "writing.diagnostic.briefing.title": "Diagnostic Assessment",
   "writing.diagnostic.briefing.subtitle": "A 50-minute baseline of your six writing criteria.",
   "writing.diagnostic.briefing.cta": "Begin Diagnostic",
@@ -77,7 +75,6 @@
   "writing.diagnostic.briefing.back": "Back to Writing home",
   "writing.diagnostic.briefing.error.profile": "Could not load your profile. Complete onboarding first.",
   "writing.diagnostic.briefing.error.start": "Could not start the diagnostic.",
-
   "writing.diagnostic.session.reading": "Reading window",
   "writing.diagnostic.session.writing": "Writing window",
   "writing.diagnostic.session.submit": "Submit diagnostic",
@@ -96,7 +93,6 @@
   "writing.diagnostic.session.error.load": "Could not load diagnostic session.",
   "writing.diagnostic.session.error.startWriting": "Could not start the writing window.",
   "writing.diagnostic.session.error.submit": "Submission failed.",
-
   "writing.diagnostic.results.title": "Your diagnostic result",
   "writing.diagnostic.results.startPathway": "Start my pathway",
   "writing.diagnostic.results.pageTitle": "Diagnostic Results",
@@ -120,7 +116,6 @@
   "writing.diagnostic.results.cta.heading": "Start your pathway",
   "writing.diagnostic.results.cta.subtitle": "Today's plan is ready — first item picks up from your weakest criterion.",
   "writing.diagnostic.results.error.load": "Could not load results.",
-
   "writing.skillTree.pageTitle": "Writing Skill Tree",
   "writing.skillTree.eyebrow": "Foundation skills",
   "writing.skillTree.title": "W1-W8 — the eight skills every OET letter rests on",
@@ -139,7 +134,6 @@
   "writing.skillTree.skillAria": "Skill {label}",
   "writing.skillTree.masteryAria": "{label} mastery: {value}%",
   "writing.skillTree.error.load": "Could not load the skill tree.",
-
   "writing.lessons.pageTitle": "Writing Lessons",
   "writing.lessons.loading": "Loading lessons…",
   "writing.lessons.eyebrow": "Foundation",
@@ -162,7 +156,6 @@
   "writing.lessons.list.review": "Review lesson",
   "writing.lessons.list.aria": "Lesson {title}",
   "writing.lessons.error.load": "Could not load lessons.",
-
   "writing.lessons.detail.openQuiz": "Mark as read & start quiz",
   "writing.lessons.detail.submitQuiz": "Submit quiz",
   "writing.lessons.detail.pageTitleFallback": "Writing Lesson",
@@ -194,7 +187,6 @@
   "writing.lessons.detail.nav.previous": "Previous",
   "writing.lessons.detail.nav.next": "Next",
   "writing.lessons.detail.nav.pathway": "Pathway",
-
   "writing.practice.library.pageTitle": "Practice Library",
   "writing.practice.library.title": "Browse the scenario library",
   "writing.practice.library.eyebrow": "Practice",
@@ -232,7 +224,6 @@
   "writing.practice.library.cta.practiceAria": "Practice scenario {title}",
   "writing.practice.library.cardAria": "Scenario: {title}",
   "writing.practice.library.error.load": "Could not load scenarios.",
-
   "writing.practice.session.pageTitle": "Practice Session",
   "writing.practice.session.controlsLabel": "Practice session controls",
   "writing.practice.session.eyebrow": "Practice",
@@ -250,7 +241,6 @@
   "writing.practice.session.helper.ready": "When you submit, the rubric, canon engine, and exemplar matcher run in parallel.",
   "writing.practice.session.error.load": "Could not load this scenario.",
   "writing.practice.session.error.submit": "Could not submit. Try again.",
-
   "writing.submissions.detail.pageTitle": "Writing Submission",
   "writing.submissions.detail.title": "Submission",
   "writing.submissions.detail.openResults": "Open results",
@@ -276,7 +266,6 @@
   "writing.submissions.detail.reviseThis": "Revise this letter",
   "writing.submissions.detail.letterHeading": "Your letter",
   "writing.submissions.detail.error.load": "Could not load submission.",
-
   "writing.submissions.grading.pageTitle": "Grading your letter",
   "writing.submissions.grading.title": "Sit tight while we grade your letter",
   "writing.submissions.grading.eyebrow": "Grading",
@@ -295,7 +284,6 @@
   "writing.submissions.grading.status.inProgress": "In progress",
   "writing.submissions.grading.viewDetails": "View submission details",
   "writing.submissions.grading.error.load": "Could not check submission status.",
-
   "writing.submissions.results.pageTitle": "Submission Results",
   "writing.submissions.results.title": "Submission results",
   "writing.submissions.results.eyebrow": "Result",
@@ -332,7 +320,6 @@
   "writing.submissions.results.actions.disputePrompt": "Why is this detection wrong? (10+ characters)",
   "writing.submissions.results.actions.disputeError": "Dispute failed.",
   "writing.submissions.results.error.load": "Could not load results.",
-
   "writing.submissions.revise.pageTitle": "Revise letter",
   "writing.submissions.revise.title": "Revise letter",
   "writing.submissions.revise.eyebrow": "Revision",
@@ -348,10 +335,8 @@
   "writing.submissions.revise.helper.ready": "Your revision will be graded separately and linked to the original.",
   "writing.submissions.revise.error.load": "Could not load original letter.",
   "writing.submissions.revise.error.submit": "Could not submit revision.",
-
   "writing.caseNoteDrills.title": "Case-note drills",
   "writing.caseNoteDrills.checkAnswers": "Check answers",
-
   "writing.canon.library.pageTitle": "Writing Canon",
   "writing.canon.library.eyebrow": "Style Canon",
   "writing.canon.library.hero.title": "Dr Ahmed's Writing rules in one place",
@@ -373,7 +358,6 @@
   "writing.canon.library.card.avoid": "Avoid",
   "writing.canon.library.card.practise": "Practise this rule",
   "writing.canon.library.error.load": "Could not load the Writing canon.",
-
   "writing.canon.detail.metadataTitle": "Rule metadata",
   "writing.canon.detail.correct": "Correct",
   "writing.canon.detail.incorrect": "Incorrect",
@@ -401,7 +385,6 @@
   "writing.canon.detail.history.line": "— line {line}: \"{snippet}\"",
   "writing.canon.detail.back": "Back to canon library",
   "writing.canon.detail.error.load": "Could not load this canon rule.",
-
   "writing.mistakes.library.pageTitle": "Common Mistakes Library",
   "writing.mistakes.library.title": "The 20 mistakes that cost the most marks",
   "writing.mistakes.library.eyebrow": "Library",
@@ -414,7 +397,6 @@
   "writing.mistakes.library.list.empty": "No mistakes match the filter.",
   "writing.mistakes.library.cta.mine": "See mistakes from your own letters",
   "writing.mistakes.library.error.load": "Could not load mistakes.",
-
   "writing.mistakes.mine.pageTitle": "Your Common Mistakes",
   "writing.mistakes.mine.title": "The mistakes showing up most in your letters",
   "writing.mistakes.mine.eyebrow": "Personalised",
@@ -429,7 +411,6 @@
   "writing.mistakes.mine.empty.cta": "Browse the practice library",
   "writing.mistakes.mine.all.heading": "Every mistake we've tracked",
   "writing.mistakes.mine.error.load": "Could not load your mistakes.",
-
   "writing.mocks.catalogue.pageTitle": "Writing Mocks",
   "writing.mocks.catalogue.title": "Mocks under strict exam conditions",
   "writing.mocks.catalogue.eyebrow": "Exam simulation",
@@ -447,7 +428,6 @@
   "writing.mocks.catalogue.readiness": "See readiness",
   "writing.mocks.catalogue.error.load": "Could not load mocks.",
   "writing.mocks.catalogue.error.start": "Could not start the mock.",
-
   "writing.mocks.session.pageTitle": "Writing Mock",
   "writing.mocks.session.controlsLabel": "Mock session controls",
   "writing.mocks.session.eyebrow": "Mock — strict mode",
@@ -464,7 +444,6 @@
   "writing.mocks.session.error.load": "Could not load mock session.",
   "writing.mocks.session.error.startWriting": "Could not start the writing window.",
   "writing.mocks.session.error.submit": "Could not submit mock.",
-
   "writing.mocks.results.pageTitle": "Mock Results",
   "writing.mocks.results.title": "Mock results",
   "writing.mocks.results.eyebrow": "Mock #{n}",
@@ -484,7 +463,6 @@
   "writing.mocks.results.openSubmission": "Open full submission",
   "writing.mocks.results.statusGrading": "Mock grading is still finishing. This page will refresh automatically.",
   "writing.mocks.results.error.load": "Could not load mock results.",
-
   "writing.stats.pageTitle": "Writing Stats",
   "writing.stats.title": "Track every dimension of your writing progress",
   "writing.stats.eyebrow": "Analytics",
@@ -518,7 +496,6 @@
   "writing.stats.calendar.cellAria": "{date}: {count} activities",
   "writing.stats.error.load": "Could not load all stats panels.",
   "writing.stats.error.export": "Export failed.",
-
   "writing.showcase.pageTitle": "Showcase",
   "writing.showcase.title": "Browse A-grade letters from other learners",
   "writing.showcase.eyebrow": "Community",
@@ -532,7 +509,6 @@
   "writing.showcase.list.aGrade": "A grade",
   "writing.showcase.list.reactions": "{count} reactions",
   "writing.showcase.error.load": "Could not load showcase.",
-
   "writing.tools.paraphrase.pageTitle": "Paraphrase tool",
   "writing.tools.paraphrase.title": "Paraphrase a sentence three ways",
   "writing.tools.paraphrase.eyebrow": "Tools",
@@ -546,7 +522,6 @@
   "writing.tools.paraphrase.copied": "Copied!",
   "writing.tools.paraphrase.copyAria": "Copy {formality} alternative",
   "writing.tools.paraphrase.error.load": "Paraphrase failed.",
-
   "writing.tools.ask.pageTitle": "Ask about your letter",
   "writing.tools.ask.title": "Chat with the coach about a past submission",
   "writing.tools.ask.eyebrow": "Tools",
@@ -566,7 +541,6 @@
   "writing.tools.ask.error.loadSubmission": "Could not load submission.",
   "writing.tools.ask.error.pickFirst": "Pick a submission first so the assistant has your letter to read.",
   "writing.tools.ask.error.send": "Ask request failed.",
-
   "writing.today.title": "Today's Writing plan",
   "writing.today.actions.start": "Start",
   "writing.today.actions.complete": "Complete",
@@ -586,5 +560,42 @@
   "writing.today.error.start": "Could not start item.",
   "writing.today.error.complete": "Could not mark complete.",
   "writing.today.error.skip": "Could not skip item.",
-  "writing.today.error.regenerate": "Could not regenerate the plan."
+  "writing.today.error.regenerate": "Could not regenerate the plan.",
+  "writing.paper.pageTitle": "Writing — Paper mode",
+  "writing.paper.eyebrow": "OET Writing — Paper simulation",
+  "writing.paper.loading": "Loading booklet…",
+  "writing.paper.controlsLabel": "Exam controls",
+  "writing.paper.wordCountLabel": "Letter length",
+  "writing.paper.readingLock": "Reading window: study the booklet. The answer booklet unlocks when writing time begins.",
+  "writing.paper.questionBookletLabel": "Question booklet",
+  "writing.paper.coverLabel": "Booklet cover",
+  "writing.paper.caseNotesLabel": "Case notes",
+  "writing.paper.caseNotesHeading": "Notes",
+  "writing.paper.writingTaskLabel": "Writing task",
+  "writing.paper.writingTaskHeading": "Writing task",
+  "writing.paper.recipientHeading": "Write to",
+  "writing.paper.answerBookletLabel": "Answer booklet",
+  "writing.paper.answerBookletHeading": "Answer booklet",
+  "writing.paper.answerPlaceholder": "Write your letter here…",
+  "writing.paper.answerLockedReading": "Locked during reading",
+  "writing.paper.answerLockedSubmitted": "Submitted",
+  "writing.paper.submit": "Submit letter",
+  "writing.paper.submittedTitle": "Submitted — awaiting tutor review",
+  "writing.paper.submittedBody": "Your letter has been submitted. A tutor will review it; your booklet is now locked.",
+  "writing.paper.viewResults": "View results",
+  "writing.paper.wordGuide": "Write {min}–{max} words.",
+  "writing.paper.cover.testName": "Occupational English Test",
+  "writing.paper.cover.subTest": "Writing sub-test",
+  "writing.paper.cover.dateStamp": "Today’s date: {date}",
+  "writing.paper.cover.instructionsHeading": "Instructions to candidates",
+  "writing.paper.cover.instruction1": "You must write your answer in the answer booklet.",
+  "writing.paper.cover.instruction2": "You have 5 minutes to read the case notes. You cannot write during this time.",
+  "writing.paper.cover.instruction3": "You then have 40 minutes to write your letter.",
+  "writing.paper.helper.reading": "Reading window — the answer booklet is locked.",
+  "writing.paper.helper.tooShort": "Keep writing — at least {min} words before you can submit.",
+  "writing.paper.helper.ready": "Looks ready. Review, then submit.",
+  "writing.paper.helper.submitted": "Submitted — awaiting tutor review.",
+  "writing.paper.error.load": "We could not load this paper session.",
+  "writing.paper.error.startWriting": "We could not start the writing window.",
+  "writing.paper.error.submit": "We could not submit your letter. Please try again."
 }

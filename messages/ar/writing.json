@@ -26,7 +26,6 @@
   "writing.welcome.stages.practiceDescription": "رسائل يومية وملاحظات من المدرّب ومقارنات بالنماذج المرجعية ومراجعات.",
   "writing.welcome.stages.mastery": "الإتقان",
   "writing.welcome.stages.masteryDescription": "اختبارات تجريبية ومراجعات من المدرّسين والاستعداد ليوم الامتحان.",
-
   "writing.profileSetup.profession.title": "أخبرنا عن نفسك",
   "writing.profileSetup.profession.subtitle": "مهنتك تحدد أنواع الرسائل التي ندرّبك عليها والسيناريوهات التي نعرضها لك.",
   "writing.profileSetup.profession.fieldLabel": "المهنة",
@@ -44,7 +43,6 @@
   "writing.profileSetup.confirm.cta": "احفظ ومتابعة",
   "writing.profileSetup.actions.continue": "متابعة",
   "writing.profileSetup.actions.back": "رجوع",
-
   "writing.diagnostic.briefing.title": "التقييم التشخيصي",
   "writing.diagnostic.briefing.subtitle": "خط أساس مدته 50 دقيقة لمعايير الكتابة الستة لديك.",
   "writing.diagnostic.briefing.cta": "ابدأ التقييم التشخيصي",
@@ -77,7 +75,6 @@
   "writing.diagnostic.briefing.back": "العودة إلى الصفحة الرئيسية للكتابة",
   "writing.diagnostic.briefing.error.profile": "تعذّر تحميل ملفك الشخصي. أكمل التهيئة أولاً.",
   "writing.diagnostic.briefing.error.start": "تعذّر بدء التقييم التشخيصي.",
-
   "writing.diagnostic.session.reading": "فترة القراءة",
   "writing.diagnostic.session.writing": "فترة الكتابة",
   "writing.diagnostic.session.submit": "أرسل التقييم التشخيصي",
@@ -96,7 +93,6 @@
   "writing.diagnostic.session.error.load": "تعذّر تحميل جلسة التقييم التشخيصي.",
   "writing.diagnostic.session.error.startWriting": "تعذّر بدء فترة الكتابة.",
   "writing.diagnostic.session.error.submit": "فشل الإرسال.",
-
   "writing.diagnostic.results.title": "نتيجة تقييمك التشخيصي",
   "writing.diagnostic.results.startPathway": "ابدأ مساري",
   "writing.diagnostic.results.pageTitle": "نتائج التقييم التشخيصي",
@@ -120,7 +116,6 @@
   "writing.diagnostic.results.cta.heading": "ابدأ مسارك",
   "writing.diagnostic.results.cta.subtitle": "خطة اليوم جاهزة — أول عنصر ينطلق من المعيار الأضعف لديك.",
   "writing.diagnostic.results.error.load": "تعذّر تحميل النتائج.",
-
   "writing.skillTree.pageTitle": "شجرة مهارات الكتابة",
   "writing.skillTree.eyebrow": "مهارات أساسية",
   "writing.skillTree.title": "W1-W8 — المهارات الثماني التي تقوم عليها كل رسالة في OET",
@@ -139,7 +134,6 @@
   "writing.skillTree.skillAria": "المهارة {label}",
   "writing.skillTree.masteryAria": "إتقان {label}: {value}%",
   "writing.skillTree.error.load": "تعذّر تحميل شجرة المهارات.",
-
   "writing.lessons.pageTitle": "دروس الكتابة",
   "writing.lessons.loading": "جارٍ تحميل الدروس…",
   "writing.lessons.eyebrow": "الأساسيات",
@@ -162,7 +156,6 @@
   "writing.lessons.list.review": "راجع الدرس",
   "writing.lessons.list.aria": "الدرس {title}",
   "writing.lessons.error.load": "تعذّر تحميل الدروس.",
-
   "writing.lessons.detail.openQuiz": "اعتبره مقروءاً وابدأ الاختبار",
   "writing.lessons.detail.submitQuiz": "أرسل الاختبار",
   "writing.lessons.detail.pageTitleFallback": "درس في الكتابة",
@@ -194,7 +187,6 @@
   "writing.lessons.detail.nav.previous": "السابق",
   "writing.lessons.detail.nav.next": "التالي",
   "writing.lessons.detail.nav.pathway": "المسار",
-
   "writing.practice.library.pageTitle": "مكتبة التدريب",
   "writing.practice.library.title": "تصفّح مكتبة السيناريوهات",
   "writing.practice.library.eyebrow": "تدريب",
@@ -232,7 +224,6 @@
   "writing.practice.library.cta.practiceAria": "تدرّب على السيناريو {title}",
   "writing.practice.library.cardAria": "السيناريو: {title}",
   "writing.practice.library.error.load": "تعذّر تحميل السيناريوهات.",
-
   "writing.practice.session.pageTitle": "جلسة تدريب",
   "writing.practice.session.controlsLabel": "أدوات التحكم في جلسة التدريب",
   "writing.practice.session.eyebrow": "تدريب",
@@ -250,7 +241,6 @@
   "writing.practice.session.helper.ready": "عند الإرسال، يعمل المعيار ومحرّك القواعد ومُطابِق النماذج المرجعية بالتوازي.",
   "writing.practice.session.error.load": "تعذّر تحميل هذا السيناريو.",
   "writing.practice.session.error.submit": "تعذّر الإرسال. أعد المحاولة.",
-
   "writing.submissions.detail.pageTitle": "إرسال الكتابة",
   "writing.submissions.detail.title": "الإرسال",
   "writing.submissions.detail.openResults": "افتح النتائج",
@@ -276,7 +266,6 @@
   "writing.submissions.detail.reviseThis": "راجع هذه الرسالة",
   "writing.submissions.detail.letterHeading": "رسالتك",
   "writing.submissions.detail.error.load": "تعذّر تحميل الإرسال.",
-
   "writing.submissions.grading.pageTitle": "جارٍ تصحيح رسالتك",
   "writing.submissions.grading.title": "انتظر قليلاً بينما نصحّح رسالتك",
   "writing.submissions.grading.eyebrow": "التصحيح",
@@ -295,7 +284,6 @@
   "writing.submissions.grading.status.inProgress": "قيد التنفيذ",
   "writing.submissions.grading.viewDetails": "عرض تفاصيل الإرسال",
   "writing.submissions.grading.error.load": "تعذّر التحقق من حالة الإرسال.",
-
   "writing.submissions.results.pageTitle": "نتائج الإرسال",
   "writing.submissions.results.title": "نتائج الإرسال",
   "writing.submissions.results.eyebrow": "النتيجة",
@@ -332,7 +320,6 @@
   "writing.submissions.results.actions.disputePrompt": "لماذا هذا الاكتشاف خاطئ؟ (10 أحرف على الأقل)",
   "writing.submissions.results.actions.disputeError": "فشل الاعتراض.",
   "writing.submissions.results.error.load": "تعذّر تحميل النتائج.",
-
   "writing.submissions.revise.pageTitle": "راجع الرسالة",
   "writing.submissions.revise.title": "راجع الرسالة",
   "writing.submissions.revise.eyebrow": "مراجعة",
@@ -348,10 +335,8 @@
   "writing.submissions.revise.helper.ready": "ستُصحَّح مراجعتك بشكل منفصل وتُربط بالإرسال الأصلي.",
   "writing.submissions.revise.error.load": "تعذّر تحميل الرسالة الأصلية.",
   "writing.submissions.revise.error.submit": "تعذّر إرسال المراجعة.",
-
   "writing.caseNoteDrills.title": "تمارين على ملاحظات الحالة (Case Notes)",
   "writing.caseNoteDrills.checkAnswers": "تحقق من الإجابات",
-
   "writing.canon.library.pageTitle": "قواعد الكتابة الأسلوبية",
   "writing.canon.library.eyebrow": "القواعد الأسلوبية",
   "writing.canon.library.hero.title": "قواعد د. أحمد للكتابة في مكان واحد",
@@ -373,7 +358,6 @@
   "writing.canon.library.card.avoid": "تجنّب",
   "writing.canon.library.card.practise": "تدرّب على هذه القاعدة",
   "writing.canon.library.error.load": "تعذّر تحميل قواعد الكتابة.",
-
   "writing.canon.detail.metadataTitle": "بيانات القاعدة",
   "writing.canon.detail.correct": "صحيح",
   "writing.canon.detail.incorrect": "خطأ",
@@ -401,7 +385,6 @@
   "writing.canon.detail.history.line": "— السطر {line}: «{snippet}»",
   "writing.canon.detail.back": "العودة إلى مكتبة القواعد",
   "writing.canon.detail.error.load": "تعذّر تحميل هذه القاعدة.",
-
   "writing.mistakes.library.pageTitle": "مكتبة الأخطاء الشائعة",
   "writing.mistakes.library.title": "الأخطاء العشرون الأكثر كلفةً للدرجات",
   "writing.mistakes.library.eyebrow": "مكتبة",
@@ -414,7 +397,6 @@
   "writing.mistakes.library.list.empty": "لا توجد أخطاء مطابقة لهذه التصفية.",
   "writing.mistakes.library.cta.mine": "اطّلع على أخطائك من رسائلك الخاصة",
   "writing.mistakes.library.error.load": "تعذّر تحميل الأخطاء.",
-
   "writing.mistakes.mine.pageTitle": "أخطاؤك الشائعة",
   "writing.mistakes.mine.title": "الأخطاء التي تتكرّر في رسائلك",
   "writing.mistakes.mine.eyebrow": "مخصّص",
@@ -429,7 +411,6 @@
   "writing.mistakes.mine.empty.cta": "تصفّح مكتبة التدريب",
   "writing.mistakes.mine.all.heading": "كل خطأ تتبّعناه",
   "writing.mistakes.mine.error.load": "تعذّر تحميل أخطائك.",
-
   "writing.mocks.catalogue.pageTitle": "اختبارات الكتابة التجريبية",
   "writing.mocks.catalogue.title": "اختبارات تجريبية بشروط امتحان صارمة",
   "writing.mocks.catalogue.eyebrow": "محاكاة الامتحان",
@@ -447,7 +428,6 @@
   "writing.mocks.catalogue.readiness": "اطّلع على الجاهزية",
   "writing.mocks.catalogue.error.load": "تعذّر تحميل الاختبارات التجريبية.",
   "writing.mocks.catalogue.error.start": "تعذّر بدء الاختبار التجريبي.",
-
   "writing.mocks.session.pageTitle": "اختبار كتابة تجريبي",
   "writing.mocks.session.controlsLabel": "أدوات التحكم في جلسة الاختبار التجريبي",
   "writing.mocks.session.eyebrow": "اختبار تجريبي — وضع صارم",
@@ -464,7 +444,6 @@
   "writing.mocks.session.error.load": "تعذّر تحميل جلسة الاختبار التجريبي.",
   "writing.mocks.session.error.startWriting": "تعذّر بدء فترة الكتابة.",
   "writing.mocks.session.error.submit": "تعذّر إرسال الاختبار التجريبي.",
-
   "writing.mocks.results.pageTitle": "نتائج الاختبار التجريبي",
   "writing.mocks.results.title": "نتائج الاختبار التجريبي",
   "writing.mocks.results.eyebrow": "اختبار تجريبي رقم {n}",
@@ -484,7 +463,6 @@
   "writing.mocks.results.openSubmission": "افتح الإرسال كاملاً",
   "writing.mocks.results.statusGrading": "ما زال تصحيح الاختبار التجريبي قيد الإنجاز. ستُحدَّث هذه الصفحة تلقائياً.",
   "writing.mocks.results.error.load": "تعذّر تحميل نتائج الاختبار التجريبي.",
-
   "writing.stats.pageTitle": "إحصاءات الكتابة",
   "writing.stats.title": "تتبّع كل أبعاد تقدّمك في الكتابة",
   "writing.stats.eyebrow": "تحليلات",
@@ -518,7 +496,6 @@
   "writing.stats.calendar.cellAria": "{date}: {count} نشاط",
   "writing.stats.error.load": "تعذّر تحميل كل لوحات الإحصاءات.",
   "writing.stats.error.export": "فشل التصدير.",
-
   "writing.showcase.pageTitle": "المعرض",
   "writing.showcase.title": "تصفّح رسائل بدرجة A من متعلّمين آخرين",
   "writing.showcase.eyebrow": "المجتمع",
@@ -532,7 +509,6 @@
   "writing.showcase.list.aGrade": "درجة A",
   "writing.showcase.list.reactions": "{count} تفاعل",
   "writing.showcase.error.load": "تعذّر تحميل المعرض.",
-
   "writing.tools.paraphrase.pageTitle": "أداة إعادة الصياغة",
   "writing.tools.paraphrase.title": "أعد صياغة جملة بثلاث طرق",
   "writing.tools.paraphrase.eyebrow": "أدوات",
@@ -546,7 +522,6 @@
   "writing.tools.paraphrase.copied": "تم النسخ!",
   "writing.tools.paraphrase.copyAria": "انسخ البديل ذا الرسمية {formality}",
   "writing.tools.paraphrase.error.load": "فشلت إعادة الصياغة.",
-
   "writing.tools.ask.pageTitle": "اسأل عن رسالتك",
   "writing.tools.ask.title": "تحدّث مع المدرّب عن إرسال سابق",
   "writing.tools.ask.eyebrow": "أدوات",
@@ -566,7 +541,6 @@
   "writing.tools.ask.error.loadSubmission": "تعذّر تحميل الإرسال.",
   "writing.tools.ask.error.pickFirst": "اختر إرسالاً أولاً ليطّلع المساعد على رسالتك.",
   "writing.tools.ask.error.send": "فشل طلب السؤال.",
-
   "writing.today.title": "خطة الكتابة اليوم",
   "writing.today.actions.start": "ابدأ",
   "writing.today.actions.complete": "أكمل",
@@ -586,5 +560,42 @@
   "writing.today.error.start": "تعذّر بدء العنصر.",
   "writing.today.error.complete": "تعذّر التمييز كمكتمل.",
   "writing.today.error.skip": "تعذّر تخطّي العنصر.",
-  "writing.today.error.regenerate": "تعذّرت إعادة توليد الخطة."
+  "writing.today.error.regenerate": "تعذّرت إعادة توليد الخطة.",
+  "writing.paper.pageTitle": "الكتابة — وضع الورق",
+  "writing.paper.eyebrow": "كتابة OET — محاكاة ورقية",
+  "writing.paper.loading": "جارٍ تحميل الكتيب…",
+  "writing.paper.controlsLabel": "أدوات الاختبار",
+  "writing.paper.wordCountLabel": "طول الرسالة",
+  "writing.paper.readingLock": "نافذة القراءة: ادرس الكتيب. يُفتح كتيب الإجابة عند بدء وقت الكتابة.",
+  "writing.paper.questionBookletLabel": "كتيب الأسئلة",
+  "writing.paper.coverLabel": "غلاف الكتيب",
+  "writing.paper.caseNotesLabel": "ملاحظات الحالة",
+  "writing.paper.caseNotesHeading": "الملاحظات",
+  "writing.paper.writingTaskLabel": "مهمة الكتابة",
+  "writing.paper.writingTaskHeading": "مهمة الكتابة",
+  "writing.paper.recipientHeading": "إلى",
+  "writing.paper.answerBookletLabel": "كتيب الإجابة",
+  "writing.paper.answerBookletHeading": "كتيب الإجابة",
+  "writing.paper.answerPlaceholder": "اكتب رسالتك هنا…",
+  "writing.paper.answerLockedReading": "مقفل أثناء القراءة",
+  "writing.paper.answerLockedSubmitted": "تم الإرسال",
+  "writing.paper.submit": "إرسال الرسالة",
+  "writing.paper.submittedTitle": "تم الإرسال — في انتظار مراجعة المعلم",
+  "writing.paper.submittedBody": "تم إرسال رسالتك. سيقوم المعلم بمراجعتها؛ الكتيب مقفل الآن.",
+  "writing.paper.viewResults": "عرض النتائج",
+  "writing.paper.wordGuide": "اكتب من {min} إلى {max} كلمة.",
+  "writing.paper.cover.testName": "اختبار اللغة الإنجليزية المهني",
+  "writing.paper.cover.subTest": "اختبار الكتابة الفرعي",
+  "writing.paper.cover.dateStamp": "تاريخ اليوم: {date}",
+  "writing.paper.cover.instructionsHeading": "تعليمات للمرشحين",
+  "writing.paper.cover.instruction1": "يجب أن تكتب إجابتك في كتيب الإجابة.",
+  "writing.paper.cover.instruction2": "لديك 5 دقائق لقراءة ملاحظات الحالة. لا يمكنك الكتابة خلال هذا الوقت.",
+  "writing.paper.cover.instruction3": "ثم لديك 40 دقيقة لكتابة رسالتك.",
+  "writing.paper.helper.reading": "نافذة القراءة — كتيب الإجابة مقفل.",
+  "writing.paper.helper.tooShort": "واصل الكتابة — {min} كلمة على الأقل قبل أن تتمكن من الإرسال.",
+  "writing.paper.helper.ready": "يبدو جاهزًا. راجع ثم أرسل.",
+  "writing.paper.helper.submitted": "تم الإرسال — في انتظار مراجعة المعلم.",
+  "writing.paper.error.load": "تعذّر تحميل جلسة الورق هذه.",
+  "writing.paper.error.startWriting": "تعذّر بدء نافذة الكتابة.",
+  "writing.paper.error.submit": "تعذّر إرسال رسالتك. يرجى المحاولة مرة أخرى."
 }

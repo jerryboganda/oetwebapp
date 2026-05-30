@@ -65,7 +65,8 @@ public sealed class WritingOnboardingService(
     TimeProvider clock,
     IWritingSubmissionEvaluationPipeline pipeline,
     IWritingPathwayServiceV2 pathwayService,
-    ILogger<WritingOnboardingService> logger)
+    ILogger<WritingOnboardingService> logger,
+    IWritingAttemptEventService? attemptEvents = null)
     : IWritingOnboardingService
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
@@ -373,6 +374,9 @@ public sealed class WritingOnboardingService(
         };
         db.WritingDiagnosticSessions.Add(session);
         await db.SaveChangesAsync(ct);
+        // §17.7 — diagnostic attempt lifecycle (best-effort, simulation mode defaults to computer).
+        await SafeEmitAsync(userId, "attempt_started", session.Id, session.ScenarioId, "reading", ct);
+        await SafeEmitAsync(userId, "reading_started", session.Id, session.ScenarioId, "reading", ct);
         return BuildDiagnosticSessionResponse(session, now);
     }
 
@@ -392,6 +396,9 @@ public sealed class WritingOnboardingService(
             session.ReadingPhaseEndedAt = now;
             session.UpdatedAt = now;
             await db.SaveChangesAsync(ct);
+            // §17.7 — reading→writing transition (best-effort).
+            await SafeEmitAsync(userId, "reading_ended", session.Id, session.ScenarioId, "writing", ct);
+            await SafeEmitAsync(userId, "writing_started", session.Id, session.ScenarioId, "writing", ct);
         }
         return BuildDiagnosticSessionResponse(session, clock.GetUtcNow());
     }
@@ -425,6 +432,10 @@ public sealed class WritingOnboardingService(
         session.SubmissionId = submissionId;
         session.UpdatedAt = clock.GetUtcNow();
         await db.SaveChangesAsync(ct);
+
+        // §17.7 — diagnostic submitted/locked lifecycle (best-effort).
+        await SafeEmitAsync(userId, "submit_clicked", session.Id, session.ScenarioId, "submitted", ct, submissionId);
+        await SafeEmitAsync(userId, "attempt_locked", session.Id, session.ScenarioId, "submitted", ct, submissionId);
 
         var sub = await db.WritingSubmissions.AsNoTracking().FirstOrDefaultAsync(s => s.Id == submissionId, ct);
         return sub is null ? null : ToSubmissionResponse(sub);
@@ -471,6 +482,37 @@ public sealed class WritingOnboardingService(
         if (session is null) return null;
         if (session.SubmissionId is null && session.ExpiresAt <= clock.GetUtcNow()) return null;
         return session;
+    }
+
+    /// <summary>
+    /// Emit a Writing attempt event for a diagnostic session without ever throwing
+    /// into the caller (spec §17.7 — fire-and-forget-safe). Diagnostic sessions carry
+    /// no simulation-mode column, so mode defaults to "computer".
+    /// </summary>
+    private async Task SafeEmitAsync(string userId, string eventType, Guid sessionId, Guid scenarioId, string status, CancellationToken ct, Guid? submissionId = null)
+    {
+        if (attemptEvents is null) return;
+        try
+        {
+            await attemptEvents.RecordAsync(
+                userId,
+                new[]
+                {
+                    new WritingAttemptEventInput(
+                        eventType,
+                        clock.GetUtcNow(),
+                        "computer",
+                        sessionId.ToString(),
+                        scenarioId,
+                        submissionId,
+                        $"{{\"context\":\"diagnostic\",\"status\":\"{status}\"}}"),
+                },
+                ct);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to emit Writing attempt event {EventType} for diagnostic session {SessionId}.", eventType, sessionId);
+        }
     }
 
     private WritingProfileResponseV2 BuildProfileResponse(string userId, LearnerWritingProfile? profile, bool diagnosticDone)

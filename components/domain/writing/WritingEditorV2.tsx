@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 import type { WritingEditorMode } from '@/lib/writing/types';
 import type {
@@ -56,6 +56,19 @@ export interface WritingEditorV2Props {
    */
   inputId?: string;
   className?: string;
+  /**
+   * Strict exam hardening. When true the editor blocks paste + drop and
+   * forces spell-check off, regardless of `mode`/`spellCheck`. Used by the
+   * computer-mode mock + diagnostic sessions (spec §10/§19.1). Defaults to
+   * false so practice/coached surfaces keep their relaxed behaviour.
+   */
+  blockPaste?: boolean;
+  /**
+   * Fired when a paste (or text drop) is rejected because `blockPaste` is
+   * set. Lets the host log a `paste` attempt-event. Receives the length of
+   * the rejected text (0 if unknown).
+   */
+  onPasteBlocked?: (rejectedLength: number) => void;
   /**
    * Render slot for the right rail (e.g. <CoachPanel />). The editor
    * lays itself out single-column; the parent wraps it in a grid if a
@@ -114,6 +127,8 @@ export function WritingEditorV2({
   placeholder = 'Begin writing your response…',
   inputId,
   className,
+  blockPaste = false,
+  onPasteBlocked,
   children,
 }: WritingEditorV2Props) {
   const [tiptap, setTiptap] = useState<{
@@ -125,9 +140,42 @@ export function WritingEditorV2({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const currentValueRef = useRef(initialContent);
   // Spell-check rules: ON in practice modes, OFF in mock per spec §11.4.
-  // Caller can override via `spellCheck` prop.
-  const effectiveSpellCheck =
-    typeof spellCheck === 'boolean' ? spellCheck : mode !== 'mock';
+  // Caller can override via `spellCheck` prop. Strict `blockPaste` always
+  // forces it off (exam fidelity — no spell assistance in mock/diagnostic).
+  const effectiveSpellCheck = blockPaste
+    ? false
+    : typeof spellCheck === 'boolean'
+      ? spellCheck
+      : mode !== 'mock';
+
+  // Strict paste/drop guard. Wired to both the textarea fallback and the
+  // Tiptap surface. `onPasteBlocked` lets the host log a `paste` event.
+  const blockPasteRef = useRef(blockPaste);
+  blockPasteRef.current = blockPaste;
+  const onPasteBlockedRef = useRef(onPasteBlocked);
+  onPasteBlockedRef.current = onPasteBlocked;
+
+  const handleBlockedPaste = useCallback(
+    (e: React.ClipboardEvent<HTMLElement>) => {
+      if (!blockPasteRef.current) return;
+      e.preventDefault();
+      const rejected = e.clipboardData?.getData('text') ?? '';
+      onPasteBlockedRef.current?.(rejected.length);
+    },
+    [],
+  );
+
+  const handleBlockedDrop = useCallback((e: React.DragEvent<HTMLElement>) => {
+    if (!blockPasteRef.current) return;
+    e.preventDefault();
+    const rejected = e.dataTransfer?.getData('text') ?? '';
+    onPasteBlockedRef.current?.(rejected.length);
+  }, []);
+
+  const handleDragOver = useCallback((e: React.DragEvent<HTMLElement>) => {
+    if (!blockPasteRef.current) return;
+    e.preventDefault();
+  }, []);
 
   // Dynamic Tiptap import (client-only). Cast to `string` so TypeScript
   // doesn't try to resolve the module at compile time — `@tiptap/react`
@@ -201,7 +249,14 @@ export function WritingEditorV2({
         </span>
       </div>
 
-      <div className="flex-1 relative">
+      <div
+        className="flex-1 relative"
+        // Capture-phase guards so paste/drop is blocked before ProseMirror
+        // (or the textarea) processes it. No-ops unless `blockPaste` is set.
+        onPasteCapture={blockPaste ? handleBlockedPaste : undefined}
+        onDropCapture={blockPaste ? handleBlockedDrop : undefined}
+        onDragOverCapture={blockPaste ? handleDragOver : undefined}
+      >
         {tiptap ? (
           <TiptapEditor
             tiptap={tiptap}
@@ -236,6 +291,9 @@ export function WritingEditorV2({
               currentValueRef.current = e.target.value;
               setFallbackValue(e.target.value);
             }}
+            onPaste={blockPaste ? handleBlockedPaste : undefined}
+            onDrop={blockPaste ? handleBlockedDrop : undefined}
+            onDragOver={blockPaste ? handleDragOver : undefined}
             aria-label="Writing editor"
           />
         )}

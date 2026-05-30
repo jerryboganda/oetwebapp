@@ -658,3 +658,162 @@ export function readinessBandLabel(band: string): string {
       return band ? band.replace(/_/g, ' ') : 'Unknown';
   }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Double-marking + senior moderation (§15.4 / §15.5)
+//   GET  /v1/expert/speaking/moderation/queue?professionId=
+//   GET  /v1/expert/speaking/sessions/{id}/moderation
+//   POST /v1/expert/speaking/sessions/{id}/moderation/open
+//   POST /v1/expert/speaking/sessions/{id}/moderation/second-mark
+//   POST /v1/expert/speaking/sessions/{id}/moderation/finalize
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type SpeakingModerationStatus =
+  | 'pending_second'
+  | 'pending_moderation'
+  | 'finalized'
+  | 'reattempt_requested';
+
+export type SpeakingModerationReason = 'tutor_request' | 'wide_divergence' | 'dispute';
+
+export interface SpeakingCriterionScorePayload {
+  intelligibility: number;
+  fluency: number;
+  appropriateness: number;
+  grammarExpression: number;
+  relationshipBuilding: number;
+  patientPerspective: number;
+  structure: number;
+  informationGathering: number;
+  informationGiving: number;
+  estimatedScaledScore: number;
+}
+
+export interface SpeakingModerationCase {
+  id: string;
+  sessionId: string;
+  reason: SpeakingModerationReason;
+  status: SpeakingModerationStatus;
+  firstMarkerId?: string | null;
+  firstAssessmentId?: string | null;
+  firstScore?: SpeakingCriterionScorePayload | null;
+  secondMarkerId?: string | null;
+  secondAssessmentId?: string | null;
+  secondScore?: SpeakingCriterionScorePayload | null;
+  moderatorId?: string | null;
+  finalAssessmentId?: string | null;
+  finalScore?: SpeakingCriterionScorePayload | null;
+  variancePoints?: number | null;
+  varianceReason?: string | null;
+  finalDecisionNote?: string | null;
+  requestReattempt: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SpeakingModerationQueueItem {
+  caseId: string;
+  sessionId: string;
+  professionId: string;
+  reason: SpeakingModerationReason;
+  status: SpeakingModerationStatus;
+  variancePoints?: number | null;
+  needsSecondMark: boolean;
+  needsModeration: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** The nine criterion scores plus optional narrative feedback submitted by a marker. */
+export interface SpeakingMarkInput {
+  intelligibility: number;
+  fluency: number;
+  appropriateness: number;
+  grammarExpression: number;
+  relationshipBuilding: number;
+  patientPerspective: number;
+  structure: number;
+  informationGathering: number;
+  informationGiving: number;
+  overallFeedbackMarkdown?: string;
+  strengths?: string[];
+  improvements?: string[];
+  recommendedDrills?: string[];
+}
+
+export interface SpeakingModerationFinalizeInput {
+  intelligibility?: number;
+  fluency?: number;
+  appropriateness?: number;
+  grammarExpression?: number;
+  relationshipBuilding?: number;
+  patientPerspective?: number;
+  structure?: number;
+  informationGathering?: number;
+  informationGiving?: number;
+  overallFeedbackMarkdown?: string;
+  decisionNote?: string;
+  requestReattempt: boolean;
+}
+
+export async function moderationListQueue(professionId?: string): Promise<SpeakingModerationQueueItem[]> {
+  const qs = professionId ? `?professionId=${encodeURIComponent(professionId)}` : '';
+  const res = await request<{ items: SpeakingModerationQueueItem[] }>(
+    `/v1/expert/speaking/moderation/queue${qs}`,
+  );
+  return res.items ?? [];
+}
+
+export async function moderationGetCase(sessionId: string): Promise<SpeakingModerationCase | null> {
+  return request<SpeakingModerationCase | null>(
+    `/v1/expert/speaking/sessions/${encodeURIComponent(sessionId)}/moderation`,
+    undefined,
+    { acceptedStatuses: [404] },
+  );
+}
+
+export async function moderationOpenCase(
+  sessionId: string,
+  reason?: SpeakingModerationReason,
+): Promise<SpeakingModerationCase> {
+  return request<SpeakingModerationCase>(
+    `/v1/expert/speaking/sessions/${encodeURIComponent(sessionId)}/moderation/open`,
+    { method: 'POST', body: JSON.stringify({ reason: reason ?? null }) },
+  );
+}
+
+export async function moderationSubmitSecondMark(
+  sessionId: string,
+  body: SpeakingMarkInput,
+): Promise<SpeakingModerationCase> {
+  return request<SpeakingModerationCase>(
+    `/v1/expert/speaking/sessions/${encodeURIComponent(sessionId)}/moderation/second-mark`,
+    { method: 'POST', body: JSON.stringify(body) },
+  );
+}
+
+export async function moderationFinalize(
+  sessionId: string,
+  body: SpeakingModerationFinalizeInput,
+): Promise<SpeakingModerationCase> {
+  return request<SpeakingModerationCase>(
+    `/v1/expert/speaking/sessions/${encodeURIComponent(sessionId)}/moderation/finalize`,
+    { method: 'POST', body: JSON.stringify(body) },
+  );
+}
+
+export function moderationStatusLabel(status: SpeakingModerationStatus): string {
+  switch (status) {
+    case 'pending_second':
+      return 'Awaiting second marker';
+    case 'pending_moderation':
+      return 'Awaiting senior moderation';
+    case 'finalized':
+      return 'Finalised';
+    case 'reattempt_requested':
+      return 'Reattempt requested';
+    default:
+      return status;
+  }
+}
+

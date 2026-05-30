@@ -14,6 +14,7 @@ public static class VocabularyEndpoints
 
         // ── Term browse (auth required) ──────────────────────────────────
         vocab.MapGet("/terms", async (
+            HttpContext http,
             [FromQuery] string? examTypeCode,
             [FromQuery] string? category,
             [FromQuery] string? profession,
@@ -28,7 +29,8 @@ public static class VocabularyEndpoints
                 page <= 0 ? 1 : page,
                 pageSize <= 0 ? 20 : Math.Min(pageSize, 100),
                 ct,
-                recallSet)));
+                recallSet,
+                http.IsPremium())));
 
         // Recall-set registry (year/source dimension). Public to authenticated
         // learners so the browse + recalls UI can render filter chips.
@@ -44,8 +46,8 @@ public static class VocabularyEndpoints
             VocabularyService svc, CancellationToken ct) =>
             Results.Ok(await svc.LookupAsync(q, examTypeCode, ct)));
 
-        vocab.MapGet("/terms/{termId}", async (string termId, VocabularyService svc, CancellationToken ct) =>
-            Results.Ok(await svc.GetTermAsync(termId, ct)));
+        vocab.MapGet("/terms/{termId}", async (HttpContext http, string termId, VocabularyService svc, CancellationToken ct) =>
+            Results.Ok(await svc.GetTermAsync(termId, ct, http.IsPremium())));
 
         vocab.MapGet("/categories", async (
             [FromQuery] string? examTypeCode,

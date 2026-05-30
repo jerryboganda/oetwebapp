@@ -113,6 +113,7 @@ public class WritingWave6ServiceTests
             db,
             clock,
             Options.Create(new WritingV2Options()),
+            new WritingModerationService(db, NullLogger<WritingModerationService>.Instance),
             NullLogger<WritingTutorReviewService>.Instance);
 
         await service.ClaimAsync("tutor-1", submissionId, CancellationToken.None);

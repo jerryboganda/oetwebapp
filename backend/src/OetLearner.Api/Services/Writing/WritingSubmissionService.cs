@@ -23,7 +23,8 @@ public sealed class WritingSubmissionService(
     LearnerDbContext db,
     IWritingSubmissionEvaluationPipeline pipeline,
     IWritingExemplarService exemplarService,
-    ILogger<WritingSubmissionService> logger) : IWritingSubmissionService
+    ILogger<WritingSubmissionService> logger,
+    IWritingAttemptEventService? attemptEvents = null) : IWritingSubmissionService
 {
     public async Task<WritingSubmissionResponse> CreateSubmissionAsync(string userId, WritingSubmissionCreateRequest request, CancellationToken ct)
     {
@@ -33,6 +34,23 @@ public sealed class WritingSubmissionService(
         {
             throw ApiException.NotFound("writing_scenario_not_found", "Scenario was not found.");
         }
+
+        // Submission lock (§17.7): once a non-revision submission for this learner+scenario
+        // has reached a submitted/locked state, reject further creates so a re-submit cannot
+        // overwrite a locked attempt. Revisions go through ReviseSubmissionAsync intentionally.
+        var alreadyLocked = await db.WritingSubmissions.AsNoTracking()
+            .AnyAsync(s => s.UserId == userId
+                && s.ScenarioId == request.ScenarioId
+                && !s.IsRevision
+                && (s.Status == "submitted" || s.Status == "graded" || s.Status == "locked"), ct);
+        if (alreadyLocked)
+        {
+            throw ApiException.Conflict(
+                "writing_submission_locked",
+                "You have already submitted this task. Submitted attempts are locked; use revise to try again.");
+        }
+
+        var simulationMode = NormalizeSimulationMode(request.SimulationMode);
         var startedAt = DateTimeOffset.UtcNow.AddSeconds(-Math.Max(0, request.TimeSpentSeconds));
         var submissionId = await pipeline.CreateSubmissionAsync(new WritingSubmissionGradeContext(
             UserId: userId,
@@ -50,6 +68,15 @@ public sealed class WritingSubmissionService(
 
         var entity = await db.WritingSubmissions.AsNoTracking().FirstOrDefaultAsync(s => s.Id == submissionId, ct)
             ?? throw new InvalidOperationException("Submission missing after create.");
+
+        // §17.7 — the submission is now persisted in a graded/locked state. Emit the
+        // lifecycle markers carrying the simulation mode (paper|computer) in payload,
+        // best-effort so event logging never fails the submit.
+        var payload = $"{{\"simulationMode\":\"{simulationMode}\",\"wordCount\":{entity.WordCount}}}";
+        await SafeEmitAsync(userId, "writing_started", simulationMode, entity.ScenarioId, entity.Id, payload, ct);
+        await SafeEmitAsync(userId, "submit_clicked", simulationMode, entity.ScenarioId, entity.Id, payload, ct);
+        await SafeEmitAsync(userId, "attempt_locked", simulationMode, entity.ScenarioId, entity.Id, payload, ct);
+
         return WritingV2ResponseMapper.ToSubmissionResponse(entity);
     }
 
@@ -170,6 +197,47 @@ public sealed class WritingSubmissionService(
             });
         }
         await db.SaveChangesAsync(ct);
+    }
+
+    /// <summary>Simulation mode is paper | computer; anything else defaults to computer.</summary>
+    private static string NormalizeSimulationMode(string? simulationMode)
+        => string.Equals(simulationMode, "paper", StringComparison.OrdinalIgnoreCase) ? "paper" : "computer";
+
+    /// <summary>
+    /// Emit a Writing attempt event without ever throwing into the caller
+    /// (spec §17.7 — server-side lifecycle events are fire-and-forget-safe).
+    /// </summary>
+    private async Task SafeEmitAsync(
+        string userId,
+        string eventType,
+        string simulationMode,
+        Guid scenarioId,
+        Guid submissionId,
+        string payloadJson,
+        CancellationToken ct)
+    {
+        if (attemptEvents is null) return;
+        try
+        {
+            await attemptEvents.RecordAsync(
+                userId,
+                new[]
+                {
+                    new WritingAttemptEventInput(
+                        eventType,
+                        DateTimeOffset.UtcNow,
+                        simulationMode,
+                        SessionId: null,
+                        scenarioId,
+                        submissionId,
+                        payloadJson),
+                },
+                ct);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to emit Writing attempt event {EventType} for submission {SubmissionId}.", eventType, submissionId);
+        }
     }
 
     private static string NormalizeMode(string? mode)

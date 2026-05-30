@@ -14,7 +14,45 @@
 // Enums / discriminated unions
 // ─────────────────────────────────────────────────────────────────────────────
 
-export type WritingProfession = 'medicine' | 'pharmacy' | 'nursing' | 'other';
+// All 12 OET Writing professions (spec §1.2) plus a generic fallback. Ids match
+// the backend WritingContentStructure allow-list and the admin builder dropdown.
+export type WritingProfession =
+  | 'medicine'
+  | 'nursing'
+  | 'dentistry'
+  | 'pharmacy'
+  | 'physiotherapy'
+  | 'occupational-therapy'
+  | 'radiography'
+  | 'dietetics'
+  | 'optometry'
+  | 'podiatry'
+  | 'speech-pathology'
+  | 'veterinary'
+  | 'other';
+
+/** Display labels for every WritingProfession id (spec §1.2). */
+export const WRITING_PROFESSION_LABELS: Record<WritingProfession, string> = {
+  medicine: 'Medicine',
+  nursing: 'Nursing',
+  dentistry: 'Dentistry',
+  pharmacy: 'Pharmacy',
+  physiotherapy: 'Physiotherapy',
+  'occupational-therapy': 'Occupational Therapy',
+  radiography: 'Radiography',
+  dietetics: 'Dietetics',
+  optometry: 'Optometry',
+  podiatry: 'Podiatry',
+  'speech-pathology': 'Speech Pathology',
+  veterinary: 'Veterinary Science',
+  other: 'Other',
+};
+
+export const WRITING_PROFESSIONS: WritingProfession[] = [
+  'medicine', 'nursing', 'dentistry', 'pharmacy', 'physiotherapy',
+  'occupational-therapy', 'radiography', 'dietetics', 'optometry',
+  'podiatry', 'speech-pathology', 'veterinary', 'other',
+];
 export type WritingLetterType =
   | 'LT-RR'
   | 'LT-UR'
@@ -214,6 +252,22 @@ export interface WritingScenarioDto {
   status: 'draft' | 'published' | 'archived';
   createdAt: string;
   updatedAt: string;
+
+  // Exam-faithful authored fields (spec §4/§5). Optional; present on enriched
+  // tasks so the paper/computer simulations can render the full task screen.
+  internalCode?: string | null;
+  taskPromptMarkdown?: string | null;
+  writerRole?: string | null;
+  todayDate?: string | null;
+  recipient?: WritingRecipientDto | null;
+  caseNoteSections?: WritingCaseNoteSectionDto[];
+  fixedInstructions?: string[];
+  wordGuideMin?: number;
+  wordGuideMax?: number;
+  readingTimeSeconds?: number;
+  writingTimeSeconds?: number;
+  simulationModes?: WritingSimulationMode;
+  markingMode?: WritingMarkingMode;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -702,4 +756,300 @@ export interface WritingOutlineResultDto {
     purpose: string;
     suggestedSentences: string[];
   }>;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// OET exam-faithful closure (spec §4/§5/§6/§9/§12/§13/§14/§15/§16/§17/§18)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type WritingSimulationMode = 'paper' | 'computer' | 'both';
+export type WritingMarkingMode = 'tutor' | 'ai_assisted' | 'double';
+export type WritingChecklistRequiredStatus = 'required' | 'optional' | 'irrelevant';
+export type WritingChecklistVerdict = 'included' | 'missing' | 'inaccurate' | 'irrelevant';
+export type WritingMarkerSequence = 'first' | 'second' | 'senior';
+export type WritingModerationStatus =
+  | 'pending_first'
+  | 'pending_second'
+  | 'pending_moderation'
+  | 'finalized';
+export type WritingAttemptEventType =
+  | 'attempt_started'
+  | 'reading_started'
+  | 'reading_ended'
+  | 'writing_started'
+  | 'response_typed'
+  | 'auto_saved'
+  | 'paste'
+  | 'focus_lost'
+  | 'submit_clicked'
+  | 'timer_expired'
+  | 'attempt_locked';
+
+export interface WritingRecipientDto {
+  name: string;
+  role: string;
+  organisation: string;
+  address: string;
+}
+
+export interface WritingCaseNoteSectionDto {
+  heading: string;
+  items: string[];
+}
+
+export interface WritingModelAnswerParagraphDto {
+  id: string;
+  text: string;
+  rationale: string;
+  criteria: string[];
+  included: string[];
+  excluded: string[];
+  languageNotes: string;
+}
+
+export interface WritingContentChecklistItemDto {
+  id: string;
+  itemText: string;
+  category: string;
+  importance: WritingSeverity;
+  requiredStatus: WritingChecklistRequiredStatus;
+  linkedCaseNoteSection: string | null;
+  expectedRepresentation: string | null;
+  commonError: string | null;
+  ordinal: number;
+}
+
+/** Enriched authored task = the unified, attemptable, markable WritingScenario. */
+export interface WritingTaskDto {
+  id: string;
+  internalCode: string | null;
+  title: string;
+  profession: WritingProfession;
+  letterType: WritingLetterType;
+  difficulty: 1 | 2 | 3 | 4 | 5;
+  status: 'draft' | 'published' | 'archived';
+  version: number;
+  writerRole: string | null;
+  todayDate: string | null;
+  taskPromptMarkdown: string | null;
+  recipient: WritingRecipientDto | null;
+  expectedPurpose: string | null;
+  expectedAction: string | null;
+  caseNotesMarkdown: string;
+  caseNoteSections: WritingCaseNoteSectionDto[];
+  fixedInstructions: string[];
+  wordGuideMin: number;
+  wordGuideMax: number;
+  readingTimeSeconds: number;
+  writingTimeSeconds: number;
+  simulationModes: WritingSimulationMode;
+  markingMode: WritingMarkingMode;
+  modelAnswerText: string | null;
+  modelAnswerParagraphs: WritingModelAnswerParagraphDto[];
+  keyContentChecklist: WritingContentChecklistItemDto[];
+  irrelevantContentChecklist: WritingContentChecklistItemDto[];
+  sourceProvenance: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Admin create/update payload for a writing task (subset that is editable). */
+export interface WritingTaskUpsertDto {
+  internalCode?: string | null;
+  title: string;
+  profession: WritingProfession;
+  letterType: WritingLetterType;
+  difficulty: number;
+  writerRole?: string | null;
+  todayDate?: string | null;
+  taskPromptMarkdown: string;
+  recipient: WritingRecipientDto;
+  expectedPurpose?: string | null;
+  expectedAction?: string | null;
+  caseNotesMarkdown?: string;
+  caseNoteSections: WritingCaseNoteSectionDto[];
+  fixedInstructions: string[];
+  wordGuideMin: number;
+  wordGuideMax: number;
+  simulationModes: WritingSimulationMode;
+  markingMode: WritingMarkingMode;
+  modelAnswerText: string;
+  modelAnswerParagraphs?: WritingModelAnswerParagraphDto[];
+  keyContentChecklist: WritingContentChecklistItemDto[];
+  irrelevantContentChecklist: WritingContentChecklistItemDto[];
+  sourceProvenance: string;
+  integrityAcknowledged: boolean;
+}
+
+export interface WritingTaskValidationDto {
+  isPublishReady: boolean;
+  issues: Array<{ code: string; severity: 'error' | 'warning' | string; message: string }>;
+}
+
+/** Spec §18 import/export envelope. */
+export interface WritingTaskImportJson {
+  taskTitle: string;
+  internalCode?: string;
+  profession: string;
+  taskType: string;
+  duration?: { readingTimeSeconds?: number; writingTimeSeconds?: number };
+  caseNotes: {
+    todayDate?: string;
+    candidateRole?: string;
+    sections: Array<{ heading: string; items: string[] }>;
+  };
+  writingTask: {
+    instruction: string;
+    recipient?: Partial<WritingRecipientDto>;
+    fixedInstructions?: string[];
+    wordGuide?: { min: number; max: number };
+  };
+  marking?: {
+    expectedPurpose?: string;
+    expectedAction?: string;
+    keyContentChecklist?: Array<Partial<WritingContentChecklistItemDto>>;
+    irrelevantContentChecklist?: Array<Partial<WritingContentChecklistItemDto>>;
+    modelAnswer?: string;
+  };
+}
+
+export interface WritingAttemptEventDto {
+  eventType: WritingAttemptEventType;
+  timestamp: string;
+  mode: 'paper' | 'computer';
+  sessionId?: string | null;
+  scenarioId?: string | null;
+  submissionId?: string | null;
+  payload?: Record<string, unknown>;
+}
+
+export interface WritingFeedbackAnnotationDto {
+  id: string;
+  submissionId: string;
+  reviewId: string | null;
+  tutorId: string;
+  criterion: WritingCriterionCode | null;
+  highlightedText: string;
+  startOffset: number;
+  endOffset: number;
+  severity: WritingSeverity;
+  suggestion: string | null;
+  feedbackText: string;
+  createdAt: string;
+}
+
+/** Deterministic (or LLM-enriched) pre-assessment feeding the tutor (spec §13.2). */
+export interface WritingPreAssessmentDto {
+  source: 'heuristic' | 'llm';
+  estimatedBands: WritingCriteriaScoresDto;
+  estimatedRawTotal: number;
+  estimatedBandLabel: string;
+  confidence: WritingConfidenceFlag;
+  wordCount: number;
+  withinWordGuide: boolean;
+  keyContentCoveragePercent: number;
+  missingKeyContent: string[];
+  detectedIrrelevantContent: string[];
+  languageNotes: string[];
+  suggestedCriterionFeedback: Partial<Record<WritingCriterionCode, string>>;
+}
+
+/** Everything a tutor needs on the marking screen (spec §14.2). */
+export interface WritingTutorMarkingContextDto {
+  submission: WritingSubmissionDto;
+  task: WritingTaskDto;
+  aiGrade: WritingGradeDto | null;
+  preAssessment: WritingPreAssessmentDto;
+  existingReview: WritingTutorReviewDto | null;
+  annotations: WritingFeedbackAnnotationDto[];
+  moderation: WritingModerationDto | null;
+  markerSequence: WritingMarkerSequence;
+}
+
+export interface WritingTutorReviewSubmitDto {
+  freeTextFeedback?: string | null;
+  perCriterionComments?: Partial<Record<WritingCriterionCode, string>>;
+  scoreOverride?: Partial<WritingCriteriaScoresDto>;
+  contentChecklistVerdict?: Record<string, WritingChecklistVerdict>;
+  markerSequence?: WritingMarkerSequence;
+  acceptedAiPreAssessment?: boolean;
+}
+
+export interface WritingModerationDto {
+  id: string;
+  submissionId: string;
+  firstMarkerId: string | null;
+  secondMarkerId: string | null;
+  seniorMarkerId: string | null;
+  firstScore: WritingCriteriaScoresDto | null;
+  secondScore: WritingCriteriaScoresDto | null;
+  finalScore: WritingCriteriaScoresDto | null;
+  variancePoints: number | null;
+  varianceReason: string | null;
+  finalDecisionNote: string | null;
+  status: WritingModerationStatus;
+}
+
+export interface WritingResultVisibilityDto {
+  showSubmissionReceived: boolean;
+  showAiEstimate: boolean;
+  showTutorScore: boolean;
+  showFullCriteria: boolean;
+  showAnnotatedResponse: boolean;
+  showMissingContent: boolean;
+  showModelAnswer: boolean;
+  showContentChecklist: boolean;
+  allowRewrite: boolean;
+}
+
+/** Gated learner feedback bundle (spec §15.2). Null fields = not yet visible. */
+export interface WritingSubmissionFeedbackDto {
+  submission: WritingSubmissionDto;
+  visibility: WritingResultVisibilityDto;
+  status: 'submitted_awaiting_review' | 'ai_estimated' | 'tutor_reviewed';
+  grade: WritingGradeDto | null;
+  tutorReview: WritingTutorReviewDto | null;
+  annotations: WritingFeedbackAnnotationDto[];
+  missingContent: WritingContentChecklistItemDto[];
+  irrelevantContent: WritingContentChecklistItemDto[];
+  modelAnswerText: string | null;
+  nextSteps: string[];
+}
+
+export interface WritingRewriteComparisonDto {
+  original: { submissionId: string; letterContent: string; grade: WritingGradeDto | null };
+  rewrite: { submissionId: string; letterContent: string; grade: WritingGradeDto | null };
+  perCriterionDelta: Partial<Record<WritingCriterionCode, number>>;
+}
+
+// ── Admin analytics (spec §16) ──
+
+export interface WritingAdminAnalyticsDto {
+  totals: { tasks: number; submissions: number; reviewed: number; learners: number };
+  averageCriteria: WritingCriteriaScoresDto;
+  averageBandByProfession: Array<{ profession: WritingProfession; averageBand: number; attempts: number }>;
+  averageBandByLetterType: Array<{ letterType: WritingLetterType; averageBand: number; attempts: number }>;
+  hardestTasks: Array<{ taskId: string; title: string; averageBand: number; attempts: number }>;
+  commonMissingContent: Array<{ itemText: string; count: number }>;
+  commonIrrelevantContent: Array<{ itemText: string; count: number }>;
+  commonLanguageErrors: Array<{ ruleId: string; ruleText: string; count: number; criterion: WritingCriterionCode | null }>;
+  wordCountDistribution: Array<{ bucketLabel: string; count: number }>;
+  writingPhaseSeconds: { average: number; median: number };
+  abandonmentRatePercent: number;
+  resubmissionImprovementAverage: number;
+}
+
+export interface WritingMarkingQualityDto {
+  tutorConsistency: Array<{
+    tutorId: string;
+    displayName: string | null;
+    reviews: number;
+    averageRawTotal: number;
+    leniencyDelta: number; // vs cohort mean (+ = lenient)
+    agreementCoefficient: number;
+  }>;
+  aiVsTutorVariance: { meanAbsoluteDelta: number; samples: number };
+  averageReviewTurnaroundHours: number;
+  criteriaDisagreement: Array<{ criterion: WritingCriterionCode; meanAbsoluteDelta: number }>;
+  moderationsTriggered: number;
 }

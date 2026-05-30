@@ -7413,6 +7413,29 @@ export async function bulkDraftAdminVocabularyItems(itemIds: string[]): Promise<
   }) as Promise<AdminVocabularyBulkDraftResponse>;
 }
 
+export type AdminVocabularyBulkPreviewResponse = {
+  totalRequested: number;
+  updated: number;
+  failed: number;
+  freePreviewTotal: number;
+  errors: string[];
+};
+
+/**
+ * Set or clear the free-preview flag on the given vocabulary terms. Free-preview
+ * terms are the only Recall Vocabulary Bank terms a non-subscribed learner can
+ * access. Admin-curated — no automatic cap.
+ */
+export async function setAdminVocabularyFreePreview(
+  itemIds: string[],
+  isFreePreview: boolean,
+): Promise<AdminVocabularyBulkPreviewResponse> {
+  return apiRequest('/v1/admin/vocabulary/items/bulk-free-preview', {
+    method: 'POST',
+    body: JSON.stringify({ itemIds, isFreePreview }),
+  }) as Promise<AdminVocabularyBulkPreviewResponse>;
+}
+
 export type AdminVocabularyAudioProgress = {
   total: number;
   withAudio: number;

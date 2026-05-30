@@ -2,15 +2,17 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { useTranslations } from 'next-intl';
-import { ClipboardCheck } from 'lucide-react';
+import { ClipboardCheck, Lock } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout/learner-dashboard-shell';
 import { InlineAlert } from '@/components/ui/alert';
+import { Button } from '@/components/ui/button';
 import { WritingEditorV2 } from '@/components/domain/writing/WritingEditorV2';
 import { WritingTimerV2 } from '@/components/domain/writing/WritingTimerV2';
 import { WordCounter } from '@/components/domain/writing/WordCounter';
 import { SubmitBar } from '@/components/domain/writing/SubmitBar';
-import { WritingCaseNotesPanel } from '@/components/domain/writing-case-notes-panel';
+import { CaseNotePdfViewer } from '@/components/domain/writing/CaseNotePdfViewer';
 import {
   beginWritingDiagnosticWriting,
   getWritingDiagnosticSession,
@@ -19,8 +21,9 @@ import {
   submitWritingDiagnostic,
 } from '@/lib/writing/api';
 import { connectWritingSubmissionStream } from '@/lib/writing/realtime';
+import { recordWritingAttemptEvent } from '@/lib/writing/exam-api';
 import type { WritingDiagnosticSessionDto } from '@/lib/writing/api';
-import type { WritingGradeDto, WritingScenarioDto } from '@/lib/writing/types';
+import type { WritingAttemptEventType, WritingGradeDto, WritingScenarioDto } from '@/lib/writing/types';
 
 export default function WritingDiagnosticSessionPage() {
   const t = useTranslations();
@@ -37,8 +40,30 @@ export default function WritingDiagnosticSessionPage() {
   const [phase, setPhase] = useState<'reading' | 'writing' | 'completed'>('reading');
   const [readingSeconds, setReadingSeconds] = useState(0);
   const [writingSeconds, setWritingSeconds] = useState(0);
+  // Post-submit lock: freeze the letter + show a read-only "awaiting review"
+  // state instead of navigating away (spec §10/§15).
+  const [locked, setLocked] = useState(false);
+  const [frozenLetter, setFrozenLetter] = useState('');
   const startedAtRef = useRef<number>(Date.now());
   const lastAutosaveContent = useRef<string>('');
+
+  // ----- Attempt-event emission (computer mode; fire-and-forget) -----
+  const contentRef = useRef(content);
+  contentRef.current = content;
+
+  const emitEvent = useCallback(
+    (eventType: WritingAttemptEventType, payload?: Record<string, unknown>) => {
+      recordWritingAttemptEvent({
+        eventType,
+        timestamp: new Date().toISOString(),
+        mode: 'computer',
+        sessionId: sessionId || null,
+        scenarioId: scenario?.id ?? null,
+        payload,
+      }).catch(() => {});
+    },
+    [sessionId, scenario?.id],
+  );
 
   const refresh = useCallback(async () => {
     if (!sessionId) return;
@@ -97,7 +122,7 @@ export default function WritingDiagnosticSessionPage() {
   // Autosave every 5s during writing phase.
   useEffect(() => {
     if (phase !== 'writing' || !scenario?.id) return;
-    const t = window.setInterval(() => {
+    const interval = window.setInterval(() => {
       const elapsed = Math.round((Date.now() - startedAtRef.current) / 1000);
       if (content === lastAutosaveContent.current) return;
       lastAutosaveContent.current = content;
@@ -108,9 +133,41 @@ export default function WritingDiagnosticSessionPage() {
       }).catch(() => {
         /* autosave is best-effort; do not surface */
       });
+      emitEvent('auto_saved', { wordCount });
     }, 5000);
-    return () => window.clearInterval(t);
-  }, [phase, scenario?.id, content, wordCount]);
+    return () => window.clearInterval(interval);
+  }, [phase, scenario?.id, content, wordCount, emitEvent]);
+
+  // attempt_started + reading_started once on mount (computer mode).
+  useEffect(() => {
+    emitEvent('attempt_started', { variant: 'diagnostic' });
+    emitEvent('reading_started');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // focus_lost on window blur (integrity signal).
+  useEffect(() => {
+    const onBlur = () => emitEvent('focus_lost');
+    window.addEventListener('blur', onBlur);
+    return () => window.removeEventListener('blur', onBlur);
+  }, [emitEvent]);
+
+  // reading_ended + writing_started on the reading→writing transition.
+  const prevPhaseRef = useRef(phase);
+  useEffect(() => {
+    if (prevPhaseRef.current === 'reading' && phase === 'writing') {
+      emitEvent('reading_ended');
+      emitEvent('writing_started');
+    }
+    prevPhaseRef.current = phase;
+  }, [phase, emitEvent]);
+
+  const handlePasteBlocked = useCallback(
+    (rejectedLength: number) => {
+      emitEvent('paste', { blocked: true, rejectedLength });
+    },
+    [emitEvent],
+  );
 
   const helperText = useMemo(() => {
     if (phase !== 'writing') return t('writing.diagnostic.session.helper.notStarted');
@@ -120,34 +177,61 @@ export default function WritingDiagnosticSessionPage() {
 
   const canSubmit = phase === 'writing' && wordCount >= 50 && !submitting;
 
-  const submit = useCallback(async () => {
-    if (!canSubmit) return;
-    setSubmitting(true);
-    setError(null);
-    try {
-      const elapsed = Math.round((Date.now() - startedAtRef.current) / 1000);
-      await submitWritingDiagnostic(sessionId, {
-        letterContent: content,
-        wordCount,
-        timeSpentSeconds: elapsed,
-      });
-      router.push(`/writing/diagnostic/session/${encodeURIComponent(sessionId)}/results`);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : t('writing.diagnostic.session.error.submit'));
-      setSubmitting(false);
-    }
-  }, [canSubmit, content, sessionId, wordCount, router, t]);
+  // Shared submit path. `auto` = true when fired by the writing-timer expiry.
+  const finalizeSubmit = useCallback(
+    async (auto: boolean) => {
+      if (submitting || locked) return;
+      setSubmitting(true);
+      setError(null);
+      emitEvent(auto ? 'timer_expired' : 'submit_clicked', { wordCount, auto });
+      try {
+        const elapsed = Math.round((Date.now() - startedAtRef.current) / 1000);
+        const letter = contentRef.current;
+        await submitWritingDiagnostic(sessionId, {
+          letterContent: letter,
+          wordCount,
+          timeSpentSeconds: elapsed,
+        });
+        // Do NOT navigate: freeze the letter and lock the UI.
+        setFrozenLetter(letter);
+        setLocked(true);
+        setPhase('completed');
+        emitEvent('attempt_locked');
+      } catch (err) {
+        setError(err instanceof Error ? err.message : t('writing.diagnostic.session.error.submit'));
+      } finally {
+        setSubmitting(false);
+      }
+    },
+    [submitting, locked, sessionId, wordCount, emitEvent, t],
+  );
 
-  // SignalR — grade-ready push (in case backend grades quickly while still on this page).
+  const submit = useCallback(() => {
+    if (!canSubmit) return;
+    void finalizeSubmit(false);
+  }, [canSubmit, finalizeSubmit]);
+
+  // Auto-submit + lock when the writing timer expires (phase → completed).
+  // Keeps the strict auto-submit-on-timer guarantee while showing the locked
+  // read-only state instead of an immediate redirect.
   useEffect(() => {
-    if (!session?.submissionId) return;
+    if (phase === 'completed' && !locked && !submitting) {
+      void finalizeSubmit(true);
+    }
+  }, [phase, locked, submitting, finalizeSubmit]);
+
+  // SignalR — grade-ready push (in case backend grades quickly while still on
+  // this page). Suppressed once we've shown the local locked state so the
+  // learner stays on the "awaiting review" screen (they navigate via the link).
+  useEffect(() => {
+    if (!session?.submissionId || locked) return;
     const d = connectWritingSubmissionStream(session.submissionId, {
       onGradeReady: (_: WritingGradeDto) => {
         router.push(`/writing/diagnostic/session/${encodeURIComponent(sessionId)}/results`);
       },
     });
     return () => d.close();
-  }, [session?.submissionId, sessionId, router]);
+  }, [session?.submissionId, sessionId, router, locked]);
 
   return (
     <LearnerDashboardShell pageTitle={t('writing.diagnostic.session.pageTitle')} distractionFree>
@@ -191,10 +275,10 @@ export default function WritingDiagnosticSessionPage() {
             // chrome is RTL.
             dir="ltr"
           >
-            <WritingCaseNotesPanel
-              caseNotes={scenario?.caseNotesMarkdown ?? t('writing.diagnostic.session.caseNotesLoading')}
+            <CaseNotePdfViewer
+              caseNotesMarkdown={scenario?.caseNotesMarkdown ?? t('writing.diagnostic.session.caseNotesLoading')}
+              title={scenario?.title ?? t('writing.diagnostic.session.caseNotesLabel')}
               readingWindowLocked={phase === 'reading'}
-              taskId={sessionId}
             />
           </section>
 
@@ -204,32 +288,64 @@ export default function WritingDiagnosticSessionPage() {
             // Learner writes the letter in English — keep the editor LTR.
             dir="ltr"
           >
-            <WritingEditorV2
-              mode="diagnostic"
-              initialContent=""
-              disabled={phase !== 'writing'}
-              spellCheck={true}
-              onChange={(text, words) => {
-                setContent(text);
-                setWordCount(words);
-              }}
-              placeholder={
-                phase === 'reading'
-                  ? t('writing.diagnostic.session.placeholderReading')
-                  : t('writing.diagnostic.session.placeholderWriting')
-              }
-              inputId="diagnostic-editor"
-            />
+            {locked ? (
+              <div className="flex min-h-[60vh] flex-col">
+                <div
+                  role="status"
+                  aria-live="polite"
+                  className="mb-3 flex items-start gap-2 rounded-xl border border-success/40 bg-success/10 px-4 py-3"
+                >
+                  <Lock className="mt-0.5 h-4 w-4 shrink-0 text-success" aria-hidden="true" />
+                  <div>
+                    <p className="text-sm font-bold text-navy">Submitted — awaiting tutor review</p>
+                    <p className="mt-0.5 text-xs text-muted">
+                      Your letter is locked and can no longer be edited.
+                    </p>
+                  </div>
+                </div>
+                <div
+                  className="flex-1 overflow-y-auto whitespace-pre-wrap rounded-xl border border-border bg-background-light p-4 text-sm leading-7 text-navy"
+                  aria-label="Submitted letter (read-only)"
+                >
+                  {frozenLetter.trim() ? frozenLetter : 'No letter was written.'}
+                </div>
+                <Button asChild variant="primary" size="md" className="mt-3 self-start">
+                  <Link href={`/writing/diagnostic/session/${encodeURIComponent(sessionId)}/results`}>
+                    Go to results
+                  </Link>
+                </Button>
+              </div>
+            ) : (
+              <WritingEditorV2
+                mode="diagnostic"
+                initialContent=""
+                disabled={phase !== 'writing'}
+                blockPaste
+                onPasteBlocked={handlePasteBlocked}
+                onChange={(text, words) => {
+                  setContent(text);
+                  setWordCount(words);
+                }}
+                placeholder={
+                  phase === 'reading'
+                    ? t('writing.diagnostic.session.placeholderReading')
+                    : t('writing.diagnostic.session.placeholderWriting')
+                }
+                inputId="diagnostic-editor"
+              />
+            )}
           </section>
         </div>
 
-        <SubmitBar
-          canSubmit={canSubmit}
-          submitLabel={t('writing.diagnostic.session.submit')}
-          onSubmit={() => void submit()}
-          loading={submitting}
-          helperText={helperText}
-        />
+        {!locked ? (
+          <SubmitBar
+            canSubmit={canSubmit}
+            submitLabel={t('writing.diagnostic.session.submit')}
+            onSubmit={submit}
+            loading={submitting}
+            helperText={helperText}
+          />
+        ) : null}
       </div>
     </LearnerDashboardShell>
   );

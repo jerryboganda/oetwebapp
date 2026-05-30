@@ -754,6 +754,8 @@ builder.Services.AddScoped<OetLearner.Api.Services.Speaking.SpeakingLiveRoomServ
 // Phase 4 — tutor-side scoring + review-queue services.
 builder.Services.AddScoped<OetLearner.Api.Services.Speaking.TutorAssessmentService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Speaking.TutorReviewQueueService>();
+// Double-marking + senior moderation (§15.4 / §15.5).
+builder.Services.AddScoped<OetLearner.Api.Services.Speaking.SpeakingModerationService>();
 // Phase 5 — drill bank service.
 builder.Services.AddScoped<OetLearner.Api.Services.Speaking.SpeakingDrillService>();
 // Phase 6 — analytics + course pathway + interlocutor training services.
@@ -1527,6 +1529,14 @@ builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingCoachServiceV
     OetLearner.Api.Services.Writing.WritingCoachServiceV2>();
 builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingOcrService,
     OetLearner.Api.Services.Writing.WritingOcrService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingModerationService,
+    OetLearner.Api.Services.Writing.WritingModerationService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingAnnotationService,
+    OetLearner.Api.Services.Writing.WritingAnnotationService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingHeuristicPreAssessmentService,
+    OetLearner.Api.Services.Writing.WritingHeuristicPreAssessmentService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingAdminAnalyticsService,
+    OetLearner.Api.Services.Writing.WritingAdminAnalyticsService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingTutorReviewService,
     OetLearner.Api.Services.Writing.WritingTutorReviewService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingAppealService,
@@ -2076,6 +2086,8 @@ app.MapSpeakingLiveRoomEndpoints();
 app.MapLiveKitWebhookEndpoint();
 // Phase 4 — tutor-side speaking review surface.
 app.MapTutorSpeakingEndpoints();
+// Double-marking + senior moderation surface (§15.4 / §15.5).
+app.MapSpeakingModerationEndpoints();
 // Phase 5 — speaking drill bank (learner + admin).
 app.MapSpeakingDrillEndpoints();
 // Phase 6 — speaking analytics dashboards, interlocutor training modules,

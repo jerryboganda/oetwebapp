@@ -7,6 +7,7 @@ using OetLearner.Api.Configuration;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services.Content;
+using OetLearner.Api.Services.Writing;
 
 namespace OetLearner.Api.Endpoints;
 
@@ -147,7 +148,9 @@ public static class ContentPapersAdminEndpoints
         .RequireRateLimiting("PerUserWrite");
 
         group.MapPost("/{id}/approve-publish", async (
-            string id, IContentPaperService svc, HttpContext http, CancellationToken ct) =>
+            string id, IContentPaperService svc, LearnerDbContext db,
+            IWritingTaskProjectionService projection,
+            ILoggerFactory loggerFactory, HttpContext http, CancellationToken ct) =>
         {
             var adminId = http.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "system";
             try { await svc.ApproveAndPublishAsync(id, adminId, ct); }
@@ -155,6 +158,25 @@ public static class ContentPapersAdminEndpoints
             {
                 return Results.BadRequest(new { error = ex.Message });
             }
+
+            // WS-B2 bridge: publishing a writing paper idempotently projects it into
+            // the authoritative WritingScenario (keyed on SourceContentPaperId). Failure
+            // here must not undo the publish, so it is logged and swallowed.
+            var paper = await db.ContentPapers.Include(p => p.Assets).FirstOrDefaultAsync(p => p.Id == id, ct);
+            if (paper is not null && string.Equals(paper.SubtestCode, "writing", StringComparison.OrdinalIgnoreCase))
+            {
+                try
+                {
+                    await projection.ProjectFromContentPaperAsync(paper, ct);
+                }
+                catch (Exception ex)
+                {
+                    loggerFactory
+                        .CreateLogger(typeof(ContentPapersAdminEndpoints).FullName!)
+                        .LogError(ex, "Failed to project writing ContentPaper {PaperId} into a scenario", id);
+                }
+            }
+
             return Results.NoContent();
         })
         .RequireAuthorization("AdminContentPublish")

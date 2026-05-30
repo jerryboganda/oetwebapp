@@ -1087,6 +1087,13 @@ public static class AdminEndpoints
             .RequireRateLimiting("PerUserWrite")
             .WithAdminWrite("AdminContentWrite");
 
+        // Set/clear the free-preview flag in bulk. Free-preview terms are the
+        // only Recall Vocabulary Bank terms a non-subscribed learner can access.
+        admin.MapPost("/vocabulary/items/bulk-free-preview", async (HttpContext http, AdminVocabularyBulkPreviewRequest request, AdminService service, CancellationToken ct)
+            => Results.Ok(await service.SetVocabularyFreePreviewBulkAsync(http.AdminId(), http.AdminName(), request, ct)))
+            .RequireRateLimiting("PerUserWrite")
+            .WithAdminWrite("AdminContentWrite");
+
         admin.MapGet("/vocabulary/audio/progress", async (AdminService service, CancellationToken ct)
             => Results.Ok(await service.GetVocabularyAudioProgressAsync(ct)))
             .WithAdminRead("AdminContentRead");

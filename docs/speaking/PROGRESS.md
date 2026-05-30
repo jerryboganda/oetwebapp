@@ -24,6 +24,10 @@ Core Speaking engineering exists, and this pass hardens the admin/learner operat
 | 2026-05-06 | Retention registration | Complete | Program registers `SpeakingAudioRetentionWorker`; deletion only clears DB pointer when storage deletion succeeds | Covered by registration/sweep tests |
 | 2026-05-06 | Validation | Partial | Frontend focused API test passed; changed-file diagnostics clean; backend/tsc blocked by unrelated dirty-worktree errors | Re-run backend and tsc after unrelated AdminAlert/AdminAlerts issues are fixed |
 | 2026-05-07 | Final validation | Complete | `npx tsc --noEmit` zero errors; focused `dotnet test` 64/64 pass (Speaking + AdminFlows + retention worker); `npx vitest run lib/__tests__/api.test.ts` 24/24 pass | Speaking hardening slice closed |
+| 2026-06-01 | Double-marking + senior moderation (§15.4 / §15.5) | Complete | Backend: `SpeakingTutorAssessment.MarkerRole`; `SpeakingModerationCase` entity + DbContext partial + idempotent migration `20260601090000_AddSpeakingModeration`; `SpeakingModerationService` (open / second-mark / variance auto-finalize / senior finalize / request-reattempt) with separation-of-duties; `SpeakingModerationEndpoints` under `/v1/expert/speaking` (ExpertOnly); canonical tutor projection now prefers `moderated` → `primary`. Frontend: `lib/api/speaking-assessments.ts` moderation client; `app/expert/speaking/moderation` queue + `[sessionId]` case detail; "Send to moderation" action on the assess page. Tests: `SpeakingModerationTests` (10 cases). | Optional P2: variance threshold as a runtime setting; moderator RBAC role if separation-of-duties is insufficient |
+| 2026-06-01 | Claim heartbeat fix (`EnsureTutorMayReviewAsync`) | Complete | Pre-existing latent bug surfaced once the backend build was repaired: the interlocutor early-return skipped the active-claim heartbeat refresh, so `TutorAssessment_RefreshesActiveClaimOnAssessmentActivity` failed. Refactored so the claim heartbeat refresh runs before the interlocutor short-circuit; behaviour-preserving for all non-interlocutor paths. | None |
+| 2026-06-01 | Final validation (moderation slice) | Complete | SDK-container `dotnet test` (filter SpeakingModeration\|DualAssessment\|WritingWave6): **40 passed, 0 failed**. Frontend: language-server diagnostics clean + `eslint` clean on all 4 moderation files. | Slice closed |
+
 
 ## Gap Register
 
@@ -51,6 +55,8 @@ Core Speaking engineering exists, and this pass hardens the admin/learner operat
 | `dotnet test --filter SpeakingMockSetTests\|SpeakingAudioRetentionWorkerTests\|SpeakingSelfPracticeFlowsTests\|AdminFlowsTests` (2026-05-07) | Pass | 64 passed, 0 failed in 2m05s |
 | `npx vitest run lib/__tests__/api.test.ts` (2026-05-07) | Pass | 24/24 including bound mock-session helper |
 | Independent scoped review | Pass | No blocking or non-blocking findings after the server-side binding hardening revision |
+| `dotnet test --filter SpeakingModeration\|DualAssessment\|WritingWave6` (SDK container, 2026-06-01) | Pass | 40 passed, 0 failed; includes the 10 `SpeakingModerationTests` + the repaired claim-heartbeat test |
+| `eslint` on moderation frontend (queue, case detail, assess, api client) | Pass | Clean; language-server diagnostics also clean on all 4 files |
 
 ## Decisions
 

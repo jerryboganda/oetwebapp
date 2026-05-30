@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { BookOpen, Plus, Upload, Sparkles, Trash2, Edit3, Volume2, CheckCircle2, Archive, FileText, RefreshCw } from 'lucide-react';
+import { BookOpen, Plus, Upload, Sparkles, Trash2, Edit3, Volume2, CheckCircle2, Archive, FileText, RefreshCw, Star, StarOff } from 'lucide-react';
 import { AdminCatalogLayout } from '@/components/admin/layout/admin-catalog-layout';
 import { Button } from '@/components/admin/ui/button';
 import { Card, CardContent } from '@/components/admin/ui/card';
@@ -28,6 +28,7 @@ import {
   resumeAdminVocabularyAudio,
   fetchAdminVocabularyCategories,
   fetchAdminVocabularyRecallSets,
+  setAdminVocabularyFreePreview,
   type AdminRecallSetSummary,
   type AdminVocabularyAudioProgress,
 } from '@/lib/api';
@@ -41,6 +42,7 @@ type VocabRow = {
   exampleSentence: string | null;
   status: 'draft' | 'active' | 'archived';
   hasAudio?: boolean;
+  isFreePreview?: boolean;
 };
 
 type ListResponse = {
@@ -48,6 +50,7 @@ type ListResponse = {
   page: number;
   pageSize: number;
   items: VocabRow[];
+  freePreviewTotal?: number;
 };
 
 
@@ -74,6 +77,8 @@ export default function AdminVocabularyPage() {
   const [bulkPublishing, setBulkPublishing] = useState(false);
   const [bulkArchiving, setBulkArchiving] = useState(false);
   const [bulkDrafting, setBulkDrafting] = useState(false);
+  const [bulkPreviewing, setBulkPreviewing] = useState(false);
+  const [freePreviewTotal, setFreePreviewTotal] = useState(0);
   const [audioProgress, setAudioProgress] = useState<AdminVocabularyAudioProgress | null>(null);
   const [audioStalled, setAudioStalled] = useState(false);
   const audioPollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -146,6 +151,7 @@ export default function AdminVocabularyPage() {
         const data = res as ListResponse;
         setRows(data.items ?? []);
         setTotal(data.total ?? 0);
+        setFreePreviewTotal(data.freePreviewTotal ?? 0);
         setSelectedKeys(new Set());
       } catch {
         if (!cancelled) setToast({ variant: 'error', message: 'Failed to load vocabulary items.' });
@@ -260,6 +266,43 @@ export default function AdminVocabularyPage() {
     }
   }
 
+  async function handleBulkSetPreview(isFreePreview: boolean) {
+    const itemIds = Array.from(selectedKeys);
+    if (itemIds.length === 0) return;
+    setBulkPreviewing(true);
+    try {
+      const result = await setAdminVocabularyFreePreview(itemIds, isFreePreview);
+      setSelectedKeys(new Set());
+      setRows(prev => prev.map(r => itemIds.includes(r.id) ? { ...r, isFreePreview } : r));
+      setFreePreviewTotal(result.freePreviewTotal);
+      const failMsg = result.failed > 0 ? ` ${result.failed} failed.` : '';
+      setToast({
+        variant: result.failed > 0 ? 'error' : 'success',
+        message: isFreePreview
+          ? `Added ${result.updated} ${result.updated === 1 ? 'term' : 'terms'} to the free preview.${failMsg}`
+          : `Removed ${result.updated} ${result.updated === 1 ? 'term' : 'terms'} from the free preview.${failMsg}`,
+      });
+    } catch {
+      setToast({ variant: 'error', message: 'Failed to update free-preview selection.' });
+    } finally {
+      setBulkPreviewing(false);
+    }
+  }
+
+  async function handleSetPreviewSingle(id: string, isFreePreview: boolean) {
+    try {
+      const result = await setAdminVocabularyFreePreview([id], isFreePreview);
+      setRows(prev => prev.map(r => r.id === id ? { ...r, isFreePreview } : r));
+      setFreePreviewTotal(result.freePreviewTotal);
+      setToast({
+        variant: 'success',
+        message: isFreePreview ? 'Added to the free preview.' : 'Removed from the free preview.',
+      });
+    } catch {
+      setToast({ variant: 'error', message: 'Failed to update free-preview selection.' });
+    }
+  }
+
   async function handleRegenerateAudio() {
     try {
       const result = await resumeAdminVocabularyAudio();
@@ -306,6 +349,30 @@ export default function AdminVocabularyPage() {
         <Badge variant={row.status === 'active' ? 'success' : row.status === 'draft' ? 'warning' : 'secondary'} size="sm">
           {row.status}
         </Badge>
+      ),
+    },
+    {
+      key: 'freePreview',
+      header: 'Free preview',
+      render: (row) => (
+        <button
+          type="button"
+          onClick={() => void handleSetPreviewSingle(row.id, !row.isFreePreview)}
+          aria-pressed={!!row.isFreePreview}
+          aria-label={row.isFreePreview
+            ? `Remove ${row.term} from free preview`
+            : `Add ${row.term} to free preview`}
+          title={row.isFreePreview ? 'In free preview — click to lock' : 'Locked — click to add to free preview'}
+          className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium transition-colors ${
+            row.isFreePreview
+              ? 'border-[var(--admin-success)] bg-[color-mix(in_srgb,var(--admin-success)_12%,transparent)] text-[var(--admin-success)]'
+              : 'border-admin-border bg-admin-bg-surface text-admin-fg-muted hover:border-admin-border-strong hover:text-admin-fg-strong'
+          }`}
+        >
+          {row.isFreePreview
+            ? <><Star className="h-3.5 w-3.5 fill-current" aria-hidden="true" />Free</>
+            : <><StarOff className="h-3.5 w-3.5" aria-hidden="true" />Locked</>}
+        </button>
       ),
     },
     {
@@ -499,6 +566,20 @@ export default function AdminVocabularyPage() {
           </Card>
         )}
 
+        <Card>
+          <CardContent className="flex flex-wrap items-center justify-between gap-2 p-4 pt-4">
+            <div className="flex items-center gap-2">
+              <Star className="h-4 w-4 text-[var(--admin-success)]" aria-hidden="true" />
+              <span className="text-sm text-admin-fg-default">
+                <span className="font-semibold text-admin-fg-strong">{freePreviewTotal}</span> term{freePreviewTotal === 1 ? '' : 's'} in the free preview.
+              </span>
+            </div>
+            <span className="text-xs text-admin-fg-muted">
+              Free learners only see free-preview terms; everything else is locked behind the paywall.
+            </span>
+          </CardContent>
+        </Card>
+
         {recallSets.length > 0 && (
           <Card>
             <CardContent className="p-4 pt-4">
@@ -572,6 +653,24 @@ export default function AdminVocabularyPage() {
                     disabled: selectedRows.length === 0,
                     loading: bulkDrafting,
                     onClick: handleBulkDraft,
+                  },
+                  {
+                    key: 'free-preview-on',
+                    label: 'Add to free preview',
+                    icon: <Star className="h-4 w-4" aria-hidden="true" />,
+                    variant: 'secondary',
+                    disabled: selectedRows.length === 0,
+                    loading: bulkPreviewing,
+                    onClick: () => void handleBulkSetPreview(true),
+                  },
+                  {
+                    key: 'free-preview-off',
+                    label: 'Remove from free preview',
+                    icon: <StarOff className="h-4 w-4" aria-hidden="true" />,
+                    variant: 'secondary',
+                    disabled: selectedRows.length === 0,
+                    loading: bulkPreviewing,
+                    onClick: () => void handleBulkSetPreview(false),
                   },
                   {
                     key: 'archive',

@@ -104,6 +104,17 @@ public class SpeakingTutorAssessment
     [MaxLength(64)]
     public string TutorId { get; set; } = default!;
 
+    /// <summary>Which marker track this row belongs to in the double-marking
+    /// + moderation workflow: <c>primary</c> (default — the first independent
+    /// human assessor and the only role the ordinary tutor flow ever writes),
+    /// <c>second</c> (a distinct second independent assessor opened via a
+    /// moderation case), or <c>moderated</c> (the senior moderator's reconciled
+    /// final). The learner-facing dual projection prefers
+    /// <c>moderated</c> &gt; <c>primary</c> when choosing the canonical tutor
+    /// score, so the ordinary single-marker flow is unchanged.</summary>
+    [MaxLength(16)]
+    public string MarkerRole { get; set; } = "primary";
+
     // Linguistic criteria — 0..6 each (OET band).
     public int Intelligibility { get; set; }
     public int Fluency { get; set; }

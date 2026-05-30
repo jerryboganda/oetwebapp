@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, BookOpen, Volume2, Plus, CheckCircle2, Trash2 } from 'lucide-react';
+import { ArrowLeft, BookOpen, Volume2, Plus, CheckCircle2, Trash2, Lock } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { Card } from '@/components/ui/card';
@@ -127,6 +127,53 @@ export default function VocabularyTermDetailPage() {
       <LearnerDashboardShell>
         <InlineAlert variant="warning" className="mb-4">Term not found.</InlineAlert>
         <button onClick={() => router.back()} className="rounded-xl bg-primary px-4 py-2 text-sm text-white dark:bg-violet-700">Go back</button>
+      </LearnerDashboardShell>
+    );
+  }
+
+  // Free-preview locking: the backend redacts non-preview terms for
+  // non-subscribed learners. Render a locked state with the canonical subscribe
+  // prompt instead of the (empty) redacted content.
+  if (term.isLocked) {
+    return (
+      <LearnerDashboardShell>
+        <div className="mb-6 flex items-center gap-3">
+          <Link href="/vocabulary/browse" aria-label="Back to vocabulary browse" className="text-muted transition-colors hover:text-navy">
+            <ArrowLeft className="w-5 h-5" aria-hidden="true" />
+          </Link>
+          <LearnerPageHero
+            eyebrow="Vocabulary"
+            title={term.term}
+            description="Locked recall word"
+            icon={Lock}
+          />
+        </div>
+        <Card className="border-border bg-surface p-8 text-center">
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-primary/10 text-primary">
+            <Lock className="h-6 w-6" />
+          </div>
+          <h2 className="mt-4 text-lg font-bold text-navy">
+            Subscribe to unlock the full Recall Vocabulary Bank.
+          </h2>
+          <p className="mx-auto mt-2 max-w-md text-sm text-muted">
+            Free learners can preview a curated selection of recall words. Subscribe to reveal this term&apos;s
+            definition, examples, British clinical pronunciation, and the full Recalls drill set.
+          </p>
+          <div className="mt-6 flex flex-col items-center justify-center gap-2 sm:flex-row">
+            <Link
+              href="/billing/upgrade"
+              className="inline-flex items-center justify-center rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-white hover:bg-primary-dark active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600"
+            >
+              View upgrade options
+            </Link>
+            <Link
+              href="/vocabulary/browse"
+              className="inline-flex items-center justify-center rounded-xl border border-border px-5 py-2.5 text-sm font-medium text-muted hover:text-navy"
+            >
+              Back to browse
+            </Link>
+          </div>
+        </Card>
       </LearnerDashboardShell>
     );
   }

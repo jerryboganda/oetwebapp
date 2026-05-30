@@ -313,7 +313,17 @@ public sealed class TutorAssessmentService(
             .ToListAsync(ct);
 
         var finalRows = tutorRows.Where(t => t.IsFinal).ToArray();
-        var latestTutor = finalRows.FirstOrDefault()
+        // Canonical tutor score selection for the double-marking + moderation
+        // workflow: a senior moderator's reconciled "moderated" final wins over
+        // a "primary" first-marker final, which in turn wins over any other
+        // final (e.g. a "second" independent mark). When only the ordinary
+        // single-marker flow has run, all finals are "primary" (or legacy "")
+        // so this preserves the previous "latest final" behaviour exactly.
+        var canonicalTutor =
+            finalRows.FirstOrDefault(t => t.MarkerRole == "moderated")
+            ?? finalRows.FirstOrDefault(t => t.MarkerRole == "primary" || string.IsNullOrEmpty(t.MarkerRole))
+            ?? finalRows.FirstOrDefault();
+        var latestTutor = canonicalTutor
             ?? (includeDraftForTutorId is null
                 ? null
                 : tutorRows.FirstOrDefault(t => t.TutorId == includeDraftForTutorId));
@@ -464,11 +474,8 @@ public sealed class TutorAssessmentService(
 
     private async Task EnsureTutorMayReviewAsync(string tutorId, SpeakingSession session, CancellationToken ct)
     {
-        if (!string.IsNullOrWhiteSpace(session.InterlocutorActorId)
-            && string.Equals(session.InterlocutorActorId, tutorId, StringComparison.Ordinal))
-        {
-            return;
-        }
+        var isInterlocutor = !string.IsNullOrWhiteSpace(session.InterlocutorActorId)
+            && string.Equals(session.InterlocutorActorId, tutorId, StringComparison.Ordinal);
 
         var now = clock.GetUtcNow();
         var claimCutoff = now.AddMinutes(-TutorReviewQueueService.IdleClaimTtlMinutes);
@@ -488,10 +495,18 @@ public sealed class TutorAssessmentService(
                 .FirstOrDefaultAsync(ct);
             if (string.Equals(latestClaimActor, tutorId, StringComparison.Ordinal))
             {
+                // Assessment activity refreshes the claim heartbeat so an actively
+                // working reviewer — including the interlocutor when they also hold
+                // the claim — is not reaped by the idle-claim TTL.
                 activeClaim.CreatedAt = now;
                 await db.SaveChangesAsync(ct);
                 return;
             }
+        }
+
+        if (isInterlocutor)
+        {
+            return;
         }
 
         throw ApiException.Forbidden(

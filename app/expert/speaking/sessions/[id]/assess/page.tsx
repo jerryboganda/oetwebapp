@@ -18,7 +18,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { ArrowLeft, ListChecks, Loader2, Save, Send } from 'lucide-react';
+import { ArrowLeft, ListChecks, Loader2, Save, Scale, Send } from 'lucide-react';
 
 import { ExpertDashboardShell } from '@/components/layout';
 import { InlineAlert, Toast } from '@/components/ui/alert';
@@ -30,6 +30,7 @@ import { DualAssessmentColumn } from '@/components/domain/speaking/DualAssessmen
 import { TranscriptPlayerWithComments, type TranscriptPayload } from '@/components/domain/speaking/TranscriptPlayerWithComments';
 import {
   SpeakingAssessmentApiError,
+  moderationOpenCase,
   tutorAddTimestampedComment,
   tutorCreateDraft,
   tutorGetDualAssessment,
@@ -98,6 +99,7 @@ export default function AssessSpeakingSessionPage() {
   const [mode, setMode] = useState<'draft' | 'submit'>('draft');
   const [savingDraft, setSavingDraft] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [sendingToModeration, setSendingToModeration] = useState(false);
   const [toast, setToast] = useState<{ variant: 'success' | 'error' | 'info'; message: string } | null>(null);
   const [comments, setComments] = useState<TimestampedComment[]>([]);
 
@@ -242,6 +244,22 @@ export default function AssessSpeakingSessionPage() {
     }
   };
 
+  const handleSendToModeration = async () => {
+    setSendingToModeration(true);
+    try {
+      await moderationOpenCase(sessionId, 'tutor_request');
+      router.push(`/expert/speaking/moderation/${encodeURIComponent(sessionId)}`);
+    } catch (err) {
+      const msg =
+        err instanceof SpeakingAssessmentApiError
+          ? err.message
+          : 'Could not open a moderation case. Submit your assessment first.';
+      setToast({ variant: 'error', message: msg });
+    } finally {
+      setSendingToModeration(false);
+    }
+  };
+
   const aiAssessment = data?.ai ?? null;
 
   const allCommentsForPlayer = useMemo(() => comments, [comments]);
@@ -337,6 +355,16 @@ export default function AssessSpeakingSessionPage() {
           <Button variant="outline" onClick={() => void handleSaveDraft()} loading={savingDraft} disabled={submitting}>
             <Save className="mr-1.5 h-3.5 w-3.5" aria-hidden />
             Save draft
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => void handleSendToModeration()}
+            loading={sendingToModeration}
+            disabled={submitting || savingDraft}
+            title="Flag this submitted assessment for an independent second mark"
+          >
+            <Scale className="mr-1.5 h-3.5 w-3.5" aria-hidden />
+            Send to moderation
           </Button>
           <Button variant="primary" onClick={() => void handleSubmit()} loading={submitting} disabled={savingDraft}>
             {submitting ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Send className="mr-1.5 h-3.5 w-3.5" aria-hidden />}

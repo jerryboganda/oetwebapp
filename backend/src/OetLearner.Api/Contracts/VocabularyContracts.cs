@@ -36,7 +36,19 @@ public sealed record VocabularyTermResponse(
     /// How many times this term appeared across CSV imports.
     /// Higher count = higher exam importance.
     /// </summary>
-    int ExamFrequencyCount
+    int ExamFrequencyCount,
+    /// <summary>
+    /// True when this term is part of the curated free-preview Recall
+    /// Vocabulary Bank (admin-selected). Independent of the requesting user.
+    /// </summary>
+    bool IsFreePreview = false,
+    /// <summary>
+    /// True when the requesting learner may NOT access this term's content
+    /// (free tier + not a preview word). When locked, content fields
+    /// (definition, example, audio, etc.) are redacted server-side and the UI
+    /// must blur the card and prompt the learner to subscribe.
+    /// </summary>
+    bool IsLocked = false
 );
 
 /// <summary>One row in the canonical recall-set registry response.</summary>
@@ -264,7 +276,8 @@ public sealed record AdminVocabularyItemCreateRequestV2(
     IReadOnlyList<string>? CommonMistakes,
     IReadOnlyList<string>? SimilarSounding,
     string? SourceProvenance,
-    string? Status
+    string? Status,
+    bool? IsFreePreview = null
 );
 
 public sealed record AdminVocabularyItemUpdateRequestV2(
@@ -289,7 +302,8 @@ public sealed record AdminVocabularyItemUpdateRequestV2(
     IReadOnlyList<string>? CommonMistakes,
     IReadOnlyList<string>? SimilarSounding,
     string? SourceProvenance,
-    string? Status
+    string? Status,
+    bool? IsFreePreview = null
 );
 
 public sealed record AdminVocabularyImportPreviewRow(
@@ -342,6 +356,20 @@ public sealed record AdminVocabularyBulkDeleteRequest(
 
 public sealed record AdminVocabularyBulkIdsRequest(
     IReadOnlyList<string> ItemIds
+);
+
+/// <summary>Bulk set/clear the free-preview flag on the given vocabulary items.</summary>
+public sealed record AdminVocabularyBulkPreviewRequest(
+    IReadOnlyList<string> ItemIds,
+    bool IsFreePreview
+);
+
+public sealed record AdminVocabularyBulkPreviewResponse(
+    int TotalRequested,
+    int Updated,
+    int Failed,
+    int FreePreviewTotal,
+    IReadOnlyList<string> Errors
 );
 
 public sealed record AdminVocabularyBulkDeleteResponse(

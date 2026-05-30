@@ -107,6 +107,10 @@ export default function RecallsWordsPage() {
   // authoritative (returns 402/403 for free learners) — we surface that as an
   // upgrade modal instead of a silent failure so candidates understand why.
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+  // Free-preview locking: the backend redacts non-preview terms for
+  // non-subscribed learners (`term.isLocked === true`). Clicking a locked term
+  // opens this modal with the canonical subscribe prompt.
+  const [showLockedModal, setShowLockedModal] = useState(false);
 
   useEffect(() => {
     analytics.track('recalls_words_viewed');
@@ -364,6 +368,44 @@ export default function RecallsWordsPage() {
                 {catalogTerms.map((term) => {
                   const definitionText =
                     term.definition && !/^\s*\(\s*pending\b/i.test(term.definition) ? term.definition : null;
+                  if (term.isLocked) {
+                    return (
+                      <article
+                        key={term.id}
+                        role="group"
+                        tabIndex={0}
+                        onClick={() => setShowLockedModal(true)}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter' || event.key === ' ' || event.code === 'Space') {
+                            event.preventDefault();
+                            setShowLockedModal(true);
+                          }
+                        }}
+                        aria-label={`${term.term} — locked. Subscribe to unlock the full Recall Vocabulary Bank.`}
+                        className="group relative cursor-pointer overflow-hidden rounded-2xl border border-border bg-surface p-5 transition-[color,background-color,border-color,box-shadow] duration-200 hover:border-primary/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                      >
+                        <div className="pointer-events-none select-none blur-sm" aria-hidden="true">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <h3 className="text-base font-bold text-navy">{term.term}</h3>
+                          </div>
+                          <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                            <CategoryBadge category={term.category} size="sm" />
+                          </div>
+                          <p className="mt-3 text-sm leading-relaxed text-muted">
+                            Definition hidden — subscribe to reveal the full recall entry, audio and examples.
+                          </p>
+                        </div>
+                        <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-surface/40 text-center backdrop-blur-[2px]">
+                          <span className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-primary/10 text-primary">
+                            <Lock size={16} strokeWidth={2} />
+                          </span>
+                          <span className="px-4 text-xs font-semibold text-navy">
+                            Subscribe to unlock the full Recall Vocabulary Bank.
+                          </span>
+                        </div>
+                      </article>
+                    );
+                  }
                   return (
                     <article
                       key={term.id}
@@ -565,6 +607,38 @@ export default function RecallsWordsPage() {
               href="/billing/upgrade"
               className="inline-flex items-center justify-center rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary-dark active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600"
               onClick={() => setShowUpgradeModal(false)}
+            >
+              View upgrade options
+            </Link>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
+        open={showLockedModal}
+        onClose={() => setShowLockedModal(false)}
+        title="Locked recall word"
+        size="sm"
+      >
+        <div className="space-y-4">
+          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary">
+            <Lock className="h-5 w-5" />
+          </div>
+          <p className="text-sm font-semibold text-navy">
+            Subscribe to unlock the full Recall Vocabulary Bank.
+          </p>
+          <p className="text-sm text-muted">
+            Free learners can preview a curated selection of recall words. Subscribe to reveal every term, with
+            definitions, examples, British clinical pronunciation, and the full Recalls drill set.
+          </p>
+          <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+            <Button variant="secondary" onClick={() => setShowLockedModal(false)}>
+              Not now
+            </Button>
+            <Link
+              href="/billing/upgrade"
+              className="inline-flex items-center justify-center rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary-dark active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600"
+              onClick={() => setShowLockedModal(false)}
             >
               View upgrade options
             </Link>

@@ -35,6 +35,27 @@ public sealed record WritingTutorReviewInternalSubmitRequest(
     IReadOnlyDictionary<string, string>? PerCriterionComments,
     IReadOnlyDictionary<string, int>? ScoreOverride);
 
+/// <summary>
+/// Tutor marking-surface submit payload (WS-B4). Mirrors the
+/// <c>POST /v1/writing/tutor/reviews/{id}</c> request body. Distinct from
+/// <see cref="WritingTutorReviewInternalSubmitRequest"/> (queue submit): it also
+/// carries the content-checklist verdict, marker sequence and accepted-AI flag,
+/// and the score override is a strongly-typed <see cref="WritingCriteriaScores"/>.
+/// </summary>
+public sealed record WritingTutorReviewSubmitInput(
+    string? FreeTextFeedback,
+    IReadOnlyDictionary<string, string>? PerCriterionComments,
+    WritingCriteriaScores? ScoreOverride,
+    IReadOnlyDictionary<string, string>? ContentChecklistVerdict,
+    string? MarkerSequence,
+    bool AcceptedAiPreAssessment);
+
+/// <summary>Result of a marking-surface submit: the persisted review plus the
+/// moderation row when double-marking advanced one (else null).</summary>
+public sealed record WritingMarkingReviewResult(
+    WritingTutorReview Review,
+    WritingModeration? Moderation);
+
 public sealed record WritingTutorQueueStatus(bool Paused, string? Reason, int CurrentDepth, int OldestWaitHours);
 
 public interface IWritingTutorReviewService
@@ -43,6 +64,14 @@ public interface IWritingTutorReviewService
     Task<WritingTutorQueueStatus> GetQueueStatusAsync(CancellationToken ct);
     Task<WritingTutorReviewView> ClaimAsync(string tutorId, Guid submissionId, CancellationToken ct);
     Task<WritingTutorReviewView> SubmitReviewAsync(string tutorId, Guid submissionId, WritingTutorReviewInternalSubmitRequest request, CancellationToken ct);
+
+    /// <summary>
+    /// Tutor marking-surface submit (WS-B4): upserts the review keyed by
+    /// submission + tutor, applies any score override to the grade, and — for
+    /// double-marking scenarios with an override — records the marker score on the
+    /// moderation row. Returns the persisted review and the moderation row (if any).
+    /// </summary>
+    Task<WritingMarkingReviewResult> SubmitMarkingReviewAsync(Guid submissionId, string tutorId, WritingTutorReviewSubmitInput input, CancellationToken ct);
     Task<WritingTutorReviewView?> GetReviewForSubmissionAsync(string userId, Guid submissionId, CancellationToken ct);
     Task<WritingTutorReviewView> RequestReviewAsync(string userId, Guid submissionId, CancellationToken ct);
 
@@ -59,6 +88,7 @@ public sealed class WritingTutorReviewService(
     LearnerDbContext db,
     TimeProvider clock,
     IOptions<WritingV2Options> options,
+    IWritingModerationService moderation,
     ILogger<WritingTutorReviewService> logger) : IWritingTutorReviewService
 {
     public async Task<IReadOnlyList<WritingTutorQueueEntry>> GetQueueAsync(string tutorId, CancellationToken ct)
@@ -202,6 +232,91 @@ public sealed class WritingTutorReviewService(
         logger.LogInformation("Tutor review submitted for submission {SubmissionId} by tutor {TutorId}.", submissionId, tutorId);
         return ToView(review);
     }
+
+    public async Task<WritingMarkingReviewResult> SubmitMarkingReviewAsync(Guid submissionId, string tutorId, WritingTutorReviewSubmitInput input, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(input);
+
+        var submission = await db.WritingSubmissions
+            .FirstOrDefaultAsync(s => s.Id == submissionId, ct)
+            ?? throw ApiException.NotFound("writing_submission_not_found", "Writing submission was not found.");
+        var scenario = await db.WritingScenarios.AsNoTracking()
+            .FirstOrDefaultAsync(s => s.Id == submission.ScenarioId, ct)
+            ?? throw ApiException.NotFound("writing_scenario_not_found", "Writing scenario was not found.");
+
+        var now = clock.GetUtcNow();
+        var review = await db.WritingTutorReviews
+            .FirstOrDefaultAsync(r => r.SubmissionId == submissionId && r.TutorId == tutorId, ct);
+        if (review is null)
+        {
+            review = new WritingTutorReview
+            {
+                Id = Guid.NewGuid(),
+                SubmissionId = submissionId,
+                TutorId = tutorId,
+                CreatedAt = now,
+            };
+            db.WritingTutorReviews.Add(review);
+        }
+
+        var scoreOverride = NormalizeScoreOverride(ScoreOverrideMap(input.ScoreOverride));
+
+        review.FreeTextFeedback = input.FreeTextFeedback ?? string.Empty;
+        review.PerCriterionCommentsJson = input.PerCriterionComments is null
+            ? "{}"
+            : JsonSerializer.Serialize(input.PerCriterionComments);
+        review.ScoreOverrideJson = scoreOverride is null ? null : JsonSerializer.Serialize(scoreOverride);
+        review.ContentChecklistVerdictJson = input.ContentChecklistVerdict is null
+            ? "{}"
+            : JsonSerializer.Serialize(input.ContentChecklistVerdict);
+        review.IsContentChecklistMarked = input.ContentChecklistVerdict is { Count: > 0 };
+        review.MarkerSequence = string.IsNullOrWhiteSpace(input.MarkerSequence)
+            ? review.MarkerSequence
+            : input.MarkerSequence;
+        // The accepted-AI flag clears any stale audit JSON when the tutor opts out;
+        // when accepted, any pre-assessment JSON already captured on the row is kept.
+        if (!input.AcceptedAiPreAssessment)
+        {
+            review.AcceptedAiPreAssessmentJson = null;
+        }
+        review.Status = "submitted";
+        review.SubmittedAt = now;
+
+        await ApplyTutorGradeAsync(review, scoreOverride, now, ct);
+
+        WritingModeration? moderationRow = null;
+        if (string.Equals(scenario.MarkingMode, "double", StringComparison.OrdinalIgnoreCase)
+            && input.ScoreOverride is not null)
+        {
+            moderationRow = await moderation.RecordMarkerScoreAsync(
+                submissionId,
+                tutorId,
+                review.MarkerSequence,
+                input.ScoreOverride,
+                WritingModerationService.DefaultVarianceThreshold,
+                ct);
+        }
+
+        await db.SaveChangesAsync(ct);
+        logger.LogInformation(
+            "Tutor marking review submitted for submission {SubmissionId} by tutor {TutorId} (sequence {MarkerSequence}).",
+            submissionId, tutorId, review.MarkerSequence);
+        return new WritingMarkingReviewResult(review, moderationRow);
+    }
+
+    /// <summary>Strongly-typed override → canonical c1Purpose..c6Language map (null when no override).</summary>
+    private static IReadOnlyDictionary<string, int>? ScoreOverrideMap(WritingCriteriaScores? score)
+        => score is null
+            ? null
+            : new Dictionary<string, int>(StringComparer.Ordinal)
+            {
+                ["c1Purpose"] = score.C1Purpose,
+                ["c2Content"] = score.C2Content,
+                ["c3Conciseness"] = score.C3Conciseness,
+                ["c4Genre"] = score.C4Genre,
+                ["c5Organisation"] = score.C5Organisation,
+                ["c6Language"] = score.C6Language,
+            };
 
     private async Task ApplyTutorGradeAsync(WritingTutorReview review, IReadOnlyDictionary<string, int>? scoreOverride, DateTimeOffset now, CancellationToken ct)
     {

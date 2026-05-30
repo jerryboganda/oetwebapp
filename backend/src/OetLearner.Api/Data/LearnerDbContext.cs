@@ -887,6 +887,7 @@ public partial class LearnerDbContext(DbContextOptions<LearnerDbContext> options
         modelBuilder.Entity<VocabularyTerm>().HasIndex(x => new { x.ExamTypeCode, x.Status, x.Category });
         modelBuilder.Entity<VocabularyTerm>().HasIndex(x => new { x.ProfessionId, x.Category, x.Status });
         modelBuilder.Entity<VocabularyTerm>().HasIndex(x => new { x.Term, x.ExamTypeCode, x.ProfessionId });
+        modelBuilder.Entity<VocabularyTerm>().HasIndex(x => new { x.ExamTypeCode, x.Status, x.IsFreePreview });
         modelBuilder.Entity<LearnerVocabulary>().HasIndex(x => new { x.UserId, x.NextReviewDate });
         modelBuilder.Entity<LearnerVocabulary>().HasIndex(x => new { x.UserId, x.TermId }).IsUnique();
         modelBuilder.Entity<LearnerVocabulary>().HasIndex(x => new { x.UserId, x.Starred });
@@ -1246,6 +1247,9 @@ public partial class LearnerDbContext(DbContextOptions<LearnerDbContext> options
         // Speaking AI + Tutor Assessments + Timestamped Comments (partial; see LearnerDbContext.SpeakingAssessments.cs).
         OnModelCreatingSpeakingAssessments(modelBuilder);
 
+        // Speaking double-marking + senior moderation (partial; see LearnerDbContext.SpeakingModeration.cs).
+        OnModelCreatingSpeakingModeration(modelBuilder);
+
         // Speaking Live Rooms + Tokens (partial; see LearnerDbContext.SpeakingLiveRooms.cs).
         OnModelCreatingSpeakingLiveRooms(modelBuilder);
 
@@ -1293,6 +1297,11 @@ public partial class LearnerDbContext(DbContextOptions<LearnerDbContext> options
         // LearnerDbContext.WritingBuddy.cs and LearnerDbContext.WritingCalibration.cs.
         OnModelCreatingWritingBuddy(modelBuilder);
         OnModelCreatingWritingCalibration(modelBuilder);
+
+        // OET Writing exam-faithful closure — authored task fields, content
+        // checklists, attempt events, span annotations, double-marking/moderation,
+        // result-visibility. Partial class in LearnerDbContext.WritingExam.cs.
+        OnModelCreatingWritingExam(modelBuilder);
     }
 
     /// <summary>
@@ -1324,6 +1333,11 @@ public partial class LearnerDbContext(DbContextOptions<LearnerDbContext> options
     /// Defined in <see cref="LearnerDbContext"/>.SpeakingAssessments.cs (partial).
     /// </summary>
     partial void OnModelCreatingSpeakingAssessments(ModelBuilder modelBuilder);
+
+    /// <summary>
+    /// Defined in <see cref="LearnerDbContext"/>.SpeakingModeration.cs (partial).
+    /// </summary>
+    partial void OnModelCreatingSpeakingModeration(ModelBuilder modelBuilder);
 
     /// <summary>
     /// Defined in <see cref="LearnerDbContext"/>.SpeakingLiveRooms.cs (partial).
@@ -1385,6 +1399,7 @@ public partial class LearnerDbContext(DbContextOptions<LearnerDbContext> options
     // and 50-letter calibration harness (spec §33).
     partial void OnModelCreatingWritingBuddy(ModelBuilder modelBuilder);
     partial void OnModelCreatingWritingCalibration(ModelBuilder modelBuilder);
+    partial void OnModelCreatingWritingExam(ModelBuilder modelBuilder);
 
     /// <summary>
     /// Configures the Postgres system column <c>xmin</c> as an optimistic

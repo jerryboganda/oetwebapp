@@ -116,6 +116,15 @@ public class VocabularyTerm
     [MaxLength(512)]
     public string? SourceProvenance { get; set; }           // Required at publish
 
+    /// <summary>
+    /// Free-preview flag (2026-05-30): when true this term is part of the
+    /// limited free-preview Recall Vocabulary Bank visible to non-subscribed
+    /// learners. When false, free learners see the term locked/blurred and must
+    /// subscribe to unlock it. Subscribed learners always see every term.
+    /// Admin-curated — there is no automatic selection.
+    /// </summary>
+    public bool IsFreePreview { get; set; }
+
     [MaxLength(16)]
     public string Status { get; set; } = "draft";           // draft|active|archived
 

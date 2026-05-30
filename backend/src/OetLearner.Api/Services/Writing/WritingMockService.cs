@@ -44,7 +44,8 @@ public sealed class WritingMockService(
     TimeProvider clock,
     IWritingEventBus events,
     IWritingSubmissionEvaluationPipeline pipeline,
-    ILogger<WritingMockService> logger) : IWritingMockService
+    ILogger<WritingMockService> logger,
+    IWritingAttemptEventService? attemptEvents = null) : IWritingMockService
 {
     private const int ReadingPhaseSeconds = 5 * 60;
     private const int WritingPhaseSeconds = 40 * 60;
@@ -94,6 +95,9 @@ public sealed class WritingMockService(
         };
         db.WritingMockSessions.Add(session);
         await db.SaveChangesAsync(ct);
+        // §17.7 — best-effort lifecycle events (paper|computer simulation, default computer).
+        await SafeEmitAsync(userId, "attempt_started", session.Id, mock.ScenarioId, "mock", session.Status, ct);
+        await SafeEmitAsync(userId, "reading_started", session.Id, mock.ScenarioId, "mock", session.Status, ct);
         return BuildView(session, mock.ScenarioId, clock.GetUtcNow());
     }
 
@@ -125,6 +129,9 @@ public sealed class WritingMockService(
         session.Status = "writing";
         await db.SaveChangesAsync(ct);
         var scenarioId = await db.WritingMocks.AsNoTracking().Where(m => m.Id == session.MockId).Select(m => m.ScenarioId).FirstOrDefaultAsync(ct);
+        // §17.7 — reading→writing transition lifecycle events (best-effort).
+        await SafeEmitAsync(userId, "reading_ended", session.Id, scenarioId, "mock", session.Status, ct);
+        await SafeEmitAsync(userId, "writing_started", session.Id, scenarioId, "mock", session.Status, ct);
         return BuildView(session, scenarioId, now);
     }
 
@@ -164,6 +171,9 @@ public sealed class WritingMockService(
         {
             logger.LogWarning(ex, "Writing mock event publish failed for session {SessionId}.", session.Id);
         }
+        // §17.7 — submission transitioned to submitted/locked: emit lifecycle markers (best-effort).
+        await SafeEmitAsync(userId, "submit_clicked", session.Id, scenarioId, "mock", session.Status, submissionId, ct);
+        await SafeEmitAsync(userId, "attempt_locked", session.Id, scenarioId, "mock", session.Status, submissionId, ct);
         return BuildView(session, scenarioId, now);
     }
 
@@ -251,6 +261,40 @@ public sealed class WritingMockService(
 
     private async Task<Guid> ScenarioIdAsync(Guid mockId, CancellationToken ct)
         => await db.WritingMocks.AsNoTracking().Where(m => m.Id == mockId).Select(m => m.ScenarioId).FirstOrDefaultAsync(ct);
+
+    /// <summary>
+    /// Emit a Writing attempt event for a mock session without ever throwing into the
+    /// caller (spec §17.7 — server-side lifecycle events are fire-and-forget-safe).
+    /// Mock sessions carry no simulation-mode column, so mode defaults to "computer".
+    /// </summary>
+    private Task SafeEmitAsync(string userId, string eventType, Guid sessionId, Guid scenarioId, string context, string status, CancellationToken ct)
+        => SafeEmitAsync(userId, eventType, sessionId, scenarioId, context, status, submissionId: null, ct);
+
+    private async Task SafeEmitAsync(string userId, string eventType, Guid sessionId, Guid scenarioId, string context, string status, Guid? submissionId, CancellationToken ct)
+    {
+        if (attemptEvents is null) return;
+        try
+        {
+            await attemptEvents.RecordAsync(
+                userId,
+                new[]
+                {
+                    new WritingAttemptEventInput(
+                        eventType,
+                        clock.GetUtcNow(),
+                        "computer",
+                        sessionId.ToString(),
+                        scenarioId,
+                        submissionId,
+                        $"{{\"context\":\"{context}\",\"status\":\"{status}\"}}"),
+                },
+                ct);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to emit Writing attempt event {EventType} for mock session {SessionId}.", eventType, sessionId);
+        }
+    }
 
     private static WritingMockSessionView BuildView(WritingMockSession session, Guid scenarioId, DateTimeOffset now)
     {

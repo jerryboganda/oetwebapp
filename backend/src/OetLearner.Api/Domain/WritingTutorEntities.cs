@@ -23,6 +23,25 @@ public class WritingTutorReview
     public DateTimeOffset? SubmittedAt { get; set; }
 
     public DateTimeOffset CreatedAt { get; set; }
+
+    // ── Double-marking + content-checklist marking (spec §12/§14.4) ────────────
+    // Added by AddWritingExamModuleClosure.
+
+    /// <summary>first | second | senior — ordinal of this marker in a double-marking flow.</summary>
+    [MaxLength(16)]
+    public string MarkerSequence { get; set; } = "first";
+
+    /// <summary>True once the tutor has worked through the task content checklist.</summary>
+    public bool IsContentChecklistMarked { get; set; }
+
+    /// <summary>
+    /// Per-checklist-item verdict JSON keyed by checklist item id:
+    /// { "&lt;id&gt;": "included" | "missing" | "inaccurate" | "irrelevant" } (spec §14.2).
+    /// </summary>
+    public string ContentChecklistVerdictJson { get; set; } = "{}";
+
+    /// <summary>AI pre-assessment the tutor accepted/edited, for audit (spec §13.2).</summary>
+    public string? AcceptedAiPreAssessmentJson { get; set; }
 }
 
 public class WritingTutorReviewAssignment
