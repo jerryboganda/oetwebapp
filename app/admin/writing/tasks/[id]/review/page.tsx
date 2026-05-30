@@ -53,8 +53,8 @@ function professionLabel(v: string | null): string {
 }
 
 export default function AdminWritingReviewPage() {
-  const params = useParams<{ paperId: string }>();
-  const paperId = params?.paperId ?? '';
+  const params = useParams<{ id: string }>();
+  const paperId = params?.id ?? '';
   const router = useRouter();
   const { isAuthenticated, role } = useAdminAuth();
   const { user } = useCurrentUser();
