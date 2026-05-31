@@ -1,0 +1,258 @@
+# =============================================================================
+# OET Prep Platform — Simple single-container production compose for the VPS.
+#
+# Replaces the old blue/green + nginx-router + CI/CD deploy machinery with one
+# container per tier. Build and run use the SAME image tag, so a plain
+# `git pull && docker compose build && docker compose up -d` actually ships
+# your latest code (the old split build/runtime image names silently shipped
+# stale images — that is why visual fixes "reverted").
+#
+# Manual deploy (the only supported flow now):
+#   ssh vps
+#   cd /opt/oetwebapp
+#   git pull origin main
+#   docker compose -f docker-compose.vps.yml --env-file .env.production build
+#   docker compose -f docker-compose.vps.yml --env-file .env.production up -d
+#
+# IMPORTANT:
+#  * `name: oetwebsite` pins the project so the LIVE volumes
+#    (oetwebsite_oet_postgres_data, oetwebsite_oet_learner_storage) and the
+#    LIVE internal network (oetwebsite_internal) are reused. Do NOT change it.
+#  * Container names oet-web / oet-api match what nginx-proxy-manager already
+#    forwards to, so NO NPM reconfiguration is needed.
+#  * Shared host: only the oet-* containers below belong to this app. Never run
+#    `docker compose down -v`, `docker volume rm`, or touch other projects.
+# =============================================================================
+name: oetwebsite
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg17
+    container_name: oet-postgres
+    restart: unless-stopped
+    command:
+      - postgres
+      - -c
+      - shared_preload_libraries=pg_stat_statements
+      - -c
+      - pg_stat_statements.track=all
+      - -c
+      - pg_stat_statements.max=5000
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - oet_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - internal
+
+  clamav:
+    image: clamav/clamav:stable
+    container_name: oet-clamav
+    restart: unless-stopped
+    volumes:
+      - oet_clamav_data:/var/lib/clamav
+    healthcheck:
+      test: ["CMD-SHELL", "clamdscan --ping 1 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 120s
+    networks:
+      - internal
+
+  learner-api:
+    image: oetwebsite-learner-api:local
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    pull_policy: build
+    container_name: oet-api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      clamav:
+        condition: service_healthy
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: http://+:8080
+      AllowedHosts: ${API_ALLOWED_HOSTS:?Set API_ALLOWED_HOSTS to the public API host name};127.0.0.1;localhost;learner-api;oet-api
+      ConnectionStrings__DefaultConnection: Host=postgres;Port=5432;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD}
+      AUTHTOKENS__ISSUER: ${AUTHTOKENS__ISSUER}
+      AUTHTOKENS__AUDIENCE: ${AUTHTOKENS__AUDIENCE}
+      AUTHTOKENS__ACCESSTOKENSIGNINGKEY: ${AUTHTOKENS__ACCESSTOKENSIGNINGKEY}
+      AUTHTOKENS__REFRESHTOKENSIGNINGKEY: ${AUTHTOKENS__REFRESHTOKENSIGNINGKEY}
+      AUTHTOKENS__ACCESSTOKENLIFETIME: ${AUTHTOKENS__ACCESSTOKENLIFETIME}
+      AUTHTOKENS__REFRESHTOKENLIFETIME: ${AUTHTOKENS__REFRESHTOKENLIFETIME}
+      AUTHTOKENS__OTPLIFETIME: ${AUTHTOKENS__OTPLIFETIME}
+      AUTHTOKENS__AUTHENTICATORISSUER: ${AUTHTOKENS__AUTHENTICATORISSUER}
+      BREVO__ENABLED: ${BREVO__ENABLED:-true}
+      BREVO__APIKEY: ${BREVO__APIKEY}
+      BREVO__BASEURL: ${BREVO__BASEURL:-https://api.brevo.com/v3}
+      BREVO__FROMEMAIL: ${BREVO__FROMEMAIL}
+      BREVO__FROMNAME: ${BREVO__FROMNAME:-OET Learner}
+      BREVO__EMAILVERIFICATIONTEMPLATEID: ${BREVO__EMAILVERIFICATIONTEMPLATEID}
+      BREVO__PASSWORDRESETTEMPLATEID: ${BREVO__PASSWORDRESETTEMPLATEID}
+      BREVO__WEBHOOKSECRET: ${BREVO__WEBHOOKSECRET:-}
+      SMTP__ENABLED: ${SMTP__ENABLED:-true}
+      SMTP__HOST: ${SMTP__HOST}
+      SMTP__PORT: ${SMTP__PORT}
+      SMTP__USERNAME: ${SMTP__USERNAME:-}
+      SMTP__PASSWORD: ${SMTP__PASSWORD:-}
+      SMTP__ENABLESSL: ${SMTP__ENABLESSL:-true}
+      SMTP__FROMEMAIL: ${SMTP__FROMEMAIL}
+      SMTP__FROMNAME: ${SMTP__FROMNAME:-OET Learner}
+      Billing__AllowSandboxFallbacks: ${BILLING__ALLOWSANDBOXFALLBACKS:-false}
+      Billing__Stripe__SecretKey: ${BILLING__STRIPE__SECRETKEY}
+      Billing__Stripe__SuccessUrl: ${BILLING__STRIPE__SUCCESSURL}
+      Billing__Stripe__CancelUrl: ${BILLING__STRIPE__CANCELURL}
+      Billing__Stripe__WebhookSecret: ${BILLING__STRIPE__WEBHOOKSECRET}
+      Platform__PublicApiBaseUrl: ${PUBLIC_API_BASE_URL}
+      Platform__PublicWebBaseUrl: ${APP_URL}
+      Platform__FallbackEmailDomain: ${FALLBACK_EMAIL_DOMAIN:-example.invalid}
+      Billing__CheckoutBaseUrl: ${CHECKOUT_BASE_URL}
+      Storage__LocalRootPath: /var/opt/oet-learner/storage
+      Storage__MaxUploadBytes: ${MAX_UPLOAD_BYTES:-1073741824}
+      Bootstrap__AutoMigrate: ${AUTO_MIGRATE:-true}
+      Bootstrap__SeedDemoData: ${SEED_DEMO_DATA:-false}
+      Content__WritingSeed__Enabled: ${CONTENT__WRITINGSEED__ENABLED:-true}
+      Proxy__TrustForwardHeaders: true
+      Proxy__EnforceHttps: true
+      Cors__AllowedOriginsCsv: ${CORS_ALLOWED_ORIGINS}
+      Sentry__Dsn: ${SENTRY_DSN}
+      Features__EnableSwagger: ${ENABLE_SWAGGER:-false}
+      AI__ProviderId: ${AI__PROVIDERID:-}
+      AI__BaseUrl: ${AI__BASEURL:-}
+      AI__ApiKey: ${AI__APIKEY:-}
+      AI__DefaultModel: ${AI__DEFAULTMODEL:-}
+      AI__ReasoningEffort: ${AI__REASONINGEFFORT:-}
+      AI__DefaultMaxTokens: ${AI__DEFAULTMAXTOKENS:-4096}
+      AI__DefaultTemperature: ${AI__DEFAULTTEMPERATURE:-0.2}
+      Pronunciation__Provider: ${PRONUNCIATION__PROVIDER:-}
+      Pronunciation__AzureSpeechKey: ${PRONUNCIATION__AZURESPEECHKEY:-}
+      Pronunciation__AzureSpeechRegion: ${PRONUNCIATION__AZURESPEECHREGION:-}
+      Conversation__Enabled: ${CONVERSATION__ENABLED:-}
+      Conversation__AsrProvider: ${CONVERSATION__ASRPROVIDER:-}
+      Conversation__DeepgramApiKey: ${CONVERSATION__DEEPGRAMAPIKEY:-}
+      Conversation__TtsProvider: ${CONVERSATION__TTSPROVIDER:-}
+      Conversation__ElevenLabsApiKey: ${CONVERSATION__ELEVENLABSAPIKEY:-}
+      Conversation__RealtimeSttEnabled: ${CONVERSATION__REALTIMESTTENABLED:-false}
+      Conversation__RealtimeAsrProvider: ${CONVERSATION__REALTIMEASRPROVIDER:-}
+      Conversation__RealtimeSttAllowRealProvider: ${CONVERSATION__REALTIMESTTALLOWREALPROVIDER:-false}
+      Conversation__RealtimeSttRealProviderProductionAuthorized: ${CONVERSATION__REALTIMESTTREALPROVIDERPRODUCTIONAUTHORIZED:-false}
+      Conversation__RealtimeSttProviderSessionTopology: ${CONVERSATION__REALTIMESTTPROVIDERSESSIONTOPOLOGY:-unconfigured}
+      Conversation__RealtimeSttRegionId: ${CONVERSATION__REALTIMESTTREGIONID:-}
+      Conversation__RealtimeSttEstimatedCostUsdPerMinute: ${CONVERSATION__REALTIMESTTESTIMATEDCOSTUSDPERMINUTE:-0}
+      Conversation__RealtimeSttAssumeLearnersAdult: ${CONVERSATION__REALTIMESTTASSUMELEARNERSADULT:-false}
+      Conversation__RealtimeSttAllowManagedLearnerRealProvider: ${CONVERSATION__REALTIMESTTALLOWMANAGEDLEARNERREALPROVIDER:-false}
+      UploadScanner__Provider: ${UPLOAD_SCANNER__PROVIDER:-clamav}
+      UploadScanner__Host: ${UPLOAD_SCANNER__HOST:-clamav}
+      UploadScanner__Port: ${UPLOAD_SCANNER__PORT:-3310}
+      UploadScanner__FailClosedOnError: ${UPLOAD_SCANNER__FAILCLOSEDONERROR:-true}
+    volumes:
+      - oet_learner_storage:/var/opt/oet-learner/storage
+    expose:
+      - "8080"
+    networks:
+      - internal
+      - npm_proxy
+    healthcheck:
+      test: ["CMD-SHELL", "curl --fail http://127.0.0.1:8080/health/ready || exit 1"]
+      interval: 30s
+      timeout: 5s
+      start_period: 40s
+      retries: 5
+
+  web:
+    image: oetwebsite-web:local
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL}
+        NEXT_PUBLIC_SENTRY_DSN: ${NEXT_PUBLIC_SENTRY_DSN}
+        APP_URL: ${APP_URL}
+    pull_policy: build
+    container_name: oet-web
+    restart: unless-stopped
+    depends_on:
+      learner-api:
+        condition: service_started
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      HOSTNAME: 0.0.0.0
+      NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL}
+      NEXT_PUBLIC_SENTRY_DSN: ${NEXT_PUBLIC_SENTRY_DSN}
+      SENTRY_DSN: ${SENTRY_DSN}
+      APP_URL: ${APP_URL}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      # Server-side proxy target for /api routes handled inside the Next server.
+      API_PROXY_TARGET_URL: http://learner-api:8080
+    expose:
+      - "3000"
+    networks:
+      - internal
+      - npm_proxy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/api/health >/dev/null || exit 1"]
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 5
+
+  db-backup:
+    image: oetwebsite-db-backup:local
+    build:
+      context: .
+      dockerfile: scripts/backup/Dockerfile
+    pull_policy: build
+    container_name: oet-db-backup
+    restart: unless-stopped
+    init: true
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      BACKUP_SCHEDULE: ${BACKUP_SCHEDULE:-17 2 * * *}
+      BACKUP_RETENTION_DAYS: ${BACKUP_RETENTION_DAYS:-14}
+      BACKUP_GPG_PASSPHRASE: ${BACKUP_GPG_PASSPHRASE:-}
+      BACKUP_S3_URL: ${BACKUP_S3_URL:-}
+      BACKUP_S3_EXTRA_ARGS: ${BACKUP_S3_EXTRA_ARGS:-}
+      BACKUP_ALERT_WEBHOOK: ${BACKUP_ALERT_WEBHOOK:-}
+      MEDIA_BACKUP_ENABLED: ${MEDIA_BACKUP_ENABLED:-true}
+      MEDIA_BACKUP_SOURCE_DIR: /media-storage
+      AWS_ACCESS_KEY_ID: ${BACKUP_AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${BACKUP_AWS_SECRET_ACCESS_KEY:-}
+      AWS_DEFAULT_REGION: ${BACKUP_AWS_REGION:-auto}
+      TZ: UTC
+    volumes:
+      - oet_db_backups:/backups
+      - oet_learner_storage:/media-storage:ro
+    networks:
+      - internal
+
+volumes:
+  oet_postgres_data:
+  oet_learner_storage:
+  oet_clamav_data:
+  oet_db_backups:
+
+networks:
+  internal:
+    driver: bridge
+  npm_proxy:
+    external: true
+    name: ${NPM_PROXY_NETWORK:-nginx-proxy-manager_default}
