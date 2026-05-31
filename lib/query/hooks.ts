@@ -45,6 +45,10 @@ export const queryKeys = {
     _def: ['study-plan'] as const,
     list: ['study-plan', 'list'] as const,
   },
+  onboardingTours: {
+    _def: ['onboarding-tours'] as const,
+    state: ['onboarding-tours', 'state'] as const,
+  },
 } as const;
 
 type QueryOpts<TData> = Omit<UseQueryOptions<TData, Error, TData>, 'queryKey' | 'queryFn'>;

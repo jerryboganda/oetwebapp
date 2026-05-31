@@ -10,6 +10,7 @@ import { RuntimeLifecycleBridge } from '@/components/runtime/runtime-lifecycle-b
 import { QueryProvider } from '@/components/providers/query-provider';
 import { Toaster } from '@/components/admin/ui/toaster';
 import { TooltipProvider } from '@/components/admin/ui/tooltip';
+import { TourProvider } from '@/components/onboarding/tour-provider';
 
 function useServiceWorkerRegistration() {
   useEffect(() => {
@@ -63,7 +64,9 @@ export function AppProviders({
             <AuthProvider>
               <RuntimeLifecycleBridge />
               <MobileRuntimeBridge />
-              {children}
+              <TourProvider>
+                {children}
+              </TourProvider>
               {/*
                 Global sonner toaster — rendered once at the root so any
                 `toast()` call anywhere in the tree surfaces in the same anchor.

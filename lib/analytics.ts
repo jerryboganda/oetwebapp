@@ -215,6 +215,22 @@ const TRACKED_EVENTS = [
   // Onboarding tour events
   'onboarding_tour_completed',
   'onboarding_tour_started',
+  // Anchored product-tour + checklist + first-milestone events (onboarding/tour system)
+  'tour_started',
+  'tour_replayed',
+  'tour_step_viewed',
+  'tour_step_completed',
+  'tour_completed',
+  'tour_skipped',
+  'tour_dismissed',
+  'checklist_item_completed',
+  'help_center_opened',
+  'welcome_exam_mode_set',
+  'welcome_confidence_set',
+  'first_practice_started',
+  'first_mock_started',
+  'first_submission_completed',
+  'first_feedback_viewed',
   // Peer review events
   'peer_review_claimed',
   'peer_review_viewed',

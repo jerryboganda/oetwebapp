@@ -17,6 +17,7 @@ import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { triggerImpactHaptic } from '@/lib/mobile/haptics';
 import { getSurfaceTransition } from '@/lib/motion';
 import { ThemeToggle } from '@/components/ui/theme-toggle';
+import { TourLauncher } from '@/components/onboarding/tour-launcher';
 
 export interface MobileMenuSection {
   label: string;
@@ -190,6 +191,7 @@ export function TopNav({
         <motion.div className="flex flex-wrap items-center justify-end gap-2 sm:gap-3" layout={!reducedMotion}>
           {actions}
           {showStreakBadges && <LearnerStreakBadges />}
+          <TourLauncher workspaceRole={workspaceRole} />
           <ThemeToggle />
           <NotificationCenter />
           <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/10 text-sm font-bold text-primary ring-1 ring-primary/10">

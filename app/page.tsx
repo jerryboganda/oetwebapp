@@ -255,7 +255,9 @@ export default function Dashboard() {
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
             {nextActionCard ? (
               <MotionItem delayIndex={0}>
-                <LearnerSurfaceCard card={nextActionCard} />
+                <div data-tour="learner-dashboard-next-action">
+                  <LearnerSurfaceCard card={nextActionCard} />
+                </div>
               </MotionItem>
             ) : null}
             {nextMockCard ? (
@@ -275,11 +277,13 @@ export default function Dashboard() {
             ) : null}
           </div>
 
-          <LearnerSkillSwitcher compact />
+          <div data-tour="learner-dashboard-skills">
+            <LearnerSkillSwitcher compact />
+          </div>
 
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
             <div className="space-y-6 lg:col-span-8">
-              <section>
+              <section data-tour="learner-dashboard-today">
                 <LearnerSurfaceSectionHeader
                   title="Today&apos;s Study Plan"
                   description={`${completedToday} of ${todayTasks.length} scheduled tasks completed.`}
@@ -374,7 +378,7 @@ export default function Dashboard() {
 
             <div className="space-y-5 lg:col-span-4">
               {liveReadiness ? (
-                <Card>
+                <Card data-tour="learner-dashboard-readiness">
                   <CardHeader>
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <CardTitle>Test Readiness</CardTitle>

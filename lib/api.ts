@@ -1256,6 +1256,8 @@ export async function fetchUserProfile(): Promise<UserProfile> {
     weakSubTests: (goals.weakSubtestSelfReport ?? []).map((value: string) => toSubTest(value)),
     studyHoursPerWeek: goals.studyHoursPerWeek ?? 0,
     targetCountry: goals.targetCountry ?? '',
+    targetExamMode: (goals.targetExamMode ?? null) as string | null,
+    confidenceLevel: (goals.confidenceLevel ?? null) as string | null,
     onboardingComplete: Boolean(bootstrap.onboarding?.completed),
     goalsComplete: Boolean(goals.submittedAt || goals.professionId),
     diagnosticComplete: Array.isArray(bootstrap.readiness?.subTests) && bootstrap.readiness.subTests.length > 0,
@@ -1281,6 +1283,65 @@ export async function startOnboarding(): Promise<void> {
 
 export async function completeOnboarding(): Promise<void> {
   await apiRequest('/v1/learner/onboarding/complete', { method: 'POST' });
+}
+
+// ── Onboarding product-tour state ───────────────────────────────────────────
+// Backed by /v1/onboarding/tours (GET + PATCH). Available to every authenticated
+// role so learner, expert/tutor, and admin workspaces can persist their own tours.
+export interface OnboardingTourState {
+  onboardingVersion: number;
+  role: string;
+  lastSeenTourVersion: number;
+  completed: {
+    intro: boolean;
+    dashboard: boolean;
+    listening: boolean;
+    reading: boolean;
+    writing: boolean;
+    speaking: boolean;
+    admin: boolean;
+    expert: boolean;
+  };
+  skippedTours: string[];
+  dismissedTips: string[];
+}
+
+function toOnboardingTourState(data: ApiRecord): OnboardingTourState {
+  const completed = (data.completed ?? {}) as ApiRecord;
+  return {
+    onboardingVersion: Number(data.onboardingVersion ?? 1),
+    role: typeof data.role === 'string' ? data.role : 'learner',
+    lastSeenTourVersion: Number(data.lastSeenTourVersion ?? 0),
+    completed: {
+      intro: Boolean(completed.intro),
+      dashboard: Boolean(completed.dashboard),
+      listening: Boolean(completed.listening),
+      reading: Boolean(completed.reading),
+      writing: Boolean(completed.writing),
+      speaking: Boolean(completed.speaking),
+      admin: Boolean(completed.admin),
+      expert: Boolean(completed.expert),
+    },
+    skippedTours: Array.isArray(data.skippedTours) ? data.skippedTours.map(String) : [],
+    dismissedTips: Array.isArray(data.dismissedTips) ? data.dismissedTips.map(String) : [],
+  };
+}
+
+export async function fetchTourState(): Promise<OnboardingTourState> {
+  const data = await apiRequest<ApiRecord>('/v1/onboarding/tours');
+  return toOnboardingTourState(data);
+}
+
+export async function markTour(
+  tourId: string,
+  status: 'completed' | 'skipped' | 'dismissed',
+  role?: string,
+): Promise<OnboardingTourState> {
+  const data = await apiRequest<ApiRecord>('/v1/onboarding/tours', {
+    method: 'PATCH',
+    body: JSON.stringify({ tourId, status, role }),
+  });
+  return toOnboardingTourState(data);
 }
 
 export interface DiagnosticOverviewResponse {
@@ -1624,6 +1685,8 @@ export async function updateUserProfile(updates: Partial<UserProfile>): Promise<
   }
   if (updates.previousAttempts !== undefined) goalValues.previousAttempts = updates.previousAttempts;
   if (updates.weakSubTests) goalValues.weakSubtests = updates.weakSubTests.map((value) => value.toLowerCase());
+  if (updates.targetExamMode !== undefined) goalValues.targetExamMode = updates.targetExamMode;
+  if (updates.confidenceLevel !== undefined) goalValues.confidenceLevel = updates.confidenceLevel;
 
   if (Object.keys(goalValues).length > 0) {
     await apiRequest('/v1/learner/goals', { method: 'PATCH', body: JSON.stringify(goalValues) });

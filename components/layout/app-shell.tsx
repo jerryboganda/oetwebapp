@@ -11,6 +11,7 @@ import { cn } from '@/lib/utils';
 import { usePathname } from 'next/navigation';
 import { BottomNav, type NavGroup, type NavItem, type ShellUserSummary, Sidebar } from './sidebar';
 import { TopNav, type MobileMenuSection } from './top-nav';
+import { TourAutoTrigger } from '@/components/onboarding/tour-auto-trigger';
 
 /** Scrolls the main content area to top on every mount (triggered by route change via key={pathname}). */
 function ScrollReset() {
@@ -160,7 +161,12 @@ export function AppShell({
   );
 
   const shellWithNotifications = requireAuth
-    ? <NotificationCenterProvider>{shell}</NotificationCenterProvider>
+    ? (
+      <NotificationCenterProvider>
+        {shell}
+        <TourAutoTrigger workspaceRole={workspaceRole} />
+      </NotificationCenterProvider>
+    )
     : shell;
 
   const content = requireAuth ? (

@@ -1,0 +1,131 @@
+/*
+ * Themes Driver.js popovers to the OET clinical design system. Driver.js renders
+ * its popover outside the React tree, so these are global overrides scoped to the
+ * `.oet-tour-popover` class passed via `popoverClass`. Tokens fall back to the
+ * brand palette (violet #7c3aed, navy #0f172a) so it looks right even if a token
+ * name shifts. Dark mode is gated by the `.dark` class (matching next-themes).
+ */
+
+.driver-popover.oet-tour-popover {
+  --oet-tour-fg: var(--color-navy, #0f172a);
+  --oet-tour-muted: var(--color-muted, #64748b);
+  --oet-tour-surface: var(--color-surface, #ffffff);
+  --oet-tour-primary: var(--color-primary, #7c3aed);
+  --oet-tour-border: var(--color-border, #e2e8f0);
+
+  max-width: 22rem;
+  padding: 1.25rem 1.25rem 1rem;
+  border-radius: 1rem;
+  background: var(--oet-tour-surface);
+  color: var(--oet-tour-fg);
+  border: 1px solid var(--oet-tour-border);
+  box-shadow: 0 12px 32px -8px rgb(15 23 42 / 0.25), 0 4px 12px -4px rgb(15 23 42 / 0.12);
+}
+
+.driver-popover.oet-tour-popover .driver-popover-title {
+  font-size: 1.0625rem;
+  font-weight: 700;
+  line-height: 1.4;
+  color: var(--oet-tour-fg);
+}
+
+.driver-popover.oet-tour-popover .driver-popover-description {
+  margin-top: 0.5rem;
+  color: var(--oet-tour-muted);
+}
+
+.driver-popover.oet-tour-popover .oet-tour-body {
+  font-size: 0.875rem;
+  line-height: 1.55;
+  color: var(--oet-tour-muted);
+}
+
+.driver-popover.oet-tour-popover .oet-tour-why {
+  margin-top: 0.625rem;
+  padding-top: 0.625rem;
+  border-top: 1px dashed var(--oet-tour-border);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: var(--oet-tour-muted);
+}
+
+.driver-popover.oet-tour-popover .oet-tour-why span {
+  display: block;
+  font-weight: 700;
+  font-size: 0.6875rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--oet-tour-primary);
+  margin-bottom: 0.125rem;
+}
+
+.driver-popover.oet-tour-popover .driver-popover-progress-text {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--oet-tour-muted);
+}
+
+.driver-popover.oet-tour-popover .driver-popover-navigation-btns {
+  gap: 0.5rem;
+  padding-top: 0.25rem;
+}
+
+.driver-popover.oet-tour-popover .driver-popover-navigation-btns button {
+  font-family: inherit;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  padding: 0.4375rem 0.875rem;
+  border-radius: 0.625rem;
+  border: 1px solid var(--oet-tour-border);
+  background: transparent;
+  color: var(--oet-tour-fg);
+  text-shadow: none;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.driver-popover.oet-tour-popover .driver-popover-next-btn,
+.driver-popover.oet-tour-popover .driver-popover-navigation-btns button.driver-popover-next-btn {
+  background: var(--oet-tour-primary);
+  border-color: var(--oet-tour-primary);
+  color: #ffffff;
+}
+
+.driver-popover.oet-tour-popover .driver-popover-next-btn:hover {
+  filter: brightness(0.95);
+}
+
+.driver-popover.oet-tour-popover .driver-popover-prev-btn:hover {
+  background: color-mix(in srgb, var(--oet-tour-primary) 8%, transparent);
+}
+
+.driver-popover.oet-tour-popover .driver-popover-close-btn {
+  color: var(--oet-tour-muted);
+}
+
+.driver-popover.oet-tour-popover .driver-popover-arrow {
+  border-color: var(--oet-tour-surface);
+}
+
+/* Dark mode — gated by next-themes `.dark` class, not OS preference. */
+.dark .driver-popover.oet-tour-popover {
+  --oet-tour-fg: #f1f5f9;
+  --oet-tour-muted: #94a3b8;
+  --oet-tour-surface: #0f172a;
+  --oet-tour-border: #1e293b;
+  --oet-tour-primary: #a78bfa;
+  box-shadow: 0 12px 32px -8px rgb(0 0 0 / 0.6), 0 4px 12px -4px rgb(0 0 0 / 0.4);
+}
+
+.dark .driver-popover.oet-tour-popover .driver-popover-next-btn {
+  color: #0f172a;
+}
+
+/* Respect reduced-motion in addition to Driver.js's animate:false. */
+@media (prefers-reduced-motion: reduce) {
+  .driver-popover.oet-tour-popover,
+  .driver-overlay,
+  .driver-active-element {
+    transition: none !important;
+    animation: none !important;
+  }
+}
