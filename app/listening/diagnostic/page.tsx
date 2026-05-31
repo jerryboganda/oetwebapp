@@ -367,12 +367,30 @@ export default function ListeningDiagnosticPage() {
               />
             </div>
 
-            {/* Audio player */}
-            {currentQuestion.audioPlaybackUrl && (
-              <div className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
+            {/* Audio player — falls back to a graceful "audio coming soon"
+                placeholder when the extract has no synthesised clip yet
+                (Phase 1 diagnostic items ship with AudioContentSha = null). */}
+            <div className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
+              {currentQuestion.audioPlaybackUrl ? (
                 <DiagnosticPlayer audioUrl={currentQuestion.audioPlaybackUrl} allowReplay={false} onEnded={() => {}} />
-              </div>
-            )}
+              ) : (
+                <div className="flex items-center gap-3 text-sm text-muted">
+                  <span
+                    aria-hidden
+                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-background-light text-primary"
+                  >
+                    🔊
+                  </span>
+                  <div>
+                    <p className="font-semibold text-navy">Audio coming soon</p>
+                    <p>
+                      This diagnostic clip isn&apos;t available yet — read the question below and
+                      answer based on what you can, then continue.
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
 
             {/* Question stem */}
             <div className="rounded-2xl border border-border bg-surface p-6 shadow-sm">
