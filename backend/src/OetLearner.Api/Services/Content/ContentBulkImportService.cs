@@ -613,6 +613,7 @@ public sealed class ContentBulkImportService(
         "ogg" => "audio/ogg",
         "jpg" or "jpeg" => "image/jpeg",
         "png" => "image/png",
+        "webp" => "image/webp",
         "txt" => "text/plain",
         _ => "application/octet-stream",
     };
@@ -686,6 +687,7 @@ public sealed class ContentBulkImportService(
                 && header[0] == 0x89 && header[1] == 0x50 && header[2] == 0x4E && header[3] == 0x47
                 && header[4] == 0x0D && header[5] == 0x0A && header[6] == 0x1A && header[7] == 0x0A,
             "jpg" or "jpeg" => header.Length >= 3 && header[0] == 0xFF && header[1] == 0xD8 && header[2] == 0xFF,
+            "webp" => header.Length >= 12 && StartsWithAscii(header, "RIFF") && StartsWithAscii(header[8..], "WEBP"),
             "txt" => !header.Contains((byte)0x00),
             _ => false,
         };

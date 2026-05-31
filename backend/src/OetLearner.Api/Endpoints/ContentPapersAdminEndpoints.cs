@@ -404,10 +404,7 @@ public static class ContentPapersAdminEndpoints
             var session = await svc.UploadPartAsync(adminId, uploadId, partNumber, http.Request.Body, ct);
             return Results.Ok(new { session.PartsReceived, session.ReceivedBytes, session.State });
         })
-        .DisableAntiforgery()
-        .WithMetadata(
-            new RequestSizeLimitAttribute(BulkZipRequestLimitBytes),
-            new RequestFormLimitsAttribute { MultipartBodyLengthLimit = BulkZipRequestLimitBytes });
+        .DisableAntiforgery();
 
         uploads.MapPost("/{uploadId}/complete", async (
             string uploadId, HttpContext http, IChunkedUploadService svc, CancellationToken ct) =>
@@ -477,7 +474,10 @@ public static class ContentPapersAdminEndpoints
                 issues = session.Manifest.Issues,
             });
         })
-        .DisableAntiforgery();
+        .DisableAntiforgery()
+        .WithMetadata(
+            new RequestSizeLimitAttribute(BulkZipRequestLimitBytes),
+            new RequestFormLimitsAttribute { MultipartBodyLengthLimit = BulkZipRequestLimitBytes });
 
         imports.MapPost("/zip/{sessionId}/commit", async (
             string sessionId,

@@ -353,6 +353,21 @@ public class ContentBulkImportE2ETests
     }
 
     [Fact]
+    public async Task Stage_accepts_webp_result_template_reference()
+    {
+        var (db, _, svc, _, _) = Build();
+        await using var zip = BuildTinyZip(
+            ("Result Templates/OET Result Table.webp", "RIFF0000WEBPimage-body"));
+
+        var session = await svc.StagePayloadAsync("admin-1", zip, "result-template.zip", default);
+
+        var reference = Assert.Single(session.Manifest.References);
+        Assert.Equal(ImportReferenceTargets.ResultTemplate, reference.Target);
+        Assert.Equal("webp", session.Manifest.Inventory.FilesByExtension.Keys.Single());
+        await db.DisposeAsync();
+    }
+
+    [Fact]
     public async Task Stage_rejects_zip_entry_that_fails_security_scan()
     {
         var scanner = new RejectingUploadScanner(filename =>
