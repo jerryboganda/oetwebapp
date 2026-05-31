@@ -3,34 +3,59 @@ using System.Text.Json;
 using Microsoft.Extensions.Logging;
 
 using OetLearner.Api.Configuration;
+using OetLearner.Api.Services.Settings;
 
 namespace OetLearner.Api.Services.Conversation.Asr;
 
 public sealed class WhisperConversationAsrProvider(
     IHttpClientFactory httpClientFactory,
     IConversationOptionsProvider optionsProvider,
+    IRuntimeSettingsProvider runtimeSettings,
     ILogger<WhisperConversationAsrProvider> logger) : IConversationAsrProvider
 {
     private ConversationOptions ReadOptions() => optionsProvider.GetAsync().GetAwaiter().GetResult();
 
     public string Name => "whisper";
-    public bool IsConfigured =>
-        !string.IsNullOrWhiteSpace(ReadOptions().WhisperApiKey) &&
-        !string.IsNullOrWhiteSpace(ReadOptions().WhisperBaseUrl);
+    public bool IsConfigured
+    {
+        get
+        {
+            var opts = ReadOptions();
+            if (!string.IsNullOrWhiteSpace(opts.WhisperApiKey) && !string.IsNullOrWhiteSpace(opts.WhisperBaseUrl))
+                return true;
+            try { return runtimeSettings.GetAsync().GetAwaiter().GetResult().SpeakingWhisper.IsConfigured; }
+            catch { return false; }
+        }
+    }
 
     public async Task<ConversationAsrResult> TranscribeAsync(ConversationAsrRequest request, CancellationToken ct)
     {
-        if (!IsConfigured) throw new InvalidOperationException("Whisper provider is not configured.");
+        // Resolve credentials: own ConversationOptions → admin-panel SpeakingWhisper (shared key).
+        var opts = ReadOptions();
+        var apiKey = string.IsNullOrWhiteSpace(opts.WhisperApiKey) ? null : opts.WhisperApiKey;
+        var whisperUrl = string.IsNullOrWhiteSpace(opts.WhisperBaseUrl) ? null : opts.WhisperBaseUrl;
+        var whisperModel = string.IsNullOrWhiteSpace(opts.WhisperModel) ? null : opts.WhisperModel;
+
+        if (apiKey is null || whisperUrl is null)
+        {
+            var adminWhisper = (await runtimeSettings.GetAsync(ct)).SpeakingWhisper;
+            apiKey ??= adminWhisper.ApiKey;
+            whisperUrl ??= adminWhisper.BaseUrl;
+            whisperModel ??= adminWhisper.Model;
+        }
+
+        if (string.IsNullOrWhiteSpace(apiKey) || string.IsNullOrWhiteSpace(whisperUrl))
+            throw new InvalidOperationException("Whisper provider is not configured.");
 
         var client = httpClientFactory.CreateClient("ConversationWhisperClient");
-        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", ReadOptions().WhisperApiKey);
-        var url = $"{ReadOptions().WhisperBaseUrl.TrimEnd('/')}/audio/transcriptions";
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
+        var url = $"{whisperUrl.TrimEnd('/')}/audio/transcriptions";
 
         using var form = new MultipartFormDataContent();
         var audioContent = new StreamContent(request.Audio);
         audioContent.Headers.ContentType = new MediaTypeHeaderValue(request.AudioMimeType);
         form.Add(audioContent, "file", GuessFileName(request.AudioMimeType));
-        form.Add(new StringContent(ReadOptions().WhisperModel), "model");
+        form.Add(new StringContent(whisperModel ?? "whisper-1"), "model");
         var locale = request.Locale ?? "en-GB";
         var lang = locale.Length >= 2 ? locale.Substring(0, 2) : "en";
         form.Add(new StringContent(lang), "language");

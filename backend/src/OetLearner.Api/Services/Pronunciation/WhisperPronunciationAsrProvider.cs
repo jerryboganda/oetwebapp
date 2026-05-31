@@ -7,6 +7,7 @@ using OetLearner.Api.Configuration;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services.AiManagement;
 using OetLearner.Api.Services.Rulebook;
+using OetLearner.Api.Services.Settings;
 
 namespace OetLearner.Api.Services.Pronunciation;
 
@@ -27,26 +28,38 @@ public sealed class WhisperPronunciationAsrProvider(
     IOptions<PronunciationOptions> options,
     IAiGatewayService aiGateway,
     IPronunciationCredentialResolver credentialResolver,
+    IRuntimeSettingsProvider runtimeSettings,
     ILogger<WhisperPronunciationAsrProvider> logger) : IPronunciationAsrProvider
 {
     private readonly PronunciationOptions _options = options.Value;
 
     public string Name => "whisper";
-    // Phase 6c: registry-first / options-fallback. Marked configured if
-    // either source has a usable key.
+    // Phase 6c: registry-first / options-fallback / admin-panel-fallback.
     public bool IsConfigured =>
         credentialResolver.IsRegistryConfigured("whisper-asr") ||
-        (!string.IsNullOrWhiteSpace(_options.WhisperApiKey) &&
-         !string.IsNullOrWhiteSpace(_options.WhisperBaseUrl));
+        (!string.IsNullOrWhiteSpace(_options.WhisperApiKey) && !string.IsNullOrWhiteSpace(_options.WhisperBaseUrl)) ||
+        TryGetAdminConfigured();
+
+    private bool TryGetAdminConfigured()
+    {
+        try { return runtimeSettings.GetAsync().GetAwaiter().GetResult().SpeakingWhisper.IsConfigured; }
+        catch { return false; }
+    }
 
     public async Task<AsrResult> AnalyzeAsync(AsrRequest request, CancellationToken ct)
     {
-        // Resolve credentials at call time so admin key rotations land
-        // without an app restart (cached for 30s).
+        // Resolve credentials: registry → own options → admin-panel SpeakingWhisper (shared key).
         var registry = await credentialResolver.ResolveAsync("whisper-asr", ct);
-        var apiKey = registry?.ApiKey ?? _options.WhisperApiKey;
-        var baseUrl = registry?.BaseUrl ?? _options.WhisperBaseUrl;
-        var model = registry?.DefaultModel ?? _options.WhisperModel;
+        var adminWhisper = (await runtimeSettings.GetAsync(ct)).SpeakingWhisper;
+        var apiKey = registry?.ApiKey
+            ?? (string.IsNullOrWhiteSpace(_options.WhisperApiKey) ? null : _options.WhisperApiKey)
+            ?? adminWhisper.ApiKey;
+        var baseUrl = registry?.BaseUrl
+            ?? (string.IsNullOrWhiteSpace(_options.WhisperBaseUrl) ? null : _options.WhisperBaseUrl)
+            ?? adminWhisper.BaseUrl;
+        var model = registry?.DefaultModel
+            ?? (string.IsNullOrWhiteSpace(_options.WhisperModel) ? null : _options.WhisperModel)
+            ?? adminWhisper.Model;
 
         if (string.IsNullOrWhiteSpace(apiKey) || string.IsNullOrWhiteSpace(baseUrl))
             throw new InvalidOperationException("Whisper provider is not configured.");
