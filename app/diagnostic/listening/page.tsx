@@ -216,7 +216,7 @@ export default function DiagnosticListeningPage() {
                               ? 'bg-primary text-white dark:bg-violet-700 shadow-primary/20 ring-2 ring-primary ring-offset-2'
                               : answers[q.id]?.trim()
                                 ? 'bg-success/10 text-success hover:bg-success/20 ring-1 ring-success/20'
-                                : 'bg-surface text-muted hover:bg-muted ring-1 ring-border',
+                                : 'bg-surface text-muted hover:bg-primary hover:text-white ring-1 ring-border hover:ring-primary/50',
                           )}
                         >
                           {q.number}
@@ -248,7 +248,7 @@ export default function DiagnosticListeningPage() {
                                   'flex items-center gap-4 p-4 sm:p-5 rounded-2xl cursor-pointer transition-[color,background-color,border-color,box-shadow,transform,opacity] duration-200 group relative overflow-hidden',
                                   answers[question.id] === opt
                                     ? 'bg-primary/[0.03] ring-2 ring-primary shadow-sm shadow-primary/5'
-                                    : 'bg-surface hover:bg-muted ring-1 ring-border hover:ring-border-hover hover:shadow-md',
+                                    : 'bg-surface hover:bg-primary hover:text-white ring-1 ring-border hover:ring-primary/50 hover:shadow-md',
                                 )}
                               >
                                 <div className="relative flex items-center justify-center shrink-0">
@@ -272,7 +272,7 @@ export default function DiagnosticListeningPage() {
                                 </div>
                                 <span className={cn(
                                   "text-base font-medium transition-colors duration-200",
-                                  answers[question.id] === opt ? "text-navy font-bold" : "text-navy/70 group-hover:text-navy"
+                                  answers[question.id] === opt ? "text-navy font-bold" : "text-navy/70 group-hover:text-white"
                                 )}>{opt}</span>
                               </label>
                             ))}

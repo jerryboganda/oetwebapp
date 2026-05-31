@@ -330,14 +330,14 @@ export function TutorCuePanel({
                         'group flex w-full items-start gap-2 rounded-lg border px-3 py-2 text-left transition-colors',
                         delivered
                           ? 'border-emerald-300 bg-emerald-50 text-emerald-900'
-                          : 'border-border bg-surface hover:border-border-hover hover:bg-muted',
+                          : 'border-border bg-surface hover:border-primary/50 hover:bg-primary hover:text-white',
                       )}
                       data-testid={`tutor-cue-${cue.index}`}
                     >
                       <MessageSquareQuote
                         className={cn(
                           'mt-0.5 h-4 w-4 shrink-0',
-                          delivered ? 'text-emerald-600' : 'text-muted',
+                          delivered ? 'text-emerald-600' : 'text-muted group-hover:text-white',
                         )}
                         aria-hidden
                       />
@@ -354,7 +354,7 @@ export function TutorCuePanel({
               type="button"
               onClick={() => setHiddenOpen((v) => !v)}
               aria-expanded={hiddenOpen}
-              className="flex w-full items-center justify-between rounded-md border border-border bg-muted px-3 py-2 text-left text-sm font-medium text-foreground hover:bg-muted/80"
+              className="flex w-full items-center justify-between rounded-md border border-border bg-muted px-3 py-2 text-left text-sm font-medium text-foreground hover-primary"
             >
               <span className="inline-flex items-center gap-2">
                 <EyeOff className="h-4 w-4 text-muted" aria-hidden />

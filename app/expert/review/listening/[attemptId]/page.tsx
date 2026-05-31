@@ -295,7 +295,7 @@ function QuestionCard({
       className={`w-full rounded-xl border p-4 text-left transition-[color,background-color,border-color,box-shadow,transform,opacity,filter] duration-200 ${
         selected
           ? 'border-primary/40 bg-primary/5 shadow-sm'
-          : 'border-border bg-surface hover:border-border-hover hover:bg-muted'
+          : 'border-border bg-surface hover:border-primary/50 hover-primary'
       }`}
       aria-pressed={selected}
     >

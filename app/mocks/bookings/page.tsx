@@ -189,7 +189,7 @@ export default function MockBookingsPage() {
                         href={b.zoomJoinUrl}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="inline-flex items-center rounded-md border border-border px-3 py-2 text-sm font-medium text-foreground hover:bg-muted"
+                        className="inline-flex items-center rounded-md border border-border px-3 py-2 text-sm font-medium text-foreground hover-primary"
                       >
                         Join room
                       </a>

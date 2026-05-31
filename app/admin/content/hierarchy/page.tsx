@@ -733,13 +733,13 @@ export default function AdminContentHierarchyPage() {
       <div className="flex gap-2 mb-4">
         <button
           onClick={() => { setTab('programs'); setSelectedProgramId(null); setSelectedTrackId(null); setSelectedModuleId(null); }}
-          className={`px-4 py-2 text-sm rounded-md ${tab === 'programs' ? 'bg-primary text-primary-foreground' : 'bg-muted hover:bg-muted/80'}`}
+          className={`px-4 py-2 text-sm rounded-md ${tab === 'programs' ? 'bg-primary text-primary-foreground' : 'bg-muted hover-primary'}`}
         >
           <GitBranch className="w-4 h-4 inline mr-1" /> Programs ({programs.length})
         </button>
         <button
           onClick={() => { setTab('packages'); setSelectedProgramId(null); setSelectedTrackId(null); setSelectedModuleId(null); }}
-          className={`px-4 py-2 text-sm rounded-md ${tab === 'packages' ? 'bg-primary text-primary-foreground' : 'bg-muted hover:bg-muted/80'}`}
+          className={`px-4 py-2 text-sm rounded-md ${tab === 'packages' ? 'bg-primary text-primary-foreground' : 'bg-muted hover-primary'}`}
         >
           <Package className="w-4 h-4 inline mr-1" /> Packages ({packages.length})
         </button>

@@ -155,9 +155,9 @@ function NavSection({
                   void triggerImpactHaptic('LIGHT');
                 }}
                 className={cn(
-                  'pressable relative flex items-center gap-3 overflow-hidden rounded-2xl px-4 py-2.5 text-sm font-semibold',
+                  'pressable group relative flex items-center gap-3 overflow-hidden rounded-2xl px-4 py-2.5 text-sm font-semibold',
                   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2',
-                  active ? 'text-primary-dark dark:text-primary' : 'text-muted hover:bg-white/70 hover:text-navy dark:hover:bg-white/5',
+                  active ? 'text-primary-dark dark:text-primary' : 'text-muted hover:bg-primary hover:text-white dark:hover:bg-primary',
                 )}
                 aria-current={active ? 'page' : undefined}
               >
@@ -169,7 +169,7 @@ function NavSection({
                     transition={getSurfaceTransition('item', reducedMotion)}
                   />
                 )}
-                <span className={cn('relative z-10 flex items-center justify-center', active ? 'text-primary-dark dark:text-primary' : 'text-muted')}>
+                <span className={cn('relative z-10 flex items-center justify-center', active ? 'text-primary-dark dark:text-primary' : 'text-muted group-hover:text-white')}>
                   {item.icon}
                 </span>
                 <span className="relative z-10">{item.label}</span>
@@ -286,7 +286,7 @@ export function Sidebar({
             <Link
               href="/settings"
               onClick={() => { void triggerImpactHaptic('LIGHT'); }}
-              className="pressable flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-semibold text-muted hover:bg-white/70 hover:text-navy dark:hover:bg-white/5"
+              className="pressable flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-semibold text-muted hover:bg-primary hover:text-white dark:hover:bg-primary"
             >
               <Settings className="h-4 w-4" aria-hidden="true" />
               Settings
@@ -296,7 +296,7 @@ export function Sidebar({
             <a
               href="mailto:support@edu80.app?subject=Need%20help%20with%20my%20OET%20account&body=Hello%20Support%20Team%2C%0AI%20need%20assistance%20with%20my%20OET%20account."
               onClick={() => { void triggerImpactHaptic('LIGHT'); }}
-              className="pressable flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-sm font-semibold text-muted hover:bg-white/70 hover:text-navy dark:hover:bg-white/5"
+              className="pressable flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-sm font-semibold text-muted hover:bg-primary hover:text-white dark:hover:bg-primary"
             >
               <HelpCircle className="h-4 w-4" aria-hidden="true" />
               Help & Support
@@ -352,7 +352,7 @@ export function BottomNav({ className, items = mobileNavItems }: { className?: s
                 className={cn(
                   'pressable relative flex min-h-14 flex-col items-center justify-center gap-1 overflow-hidden rounded-[1rem] px-1 py-1 text-[10px] font-semibold',
                   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary',
-                  active ? 'text-white shadow-[0_10px_24px_rgba(124,58,237,0.28)]' : 'text-muted hover:bg-white/70 hover:text-navy dark:hover:bg-white/5',
+                  active ? 'text-white shadow-[0_10px_24px_rgba(124,58,237,0.28)]' : 'text-muted hover:bg-primary hover:text-white dark:hover:bg-primary',
                 )}
                 aria-current={active ? 'page' : undefined}
               >

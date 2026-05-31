@@ -161,7 +161,7 @@ export function TopNav({
       >
         <div className="flex items-center gap-3">
           <button
-            className="touch-target pressable rounded-2xl p-2 text-muted hover:bg-white/70 hover:text-navy dark:hover:bg-white/5 lg:hidden"
+            className="touch-target pressable rounded-2xl p-2 text-muted hover:bg-primary hover:text-white dark:hover:bg-primary lg:hidden"
             onClick={() => {
               void triggerImpactHaptic('LIGHT');
               setMobileMenuOpen((current) => !current);
@@ -246,7 +246,7 @@ export function TopNav({
                                     onClick={handleMobileItemClick}
                                     className={cn(
                                       'pressable flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-semibold',
-                                      active ? 'bg-primary/12 text-primary-dark ring-1 ring-primary/15 dark:text-primary' : 'text-muted hover:bg-white/70 hover:text-navy dark:hover:bg-white/5',
+                                      active ? 'bg-primary/12 text-primary-dark ring-1 ring-primary/15 dark:text-primary' : 'text-muted hover:bg-primary hover:text-white dark:hover:bg-primary',
                                     )}
                                     aria-current={active ? 'page' : undefined}
                                   >
@@ -266,7 +266,7 @@ export function TopNav({
                           <Link
                             href="/settings"
                             onClick={handleMobileItemClick}
-                            className="pressable flex items-center gap-3 rounded-2xl border border-border/60 bg-surface/95 px-4 py-3 text-sm font-semibold text-navy shadow-sm hover:bg-muted"
+                            className="pressable flex items-center gap-3 rounded-2xl border border-border/60 bg-surface/95 px-4 py-3 text-sm font-semibold text-navy shadow-sm hover:bg-primary hover:text-white"
                           >
                             <Settings className="h-4 w-4" aria-hidden="true" />
                             Settings
@@ -274,7 +274,7 @@ export function TopNav({
                           <a
                             href={buildSupportMailto(userSummary?.email ?? undefined)}
                             onClick={handleMobileItemClick}
-                            className="pressable flex items-center gap-3 rounded-2xl border border-border/60 bg-surface/95 px-4 py-3 text-sm font-semibold text-navy shadow-sm hover:bg-muted"
+                            className="pressable flex items-center gap-3 rounded-2xl border border-border/60 bg-surface/95 px-4 py-3 text-sm font-semibold text-navy shadow-sm hover:bg-primary hover:text-white"
                           >
                             <HelpCircle className="h-4 w-4" aria-hidden="true" />
                             Help & Support
@@ -300,7 +300,7 @@ export function TopNav({
                               onClick={handleMobileItemClick}
                               className={cn(
                                 'pressable flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-semibold',
-                                active ? 'bg-primary/12 text-primary-dark ring-1 ring-primary/15 dark:text-primary' : 'text-muted hover:bg-white/70 hover:text-navy dark:hover:bg-white/5',
+                                active ? 'bg-primary/12 text-primary-dark ring-1 ring-primary/15 dark:text-primary' : 'text-muted hover:bg-primary hover:text-white dark:hover:bg-primary',
                               )}
                               aria-current={active ? 'page' : undefined}
                             >
@@ -320,7 +320,7 @@ export function TopNav({
                         onClick={() => {
                           void handleSignOut();
                         }}
-                        className="pressable flex w-full items-center justify-center gap-3 rounded-2xl border border-border/60 bg-surface/95 px-4 py-3 text-sm font-semibold text-navy shadow-sm hover:bg-muted"
+                        className="pressable flex w-full items-center justify-center gap-3 rounded-2xl border border-border/60 bg-surface/95 px-4 py-3 text-sm font-semibold text-navy shadow-sm hover:bg-primary hover:text-white"
                       >
                         <LogOut className="h-4 w-4" aria-hidden="true" />
                         Sign out

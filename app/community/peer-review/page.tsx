@@ -172,7 +172,7 @@ export default function PeerReviewPage() {
                   className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
                     subtestCode === 'writing'
                       ? 'bg-primary text-primary-foreground'
-                      : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                      : 'bg-muted text-muted-foreground hover:bg-primary hover:text-white'
                   }`}
                 >
                   Writing
@@ -182,7 +182,7 @@ export default function PeerReviewPage() {
                   className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
                     subtestCode === 'speaking'
                       ? 'bg-primary text-primary-foreground'
-                      : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                      : 'bg-muted text-muted-foreground hover:bg-primary hover:text-white'
                   }`}
                 >
                   Speaking

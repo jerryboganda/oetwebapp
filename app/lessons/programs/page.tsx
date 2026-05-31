@@ -63,7 +63,7 @@ export default function ProgramBrowserPage() {
       <div className="flex gap-2 mb-6 flex-wrap">
         <button
           onClick={() => changeFilter('')}
-          className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${!typeFilter ? 'bg-primary text-primary-foreground' : 'bg-muted text-navy hover:bg-muted/80'}`}
+          className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${!typeFilter ? 'bg-primary text-primary-foreground' : 'bg-muted text-navy hover:bg-primary hover:text-white'}`}
         >
           All
         </button>
@@ -71,7 +71,7 @@ export default function ProgramBrowserPage() {
           <button
             key={key}
             onClick={() => changeFilter(key)}
-            className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${typeFilter === key ? 'bg-primary text-primary-foreground' : 'bg-muted text-navy hover:bg-muted/80'}`}
+            className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${typeFilter === key ? 'bg-primary text-primary-foreground' : 'bg-muted text-navy hover:bg-primary hover:text-white'}`}
           >
             {label}
           </button>

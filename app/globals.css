@@ -602,3 +602,14 @@
   }
 }
 
+/* ── Platform hover: solid-purple interactive state ───────────────────────
+   Applied to buttons, links, and filter chips that turn solid purple on
+   hover. Placed OUTSIDE @layer so it beats every Tailwind utility class.
+   !important on bg and color ensures it wins over any competing base class
+   regardless of specificity (bg-surface, bg-muted, bg-background-light…).
+   Use class "hover-primary" on any interactive element. ─────────────────── */
+.hover-primary:hover {
+  background-color: var(--color-primary) !important;
+  color: rgb(255 255 255) !important;
+}
+

@@ -94,7 +94,7 @@ export function MobileFilterSheet({ groups, selected, onChange, onClear, classNa
         <button
           type="button"
           onClick={onClear}
-          className="pressable flex items-center gap-2 rounded-2xl px-3 py-3 text-sm font-semibold text-muted transition-colors hover:bg-muted hover:text-navy"
+          className="pressable flex items-center gap-2 rounded-2xl px-3 py-3 text-sm font-semibold text-muted transition-colors hover:bg-primary hover:text-white"
           aria-label={`Clear all ${totalSelected} filters`}
         >
           <X className="h-4 w-4" aria-hidden="true" />
@@ -144,7 +144,7 @@ export function MobileFilterSheet({ groups, selected, onChange, onClear, classNa
             <button
               type="button"
               onClick={onClear}
-              className="pressable flex w-full items-center justify-center gap-2 rounded-2xl border border-border/60 bg-surface px-4 py-3 text-sm font-semibold text-navy shadow-sm hover:bg-muted"
+              className="pressable flex w-full items-center justify-center gap-2 rounded-2xl border border-border/60 bg-surface px-4 py-3 text-sm font-semibold text-navy shadow-sm hover:bg-primary hover:text-white"
             >
               <X className="h-4 w-4" aria-hidden="true" />
               Clear all filters

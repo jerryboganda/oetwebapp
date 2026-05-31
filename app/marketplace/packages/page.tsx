@@ -81,7 +81,7 @@ export default function PackagesPage() {
       <div className="flex gap-2 mb-6 flex-wrap">
         <button
           onClick={() => changeFilter('')}
-          className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${!typeFilter ? 'bg-primary text-white dark:bg-violet-700' : 'bg-muted text-muted hover:bg-muted/80'}`}
+          className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${!typeFilter ? 'bg-primary text-white dark:bg-violet-700' : 'bg-muted text-muted hover-primary'}`}
         >
           All Packages
         </button>
@@ -89,7 +89,7 @@ export default function PackagesPage() {
           <button
             key={key}
             onClick={() => changeFilter(key)}
-            className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${typeFilter === key ? 'bg-primary text-white dark:bg-violet-700' : 'bg-muted text-muted hover:bg-muted/80'}`}
+            className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${typeFilter === key ? 'bg-primary text-white dark:bg-violet-700' : 'bg-muted text-muted hover-primary'}`}
           >
             {label}
           </button>
