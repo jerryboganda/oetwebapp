@@ -8,6 +8,7 @@ using OetLearner.Api.Configuration;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services;
+using OetLearner.Api.Services.Reading;
 
 namespace OetLearner.Api.Services.Content;
 
@@ -35,6 +36,8 @@ public sealed class RealContentFolderImporter
     private readonly IUploadContentValidator _validator;
     private readonly IUploadScanner _scanner;
     private readonly StorageOptions _opts;
+    private readonly IReadingStructureService _readingStructure;
+    private readonly IContentTextExtractionService _textExtraction;
     private readonly ILogger<RealContentFolderImporter> _log;
 
     public RealContentFolderImporter(
@@ -43,6 +46,8 @@ public sealed class RealContentFolderImporter
         IUploadContentValidator validator,
         IUploadScanner scanner,
         IOptions<StorageOptions> opts,
+        IReadingStructureService readingStructure,
+        IContentTextExtractionService textExtraction,
         ILogger<RealContentFolderImporter> log)
     {
         _db = db;
@@ -50,6 +55,8 @@ public sealed class RealContentFolderImporter
         _validator = validator;
         _scanner = scanner;
         _opts = opts.Value;
+        _readingStructure = readingStructure;
+        _textExtraction = textExtraction;
         _log = log;
     }
 
@@ -274,13 +281,40 @@ public sealed class RealContentFolderImporter
             foreach (var f in files)
             {
                 var nm = Path.GetFileName(f.FullName).ToLowerInvariant();
-                var role = nm.Contains("part a") ? "QuestionPaper" : nm.Contains("part b") || nm.Contains("b&c") ? "QuestionPaper" : "Supplementary";
+                // A Reading sample folder holds up to four distinct documents that
+                // all share Part A: the text booklet (passages), the question
+                // paper, the answer key, plus the combined Part B&C paper. They
+                // MUST map to distinct (Role, Part) pairs — the
+                // UX_PaperAsset_Primary_Per_RolePart unique index spans
+                // (PaperId, Role, Part, IsPrimary), so two same-(Role,Part) assets
+                // collide. Distinguish them by filename like the Listening parser.
+                string role; string? part;
+                if (nm.Contains("b&c") || nm.Contains("part b") || nm.Contains("part c"))
+                {
+                    role = "QuestionPaper"; part = "B+C";
+                }
+                else if (nm.Contains("answer"))
+                {
+                    role = "AnswerKey"; part = "A";
+                }
+                else if (nm.Contains("text booklet") || nm.Contains("text-booklet") || nm.Contains("booklet"))
+                {
+                    role = "Supplementary"; part = "A";
+                }
+                else if (nm.Contains("question") || nm.Contains("part a"))
+                {
+                    role = "QuestionPaper"; part = "A";
+                }
+                else
+                {
+                    role = "Supplementary"; part = null;
+                }
                 p.Assets.Add(new RealContentAssetProposal
                 {
                     Role = role,
                     SourcePath = NormalizePath(f.FullName),
                     OriginalFilename = Path.GetFileName(f.FullName),
-                    Part = nm.Contains("part a") ? "A" : nm.Contains("part b") || nm.Contains("b&c") ? "B" : null,
+                    Part = part,
                 });
             }
             proposals.Add(p);
@@ -636,6 +670,37 @@ public sealed class RealContentFolderImporter
         }
 
         await _db.SaveChangesAsync(ct);
+
+        // G2 — every imported Reading paper lands structure-ready. The folder
+        // import only attaches the Part A / Part B+C PDFs as assets; here we
+        // scaffold the canonical A/B/C parts and extract the source text so the
+        // admin's structure-review screen has content to work from immediately
+        // (no 10-minute background-worker wait). Runs after the SaveChanges
+        // above so the paper + assets are persisted and queryable by id.
+        // Best-effort: a failure here must never fail the import — both steps
+        // are idempotent and can be re-run from the authoring UI.
+        foreach (var row in created.Where(r => r.Target == RealContentTarget.ReadingPaper).ToList())
+        {
+            try
+            {
+                await _readingStructure.EnsureCanonicalPartsAsync(row.Id, ct);
+            }
+            catch (Exception ex)
+            {
+                _log.LogWarning(ex, "RealContent import: EnsureCanonicalParts failed for reading paper {PaperId}", row.Id);
+                errors.Add($"Reading structure scaffold failed for '{row.Title}': {ex.Message}");
+            }
+
+            try
+            {
+                await _textExtraction.ExtractForPaperAsync(row.Id, ct);
+            }
+            catch (Exception ex)
+            {
+                _log.LogWarning(ex, "RealContent import: text extraction failed for reading paper {PaperId}", row.Id);
+            }
+        }
+
         return new RealContentCommitResult { Created = created, Errors = errors };
     }
 

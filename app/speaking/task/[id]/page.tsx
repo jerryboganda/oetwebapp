@@ -27,6 +27,7 @@ import {
 import { SpeakingSelfPracticeButton } from '@/components/domain/speaking-self-practice-button';
 import { getRealtimeValueTransition, getRecordingPulseTransition, prefersReducedMotion } from '@/lib/motion';
 import type { RoleCard } from '@/lib/mock-data';
+import { deriveDeliveryMode, deliveryModeLabel } from '@/lib/mocks/delivery-mode';
 
 // --- Types ---
 type TaskMode = 'self' | 'exam';
@@ -50,6 +51,11 @@ function LiveSpeakingTaskContent() {
   const speakingMockAttemptId = searchParams?.get('attemptId') ?? undefined;
   const speakingMockSessionId = searchParams?.get('mockSession') ?? searchParams?.get('mockSessionId') ?? undefined;
   const speakingMockSetId = searchParams?.get('mockSetId') ?? undefined;
+  // Delivery mode (paper | computer | oet_home) is attached by the mock launch.
+  // Speaking content is identical across modes — the interlocutor is live in
+  // all three — so this only drives an informational badge.
+  const deliveryModeParam = searchParams?.get('deliveryMode');
+  const deliveryMode = deriveDeliveryMode(searchParams);
   const mode: TaskMode = requestedMode === 'exam' ? 'exam' : 'self';
 
   // --- Card State ---
@@ -721,6 +727,11 @@ function LiveSpeakingTaskContent() {
             {mode === 'self' ? <User className="w-3 h-3" /> : <ShieldCheck className="w-3 h-3" />}
             {mode === 'self' ? 'Self Practice' : 'Exam Simulation'}
           </div>
+          {deliveryModeParam ? (
+            <div className="hidden items-center rounded-full border border-border bg-background-light px-3 py-1 text-[10px] font-black uppercase tracking-widest text-muted sm:flex">
+              {deliveryModeLabel(deliveryMode)}
+            </div>
+          ) : null}
           <div className="hidden h-4 w-px bg-border sm:block" />
           <div className="hidden sm:flex items-center gap-2 text-muted">
             {connectionStatus === 'connected' ? <Wifi className="w-4 h-4 text-success" /> : 

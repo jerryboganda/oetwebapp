@@ -10,6 +10,7 @@ import { WritingEditor } from '@/components/domain/writing-editor';
 import { WritingCaseNotePanel } from '@/components/domain/mock-player/WritingCaseNotePanel';
 import { WritingPhaseTimer, type WritingPhase } from '@/components/domain/mock-player/WritingPhaseTimer';
 import { completeMockSection } from '@/lib/api';
+import { deriveDeliveryMode, deliveryModeLabel } from '@/lib/mocks/delivery-mode';
 
 const DEFAULT_READING_SECONDS = 5 * 60;
 const DEFAULT_EDITING_SECONDS = 40 * 60;
@@ -24,6 +25,12 @@ export default function MockWritingSectionPage() {
   const caseNoteHtml = searchParams?.get('caseNoteHtml') ?? undefined;
   const readingSeconds = Number(searchParams?.get('readingWindowSeconds') ?? DEFAULT_READING_SECONDS) || DEFAULT_READING_SECONDS;
   const editingSeconds = Number(searchParams?.get('editingWindowSeconds') ?? DEFAULT_EDITING_SECONDS) || DEFAULT_EDITING_SECONDS;
+  // Delivery mode (paper | computer | oet_home) is attached by the mock launch.
+  // The Writing task content is identical across modes; this drives an
+  // informational badge (Writing's own paper/computer simulation lives on the
+  // authored task's SimulationModes).
+  const deliveryModeParam = searchParams?.get('deliveryMode');
+  const deliveryMode = deriveDeliveryMode(searchParams);
 
   const [phase, setPhase] = useState<WritingPhase>('reading');
   const [phaseStartedAt, setPhaseStartedAt] = useState(Date.now());
@@ -116,12 +123,19 @@ export default function MockWritingSectionPage() {
                 <p className="text-sm font-black text-navy">Response</p>
                 <p className="text-xs text-muted">{wordCount} words / autosave is local until the backend autosave endpoint is enabled.</p>
               </div>
-              {phase === 'reading' ? (
-                <span className="inline-flex items-center gap-2 rounded-full bg-warning/10 px-3 py-1 text-xs font-black uppercase tracking-widest text-warning">
-                  <Lock className="h-3.5 w-3.5" aria-hidden />
-                  Editor locked
-                </span>
-              ) : null}
+              <div className="flex items-center gap-2">
+                {deliveryModeParam ? (
+                  <span className="inline-flex items-center rounded-full border border-border bg-background-light px-3 py-1 text-xs font-black uppercase tracking-widest text-muted">
+                    {deliveryModeLabel(deliveryMode)}
+                  </span>
+                ) : null}
+                {phase === 'reading' ? (
+                  <span className="inline-flex items-center gap-2 rounded-full bg-warning/10 px-3 py-1 text-xs font-black uppercase tracking-widest text-warning">
+                    <Lock className="h-3.5 w-3.5" aria-hidden />
+                    Editor locked
+                  </span>
+                ) : null}
+              </div>
             </div>
 
             <WritingEditor

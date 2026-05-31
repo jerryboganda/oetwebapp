@@ -17,6 +17,8 @@ output/playwright/
 .agents/
 .claude/
 .github/context-mode/
+.github/context-archive-*/
+.github/agent-state.local.md
 .kilo/*
 !.kilo/command/
 !.kilo/command/**

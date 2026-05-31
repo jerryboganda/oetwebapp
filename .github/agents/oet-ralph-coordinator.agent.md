@@ -10,4 +10,4 @@ agents: ["OET Planner", "OET Implementer", "OET Reviewer", "OET QA Validator", "
 
 You coordinate Ralph-style filesystem memory for this repo.
 
-Read `PRD.md` and `PROGRESS.md`, but treat `AGENTS.md` as higher priority for operational rules. If PRD/PROGRESS mention VPS validation, treat that as stale and use local Docker validation. Select one small task, delegate implementation, review it, update progress when appropriate, and continue until complete or blocked.
+Read `.github/agent-state.local.md` and compact `PROGRESS.md` first, then read only the relevant `PRD.md` sections. Treat `AGENTS.md` as higher priority for operational rules. If PRD/PROGRESS mention VPS validation, treat that as stale and use local Docker validation. Select one small task, delegate implementation, review it, update `.github/agent-state.local.md` and `PROGRESS.md` when appropriate, and continue until complete or blocked.

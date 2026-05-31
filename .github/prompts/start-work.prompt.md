@@ -8,4 +8,4 @@ tools: ["read", "search", "web", "todo"]
 
 Create a decision-complete plan for: `${input:goal:Describe the goal}`.
 
-Inspect the repo context, relevant docs, existing code, tests, and useful web documentation before planning. Ask only blocking questions. Include evidence gathered, scope, assumptions, likely files/contracts, implementation sequence, validation matrix, risks, rejected approaches, and any required user decision. Do not implement in this prompt.
+Read `AGENTS.md`, `PROGRESS.md`, and `.github/agent-state.local.md` if present, then inspect only the relevant docs, existing code, tests, and useful web documentation before planning. Ask only blocking questions. Include evidence gathered, scope, assumptions, likely files/contracts, implementation sequence, validation matrix, risks, rejected approaches, and any required user decision. Update `.github/agent-state.local.md` with the planned next step. Do not implement in this prompt.

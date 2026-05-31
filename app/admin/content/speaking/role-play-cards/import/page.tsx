@@ -14,7 +14,7 @@
  * the validation report so the admin can structure the card manually. The
  * admin reviews + edits + publishes the draft from the role-play card list.
  */
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 
 import { AdminCatalogLayout } from '@/components/admin/layout/admin-catalog-layout';
@@ -25,6 +25,7 @@ import { Input } from '@/components/admin/ui/input';
 
 import { InlineAlert } from '@/components/ui/alert';
 import { Select } from '@/components/ui/form-controls';
+import { downloadMediaAssetContent } from '@/lib/api';
 import {
   PROFESSION_OPTIONS,
   importSpeakingRolePlayCard,
@@ -48,6 +49,33 @@ export default function AdminSpeakingRolePlayCardImportPage() {
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<SpeakingContentImportResult | null>(null);
+  const [sourcePreviewUrl, setSourcePreviewUrl] = useState<string | null>(null);
+
+  // Fetch the persisted source PDF (authenticated) so the operator can read a
+  // scanned card while transcribing it by hand. Object-URL lifecycle cleaned up
+  // on change/unmount.
+  useEffect(() => {
+    const mediaId = result?.sourceMediaId;
+    if (!mediaId) {
+      setSourcePreviewUrl(null);
+      return;
+    }
+    let cancelled = false;
+    let objectUrl: string | null = null;
+    void downloadMediaAssetContent(mediaId)
+      .then((blob) => {
+        if (cancelled) return;
+        objectUrl = URL.createObjectURL(blob);
+        setSourcePreviewUrl(objectUrl);
+      })
+      .catch(() => {
+        if (!cancelled) setSourcePreviewUrl(null);
+      });
+    return () => {
+      cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [result?.sourceMediaId]);
 
   async function submit() {
     setError(null);
@@ -151,12 +179,41 @@ export default function AdminSpeakingRolePlayCardImportPage() {
 
             {result.warning ? <InlineAlert variant="warning">{result.warning}</InlineAlert> : null}
 
+            {sourcePreviewUrl ? (
+              <div>
+                <div className="mb-2 flex items-center justify-between">
+                  <h4 className="text-sm font-semibold text-admin-fg">Source PDF (for manual entry)</h4>
+                  <a
+                    className="text-sm font-medium text-admin-accent underline"
+                    href={sourcePreviewUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    Open in new tab
+                  </a>
+                </div>
+                <object
+                  data={sourcePreviewUrl}
+                  type="application/pdf"
+                  className="h-[480px] w-full rounded-md border"
+                >
+                  <p className="p-3 text-sm text-admin-fg-muted">
+                    Inline preview unavailable.{' '}
+                    <a href={sourcePreviewUrl} target="_blank" rel="noreferrer" className="underline">
+                      Open the source PDF
+                    </a>
+                    .
+                  </p>
+                </object>
+              </div>
+            ) : null}
+
             <div>
               <h4 className="mb-2 text-sm font-semibold text-admin-fg">Builder validation</h4>
               <ul className="space-y-1 text-sm">
                 {result.validation.checks.map((check) => (
                   <li key={check.field} className="flex items-center gap-2">
-                    <Badge variant={check.detected ? 'success' : check.required ? 'error' : 'muted'}>
+                    <Badge variant={check.detected ? 'success' : check.required ? 'danger' : 'muted'}>
                       {check.detected ? 'detected' : check.required ? 'missing' : 'optional'}
                     </Badge>
                     <span className="font-medium text-admin-fg">{check.field}</span>
@@ -179,10 +236,24 @@ export default function AdminSpeakingRolePlayCardImportPage() {
                 </Button>
               </div>
             ) : (
-              <p className="text-sm text-admin-fg-muted">
-                No draft was created. The source asset was saved — structure the card manually via{' '}
-                <span className="font-medium">New role-play card</span>.
-              </p>
+              <div className="space-y-2">
+                <p className="text-sm text-admin-fg-muted">
+                  {result.likelyScanned
+                    ? 'No draft was created — the PDF is a scanned image with no extractable text. Enter the card manually using the source preview above as your reference. The manual step (not OCR) is what guarantees 100% fidelity.'
+                    : 'No draft was created. The source asset was saved — enter the card manually using the source preview above.'}
+                </p>
+                <Button
+                  onClick={() => {
+                    const sp = new URLSearchParams();
+                    if (professionId.trim()) sp.set('professionId', professionId.trim());
+                    if (result.sourceMediaId) sp.set('sourceMediaId', result.sourceMediaId);
+                    const qs = sp.toString();
+                    router.push(`/admin/content/speaking/role-play-cards/new${qs ? `?${qs}` : ''}`);
+                  }}
+                >
+                  Enter card manually
+                </Button>
+              </div>
             )}
           </CardContent>
         </Card>

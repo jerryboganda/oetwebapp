@@ -297,4 +297,5 @@ public record SpeakingContentImportResult(
     SpeakingImportValidationReport Validation,
     string? DraftCardId,
     AdminRolePlayCardDetail? Draft,
-    string? Warning);
+    string? Warning,
+    string? SourceMediaId = null);

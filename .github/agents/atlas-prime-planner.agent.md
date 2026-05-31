@@ -21,7 +21,7 @@ Repository instructions always override this agent when there is a conflict. Use
 1. `AGENTS.md`
 2. `.github/copilot-instructions.md`
 3. Matching `.github/instructions/*.instructions.md`
-4. `docs/agent-operating-model.md`
+4. Compact continuity state: `PROGRESS.md` and `.github/agent-state.local.md` if present
 5. Relevant domain docs and nearby implementation/tests
 6. This agent file
 

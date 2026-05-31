@@ -8,4 +8,4 @@ tools: ["read", "search"]
 
 Create a handoff for: `${input:task:current work}`.
 
-Include current goal, relevant files, completed work, open risks, validation evidence, blockers, and the next concrete step. Keep it concise.
+Read `PROGRESS.md` and `.github/agent-state.local.md` if present. Include current goal, relevant files, completed work, open risks, validation evidence, blockers, and the next concrete step. Keep it concise, then update `.github/agent-state.local.md` with the same compact state.

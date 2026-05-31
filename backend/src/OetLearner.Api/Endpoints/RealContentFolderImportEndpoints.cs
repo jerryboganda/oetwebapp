@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Security.Claims;
 using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
 using OetLearner.Api.Services.Content;
 
 namespace OetLearner.Api.Endpoints;
@@ -93,7 +94,15 @@ public static class RealContentFolderImportEndpoints
                 issues = result.Issues,
             });
         })
-        .DisableAntiforgery();
+        .DisableAntiforgery()
+        // Real content zips mirror the whole `Project Real Content` folder and
+        // routinely exceed 100 MB (Listening audio). The global Kestrel ceiling
+        // is pinned to Storage:MaxUploadBytes (Program.cs) which is far smaller,
+        // so override it for THIS endpoint and let the importer's own 1 GB
+        // MaxZipBytes guard be the effective bound.
+        .WithMetadata(
+            new RequestSizeLimitAttribute(MaxZipBytes),
+            new RequestFormLimitsAttribute { MultipartBodyLengthLimit = MaxZipBytes });
 
         group.MapPost("/{sessionId}/commit", async (
             string sessionId,

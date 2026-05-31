@@ -1,5 +1,8 @@
 using System.Text.RegularExpressions;
+using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Contracts;
+using OetLearner.Api.Data;
+using OetLearner.Api.Domain;
 using OetLearner.Api.Services.Content;
 using OetLearner.Api.Services.Rulebook;
 
@@ -46,6 +49,7 @@ public interface ISpeakingContentImportService
 }
 
 public sealed class SpeakingContentImportService(
+    LearnerDbContext db,
     IFileStorage storage,
     IPdfTextExtractor extractor,
     IUploadContentValidator validator,
@@ -106,6 +110,49 @@ public sealed class SpeakingContentImportService(
         var safeName = SanitizeFileName(fileName);
         var key = $"speaking/imports/{DateTimeOffset.UtcNow:yyyy/MM}/{Guid.NewGuid():N}-{safeName}";
         var bytesWritten = await storage.WriteAsync(key, buffer, ct);
+        buffer.Position = 0;
+
+        // 2b) Register a viewable MediaAsset for the source PDF so the admin's
+        // manual authoring screen can render it side-by-side (critical for
+        // scanned cards that must be transcribed by hand). Best-effort and
+        // content-deduped by SHA — a failure here never blocks the import.
+        string? sourceMediaId = null;
+        try
+        {
+            buffer.Position = 0;
+            var (_, sourceSha) = await StreamingSha256.ComputeAsync(new[] { buffer }, null, ct);
+            var existingMedia = await db.MediaAssets
+                .FirstOrDefaultAsync(m => m.Sha256 == sourceSha && m.Format == "pdf", ct);
+            if (existingMedia is not null)
+            {
+                sourceMediaId = existingMedia.Id;
+            }
+            else
+            {
+                sourceMediaId = $"med_{Guid.NewGuid():N}";
+                db.MediaAssets.Add(new MediaAsset
+                {
+                    Id = sourceMediaId,
+                    OriginalFilename = safeName,
+                    MimeType = "application/pdf",
+                    Format = "pdf",
+                    SizeBytes = bytesWritten,
+                    StoragePath = key,
+                    Status = MediaAssetStatus.Ready,
+                    Sha256 = sourceSha,
+                    MediaKind = "document",
+                    UploadedBy = adminId,
+                    UploadedAt = DateTimeOffset.UtcNow,
+                    ProcessedAt = DateTimeOffset.UtcNow,
+                });
+                await db.SaveChangesAsync(ct);
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Speaking import: failed to register source MediaAsset for {Key}", key);
+            sourceMediaId = null;
+        }
         buffer.Position = 0;
 
         // 3) Extract text (PdfPig + configured OCR fallback; no-op in CI).
@@ -180,7 +227,8 @@ public sealed class SpeakingContentImportService(
             Validation: report,
             DraftCardId: draftCardId,
             Draft: draft,
-            Warning: warning);
+            Warning: warning,
+            SourceMediaId: sourceMediaId);
     }
 
     /// <summary>

@@ -28,6 +28,7 @@ import { ReadingPaperSimulation } from '@/components/domain/reading-paper-simula
 import { completeMockSection } from '@/lib/api';
 import { sanitizeBodyHtml } from '@/lib/wizard/sanitize-html';
 import { readErrorMessage } from '@/lib/read-error-message';
+import { deriveDeliveryMode, deliveryModeToReadingPresentation } from '@/lib/mocks/delivery-mode';
 
 type SaveState = 'idle' | 'saving' | 'saved' | 'error';
 
@@ -66,7 +67,12 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
   const { paperId } = use(params);
   const search = useSearchParams();
   const resumeAttemptId = search?.get('attemptId') ?? '';
-  const requestedPresentation = search?.get('presentation') === 'paper' ? 'paper' : 'computer';
+  // Mocks attach the chosen delivery mode (paper | computer | oet_home) via
+  // BuildLaunchRoute's `&deliveryMode=`. paper → the printed-booklet
+  // presentation; computer and oet_home are on-screen. Falls back to the
+  // legacy `?presentation=paper` alias so existing deep links keep working.
+  const deliveryMode = deriveDeliveryMode(search);
+  const requestedPresentation = deliveryModeToReadingPresentation(deliveryMode);
   // Mocks V2 — BuildLaunchRoute attaches mockAttemptId/mockSectionId when
   // this paper is launched as a section of a mock attempt. Submission then
   // writes the score back via completeMockSection so the mock report is

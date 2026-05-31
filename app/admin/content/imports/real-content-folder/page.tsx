@@ -18,6 +18,19 @@ import {
 
 type ToastState = { variant: 'success' | 'error'; message: string } | null;
 
+/** Map a committed import row to the admin editor where the operator can
+ * review / structure / publish it — so they can jump straight in after import. */
+function editorHrefFor(target: string, id: string): string {
+  switch (target) {
+    case 'ListeningPaper': return `/admin/content/listening/${id}/structure`;
+    case 'ReadingPaper': return `/admin/content/reading/${id}`;
+    case 'WritingPaper': return '/admin/content/writing';
+    case 'SpeakingPaper': return '/admin/content/speaking/role-play-cards';
+    case 'SpeakingSharedResource': return '/admin/content/speaking/shared-resources';
+    default: return '/admin/content';
+  }
+}
+
 export default function AdminRealContentFolderImportPage() {
   const fileRef = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
@@ -232,7 +245,15 @@ export default function AdminRealContentFolderImportPage() {
             <ul className="text-xs space-y-1 max-h-60 overflow-y-auto">
               {commitResult.created.map((c, i) => (
                 <li key={i}>
-                  <Badge variant="outline">{c.target}</Badge> {c.title} <code className="text-muted">{c.id.slice(0, 12)}...</code>
+                  <a
+                    href={editorHrefFor(c.target, c.id)}
+                    className="inline-flex items-center gap-2 rounded px-1.5 py-0.5 hover:bg-primary/10 hover:underline"
+                  >
+                    <Badge variant="outline">{c.target}</Badge>
+                    <span className="font-medium">{c.title}</span>
+                    <code className="text-muted">{c.id.slice(0, 12)}...</code>
+                    <ArrowRight className="h-3 w-3" />
+                  </a>
                 </li>
               ))}
             </ul>
@@ -243,7 +264,7 @@ export default function AdminRealContentFolderImportPage() {
             </div>
           ) : null}
           <p className="text-xs text-admin-fg-muted">
-            Drafts are now in each respective admin page. Open Result Templates, Speaking Shared Resources, Scoring System, and the per-paper admin pages to publish them.
+            Click any created row above to open its editor. Reading papers land structure-ready (Parts A/B/C scaffolded) for question authoring; everything is a Draft until you publish it.
           </p>
           </CardContent>
         </Card>

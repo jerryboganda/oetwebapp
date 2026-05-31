@@ -31,11 +31,11 @@ The official marketplace is registered in Copilot CLI as `copilot-plugins` and t
 - `fabric-consumption@copilot-plugins` v0.3.1
 - `fabric-operations@copilot-plugins` v0.3.1
 
-The plugin skills are installed into both `.github/skills/*` and `~/.copilot/skills/*`. Fabric specialist agents are installed into both `.github/agents/*` and `~/.copilot/agents/*`.
+The plugin skills are exposed through Copilot's skill registry and currently live under `~/.copilot/installed-plugins/copilot-plugins/*/skills/*`. Repo `.github/skills/*` was intentionally archived to keep context lean; do not restore it unless the user explicitly asks.
 
 ## Priority Order
 1. User/system/developer instructions.
-2. OET repo instructions: `AGENTS.md`, `.github/copilot-instructions.md`, matching `.github/instructions/*.instructions.md`, `docs/agent-operating-model.md`, and repo memory files.
+2. OET repo instructions: `AGENTS.md`, `.github/copilot-instructions.md`, matching `.github/instructions/*.instructions.md`, compact `PROGRESS.md`, `.github/agent-state.local.md` if present, and relevant repo memory files.
 3. Relevant OET domain docs for auth, security, AI, scoring, uploads, runtime settings, deployment, frontend, backend, and tests.
 4. Official Copilot plugin skill/agent instructions.
 5. Generic model defaults.
@@ -45,10 +45,10 @@ When instructions conflict, OET safety and user intent win over plugin marketpla
 ## Capability Boundary
 - `github/copilot-plugins` is an official Copilot CLI marketplace, not one single plugin agent. This file makes the installed marketplace capabilities selectable in VS Code Copilot.
 - Some plugin workflows require external services or credentials: Microsoft Fabric, Power BI, WorkIQ, GitHub Advanced Security, or GitHub Spark. If authentication is needed, ask the user to authenticate directly in the terminal or service UI; never ask for secrets in chat.
-- This OET machine currently runs dev work natively without Docker. Before validation, consult `.memories/repo/docker-local-setup.md` and `.memories/repo/native-dev-environment.md`.
+- Heavy validation for this repo is Docker-only per `AGENTS.md`: use `docker exec oet-local-web ...`, `docker exec oet-local-api ...`, or local compose commands. If Docker is unavailable, report the blocker instead of running host or VPS equivalents.
 
 ## Skill Routing
-Before acting, check whether an official plugin skill applies. If Copilot has not auto-loaded it, read `.github/skills/<skill>/SKILL.md` first and follow it.
+Before acting, check whether an official plugin skill applies. If Copilot has not auto-loaded it, read the matching installed plugin skill file and follow it.
 
 Use these skill families:
 - Advanced Security: `dependency-scanning`, `secret-scanning`
@@ -65,7 +65,7 @@ Use these skill families:
 2. Load OET repo instructions and the relevant official plugin skill.
 3. Use OET specialists for repo implementation and Fabric specialists for Fabric-specific work.
 4. Preserve OET contracts: scoring helpers, rulebook services, grounded AI gateway, `IFileStorage`, runtime settings provider, and auth/security gates.
-5. Verify with the lightest meaningful native validation available on this machine.
+5. Verify with the lightest meaningful Docker validation available for touched files, or report Docker as a blocker.
 6. Report exact plugin/skill/agent used, files changed, verification, and any external-auth limits.
 
 ## MCP

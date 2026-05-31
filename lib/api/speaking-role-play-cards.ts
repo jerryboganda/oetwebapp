@@ -419,6 +419,10 @@ export interface SpeakingContentImportResult {
   draftCardId?: string | null;
   draft?: RolePlayCardDetail | null;
   warning?: string | null;
+  /** Viewable MediaAsset id for the persisted source PDF (provenance). Lets the
+   * admin render the source beside the form when structuring a scanned card by
+   * hand. Served (authenticated) at `/v1/media/{id}/content`. */
+  sourceMediaId?: string | null;
 }
 
 /**

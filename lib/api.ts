@@ -12651,6 +12651,20 @@ export async function downloadRulebookReferencePdfMedia(assetId: string): Promis
   return response.blob();
 }
 
+/** Generic authenticated fetch of a MediaAsset's bytes (PDF/audio/image) for
+ * in-app preview. Caller is responsible for `URL.createObjectURL` lifecycle. */
+export async function downloadMediaAssetContent(assetId: string): Promise<Blob> {
+  const path = `/v1/media/${encodeURIComponent(assetId)}/content`;
+  const response = await fetchWithTimeout(resolveApiUrl(path), {
+    method: 'GET',
+    headers: await getHeaders(path, undefined, { json: false }),
+  }, 120_000);
+  if (!response.ok) {
+    throw new ApiError(response.status, 'media_asset_download_failed', `Media download failed: ${response.status}`, isRetryable(response.status));
+  }
+  return response.blob();
+}
+
 // ── Admin mocks analytics (Phase 3) ─────────────────────────────────────
 
 export interface AdminMocksAnalyticsRevenueRow {
