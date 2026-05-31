@@ -46,11 +46,11 @@
   --color-border: #d8e0e8;
   --color-border-hover: #b9c6d1;
   
-  --color-admin-surface: #09090b;
-  --color-admin-surface-raised: #18181b;
-  --color-admin-border: #27272a;
-  --color-admin-text: #fafafa;
-  --color-admin-text-muted: #a1a1aa;
+  --color-admin-surface:           #ffffff;
+  --color-admin-surface-raised:    #f8fafc;
+  --color-admin-border:            #e2e8f0;
+  --color-admin-text:              #0f172a;
+  --color-admin-text-muted:        #64748b;
 
   /* Decisive ease-out for toggles and controls: no overshoot or bounce
      (motion law), ease-out-quint, matching the safe-area and hover curves. */

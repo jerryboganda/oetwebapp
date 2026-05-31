@@ -173,22 +173,22 @@
   --admin-info-rgb:             49, 178, 213;
 
   /* ---------- Surfaces (4-layer elevation — file 13 §4.1) ----------- */
-  --admin-bg-page:              hsl(220 15% 8%);    /* Layer 0 — deepest */
-  --admin-bg-surface:           hsl(220 14% 12%);   /* Layer 1 — cards   */
-  --admin-bg-elevated:          hsl(220 13% 16%);   /* Layer 2 — modals  */
-  --admin-bg-subtle:            hsl(220 12% 20%);   /* Layer 3 — header strips */
-  --admin-bg-inverse:           #f8fafc;            /* Light surface on dark UI */
+  --admin-bg-page:              #f8fafc;            /* App background  */
+  --admin-bg-surface:           #ffffff;            /* Cards/panels    */
+  --admin-bg-elevated:          #ffffff;            /* Modals/popovers (paired with shadow-lg) */
+  --admin-bg-subtle:            #f1f5f9;            /* Table header strip, inset wells */
+  --admin-bg-inverse:           #0f172a;            /* Light surface on dark UI (e.g. tooltips) */
 
   /* ---------- Text (opacity-tinted white — file 13 §4.5) ------------ */
-  --admin-fg-strong:            rgba(255, 255, 255, 0.95);
-  --admin-fg-default:           rgba(255, 255, 255, 0.87);
-  --admin-fg-muted:             rgba(255, 255, 255, 0.60);
-  --admin-fg-disabled:          rgba(255, 255, 255, 0.38);
-  --admin-fg-inverse:           #0f172a;
+  --admin-fg-strong:            #0f172a;
+  --admin-fg-default:           #334155;
+  --admin-fg-muted:             #64748b;
+  --admin-fg-disabled:          #94a3b8;
+  --admin-fg-inverse:           #ffffff;
 
   /* ---------- Borders (lighter than surface — file 13 §4.6) --------- */
-  --admin-border-default:       rgba(255, 255, 255, 0.12);
-  --admin-border-strong:        rgba(255, 255, 255, 0.20);
+  --admin-border-default:       #e2e8f0;
+  --admin-border-strong:        #cbd5e1;
   --admin-border-focus:         var(--admin-primary);
 
   /* ---------- State overlays (6/14% white per file 13 §4.4) --------- */
