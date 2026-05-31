@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation';
 import type { UserRole } from '@/lib/types/auth';
 import { allTours } from '@/lib/onboarding/tour-registry';
 import { TOUR_VERSION, type TourRole } from '@/lib/onboarding/tour-types';
-import { useTour } from './tour-provider';
+import { useTourSafe } from './tour-provider';
 
 function toTourRole(role: UserRole | undefined): TourRole | null {
   if (role === 'learner' || role === 'expert' || role === 'admin') return role;
@@ -33,7 +33,11 @@ const AUTOSTART_DELAY_MS = 1000;
 export function TourAutoTrigger({ workspaceRole }: { workspaceRole?: UserRole }) {
   const rawPath = usePathname() ?? '/';
   const pathname = rawPath === '/' ? '/dashboard' : rawPath;
-  const { state, loading, isAuthenticated, isCompleted, isSkipped, startTour } = useTour();
+  const tour = useTourSafe();
+  const { state, loading, isAuthenticated, isCompleted, isSkipped, startTour } = tour ?? {
+    state: undefined, loading: true, isAuthenticated: false,
+    isCompleted: () => false, isSkipped: () => false, startTour: () => Promise.resolve(),
+  };
   const firedRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {

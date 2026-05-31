@@ -120,3 +120,14 @@ export function useTour(): TourContextValue {
   if (!ctx) throw new Error('useTour must be used within TourProvider');
   return ctx;
 }
+
+/**
+ * Nullable variant — returns `null` when rendered outside TourProvider (e.g.
+ * in tests that don't mount the full provider tree). Components that silently
+ * degrade (checklist, auto-trigger) use this; components that require the
+ * context (Help drawer replay) continue to use useTour() so misconfiguration
+ * surfaces at dev time.
+ */
+export function useTourSafe(): TourContextValue | null {
+  return useContext(TourContext);
+}

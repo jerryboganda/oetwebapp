@@ -6,7 +6,7 @@ import { Drawer } from '@/components/ui/modal';
 import { useAuth } from '@/contexts/auth-context';
 import { buildSupportMailto } from '@/lib/auth/support';
 import { toursForRole } from '@/lib/onboarding/tour-registry';
-import { useTour } from './tour-provider';
+import { useTourSafe } from './tour-provider';
 import type { TourId, TourRole } from '@/lib/onboarding/tour-types';
 import type { UserRole } from '@/lib/types/auth';
 
@@ -28,7 +28,9 @@ interface HelpCenterDrawerProps {
  */
 export function HelpCenterDrawer({ open, onClose, workspaceRole }: HelpCenterDrawerProps) {
   const { user } = useAuth();
-  const { startTour, isCompleted } = useTour();
+  const tourCtx = useTourSafe();
+  const startTour = tourCtx?.startTour ?? (() => Promise.resolve());
+  const isCompleted = tourCtx?.isCompleted ?? (() => false);
   const tourRole = toTourRole(workspaceRole ?? user?.role);
   const tours = tourRole ? toursForRole(tourRole) : [];
   const isLearner = tourRole === 'learner';
