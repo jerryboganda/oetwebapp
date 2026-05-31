@@ -159,10 +159,18 @@ public sealed record TutorSessionContextPayload(
 public sealed record TutorReviewQueueItem(
     string SessionId,
     string UserId,
+    string LearnerDisplayName,
     string RolePlayCardId,
+    string CardId,
     string? ScenarioTitle,
+    string CardTitle,
     string ProfessionId,
     DateTimeOffset? EndedAt,
     int ElapsedSeconds,
+    int DurationSeconds,
+    string? AiReadinessBand,
+    int? AiScaledScore,
+    bool HasDraft,
     bool ClaimedByMe,
-    bool ClaimedBySomeoneElse);
+    bool ClaimedBySomeoneElse,
+    DateTimeOffset? ClaimExpiresAt);
