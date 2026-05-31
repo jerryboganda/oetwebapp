@@ -42,6 +42,10 @@ public static class WritingV2ContentSeeder
 {
     private const string SeedFolderRelative = "Data/Seeds/WritingV2";
     private const string ConfigEnabledKey = "Writing:V2Seeder:Enabled";
+    // Demo/dummy authored tasks are opt-in only. Default OFF so production and
+    // active-development databases stay free of placeholder content. Set
+    // Writing:V2Seeder:SeedDemoTasks=true to restore the sample tasks.
+    private const string ConfigSeedDemoTasksKey = "Writing:V2Seeder:SeedDemoTasks";
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -91,7 +95,11 @@ public static class WritingV2ContentSeeder
             // fully-structured WritingScenarios (recipient, model answer exemplar, key +
             // irrelevant content checklists) the admin Task Builder + learner attempt flow
             // can exercise out of the box. Original content only; idempotent by InternalCode.
-            await SeedDemoWritingTasksAsync(db, logger, cancellationToken);
+            // Opt-in only (default OFF) — these are placeholder/demo tasks, not real content.
+            if (configuration.GetValue<bool?>(ConfigSeedDemoTasksKey) ?? false)
+            {
+                await SeedDemoWritingTasksAsync(db, logger, cancellationToken);
+            }
 
             logger.LogInformation("WritingV2ContentSeeder: complete.");
         }
