@@ -16,9 +16,18 @@ public record PatchGoalsRequest(
     int? StudyHoursPerWeek,
     string? TargetCountry,
     string? TargetOrganization,
-    Dictionary<string, object?>? DraftState);
+    Dictionary<string, object?>? DraftState,
+    string? TargetExamMode = null,
+    string? ConfidenceLevel = null);
 
 public record PatchSectionRequest(Dictionary<string, object?> Values);
+
+/// <summary>
+/// Marks a guided product tour or contextual tip for the current user.
+/// <paramref name="Status"/> is one of: completed | skipped | dismissed.
+/// For "dismissed", <paramref name="TourId"/> is treated as a contextual-tip id.
+/// </summary>
+public record MarkTourRequest(string TourId, string Status, string? Role = null);
 
 public record CreateAttemptRequest(
     string ContentId,

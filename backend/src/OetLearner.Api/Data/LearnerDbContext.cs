@@ -97,6 +97,9 @@ public partial class LearnerDbContext(DbContextOptions<LearnerDbContext> options
     public DbSet<ExpertMetricSnapshot> ExpertMetricSnapshots => Set<ExpertMetricSnapshot>();
     public DbSet<ExpertOnboardingProgress> ExpertOnboardingProgresses => Set<ExpertOnboardingProgress>();
 
+    // Per-user onboarding / product-tour progress (learner, expert, admin).
+    public DbSet<LearnerOnboardingTour> LearnerOnboardingTours => Set<LearnerOnboardingTour>();
+
     // Rulebook authoring (admin-managed)
     public DbSet<RulebookVersion> RulebookVersions => Set<RulebookVersion>();
     public DbSet<RulebookSectionRow> RulebookSectionRows => Set<RulebookSectionRow>();

@@ -260,6 +260,125 @@ public partial class LearnerService(
         return await GetOnboardingStateAsync(userId, cancellationToken);
     }
 
+    // ── Onboarding product tours ────────────────────────────────────────────
+    // Per-user guided-tour completion state used by the client tour engine so a
+    // tour is never auto-replayed once seen, and so tours can be re-surfaced after
+    // a major content revision (LastSeenTourVersion < OnboardingTourVersion). The
+    // rich tour_* analytics (with step/route detail) are emitted client-side; these
+    // methods only persist durable completion/skip/dismiss state. Keyed by the auth
+    // user id, so they also serve expert/tutor and admin workspaces.
+    public const int OnboardingTourVersion = 1;
+
+    public async Task<object> GetTourStateAsync(string userId, CancellationToken cancellationToken)
+    {
+        var row = await db.LearnerOnboardingTours.FirstOrDefaultAsync(x => x.UserId == userId, cancellationToken);
+        return TourStateDto(row);
+    }
+
+    public async Task<object> MarkTourAsync(string userId, MarkTourRequest request, CancellationToken cancellationToken)
+    {
+        var tourId = (request.TourId ?? string.Empty).Trim().ToLowerInvariant();
+        var status = (request.Status ?? string.Empty).Trim().ToLowerInvariant();
+        if (tourId.Length == 0)
+            throw ApiException.Validation("invalid_tour", "A tour id is required.", [new ApiFieldError("tourId", "required", "Tour id is required.")]);
+        if (status is not ("completed" or "skipped" or "dismissed"))
+            throw ApiException.Validation("invalid_tour_status", "Status must be completed, skipped, or dismissed.", [new ApiFieldError("status", "invalid", "Use completed | skipped | dismissed.")]);
+
+        var now = DateTimeOffset.UtcNow;
+        var row = await db.LearnerOnboardingTours.FirstOrDefaultAsync(x => x.UserId == userId, cancellationToken);
+        if (row is null)
+        {
+            row = new LearnerOnboardingTour
+            {
+                UserId = userId,
+                Role = NormalizeTourRole(request.Role),
+                OnboardingVersion = OnboardingTourVersion,
+                CreatedAt = now,
+                UpdatedAt = now,
+            };
+            db.LearnerOnboardingTours.Add(row);
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.Role)) row.Role = NormalizeTourRole(request.Role);
+
+        if (status == "dismissed")
+            row.DismissedTipsJson = AddToJsonSet(row.DismissedTipsJson, tourId);
+        else if (status == "skipped")
+            row.SkippedToursJson = AddToJsonSet(row.SkippedToursJson, tourId);
+        else
+            ApplyTourCompletion(row, tourId);
+
+        row.LastSeenTourVersion = OnboardingTourVersion;
+        row.UpdatedAt = now;
+        await db.SaveChangesAsync(cancellationToken);
+        return TourStateDto(row);
+    }
+
+    private static void ApplyTourCompletion(LearnerOnboardingTour row, string tourId)
+    {
+        switch (tourId)
+        {
+            case "intro": row.CompletedIntro = true; break;
+            case "dashboard":
+            case "learner-dashboard": row.CompletedDashboardTour = true; break;
+            case "listening": row.CompletedListeningTour = true; break;
+            case "reading": row.CompletedReadingTour = true; break;
+            case "writing": row.CompletedWritingTour = true; break;
+            case "speaking": row.CompletedSpeakingTour = true; break;
+            case "admin": row.CompletedAdminTour = true; break;
+            case "expert":
+            case "tutor": row.CompletedExpertTour = true; break;
+            // Unknown ids: the closed column set stays stable; the client also caches
+            // completion locally, so an unmapped id is simply not mirrored to a column.
+        }
+    }
+
+    private static string AddToJsonSet(string json, string value)
+    {
+        var list = JsonSupport.Deserialize<List<string>>(json, []) ?? [];
+        if (!list.Contains(value, StringComparer.OrdinalIgnoreCase)) list.Add(value);
+        return JsonSupport.Serialize(list);
+    }
+
+    private static string NormalizeTourRole(string? role)
+    {
+        var r = (role ?? string.Empty).Trim().ToLowerInvariant();
+        if (r == "tutor") return "expert";
+        return r is "expert" or "admin" ? r : "learner";
+    }
+
+    private static string? NormalizeExamMode(string? mode)
+    {
+        var m = (mode ?? string.Empty).Trim().ToLowerInvariant();
+        return m.Length == 0 ? null : m;
+    }
+
+    private static string? NormalizeConfidence(string? level)
+    {
+        var l = (level ?? string.Empty).Trim().ToLowerInvariant();
+        return l.Length == 0 ? null : l;
+    }
+
+    private static object TourStateDto(LearnerOnboardingTour? row) => new
+    {
+        onboardingVersion = row?.OnboardingVersion ?? OnboardingTourVersion,
+        role = row?.Role ?? "learner",
+        lastSeenTourVersion = row?.LastSeenTourVersion ?? 0,
+        completed = new
+        {
+            intro = row?.CompletedIntro ?? false,
+            dashboard = row?.CompletedDashboardTour ?? false,
+            listening = row?.CompletedListeningTour ?? false,
+            reading = row?.CompletedReadingTour ?? false,
+            writing = row?.CompletedWritingTour ?? false,
+            speaking = row?.CompletedSpeakingTour ?? false,
+            admin = row?.CompletedAdminTour ?? false,
+            expert = row?.CompletedExpertTour ?? false,
+        },
+        skippedTours = JsonSupport.Deserialize<List<string>>(row?.SkippedToursJson ?? "[]", []),
+        dismissedTips = JsonSupport.Deserialize<List<string>>(row?.DismissedTipsJson ?? "[]", []),
+    };
+
     public async Task<object> GetGoalsAsync(string userId, CancellationToken cancellationToken)
     {
         await EnsureLearnerProfileAsync(userId, cancellationToken);
@@ -308,6 +427,8 @@ public partial class LearnerService(
         if (request.TargetCountry is not null) goal.TargetCountry = TargetCountryOptions.Canonicalize(request.TargetCountry);
         if (request.TargetOrganization is not null) goal.TargetOrganization = request.TargetOrganization;
         if (request.DraftState is not null) goal.DraftStateJson = JsonSupport.Serialize(request.DraftState);
+        if (request.TargetExamMode is not null) goal.TargetExamMode = NormalizeExamMode(request.TargetExamMode);
+        if (request.ConfidenceLevel is not null) goal.ConfidenceLevel = NormalizeConfidence(request.ConfidenceLevel);
 
         goal.UpdatedAt = DateTimeOffset.UtcNow;
         await RecordEventAsync(userId, "goals_saved", new { userId, professionId = goal.ProfessionId, targetExamDate = goal.TargetExamDate }, cancellationToken);
@@ -4766,6 +4887,8 @@ public partial class LearnerService(
         studyHoursPerWeek = goal.StudyHoursPerWeek,
         targetCountry = goal.TargetCountry,
         targetOrganization = goal.TargetOrganization,
+        targetExamMode = goal.TargetExamMode,
+        confidenceLevel = goal.ConfidenceLevel,
         draftState = JsonSupport.Deserialize<Dictionary<string, object?>>(goal.DraftStateJson, new Dictionary<string, object?>()),
         submittedAt = goal.SubmittedAt,
         updatedAt = goal.UpdatedAt
@@ -4789,6 +4912,8 @@ public partial class LearnerService(
         studyHoursPerWeek = goal.StudyHoursPerWeek,
         targetCountry = goal.TargetCountry,
         targetOrganization = goal.TargetOrganization,
+        targetExamMode = goal.TargetExamMode,
+        confidenceLevel = goal.ConfidenceLevel,
         draftState = JsonSupport.Deserialize<Dictionary<string, object?>>(goal.DraftStateJson, new Dictionary<string, object?>()),
         submittedAt = goal.SubmittedAt,
         updatedAt = goal.UpdatedAt

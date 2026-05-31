@@ -8734,6 +8734,10 @@ namespace OetLearner.Api.Data.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<string>("ConfidenceLevel")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
                     b.Property<string>("DraftStateJson")
                         .IsRequired()
                         .HasColumnType("text");
@@ -8771,6 +8775,10 @@ namespace OetLearner.Api.Data.Migrations
                     b.Property<DateOnly?>("TargetExamDate")
                         .HasColumnType("date");
 
+                    b.Property<string>("TargetExamMode")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
                     b.Property<int?>("TargetListeningScore")
                         .HasColumnType("integer");
 
@@ -8803,6 +8811,66 @@ namespace OetLearner.Api.Data.Migrations
                     b.HasIndex("UserId");
 
                     b.ToTable("Goals");
+                });
+
+            modelBuilder.Entity("OetLearner.Api.Domain.LearnerOnboardingTour", b =>
+                {
+                    b.Property<string>("UserId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<bool>("CompletedAdminTour")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("CompletedDashboardTour")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("CompletedExpertTour")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("CompletedIntro")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("CompletedListeningTour")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("CompletedReadingTour")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("CompletedSpeakingTour")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("CompletedWritingTour")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DismissedTipsJson")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("LastSeenTourVersion")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("OnboardingVersion")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Role")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("SkippedToursJson")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("UserId");
+
+                    b.ToTable("LearnerOnboardingTours");
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.LearnerGrammarProgress", b =>

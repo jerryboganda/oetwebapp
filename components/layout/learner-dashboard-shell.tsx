@@ -18,9 +18,10 @@ export function LearnerDashboardShell({
   navItems,
   ...shellProps
 }: LearnerDashboardShellProps) {
-  // Learner sidebar: Dashboard | Listening | Reading | Writing | Mocks |
-  // Recalls | Progress | Billing. The legacy Learn group (Grammar/Classes/
-  // Lessons/Strategies/Conversation) is not surfaced in the candidate workspace.
+  // Learner sidebar: Dashboard | Listening | Reading | Writing | Speaking |
+  // Mocks | Recalls | Progress | Billing. The legacy Learn group
+  // (Grammar/Classes/Lessons/Strategies/Conversation) is not surfaced in the
+  // candidate workspace.
   const learnerNavItems = navItems ?? learnerMainNavItems;
   const learnerMobileMenuSections = mobileMenuSections ?? [
     { label: 'Practice', items: learnerNavItems },

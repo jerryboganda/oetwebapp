@@ -93,6 +93,14 @@ public class LearnerGoal
 
     [MaxLength(16)]
     public string ExamTypeCode { get; set; } = "oet";
+
+    /// <summary>Target OET delivery mode: paper | computer | home | unsure. Null until the learner sets it.</summary>
+    [MaxLength(16)]
+    public string? TargetExamMode { get; set; }
+
+    /// <summary>Self-reported confidence: beginner | intermediate | advanced | unsure. Null until set.</summary>
+    [MaxLength(16)]
+    public string? ConfidenceLevel { get; set; }
 }
 
 public class LearnerSettings

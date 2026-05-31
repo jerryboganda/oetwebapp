@@ -68,16 +68,17 @@ export const mainNavItems: NavItem[] = [
   { href: '/escalations', label: 'Escalations', icon: <AlertTriangle className="w-5 h-5" />, matchPrefix: '/escalations' },
 ];
 
-// Per the OET sample-test alignment directive (2026-05-27): the candidate
-// sidebar collapses to the core modules plus Recalls, Progress, and Billing.
-// Other surfaces (Study Plan, Speaking, Readiness, History, Escalations)
-// remain addressable by URL and visible to admins/tutors via `mainNavItems`,
-// but are removed from the learner workspace nav.
+// Learner workspace nav keeps the core practice modules plus Recalls,
+// Progress, and Billing. Speaking is surfaced here as a primary learner
+// module; the more operational surfaces (Study Plan, Readiness, History,
+// Escalations) remain addressable by URL and visible to admins/tutors via
+// `mainNavItems`, but stay out of the learner workspace nav.
 export const learnerMainNavItems: NavItem[] = [
   { href: '/', label: 'Dashboard', icon: <LayoutDashboard className="w-5 h-5" />, matchPrefix: '/' },
   { href: '/listening', label: 'Listening', icon: <Headphones className="w-5 h-5" />, matchPrefix: '/listening' },
   { href: '/reading', label: 'Reading', icon: <BookOpen className="w-5 h-5" />, matchPrefix: '/reading' },
   { href: '/writing', label: 'Writing', icon: <FilePenLine className="w-5 h-5" />, matchPrefix: '/writing' },
+  { href: '/speaking', label: 'Speaking', icon: <Mic className="w-5 h-5" />, matchPrefix: '/speaking' },
   { href: '/mocks', label: 'Mocks', icon: <FileQuestion className="w-5 h-5" />, matchPrefix: '/mocks' },
   { href: '/recalls', label: 'Recalls', icon: <Brain className="w-5 h-5" />, matchPrefix: '/recalls' },
   { href: '/progress', label: 'Progress', icon: <TrendingUp className="w-5 h-5" />, matchPrefix: '/progress' },
@@ -106,8 +107,7 @@ export const mobileNavItems: NavItem[] = [
   mainNavItems[6], // Mocks
 ];
 
-// Same five-plus-two list as `learnerMainNavItems`, exposed for the mobile
-// bottom-nav grid which is fixed at 7 cells.
+// Same learner nav list, exposed for the mobile bottom-nav surface.
 export const learnerMobileNavItems: NavItem[] = learnerMainNavItems;
 
 function isActive(pathname: string | null, item: NavItem): boolean {

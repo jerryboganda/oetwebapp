@@ -40,6 +40,13 @@ public static class LearnerEndpoints
         onboarding.MapPost("/start", async (HttpContext http, LearnerService service, CancellationToken ct) => Results.Ok(await service.StartOnboardingAsync(http.UserId(), ct)));
         onboarding.MapPost("/complete", async (HttpContext http, LearnerService service, CancellationToken ct) => Results.Ok(await service.CompleteOnboardingAsync(http.UserId(), ct)));
 
+        // Product-tour / onboarding-tour state. Rooted off `app` (not the LearnerOnly
+        // `v1` group) and gated by RequireAuthorization() so EVERY authenticated role —
+        // learner, expert/tutor, and admin — can persist its own guided tours.
+        var tours = app.MapGroup("/v1/onboarding/tours").RequireAuthorization();
+        tours.MapGet("/", async (HttpContext http, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetTourStateAsync(http.UserId(), ct)));
+        tours.MapPatch("/", async (HttpContext http, MarkTourRequest request, LearnerService service, CancellationToken ct) => Results.Ok(await service.MarkTourAsync(http.UserId(), request, ct)));
+
         var goals = v1.MapGroup("/learner/goals");
         goals.MapGet("/", async (HttpContext http, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetGoalsAsync(http.UserId(), ct)));
         goals.MapPatch("/", async (HttpContext http, PatchGoalsRequest request, LearnerService service, CancellationToken ct) => Results.Ok(await service.PatchGoalsAsync(http.UserId(), request, ct)));
