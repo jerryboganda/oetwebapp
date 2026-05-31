@@ -4,7 +4,6 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useMemo } from 'react';
 import {
-  ArrowRight,
   BarChart3,
   BookOpenText,
   Calculator,
@@ -24,27 +23,19 @@ import {
   Users,
 } from 'lucide-react';
 import { AdminCatalogLayout } from '@/components/admin/layout/admin-catalog-layout';
-import { Badge } from '@/components/admin/ui/badge';
 import { Button } from '@/components/admin/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/admin/ui/card';
 import { EmptyState } from '@/components/admin/ui/empty-state';
+import { AdminHubSection, type AdminHubLink } from '@/components/admin/ui/hub-card';
 import { hasPermission, sidebarPermissionMap } from '@/lib/admin-permissions';
 import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
 import { useCurrentUser } from '@/lib/hooks/use-current-user';
-
-type HubLink = {
-  href: string;
-  label: string;
-  description: string;
-  icon: React.ReactNode;
-  badge?: string;
-};
 
 type HubSection = {
   id: string;
   title: string;
   description: string;
-  links: HubLink[];
+  links: AdminHubLink[];
+  columns?: 'two' | 'three' | 'five';
 };
 
 const hubSections: HubSection[] = [
