@@ -293,6 +293,28 @@ export interface AdminUserDetail {
   tasksCompleted?: number;
   tasksGraded?: number;
   creditBalance?: number;
+  // ── Full editable profile (registration data) ──
+  displayName?: string | null;
+  firstName?: string | null;
+  lastName?: string | null;
+  mobileNumber?: string | null;
+  professionId?: string | null;
+  examTypeId?: string | null;
+  countryTarget?: string | null;
+  timezone?: string | null;
+  locale?: string | null;
+  marketingOptIn?: boolean | null;
+  agreeToTerms?: boolean | null;
+  agreeToPrivacy?: boolean | null;
+  attribution?: {
+    utmSource?: string | null;
+    utmMedium?: string | null;
+    utmCampaign?: string | null;
+    utmTerm?: string | null;
+    utmContent?: string | null;
+    referrerUrl?: string | null;
+    landingPath?: string | null;
+  } | null;
   security?: AdminUserSecuritySnapshot | null;
   subscription?: AdminUserSubscriptionSnapshot | null;
   recentActivity?: AdminUserActivityEvent[];

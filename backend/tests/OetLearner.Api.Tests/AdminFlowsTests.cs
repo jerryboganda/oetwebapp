@@ -641,6 +641,78 @@ public class AdminFlowsTests : IClassFixture<FirstPartyAuthTestWebApplicationFac
         Assert.Equal("invalid_user_status", await ReadErrorCodeAsync(response));
     }
 
+    [Fact]
+    public async Task AdminUsers_UpdateProfile_PersistsEditableFieldsAndKeepsEmailLocked()
+    {
+        var beforeResponse = await _client.GetAsync("/v1/admin/users/mock-user-001");
+        beforeResponse.EnsureSuccessStatusCode();
+        using var beforeJson = JsonDocument.Parse(await beforeResponse.Content.ReadAsStringAsync());
+        var originalEmail = beforeJson.RootElement.GetProperty("email").GetString();
+
+        var suffix = Guid.NewGuid().ToString("N")[..6];
+        var updateResponse = await _client.PutAsJsonAsync("/v1/admin/users/mock-user-001/profile", new
+        {
+            displayName = $"Edited Learner {suffix}",
+            firstName = $"First{suffix}",
+            lastName = $"Last{suffix}",
+            mobileNumber = "+44 7700 900111",
+            professionId = "medicine",
+            examTypeId = "oet",
+            timezone = "Europe/London",
+            locale = "en-GB",
+            marketingOptIn = true,
+            agreeToTerms = true,
+            agreeToPrivacy = true,
+            email = "attacker@example.com", // must be ignored — email is immutable
+            reason = "admin profile edit test"
+        });
+        updateResponse.EnsureSuccessStatusCode();
+
+        using var updateJson = JsonDocument.Parse(await updateResponse.Content.ReadAsStringAsync());
+        Assert.True(updateJson.RootElement.GetProperty("updated").GetBoolean());
+
+        var afterResponse = await _client.GetAsync("/v1/admin/users/mock-user-001");
+        afterResponse.EnsureSuccessStatusCode();
+        using var afterJson = JsonDocument.Parse(await afterResponse.Content.ReadAsStringAsync());
+        var after = afterJson.RootElement;
+
+        Assert.Equal($"Edited Learner {suffix}", after.GetProperty("displayName").GetString());
+        Assert.Equal($"First{suffix}", after.GetProperty("firstName").GetString());
+        Assert.Equal($"Last{suffix}", after.GetProperty("lastName").GetString());
+        Assert.Equal("+44 7700 900111", after.GetProperty("mobileNumber").GetString());
+        Assert.Equal("medicine", after.GetProperty("professionId").GetString());
+        Assert.Equal("Europe/London", after.GetProperty("timezone").GetString());
+        Assert.Equal("en-GB", after.GetProperty("locale").GetString());
+        Assert.True(after.GetProperty("marketingOptIn").GetBoolean());
+
+        // Email is the immutable identity and must never change, even when supplied in the payload.
+        Assert.Equal(originalEmail, after.GetProperty("email").GetString());
+        Assert.NotEqual("attacker@example.com", after.GetProperty("email").GetString());
+    }
+
+    [Fact]
+    public async Task AdminUsers_UpdateProfile_RejectsUnknownProfession()
+    {
+        var response = await _client.PutAsJsonAsync("/v1/admin/users/mock-user-001/profile", new
+        {
+            professionId = "not-a-real-profession"
+        });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal("invalid_profession", await ReadErrorCodeAsync(response));
+    }
+
+    [Fact]
+    public async Task AdminUsers_UpdateProfile_ReturnsNotFoundForUnknownUser()
+    {
+        var response = await _client.PutAsJsonAsync($"/v1/admin/users/missing-{Guid.NewGuid():N}/profile", new
+        {
+            displayName = "Nobody"
+        });
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
     // ── Billing ────────────────────────────────
 
     [Fact]

@@ -1,5 +1,12 @@
 import type { TourDefinition, TourId, TourRole } from './tour-types';
 import { learnerDashboardTour } from './tours/learner-dashboard-tour';
+import { listeningTour } from './tours/listening-tour';
+import { readingTour } from './tours/reading-tour';
+import { writingTour } from './tours/writing-tour';
+import { speakingTour } from './tours/speaking-tour';
+import { adminTour } from './tours/admin-tour';
+import { expertTour } from './tours/expert-tour';
+import { tutorTour } from './tours/tutor-tour';
 
 /**
  * Central registry of every guided tour. Tours are appended here as each surface
@@ -8,6 +15,13 @@ import { learnerDashboardTour } from './tours/learner-dashboard-tour';
  */
 const TOURS: TourDefinition[] = [
   learnerDashboardTour,
+  listeningTour,
+  readingTour,
+  writingTour,
+  speakingTour,
+  adminTour,
+  expertTour,
+  tutorTour,
 ];
 
 const BY_ID = new Map<TourId, TourDefinition>(TOURS.map((tour) => [tour.id, tour]));

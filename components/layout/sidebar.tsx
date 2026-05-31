@@ -255,7 +255,7 @@ export function Sidebar({
         </Link>
       </div>
 
-      <nav className="flex-1 overflow-y-auto px-4 py-5" aria-label="Main navigation">
+      <nav className="flex-1 overflow-y-auto px-4 py-5" aria-label="Main navigation" data-tour="workspace-nav">
         {groups && groups.length > 0 ? (
           groups.map((group) => (
             <NavSection

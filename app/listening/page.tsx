@@ -251,7 +251,7 @@ export default function ListeningHome() {
 
         <LearnerSkillSwitcher compact />
 
-        <section aria-labelledby="listening-hub-heading">
+        <section aria-labelledby="listening-hub-heading" data-tour="listening-hub">
           <div className="mb-4">
             <p className="text-xs font-semibold uppercase tracking-widest text-violet-500">
               Choose how to practice

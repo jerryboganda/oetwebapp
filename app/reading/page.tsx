@@ -239,7 +239,7 @@ export default function ReadingHome() {
 
         {activeAttempts.length > 0 ? <ResumeBanner attempts={activeAttempts} /> : null}
 
-        <section aria-labelledby="reading-hub-heading">
+        <section aria-labelledby="reading-hub-heading" data-tour="reading-hub">
           <div className="mb-4">
             <p className="text-xs font-semibold uppercase tracking-widest text-primary">
               Choose how to practice

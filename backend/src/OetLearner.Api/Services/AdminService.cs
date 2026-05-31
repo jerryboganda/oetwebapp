@@ -2679,6 +2679,8 @@ public partial class AdminService(
             var security = await BuildSecuritySnapshotAsync(authAccount, ct);
             var subscription = await BuildLearnerSubscriptionAsync(learner.Id, ct);
             var recentActivity = await GetRecentUserActivityAsync(learner.Id, learner.AuthAccountId, ct);
+            var registration = await db.LearnerRegistrationProfiles.AsNoTracking()
+                .FirstOrDefaultAsync(p => p.LearnerUserId == learner.Id, ct);
             return new
             {
                 learner.Id,
@@ -2692,6 +2694,30 @@ public partial class AdminService(
                 profession = learner.ActiveProfessionId,
                 authAccountId = learner.AuthAccountId,
                 createdAt = learner.CreatedAt,
+                // ── Full editable profile (registration data captured at signup) ──
+                displayName = learner.DisplayName,
+                firstName = registration?.FirstName,
+                lastName = registration?.LastName,
+                mobileNumber = registration?.MobileNumber,
+                professionId = learner.ActiveProfessionId,
+                examTypeId = registration?.ExamTypeId ?? learner.ActiveExamTypeCode,
+                countryTarget = registration?.CountryTarget,
+                timezone = learner.Timezone,
+                locale = learner.Locale,
+                marketingOptIn = registration?.MarketingOptIn,
+                agreeToTerms = registration?.AgreeToTerms,
+                agreeToPrivacy = registration?.AgreeToPrivacy,
+                // Read-only acquisition attribution (display only; never edited here).
+                attribution = registration is null ? null : new
+                {
+                    registration.UtmSource,
+                    registration.UtmMedium,
+                    registration.UtmCampaign,
+                    registration.UtmTerm,
+                    registration.UtmContent,
+                    registration.ReferrerUrl,
+                    registration.LandingPath,
+                },
                 security,
                 subscription,
                 recentActivity,
@@ -2731,6 +2757,9 @@ public partial class AdminService(
                 specialties = JsonSupport.Deserialize(expert.SpecialtiesJson, Array.Empty<string>()),
                 authAccountId = expert.AuthAccountId,
                 createdAt = expert.CreatedAt,
+                // ── Editable profile (tutor) ──
+                displayName = expert.DisplayName,
+                timezone = expert.Timezone,
                 security,
                 subscription = (object?)null,
                 recentActivity,
@@ -3245,6 +3274,143 @@ public partial class AdminService(
         public string? LastName { get; init; }
         public string? Role { get; init; }
         public string? Profession { get; init; }
+    }
+
+    public async Task<object> UpdateUserProfileAsync(string adminId, string adminName,
+        string userId, AdminUserProfileUpdateRequest request, CancellationToken ct)
+    {
+        // Email is intentionally NOT part of AdminUserProfileUpdateRequest. It is the immutable
+        // auth identity and can never be changed here, regardless of payload.
+        var changes = new List<string>();
+
+        static string? Clean(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+        async Task ValidateProfessionAsync(string professionId)
+        {
+            var exists = await db.SignupProfessionCatalog.AsNoTracking()
+                .AnyAsync(p => p.Id == professionId && p.IsActive, ct);
+            if (!exists)
+                throw ApiException.Validation("invalid_profession", $"Unknown or inactive profession '{professionId}'.");
+        }
+
+        async Task ValidateExamTypeAsync(string examTypeId)
+        {
+            var exists = await db.SignupExamTypeCatalog.AsNoTracking()
+                .AnyAsync(e => e.Id == examTypeId && e.IsActive, ct);
+            if (!exists)
+                throw ApiException.Validation("invalid_exam_type", $"Unknown or inactive exam type '{examTypeId}'.");
+        }
+
+        // ── Learner ──
+        var learner = await db.Users.FirstOrDefaultAsync(u => u.Id == userId, ct);
+        if (learner is not null)
+        {
+            var registration = await db.LearnerRegistrationProfiles
+                .FirstOrDefaultAsync(p => p.LearnerUserId == learner.Id, ct);
+
+            var profession = Clean(request.ProfessionId);
+            if (profession is not null)
+            {
+                await ValidateProfessionAsync(profession);
+                if (!string.Equals(learner.ActiveProfessionId, profession, StringComparison.Ordinal))
+                {
+                    learner.ActiveProfessionId = profession;
+                    changes.Add($"profession→{profession}");
+                }
+                if (registration is not null) registration.ProfessionId = profession;
+            }
+
+            var examType = Clean(request.ExamTypeId);
+            if (examType is not null)
+            {
+                await ValidateExamTypeAsync(examType);
+                if (registration is not null) registration.ExamTypeId = examType;
+                changes.Add($"examType→{examType}");
+            }
+
+            var displayName = Clean(request.DisplayName);
+            if (displayName is not null && !string.Equals(learner.DisplayName, displayName, StringComparison.Ordinal))
+            {
+                learner.DisplayName = displayName;
+                changes.Add("displayName");
+            }
+
+            var timezone = Clean(request.Timezone);
+            if (timezone is not null) { learner.Timezone = timezone; changes.Add("timezone"); }
+
+            var locale = Clean(request.Locale);
+            if (locale is not null) { learner.Locale = locale; changes.Add("locale"); }
+
+            if (registration is not null)
+            {
+                var firstName = Clean(request.FirstName);
+                if (firstName is not null) { registration.FirstName = firstName; changes.Add("firstName"); }
+
+                var lastName = Clean(request.LastName);
+                if (lastName is not null) { registration.LastName = lastName; changes.Add("lastName"); }
+
+                var mobile = Clean(request.MobileNumber);
+                if (mobile is not null) { registration.MobileNumber = mobile; changes.Add("mobileNumber"); }
+
+                var country = Clean(request.CountryTarget);
+                if (country is not null) { registration.CountryTarget = country; changes.Add("countryTarget"); }
+
+                if (request.MarketingOptIn is { } marketing && registration.MarketingOptIn != marketing)
+                { registration.MarketingOptIn = marketing; changes.Add($"marketingOptIn→{marketing}"); }
+
+                if (request.AgreeToTerms is { } terms && registration.AgreeToTerms != terms)
+                { registration.AgreeToTerms = terms; changes.Add($"agreeToTerms→{terms}"); }
+
+                if (request.AgreeToPrivacy is { } privacy && registration.AgreeToPrivacy != privacy)
+                { registration.AgreeToPrivacy = privacy; changes.Add($"agreeToPrivacy→{privacy}"); }
+
+                registration.UpdatedAt = timeProvider.GetUtcNow();
+            }
+
+            if (changes.Count == 0)
+                return new { id = userId, updated = false };
+
+            await db.SaveChangesAsync(ct);
+            var detail = request.Reason is { Length: > 0 } r ? $"{string.Join(", ", changes)} ({r})" : string.Join(", ", changes);
+            await LogAuditAsync(adminId, adminName, "Updated User Profile", "User", userId, detail, ct);
+            return new { id = userId, updated = true, changes };
+        }
+
+        // ── Expert / tutor ──
+        var expert = await db.ExpertUsers.FirstOrDefaultAsync(e => e.Id == userId, ct);
+        if (expert is not null)
+        {
+            var displayName = Clean(request.DisplayName);
+            if (displayName is not null && !string.Equals(expert.DisplayName, displayName, StringComparison.Ordinal))
+            {
+                expert.DisplayName = displayName;
+                changes.Add("displayName");
+            }
+
+            var timezone = Clean(request.Timezone);
+            if (timezone is not null) { expert.Timezone = timezone; changes.Add("timezone"); }
+
+            if (request.Specialties is not null)
+            {
+                var specialties = request.Specialties
+                    .Select(s => s?.Trim())
+                    .Where(s => !string.IsNullOrWhiteSpace(s))
+                    .Select(s => s!)
+                    .ToArray();
+                expert.SpecialtiesJson = JsonSupport.Serialize(specialties);
+                changes.Add("specialties");
+            }
+
+            if (changes.Count == 0)
+                return new { id = userId, updated = false };
+
+            await db.SaveChangesAsync(ct);
+            var detail = request.Reason is { Length: > 0 } r ? $"{string.Join(", ", changes)} ({r})" : string.Join(", ", changes);
+            await LogAuditAsync(adminId, adminName, "Updated User Profile", "User", userId, detail, ct);
+            return new { id = userId, updated = true, changes };
+        }
+
+        throw ApiException.NotFound("user_not_found", "User not found.");
     }
 
     public async Task<object> UpdateUserStatusAsync(string adminId, string adminName,

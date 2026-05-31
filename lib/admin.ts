@@ -531,6 +531,32 @@ export async function getAdminUserDetailData(userId: string): Promise<AdminUserD
     tasksCompleted: raw.tasksCompleted != null ? toNumberValue(raw.tasksCompleted) : undefined,
     tasksGraded: raw.tasksGraded != null ? toNumberValue(raw.tasksGraded) : undefined,
     creditBalance: raw.creditBalance != null ? toNumberValue(raw.creditBalance) : undefined,
+    displayName: toNullableString(raw.displayName),
+    firstName: toNullableString(raw.firstName),
+    lastName: toNullableString(raw.lastName),
+    mobileNumber: toNullableString(raw.mobileNumber),
+    professionId: toNullableString(raw.professionId ?? raw.profession),
+    examTypeId: toNullableString(raw.examTypeId),
+    countryTarget: toNullableString(raw.countryTarget),
+    timezone: toNullableString(raw.timezone),
+    locale: toNullableString(raw.locale),
+    marketingOptIn: raw.marketingOptIn != null ? toBooleanValue(raw.marketingOptIn) : null,
+    agreeToTerms: raw.agreeToTerms != null ? toBooleanValue(raw.agreeToTerms) : null,
+    agreeToPrivacy: raw.agreeToPrivacy != null ? toBooleanValue(raw.agreeToPrivacy) : null,
+    attribution: raw.attribution
+      ? (() => {
+          const a = asRecord(raw.attribution);
+          return {
+            utmSource: toNullableString(a.utmSource),
+            utmMedium: toNullableString(a.utmMedium),
+            utmCampaign: toNullableString(a.utmCampaign),
+            utmTerm: toNullableString(a.utmTerm),
+            utmContent: toNullableString(a.utmContent),
+            referrerUrl: toNullableString(a.referrerUrl),
+            landingPath: toNullableString(a.landingPath),
+          };
+        })()
+      : null,
     security,
     subscription,
     recentActivity,

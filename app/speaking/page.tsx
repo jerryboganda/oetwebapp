@@ -293,7 +293,7 @@ export default function SpeakingHome() {
         ) : null}
 
         {recommendedCard ? (
-          <section className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+          <section className="grid grid-cols-1 gap-6 lg:grid-cols-2" data-tour="speaking-hub">
             <MotionSection>
               <LearnerSurfaceCard card={recommendedCard} />
             </MotionSection>

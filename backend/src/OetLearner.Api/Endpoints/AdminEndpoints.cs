@@ -270,6 +270,10 @@ public static class AdminEndpoints
             => Results.Ok(await service.UpdateUserStatusAsync(http.AdminId(), http.AdminName(), userId, request, ct)))
             .WithAdminWrite("AdminUsersWrite");
 
+        admin.MapPut("/users/{userId}/profile", async (string userId, HttpContext http, AdminUserProfileUpdateRequest request, AdminService service, CancellationToken ct)
+            => Results.Ok(await service.UpdateUserProfileAsync(http.AdminId(), http.AdminName(), userId, request, ct)))
+            .WithAdminWrite("AdminUsersWrite");
+
         admin.MapPost("/users/{userId}/delete", async (string userId, HttpContext http, AdminUserLifecycleRequest request, AdminService service, CancellationToken ct)
             => Results.Ok(await service.DeleteUserAsync(http.AdminId(), http.AdminName(), userId, request, ct)))
             .WithAdminWrite("AdminUsersWrite");

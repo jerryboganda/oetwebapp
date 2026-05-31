@@ -5201,6 +5201,27 @@ export async function updateAdminUserStatus(userId: string, payload: { status: s
   return apiRequest(`/v1/admin/users/${encodeURIComponent(userId)}/status`, { method: 'PUT', body: JSON.stringify(payload) });
 }
 
+export interface AdminUserProfileUpdatePayload {
+  displayName?: string;
+  firstName?: string;
+  lastName?: string;
+  mobileNumber?: string;
+  professionId?: string;
+  examTypeId?: string;
+  countryTarget?: string;
+  timezone?: string;
+  locale?: string;
+  marketingOptIn?: boolean;
+  agreeToTerms?: boolean;
+  agreeToPrivacy?: boolean;
+  specialties?: string[];
+  reason?: string;
+}
+
+export async function updateAdminUserProfile(userId: string, payload: AdminUserProfileUpdatePayload) {
+  return apiRequest(`/v1/admin/users/${encodeURIComponent(userId)}/profile`, { method: 'PUT', body: JSON.stringify(payload) });
+}
+
 export async function deleteAdminUser(userId: string, payload?: { reason?: string }) {
   return apiRequest(`/v1/admin/users/${encodeURIComponent(userId)}/delete`, { method: 'POST', body: JSON.stringify(payload ?? {}) });
 }

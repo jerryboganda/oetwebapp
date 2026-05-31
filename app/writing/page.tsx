@@ -337,7 +337,7 @@ export default function WritingHome() {
         <WritingEntitlementBanner entitlement={entitlement} />
 
         <MotionSection>
-          <div className="rounded-2xl border border-border bg-surface p-4 shadow-sm">
+          <div className="rounded-2xl border border-border bg-surface p-4 shadow-sm" data-tour="writing-hub">
             <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
               <div className="space-y-2">
                 <div className="flex flex-wrap items-center gap-2">

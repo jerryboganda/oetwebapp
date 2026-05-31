@@ -7,9 +7,12 @@ import {
   Coins,
   KeyRound,
   Lock,
+  LockKeyhole,
   LogOut,
   Mail,
   Mic,
+  Pencil,
+  Phone,
   RefreshCcw,
   Shield,
   ShieldCheck,
@@ -23,22 +26,46 @@ import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
 import { Toast } from '@/components/ui/alert';
 import { Badge } from '@/components/admin/ui/badge';
 import { Button } from '@/components/admin/ui/button';
-import { Input } from '@/components/ui/form-controls';
+import { Input, Select, Checkbox } from '@/components/ui/form-controls';
 import { Modal } from '@/components/ui/modal';
 import {
   adjustAdminUserCredits,
   deleteAdminUser,
   fetchAdminPermissions,
+  fetchAdminSignupCatalog,
   resendAdminUserInvite,
   restoreAdminUser,
   revokeAdminUserSessions,
   triggerAdminUserPasswordReset,
   unlockAdminUser,
+  updateAdminUserProfile,
   updateAdminUserStatus,
+  type AdminUserProfileUpdatePayload,
 } from '@/lib/api';
 import { getAdminUserDetailData } from '@/lib/admin';
 import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
-import type { AdminPermissionGrant, AdminUserDetail } from '@/lib/types/admin';
+import type {
+  AdminPermissionGrant,
+  AdminSignupCatalogResponse,
+  AdminSignupProfessionCatalogItem,
+  AdminUserDetail,
+} from '@/lib/types/admin';
+
+type ProfileForm = {
+  displayName: string;
+  firstName: string;
+  lastName: string;
+  mobileNumber: string;
+  professionId: string;
+  examTypeId: string;
+  countryTarget: string;
+  timezone: string;
+  locale: string;
+  marketingOptIn: boolean;
+  agreeToTerms: boolean;
+  agreeToPrivacy: boolean;
+  specialties: string;
+};
 
 type PageStatus = 'loading' | 'success' | 'error';
 type ToastState = { variant: 'success' | 'error'; message: string } | null;
@@ -57,6 +84,31 @@ function uiRoleLabel(role: string) {
   return role === 'expert' ? 'tutor' : role;
 }
 
+function formatBool(value: boolean | null | undefined) {
+  if (value === null || value === undefined) return null;
+  return value ? 'Yes' : 'No';
+}
+
+function ProfileField({
+  label,
+  value,
+  locked = false,
+}: {
+  label: string;
+  value: string | null | undefined;
+  locked?: boolean;
+}) {
+  return (
+    <div className="rounded-2xl border border-border/60 bg-admin-bg-subtle p-4">
+      <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">
+        {locked ? <LockKeyhole className="h-3 w-3" /> : null}
+        {label}
+      </p>
+      <p className="mt-1 break-words text-sm font-medium text-admin-fg-strong">{value ?? '—'}</p>
+    </div>
+  );
+}
+
 export default function UserDetailPage() {
   const params = useParams<{ id: string }>();
   const userId = params?.id ?? '';
@@ -73,6 +125,9 @@ export default function UserDetailPage() {
   const [isMutating, setIsMutating] = useState(false);
   const adjustCreditsButtonRef = useRef<HTMLButtonElement | null>(null);
   const [adminPermissions, setAdminPermissions] = useState<AdminPermissionGrant[] | null>(null);
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+  const [profileForm, setProfileForm] = useState<ProfileForm | null>(null);
+  const [signupCatalog, setSignupCatalog] = useState<AdminSignupCatalogResponse | null>(null);
 
   useEffect(() => {
     if (!userId) return;
@@ -276,11 +331,117 @@ export default function UserDetailPage() {
     }
   }
 
+  async function openProfileModal() {
+    if (!user) return;
+    setProfileForm({
+      displayName: user.displayName ?? user.name ?? '',
+      firstName: user.firstName ?? '',
+      lastName: user.lastName ?? '',
+      mobileNumber: user.mobileNumber ?? '',
+      professionId: user.professionId ?? user.profession ?? '',
+      examTypeId: user.examTypeId ?? '',
+      countryTarget: user.countryTarget ?? '',
+      timezone: user.timezone ?? '',
+      locale: user.locale ?? '',
+      marketingOptIn: user.marketingOptIn ?? false,
+      agreeToTerms: user.agreeToTerms ?? false,
+      agreeToPrivacy: user.agreeToPrivacy ?? false,
+      specialties: (user.specialties ?? []).join(', '),
+    });
+    setIsProfileModalOpen(true);
+    if (!signupCatalog) {
+      try {
+        const catalog = (await fetchAdminSignupCatalog()) as AdminSignupCatalogResponse;
+        setSignupCatalog(catalog);
+      } catch (error) {
+        console.error(error);
+      }
+    }
+  }
+
+  function closeProfileModal() {
+    setIsProfileModalOpen(false);
+    setProfileForm(null);
+  }
+
+  function updateProfileField<K extends keyof ProfileForm>(key: K, value: ProfileForm[K]) {
+    setProfileForm((prev) => (prev ? { ...prev, [key]: value } : prev));
+  }
+
+  async function handleSaveProfile() {
+    if (!user || !profileForm) return;
+    setIsMutating(true);
+    try {
+      const isExpert = user.role === 'expert';
+      const payload: AdminUserProfileUpdatePayload = isExpert
+        ? {
+            displayName: profileForm.displayName.trim(),
+            timezone: profileForm.timezone.trim() || undefined,
+            specialties: profileForm.specialties
+              .split(',')
+              .map((s) => s.trim())
+              .filter(Boolean),
+          }
+        : {
+            displayName: profileForm.displayName.trim(),
+            firstName: profileForm.firstName.trim() || undefined,
+            lastName: profileForm.lastName.trim() || undefined,
+            mobileNumber: profileForm.mobileNumber.trim() || undefined,
+            professionId: profileForm.professionId.trim() || undefined,
+            examTypeId: profileForm.examTypeId.trim() || undefined,
+            countryTarget: profileForm.countryTarget.trim() || undefined,
+            timezone: profileForm.timezone.trim() || undefined,
+            locale: profileForm.locale.trim() || undefined,
+            marketingOptIn: profileForm.marketingOptIn,
+            agreeToTerms: profileForm.agreeToTerms,
+            agreeToPrivacy: profileForm.agreeToPrivacy,
+          };
+
+      await updateAdminUserProfile(user.id, payload);
+      await reloadUser();
+      closeProfileModal();
+      setToast({ variant: 'success', message: 'Profile updated successfully.' });
+    } catch (error) {
+      console.error(error);
+      setToast({ variant: 'error', message: 'Unable to update this profile.' });
+    } finally {
+      setIsMutating(false);
+    }
+  }
+
   const subscriptionLabel = useMemo(() => {
     if (!user?.subscription) return null;
     const sub = user.subscription;
     return `${sub.planName} - ${sub.priceAmount} ${sub.currency}/${sub.interval}`;
   }, [user?.subscription]);
+
+  const selectedProfession = useMemo(
+    () => signupCatalog?.professions.find((p) => p.id === profileForm?.professionId) ?? null,
+    [signupCatalog, profileForm?.professionId],
+  );
+
+  const examTypeOptions = useMemo(() => {
+    const all = signupCatalog?.examTypes ?? [];
+    const allowedIds = selectedProfession?.examTypeIds;
+    const filtered = allowedIds && allowedIds.length > 0 ? all.filter((e) => allowedIds.includes(e.id)) : all;
+    const options = filtered
+      .filter((e) => e.isActive || e.id === profileForm?.examTypeId)
+      .map((e) => ({ value: e.id, label: e.label }));
+    // Preserve a value not present in the catalog so it is not silently dropped.
+    if (profileForm?.examTypeId && !options.some((o) => o.value === profileForm.examTypeId)) {
+      options.push({ value: profileForm.examTypeId, label: profileForm.examTypeId });
+    }
+    return options;
+  }, [signupCatalog, selectedProfession, profileForm?.examTypeId]);
+
+  const countryTargetOptions = useMemo(() => {
+    const targets = selectedProfession?.countryTargets ?? [];
+    const options = targets.map((c) => ({ value: c, label: c }));
+    if (profileForm?.countryTarget && !options.some((o) => o.value === profileForm.countryTarget)) {
+      options.push({ value: profileForm.countryTarget, label: profileForm.countryTarget });
+    }
+    return options;
+  }, [selectedProfession, profileForm?.countryTarget]);
 
   if (!isAuthenticated || role !== 'admin') return null;
 
@@ -316,6 +477,12 @@ export default function UserDetailPage() {
                 </div>
               </div>
               <div className="flex flex-wrap gap-2">
+                {user.role !== 'admin' && user.status !== 'deleted' ? (
+                  <Button variant="primary" onClick={openProfileModal} className="gap-2">
+                    <Pencil className="h-4 w-4" />
+                    Edit Profile
+                  </Button>
+                ) : null}
                 {user.availableActions.canTriggerPasswordReset ? (
                   <Button variant="outline" onClick={handlePasswordReset} loading={isMutating} className="gap-2">
                     <KeyRound className="h-4 w-4" />
@@ -421,6 +588,58 @@ export default function UserDetailPage() {
                     <p className="mt-1 text-sm font-semibold text-admin-fg-strong">{formatDate(user.lastLogin, 'Never')}</p>
                   </div>
                 </div>
+
+                {user.role !== 'admin' ? (
+                  <SettingsSection
+                    title="Registration details"
+                    description="Everything captured at signup. Editable via Edit Profile — email is permanent."
+                  >
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <ProfileField label="Email (locked)" value={user.email} locked />
+                      <ProfileField label="Display name" value={user.displayName ?? user.name} />
+                      {user.role === 'learner' ? (
+                        <>
+                          <ProfileField label="First name" value={user.firstName} />
+                          <ProfileField label="Last name" value={user.lastName} />
+                          <ProfileField label="Mobile number" value={user.mobileNumber} />
+                          <ProfileField label="Profession" value={user.professionId ?? user.profession} />
+                          <ProfileField label="Exam type" value={user.examTypeId} />
+                          <ProfileField label="Target country" value={user.countryTarget} />
+                          <ProfileField label="Timezone" value={user.timezone} />
+                          <ProfileField label="Locale" value={user.locale} />
+                          <ProfileField label="Marketing opt-in" value={formatBool(user.marketingOptIn)} />
+                          <ProfileField label="Agreed to terms" value={formatBool(user.agreeToTerms)} />
+                          <ProfileField label="Agreed to privacy" value={formatBool(user.agreeToPrivacy)} />
+                        </>
+                      ) : (
+                        <>
+                          <ProfileField label="Timezone" value={user.timezone} />
+                          <ProfileField
+                            label="Specialties"
+                            value={user.specialties && user.specialties.length > 0 ? user.specialties.join(', ') : null}
+                          />
+                        </>
+                      )}
+                    </div>
+                  </SettingsSection>
+                ) : null}
+
+                {user.role === 'learner' && user.attribution ? (
+                  <SettingsSection
+                    title="Acquisition attribution"
+                    description="Read-only marketing attribution captured at signup."
+                  >
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <ProfileField label="UTM source" value={user.attribution.utmSource} />
+                      <ProfileField label="UTM medium" value={user.attribution.utmMedium} />
+                      <ProfileField label="UTM campaign" value={user.attribution.utmCampaign} />
+                      <ProfileField label="UTM term" value={user.attribution.utmTerm} />
+                      <ProfileField label="UTM content" value={user.attribution.utmContent} />
+                      <ProfileField label="Referrer URL" value={user.attribution.referrerUrl} />
+                      <ProfileField label="Landing path" value={user.attribution.landingPath} />
+                    </div>
+                  </SettingsSection>
+                ) : null}
 
                 {user.role === 'admin' ? (
                   <SettingsSection
@@ -620,6 +839,125 @@ export default function UserDetailPage() {
             </Button>
           </div>
         </div>
+      </Modal>
+
+      <Modal open={isProfileModalOpen} onClose={closeProfileModal} title="Edit Profile">
+        {profileForm ? (
+          <div className="space-y-4 py-2">
+            <div className="flex items-start gap-2 rounded-[20px] border border-border bg-admin-bg-subtle p-3 text-sm text-muted">
+              <LockKeyhole className="mt-0.5 h-4 w-4 shrink-0" />
+              <div>
+                <p className="font-semibold text-admin-fg-strong">Email is permanent</p>
+                <p>{user?.email}</p>
+                <p className="mt-0.5 text-xs">The email is the account identity and cannot be changed.</p>
+              </div>
+            </div>
+
+            <Input
+              label="Display name"
+              value={profileForm.displayName}
+              onChange={(event) => updateProfileField('displayName', event.target.value)}
+            />
+
+            {user?.role === 'expert' ? (
+              <>
+                <Input
+                  label="Timezone"
+                  value={profileForm.timezone}
+                  onChange={(event) => updateProfileField('timezone', event.target.value)}
+                  hint="IANA timezone, e.g. Europe/London."
+                />
+                <Input
+                  label="Specialties"
+                  value={profileForm.specialties}
+                  onChange={(event) => updateProfileField('specialties', event.target.value)}
+                  hint="Comma-separated list."
+                />
+              </>
+            ) : (
+              <>
+                <div className="grid gap-4 md:grid-cols-2">
+                  <Input
+                    label="First name"
+                    value={profileForm.firstName}
+                    onChange={(event) => updateProfileField('firstName', event.target.value)}
+                  />
+                  <Input
+                    label="Last name"
+                    value={profileForm.lastName}
+                    onChange={(event) => updateProfileField('lastName', event.target.value)}
+                  />
+                </div>
+                <Input
+                  label="Mobile number"
+                  value={profileForm.mobileNumber}
+                  onChange={(event) => updateProfileField('mobileNumber', event.target.value)}
+                />
+                <Select
+                  label="Profession"
+                  value={profileForm.professionId}
+                  onChange={(event) => updateProfileField('professionId', event.target.value)}
+                  placeholder={signupCatalog ? 'Select a profession' : 'Loading…'}
+                  options={(signupCatalog?.professions ?? [])
+                    .filter((p) => p.isActive || p.id === profileForm.professionId)
+                    .map((p) => ({ value: p.id, label: p.label }))}
+                />
+                <Select
+                  label="Exam type"
+                  value={profileForm.examTypeId}
+                  onChange={(event) => updateProfileField('examTypeId', event.target.value)}
+                  placeholder={signupCatalog ? 'Select an exam type' : 'Loading…'}
+                  options={examTypeOptions}
+                />
+                <Select
+                  label="Target country"
+                  value={profileForm.countryTarget}
+                  onChange={(event) => updateProfileField('countryTarget', event.target.value)}
+                  placeholder="Select a country"
+                  options={countryTargetOptions}
+                />
+                <div className="grid gap-4 md:grid-cols-2">
+                  <Input
+                    label="Timezone"
+                    value={profileForm.timezone}
+                    onChange={(event) => updateProfileField('timezone', event.target.value)}
+                  />
+                  <Input
+                    label="Locale"
+                    value={profileForm.locale}
+                    onChange={(event) => updateProfileField('locale', event.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Checkbox
+                    label="Marketing opt-in"
+                    checked={profileForm.marketingOptIn}
+                    onChange={(event) => updateProfileField('marketingOptIn', event.target.checked)}
+                  />
+                  <Checkbox
+                    label="Agreed to terms"
+                    checked={profileForm.agreeToTerms}
+                    onChange={(event) => updateProfileField('agreeToTerms', event.target.checked)}
+                  />
+                  <Checkbox
+                    label="Agreed to privacy policy"
+                    checked={profileForm.agreeToPrivacy}
+                    onChange={(event) => updateProfileField('agreeToPrivacy', event.target.checked)}
+                  />
+                </div>
+              </>
+            )}
+
+            <div className="flex justify-end gap-3 border-t border-border pt-4">
+              <Button variant="outline" onClick={closeProfileModal}>
+                Cancel
+              </Button>
+              <Button onClick={handleSaveProfile} loading={isMutating}>
+                Save Profile
+              </Button>
+            </div>
+          </div>
+        ) : null}
       </Modal>
     </AdminSettingsLayout>
   );
