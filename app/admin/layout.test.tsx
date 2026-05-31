@@ -152,7 +152,7 @@ describe('AdminLayout', () => {
     expect(screen.queryByText('Billing workspace')).not.toBeInTheDocument();
   });
 
-  it('blocks the admin-management users tab without manage_permissions', () => {
+  it('blocks the admin-management users tab without system_admin', () => {
     mockUseAuth.mockReturnValue({
       loading: false,
       user: {
@@ -178,7 +178,7 @@ describe('AdminLayout', () => {
     );
 
     expect(screen.getByText('Admin permission required')).toBeInTheDocument();
-    expect(screen.getByText(`Required: ${AdminPermission.ManagePermissions}`)).toBeInTheDocument();
+    expect(screen.getByText(`Required: ${AdminPermission.SystemAdmin}`)).toBeInTheDocument();
     expect(screen.queryByText('Admin management tab')).not.toBeInTheDocument();
   });
 });

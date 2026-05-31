@@ -135,9 +135,10 @@ describe('sidebarPermissionMap', () => {
 });
 
 describe('admin route permissions', () => {
-  it('requires manage_permissions for the admin-management users tab', () => {
-    expect(getAdminRoutePermissions('/admin/users?tab=admins')).toEqual([AdminPermission.ManagePermissions]);
+  it('requires system_admin for the admin-management users tab', () => {
+    expect(getAdminRoutePermissions('/admin/users?tab=admins')).toEqual([AdminPermission.SystemAdmin]);
     expect(canAccessAdminRoute([AdminPermission.UsersRead], '/admin/users?tab=admins')).toBe(false);
-    expect(canAccessAdminRoute([AdminPermission.ManagePermissions], '/admin/users?tab=admins')).toBe(true);
+    expect(canAccessAdminRoute([AdminPermission.ManagePermissions], '/admin/users?tab=admins')).toBe(false);
+    expect(canAccessAdminRoute([AdminPermission.SystemAdmin], '/admin/users?tab=admins')).toBe(true);
   });
 });

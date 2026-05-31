@@ -64,6 +64,8 @@ export const sidebarPermissionMap: Record<string, string[]> = {
   '/admin/content/analytics': [AdminPermission.ContentRead],
   '/admin/content/quality': [AdminPermission.ContentRead],
   '/admin/content/papers': [AdminPermission.ContentRead],
+  '/admin/content/reading': [AdminPermission.ContentRead],
+  '/admin/content/listening': [AdminPermission.ContentRead],
   '/admin/content/writing': [AdminPermission.ContentRead],
   '/admin/content/writing/ai-draft': [AdminPermission.ContentWrite],
   '/admin/content/papers/import': [AdminPermission.ContentWrite],
@@ -108,6 +110,7 @@ export const sidebarPermissionMap: Record<string, string[]> = {
   '/admin/escalations': [AdminPermission.SystemAdmin],
   '/admin/live-classes': [AdminPermission.ReviewOps],
   '/admin/private-speaking': [AdminPermission.ReviewOps],
+  '/admin/speaking': [AdminPermission.ContentRead, AdminPermission.ReviewOps, AdminPermission.QualityAnalytics, AdminPermission.ContentPublish],
   '/admin/recalls/bulk-upload': [AdminPermission.ContentWrite],
   '/admin/settings': [AdminPermission.SystemAdmin],
   // Phase 4 — AI extraction workflow
@@ -118,6 +121,7 @@ export const sidebarPermissionMap: Record<string, string[]> = {
   '/admin/study-plan-templates': [AdminPermission.ContentRead],
   '/admin/learners': [AdminPermission.UsersRead],
   '/admin/readiness': [AdminPermission.LearnerRead],
+  '/admin/writing': [AdminPermission.ContentRead],
 };
 
 export const adminRoutePermissionMap: Record<string, string[]> = {
@@ -149,6 +153,8 @@ export const adminRoutePermissionMap: Record<string, string[]> = {
   '/admin/content/mocks': [AdminPermission.ContentRead],
   '/admin/content/new': [AdminPermission.ContentWrite],
   '/admin/content/papers/import': [AdminPermission.ContentWrite],
+  '/admin/content/reading': [AdminPermission.ContentRead],
+  '/admin/content/listening': [AdminPermission.ContentRead],
   '/admin/content/pronunciation/ai-draft': [AdminPermission.ContentWrite],
   '/admin/content/pronunciation/new': [AdminPermission.ContentWrite],
   '/admin/content/publish-requests': [
@@ -197,8 +203,11 @@ export const adminRoutePermissionMap: Record<string, string[]> = {
   '/admin/signup-catalog': [AdminPermission.ContentRead],
   '/admin/sla-health': [AdminPermission.SystemAdmin],
   '/admin/speaking/recordings/audit': [AdminPermission.ReviewOps],
+  '/admin/speaking': [AdminPermission.ContentRead, AdminPermission.ReviewOps, AdminPermission.QualityAnalytics, AdminPermission.ContentPublish],
+  '/admin/speaking/result-visibility': [AdminPermission.ContentPublish, AdminPermission.ReviewOps],
   '/admin/taxonomy': [AdminPermission.ContentRead],
   '/admin/users/import': [AdminPermission.UsersWrite],
+  '/admin/users?tab=admins': [AdminPermission.SystemAdmin],
   '/admin/users': [AdminPermission.UsersRead],
   '/admin/webhooks': [AdminPermission.SystemAdmin],
   '/admin/calibration': [AdminPermission.QualityAnalytics],
@@ -239,9 +248,9 @@ export const adminRoutePermissionMap: Record<string, string[]> = {
   '/admin/ai-analytics': [AdminPermission.AiConfig],
   '/admin/fx-rates': [AdminPermission.BillingRead],
   '/admin/pricing-experiments': [AdminPermission.BillingRead],
-  '/admin/readiness': [AdminPermission.SystemAdmin],
-  '/admin/readiness/:param': [AdminPermission.SystemAdmin],
-  '/admin/readiness/metrics': [AdminPermission.SystemAdmin],
+  '/admin/readiness': [AdminPermission.LearnerRead],
+  '/admin/readiness/:param': [AdminPermission.LearnerRead],
+  '/admin/readiness/metrics': [AdminPermission.LearnerRead],
   '/admin/voice-design': [AdminPermission.AiConfig],
   // Added 2026-05-27 — the route-permission test walks `app/admin/**/page.tsx`
   // and these concrete pages exist on disk but were only registered in the
@@ -259,14 +268,42 @@ export const adminRoutePermissionMap: Record<string, string[]> = {
 
 function normalizeAdminPath(pathname: string | null | undefined): string {
   if (!pathname) return '/admin';
-  const withoutQuery = pathname.split('?')[0]?.split('#')[0] ?? pathname;
-  return withoutQuery.length > 1 ? withoutQuery.replace(/\/+$/, '') : withoutQuery;
+  const [pathPart, queryAndHash] = pathname.split('?');
+  const withoutHash = pathPart?.split('#')[0] ?? pathname;
+  const normalizedPath = withoutHash.length > 1 ? withoutHash.replace(/\/+$/, '') : withoutHash;
+  const query = queryAndHash?.split('#')[0];
+
+  if (normalizedPath === '/admin/users' && query) {
+    const params = new URLSearchParams(query);
+    if (params.get('tab') === 'admins') return '/admin/users?tab=admins';
+  }
+
+  return normalizedPath;
+}
+
+function routePatternMatches(route: string, pathname: string): boolean {
+  if (!route.includes('/:')) return false;
+
+  const routeSegments = route.split('/').filter(Boolean);
+  const pathSegments = pathname.split('/').filter(Boolean);
+  if (routeSegments.length !== pathSegments.length) return false;
+
+  return routeSegments.every((segment, index) => segment.startsWith(':') || segment === pathSegments[index]);
+}
+
+function getDynamicRouteMatch(pathname: string): string | undefined {
+  return Object.keys(adminRoutePermissionMap)
+    .filter((route) => routePatternMatches(route, pathname))
+    .sort((a, b) => b.length - a.length)[0];
 }
 
 export function getAdminRoutePermissions(pathname: string | null | undefined): string[] {
   const normalized = normalizeAdminPath(pathname);
   const exact = adminRoutePermissionMap[normalized];
   if (exact) return exact;
+
+  const dynamicMatch = getDynamicRouteMatch(normalized);
+  if (dynamicMatch) return adminRoutePermissionMap[dynamicMatch];
 
   const bestPrefix = Object.keys(adminRoutePermissionMap)
     .filter((route) => route !== '/admin' && normalized.startsWith(`${route}/`))
@@ -279,6 +316,7 @@ export function getAdminRoutePermissions(pathname: string | null | undefined): s
 export function hasExplicitAdminRoutePermission(pathname: string | null | undefined): boolean {
   const normalized = normalizeAdminPath(pathname);
   return Boolean(adminRoutePermissionMap[normalized])
+    || Boolean(getDynamicRouteMatch(normalized))
     || Object.keys(adminRoutePermissionMap).some((route) => route !== '/admin' && normalized.startsWith(`${route}/`));
 }
 

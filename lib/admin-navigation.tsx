@@ -185,7 +185,7 @@ export const adminNavGroups: AdminNavGroup[] = [
         label: 'Learner Readiness',
         icon: <TrendingUp className={iconClassName} />,
         matchPrefix: '/admin/readiness',
-        requiredPermissions: [AdminPermission.SystemAdmin],
+        requiredPermissions: [AdminPermission.LearnerRead],
       },
       {
         href: '/admin/policies/reading/users',
