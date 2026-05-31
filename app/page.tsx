@@ -40,6 +40,7 @@ import { PronunciationDashboardTile } from '@/components/domain/pronunciation';
 import { SafeRichText } from '@/components/domain/grammar/grammar-content-renderer';
 import { AsyncStateWrapper } from '@/components/state';
 import { DashboardAddonsWidget } from '@/components/learner/dashboard-addons-widget';
+import { OnboardingChecklist } from '@/components/onboarding/onboarding-checklist';
 import { useDashboardHome } from '@/lib/hooks/use-dashboard-home';
 import { learnerGetScoringPolicy, fetchMyEntitlementSnapshot, type ScoringPolicyLearnerDto, type MyEntitlementSnapshot } from '@/lib/api';
 import type { SubTest } from '@/lib/mock-data';
@@ -214,6 +215,8 @@ export default function Dashboard() {
             highlights={dashboardHeroHighlights}
             aside={loadedAt ? <LearnerFreshnessIndicator updatedAt={loadedAt} source="loaded" staleAfterMinutes={30} /> : undefined}
           />
+
+          <OnboardingChecklist />
 
           {freeze ? (
             <Card className="border-amber-200 bg-amber-50/70 shadow-sm">

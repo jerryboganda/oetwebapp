@@ -243,6 +243,27 @@ public record AdminUserCreditsRequest(int Amount, string? Reason);
 
 public record AdminUserLifecycleRequest(string? Reason);
 
+/// <summary>
+/// Admin edit of a user's captured registration/profile data. Every field is optional;
+/// only provided (non-null) values are applied. Email is intentionally absent — it is the
+/// immutable auth identity and cannot be changed through this endpoint.
+/// </summary>
+public record AdminUserProfileUpdateRequest(
+    string? DisplayName,
+    string? FirstName,
+    string? LastName,
+    string? MobileNumber,
+    string? ProfessionId,
+    string? ExamTypeId,
+    string? CountryTarget,
+    string? Timezone,
+    string? Locale,
+    bool? MarketingOptIn,
+    bool? AgreeToTerms,
+    bool? AgreeToPrivacy,
+    string[]? Specialties,
+    string? Reason);
+
 // ── Billing ──
 
 public record AdminBillingPlanCreateRequest(
