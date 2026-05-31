@@ -59,12 +59,12 @@ public class RolePlayCard
 
     /// <summary>How the card refers to the candidate (e.g. "Nurse",
     /// "Doctor", "Pharmacist").</summary>
-    [MaxLength(64)]
+    [MaxLength(256)]
     public string CandidateRole { get; set; } = default!;
 
     /// <summary>How the card refers to the other person (e.g. "Patient",
     /// "Parent", "Carer").</summary>
-    [MaxLength(64)]
+    [MaxLength(256)]
     public string InterlocutorRole { get; set; } = "Patient";
 
     /// <summary>Optional patient name shown on the candidate card.</summary>
@@ -105,17 +105,17 @@ public class RolePlayCard
 
     /// <summary>Patient's emotional state (e.g. "worried", "anxious",
     /// "angry", "embarrassed"). Drives interlocutor AI persona.</summary>
-    [MaxLength(64)]
+    [MaxLength(256)]
     public string PatientEmotion { get; set; } = "neutral";
 
     /// <summary>Candidate's primary communication goal (e.g. "Reassure",
     /// "Explain", "Persuade", "Inform"). Surfaced to AI scorer.</summary>
-    [MaxLength(64)]
+    [MaxLength(256)]
     public string CommunicationGoal { get; set; } = "Inform";
 
     /// <summary>Clinical topic tag (e.g. "Pain management", "Asthma
     /// inhaler use"). Used by analytics and drill recommendation.</summary>
-    [MaxLength(96)]
+    [MaxLength(256)]
     public string ClinicalTopic { get; set; } = "general";
 
     /// <summary>Difficulty tier (`core` | `extension` | `exam`). Mirrors

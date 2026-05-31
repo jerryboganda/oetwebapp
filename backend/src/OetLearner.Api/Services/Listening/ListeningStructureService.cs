@@ -128,7 +128,22 @@ public sealed class ListeningStructureService(LearnerDbContext db) : IListeningS
                     $"Part C has {partC} item(s); OET requires exactly {CanonicalPartCCount} (6 per presentation)."));
         }
 
-        var isPublishReady = !issues.Any(i => string.Equals(i.Severity, "error", StringComparison.OrdinalIgnoreCase));
+        // Relaxed publish gate (real-paper fidelity): only structural problems —
+        // missing items or wrong canonical A/B/C counts — block publishing. The
+        // authoring-enhancement rules (audio cue timings, per-item difficulty,
+        // skill tags, transcript evidence, distractor categories, source-legal
+        // attestation) are advisory, because the raw OET sample paper does not
+        // carry them; they remain in the report as guidance for later enrichment.
+        var listeningBlockingCodes = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "listening_no_items",
+            "listening_part_a_count",
+            "listening_part_b_count",
+            "listening_part_c_count",
+        };
+        var isPublishReady = !issues.Any(i =>
+            string.Equals(i.Severity, "error", StringComparison.OrdinalIgnoreCase)
+            && listeningBlockingCodes.Contains(i.Code));
         return new ListeningValidationReport(
             isPublishReady,
             issues,
