@@ -204,9 +204,60 @@ public sealed class WritingSubmissionEvaluationPipeline(
             .Select(x => x.g)
             .FirstOrDefaultAsync(ct);
         if (existing is null) return null;
+        var materializedGrade = new WritingGrade
+        {
+            Id = Guid.NewGuid(),
+            SubmissionId = submission.Id,
+            C1Purpose = existing.C1Purpose,
+            C2Content = existing.C2Content,
+            C3Conciseness = existing.C3Conciseness,
+            C4Genre = existing.C4Genre,
+            C5Organisation = existing.C5Organisation,
+            C6Language = existing.C6Language,
+            RawTotal = existing.RawTotal,
+            EstimatedBand = existing.EstimatedBand,
+            BandLabel = existing.BandLabel,
+            PerCriterionFeedbackJson = existing.PerCriterionFeedbackJson,
+            TopThreePrioritiesJson = existing.TopThreePrioritiesJson,
+            ConfidenceFlag = existing.ConfidenceFlag,
+            ModelUsed = existing.ModelUsed,
+            CanonVersion = existing.CanonVersion,
+            GradedAt = existing.GradedAt,
+            CreatedAt = clock.GetUtcNow(),
+        };
+        db.WritingGrades.Add(materializedGrade);
+        var reusedViolations = await db.WritingCanonViolations.AsNoTracking()
+            .Where(v => v.SubmissionId == existing.SubmissionId)
+            .ToListAsync(ct);
+        foreach (var violation in reusedViolations)
+        {
+            db.WritingCanonViolations.Add(new WritingCanonViolation
+            {
+                Id = Guid.NewGuid(),
+                SubmissionId = submission.Id,
+                RuleId = violation.RuleId,
+                Severity = violation.Severity,
+                Snippet = violation.Snippet,
+                LineNumber = violation.LineNumber,
+                CharStart = violation.CharStart,
+                CharEnd = violation.CharEnd,
+                SuggestedFix = violation.SuggestedFix,
+                Disputed = violation.Disputed,
+                DisputeResolution = violation.DisputeResolution,
+                DetectedAt = violation.DetectedAt,
+            });
+        }
         submission.Status = "graded";
         await db.SaveChangesAsync(ct);
-        return new WritingSubmissionGradeOutcome(submission.Id, existing.Id, existing.RawTotal, existing.BandLabel, true);
+        await events.PublishAsync(new WritingGradeReady(
+            submission.UserId,
+            submission.Id,
+            materializedGrade.Id,
+            materializedGrade.RawTotal,
+            materializedGrade.EstimatedBand,
+            materializedGrade.BandLabel,
+            clock.GetUtcNow()), ct);
+        return new WritingSubmissionGradeOutcome(submission.Id, materializedGrade.Id, materializedGrade.RawTotal, materializedGrade.BandLabel, true);
     }
 
     private static (bool Passed, string? Reason, string? Message) PreflightChecks(WritingSubmission submission)

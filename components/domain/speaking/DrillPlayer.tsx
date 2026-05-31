@@ -259,7 +259,7 @@ export function DrillPlayer({ drill, attemptId, maxSeconds = DEFAULT_MAX_SECONDS
           {feedback.specificComments.length > 0 && (
             <div>
               <h3 className="text-xs font-semibold uppercase tracking-wide text-muted">
-                What the AI noticed
+                What the scorer noticed
               </h3>
               <ul className="mt-1 list-disc space-y-1 pl-5 text-sm">
                 {feedback.specificComments.map((c, i) => (

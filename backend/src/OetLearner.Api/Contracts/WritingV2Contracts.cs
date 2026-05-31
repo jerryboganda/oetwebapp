@@ -777,6 +777,10 @@ public sealed record WritingTutorReviewSubmitRequest(
     IReadOnlyDictionary<string, string>? PerCriterionComments,
     IReadOnlyDictionary<string, double>? ScoreOverride);
 
+public sealed record WritingTutorReviewDetailResponse(
+    WritingSubmissionResponse Submission,
+    WritingGradeResponseV2? Grade);
+
 public sealed record WritingTutorCalibrationResponse(
     string TutorId,
     double AgreementCoefficient,

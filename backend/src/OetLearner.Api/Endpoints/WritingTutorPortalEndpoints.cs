@@ -48,6 +48,17 @@ public static class WritingTutorPortalEndpoints
         .RequireRateLimiting("PerUserWrite")
         .WithName("SubmitWritingTutorReview");
 
+        group.MapGet("/reviews/{submissionId:guid}", async (
+            Guid submissionId,
+            HttpContext http,
+            IWritingTutorReviewService service,
+            CancellationToken ct) =>
+        {
+            var detail = await service.GetTutorReviewDetailAsync(http.WritingV2UserId(), submissionId, ct);
+            return detail is null ? Results.NotFound() : Results.Ok(detail);
+        })
+        .WithName("GetWritingTutorReviewDetail");
+
         group.MapGet("/calibration", async (
             HttpContext http,
             IWritingTutorReviewService service,

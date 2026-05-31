@@ -628,11 +628,8 @@ public partial class LearnerService(
                     continue;
                 }
 
-                var report = await structure.ValidatePaperAsync(paper.Id, cancellationToken);
-                if (!report.IsPublishReady)
-                {
-                    continue;
-                }
+                // Publish-readiness gate disabled (product decision): do not
+                // skip papers that fail structural validation.
 
                 return new
                 {

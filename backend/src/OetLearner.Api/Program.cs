@@ -1497,6 +1497,8 @@ builder.Services.Configure<OetLearner.Api.Services.Writing.Configuration.Writing
 // Event bus is singleton — opens scopes per dispatch so handlers see fresh DbContext.
 builder.Services.AddSingleton<OetLearner.Api.Services.Writing.Events.IWritingEventBus,
     OetLearner.Api.Services.Writing.Events.WritingEventBus>();
+builder.Services.AddScoped<OetLearner.Api.Services.Writing.Events.IWritingEventHandler<OetLearner.Api.Services.Writing.Events.WritingGradeReady>,
+    OetLearner.Api.Services.Writing.Events.WritingGradeReadyHubEventHandler>();
 // Canon engine — scoped so it can consume scoped IAiGatewayService;
 // internal compiled-Regex cache lives across requests via a static cache in the implementation.
 builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingCanonEngine,

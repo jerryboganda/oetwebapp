@@ -66,6 +66,7 @@ const adminNavGroups: NavGroup[] = [
     label: 'Content',
     items: [
       { href: '/admin/content', label: 'Content Hub', icon: <Library className="w-5 h-5" />, matchPrefix: '/admin/content' },
+      { href: '/admin/writing', label: 'Writing Authoring', icon: <BookOpenText className="w-5 h-5" />, matchPrefix: '/admin/writing' },
       { href: '/admin/content/reading/extraction', label: 'AI Extraction', icon: <Sparkles className="w-5 h-5" />, matchPrefix: '/admin/content/reading/extraction' },
     ],
   },

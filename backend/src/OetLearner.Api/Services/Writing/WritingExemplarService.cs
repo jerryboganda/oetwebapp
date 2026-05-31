@@ -114,6 +114,7 @@ public sealed class WritingExemplarService(
         };
         db.WritingExemplars.Add(entity);
         await AddAnnotationsAsync(entity.Id, exemplar.Annotations, ct);
+        AddAuditEvent(userId, "WritingExemplar", entity.Id.ToString("D"), "writing.exemplar.created", exemplar.TargetBand);
         await db.SaveChangesAsync(ct);
         if (status == "published")
         {
@@ -138,6 +139,7 @@ public sealed class WritingExemplarService(
         var existing = await db.WritingExemplarAnnotations.Where(a => a.ExemplarId == id).ToListAsync(ct);
         db.WritingExemplarAnnotations.RemoveRange(existing);
         await AddAnnotationsAsync(id, exemplar.Annotations, ct);
+        AddAuditEvent(userId, "WritingExemplar", id.ToString("D"), "writing.exemplar.updated", exemplar.TargetBand);
         await db.SaveChangesAsync(ct);
         if (status == "published")
         {
@@ -152,6 +154,7 @@ public sealed class WritingExemplarService(
             ?? throw ApiException.NotFound("writing_exemplar_not_found", "Exemplar was not found.");
         entity.Status = "published";
         entity.PublishedAt = clock.GetUtcNow();
+        AddAuditEvent(userId, "WritingExemplar", id.ToString("D"), "writing.exemplar.published", entity.TargetBand);
         await db.SaveChangesAsync(ct);
         await TryEmbedExemplarAsync(userId, id, ct);
         return (await GetInternalAsync(id, publishedOnly: false, ct))!;
@@ -306,12 +309,27 @@ public sealed class WritingExemplarService(
 
     public async Task<bool> AdminDeleteExemplarAsync(string adminUserId, Guid id, CancellationToken ct)
     {
-        _ = adminUserId;
         var entity = await db.WritingExemplars.FirstOrDefaultAsync(e => e.Id == id, ct);
         if (entity is null) return false;
         db.WritingExemplars.Remove(entity);
+        AddAuditEvent(adminUserId, "WritingExemplar", id.ToString("D"), "writing.exemplar.deleted", entity.TargetBand);
         await db.SaveChangesAsync(ct);
         return true;
+    }
+
+    private void AddAuditEvent(string actorId, string resourceType, string resourceId, string action, string? details)
+    {
+        db.AuditEvents.Add(new AuditEvent
+        {
+            Id = Guid.NewGuid().ToString("N"),
+            ActorId = string.IsNullOrWhiteSpace(actorId) ? "system" : actorId,
+            ActorName = string.IsNullOrWhiteSpace(actorId) ? "system" : actorId,
+            Action = action,
+            ResourceType = resourceType,
+            ResourceId = resourceId,
+            Details = details,
+            OccurredAt = clock.GetUtcNow(),
+        });
     }
 
     public async Task<WritingExemplarTestGradeResponse?> AdminTestGradeExemplarAsync(string adminUserId, Guid id, CancellationToken ct)

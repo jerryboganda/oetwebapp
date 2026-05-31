@@ -109,10 +109,32 @@ public sealed class TutorReviewQueueService(
             .Where(a => a.Action == "SpeakingSessionClaimed" && sessionIds.Contains(a.ResourceId!))
             .Select(a => new { a.ResourceId, a.ActorId, a.OccurredAt })
             .ToListAsync(ct);
-        var latestClaimByMe = claimAudit
-            .Where(a => a.ActorId == tutorId)
+        var latestClaimOwner = claimAudit
             .GroupBy(a => a.ResourceId!)
             .ToDictionary(g => g.Key, g => g.OrderByDescending(x => x.OccurredAt).First());
+
+        var userIds = raw.Select(x => x.session.UserId).Distinct().ToArray();
+        var displayNameByUserId = await db.Users.AsNoTracking()
+            .Where(u => userIds.Contains(u.Id))
+            .Select(u => new { u.Id, u.DisplayName, u.Email })
+            .ToDictionaryAsync(
+                u => u.Id,
+                u => string.IsNullOrWhiteSpace(u.DisplayName) ? u.Email : u.DisplayName,
+                ct);
+
+        var draftSessionIds = await db.SpeakingTutorAssessments.AsNoTracking()
+            .Where(t => !t.IsFinal && t.TutorId == tutorId && sessionIds.Contains(t.SpeakingSessionId))
+            .Select(t => t.SpeakingSessionId)
+            .Distinct()
+            .ToListAsync(ct);
+        var draftSet = draftSessionIds.ToHashSet();
+
+        var aiRows = await db.SpeakingAiAssessments.AsNoTracking()
+            .Where(a => sessionIds.Contains(a.SpeakingSessionId))
+            .ToListAsync(ct);
+        var aiBySession = aiRows
+            .GroupBy(a => a.SpeakingSessionId)
+            .ToDictionary(g => g.Key, g => g.OrderByDescending(a => a.GeneratedAt).First());
 
         // Pull the tutor's specialties up-front so the fairness sort can
         // bucket profession matches before timestamps.
@@ -127,18 +149,34 @@ public sealed class TutorReviewQueueService(
             }
 
             var hasClaim = claimsLookup.TryGetValue(r.session.Id, out var claim);
-            var mineClaim = latestClaimByMe.TryGetValue(r.session.Id, out _);
+            var mineClaim = latestClaimOwner.TryGetValue(r.session.Id, out var owner)
+                && string.Equals(owner.ActorId, tutorId, StringComparison.Ordinal);
+            aiBySession.TryGetValue(r.session.Id, out var ai);
+            var learnerDisplayName = displayNameByUserId.TryGetValue(r.session.UserId, out var displayName)
+                ? displayName
+                : r.session.UserId;
+            var title = string.IsNullOrWhiteSpace(r.card.ScenarioTitle)
+                ? r.card.Id
+                : r.card.ScenarioTitle;
 
             items.Add(new TutorReviewQueueItem(
                 SessionId: r.session.Id,
                 UserId: r.session.UserId,
+                LearnerDisplayName: learnerDisplayName,
                 RolePlayCardId: r.session.RolePlayCardId,
+                CardId: r.session.RolePlayCardId,
                 ScenarioTitle: r.card.ScenarioTitle,
+                CardTitle: title,
                 ProfessionId: r.card.ProfessionId,
                 EndedAt: r.session.EndedAt,
                 ElapsedSeconds: r.session.ElapsedSeconds,
+                DurationSeconds: r.session.ElapsedSeconds,
+                AiReadinessBand: ai?.ReadinessBand,
+                AiScaledScore: ai?.EstimatedScaledScore,
+                HasDraft: draftSet.Contains(r.session.Id),
                 ClaimedByMe: mineClaim,
-                ClaimedBySomeoneElse: hasClaim && !mineClaim));
+                ClaimedBySomeoneElse: hasClaim && !mineClaim,
+                ClaimExpiresAt: hasClaim ? claim!.CreatedAt.AddMinutes(IdleClaimTtlMinutes) : null));
         }
 
         // Fairness ordering: profession-match first, then oldest finishedAt.
@@ -277,6 +315,8 @@ public sealed class TutorReviewQueueService(
                 .FirstOrDefaultAsync(ct);
             if (auditOwner == tutorId)
             {
+                existing.CreatedAt = clock.GetUtcNow();
+                await db.SaveChangesAsync(ct);
                 return;
             }
             throw ApiException.Conflict(

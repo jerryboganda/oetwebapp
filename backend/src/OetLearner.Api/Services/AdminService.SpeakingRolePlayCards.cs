@@ -292,31 +292,8 @@ public partial class AdminService
             ?? throw ApiException.NotFound("role_play_card_not_found",
                 "That role-play card does not exist.");
 
-        if (card.Status == ContentStatus.Archived)
-        {
-            throw ApiException.Conflict("role_play_card_archived",
-                "Archived role-play cards cannot be published.");
-        }
-
         var script = await db.InterlocutorScripts
             .FirstOrDefaultAsync(x => x.RolePlayCardId == cardId, ct);
-        if (script is null)
-        {
-            throw ApiException.Conflict("role_play_card_missing_interlocutor",
-                "This card cannot be published until an interlocutor script has been authored for it.");
-        }
-
-        var taskCount = CountNonEmptyTasks(card);
-        if (taskCount < 3)
-        {
-            throw ApiException.Validation("ROLE_PLAY_CARD_INSUFFICIENT_TASKS",
-                $"A publishable role-play card must include at least three task bullets ({taskCount} provided).");
-        }
-        if (string.IsNullOrWhiteSpace(card.Background))
-        {
-            throw ApiException.Validation("ROLE_PLAY_CARD_BACKGROUND_REQUIRED",
-                "Background must be filled in before a role-play card can be published.");
-        }
 
         var now = DateTimeOffset.UtcNow;
         card.Status = ContentStatus.Published;

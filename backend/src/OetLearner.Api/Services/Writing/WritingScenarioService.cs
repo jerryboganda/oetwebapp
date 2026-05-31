@@ -113,6 +113,7 @@ public sealed class WritingScenarioService(LearnerDbContext db, TimeProvider clo
         };
         db.WritingScenarios.Add(entity);
         await PersistSentencesAsync(entity.Id, scenario.CaseNotesStructured, ct);
+        AddAuditEvent(userId, "WritingScenario", entity.Id.ToString("D"), "writing.scenario.created", scenario.Title);
         await db.SaveChangesAsync(ct);
         return await GetAsync(userId, entity.Id, ct) ?? throw new InvalidOperationException("Scenario not found after create.");
     }
@@ -141,6 +142,7 @@ public sealed class WritingScenarioService(LearnerDbContext db, TimeProvider clo
             .ToListAsync(ct);
         db.WritingScenarioStructuredSentences.RemoveRange(existing);
         await PersistSentencesAsync(id, scenario.CaseNotesStructured, ct);
+        AddAuditEvent(userId, "WritingScenario", id.ToString("D"), "writing.scenario.updated", scenario.Title);
         await db.SaveChangesAsync(ct);
         return (await GetAsync(userId, id, ct))!;
     }
@@ -152,6 +154,7 @@ public sealed class WritingScenarioService(LearnerDbContext db, TimeProvider clo
         entity.Status = "published";
         entity.ApprovedById = userId;
         entity.PublishedAt = clock.GetUtcNow();
+        AddAuditEvent(userId, "WritingScenario", id.ToString("D"), "writing.scenario.approved", entity.Title);
         await db.SaveChangesAsync(ct);
         return (await GetAsync(userId, id, ct))!;
     }
@@ -311,10 +314,10 @@ public sealed class WritingScenarioService(LearnerDbContext db, TimeProvider clo
 
     public async Task<bool> AdminDeleteScenarioAsync(string adminUserId, Guid id, CancellationToken ct)
     {
-        _ = adminUserId;
         var entity = await db.WritingScenarios.FirstOrDefaultAsync(s => s.Id == id, ct);
         if (entity is null) return false;
         db.WritingScenarios.Remove(entity);
+        AddAuditEvent(adminUserId, "WritingScenario", id.ToString("D"), "writing.scenario.deleted", entity.Title);
         await db.SaveChangesAsync(ct);
         return true;
     }
@@ -343,4 +346,18 @@ public sealed class WritingScenarioService(LearnerDbContext db, TimeProvider clo
             IsDiagnostic: req.IsDiagnostic ?? false,
             Status: string.IsNullOrWhiteSpace(req.Status) ? "draft" : req.Status!,
             CreatedAt: DateTimeOffset.UtcNow);
+    private void AddAuditEvent(string actorId, string resourceType, string resourceId, string action, string? details)
+    {
+        db.AuditEvents.Add(new AuditEvent
+        {
+            Id = Guid.NewGuid().ToString("N"),
+            ActorId = string.IsNullOrWhiteSpace(actorId) ? "system" : actorId,
+            ActorName = string.IsNullOrWhiteSpace(actorId) ? "system" : actorId,
+            Action = action,
+            ResourceType = resourceType,
+            ResourceId = resourceId,
+            Details = details,
+            OccurredAt = clock.GetUtcNow(),
+        });
+    }
 }

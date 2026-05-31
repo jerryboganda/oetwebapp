@@ -428,7 +428,7 @@ export function LearnerSpeakingAnalyticsDashboard({
               <ArrowRight className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
               <span>
                 Continue the{' '}
-                <Link href="/speaking/course-pathway" className="font-semibold text-primary underline">
+                <Link href="/speaking/pathway" className="font-semibold text-primary underline">
                   16-stage speaking pathway
                 </Link>
                 .

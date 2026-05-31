@@ -22,7 +22,7 @@
 
 import { ensureFreshAccessToken } from '../auth-client';
 import type { HubConnection } from '@microsoft/signalr';
-import type { WritingCoachHintDto, WritingTodayPlanDto, WritingGradeDto } from './types';
+import type { WritingCoachHintDto, WritingTodayPlanDto } from './types';
 import { requestWritingCoachHints, type WritingCoachHintRequestPayload } from './api';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -58,7 +58,15 @@ function resolveWsBase(): string {
 }
 
 function resolveRealtimeHttpBase(): string {
-  return (process.env.NEXT_PUBLIC_API_BASE_URL?.trim() || 'http://127.0.0.1:5198').replace(/\/$/, '');
+  const explicitRealtime = process.env.NEXT_PUBLIC_REALTIME_API_BASE_URL?.trim();
+  if (explicitRealtime && /^https?:\/\//i.test(explicitRealtime)) {
+    return explicitRealtime.replace(/\/$/, '');
+  }
+  const explicitApi = process.env.NEXT_PUBLIC_API_BASE_URL?.trim();
+  if (explicitApi && /^https?:\/\//i.test(explicitApi)) {
+    return explicitApi.replace(/\/$/, '');
+  }
+  return 'http://127.0.0.1:5198';
 }
 
 function resolveCoachWsUrl(sessionId: string, token: string | null): string {
@@ -265,9 +273,17 @@ export function connectWritingCoachStreamSimple(
 // ─────────────────────────────────────────────────────────────────────────────
 
 export interface SubmissionStreamHandlers {
-  onGradeReady: (grade: WritingGradeDto) => void;
+  onGradeReady: (event: WritingGradeReadyEventDto) => void;
   onStatusChange?: (status: 'connecting' | 'connected' | 'reconnecting' | 'disconnected') => void;
   onError?: (error: Error) => void;
+}
+
+export interface WritingGradeReadyEventDto {
+  submissionId: string;
+  gradeId: string;
+  estimatedBand: number;
+  bandLabel: string;
+  gradedAt: string;
 }
 
 /**
@@ -315,7 +331,7 @@ export function connectWritingSubmissionStream(
       connection.onreconnected(() => setStatus('connected'));
       connection.onclose(() => setStatus('disconnected'));
       connection.on('GradeReady', (grade: unknown) => {
-        handlers.onGradeReady(grade as WritingGradeDto);
+        handlers.onGradeReady(grade as WritingGradeReadyEventDto);
       });
 
       await connection.start();
@@ -364,7 +380,7 @@ export interface TodayStreamHandlers {
  */
 export function connectWritingSubmissionStreamSimple(
   submissionId: string,
-  onEvent: (grade: WritingGradeDto) => void,
+  onEvent: (event: WritingGradeReadyEventDto) => void,
 ): Disposable {
   return connectWritingSubmissionStream(submissionId, { onGradeReady: onEvent });
 }

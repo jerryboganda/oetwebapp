@@ -82,6 +82,7 @@ public sealed class WritingCanonService(LearnerDbContext db, TimeProvider clock)
         ArgumentNullException.ThrowIfNull(rule);
         var now = clock.GetUtcNow();
         var entity = await db.WritingCanonRules.FirstOrDefaultAsync(r => r.Id == rule.Id, ct);
+        var created = entity is null;
         if (entity is null)
         {
             entity = new WritingCanonRule
@@ -109,6 +110,7 @@ public sealed class WritingCanonService(LearnerDbContext db, TimeProvider clock)
         entity.LessonId = rule.LessonId;
         entity.Active = rule.Active;
         entity.UpdatedAt = now;
+        AddAuditEvent(userId, "WritingCanonRule", entity.Id, created ? "writing.canon.created" : "writing.canon.updated", entity.Category);
         await db.SaveChangesAsync(ct);
         return ToView(entity);
     }
@@ -120,6 +122,7 @@ public sealed class WritingCanonService(LearnerDbContext db, TimeProvider clock)
             ?? throw ApiException.NotFound("writing_canon_rule_not_found", "Canon rule was not found.");
         entity.Active = active;
         entity.UpdatedAt = clock.GetUtcNow();
+        AddAuditEvent(userId, "WritingCanonRule", ruleId, active ? "writing.canon.activated" : "writing.canon.deactivated", entity.Category);
         await db.SaveChangesAsync(ct);
         return ToView(entity);
     }
@@ -286,12 +289,27 @@ public sealed class WritingCanonService(LearnerDbContext db, TimeProvider clock)
 
     public async Task<bool> AdminDeleteCanonRuleAsync(string adminUserId, string ruleId, CancellationToken ct)
     {
-        _ = adminUserId;
         var rule = await db.WritingCanonRules.FirstOrDefaultAsync(r => r.Id == ruleId, ct);
         if (rule is null) return false;
         db.WritingCanonRules.Remove(rule);
+        AddAuditEvent(adminUserId, "WritingCanonRule", ruleId, "writing.canon.deleted", rule.Category);
         await db.SaveChangesAsync(ct);
         return true;
+    }
+
+    private void AddAuditEvent(string actorId, string resourceType, string resourceId, string action, string? details)
+    {
+        db.AuditEvents.Add(new AuditEvent
+        {
+            Id = Guid.NewGuid().ToString("N"),
+            ActorId = string.IsNullOrWhiteSpace(actorId) ? "system" : actorId,
+            ActorName = string.IsNullOrWhiteSpace(actorId) ? "system" : actorId,
+            Action = action,
+            ResourceType = resourceType,
+            ResourceId = resourceId,
+            Details = details,
+            OccurredAt = clock.GetUtcNow(),
+        });
     }
 
     private static WritingCanonRuleView ToCanonView(WritingCanonRuleUpsertRequest req)

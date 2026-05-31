@@ -233,9 +233,6 @@ export default function ContentPaperEditorPage({ params }: { params: Promise<{ p
     );
   }
 
-  const missingRoles = paper
-    ? requiredRoles.filter((r) => !paper.assets?.some((a) => a.role === r && a.isPrimary))
-    : [];
 
   return (
     <AdminSettingsLayout
@@ -262,12 +259,6 @@ export default function ContentPaperEditorPage({ params }: { params: Promise<{ p
       <AsyncStateWrapper status={status}>
         {paper && (
           <div className="space-y-6">
-            {missingRoles.length > 0 && paper.status !== 'Published' && (
-              <InlineAlert variant="warning">
-                Missing required roles for {paper.subtestCode}: {missingRoles.join(', ')}. Publish is blocked until all required roles have a primary asset.
-              </InlineAlert>
-            )}
-
             <Card>
               <CardHeader><CardTitle>Metadata</CardTitle></CardHeader>
               <CardContent>
@@ -326,7 +317,7 @@ export default function ContentPaperEditorPage({ params }: { params: Promise<{ p
                 {canWriteContent ? <Button variant="primary" onClick={saveMetadata} loading={saving} loadingText="Saving…">Save metadata</Button> : null}
                 {canPublishContent ? (
                   <Button variant="outline" onClick={publish} loading={publishing} loadingText="Publishing…"
-                    disabled={missingRoles.length > 0 || !paper.sourceProvenance || paper.status === 'Published'}>
+                    disabled={paper.status === 'Published'}>
                     Publish
                   </Button>
                 ) : null}

@@ -225,12 +225,9 @@ public sealed class ReadingAttemptService(
             }
         }
 
-        // Gate 5: paper has a validated Reading structure.
-        var validation = await new ReadingStructureService(db).ValidatePaperAsync(paperId, ct);
-        if (!validation.IsPublishReady)
-            throw new ReadingAttemptException(
-                "reading_structure_invalid",
-                "Paper is not yet authored for Reading attempts.");
+        // Gate 5 DISABLED (product decision): any paper can be attempted,
+        // regardless of structural publish-readiness. Re-enable by restoring
+        // the ReadingStructureService.ValidatePaperAsync IsPublishReady check.
 
         var maxRaw = ReadingStructureService.CanonicalMaxRawScore;
 

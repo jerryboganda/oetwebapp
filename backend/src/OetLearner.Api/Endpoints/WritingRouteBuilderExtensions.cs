@@ -44,6 +44,18 @@ public static class WritingRouteBuilderExtensions
         // 50-letter calibration harness (spec §33) — admin-only.
         app.MapWritingCalibrationEndpoints();
 
+        // OET exam-faithful closure (WS-B2..B5):
+        //  • admin unified task builder + JSON import/export (spec §3-§6, §18)
+        //  • learner attempt-event ingestion (spec §17.7)
+        //  • tutor marking: annotations, content-checklist, double-marking, moderation (spec §12-§14)
+        //  • learner gated feedback + rewrite comparison + result-visibility (spec §15)
+        //  • admin analytics + marking quality control (spec §16)
+        app.MapWritingTaskAdminEndpoints();
+        app.MapWritingAttemptEventEndpoints();
+        app.MapWritingMarkingEndpoints();
+        app.MapWritingResultVisibilityEndpoints();
+        app.MapWritingExamAnalyticsAdminEndpoints();
+
         return app;
     }
 }

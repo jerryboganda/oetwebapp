@@ -126,6 +126,8 @@ public class SpeakingMockSetTests : IClassFixture<TestWebApplicationFactory>
         using var sessionJson = JsonDocument.Parse(await sessionResponse.Content.ReadAsStringAsync());
         Assert.Equal(role1AttemptId, sessionJson.RootElement.GetProperty("rolePlay1").GetProperty("attemptId").GetString());
         Assert.Equal("evaluating", sessionJson.RootElement.GetProperty("rolePlay1").GetProperty("state").GetString());
+        Assert.Equal("queued", sessionJson.RootElement.GetProperty("rolePlay1").GetProperty("evaluationState").GetString());
+        Assert.Equal("finished1", sessionJson.RootElement.GetProperty("orchestratorState").GetString());
         Assert.False(string.IsNullOrWhiteSpace(sessionJson.RootElement.GetProperty("rolePlay1").GetProperty("evaluationId").GetString()));
 
         using var verifyScope = _factory.Services.CreateScope();

@@ -167,12 +167,12 @@ public sealed class WritingMistakeService(LearnerDbContext db, TimeProvider cloc
 
     public async Task<WritingCommonMistakeView> UpsertAsync(string adminId, WritingCommonMistakeView mistake, CancellationToken ct)
     {
-        _ = adminId;
         ArgumentNullException.ThrowIfNull(mistake);
         var now = clock.GetUtcNow();
         var entity = mistake.Id != Guid.Empty
             ? await db.WritingCommonMistakes.FirstOrDefaultAsync(m => m.Id == mistake.Id, ct)
             : null;
+        var created = entity is null;
         if (entity is null)
         {
             entity = new WritingCommonMistake
@@ -188,6 +188,7 @@ public sealed class WritingMistakeService(LearnerDbContext db, TimeProvider cloc
         entity.ExampleRight = mistake.ExampleRight;
         entity.CanonRuleId = mistake.CanonRuleId;
         entity.RelatedSubSkill = mistake.RelatedSubSkill;
+        AddAuditEvent(adminId, "WritingCommonMistake", entity.Id.ToString("D"), created ? "writing.mistake.created" : "writing.mistake.updated", entity.Summary);
         await db.SaveChangesAsync(ct);
         return ToView(entity);
     }
@@ -282,11 +283,26 @@ public sealed class WritingMistakeService(LearnerDbContext db, TimeProvider cloc
 
     public async Task<bool> AdminDeleteMistakeAsync(string adminUserId, Guid id, CancellationToken ct)
     {
-        _ = adminUserId;
         var entity = await db.WritingCommonMistakes.FirstOrDefaultAsync(m => m.Id == id, ct);
         if (entity is null) return false;
         db.WritingCommonMistakes.Remove(entity);
+        AddAuditEvent(adminUserId, "WritingCommonMistake", id.ToString("D"), "writing.mistake.deleted", entity.Summary);
         await db.SaveChangesAsync(ct);
         return true;
+    }
+
+    private void AddAuditEvent(string actorId, string resourceType, string resourceId, string action, string? details)
+    {
+        db.AuditEvents.Add(new AuditEvent
+        {
+            Id = Guid.NewGuid().ToString("N"),
+            ActorId = string.IsNullOrWhiteSpace(actorId) ? "system" : actorId,
+            ActorName = string.IsNullOrWhiteSpace(actorId) ? "system" : actorId,
+            Action = action,
+            ResourceType = resourceType,
+            ResourceId = resourceId,
+            Details = details,
+            OccurredAt = clock.GetUtcNow(),
+        });
     }
 }

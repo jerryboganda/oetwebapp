@@ -675,6 +675,20 @@ export interface WritingLearnerMistakeStatDto {
   lastOccurredAt: string;
 }
 
+export interface WritingContentAuditEntryDto {
+  id: string;
+  entityType: string;
+  entityId: string;
+  action: string;
+  actorUserId: string;
+  note: string | null;
+  occurredAt: string;
+}
+
+export interface WritingContentAuditListDto {
+  items: WritingContentAuditEntryDto[];
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Tutor review
 // ─────────────────────────────────────────────────────────────────────────────

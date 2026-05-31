@@ -79,6 +79,7 @@ public interface IWritingTutorReviewService
     Task<WritingTutorReviewResponse?> RequestTutorReviewAsync(string userId, Guid submissionId, string? priority, CancellationToken ct);
     Task<WritingTutorReviewResponse?> GetTutorReviewAsync(string userId, Guid submissionId, CancellationToken ct);
     Task<WritingTutorQueueResponse> GetTutorQueueAsync(string tutorId, string? status, CancellationToken ct);
+    Task<WritingTutorReviewDetailResponse?> GetTutorReviewDetailAsync(string tutorId, Guid submissionId, CancellationToken ct);
     Task<WritingTutorReviewResponse?> ClaimSubmissionForReviewAsync(string tutorId, Guid submissionId, CancellationToken ct);
     Task<WritingTutorReviewResponse> SubmitTutorReviewAsync(string tutorId, WritingTutorReviewSubmitRequest request, CancellationToken ct);
     Task<WritingTutorCalibrationResponse> GetTutorCalibrationAsync(string tutorId, CancellationToken ct);
@@ -410,7 +411,7 @@ public sealed class WritingTutorReviewService(
             : status.Trim().ToLowerInvariant() switch
             {
                 "pending" => "pending",
-                "claimed" => "claimed",
+                "claimed" or "in-review" => "claimed",
                 "submitted" => "submitted",
                 _ => throw ApiException.Validation("writing_tutor_invalid_queue_status", "Unsupported tutor queue status."),
             };
@@ -487,6 +488,33 @@ public sealed class WritingTutorReviewService(
             rows = rows.Where(r => string.Equals(r.Status, normalizedStatus, StringComparison.OrdinalIgnoreCase)).ToList();
         }
         return new WritingTutorQueueResponse(rows.Select(WritingV2ResponseMapper.ToResponse).ToList());
+    }
+
+    public async Task<WritingTutorReviewDetailResponse?> GetTutorReviewDetailAsync(string tutorId, Guid submissionId, CancellationToken ct)
+    {
+        var assignment = await db.WritingTutorReviewAssignments.AsNoTracking()
+            .FirstOrDefaultAsync(a => a.SubmissionId == submissionId && a.TutorId == tutorId && (a.Status == "claimed" || a.Status == "submitted"), ct);
+        if (assignment is null) return null;
+        var submission = await db.WritingSubmissions.AsNoTracking().FirstOrDefaultAsync(s => s.Id == submissionId, ct);
+        if (submission is null) return null;
+        var grade = await db.WritingGrades.AsNoTracking()
+            .Where(g => g.SubmissionId == submissionId)
+            .OrderByDescending(g => g.AppealedByGradeId != null || g.TutorReviewId != null)
+            .ThenByDescending(g => g.GradedAt)
+            .FirstOrDefaultAsync(ct);
+        WritingGradeResponseV2? gradeResponse = null;
+        if (grade is not null)
+        {
+            var violations = await db.WritingCanonViolations.AsNoTracking()
+                .Where(v => v.SubmissionId == submissionId)
+                .ToListAsync(ct);
+            var ruleIds = violations.Select(v => v.RuleId).Distinct().ToList();
+            var ruleText = await db.WritingCanonRules.AsNoTracking()
+                .Where(r => ruleIds.Contains(r.Id))
+                .ToDictionaryAsync(r => r.Id, r => r.RuleText, ct);
+            gradeResponse = WritingV2ResponseMapper.ToGradeResponse(grade, violations, ruleText, comparison: null);
+        }
+        return new WritingTutorReviewDetailResponse(WritingV2ResponseMapper.ToSubmissionResponse(submission), gradeResponse);
     }
 
     public async Task<WritingTutorReviewResponse?> ClaimSubmissionForReviewAsync(string tutorId, Guid submissionId, CancellationToken ct)

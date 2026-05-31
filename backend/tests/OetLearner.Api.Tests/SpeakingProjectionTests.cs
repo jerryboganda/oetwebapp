@@ -1,4 +1,6 @@
+using OetLearner.Api.Domain;
 using OetLearner.Api.Services;
+using OetLearner.Api.Services.Speaking;
 using static OetLearner.Api.Services.OetScoring;
 
 namespace OetLearner.Api.Tests;
@@ -138,5 +140,43 @@ public class SpeakingProjectionTests
     public void ReadinessBandCode_StableWireFormat(SpeakingReadinessBand band, string expected)
     {
         Assert.Equal(expected, OetScoring.SpeakingReadinessBandCode(band));
+    }
+
+    [Fact]
+    public void TutorDivergence_UsesSignedCriterionDeltas_AndAbsoluteBanding()
+    {
+        var ai = new SpeakingAiAssessment
+        {
+            Intelligibility = 5,
+            Fluency = 4,
+            Appropriateness = 4,
+            GrammarExpression = 4,
+            RelationshipBuilding = 3,
+            PatientPerspective = 2,
+            Structure = 2,
+            InformationGathering = 2,
+            InformationGiving = 2,
+            EstimatedScaledScore = 380,
+        };
+        var tutor = new SpeakingTutorAssessment
+        {
+            Intelligibility = 3,
+            Fluency = 6,
+            Appropriateness = 4,
+            GrammarExpression = 4,
+            RelationshipBuilding = 2,
+            PatientPerspective = 2,
+            Structure = 2,
+            InformationGathering = 2,
+            InformationGiving = 2,
+            EstimatedScaledScore = 360,
+        };
+
+        var divergence = TutorAssessmentService.ComputeDivergence(ai, tutor);
+
+        Assert.Equal(-2, divergence.PerCriterion["intelligibility"]);
+        Assert.Equal(2, divergence.PerCriterion["fluency"]);
+        Assert.Equal(-20, divergence.ScaledDelta);
+        Assert.Equal("moderate", divergence.AgreementBand);
     }
 }

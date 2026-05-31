@@ -651,6 +651,11 @@ export const getTutorReview = (submissionId: string) =>
     path('/v1/writing/submissions/{id}/tutor-review', { id: submissionId }),
   );
 
+export const getTutorReviewDetail = (submissionId: string) =>
+  apiClient.get<{ submission: WritingSubmissionDto; grade: WritingGradeDto | null }>(
+    path('/v1/tutors/writing/reviews/{id}', { id: submissionId }),
+  );
+
 // ─────────────────────────────────────────────────────────────────────────────
 // OCR
 // ─────────────────────────────────────────────────────────────────────────────

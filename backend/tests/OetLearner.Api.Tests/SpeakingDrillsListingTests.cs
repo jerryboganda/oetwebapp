@@ -1,6 +1,10 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using OetLearner.Api.Data;
+using OetLearner.Api.Domain;
 using OetLearner.Api.Services;
 using OetLearner.Api.Tests.Infrastructure;
 
@@ -87,6 +91,42 @@ public class SpeakingDrillsListingTests : IClassFixture<FirstPartyAuthTestWebApp
         using var doc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync());
         var items = doc.RootElement.GetProperty("items").EnumerateArray().ToList();
         Assert.True(items.Count >= 6);
+    }
+
+    [Fact]
+    public async Task Drills_List_MarksCanonicalSpeakingDrillAttemptsCompleted()
+    {
+        string contentItemId;
+        await using (var scope = _factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+            var learner = await db.Users.SingleAsync(u => u.Email == SeedData.LearnerEmail);
+            var drill = await db.SpeakingDrillItems
+                .OrderBy(d => d.Id)
+                .FirstAsync(d => d.ContentItem != null && d.ContentItem.Status == ContentStatus.Published);
+            contentItemId = drill.ContentItemId;
+
+            db.SpeakingDrillAttempts.Add(new SpeakingDrillAttempt
+            {
+                Id = $"sda-listing-{Guid.NewGuid():N}",
+                UserId = learner.Id,
+                DrillItemId = drill.Id,
+                StartedAt = DateTimeOffset.UtcNow.AddMinutes(-2),
+                CompletedAt = DateTimeOffset.UtcNow.AddMinutes(-1),
+                Score = 4,
+            });
+            await db.SaveChangesAsync();
+        }
+
+        using var client = _factory.CreateAuthenticatedClient(SeedData.LearnerEmail, SeedData.LocalSeedPassword, expectedRole: "learner");
+        var resp = await client.GetAsync("/v1/speaking/drills");
+        resp.EnsureSuccessStatusCode();
+
+        using var doc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync());
+        var completedItem = doc.RootElement.GetProperty("items")
+            .EnumerateArray()
+            .Single(i => i.GetProperty("id").GetString() == contentItemId);
+        Assert.True(completedItem.GetProperty("completed").GetBoolean());
     }
 
     [Fact]

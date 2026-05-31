@@ -19,6 +19,52 @@ Write-Host ""
 
 New-Item -ItemType Directory -Force -Path $logDir | Out-Null
 
+# --- 0. Update to the latest main from GitHub ---
+# Always launch the newest code: fetch origin and hard-reset to origin/main.
+# Local edits are stashed first (recoverable via 'git stash list'); untracked
+# files (.env*, data, logs) are left untouched.
+Write-Host "[0/4] Updating to latest main..." -ForegroundColor Yellow
+$prevEAP = $ErrorActionPreference
+$ErrorActionPreference = 'Continue'
+try {
+    $gitCmd = Get-Command git -ErrorAction SilentlyContinue
+    if ($null -eq $gitCmd) {
+        Write-Host "       git not on PATH - launching with local code." -ForegroundColor DarkYellow
+    } else {
+        Push-Location $projectRoot
+        & git rev-parse --is-inside-work-tree 1>$null 2>$null
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host "       Fetching origin..." -ForegroundColor DarkGray
+            & git fetch origin --prune --quiet 2>$null
+            if ($LASTEXITCODE -eq 0) {
+                $dirty = & git status --porcelain 2>$null
+                if ($dirty) {
+                    $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
+                    & git stash push -m "OET-Launch auto-stash $stamp" 1>$null 2>$null
+                    Write-Host "       Stashed local changes ($stamp) - recover via 'git stash list'." -ForegroundColor DarkYellow
+                }
+                & git checkout main --quiet 2>$null
+                & git reset --hard origin/main --quiet 2>$null
+                if ($LASTEXITCODE -eq 0) {
+                    $head = (& git rev-parse --short HEAD 2>$null)
+                    Write-Host "       Updated to origin/main @ $head" -ForegroundColor Green
+                } else {
+                    Write-Host "       Could not reset to origin/main - using local code." -ForegroundColor DarkYellow
+                }
+            } else {
+                Write-Host "       Fetch failed (offline?) - using local code." -ForegroundColor DarkYellow
+            }
+        } else {
+            Write-Host "       Not a git checkout - skipping update." -ForegroundColor DarkYellow
+        }
+        Pop-Location
+    }
+} catch {
+    Write-Host "       Update skipped: $($_.Exception.Message)" -ForegroundColor DarkYellow
+} finally {
+    $ErrorActionPreference = $prevEAP
+}
+
 # --- 1. Start PostgreSQL ---
 Write-Host "[1/4] Starting PostgreSQL..." -ForegroundColor Yellow
 

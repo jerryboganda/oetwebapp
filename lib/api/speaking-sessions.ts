@@ -9,7 +9,7 @@
  *   POST   /v1/speaking/sessions/{id}/start-roleplay
  *   POST   /v1/speaking/sessions/{id}/end
  *   POST   /v1/speaking/sessions/{id}/consent
- *   POST   /v1/speaking/sessions/{id}/ai-assessment        (AI scoring trigger)
+ *   POST   /v1/speaking/sessions/{id}/ai-assess            (AI scoring trigger)
  *   GET    /v1/speaking/sessions/{id}/ai-assessment        (latest AI scoring)
  *   GET    /v1/speaking/sessions/{id}/transcript           (LearnerSpeakingTranscript)
  *
@@ -301,19 +301,16 @@ export async function recordConsent(
  */
 export async function runAiAssessment(sessionId: string): Promise<AiAssessmentDetail> {
   return apiClient.post<AiAssessmentDetail>(
-    `/v1/speaking/sessions/${encodeURIComponent(sessionId)}/ai-assessment`,
+    `/v1/speaking/sessions/${encodeURIComponent(sessionId)}/ai-assess`,
     {},
   );
 }
 
 export async function getAiAssessment(sessionId: string): Promise<AiAssessmentDetail | null> {
-  return apiClient.postWithAcceptedStatuses<AiAssessmentDetail | null>(
+  return apiClient.request<AiAssessmentDetail | null>(
     `/v1/speaking/sessions/${encodeURIComponent(sessionId)}/ai-assessment`,
-    {},
-    [404],
-    // Re-use POST so the backend can return the same body shape for both
-    // "create-or-get" and "get" semantics. If the backend exposes a GET
-    // variant, swap to apiClient.get without changing the call sites.
+    { method: 'GET' },
+    { acceptedStatuses: [404] },
   );
 }
 
