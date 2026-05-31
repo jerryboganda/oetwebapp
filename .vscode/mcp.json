@@ -1,5 +1,10 @@
 {
   "servers": {
+    "PowerBIQuery": {
+      "type": "http",
+      "url": "https://api.fabric.microsoft.com/v1/mcp/powerbi",
+      "headers": {}
+    },
     "ai-coding": {
       "type": "docker",
       "image": "docker.io/egjerry/ai_coding:latest"

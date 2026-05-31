@@ -7,6 +7,10 @@ name: "OET Agentic Workflow"
 - Start from `AGENTS.md`, then inspect the relevant code and docs before editing.
 - For multi-step work, keep a visible todo list and update it as work progresses.
 - Use workspace custom agents when helpful: `OET Explorer`, `OET Planner`, `OET Implementer`, `OET Reviewer`, `OET Security Reviewer`, and `OET QA Validator`.
+- The user should not have to request agents, skills, slash prompts, or plugin names. Automatically use installed Superpowers skills, `OET Superpowers`, official Copilot Plugins skills, `OET Copilot Plugins`, Awesome Copilot assets, `OET Awesome Copilot`, and Fabric specialist agents when their trigger domain fits the prompt.
+- Route new feature/design prompts through `brainstorming`, failures through `systematic-debugging`, behavior changes through `test-driven-development` when practical, multi-step work through `writing-plans`, reviews through `requesting-code-review`, and completion claims through `verification-before-completion`.
+- Route plugin-specific domains automatically: dependency or secret scanning to Advanced Security skills, GitHub Spark app tasks to `spark-app-template`, WorkIQ requests to `workiq`, and Microsoft Fabric / Power BI work to the Fabric skills and agents.
+- Route Awesome Copilot domains automatically: framework-specific implementation, modernization, testing, docs, architecture, frontend/backend patterns, DevOps/cloud, data, and productivity workflows should load the relevant installed Awesome skill, hidden `Awesome ...` specialist, or archived instruction instead of requiring the user to name it.
 - Research in parallel when searches are independent; serialize edits that touch the same file or contract.
 - Fix root causes and preserve unrelated user changes.
 - Prefer existing helpers, service boundaries, design tokens, and test conventions.

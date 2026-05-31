@@ -172,11 +172,60 @@ export interface SpeakingSessionClock {
   canAdvanceTo: string[];
 }
 
+export interface SpeakingTranscriptionStatus {
+  speakingSessionId: string;
+  state: string;
+  statusReasonCode: string;
+  statusMessage: string;
+  retryable: boolean;
+  retryCount: number;
+  queuedAt: string | null;
+  completedAt: string | null;
+  latestTranscriptId: string | null;
+  provider: string | null;
+  language: string | null;
+  wordCount: number | null;
+  meanConfidence: number | null;
+}
+
+export interface SpeakingTranscriptSegment {
+  speaker: 'candidate' | 'interlocutor' | 'system' | string;
+  startMs: number;
+  endMs: number;
+  text: string;
+  confidence?: number;
+  words?: unknown[];
+}
+
+export interface SpeakingTranscriptPayload {
+  id: string;
+  provider: string;
+  language: string;
+  segments: SpeakingTranscriptSegment[];
+  wordCount: number;
+  meanConfidence: number;
+  generatedAt: string;
+}
+
+export interface SpeakingTranscriptResponse {
+  speakingSessionId: string;
+  status: SpeakingTranscriptionStatus;
+  transcript: SpeakingTranscriptPayload | null;
+}
+
 export async function getSpeakingSessionClock(
   sessionId: string,
 ): Promise<SpeakingSessionClock> {
   return apiClient.get<SpeakingSessionClock>(
     `/v1/speaking/sessions/${encodeURIComponent(sessionId)}/clock`,
+  );
+}
+
+export async function getSpeakingSessionTranscript(
+  sessionId: string,
+): Promise<SpeakingTranscriptResponse> {
+  return apiClient.get<SpeakingTranscriptResponse>(
+    `/v1/speaking/sessions/${encodeURIComponent(sessionId)}/transcript`,
   );
 }
 

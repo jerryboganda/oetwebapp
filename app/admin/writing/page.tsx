@@ -50,9 +50,9 @@ const AUTHORING_LINKS: HubLink[] = [
 
 const INSIGHTS_LINKS: HubLink[] = [
   {
-    href: '/admin/writing/analytics/rule-violations',
+    href: '/admin/writing/analytics',
     title: 'Analytics',
-    description: 'Integrity telemetry — paste blocks, focus loss, and rule violations.',
+    description: 'Outcome, quality, and integrity telemetry with rule-violation drill-down.',
     icon: <BarChart3 className="h-5 w-5" />,
   },
   {

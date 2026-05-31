@@ -43,6 +43,8 @@ export interface DualAssessmentColumnProps {
   assessment: AiAssessment | TutorAssessment | null;
   attribution?: DualAssessmentColumnAttribution;
   placeholderCta?: ReactNode;
+  showFullCriteria?: boolean;
+  showReadinessBand?: boolean;
 }
 
 const KIND_STYLES: Record<DualAssessmentColumnKind, { header: string; ring: string; bar: string; chip: string; icon: ReactNode; tooltip: string }> = {
@@ -208,6 +210,8 @@ export function DualAssessmentColumn({
   assessment,
   attribution,
   placeholderCta,
+  showFullCriteria = true,
+  showReadinessBand = true,
 }: DualAssessmentColumnProps) {
   const styles = KIND_STYLES[kind];
 
@@ -263,9 +267,11 @@ export function DualAssessmentColumn({
                 </span>
                 <span className="text-sm text-muted">/ 500</span>
               </div>
-              <Badge variant={kind === 'ai' ? 'info' : 'success'}>
-                {readinessBandLabel(assessment.readinessBand)}
-              </Badge>
+              {showReadinessBand ? (
+                <Badge variant={kind === 'ai' ? 'info' : 'success'}>
+                  {readinessBandLabel(assessment.readinessBand)}
+                </Badge>
+              ) : null}
               {isAiAssessment(assessment) && assessment.confidenceBand && (
                 <p className="text-xs text-muted">Confidence: {assessment.confidenceBand}</p>
               )}
@@ -286,50 +292,54 @@ export function DualAssessmentColumn({
             )}
 
             {/* Linguistic criteria (0-6) */}
-            <section aria-label="Linguistic criteria">
-              <h4 className="mb-2 text-xs font-bold uppercase tracking-wide text-muted">
-                Linguistic Criteria (0–6)
-              </h4>
-              <div className="flex flex-col gap-2">
-                {LINGUISTIC_CRITERIA.map((code) => {
-                  const { score, max, rationale, quotes } = readScore(assessment, code);
-                  return (
-                    <CriterionRow
-                      key={code}
-                      code={code}
-                      score={score}
-                      max={max}
-                      barClass={styles.bar}
-                      rationale={rationale}
-                      quotes={quotes}
-                    />
-                  );
-                })}
-              </div>
-            </section>
+            {showFullCriteria ? (
+              <>
+                <section aria-label="Linguistic criteria">
+                  <h4 className="mb-2 text-xs font-bold uppercase tracking-wide text-muted">
+                    Linguistic Criteria (0–6)
+                  </h4>
+                  <div className="flex flex-col gap-2">
+                    {LINGUISTIC_CRITERIA.map((code) => {
+                      const { score, max, rationale, quotes } = readScore(assessment, code);
+                      return (
+                        <CriterionRow
+                          key={code}
+                          code={code}
+                          score={score}
+                          max={max}
+                          barClass={styles.bar}
+                          rationale={rationale}
+                          quotes={quotes}
+                        />
+                      );
+                    })}
+                  </div>
+                </section>
 
-            {/* Clinical communication criteria (0-3) */}
-            <section aria-label="Clinical communication criteria">
-              <h4 className="mb-2 text-xs font-bold uppercase tracking-wide text-muted">
-                Clinical Communication (0–3)
-              </h4>
-              <div className="flex flex-col gap-2">
-                {CLINICAL_CRITERIA.map((code) => {
-                  const { score, max, rationale, quotes } = readScore(assessment, code);
-                  return (
-                    <CriterionRow
-                      key={code}
-                      code={code}
-                      score={score}
-                      max={max}
-                      barClass={styles.bar}
-                      rationale={rationale}
-                      quotes={quotes}
-                    />
-                  );
-                })}
-              </div>
-            </section>
+                {/* Clinical communication criteria (0-3) */}
+                <section aria-label="Clinical communication criteria">
+                  <h4 className="mb-2 text-xs font-bold uppercase tracking-wide text-muted">
+                    Clinical Communication (0–3)
+                  </h4>
+                  <div className="flex flex-col gap-2">
+                    {CLINICAL_CRITERIA.map((code) => {
+                      const { score, max, rationale, quotes } = readScore(assessment, code);
+                      return (
+                        <CriterionRow
+                          key={code}
+                          code={code}
+                          score={score}
+                          max={max}
+                          barClass={styles.bar}
+                          rationale={rationale}
+                          quotes={quotes}
+                        />
+                      );
+                    })}
+                  </div>
+                </section>
+              </>
+            ) : null}
 
             {/* Tutor-only: strengths + improvements */}
             {isTutorAssessment(assessment) && (assessment.strengths.length > 0 || assessment.improvements.length > 0) && (

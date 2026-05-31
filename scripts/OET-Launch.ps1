@@ -4,9 +4,11 @@
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 
-$projectRoot = 'C:\Users\Dr Faisal Maqsood PC\Desktop\New OET Web App'
-$pgBin = "$env:USERPROFILE\scoop\apps\postgresql\current\bin"
-$pgData = "$env:USERPROFILE\scoop\persist\postgresql\data"
+# Derive the repo root from this script's location so the launcher is portable
+# across machines (scripts/ lives directly under the repo root).
+$projectRoot = Split-Path -Parent $PSScriptRoot
+$pgBin = 'C:\Program Files\PostgreSQL\17\bin'
+$pgService = 'postgresql-17'
 $logDir = Join-Path $projectRoot '.local-deploy\logs'
 
 Write-Host ""
@@ -36,26 +38,24 @@ try {
 } catch {}
 
 if (-not $pgReady) {
-    $pidFile = Join-Path $pgData 'postmaster.pid'
-    if (Test-Path $pidFile) {
+    # PostgreSQL is installed as the Windows service 'postgresql-17' on this
+    # machine. Start it via the service control manager and wait for readiness.
+    $svc = Get-Service -Name $pgService -ErrorAction SilentlyContinue
+    if ($null -eq $svc) {
+        Write-Host "  FAILED: Windows service '$pgService' not found." -ForegroundColor Red
+        Read-Host "Press Enter to close"
+        exit 1
+    }
+    if ($svc.Status -ne 'Running') {
         try {
-            $pidContent = Get-Content $pidFile -ErrorAction SilentlyContinue
-            if ($pidContent -and $pidContent.Count -gt 0) {
-                $oldPid = [int]$pidContent[0]
-                $proc = Get-Process -Id $oldPid -ErrorAction SilentlyContinue
-                if (-not $proc) {
-                    Remove-Item $pidFile -Force
-                    Write-Host "       Removed stale postmaster.pid (PID $oldPid)" -ForegroundColor DarkGray
-                }
-            }
+            Start-Service -Name $pgService -ErrorAction Stop
+            Write-Host "       Started Windows service '$pgService'" -ForegroundColor DarkGray
         } catch {
-            Remove-Item $pidFile -Force -ErrorAction SilentlyContinue
+            Write-Host "  FAILED: Could not start service '$pgService': $($_.Exception.Message)" -ForegroundColor Red
+            Read-Host "Press Enter to close"
+            exit 1
         }
     }
-
-    $pgLog = Join-Path $logDir 'postgres.log'
-    $pgCtlExe = Join-Path $pgBin 'pg_ctl.exe'
-    Start-Process -FilePath $pgCtlExe -ArgumentList "start -D `"$pgData`" -l `"$pgLog`"" -WindowStyle Hidden -PassThru | Out-Null
 
     $deadline = (Get-Date).AddSeconds(30)
     while ((Get-Date) -lt $deadline) {
@@ -67,7 +67,7 @@ if (-not $pgReady) {
     }
 
     if (-not $pgReady) {
-        Write-Host "  FAILED: PostgreSQL did not start. Check $pgLog" -ForegroundColor Red
+        Write-Host "  FAILED: PostgreSQL service '$pgService' did not become ready." -ForegroundColor Red
         Read-Host "Press Enter to close"
         exit 1
     }

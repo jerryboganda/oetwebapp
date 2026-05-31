@@ -24,23 +24,17 @@ foreach ($c in $conns5198) {
     [System.Diagnostics.Process]::GetProcessById($targetPid).Kill()
 }
 
-# Stop PostgreSQL gracefully using pg_ctl
-$pgBin = "$env:USERPROFILE\scoop\apps\postgresql\current\bin"
-$pgData = "$env:USERPROFILE\scoop\persist\postgresql\data"
-$pgCtl = Join-Path $pgBin 'pg_ctl.exe'
-
-if (Test-Path $pgCtl) {
-    Write-Host "  Stopping PostgreSQL..." -ForegroundColor Cyan
-    $proc = Start-Process -FilePath $pgCtl -ArgumentList "stop -D `"$pgData`" -m fast" -WindowStyle Hidden -PassThru
-    $proc | Wait-Process -Timeout 15 -ErrorAction SilentlyContinue
-    if (-not $proc.HasExited) {
-        Write-Host "  PostgreSQL stop timed out, killing by port..." -ForegroundColor Yellow
-        $conns5432 = Get-NetTCPConnection -LocalPort 5432 -State Listen -ErrorAction SilentlyContinue
-        foreach ($c in $conns5432) {
-            [System.Diagnostics.Process]::GetProcessById($c.OwningProcess).Kill()
-        }
+# Stop PostgreSQL (installed as the Windows service 'postgresql-17' on this machine)
+$pgService = 'postgresql-17'
+$svc = Get-Service -Name $pgService -ErrorAction SilentlyContinue
+if ($null -ne $svc) {
+    if ($svc.Status -eq 'Running') {
+        Write-Host "  Stopping PostgreSQL service '$pgService'..." -ForegroundColor Cyan
+        Stop-Service -Name $pgService -Force -ErrorAction SilentlyContinue
+        Write-Host "  PostgreSQL stopped." -ForegroundColor Green
+    } else {
+        Write-Host "  PostgreSQL service already stopped." -ForegroundColor DarkGray
     }
-    Write-Host "  PostgreSQL stopped." -ForegroundColor Green
 } else {
     $conns5432 = Get-NetTCPConnection -LocalPort 5432 -State Listen -ErrorAction SilentlyContinue
     foreach ($c in $conns5432) {

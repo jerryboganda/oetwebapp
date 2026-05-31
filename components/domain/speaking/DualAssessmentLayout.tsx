@@ -27,6 +27,8 @@ export interface DualAssessmentLayoutProps {
   /** Optional CTAs for null states (e.g. "Request tutor review"). */
   tutorPlaceholderCta?: ReactNode;
   aiPlaceholderCta?: ReactNode;
+  showFullCriteria?: boolean;
+  showReadinessBand?: boolean;
 }
 
 function pickLargestDelta(
@@ -104,6 +106,8 @@ export function DualAssessmentLayout({
   data,
   tutorPlaceholderCta,
   aiPlaceholderCta,
+  showFullCriteria = true,
+  showReadinessBand = true,
 }: DualAssessmentLayoutProps) {
   const { ai, tutor, divergence } = data;
   const bothPresent = !!ai && !!tutor;
@@ -117,6 +121,8 @@ export function DualAssessmentLayout({
           kind="ai"
           title="AI Assessment"
           assessment={ai}
+          showFullCriteria={showFullCriteria}
+          showReadinessBand={showReadinessBand}
           attribution={
             ai
               ? {
@@ -132,6 +138,8 @@ export function DualAssessmentLayout({
           kind="tutor"
           title="Tutor Assessment"
           assessment={tutor}
+          showFullCriteria={showFullCriteria}
+          showReadinessBand={showReadinessBand}
           attribution={
             tutor
               ? {

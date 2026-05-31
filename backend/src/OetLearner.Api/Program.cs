@@ -1626,6 +1626,24 @@ builder.Services.AddScoped<OetLearner.Api.Services.Classes.IClassNotificationSer
 
 var app = builder.Build();
 
+// ── Dev-only one-off: emit the full EF model CREATE script and exit. ──
+// Usage: dotnet run -- --emit-create-script <outputPath>
+// Used to rebuild a fresh local dev database from the current model when the
+// migration chain has accumulated drift (tables present in the model snapshot
+// but never created by any migration). Never runs in normal startup paths and
+// is a no-op unless the explicit CLI flag is supplied.
+if (args.Contains("--emit-create-script"))
+{
+    var idx = Array.IndexOf(args, "--emit-create-script");
+    var outPath = (idx >= 0 && idx + 1 < args.Length) ? args[idx + 1] : "model-create-script.sql";
+    using var emitScope = app.Services.CreateScope();
+    var emitDb = emitScope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+    var script = emitDb.Database.GenerateCreateScript();
+    File.WriteAllText(outPath, script);
+    Console.WriteLine($"[emit-create-script] Wrote model create script to {outPath} ({script.Length} chars).");
+    return;
+}
+
 // ── Production safety gate: forbid NoOpUploadScanner when running in production. ──
 // Rationale: the NoOp scanner accepts every byte; if production accidentally
 // boots with it (misconfiguration, missing env var, container swap), learner

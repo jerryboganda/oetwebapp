@@ -54,6 +54,39 @@ intent and automatically run the matching workflow:
 If the best workflow is obvious, choose it silently and proceed. Ask questions
 only when a missing decision blocks correctness or safety.
 
+## Automatic Agent And Skill Routing
+
+The user should not have to remember agent names, skill names, slash prompts, or
+marketplace plugin names. For normal prompts, infer the needed workflow and use
+the installed capabilities automatically when they are relevant.
+
+- Check installed Superpowers skills before substantive work. Use
+  `brainstorming` for new features/design, `systematic-debugging` for bugs or
+  failing commands, `test-driven-development` for behavior changes,
+  `writing-plans` for multi-step implementation, `requesting-code-review` for
+  meaningful review, and `verification-before-completion` before claiming done.
+- Use `OET Superpowers` / `Superpowers` behavior automatically when it improves
+  planning, TDD discipline, debugging, review, verification, or branch finish
+  quality. The user does not need to say "use Superpowers".
+- Use official `github/copilot-plugins` skills automatically when their domain
+  applies: `dependency-scanning`, `secret-scanning`, `spark-app-template`,
+  `workiq`, and Microsoft Fabric / Power BI skills and agents.
+- Use `OET Copilot Plugins` / `Copilot Plugins` behavior automatically for
+  plugin-powered security scanning, WorkIQ, GitHub Spark, Fabric, Power BI, and
+  marketplace maintenance tasks. The user does not need to name the plugin.
+- Use installed `github/awesome-copilot` assets automatically when their domain
+  applies: framework-specific skills, modernization, testing, docs, frontend,
+  backend, DevOps/cloud, architecture, and productivity workflows. Prefer
+  `OET Awesome Copilot` in this repo and `Awesome Copilot` globally; load only
+  the relevant skill/instruction/hidden specialist instead of activating the
+  whole collection at once.
+- In VS Code, a custom agent is still selected explicitly at the top level by
+  the UI. If a different top-level agent is active, do not pretend the selector
+  changed; instead load the relevant skill files and invoke available subagents
+  when the tool surface permits it.
+- If a plugin needs external authentication or secrets, ask the user to sign in
+  directly in the terminal or service UI. Never ask for secrets in chat.
+
 ## ECC-Inspired Workflow Defaults
 
 - Research first: locate existing implementation, docs, tests, and contracts.

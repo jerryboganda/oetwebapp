@@ -89,6 +89,13 @@ const hubSections: HubSection[] = [
         badge: 'Module',
       },
       {
+        href: '/admin/speaking',
+        label: 'Speaking Operations',
+        description: 'Open the Speaking hub for result visibility, analytics, recording audit, and content shortcuts.',
+        icon: <BarChart3 className="h-5 w-5" />,
+        badge: 'Hub',
+      },
+      {
         href: '/admin/content/papers?subtest=speaking',
         label: 'Speaking Authoring',
         description: 'Author OET Speaking role-play cards with candidate/interlocutor structure, source assets, and publish readiness.',

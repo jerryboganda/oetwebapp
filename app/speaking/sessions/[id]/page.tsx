@@ -27,6 +27,7 @@ import { SpeakingConsentBanner } from '@/components/domain/speaking/SpeakingCons
 import {
   endSpeakingSession,
   getSpeakingSession,
+  getSpeakingSessionClock,
   runAiAssessment,
   submitSpeakingSessionForMarking,
   type SpeakingSessionDetail,
@@ -36,6 +37,7 @@ import { ApiError } from '@/lib/api';
 import { trackSpeaking } from '@/lib/analytics/speaking-events';
 
 const ROLE_PLAY_HARD_LIMIT_SECONDS = 5 * 60;
+const CLOCK_SYNC_INTERVAL_MS = 10_000;
 
 /** AI patient / interlocutor utterance pushed by the hub (WS2). */
 interface PatientUtterance {
@@ -239,6 +241,21 @@ export default function SpeakingSessionRecordingPage() {
         if (s.rolePlayStartedAt) {
           roleplayStartedAtRef.current = new Date(s.rolePlayStartedAt).getTime();
         }
+
+        if (isAiMode(s.mode)) {
+          void getSpeakingSessionClock(s.sessionId)
+            .then((clock) => {
+              if (cancelled) return;
+              if (clock.expired || clock.stage === 'finished' || clock.stage === 'cancelled') {
+                setSecondsLeft(0);
+                return;
+              }
+              if (typeof clock.secondsRemaining === 'number') {
+                setSecondsLeft(clock.secondsRemaining);
+              }
+            })
+            .catch(() => undefined);
+        }
       })
       .catch((err: unknown) => {
         if (cancelled) return;
@@ -257,6 +274,37 @@ export default function SpeakingSessionRecordingPage() {
       cancelled = true;
     };
   }, [router, sessionId]);
+
+  useEffect(() => {
+    if (!session || !isAiMode(session.mode)) return;
+
+    let cancelled = false;
+    const syncClock = async () => {
+      try {
+        const clock = await getSpeakingSessionClock(session.sessionId);
+        if (cancelled) return;
+        if (clock.expired || clock.stage === 'finished' || clock.stage === 'cancelled') {
+          setSecondsLeft(0);
+          return;
+        }
+        if (typeof clock.secondsRemaining === 'number') {
+          setSecondsLeft(clock.secondsRemaining);
+        }
+      } catch {
+        // Keep the last known countdown if the authoritative clock blips.
+      }
+    };
+
+    void syncClock();
+    const interval = window.setInterval(() => {
+      void syncClock();
+    }, CLOCK_SYNC_INTERVAL_MS);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [session]);
 
   // ── Connect hub once consent is accepted ─────────────────────────────────
   useEffect(() => {
@@ -324,7 +372,6 @@ export default function SpeakingSessionRecordingPage() {
     };
   }, [consentAccepted, session]);
 
-  // ── Local 5-min hard timer ───────────────────────────────────────────────
   const handleFinalize = useCallback(async (reason: 'manual' | 'timer' = 'manual') => {
     if (!session || endedRef.current) return;
     if (reason === 'manual' && (recording || sending)) {
@@ -441,31 +488,30 @@ export default function SpeakingSessionRecordingPage() {
 
   useEffect(() => {
     if (!session || !consentAccepted || !isAiMode(session.mode)) return;
-    const start = Date.now();
-    const baseRemaining = secondsLeft > 0 ? secondsLeft : ROLE_PLAY_HARD_LIMIT_SECONDS;
-    const id = window.setInterval(() => {
-      const elapsed = Math.floor((Date.now() - start) / 1000);
-      const remaining = Math.max(0, baseRemaining - elapsed);
-      setSecondsLeft(remaining);
-      if (remaining <= 30 && !trackedTimeWarningRef.current) {
+    if (secondsLeft <= 0) {
+      if (!endedRef.current) void handleFinalize('timer');
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      const nextSecondsLeft = Math.max(0, secondsLeft - 1);
+      setSecondsLeft(nextSecondsLeft);
+      if (nextSecondsLeft <= 30 && !trackedTimeWarningRef.current) {
         trackedTimeWarningRef.current = true;
         trackSpeaking('roleplay_time_nearly_up', {
           sessionId: session.sessionId,
-          secondsLeft: remaining,
+          secondsLeft: nextSecondsLeft,
         });
       }
-      if (remaining <= 0) {
-        window.clearInterval(id);
-        if (!endedRef.current) void handleFinalize('timer');
+      if (nextSecondsLeft <= 0 && !endedRef.current) {
+        void handleFinalize('timer');
       }
-    }, 500);
+    }, 1000);
+
     return () => {
-      window.clearInterval(id);
+      window.clearTimeout(timer);
     };
-    // We intentionally don't depend on `secondsLeft` — that would reset
-    // the countdown every tick.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [consentAccepted, session, handleFinalize]);
+  }, [consentAccepted, handleFinalize, secondsLeft, session]);
 
   // ── Mic level meter (purely visual) ──────────────────────────────────────
   useEffect(() => {

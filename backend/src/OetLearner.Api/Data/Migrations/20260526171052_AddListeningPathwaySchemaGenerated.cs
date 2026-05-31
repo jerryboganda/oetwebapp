@@ -67,30 +67,9 @@ namespace OetLearner.Api.Data.Migrations
                     table.PrimaryKey("PK_ClassMaterials", x => x.Id);
                 });
 
-            migrationBuilder.CreateTable(
-                name: "ClassRecordingEmbeddings",
-                columns: table => new
-                {
-                    Id = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: false),
-                    ClassRecordingId = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: false),
-                    ChunkIndex = table.Column<int>(type: "integer", nullable: false),
-                    ChunkText = table.Column<string>(type: "text", nullable: false),
-                    EmbeddingJson = table.Column<string>(type: "text", nullable: false),
-                    EmbeddingModel = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: false),
-                    StartTimeSeconds = table.Column<int>(type: "integer", nullable: false),
-                    EndTimeSeconds = table.Column<int>(type: "integer", nullable: false),
-                    CreatedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_ClassRecordingEmbeddings", x => x.Id);
-                    table.ForeignKey(
-                        name: "FK_ClassRecordingEmbeddings_LiveClassRecordings_ClassRecording~",
-                        column: x => x.ClassRecordingId,
-                        principalTable: "LiveClassRecordings",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.Cascade);
-                });
+            // NOTE: ClassRecordingEmbeddings is created by migration
+            // 20260526160100_AddClassRecordingEmbeddings; this generated
+            // migration drifted and re-created it. Duplicate removed.
 
             migrationBuilder.CreateTable(
                 name: "DunningAttempts",
@@ -353,16 +332,8 @@ namespace OetLearner.Api.Data.Migrations
                 table: "ClassMaterials",
                 columns: new[] { "LiveClassId", "ClassSessionId" });
 
-            migrationBuilder.CreateIndex(
-                name: "IX_ClassRecordingEmbeddings_ClassRecordingId",
-                table: "ClassRecordingEmbeddings",
-                column: "ClassRecordingId");
-
-            migrationBuilder.CreateIndex(
-                name: "IX_ClassRecordingEmbeddings_ClassRecordingId_ChunkIndex",
-                table: "ClassRecordingEmbeddings",
-                columns: new[] { "ClassRecordingId", "ChunkIndex" },
-                unique: true);
+            // IX_ClassRecordingEmbeddings_* indexes are created by migration
+            // 20260526160100_AddClassRecordingEmbeddings. Duplicate removed.
 
             migrationBuilder.CreateIndex(
                 name: "IX_DunningAttempts_InvoiceId_AttemptNumber",
@@ -448,9 +419,6 @@ namespace OetLearner.Api.Data.Migrations
 
             migrationBuilder.DropTable(
                 name: "ClassMaterials");
-
-            migrationBuilder.DropTable(
-                name: "ClassRecordingEmbeddings");
 
             migrationBuilder.DropTable(
                 name: "DunningAttempts");

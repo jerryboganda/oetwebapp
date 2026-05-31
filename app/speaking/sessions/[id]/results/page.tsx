@@ -29,15 +29,18 @@ import {
   SpeakingAssessmentApiError,
   learnerGetDualAssessment,
   type DualAssessmentResponse,
-  type TimestampedComment,
 } from '@/lib/api/speaking-assessments';
+import {
+  getSpeakingSession,
+  getSpeakingSessionTranscript,
+  type SpeakingSessionDetail,
+  type SpeakingTranscriptPayload,
+} from '@/lib/api/speaking-sessions';
+import {
+  getSpeakingResultVisibility,
+  type SpeakingResultVisibilityDto,
+} from '@/lib/api/speaking-result-visibility';
 import { trackSpeaking } from '@/lib/analytics/speaking-events';
-
-interface SessionContext {
-  recordingUrl?: string | null;
-  transcript: TranscriptPayload;
-  comments: TimestampedComment[];
-}
 
 function TutorReviewCta() {
   return (
@@ -71,34 +74,48 @@ function AiProcessingCta() {
   );
 }
 
+function VisibilityLockedCta({ title, body }: { title: string; body: string }) {
+  return (
+    <div className="flex flex-col items-start gap-2">
+      <p className="text-sm font-semibold text-navy">{title}</p>
+      <p className="text-xs leading-relaxed text-muted">{body}</p>
+    </div>
+  );
+}
+
 export default function SpeakingSessionResultsPage() {
   const params = useParams();
   const rawId = params?.id;
   const sessionId = Array.isArray(rawId) ? rawId[0] ?? '' : rawId ?? '';
 
   const [data, setData] = useState<DualAssessmentResponse | null>(null);
-  const [context, setContext] = useState<SessionContext | null>(null);
+  const [session, setSession] = useState<SpeakingSessionDetail | null>(null);
+  const [visibility, setVisibility] = useState<SpeakingResultVisibilityDto | null>(null);
+  const [transcript, setTranscript] = useState<SpeakingTranscriptPayload | null>(null);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState('overview');
   const trackedAiAssessmentRef = useRef(false);
   const trackedTutorAssessmentRef = useRef(false);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (showSpinner = true) => {
     if (!sessionId) return;
-    setLoading(true);
+    if (showSpinner) setLoading(true);
     setErrorMsg(null);
     try {
-      const response = await learnerGetDualAssessment(sessionId);
-      setData(response);
-      const ctx = (response as unknown as { context?: SessionContext }).context;
-      setContext(
-        ctx ?? {
-          recordingUrl: null,
-          transcript: { segments: [] },
-          comments: [],
-        },
-      );
+      const sessionDetail = await getSpeakingSession(sessionId);
+      const visibilityDto = await getSpeakingResultVisibility(sessionDetail.card.cardId).catch(() => null);
+
+      const assessmentPromise = learnerGetDualAssessment(sessionId);
+      const transcriptPromise = visibilityDto?.showTranscript !== false
+        ? getSpeakingSessionTranscript(sessionId).catch(() => null)
+        : Promise.resolve(null);
+
+      const [assessmentResponse, transcriptResponse] = await Promise.all([assessmentPromise, transcriptPromise]);
+      setSession(sessionDetail);
+      setVisibility(visibilityDto);
+      setData(assessmentResponse);
+      setTranscript(transcriptResponse?.transcript ?? null);
     } catch (err) {
       const msg = err instanceof SpeakingAssessmentApiError ? err.message : 'Failed to load assessment.';
       setErrorMsg(msg);
@@ -108,47 +125,114 @@ export default function SpeakingSessionResultsPage() {
   }, [sessionId]);
 
   useEffect(() => {
-    if (data?.ai && !trackedAiAssessmentRef.current) {
+    if (visibleData?.ai && !trackedAiAssessmentRef.current) {
       trackedAiAssessmentRef.current = true;
       trackSpeaking('ai_assessment_viewed', {
         sessionId,
-        estimatedBand: data.ai.readinessBand,
+        estimatedBand: visibleData.ai.readinessBand,
       });
     }
-    if (data?.tutor && !trackedTutorAssessmentRef.current) {
+    if (visibleData?.tutor && !trackedTutorAssessmentRef.current) {
       trackedTutorAssessmentRef.current = true;
       trackSpeaking('tutor_assessment_viewed', {
         sessionId,
-        estimatedBand: data.tutor.readinessBand,
+        estimatedBand: visibleData.tutor.readinessBand,
       });
     }
-  }, [data, sessionId]);
+  }, [sessionId, visibleData]);
 
   useEffect(() => {
     void load();
-    // Poll once a minute while AI is still processing (`ai === null`)
+  }, [load]);
+
+  useEffect(() => {
+    // Poll once a minute while AI is still processing or the transcript is pending.
     const interval = window.setInterval(() => {
-      if (!data?.ai) void load();
+      if (!data?.ai || (visibility?.showTranscript && !transcript)) {
+        void load(false);
+      }
     }, 60_000);
     return () => window.clearInterval(interval);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessionId]);
+  }, [data?.ai, load, transcript, visibility?.showTranscript]);
+
+  const showSubmissionReceived = visibility?.showSubmissionReceived ?? true;
+  const showAiEstimate = visibility?.showAiEstimate ?? true;
+  const showReadinessBand = visibility?.showReadinessBand ?? true;
+  const showTutorScore = visibility?.showTutorScore ?? true;
+  const showFullCriteria = visibility?.showFullCriteria ?? true;
+  const showTranscript = visibility?.showTranscript ?? true;
+  const showTutorComments = visibility?.showTutorComments ?? true;
+  const showRecommendedDrills = visibility?.showRecommendedDrills ?? true;
+  const allowReattempt = visibility?.allowReattempt ?? true;
+
+  const visibleData = useMemo<DualAssessmentResponse | null>(() => {
+    if (!data) return null;
+    return {
+      sessionId: data.sessionId,
+      ai: showAiEstimate ? data.ai : null,
+      tutor: showTutorScore ? data.tutor : null,
+      tutorHistory: showTutorScore ? data.tutorHistory : [],
+      divergence: showAiEstimate && showTutorScore ? data.divergence : null,
+    };
+  }, [data, showAiEstimate, showTutorScore]);
+
+  const transcriptPayload = useMemo<TranscriptPayload>(() => ({
+    segments: transcript?.segments ?? [],
+  }), [transcript]);
 
   const drills = useMemo(() => {
+    if (!showRecommendedDrills) return [] as string[];
     const all = new Set<string>();
-    data?.ai?.recommendedDrills?.forEach((d) => all.add(d));
-    data?.tutor?.recommendedDrills?.forEach((d) => all.add(d));
+    visibleData?.ai?.recommendedDrills?.forEach((d) => all.add(d));
+    visibleData?.tutor?.recommendedDrills?.forEach((d) => all.add(d));
     return Array.from(all);
-  }, [data?.ai?.recommendedDrills, data?.tutor?.recommendedDrills]);
+  }, [showRecommendedDrills, visibleData]);
 
   const tabs = useMemo(
-    () => [
+    () => {
+      const baseTabs = [
       { id: 'overview', label: 'Overview', icon: <Mic className="h-4 w-4" aria-hidden /> },
-      { id: 'transcript', label: 'Transcript', icon: <Loader2 className="hidden" aria-hidden /> },
-      { id: 'drills', label: 'Recommended drills', icon: <BookOpen className="h-4 w-4" aria-hidden />, count: drills.length || undefined },
-    ],
-    [drills.length],
+      ];
+      if (showTranscript) {
+        baseTabs.push({ id: 'transcript', label: 'Transcript', icon: <Loader2 className="hidden" aria-hidden /> });
+      }
+      if (showRecommendedDrills) {
+        baseTabs.push({
+          id: 'drills',
+          label: 'Recommended drills',
+          icon: <BookOpen className="h-4 w-4" aria-hidden />,
+          count: drills.length || undefined,
+        });
+      }
+      return baseTabs;
+    },
+    [drills.length, showRecommendedDrills, showTranscript],
   );
+
+  useEffect(() => {
+    if (!tabs.some((tab) => tab.id === activeTab)) {
+      setActiveTab(tabs[0]?.id ?? 'overview');
+    }
+  }, [activeTab, tabs]);
+
+  const hiddenAiPlaceholder = (
+    <VisibilityLockedCta
+      title="AI estimate hidden"
+      body="This result visibility profile hides the AI estimate for learners on this card."
+    />
+  );
+
+  const hiddenTutorPlaceholder = (
+    <VisibilityLockedCta
+      title="Tutor review hidden"
+      body="This result visibility profile hides the tutor score and review details for learners on this card."
+    />
+  );
+
+  const reattemptHref = session ? `/speaking/check?taskId=${encodeURIComponent(session.card.cardId)}` : '/speaking/check';
+  const submissionAtLabel = session?.submittedAt
+    ? new Date(session.submittedAt).toLocaleString()
+    : null;
 
   if (loading) {
     return (
@@ -182,61 +266,106 @@ export default function SpeakingSessionResultsPage() {
     );
   }
 
+  const subtitle = session
+    ? `${session.card.scenarioTitle} · Session ${sessionId.slice(0, 8)}…`
+    : `Session ${sessionId.slice(0, 8)}…`;
+
   return (
     <LearnerDashboardShell
       pageTitle="Speaking results"
-      subtitle={`Session ${sessionId.slice(0, 8)}…`}
+      subtitle={subtitle}
     >
       <div className="flex flex-col gap-4">
+        {showSubmissionReceived && session?.submittedAt ? (
+          <InlineAlert
+            variant="success"
+            title="Submission received"
+            action={allowReattempt ? (
+              <Button variant="outline" size="sm" asChild>
+                <Link href={reattemptHref}>Try another role play</Link>
+              </Button>
+            ) : undefined}
+          >
+            We received your recording{submissionAtLabel ? ` on ${submissionAtLabel}` : ''} and queued it for marking.
+          </InlineAlert>
+        ) : null}
+
+        {allowReattempt ? (
+          <Card padding="md" className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-sm font-semibold text-navy">Reattempt this speaking card</p>
+              <p className="text-xs leading-relaxed text-muted">
+                Start another practice attempt with the same scenario from the learner speaking check flow.
+              </p>
+            </div>
+            <Button variant="outline" size="sm" asChild>
+              <Link href={reattemptHref}>Open speaking check</Link>
+            </Button>
+          </Card>
+        ) : null}
+
         <Tabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
 
         <TabPanel id="overview" activeTab={activeTab}>
           <DualAssessmentLayout
-            data={data}
-            tutorPlaceholderCta={<TutorReviewCta />}
-            aiPlaceholderCta={<AiProcessingCta />}
+            data={visibleData ?? data}
+            tutorPlaceholderCta={showTutorScore ? <TutorReviewCta /> : hiddenTutorPlaceholder}
+            aiPlaceholderCta={showAiEstimate ? <AiProcessingCta /> : hiddenAiPlaceholder}
+            showFullCriteria={showFullCriteria}
+            showReadinessBand={showReadinessBand}
           />
         </TabPanel>
 
-        <TabPanel id="transcript" activeTab={activeTab}>
-          <TranscriptPlayerWithComments
-            recordingUrl={context?.recordingUrl ?? null}
-            transcript={context?.transcript ?? { segments: [] }}
-            comments={context?.comments ?? []}
-            readOnly
-          />
-        </TabPanel>
+        {showTranscript ? (
+          <TabPanel id="transcript" activeTab={activeTab}>
+            <div className="space-y-3">
+              {!showTutorComments ? (
+                <InlineAlert variant="info" title="Tutor comments hidden">
+                  This result visibility profile hides tutor comments. The transcript remains available for review.
+                </InlineAlert>
+              ) : null}
+              <TranscriptPlayerWithComments
+                recordingUrl={null}
+                transcript={transcriptPayload}
+                comments={[]}
+                readOnly
+              />
+            </div>
+          </TabPanel>
+        ) : null}
 
-        <TabPanel id="drills" activeTab={activeTab}>
-          {drills.length === 0 ? (
-            <Card padding="lg" className="text-center text-sm text-muted">
-              No drills recommended yet. Come back once your tutor review is in.
-            </Card>
-          ) : (
-            <Card padding="md" className="flex flex-col gap-3">
-              <h3 className="text-base font-bold text-navy">Recommended drills</h3>
-              <p className="text-xs text-muted">
-                Targeted practice based on your AI and tutor feedback. Drill titles map to slugs in the practice library.
-              </p>
-              <ul className="flex flex-col gap-2">
-                {drills.map((slug) => (
-                  <li key={slug}>
-                    <Link
-                      href={`/speaking/drills?slug=${encodeURIComponent(slug)}`}
-                      className="flex items-center justify-between gap-3 rounded-xl border border-border bg-background-light p-3 hover:border-primary/40 hover:bg-primary/5"
-                    >
-                      <div className="flex items-center gap-2">
-                        <BookOpen className="h-4 w-4 text-primary" aria-hidden />
-                        <span className="font-semibold text-navy">{slug.replace(/-/g, ' ')}</span>
-                      </div>
-                      <span className="text-xs font-bold text-primary">Open drill →</span>
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            </Card>
-          )}
-        </TabPanel>
+        {showRecommendedDrills ? (
+          <TabPanel id="drills" activeTab={activeTab}>
+            {drills.length === 0 ? (
+              <Card padding="lg" className="text-center text-sm text-muted">
+                No drills recommended yet. Come back once your tutor review is in.
+              </Card>
+            ) : (
+              <Card padding="md" className="flex flex-col gap-3">
+                <h3 className="text-base font-bold text-navy">Recommended drills</h3>
+                <p className="text-xs text-muted">
+                  Targeted practice based on your AI and tutor feedback. Drill titles map to slugs in the practice library.
+                </p>
+                <ul className="flex flex-col gap-2">
+                  {drills.map((slug) => (
+                    <li key={slug}>
+                      <Link
+                        href={`/speaking/drills?slug=${encodeURIComponent(slug)}`}
+                        className="flex items-center justify-between gap-3 rounded-xl border border-border bg-background-light p-3 hover:border-primary/40 hover:bg-primary/5"
+                      >
+                        <div className="flex items-center gap-2">
+                          <BookOpen className="h-4 w-4 text-primary" aria-hidden />
+                          <span className="font-semibold text-navy">{slug.replace(/-/g, ' ')}</span>
+                        </div>
+                        <span className="text-xs font-bold text-primary">Open drill →</span>
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </Card>
+            )}
+          </TabPanel>
+        ) : null}
       </div>
     </LearnerDashboardShell>
   );
