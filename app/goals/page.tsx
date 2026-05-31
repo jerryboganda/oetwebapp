@@ -17,6 +17,18 @@ import { TARGET_COUNTRY_OPTIONS, isTargetCountry } from '@/lib/auth/target-count
 import { useEffect, useMemo, useState } from 'react';
 
 const SUB_TESTS: SubTest[] = ['Writing', 'Speaking', 'Reading', 'Listening'];
+const EXAM_MODE_OPTIONS = [
+  { value: 'paper', label: 'Paper-based' },
+  { value: 'computer', label: 'Computer-based' },
+  { value: 'home', label: 'OET@Home' },
+  { value: 'unsure', label: 'Not sure yet' },
+];
+const CONFIDENCE_OPTIONS = [
+  { value: 'beginner', label: 'Beginner' },
+  { value: 'intermediate', label: 'Intermediate' },
+  { value: 'advanced', label: 'Advanced' },
+  { value: 'unsure', label: 'Not sure' },
+];
 const SCORE_FIELD_KEYS = ['targetWriting', 'targetSpeaking', 'targetReading', 'targetListening'] as const;
 const EXAM_FAMILY_OPTIONS: Array<{ value: ExamFamilyCode; label: string }> = [
   { value: 'oet', label: 'OET' },
@@ -67,6 +79,8 @@ const goalSchema = z.object({
   ieltsPathway: z.enum(['academic', 'general']).optional(),
   profession: z.string().min(1, 'Please select your profession'),
   examDate: z.string().optional(),
+  examMode: z.union([z.enum(['paper', 'computer', 'home', 'unsure']), z.literal('')]).optional(),
+  confidence: z.union([z.enum(['beginner', 'intermediate', 'advanced', 'unsure']), z.literal('')]).optional(),
   targetWriting: scoreField,
   targetSpeaking: scoreField,
   targetReading: scoreField,
@@ -160,6 +174,8 @@ export default function GoalSetupPage() {
       examFamilyCode: 'oet',
       profession: '',
       examDate: '',
+      examMode: '',
+      confidence: '',
       weakSubTests: [],
       studyHoursPerWeek: '',
       targetCountry: '',
@@ -201,6 +217,8 @@ export default function GoalSetupPage() {
           ieltsPathway: profile.ieltsPathway ?? undefined,
           profession: profile.profession || '',
           examDate: profile.examDate || '',
+          examMode: (profile.targetExamMode ?? '') as 'paper' | 'computer' | 'home' | 'unsure' | '',
+          confidence: (profile.confidenceLevel ?? '') as 'beginner' | 'intermediate' | 'advanced' | 'unsure' | '',
           targetWriting: profile.targetScores.Writing ?? '',
           targetSpeaking: profile.targetScores.Speaking ?? '',
           targetReading: profile.targetScores.Reading ?? '',
@@ -248,9 +266,13 @@ export default function GoalSetupPage() {
         weakSubTests: (data.weakSubTests ?? []) as SubTest[],
         studyHoursPerWeek: data.studyHoursPerWeek === '' || data.studyHoursPerWeek === undefined ? 10 : Number(data.studyHoursPerWeek),
         targetCountry: data.targetCountry || '',
+        targetExamMode: data.examMode || null,
+        confidenceLevel: data.confidence || null,
         goalsComplete: true,
       });
 
+      if (data.examMode) track('welcome_exam_mode_set', { mode: data.examMode });
+      if (data.confidence) track('welcome_confidence_set', { level: data.confidence });
       track('goals_saved', { examFamilyCode: data.examFamilyCode });
       router.push('/diagnostic');
     } finally {
@@ -354,6 +376,29 @@ export default function GoalSetupPage() {
               {...register('previousAttempts')}
               error={errors.previousAttempts?.message}
             />
+          </Card>
+
+          <Card className="space-y-4">
+            <LearnerSurfaceSectionHeader
+              title="Exam mode & confidence"
+              description="OET runs on paper, on computer, or remotely (OET@Home). Sharing your target mode and confidence helps us tailor strict-mock guidance and pacing."
+            />
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Select
+                label="Target test mode"
+                options={EXAM_MODE_OPTIONS}
+                placeholder="Select a mode..."
+                {...register('examMode')}
+                error={errors.examMode?.message}
+              />
+              <Select
+                label="Current confidence"
+                options={CONFIDENCE_OPTIONS}
+                placeholder="Select your level..."
+                {...register('confidence')}
+                error={errors.confidence?.message}
+              />
+            </div>
           </Card>
 
           <Card className="space-y-4">

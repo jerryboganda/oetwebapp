@@ -30,6 +30,8 @@ export interface UserProfile {
   weakSubTests: SubTest[];
   studyHoursPerWeek: number;
   targetCountry: string;
+  targetExamMode?: string | null;
+  confidenceLevel?: string | null;
   onboardingComplete: boolean;
   goalsComplete: boolean;
   diagnosticComplete: boolean;
