@@ -2054,8 +2054,7 @@ app.MapWritingPathwayEndpoints();
 // stats, canon library, mistakes, tutor review, OCR, showcase, AI tools,
 // admin content, tutor portal + native WebSocket coach fallback (~60+
 // routes across 20 endpoint files). See WritingRouteBuilderExtensions.cs.
-app.MapWritingV2Endpoints();
-app.MapWritingResultVisibilityEndpoints();
+app.MapWritingV2Endpoints(); // includes MapWritingResultVisibilityEndpoints internally
 // OET Writing exam-faithful closure endpoint groups (spec §3-§6 task builder +
 // §18 import/export, §17.7 attempt events, §12-§14 tutor marking + moderation,
 // §16 admin analytics + marking quality control).
