@@ -62,6 +62,29 @@ public class ContentConventionParserTests
     }
 
     [Fact]
+    public void Recognises_real_medicine_reading_answer_question_text_booklet_and_part_bc_files()
+    {
+        var paths = new[]
+        {
+            "OET with Dr. Ahmed Hesham ( Medicine Only )/Reading ( IMPORTANT NOTE = Same for All Professions )/Reading Sample 1/Answers ( Part A Reading ).pdf",
+            "OET with Dr. Ahmed Hesham ( Medicine Only )/Reading ( IMPORTANT NOTE = Same for All Professions )/Reading Sample 1/Question Paper ( Part A Reading ).pdf",
+            "OET with Dr. Ahmed Hesham ( Medicine Only )/Reading ( IMPORTANT NOTE = Same for All Professions )/Reading Sample 1/Text Booklet ( Part A Reading ).pdf",
+            "OET with Dr. Ahmed Hesham ( Medicine Only )/Reading ( IMPORTANT NOTE = Same for All Professions )/Reading Sample 1/Reading Part B&C _.pdf",
+        };
+
+        var manifest = _parser.Parse(paths);
+        var paper = Assert.Single(manifest.Papers);
+
+        Assert.Equal("reading", paper.SubtestCode);
+        Assert.True(paper.AppliesToAllProfessions);
+        Assert.Contains(paper.Assets, a => a.Role == PaperAssetRole.AnswerKey && a.Part == "A");
+        Assert.Contains(paper.Assets, a => a.Role == PaperAssetRole.QuestionPaper && a.Part == "A");
+        Assert.Contains(paper.Assets, a => a.Role == PaperAssetRole.Supplementary && a.Part == "A");
+        Assert.Contains(paper.Assets, a => a.Role == PaperAssetRole.QuestionPaper && a.Part == "B+C");
+        Assert.DoesNotContain(paper.ReadinessIssues, issue => issue.Severity == "error");
+    }
+
+    [Fact]
     public void Recognises_writing_letter_type_and_role_pairs()
     {
         var paths = new[]
@@ -84,6 +107,9 @@ public class ContentConventionParserTests
 
         var w3 = m.Papers.First(p => p.Title.Contains("Writing 3"));
         Assert.Equal("urgent_referral", w3.LetterType);
+        Assert.Contains(w3.Assets, a => a.Role == PaperAssetRole.CaseNotes);
+        Assert.Contains(w3.Assets, a => a.Role == PaperAssetRole.ModelAnswer);
+        Assert.DoesNotContain(w3.ReadinessIssues, issue => issue.Severity == "error");
 
         var w6 = m.Papers.First(p => p.Title.Contains("Writing 6"));
         Assert.Equal("transfer_letter", w6.LetterType);
@@ -106,6 +132,39 @@ public class ContentConventionParserTests
         Assert.Equal("first_visit_emergency", m.Papers.First(p => p.Title.Contains("Card 5")).CardType);
         Assert.Equal("first_visit_routine", m.Papers.First(p => p.Title.Contains("Card 6")).CardType);
         Assert.All(m.Papers, p => Assert.Equal("medicine", p.ProfessionId));
+    }
+
+    [Fact]
+    public void Recognises_real_medicine_reference_files_and_uses_shared_speaking_resources_for_readiness()
+    {
+        var paths = new[]
+        {
+            "OET with Dr. Ahmed Hesham ( Medicine Only )/Listening ( IMPORTANT NOTE =  Same for All Professions )/Listening Rulebook for Paper & Computer Based Exams ( IMPORTANT NOTE=THE SAME FOR ALL PROFESSIONS )/OET Listening Rulebook for Both Paper & Computer Based ( IMPORTANT NOTE-THE SAME FOR ALL PROFESSIONS ).pdf",
+            "OET with Dr. Ahmed Hesham ( Medicine Only )/Reading ( IMPORTANT NOTE = Same for All Professions )/Reading Rulebook for Paper & Computer Based Exams ( IMPORTANT NOTE=THE SAME FOR ALL PROFESSIONS )/OET Reading Rulebook for Both Paper & Computer Based ( IMPORTANT NOTE-THE SAME FOR ALL PROFESSIONS ).pdf",
+            "OET with Dr. Ahmed Hesham ( Medicine Only )/Speaking_/Speaking Assessment Criteria  ( IMPORTANT NOTE = same for all professions ).pdf",
+            "OET with Dr. Ahmed Hesham ( Medicine Only )/Speaking_/Speaking Intro Questions - Warm Up Questions - ( IMPORTANT NOTE = same for all professions ).pdf",
+            "OET with Dr. Ahmed Hesham ( Medicine Only )/Speaking_/Speaking Rulebook ( Medicine Only )/OET_Speaking_Rulebook ( For Medicine only ).pdf",
+            "OET with Dr. Ahmed Hesham ( Medicine Only )/Writing_/Writing RuleBook ( Medicine only )/OET_Writing_Rulebook_FINAL ( For Medicine Only ).pdf",
+            "OET with Dr. Ahmed Hesham ( Medicine Only )/Scoring System.txt",
+            "OET with Dr. Ahmed Hesham ( Medicine Only )/Speaking_/Card 4 ( Examination Card )_ MOST IMPORTANT TYPE/4.pdf",
+        };
+
+        var manifest = _parser.Parse(paths);
+        var speakingPaper = Assert.Single(manifest.Papers);
+
+        Assert.Equal("speaking", speakingPaper.SubtestCode);
+        Assert.Equal("examination", speakingPaper.CardType);
+        Assert.DoesNotContain(speakingPaper.ReadinessIssues, issue => issue.Severity == "error");
+        Assert.Contains(manifest.References, r => r.Target == ImportReferenceTargets.SpeakingSharedResource && r.SharedResourceKind == SpeakingSharedResourceKinds.AssessmentCriteria);
+        Assert.Contains(manifest.References, r => r.Target == ImportReferenceTargets.SpeakingSharedResource && r.SharedResourceKind == SpeakingSharedResourceKinds.WarmUpQuestions);
+        Assert.Contains(manifest.References, r => r.Target == ImportReferenceTargets.RulebookReferencePdf && r.Kind == "listening");
+        Assert.Contains(manifest.References, r => r.Target == ImportReferenceTargets.RulebookReferencePdf && r.Kind == "reading");
+        Assert.Contains(manifest.References, r => r.Target == ImportReferenceTargets.RulebookReferencePdf && r.Kind == "speaking");
+        Assert.Contains(manifest.References, r => r.Target == ImportReferenceTargets.RulebookReferencePdf && r.Kind == "writing");
+        Assert.Contains(manifest.References, r => r.Target == ImportReferenceTargets.ScoringPolicyBody);
+        Assert.Equal(paths.Length, manifest.Inventory.TotalFiles);
+        Assert.Equal(8, manifest.Inventory.ClassifiedFileCount);
+        Assert.Equal(0, manifest.Inventory.UnclassifiedFileCount);
     }
 
     [Fact]

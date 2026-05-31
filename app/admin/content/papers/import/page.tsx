@@ -2,7 +2,7 @@
 
 import { useRef, useState } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, CloudUpload, Loader2 } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, CloudUpload, FileText, Loader2 } from 'lucide-react';
 import { AdminSettingsLayout } from '@/components/admin/layout/admin-settings-layout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/admin/ui/card';
 import { Input } from '@/components/admin/ui/input';
@@ -15,9 +15,14 @@ import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
 import { useCurrentUser } from '@/lib/hooks/use-current-user';
 import { apiClient } from '@/lib/api';
 import { DEFAULT_CONTENT_SOURCE_PROVENANCE } from '@/lib/content-upload-defaults';
-import { BulkActionBar } from '@/components/ui/bulk-action-bar';
 
 type ToastState = { variant: 'success' | 'error'; message: string } | null;
+
+interface ReadinessIssue {
+  code: string;
+  severity: 'error' | 'warning' | string;
+  message: string;
+}
 
 interface ProposedAsset {
   sourceRelativePath: string;
@@ -35,14 +40,50 @@ interface ProposedPaper {
   cardType: string | null;
   letterType: string | null;
   sourceProvenance: string | null;
+  deliveryModes: string[];
+  officialShape: string;
+  readinessIssues: ReadinessIssue[];
   assets: ProposedAsset[];
+}
+
+interface ProposedReference {
+  proposalId: string;
+  target: string;
+  title: string;
+  sourceRelativePath: string;
+  kind: string | null;
+  professionId: string | null;
+  sharedResourceKind: string | null;
+  templateKey: string | null;
+  sortOrder: number | null;
+  sourceProvenance: string | null;
+  readinessIssues: ReadinessIssue[];
+}
+
+interface ImportInventory {
+  totalFiles: number;
+  classifiedFileCount: number;
+  unclassifiedFileCount: number;
+  filesByExtension: Record<string, number>;
+  filesByTopLevel: Record<string, number>;
 }
 
 interface StagedResponse {
   sessionId: string;
   expiresAt: string;
   papers: ProposedPaper[];
+  references: ProposedReference[];
+  inventory: ImportInventory;
+  readinessIssues: ReadinessIssue[];
   issues: Array<{ relativePath: string; issueCode: string; message: string }>;
+}
+
+function readinessSummary(issues: ReadinessIssue[]) {
+  const errors = issues.filter((issue) => issue.severity === 'error').length;
+  const warnings = issues.filter((issue) => issue.severity !== 'error').length;
+  if (errors > 0) return <Badge variant="danger">{errors} blocker{errors === 1 ? '' : 's'}</Badge>;
+  if (warnings > 0) return <Badge variant="warning">{warnings} warning{warnings === 1 ? '' : 's'}</Badge>;
+  return <Badge variant="success">Ready to commit</Badge>;
 }
 
 export default function BulkImportPage() {
@@ -55,7 +96,6 @@ export default function BulkImportPage() {
   const [provenance, setProvenance] = useState(DEFAULT_CONTENT_SOURCE_PROVENANCE);
   const [committing, setCommitting] = useState(false);
   const [toast, setToast] = useState<ToastState>(null);
-  const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
   const fileRef = useRef<HTMLInputElement>(null);
 
   const breadcrumbs = [
@@ -91,10 +131,13 @@ export default function BulkImportPage() {
       form.set('file', file);
       const data = await apiClient.postForm<StagedResponse>('/v1/admin/imports/zip', form);
       setStaged(data);
-      setApproved(Object.fromEntries(data.papers.map((p) => [p.proposalId, true])));
+      setApproved(Object.fromEntries([
+        ...data.papers.map((p) => [p.proposalId, true] as const),
+        ...data.references.map((r) => [r.proposalId, true] as const),
+      ]));
       setToast({
         variant: 'success',
-        message: `Detected ${data.papers.length} papers from ${file.name}.`,
+        message: `Detected ${data.papers.length} papers and ${data.references.length} references from ${file.name}.`,
       });
     } catch (e) {
       setToast({ variant: 'error', message: (e as Error).message });
@@ -108,19 +151,28 @@ export default function BulkImportPage() {
     if (!staged || !canWriteContent) return;
     setCommitting(true);
     try {
-      const approvals = staged.papers.map((p) => ({
-        proposalId: p.proposalId,
-        approve: Boolean(approved[p.proposalId]),
-        overrideSourceProvenance: provenance.trim() || DEFAULT_CONTENT_SOURCE_PROVENANCE,
-      }));
+      const approvals = [
+        ...staged.papers.map((p) => ({
+          proposalId: p.proposalId,
+          approve: Boolean(approved[p.proposalId]),
+          overrideSourceProvenance: provenance.trim() || DEFAULT_CONTENT_SOURCE_PROVENANCE,
+        })),
+        ...staged.references.map((r) => ({
+          proposalId: r.proposalId,
+          approve: Boolean(approved[r.proposalId]),
+          overrideSourceProvenance: provenance.trim() || DEFAULT_CONTENT_SOURCE_PROVENANCE,
+        })),
+      ];
       const result = await apiClient.post<{
         createdPaperCount: number;
         createdAssetCount: number;
         deduplicatedAssetCount: number;
+        createdReferenceCount: number;
+        warnings: string[];
       }>(`/v1/admin/imports/zip/${staged.sessionId}/commit`, approvals);
       setToast({
         variant: 'success',
-        message: `Created ${result.createdPaperCount} papers and ${result.createdAssetCount} assets (${result.deduplicatedAssetCount} deduplicated).`,
+        message: `Created ${result.createdPaperCount} papers, ${result.createdAssetCount} paper assets, and ${result.createdReferenceCount} references (${result.deduplicatedAssetCount} deduplicated).`,
       });
       setStaged(null);
       setApproved({});
@@ -142,6 +194,7 @@ export default function BulkImportPage() {
     },
     { key: 's', header: 'Subtest', render: (p) => <Badge variant="info">{p.subtestCode}</Badge> },
     { key: 't', header: 'Title', render: (p) => p.title },
+    { key: 'shape', header: 'Official shape', render: (p) => <span className="text-xs text-admin-fg-muted">{p.officialShape}</span> },
     {
       key: 'sc', header: 'Scope', render: (p) => p.appliesToAllProfessions
         ? <Badge variant="muted">All</Badge>
@@ -156,6 +209,26 @@ export default function BulkImportPage() {
         </div>
       ),
     },
+    { key: 'ready', header: 'Readiness', render: (p) => readinessSummary(p.readinessIssues) },
+  ];
+
+  const referenceColumns: Column<ProposedReference>[] = [
+    {
+      key: 'a', header: 'Approve',
+      render: (r) => (
+        <input
+          type="checkbox"
+          checked={approved[r.proposalId] ?? false}
+          onChange={(e) => setApproved({ ...approved, [r.proposalId]: e.target.checked })}
+        />
+      ),
+    },
+    { key: 'target', header: 'Target', render: (r) => <Badge variant="info">{r.target}</Badge> },
+    { key: 'title', header: 'Title', render: (r) => r.title },
+    { key: 'kind', header: 'Kind', render: (r) => r.kind ?? r.sharedResourceKind ?? r.templateKey ?? '-' },
+    { key: 'scope', header: 'Scope', render: (r) => r.professionId ? <Badge variant="info">{r.professionId}</Badge> : <Badge variant="muted">All</Badge> },
+    { key: 'source', header: 'Source', render: (r) => <span className="text-xs text-admin-fg-muted break-all">{r.sourceRelativePath}</span> },
+    { key: 'ready', header: 'Readiness', render: (r) => readinessSummary(r.readinessIssues) },
   ];
 
   return (
@@ -193,10 +266,68 @@ export default function BulkImportPage() {
 
         {staged && (
           <>
+            <div className="grid gap-3 md:grid-cols-4">
+              <Card>
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-admin-fg-muted">
+                    <FileText className="h-4 w-4" /> Files
+                  </div>
+                  <div className="mt-2 text-2xl font-semibold text-admin-fg-strong">{staged.inventory.totalFiles}</div>
+                  <div className="mt-1 text-xs text-admin-fg-muted">{staged.inventory.classifiedFileCount} classified</div>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="p-4">
+                  <div className="text-xs font-medium uppercase tracking-wide text-admin-fg-muted">Papers</div>
+                  <div className="mt-2 text-2xl font-semibold text-admin-fg-strong">{staged.papers.length}</div>
+                  <div className="mt-1 text-xs text-admin-fg-muted">Listening, Reading, Writing, Speaking</div>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="p-4">
+                  <div className="text-xs font-medium uppercase tracking-wide text-admin-fg-muted">References</div>
+                  <div className="mt-2 text-2xl font-semibold text-admin-fg-strong">{staged.references.length}</div>
+                  <div className="mt-1 text-xs text-admin-fg-muted">Rulebooks, scoring, shared resources</div>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-admin-fg-muted">
+                    <AlertTriangle className="h-4 w-4" /> Issues
+                  </div>
+                  <div className="mt-2 text-2xl font-semibold text-admin-fg-strong">{staged.inventory.unclassifiedFileCount}</div>
+                  <div className="mt-1 text-xs text-admin-fg-muted">Need manual review</div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {staged.readinessIssues.length > 0 && (
+              <InlineAlert variant="warning">
+                {staged.readinessIssues.map((issue) => issue.message).join(' ')}
+              </InlineAlert>
+            )}
+
             {staged.issues.length > 0 && (
               <InlineAlert variant="warning">
                 {staged.issues.length} files were not auto-classified. Edit each paper post-import to add them manually.
               </InlineAlert>
+            )}
+
+            {staged.issues.length > 0 && (
+              <Card>
+                <CardHeader><CardTitle>Unclassified files</CardTitle></CardHeader>
+                <CardContent>
+                  <div className="space-y-2">
+                    {staged.issues.map((issue) => (
+                      <div key={`${issue.issueCode}:${issue.relativePath}`} className="rounded-admin border border-admin-border-subtle p-3 text-sm">
+                        <div className="font-medium text-admin-fg-strong">{issue.issueCode}</div>
+                        <div className="mt-1 text-admin-fg-muted break-all">{issue.relativePath}</div>
+                        <div className="mt-1 text-admin-fg-muted">{issue.message}</div>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
             )}
 
             <Card>
@@ -214,15 +345,39 @@ export default function BulkImportPage() {
             <Card>
               <CardHeader><CardTitle>Proposed papers ({staged.papers.length})</CardTitle></CardHeader>
               <CardContent>
-                <DataTable data={staged.papers} columns={columns} keyExtractor={(p) => p.proposalId} selectable selectedKeys={selectedKeys} onSelectionChange={setSelectedKeys} />
-                <BulkActionBar
-                  selectedCount={selectedKeys.size}
-                  onClearSelection={() => setSelectedKeys(new Set())}
-                  actions={[
-                    { key: 'discard', label: 'Discard selected', variant: 'danger', onClick: () => setToast({ variant: 'error', message: 'Bulk discard coming soon.' }) },
-                  ]}
-                />
-                <div className="flex gap-3 mt-4 justify-end">
+                <DataTable data={staged.papers} columns={columns} keyExtractor={(p) => p.proposalId} />
+              </CardContent>
+            </Card>
+
+            {staged.references.length > 0 && (
+              <Card>
+                <CardHeader><CardTitle>Reference targets ({staged.references.length})</CardTitle></CardHeader>
+                <CardContent>
+                  <DataTable data={staged.references} columns={referenceColumns} keyExtractor={(r) => r.proposalId} />
+                </CardContent>
+              </Card>
+            )}
+
+            <Card>
+              <CardHeader><CardTitle>File type inventory</CardTitle></CardHeader>
+              <CardContent>
+                <div className="flex flex-wrap gap-2">
+                  {Object.entries(staged.inventory.filesByExtension).map(([ext, count]) => (
+                    <Badge key={ext} variant="muted">.{ext}: {count}</Badge>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <div className="text-sm font-medium text-admin-fg-strong">Commit reviewed proposals</div>
+                  <div className="mt-1 text-xs text-admin-fg-muted">
+                    Approved targets are created as drafts. Publish gates still require structured authoring and review.
+                  </div>
+                </div>
+                <div className="flex gap-3 justify-end">
                   <Button variant="ghost" onClick={() => { setStaged(null); setApproved({}); }}>Discard</Button>
                   <Button
                     variant="primary"
@@ -231,7 +386,7 @@ export default function BulkImportPage() {
                     loadingText="Committing…"
                     disabled={!provenance.trim() || Object.values(approved).every((v) => !v)}
                   >
-                    Approve selected &amp; commit
+                    Commit approved proposals
                   </Button>
                 </div>
               </CardContent>

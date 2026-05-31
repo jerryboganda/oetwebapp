@@ -1,10 +1,12 @@
 using System.IO.Compression;
 using System.Security.Cryptography;
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using OetLearner.Api.Configuration;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services;
 
 namespace OetLearner.Api.Services.Content;
 
@@ -54,7 +56,15 @@ public sealed record BulkImportCommitResult(
     int CreatedPaperCount,
     int CreatedAssetCount,
     int DeduplicatedAssetCount,
+    int CreatedReferenceCount,
     List<string> Warnings);
+
+internal sealed record BulkImportSessionSnapshot(
+    string SessionId,
+    string AdminId,
+    DateTimeOffset ExpiresAt,
+    ImportManifest Manifest,
+    Dictionary<string, string> RelativeToStagingKey);
 
 public sealed class ContentBulkImportService(
     LearnerDbContext db,
@@ -68,6 +78,7 @@ public sealed class ContentBulkImportService(
     private readonly ContentUploadOptions _opts = options.Value.ContentUpload;
     private static readonly Dictionary<string, BulkImportSession> _sessions = new(StringComparer.Ordinal);
     private static readonly object _sessionLock = new();
+    private const long MaxTextEntryBytes = 2L * 1024 * 1024;
 
     public async Task<BulkImportSession> StagePayloadAsync(
         string adminId, Stream zipStream, string filename, CancellationToken ct)
@@ -115,6 +126,8 @@ public sealed class ContentBulkImportService(
                     if (entry.Length > _opts.MaxZipEntryBytes)
                         throw new InvalidOperationException($"ZIP entry {relativePath} exceeds {_opts.MaxZipEntryBytes} byte limit.");
 
+                    ValidateZipEntrySizeByType(relativePath, entry.Length);
+
                     totalUncompressed += entry.Length;
                     if (totalUncompressed > _opts.MaxZipUncompressedBytes)
                         throw new InvalidOperationException($"ZIP uncompressed size exceeds {_opts.MaxZipUncompressedBytes} byte limit.");
@@ -152,6 +165,7 @@ public sealed class ContentBulkImportService(
             Manifest: manifest,
             RelativeToStagingKey: relativeToStaging);
 
+        await PersistSessionSnapshotAsync(session, ct);
         lock (_sessionLock) { _sessions[sessionId] = session; }
         logger.LogInformation("Bulk import staged {Files} files into {Papers} proposed papers ({Issues} issues).",
             relatives.Count, manifest.Papers.Count, manifest.Issues.Count);
@@ -164,6 +178,7 @@ public sealed class ContentBulkImportService(
     {
         BulkImportSession? session;
         lock (_sessionLock) _sessions.TryGetValue(sessionId, out session);
+        session ??= await TryLoadSessionSnapshotAsync(adminId, sessionId, ct);
         if (session is null || session.AdminId != adminId)
             throw new InvalidOperationException("Bulk import session not found.");
         if (session.ExpiresAt < DateTimeOffset.UtcNow)
@@ -171,7 +186,33 @@ public sealed class ContentBulkImportService(
 
         var approvalByProposal = approvals.ToDictionary(a => a.ProposalId);
         var warnings = new List<string>();
-        int papersCreated = 0, assetsCreated = 0, dedup = 0;
+        int papersCreated = 0, assetsCreated = 0, dedup = 0, referencesCreated = 0;
+        var speakingSharedMediaByKind = new Dictionary<string, (string MediaId, string Title)>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var reference in session.Manifest.References)
+        {
+            if (!approvalByProposal.TryGetValue(reference.ProposalId, out var approval) || !approval.Approve)
+                continue;
+
+            if (!session.RelativeToStagingKey.TryGetValue(reference.SourceRelativePath, out var stagingKey))
+            {
+                warnings.Add($"Missing staged file for {reference.SourceRelativePath}");
+                continue;
+            }
+
+            var title = approval.OverrideTitle ?? reference.Title;
+            var profession = approval.OverrideProfessionId ?? reference.ProfessionId;
+            var (created, mediaId, deduped) = await CommitReferenceAsync(reference, stagingKey, title, profession, adminId, warnings, ct);
+            if (created) referencesCreated++;
+            if (deduped) dedup++;
+            if (created
+                && mediaId is not null
+                && reference.Target == ImportReferenceTargets.SpeakingSharedResource
+                && !string.IsNullOrWhiteSpace(reference.SharedResourceKind))
+            {
+                speakingSharedMediaByKind[reference.SharedResourceKind] = (mediaId, title);
+            }
+        }
 
         foreach (var proposal in session.Manifest.Papers)
         {
@@ -212,6 +253,7 @@ public sealed class ContentBulkImportService(
             papersCreated++;
 
             // Promote each staged file to a MediaAsset, then attach.
+            var displayOrder = 0;
             foreach (var asset in proposal.Assets)
             {
                 if (!session.RelativeToStagingKey.TryGetValue(asset.SourceRelativePath, out var stagingKey))
@@ -225,8 +267,35 @@ public sealed class ContentBulkImportService(
 
                 await paperService.AttachAssetAsync(paper.Id, new ContentPaperAssetAttach(
                     Role: asset.Role, MediaAssetId: mediaId, Part: asset.Part,
-                    Title: asset.SuggestedTitle, DisplayOrder: 0, MakePrimary: true), adminId, ct);
+                    Title: asset.SuggestedTitle, DisplayOrder: displayOrder++, MakePrimary: true), adminId, ct);
                 assetsCreated++;
+            }
+
+            if (proposal.SubtestCode == "speaking")
+            {
+                if (speakingSharedMediaByKind.TryGetValue(SpeakingSharedResourceKinds.AssessmentCriteria, out var criteria))
+                {
+                    await paperService.AttachAssetAsync(paper.Id, new ContentPaperAssetAttach(
+                        Role: PaperAssetRole.AssessmentCriteria,
+                        MediaAssetId: criteria.MediaId,
+                        Part: null,
+                        Title: criteria.Title,
+                        DisplayOrder: displayOrder++,
+                        MakePrimary: true), adminId, ct);
+                    assetsCreated++;
+                }
+
+                if (speakingSharedMediaByKind.TryGetValue(SpeakingSharedResourceKinds.WarmUpQuestions, out var warmUp))
+                {
+                    await paperService.AttachAssetAsync(paper.Id, new ContentPaperAssetAttach(
+                        Role: PaperAssetRole.WarmUpQuestions,
+                        MediaAssetId: warmUp.MediaId,
+                        Part: null,
+                        Title: warmUp.Title,
+                        DisplayOrder: displayOrder++,
+                        MakePrimary: true), adminId, ct);
+                    assetsCreated++;
+                }
             }
         }
 
@@ -238,11 +307,252 @@ public sealed class ContentBulkImportService(
         catch { /* best-effort */ }
         lock (_sessionLock) _sessions.Remove(sessionId);
 
-        return new BulkImportCommitResult(papersCreated, assetsCreated, dedup, warnings);
+        return new BulkImportCommitResult(papersCreated, assetsCreated, dedup, referencesCreated, warnings);
+    }
+
+    private async Task PersistSessionSnapshotAsync(BulkImportSession session, CancellationToken ct)
+    {
+        var snapshot = new BulkImportSessionSnapshot(
+            session.SessionId,
+            session.AdminId,
+            session.ExpiresAt,
+            session.Manifest,
+            new Dictionary<string, string>(session.RelativeToStagingKey, StringComparer.OrdinalIgnoreCase));
+        var key = SessionSnapshotKey(session.AdminId, session.SessionId);
+        await using var stream = await storage.OpenWriteAsync(key, ct);
+        await JsonSerializer.SerializeAsync(stream, snapshot, cancellationToken: ct);
+    }
+
+    private async Task<BulkImportSession?> TryLoadSessionSnapshotAsync(string adminId, string sessionId, CancellationToken ct)
+    {
+        var key = SessionSnapshotKey(adminId, sessionId);
+        if (!storage.Exists(key)) return null;
+        await using var stream = await storage.OpenReadAsync(key, ct);
+        var snapshot = await JsonSerializer.DeserializeAsync<BulkImportSessionSnapshot>(stream, cancellationToken: ct);
+        if (snapshot is null) return null;
+        return new BulkImportSession(
+            snapshot.SessionId,
+            snapshot.AdminId,
+            snapshot.ExpiresAt,
+            snapshot.Manifest,
+            snapshot.RelativeToStagingKey);
+    }
+
+    private string SessionSnapshotKey(string adminId, string sessionId)
+        => $"{_opts.StagingSubpath}/bulk/{adminId}/{sessionId}/__session.json";
+
+    private async Task<(bool Created, string? MediaId, bool Deduplicated)> CommitReferenceAsync(
+        ProposedReference reference,
+        string stagingKey,
+        string title,
+        string? professionId,
+        string adminId,
+        List<string> warnings,
+        CancellationToken ct)
+    {
+        switch (reference.Target)
+        {
+            case ImportReferenceTargets.SpeakingSharedResource:
+                return await CommitSpeakingSharedResourceAsync(reference, stagingKey, title, professionId, adminId, ct);
+            case ImportReferenceTargets.RulebookReferencePdf:
+                return await CommitRulebookReferencePdfAsync(reference, stagingKey, adminId, warnings, ct);
+            case ImportReferenceTargets.ScoringPolicyBody:
+                await CommitScoringPolicyAsync(stagingKey, adminId, ct);
+                return (true, null, false);
+            case ImportReferenceTargets.ResultTemplate:
+                return await CommitResultTemplateAsync(reference, stagingKey, title, professionId, adminId, warnings, ct);
+            default:
+                warnings.Add($"Unknown reference target {reference.Target} for {reference.SourceRelativePath}");
+                return (false, null, false);
+        }
+    }
+
+    private async Task<(bool Created, string? MediaId, bool Deduplicated)> CommitSpeakingSharedResourceAsync(
+        ProposedReference reference,
+        string stagingKey,
+        string title,
+        string? professionId,
+        string adminId,
+        CancellationToken ct)
+    {
+        var (mediaId, deduplicated) = await PromoteToPublishedAsync(stagingKey, reference.SourceRelativePath, adminId, ct);
+        var now = DateTimeOffset.UtcNow;
+        var id = $"sss_{Guid.NewGuid():N}";
+        db.SpeakingSharedResources.Add(new SpeakingSharedResource
+        {
+            Id = id,
+            Kind = reference.SharedResourceKind ?? SpeakingSharedResourceKinds.WarmUpQuestions,
+            Title = title,
+            ProfessionId = professionId,
+            MediaAssetId = mediaId,
+            Status = ContentStatus.Draft,
+            UploadedByUserId = adminId,
+            CreatedAt = now,
+            UpdatedAt = now,
+        });
+        AddAuditEvent("BulkImportSpeakingSharedResourceImported", "SpeakingSharedResource", id, $"kind={reference.SharedResourceKind};media={mediaId}", adminId);
+        await db.SaveChangesAsync(ct);
+        return (true, mediaId, deduplicated);
+    }
+
+    private async Task<(bool Created, string? MediaId, bool Deduplicated)> CommitRulebookReferencePdfAsync(
+        ProposedReference reference,
+        string stagingKey,
+        string adminId,
+        List<string> warnings,
+        CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(reference.Kind) || string.IsNullOrWhiteSpace(reference.ProfessionId))
+        {
+            warnings.Add($"Rulebook reference missing kind/profession: {reference.SourceRelativePath}");
+            return (false, null, false);
+        }
+
+        var published = await db.RulebookVersions
+            .Include(x => x.Sections)
+            .Include(x => x.Rules)
+            .Where(x => x.Kind == reference.Kind && x.Profession == reference.ProfessionId && x.Status == RulebookStatus.Published)
+            .OrderByDescending(x => x.PublishedAt)
+            .FirstOrDefaultAsync(ct);
+        if (published is null)
+        {
+            warnings.Add($"No published rulebook found for {reference.Kind}/{reference.ProfessionId}; skipped reference PDF {reference.SourceRelativePath}.");
+            return (false, null, false);
+        }
+
+        var (mediaId, deduplicated) = await PromoteToPublishedAsync(stagingKey, reference.SourceRelativePath, adminId, ct);
+        var now = DateTimeOffset.UtcNow;
+        var draftId = $"rb_{reference.Kind}_{reference.ProfessionId}_{Guid.NewGuid():N}";
+        db.RulebookVersions.Add(new RulebookVersion
+        {
+            Id = draftId,
+            Kind = published.Kind,
+            Profession = published.Profession,
+            Version = $"{published.Version}-pdf-draft-{now:yyyyMMddHHmmss}",
+            Status = RulebookStatus.Draft,
+            AuthoritySource = published.AuthoritySource,
+            ReferencePdfAssetId = mediaId,
+            CreatedAt = now,
+            UpdatedAt = now,
+            UpdatedByUserId = adminId,
+            Sections = published.Sections.Select(section => new RulebookSectionRow
+            {
+                Id = Guid.NewGuid().ToString("N"),
+                RulebookVersionId = draftId,
+                Code = section.Code,
+                Title = section.Title,
+                OrderIndex = section.OrderIndex,
+            }).ToList(),
+            Rules = published.Rules.Select(rule => new RulebookRuleRow
+            {
+                Id = Guid.NewGuid().ToString("N"),
+                RulebookVersionId = draftId,
+                Code = rule.Code,
+                SectionCode = rule.SectionCode,
+                Title = rule.Title,
+                Body = rule.Body,
+                Severity = rule.Severity,
+                AppliesToJson = rule.AppliesToJson,
+                TurnStage = rule.TurnStage,
+                ExemplarPhrasesJson = rule.ExemplarPhrasesJson,
+                ForbiddenPatternsJson = rule.ForbiddenPatternsJson,
+                CheckId = rule.CheckId,
+                ParamsJson = rule.ParamsJson,
+                ExamplesJson = rule.ExamplesJson,
+                OrderIndex = rule.OrderIndex,
+            }).ToList(),
+        });
+        AddAuditEvent("BulkImportRulebookReferencePdfDraftImported", "RulebookVersion", draftId, $"source={published.Id};media={mediaId}", adminId);
+        await db.SaveChangesAsync(ct);
+        return (true, mediaId, deduplicated);
+    }
+
+    private async Task CommitScoringPolicyAsync(string stagingKey, string adminId, CancellationToken ct)
+    {
+        await using var stream = await storage.OpenReadAsync(stagingKey, ct);
+        using var reader = new StreamReader(stream);
+        var bodyMarkdown = await reader.ReadToEndAsync(ct);
+        var policyJson = ScoringPolicyValidation.CanonicalDefaultPolicyJson;
+        var validationError = ScoringPolicyValidation.ValidateCanonicalPolicyJson(policyJson);
+        if (validationError is not null)
+        {
+            throw new InvalidOperationException(validationError);
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        var id = $"scr_{Guid.NewGuid():N}";
+        db.ScoringPolicies.Add(new ScoringPolicy
+        {
+            Id = id,
+            BodyMarkdown = bodyMarkdown,
+            PolicyJson = policyJson,
+            IsActive = false,
+            UpdatedByUserId = adminId,
+            CreatedAt = now,
+            UpdatedAt = now,
+        });
+        AddAuditEvent("BulkImportScoringPolicyDraftImported", "ScoringPolicy", id, "Inactive scoring policy draft imported from bulk ZIP.", adminId);
+        await db.SaveChangesAsync(ct);
+    }
+
+    private async Task<(bool Created, string? MediaId, bool Deduplicated)> CommitResultTemplateAsync(
+        ProposedReference reference,
+        string stagingKey,
+        string title,
+        string? professionId,
+        string adminId,
+        List<string> warnings,
+        CancellationToken ct)
+    {
+        var (mediaId, deduplicated) = await PromoteToPublishedAsync(stagingKey, reference.SourceRelativePath, adminId, ct);
+        var key = reference.TemplateKey ?? $"real-content-{Guid.NewGuid():N}";
+        if (await db.ResultTemplateAssets.AnyAsync(x => x.TemplateKey == key, ct))
+        {
+            key = $"{key}-{Guid.NewGuid():N}"[..Math.Min(128, key.Length + 33)];
+            warnings.Add($"Result template key already existed; using {key}.");
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        var id = $"rtpl_{Guid.NewGuid():N}";
+        db.ResultTemplateAssets.Add(new ResultTemplateAsset
+        {
+            Id = id,
+            TemplateKey = key,
+            Title = title,
+            ProfessionId = professionId,
+            MediaAssetId = mediaId,
+            IsActive = false,
+            SortOrder = reference.SortOrder ?? 0,
+            UploadedByUserId = adminId,
+            CreatedAt = now,
+            UpdatedAt = now,
+        });
+        AddAuditEvent("BulkImportResultTemplateImported", "ResultTemplateAsset", id, key, adminId);
+        await db.SaveChangesAsync(ct);
+        return (true, mediaId, deduplicated);
+    }
+
+    private void AddAuditEvent(string action, string resourceType, string? resourceId, string? details, string adminId)
+    {
+        db.AuditEvents.Add(new AuditEvent
+        {
+            Id = $"audit-{Guid.NewGuid():N}",
+            OccurredAt = DateTimeOffset.UtcNow,
+            ActorId = adminId,
+            ActorName = adminId,
+            Action = action,
+            ResourceType = resourceType,
+            ResourceId = resourceId,
+            Details = details,
+        });
     }
 
     private async Task<(string mediaId, bool deduplicated)> PromoteToPublishedAsync(
         string stagingKey, ProposedAsset asset, string adminId, CancellationToken ct)
+        => await PromoteToPublishedAsync(stagingKey, asset.SourceRelativePath, adminId, ct);
+
+    private async Task<(string mediaId, bool deduplicated)> PromoteToPublishedAsync(
+        string stagingKey, string sourceRelativePath, string adminId, CancellationToken ct)
     {
         // Stream-hash the staged file.
         string sha;
@@ -267,7 +577,7 @@ public sealed class ContentBulkImportService(
         var existing = await db.MediaAssets.FirstOrDefaultAsync(m => m.Sha256 == sha, ct);
         if (existing is not null) return (existing.Id, deduplicated: true);
 
-        var ext = Path.GetExtension(asset.SourceRelativePath).TrimStart('.').ToLowerInvariant();
+        var ext = Path.GetExtension(sourceRelativePath).TrimStart('.').ToLowerInvariant();
         var publishedKey = ContentAddressed.PublishedKey(_opts.PublishedSubpath, sha, ext);
         if (!storage.Exists(publishedKey))
             storage.Move(stagingKey, publishedKey, overwrite: false);
@@ -277,7 +587,7 @@ public sealed class ContentBulkImportService(
         var media = new MediaAsset
         {
             Id = mediaId,
-            OriginalFilename = Path.GetFileName(asset.SourceRelativePath),
+            OriginalFilename = Path.GetFileName(sourceRelativePath),
             MimeType = mime,
             Format = ext,
             SizeBytes = size,
@@ -303,6 +613,7 @@ public sealed class ContentBulkImportService(
         "ogg" => "audio/ogg",
         "jpg" or "jpeg" => "image/jpeg",
         "png" => "image/png",
+        "txt" => "text/plain",
         _ => "application/octet-stream",
     };
 
@@ -342,6 +653,22 @@ public sealed class ContentBulkImportService(
         return total;
     }
 
+    private void ValidateZipEntrySizeByType(string relativePath, long length)
+    {
+        var ext = Path.GetExtension(relativePath).TrimStart('.').ToLowerInvariant();
+        var limit = ext switch
+        {
+            "pdf" => _opts.MaxPdfBytes,
+            "mp3" or "m4a" or "mp4" or "wav" or "ogg" => _opts.MaxAudioBytes,
+            "jpg" or "jpeg" or "png" or "webp" => _opts.MaxImageBytes,
+            "txt" => MaxTextEntryBytes,
+            _ => (long?)null,
+        };
+
+        if (limit.HasValue && length > limit.Value)
+            throw new InvalidOperationException($"ZIP entry {relativePath} exceeds the {ext} upload limit of {limit.Value} bytes.");
+    }
+
     private static void ValidateZipEntryMagic(string relativePath, ReadOnlySpan<byte> header, long length)
     {
         if (length <= 0)
@@ -359,6 +686,7 @@ public sealed class ContentBulkImportService(
                 && header[0] == 0x89 && header[1] == 0x50 && header[2] == 0x4E && header[3] == 0x47
                 && header[4] == 0x0D && header[5] == 0x0A && header[6] == 0x1A && header[7] == 0x0A,
             "jpg" or "jpeg" => header.Length >= 3 && header[0] == 0xFF && header[1] == 0xD8 && header[2] == 0xFF,
+            "txt" => !header.Contains((byte)0x00),
             _ => false,
         };
 

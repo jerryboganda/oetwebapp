@@ -900,8 +900,15 @@ public sealed class ReadingStructureService : IReadingStructureService
                             Message: $"Part A question {q.DisplayOrder} references a text outside Part A.",
                             TargetId: q.Id));
                     }
-                    var expectedType = ExpectedPartAQuestionType(q.DisplayOrder);
-                    if (expectedType is null)
+                    // Part A type layout — relaxed to match real OET paper
+                    // variation. Sentence-completion always occupies Q15-20; Q1-14
+                    // hold the matching-text-reference block followed by the
+                    // short-answer block. The matching/short boundary varies
+                    // between real papers (6 or 7 matching), so we validate the
+                    // BLOCKS, not a fixed per-position type. Accepted synonyms ARE
+                    // permitted in Part A because official answer keys list real
+                    // spelling variants (e.g. neuroischemic / neuroischaemic).
+                    if (q.DisplayOrder is < 1 or > 20)
                     {
                         issues.Add(new(
                             Code: "part_A_question_order",
@@ -909,21 +916,19 @@ public sealed class ReadingStructureService : IReadingStructureService
                             Message: $"Part A question {q.DisplayOrder} is outside the official 1-20 range.",
                             TargetId: q.Id));
                     }
-                    else if (q.QuestionType != expectedType)
+                    else
                     {
-                        issues.Add(new(
-                            Code: "part_A_question_sequence",
-                            Severity: "error",
-                            Message: $"Part A question {q.DisplayOrder} must be {expectedType}, not {q.QuestionType}.",
-                            TargetId: q.Id));
-                    }
-                    if (!string.IsNullOrWhiteSpace(q.AcceptedSynonymsJson))
-                    {
-                        issues.Add(new(
-                            Code: "part_A_synonyms_forbidden",
-                            Severity: "error",
-                            Message: $"Part A question {q.DisplayOrder} must not define accepted synonyms; strict marking uses the authored answer only.",
-                            TargetId: q.Id));
+                        var blockOk = q.DisplayOrder <= 14
+                            ? q.QuestionType is ReadingQuestionType.MatchingTextReference or ReadingQuestionType.ShortAnswer
+                            : q.QuestionType is ReadingQuestionType.SentenceCompletion;
+                        if (!blockOk)
+                        {
+                            issues.Add(new(
+                                Code: "part_A_question_sequence",
+                                Severity: "error",
+                                Message: $"Part A question {q.DisplayOrder}: expected matching or short-answer in Q1-14 and sentence-completion in Q15-20, got {q.QuestionType}.",
+                                TargetId: q.Id));
+                        }
                     }
                 }
                 try

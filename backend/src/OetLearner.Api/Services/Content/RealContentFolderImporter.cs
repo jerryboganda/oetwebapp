@@ -555,7 +555,24 @@ public sealed class RealContentFolderImporter
 
         var firstSegment = normalized[..slash];
         var compact = Regex.Replace(firstSegment, "[^a-zA-Z0-9]", string.Empty).ToLowerInvariant();
-        return compact is "projectrealcontent" ? normalized[(slash + 1)..] : normalized;
+        if (compact is "projectrealcontent") return normalized[(slash + 1)..];
+
+        var remainder = normalized[(slash + 1)..];
+        var nextSlash = remainder.IndexOf('/');
+        var nextSegment = nextSlash >= 0 ? remainder[..nextSlash] : remainder;
+        return IsKnownImportRoot(nextSegment) ? remainder : normalized;
+    }
+
+    private static bool IsKnownImportRoot(string segment)
+    {
+        var lower = segment.ToLowerInvariant();
+        return lower.Contains("listening")
+            || lower.Contains("reading")
+            || lower.Contains("writing")
+            || lower.Contains("speaking")
+            || lower.Contains("scoring")
+            || lower.Contains("result")
+            || lower.Contains("table format");
     }
 
     private async Task<string?> ValidateEntryBeforeStagingAsync(ZipArchiveEntry entry, string sourcePath, CancellationToken ct)
@@ -796,20 +813,28 @@ public sealed class RealContentFolderImporter
         AddAuditEvent(adminId, "RealContentPaperImported", "ContentPaper", paperId, $"subtest={paper.SubtestCode};title={paper.Title}");
 
         var order = 0;
+        var primarySeen = new HashSet<string>();
         foreach (var a in p.Assets)
         {
             if (a.StagedStorageKey is null) { errors.Add($"Asset not staged: {a.SourcePath}"); continue; }
             var (mediaId, _, _) = await EnsureMediaAssetAsync(adminId, new RealContentProposal { SourcePath = a.SourcePath }, a.StagedStorageKey, ct);
+            var role = Enum.Parse<PaperAssetRole>(a.Role);
+            // Mark the first asset of EACH (role, part) as primary so publish
+            // gates that require a primary asset per role (e.g. reading needs a
+            // primary QuestionPaper AND AnswerKey) are satisfied. The unique
+            // index is on (PaperId, Role, Part, IsPrimary), so distinct roles
+            // each get their own primary without collision.
+            var isPrimary = primarySeen.Add($"{role}|{a.Part}");
             _db.Set<ContentPaperAsset>().Add(new ContentPaperAsset
             {
                 Id = Guid.NewGuid().ToString("N"),
                 PaperId = paperId,
-                Role = Enum.Parse<PaperAssetRole>(a.Role),
+                Role = role,
                 Part = a.Part,
                 MediaAssetId = mediaId,
                 Title = a.OriginalFilename ?? a.Role,
                 DisplayOrder = order++,
-                IsPrimary = order == 1,
+                IsPrimary = isPrimary,
                 CreatedAt = now,
             });
         }

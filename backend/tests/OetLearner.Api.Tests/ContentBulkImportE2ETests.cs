@@ -75,7 +75,15 @@ public class ContentBulkImportE2ETests
             Add("Writing_/Writing 3 ( Urgent Referral )/Leo Bennett - Urgent Referral.pdf", "W3-CN");
 
             // Speaking — examination card (medicine)
+            Add("Speaking_/Speaking Assessment Criteria  ( IMPORTANT NOTE = same for all professions ).pdf", "S-CRITERIA");
+            Add("Speaking_/Speaking Intro Questions - Warm Up Questions - ( IMPORTANT NOTE = same for all professions ).pdf", "S-WARMUP");
             Add("Speaking_/Card 4 ( Examination Card )_ MOST IMPORTANT TYPE/4.pdf", "S4");
+
+            // Canonical references — scoring + rulebook PDFs are staged as
+            // reviewable drafts; they do not mutate active scoring/rulebook policy.
+            Add("Scoring System.txt", "# Scoring\nListening/Reading 30 of 42 equals 350.");
+            Add("Writing_/Writing RuleBook ( Medicine only )/OET_Writing_Rulebook_FINAL ( For Medicine Only ).pdf", "W-RULEBOOK");
+            Add("Speaking_/Speaking Rulebook ( Medicine Only )/OET_Speaking_Rulebook ( For Medicine only ).pdf", "S-RULEBOOK");
 
             // Duplicate content: an identical Listening audio file elsewhere,
             // SHOULD dedup to the same MediaAsset.
@@ -95,9 +103,53 @@ public class ContentBulkImportE2ETests
         {
             ".pdf" => Encoding.ASCII.GetBytes("%PDF-1.4\n"),
             ".mp3" => Encoding.ASCII.GetBytes("ID3"),
+            ".txt" => Array.Empty<byte>(),
             _ => Array.Empty<byte>(),
         };
         return prefix.Concat(body).ToArray();
+    }
+
+    private static void SeedPublishedRulebook(LearnerDbContext db, string kind, string profession)
+    {
+        var id = $"rb-{kind}-{profession}-published";
+        db.RulebookVersions.Add(new RulebookVersion
+        {
+            Id = id,
+            Kind = kind,
+            Profession = profession,
+            Version = "1.0.0",
+            Status = RulebookStatus.Published,
+            AuthoritySource = "Test canonical rulebook",
+            CreatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow,
+            PublishedAt = DateTimeOffset.UtcNow,
+            Sections =
+            {
+                new RulebookSectionRow
+                {
+                    Id = $"section-{id}",
+                    RulebookVersionId = id,
+                    Code = "01",
+                    Title = "Core rules",
+                    OrderIndex = 1,
+                }
+            },
+            Rules =
+            {
+                new RulebookRuleRow
+                {
+                    Id = $"rule-{id}",
+                    RulebookVersionId = id,
+                    Code = "R01",
+                    SectionCode = "01",
+                    Title = "Core rule",
+                    Body = "Use canonical OET format.",
+                    Severity = "major",
+                    AppliesToJson = "\"all\"",
+                    OrderIndex = 1,
+                }
+            },
+        });
     }
 
     private static Stream BuildTinyZip(params (string Path, string Content)[] entries)
@@ -135,6 +187,9 @@ public class ContentBulkImportE2ETests
     public async Task Full_pipeline_creates_papers_assets_and_dedupes_identical_content()
     {
         var (db, storage, svc, _, _) = Build();
+        SeedPublishedRulebook(db, "writing", "medicine");
+        SeedPublishedRulebook(db, "speaking", "medicine");
+        await db.SaveChangesAsync();
 
         // ── 1. Stage: unzip + parse into a manifest ────────────────────────
         await using var zip = BuildRealShapedZip();
@@ -144,6 +199,13 @@ public class ContentBulkImportE2ETests
         Assert.NotEmpty(session.Manifest.Papers);
         // 2 Listening, 1 Reading, 2 Writing, 1 Speaking = 6 proposed papers
         Assert.Equal(6, session.Manifest.Papers.Count);
+        Assert.Equal(5, session.Manifest.References.Count);
+        Assert.Contains(session.Manifest.References, r => r.Target == ImportReferenceTargets.SpeakingSharedResource && r.SharedResourceKind == SpeakingSharedResourceKinds.AssessmentCriteria);
+        Assert.Contains(session.Manifest.References, r => r.Target == ImportReferenceTargets.SpeakingSharedResource && r.SharedResourceKind == SpeakingSharedResourceKinds.WarmUpQuestions);
+        Assert.Contains(session.Manifest.References, r => r.Target == ImportReferenceTargets.RulebookReferencePdf && r.Kind == "writing");
+        Assert.Contains(session.Manifest.References, r => r.Target == ImportReferenceTargets.RulebookReferencePdf && r.Kind == "speaking");
+        Assert.Contains(session.Manifest.References, r => r.Target == ImportReferenceTargets.ScoringPolicyBody);
+        Assert.Equal(19, session.Manifest.Inventory.TotalFiles);
 
         // Listening Sample 1 must have all 4 roles detected
         var l1 = session.Manifest.Papers.First(p => p.Title.Contains("Listening Sample 1"));
@@ -178,13 +240,22 @@ public class ContentBulkImportE2ETests
                 OverrideCardType: null,
                 OverrideLetterType: null,
                 OverrideSourceProvenance: DefaultSourceProvenance))
+            .Concat(session.Manifest.References.Select(r => new BulkImportApproval(
+                r.ProposalId, Approve: true,
+                OverrideTitle: null,
+                OverrideProfessionId: null,
+                OverrideAppliesToAllProfessions: null,
+                OverrideCardType: null,
+                OverrideLetterType: null,
+                OverrideSourceProvenance: DefaultSourceProvenance)))
             .ToList();
 
         var result = await svc.CommitAsync("admin-1", session.SessionId, approvals, default);
 
         Assert.Equal(6, result.CreatedPaperCount);
-        // 4 (L1) + 2 (R1) + 2 (W1) + 1 (W3) + 1 (S4) + 4 (L2) = 14 assets
-        Assert.Equal(14, result.CreatedAssetCount);
+        Assert.Equal(5, result.CreatedReferenceCount);
+        // 4 (L1) + 2 (R1) + 2 (W1) + 1 (W3) + 3 (S4 role-card + shared links) + 4 (L2) = 16 paper assets
+        Assert.Equal(16, result.CreatedAssetCount);
         // The duplicate audio file should have deduplicated to the same MediaAsset
         Assert.True(result.DeduplicatedAssetCount >= 1,
             $"Expected at least 1 deduplicated asset, got {result.DeduplicatedAssetCount}");
@@ -218,9 +289,24 @@ public class ContentBulkImportE2ETests
         // Staging is cleaned
         Assert.False(storage.Exists($"uploads/staging/bulk/admin-1/{session.SessionId}/__source.zip"));
 
-        // Every paper asset marked IsPrimary=true (attachment default)
+        var s4Db = papers.First(p => p.Title.Contains("Card 4"));
+        Assert.Contains(s4Db.Assets, a => a.Role == PaperAssetRole.RoleCard && a.IsPrimary);
+        Assert.Contains(s4Db.Assets, a => a.Role == PaperAssetRole.AssessmentCriteria && a.IsPrimary);
+        Assert.Contains(s4Db.Assets, a => a.Role == PaperAssetRole.WarmUpQuestions && a.IsPrimary);
+
+        Assert.Equal(2, await db.SpeakingSharedResources.CountAsync());
+        Assert.Contains(await db.SpeakingSharedResources.ToListAsync(), row => row.Kind == SpeakingSharedResourceKinds.AssessmentCriteria);
+        Assert.Contains(await db.SpeakingSharedResources.ToListAsync(), row => row.Kind == SpeakingSharedResourceKinds.WarmUpQuestions);
+        Assert.Equal(1, await db.ScoringPolicies.CountAsync());
+        Assert.False(await db.ScoringPolicies.Select(p => p.IsActive).SingleAsync());
+        Assert.Equal(4, await db.RulebookVersions.CountAsync());
+        Assert.Equal(2, await db.RulebookVersions.CountAsync(r => r.Status == RulebookStatus.Draft && r.ReferencePdfAssetId != null));
+
+        // Every paper asset slot marked primary once per role/part.
         var paperAssets = await db.ContentPaperAssets.ToListAsync();
-        Assert.All(paperAssets, a => Assert.True(a.IsPrimary));
+        Assert.All(
+            paperAssets.GroupBy(a => new { a.PaperId, a.Role, a.Part }),
+            group => Assert.Equal(1, group.Count(a => a.IsPrimary)));
 
         // Audit trail: one ContentPaperCreated + one ContentPaperAssetAttached per event
         var audit = await db.AuditEvents.Where(e => e.ResourceType == "ContentPaper").ToListAsync();
@@ -318,6 +404,23 @@ public class ContentBulkImportE2ETests
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
             svc.StagePayloadAsync("admin-1", zip, "oversize.zip", default));
 
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Stage_rejects_zip_entry_over_media_type_limit()
+    {
+        var (db, _, svc, _, _) = Build(new ContentUploadOptions
+        {
+            MaxZipEntryBytes = 10_000,
+            MaxPdfBytes = 10,
+        });
+        await using var zip = BuildTinyZip(("Listening/Listening Sample 1/Listening Sample 1 Question-Paper.pdf", "%PDF-1.4\nthis pdf is too large"));
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            svc.StagePayloadAsync("admin-1", zip, "oversize-type.zip", default));
+
+        Assert.Contains("pdf upload limit", ex.Message);
         await db.DisposeAsync();
     }
 

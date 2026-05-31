@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using System.Text.Json;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.EntityFrameworkCore;
@@ -18,6 +19,8 @@ namespace OetLearner.Api.Endpoints;
 /// </summary>
 public static class ContentPapersAdminEndpoints
 {
+    private const long BulkZipRequestLimitBytes = 1024L * 1024 * 1024;
+
     public static IEndpointRouteBuilder MapContentPapersAdminEndpoints(this IEndpointRouteBuilder app)
     {
         var group = app.MapGroup("/v1/admin/papers")
@@ -401,7 +404,10 @@ public static class ContentPapersAdminEndpoints
             var session = await svc.UploadPartAsync(adminId, uploadId, partNumber, http.Request.Body, ct);
             return Results.Ok(new { session.PartsReceived, session.ReceivedBytes, session.State });
         })
-        .DisableAntiforgery();
+        .DisableAntiforgery()
+        .WithMetadata(
+            new RequestSizeLimitAttribute(BulkZipRequestLimitBytes),
+            new RequestFormLimitsAttribute { MultipartBodyLengthLimit = BulkZipRequestLimitBytes });
 
         uploads.MapPost("/{uploadId}/complete", async (
             string uploadId, HttpContext http, IChunkedUploadService svc, CancellationToken ct) =>
@@ -443,12 +449,31 @@ public static class ContentPapersAdminEndpoints
                     p.ProposalId, p.SubtestCode, p.Title,
                     p.ProfessionId, p.AppliesToAllProfessions,
                     p.CardType, p.LetterType, p.SourceProvenance,
+                    p.DeliveryModes,
+                    p.OfficialShape,
+                    readinessIssues = p.ReadinessIssues.Select(i => new { i.Code, i.Severity, i.Message }),
                     assets = p.Assets.Select(a => new
                     {
                         a.SourceRelativePath, role = a.Role.ToString(),
                         a.Part, a.SuggestedTitle,
                     }),
                 }),
+                references = session.Manifest.References.Select(r => new
+                {
+                    r.ProposalId,
+                    r.Target,
+                    r.Title,
+                    r.SourceRelativePath,
+                    r.Kind,
+                    r.ProfessionId,
+                    r.SharedResourceKind,
+                    r.TemplateKey,
+                    r.SortOrder,
+                    r.SourceProvenance,
+                    readinessIssues = r.ReadinessIssues.Select(i => new { i.Code, i.Severity, i.Message }),
+                }),
+                inventory = session.Manifest.Inventory,
+                readinessIssues = session.Manifest.ReadinessIssues.Select(i => new { i.Code, i.Severity, i.Message }),
                 issues = session.Manifest.Issues,
             });
         })
