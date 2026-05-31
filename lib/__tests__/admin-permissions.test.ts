@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { AdminPermission, hasPermission, sidebarPermissionMap } from '../admin-permissions';
+import {
+  AdminPermission,
+  canAccessAdminRoute,
+  getAdminRoutePermissions,
+  hasPermission,
+  sidebarPermissionMap,
+} from '../admin-permissions';
 
 describe('hasPermission', () => {
   it('returns false for null/undefined permissions', () => {
@@ -62,6 +68,18 @@ describe('sidebarPermissionMap', () => {
     expect(sidebarPermissionMap['/admin/content/library']).toEqual([AdminPermission.ContentRead]);
   });
 
+  it('keeps OET subtest hubs mapped to their workspace permissions', () => {
+    expect(sidebarPermissionMap['/admin/content/reading']).toEqual([AdminPermission.ContentRead]);
+    expect(sidebarPermissionMap['/admin/content/listening']).toEqual([AdminPermission.ContentRead]);
+    expect(sidebarPermissionMap['/admin/writing']).toEqual([AdminPermission.ContentRead]);
+    expect(sidebarPermissionMap['/admin/speaking']).toEqual([
+      AdminPermission.ContentRead,
+      AdminPermission.ReviewOps,
+      AdminPermission.QualityAnalytics,
+      AdminPermission.ContentPublish,
+    ]);
+  });
+
   it('keeps consolidated content hub child workflows mapped to granular permissions', () => {
     expect(sidebarPermissionMap['/admin/content/import']).toEqual([AdminPermission.ContentWrite]);
     expect(sidebarPermissionMap['/admin/content/papers/import']).toEqual([AdminPermission.ContentWrite]);
@@ -113,5 +131,13 @@ describe('sidebarPermissionMap', () => {
         expect(allPerms).toContain(p);
       }
     }
+  });
+});
+
+describe('admin route permissions', () => {
+  it('requires manage_permissions for the admin-management users tab', () => {
+    expect(getAdminRoutePermissions('/admin/users?tab=admins')).toEqual([AdminPermission.ManagePermissions]);
+    expect(canAccessAdminRoute([AdminPermission.UsersRead], '/admin/users?tab=admins')).toBe(false);
+    expect(canAccessAdminRoute([AdminPermission.ManagePermissions], '/admin/users?tab=admins')).toBe(true);
   });
 });

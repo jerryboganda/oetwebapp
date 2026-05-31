@@ -151,4 +151,34 @@ describe('AdminLayout', () => {
     expect(screen.getByText('Admin permission required')).toBeInTheDocument();
     expect(screen.queryByText('Billing workspace')).not.toBeInTheDocument();
   });
+
+  it('blocks the admin-management users tab without manage_permissions', () => {
+    mockUseAuth.mockReturnValue({
+      loading: false,
+      user: {
+        userId: 'admin-3',
+        email: 'users-reader@test.com',
+        role: 'admin',
+        displayName: 'Users Reader',
+        isEmailVerified: true,
+        isAuthenticatorEnabled: false,
+        requiresEmailVerification: false,
+        requiresMfa: false,
+        emailVerifiedAt: null,
+        authenticatorEnabledAt: null,
+        adminPermissions: [AdminPermission.UsersRead],
+      },
+    });
+
+    renderWithRouter(
+      <AdminLayout>
+        <div>Admin management tab</div>
+      </AdminLayout>,
+      { pathname: '/admin/users', searchParams: new URLSearchParams({ tab: 'admins' }) },
+    );
+
+    expect(screen.getByText('Admin permission required')).toBeInTheDocument();
+    expect(screen.getByText(`Required: ${AdminPermission.ManagePermissions}`)).toBeInTheDocument();
+    expect(screen.queryByText('Admin management tab')).not.toBeInTheDocument();
+  });
 });
