@@ -324,6 +324,9 @@ export default function AdminReadingPaperOverviewPage() {
                   <Button asChild variant="secondary" size="sm" startIcon={<Eye className="h-4 w-4" />}>
                     <Link href={`/admin/content/reading/${paperId}/preview`}>Preview as student</Link>
                   </Button>
+                  <Button asChild variant="secondary" size="sm" startIcon={<BookOpen className="h-4 w-4" />}>
+                    <Link href={`/admin/content/reading/${paperId}/extractions`}>Structure review</Link>
+                  </Button>
                   <Button
                     variant="secondary"
                     size="sm"
