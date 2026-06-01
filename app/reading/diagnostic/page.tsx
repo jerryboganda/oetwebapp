@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/auth-context';
+import { useReadingProfile } from '@/hooks/useReadingProfile';
 import {
   getDiagnosticQuestions,
   startDiagnostic,
@@ -68,6 +69,7 @@ function LoadingSpinner({ label }: { label: string }) {
 
 export default function DiagnosticPage() {
   const { isAuthenticated, loading: authLoading } = useAuth();
+  const { profile, isLoading: profileLoading } = useReadingProfile();
   const router = useRouter();
 
   const [flowState, setFlowState] = useState<FlowState>('brief');
@@ -86,6 +88,14 @@ export default function DiagnosticPage() {
       router.replace('/sign-in');
     }
   }, [authLoading, isAuthenticated, router]);
+
+  // Learners who have not completed onboarding should be routed back to
+  // profile setup before they can start or submit the diagnostic.
+  useEffect(() => {
+    if (!authLoading && !profileLoading && profile?.currentStage === 'onboarding') {
+      router.replace('/reading/profile-setup');
+    }
+  }, [authLoading, profile, profileLoading, router]);
 
   // Timer while testing
   useEffect(() => {
@@ -164,6 +174,16 @@ export default function DiagnosticPage() {
     return (
       <div className="flex min-h-screen items-center justify-center">
         <LoadingSpinner label="Loading…" />
+      </div>
+    );
+  }
+
+  if (profileLoading || profile?.currentStage === 'onboarding') {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <LoadingSpinner
+          label={profile?.currentStage === 'onboarding' ? 'Redirecting to profile setup…' : 'Loading your reading profile…'}
+        />
       </div>
     );
   }
