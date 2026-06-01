@@ -31,7 +31,7 @@ function resolveExecutablePath() {
 
   const executablePath = candidateExecutablePaths().find((candidatePath) => fs.existsSync(candidatePath));
   if (!executablePath) {
-    throw new Error('Packaged desktop executable was not found. Run npm run desktop:dist first or set ELECTRON_EXECUTABLE_PATH.');
+    throw new Error('Packaged desktop executable was not found. Run pnpm run desktop:dist first or set ELECTRON_EXECUTABLE_PATH.');
   }
 
   return executablePath;
@@ -39,10 +39,10 @@ function resolveExecutablePath() {
 
 function main() {
   const executablePath = resolveExecutablePath();
-  const command = process.platform === 'win32' ? 'cmd.exe' : 'npx';
+  const command = process.platform === 'win32' ? 'cmd.exe' : 'pnpm';
   const args = process.platform === 'win32'
-    ? ['/c', 'npx', 'playwright', 'test', '-c', 'playwright.desktop.config.ts', 'tests/e2e/desktop/electron-packaged-smoke.spec.ts', ...process.argv.slice(2)]
-    : ['playwright', 'test', '-c', 'playwright.desktop.config.ts', 'tests/e2e/desktop/electron-packaged-smoke.spec.ts', ...process.argv.slice(2)];
+    ? ['/c', 'pnpm', 'exec', 'playwright', 'test', '-c', 'playwright.desktop.config.ts', 'tests/e2e/desktop/electron-packaged-smoke.spec.ts', ...process.argv.slice(2)]
+    : ['exec', 'playwright', 'test', '-c', 'playwright.desktop.config.ts', 'tests/e2e/desktop/electron-packaged-smoke.spec.ts', ...process.argv.slice(2)];
 
   const result = spawnSync(command, args, {
     cwd: path.join(__dirname, '..'),

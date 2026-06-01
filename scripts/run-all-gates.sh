@@ -47,11 +47,11 @@ else
 fi
 
 echo "=== TSC ==="
-npx tsc --noEmit > /tmp/g_tsc.log 2>&1
+pnpm exec tsc --noEmit > /tmp/g_tsc.log 2>&1
 echo "TSC_EXIT=$?" >> /tmp/g_tsc.log
 
 echo "=== LINT ==="
-npm run lint > /tmp/g_lint.log 2>&1
+pnpm run lint > /tmp/g_lint.log 2>&1
 echo "LINT_EXIT=$?" >> /tmp/g_lint.log
 
 echo "=== DONE ==="

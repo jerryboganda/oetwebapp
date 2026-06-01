@@ -14,8 +14,8 @@
  *  5. Auto-generated artefacts (.next/, node_modules/, dist/, coverage/).
  *
  * Usage:
- *   npx ts-prune -p tsconfig.json | node scripts/ts-prune-filter.mjs
- *   npm run unused:scan
+ *   pnpm exec ts-prune -p tsconfig.json | node scripts/ts-prune-filter.mjs
+ *   pnpm run unused:scan
  *
  * Exit code:
  *   0  -> no actionable unused exports

@@ -18,16 +18,16 @@
 #   bash scripts/install-admin-deps.sh
 #
 # Notes
-#   - Idempotent: re-running is safe; npm will no-op if versions are already
+#   - Idempotent: re-running is safe; pnpm will no-op if versions are already
 #     satisfied.
-#   - Pinned with caret (^) ranges via npm's default — adjust here if you
+#   - Pinned with caret (^) ranges via pnpm's default — adjust here if you
 #     need exact versions.
 # ============================================================================
 set -euo pipefail
 
 echo "==> Installing admin redesign dependencies..."
 
-npm install --save \
+pnpm add \
   @radix-ui/react-dialog \
   @radix-ui/react-alert-dialog \
   @radix-ui/react-dropdown-menu \
@@ -48,4 +48,4 @@ npm install --save \
   cmdk \
   @tanstack/react-table
 
-echo "==> Done. Restart the dev server (npm run dev) for the new packages to be picked up."
+echo "==> Done. Restart the dev server (pnpm run dev) for the new packages to be picked up."

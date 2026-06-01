@@ -358,12 +358,12 @@ function Ensure-NodeDependencies {
     return
   }
 
-  Write-Warn "node_modules is missing. Installing from package-lock.json with npm ci."
+  Write-Warn "node_modules is missing. Installing from pnpm-lock.yaml with pnpm install."
   Push-Location $ProjectRoot
   try {
-    cmd /c npm ci
+    cmd /c pnpm install --frozen-lockfile
     if ($LASTEXITCODE -ne 0) {
-      throw "npm ci failed with exit code $LASTEXITCODE."
+      throw "pnpm install failed with exit code $LASTEXITCODE."
     }
   } finally {
     Pop-Location
@@ -462,7 +462,7 @@ try {
 
 Write-Step "Checking required tools"
 Assert-Command -Name 'node' -InstallHint 'Install Node.js and retry.'
-Assert-Command -Name 'npm' -InstallHint 'Install npm and retry.'
+Assert-Command -Name 'pnpm' -InstallHint 'Install pnpm and retry.'
 Assert-Command -Name 'dotnet' -InstallHint 'Install the .NET SDK and retry.'
 
 if ($ValidateOnly) {
@@ -483,7 +483,7 @@ Write-Step "Starting backend API"
 if (Test-HttpOk -Url 'http://localhost:5198/health' -TimeoutSeconds 5) {
   Write-Ok "Backend is already running on http://localhost:5198."
 } else {
-  Start-LocalProcess -Name 'Backend API' -Command 'cmd /c npm run backend:run' -LogPath (Join-Path $logDir 'backend.log') -WorkingDirectory $projectRoot
+  Start-LocalProcess -Name 'Backend API' -Command 'cmd /c pnpm run backend:run' -LogPath (Join-Path $logDir 'backend.log') -WorkingDirectory $projectRoot
 }
 Wait-HttpOk -Url 'http://localhost:5198/health' -TimeoutSeconds 180
 
@@ -491,7 +491,7 @@ Write-Step "Starting frontend"
 if (Test-HttpOk -Url 'http://localhost:3000/sign-in' -TimeoutSeconds 5) {
   Write-Ok "Frontend is already running on http://localhost:3000."
 } else {
-  Start-LocalProcess -Name 'Frontend web app' -Command 'cmd /c npm run dev' -LogPath (Join-Path $logDir 'frontend.log') -WorkingDirectory $projectRoot
+  Start-LocalProcess -Name 'Frontend web app' -Command 'cmd /c pnpm run dev' -LogPath (Join-Path $logDir 'frontend.log') -WorkingDirectory $projectRoot
 }
 Wait-HttpOk -Url 'http://localhost:3000/sign-in' -TimeoutSeconds 180
 

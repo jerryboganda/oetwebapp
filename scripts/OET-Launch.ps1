@@ -164,7 +164,7 @@ if (-not $backendAlive) {
     foreach ($key in $aiEnvVars.Keys) {
         [void]$runnerLines.Add("set $key=$($aiEnvVars[$key])")
     }
-    [void]$runnerLines.Add("npm run backend:run > ""$backendLog"" 2>&1")
+    [void]$runnerLines.Add("pnpm run backend:run > ""$backendLog"" 2>&1")
 
     $runnerPath = Join-Path $runnerDir 'backend-api.cmd'
     Set-Content -LiteralPath $runnerPath -Value ($runnerLines -join "`r`n") -Encoding ASCII
@@ -231,7 +231,7 @@ if (-not $frontendAlive) {
     [void]$fRunnerLines.Add('set NEXT_PUBLIC_API_BASE_URL=http://localhost:5198')
     [void]$fRunnerLines.Add('set APP_URL=http://localhost:3000')
     [void]$fRunnerLines.Add('set API_PROXY_TARGET_URL=http://127.0.0.1:5198')
-    [void]$fRunnerLines.Add("npx next dev --turbopack > ""$frontendLog"" 2>&1")
+    [void]$fRunnerLines.Add("pnpm exec next dev --turbopack > ""$frontendLog"" 2>&1")
 
     $runnerPath = Join-Path $runnerDir 'frontend-web.cmd'
     Set-Content -LiteralPath $runnerPath -Value ($fRunnerLines -join "`r`n") -Encoding ASCII
