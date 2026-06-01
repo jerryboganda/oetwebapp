@@ -85,7 +85,7 @@ export default function AdminCreateReadingPaperPage() {
     <>
       <AdminSettingsLayout
         title="Create New Reading Paper"
-        description="Set up a new Reading subtest paper. After creating, you'll add passage texts and author questions."
+        description="Set up a new Reading subtest paper. After creating, you'll attach Part A/B/C PDFs and author questions."
         eyebrow="CMS"
         breadcrumbs={[
           { label: 'Admin', href: '/admin' },

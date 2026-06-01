@@ -316,7 +316,7 @@ export default function AdminReadingPaperOverviewPage() {
               >
                 <div className="flex flex-wrap gap-3">
                   <Button asChild variant="primary" size="sm" endIcon={<ArrowRight className="h-4 w-4" />}>
-                    <Link href={`/admin/content/reading/${paperId}/texts`}>Edit Texts</Link>
+                    <Link href={`/admin/content/reading/${paperId}/texts`}>Manage PDFs</Link>
                   </Button>
                   <Button asChild variant="primary" size="sm" endIcon={<ArrowRight className="h-4 w-4" />}>
                     <Link href={`/admin/content/reading/${paperId}/questions`}>Edit Questions</Link>
@@ -325,7 +325,7 @@ export default function AdminReadingPaperOverviewPage() {
                     <Link href={`/admin/content/reading/${paperId}/preview`}>Preview as student</Link>
                   </Button>
                   <Button asChild variant="secondary" size="sm" startIcon={<BookOpen className="h-4 w-4" />}>
-                    <Link href={`/admin/content/reading/${paperId}/extractions`}>Structure review</Link>
+                    <Link href={`/admin/content/reading/${paperId}/structure`}>Structure review</Link>
                   </Button>
                   <Button
                     variant="secondary"

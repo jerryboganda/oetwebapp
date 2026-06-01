@@ -43,14 +43,14 @@ public class ContentPaperServiceTests
         ContentPaperService svc,
         string paperId)
     {
-        await AddMediaAsync(db, "reading-question-paper");
-        await AddMediaAsync(db, "reading-answer-key");
-        await svc.AttachAssetAsync(paperId, new ContentPaperAssetAttach(
-            PaperAssetRole.QuestionPaper, "reading-question-paper", null, null, 0, true),
-            "admin-1", default);
-        await svc.AttachAssetAsync(paperId, new ContentPaperAssetAttach(
-            PaperAssetRole.AnswerKey, "reading-answer-key", null, null, 1, true),
-            "admin-1", default);
+        foreach (var (part, displayOrder) in new[] { ("A", 0), ("B", 1), ("C", 2) })
+        {
+            var mediaId = $"reading-question-paper-{part}";
+            await AddMediaAsync(db, mediaId);
+            await svc.AttachAssetAsync(paperId, new ContentPaperAssetAttach(
+                PaperAssetRole.QuestionPaper, mediaId, part, $"Part {part} PDF", displayOrder, true),
+                "admin-1", default);
+        }
     }
 
     private static async Task AttachRequiredSpeakingAssetsAsync(
@@ -415,7 +415,31 @@ public class ContentPaperServiceTests
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
             svc.PublishAsync(paper.Id, "admin-1", default));
-        Assert.Contains("Reading structure", ex.Message);
+        Assert.Contains("publish-ready", ex.Message);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Publish_fails_when_reading_part_pdf_media_is_not_ready_pdf()
+    {
+        var (db, svc) = Build();
+        var paper = await svc.CreateAsync(new ContentPaperCreate(
+            "reading", "Reading PDF guard", null, null, true, null, 60, null, null, 0, null,
+            DefaultSourceProvenance), "admin-1", default);
+        await AttachRequiredReadingAssetsAsync(db, svc, paper.Id);
+
+        var partBMedia = await db.MediaAssets.FirstAsync(m => m.Id == "reading-question-paper-B");
+        partBMedia.MimeType = "text/plain";
+        partBMedia.Format = "txt";
+        await db.SaveChangesAsync();
+
+        var structure = new ReadingStructureService(db);
+        await structure.EnsureCanonicalPartsAsync(paper.Id, default);
+        await FullyAuthorReadingPaperAsync(db, structure, paper.Id);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            svc.PublishAsync(paper.Id, "admin-1", default));
+        Assert.Contains("Part B requires exactly one primary QuestionPaper PDF asset", ex.Message);
         await db.DisposeAsync();
     }
 

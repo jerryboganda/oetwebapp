@@ -95,26 +95,7 @@ export function WritingTaskImportDialog({
       open={open}
       onClose={handleClose}
       title="Import writing task"
-      description="Paste a writing-task JSON envelope. It will be created as a new draft."
-      widthClassName="max-w-2xl"
-      footer={
-        <>
-          <Button variant="secondary" size="sm" onClick={handleDownloadSample}>
-            Download sample JSON
-          </Button>
-          <Button variant="secondary" size="sm" onClick={handleClose} disabled={busy}>
-            Cancel
-          </Button>
-          <Button
-            size="sm"
-            onClick={handleImport}
-            loading={busy}
-            disabled={busy || raw.trim().length === 0}
-          >
-            Import
-          </Button>
-        </>
-      }
+      size="lg"
     >
       <div className="space-y-3">
         <label
@@ -142,6 +123,22 @@ export function WritingTaskImportDialog({
             recipient, word guide, and marking checklist).
           </p>
         )}
+        <div className="flex flex-wrap justify-end gap-2 pt-2">
+          <Button variant="secondary" size="sm" onClick={handleDownloadSample}>
+            Download sample JSON
+          </Button>
+          <Button variant="secondary" size="sm" onClick={handleClose} disabled={busy}>
+            Cancel
+          </Button>
+          <Button
+            size="sm"
+            onClick={handleImport}
+            loading={busy}
+            disabled={busy || raw.trim().length === 0}
+          >
+            Import
+          </Button>
+        </div>
       </div>
     </Modal>
   );

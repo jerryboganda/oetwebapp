@@ -99,6 +99,14 @@ public class ReadingAuthoringTests
         await db.SaveChangesAsync();
     }
 
+    private static async Task SeedPublishedReadingPaperForEndpointsAsync(LearnerDbContext db, string paperId)
+    {
+        var structure = new ReadingStructureService(db);
+        await SeedPaperAsync(db, paperId, ContentStatus.Published);
+        await structure.EnsureCanonicalPartsAsync(paperId, default);
+        await FullyAuthorPaperAsync(db, structure, paperId);
+    }
+
     // ════════════════════════════════════════════════════════════════════
     // Structure service + validator
     // ════════════════════════════════════════════════════════════════════
@@ -149,7 +157,7 @@ public class ReadingAuthoringTests
     }
 
     [Fact]
-    public async Task Validator_rejects_non_official_text_topology()
+    public async Task Validator_requires_three_part_pdfs()
     {
         var (db, structure, _, _, _) = Build();
         await SeedPaperAsync(db, "p1");
@@ -175,9 +183,9 @@ public class ReadingAuthoringTests
         var report = await structure.ValidatePaperAsync("p1", default);
 
         Assert.False(report.IsPublishReady);
-        Assert.Contains(report.Issues, i => i.Code == "part_A_text_count");
-        Assert.Contains(report.Issues, i => i.Code == "part_B_text_count");
-        Assert.Contains(report.Issues, i => i.Code == "part_C_text_count");
+        Assert.Contains(report.Issues, i => i.Code == "part_A_pdf_required");
+        Assert.Contains(report.Issues, i => i.Code == "part_B_pdf_required");
+        Assert.Contains(report.Issues, i => i.Code == "part_C_pdf_required");
         await db.DisposeAsync();
     }
 
@@ -203,7 +211,7 @@ public class ReadingAuthoringTests
     }
 
     [Fact]
-    public async Task Validator_rejects_part_a_questions_without_text_links()
+    public async Task Validator_allows_pdf_only_questions_without_text_links()
     {
         var (db, structure, _, _, _) = Build();
         await SeedPaperAsync(db, "p1");
@@ -222,8 +230,7 @@ public class ReadingAuthoringTests
 
         var report = await structure.ValidatePaperAsync("p1", default);
 
-        Assert.False(report.IsPublishReady);
-        Assert.Contains(report.Issues, issue => issue.Code == "part_A_no_texts" && issue.Severity == "error");
+        Assert.True(report.IsPublishReady, string.Join(", ", report.Issues.Select(i => i.Message)));
         await db.DisposeAsync();
     }
 
@@ -583,6 +590,167 @@ public class ReadingAuthoringTests
         Assert.Equal(HttpStatusCode.NotFound, directMediaResponse.StatusCode);
         var signedUrlResponse = await client.GetAsync("/v1/media/media-policy-disabled-paper/url");
         Assert.Equal(HttpStatusCode.NotFound, signedUrlResponse.StatusCode);
+    }
+
+    [Fact]
+    public async Task Reading_pdf_annotations_support_crud_for_current_user()
+    {
+        using var factory = new TestWebApplicationFactory();
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        await db.Database.EnsureCreatedAsync();
+        const string paperId = "annotation-crud-paper";
+        await SeedPublishedReadingPaperForEndpointsAsync(db, paperId);
+
+        using var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Debug-UserId", "learner-annotations");
+
+        using var createResponse = await client.PostAsJsonAsync(
+            $"/v1/reading-papers/papers/{paperId}/annotations",
+            new
+            {
+                contentPaperAssetId = $"{paperId}-asset-A",
+                pageNumber = 1,
+                kind = "Text",
+                geometryJson = new { x = 0.10, y = 0.20, width = 0.30, height = 0.08 },
+            });
+
+        Assert.Equal(HttpStatusCode.Created, createResponse.StatusCode);
+        using var createdJson = JsonDocument.Parse(await createResponse.Content.ReadAsStringAsync());
+        var annotationId = createdJson.RootElement.GetProperty("id").GetString();
+        Assert.False(string.IsNullOrWhiteSpace(annotationId));
+        Assert.Equal($"{paperId}-asset-A", createdJson.RootElement.GetProperty("contentPaperAssetId").GetString());
+        Assert.Equal("Text", createdJson.RootElement.GetProperty("kind").GetString());
+        Assert.Equal(0.10, createdJson.RootElement.GetProperty("geometry").GetProperty("x").GetDouble(), 3);
+
+        using var listResponse = await client.GetAsync($"/v1/reading-papers/papers/{paperId}/annotations");
+        listResponse.EnsureSuccessStatusCode();
+        using var listJson = JsonDocument.Parse(await listResponse.Content.ReadAsStringAsync());
+        var listed = Assert.Single(listJson.RootElement.EnumerateArray());
+        Assert.Equal(annotationId, listed.GetProperty("id").GetString());
+
+        using var updateResponse = await client.PutAsJsonAsync(
+            $"/v1/reading-papers/papers/{paperId}/annotations/{annotationId}",
+            new
+            {
+                contentPaperAssetId = $"{paperId}-asset-B",
+                pageNumber = 2,
+                kind = "Rectangle",
+                geometryJson = new { x = 0.15, y = 0.25, width = 0.35, height = 0.20 },
+            });
+
+        updateResponse.EnsureSuccessStatusCode();
+        using var updatedJson = JsonDocument.Parse(await updateResponse.Content.ReadAsStringAsync());
+        Assert.Equal($"{paperId}-asset-B", updatedJson.RootElement.GetProperty("contentPaperAssetId").GetString());
+        Assert.Equal(2, updatedJson.RootElement.GetProperty("pageNumber").GetInt32());
+        Assert.Equal("Rectangle", updatedJson.RootElement.GetProperty("kind").GetString());
+
+        using var deleteResponse = await client.DeleteAsync($"/v1/reading-papers/papers/{paperId}/annotations/{annotationId}");
+        Assert.Equal(HttpStatusCode.NoContent, deleteResponse.StatusCode);
+
+        using var emptyResponse = await client.GetAsync($"/v1/reading-papers/papers/{paperId}/annotations");
+        emptyResponse.EnsureSuccessStatusCode();
+        using var emptyJson = JsonDocument.Parse(await emptyResponse.Content.ReadAsStringAsync());
+        Assert.Empty(emptyJson.RootElement.EnumerateArray());
+    }
+
+    [Fact]
+    public async Task Reading_pdf_annotations_reject_invalid_geometry_and_isolate_users()
+    {
+        using var factory = new TestWebApplicationFactory();
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        await db.Database.EnsureCreatedAsync();
+        const string paperId = "annotation-guard-paper";
+        await SeedPublishedReadingPaperForEndpointsAsync(db, paperId);
+
+        using var ownerClient = factory.CreateClient();
+        ownerClient.DefaultRequestHeaders.Add("X-Debug-UserId", "annotation-owner");
+        using var invalidResponse = await ownerClient.PostAsJsonAsync(
+            $"/v1/reading-papers/papers/{paperId}/annotations",
+            new
+            {
+                contentPaperAssetId = $"{paperId}-asset-A",
+                pageNumber = 1,
+                kind = "Text",
+                geometryJson = new { x = 1.10, y = 0.20, width = 0.30, height = 0.08 },
+            });
+
+        Assert.Equal(HttpStatusCode.BadRequest, invalidResponse.StatusCode);
+        Assert.Contains("reading_annotation_geometry_invalid", await invalidResponse.Content.ReadAsStringAsync());
+
+        using var missingGeometryResponse = await ownerClient.PostAsJsonAsync(
+            $"/v1/reading-papers/papers/{paperId}/annotations",
+            new
+            {
+                contentPaperAssetId = $"{paperId}-asset-A",
+                pageNumber = 1,
+                kind = "Text",
+            });
+
+        Assert.Equal(HttpStatusCode.BadRequest, missingGeometryResponse.StatusCode);
+        Assert.Contains("reading_annotation_geometry_invalid", await missingGeometryResponse.Content.ReadAsStringAsync());
+
+        using var createResponse = await ownerClient.PostAsJsonAsync(
+            $"/v1/reading-papers/papers/{paperId}/annotations",
+            new
+            {
+                contentPaperAssetId = $"{paperId}-asset-A",
+                pageNumber = 1,
+                kind = "Text",
+                geometryJson = new { x = 0.10, y = 0.20, width = 0.30, height = 0.08 },
+            });
+        createResponse.EnsureSuccessStatusCode();
+        using var createdJson = JsonDocument.Parse(await createResponse.Content.ReadAsStringAsync());
+        var annotationId = createdJson.RootElement.GetProperty("id").GetString();
+
+        using var otherClient = factory.CreateClient();
+        otherClient.DefaultRequestHeaders.Add("X-Debug-UserId", "annotation-other");
+        using var otherListResponse = await otherClient.GetAsync($"/v1/reading-papers/papers/{paperId}/annotations");
+        otherListResponse.EnsureSuccessStatusCode();
+        using var otherListJson = JsonDocument.Parse(await otherListResponse.Content.ReadAsStringAsync());
+        Assert.Empty(otherListJson.RootElement.EnumerateArray());
+
+        using var otherDeleteResponse = await otherClient.DeleteAsync($"/v1/reading-papers/papers/{paperId}/annotations/{annotationId}");
+        Assert.Equal(HttpStatusCode.NotFound, otherDeleteResponse.StatusCode);
+
+        Assert.Equal(1, await db.ReadingPaperAnnotations.CountAsync(a => a.UserId == "annotation-owner" && a.PaperId == paperId));
+    }
+
+    [Fact]
+    public async Task Reading_pdf_annotations_are_unavailable_when_pdf_mode_is_disabled()
+    {
+        using var factory = new TestWebApplicationFactory();
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        await db.Database.EnsureCreatedAsync();
+        const string paperId = "annotation-policy-disabled-paper";
+        await SeedPublishedReadingPaperForEndpointsAsync(db, paperId);
+
+        db.ReadingPolicies.Add(new ReadingPolicy
+        {
+            Id = "global",
+            AllowPaperReadingMode = false,
+            UpdatedAt = DateTimeOffset.UtcNow,
+        });
+        await db.SaveChangesAsync();
+
+        using var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Debug-UserId", "annotation-policy-disabled");
+
+        using var listResponse = await client.GetAsync($"/v1/reading-papers/papers/{paperId}/annotations");
+        Assert.Equal(HttpStatusCode.NotFound, listResponse.StatusCode);
+
+        using var createResponse = await client.PostAsJsonAsync(
+            $"/v1/reading-papers/papers/{paperId}/annotations",
+            new
+            {
+                contentPaperAssetId = $"{paperId}-asset-A",
+                pageNumber = 1,
+                kind = "Text",
+                geometryJson = new { x = 0.10, y = 0.20, width = 0.30, height = 0.08 },
+            });
+        Assert.Equal(HttpStatusCode.NotFound, createResponse.StatusCode);
     }
 
     [Fact]
@@ -2552,6 +2720,7 @@ public class ReadingAuthoringTests
 
     private static async Task FullyAuthorPaperAsync(LearnerDbContext db, ReadingStructureService structure, string paperId)
     {
+        await AttachReadingPartPdfsAsync(db, paperId);
         var parts = await db.ReadingParts.Where(p => p.PaperId == paperId).ToListAsync();
         var partA = parts.First(p => p.PartCode == ReadingPartCode.A);
         var partB = parts.First(p => p.PartCode == ReadingPartCode.B);
@@ -2621,6 +2790,44 @@ public class ReadingAuthoringTests
         foreach (var q in questions)
         {
             q.ReviewState = ReadingReviewState.Published;
+        }
+        await db.SaveChangesAsync();
+    }
+
+    private static async Task AttachReadingPartPdfsAsync(LearnerDbContext db, string paperId)
+    {
+        foreach (var part in new[] { "A", "B", "C" })
+        {
+            var mediaId = $"{paperId}-pdf-{part}";
+            if (!await db.MediaAssets.AnyAsync(m => m.Id == mediaId))
+            {
+                db.MediaAssets.Add(new MediaAsset
+                {
+                    Id = mediaId,
+                    OriginalFilename = $"reading-part-{part}.pdf",
+                    MimeType = "application/pdf",
+                    Format = "pdf",
+                    SizeBytes = 10,
+                    StoragePath = $"reading/{paperId}/part-{part}.pdf",
+                    Status = MediaAssetStatus.Ready,
+                    UploadedBy = "admin",
+                });
+            }
+            if (!await db.ContentPaperAssets.AnyAsync(a => a.PaperId == paperId && a.Part == part && a.Role == PaperAssetRole.QuestionPaper && a.IsPrimary))
+            {
+                db.ContentPaperAssets.Add(new ContentPaperAsset
+                {
+                    Id = $"{paperId}-asset-{part}",
+                    PaperId = paperId,
+                    Role = PaperAssetRole.QuestionPaper,
+                    Part = part,
+                    MediaAssetId = mediaId,
+                    Title = $"Part {part} PDF",
+                    DisplayOrder = part == "A" ? 0 : part == "B" ? 1 : 2,
+                    IsPrimary = true,
+                    CreatedAt = DateTimeOffset.UtcNow,
+                });
+            }
         }
         await db.SaveChangesAsync();
     }

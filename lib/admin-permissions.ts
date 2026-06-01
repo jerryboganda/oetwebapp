@@ -115,8 +115,6 @@ export const sidebarPermissionMap: Record<string, string[]> = {
   '/admin/speaking/result-visibility': [AdminPermission.ContentWrite],
   '/admin/recalls/bulk-upload': [AdminPermission.ContentWrite],
   '/admin/settings': [AdminPermission.SystemAdmin],
-  // Phase 4 — AI extraction workflow
-  '/admin/content/reading/extraction': [AdminPermission.ContentWrite],
   // Phase 3 — per-user Reading policy overrides
   '/admin/policies/reading/users': [AdminPermission.UsersWrite],
   // Study Planner admin surfaces
@@ -251,8 +249,6 @@ export const adminRoutePermissionMap: Record<string, string[]> = {
   '/admin/content/speaking/shared-resources': [AdminPermission.ContentRead, AdminPermission.ContentWrite, AdminPermission.ContentPublish],
   '/admin/content/imports/real-content-folder': [AdminPermission.ContentWrite, AdminPermission.ContentPublish],
   '/admin/content/vocabulary/recall-set-tags': [AdminPermission.ContentRead, AdminPermission.ContentWrite],
-  // Phase 4 — AI extraction workflow
-  '/admin/content/reading/extraction': [AdminPermission.ContentWrite],
   // Phase 3 — per-user Reading policy overrides
   '/admin/policies/reading/users': [AdminPermission.UsersWrite],
   // Study Planner admin surfaces

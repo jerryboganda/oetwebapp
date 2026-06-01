@@ -1,8 +1,7 @@
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
-const { mockFetchAuthorizedObjectUrl, mockGetReadingStructureAdminPreview } = vi.hoisted(() => ({
-  mockFetchAuthorizedObjectUrl: vi.fn(),
+const { mockGetReadingStructureAdminPreview } = vi.hoisted(() => ({
   mockGetReadingStructureAdminPreview: vi.fn(),
 }));
 
@@ -27,12 +26,16 @@ vi.mock('@/components/admin/layout/admin-settings-layout', () => ({
   ),
 }));
 
-vi.mock('@/lib/api', () => ({
-  fetchAuthorizedObjectUrl: mockFetchAuthorizedObjectUrl,
-}));
-
 vi.mock('@/lib/reading-authoring-api', () => ({
   getReadingStructureAdminPreview: mockGetReadingStructureAdminPreview,
+}));
+
+vi.mock('@/components/domain/reading-pdf-viewer', () => ({
+  ReadingPdfViewer: ({ partCode, readOnly, assets }: { partCode: string; readOnly?: boolean; assets: Array<{ title: string }> }) => (
+    <section aria-label={`Part ${partCode} PDF preview`} data-readonly={readOnly ? 'true' : 'false'}>
+      {assets.map((asset) => <span key={`${partCode}-${asset.title}`}>{asset.title}</span>)}
+    </section>
+  ),
 }));
 
 import AdminReadingPreviewPage from './page';
@@ -61,7 +64,7 @@ function part(partCode: 'A' | 'B' | 'C', questionCount: number) {
       displayOrder: index + 1,
       stem: `Question ${partCode}${index + 1}`,
       questionType: 'mcq',
-      maxScore: 1,
+      points: 1,
       options: index === 0 ? [{ value: 'A', label: 'Safe option A', correctAnswer: 'SECRET-OPTION', acceptedVariants: ['SECRET-VARIANT'] }] : [],
       mediaAssetId: null,
       readingTextId: `text-${partCode}`,
@@ -72,7 +75,6 @@ function part(partCode: 'A' | 'B' | 'C', questionCount: number) {
 describe('Admin Reading preview', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockFetchAuthorizedObjectUrl.mockResolvedValue('blob:paper-a');
     mockGetReadingStructureAdminPreview.mockResolvedValue({
       paper: {
         id: 'paper-1',
@@ -81,6 +83,8 @@ describe('Admin Reading preview', () => {
         subtestCode: 'reading',
         questionPaperAssets: [
           { id: 'asset-a', part: 'A', title: 'Part A PDF', downloadPath: '/v1/media/asset-a/content' },
+          { id: 'asset-b', part: 'B', title: 'Part B PDF', downloadPath: '/v1/media/asset-b/content' },
+          { id: 'asset-c', part: 'C', title: 'Part C PDF', downloadPath: '/v1/media/asset-c/content' },
         ],
       },
       parts: [part('A', 20), part('B', 6), part('C', 16)],
@@ -97,11 +101,15 @@ describe('Admin Reading preview', () => {
     expect(within(consolePanel).getByText('45:00')).toBeInTheDocument();
     expect(within(consolePanel).getByText('42')).toBeInTheDocument();
 
-    await user.click(within(consolePanel).getByRole('button', { name: /paper mode/i }));
-    expect(within(consolePanel).getByRole('button', { name: /part a pdf/i })).toBeInTheDocument();
+    await user.click(within(consolePanel).getByRole('button', { name: /^part b$/i }));
+    expect(within(consolePanel).getByText('Part B - Q1')).toBeInTheDocument();
+
+    expect(screen.getByRole('region', { name: 'Part A PDF preview' })).toHaveAttribute('data-readonly', 'true');
+    expect(screen.getByRole('region', { name: 'Part B PDF preview' })).toHaveAttribute('data-readonly', 'true');
+    expect(screen.getByRole('region', { name: 'Part C PDF preview' })).toHaveAttribute('data-readonly', 'true');
 
     expect(document.body.innerHTML).toContain('Safe option A');
-    expect(screen.getAllByText('Safe learner text').length).toBeGreaterThan(0);
+    expect(screen.queryByText('Safe learner text')).not.toBeInTheDocument();
     expect(document.body.innerHTML).not.toContain('SECRET_SCRIPT');
     expect(document.body.innerHTML).not.toContain('SECRET_ONERROR');
     expect(screen.queryByText('SECRET-OPTION')).not.toBeInTheDocument();

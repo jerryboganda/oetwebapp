@@ -11,8 +11,7 @@ import {
 } from './listening-sections';
 
 /**
- * Listening paper/booklet page model — the static analogue of
- * `lib/reading-paper-simulation.ts`. The audio stays platform-controlled by
+ * Listening paper/booklet page model. The audio stays platform-controlled by
  * the FSM player; this builder only produces the ordered answer-booklet pages
  * the candidate writes on:
  *   - Part A1 / A2 → notes-with-gaps pages (one page per section)

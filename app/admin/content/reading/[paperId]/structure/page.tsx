@@ -3,13 +3,10 @@
 /**
  * G2 — Reading structure review.
  *
- * Side-by-side review screen: the imported source PDFs (left) beside the
- * structure tools (right). The operator reads the question paper / text booklet
- * / Part B&C on the left and builds or corrects the canonical 42-item structure
- * on the right via the manifest import/export panel, validates against the
- * publish gate, then publishes from the paper overview. For OCR-unfriendly
- * scans (e.g. Reading Sample 1 Part B&C), the manual texts/questions editors are
- * one click away — no OCR required.
+ * Side-by-side review screen: the attached Reading PDFs (left) beside the
+ * structure tools (right). The operator reads the Part A/B/C PDFs on the left,
+ * builds or corrects the canonical 42-item question structure on the right,
+ * validates against the publish gate, then publishes from the paper overview.
  *
  * Reuses: ReadingManifestPanel (import/export + report), validateReadingPaper,
  * getContentPaper (assets), downloadMediaAssetContent (authenticated PDF bytes).
@@ -28,8 +25,6 @@ import { validateReadingPaper, type ReadingValidationReport } from '@/lib/readin
 import { getContentPaper, type ContentPaperDto } from '@/lib/content-upload-api';
 import { downloadMediaAssetContent } from '@/lib/api';
 
-/** Authenticated PDF preview — fetches the media bytes through the API client
- * (which adds auth) and renders them via an object URL. */
 function AssetPdfPreview({ mediaAssetId, label }: { mediaAssetId: string; label: string }) {
   const [url, setUrl] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
@@ -80,7 +75,7 @@ function AssetPdfPreview({ mediaAssetId, label }: { mediaAssetId: string; label:
   );
 }
 
-export default function AdminReadingExtractionReviewPage() {
+export default function AdminReadingStructureReviewPage() {
   const params = useParams<{ paperId: string }>();
   const paperId = params?.paperId ?? '';
 
@@ -117,7 +112,7 @@ export default function AdminReadingExtractionReviewPage() {
   return (
     <AdminSettingsLayout
       title="Reading · Structure review"
-      description="Read the imported source paper on the left; build or correct the 42-item structure (Part A 20, Part B 6, Part C 16) on the right via the manifest, validate against the publish gate, then publish from the paper overview. For scanned papers with no extractable text, type the questions directly in the manual editors — no OCR required."
+      description="Read the attached Part A/B/C PDFs on the left; build or correct the 42-item structure (Part A 20, Part B 6, Part C 16) on the right via the manifest, validate against the publish gate, then publish from the paper overview."
       eyebrow="Content · Reading"
       breadcrumbs={[
         { label: 'Admin', href: '/admin' },
@@ -128,10 +123,9 @@ export default function AdminReadingExtractionReviewPage() {
       ]}
     >
       <div className="grid gap-4 lg:grid-cols-2">
-        {/* LEFT — source documents */}
         <SettingsSection
           title="Source documents"
-          description="The PDFs attached on import: text booklet, question paper, answer key, and Part B&C."
+          description="The PDFs attached to this paper, including the primary Part A/B/C question-paper slots."
         >
           <div className="space-y-3">
             {assets.length === 0 ? (
@@ -148,7 +142,6 @@ export default function AdminReadingExtractionReviewPage() {
           </div>
         </SettingsSection>
 
-        {/* RIGHT — structure tools */}
         <div className="space-y-4">
           {paper ? (
             <ReadingManifestPanel
@@ -198,13 +191,13 @@ export default function AdminReadingExtractionReviewPage() {
           </SettingsSection>
 
           <SettingsSection
-            title="Manual entry (no OCR)"
-            description="If the source is a scan with no extractable text, type the texts and questions directly."
+            title="Manual authoring"
+            description="Attach or replace the Part A/B/C PDFs, then author the learner-safe questions directly."
           >
             <div className="flex flex-wrap gap-2">
               <Link href={`/admin/content/reading/${paperId}/texts`}>
                 <Button size="sm" variant="outline" startIcon={<FileText className="h-4 w-4" />}>
-                  Edit texts
+                  Manage PDFs
                 </Button>
               </Link>
               <Link href={`/admin/content/reading/${paperId}/questions`}>

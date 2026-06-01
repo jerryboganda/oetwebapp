@@ -174,7 +174,7 @@ Status legend: ✅ implemented and verified; 🟡 partially implemented; ❌ mis
 
 ### Section 12 — Paper-based navigation
 
-R12.1–R12.9: ⚪ Paper-only; not applicable to web platform. The "paper-look simulation mode" in [`components/domain/reading-paper-simulation.tsx`](../../oetwebapp/components/domain/reading-paper-simulation.tsx) and helpers in [`lib/reading-paper-simulation.ts`](../../oetwebapp/lib/reading-paper-simulation.ts) provide visual-only simulation; rule-by-rule paper enforcement is intentionally not duplicated.
+R12.1–R12.9: ⚪ Paper-only; the web platform now renders the uploaded Reading PDFs directly in the learner/admin preview surfaces. Rule-by-rule paper enforcement is intentionally not duplicated because the structured answer-entry and grading contracts remain server-authoritative.
 
 ---
 

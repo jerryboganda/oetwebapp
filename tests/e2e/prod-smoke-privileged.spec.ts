@@ -14,7 +14,7 @@ import { seedProdAuth } from './fixtures/prod-auth';
  *   $env:PROD_ADMIN_EMAIL="...";   $env:PROD_ADMIN_PASSWORD="..."
  *   $env:PROD_SPONSOR_EMAIL="..."; $env:PROD_SPONSOR_PASSWORD="..."
  *   $env:PROD_EXPIRED_EMAIL="..."; $env:PROD_EXPIRED_PASSWORD="..."
- *   npm run test:e2e:prod-privileged -- --workers=1
+ *   pnpm run test:e2e:prod-privileged -- --workers=1
  */
 
 const PROD_URL = process.env.PROD_URL ?? 'https://app.oetwithdrhesham.co.uk';

@@ -76,6 +76,7 @@ public static class ReadingLearnerEndpoints
                     .Where(a => a.PaperId == paperId
                         && a.Role == PaperAssetRole.QuestionPaper
                         && a.IsPrimary
+                        && (a.Part == "A" || a.Part == "B" || a.Part == "C")
                         && a.MediaAsset != null
                         && a.MediaAsset.Status == MediaAssetStatus.Ready)
                     .Include(a => a.MediaAsset)
@@ -146,6 +147,158 @@ public static class ReadingLearnerEndpoints
         });
 
         // ── Start attempt ──────────────────────────────────────────────────
+
+        group.MapGet("/papers/{paperId}/annotations", async (
+            string paperId,
+            LearnerDbContext db,
+            IReadingPolicyService policyService,
+            IContentEntitlementService entitlements,
+            HttpContext http,
+            CancellationToken ct) =>
+        {
+            var userId = http.User.FindFirstValue(ClaimTypes.NameIdentifier)
+                ?? throw new InvalidOperationException("auth required");
+            if (!await CanAccessReadingPaperAsync(db, http, policyService, entitlements, userId, paperId, ct))
+                return Results.NotFound();
+
+            var rows = await db.ReadingPaperAnnotations.AsNoTracking()
+                .Where(a => a.UserId == userId && a.PaperId == paperId)
+                .OrderBy(a => a.ContentPaperAssetId)
+                .ThenBy(a => a.PageNumber)
+                .ThenBy(a => a.CreatedAt)
+                .ToListAsync(ct);
+            return Results.Ok(rows.Select(a => new ReadingPaperAnnotationDto(
+                a.Id,
+                a.PaperId,
+                a.ContentPaperAssetId,
+                a.PageNumber,
+                a.Kind.ToString(),
+                SafeParseJson(a.GeometryJson),
+                a.CreatedAt,
+                a.UpdatedAt)));
+        });
+
+        group.MapPost("/papers/{paperId}/annotations", async (
+            string paperId,
+            ReadingPaperAnnotationMutationDto dto,
+            LearnerDbContext db,
+            IReadingPolicyService policyService,
+            IContentEntitlementService entitlements,
+            HttpContext http,
+            CancellationToken ct) =>
+        {
+            var userId = http.User.FindFirstValue(ClaimTypes.NameIdentifier)
+                ?? throw new InvalidOperationException("auth required");
+            var validation = await ValidateAnnotationMutationAsync(db, http, policyService, entitlements, userId, paperId, dto, ct);
+            if (validation is not null) return validation;
+
+            var now = DateTimeOffset.UtcNow;
+            var row = new ReadingPaperAnnotation
+            {
+                Id = $"rpa_{Guid.NewGuid():N}",
+                UserId = userId,
+                PaperId = paperId,
+                ContentPaperAssetId = dto.ContentPaperAssetId,
+                PageNumber = dto.PageNumber,
+                Kind = Enum.Parse<ReadingPaperAnnotationKind>(dto.Kind, ignoreCase: true),
+                GeometryJson = dto.GeometryJson.GetRawText(),
+                CreatedAt = now,
+                UpdatedAt = now,
+            };
+            db.ReadingPaperAnnotations.Add(row);
+            await db.SaveChangesAsync(ct);
+            return Results.Created(
+                $"/v1/reading-papers/papers/{paperId}/annotations/{row.Id}",
+                new ReadingPaperAnnotationDto(row.Id, row.PaperId, row.ContentPaperAssetId,
+                    row.PageNumber, row.Kind.ToString(), SafeParseJson(row.GeometryJson), row.CreatedAt, row.UpdatedAt));
+        }).RequireRateLimiting("PerUserWrite");
+
+        group.MapPut("/papers/{paperId}/annotations/{annotationId}", async (
+            string paperId,
+            string annotationId,
+            ReadingPaperAnnotationMutationDto dto,
+            LearnerDbContext db,
+            IReadingPolicyService policyService,
+            IContentEntitlementService entitlements,
+            HttpContext http,
+            CancellationToken ct) =>
+        {
+            var userId = http.User.FindFirstValue(ClaimTypes.NameIdentifier)
+                ?? throw new InvalidOperationException("auth required");
+            var validation = await ValidateAnnotationMutationAsync(db, http, policyService, entitlements, userId, paperId, dto, ct);
+            if (validation is not null) return validation;
+
+            var row = await db.ReadingPaperAnnotations
+                .FirstOrDefaultAsync(a => a.Id == annotationId && a.UserId == userId && a.PaperId == paperId, ct);
+            if (row is null) return Results.NotFound();
+
+            row.ContentPaperAssetId = dto.ContentPaperAssetId;
+            row.PageNumber = dto.PageNumber;
+            row.Kind = Enum.Parse<ReadingPaperAnnotationKind>(dto.Kind, ignoreCase: true);
+            row.GeometryJson = dto.GeometryJson.GetRawText();
+            row.UpdatedAt = DateTimeOffset.UtcNow;
+            await db.SaveChangesAsync(ct);
+            return Results.Ok(new ReadingPaperAnnotationDto(row.Id, row.PaperId, row.ContentPaperAssetId,
+                row.PageNumber, row.Kind.ToString(), SafeParseJson(row.GeometryJson), row.CreatedAt, row.UpdatedAt));
+        }).RequireRateLimiting("PerUserWrite");
+
+        group.MapDelete("/papers/{paperId}/annotations/{annotationId}", async (
+            string paperId,
+            string annotationId,
+            LearnerDbContext db,
+            IReadingPolicyService policyService,
+            IContentEntitlementService entitlements,
+            HttpContext http,
+            CancellationToken ct) =>
+        {
+            var userId = http.User.FindFirstValue(ClaimTypes.NameIdentifier)
+                ?? throw new InvalidOperationException("auth required");
+            if (!await CanAccessReadingPaperAsync(db, http, policyService, entitlements, userId, paperId, ct))
+                return Results.NotFound();
+            var row = await db.ReadingPaperAnnotations
+                .FirstOrDefaultAsync(a => a.Id == annotationId && a.UserId == userId && a.PaperId == paperId, ct);
+            if (row is null) return Results.NotFound();
+            db.ReadingPaperAnnotations.Remove(row);
+            await db.SaveChangesAsync(ct);
+            return Results.NoContent();
+        }).RequireRateLimiting("PerUserWrite");
+
+        group.MapDelete("/papers/{paperId}/annotations", async (
+            string paperId,
+            string scope,
+            string? assetId,
+            LearnerDbContext db,
+            IReadingPolicyService policyService,
+            IContentEntitlementService entitlements,
+            HttpContext http,
+            CancellationToken ct) =>
+        {
+            var userId = http.User.FindFirstValue(ClaimTypes.NameIdentifier)
+                ?? throw new InvalidOperationException("auth required");
+            if (!await CanAccessReadingPaperAsync(db, http, policyService, entitlements, userId, paperId, ct))
+                return Results.NotFound();
+
+            var normalizedScope = scope.Trim().ToLowerInvariant();
+            if (normalizedScope == "asset")
+            {
+                if (string.IsNullOrWhiteSpace(assetId))
+                    return Results.BadRequest(new { code = "reading_annotation_asset_required", error = "assetId is required when scope=asset." });
+                if (!await IsReadingPdfAssetForPaperAsync(db, paperId, assetId, ct))
+                    return Results.BadRequest(new { code = "reading_annotation_asset_invalid", error = "Asset does not belong to this Reading paper." });
+            }
+            else if (normalizedScope != "paper")
+            {
+                return Results.BadRequest(new { code = "reading_annotation_scope_invalid", error = "scope must be asset or paper." });
+            }
+
+            var query = db.ReadingPaperAnnotations.Where(a => a.UserId == userId && a.PaperId == paperId);
+            if (normalizedScope == "asset")
+                query = query.Where(a => a.ContentPaperAssetId == assetId);
+            db.ReadingPaperAnnotations.RemoveRange(await query.ToListAsync(ct));
+            await db.SaveChangesAsync(ct);
+            return Results.NoContent();
+        }).RequireRateLimiting("PerUserWrite");
+
         group.MapPost("/papers/{paperId}/attempts", async (
             string paperId,
             string? mockAttemptId,
@@ -1134,6 +1287,121 @@ public static class ReadingLearnerEndpoints
         }
     }
 
+    private static async Task<IResult?> ValidateAnnotationMutationAsync(
+        LearnerDbContext db,
+        HttpContext http,
+        IReadingPolicyService policyService,
+        IContentEntitlementService entitlements,
+        string userId,
+        string paperId,
+        ReadingPaperAnnotationMutationDto dto,
+        CancellationToken ct)
+    {
+        if (!await CanAccessReadingPaperAsync(db, http, policyService, entitlements, userId, paperId, ct))
+            return Results.NotFound();
+
+        if (!Enum.TryParse<ReadingPaperAnnotationKind>(dto.Kind, ignoreCase: true, out _))
+            return Results.BadRequest(new { code = "reading_annotation_kind_invalid", error = "Annotation kind must be Text, Rectangle, or Freehand." });
+        if (dto.PageNumber < 1 || dto.PageNumber > 10_000)
+            return Results.BadRequest(new { code = "reading_annotation_page_invalid", error = "Page number is outside the accepted range." });
+        if (string.IsNullOrWhiteSpace(dto.ContentPaperAssetId)
+            || !await IsReadingPdfAssetForPaperAsync(db, paperId, dto.ContentPaperAssetId, ct))
+            return Results.BadRequest(new { code = "reading_annotation_asset_invalid", error = "Asset does not belong to this Reading paper." });
+
+        if (dto.GeometryJson.ValueKind is JsonValueKind.Undefined or JsonValueKind.Null)
+            return Results.BadRequest(new { code = "reading_annotation_geometry_invalid", error = "Annotation geometry is required." });
+
+        var raw = dto.GeometryJson.GetRawText();
+        if (raw.Length > 8192)
+            return Results.BadRequest(new { code = "reading_annotation_payload_too_large", error = "Annotation geometry is too large." });
+        if (!GeometryCoordinatesAreNormalised(dto.GeometryJson))
+            return Results.BadRequest(new { code = "reading_annotation_geometry_invalid", error = "Annotation coordinates must be normalized between 0 and 1." });
+        return null;
+    }
+
+    private static async Task<bool> CanAccessReadingPaperAsync(
+        LearnerDbContext db,
+        HttpContext http,
+        IReadingPolicyService policyService,
+        IContentEntitlementService entitlements,
+        string userId,
+        string paperId,
+        CancellationToken ct)
+    {
+        var globalPolicy = await policyService.GetGlobalAsync(ct);
+        var paper = await db.ContentPapers.AsNoTracking()
+            .FirstOrDefaultAsync(p => p.Id == paperId
+                && p.SubtestCode == "reading"
+                && (p.Status == ContentStatus.Published
+                    || (globalPolicy.AllowAttemptOnArchivedPaper && p.Status == ContentStatus.Archived)), ct);
+        if (paper is null || !await CanLearnerSeePaperAsync(db, http, userId, paper, ct))
+            return false;
+
+        await entitlements.RequireAccessAsync(userId, paper, ct);
+        var resolvedPolicy = await policyService.ResolveForUserAsync(userId, ct);
+        return resolvedPolicy.AllowPaperReadingMode;
+    }
+
+    private static Task<bool> IsReadingPdfAssetForPaperAsync(
+        LearnerDbContext db,
+        string paperId,
+        string assetId,
+        CancellationToken ct) =>
+        db.ContentPaperAssets.AsNoTracking().AnyAsync(a =>
+            a.Id == assetId
+            && a.PaperId == paperId
+            && a.Role == PaperAssetRole.QuestionPaper
+            && a.IsPrimary
+            && (a.Part == "A" || a.Part == "B" || a.Part == "C"), ct);
+
+    private static bool GeometryCoordinatesAreNormalised(JsonElement element)
+    {
+        var foundCoordinate = false;
+        return Visit(element, ref foundCoordinate) && foundCoordinate;
+
+        static bool Visit(JsonElement el, ref bool found)
+        {
+            switch (el.ValueKind)
+            {
+                case JsonValueKind.Object:
+                    foreach (var prop in el.EnumerateObject())
+                    {
+                        var name = prop.Name.ToLowerInvariant();
+                        if (name is "x" or "y" or "width" or "height" or "x1" or "y1" or "x2" or "y2")
+                        {
+                            if (prop.Value.ValueKind != JsonValueKind.Number
+                                || !prop.Value.TryGetDouble(out var value)
+                                || value < 0d
+                                || value > 1d)
+                            {
+                                return false;
+                            }
+                            found = true;
+                        }
+                        else if (!Visit(prop.Value, ref found))
+                        {
+                            return false;
+                        }
+                    }
+                    return true;
+                case JsonValueKind.Array:
+                    foreach (var item in el.EnumerateArray())
+                    {
+                        if (!Visit(item, ref found)) return false;
+                    }
+                    return true;
+                case JsonValueKind.String:
+                case JsonValueKind.Number:
+                case JsonValueKind.True:
+                case JsonValueKind.False:
+                case JsonValueKind.Null:
+                    return true;
+                default:
+                    return false;
+            }
+        }
+    }
+
     /// <summary>
     /// Wave 1 — decode a stored <c>CorrectAnswerJson</c> value into a flat
     /// display string for post-submit review. A JSON string yields its raw
@@ -1257,6 +1525,22 @@ public static class ReadingLearnerEndpoints
         string? Part,
         string Title,
         string DownloadPath);
+
+    private sealed record ReadingPaperAnnotationDto(
+        string Id,
+        string PaperId,
+        string ContentPaperAssetId,
+        int PageNumber,
+        string Kind,
+        object? Geometry,
+        DateTimeOffset CreatedAt,
+        DateTimeOffset UpdatedAt);
+
+    private sealed record ReadingPaperAnnotationMutationDto(
+        string ContentPaperAssetId,
+        int PageNumber,
+        string Kind,
+        JsonElement GeometryJson);
 
     private sealed record ReadingReviewItem(
         string QuestionId,

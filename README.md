@@ -18,19 +18,19 @@ OET preparation platform with a Next.js 15 web app, ASP.NET Core 10 API, Electro
 ## Quick Start
 
 ```bash
-npm install
-npm run dev
-npm run backend:run
+pnpm install
+pnpm run dev
+pnpm run backend:run
 ```
 
 Optional workflow commands:
 
 ```bash
-npm run backend:watch
-npm run desktop:dev
-npm run mobile:sync
-npm run mobile:run:android
-npm run mobile:run:ios
+pnpm run backend:watch
+pnpm run desktop:dev
+pnpm run mobile:sync
+pnpm run mobile:run:android
+pnpm run mobile:run:ios
 ```
 
 If PowerShell blocks scripts, run:
@@ -42,23 +42,23 @@ Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 ## Verification
 
 ```bash
-npx tsc --noEmit
-npm run lint
-npm test
-npm run build
-npm run backend:build
-npm run backend:test
+pnpm exec tsc --noEmit
+pnpm run lint
+pnpm test
+pnpm run build
+pnpm run backend:build
+pnpm run backend:test
 ```
 
 E2E coverage:
 
 ```bash
-npm run test:e2e:install
-npm run test:e2e:auth
-npm run test:e2e
-npm run test:e2e:smoke
-npm run test:e2e:desktop
-npm run test:e2e:report
+pnpm run test:e2e:install
+pnpm run test:e2e:auth
+pnpm run test:e2e
+pnpm run test:e2e:smoke
+pnpm run test:e2e:desktop
+pnpm run test:e2e:report
 ```
 
 ## Local API Truth

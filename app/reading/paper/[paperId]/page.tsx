@@ -2,7 +2,7 @@
 
 import { Suspense, use, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { AlertCircle, Clock, Eye, Flag, Highlighter, Loader2, Play, RotateCcw, Save, Send, Settings, ZoomIn, ZoomOut } from 'lucide-react';
+import { AlertCircle, Clock, Eye, Flag, Loader2, Play, RotateCcw, Save, Send, Settings, ZoomIn, ZoomOut } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -12,11 +12,16 @@ import { Modal } from '@/components/ui/modal';
 import { cn } from '@/lib/utils';
 import {
   getReadingAttempt,
+  getReadingPaperAnnotations,
   getReadingStructureLearner,
   resumeReadingBreak,
   saveReadingAnswer,
   startReadingAttempt,
   submitReadingAttempt,
+  createReadingPaperAnnotation,
+  deleteReadingPaperAnnotation,
+  clearReadingPaperAnnotations,
+  type ReadingPaperAnnotationDto,
   type ReadingAttemptStarted,
   type ReadingAttemptStatus,
   type ReadingLearnerStructureDto,
@@ -24,9 +29,8 @@ import {
   type ReadingQuestionLearnerDto,
 } from '@/lib/reading-authoring-api';
 import { ContentLockedNotice, isContentLockedError, readContentLockedMessage } from '@/components/domain/ContentLockedNotice';
-import { ReadingPaperSimulation } from '@/components/domain/reading-paper-simulation';
+import { ReadingPdfViewer } from '@/components/domain/reading-pdf-viewer';
 import { completeMockSection } from '@/lib/api';
-import { sanitizeBodyHtml } from '@/lib/wizard/sanitize-html';
 import { readErrorMessage } from '@/lib/read-error-message';
 import { deriveDeliveryMode, deliveryModeToReadingPresentation } from '@/lib/mocks/delivery-mode';
 
@@ -82,6 +86,7 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
   const router = useRouter();
 
   const [structure, setStructure] = useState<ReadingLearnerStructureDto | null>(null);
+  const [pdfAnnotations, setPdfAnnotations] = useState<ReadingPaperAnnotationDto[]>([]);
   const [attempt, setAttempt] = useState<ActiveAttempt | null>(null);
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [flagged, setFlagged] = useState<Set<string>>(() => new Set());
@@ -109,14 +114,6 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
   const [screenReaderHints, setScreenReaderHints] = useState(false);
   const [displayWarnings, setDisplayWarnings] = useState<string[]>([]);
   const [eliminatedChoices, setEliminatedChoices] = useState<Set<string>>(() => new Set());
-  /**
-   * Computer-mode passage highlights — keyed by reading text id so they
-   * survive Part tab switches (PartBody remounts) for the duration of the
-   * session. Each value is a list of {start,end} character offsets relative
-   * to that passage's scope element. Highlights are presentation-only: they
-   * never touch answers, autosave, scoring, or the locked-input state.
-   */
-  const [passageHighlights, setPassageHighlights] = useState<Record<string, ReadingHighlightRange[]>>({});
   /**
    * One-shot acknowledgement for the Part A → Parts B/C transition screen.
    * Once the learner presses Continue (or resumes a break, which already
@@ -214,6 +211,13 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
     try {
       const loadedStructure = await getReadingStructureLearner(paperId);
       setStructure(loadedStructure);
+      // Secondary, non-blocking load. PDF annotations are a learner aid, not a
+      // prerequisite for rendering the paper or resuming an attempt, so a slow
+      // or failed annotations fetch must never block the structure/attempt load
+      // (mirrors the sibling results page fix).
+      void getReadingPaperAnnotations(paperId)
+        .then((annotations) => setPdfAnnotations(annotations))
+        .catch(() => setPdfAnnotations([]));
 
       if (resumeAttemptId) {
         const saved = await getReadingAttempt(resumeAttemptId);
@@ -641,6 +645,30 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
     void submit();
   }, [attempt, partBCWindowEnded, submit]);
 
+  const reloadPdfAnnotations = useCallback(async () => {
+    setPdfAnnotations(await getReadingPaperAnnotations(paperId));
+  }, [paperId]);
+
+  const handleCreatePdfAnnotation = useCallback(async (body: Parameters<typeof createReadingPaperAnnotation>[1]) => {
+    await createReadingPaperAnnotation(paperId, body);
+    await reloadPdfAnnotations();
+  }, [paperId, reloadPdfAnnotations]);
+
+  const handleDeletePdfAnnotation = useCallback(async (annotationId: string) => {
+    await deleteReadingPaperAnnotation(paperId, annotationId);
+    await reloadPdfAnnotations();
+  }, [paperId, reloadPdfAnnotations]);
+
+  const handleClearPdfAsset = useCallback(async (assetId: string) => {
+    await clearReadingPaperAnnotations(paperId, { scope: 'asset', assetId });
+    await reloadPdfAnnotations();
+  }, [paperId, reloadPdfAnnotations]);
+
+  const handleClearPdfPaper = useCallback(async () => {
+    await clearReadingPaperAnnotations(paperId, { scope: 'paper' });
+    await reloadPdfAnnotations();
+  }, [paperId, reloadPdfAnnotations]);
+
   if (loading) {
     return <LearnerDashboardShell pageTitle="Reading"><Skeleton className="h-64" /></LearnerDashboardShell>;
   }
@@ -773,39 +801,22 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
               />
             ) : null}
 
-            {!breakPending && !showPartTransition && presentation === 'paper' && displayedStructure ? (
-              <ReadingPaperSimulation
-                structure={displayedStructure}
-                answers={answers}
-                partADeadlineAt={attempt.partADeadlineAt}
-                partBCDeadlineAt={attempt.partBCDeadlineAt}
-                nowMs={nowMs}
-                locked={attemptInputsLocked || (partALocked && activePart === 'A')}
-                questionPaperAssets={structure.paper.questionPaperAssets ?? []}
-                onAnswerChange={setAnswer}
-              />
-            ) : null}
-
-            {!breakPending && !showPartTransition && presentation === 'computer' && displayedCurrentPart ? (
+            {!breakPending && !showPartTransition && displayedCurrentPart ? (
               <div className="origin-top" style={{ transform: 'scale(var(--reading-player-scale))', transformOrigin: 'top center' }}>
                 <PartBody
+                  paperId={paperId}
                   part={displayedCurrentPart}
+                  questionPaperAssets={structure.paper.questionPaperAssets ?? []}
+                  pdfAnnotations={pdfAnnotations}
                   answers={answers}
                   flagged={flagged}
                   activeQuestionId={activeQuestionId}
                   eliminatedChoices={eliminatedChoices}
                   locked={attemptInputsLocked || (displayedCurrentPart.partCode === 'A' && partALocked)}
-                  highlights={passageHighlights}
-                  onAddHighlight={(textId, range) =>
-                    setPassageHighlights((prev) => ({ ...prev, [textId]: mergeReadingHighlightRanges(prev[textId] ?? [], range) }))
-                  }
-                  onClearHighlights={(textIds) =>
-                    setPassageHighlights((prev) => {
-                      const next = { ...prev };
-                      for (const id of textIds) delete next[id];
-                      return next;
-                    })
-                  }
+                  onCreatePdfAnnotation={handleCreatePdfAnnotation}
+                  onDeletePdfAnnotation={handleDeletePdfAnnotation}
+                  onClearPdfAsset={handleClearPdfAsset}
+                  onClearPdfPaper={handleClearPdfPaper}
                   onActiveQuestionChange={setActiveQuestionId}
                   onToggleFlag={(questionId) => setFlagged((prev) => toggleSetValue(prev, questionId))}
                   onToggleEliminated={(questionId, optionValue) => setEliminatedChoices((prev) => toggleSetValue(prev, `${questionId}:${optionValue}`))}
@@ -1024,6 +1035,7 @@ function ReadingA11ySettings({
     <details className="group relative inline-block">
       <summary
         className="inline-flex h-9 cursor-pointer list-none items-center gap-1.5 rounded-xl border border-border bg-background-light px-3 text-xs font-bold text-navy hover:border-border-hover focus:outline-none focus:ring-4 focus:ring-primary/15"
+        role="button"
         aria-label="Accessibility settings"
       >
         <Settings className="h-4 w-4" aria-hidden />
@@ -1222,77 +1234,42 @@ function PartTabs({
 }
 
 function PartBody({
+  paperId,
   part,
+  questionPaperAssets,
+  pdfAnnotations,
   answers,
   flagged,
   activeQuestionId,
   eliminatedChoices,
   locked,
-  highlights,
-  onAddHighlight,
-  onClearHighlights,
+  onCreatePdfAnnotation,
+  onDeletePdfAnnotation,
+  onClearPdfAsset,
+  onClearPdfPaper,
   onActiveQuestionChange,
   onToggleFlag,
   onToggleEliminated,
   onAnswerChange,
 }: {
+  paperId: string;
   part: ReadingLearnerStructureDto['parts'][number];
+  questionPaperAssets: NonNullable<ReadingLearnerStructureDto['paper']['questionPaperAssets']>;
+  pdfAnnotations: ReadingPaperAnnotationDto[];
   answers: Record<string, string>;
   flagged: Set<string>;
   activeQuestionId: string | null;
   eliminatedChoices: Set<string>;
   locked: boolean;
-  highlights: Record<string, ReadingHighlightRange[]>;
-  onAddHighlight: (textId: string, range: ReadingHighlightRange) => void;
-  onClearHighlights: (textIds: string[]) => void;
+  onCreatePdfAnnotation: (body: Parameters<typeof createReadingPaperAnnotation>[1]) => Promise<void>;
+  onDeletePdfAnnotation: (annotationId: string) => Promise<void>;
+  onClearPdfAsset: (assetId: string) => Promise<void>;
+  onClearPdfPaper: () => Promise<void>;
   onActiveQuestionChange: (questionId: string) => void;
   onToggleFlag: (questionId: string) => void;
   onToggleEliminated: (questionId: string, optionValue: string) => void;
   onAnswerChange: (question: ReadingQuestionLearnerDto, value: unknown) => void;
 }) {
-  // Map of reading-text id → its passage scope element, so the highlight
-  // controls know which passage a text selection belongs to and can repaint
-  // stored ranges after re-mounts/zoom changes.
-  const scopeRefs = useRef<Map<string, HTMLElement>>(new Map());
-
-  // Repaint persisted highlights whenever they change or the active part
-  // changes (which remounts the passage scopes). Because the passage HTML is
-  // injected via dangerouslySetInnerHTML, React never re-touches the inner
-  // DOM unless `bodyHtml` changes, so our marks survive per-second re-renders.
-  useEffect(() => {
-    for (const [textId, scope] of scopeRefs.current.entries()) {
-      paintReadingHighlights(scope, highlights[textId] ?? []);
-    }
-  }, [highlights, part.partCode, part.texts]);
-
-  // Escape clears the pending (un-applied) selection without removing any
-  // committed highlights — matches the official player's keyboard affordance.
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') window.getSelection?.()?.removeAllRanges();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, []);
-
-  const handleHighlightSelection = () => {
-    for (const [textId, scope] of scopeRefs.current.entries()) {
-      const range = readReadingScopeSelection(scope);
-      if (range) {
-        onAddHighlight(textId, range);
-        window.getSelection?.()?.removeAllRanges();
-        return;
-      }
-    }
-  };
-
-  const handleClearHighlights = () => {
-    onClearHighlights(part.texts.map((text) => text.id));
-    window.getSelection?.()?.removeAllRanges();
-  };
-
-  const hasHighlights = part.texts.some((text) => (highlights[text.id] ?? []).length > 0);
-
   if (part.questions.length === 0) {
     return (
       <div
@@ -1315,66 +1292,16 @@ function PartBody({
       id={`reading-part-panel-${part.partCode}`}
       aria-labelledby={`reading-part-tab-${part.partCode}`}
     >
-      <section
-        className="max-h-[72vh] overflow-y-auto rounded-[20px] border border-border bg-surface p-5 shadow-sm"
-        aria-label={`Reading passages for Part ${part.partCode}`}
-      >
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-          <h2 className="text-sm font-black uppercase tracking-[0.18em] text-muted">Passages</h2>
-          <div className="flex items-center gap-2">
-            <div className="inline-flex items-center gap-1 rounded-lg border border-border bg-background-light p-1" aria-label="Passage highlight tools">
-              <button
-                type="button"
-                // Prevent the click from collapsing the text selection before we read it.
-                onMouseDown={(event) => event.preventDefault()}
-                onClick={handleHighlightSelection}
-                className="inline-flex items-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-semibold text-amber-700 hover:bg-amber-50 dark:text-amber-300 dark:hover:bg-amber-900/30"
-                aria-label="Highlight selected passage text"
-              >
-                <Highlighter className="h-4 w-4" aria-hidden="true" />
-                Highlight
-              </button>
-              <button
-                type="button"
-                onMouseDown={(event) => event.preventDefault()}
-                onClick={handleClearHighlights}
-                disabled={!hasHighlights}
-                className="rounded-md px-2 py-1.5 text-xs font-semibold text-muted hover:bg-surface hover:text-navy disabled:cursor-not-allowed disabled:opacity-50"
-                aria-label="Clear highlights in this part"
-              >
-                Clear highlights
-              </button>
-            </div>
-            <Badge variant="muted">Part {part.partCode}</Badge>
-          </div>
-        </div>
-        <div className="space-y-6">
-          {part.texts.map((text) => (
-            <article key={text.id} className="space-y-2">
-              <div>
-                <h3 className="text-base font-bold text-navy">{text.title}</h3>
-                {text.source ? <p className="text-xs font-semibold text-muted">Source: {text.source}</p> : null}
-              </div>
-              {/* P0-J 2026-05 hardening: sanitize author-supplied HTML before
-                  injecting into the DOM. Backend authoring stores raw HTML and
-                  the player previously rendered it verbatim — a stored XSS
-                  vector if AI-extraction or an admin upload smuggled a
-                  <script> tag through. sanitizeBodyHtml applies a conservative
-                  allow-list (paragraphs, emphasis, lists, tables) and strips
-                  script/iframe/event handlers. */}
-              <div
-                ref={(el) => {
-                  if (el) scopeRefs.current.set(text.id, el);
-                  else scopeRefs.current.delete(text.id);
-                }}
-                className="prose prose-sm max-w-none text-navy selection:bg-warning/30"
-                data-reading-highlight-scope="passage"
-                dangerouslySetInnerHTML={{ __html: sanitizeBodyHtml(text.bodyHtml) }}
-              />
-            </article>
-          ))}
-        </div>
-      </section>
+      <ReadingPdfViewer
+        paperId={paperId}
+        partCode={part.partCode}
+        assets={questionPaperAssets}
+        annotations={pdfAnnotations}
+        onCreateAnnotation={onCreatePdfAnnotation}
+        onDeleteAnnotation={onDeletePdfAnnotation}
+        onClearAsset={onClearPdfAsset}
+        onClearPaper={onClearPdfPaper}
+      />
 
       <section
         className="rounded-[20px] border border-border bg-surface p-5 shadow-sm"
@@ -1800,105 +1727,3 @@ function formatCountdown(totalSec: number): string {
 function minutesBetween(start: string, end: string): number {
   return Math.max(0, Math.round((new Date(end).getTime() - new Date(start).getTime()) / 60000));
 }
-
-// ─── Computer-mode passage highlighting ──────────────────────────────────────
-// Lightweight, session-only text highlighting scoped strictly to a passage
-// container. Highlights are stored as character offsets relative to the scope's
-// concatenated text content, so they survive re-renders and Part switches and
-// can be repainted deterministically. None of this touches answers, autosave,
-// or scoring — it is purely presentational.
-
-interface ReadingHighlightRange {
-  start: number;
-  end: number;
-}
-
-const READING_HIGHLIGHT_CLASS =
-  'rounded-[2px] bg-amber-200/80 text-navy dark:bg-amber-300/40 dark:text-amber-50';
-
-/** Character offset of a DOM boundary within the scope's text content. */
-function readingOffsetWithin(scope: HTMLElement, node: Node, nodeOffset: number): number {
-  const measure = document.createRange();
-  measure.selectNodeContents(scope);
-  try {
-    measure.setEnd(node, nodeOffset);
-  } catch {
-    return 0;
-  }
-  return (measure.cloneContents().textContent ?? '').length;
-}
-
-/** Reads the current window selection as a scope-relative range, or null. */
-function readReadingScopeSelection(scope: HTMLElement): ReadingHighlightRange | null {
-  if (typeof window === 'undefined') return null;
-  const selection = window.getSelection();
-  if (!selection || selection.rangeCount === 0 || selection.isCollapsed) return null;
-  const range = selection.getRangeAt(0);
-  if (!scope.contains(range.startContainer) || !scope.contains(range.endContainer)) return null;
-  const a = readingOffsetWithin(scope, range.startContainer, range.startOffset);
-  const b = readingOffsetWithin(scope, range.endContainer, range.endOffset);
-  const start = Math.min(a, b);
-  const end = Math.max(a, b);
-  if (end - start < 1) return null;
-  return { start, end };
-}
-
-/** Inserts a new range, merging any that overlap or touch. */
-function mergeReadingHighlightRanges(
-  ranges: ReadingHighlightRange[],
-  next: ReadingHighlightRange,
-): ReadingHighlightRange[] {
-  const all = [...ranges, next].sort((x, y) => x.start - y.start);
-  const merged: ReadingHighlightRange[] = [];
-  for (const range of all) {
-    const last = merged[merged.length - 1];
-    if (last && range.start <= last.end) last.end = Math.max(last.end, range.end);
-    else merged.push({ ...range });
-  }
-  return merged;
-}
-
-/** Repaints `<mark>` elements for the supplied ranges, clearing prior ones. */
-function paintReadingHighlights(scope: HTMLElement, ranges: ReadingHighlightRange[]): void {
-  // Unwrap any existing highlight marks first so repaints are idempotent.
-  scope.querySelectorAll('mark[data-reading-highlight]').forEach((mark) => {
-    const parent = mark.parentNode;
-    if (!parent) return;
-    while (mark.firstChild) parent.insertBefore(mark.firstChild, mark);
-    parent.removeChild(mark);
-  });
-  scope.normalize();
-  if (ranges.length === 0) return;
-
-  for (const { start, end } of ranges) {
-    const segments: Array<{ node: Text; from: number; to: number }> = [];
-    const walker = document.createTreeWalker(scope, NodeFilter.SHOW_TEXT);
-    let offset = 0;
-    let node = walker.nextNode() as Text | null;
-    while (node) {
-      const len = node.textContent?.length ?? 0;
-      const from = Math.max(start, offset);
-      const to = Math.min(end, offset + len);
-      if (from < to) segments.push({ node, from: from - offset, to: to - offset });
-      offset += len;
-      node = walker.nextNode() as Text | null;
-    }
-    // Wrap last-to-first so earlier offsets stay valid as nodes split.
-    for (const segment of segments.reverse()) {
-      const range = document.createRange();
-      range.setStart(segment.node, segment.from);
-      range.setEnd(segment.node, segment.to);
-      const mark = document.createElement('mark');
-      mark.setAttribute('data-reading-highlight', '');
-      mark.className = READING_HIGHLIGHT_CLASS;
-      try {
-        range.surroundContents(mark);
-      } catch {
-        // Segment spans an element boundary — skip; remaining segments still paint.
-      }
-    }
-  }
-}
-
-
-

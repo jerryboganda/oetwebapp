@@ -15,7 +15,7 @@ import { expect, test, type ConsoleMessage, type Response } from '@playwright/te
  * Run:
  *   $env:PROD_LEARNER_EMAIL  = "..."
  *   $env:PROD_LEARNER_PASSWORD = "..."
- *   npx playwright test tests/e2e/prod-interaction.spec.ts --project=chromium-unauth --workers=1
+ *   pnpm exec playwright test tests/e2e/prod-interaction.spec.ts --project=chromium-unauth --workers=1
  */
 
 const PROD_URL = process.env.PROD_URL ?? 'https://app.oetwithdrhesham.co.uk';

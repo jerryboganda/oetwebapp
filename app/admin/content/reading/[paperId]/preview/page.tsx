@@ -3,15 +3,14 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, Clock3, Eye, FileText, Monitor, Play, RotateCcw } from 'lucide-react';
+import { ArrowLeft, Clock3, Eye, Play, RotateCcw } from 'lucide-react';
 
 import { AdminSettingsLayout, SettingsSection } from '@/components/admin/layout/admin-settings-layout';
 import { Button } from '@/components/admin/ui/button';
 import { Badge } from '@/components/admin/ui/badge';
 import { Skeleton } from '@/components/admin/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
-import { fetchAuthorizedObjectUrl } from '@/lib/api';
-import { sanitizeBodyHtml } from '@/lib/wizard/sanitize-html';
+import { ReadingPdfViewer } from '@/components/domain/reading-pdf-viewer';
 import {
   getReadingStructureAdminPreview,
   type ReadingLearnerStructureDto,
@@ -19,7 +18,6 @@ import {
 
 const OPTION_LABELS = ['A', 'B', 'C', 'D', 'E', 'F'];
 
-type PreviewMode = 'computer' | 'paper';
 type PreviewPartCode = 'A' | 'B' | 'C';
 type PreviewTimerWindow = 'A' | 'BC';
 
@@ -58,12 +56,9 @@ export default function ReadingPreviewAsStudentPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [previewStarted, setPreviewStarted] = useState(false);
-  const [previewMode, setPreviewMode] = useState<PreviewMode>('computer');
   const [activePart, setActivePart] = useState<PreviewPartCode>('A');
   const activeTimerWindow = timerWindowForPart(activePart);
   const [remainingSeconds, setRemainingSeconds] = useState(initialTimerSeconds('A'));
-  const [openingAssetId, setOpeningAssetId] = useState<string | null>(null);
-  const [assetError, setAssetError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!paperId) return;
@@ -95,28 +90,6 @@ export default function ReadingPreviewAsStudentPage() {
     }, 1000);
     return () => window.clearInterval(timerId);
   }, [previewStarted, remainingSeconds]);
-
-  async function handleOpenAsset(asset: NonNullable<ReadingLearnerStructureDto['paper']['questionPaperAssets']>[number]) {
-    setOpeningAssetId(asset.id);
-    setAssetError(null);
-    const openedWindow = window.open('about:blank', '_blank');
-    if (openedWindow) openedWindow.opener = null;
-    try {
-      const objectUrl = await fetchAuthorizedObjectUrl(asset.downloadPath);
-      if (openedWindow && !openedWindow.closed) {
-        openedWindow.location.assign(objectUrl);
-      } else {
-        const fallbackWindow = window.open(objectUrl, '_blank', 'noopener,noreferrer');
-        if (!fallbackWindow) throw new Error('The browser blocked the PDF popup.');
-      }
-      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 10_000);
-    } catch (err) {
-      if (openedWindow && !openedWindow.closed) openedWindow.close();
-      setAssetError(err instanceof Error ? err.message : 'Unable to open original paper.');
-    } finally {
-      setOpeningAssetId(null);
-    }
-  }
 
   return (
     <AdminSettingsLayout
@@ -158,7 +131,7 @@ export default function ReadingPreviewAsStudentPage() {
 
             <SettingsSection
               title="Timed preview console"
-              description="Exercise the learner layout with official Reading timing and paper/computer mode controls before publishing. This does not create a learner attempt."
+              description="Exercise the learner-safe PDF layout with official Reading timing before publishing. This does not create a learner attempt."
             >
               <div className="space-y-4">
                 <div className="grid gap-3 md:grid-cols-4">
@@ -195,25 +168,15 @@ export default function ReadingPreviewAsStudentPage() {
                   </Button>
                   <Button
                     type="button"
-                    variant={previewMode === 'computer' ? 'primary' : 'secondary'}
+                    variant="secondary"
                     size="sm"
-                    onClick={() => setPreviewMode('computer')}
-                    startIcon={<Monitor className="h-4 w-4" />}
+                    disabled
                   >
-                    Computer mode
-                  </Button>
-                  <Button
-                    type="button"
-                    variant={previewMode === 'paper' ? 'primary' : 'secondary'}
-                    size="sm"
-                    onClick={() => setPreviewMode('paper')}
-                    startIcon={<FileText className="h-4 w-4" />}
-                  >
-                    Paper mode
+                    Read-only PDF mode
                   </Button>
                 </div>
 
-                <div className="rounded-lg border border-admin-border bg-admin-bg-subtle p-4">
+                <div className="rounded-admin-lg border border-admin-border bg-admin-bg-subtle p-4">
                   <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
                     <div>
                       <p className="text-xs font-semibold uppercase tracking-wider text-admin-fg-muted">
@@ -222,9 +185,7 @@ export default function ReadingPreviewAsStudentPage() {
                       <p className="text-sm text-admin-fg-default">
                         {previewStarted
                           ? `Active timer ${formatTimer(remainingSeconds)} for ${activePart === 'A' ? 'Part A' : 'Parts B+C'}.`
-                          : previewMode === 'paper'
-                          ? 'Paper simulation shows source PDFs first and uses answer-sheet style entry.'
-                          : 'Computer simulation shows texts, questions, and inline response controls together.'}
+                          : 'PDF preview shows the uploaded question paper with answer-sheet style entry.'}
                       </p>
                     </div>
                     <div className="inline-flex rounded-admin-lg border border-admin-border bg-admin-bg-surface p-1">
@@ -241,28 +202,6 @@ export default function ReadingPreviewAsStudentPage() {
                     </div>
                   </div>
 
-                  {previewMode === 'paper' && structure.paper.questionPaperAssets?.length ? (
-                    <div className="mb-4 rounded-admin-lg border border-admin-border bg-admin-bg-surface p-3">
-                      <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-admin-fg-muted">Question paper assets</p>
-                      <div className="flex flex-wrap gap-2">
-                        {structure.paper.questionPaperAssets.map((asset) => (
-                          <Button
-                            key={asset.id}
-                            type="button"
-                            variant="secondary"
-                            size="sm"
-                            onClick={() => void handleOpenAsset(asset)}
-                            disabled={openingAssetId === asset.id}
-                            startIcon={<FileText className="h-4 w-4" />}
-                          >
-                            {asset.part ?? 'Paper'} · {asset.title}
-                          </Button>
-                        ))}
-                      </div>
-                      {assetError ? <p className="mt-2 text-xs font-medium text-[var(--admin-danger)]" role="alert">{assetError}</p> : null}
-                    </div>
-                  ) : null}
-
                   <PreviewAnswerSheet structure={structure} activePart={activePart} />
                 </div>
               </div>
@@ -272,31 +211,16 @@ export default function ReadingPreviewAsStudentPage() {
               <SettingsSection
                 key={part.id}
                 title={`Part ${part.partCode}`}
-                description={`${part.timeLimitMinutes} min · ${part.questions.length} question${part.questions.length !== 1 ? 's' : ''}`}
+                description={`${part.timeLimitMinutes} min - ${part.questions.length} question${part.questions.length !== 1 ? 's' : ''}`}
               >
                 <div className="space-y-6">
-                  {part.texts.length > 0 && (
-                    <div className="space-y-4">
-                      {part.texts.map((text) => (
-                        <article
-                          key={text.id}
-                          className="rounded-lg border border-admin-border bg-admin-bg-subtle p-4"
-                        >
-                          <h3 className="text-sm font-semibold text-admin-fg-strong">
-                            {text.displayOrder}. {text.title}
-                          </h3>
-                          {text.source && (
-                            <p className="mt-0.5 text-xs text-admin-fg-muted">{text.source}</p>
-                          )}
-                          <div
-                            className="prose prose-sm mt-3 max-w-none text-admin-fg-default"
-                            // Learner-facing body HTML, identical to the student player.
-                            dangerouslySetInnerHTML={{ __html: sanitizeBodyHtml(text.bodyHtml) }}
-                          />
-                        </article>
-                      ))}
-                    </div>
-                  )}
+                  <ReadingPdfViewer
+                    paperId={paperId}
+                    partCode={part.partCode}
+                    assets={structure.paper.questionPaperAssets ?? []}
+                    annotations={[]}
+                    readOnly
+                  />
 
                   <ol className="space-y-3">
                     {part.questions.map((q) => {
@@ -360,7 +284,7 @@ function PreviewAnswerSheet({ structure, activePart }: { structure: ReadingLearn
         return (
           <label key={question.id} className="rounded-admin-lg border border-admin-border bg-admin-bg-surface p-3 text-sm">
             <span className="mb-2 block text-xs font-semibold text-admin-fg-muted">
-              Part {part.partCode} · Q{question.displayOrder}
+              Part {part.partCode} - Q{question.displayOrder}
             </span>
             {options.length > 0 ? (
               <select className="w-full rounded-admin-md border border-admin-border bg-admin-bg-surface px-2 py-2 text-sm text-admin-fg-default">

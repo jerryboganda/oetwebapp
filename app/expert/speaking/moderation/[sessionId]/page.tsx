@@ -321,9 +321,7 @@ export default function SpeakingModerationCasePage() {
       </div>
 
       {toast && (
-        <Toast variant={toast.variant} onClose={() => setToast(null)}>
-          {toast.message}
-        </Toast>
+        <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} />
       )}
     </ExpertDashboardShell>
   );

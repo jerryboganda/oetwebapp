@@ -1,7 +1,7 @@
 # Reading Part B / Part C Stacked Student Layout — Design
 
 Date: 2026-06-01
-Status: Approved (clarifications captured via popup)
+Status: Superseded by the PDF-only Reading rebuild. The historical stacked HTML practice surface notes below remain for context; the full Reading paper route now renders uploaded PDFs through `components/domain/reading-pdf-viewer.tsx`.
 
 ## Goal
 
@@ -19,11 +19,10 @@ stacks **above** its questions.
 
 ## Scope (approved)
 
-Two surfaces, made consistent:
+Two surfaces were originally in scope:
 
-1. **Exam paper simulation** — `components/domain/reading-paper-simulation.tsx`
-   + `lib/reading-paper-simulation.ts`, used by `/reading/exam` and
-   `/reading/paper/[paperId]`.
+1. **Full paper route** — superseded by the PDF-only viewer on
+  `/reading/paper/[paperId]`.
 2. **Practice player** — `components/reading/ReadingPlayer.tsx`, used by
    `/reading/practice/[sessionId]`. Full conversion of Part B/C presentation to
    the stacked layout (Option B).
@@ -57,20 +56,15 @@ Both surfaces adapt their data into these components:
 - Part B = 3-option MCQ, Part C = 4-option MCQ contracts unchanged (backend
   publish gate still enforces cardinality).
 
-## Page-model change (exam sim)
+## Page-model change (historical exam sim)
 
-`buildPartBCBookletPages` currently paginates Part B per extract and splits
-Part C into separate text-only and questions-only pages. New model:
-
-- Part B → a single stacked section (all 6 pairs), not paginated.
-- Part C → one combined page per text carrying both `textIds` and `questionIds`
-  (drop the questions-only page), rendered as sticky-text + stacked questions.
+The old `buildPartBCBookletPages` model was removed with the PDF-only rebuild.
+The full paper route now uses the uploaded PDF as the visual source and keeps
+structured answer entry separate from the PDF canvas.
 
 ## Testing
 
-- `lib/reading-paper-simulation.test.ts` — updated page-model expectations.
-- `components/domain/reading-paper-simulation.test.tsx` — Part B pairing + Part C
-  text/8-question stacking + HTML sanitisation retained.
+- Full paper PDF viewer tests cover annotation and read-only rendering behavior.
 - `ReadingPlayer` — add a test for grouped stacked rendering of Part B/C.
 - `tests/e2e/reading/part-c-four-options.spec.ts` — keep green.
 

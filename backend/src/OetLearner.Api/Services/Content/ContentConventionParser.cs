@@ -17,7 +17,7 @@ namespace OetLearner.Api.Services.Content;
 //   ─ Listening Sample N / *Audio-Script.pdf
 //   ─ Listening Sample N / *Answer-Key.pdf  (also "Answers.pdf")
 //   ─ Reading Sample N / Part A Reading*.pdf  (Part="A")
-//   ─ Reading Sample N / Reading Part B&C*.pdf  (Part="B+C")
+//   ─ Reading Sample N / Reading Part B&C*.pdf  (attached to Part="B" and Part="C")
 //   ─ Writing N (<LetterType label>) / *Case Notes*.pdf   + *Answer Sheet*.pdf
 //   ─ Card N (<CardType label>) / *.pdf
 //   ─ "Same for all professions" in folder → AppliesToAllProfessions=true
@@ -185,11 +185,20 @@ public sealed class ContentConventionParser : IContentConventionParser
 
             // ── Classify the file by role ─────────────────────────────────
             var (role, part) = ClassifyFile(path);
-            paper.Assets.Add(new ProposedAsset(
-                SourceRelativePath: path,
-                Role: role,
-                Part: part,
-                SuggestedTitle: Path.GetFileNameWithoutExtension(segments[^1])));
+            var suggestedTitle = Path.GetFileNameWithoutExtension(segments[^1]);
+            if (subtest == "reading" && role == PaperAssetRole.QuestionPaper && part == "B+C")
+            {
+                paper.Assets.Add(new ProposedAsset(path, role, "B", $"{suggestedTitle} (Part B)"));
+                paper.Assets.Add(new ProposedAsset(path, role, "C", $"{suggestedTitle} (Part C)"));
+            }
+            else
+            {
+                paper.Assets.Add(new ProposedAsset(
+                    SourceRelativePath: path,
+                    Role: role,
+                    Part: part,
+                    SuggestedTitle: suggestedTitle));
+            }
             classified++;
         }
 
@@ -524,8 +533,19 @@ public sealed class ContentConventionParser : IContentConventionParser
             RequireAsset(paper, PaperAssetRole.QuestionPaper, requiredFor: "listening");
             RequireAsset(paper, PaperAssetRole.AudioScript, requiredFor: "listening");
             RequireAsset(paper, PaperAssetRole.AnswerKey, requiredFor: "listening");
-            RequireAsset(paper, PaperAssetRole.QuestionPaper, requiredFor: "reading");
-            RequireAsset(paper, PaperAssetRole.AnswerKey, requiredFor: "reading");
+            if (paper.SubtestCode == "reading")
+            {
+                foreach (var part in new[] { "A", "B", "C" })
+                {
+                    if (!paper.Assets.Any(a => a.Role == PaperAssetRole.QuestionPaper && a.Part == part))
+                    {
+                        paper.ReadinessIssues.Add(new(
+                            Code: $"missing_reading_part_{part.ToLowerInvariant()}_pdf",
+                            Severity: "error",
+                            Message: $"Reading papers require a primary QuestionPaper PDF for Part {part}."));
+                    }
+                }
+            }
             RequireAsset(paper, PaperAssetRole.CaseNotes, requiredFor: "writing");
             RequireAsset(paper, PaperAssetRole.ModelAnswer, requiredFor: "writing");
             RequireAsset(paper, PaperAssetRole.RoleCard, requiredFor: "speaking");

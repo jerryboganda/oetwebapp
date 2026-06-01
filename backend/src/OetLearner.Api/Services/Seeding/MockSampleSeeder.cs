@@ -304,10 +304,11 @@ public sealed class MockSampleSeeder(
             cardType: null, letterType: null,
             durationMinutes: 60, now: now);
 
-        // Two QuestionPaper rows distinguished by Part. The (Paper, Role,
-        // Part, IsPrimary) unique index permits both as primary.
+        // Combined B+C source PDFs are attached to both canonical part slots;
+        // the (Paper, Role, Part, IsPrimary) unique index permits all three.
         await AttachAssetAsync(paper, PaperAssetRole.QuestionPaper, partA,  "Part A",   0, now, ct, part: "A");
-        await AttachAssetAsync(paper, PaperAssetRole.QuestionPaper, partBC, "Part B+C", 1, now, ct, part: "B+C");
+        await AttachAssetAsync(paper, PaperAssetRole.QuestionPaper, partBC, "Part B",   1, now, ct, part: "B");
+        await AttachAssetAsync(paper, PaperAssetRole.QuestionPaper, partBC, "Part C",   2, now, ct, part: "C");
         return paper;
     }
 

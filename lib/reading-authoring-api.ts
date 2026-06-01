@@ -415,6 +415,19 @@ export interface ReadingLearnerStructureDto {
   }>;
 }
 
+export type ReadingPaperAnnotationKind = 'Text' | 'Rectangle' | 'Freehand';
+
+export interface ReadingPaperAnnotationDto {
+  id: string;
+  paperId: string;
+  contentPaperAssetId: string;
+  pageNumber: number;
+  kind: ReadingPaperAnnotationKind;
+  geometry: unknown;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface ReadingPolicyDto {
   id: string;
   attemptsPerPaperPerUser: number;
@@ -970,6 +983,48 @@ export const getReadingPathway = () =>
 
 export const getReadingStructureLearner = (paperId: string) =>
   api<ReadingLearnerStructureDto>(`/v1/reading-papers/papers/${paperId}/structure`);
+
+export const getReadingPaperAnnotations = (paperId: string) =>
+  api<ReadingPaperAnnotationDto[]>(`/v1/reading-papers/papers/${paperId}/annotations`);
+
+export const createReadingPaperAnnotation = (
+  paperId: string,
+  body: {
+    contentPaperAssetId: string;
+    pageNumber: number;
+    kind: ReadingPaperAnnotationKind;
+    geometryJson: unknown;
+  },
+) => api<ReadingPaperAnnotationDto>(`/v1/reading-papers/papers/${paperId}/annotations`, {
+  method: 'POST',
+  body: JSON.stringify(body),
+});
+
+export const updateReadingPaperAnnotation = (
+  paperId: string,
+  annotationId: string,
+  body: {
+    contentPaperAssetId: string;
+    pageNumber: number;
+    kind: ReadingPaperAnnotationKind;
+    geometryJson: unknown;
+  },
+) => api<ReadingPaperAnnotationDto>(`/v1/reading-papers/papers/${paperId}/annotations/${annotationId}`, {
+  method: 'PUT',
+  body: JSON.stringify(body),
+});
+
+export const deleteReadingPaperAnnotation = (paperId: string, annotationId: string) =>
+  api<void>(`/v1/reading-papers/papers/${paperId}/annotations/${annotationId}`, { method: 'DELETE' });
+
+export const clearReadingPaperAnnotations = (
+  paperId: string,
+  options: { scope: 'asset'; assetId: string } | { scope: 'paper' },
+) => {
+  const params = new URLSearchParams({ scope: options.scope });
+  if (options.scope === 'asset') params.set('assetId', options.assetId);
+  return api<void>(`/v1/reading-papers/papers/${paperId}/annotations?${params.toString()}`, { method: 'DELETE' });
+};
 
 export const startReadingAttempt = (
   paperId: string,

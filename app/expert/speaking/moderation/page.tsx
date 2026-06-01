@@ -91,9 +91,9 @@ export default function SpeakingModerationQueuePage() {
   const columns: Column<SpeakingModerationQueueItem>[] = useMemo(
     () => [
       {
-        id: 'session',
+        key: 'session',
         header: 'Session',
-        cell: (row) => (
+        render: (row) => (
           <div className="flex flex-col">
             <span className="font-mono text-xs text-muted-foreground">{row.sessionId}</span>
             <span className="text-sm">{row.professionId || '—'}</span>
@@ -101,9 +101,9 @@ export default function SpeakingModerationQueuePage() {
         ),
       },
       {
-        id: 'status',
+        key: 'status',
         header: 'Status',
-        cell: (row) => (
+        render: (row) => (
           <div className="flex items-center gap-2">
             {row.needsSecondMark ? (
               <Users className="h-4 w-4 text-amber-500" aria-hidden />
@@ -117,9 +117,9 @@ export default function SpeakingModerationQueuePage() {
         ),
       },
       {
-        id: 'variance',
+        key: 'variance',
         header: 'Variance',
-        cell: (row) =>
+        render: (row) =>
           row.variancePoints == null ? (
             <span className="text-muted-foreground">—</span>
           ) : (
@@ -127,19 +127,19 @@ export default function SpeakingModerationQueuePage() {
           ),
       },
       {
-        id: 'reason',
+        key: 'reason',
         header: 'Reason',
-        cell: (row) => <span className="capitalize">{row.reason.replace(/_/g, ' ')}</span>,
+        render: (row) => <span className="capitalize">{row.reason.replace(/_/g, ' ')}</span>,
       },
       {
-        id: 'created',
+        key: 'created',
         header: 'Opened',
-        cell: (row) => <span className="text-muted-foreground">{formatRelative(row.createdAt)}</span>,
+        render: (row) => <span className="text-muted-foreground">{formatRelative(row.createdAt)}</span>,
       },
       {
-        id: 'actions',
+        key: 'actions',
         header: '',
-        cell: (row) => (
+        render: (row) => (
           <Button
             variant="primary"
             size="sm"
@@ -173,8 +173,11 @@ export default function SpeakingModerationQueuePage() {
             <FilterBar
               groups={filterGroups}
               selected={{ profession: profession ? [profession] : [] }}
-              onChange={(next) => setProfession(next.profession?.[0] ?? '')}
-              multiple={false}
+              onChange={(groupId, optionId) => {
+                if (groupId !== 'profession') return;
+                setProfession((prev) => (prev === optionId ? '' : optionId));
+              }}
+              onClear={() => setProfession('')}
             />
             <Button variant="secondary" size="sm" onClick={() => void load()} disabled={loading}>
               <RefreshCw className={`mr-2 h-4 w-4 ${loading ? 'animate-spin' : ''}`} aria-hidden />
@@ -199,7 +202,7 @@ export default function SpeakingModerationQueuePage() {
           />
         ) : (
           <Card className="overflow-hidden">
-            <DataTable data={items} columns={columns} getRowId={(row) => row.caseId} />
+            <DataTable data={items} columns={columns} keyExtractor={(row) => row.caseId} />
           </Card>
         )}
       </div>

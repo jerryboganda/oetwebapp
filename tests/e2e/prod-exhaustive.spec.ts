@@ -17,7 +17,7 @@ import { seedProdAuth } from './fixtures/prod-auth';
  * Run:
  *   $env:PROD_LEARNER_EMAIL  = "..."
  *   $env:PROD_LEARNER_PASSWORD = "..."
- *   npx playwright test tests/e2e/prod-exhaustive.spec.ts --project=chromium-unauth --workers=1
+ *   pnpm exec playwright test tests/e2e/prod-exhaustive.spec.ts --project=chromium-unauth --workers=1
  */
 
 const PROD_URL = process.env.PROD_URL ?? 'https://app.oetwithdrhesham.co.uk';

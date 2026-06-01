@@ -309,11 +309,32 @@ public sealed class RealContentFolderImporter
                 {
                     role = "Supplementary"; part = null;
                 }
+                var normalizedPath = NormalizePath(f.FullName);
+                var originalFilename = Path.GetFileName(f.FullName);
+                if (role == "QuestionPaper" && part == "B+C")
+                {
+                    p.Assets.Add(new RealContentAssetProposal
+                    {
+                        Role = role,
+                        SourcePath = normalizedPath,
+                        OriginalFilename = originalFilename,
+                        Part = "B",
+                    });
+                    p.Assets.Add(new RealContentAssetProposal
+                    {
+                        Role = role,
+                        SourcePath = normalizedPath,
+                        OriginalFilename = originalFilename,
+                        Part = "C",
+                    });
+                    continue;
+                }
+
                 p.Assets.Add(new RealContentAssetProposal
                 {
                     Role = role,
-                    SourcePath = NormalizePath(f.FullName),
-                    OriginalFilename = Path.GetFileName(f.FullName),
+                    SourcePath = normalizedPath,
+                    OriginalFilename = originalFilename,
                     Part = part,
                 });
             }
@@ -689,7 +710,8 @@ public sealed class RealContentFolderImporter
         await _db.SaveChangesAsync(ct);
 
         // G2 — every imported Reading paper lands structure-ready. The folder
-        // import only attaches the Part A / Part B+C PDFs as assets; here we
+        // import attaches Part A plus the combined B+C source PDF as separate
+        // canonical Part B and Part C asset rows; here we
         // scaffold the canonical A/B/C parts and extract the source text so the
         // admin's structure-review screen has content to work from immediately
         // (no 10-minute background-worker wait). Runs after the SaveChanges

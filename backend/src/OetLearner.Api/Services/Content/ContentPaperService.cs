@@ -127,7 +127,7 @@ public sealed class ContentPaperService(LearnerDbContext db) : IContentPaperServ
     private static readonly Dictionary<string, HashSet<PaperAssetRole>> RequiredRoles = new(StringComparer.OrdinalIgnoreCase)
     {
         ["listening"] = new() { PaperAssetRole.Audio, PaperAssetRole.QuestionPaper, PaperAssetRole.AudioScript, PaperAssetRole.AnswerKey },
-        ["reading"]   = new() { PaperAssetRole.QuestionPaper, PaperAssetRole.AnswerKey },
+        ["reading"]   = new() { PaperAssetRole.QuestionPaper },
         ["writing"]   = new() { PaperAssetRole.CaseNotes, PaperAssetRole.ModelAnswer },
         ["speaking"]  = new()
         {
@@ -399,6 +399,19 @@ public sealed class ContentPaperService(LearnerDbContext db) : IContentPaperServ
             .Include(p => p.Assets)
             .FirstOrDefaultAsync(x => x.Id == paperId, ct)
             ?? throw new InvalidOperationException("Paper not found.");
+
+        if (string.Equals(paper.SubtestCode, "reading", StringComparison.OrdinalIgnoreCase))
+        {
+            var report = await new ReadingStructureService(db).ValidatePaperAsync(paper.Id, ct);
+            if (!report.IsPublishReady)
+            {
+                var errors = report.Issues
+                    .Where(issue => string.Equals(issue.Severity, "error", StringComparison.OrdinalIgnoreCase))
+                    .Select(issue => issue.Message)
+                    .DefaultIfEmpty("Reading paper is not publish-ready.");
+                throw new InvalidOperationException("Reading paper is not publish-ready: " + string.Join(" ", errors));
+            }
+        }
 
         var now = DateTimeOffset.UtcNow;
         paper.Status = ContentStatus.Published;

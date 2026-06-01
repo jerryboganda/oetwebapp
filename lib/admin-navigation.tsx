@@ -382,7 +382,6 @@ export function isContentWorkspace(pathname: string | null | undefined): boolean
 
 const adminPageTitleRules: AdminPageTitleRule[] = [
   { prefix: '/admin', title: 'Operations', exact: true },
-  { prefix: '/admin/content/reading/extraction', title: 'AI Extraction' },
   { prefix: '/admin/content/reading', title: 'Reading' },
   { prefix: '/admin/content/listening', title: 'Listening' },
   { prefix: '/admin/content/mocks', title: 'Mocks' },

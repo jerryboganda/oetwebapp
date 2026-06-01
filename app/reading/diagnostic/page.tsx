@@ -160,7 +160,12 @@ function isDiagnosticResultPendingError(error: unknown): boolean {
   }
 
   const record = error as { status?: number };
-  return record.status === 404 || record.status === 408 || record.status === 429 || record.status >= 500;
+  return (
+    record.status === 404 ||
+    record.status === 408 ||
+    record.status === 429 ||
+    (record.status != null && record.status >= 500)
+  );
 }
 
 export default function DiagnosticPage() {

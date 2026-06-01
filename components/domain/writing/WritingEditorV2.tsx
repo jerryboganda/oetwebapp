@@ -105,7 +105,7 @@ interface AnnotationsModule {
  *     stays interactive even before hydration. Once the client mounts,
  *     we lazy-import `@tiptap/react` + `@tiptap/starter-kit` and swap
  *     to the rich editor.
- *   - If Tiptap is not yet installed (fresh checkout pre-`npm install`)
+ *   - If Tiptap is not yet installed (fresh checkout pre-`pnpm install`)
  *     we keep the textarea fallback indefinitely so the editor still
  *     functions. The annotation overlay is rendered above either surface.
  *   - All changes go through `onChange(content, wordCount)`. The
@@ -180,7 +180,7 @@ export function WritingEditorV2({
   // Dynamic Tiptap import (client-only). Cast to `string` so TypeScript
   // doesn't try to resolve the module at compile time — `@tiptap/react`
   // and `@tiptap/starter-kit` are listed in package.json and will resolve
-  // once `npm install` runs.
+  // once `pnpm install` runs.
   useEffect(() => {
     let cancelled = false;
     void (async () => {

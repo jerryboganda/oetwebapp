@@ -287,6 +287,7 @@ public partial class LearnerDbContext(DbContextOptions<LearnerDbContext> options
     public DbSet<ReadingQuestion> ReadingQuestions => Set<ReadingQuestion>();
     public DbSet<ReadingAttempt> ReadingAttempts => Set<ReadingAttempt>();
     public DbSet<ReadingAnswer> ReadingAnswers => Set<ReadingAnswer>();
+    public DbSet<ReadingPaperAnnotation> ReadingPaperAnnotations => Set<ReadingPaperAnnotation>();
     public DbSet<ReadingPolicy> ReadingPolicies => Set<ReadingPolicy>();
     public DbSet<ReadingUserPolicyOverride> ReadingUserPolicyOverrides => Set<ReadingUserPolicyOverride>();
     public DbSet<ReadingErrorBankEntry> ReadingErrorBankEntries => Set<ReadingErrorBankEntry>();
@@ -799,6 +800,16 @@ public partial class LearnerDbContext(DbContextOptions<LearnerDbContext> options
             .WithMany()
             .HasForeignKey(x => x.ReadingQuestionId)
             .OnDelete(DeleteBehavior.Restrict);
+        modelBuilder.Entity<ReadingPaperAnnotation>()
+            .HasOne(x => x.Paper)
+            .WithMany()
+            .HasForeignKey(x => x.PaperId)
+            .OnDelete(DeleteBehavior.Cascade);
+        modelBuilder.Entity<ReadingPaperAnnotation>()
+            .HasOne(x => x.ContentPaperAsset)
+            .WithMany()
+            .HasForeignKey(x => x.ContentPaperAssetId)
+            .OnDelete(DeleteBehavior.Cascade);
         modelBuilder.Entity<ReadingQuestionReviewLog>()
             .HasOne(x => x.Question)
             .WithMany()

@@ -44,6 +44,7 @@ public static class ReadingAuthoringAdminEndpoints
                 .Where(a => a.PaperId == paperId
                     && a.Role == PaperAssetRole.QuestionPaper
                     && a.IsPrimary
+                    && (a.Part == "A" || a.Part == "B" || a.Part == "C")
                     && a.MediaAsset != null
                     && a.MediaAsset.Status == MediaAssetStatus.Ready)
                 .Include(a => a.MediaAsset)

@@ -8,7 +8,7 @@ export type ReadingWizardStep = 'metadata' | 'texts' | 'questions' | 'validate';
 
 const STEPS: Array<{ key: ReadingWizardStep; label: string; icon: React.ReactNode; href: (id: string) => string }> = [
   { key: 'metadata', label: 'Paper Info', icon: <FileText className="h-4 w-4" />, href: (id) => `/admin/content/reading/${id}` },
-  { key: 'texts', label: 'Texts', icon: <BookOpen className="h-4 w-4" />, href: (id) => `/admin/content/reading/${id}/texts` },
+  { key: 'texts', label: 'PDFs', icon: <BookOpen className="h-4 w-4" />, href: (id) => `/admin/content/reading/${id}/texts` },
   { key: 'questions', label: 'Questions', icon: <HelpCircle className="h-4 w-4" />, href: (id) => `/admin/content/reading/${id}/questions` },
   { key: 'validate', label: 'Validate & Publish', icon: <ShieldCheck className="h-4 w-4" />, href: (id) => `/admin/content/reading/${id}/validate` },
 ];

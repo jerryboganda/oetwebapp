@@ -1,22 +1,21 @@
 # PROGRESS - Active Agent Continuity
 
-Last updated: 2026-05-31
+Last updated: 2026-06-01
 
 This file is intentionally compact. Historical progress was archived locally at `.github/context-archive-20260531/PROGRESS-before-continuity.md` and is also available through git history. Do not paste long historical ledgers back here.
 
 ## Current Operating Goal
 
-Keep GitHub Copilot in VS Code efficient and stateful for the OET workspace by using compact, durable task memory instead of large catalogs or stale conversation context.
+The current production-facing task is complete: the Reading diagnostic finish-flow hardening is committed, pushed, and deployed to the live VPS green slot.
 
 ## Current State
 
-- Startup-context cleanup is complete: repo `.github/skills` and broad `awesome-*` agents were archived locally; always-loaded OET instructions are compact.
-- Broad global `awesome-copilot` skill/agent discovery was disabled in place by renaming discovery files with `.disabled-20260531` because Windows/VS Code locked the plugin folder.
+- Commit `4345305e` is on `origin/main`.
+- Production VPS rebuilt the green slot with a no-cache source build, updated `.deploy/active-slot.env` to `green`, stopped the stale blue slot, and passed public API/web health checks.
+- The deployed green web bundle contains the `diagnostic_already_submitted` marker from the updated finish-flow logic.
+- `.github/agent-state.local.md` now reflects the deployed state and the remaining follow-up is optional browser QA.
 - A compact local task ledger is expected at `.github/agent-state.local.md`; update it during long work and before handoff.
-- Repo and user-level OmO/Ralph/Superpowers agents now have continuity-first instructions.
-- Superpowers is now the preferred all-purpose primary agent for future OET build, fix, debug, review, research, and automation tasks.
-- Archived catalog deletion noise is hidden locally with `skip-worktree`; broad status now shows only real modified customization files.
-- Heavy validation remains Docker-only per `AGENTS.md`; never use the production VPS for validation.
+- Heavy validation remains Docker-only per `AGENTS.md`; production VPS was used only for deployment and verification.
 
 ## Next-Step Protocol For New Agent Runs
 

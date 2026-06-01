@@ -245,7 +245,7 @@ export default function WritingDiagnosticSessionPage() {
   useEffect(() => {
     if (!session?.submissionId || locked) return;
     const d = connectWritingSubmissionStream(session.submissionId, {
-      onGradeReady: (_: WritingGradeDto) => {
+      onGradeReady: () => {
         router.push(`/writing/diagnostic/session/${encodeURIComponent(sessionId)}/results`);
       },
     });

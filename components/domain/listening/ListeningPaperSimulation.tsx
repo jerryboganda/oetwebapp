@@ -31,8 +31,7 @@ export interface ListeningPaperSimulationProps {
 }
 
 /**
- * Listening paper/booklet answer surface — the static analogue of
- * `components/domain/reading-paper-simulation.tsx`.
+ * Listening paper/booklet answer surface for the static listening answer booklet.
  *
  * IMPORTANT: this component does NOT own the `<audio>` element, the
  * `ListeningAudioTransport`, or the FSM phase machine. Audio stays

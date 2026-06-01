@@ -279,7 +279,7 @@ export default function SpeakingResultVisibilityPage() {
             <ToggleRow
               key={spec.key}
               spec={spec}
-              value={draft[spec.key]}
+              value={draft[spec.key] === true}
               onChange={(next) => setField(spec.key, next)}
             />
           ))}
@@ -295,7 +295,7 @@ export default function SpeakingResultVisibilityPage() {
             <ToggleRow
               key={spec.key}
               spec={spec}
-              value={draft[spec.key]}
+              value={draft[spec.key] === true}
               onChange={(next) => setField(spec.key, next)}
             />
           ))}

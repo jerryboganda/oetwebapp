@@ -12,7 +12,7 @@
  * (uses 1 credit)" — visually disabled for now (credit gating wires in later).
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { BookOpen, Loader2, Mic, UserPlus } from 'lucide-react';
@@ -125,23 +125,6 @@ export default function SpeakingSessionResultsPage() {
   }, [sessionId]);
 
   useEffect(() => {
-    if (visibleData?.ai && !trackedAiAssessmentRef.current) {
-      trackedAiAssessmentRef.current = true;
-      trackSpeaking('ai_assessment_viewed', {
-        sessionId,
-        estimatedBand: visibleData.ai.readinessBand,
-      });
-    }
-    if (visibleData?.tutor && !trackedTutorAssessmentRef.current) {
-      trackedTutorAssessmentRef.current = true;
-      trackSpeaking('tutor_assessment_viewed', {
-        sessionId,
-        estimatedBand: visibleData.tutor.readinessBand,
-      });
-    }
-  }, [sessionId, visibleData]);
-
-  useEffect(() => {
     void load();
   }, [load]);
 
@@ -176,6 +159,23 @@ export default function SpeakingSessionResultsPage() {
     };
   }, [data, showAiEstimate, showTutorScore]);
 
+  useEffect(() => {
+    if (visibleData?.ai && !trackedAiAssessmentRef.current) {
+      trackedAiAssessmentRef.current = true;
+      trackSpeaking('ai_assessment_viewed', {
+        sessionId,
+        estimatedBand: visibleData.ai.readinessBand,
+      });
+    }
+    if (visibleData?.tutor && !trackedTutorAssessmentRef.current) {
+      trackedTutorAssessmentRef.current = true;
+      trackSpeaking('tutor_assessment_viewed', {
+        sessionId,
+        estimatedBand: visibleData.tutor.readinessBand,
+      });
+    }
+  }, [sessionId, visibleData]);
+
   const transcriptPayload = useMemo<TranscriptPayload>(() => ({
     segments: transcript?.segments ?? [],
   }), [transcript]);
@@ -190,7 +190,7 @@ export default function SpeakingSessionResultsPage() {
 
   const tabs = useMemo(
     () => {
-      const baseTabs = [
+      const baseTabs: Array<{ id: string; label: string; icon: ReactNode; count?: number }> = [
       { id: 'overview', label: 'Overview', icon: <Mic className="h-4 w-4" aria-hidden /> },
       ];
       if (showTranscript) {

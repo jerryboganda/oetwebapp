@@ -90,6 +90,19 @@ public enum ReadingAttemptMode
 }
 
 /// <summary>
+/// PDF-only Reading annotations. Geometry is stored in normalised PDF page
+/// coordinates (0..1) so highlights survive zoom, scrolling, and responsive
+/// resizing. The uploaded PDF is never mutated.
+/// </summary>
+[JsonConverter(typeof(JsonStringEnumConverter))]
+public enum ReadingPaperAnnotationKind
+{
+    Text = 0,
+    Rectangle = 1,
+    Freehand = 2,
+}
+
+/// <summary>
 /// Phase 4 — distractor categorisation for MCQ-style questions. Authors
 /// label each non-correct option with the OET teaching category so we can
 /// (a) drive analytics ("which distractor type trips this cohort up most")
@@ -551,6 +564,45 @@ public class ReadingAnswer
 
     public ReadingAttempt? Attempt { get; set; }
     public ReadingQuestion? Question { get; set; }
+}
+
+/// <summary>
+/// Learner-owned, paper-level annotation attached to one Reading question-paper
+/// asset. Annotations carry across attempts by the same learner.
+/// </summary>
+[Index(nameof(UserId), nameof(PaperId))]
+[Index(nameof(UserId), nameof(PaperId), nameof(ContentPaperAssetId))]
+public class ReadingPaperAnnotation
+{
+    [Key]
+    [MaxLength(64)]
+    public string Id { get; set; } = default!;
+
+    [MaxLength(64)]
+    public string UserId { get; set; } = default!;
+
+    [MaxLength(64)]
+    public string PaperId { get; set; } = default!;
+
+    [MaxLength(64)]
+    public string ContentPaperAssetId { get; set; } = default!;
+
+    public int PageNumber { get; set; }
+
+    public ReadingPaperAnnotationKind Kind { get; set; }
+
+    /// <summary>
+    /// JSON payload with normalised page coordinates. Hard-capped by endpoint
+    /// validation to keep learner write amplification bounded.
+    /// </summary>
+    [MaxLength(8192)]
+    public string GeometryJson { get; set; } = "{}";
+
+    public DateTimeOffset CreatedAt { get; set; }
+    public DateTimeOffset UpdatedAt { get; set; }
+
+    public ContentPaper? Paper { get; set; }
+    public ContentPaperAsset? ContentPaperAsset { get; set; }
 }
 
 /// <summary>

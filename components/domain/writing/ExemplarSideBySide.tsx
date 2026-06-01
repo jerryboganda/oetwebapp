@@ -17,7 +17,7 @@ type DiffChunk = [DiffOp, string];
 /**
  * Lazy loader for `diff-match-patch`. Returns a tokenised diff at word
  * granularity. If the library is unavailable at runtime (e.g. before
- * `npm install` has been re-run on a fresh checkout), we degrade
+ * `pnpm install` has been re-run on a fresh checkout), we degrade
  * gracefully to a simple no-diff render where both letters are shown
  * side-by-side without highlighting.
  *

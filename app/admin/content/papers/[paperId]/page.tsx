@@ -14,7 +14,6 @@ import { AdminPermission, hasPermission } from '@/lib/admin-permissions';
 import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
 import { useCurrentUser } from '@/lib/hooks/use-current-user';
 import { ReadingStructureEditor } from '@/components/domain/ReadingStructureEditor';
-import { ReadingExtractionPanel } from '@/components/domain/ReadingExtractionPanel';
 import { ListeningStructureEditor } from '@/components/domain/ListeningStructureEditor';
 import { ListeningExtractMetadataEditor } from '@/components/domain/ListeningExtractMetadataEditor';
 import { ListeningExtractionPanel } from '@/components/domain/ListeningExtractionPanel';
@@ -365,13 +364,7 @@ export default function ContentPaperEditorPage({ params }: { params: Promise<{ p
             </Card>
 
             {canWriteContent && paper.subtestCode === 'reading' && (
-              <>
-                <ReadingExtractionPanel
-                  paperId={paper.id}
-                  onApplied={() => setReadingStructureVersion((value) => value + 1)}
-                />
-                <ReadingStructureEditor key={readingStructureVersion} paperId={paper.id} />
-              </>
+              <ReadingStructureEditor key={readingStructureVersion} paperId={paper.id} />
             )}
 
             {canWriteContent && paper.subtestCode === 'listening' && (

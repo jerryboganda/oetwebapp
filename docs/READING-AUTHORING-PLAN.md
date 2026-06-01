@@ -382,7 +382,7 @@ Opens the learner player in a `/preview` route scoped to the admin's session, gr
 - **Answer leakage**: `CorrectAnswerJson` and `ExplanationMarkdown` are **never** serialised on the learner's question-fetch endpoint. Two DTOs: `ReadingQuestionLearnerDto` (no answers) and `ReadingQuestionAdminDto` (full). Enforced at the endpoint layer, not left to "please remember not to include it."
 - **Audit events** on every mutation: `ReadingPartCreated`, `ReadingQuestionUpdated`, `ReadingAttemptSubmitted`, `ReadingAttemptGraded` — standard pattern used by Content Upload already.
 - **Rate limits**: attempt submit limited to 1 per 30 seconds per user (replay protection). Question fetch cached per-user per-attempt.
-- **Admin AI extraction**: the `reading.authoring_extract` feature code runs on platform keys only (admin tooling per the existing `PlatformOnlyFeatures` list in the credential resolver).
+- **Admin AI extraction**: retired from the active PDF-only admin UI. If the internal `reading.authoring_extract` path is reintroduced, it must stay on platform keys only (admin tooling per the existing `PlatformOnlyFeatures` list in the credential resolver) and require human approval before import.
 
 ---
 
@@ -433,12 +433,11 @@ Same pattern as Content Upload: each slice independently mergeable and independe
 - Retry button → new attempt row.
 - Tests: renders scaled score correctly, explanation gating respects admin field.
 
-### Slice R8 — AI extraction (authoring Mode B)
-- Feature code `reading.authoring_extract` added to `AiFeatureCodes` + classified as platform-only admin tooling.
-- JSON schema contract for the expected AI response.
-- Server-side validation; any shape mismatch → refuse, no DB writes.
-- Admin UI "Extract from PDF" button + review/approve flow.
-- Tests: schema rejection, happy path produces a draft structure, approval promotes it.
+### Slice R8 — PDF slots + optional assisted import
+- Part A, Part B, and Part C each require exactly one primary `QuestionPaper` PDF asset before publish.
+- `/admin/content/reading/{paperId}/texts` is the compatibility route for managing those PDF slots; labels should say PDFs, not texts.
+- Any assisted import must produce the same JSON manifest used by manual import and remain draft-only until admin review.
+- Tests: publish gate requires three primary PDFs, admin slot uploads attach the right part/role, non-PDF uploads are rejected, learner/admin previews render the original PDFs without answer leakage.
 
 ### Slice R9 — Hardening + observability
 - Rate limit on submit endpoint.
@@ -451,7 +450,7 @@ Same pattern as Content Upload: each slice independently mergeable and independe
 
 ## 10. Non-goals (deliberately excluded)
 
-- **Rendering the original PDF inline for grading.** PDFs aren't structured data. The learner sees authored HTML for grading purposes; the PDF remains available as a download.
+- **Using the PDF as the answer key.** The original PDFs render inline for the learner and admin preview, but grading still requires structured questions and correct answers. The PDF is the visual question paper, not the grading source.
 - **AI-graded Reading.** Reading is objective; the grading contract is exact-match against the author's correct answer key. No AI in the grading path.
 - **Dynamic question generation.** Every question is authored and reviewed. We do not generate variants at runtime.
 - **Adaptive / item-response theory.** The existing 30/42 → 350 mapping is fixed by OET. We don't invent an adaptive scoring curve.
@@ -517,9 +516,9 @@ deliverables:
 5. **Per-user policy override admin UI** — new page
    `/admin/policies/reading/users` over the existing
    `/v1/admin/reading-policy/users/{userId}` endpoints.
-6. **AI extraction admin workflow** — new page
-   `/admin/content/reading/extraction` over the existing
-   `ReadingExtractionService` (propose / approve / reject with audit).
+6. **PDF-only admin workflow** — `/admin/content/reading/{paperId}/texts`
+   now manages required Part A/B/C `QuestionPaper` PDF slots. The old global
+   `/admin/content/reading/extraction` dashboard is retired from navigation.
 7. **Learner a11y toggles** — font scale (90/100/110/125), high
    contrast, screen-reader hints — gated by
    `ReadingPolicy.FontScaleUserControl` / `.HighContrastMode` /

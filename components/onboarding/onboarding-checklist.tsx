@@ -4,7 +4,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowRight, CheckCircle2, Circle, Sparkles } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, ProgressBar } from '@/components/ui';
-import { fetchUserProfile, type UserProfile } from '@/lib/api';
+import { fetchUserProfile } from '@/lib/api';
+import type { UserProfile } from '@/lib/mock-data';
 import { trackChecklistItemCompleted } from '@/lib/onboarding/tour-events';
 import { useTourSafe } from './tour-provider';
 

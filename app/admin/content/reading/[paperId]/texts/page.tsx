@@ -1,216 +1,167 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { type ChangeEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, ArrowRight, Plus, Trash2, ArrowUp, ArrowDown, Save } from 'lucide-react';
+import {
+  AlertTriangle,
+  ArrowLeft,
+  ArrowRight,
+  CheckCircle2,
+  FileText,
+  Loader2,
+  Trash2,
+  Upload,
+} from 'lucide-react';
 
 import { AdminSettingsLayout, SettingsSection } from '@/components/admin/layout/admin-settings-layout';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardAction } from '@/components/admin/ui/card';
+import { Badge } from '@/components/admin/ui/badge';
 import { Button } from '@/components/admin/ui/button';
+import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/admin/ui/card';
 import { Skeleton } from '@/components/admin/ui/skeleton';
-import { Input, Textarea } from '@/components/ui/form-controls';
-import { Toast } from '@/components/ui/alert';
-import { Badge } from '@/components/ui/badge';
+import { InlineAlert, Toast } from '@/components/ui/alert';
 import { ReadingWizardSteps } from '@/components/domain/admin/reading/ReadingWizardSteps';
-import { ReadingPartTabs } from '@/components/domain/admin/reading/ReadingPartTabs';
 import {
-  getReadingStructureAdmin,
-  upsertReadingText,
-  removeReadingText,
-  reorderReadingTexts,
-  type ReadingPartCode,
-  type ReadingTextDto,
-  type ReadingPartAdminDto,
+  attachPaperAsset,
+  getContentPaper,
+  removePaperAsset,
+  uploadFileChunked,
+  type ContentPaperAssetDto,
+  type ContentPaperDto,
+} from '@/lib/content-upload-api';
+import {
+  validateReadingPaper,
+  type ReadingValidationReport,
 } from '@/lib/reading-authoring-api';
 
-interface TextFormData {
-  id: string | null;
-  readingPartId: string;
-  displayOrder: number;
-  title: string;
-  source: string;
-  bodyHtml: string;
-  wordCount: number;
-  topicTag: string;
+type PartCode = 'A' | 'B' | 'C';
+type ToastState = { message: string; variant: 'success' | 'error' };
+
+const REQUIRED_PARTS: readonly PartCode[] = ['A', 'B', 'C'];
+
+function isPartCode(value: string | null | undefined): value is PartCode {
+  return value === 'A' || value === 'B' || value === 'C';
 }
 
-function createEmptyForm(readingPartId: string, displayOrder: number): TextFormData {
-  return {
-    id: null,
-    readingPartId,
-    displayOrder,
-    title: '',
-    source: '',
-    bodyHtml: '',
-    wordCount: 0,
-    topicTag: '',
-  };
+function isReadingQuestionPaperAsset(asset: ContentPaperAssetDto): boolean {
+  return asset.role === 'QuestionPaper' && isPartCode(asset.part);
 }
 
-function formFromDto(dto: ReadingTextDto): TextFormData {
-  return {
-    id: dto.id,
-    readingPartId: dto.readingPartId,
-    displayOrder: dto.displayOrder,
-    title: dto.title,
-    source: dto.source ?? '',
-    bodyHtml: dto.bodyHtml,
-    wordCount: dto.wordCount,
-    topicTag: dto.topicTag ?? '',
-  };
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
-function countWordsFromHtml(html: string): number {
-  const text = html.replace(/<[^>]*>/g, ' ').replace(/&nbsp;/g, ' ');
-  const words = text.trim().split(/\s+/).filter(Boolean);
-  return words.length;
+function primaryForPart(assets: ContentPaperAssetDto[], partCode: PartCode): ContentPaperAssetDto | null {
+  const partAssets = assets.filter((asset) => asset.role === 'QuestionPaper' && asset.part === partCode);
+  return partAssets.find((asset) => asset.isPrimary) ?? null;
 }
 
-export default function ReadingTextsEditorPage() {
+function requiredIssueForPart(report: ReadingValidationReport | null, partCode: PartCode): string | null {
+  const issue = report?.issues.find((candidate) => candidate.code === `part_${partCode.toLowerCase()}_pdf_required`);
+  return issue?.message ?? null;
+}
+
+export default function ReadingPdfAssetsPage() {
   const params = useParams<{ paperId: string }>();
   const paperId = params?.paperId ?? '';
 
-  const [parts, setParts] = useState<ReadingPartAdminDto[]>([]);
-  const [activeTab, setActiveTab] = useState<ReadingPartCode>('A');
+  const [paper, setPaper] = useState<ContentPaperDto | null>(null);
+  const [validation, setValidation] = useState<ReadingValidationReport | null>(null);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [editingForm, setEditingForm] = useState<TextFormData | null>(null);
-  const [toast, setToast] = useState<{ message: string; variant: 'success' | 'error' } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [uploadingPart, setUploadingPart] = useState<PartCode | null>(null);
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
+  const [removingAssetId, setRemovingAssetId] = useState<string | null>(null);
+  const [toast, setToast] = useState<ToastState | null>(null);
 
-  const fetchStructure = useCallback(async () => {
+  const load = useCallback(async () => {
     if (!paperId) return;
+    setLoading(true);
+    setError(null);
     try {
-      const data = await getReadingStructureAdmin(paperId);
-      setParts(data.parts);
+      const [paperData, report] = await Promise.all([
+        getContentPaper(paperId),
+        validateReadingPaper(paperId).catch(() => null),
+      ]);
+      setPaper(paperData);
+      setValidation(report);
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to load structure';
-      setToast({ message, variant: 'error' });
+      setError(err instanceof Error ? err.message : 'Failed to load reading PDF assets');
     } finally {
       setLoading(false);
     }
   }, [paperId]);
 
   useEffect(() => {
-    fetchStructure();
-  }, [fetchStructure]);
+    void load();
+  }, [load]);
 
-  const activePart = parts.find((p) => p.partCode === activeTab) ?? null;
-  const activeTexts = activePart?.texts ?? [];
+  const readingQuestionPaperAssets = useMemo(
+    () => (paper?.assets ?? []).filter(isReadingQuestionPaperAsset),
+    [paper?.assets],
+  );
 
-  const handleAddText = () => {
-    if (!activePart) return;
-    const nextOrder = activeTexts.length > 0
-      ? Math.max(...activeTexts.map((t) => t.displayOrder)) + 1
-      : 1;
-    setEditingForm(createEmptyForm(activePart.id, nextOrder));
-  };
+  const readyParts = REQUIRED_PARTS.filter((partCode) => primaryForPart(readingQuestionPaperAssets, partCode));
+  const errorCount = validation?.issues.filter((issue) => issue.severity === 'error').length ?? 0;
+  const warningCount = validation?.issues.filter((issue) => issue.severity === 'warning').length ?? 0;
 
-  const handleEditText = (dto: ReadingTextDto) => {
-    setEditingForm(formFromDto(dto));
-  };
-
-  const handleCancelEdit = () => {
-    setEditingForm(null);
-  };
-
-  const handleDeleteText = async (textId: string) => {
-    if (!window.confirm('Are you sure you want to delete this text passage? This cannot be undone.')) {
+  async function handleUpload(partCode: PartCode, file: File): Promise<void> {
+    const looksLikePdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+    if (!looksLikePdf) {
+      setToast({ message: 'Upload a PDF file for the question paper slot.', variant: 'error' });
       return;
     }
+
+    setUploadingPart(partCode);
+    setUploadProgress(0);
     try {
-      await removeReadingText(paperId, textId);
-      setToast({ message: 'Text deleted successfully', variant: 'success' });
-      await fetchStructure();
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to delete text';
-      setToast({ message, variant: 'error' });
-    }
-  };
-
-  const handleSaveText = async () => {
-    if (!editingForm) return;
-    if (!editingForm.title.trim()) {
-      setToast({ message: 'Title is required', variant: 'error' });
-      return;
-    }
-    if (!editingForm.bodyHtml.trim()) {
-      setToast({ message: 'Body text is required', variant: 'error' });
-      return;
-    }
-
-    setSaving(true);
-    try {
-      await upsertReadingText(paperId, {
-        id: editingForm.id,
-        readingPartId: editingForm.readingPartId,
-        displayOrder: editingForm.displayOrder,
-        title: editingForm.title.trim(),
-        source: editingForm.source.trim() || null,
-        bodyHtml: editingForm.bodyHtml,
-        wordCount: editingForm.wordCount,
-        topicTag: editingForm.topicTag.trim() || null,
+      const result = await uploadFileChunked(file, 'QuestionPaper', (pct) => setUploadProgress(pct));
+      await attachPaperAsset(paperId, {
+        role: 'QuestionPaper',
+        mediaAssetId: result.mediaAssetId,
+        part: partCode,
+        title: file.name,
+        displayOrder: REQUIRED_PARTS.indexOf(partCode) + 1,
+        makePrimary: true,
       });
-      setToast({ message: editingForm.id ? 'Text updated successfully' : 'Text added successfully', variant: 'success' });
-      setEditingForm(null);
-      await fetchStructure();
+      setToast({
+        message: result.deduplicated ? `Part ${partCode} PDF attached from existing media.` : `Part ${partCode} PDF uploaded.`,
+        variant: 'success',
+      });
+      await load();
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to save text';
-      setToast({ message, variant: 'error' });
+      setToast({ message: err instanceof Error ? err.message : 'PDF upload failed', variant: 'error' });
     } finally {
-      setSaving(false);
+      setUploadingPart(null);
+      setUploadProgress(null);
     }
-  };
+  }
 
-  const handleMoveUp = async (index: number) => {
-    if (index <= 0 || !activePart) return;
-    const reordered = [...activeTexts];
-    [reordered[index - 1], reordered[index]] = [reordered[index], reordered[index - 1]];
-    const orderedIds = reordered.map((t) => t.id);
+  async function handleRemove(assetId: string): Promise<void> {
+    if (!window.confirm('Remove this PDF from the reading paper?')) return;
+    setRemovingAssetId(assetId);
     try {
-      await reorderReadingTexts(paperId, activePart.id, orderedIds);
-      await fetchStructure();
+      await removePaperAsset(paperId, assetId);
+      setToast({ message: 'PDF removed.', variant: 'success' });
+      await load();
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to reorder';
-      setToast({ message, variant: 'error' });
+      setToast({ message: err instanceof Error ? err.message : 'Failed to remove PDF', variant: 'error' });
+    } finally {
+      setRemovingAssetId(null);
     }
-  };
-
-  const handleMoveDown = async (index: number) => {
-    if (index >= activeTexts.length - 1 || !activePart) return;
-    const reordered = [...activeTexts];
-    [reordered[index], reordered[index + 1]] = [reordered[index + 1], reordered[index]];
-    const orderedIds = reordered.map((t) => t.id);
-    try {
-      await reorderReadingTexts(paperId, activePart.id, orderedIds);
-      await fetchStructure();
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to reorder';
-      setToast({ message, variant: 'error' });
-    }
-  };
-
-  const handleBodyHtmlChange = (value: string) => {
-    if (!editingForm) return;
-    const autoWordCount = countWordsFromHtml(value);
-    setEditingForm({ ...editingForm, bodyHtml: value, wordCount: autoWordCount });
-  };
-
-  const textCounts = {
-    A: parts.find((p) => p.partCode === 'A')?.texts.length ?? 0,
-    B: parts.find((p) => p.partCode === 'B')?.texts.length ?? 0,
-    C: parts.find((p) => p.partCode === 'C')?.texts.length ?? 0,
-  };
+  }
 
   if (!paperId) {
     return (
       <AdminSettingsLayout
-        title="Reading Texts Editor"
+        title="Reading PDFs"
         breadcrumbs={[
           { label: 'Admin', href: '/admin' },
           { label: 'Content', href: '/admin/content' },
           { label: 'Reading', href: '/admin/content/reading' },
-          { label: 'Texts' },
+          { label: 'PDFs' },
         ]}
       >
         <SettingsSection title="Missing paper">
@@ -222,241 +173,251 @@ export default function ReadingTextsEditorPage() {
 
   return (
     <AdminSettingsLayout
-      title="Reading Texts Editor"
-      description="Add and manage reading passages for each part of the paper."
+      title="Reading PDFs"
+      description="Attach the three primary question paper PDFs used by the learner Reading player."
       eyebrow="Reading authoring"
       breadcrumbs={[
         { label: 'Admin', href: '/admin' },
         { label: 'Content', href: '/admin/content' },
         { label: 'Reading', href: '/admin/content/reading' },
         { label: 'Paper', href: `/admin/content/reading/${paperId}` },
-        { label: 'Texts' },
+        { label: 'PDFs' },
       ]}
     >
-      <ReadingWizardSteps paperId={paperId} currentStep="texts" />
+      <div className="space-y-6">
+        <ReadingWizardSteps paperId={paperId} currentStep="texts" />
 
-      <ReadingPartTabs activeTab={activeTab} onTabChange={setActiveTab} counts={textCounts} context="texts" />
+        {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
 
-      {loading ? (
-        <Card>
-          <CardContent className="space-y-3 py-6">
-            <Skeleton variant="text" className="h-5 w-1/3" />
-            <Skeleton variant="card" />
-            <Skeleton variant="card" />
-          </CardContent>
-        </Card>
-      ) : (
-        <Card>
-          <CardHeader>
-            <div className="min-w-0">
-              <CardTitle>{`Part ${activeTab} Texts`}</CardTitle>
-              <CardDescription>
-                {`${activeTexts.length} passage${activeTexts.length !== 1 ? 's' : ''} added`}
-              </CardDescription>
-            </div>
-            <CardAction>
-              <Button
-                variant="primary"
-                size="sm"
-                onClick={handleAddText}
-                disabled={!!editingForm}
-                startIcon={<Plus className="h-4 w-4" />}
-              >
-                Add Text
-              </Button>
-            </CardAction>
-          </CardHeader>
-          <CardContent>
-          {activeTexts.length === 0 && !editingForm && (
-            <div className="flex flex-col items-center justify-center py-12 text-center">
-              <p className="text-sm text-admin-fg-muted mb-3">
-                No texts have been added to Part {activeTab} yet.
-              </p>
-              <Button variant="primary" size="sm" onClick={handleAddText}>
-                <Plus className="h-4 w-4 mr-1" />
-                Add First Text
-              </Button>
-            </div>
-          )}
-
-          {activeTexts.length > 0 && (
-            <div className="space-y-2">
-              {activeTexts.map((text, idx) => (
-                <div
-                  key={text.id}
-                  className="flex items-center gap-3 rounded-xl border border-admin-border bg-admin-bg-subtle px-4 py-3 transition-colors hover:bg-[var(--admin-state-hover)]"
-                >
-                  <div className="flex flex-col items-center gap-0.5 text-admin-fg-muted">
-                    <button
-                      type="button"
-                      onClick={() => handleMoveUp(idx)}
-                      disabled={idx === 0}
-                      className="p-0.5 hover:text-primary disabled:opacity-30 disabled:cursor-not-allowed"
-                      aria-label="Move up"
-                    >
-                      <ArrowUp className="h-3.5 w-3.5" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleMoveDown(idx)}
-                      disabled={idx === activeTexts.length - 1}
-                      className="p-0.5 hover:text-primary disabled:opacity-30 disabled:cursor-not-allowed"
-                      aria-label="Move down"
-                    >
-                      <ArrowDown className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
-
-                  <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-xs font-bold text-primary">
-                    {text.displayOrder}
-                  </div>
-
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-semibold text-admin-fg-strong truncate">{text.title}</p>
-                    {text.source && (
-                      <p className="text-xs text-admin-fg-muted truncate mt-0.5">{text.source}</p>
-                    )}
-                  </div>
-
-                  <Badge variant="muted" className="shrink-0">
-                    {text.wordCount} words
-                  </Badge>
-
-                  {text.topicTag && (
-                    <Badge variant="outline" className="shrink-0 text-xs">
-                      {text.topicTag}
-                    </Badge>
-                  )}
-
-                  <div className="flex items-center gap-1 shrink-0">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleEditText(text)}
-                      disabled={!!editingForm}
-                    >
-                      Edit
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleDeleteText(text.id)}
-                      className="text-rose-400 hover:text-rose-300 hover:bg-rose-500/10"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
-                  </div>
-                </div>
+        <SettingsSection
+          title="Question paper slots"
+          description="Each Reading paper needs one primary QuestionPaper PDF for Part A, Part B, and Part C before it can publish."
+        >
+          {loading ? (
+            <div className="grid gap-4 lg:grid-cols-3">
+              {REQUIRED_PARTS.map((partCode) => (
+                <Card key={partCode}>
+                  <CardContent className="space-y-3 py-6">
+                    <Skeleton variant="text" className="h-5 w-1/3" />
+                    <Skeleton variant="card" />
+                    <Skeleton variant="text" className="h-4 w-2/3" />
+                  </CardContent>
+                </Card>
               ))}
             </div>
-          )}
-
-          {editingForm && (
-            <div className="mt-4 rounded-xl border border-primary/30 bg-admin-bg-subtle p-4 space-y-4">
-              <h3 className="text-sm font-bold text-admin-fg-strong">
-                {editingForm.id ? 'Edit Text Passage' : 'Add New Text Passage'}
-              </h3>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <label htmlFor="text-title" className="text-xs font-medium text-admin-fg-muted">
-                    Title <span className="text-rose-400">*</span>
-                  </label>
-                  <Input
-                    id="text-title"
-                    value={editingForm.title}
-                    onChange={(e) => setEditingForm({ ...editingForm, title: e.target.value })}
-                    placeholder="e.g. Text 1: Patient Discharge"
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <label htmlFor="text-source" className="text-xs font-medium text-admin-fg-muted">
-                    Source
-                  </label>
-                  <Input
-                    id="text-source"
-                    value={editingForm.source}
-                    onChange={(e) => setEditingForm({ ...editingForm, source: e.target.value })}
-                    placeholder="e.g. British Medical Journal, 2023"
-                  />
-                </div>
+          ) : (
+            <div className="space-y-4">
+              <div className="grid gap-3 md:grid-cols-3">
+                <StatusTile label="PDF slots ready" value={`${readyParts.length}/3`} tone={readyParts.length === 3 ? 'success' : 'warning'} />
+                <StatusTile label="Publish blockers" value={String(errorCount)} tone={errorCount > 0 ? 'danger' : 'success'} />
+                <StatusTile label="Warnings" value={String(warningCount)} tone={warningCount > 0 ? 'warning' : 'success'} />
               </div>
 
-              <div className="space-y-1.5">
-                <label htmlFor="text-body" className="text-xs font-medium text-admin-fg-muted">
-                  Body HTML <span className="text-rose-400">*</span>
-                </label>
-                <Textarea
-                  id="text-body"
-                  value={editingForm.bodyHtml}
-                  onChange={(e) => handleBodyHtmlChange(e.target.value)}
-                  placeholder="Paste the reading passage text/HTML here…"
-                  rows={12}
-                  className="font-mono text-xs"
-                />
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <label htmlFor="text-wordcount" className="text-xs font-medium text-admin-fg-muted">
-                    Word Count
-                  </label>
-                  <Input
-                    id="text-wordcount"
-                    type="number"
-                    min={0}
-                    value={editingForm.wordCount}
-                    onChange={(e) => setEditingForm({ ...editingForm, wordCount: parseInt(e.target.value, 10) || 0 })}
-                  />
-                  <p className="text-xs text-admin-fg-muted">Auto-calculated from body. Override if needed.</p>
-                </div>
-
-                <div className="space-y-1.5">
-                  <label htmlFor="text-topic" className="text-xs font-medium text-admin-fg-muted">
-                    Topic Tag
-                  </label>
-                  <Input
-                    id="text-topic"
-                    value={editingForm.topicTag}
-                    onChange={(e) => setEditingForm({ ...editingForm, topicTag: e.target.value })}
-                    placeholder="e.g. cardiology, paediatrics"
-                  />
-                </div>
-              </div>
-
-              <div className="flex items-center gap-2 pt-2">
-                <Button variant="primary" size="sm" onClick={handleSaveText} disabled={saving}>
-                  <Save className="h-4 w-4 mr-1" />
-                  {saving ? 'Saving…' : 'Save Text'}
-                </Button>
-                <Button variant="ghost" size="sm" onClick={handleCancelEdit} disabled={saving}>
-                  Cancel
-                </Button>
+              <div className="grid gap-4 lg:grid-cols-3">
+                {REQUIRED_PARTS.map((partCode) => {
+                  const assets = readingQuestionPaperAssets.filter((asset) => asset.part === partCode);
+                  const primaryAsset = primaryForPart(readingQuestionPaperAssets, partCode);
+                  return (
+                    <PdfSlotCard
+                      key={partCode}
+                      partCode={partCode}
+                      assets={assets}
+                      primaryAsset={primaryAsset}
+                      requiredIssue={requiredIssueForPart(validation, partCode)}
+                      uploading={uploadingPart === partCode}
+                      uploadProgress={uploadProgress}
+                      removingAssetId={removingAssetId}
+                      onUpload={handleUpload}
+                      onRemove={handleRemove}
+                    />
+                  );
+                })}
               </div>
             </div>
           )}
-          </CardContent>
-        </Card>
-      )}
+        </SettingsSection>
 
-      <div className="flex items-center justify-between pt-2">
-        <Button asChild variant="ghost" size="sm" startIcon={<ArrowLeft className="h-4 w-4" />}>
-          <Link href={`/admin/content/reading/${paperId}`}>Back to Overview</Link>
-        </Button>
+        <div className="flex items-center justify-between pt-2">
+          <Button asChild variant="ghost" size="sm" startIcon={<ArrowLeft className="h-4 w-4" />}>
+            <Link href={`/admin/content/reading/${paperId}`}>Back to Overview</Link>
+          </Button>
 
-        <Button asChild variant="primary" size="sm" endIcon={<ArrowRight className="h-4 w-4" />}>
-          <Link href={`/admin/content/reading/${paperId}/questions`}>Next: Questions</Link>
-        </Button>
+          <Button asChild variant="primary" size="sm" endIcon={<ArrowRight className="h-4 w-4" />}>
+            <Link href={`/admin/content/reading/${paperId}/questions`}>Next: Questions</Link>
+          </Button>
+        </div>
       </div>
 
-      {toast && (
+      {toast ? (
         <Toast
           variant={toast.variant}
           message={toast.message}
           onClose={() => setToast(null)}
         />
-      )}
+      ) : null}
     </AdminSettingsLayout>
+  );
+}
+
+function StatusTile({ label, value, tone }: { label: string; value: string; tone: 'success' | 'warning' | 'danger' }) {
+  return (
+    <div className="rounded-admin-lg border border-admin-border bg-admin-bg-surface px-4 py-3">
+      <p className="text-xs font-semibold uppercase tracking-wider text-admin-fg-muted">{label}</p>
+      <div className="mt-2 flex items-center justify-between gap-3">
+        <p className="text-2xl font-semibold text-admin-fg-strong">{value}</p>
+        <Badge variant={tone}>{tone === 'success' ? 'Ready' : tone === 'warning' ? 'Check' : 'Blocked'}</Badge>
+      </div>
+    </div>
+  );
+}
+
+function PdfSlotCard({
+  partCode,
+  assets,
+  primaryAsset,
+  requiredIssue,
+  uploading,
+  uploadProgress,
+  removingAssetId,
+  onUpload,
+  onRemove,
+}: {
+  partCode: PartCode;
+  assets: ContentPaperAssetDto[];
+  primaryAsset: ContentPaperAssetDto | null;
+  requiredIssue: string | null;
+  uploading: boolean;
+  uploadProgress: number | null;
+  removingAssetId: string | null;
+  onUpload: (partCode: PartCode, file: File) => Promise<void>;
+  onRemove: (assetId: string) => Promise<void>;
+}) {
+  const inputId = `reading-part-${partCode.toLowerCase()}-pdf`;
+  const extraAssets = assets.filter((asset) => asset.id !== primaryAsset?.id);
+
+  async function handleFileChange(event: ChangeEvent<HTMLInputElement>): Promise<void> {
+    const file = event.currentTarget.files?.[0];
+    if (!file) return;
+      const input = event.currentTarget;
+      await onUpload(partCode, file);
+      input.value = '';
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="min-w-0">
+          <CardTitle className="flex items-center gap-2">
+            <FileText className="h-4 w-4 text-admin-fg-muted" />
+            Part {partCode}
+          </CardTitle>
+          <CardDescription>Primary QuestionPaper PDF</CardDescription>
+        </div>
+        <CardAction>
+          {primaryAsset ? (
+            <Badge variant="success" startIcon={<CheckCircle2 className="h-3.5 w-3.5" />}>Ready</Badge>
+          ) : (
+            <Badge variant="warning" startIcon={<AlertTriangle className="h-3.5 w-3.5" />}>Missing</Badge>
+          )}
+        </CardAction>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {primaryAsset ? (
+          <AssetSummary
+            asset={primaryAsset}
+            label="Primary PDF"
+            removing={removingAssetId === primaryAsset.id}
+            onRemove={onRemove}
+          />
+        ) : (
+          <div className="rounded-admin-lg border border-dashed border-admin-border bg-admin-bg-subtle px-4 py-5 text-sm text-admin-fg-muted">
+            {requiredIssue ?? `Part ${partCode} has no primary question paper PDF.`}
+          </div>
+        )}
+
+        {extraAssets.length > 0 ? (
+          <div className="space-y-2">
+            <p className="text-xs font-semibold uppercase tracking-wider text-admin-fg-muted">Additional assets</p>
+            {extraAssets.map((asset) => (
+              <AssetSummary
+                key={asset.id}
+                asset={asset}
+                label="Secondary PDF"
+                removing={removingAssetId === asset.id}
+                onRemove={onRemove}
+              />
+            ))}
+          </div>
+        ) : null}
+
+        <div className="space-y-2">
+          <input
+            id={inputId}
+            type="file"
+            accept="application/pdf,.pdf"
+            className="sr-only"
+            onChange={(event) => void handleFileChange(event)}
+            disabled={uploading}
+          />
+          <Button
+            asChild
+            variant={primaryAsset ? 'secondary' : 'primary'}
+            size="sm"
+            className="w-full justify-center"
+          >
+            <label htmlFor={inputId} aria-disabled={uploading} className="inline-flex items-center justify-center gap-2">
+              {uploading ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Upload className="h-4 w-4" aria-hidden="true" />}
+              {uploading ? 'Uploading...' : primaryAsset ? 'Replace primary PDF' : 'Upload PDF'}
+            </label>
+          </Button>
+          {uploading && uploadProgress !== null ? (
+            <div className="h-2 overflow-hidden rounded-full bg-admin-bg-subtle" aria-label={`Part ${partCode} upload progress`}>
+              <div className="h-full bg-[var(--admin-primary)] transition-all" style={{ width: `${Math.round(uploadProgress * 100)}%` }} />
+            </div>
+          ) : null}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function AssetSummary({
+  asset,
+  label,
+  removing,
+  onRemove,
+}: {
+  asset: ContentPaperAssetDto;
+  label: string;
+  removing: boolean;
+  onRemove: (assetId: string) => Promise<void>;
+}) {
+  const filename = asset.media?.originalFilename ?? asset.title ?? 'Question paper PDF';
+  const size = asset.media ? formatBytes(asset.media.sizeBytes) : null;
+
+  return (
+    <div className="flex items-start justify-between gap-3 rounded-admin-lg border border-admin-border bg-admin-bg-subtle px-3 py-3">
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge variant={asset.isPrimary ? 'success' : 'muted'}>{label}</Badge>
+          {asset.part ? <Badge variant="outline">Part {asset.part}</Badge> : null}
+        </div>
+        <p className="mt-2 truncate text-sm font-semibold text-admin-fg-strong">{filename}</p>
+        <p className="mt-1 text-xs text-admin-fg-muted">
+          {asset.media?.mimeType ?? 'application/pdf'}{size ? ` - ${size}` : ''}
+        </p>
+      </div>
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        onClick={() => void onRemove(asset.id)}
+        disabled={removing}
+        aria-label={`Remove ${filename}`}
+        className="text-[var(--admin-danger)] hover:bg-[var(--admin-danger-tint)] hover:text-[var(--admin-danger)]"
+      >
+        {removing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+      </Button>
+    </div>
   );
 }

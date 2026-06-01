@@ -36,5 +36,5 @@ rather than applied directly, to avoid parallel-write conflicts.
 5. Always go through `IFileStorage`, `IAiGatewayService`, `OetScoring` — never
    bypass the canonical wrappers.
 6. End every slice report with a **Validation** section listing the exact
-   commands run (`dotnet build`, `npx tsc --noEmit`, focused tests) and
+   commands run (`dotnet build`, `pnpm exec tsc --noEmit`, focused tests) and
    their results.

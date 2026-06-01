@@ -106,7 +106,7 @@ function buildDiagnosticResult(overrides: Partial<DiagnosticResultDto> = {}): Di
 }
 
 function createAbortError(): Error & { name: 'AbortError' } {
-  return new DOMException('The request timed out.', 'AbortError');
+  return new DOMException('The request timed out.', 'AbortError') as Error & { name: 'AbortError' };
 }
 
 function createRecoverableSubmitError(status: number, detail?: { code?: string }): Error & {

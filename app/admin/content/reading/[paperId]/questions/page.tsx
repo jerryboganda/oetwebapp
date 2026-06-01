@@ -834,7 +834,7 @@ export default function ReadingQuestionsEditorPage() {
         footer={
           <div className="flex items-center justify-between pt-2">
             <Button asChild variant="ghost" size="sm" startIcon={<ArrowLeft className="h-4 w-4" />}>
-              <Link href={`/admin/content/reading/${paperId}/texts`}>Back to Texts</Link>
+              <Link href={`/admin/content/reading/${paperId}/texts`}>Back to PDFs</Link>
             </Button>
             <Button asChild variant="primary" size="sm" endIcon={<ArrowRight className="h-4 w-4" />}>
               <Link href={`/admin/content/reading/${paperId}/validate`}>Next: Validate</Link>

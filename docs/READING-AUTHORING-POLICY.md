@@ -94,7 +94,15 @@ changes never retroactively hide content from past results.
 
 ---
 
-## 5. Authoring assistance (AI extraction)
+## 5. Authoring assistance
+
+The active admin workflow is PDF-first: admins attach one primary
+`QuestionPaper` PDF for each Part A, Part B, and Part C, then author or
+import the machine-gradable question structure. The legacy global Reading
+extraction dashboard is not part of the active PDF-only workflow.
+
+If AI-assisted extraction is re-enabled for an internal admin flow, these
+policy flags still apply and the output remains draft-only until reviewed.
 
 | Option | Meaning | Default | Alternatives |
 |---|---|---|---|
@@ -273,13 +281,15 @@ block computed from `MockSectionAttempt` rows with
 `averageRawScore`, `averageScaledScore`, `averageCompletionSeconds`.
 Rendered as a "Reading inside mocks" panel on `/admin/analytics/mocks`.
 
-### AI extraction admin workflow (Phase 4)
+### PDF-only admin workflow (Phase 4 replacement)
 
-`/admin/content/reading/extraction` is the three-pane (paper picker /
-draft list / manifest preview) workflow over the existing
-`ReadingExtractionService`. Approval calls `ApproveDraftAsync` which
-imports the manifest with `replaceExisting: true` — the page surfaces a
-confirmation prompt before firing.
+`/admin/content/reading/{paperId}/texts` is retained as a compatibility
+route, but now manages the required Part A/B/C PDF slots. Each slot attaches
+a primary `QuestionPaper` asset. The paper publish gate requires exactly one
+primary PDF per part, plus the canonical 42 scored questions. Manual authoring
+and manifest import remain the supported structure workflows; the retired
+global `/admin/content/reading/extraction` dashboard should not be linked from
+admin navigation.
 
 ### Wizard question-type fix (Phase 5)
 

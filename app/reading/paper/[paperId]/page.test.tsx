@@ -4,9 +4,11 @@ import { act } from 'react';
 import type { ReadingLearnerStructureDto } from '@/lib/reading-authoring-api';
 
 const {
+  mockClearReadingPaperAnnotations,
   mockCompleteMockSection,
   mockFetchAuthorizedObjectUrl,
   mockGetReadingAttempt,
+  mockGetReadingPaperAnnotations,
   mockGetReadingStructureLearner,
   mockPush,
   mockResumeReadingBreak,
@@ -15,9 +17,11 @@ const {
   mockStartReadingAttempt,
   mockSubmitReadingAttempt,
 } = vi.hoisted(() => ({
+  mockClearReadingPaperAnnotations: vi.fn(),
   mockCompleteMockSection: vi.fn(),
   mockFetchAuthorizedObjectUrl: vi.fn(),
   mockGetReadingAttempt: vi.fn(),
+  mockGetReadingPaperAnnotations: vi.fn(),
   mockGetReadingStructureLearner: vi.fn(),
   mockPush: vi.fn(),
   mockResumeReadingBreak: vi.fn(),
@@ -45,7 +49,9 @@ vi.mock('@/lib/reading-authoring-api', async () => {
   const actual = await vi.importActual<typeof import('@/lib/reading-authoring-api')>('@/lib/reading-authoring-api');
   return {
     ...actual,
+    clearReadingPaperAnnotations: mockClearReadingPaperAnnotations,
     getReadingAttempt: mockGetReadingAttempt,
+    getReadingPaperAnnotations: mockGetReadingPaperAnnotations,
     getReadingStructureLearner: mockGetReadingStructureLearner,
     resumeReadingBreak: mockResumeReadingBreak,
     saveReadingAnswer: mockSaveReadingAnswer,
@@ -72,6 +78,8 @@ describe('Reading paper player page', () => {
     });
     mockSearchParams.current = new URLSearchParams();
     mockGetReadingStructureLearner.mockResolvedValue(buildStructure());
+    mockGetReadingPaperAnnotations.mockResolvedValue([]);
+    mockClearReadingPaperAnnotations.mockResolvedValue(undefined);
     mockStartReadingAttempt.mockResolvedValue({
       attemptId: 'attempt-1',
       startedAt,
@@ -131,21 +139,19 @@ describe('Reading paper player page', () => {
     });
   });
 
-  it('renders paper presentation with original PDF controls for resumed attempts', async () => {
-    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-    Object.defineProperty(window, 'print', { value: vi.fn(), configurable: true });
+  it('renders the Part A PDF viewer with annotation tooling for resumed paper attempts', async () => {
     mockSearchParams.current = new URLSearchParams('presentation=paper&attemptId=attempt-1');
-    mockFetchAuthorizedObjectUrl.mockResolvedValue('blob:paper-a');
 
     await renderPlayer();
 
-    expect(await screen.findByLabelText(/paper-based reading simulation/i)).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: /pdf a/i }));
-    expect(mockFetchAuthorizedObjectUrl).toHaveBeenCalledWith('/v1/media/media-a/content');
-    expect(screen.getByRole('heading', { name: /part a answer sheet/i })).toBeInTheDocument();
-
-    await user.click(screen.getByRole('button', { name: /print paper view/i }));
-    expect(window.print).toHaveBeenCalledTimes(1);
+    // PDF-only rebuild: the Part A passage is delivered as a PDF region with
+    // an in-viewer annotation toolbar (no separate "answer sheet" / printed
+    // paper-sim surface).
+    expect(await screen.findByLabelText(/part a pdf/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /text highlight/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^marker$/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /clear pdf/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /clear paper/i })).toBeInTheDocument();
   });
 
   it('falls back to computer delivery when paper mode is disabled by policy', async () => {
@@ -186,38 +192,23 @@ describe('Reading paper player page', () => {
     });
   });
 
-  it('highlights selected passage text and clears it without touching question text', async () => {
+  it('moves passage highlighting into the PDF viewer and clears paper annotations', async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
 
     await renderPlayer();
     await user.click(await screen.findByRole('button', { name: /start attempt/i }));
 
-    const scope = document.querySelector('[data-reading-highlight-scope="passage"]') as HTMLElement | null;
-    expect(scope).not.toBeNull();
+    // The PDF-only rebuild replaced the old HTML passage-text highlight scope
+    // with the PDF viewer's annotation toolbar.
+    expect(await screen.findByLabelText(/part a pdf/i)).toBeInTheDocument();
+    expect(document.querySelector('[data-reading-highlight-scope="passage"]')).toBeNull();
+    expect(screen.getByRole('button', { name: /text highlight/i })).toBeInTheDocument();
 
-    // Programmatically select the first word of the passage text.
-    const textNode = scope!.querySelector('p')!.firstChild as Text;
-    const range = document.createRange();
-    range.setStart(textNode, 0);
-    range.setEnd(textNode, 3);
-    const selection = window.getSelection()!;
-    selection.removeAllRanges();
-    selection.addRange(range);
-
-    fireEvent.click(screen.getByRole('button', { name: /highlight selected passage text/i }));
-
+    // Clearing all highlights routes through the annotations API for this paper.
+    await user.click(screen.getByRole('button', { name: /clear paper/i }));
     await waitFor(() => {
-      expect(scope!.querySelectorAll('mark[data-reading-highlight]').length).toBeGreaterThan(0);
-    });
-    // Highlights must stay scoped to the passage — never the question pane.
-    expect(document.querySelectorAll('mark[data-reading-highlight]').length).toBe(
-      scope!.querySelectorAll('mark[data-reading-highlight]').length,
-    );
-
-    fireEvent.click(screen.getByRole('button', { name: /clear highlights in this part/i }));
-
-    await waitFor(() => {
-      expect(scope!.querySelectorAll('mark[data-reading-highlight]').length).toBe(0);
+      expect(mockClearReadingPaperAnnotations).toHaveBeenCalledWith('paper-1', { scope: 'paper' });
     });
   });
 
@@ -304,6 +295,11 @@ function buildStructure(opts?: { allowPaperReadingMode?: boolean; partAMatching?
       slug: 'reading-sample-paper-1',
       subtestCode: 'reading',
       allowPaperReadingMode: opts?.allowPaperReadingMode ?? true,
+      policy: {
+        fontScaleUserControl: true,
+        highContrastMode: true,
+        screenReaderOptimised: true,
+      },
       questionPaperAssets: [
         { id: 'asset-a', part: 'A', title: 'Part A PDF', downloadPath: '/v1/media/media-a/content' },
       ],

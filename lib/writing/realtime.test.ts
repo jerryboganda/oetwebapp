@@ -90,7 +90,7 @@ describe('writing realtime helpers', () => {
       scenarioId: 'scenario-1',
       letterContent: 'Draft text',
       wordCount: 42,
-      letterType: 'routine_referral',
+      letterType: 'LT-RR',
       profession: 'medicine',
     };
 
@@ -146,7 +146,7 @@ describe('writing realtime helpers', () => {
       scenarioId: 'scenario-2',
       letterContent: 'Another draft',
       wordCount: 64,
-      letterType: 'routine_referral',
+      letterType: 'LT-RR',
       profession: 'medicine',
     };
     const hint: WritingCoachHintDto = {

@@ -17,7 +17,8 @@ import { WritingTaskBuilder } from '@/components/domain/writing/admin';
 
 export default function EditWritingTaskPage() {
   const params = useParams<{ id: string }>();
-  const id = Array.isArray(params.id) ? params.id[0] : params.id;
+  const rawId = params?.id;
+  const id = Array.isArray(rawId) ? rawId[0] : rawId;
 
   if (!id) {
     return null;

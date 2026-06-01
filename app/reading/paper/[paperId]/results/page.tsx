@@ -11,7 +11,15 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert, Toast } from '@/components/ui/alert';
-import { getReadingAttemptReview, type ReadingAttemptReviewDto } from '@/lib/reading-authoring-api';
+import {
+  getReadingAttemptReview,
+  getReadingPaperAnnotations,
+  getReadingStructureLearner,
+  type ReadingAttemptReviewDto,
+  type ReadingLearnerStructureDto,
+  type ReadingPaperAnnotationDto,
+} from '@/lib/reading-authoring-api';
+import { ReadingPdfViewer } from '@/components/domain/reading-pdf-viewer';
 import { completeMockSection } from '@/lib/api';
 import { isListeningReadingPassByScaled } from '@/lib/scoring';
 import { readErrorMessage } from '@/lib/read-error-message';
@@ -74,6 +82,8 @@ function ReadingPaperResultsContent({ params }: { params: Promise<{ paperId: str
   const search = useSearchParams();
   const attemptId = search?.get('attemptId') ?? '';
   const [review, setReview] = useState<ReadingReviewData | null>(null);
+  const [structure, setStructure] = useState<ReadingLearnerStructureDto | null>(null);
+  const [pdfAnnotations, setPdfAnnotations] = useState<ReadingPaperAnnotationDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [errorBankToast, setErrorBankToast] = useState<string | null>(null);
@@ -91,7 +101,15 @@ function ReadingPaperResultsContent({ params }: { params: Promise<{ paperId: str
         setLoading(true);
         setError(null);
         const data = await getReadingAttemptReview(attemptId);
-        if (!cancelled) setReview(data as ReadingReviewData);
+        const [loadedStructure, loadedAnnotations] = await Promise.all([
+          getReadingStructureLearner(paperId).catch(() => null),
+          getReadingPaperAnnotations(paperId).catch(() => [] as ReadingPaperAnnotationDto[]),
+        ]);
+        if (!cancelled) {
+          setReview(data as ReadingReviewData);
+          setStructure(loadedStructure);
+          setPdfAnnotations(loadedAnnotations);
+        }
       } catch (err) {
         if (!cancelled) setError(readErrorMessage(err, 'Failed to load Reading review.'));
       } finally {
@@ -267,6 +285,29 @@ function ReadingPaperResultsContent({ params }: { params: Promise<{ paperId: str
               <LearnerSurfaceCard card={nextActionCard(passed, isPracticeOnly)} />
               <LearnerSurfaceCard card={policyCard(review)} />
             </section>
+
+            {structure?.paper.questionPaperAssets?.length ? (
+              <section id="pdf-review">
+                <LearnerSurfaceSectionHeader
+                  eyebrow="Original PDFs"
+                  title="Your saved highlights"
+                  description="The uploaded PDFs are shown read-only here. Highlights are your paper-level annotations and carry across attempts."
+                  className="mb-5"
+                />
+                <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+                  {(['A', 'B', 'C'] as const).map((partCode) => (
+                    <ReadingPdfViewer
+                      key={partCode}
+                      paperId={paperId}
+                      partCode={partCode}
+                      assets={structure.paper.questionPaperAssets ?? []}
+                      annotations={pdfAnnotations}
+                      readOnly
+                    />
+                  ))}
+                </div>
+              </section>
+            ) : null}
 
             <section id="part-breakdown">
               <LearnerSurfaceSectionHeader
@@ -609,4 +650,3 @@ function feedbackScopeLabel(scope: string, targetRef: string | null): string {
       return scope;
   }
 }
-

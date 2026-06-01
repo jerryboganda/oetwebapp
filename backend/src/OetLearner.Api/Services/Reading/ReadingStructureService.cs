@@ -792,6 +792,30 @@ public sealed class ReadingStructureService : IReadingStructureService
                 $"Paper subtest is '{paper.SubtestCode}', expected 'reading'.", null));
         }
 
+        var pdfParts = await db.ContentPaperAssets.AsNoTracking()
+            .Where(a => a.PaperId == paperId
+                && a.Role == PaperAssetRole.QuestionPaper
+                && a.IsPrimary
+                && (a.Part == "A" || a.Part == "B" || a.Part == "C")
+                && a.MediaAsset != null
+                && a.MediaAsset.Status == MediaAssetStatus.Ready
+                && (a.MediaAsset.Format == "pdf" || a.MediaAsset.MimeType == "application/pdf"))
+            .GroupBy(a => a.Part!)
+            .Select(g => new { Part = g.Key, Count = g.Count() })
+            .ToListAsync(ct);
+        foreach (var requiredPart in new[] { "A", "B", "C" })
+        {
+            var count = pdfParts.FirstOrDefault(p => p.Part == requiredPart)?.Count ?? 0;
+            if (count != 1)
+            {
+                issues.Add(new(
+                    Code: $"part_{requiredPart}_pdf_required",
+                    Severity: "error",
+                    Message: $"Reading Part {requiredPart} requires exactly one primary QuestionPaper PDF asset.",
+                    TargetId: paperId));
+            }
+        }
+
         var parts = await db.ReadingParts.AsNoTracking()
             .Where(p => p.PaperId == paperId)
             .Include(p => p.Questions)
@@ -814,21 +838,12 @@ public sealed class ReadingStructureService : IReadingStructureService
                     Message: $"Part {part.PartCode} has a {part.TimeLimitMinutes}-minute limit, expected {expectedMinutes} minute(s).",
                     TargetId: part.Id));
             }
-            var expectedTextCount = CanonicalTextCounts[part.PartCode];
-            if (texts.Count != expectedTextCount)
-            {
-                issues.Add(new(
-                    Code: $"part_{part.PartCode}_text_count",
-                    Severity: "error",
-                    Message: $"Part {part.PartCode} has {texts.Count} text unit(s), expected {expectedTextCount}.",
-                    TargetId: part.Id));
-            }
-            if (!HasContiguousDisplayOrders(texts.Select(t => t.DisplayOrder)))
+            if (texts.Count > 0 && !HasContiguousDisplayOrders(texts.Select(t => t.DisplayOrder)))
             {
                 issues.Add(new(
                     Code: $"part_{part.PartCode}_text_order",
-                    Severity: "error",
-                    Message: $"Part {part.PartCode} text display orders must be unique and contiguous from 1.",
+                    Severity: "warning",
+                    Message: $"Legacy Part {part.PartCode} text display orders should be unique and contiguous from 1.",
                     TargetId: part.Id));
             }
             if (!HasContiguousDisplayOrders(part.Questions.Select(q => q.DisplayOrder)))
@@ -873,33 +888,16 @@ public sealed class ReadingStructureService : IReadingStructureService
                         Message: $"Part {part.PartCode} question {q.DisplayOrder} uses {q.QuestionType}, which is not valid for this part.",
                         TargetId: q.Id));
                 }
-                if (part.PartCode is ReadingPartCode.B or ReadingPartCode.C
-                    && (q.ReadingTextId is null || !textIds.Contains(q.ReadingTextId)))
+                if (q.ReadingTextId is not null && !textIds.Contains(q.ReadingTextId))
                 {
                     issues.Add(new(
-                        Code: $"part_{part.PartCode}_question_text_required",
-                        Severity: "error",
-                        Message: $"Part {part.PartCode} question {q.DisplayOrder} must reference one of this part's text units.",
+                        Code: $"part_{part.PartCode}_question_text_invalid",
+                        Severity: "warning",
+                        Message: $"Part {part.PartCode} question {q.DisplayOrder} references a legacy text outside this part. PDF-only rendering ignores text links.",
                         TargetId: q.Id));
                 }
                 if (part.PartCode == ReadingPartCode.A)
                 {
-                    if (q.ReadingTextId is null)
-                    {
-                        issues.Add(new(
-                            Code: "part_A_question_text_required",
-                            Severity: "error",
-                            Message: $"Part A question {q.DisplayOrder} must reference one of the authored Part A text units.",
-                            TargetId: q.Id));
-                    }
-                    else if (!textIds.Contains(q.ReadingTextId))
-                    {
-                        issues.Add(new(
-                            Code: "part_A_question_text_invalid",
-                            Severity: "error",
-                            Message: $"Part A question {q.DisplayOrder} references a text outside Part A.",
-                            TargetId: q.Id));
-                    }
                     // Part A type layout — relaxed to match real OET paper
                     // variation. Sentence-completion always occupies Q15-20; Q1-14
                     // hold the matching-text-reference block followed by the
@@ -941,7 +939,7 @@ public sealed class ReadingStructureService : IReadingStructureService
                 }
             }
 
-            if (part.PartCode is ReadingPartCode.B or ReadingPartCode.C)
+            if (texts.Count > 0 && part.PartCode is ReadingPartCode.B or ReadingPartCode.C)
             {
                 var expectedPerText = part.PartCode == ReadingPartCode.B ? 1 : 8;
                 var questionsByText = part.Questions
@@ -991,18 +989,13 @@ public sealed class ReadingStructureService : IReadingStructureService
                 }
             }
 
-            if (part.PartCode == ReadingPartCode.A && questionCount > 0 && part.Questions.All(q => q.ReadingTextId is null))
-            {
-                issues.Add(new($"part_{part.PartCode}_no_texts", "error",
-                    $"Part {part.PartCode} questions must reference the authored Part A text units for rulebook-safe review and analytics.",
-                    part.Id));
-            }
-
-            // Every text must have a source for copyright
+            // Legacy text rows are no longer rendered in the PDF-only Reading
+            // player. Keep source warnings for old drafts only; provenance is
+            // enforced at paper/PDF-asset level by the content publish gate.
             foreach (var t in texts.Where(x => string.IsNullOrWhiteSpace(x.Source)))
             {
-                issues.Add(new("text_missing_source", "error",
-                    $"Text '{t.Title}' is missing a Source attribution.", t.Id));
+                issues.Add(new("legacy_text_missing_source", "warning",
+                    $"Legacy text '{t.Title}' is missing a Source attribution; PDF-only learners will not see it.", t.Id));
             }
         }
 

@@ -12,7 +12,7 @@ Capture the current state of every T0/T1 route without changing it. Evidence is 
 ## Capture method
 - **Web:** Playwright script using existing `tests/e2e/` auth fixtures to visit inventory routes and screenshot at three viewports, both themes.
 - **Mobile:** Capacitor debug builds, iOS 17 + Android 14, actual devices where possible; fall back to simulator screenshots.
-- **Desktop:** Electron build via `npm run desktop:dev`; full-window capture.
+- **Desktop:** Electron build via `pnpm run desktop:dev`; full-window capture.
 
 ## Exit criteria
 - 100% of T0 routes captured light + dark, three viewports.

@@ -16,7 +16,7 @@ export default function WritingPaperSessionIndexPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  const seededId = useMemo(() => (searchParams.get('id') ?? '').trim(), [searchParams]);
+  const seededId = useMemo(() => (searchParams?.get('id') ?? '').trim(), [searchParams]);
   const [sessionId, setSessionId] = useState(seededId);
 
   useEffect(() => {

@@ -147,13 +147,17 @@ describe('writing UI primitives', () => {
       <CanonViolationCard
         violation={{
           id: 'violation-1',
+          submissionId: 'submission-1',
           ruleId: 'R09.2',
           ruleText: 'Avoid direct reference to the patient.',
           severity: 'medium',
           lineNumber: 4,
+          charStart: 0,
+          charEnd: 11,
           snippet: 'the patient',
           suggestedFix: 'Use the patient name or pronoun instead.',
           disputed: false,
+          disputeResolution: null,
         }}
         onDispute={onDispute}
       />,

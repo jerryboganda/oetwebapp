@@ -57,7 +57,7 @@ function runReadinessCheck() {
 async function main() {
   await runReadinessCheck();
 
-  electronProcess = spawn(process.platform === 'win32' ? 'cmd.exe' : 'npm', process.platform === 'win32' ? ['/c', 'npm', 'exec', '--', 'electron', '.'] : ['exec', '--', 'electron', '.'], {
+  electronProcess = spawn(process.platform === 'win32' ? 'cmd.exe' : 'pnpm', process.platform === 'win32' ? ['/c', 'pnpm', 'exec', 'electron', '.'] : ['exec', 'electron', '.'], {
     stdio: 'inherit',
     env: {
       ...process.env,

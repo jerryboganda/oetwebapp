@@ -5,7 +5,7 @@ axe-core via Playwright. Fails on **serious + critical** violations only.
 ## Run
 
 ```bash
-npx playwright test tests/a11y
+pnpm exec playwright test tests/a11y
 ```
 
 Set `PLAYWRIGHT_BASE_URL` to target a non-default origin.
