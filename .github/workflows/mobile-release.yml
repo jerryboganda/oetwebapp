@@ -40,10 +40,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: npm
+          cache: pnpm
 
       - uses: actions/setup-java@v4
         with:
@@ -53,7 +56,7 @@ jobs:
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
 
-      - run: npm ci
+      - run: pnpm install --frozen-lockfile
 
       - name: Validate Android release inputs
         run: node scripts/qa/validate-mobile-release-inputs.mjs --platform=android --version="$MOBILE_VERSION" --version-code="$MOBILE_VERSION_CODE"
@@ -85,12 +88,12 @@ jobs:
           NODE
 
       - name: Build Next.js
-        run: npm run build
+        run: pnpm run build
         env:
           CAPACITOR_APP_URL: https://app.oetwithdrhesham.co.uk
 
       - name: Capacitor sync
-        run: npx cap sync android
+        run: pnpm exec cap sync android
 
       - name: Decode keystore
         run: printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 -d > android/app/release-keystore.jks
@@ -149,12 +152,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: npm
+          cache: pnpm
 
-      - run: npm ci
+      - run: pnpm install --frozen-lockfile
 
       - name: Validate iOS release inputs
         run: node scripts/qa/validate-mobile-release-inputs.mjs --platform=ios --version="$MOBILE_VERSION" --version-code="$MOBILE_VERSION_CODE"
@@ -167,12 +173,12 @@ jobs:
           IOS_PROVISIONING_PROFILE_BASE64: ${{ secrets.IOS_PROVISIONING_PROFILE_BASE64 }}
 
       - name: Build Next.js
-        run: npm run build
+        run: pnpm run build
         env:
           CAPACITOR_APP_URL: https://app.oetwithdrhesham.co.uk
 
       - name: Capacitor sync
-        run: npx cap sync ios
+        run: pnpm exec cap sync ios
 
       - name: Install CocoaPods
         working-directory: ios/App

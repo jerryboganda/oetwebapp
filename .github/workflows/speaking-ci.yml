@@ -66,15 +66,18 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
       - uses: ./.github/actions/setup-oet-stack
       - name: Lint
-        run: npm run lint
+        run: pnpm run lint
       - name: Vitest
-        run: npm test -- --reporter=verbose
+        run: pnpm test -- --reporter=verbose
       - name: Type-check
-        run: npx tsc --noEmit --pretty false
+        run: pnpm exec tsc --noEmit --pretty false
       - name: Build
-        run: npm run build
+        run: pnpm run build
 
   migrations-check:
     runs-on: ubuntu-latest

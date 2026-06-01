@@ -50,15 +50,18 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
-      - run: npm ci
-      - run: npx tsc --noEmit
-      - run: npm run lint
-      - run: npx vitest run --reporter=dot
-      - run: npm run build
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec tsc --noEmit
+      - run: pnpm run lint
+      - run: pnpm exec vitest run --reporter=dot
+      - run: pnpm run build
 
   e2e-smoke:
     name: E2E smoke (shard ${{ matrix.shard }}/${{ strategy.job-total }} · ${{ matrix.project }})
@@ -88,23 +91,26 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
+          cache: pnpm
 
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 10.0.x
 
-      - run: npm ci
+      - run: pnpm install --frozen-lockfile
 
       - name: Install Playwright browsers
         # All three engines are required: the `setup` project (auth state
         # generation) always runs under chromium regardless of which
         # downstream project this shard targets, and webkit/firefox shards
         # also need their own engine.
-        run: npx playwright install --with-deps chromium firefox webkit
+        run: pnpm exec playwright install --with-deps chromium firefox webkit
 
       - name: Build local smoke stack
         run: docker compose -f docker-compose.desktop.yml up -d --build
@@ -152,11 +158,14 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
-      - run: npm ci
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
       - name: Download all blob reports
         uses: actions/download-artifact@v4
         with:
@@ -168,7 +177,7 @@ jobs:
           mkdir -p merged-blob
           find all-blob-reports -type d -name 'blob-report' -exec sh -c 'cp -r "$1"/* merged-blob/ 2>/dev/null || true' _ {} \;
           if [ -n "$(ls -A merged-blob 2>/dev/null)" ]; then
-            npx playwright merge-reports --reporter html ./merged-blob
+            pnpm exec playwright merge-reports --reporter html ./merged-blob
           else
             echo "No blob reports found to merge."
           fi

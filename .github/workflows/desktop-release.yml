@@ -75,10 +75,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: npm
+          cache: pnpm
 
       - uses: actions/setup-dotnet@v4
         with:
@@ -104,10 +107,10 @@ jobs:
       - name: Stamp package.json version
         shell: pwsh
         run: |
-          npm version ${{ steps.version.outputs.version }} --no-git-tag-version --allow-same-version
+          pnpm version ${{ steps.version.outputs.version }} --no-git-tag-version --allow-same-version
 
       - name: Install dependencies
-        run: npm ci
+        run: pnpm install --frozen-lockfile
 
       - name: Validate signing configuration
         if: inputs.allow_unsigned != true
@@ -152,7 +155,7 @@ jobs:
           ELECTRON_CERT_PINS: ${{ secrets.ELECTRON_CERT_PINS }}
           # electron-builder GitHub publish credentials (used only when publish_mode != never).
           GH_TOKEN: ${{ github.token }}
-        run: npm run desktop:dist
+        run: pnpm run desktop:dist
 
       - name: Verify Authenticode signature
         if: github.event_name == 'push' || inputs.allow_unsigned != true
@@ -197,7 +200,7 @@ jobs:
 
       - name: Packaged desktop smoke
         shell: pwsh
-        run: npm run test:e2e:desktop:packaged
+        run: pnpm run test:e2e:desktop:packaged
 
       - name: Upload installer
         uses: actions/upload-artifact@v4
