@@ -62,6 +62,13 @@ describe('sidebarPermissionMap', () => {
     expect(hasPermission([AdminPermission.ContentEditorReview], ...required)).toBe(true);
     expect(hasPermission([AdminPermission.ContentPublisherApproval], ...required)).toBe(true);
     expect(hasPermission([AdminPermission.BillingRead], ...required)).toBe(false);
+
+    expect(canAccessAdminRoute([AdminPermission.ContentRead], '/admin/content')).toBe(true);
+    expect(canAccessAdminRoute([AdminPermission.ContentWrite], '/admin/content')).toBe(true);
+    expect(canAccessAdminRoute([AdminPermission.ContentPublish], '/admin/content')).toBe(true);
+    expect(canAccessAdminRoute([AdminPermission.ContentEditorReview], '/admin/content')).toBe(true);
+    expect(canAccessAdminRoute([AdminPermission.ContentPublisherApproval], '/admin/content')).toBe(true);
+    expect(canAccessAdminRoute([AdminPermission.BillingRead], '/admin/content')).toBe(false);
   });
 
   it('requires content:read for the content library', () => {
@@ -71,13 +78,21 @@ describe('sidebarPermissionMap', () => {
   it('keeps OET subtest hubs mapped to their workspace permissions', () => {
     expect(sidebarPermissionMap['/admin/content/reading']).toEqual([AdminPermission.ContentRead]);
     expect(sidebarPermissionMap['/admin/content/listening']).toEqual([AdminPermission.ContentRead]);
-    expect(sidebarPermissionMap['/admin/writing']).toEqual([AdminPermission.ContentRead]);
+    expect(sidebarPermissionMap['/admin/writing']).toEqual([
+      AdminPermission.ContentRead,
+      AdminPermission.ContentWrite,
+      AdminPermission.QualityAnalytics,
+      AdminPermission.AiConfig,
+    ]);
     expect(sidebarPermissionMap['/admin/speaking']).toEqual([
       AdminPermission.ContentRead,
+      AdminPermission.ContentWrite,
       AdminPermission.ReviewOps,
       AdminPermission.QualityAnalytics,
       AdminPermission.ContentPublish,
     ]);
+    expect(sidebarPermissionMap['/admin/writing/result-visibility']).toEqual([AdminPermission.ContentWrite]);
+    expect(sidebarPermissionMap['/admin/speaking/result-visibility']).toEqual([AdminPermission.ContentWrite]);
   });
 
   it('keeps consolidated content hub child workflows mapped to granular permissions', () => {
@@ -140,5 +155,32 @@ describe('admin route permissions', () => {
     expect(canAccessAdminRoute([AdminPermission.UsersRead], '/admin/users?tab=admins')).toBe(false);
     expect(canAccessAdminRoute([AdminPermission.ManagePermissions], '/admin/users?tab=admins')).toBe(false);
     expect(canAccessAdminRoute([AdminPermission.SystemAdmin], '/admin/users?tab=admins')).toBe(true);
+  });
+
+  it('requires content:write for Writing and Speaking result visibility pages', () => {
+    expect(getAdminRoutePermissions('/admin/writing/result-visibility')).toEqual([AdminPermission.ContentWrite]);
+    expect(getAdminRoutePermissions('/admin/speaking/result-visibility')).toEqual([AdminPermission.ContentWrite]);
+    expect(canAccessAdminRoute([AdminPermission.ContentRead], '/admin/writing/result-visibility')).toBe(false);
+    expect(canAccessAdminRoute([AdminPermission.ContentRead], '/admin/speaking/result-visibility')).toBe(false);
+    expect(canAccessAdminRoute([AdminPermission.ContentWrite], '/admin/writing/result-visibility')).toBe(true);
+    expect(canAccessAdminRoute([AdminPermission.ContentWrite], '/admin/speaking/result-visibility')).toBe(true);
+  });
+
+  it('keeps mock bundle wizard routes out of read-only access', () => {
+    expect(getAdminRoutePermissions('/admin/content/mocks/wizard')).toEqual([AdminPermission.ContentWrite]);
+    expect(getAdminRoutePermissions('/admin/content/mocks/wizard/mock-1/bundle')).toEqual([AdminPermission.ContentWrite]);
+    expect(getAdminRoutePermissions('/admin/content/mocks/wizard/mock-1/listening')).toEqual([AdminPermission.ContentWrite]);
+    expect(getAdminRoutePermissions('/admin/content/mocks/wizard/mock-1/reading')).toEqual([AdminPermission.ContentWrite]);
+    expect(getAdminRoutePermissions('/admin/content/mocks/wizard/mock-1/writing')).toEqual([AdminPermission.ContentWrite]);
+    expect(getAdminRoutePermissions('/admin/content/mocks/wizard/mock-1/speaking')).toEqual([AdminPermission.ContentWrite]);
+    expect(getAdminRoutePermissions('/admin/content/mocks/wizard/mock-1/review')).toEqual([
+      AdminPermission.ContentWrite,
+      AdminPermission.ContentPublish,
+    ]);
+
+    expect(canAccessAdminRoute([AdminPermission.ContentRead], '/admin/content/mocks/wizard')).toBe(false);
+    expect(canAccessAdminRoute([AdminPermission.ContentRead], '/admin/content/mocks/wizard/mock-1/bundle')).toBe(false);
+    expect(canAccessAdminRoute([AdminPermission.ContentWrite], '/admin/content/mocks/wizard/mock-1/bundle')).toBe(true);
+    expect(canAccessAdminRoute([AdminPermission.ContentPublish], '/admin/content/mocks/wizard/mock-1/review')).toBe(true);
   });
 });

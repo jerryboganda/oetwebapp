@@ -9,9 +9,8 @@
  * gates; this hub is intentionally a simple, link-only index.
  */
 
-import Link from 'next/link';
+import { useMemo } from 'react';
 import {
-  ArrowRight,
   BarChart3,
   Cpu,
   Eye,
@@ -20,20 +19,19 @@ import {
   PenSquare,
   Sparkles,
 } from 'lucide-react';
-import {
-  AdminSettingsLayout,
-  SettingsSection,
-} from '@/components/admin/layout/admin-settings-layout';
-import { Card } from '@/components/admin/ui/card';
+import { AdminCatalogLayout } from '@/components/admin/layout/admin-catalog-layout';
+import { EmptyState } from '@/components/admin/ui/empty-state';
+import { AdminHubSection, type AdminHubLink } from '@/components/admin/ui/hub-card';
+import { canAccessAdminRoute } from '@/lib/admin-permissions';
+import { useCurrentUser } from '@/lib/hooks/use-current-user';
 
-interface HubLink {
-  href: string;
+type WritingHubSection = {
   title: string;
   description: string;
-  icon: React.ReactNode;
-}
+  links: AdminHubLink[];
+};
 
-const AUTHORING_LINKS: HubLink[] = [
+const AUTHORING_LINKS: AdminHubLink[] = [
   {
     href: '/admin/writing/tasks/new',
     title: 'Create task',
@@ -48,7 +46,7 @@ const AUTHORING_LINKS: HubLink[] = [
   },
 ];
 
-const INSIGHTS_LINKS: HubLink[] = [
+const QUALITY_LINKS: AdminHubLink[] = [
   {
     href: '/admin/writing/analytics',
     title: 'Analytics',
@@ -63,7 +61,7 @@ const INSIGHTS_LINKS: HubLink[] = [
   },
 ];
 
-const AI_LINKS: HubLink[] = [
+const AI_LINKS: AdminHubLink[] = [
   {
     href: '/admin/writing/options',
     title: 'AI options',
@@ -78,64 +76,52 @@ const AI_LINKS: HubLink[] = [
   },
 ];
 
-function HubCardGrid({ links }: { links: HubLink[] }) {
-  return (
-    <div className="grid gap-3 sm:grid-cols-2">
-      {links.map((link) => (
-        <Link
-          key={link.href}
-          href={link.href}
-          className="group rounded-admin outline-none focus-visible:ring-2 focus-visible:ring-[var(--admin-primary)]"
-        >
-          <Card
-            surface="default"
-            className="h-full p-4 transition-colors duration-150 group-hover:border-[var(--admin-primary)] motion-reduce:transition-none"
-          >
-            <div className="flex items-start gap-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-admin bg-[var(--admin-primary-tint)] text-[var(--admin-primary)]">
-                {link.icon}
-              </div>
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center justify-between gap-2">
-                  <h3 className="text-sm font-semibold text-admin-fg-strong">{link.title}</h3>
-                  <ArrowRight
-                    className="h-4 w-4 shrink-0 text-admin-fg-muted transition-transform duration-150 group-hover:translate-x-0.5 group-hover:text-[var(--admin-primary)] motion-reduce:transition-none"
-                    aria-hidden="true"
-                  />
-                </div>
-                <p className="mt-1 text-xs text-admin-fg-muted">{link.description}</p>
-              </div>
-            </div>
-          </Card>
-        </Link>
-      ))}
-    </div>
-  );
-}
+const writingHubSections: WritingHubSection[] = [
+  { title: 'Authoring workspace', description: 'Create and manage Writing tasks.', links: AUTHORING_LINKS },
+  { title: 'Quality & release', description: 'Monitor exam integrity and control how results reach candidates.', links: QUALITY_LINKS },
+  { title: 'AI assistance', description: 'AI grading, coaching, and draft generation.', links: AI_LINKS },
+];
 
 export default function AdminWritingHubPage() {
+  const { user } = useCurrentUser();
+  const userPermissions = user?.adminPermissions;
+  const visibleSections = useMemo(
+    () =>
+      writingHubSections
+        .map((section) => ({
+          ...section,
+          links: section.links.filter((link) => canAccessAdminRoute(userPermissions, link.href)),
+        }))
+        .filter((section) => section.links.length > 0),
+    [userPermissions],
+  );
+
   return (
-    <AdminSettingsLayout
+    <AdminCatalogLayout
       title="Writing"
       description="Author Writing tasks, review integrity analytics, and manage result-release policy."
       eyebrow="Writing"
       icon={<PenSquare className="h-5 w-5" />}
       breadcrumbs={[{ label: 'Admin', href: '/admin' }, { label: 'Writing' }]}
+      hideViewModeToggle
+      itemsClassName="flex flex-col gap-6"
     >
-      <SettingsSection title="Authoring" description="Create and manage Writing tasks.">
-        <HubCardGrid links={AUTHORING_LINKS} />
-      </SettingsSection>
-
-      <SettingsSection
-        title="Insights & policy"
-        description="Monitor exam integrity and control how results reach candidates."
-      >
-        <HubCardGrid links={INSIGHTS_LINKS} />
-      </SettingsSection>
-
-      <SettingsSection title="AI" description="AI grading, coaching, and draft generation.">
-        <HubCardGrid links={AI_LINKS} />
-      </SettingsSection>
-    </AdminSettingsLayout>
+      {visibleSections.length > 0 ? (
+        visibleSections.map((section) => (
+          <AdminHubSection
+            key={section.title}
+            title={section.title}
+            description={section.description}
+            links={section.links}
+            columns="two"
+          />
+        ))
+      ) : (
+        <EmptyState
+          title="No available Writing workflows"
+          description="Your admin account does not currently have permission to open any Writing workflows."
+        />
+      )}
+    </AdminCatalogLayout>
   );
 }

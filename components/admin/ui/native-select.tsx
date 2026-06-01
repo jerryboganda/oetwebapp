@@ -16,6 +16,7 @@ export interface NativeSelectProps
   label?: string;
   hint?: string;
   error?: string;
+  placeholder?: string;
   options?: NativeSelectOption[];
   wrapperClassName?: string;
 }
@@ -28,6 +29,7 @@ const NativeSelect = React.forwardRef<HTMLSelectElement, NativeSelectProps>(
       label,
       hint,
       error,
+      placeholder,
       options,
       id,
       required,
@@ -70,6 +72,7 @@ const NativeSelect = React.forwardRef<HTMLSelectElement, NativeSelectProps>(
           )}
           {...props}
         >
+          {placeholder ? <option value="">{placeholder}</option> : null}
           {options ? options.map((option) => (
             <option key={option.value} value={option.value}>{option.label}</option>
           )) : children}

@@ -1,6 +1,5 @@
 'use client';
 
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useMemo } from 'react';
 import {
@@ -40,222 +39,59 @@ type HubSection = {
 
 const hubSections: HubSection[] = [
   {
-    id: 'papers',
-    title: 'Papers (canonical content)',
-    description:
-      'The mission-critical ContentPaper → Asset → MediaAsset model. All Reading, Listening, Writing, and Speaking practice papers are authored, versioned, and published from here.',
+    id: 'subtests',
+    title: 'OET subtest workspaces',
+    description: 'Start with the module you are operating. Each hub gathers the authoring, review, analytics, and support routes for that subtest.',
+    columns: 'five',
     links: [
-      {
-        href: '/admin/content/library',
-        label: 'Content Library',
-        description: 'Browse, search, edit, and publish every published or draft content item across professions.',
-        icon: <Library className="h-5 w-5" />,
-      },
-      {
-        href: '/admin/content/papers',
-        label: 'Content Papers',
-        description: 'Canonical paper records with typed asset slots (case notes, audio, scripts, role cards).',
-        icon: <FileCheck2 className="h-5 w-5" />,
-        badge: 'Canonical',
-      },
-      {
-        href: '/admin/content/reading',
-        label: 'Reading Authoring',
-        description: 'Dedicated workspace for OET Reading papers (20+6+16 = 42 items). Create, edit, validate, and publish reading structure.',
-        icon: <BookOpenText className="h-5 w-5" />,
-        badge: 'Module',
-      },
-      {
-        href: '/admin/content/listening',
-        label: 'Listening Authoring',
-        description: 'Dedicated workspace for OET Listening papers (24+6+12 = 42 items, audio + 3 PDFs).',
-        icon: <Headphones className="h-5 w-5" />,
-        badge: 'Module',
-      },
-      {
-        href: '/admin/content/writing',
-        label: 'Writing Authoring',
-        description: 'Dedicated workspace for OET Writing case notes, letter types, model answers, and publish readiness.',
-        icon: <PenSquare className="h-5 w-5" />,
-        badge: 'Module',
-      },
-      {
-        href: '/admin/speaking',
-        label: 'Speaking Operations',
-        description: 'Open the Speaking hub for result visibility, analytics, recording audit, and content shortcuts.',
-        icon: <BarChart3 className="h-5 w-5" />,
-        badge: 'Hub',
-      },
-      {
-        href: '/admin/content/papers?subtest=speaking',
-        label: 'Speaking Authoring',
-        description: 'Author OET Speaking role-play cards with candidate/interlocutor structure, source assets, and publish readiness.',
-        icon: <Mic className="h-5 w-5" />,
-        badge: 'Module',
-      },
-      {
-        href: '/admin/content/speaking/mock-sets',
-        label: 'Speaking Mock Sets',
-        description: 'Pair two published Speaking role-plays into the official OET Speaking mock shape.',
-        icon: <MessageSquareText className="h-5 w-5" />,
-        badge: 'OET',
-      },
-      {
-        href: '/admin/content/mocks',
-        label: 'Full Mocks',
-        description: 'Bundle Listening + Reading + Writing + Speaking into a complete OET mock paper.',
-        icon: <ScrollText className="h-5 w-5" />,
-      },
-
-      {
-        href: '/admin/content/speaking/shared-resources',
-        label: 'Speaking Shared Resources',
-        description: 'Manage shared warm-up questions and assessment-criteria PDFs used across Speaking cards.',
-        icon: <Mic className="h-5 w-5" />,
-      },
-      {
-        href: '/admin/content/analytics',
-        label: 'Item Analytics',
-        description: 'Deep-dive into per-item usage, completion rates, and learner outcomes.',
-        icon: <BarChart3 className="h-5 w-5" />,
-      },
+      { href: '/admin/content/reading', title: 'Reading', description: 'Author, validate, and publish Reading papers, texts, questions, previews, and extraction workflows.', icon: <BookOpenText className="h-5 w-5" />, badge: 'Subtest', badgeVariant: 'primary' },
+      { href: '/admin/content/listening', title: 'Listening', description: 'Manage Listening papers, structure, audio imports, sequencing, and question-level edits.', icon: <Headphones className="h-5 w-5" />, badge: 'Subtest', badgeVariant: 'primary' },
+      { href: '/admin/writing', title: 'Writing', description: 'Create Writing tasks, manage task libraries, release policy, analytics, and AI-assisted workflows.', icon: <PenSquare className="h-5 w-5" />, badge: 'Subtest', badgeVariant: 'primary' },
+      { href: '/admin/speaking', title: 'Speaking', description: 'Operate Speaking visibility, analytics, recordings, role-play authoring, mock sets, and shared resources.', icon: <Mic className="h-5 w-5" />, badge: 'Subtest', badgeVariant: 'primary' },
+      { href: '/admin/content/mocks', title: 'Mocks', description: 'Bundle subtest content into complete mocks, run operations, inspect leaks, and review item analysis.', icon: <ScrollText className="h-5 w-5" />, badge: 'Bundle', badgeVariant: 'primary' },
     ],
   },
   {
-    id: 'lessons',
-    title: 'Lessons & micro-content',
-    description: 'Authoring surfaces for the supporting modules that wrap practice papers: vocabulary, conversation, grammar, pronunciation, strategies.',
+    id: 'assets',
+    title: 'Library & learning assets',
+    description: 'Shared assets that support every subtest: paper records, lessons, media, vocabulary, conversation, grammar, pronunciation, and strategies.',
     links: [
-      {
-        href: '/admin/content/vocabulary',
-        label: 'Vocabulary',
-        description: 'Term banks tagged by profession with examples and audio.',
-        icon: <BookOpenText className="h-5 w-5" />,
-      },
-      {
-        href: '/admin/content/conversation',
-        label: 'Conversation Templates',
-        description: 'Role-play scenarios, objectives, and patient context for AI-led conversation practice.',
-        icon: <MessageSquareText className="h-5 w-5" />,
-      },
-      {
-        href: '/admin/content/grammar',
-        label: 'Grammar Lessons',
-        description: 'Server-authoritative grammar rulebook content (free tier capped, AI-drafted).',
-        icon: <PenSquare className="h-5 w-5" />,
-      },
-      {
-        href: '/admin/content/pronunciation',
-        label: 'Pronunciation Drills',
-        description: 'Phonemes, example words, sentences and ASR-graded drills.',
-        icon: <Mic className="h-5 w-5" />,
-      },
-      {
-        href: '/admin/content/strategies',
-        label: 'Strategy Guides',
-        description: 'How-to guides per skill and band level.',
-        icon: <Headphones className="h-5 w-5" />,
-      },
+      { href: '/admin/content/library', title: 'Content Library', description: 'Browse, search, edit, and publish every published or draft item across professions.', icon: <Library className="h-5 w-5" /> },
+      { href: '/admin/content/papers', title: 'Content Papers', description: 'Canonical paper records with typed asset slots for case notes, audio, scripts, and role cards.', icon: <FileCheck2 className="h-5 w-5" />, badge: 'Canonical', badgeVariant: 'success' },
+      { href: '/admin/content/vocabulary', title: 'Vocabulary', description: 'Term banks tagged by profession with examples and audio.', icon: <BookOpenText className="h-5 w-5" /> },
+      { href: '/admin/content/conversation', title: 'Conversation Templates', description: 'Role-play scenarios, objectives, and patient context for AI-led conversation practice.', icon: <MessageSquareText className="h-5 w-5" /> },
+      { href: '/admin/content/grammar', title: 'Grammar Lessons', description: 'Server-authoritative grammar rulebook content, free-tier gates, and AI-drafted lesson structure.', icon: <PenSquare className="h-5 w-5" /> },
+      { href: '/admin/content/pronunciation', title: 'Pronunciation Drills', description: 'Phonemes, example words, sentences, and ASR-graded drills.', icon: <Mic className="h-5 w-5" /> },
+      { href: '/admin/content/strategies', title: 'Strategy Guides', description: 'How-to guides per skill and band level.', icon: <Headphones className="h-5 w-5" /> },
+      { href: '/admin/content/media', title: 'Media Assets', description: 'Content-addressed storage for every uploaded source and learner-facing file.', icon: <ImageIcon className="h-5 w-5" /> },
     ],
   },
   {
-    id: 'pipelines',
-    title: 'Pipelines',
+    id: 'automation',
+    title: 'Import & automation',
     description: 'Bring content into the system at scale, draft new items with AI, and keep the catalogue organised.',
     links: [
-      {
-        href: '/admin/content/import',
-        label: 'Bulk Import',
-        description: 'CSV / ZIP imports with required source provenance and audit trail.',
-        icon: <Upload className="h-5 w-5" />,
-      },
-      {
-        href: '/admin/content/papers/import',
-        label: 'Paper ZIP Import',
-        description: 'Mission-critical chunked ZIP import that maps files to typed paper assets.',
-        icon: <Upload className="h-5 w-5" />,
-        badge: 'Canonical',
-      },
-      {
-        href: '/admin/content/imports/real-content-folder',
-        label: 'Real Content Folder Import',
-        description: 'Upload the Project Real Content folder ZIP, review parsed proposals, and commit drafts.',
-        icon: <Upload className="h-5 w-5" />,
-        badge: 'OET',
-      },
-      {
-        href: '/admin/content/generation',
-        label: 'AI Generation',
-        description: 'Grounded AI drafts (rulebook + scoring + guardrails) routed via the AI gateway.',
-        icon: <Sparkles className="h-5 w-5" />,
-      },
-      {
-        href: '/admin/content/hierarchy',
-        label: 'Hierarchy',
-        description: 'Programs → Tracks → Modules → Lessons → Packages.',
-        icon: <GitBranch className="h-5 w-5" />,
-      },
-      {
-        href: '/admin/content/media',
-        label: 'Media Assets',
-        description: 'Content-addressed (SHA-256) storage of every uploaded file.',
-        icon: <ImageIcon className="h-5 w-5" />,
-      },
+      { href: '/admin/content/import', title: 'Bulk Import', description: 'CSV and ZIP imports with required source provenance and audit trail.', icon: <Upload className="h-5 w-5" /> },
+      { href: '/admin/content/papers/import', title: 'Paper ZIP Import', description: 'Mission-critical chunked ZIP import that maps files to typed paper assets.', icon: <Upload className="h-5 w-5" />, badge: 'Canonical', badgeVariant: 'success' },
+      { href: '/admin/content/imports/real-content-folder', title: 'Real Content Folder Import', description: 'Upload the Project Real Content folder ZIP, review parsed proposals, and commit drafts.', icon: <Upload className="h-5 w-5" />, badge: 'OET', badgeVariant: 'primary' },
+      { href: '/admin/content/generation', title: 'AI Generation', description: 'Grounded AI drafts routed via the AI gateway with rulebook and scoring guardrails.', icon: <Sparkles className="h-5 w-5" /> },
+      { href: '/admin/content/hierarchy', title: 'Hierarchy', description: 'Programs, tracks, modules, lessons, and packages.', icon: <GitBranch className="h-5 w-5" /> },
     ],
   },
   {
     id: 'governance',
     title: 'Quality & governance',
-    description: 'Pre-publish checks, approvals, and ongoing quality control for the entire catalogue.',
+    description: 'Pre-publish checks, approvals, scoring references, and ongoing quality control for the whole catalogue.',
     links: [
-      {
-        href: '/admin/content/publish-requests',
-        label: 'Publish Requests',
-        description: 'Approval queue for content moving from draft to published.',
-        icon: <FileCheck2 className="h-5 w-5" />,
-      },
-      {
-        href: '/admin/content/quality',
-        label: 'Quality Review',
-        description: 'Review automated QA status for recent content before human review and publishing.',
-        icon: <FileSearch className="h-5 w-5" />,
-      },
-      {
-        href: '/admin/content/dedup',
-        label: 'Deduplication',
-        description: 'Detect and merge near-duplicate items before they reach learners.',
-        icon: <Copy className="h-5 w-5" />,
-      },
-      {
-        href: '/admin/rulebooks',
-        label: 'Rulebooks',
-        description: 'The single source of truth that grounds every grade and AI prompt.',
-        icon: <BookOpenText className="h-5 w-5" />,
-      },
-      {
-        href: '/admin/content/scoring-system',
-        label: 'Scoring System',
-        description: 'Edit the learner-facing scoring policy reference and structured threshold document.',
-        icon: <Calculator className="h-5 w-5" />,
-      },
-      {
-        href: '/admin/content/result-templates',
-        label: 'Result Templates',
-        description: 'Upload and activate OET-style score-report images for learner mock-result pages.',
-        icon: <ImageIcon className="h-5 w-5" />,
-      },
-      {
-        href: '/admin/criteria',
-        label: 'Rubrics & Criteria',
-        description: 'Writing and Speaking criterion definitions per profession.',
-        icon: <ScrollText className="h-5 w-5" />,
-      },
-      {
-        href: '/admin/signup-catalog',
-        label: 'Signup Catalog & Professions',
-        description: 'Single source of truth for the profession registry that tags every paper, lesson, and rubric.',
-        icon: <Users className="h-5 w-5" />,
-      },
+      { href: '/admin/content/publish-requests', title: 'Publish Requests', description: 'Approval queue for content moving from draft to published.', icon: <FileCheck2 className="h-5 w-5" /> },
+      { href: '/admin/content/quality', title: 'Quality Review', description: 'Review automated QA status for recent content before human review and publishing.', icon: <FileSearch className="h-5 w-5" /> },
+      { href: '/admin/content/dedup', title: 'Deduplication', description: 'Detect and merge near-duplicate items before they reach learners.', icon: <Copy className="h-5 w-5" /> },
+      { href: '/admin/rulebooks', title: 'Rulebooks', description: 'The single source of truth that grounds every grade and AI prompt.', icon: <BookOpenText className="h-5 w-5" /> },
+      { href: '/admin/content/scoring-system', title: 'Scoring System', description: 'Edit the learner-facing scoring policy reference and structured threshold document.', icon: <Calculator className="h-5 w-5" /> },
+      { href: '/admin/content/result-templates', title: 'Result Templates', description: 'Upload and activate OET-style score-report images for learner mock-result pages.', icon: <ImageIcon className="h-5 w-5" /> },
+      { href: '/admin/criteria', title: 'Rubrics & Criteria', description: 'Writing and Speaking criterion definitions per profession.', icon: <ScrollText className="h-5 w-5" /> },
+      { href: '/admin/signup-catalog', title: 'Signup Catalog & Professions', description: 'Single source of truth for the profession registry that tags every paper, lesson, and rubric.', icon: <Users className="h-5 w-5" /> },
+      { href: '/admin/content/analytics', title: 'Item Analytics', description: 'Deep-dive into per-item usage, completion rates, and learner outcomes.', icon: <BarChart3 className="h-5 w-5" /> },
     ],
   },
 ];
@@ -317,41 +153,13 @@ export default function AdminContentHubPage() {
     >
       {visibleHubSections.length > 0 ? (
         visibleHubSections.map((section) => (
-          <Card key={section.id}>
-            <CardHeader className="flex-col items-start gap-1">
-              <CardTitle>{section.title}</CardTitle>
-              <CardDescription>{section.description}</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-                {section.links.map((link) => (
-                  <Link
-                    key={link.href}
-                    href={link.href}
-                    className="group flex h-full flex-col justify-between gap-3 rounded-admin border border-admin-border bg-admin-bg-subtle p-4 transition hoverable:-translate-y-0.5 hover:border-[var(--admin-primary)] hover:shadow-admin-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--admin-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--admin-bg-page)]"
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="flex items-center gap-3">
-                        <span className="flex h-9 w-9 items-center justify-center rounded-admin bg-[var(--admin-primary-tint)] text-[var(--admin-primary)]">
-                          {link.icon}
-                        </span>
-                        <div>
-                          <p className="font-semibold text-admin-fg-strong">{link.label}</p>
-                          {link.badge ? (
-                            <Badge variant="success" size="sm" className="mt-1 uppercase tracking-wide">
-                              {link.badge}
-                            </Badge>
-                          ) : null}
-                        </div>
-                      </div>
-                      <ArrowRight className="h-4 w-4 text-admin-fg-muted transition group-hover:text-[var(--admin-primary)]" />
-                    </div>
-                    <p className="text-sm text-admin-fg-muted">{link.description}</p>
-                  </Link>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
+          <AdminHubSection
+            key={section.id}
+            title={section.title}
+            description={section.description}
+            links={section.links}
+            columns={section.columns}
+          />
         ))
       ) : (
         <EmptyState

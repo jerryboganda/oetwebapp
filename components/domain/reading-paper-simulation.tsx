@@ -370,26 +370,92 @@ export function ReadingPartBCBooklet({
         </div>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-2">
-        <div className="space-y-4">
-          {page.textIds.map((textId) => {
-            const text = textById.get(textId);
-            return text ? (
-              <article key={text.id} className="rounded-md border border-border/60 bg-surface p-4">
-                <h3 className="text-base font-bold text-navy">{text.title}</h3>
-                <div className="prose prose-sm mt-3 max-w-none text-navy selection:bg-warning/30" data-reading-annotate-scope="paper-text" dangerouslySetInnerHTML={{ __html: sanitizeBodyHtml(text.bodyHtml) }} />
-              </article>
-            ) : null;
-          })}
-        </div>
-        <div className="space-y-3">
-          {page.questionIds.map((questionId) => {
-            const question = questionById.get(questionId);
-            return question ? <PaperQuestionControl key={question.id} question={question} answers={answers} locked={locked} onAnswerChange={onAnswerChange} /> : null;
-          })}
-        </div>
-      </div>
+      {page.partCode === 'B' ? (
+        <ReadingPartBPairs page={page} textById={textById} questionById={questionById} answers={answers} locked={locked} onAnswerChange={onAnswerChange} />
+      ) : (
+        <ReadingPartCColumns page={page} textById={textById} questionById={questionById} answers={answers} locked={locked} onAnswerChange={onAnswerChange} />
+      )}
     </section>
+  );
+}
+
+type ReadingTextLearner = ReadingLearnerStructureDto['parts'][number]['texts'][number];
+type ReadingTextMap = Map<string, ReadingTextLearner>;
+type ReadingQuestionMap = Map<string, ReadingQuestionLearnerDto>;
+
+interface ReadingStackProps {
+  page: ReadingPaperBookletPage;
+  textById: ReadingTextMap;
+  questionById: ReadingQuestionMap;
+  answers: Record<string, string>;
+  locked: boolean;
+  onAnswerChange: (question: ReadingQuestionLearnerDto, value: unknown) => void;
+}
+
+/** Resolves the page's questions that belong to a given text, in page order. */
+function questionsForText(page: ReadingPaperBookletPage, questionById: ReadingQuestionMap, textId: string): ReadingQuestionLearnerDto[] {
+  return page.questionIds
+    .map((id) => questionById.get(id))
+    .filter((question): question is ReadingQuestionLearnerDto => Boolean(question) && question!.readingTextId === textId);
+}
+
+/**
+ * Part B — each short extract paired with its single 3-option question. The
+ * extract sits on the left and its question on the right (stacked on mobile);
+ * all pairs scroll on one page.
+ */
+export function ReadingPartBPairs({ page, textById, questionById, answers, locked, onAnswerChange }: ReadingStackProps) {
+  return (
+    <div className="space-y-4">
+      {page.textIds.map((textId) => {
+        const text = textById.get(textId);
+        if (!text) return null;
+        const questions = questionsForText(page, questionById, textId);
+        return (
+          <article key={text.id} className="grid gap-4 rounded-md border border-border/60 bg-surface p-4 lg:grid-cols-2">
+            <div>
+              <h3 className="text-base font-bold text-navy">{text.title}</h3>
+              <div className="prose prose-sm mt-3 max-w-none text-navy selection:bg-warning/30" data-reading-annotate-scope="paper-text" dangerouslySetInnerHTML={{ __html: sanitizeBodyHtml(text.bodyHtml) }} />
+            </div>
+            <div className="space-y-3">
+              {questions.map((question) => (
+                <PaperQuestionControl key={question.id} question={question} answers={answers} locked={locked} onAnswerChange={onAnswerChange} />
+              ))}
+            </div>
+          </article>
+        );
+      })}
+    </div>
+  );
+}
+
+/**
+ * Part C — one long passage on the left (sticky on desktop) with its eight
+ * four-option questions stacked on the right. On mobile/tablet the passage
+ * stacks above its questions.
+ */
+export function ReadingPartCColumns({ page, textById, questionById, answers, locked, onAnswerChange }: ReadingStackProps) {
+  return (
+    <div className="space-y-6">
+      {page.textIds.map((textId) => {
+        const text = textById.get(textId);
+        if (!text) return null;
+        const questions = questionsForText(page, questionById, textId);
+        return (
+          <div key={text.id} className="grid items-start gap-4 lg:grid-cols-2">
+            <article className="rounded-md border border-border/60 bg-surface p-4 lg:sticky lg:top-4 lg:max-h-[calc(100vh-9rem)] lg:overflow-y-auto">
+              <h3 className="text-base font-bold text-navy">{text.title}</h3>
+              <div className="prose prose-sm mt-3 max-w-none text-navy selection:bg-warning/30" data-reading-annotate-scope="paper-text" dangerouslySetInnerHTML={{ __html: sanitizeBodyHtml(text.bodyHtml) }} />
+            </article>
+            <div className="space-y-3">
+              {questions.map((question) => (
+                <PaperQuestionControl key={question.id} question={question} answers={answers} locked={locked} onAnswerChange={onAnswerChange} />
+              ))}
+            </div>
+          </div>
+        );
+      })}
+    </div>
   );
 }
 

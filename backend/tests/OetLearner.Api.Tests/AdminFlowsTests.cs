@@ -658,6 +658,7 @@ public class AdminFlowsTests : IClassFixture<FirstPartyAuthTestWebApplicationFac
             mobileNumber = "+44 7700 900111",
             professionId = "medicine",
             examTypeId = "oet",
+            countryTarget = "UK",
             timezone = "Europe/London",
             locale = "en-GB",
             marketingOptIn = true,
@@ -681,6 +682,8 @@ public class AdminFlowsTests : IClassFixture<FirstPartyAuthTestWebApplicationFac
         Assert.Equal($"Last{suffix}", after.GetProperty("lastName").GetString());
         Assert.Equal("+44 7700 900111", after.GetProperty("mobileNumber").GetString());
         Assert.Equal("medicine", after.GetProperty("professionId").GetString());
+        Assert.Equal("oet", after.GetProperty("examTypeId").GetString());
+        Assert.Equal("United Kingdom", after.GetProperty("countryTarget").GetString());
         Assert.Equal("Europe/London", after.GetProperty("timezone").GetString());
         Assert.Equal("en-GB", after.GetProperty("locale").GetString());
         Assert.True(after.GetProperty("marketingOptIn").GetBoolean());
@@ -700,6 +703,87 @@ public class AdminFlowsTests : IClassFixture<FirstPartyAuthTestWebApplicationFac
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         Assert.Equal("invalid_profession", await ReadErrorCodeAsync(response));
+    }
+
+    [Fact]
+    public async Task AdminUsers_UpdateProfile_RejectsProfessionExamMismatch()
+    {
+        var response = await _client.PutAsJsonAsync("/v1/admin/users/mock-user-001/profile", new
+        {
+            professionId = "nursing",
+            examTypeId = "ielts"
+        });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal("profession_exam_mismatch", await ReadErrorCodeAsync(response));
+    }
+
+    [Fact]
+    public async Task AdminUsers_UpdateProfile_RejectsProfessionOnlyCountryMismatch()
+    {
+        var countryResponse = await _client.PutAsJsonAsync("/v1/admin/users/mock-user-001/profile", new
+        {
+            countryTarget = "United Kingdom"
+        });
+        countryResponse.EnsureSuccessStatusCode();
+
+        var professionId = $"restricted-{Guid.NewGuid():N}"[..24];
+        var createProfessionResponse = await _client.PostAsJsonAsync("/v1/admin/signup-catalog/professions", new
+        {
+            id = professionId,
+            label = "Restricted Country Profession",
+            description = "Only available for Australia in this contract test.",
+            examTypeIds = new[] { "oet" },
+            countryTargets = new[] { "Australia" },
+            sortOrder = 99,
+            isActive = true
+        });
+        createProfessionResponse.EnsureSuccessStatusCode();
+
+        var response = await _client.PutAsJsonAsync("/v1/admin/users/mock-user-001/profile", new
+        {
+            professionId
+        });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal("profession_country_mismatch", await ReadErrorCodeAsync(response));
+    }
+
+    [Fact]
+    public async Task AdminUsers_UpdateProfile_RejectsUnsupportedTargetCountry()
+    {
+        var response = await _client.PutAsJsonAsync("/v1/admin/users/mock-user-001/profile", new
+        {
+            countryTarget = "Atlantis"
+        });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal("country_target_invalid", await ReadErrorCodeAsync(response));
+    }
+
+    [Fact]
+    public async Task AdminUsers_UpdateProfile_RequiresTargetCountryBeforeCreatingRegistrationProfile()
+    {
+        var email = $"invited-learner-{Guid.NewGuid():N}@oet-prep.dev";
+        var inviteResponse = await _client.PostAsJsonAsync("/v1/admin/users/invite", new
+        {
+            name = "Invited Learner",
+            email,
+            role = "learner",
+            professionId = "nursing"
+        });
+        inviteResponse.EnsureSuccessStatusCode();
+
+        using var inviteJson = JsonDocument.Parse(await inviteResponse.Content.ReadAsStringAsync());
+        var userId = inviteJson.RootElement.GetProperty("id").GetString()!;
+
+        var response = await _client.PutAsJsonAsync($"/v1/admin/users/{userId}/profile", new
+        {
+            firstName = "Invited"
+        });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal("country_target_required", await ReadErrorCodeAsync(response));
     }
 
     [Fact]

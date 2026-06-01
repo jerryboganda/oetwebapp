@@ -64,7 +64,13 @@ describe('reading paper simulation helpers', () => {
     expect(buildPartABookletPages(structure)).toEqual([
       expect.objectContaining({ partCode: 'A', textIds: ['a-text-1'], questionIds: [] }),
     ]);
-    expect(buildPartBCBookletPages(structure).map((page) => page.partCode)).toEqual(['B', 'C', 'C']);
+    // Part B collapses to a single stacked page; Part C yields one combined
+    // page per long text (passage + its questions on the same page).
+    expect(buildPartBCBookletPages(structure).map((page) => page.partCode)).toEqual(['B', 'C']);
+    expect(buildPartBCBookletPages(structure)).toEqual([
+      expect.objectContaining({ partCode: 'B', textIds: ['b-text-1'], questionIds: ['b-q-1'] }),
+      expect.objectContaining({ partCode: 'C', textIds: ['c-text-1'], questionIds: ['c-q-1'] }),
+    ]);
   });
 
   it('formats wall timer values consistently', () => {

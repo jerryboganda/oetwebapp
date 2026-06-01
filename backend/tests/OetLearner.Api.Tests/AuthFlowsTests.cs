@@ -747,6 +747,7 @@ public class AuthFlowsTests
     [InlineData("Australia")]
     [InlineData("New Zealand")]
     [InlineData("Canada")]
+    [InlineData("Qatar")]
     [InlineData("Gulf Countries")]
     [InlineData("Other Countries")]
     public async Task AuthService_RegisterLearner_AcceptsPrdTargetCountryOptionsWithoutSession(string countryTarget)
@@ -776,6 +777,7 @@ public class AuthFlowsTests
     [InlineData("Australia")]
     [InlineData("New Zealand")]
     [InlineData("Canada")]
+    [InlineData("Qatar")]
     [InlineData("Gulf Countries")]
     [InlineData("Other Countries")]
     public async Task AuthEndpoints_RegisterLearner_BootstrapUsesRegisteredTargetCountry(string countryTarget)
@@ -833,6 +835,7 @@ public class AuthFlowsTests
                 "Australia",
                 "New Zealand",
                 "Canada",
+                "Qatar",
                 "Gulf Countries",
                 "Other Countries",
             },

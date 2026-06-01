@@ -13,6 +13,7 @@ export const TARGET_COUNTRY_OPTIONS = [
   'Australia',
   'New Zealand',
   'Canada',
+  'Qatar',
   'Gulf Countries',
   'Other Countries',
 ] as const;

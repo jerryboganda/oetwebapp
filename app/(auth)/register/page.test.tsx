@@ -71,6 +71,7 @@ describe('RegisterPage', () => {
       'Australia',
       'New Zealand',
       'Canada',
+      'Qatar',
       'Gulf Countries',
       'Other Countries',
     ]);

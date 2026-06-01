@@ -5,13 +5,15 @@ import Link from 'next/link';
 import { Archive, ArrowDown, ArrowUp, BarChart3, CalendarClock, CheckCircle, Layers, Pencil, Plus, Search, ShieldAlert, Sparkles } from 'lucide-react';
 import { AdminOperationsLayout } from '@/components/admin/layout/admin-operations-layout';
 import { Card, CardContent } from '@/components/admin/ui/card';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Input, Select } from '@/components/ui/form-controls';
+import { Button } from '@/components/admin/ui/button';
+import { Badge } from '@/components/admin/ui/badge';
+import { Input } from '@/components/admin/ui/input';
+import { NativeSelect } from '@/components/admin/ui/native-select';
+import { Skeleton } from '@/components/admin/ui/skeleton';
+import { EmptyState } from '@/components/admin/ui/empty-state';
 import { InlineAlert, Toast } from '@/components/ui/alert';
-import { Skeleton } from '@/components/ui/skeleton';
-import { EmptyState } from '@/components/ui/empty-error';
 import { Modal } from '@/components/ui/modal';
+import { AdminPermission, hasPermission } from '@/lib/admin-permissions';
 import {
   addAdminMockBundleSection,
   archiveAdminMockBundle,
@@ -23,6 +25,7 @@ import {
   updateAdminMockBundle,
 } from '@/lib/api';
 import { listContentPapers, type ContentPaperDto } from '@/lib/content-upload-api';
+import { useCurrentUser } from '@/lib/hooks/use-current-user';
 
 type MockBundleRow = {
   id: string;
@@ -102,6 +105,10 @@ function toEditForm(row: MockBundleRow): MockBundleFormState {
 }
 
 export default function AdminMockBundlesPage() {
+  const { user } = useCurrentUser();
+  const userPermissions = user?.adminPermissions;
+  const canManageBundles = hasPermission(userPermissions, AdminPermission.ContentWrite);
+  const canPublishBundles = hasPermission(userPermissions, AdminPermission.ContentPublish);
   const [loading, setLoading] = useState(true);
   const [rows, setRows] = useState<MockBundleRow[]>([]);
   const [status, setStatus] = useState('');
@@ -311,6 +318,7 @@ export default function AdminMockBundlesPage() {
       >
         <Card>
           <CardContent className="p-5 space-y-6">
+          {canManageBundles ? (
           <div className="rounded-admin border border-[var(--admin-primary-tint-strong)] bg-[var(--admin-primary-tint)] p-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
@@ -328,6 +336,7 @@ export default function AdminMockBundlesPage() {
 </Button>
             </div>
           </div>
+          ) : null}
 
           <div className="mb-6 flex flex-wrap gap-3">
             <Link
@@ -345,6 +354,7 @@ export default function AdminMockBundlesPage() {
             <LeakReportsLink />
           </div>
 
+          {canManageBundles ? (
           <div className="mb-6 grid gap-4 rounded-admin border border-admin-border bg-admin-bg-subtle p-4 lg:grid-cols-[1.2fr_0.8fr]">
             <div className="space-y-3">
               <p className="text-xs font-black uppercase tracking-widest text-admin-fg-muted">Create bundle</p>
@@ -374,42 +384,30 @@ export default function AdminMockBundlesPage() {
                 </Button>
               </div>
               <div className="grid gap-3 md:grid-cols-4">
-                <label className="text-xs font-black uppercase tracking-widest text-admin-text-admin-fg-muted">
-                  Difficulty
-                  <select value={newDifficulty} onChange={(e) => setNewDifficulty(e.target.value)} className="mt-1 w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm normal-case tracking-normal">
-                    <option value="foundation">Foundation</option>
-                    <option value="developing">Developing</option>
-                    <option value="exam_ready">Exam ready</option>
-                    <option value="stretch">Stretch</option>
-                  </select>
-                </label>
-                <label className="text-xs font-black uppercase tracking-widest text-admin-text-admin-fg-muted">
-                  Source status
-                  <select value={newSourceStatus} onChange={(e) => setNewSourceStatus(e.target.value)} className="mt-1 w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm normal-case tracking-normal">
-                    <option value="needs_review">Needs review</option>
-                    <option value="original">Original</option>
-                    <option value="licensed">Licensed</option>
-                    <option value="official_sample">Official sample</option>
-                  </select>
-                </label>
-                <label className="text-xs font-black uppercase tracking-widest text-admin-text-admin-fg-muted">
-                  QA status
-                  <select value={newQualityStatus} onChange={(e) => setNewQualityStatus(e.target.value)} className="mt-1 w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm normal-case tracking-normal">
-                    <option value="draft">Draft</option>
-                    <option value="in_review">In review</option>
-                    <option value="approved">Approved</option>
-                    <option value="pilot">Pilot</option>
-                    <option value="retired">Retired</option>
-                  </select>
-                </label>
-                <label className="text-xs font-black uppercase tracking-widest text-admin-text-admin-fg-muted">
-                  Release policy
-                  <select value={newReleasePolicy} onChange={(e) => setNewReleasePolicy(e.target.value)} className="mt-1 w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm normal-case tracking-normal">
-                    <option value="instant">Instant</option>
-                    <option value="after_teacher_marking">After teacher marking</option>
-                    <option value="scheduled">Scheduled</option>
-                  </select>
-                </label>
+                <NativeSelect label="Difficulty" value={newDifficulty} onChange={(e) => setNewDifficulty(e.target.value)} options={[
+                  { value: 'foundation', label: 'Foundation' },
+                  { value: 'developing', label: 'Developing' },
+                  { value: 'exam_ready', label: 'Exam ready' },
+                  { value: 'stretch', label: 'Stretch' },
+                ]} />
+                <NativeSelect label="Source status" value={newSourceStatus} onChange={(e) => setNewSourceStatus(e.target.value)} options={[
+                  { value: 'needs_review', label: 'Needs review' },
+                  { value: 'original', label: 'Original' },
+                  { value: 'licensed', label: 'Licensed' },
+                  { value: 'official_sample', label: 'Official sample' },
+                ]} />
+                <NativeSelect label="QA status" value={newQualityStatus} onChange={(e) => setNewQualityStatus(e.target.value)} options={[
+                  { value: 'draft', label: 'Draft' },
+                  { value: 'in_review', label: 'In review' },
+                  { value: 'approved', label: 'Approved' },
+                  { value: 'pilot', label: 'Pilot' },
+                  { value: 'retired', label: 'Retired' },
+                ]} />
+                <NativeSelect label="Release policy" value={newReleasePolicy} onChange={(e) => setNewReleasePolicy(e.target.value)} options={[
+                  { value: 'instant', label: 'Instant' },
+                  { value: 'after_teacher_marking', label: 'After teacher marking' },
+                  { value: 'scheduled', label: 'Scheduled' },
+                ]} />
               </div>
               <div className="grid gap-3 md:grid-cols-2">
                 <label className="flex items-center gap-3 rounded-admin border border-admin-border bg-admin-bg-surface px-3 py-2 text-sm font-semibold text-admin-fg-strong">
@@ -442,14 +440,14 @@ export default function AdminMockBundlesPage() {
                   <Search className="h-4 w-4" /> Search
                 </Button>
               </div>
-              <Select
+              <NativeSelect
                 label="Paper subtest filter"
                 value={paperSubtest}
                 onChange={(e) => setPaperSubtest(e.target.value)}
                 options={[{ value: '', label: 'All subtests' }, ...subtestOptions.map((subtest) => ({ value: subtest, label: subtest }))]}
               />
               {paperOptions.length > 0 ? (
-                <Select
+                <NativeSelect
                   label="Published ContentPaper"
                   value={sectionPaperId}
                   onChange={(e) => setSectionPaperId(e.target.value)}
@@ -467,30 +465,25 @@ export default function AdminMockBundlesPage() {
               </Button>
             </div>
           </div>
+          ) : null}
 
-          <div className="mb-4 flex flex-wrap items-end gap-3">
-            <div>
-              <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-admin-text-admin-fg-muted">Status</label>
-              <select value={status} onChange={(e) => setStatus(e.target.value)} className="rounded-lg border border-border bg-surface px-3 py-2 text-sm">
-                <option value="">All</option>
-                <option value="draft">Draft</option>
-                <option value="published">Published</option>
-                <option value="archived">Archived</option>
-              </select>
-            </div>
-            <div>
-              <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-admin-text-admin-fg-muted">Type</label>
-              <select value={mockType} onChange={(e) => setMockType(e.target.value)} className="rounded-lg border border-border bg-surface px-3 py-2 text-sm">
-                <option value="">All</option>
-                <option value="full">Full</option>
-                <option value="lrw">LRW</option>
-                <option value="sub">Sub-test</option>
-                <option value="part">Part</option>
-                <option value="diagnostic">Diagnostic</option>
-                <option value="final_readiness">Final readiness</option>
-                <option value="remedial">Remedial</option>
-              </select>
-            </div>
+          <div className="mb-4 grid gap-3 sm:grid-cols-2 lg:max-w-xl">
+            <NativeSelect label="Status" value={status} onChange={(e) => setStatus(e.target.value)} options={[
+              { value: '', label: 'All' },
+              { value: 'draft', label: 'Draft' },
+              { value: 'published', label: 'Published' },
+              { value: 'archived', label: 'Archived' },
+            ]} />
+            <NativeSelect label="Type" value={mockType} onChange={(e) => setMockType(e.target.value)} options={[
+              { value: '', label: 'All' },
+              { value: 'full', label: 'Full' },
+              { value: 'lrw', label: 'LRW' },
+              { value: 'sub', label: 'Sub-test' },
+              { value: 'part', label: 'Part' },
+              { value: 'diagnostic', label: 'Diagnostic' },
+              { value: 'final_readiness', label: 'Final readiness' },
+              { value: 'remedial', label: 'Remedial' },
+            ]} />
           </div>
 
           {loading ? (
@@ -534,20 +527,22 @@ export default function AdminMockBundlesPage() {
                       >
                         <BarChart3 className="mr-1 h-4 w-4" /> Analysis
                       </Link>
-                      {row.status !== 'published' ? (
+                      {canPublishBundles && row.status !== 'published' ? (
                         <Button variant="primary" onClick={() => handlePublish(row.id)}>
                           <CheckCircle className="mr-1 h-4 w-4" /> Publish
                         </Button>
                       ) : null}
-                      {row.status !== 'archived' ? (
+                      {canManageBundles && row.status !== 'archived' ? (
                         <Button variant="outline" onClick={() => openEdit(row)}>
                           <Pencil className="mr-1 h-4 w-4" /> Edit
                         </Button>
                       ) : null}
-                      <Button variant="outline" onClick={() => setSectionBundleId(row.id)}>
-                        <Plus className="mr-1 h-4 w-4" /> Add section
-                      </Button>
-                      {row.status !== 'archived' ? (
+                      {canManageBundles ? (
+                        <Button variant="outline" onClick={() => setSectionBundleId(row.id)}>
+                          <Plus className="mr-1 h-4 w-4" /> Add section
+                        </Button>
+                      ) : null}
+                      {canManageBundles && row.status !== 'archived' ? (
                         <Button variant="secondary" onClick={() => handleArchive(row.id)}>
                           <Archive className="mr-1 h-4 w-4" /> Archive
                         </Button>
@@ -571,24 +566,28 @@ export default function AdminMockBundlesPage() {
                             <span>{section.timeLimitMinutes}m</span>
                             <span>{section.reviewEligible ? 'review eligible' : 'no review'}</span>
                             <span>{section.contentPaperStatus ?? 'unknown'}</span>
-                            <Button
-                              aria-label={`Move ${section.subtestCode} section up`}
-                              size="sm"
-                              variant="ghost"
-                              onClick={() => handleReorder(row, section.id, 'up')}
-                              disabled={index === 0}
-                            >
-                              <ArrowUp className="h-3.5 w-3.5" />
-                            </Button>
-                            <Button
-                              aria-label={`Move ${section.subtestCode} section down`}
-                              size="sm"
-                              variant="ghost"
-                              onClick={() => handleReorder(row, section.id, 'down')}
-                              disabled={index === orderedSections.length - 1}
-                            >
-                              <ArrowDown className="h-3.5 w-3.5" />
-                            </Button>
+                            {canManageBundles ? (
+                              <>
+                                <Button
+                                  aria-label={`Move ${section.subtestCode} section up`}
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => handleReorder(row, section.id, 'up')}
+                                  disabled={index === 0}
+                                >
+                                  <ArrowUp className="h-3.5 w-3.5" />
+                                </Button>
+                                <Button
+                                  aria-label={`Move ${section.subtestCode} section down`}
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => handleReorder(row, section.id, 'down')}
+                                  disabled={index === orderedSections.length - 1}
+                                >
+                                  <ArrowDown className="h-3.5 w-3.5" />
+                                </Button>
+                              </>
+                            ) : null}
                           </div>
                         </div>
                       ))}
@@ -612,20 +611,20 @@ export default function AdminMockBundlesPage() {
               <Input label="Edit skill tags" value={editForm.skillTagsCsv} onChange={(e) => updateEditField('skillTagsCsv', e.target.value)} />
             </div>
             <div className="grid gap-3 md:grid-cols-4">
-              <Select
+              <NativeSelect
                 label="Edit mock type"
                 value={editForm.mockType}
                 onChange={(e) => updateEditField('mockType', e.target.value as MockBundleRow['mockType'])}
                 options={mockTypeOptions.map((type) => ({ value: type, label: type.replace(/_/g, ' ') }))}
               />
-              <Select
+              <NativeSelect
                 label="Edit subtest"
                 value={editForm.subtestCode}
                 onChange={(e) => updateEditField('subtestCode', e.target.value)}
                 disabled={!isSubtestScopedType(editForm.mockType)}
                 options={subtestOptions.map((subtest) => ({ value: subtest, label: subtest }))}
               />
-              <Select
+              <NativeSelect
                 label="Edit difficulty"
                 value={editForm.difficulty}
                 onChange={(e) => updateEditField('difficulty', e.target.value)}
@@ -639,7 +638,7 @@ export default function AdminMockBundlesPage() {
               <Input label="Edit priority" value={editForm.priority} onChange={(e) => updateEditField('priority', e.target.value)} inputMode="numeric" />
             </div>
             <div className="grid gap-3 md:grid-cols-3">
-              <Select
+              <NativeSelect
                 label="Edit source status"
                 value={editForm.sourceStatus}
                 onChange={(e) => updateEditField('sourceStatus', e.target.value)}
@@ -650,7 +649,7 @@ export default function AdminMockBundlesPage() {
                   { value: 'official_sample', label: 'Official sample' },
                 ]}
               />
-              <Select
+              <NativeSelect
                 label="Edit QA status"
                 value={editForm.qualityStatus}
                 onChange={(e) => updateEditField('qualityStatus', e.target.value)}
@@ -662,7 +661,7 @@ export default function AdminMockBundlesPage() {
                   { value: 'retired', label: 'Retired' },
                 ]}
               />
-              <Select
+              <NativeSelect
                 label="Edit release policy"
                 value={editForm.releasePolicy}
                 onChange={(e) => updateEditField('releasePolicy', e.target.value)}

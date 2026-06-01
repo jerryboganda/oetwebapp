@@ -2681,6 +2681,10 @@ public partial class AdminService(
             var recentActivity = await GetRecentUserActivityAsync(learner.Id, learner.AuthAccountId, ct);
             var registration = await db.LearnerRegistrationProfiles.AsNoTracking()
                 .FirstOrDefaultAsync(p => p.LearnerUserId == learner.Id, ct);
+            var profileProfessionId = registration?.ProfessionId ?? learner.ActiveProfessionId;
+            var profileCountryTarget = TargetCountryOptions.TryCanonicalize(registration?.CountryTarget, out var canonicalCountryTarget)
+                ? canonicalCountryTarget
+                : registration?.CountryTarget;
             return new
             {
                 learner.Id,
@@ -2691,7 +2695,7 @@ public partial class AdminService(
                 lastLogin = authAccount?.LastLoginAt ?? learner.LastActiveAt,
                 tasksCompleted = attemptCount,
                 creditBalance = wallet?.CreditBalance ?? 0,
-                profession = learner.ActiveProfessionId,
+                profession = profileProfessionId,
                 authAccountId = learner.AuthAccountId,
                 createdAt = learner.CreatedAt,
                 // ── Full editable profile (registration data captured at signup) ──
@@ -2699,9 +2703,9 @@ public partial class AdminService(
                 firstName = registration?.FirstName,
                 lastName = registration?.LastName,
                 mobileNumber = registration?.MobileNumber,
-                professionId = learner.ActiveProfessionId,
+                professionId = profileProfessionId,
                 examTypeId = registration?.ExamTypeId ?? learner.ActiveExamTypeCode,
-                countryTarget = registration?.CountryTarget,
+                countryTarget = profileCountryTarget,
                 timezone = learner.Timezone,
                 locale = learner.Locale,
                 marketingOptIn = registration?.MarketingOptIn,
@@ -3284,21 +3288,91 @@ public partial class AdminService(
         var changes = new List<string>();
 
         static string? Clean(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+        static IReadOnlyList<string> ReadCatalogList(string json) => JsonSupport.Deserialize(json, Array.Empty<string>());
+        static bool HasRegistrationPayload(AdminUserProfileUpdateRequest payload)
+            => payload.FirstName is not null
+               || payload.LastName is not null
+               || payload.MobileNumber is not null
+               || payload.ProfessionId is not null
+               || payload.ExamTypeId is not null
+               || payload.CountryTarget is not null
+               || payload.MarketingOptIn is not null
+               || payload.AgreeToTerms is not null
+               || payload.AgreeToPrivacy is not null;
 
-        async Task ValidateProfessionAsync(string professionId)
+        async Task<SignupProfessionCatalog?> TryResolveProfessionAsync(string? rawProfessionId)
         {
-            var exists = await db.SignupProfessionCatalog.AsNoTracking()
-                .AnyAsync(p => p.Id == professionId && p.IsActive, ct);
-            if (!exists)
-                throw ApiException.Validation("invalid_profession", $"Unknown or inactive profession '{professionId}'.");
+            var value = Clean(rawProfessionId);
+            if (value is null) return null;
+            var normalized = value.ToLowerInvariant();
+            return await db.SignupProfessionCatalog.AsNoTracking()
+                .FirstOrDefaultAsync(p => p.IsActive
+                    && (p.Id.ToLower() == normalized || p.Label.ToLower() == normalized), ct);
         }
 
-        async Task ValidateExamTypeAsync(string examTypeId)
+        async Task<SignupProfessionCatalog> ResolveProfessionAsync(string rawProfessionId)
+            => await TryResolveProfessionAsync(rawProfessionId)
+               ?? throw ApiException.Validation("invalid_profession", $"Unknown or inactive profession '{rawProfessionId}'.");
+
+        async Task<SignupExamTypeCatalog?> TryResolveExamTypeAsync(string? rawExamTypeId)
         {
-            var exists = await db.SignupExamTypeCatalog.AsNoTracking()
-                .AnyAsync(e => e.Id == examTypeId && e.IsActive, ct);
-            if (!exists)
-                throw ApiException.Validation("invalid_exam_type", $"Unknown or inactive exam type '{examTypeId}'.");
+            var value = Clean(rawExamTypeId);
+            if (value is null) return null;
+            var normalized = value.ToLowerInvariant();
+            return await db.SignupExamTypeCatalog.AsNoTracking()
+                .FirstOrDefaultAsync(e => e.IsActive
+                    && (e.Id.ToLower() == normalized || e.Code.ToLower() == normalized || e.Label.ToLower() == normalized), ct);
+        }
+
+        async Task<SignupExamTypeCatalog> ResolveExamTypeAsync(string rawExamTypeId)
+            => await TryResolveExamTypeAsync(rawExamTypeId)
+               ?? throw ApiException.Validation("invalid_exam_type", $"Unknown or inactive exam type '{rawExamTypeId}'.");
+
+        async Task<SignupProfessionCatalog> ResolveDefaultProfessionAsync(string? preferredProfessionId)
+            => await TryResolveProfessionAsync(preferredProfessionId)
+               ?? await db.SignupProfessionCatalog.AsNoTracking()
+                   .Where(p => p.IsActive)
+                   .OrderBy(p => p.SortOrder)
+                   .FirstOrDefaultAsync(ct)
+               ?? throw ApiException.Validation("invalid_profession", "No active signup profession is available.");
+
+        async Task<SignupExamTypeCatalog> ResolveDefaultExamTypeAsync(string? preferredExamTypeId, SignupProfessionCatalog profession)
+        {
+            var preferred = await TryResolveExamTypeAsync(preferredExamTypeId);
+            var professionExamTypeIds = ReadCatalogList(profession.ExamTypeIdsJson);
+            if (preferred is not null
+                && (professionExamTypeIds.Count == 0 || professionExamTypeIds.Contains(preferred.Id, StringComparer.Ordinal)))
+            {
+                return preferred;
+            }
+
+            var allowed = professionExamTypeIds.Count > 0 ? professionExamTypeIds : Array.Empty<string>();
+            var query = db.SignupExamTypeCatalog.AsNoTracking().Where(e => e.IsActive);
+            if (allowed.Count > 0)
+            {
+                query = query.Where(e => allowed.Contains(e.Id));
+            }
+
+            return await query.OrderBy(e => e.SortOrder).FirstOrDefaultAsync(ct)
+                   ?? throw ApiException.Validation("invalid_exam_type", "No active signup exam type is available for that profession.");
+        }
+
+        static void ValidateProfessionExamMatch(SignupProfessionCatalog profession, SignupExamTypeCatalog examType)
+        {
+            var professionExamTypeIds = ReadCatalogList(profession.ExamTypeIdsJson);
+            if (professionExamTypeIds.Count > 0 && !professionExamTypeIds.Contains(examType.Id, StringComparer.Ordinal))
+            {
+                throw ApiException.Validation("profession_exam_mismatch", "The selected profession is not available for that exam.");
+            }
+        }
+
+        static void ValidateProfessionCountryMatch(SignupProfessionCatalog profession, string countryTarget)
+        {
+            var professionCountryTargets = ReadCatalogList(profession.CountryTargetsJson);
+            if (professionCountryTargets.Count > 0 && !professionCountryTargets.Contains(countryTarget, StringComparer.OrdinalIgnoreCase))
+            {
+                throw ApiException.Validation("profession_country_mismatch", "The selected target country is not available for that profession.");
+            }
         }
 
         // ── Learner ──
@@ -3308,24 +3382,153 @@ public partial class AdminService(
             var registration = await db.LearnerRegistrationProfiles
                 .FirstOrDefaultAsync(p => p.LearnerUserId == learner.Id, ct);
 
-            var profession = Clean(request.ProfessionId);
-            if (profession is not null)
+            var existingProfessionValue = registration?.ProfessionId ?? learner.ActiveProfessionId;
+            var existingExamTypeValue = registration?.ExamTypeId ?? learner.ActiveExamTypeCode;
+            var existingCountryTargetValue = registration?.CountryTarget;
+            var rawRequestedProfession = Clean(request.ProfessionId);
+            var rawRequestedExamType = Clean(request.ExamTypeId);
+            var rawRequestedCountryTarget = Clean(request.CountryTarget);
+
+            var existingProfession = await TryResolveProfessionAsync(existingProfessionValue);
+            SignupProfessionCatalog? requestedProfession = null;
+            if (rawRequestedProfession is not null)
             {
-                await ValidateProfessionAsync(profession);
-                if (!string.Equals(learner.ActiveProfessionId, profession, StringComparison.Ordinal))
+                var resolvedProfession = await TryResolveProfessionAsync(rawRequestedProfession);
+                if (resolvedProfession is null)
                 {
-                    learner.ActiveProfessionId = profession;
-                    changes.Add($"profession→{profession}");
+                    if (!string.Equals(rawRequestedProfession, existingProfessionValue, StringComparison.OrdinalIgnoreCase))
+                    {
+                        throw ApiException.Validation("invalid_profession", $"Unknown or inactive profession '{rawRequestedProfession}'.");
+                    }
                 }
-                if (registration is not null) registration.ProfessionId = profession;
+                else if (!string.Equals(resolvedProfession.Id, existingProfession?.Id, StringComparison.Ordinal))
+                {
+                    requestedProfession = resolvedProfession;
+                }
             }
 
-            var examType = Clean(request.ExamTypeId);
-            if (examType is not null)
+            var existingExamType = await TryResolveExamTypeAsync(existingExamTypeValue);
+            SignupExamTypeCatalog? requestedExamType = null;
+            if (rawRequestedExamType is not null)
             {
-                await ValidateExamTypeAsync(examType);
-                if (registration is not null) registration.ExamTypeId = examType;
-                changes.Add($"examType→{examType}");
+                var resolvedExamType = await TryResolveExamTypeAsync(rawRequestedExamType);
+                if (resolvedExamType is null)
+                {
+                    if (!string.Equals(rawRequestedExamType, existingExamTypeValue, StringComparison.OrdinalIgnoreCase))
+                    {
+                        throw ApiException.Validation("invalid_exam_type", $"Unknown or inactive exam type '{rawRequestedExamType}'.");
+                    }
+                }
+                else if (!string.Equals(resolvedExamType.Id, existingExamType?.Id, StringComparison.Ordinal))
+                {
+                    requestedExamType = resolvedExamType;
+                }
+            }
+
+            var existingCountryTarget = TargetCountryOptions.TryCanonicalize(existingCountryTargetValue, out var canonicalExistingCountryTarget)
+                ? canonicalExistingCountryTarget
+                : null;
+            string? requestedCountryTarget = null;
+            if (rawRequestedCountryTarget is not null)
+            {
+                if (TargetCountryOptions.TryCanonicalize(rawRequestedCountryTarget, out var canonicalRequestedCountryTarget))
+                {
+                    if (!string.Equals(canonicalRequestedCountryTarget, existingCountryTarget, StringComparison.OrdinalIgnoreCase))
+                    {
+                        requestedCountryTarget = canonicalRequestedCountryTarget;
+                    }
+                }
+                else if (!string.Equals(rawRequestedCountryTarget, existingCountryTargetValue, StringComparison.OrdinalIgnoreCase))
+                {
+                    throw ApiException.Validation("country_target_invalid", "Select a valid target country.");
+                }
+            }
+
+            var effectiveProfession = requestedProfession ?? existingProfession;
+            var effectiveExamType = requestedExamType ?? existingExamType;
+            var effectiveCountryTarget = requestedCountryTarget ?? existingCountryTarget;
+
+            if ((requestedProfession is not null || requestedExamType is not null) && effectiveProfession is not null && effectiveExamType is not null)
+            {
+                ValidateProfessionExamMatch(effectiveProfession, effectiveExamType);
+            }
+
+            if ((requestedCountryTarget is not null || requestedProfession is not null) && effectiveProfession is not null && effectiveCountryTarget is not null)
+            {
+                ValidateProfessionCountryMatch(effectiveProfession, effectiveCountryTarget);
+            }
+
+            if (registration is null && HasRegistrationPayload(request))
+            {
+                if (learner.AuthAccountId is null)
+                {
+                    throw ApiException.Validation("registration_profile_unavailable", "This learner has no auth account to attach registration details to.");
+                }
+
+                if (requestedCountryTarget is null)
+                {
+                    throw ApiException.Validation("country_target_required", "Target country is required before registration details can be created.");
+                }
+
+                var defaultProfession = await ResolveDefaultProfessionAsync(requestedProfession?.Id ?? learner.ActiveProfessionId);
+                var defaultExamType = await ResolveDefaultExamTypeAsync(requestedExamType?.Id ?? registration?.ExamTypeId ?? learner.ActiveExamTypeCode, defaultProfession);
+                var defaultCountry = requestedCountryTarget;
+                ValidateProfessionExamMatch(defaultProfession, defaultExamType);
+                ValidateProfessionCountryMatch(defaultProfession, defaultCountry);
+
+                registration = new LearnerRegistrationProfile
+                {
+                    Id = GenerateDomainId("reg"),
+                    ApplicationUserAccountId = learner.AuthAccountId,
+                    LearnerUserId = learner.Id,
+                    FirstName = Clean(request.FirstName) ?? learner.DisplayName,
+                    LastName = Clean(request.LastName) ?? string.Empty,
+                    ExamTypeId = defaultExamType.Id,
+                    ProfessionId = defaultProfession.Id,
+                    SessionId = string.Empty,
+                    CountryTarget = defaultCountry,
+                    MobileNumber = Clean(request.MobileNumber) ?? string.Empty,
+                    AgreeToTerms = request.AgreeToTerms ?? false,
+                    AgreeToPrivacy = request.AgreeToPrivacy ?? false,
+                    MarketingOptIn = request.MarketingOptIn ?? false,
+                    CreatedAt = timeProvider.GetUtcNow(),
+                    UpdatedAt = timeProvider.GetUtcNow()
+                };
+                db.LearnerRegistrationProfiles.Add(registration);
+                effectiveProfession = defaultProfession;
+                effectiveExamType = defaultExamType;
+                if (!string.Equals(learner.ActiveProfessionId, defaultProfession.Id, StringComparison.Ordinal))
+                {
+                    learner.ActiveProfessionId = defaultProfession.Id;
+                    changes.Add($"profession→{defaultProfession.Id}");
+                }
+                if (!string.Equals(learner.ActiveExamTypeCode, defaultExamType.Code, StringComparison.Ordinal))
+                {
+                    learner.ActiveExamTypeCode = defaultExamType.Code;
+                    changes.Add($"activeExamType→{defaultExamType.Code}");
+                }
+                changes.Add("registrationProfile");
+            }
+
+            if (requestedProfession is not null)
+            {
+                if (!string.Equals(learner.ActiveProfessionId, requestedProfession.Id, StringComparison.Ordinal))
+                {
+                    learner.ActiveProfessionId = requestedProfession.Id;
+                    changes.Add($"profession→{requestedProfession.Id}");
+                }
+                if (registration is not null) registration.ProfessionId = requestedProfession.Id;
+            }
+
+            if (requestedExamType is not null)
+            {
+                if (!string.Equals(learner.ActiveExamTypeCode, requestedExamType.Code, StringComparison.Ordinal))
+                {
+                    learner.ActiveExamTypeCode = requestedExamType.Code;
+                    changes.Add($"activeExamType→{requestedExamType.Code}");
+                }
+                if (registration is not null) registration.ExamTypeId = requestedExamType.Id;
+                changes.Add($"examType→{requestedExamType.Id}");
             }
 
             var displayName = Clean(request.DisplayName);
@@ -3352,8 +3555,7 @@ public partial class AdminService(
                 var mobile = Clean(request.MobileNumber);
                 if (mobile is not null) { registration.MobileNumber = mobile; changes.Add("mobileNumber"); }
 
-                var country = Clean(request.CountryTarget);
-                if (country is not null) { registration.CountryTarget = country; changes.Add("countryTarget"); }
+                if (requestedCountryTarget is not null) { registration.CountryTarget = requestedCountryTarget; changes.Add("countryTarget"); }
 
                 if (request.MarketingOptIn is { } marketing && registration.MarketingOptIn != marketing)
                 { registration.MarketingOptIn = marketing; changes.Add($"marketingOptIn→{marketing}"); }

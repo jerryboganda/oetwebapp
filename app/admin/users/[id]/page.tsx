@@ -43,6 +43,7 @@ import {
   type AdminUserProfileUpdatePayload,
 } from '@/lib/api';
 import { getAdminUserDetailData } from '@/lib/admin';
+import { TARGET_COUNTRY_OPTIONS } from '@/lib/auth/target-countries';
 import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
 import type {
   AdminPermissionGrant,
@@ -67,6 +68,17 @@ type ProfileForm = {
   specialties: string;
 };
 
+type LearnerTextProfileField =
+  | 'displayName'
+  | 'firstName'
+  | 'lastName'
+  | 'mobileNumber'
+  | 'professionId'
+  | 'examTypeId'
+  | 'countryTarget'
+  | 'timezone'
+  | 'locale';
+
 type PageStatus = 'loading' | 'success' | 'error';
 type ToastState = { variant: 'success' | 'error'; message: string } | null;
 
@@ -87,6 +99,37 @@ function uiRoleLabel(role: string) {
 function formatBool(value: boolean | null | undefined) {
   if (value === null || value === undefined) return null;
   return value ? 'Yes' : 'No';
+}
+
+const allTargetCountryOptions = [...TARGET_COUNTRY_OPTIONS];
+
+function normalizeComparable(value: string | null | undefined) {
+  return (value ?? '').trim().toLowerCase();
+}
+
+function findCatalogItemByIdOrLabel<T extends { id: string; label: string }>(items: T[], value: string | null | undefined) {
+  const normalized = normalizeComparable(value);
+  if (!normalized) return null;
+  return items.find((item) => normalizeComparable(item.id) === normalized || normalizeComparable(item.label) === normalized) ?? null;
+}
+
+function appendCurrentOption(
+  options: { value: string; label: string }[],
+  currentValue: string | null | undefined,
+  labelPrefix = 'Current value',
+) {
+  const value = currentValue?.trim();
+  if (!value || options.some((option) => option.value === value)) return options;
+  return [...options, { value, label: `${labelPrefix}: ${value} (not in signup catalog)` }];
+}
+
+function displayCatalogValue<T extends { id: string; label: string }>(items: T[] | undefined, value: string | null | undefined) {
+  if (!value) return value;
+  return findCatalogItemByIdOrLabel(items ?? [], value)?.label ?? value;
+}
+
+function effectiveCountryTargets(profession: AdminSignupProfessionCatalogItem | null) {
+  return profession?.countryTargets?.length ? profession.countryTargets : allTargetCountryOptions;
 }
 
 function ProfileField({
@@ -373,6 +416,48 @@ export default function UserDetailPage() {
     setIsMutating(true);
     try {
       const isExpert = user.role === 'expert';
+      const learnerPayload: AdminUserProfileUpdatePayload = {};
+      const setChangedText = (
+        key: LearnerTextProfileField,
+        nextValue: string,
+        currentValue: string | null | undefined,
+      ) => {
+        const next = nextValue.trim();
+        const current = (currentValue ?? '').trim();
+        if (next && next !== current) {
+          learnerPayload[key] = next;
+        }
+      };
+
+      setChangedText('displayName', profileForm.displayName, user.displayName ?? user.name);
+      setChangedText('firstName', profileForm.firstName, user.firstName);
+      setChangedText('lastName', profileForm.lastName, user.lastName);
+      setChangedText('mobileNumber', profileForm.mobileNumber, user.mobileNumber);
+      setChangedText('timezone', profileForm.timezone, user.timezone);
+      setChangedText('locale', profileForm.locale, user.locale);
+
+      const currentProfessionId = findCatalogItemByIdOrLabel(signupCatalog?.professions ?? [], user.professionId ?? user.profession)?.id
+        ?? (user.professionId ?? user.profession ?? '').trim();
+      const nextProfessionId = findCatalogItemByIdOrLabel(signupCatalog?.professions ?? [], profileForm.professionId)?.id
+        ?? profileForm.professionId.trim();
+      if (nextProfessionId && nextProfessionId !== currentProfessionId) learnerPayload.professionId = nextProfessionId;
+
+      const currentExamTypeId = findCatalogItemByIdOrLabel(signupCatalog?.examTypes ?? [], user.examTypeId)?.id
+        ?? (user.examTypeId ?? '').trim();
+      const nextExamTypeId = findCatalogItemByIdOrLabel(signupCatalog?.examTypes ?? [], profileForm.examTypeId)?.id
+        ?? profileForm.examTypeId.trim();
+      if (nextExamTypeId && nextExamTypeId !== currentExamTypeId) learnerPayload.examTypeId = nextExamTypeId;
+
+      const currentCountryTarget = (user.countryTarget ?? '').trim();
+      const nextCountryTarget = profileForm.countryTarget.trim();
+      if (nextCountryTarget && normalizeComparable(nextCountryTarget) !== normalizeComparable(currentCountryTarget)) {
+        learnerPayload.countryTarget = nextCountryTarget;
+      }
+
+      if (profileForm.marketingOptIn !== (user.marketingOptIn ?? false)) learnerPayload.marketingOptIn = profileForm.marketingOptIn;
+      if (profileForm.agreeToTerms !== (user.agreeToTerms ?? false)) learnerPayload.agreeToTerms = profileForm.agreeToTerms;
+      if (profileForm.agreeToPrivacy !== (user.agreeToPrivacy ?? false)) learnerPayload.agreeToPrivacy = profileForm.agreeToPrivacy;
+
       const payload: AdminUserProfileUpdatePayload = isExpert
         ? {
             displayName: profileForm.displayName.trim(),
@@ -382,20 +467,7 @@ export default function UserDetailPage() {
               .map((s) => s.trim())
               .filter(Boolean),
           }
-        : {
-            displayName: profileForm.displayName.trim(),
-            firstName: profileForm.firstName.trim() || undefined,
-            lastName: profileForm.lastName.trim() || undefined,
-            mobileNumber: profileForm.mobileNumber.trim() || undefined,
-            professionId: profileForm.professionId.trim() || undefined,
-            examTypeId: profileForm.examTypeId.trim() || undefined,
-            countryTarget: profileForm.countryTarget.trim() || undefined,
-            timezone: profileForm.timezone.trim() || undefined,
-            locale: profileForm.locale.trim() || undefined,
-            marketingOptIn: profileForm.marketingOptIn,
-            agreeToTerms: profileForm.agreeToTerms,
-            agreeToPrivacy: profileForm.agreeToPrivacy,
-          };
+        : learnerPayload;
 
       await updateAdminUserProfile(user.id, payload);
       await reloadUser();
@@ -416,32 +488,87 @@ export default function UserDetailPage() {
   }, [user?.subscription]);
 
   const selectedProfession = useMemo(
-    () => signupCatalog?.professions.find((p) => p.id === profileForm?.professionId) ?? null,
+    () => findCatalogItemByIdOrLabel(signupCatalog?.professions ?? [], profileForm?.professionId),
     [signupCatalog, profileForm?.professionId],
   );
 
-  const examTypeOptions = useMemo(() => {
-    const all = signupCatalog?.examTypes ?? [];
-    const allowedIds = selectedProfession?.examTypeIds;
-    const filtered = allowedIds && allowedIds.length > 0 ? all.filter((e) => allowedIds.includes(e.id)) : all;
-    const options = filtered
-      .filter((e) => e.isActive || e.id === profileForm?.examTypeId)
-      .map((e) => ({ value: e.id, label: e.label }));
-    // Preserve a value not present in the catalog so it is not silently dropped.
-    if (profileForm?.examTypeId && !options.some((o) => o.value === profileForm.examTypeId)) {
-      options.push({ value: profileForm.examTypeId, label: profileForm.examTypeId });
+  useEffect(() => {
+    if (!signupCatalog || !profileForm) return;
+
+    const canonicalProfessionId = findCatalogItemByIdOrLabel(signupCatalog.professions, profileForm.professionId)?.id ?? profileForm.professionId;
+    const canonicalExamTypeId = findCatalogItemByIdOrLabel(signupCatalog.examTypes, profileForm.examTypeId)?.id ?? profileForm.examTypeId;
+
+    if (canonicalProfessionId === profileForm.professionId && canonicalExamTypeId === profileForm.examTypeId) {
+      return;
     }
-    return options;
-  }, [signupCatalog, selectedProfession, profileForm?.examTypeId]);
+
+    setProfileForm((prev) => prev
+      ? { ...prev, professionId: canonicalProfessionId, examTypeId: canonicalExamTypeId }
+      : prev);
+  }, [signupCatalog, profileForm?.professionId, profileForm?.examTypeId]);
+
+  const examTypeOptions = useMemo(() => {
+    const options = (signupCatalog?.examTypes ?? [])
+      .filter((examType) => examType.isActive || examType.id === profileForm?.examTypeId)
+      .map((examType) => ({ value: examType.id, label: examType.label }));
+    return appendCurrentOption(options, profileForm?.examTypeId, 'Current exam type');
+  }, [signupCatalog, profileForm?.examTypeId]);
+
+  const professionOptions = useMemo(() => {
+    const examTypeId = profileForm?.examTypeId;
+    const options = (signupCatalog?.professions ?? [])
+      .filter((profession) => profession.isActive || profession.id === profileForm?.professionId)
+      .filter((profession) => !examTypeId || profession.examTypeIds.length === 0 || profession.examTypeIds.includes(examTypeId) || profession.id === profileForm?.professionId)
+      .map((profession) => ({ value: profession.id, label: profession.label }));
+    return appendCurrentOption(options, profileForm?.professionId, 'Current value');
+  }, [signupCatalog, profileForm?.examTypeId, profileForm?.professionId]);
 
   const countryTargetOptions = useMemo(() => {
-    const targets = selectedProfession?.countryTargets ?? [];
-    const options = targets.map((c) => ({ value: c, label: c }));
-    if (profileForm?.countryTarget && !options.some((o) => o.value === profileForm.countryTarget)) {
-      options.push({ value: profileForm.countryTarget, label: profileForm.countryTarget });
-    }
-    return options;
+    const targets = effectiveCountryTargets(selectedProfession);
+    const options = Array.from(new Set(targets)).map((country) => ({ value: country, label: country }));
+    return appendCurrentOption(options, profileForm?.countryTarget, 'Current country');
   }, [selectedProfession, profileForm?.countryTarget]);
+
+  function updateExamType(value: string) {
+    setProfileForm((prev) => {
+      if (!prev) return prev;
+      const currentProfession = findCatalogItemByIdOrLabel(signupCatalog?.professions ?? [], prev.professionId);
+      const professionStillValid = !value
+        || !currentProfession
+        || currentProfession.examTypeIds.length === 0
+        || currentProfession.examTypeIds.includes(value);
+      return {
+        ...prev,
+        examTypeId: value,
+        professionId: professionStillValid ? prev.professionId : '',
+      };
+    });
+  }
+
+  function updateProfession(value: string) {
+    setProfileForm((prev) => {
+      if (!prev) return prev;
+      const nextProfession = findCatalogItemByIdOrLabel(signupCatalog?.professions ?? [], value);
+      const nextExamTypeId = nextProfession?.examTypeIds.length
+        && prev.examTypeId
+        && !nextProfession.examTypeIds.includes(prev.examTypeId)
+        ? nextProfession.examTypeIds[0]
+        : prev.examTypeId;
+      const nextTargets = effectiveCountryTargets(nextProfession);
+      const nextCountryTarget = prev.countryTarget && nextTargets.some((country) => country === prev.countryTarget)
+        ? prev.countryTarget
+        : (nextTargets[0] ?? prev.countryTarget);
+      return {
+        ...prev,
+        professionId: value,
+        examTypeId: nextExamTypeId,
+        countryTarget: nextCountryTarget,
+      };
+    });
+  }
+
+  const displayedProfession = displayCatalogValue(signupCatalog?.professions, user?.professionId ?? user?.profession);
+  const displayedExamType = displayCatalogValue(signupCatalog?.examTypes, user?.examTypeId);
 
   if (!isAuthenticated || role !== 'admin') return null;
 
@@ -602,8 +729,8 @@ export default function UserDetailPage() {
                           <ProfileField label="First name" value={user.firstName} />
                           <ProfileField label="Last name" value={user.lastName} />
                           <ProfileField label="Mobile number" value={user.mobileNumber} />
-                          <ProfileField label="Profession" value={user.professionId ?? user.profession} />
-                          <ProfileField label="Exam type" value={user.examTypeId} />
+                          <ProfileField label="Profession" value={displayedProfession} />
+                          <ProfileField label="Exam type" value={displayedExamType} />
                           <ProfileField label="Target country" value={user.countryTarget} />
                           <ProfileField label="Timezone" value={user.timezone} />
                           <ProfileField label="Locale" value={user.locale} />
@@ -896,16 +1023,14 @@ export default function UserDetailPage() {
                 <Select
                   label="Profession"
                   value={profileForm.professionId}
-                  onChange={(event) => updateProfileField('professionId', event.target.value)}
+                  onChange={(event) => updateProfession(event.target.value)}
                   placeholder={signupCatalog ? 'Select a profession' : 'Loading…'}
-                  options={(signupCatalog?.professions ?? [])
-                    .filter((p) => p.isActive || p.id === profileForm.professionId)
-                    .map((p) => ({ value: p.id, label: p.label }))}
+                  options={professionOptions}
                 />
                 <Select
                   label="Exam type"
                   value={profileForm.examTypeId}
-                  onChange={(event) => updateProfileField('examTypeId', event.target.value)}
+                  onChange={(event) => updateExamType(event.target.value)}
                   placeholder={signupCatalog ? 'Select an exam type' : 'Loading…'}
                   options={examTypeOptions}
                 />

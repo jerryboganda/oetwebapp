@@ -40,48 +40,44 @@ export function buildPartBCBookletPages(structure: ReadingLearnerStructureDto): 
   const partB = structure.parts.find((part) => part.partCode === 'B');
   const partC = structure.parts.find((part) => part.partCode === 'C');
 
-  partB?.texts.forEach((text) => {
+  // Part B: a single stacked page. Each of the (six) short workplace extracts
+  // is paired with its own single 3-option question; the learner scrolls all
+  // extract/question pairs on one page instead of paging through them.
+  if (partB && (partB.texts.length > 0 || partB.questions.length > 0)) {
     pages.push({
-      id: `part-b-${text.id}`,
-      label: `Part B extract ${text.displayOrder}`,
+      id: 'part-b',
+      label: 'Part B',
       partCode: 'B',
-      textIds: [text.id],
-      questionIds: partB.questions.filter((question) => question.readingTextId === text.id).map((question) => question.id),
+      textIds: partB.texts.map((text) => text.id),
+      questionIds: partB.questions.map((question) => question.id),
       kind: 'mixed',
     });
-  });
+  }
 
   pages.push(...buildPartCPagePairs(structure));
   return pages;
 }
 
+/**
+ * Part C: one combined page per long text. Each page carries the passage and
+ * its (eight) four-option questions so the player can render the passage on the
+ * left with the questions stacked on the right, rather than splitting the text
+ * and its questions onto separate pages.
+ */
 export function buildPartCPagePairs(structure: ReadingLearnerStructureDto): ReadingPaperBookletPage[] {
   const partC = structure.parts.find((part) => part.partCode === 'C');
   if (!partC) return [];
 
-  return partC.texts.flatMap((text) => {
-    const questionIds = partC.questions
+  return partC.texts.map((text) => ({
+    id: `part-c-${text.id}`,
+    label: `Part C text ${text.displayOrder}`,
+    partCode: 'C' as const,
+    textIds: [text.id],
+    questionIds: partC.questions
       .filter((question) => question.readingTextId === text.id)
-      .map((question) => question.id);
-    return [
-      {
-        id: `part-c-text-${text.id}`,
-        label: `Part C text ${text.displayOrder}`,
-        partCode: 'C' as const,
-        textIds: [text.id],
-        questionIds: [],
-        kind: 'texts' as const,
-      },
-      {
-        id: `part-c-questions-${text.id}`,
-        label: `Part C questions ${text.displayOrder}`,
-        partCode: 'C' as const,
-        textIds: [],
-        questionIds,
-        kind: 'questions' as const,
-      },
-    ];
-  });
+      .map((question) => question.id),
+    kind: 'mixed' as const,
+  }));
 }
 
 export function formatWallTimer(seconds: number): string {
