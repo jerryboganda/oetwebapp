@@ -125,6 +125,51 @@ describe('ReadingPaperSimulation', () => {
     expect(container.innerHTML).not.toContain('onerror');
     expect(container.innerHTML).not.toContain('javascript:');
   });
+
+  it('pairs each Part B extract with its own question and stacks Part C questions beside the passage', async () => {
+    const user = userEvent.setup();
+    const structure = buildStructure();
+    // Part B: two short extracts, each with its own single 3-option question.
+    structure.parts[1].texts = [
+      { id: 'text-b-1', displayOrder: 1, title: 'Extract B1', source: 'Policy', bodyHtml: '<p>Hand hygiene policy.</p>', wordCount: 3, topicTag: null },
+      { id: 'text-b-2', displayOrder: 2, title: 'Extract B2', source: 'Notice', bodyHtml: '<p>Fire safety notice.</p>', wordCount: 3, topicTag: null },
+    ];
+    structure.parts[1].questions = [
+      { id: 'q-b-1', readingTextId: 'text-b-1', displayOrder: 21, points: 1, questionType: 'MultipleChoice3', stem: 'B1 purpose?', options: ['A', 'B', 'C'] },
+      { id: 'q-b-2', readingTextId: 'text-b-2', displayOrder: 22, points: 1, questionType: 'MultipleChoice3', stem: 'B2 purpose?', options: ['A', 'B', 'C'] },
+    ];
+    // Part C: one long passage with two four-option questions stacked beside it.
+    structure.parts[2].questions = [
+      { id: 'q-c-1', readingTextId: 'text-c-1', displayOrder: 27, points: 1, questionType: 'MultipleChoice4', stem: 'C inference one?', options: ['A', 'B', 'C', 'D'] },
+      { id: 'q-c-2', readingTextId: 'text-c-1', displayOrder: 28, points: 1, questionType: 'MultipleChoice4', stem: 'C inference two?', options: ['A', 'B', 'C', 'D'] },
+    ];
+
+    render(
+      <ReadingPaperSimulation
+        structure={structure}
+        answers={{}}
+        partADeadlineAt={partADeadlineAt}
+        partBCDeadlineAt={partBCDeadlineAt}
+        nowMs={baseNow + 20 * 60_000}
+        locked={false}
+        onAnswerChange={vi.fn()}
+      />,
+    );
+
+    // Part B page shows both extracts and both of their questions on one scroll.
+    expect(screen.getByText('Hand hygiene policy.')).toBeInTheDocument();
+    expect(screen.getByText('Fire safety notice.')).toBeInTheDocument();
+    expect(screen.getByText('B1 purpose?')).toBeInTheDocument();
+    expect(screen.getByText('B2 purpose?')).toBeInTheDocument();
+    // Page indicator: Part B is a single page, Part C one page per text → 1/2.
+    expect(screen.getByText('1/2')).toBeInTheDocument();
+
+    // Advance to the Part C page: passage plus its two stacked questions.
+    await user.click(screen.getByRole('button', { name: /next/i }));
+    expect(screen.getByText('Journal extract.')).toBeInTheDocument();
+    expect(screen.getByText('C inference one?')).toBeInTheDocument();
+    expect(screen.getByText('C inference two?')).toBeInTheDocument();
+  });
 });
 
 function buildStructure(): ReadingLearnerStructureDto {

@@ -110,23 +110,23 @@ test.describe('OET sample-test alignment — learner workspace', () => {
     await expect(page.getByTestId('mocks-cat-combined')).toBeVisible();
   });
 
-  test('Reading exam runs in the official split-screen layout at desktop viewports', async ({ page }) => {
+  test('Reading exam runs in the stacked passage-and-questions layout at desktop viewports', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     // Probe a known-published paper from the Reading hub. The dispatcher route
     // surfaces eligible papers and clicking one boots the player.
     await page.goto('/reading/parts/a');
 
     // If at least one paper renders, follow it into the player to assert the
-    // split-screen layout. Otherwise this path can't be verified end-to-end
+    // stacked layout. Otherwise this path can't be verified end-to-end
     // because no content was seeded — skip rather than fail.
     const startButton = page.getByRole('button', { name: /start part a practice/i }).first();
     if (await startButton.isVisible({ timeout: 5_000 }).catch(() => false)) {
       await startButton.click();
-      await expect(page.getByTestId('reading-split-screen')).toBeVisible({ timeout: 10_000 });
-      await expect(page.getByTestId('reading-passage-pane')).toBeVisible();
-      await expect(page.getByTestId('reading-question-pane')).toBeVisible();
+      await expect(page.getByTestId('reading-stacked-scroll')).toBeVisible({ timeout: 10_000 });
+      await expect(page.getByTestId('reading-group').first()).toBeVisible();
+      await expect(page.getByTestId('reading-question-card').first()).toBeVisible();
     } else {
-      test.info().annotations.push({ type: 'skip', description: 'No published Reading paper available; split-screen path not exercised.' });
+      test.info().annotations.push({ type: 'skip', description: 'No published Reading paper available; stacked layout path not exercised.' });
     }
   });
 

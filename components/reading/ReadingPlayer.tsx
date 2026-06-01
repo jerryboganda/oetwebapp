@@ -1,7 +1,7 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { ChevronLeft, ChevronRight, Highlighter, Minus, Pin, Strikethrough, StickyNote } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Highlighter, Minus, Pin, Strikethrough, StickyNote } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { sanitizeBodyHtml } from '@/lib/wizard/sanitize-html';
@@ -88,7 +88,14 @@ interface PlayerAnnotationRange {
   end: number;
 }
 
-function PassagePanel({ passage }: { passage: ReadingPassageDto | null }) {
+function PassagePanel({
+  passage,
+  variant = 'auto',
+}: {
+  passage: ReadingPassageDto | null;
+  /** 'auto' sizes to content (Part B pairs); 'scroll' caps height for sticky long passages (Part C). */
+  variant?: 'auto' | 'scroll';
+}) {
   const scopeRef = useRef<HTMLDivElement>(null);
   const [activeTool, setActiveTool] = useState<AnnotationTool | null>(null);
   const [notePopover, setNotePopover] = useState<{ range: PlayerAnnotationRange; text: string } | null>(null);
@@ -148,7 +155,7 @@ function PassagePanel({ passage }: { passage: ReadingPassageDto | null }) {
   ];
 
   return (
-    <div className="relative flex h-full flex-col">
+    <div className="relative flex flex-col">
       {/* Floating annotation toolbar */}
       <div className="mb-3 flex items-center gap-1 rounded-lg border border-border bg-surface px-3 py-2 shadow-sm">
         <span className="mr-2 text-xs font-semibold text-muted uppercase tracking-wide">Annotate</span>
@@ -209,57 +216,56 @@ function PassagePanel({ passage }: { passage: ReadingPassageDto | null }) {
         ref={scopeRef}
         onMouseUp={handleMouseUp}
         data-reading-annotate-scope="passage"
-        className="prose prose-sm max-w-[70ch] flex-1 overflow-y-auto rounded-lg border border-border bg-surface p-4 text-sm leading-relaxed text-navy selection:bg-warning/30"
+        className={cn(
+          'prose prose-sm max-w-[70ch] rounded-lg border border-border bg-surface p-4 text-sm leading-relaxed text-navy selection:bg-warning/30',
+          variant === 'scroll' && 'max-h-[calc(100vh-13rem)] overflow-y-auto',
+        )}
         dangerouslySetInnerHTML={{ __html: sanitizeBodyHtml(passage.bodyHtml) }}
       />
     </div>
   );
 }
 
-// ─── Question panel ───────────────────────────────────────────────────────────
+// ─── Question card ────────────────────────────────────────────────────────────
 
-interface QuestionPanelProps {
+interface QuestionCardProps {
   question: ReadingQuestionDto;
-  currentIndex: number;
-  total: number;
+  /** 1-based question number shown to the candidate (continuous across passages). */
+  number: number;
   answers: Record<string, string>;
   markedForReview: Set<string>;
   mode: ReadingPlayerProps['mode'];
-  isLast: boolean;
   onSelect: (questionId: string, optionKey: string) => void;
   onToggleMark: (questionId: string) => void;
-  onPrev: () => void;
-  onNext: () => void;
-  onSubmit: () => void;
-  feedbackVisible: boolean;
   correctKey: string | null;
 }
 
-function QuestionPanel({
+function QuestionCard({
   question,
-  currentIndex,
-  total,
+  number,
   answers,
   markedForReview,
   mode,
-  isLast,
   onSelect,
   onToggleMark,
-  onPrev,
-  onNext,
-  onSubmit,
-  feedbackVisible,
   correctKey,
-}: QuestionPanelProps) {
+}: QuestionCardProps) {
   const selectedKey = answers[question.id];
   const isMarked = markedForReview.has(question.id);
+  const hasOptions = question.options.length > 0;
+  // In drill / review the candidate sees feedback as soon as they answer.
+  const feedbackVisible = (mode === 'drill' || mode === 'review') && question.id in answers;
 
   return (
-    <div className="flex h-full flex-col gap-4 overflow-y-auto">
-      {/* Q counter */}
+    <div
+      id={`reading-q-${question.id}`}
+      data-testid="reading-question-card"
+      className="scroll-mt-24 flex flex-col gap-3 rounded-2xl border border-border bg-surface p-4 shadow-sm"
+    >
+      {/* Q counter + mark */}
       <div className="flex items-center justify-between">
         <span className="text-xs font-semibold uppercase tracking-wide text-muted">
-          Q{currentIndex + 1} of {total}
+          Q{number}
         </span>
         <button
           type="button"
@@ -281,6 +287,7 @@ function QuestionPanel({
       <p className="text-sm font-medium leading-relaxed text-navy">{question.stem}</p>
 
       {/* Options */}
+      {hasOptions ? (
       <div className="flex flex-col gap-2" role="radiogroup" aria-label="Answer options">
         {question.options.map((opt) => {
           const isSelected = selectedKey === opt.key;
@@ -319,9 +326,20 @@ function QuestionPanel({
           );
         })}
       </div>
+      ) : (
+        <input
+          type="text"
+          inputMode="text"
+          value={selectedKey && selectedKey !== '__unknown__' ? selectedKey : ''}
+          onChange={(event) => onSelect(question.id, event.target.value)}
+          placeholder="Type your answer…"
+          aria-label="Your answer"
+          className="rounded-xl border border-border bg-surface px-4 py-3 text-sm text-navy outline-none focus:border-primary"
+        />
+      )}
 
       {/* Diagnostic: "I don't know" */}
-      {mode === 'diagnostic' && !feedbackVisible && (
+      {mode === 'diagnostic' && !feedbackVisible && hasOptions && (
         <button
           type="button"
           onClick={() => onSelect(question.id, '__unknown__')}
@@ -344,23 +362,95 @@ function QuestionPanel({
           {selectedKey === correctKey ? '✓ Correct' : '✗ Incorrect'}
         </div>
       )}
-
-      {/* Navigation */}
-      <div className="mt-auto flex items-center justify-between gap-3 pt-2">
-        <Button variant="outline" size="sm" onClick={onPrev} disabled={currentIndex === 0}>
-          <ChevronLeft className="h-4 w-4" aria-hidden /> Prev
-        </Button>
-        {isLast ? (
-          <Button variant="primary" size="sm" onClick={onSubmit}>
-            Submit
-          </Button>
-        ) : (
-          <Button variant="primary" size="sm" onClick={onNext}>
-            Next <ChevronRight className="h-4 w-4" aria-hidden />
-          </Button>
-        )}
-      </div>
     </div>
+  );
+}
+
+// ─── Passage + questions group ────────────────────────────────────────────────
+
+interface ReadingGroup {
+  passage: ReadingPassageDto | null;
+  questions: ReadingQuestionDto[];
+  /** 1-based number of this group's first question across the whole session. */
+  startNumber: number;
+}
+
+/** Groups questions by their passage, preserving question order and numbering. */
+function groupQuestionsByPassage(
+  questions: ReadingQuestionDto[],
+  passages: ReadingPassageDto[],
+): ReadingGroup[] {
+  const order: string[] = [];
+  const byPassage = new Map<string, ReadingQuestionDto[]>();
+  for (const question of questions) {
+    const key = question.passageId;
+    if (!byPassage.has(key)) {
+      byPassage.set(key, []);
+      order.push(key);
+    }
+    byPassage.get(key)!.push(question);
+  }
+
+  let running = 1;
+  return order.map((passageId) => {
+    const groupQuestions = byPassage.get(passageId)!;
+    const group: ReadingGroup = {
+      passage: passages.find((p) => p.id === passageId) ?? null,
+      questions: groupQuestions,
+      startNumber: running,
+    };
+    running += groupQuestions.length;
+    return group;
+  });
+}
+
+function ReadingGroupBlock({
+  group,
+  answers,
+  markedForReview,
+  mode,
+  onSelect,
+  onToggleMark,
+  correctKey,
+}: {
+  group: ReadingGroup;
+  answers: Record<string, string>;
+  markedForReview: Set<string>;
+  mode: ReadingPlayerProps['mode'];
+  onSelect: (questionId: string, optionKey: string) => void;
+  onToggleMark: (questionId: string) => void;
+  correctKey: string | null;
+}) {
+  // A single-question group is a short Part B extract → side-by-side pair.
+  // A multi-question group is a long Part A/C passage → sticky passage + stack.
+  const isSingle = group.questions.length === 1;
+
+  return (
+    <section className="grid items-start gap-4 lg:grid-cols-2" data-testid="reading-group">
+      <div
+        className={cn(
+          'min-w-0',
+          !isSingle && 'lg:sticky lg:top-16 lg:self-start',
+        )}
+      >
+        <PassagePanel passage={group.passage} variant={isSingle ? 'auto' : 'scroll'} />
+      </div>
+      <div className="flex flex-col gap-3">
+        {group.questions.map((question, index) => (
+          <QuestionCard
+            key={question.id}
+            question={question}
+            number={group.startNumber + index}
+            answers={answers}
+            markedForReview={markedForReview}
+            mode={mode}
+            onSelect={onSelect}
+            onToggleMark={onToggleMark}
+            correctKey={correctKey}
+          />
+        ))}
+      </div>
+    </section>
   );
 }
 
@@ -401,32 +491,6 @@ function TimerDisplay({
   );
 }
 
-// ─── Mobile tab bar ───────────────────────────────────────────────────────────
-
-type MobileTab = 'passage' | 'question';
-
-function MobileTabBar({ active, onChange }: { active: MobileTab; onChange: (t: MobileTab) => void }) {
-  return (
-    <div className="flex border-b border-border">
-      {(['passage', 'question'] as const).map((tab) => (
-        <button
-          key={tab}
-          type="button"
-          onClick={() => onChange(tab)}
-          className={cn(
-            'flex-1 py-3 text-xs font-semibold uppercase tracking-wider transition-colors',
-            active === tab
-              ? 'border-b-2 border-primary text-primary'
-              : 'text-muted hover:text-navy',
-          )}
-        >
-          {tab}
-        </button>
-      ))}
-    </div>
-  );
-}
-
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export default function ReadingPlayer({
@@ -437,15 +501,12 @@ export default function ReadingPlayer({
   onComplete,
   timeLimitSeconds,
 }: ReadingPlayerProps) {
-  const [currentIndex, setCurrentIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [markedForReview, setMarkedForReview] = useState<Set<string>>(new Set());
   const [elapsed, setElapsed] = useState(0);
   const [remaining, setRemaining] = useState<number | null>(
     timeLimitSeconds ?? null,
   );
-  const [feedbackVisible, setFeedbackVisible] = useState(false);
-  const [mobileTab, setMobileTab] = useState<MobileTab>('passage');
 
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -470,18 +531,9 @@ export default function ReadingPlayer({
     }
   }, [mode, remaining, answers, onComplete]);
 
-  const currentQuestion = questions[currentIndex];
-  const currentPassage = currentQuestion
-    ? passages.find((p) => p.id === currentQuestion.passageId) ?? null
-    : null;
-
   const handleSelect = useCallback((questionId: string, optionKey: string) => {
     setAnswers((prev) => ({ ...prev, [questionId]: optionKey }));
-    // In drill/review mode show feedback immediately on answer
-    if (mode === 'drill' || mode === 'review') {
-      setFeedbackVisible(true);
-    }
-  }, [mode]);
+  }, []);
 
   const handleToggleMark = useCallback((questionId: string) => {
     setMarkedForReview((prev) => {
@@ -492,56 +544,30 @@ export default function ReadingPlayer({
     });
   }, []);
 
-  const handlePrev = useCallback(() => {
-    setFeedbackVisible(false);
-    setCurrentIndex((i) => Math.max(0, i - 1));
-  }, []);
-
-  const handleNext = useCallback(() => {
-    setFeedbackVisible(false);
-    setCurrentIndex((i) => Math.min(questions.length - 1, i + 1));
-    // Switch mobile tab to passage for new question
-    setMobileTab('passage');
-  }, [questions.length]);
-
-  const handleJump = useCallback((index: number) => {
-    setFeedbackVisible(false);
-    setCurrentIndex(index);
-    setMobileTab('passage');
-  }, []);
-
   const handleSubmit = useCallback(() => {
     if (intervalRef.current) clearInterval(intervalRef.current);
     onComplete(answers);
   }, [answers, onComplete]);
 
-  // Keyboard shortcuts
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      const tag = (e.target as HTMLElement).tagName;
-      if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+  const groups = useMemo(
+    () => groupQuestionsByPassage(questions, passages),
+    [questions, passages],
+  );
 
-      switch (e.key) {
-        case '1': currentQuestion && handleSelect(currentQuestion.id, 'A'); break;
-        case '2': currentQuestion && handleSelect(currentQuestion.id, 'B'); break;
-        case '3': currentQuestion && handleSelect(currentQuestion.id, 'C'); break;
-        case '4': currentQuestion && handleSelect(currentQuestion.id, 'D'); break;
-        case 'ArrowLeft': handlePrev(); break;
-        case 'ArrowRight':
-          if (currentIndex < questions.length - 1) handleNext();
-          break;
-        case 'Enter':
-          if (currentIndex === questions.length - 1) handleSubmit();
-          else handleNext();
-          break;
-        default: break;
-      }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [currentQuestion, currentIndex, questions.length, handleSelect, handlePrev, handleNext, handleSubmit]);
+  const questionIds = useMemo(() => questions.map((q) => q.id), [questions]);
 
-  if (!currentQuestion) {
+  const handleJump = useCallback(
+    (index: number) => {
+      const questionId = questionIds[index];
+      if (!questionId || typeof document === 'undefined') return;
+      document
+        .getElementById(`reading-q-${questionId}`)
+        ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    },
+    [questionIds],
+  );
+
+  if (questions.length === 0) {
     return (
       <div className="flex h-64 items-center justify-center text-muted">
         No questions available.
@@ -549,24 +575,21 @@ export default function ReadingPlayer({
     );
   }
 
-  const questionIds = questions.map((q) => q.id);
   const answeredSet = new Set(Object.keys(answers));
   // correctKey: in review mode the correct answer would come from the server;
   // for now we can't derive it client-side — show no feedback marker.
   const correctKey: string | null = null;
-
-  const isLast = currentIndex === questions.length - 1;
 
   return (
     <div className="flex h-full flex-col" data-testid="reading-player-root">
       {/* ── Sticky header (timer + question jump dots) ─────────────────────────
           The OET computer-based sample test keeps a thin status strip pinned at
           the top of the screen. We mirror that affordance so the candidate always
-          sees the timer and jump dots even when scrolling a long passage. */}
+          sees the timer and jump dots even when scrolling. */}
       <div className="sticky top-0 z-10 flex items-center justify-between gap-4 border-b border-border bg-surface px-4 py-2 shadow-sm">
         <ProgressDots
           total={questions.length}
-          current={currentIndex}
+          current={-1}
           answered={answeredSet}
           marked={markedForReview}
           questionIds={questionIds}
@@ -575,61 +598,36 @@ export default function ReadingPlayer({
         <TimerDisplay elapsed={elapsed} remaining={remaining} mode={mode} />
       </div>
 
-      {/* ── Mobile: tab switcher (hidden at md+ where the split-screen kicks in) ─ */}
-      <div className="md:hidden">
-        <MobileTabBar active={mobileTab} onChange={setMobileTab} />
+      {/* ── Body: every passage and its questions on one continuous scroll ─────
+          • Part B groups (1 question) render the extract beside its question.
+          • Part A/C groups (many questions) keep the passage sticky on the left
+            (lg+) with the questions stacked on the right; on smaller screens the
+            passage stacks above its questions. */}
+      <div className="flex-1 overflow-y-auto p-4" data-testid="reading-stacked-scroll">
+        <div className="mx-auto max-w-5xl space-y-8">
+          {groups.map((group, index) => (
+            <ReadingGroupBlock
+              key={group.passage?.id ?? `group-${index}`}
+              group={group}
+              answers={answers}
+              markedForReview={markedForReview}
+              mode={mode}
+              onSelect={handleSelect}
+              onToggleMark={handleToggleMark}
+              correctKey={correctKey}
+            />
+          ))}
+        </div>
       </div>
 
-      {/* ── Body: official OET-style split-screen at md+ ─────────────────────
-          • Mobile (<md): one column at a time, toggled by MobileTabBar above.
-          • Tablet / desktop (md+): CSS Grid two-column layout, passage left
-            (~60%) and questions right (~40%), each pane scrolls independently.
-          The owner directive (2026-05-27 §7) requires the official passage-left
-          / questions-right exam layout — we use a fixed grid (not a draggable
-          resizer) to match the official sample-test affordance exactly. */}
-      <div
-        className={cn(
-          'flex-1 overflow-hidden',
-          'md:grid md:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]',
-        )}
-        data-testid="reading-split-screen"
-      >
-        {/* Passage pane */}
-        <div
-          className={cn(
-            'flex flex-col overflow-hidden border-border p-4 md:border-r',
-            mobileTab === 'question' ? 'hidden md:flex' : 'flex',
-          )}
-          data-testid="reading-passage-pane"
-        >
-          <PassagePanel passage={currentPassage} />
-        </div>
-
-        {/* Question pane */}
-        <div
-          className={cn(
-            'overflow-hidden p-4',
-            mobileTab === 'passage' ? 'hidden md:block' : 'block',
-          )}
-          data-testid="reading-question-pane"
-        >
-          <QuestionPanel
-            question={currentQuestion}
-            currentIndex={currentIndex}
-            total={questions.length}
-            answers={answers}
-            markedForReview={markedForReview}
-            mode={mode}
-            isLast={isLast}
-            onSelect={handleSelect}
-            onToggleMark={handleToggleMark}
-            onPrev={handlePrev}
-            onNext={handleNext}
-            onSubmit={handleSubmit}
-            feedbackVisible={feedbackVisible}
-            correctKey={correctKey}
-          />
-        </div>
+      {/* ── Sticky footer (progress + submit) ─────────────────────────────────*/}
+      <div className="sticky bottom-0 z-10 flex items-center justify-between gap-3 border-t border-border bg-surface px-4 py-3 shadow-sm">
+        <span className="text-xs font-medium text-muted">
+          {answeredSet.size} of {questions.length} answered
+        </span>
+        <Button variant="primary" size="sm" onClick={handleSubmit}>
+          Submit
+        </Button>
       </div>
     </div>
   );
