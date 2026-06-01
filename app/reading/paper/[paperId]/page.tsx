@@ -146,6 +146,8 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
 
   useReadingBrowserZoomGuard();
 
+  const readingA11yHintId = screenReaderHints ? `reading-a11y-hints-${paperId}` : undefined;
+
   /**
    * Phase 5 closure — load any persisted a11y settings for this paper.
    * Keyed per-paper so a learner who uses one paper with high-contrast
@@ -669,12 +671,19 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
         className="space-y-5"
         data-reading-contrast={highContrast ? 'high' : 'standard'}
         data-reading-screen-reader-hints={screenReaderHints ? 'on' : 'off'}
+        aria-describedby={readingA11yHintId}
         style={{
           ['--reading-player-scale' as string]: zoomLevel / 100,
           ['--reading-font-scale' as string]: fontScale / 100,
           fontSize: `${fontScale}%`,
         }}
       >
+        {screenReaderHints ? (
+          <p id={readingA11yHintId} className="sr-only">
+            Screen reader hints are enabled. Use the part tabs to move between sections, then move through the question navigator with the arrow keys.
+            Select passage text first, then choose Highlight or Clear highlights for the current part.
+          </p>
+        ) : null}
         {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
         {timingNotice ? <InlineAlert variant="warning">{timingNotice}</InlineAlert> : null}
         {mockAttemptId ? (

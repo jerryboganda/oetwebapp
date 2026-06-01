@@ -9,6 +9,7 @@ import { InlineAlert } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { MarkdownContent } from '@/components/ui/markdown-content';
 import {
   getStrategy,
   markStrategyRead,
@@ -19,34 +20,6 @@ import {
 type StrategyWithSkill = ReadingStrategyWithProgressDto & {
   strategy: { skillCode?: string };
 };
-
-// ─── Simple markdown renderer (react-markdown not installed) ─────────────────
-// Converts the most common markdown patterns to HTML without a dependency.
-
-function renderMarkdown(md: string): string {
-  return md
-    // Headings
-    .replace(/^### (.+)$/gm, '<h3 class="text-base font-bold mt-4 mb-1">$1</h3>')
-    .replace(/^## (.+)$/gm, '<h2 class="text-lg font-bold mt-5 mb-2">$1</h2>')
-    .replace(/^# (.+)$/gm, '<h1 class="text-xl font-bold mt-6 mb-2">$1</h1>')
-    // Bold / italic
-    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-    .replace(/\*(.+?)\*/g, '<em>$1</em>')
-    // Inline code
-    .replace(/`(.+?)`/g, '<code class="rounded bg-border/60 px-1 py-0.5 text-xs font-mono">$1</code>')
-    // Unordered lists
-    .replace(/^\s*[-*] (.+)$/gm, '<li class="ml-4 list-disc">$1</li>')
-    // Ordered lists
-    .replace(/^\s*\d+\. (.+)$/gm, '<li class="ml-4 list-decimal">$1</li>')
-    // Wrap adjacent li's in ul/ol (simple heuristic)
-    .replace(/(<li[^>]*>[\s\S]+?<\/li>)/g, '<ul class="my-2 space-y-1">$1</ul>')
-    // Blockquotes
-    .replace(/^> (.+)$/gm, '<blockquote class="rounded-lg bg-primary/5 px-4 py-2 italic text-muted">$1</blockquote>')
-    // Paragraphs — blank-line separated blocks that aren't already HTML
-    .replace(/\n\n(?!<)/g, '</p><p class="mt-2">')
-    // Wrap top level
-    .replace(/^(?!<)/, '<p class="mt-2">');
-}
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
@@ -137,10 +110,9 @@ export default function StrategyDetailPage() {
             </div>
 
             {/* Body */}
-            <div
-              className="prose prose-sm max-w-none rounded-2xl border border-border bg-surface p-6 text-foreground dark:prose-invert"
-              // eslint-disable-next-line react/no-danger
-              dangerouslySetInnerHTML={{ __html: renderMarkdown(data.strategy.bodyMarkdown) }}
+            <MarkdownContent
+              markdown={data.strategy.bodyMarkdown}
+              className="rounded-2xl border border-border bg-surface p-6 text-foreground"
             />
 
             {/* Actions */}

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
@@ -9,6 +9,7 @@ import { LearnerDashboardShell } from '@/components/layout/learner-dashboard-she
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { InlineAlert } from '@/components/ui/alert';
+import { MarkdownContent } from '@/components/ui/markdown-content';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain/learner-surface';
 import { getWritingLesson, updateWritingLessonProgress, type WritingLessonDetailDto, writingSkillLabels } from '@/lib/writing-pathway-api';
 
@@ -32,7 +33,6 @@ export default function WritingLessonPage() {
       .catch(() => setError(t('writing.lessons.detail.error.load')));
   }, [router, slug, t]);
 
-  const bodyBlocks = useMemo(() => (lesson?.bodyMarkdownEn ?? '').split('\n\n').filter(Boolean), [lesson]);
   const complete = Boolean(lesson?.progress?.completedAt);
 
   const saveProgress = async (payload: { bodyRead?: boolean; drillCompleted?: boolean; quizScore?: number }) => {
@@ -73,13 +73,7 @@ export default function WritingLessonPage() {
             <section className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
               <LearnerSurfaceSectionHeader eyebrow={t('writing.lessons.detail.lesson.eyebrow')} title={t('writing.lessons.detail.lesson.title')} className="mb-4" />
               {/* Lesson body markdown is OET-authored English content; force LTR inside RTL chrome. */}
-              <div className="space-y-4 text-sm leading-7 text-navy" dir="ltr">
-                {bodyBlocks.map((block) => block.startsWith('##') || block.startsWith('###') ? (
-                  <h2 key={block} className="text-lg font-bold text-navy">{block.replace(/^#+\s*/, '')}</h2>
-                ) : (
-                  <p key={block}>{block}</p>
-                ))}
-              </div>
+              <MarkdownContent markdown={lesson.bodyMarkdownEn} className="text-sm leading-7 text-navy" />
               <div className="mt-5">
                 <Button onClick={() => void saveProgress({ bodyRead: true })} loading={saving} variant={lesson.progress?.bodyRead ? 'outline' : 'primary'}>
                   <CheckCircle2 className="h-4 w-4" /> {lesson.progress?.bodyRead ? t('writing.lessons.detail.lesson.read') : t('writing.lessons.detail.lesson.markRead')}

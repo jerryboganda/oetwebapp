@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
+import { MarkdownContent } from '@/components/ui/markdown-content';
 
 interface StrategyDetail {
   id: string;
@@ -92,9 +93,10 @@ export default function ListeningStrategyDetailPage() {
         <p className="mt-1 text-sm text-muted">~{strategy.estimatedReadMinutes} min read</p>
       </header>
 
-      <article className="prose prose-slate dark:prose-invert max-w-none rounded-2xl border border-border bg-surface p-6 shadow-sm">
-        <pre className="whitespace-pre-wrap font-sans">{strategy.bodyMarkdownEn}</pre>
-      </article>
+      <MarkdownContent
+        markdown={strategy.bodyMarkdownEn}
+        className="rounded-2xl border border-border bg-surface p-6 shadow-sm text-navy"
+      />
 
       <div className="flex gap-3 text-sm">
         <button

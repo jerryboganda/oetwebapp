@@ -220,6 +220,22 @@ describe('Reading paper player page', () => {
       expect(scope!.querySelectorAll('mark[data-reading-highlight]').length).toBe(0);
     });
   });
+
+  it('exposes screen-reader hints and high-contrast state through the reading a11y controls', async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+
+    await renderPlayer();
+    await user.click(await screen.findByRole('button', { name: /start attempt/i }));
+
+    await user.click(screen.getByRole('button', { name: /accessibility settings/i }));
+    await user.click(screen.getByRole('checkbox', { name: /high-contrast palette/i }));
+    await user.click(screen.getByRole('checkbox', { name: /extra screen-reader hints/i }));
+
+    const main = screen.getByRole('main');
+    expect(main).toHaveAttribute('data-reading-contrast', 'high');
+    expect(main).toHaveAttribute('aria-describedby', expect.stringContaining('reading-a11y-hints'));
+    expect(screen.getByText(/screen reader hints are enabled/i)).toBeInTheDocument();
+  });
 });
 
 function buildAttempt() {

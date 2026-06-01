@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { InlineAlert } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
+import { MarkdownContent } from '@/components/ui/markdown-content';
 import { SelectionToVocab } from '@/components/domain/vocabulary';
 import { analytics } from '@/lib/analytics';
 import { getListeningReview, type ListeningReviewDto } from '@/lib/listening-api';
@@ -315,7 +316,7 @@ export default function ListeningReviewPage() {
                         >
                           <p className="font-bold text-navy">{option.optionLabel}. {option.optionText}</p>
                           <p className="mt-2 text-xs font-black uppercase tracking-widest">{option.isCorrect ? 'Correct' : option.distractorCategory?.replace(/_/g, ' ') ?? 'Distractor'}</p>
-                          {option.whyMarkdown ? <p className="mt-2 text-xs leading-5">{option.whyMarkdown}</p> : null}
+                          {option.whyMarkdown ? <MarkdownContent markdown={option.whyMarkdown} className="mt-2 text-xs leading-5" /> : null}
                         </div>
                       ))}
                     </div>
@@ -362,9 +363,10 @@ export default function ListeningReviewPage() {
                 </div>
 
                 {/* Overall feedback — rendered as pre-wrap to preserve markdown line breaks */}
-                <div className="rounded-2xl border border-primary/10 bg-surface p-5 text-sm leading-relaxed text-navy whitespace-pre-wrap">
-                  {tutorFeedback.overallFeedbackMarkdown}
-                </div>
+                <MarkdownContent
+                  markdown={tutorFeedback.overallFeedbackMarkdown}
+                  className="rounded-2xl border border-primary/10 bg-surface p-5 text-sm leading-relaxed text-navy"
+                />
 
                 {/* Per-question comments */}
                 {tutorFeedback.perQuestionFeedbackJson && (() => {

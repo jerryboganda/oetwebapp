@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
+import { MarkdownContent } from '@/components/ui/markdown-content';
 
 interface LessonDetail {
   id: string;
@@ -106,10 +107,10 @@ export default function ListeningLessonPage() {
         ))}
       </ol>
 
-      <article className="prose prose-slate max-w-none rounded-2xl border border-border bg-surface p-6 shadow-sm">
-        {/* Markdown rendering is intentionally simple here — body comes already-rendered or plain text */}
-        <pre className="whitespace-pre-wrap font-sans">{lesson.bodyMarkdownEn}</pre>
-      </article>
+      <MarkdownContent
+        markdown={lesson.bodyMarkdownEn}
+        className="rounded-2xl border border-border bg-surface p-6 shadow-sm text-navy"
+      />
 
       <Link href="/listening/lessons" className="text-sm text-primary underline">
         ← All lessons

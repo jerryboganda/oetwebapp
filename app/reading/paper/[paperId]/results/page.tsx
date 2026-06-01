@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { BookOpen, CheckCircle2, Clock, FileText, Lightbulb, MessageSquare, RefreshCw, SpellCheck, Target, XCircle } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero, LearnerSurfaceCard, LearnerSurfaceSectionHeader } from '@/components/domain';
+import { MarkdownContent } from '@/components/ui/markdown-content';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -532,7 +533,7 @@ function ReviewItemDetails({ item }: { item: ReviewItem }) {
           data-testid="reading-explanation"
         >
           <p className="text-xs font-black uppercase tracking-[0.16em] text-muted">Explanation</p>
-          <p className="mt-1 whitespace-pre-wrap text-sm leading-6 text-navy">{item.explanationMarkdown}</p>
+          <MarkdownContent markdown={item.explanationMarkdown} className="mt-1 text-sm leading-6 text-navy" />
         </div>
       ) : null}
     </details>

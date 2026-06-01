@@ -1,47 +1,16 @@
 'use client';
 
-import type { ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 import type { GrammarContentBlockLearner } from '@/lib/grammar/types';
+import { MarkdownContent } from '@/components/ui/markdown-content';
 
 /**
- * Minimal safe renderer for admin-authored grammar content. Accepts a
- * subset of Markdown-ish formatting (bold, italics, inline code, line
- * breaks) and renders paragraphs. Anything more exotic is treated as
- * plain text. Combined with server-side sanitisation in
- * `GrammarContentSanitiser.cs`, this keeps the `/grammar/[lessonId]`
- * page XSS-free without pulling in a full Markdown renderer bundle.
+ * Grammar content is now rendered by the shared markdown component so table
+ * blocks and other structured content stay consistent with the rest of the
+ * learner surfaces.
  */
 export function SafeRichText({ markdown, className }: { markdown: string; className?: string }) {
-  const paragraphs = markdown.split(/\n\s*\n/).filter(Boolean);
-
-  return (
-    <div className={cn('space-y-3 text-sm leading-6 text-muted', className)}>
-      {paragraphs.map((p, i) => (
-        <p key={i} className="whitespace-pre-wrap">
-          {renderInline(p)}
-        </p>
-      ))}
-    </div>
-  );
-}
-
-function renderInline(text: string): ReactNode {
-  const tokens: ReactNode[] = [];
-  const regex = /(\*\*[^*\n]+\*\*|\*[^*\n]+\*|`[^`\n]+`)/g;
-  let last = 0;
-  let match: RegExpExecArray | null;
-  let key = 0;
-  while ((match = regex.exec(text)) !== null) {
-    if (match.index > last) tokens.push(text.slice(last, match.index));
-    const token = match[0];
-    if (token.startsWith('**')) tokens.push(<strong key={key++}>{token.slice(2, -2)}</strong>);
-    else if (token.startsWith('*')) tokens.push(<em key={key++}>{token.slice(1, -1)}</em>);
-    else if (token.startsWith('`')) tokens.push(<code key={key++} className="rounded border border-border bg-background-light px-1 py-0.5 text-[0.85em] font-mono text-navy">{token.slice(1, -1)}</code>);
-    last = regex.lastIndex;
-  }
-  if (last < text.length) tokens.push(text.slice(last));
-  return tokens;
+  return <MarkdownContent markdown={markdown} className={cn('text-sm leading-6 text-muted', className)} />;
 }
 
 export function GrammarContentRenderer({ blocks }: { blocks: GrammarContentBlockLearner[] }) {
