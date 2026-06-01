@@ -61,6 +61,7 @@ export const sidebarPermissionMap: Record<string, string[]> = {
   '/admin/content/speaking/shared-resources': [AdminPermission.ContentRead, AdminPermission.ContentWrite, AdminPermission.ContentPublish],
   '/admin/content/imports/real-content-folder': [AdminPermission.ContentWrite, AdminPermission.ContentPublish],
   '/admin/content/vocabulary/recall-set-tags': [AdminPermission.ContentRead, AdminPermission.ContentWrite],
+  '/admin/recalls': [AdminPermission.ContentWrite],
   '/admin/content/analytics': [AdminPermission.ContentRead],
   '/admin/content/quality': [AdminPermission.ContentRead],
   '/admin/content/papers': [AdminPermission.ContentRead],

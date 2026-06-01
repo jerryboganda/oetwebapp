@@ -61,7 +61,7 @@ const voiceDesignConfig = {
   pitch: 0,
   emotion: '',
   elevenLabsTtsBaseUrl: 'https://api.elevenlabs.io/v1',
-  elevenLabsDefaultVoiceId: 'voice-001',
+  elevenLabsDefaultVoiceId: 'auq43ws1oslv0tO4BDa7',
   elevenLabsModel: 'eleven_multilingual_v2',
   elevenLabsOutputFormat: 'mp3_44100_128',
   elevenLabsPronunciationDictionaryId: 'dict-001',
@@ -126,7 +126,7 @@ describe('Admin voice design recall audio controls', () => {
       dryRun: true,
       providerName: 'elevenlabs',
       modelVariant: 'eleven_multilingual_v2',
-      voiceId: 'voice-001',
+      voiceId: 'auq43ws1oslv0tO4BDa7',
     }));
   });
 
@@ -140,7 +140,7 @@ describe('Admin voice design recall audio controls', () => {
         totalItems: 10,
         completedItems: 7,
         failedItems: 3,
-        voiceId: 'voice-001',
+        voiceId: 'auq43ws1oslv0tO4BDa7',
         modelVariant: 'eleven_multilingual_v2',
         startedAt: '2026-05-23T00:00:00Z',
         completedAt: '2026-05-23T00:01:00Z',

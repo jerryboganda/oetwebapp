@@ -2,6 +2,7 @@ import type { MobileMenuSection, NavGroup, NavItem } from '@/components/layout';
 import { AdminPermission } from '@/lib/admin-permissions';
 import {
   Activity,
+  Brain,
   Bell,
   BookOpen,
   BookOpenText,
@@ -127,6 +128,13 @@ export const adminNavGroups: AdminNavGroup[] = [
         icon: <FileQuestion className={iconClassName} />,
         matchPrefix: '/admin/content/mocks',
         requiredPermissions: [AdminPermission.ContentRead],
+      },
+      {
+        href: '/admin/recalls',
+        label: 'Recalls',
+        icon: <Brain className={iconClassName} />,
+        matchPrefix: '/admin/recalls',
+        requiredPermissions: [AdminPermission.ContentWrite],
       },
     ],
   },

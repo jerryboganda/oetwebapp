@@ -487,6 +487,9 @@ public static class DatabaseBootstrapper
     {
         if (!db.Database.IsRelational()) return;
 
+        const string DefaultElevenLabsVoiceId = "auq43ws1oslv0tO4BDa7";
+        const string LegacyElevenLabsVoiceId = "21m00Tcm4TlvDq8ikWAM";
+
         var providerName = db.Database.ProviderName ?? string.Empty;
         if (db.Database.IsNpgsql())
         {
@@ -502,6 +505,18 @@ public static class DatabaseBootstrapper
                 ALTER TABLE IF EXISTS "ConversationSettings" ADD COLUMN IF NOT EXISTS "ElevenLabsUseSpeakerBoost" boolean;
                 """,
                 cancellationToken);
+
+                        await db.Database.ExecuteSqlRawAsync($"""
+                                UPDATE "ConversationSettings"
+                                SET "ElevenLabsDefaultVoiceId" = '{DefaultElevenLabsVoiceId}'
+                                WHERE "Id" = 'default'
+                                    AND (
+                                        "ElevenLabsDefaultVoiceId" IS NULL
+                                        OR btrim("ElevenLabsDefaultVoiceId") = ''
+                                        OR "ElevenLabsDefaultVoiceId" = '{LegacyElevenLabsVoiceId}'
+                                    );
+                                """,
+                                cancellationToken);
             return;
         }
 
@@ -515,6 +530,18 @@ public static class DatabaseBootstrapper
             await AddSqliteColumnIfMissingAsync(db, "ConversationSettings", @"""ElevenLabsSimilarityBoost"" REAL NULL", cancellationToken);
             await AddSqliteColumnIfMissingAsync(db, "ConversationSettings", @"""ElevenLabsStyle"" REAL NULL", cancellationToken);
             await AddSqliteColumnIfMissingAsync(db, "ConversationSettings", @"""ElevenLabsUseSpeakerBoost"" INTEGER NULL", cancellationToken);
+
+                        await db.Database.ExecuteSqlRawAsync($"""
+                                UPDATE "ConversationSettings"
+                                SET "ElevenLabsDefaultVoiceId" = '{DefaultElevenLabsVoiceId}'
+                                WHERE "Id" = 'default'
+                                    AND (
+                                        "ElevenLabsDefaultVoiceId" IS NULL
+                                        OR trim("ElevenLabsDefaultVoiceId") = ''
+                                        OR "ElevenLabsDefaultVoiceId" = '{LegacyElevenLabsVoiceId}'
+                                    );
+                                """,
+                                cancellationToken);
         }
     }
 

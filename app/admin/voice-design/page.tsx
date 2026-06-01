@@ -79,7 +79,7 @@ const DEFAULT_ELEVEN_SETTINGS: ElevenLabsRecallSettings = {
   apiKey: '',
   apiKeyPresent: false,
   baseUrl: 'https://api.elevenlabs.io/v1',
-  voiceId: '21m00Tcm4TlvDq8ikWAM',
+  voiceId: 'auq43ws1oslv0tO4BDa7',
   model: 'eleven_multilingual_v2',
   outputFormat: 'mp3_44100_128',
   dictionaryId: '',
@@ -864,13 +864,14 @@ export default function AdminVoiceDesignPage() {
                   </label>
                   <div className="grid gap-3 sm:grid-cols-2">
                     <label className="block space-y-1.5">
-                      <span className="text-xs font-bold text-admin-text-muted">Voice ID</span>
+                      <span className="text-xs font-bold text-admin-text-muted">Default Voice ID</span>
                       <input
                         type="text"
                         value={elevenSettings.voiceId}
                         onChange={(event) => updateElevenSettings('voiceId', event.target.value)}
                         className="w-full rounded-lg border border-admin-border bg-admin-surface-raised px-3 py-2 text-sm text-admin-text focus:border-[var(--admin-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--admin-primary)]"
                       />
+                      <p className="text-[11px] text-admin-text-muted">Used for recall batches and future ElevenLabs generations when no override is set.</p>
                     </label>
                     <label className="block space-y-1.5">
                       <span className="text-xs font-bold text-admin-text-muted">Model</span>
