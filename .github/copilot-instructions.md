@@ -26,7 +26,7 @@ Repository-specific OET rules win over generic framework, skill, plugin, or agen
 - Prefer focused tests for behavior changes and bug fixes.
 - Make minimal edits that fit existing boundaries.
 - Review the diff for OET contracts, security, tests, and regressions.
-- Verify with the lightest meaningful Docker command before reporting done.
+- Verify with the lightest meaningful host command before reporting done.
 - Before handoff, update `.github/agent-state.local.md` with current goal, changed files, validation, blockers, and next concrete step.
 
 Ask only when a missing decision blocks correctness or safety.
@@ -42,13 +42,15 @@ Ask only when a missing decision blocks correctness or safety.
 
 ## Execution Locality
 
-Heavy work runs in local Docker Desktop only:
+Local validation runs directly on the Windows host via PowerShell or `cmd` (Node 22.x, pnpm 10.33.0,
+.NET 10.x installed):
 
-- Web: `docker exec oet-local-web <command>`
-- API: `docker exec oet-local-api <command>`
-- Compose: `docker compose -f docker-compose.local.yml --env-file .env.docker-local up` or `docker compose -f docker-compose.dev.yml --env-file .env.docker-local up`
+- Frontend: `pnpm exec tsc --noEmit`, `pnpm run lint`, `pnpm test`, `pnpm run build`.
+- Backend: `pnpm run backend:build`, `pnpm run backend:test`.
+- If PowerShell quoting breaks a script, use `cmd /c "pnpm run <script>"`.
 
-Do not run builds, tests, lint, installs, or exploratory validation on the Windows host or production VPS. If Docker Desktop is unavailable, stop and say so.
+Do not run validation on the production VPS. Docker compose files are for deployment/packaging, not a
+required local validation path. See `.github/instructions/validation.instructions.md`.
 
 ## Prompt Defense
 

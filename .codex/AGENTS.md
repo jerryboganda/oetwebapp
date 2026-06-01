@@ -1,18 +1,18 @@
 # Agent Instructions
 
 ## Package Manager
-- Use npm with the committed `package-lock.json`.
-- On Windows PowerShell, prefer `cmd /c npm ...` when npm script execution is blocked.
+- Use pnpm with the committed `pnpm-lock.yaml`.
+- On Windows PowerShell, prefer `cmd /c "pnpm run <script>"` when pnpm script execution is blocked.
 
 ## Core Commands
 | Task | Command |
 | --- | --- |
-| Typecheck | `npx tsc --noEmit` |
-| Lint | `cmd /c npm run lint` |
-| Frontend tests | `cmd /c npm test` |
-| Backend tests | `cmd /c npm run backend:test` |
-| Build | `cmd /c npm run build` |
-| Encoding gate | `cmd /c npm run check:encoding` |
+| Typecheck | `pnpm exec tsc --noEmit` |
+| Lint | `pnpm run lint` |
+| Frontend tests | `pnpm test` |
+| Backend tests | `pnpm run backend:test` |
+| Build | `pnpm run build` |
+| Encoding gate | `pnpm run check:encoding` |
 
 ## Repo Scope
 - Frontend: `app/`, `components/`, `contexts/`, `hooks/`, `lib/`.

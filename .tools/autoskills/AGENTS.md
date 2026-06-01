@@ -1,5 +1,9 @@
 # AGENTS
 
+> **Scope:** This file applies only to work inside `.tools/autoskills/`, which is hardened with
+> `fendo`. The whole OET repo uses **pnpm** with `pnpm-lock.yaml`; this subtree keeps its own pinned
+> pnpm and supply-chain hardening. Do not apply these pnpm/fendo rules to the main app.
+
 <!-- fendo:start -->
 ## Supply Chain Security
 

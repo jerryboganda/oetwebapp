@@ -4,7 +4,7 @@ This file is always loaded by coding agents. Keep it compact. Do not restore lar
 
 ## Stack
 
-- Frontend: Next.js App Router, React 19, TypeScript, Tailwind CSS 4, motion v12.
+- Frontend: Next.js 16 (App Router), React 19, TypeScript, Tailwind CSS v4, motion v12.
 - Backend: ASP.NET Core Minimal API, EF Core, PostgreSQL, SignalR.
 - Desktop/mobile: Electron and Capacitor.
 - Key folders: `app/`, `components/`, `contexts/`, `hooks/`, `lib/`, `backend/`, `tests/`, `docs/`, `rulebooks/`.
@@ -25,17 +25,18 @@ This file is always loaded by coding agents. Keep it compact. Do not restore lar
 - Before ending substantial work, update `.github/agent-state.local.md` with the latest next step and evidence.
 - Prefer scoped `git status --short -- <paths>` over broad status when catalog archives or unrelated work would flood output.
 
-## Heavy Work Runs In Local Docker
+## Validation Runs On The Host
 
-All installs, builds, type-checks, lint, tests, Playwright, dotnet restore/build/test, EF, packaging, broad codemods, and Repomix work must run in local Docker Desktop, not on the Windows host and never on the production VPS.
+All local validation (installs, builds, type-checks, lint, tests, Playwright, dotnet build/test, EF,
+packaging, codemods) runs directly on the Windows host via PowerShell or `cmd`. Host toolchain is
+installed: Node 22.x, pnpm 10.33.0, .NET 10.x.
 
-- Frontend/container commands: `docker exec oet-local-web <command>`.
-- Backend/container commands: `docker exec oet-local-api <command>`.
-- Orchestrate locally with `docker compose -f docker-compose.local.yml --env-file .env.docker-local up` or `docker compose -f docker-compose.dev.yml --env-file .env.docker-local up`.
-- If Docker Desktop is unavailable, stop and report the blocker. Do not fall back to host execution for heavy work.
-- VPS `oet-dev` is production deployment only. Do not run validation there.
+- Run scripts directly, e.g. `pnpm exec tsc --noEmit`, `pnpm run lint`, `pnpm test`, `pnpm run build`.
+- If PowerShell quoting breaks a script, fall back to `cmd /c "pnpm run <script>"`.
+- The VPS `oet-dev` is production deployment only. Never run validation there.
+- Docker compose files exist for deployment/packaging, not as a required local validation path.
 
-Allowed on the host: file reads/edits, navigation, small targeted searches, and git plumbing (`status`, `diff`, `log`, `add`, `commit`, `push`, `pull`).
+See `.github/instructions/validation.instructions.md` for the full command ladder.
 
 ## Storage Persistence
 
@@ -80,16 +81,37 @@ For `app/admin/**`, `components/domain/admin/**`, or `components/admin/**`, load
 
 ## Validation Ladder
 
-Run the smallest relevant Docker validation, then expand if risk demands it:
+Run the smallest relevant host command, then expand if risk demands it:
 
 ```powershell
-npm run docker:tsc
-npm run docker:lint
-npm run docker:test
-docker exec oet-local-web npm run build
-docker exec oet-local-api dotnet build
-docker exec oet-local-api dotnet test
-docker exec oet-local-web npm run test:e2e:smoke
+pnpm exec tsc --noEmit
+pnpm run lint
+pnpm test
+pnpm run build
+pnpm run backend:build
+pnpm run backend:test
+pnpm run check:encoding
+pnpm run test:e2e:smoke
 ```
 
 Report exactly what ran, what did not run, and any remaining risk.
+
+## Map Of AI-Direction Files
+
+Precedence: this `AGENTS.md` and `.github/copilot-instructions.md` are always on. File-scoped
+instructions load by `applyTo` glob. Repo rules beat generic skill/agent/plugin defaults.
+
+- `AGENTS.md` — always-on repo contract; authoritative for storage persistence, the `apiClient`
+  exception list, OET domain invariants, and this file map.
+- `.github/copilot-instructions.md` — always-on lean startup: source of truth, lean context, routing.
+- `.github/instructions/agentic-workflow.instructions.md` — continuity protocol, default loop, agents.
+- `.github/instructions/frontend.instructions.md` — Next.js/React/TS/Tailwind/motion UI rules.
+- `.github/instructions/backend.instructions.md` — ASP.NET Core / EF Core / services / DTOs.
+- `.github/instructions/security-ai.instructions.md` — canonical security, AI grounding, scoring,
+  rulebooks, secrets, prompt defense.
+- `.github/instructions/testing.instructions.md` — Vitest/RTL/Playwright/xUnit conventions.
+- `.github/instructions/validation.instructions.md` — host validation command ladder.
+- `.github/instructions/deployment.instructions.md` — Docker/CI/CD/storage/VPS/desktop/mobile.
+- `.github/instructions/admin-hallmark.instructions.md` — admin operational UI discipline.
+- `.codex/AGENTS.md` — Codex-CLI agent operating model (host commands, production checks, commit attribution).
+- `.tools/autoskills/AGENTS.md` — scoped to `.tools/autoskills/` only (pnpm supply-chain hardening).
