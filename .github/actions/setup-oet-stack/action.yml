@@ -27,11 +27,16 @@ runs:
       with:
         dotnet-version: ${{ inputs.dotnet-version }}
 
+    - name: Setup pnpm
+      uses: pnpm/action-setup@v4
+      with:
+        version: 10.33.0
+
     - name: Setup Node
       uses: actions/setup-node@v4
       with:
         node-version: ${{ inputs.node-version }}
-        cache: npm
+        cache: pnpm
 
     - name: Restore NuGet cache
       uses: actions/cache@v4
@@ -41,9 +46,9 @@ runs:
         restore-keys: |
           nuget-${{ runner.os }}-
 
-    - name: NPM install
+    - name: pnpm install
       shell: bash
-      run: npm ci --no-audit --no-fund
+      run: pnpm install --frozen-lockfile
 
     - name: Wait for Postgres
       if: ${{ inputs.with-postgres == 'true' }}
