@@ -6,15 +6,15 @@ const { loadEnvConfig } = require('@next/env');
 const { loadCertificatePinningConfig, matchesPinnedHost } = require('../electron/security/certificate-pinning.cjs');
 const { validateRequiredDesktopApiBaseUrl } = require('../electron/runtime-config.cjs');
 
-const npmCommand = process.platform === 'win32' ? 'cmd.exe' : 'npm';
+const pnpmCommand = process.platform === 'win32' ? 'cmd.exe' : 'pnpm';
 const electronBuilderConfigPath = path.relative(process.cwd(), path.join(__dirname, '..', 'electron-builder.config.cjs'));
 const publishMode = process.env.ELECTRON_PUBLISH_MODE || 'never';
 const workspaceOutputDir = path.join(__dirname, '..', 'dist', 'desktop');
 const backendRuntimeDir = path.join(__dirname, '..', 'desktop-backend-runtime');
 const electronBuildOutputDir = fs.mkdtempSync(path.join(os.tmpdir(), 'oet-prep-electron-'));
 
-function npmArgs(args) {
-  return process.platform === 'win32' ? ['/c', 'npm', ...args] : args;
+function pnpmArgs(args) {
+  return process.platform === 'win32' ? ['/c', 'pnpm', ...args] : args;
 }
 
 function isAbsoluteHttpUrl(value) {
@@ -227,9 +227,9 @@ async function main() {
   fs.rmSync(backendRuntimeDir, { recursive: true, force: true });
 
   await publishDesktopBackend(backendRuntimeDir);
-  await run(npmCommand, npmArgs(['run', 'build']), { env: buildEnv });
+  await run(pnpmCommand, pnpmArgs(['run', 'build']), { env: buildEnv });
   try {
-    await run(npmCommand, npmArgs(['exec', '--', 'electron-builder', '--config', electronBuilderConfigPath, '--publish', publishMode]), { env: electronBuilderEnv });
+    await run(pnpmCommand, pnpmArgs(['exec', 'electron-builder', '--config', electronBuilderConfigPath, '--publish', publishMode]), { env: electronBuilderEnv });
     cleanupWorkspaceArtifacts(workspaceOutputDir);
     copyBuildArtifacts(electronBuildOutputDir, workspaceOutputDir);
   } finally {

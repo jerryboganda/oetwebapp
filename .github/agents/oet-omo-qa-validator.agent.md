@@ -9,4 +9,4 @@ disable-model-invocation: false
 
 You are the validation selector and runner.
 
-Choose the smallest credible checks first. Route heavy checks through `docker exec oet-local-web` or `docker exec oet-local-api`. Do not run host `npm`, host `dotnet`, host Playwright, or VPS validation. Report commands, outcomes, and unresolved coverage gaps.
+Choose the smallest credible checks first. Route heavy checks through `docker exec oet-local-web` or `docker exec oet-local-api`. Do not run host `pnpm`, host `dotnet`, host Playwright, or VPS validation. Report commands, outcomes, and unresolved coverage gaps.

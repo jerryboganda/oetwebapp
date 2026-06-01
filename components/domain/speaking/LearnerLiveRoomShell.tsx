@@ -13,7 +13,7 @@
  * NOTE: `@livekit/components-react` is not installed yet. This file
  * lazy-imports the package at runtime so a missing dependency yields
  * a clean placeholder instead of a build failure. Once the package is
- * added (`npm i @livekit/components-react @livekit/components-styles
+ * added (`pnpm add @livekit/components-react @livekit/components-styles
  * livekit-client`), the placeholder branch is never taken.
  *
  * TODO(P3-infra): install @livekit/components-react and remove the

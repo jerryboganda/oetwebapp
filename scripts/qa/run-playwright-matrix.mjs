@@ -2,7 +2,7 @@ import { spawnSync } from 'node:child_process';
 
 const rawArgs = process.argv.slice(2);
 const mode = rawArgs[0] === 'full' ? 'full' : 'smoke';
-const playwrightBin = process.platform === 'win32' ? 'npx.cmd' : 'npx';
+const playwrightBin = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm';
 
 // Optional CLI filters used by sharded CI: --project=<name> selects only
 // buckets that target the given Playwright project; --skip-readiness skips
@@ -53,7 +53,7 @@ function learnerProjectSmokeRuns(project) {
 }
 
 function playwrightArgs({ files, projects, grep, workers }) {
-  const args = ['playwright', 'test'];
+  const args = ['exec', 'playwright', 'test'];
   args.push(...files);
   if (grep) {
     args.push('--grep', grep);

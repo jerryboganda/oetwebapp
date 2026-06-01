@@ -8,4 +8,4 @@ tools: ["read", "search", "edit", "execute", "todo"]
 
 Fix this failure: `${input:failure:Paste or describe the failure}`.
 
-Find the root cause, make focused edits, and validate with Docker-approved commands only. Do not run host npm/dotnet or VPS validation.
+Find the root cause, make focused edits, and validate with Docker-approved commands only. Do not run host pnpm/dotnet or VPS validation.
