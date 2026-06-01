@@ -58,6 +58,26 @@ function isDiagnosticResult(value: unknown, sessionId: string | null): value is 
     && result.skillScores !== null;
 }
 
+function readCachedDiagnosticResult(): string | null {
+  if (typeof window === 'undefined') return null;
+
+  try {
+    return window.sessionStorage.getItem('diagnostic_result');
+  } catch {
+    return null;
+  }
+}
+
+function clearCachedDiagnosticResult(): void {
+  if (typeof window === 'undefined') return;
+
+  try {
+    window.sessionStorage.removeItem('diagnostic_result');
+  } catch {
+    // The API fallback below keeps the page usable if storage is blocked.
+  }
+}
+
 export default function DiagnosticResultsPage() {
   const { isAuthenticated, loading: authLoading } = useAuth();
   const router = useRouter();
@@ -80,20 +100,18 @@ export default function DiagnosticResultsPage() {
     const loadResult = async () => {
       const sessionId = searchParams?.get('sessionId') ?? null;
 
-      if (typeof window !== 'undefined') {
-        const raw = sessionStorage.getItem('diagnostic_result');
-        if (raw) {
-          try {
-            const parsed = JSON.parse(raw) as unknown;
-            if (isDiagnosticResult(parsed, sessionId)) {
-              if (!cancelled) setResult(parsed);
-              return;
-            }
-
-            sessionStorage.removeItem('diagnostic_result');
-          } catch {
-            sessionStorage.removeItem('diagnostic_result');
+      const raw = readCachedDiagnosticResult();
+      if (raw) {
+        try {
+          const parsed = JSON.parse(raw) as unknown;
+          if (isDiagnosticResult(parsed, sessionId)) {
+            if (!cancelled) setResult(parsed);
+            return;
           }
+
+          clearCachedDiagnosticResult();
+        } catch {
+          clearCachedDiagnosticResult();
         }
       }
 
@@ -212,9 +230,7 @@ export default function DiagnosticResultsPage() {
           <button
             type="button"
             onClick={() => {
-              if (typeof window !== 'undefined') {
-                sessionStorage.removeItem('diagnostic_result');
-              }
+              clearCachedDiagnosticResult();
               router.push('/reading/pathway');
             }}
             className="inline-flex items-center gap-2 rounded-full bg-primary px-10 py-4 text-base font-bold text-white shadow-lg transition-colors hover:bg-primary-dark dark:bg-violet-700 dark:hover:bg-violet-600 active:scale-95"

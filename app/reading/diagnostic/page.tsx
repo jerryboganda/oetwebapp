@@ -6,6 +6,7 @@ import { useAuth } from '@/contexts/auth-context';
 import { useReadingProfile } from '@/hooks/useReadingProfile';
 import {
   getDiagnosticQuestions,
+  getDiagnosticResult,
   startDiagnostic,
   submitDiagnostic,
   type DiagnosticQuestionDto,
@@ -15,6 +16,11 @@ import {
 import { sanitizeBodyHtml } from '@/lib/wizard/sanitize-html';
 
 type FlowState = 'brief' | 'loading' | 'testing' | 'submitting';
+
+const DIAGNOSTIC_SUBMIT_TIMEOUT_MS = 120_000;
+const DIAGNOSTIC_RESULT_RECOVERY_TIMEOUT_MS = 20_000;
+const DIAGNOSTIC_RESULT_RECOVERY_DELAYS_MS = [1000, 2000, 4000, 8000];
+const DIAGNOSTIC_RESULT_STORAGE_KEY = 'diagnostic_result';
 
 // Minimal shape we need from question data.
 interface DiagnosticOption {
@@ -67,6 +73,96 @@ function LoadingSpinner({ label }: { label: string }) {
   );
 }
 
+function cacheDiagnosticResult(result: DiagnosticResultDto): void {
+  if (typeof window === 'undefined') return;
+
+  try {
+    window.sessionStorage.setItem(DIAGNOSTIC_RESULT_STORAGE_KEY, JSON.stringify(result));
+  } catch {
+    // Results are still reachable through the API if browser storage is blocked.
+  }
+}
+
+function isRecoverableDiagnosticSubmitError(error: unknown): boolean {
+  if (error instanceof DOMException) {
+    return error.name === 'AbortError';
+  }
+
+  if (error instanceof TypeError) {
+    return true;
+  }
+
+  if (!error || typeof error !== 'object') {
+    return true;
+  }
+
+  const record = error as {
+    status?: number;
+    detail?: { code?: string } | unknown;
+  };
+
+  if (record.status === 401 || record.status === 403) {
+    return false;
+  }
+
+  if (record.status === 400) {
+    const detail = record.detail as { code?: string } | null | undefined;
+    return detail?.code === 'diagnostic_already_submitted';
+  }
+
+  if (record.status === undefined) {
+    return false;
+  }
+
+  return record.status === 0 || record.status === 408 || record.status === 429 || record.status >= 500;
+}
+
+async function waitForDiagnosticResult(sessionId: string): Promise<DiagnosticResultDto | null> {
+  const deadline = Date.now() + DIAGNOSTIC_RESULT_RECOVERY_TIMEOUT_MS;
+
+  for (let attempt = 0; Date.now() <= deadline; attempt += 1) {
+    const remainingBeforeFetch = deadline - Date.now();
+    if (remainingBeforeFetch <= 0) {
+      break;
+    }
+
+    try {
+      return await getDiagnosticResult(sessionId, { timeoutMs: Math.min(5_000, remainingBeforeFetch) });
+    } catch (error) {
+      if (!isDiagnosticResultPendingError(error)) {
+        return null;
+      }
+    }
+
+    const delay = DIAGNOSTIC_RESULT_RECOVERY_DELAYS_MS[Math.min(attempt, DIAGNOSTIC_RESULT_RECOVERY_DELAYS_MS.length - 1)];
+    const remainingAfterFetch = deadline - Date.now();
+    if (remainingAfterFetch <= 0) {
+      break;
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, Math.min(delay, remainingAfterFetch)));
+  }
+
+  return null;
+}
+
+function isDiagnosticResultPendingError(error: unknown): boolean {
+  if (error instanceof DOMException) {
+    return error.name === 'AbortError';
+  }
+
+  if (error instanceof TypeError) {
+    return true;
+  }
+
+  if (!error || typeof error !== 'object') {
+    return false;
+  }
+
+  const record = error as { status?: number };
+  return record.status === 404 || record.status === 408 || record.status === 429 || record.status >= 500;
+}
+
 export default function DiagnosticPage() {
   const { isAuthenticated, loading: authLoading } = useAuth();
   const { profile, isLoading: profileLoading } = useReadingProfile();
@@ -79,8 +175,10 @@ export default function DiagnosticPage() {
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [startError, setStartError] = useState<string | null>(null);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const isMountedRef = useRef(true);
 
   // Auth guard
   useEffect(() => {
@@ -109,19 +207,27 @@ export default function DiagnosticPage() {
     };
   }, [flowState]);
 
+  useEffect(() => () => {
+    isMountedRef.current = false;
+  }, []);
+
   const handleStart = async () => {
     setStartError(null);
+    setSubmitError(null);
     setFlowState('loading');
     try {
       const sess = await startDiagnostic();
+      if (!isMountedRef.current) return;
       setSession(sess);
       const qs = await getDiagnosticQuestions(sess.sessionId);
+      if (!isMountedRef.current) return;
       if (qs.length === 0) {
         throw new Error('No diagnostic questions are available yet.');
       }
       setQuestions(qs);
       setFlowState('testing');
     } catch {
+      if (!isMountedRef.current) return;
       setStartError('Could not start the diagnostic. Please try again.');
       setFlowState('brief');
     }
@@ -148,15 +254,33 @@ export default function DiagnosticPage() {
 
   const handleFinish = async () => {
     if (!session) return;
+    setSubmitError(null);
     setFlowState('submitting');
     try {
-      const result: DiagnosticResultDto = await submitDiagnostic(session.sessionId, answers);
-      // Store result for the results page to read
-      if (typeof window !== 'undefined') {
-        sessionStorage.setItem('diagnostic_result', JSON.stringify(result));
-      }
+      const result: DiagnosticResultDto = await submitDiagnostic(session.sessionId, answers, {
+        timeoutMs: DIAGNOSTIC_SUBMIT_TIMEOUT_MS,
+      });
+      if (!isMountedRef.current) return;
+      cacheDiagnosticResult(result);
       router.push(`/reading/diagnostic-results?sessionId=${encodeURIComponent(session.sessionId)}`);
-    } catch {
+    } catch (error) {
+      if (!isRecoverableDiagnosticSubmitError(error)) {
+        if (!isMountedRef.current) return;
+        setSubmitError('Could not finish the diagnostic right now. Your answers are still on the page, so please try again.');
+        setFlowState('testing');
+        return;
+      }
+
+      const recovered = await waitForDiagnosticResult(session.sessionId);
+      if (recovered) {
+        if (!isMountedRef.current) return;
+        cacheDiagnosticResult(recovered);
+        router.push(`/reading/diagnostic-results?sessionId=${encodeURIComponent(session.sessionId)}`);
+        return;
+      }
+
+      if (!isMountedRef.current) return;
+      setSubmitError('Could not finish the diagnostic right now. Your answers are still on the page, so please try again.');
       setFlowState('testing');
     }
   };
@@ -277,6 +401,12 @@ export default function DiagnosticPage() {
               <p className="mb-6 text-base font-medium text-navy leading-relaxed">
                 {currentQuestion.stem}
               </p>
+
+                {submitError && (
+                  <p className="mb-6 rounded-xl border border-danger/30 bg-danger/10 px-4 py-3 text-sm text-danger" role="alert">
+                    {submitError}
+                  </p>
+                )}
 
               {expectsTextAnswer ? (
                 <label className="block">

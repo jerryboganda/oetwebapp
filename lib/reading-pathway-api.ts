@@ -397,20 +397,25 @@ function resolveUrl(path: string): string {
 
 const CSRF_SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 
-async function api<T>(path: string, init?: RequestInit): Promise<T> {
+interface RequestInitWithTimeout extends RequestInit {
+  timeoutMs?: number;
+}
+
+async function api<T>(path: string, init?: RequestInitWithTimeout): Promise<T> {
   const token = await ensureFreshAccessToken();
-  const headers = new Headers(init?.headers);
+  const { timeoutMs, ...requestInit } = init ?? {};
+  const headers = new Headers(requestInit.headers);
   headers.set('Accept', 'application/json');
   if (token) headers.set('Authorization', `Bearer ${token}`);
-  if (init?.body && typeof init.body === 'string' && !headers.has('Content-Type')) {
+  if (requestInit.body && typeof requestInit.body === 'string' && !headers.has('Content-Type')) {
     headers.set('Content-Type', 'application/json');
   }
-  const method = (init?.method ?? 'GET').toUpperCase();
+  const method = (requestInit.method ?? 'GET').toUpperCase();
   if (!CSRF_SAFE_METHODS.has(method) && typeof document !== 'undefined' && !headers.has('x-csrf-token')) {
     const csrfMatch = document.cookie.match(/(?:^|;\s*)oet_csrf=([^;]+)/);
     if (csrfMatch) headers.set('x-csrf-token', csrfMatch[1]);
   }
-  const res = await fetchWithTimeout(resolveUrl(path), { ...init, headers });
+  const res = await fetchWithTimeout(resolveUrl(path), { ...requestInit, headers }, timeoutMs);
   if (!res.ok) {
     let detail: unknown = null;
     try { detail = await res.json(); } catch { /* ignore */ }
@@ -442,14 +447,21 @@ export const startDiagnostic = () =>
 export const getDiagnosticQuestions = (sessionId: string) =>
   api<DiagnosticQuestionDto[]>(`/v1/reading-pathway/diagnostic/sessions/${encodeURIComponent(sessionId)}/questions`);
 
-export const submitDiagnostic = (sessionId: string, answers: Record<string, string>) =>
+export const submitDiagnostic = (
+  sessionId: string,
+  answers: Record<string, string>,
+  options?: { timeoutMs?: number },
+) =>
   api<DiagnosticResultDto>('/v1/reading-pathway/diagnostic/submit', {
     method: 'POST',
     body: JSON.stringify({ sessionId, answers }),
+    timeoutMs: options?.timeoutMs ?? 120_000,
   });
 
-export const getDiagnosticResult = (sessionId: string) =>
-  api<DiagnosticResultDto>(`/v1/reading-pathway/diagnostic/sessions/${encodeURIComponent(sessionId)}/results`);
+export const getDiagnosticResult = (sessionId: string, options?: { timeoutMs?: number }) =>
+  api<DiagnosticResultDto>(`/v1/reading-pathway/diagnostic/sessions/${encodeURIComponent(sessionId)}/results`, {
+    timeoutMs: options?.timeoutMs,
+  });
 
 // ── Pathway & Daily Plan ──────────────────────────────────────────────────────
 

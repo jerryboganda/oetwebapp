@@ -29,7 +29,7 @@ function jsonResponse(body: unknown, status = 200) {
 }
 
 function lastCall() {
-  return mockFetchWithTimeout.mock.calls.at(-1) as [string, RequestInit];
+  return mockFetchWithTimeout.mock.calls.at(-1) as [string, RequestInit, number | undefined];
 }
 
 describe('reading-pathway-api', () => {
@@ -111,6 +111,48 @@ describe('reading-pathway-api', () => {
     const [url, init] = lastCall();
     expect(url).toBe('/v1/reading-pathway/practice/sessions/session-2/submit');
     expect(init.method).toBe('POST');
+  });
+
+  it('uses a longer timeout for diagnostic submission', async () => {
+    mockFetchWithTimeout.mockResolvedValue(jsonResponse({
+      sessionId: 'session-4',
+      score: 18,
+      totalQuestions: 22,
+      skillScores: { S1: 5 },
+      estimatedOetBand: 'B',
+      estimatedScaledScore: 350,
+      durationSeconds: 1800,
+      roadmapWeeks: 12,
+      completedAt: '2026-06-01T10:00:00Z',
+    }));
+
+    await api.submitDiagnostic('session-4', { q1: 'A' });
+
+    const [url, init, timeoutMs] = lastCall();
+    expect(url).toBe('/v1/reading-pathway/diagnostic/submit');
+    expect(init.method).toBe('POST');
+    expect(timeoutMs).toBe(120_000);
+  });
+
+  it('uses the requested timeout for diagnostic result lookups', async () => {
+    mockFetchWithTimeout.mockResolvedValue(jsonResponse({
+      sessionId: 'session-5',
+      score: 18,
+      totalQuestions: 22,
+      skillScores: { S1: 5 },
+      estimatedOetBand: 'B',
+      estimatedScaledScore: 350,
+      durationSeconds: 1800,
+      roadmapWeeks: 12,
+      completedAt: '2026-06-01T10:00:00Z',
+    }));
+
+    await api.getDiagnosticResult('session-5', { timeoutMs: 5_000 });
+
+    const [url, init, timeoutMs] = lastCall();
+    expect(url).toBe('/v1/reading-pathway/diagnostic/sessions/session-5/results');
+    expect(init.method).toBe('GET');
+    expect(timeoutMs).toBe(5_000);
   });
 
   it('loads and normalizes safe practice session questions', async () => {
