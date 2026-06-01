@@ -161,9 +161,9 @@ public static class CopilotExtensionEndpoints
         var command = scope.ToLowerInvariant() switch
         {
             "backend" => "dotnet test backend/",
-            "frontend" => "npx vitest run",
-            "all" => "dotnet test backend/ && npx vitest run",
-            _ => $"npx vitest run {scope}"
+            "frontend" => "pnpm test",
+            "all" => "dotnet test backend/ && pnpm test",
+            _ => $"pnpm exec vitest run {scope}"
         };
 
         await Task.CompletedTask;

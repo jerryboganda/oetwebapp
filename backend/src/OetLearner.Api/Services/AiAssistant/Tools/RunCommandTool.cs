@@ -35,10 +35,10 @@ public sealed class RunCommandTool : IAiToolExecutor
     /// </summary>
     private static readonly string[] AllowedCommands =
     [
-        "npm test",
-        "npm run lint",
-        "npm run build",
-        "npx tsc --noEmit",
+        "pnpm test",
+        "pnpm run lint",
+        "pnpm run build",
+        "pnpm exec tsc --noEmit",
         "dotnet build",
         "dotnet test",
         "git status",

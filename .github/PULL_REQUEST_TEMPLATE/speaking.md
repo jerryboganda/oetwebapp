@@ -45,13 +45,13 @@
 
 ## Test plan
 
-- [ ] `dotnet test backend/OetLearner.sln --filter "FullyQualifiedName~Speaking"`
-- [ ] `npm test`
-- [ ] `npm run lint`
-- [ ] `npx tsc --noEmit`
+- [ ] `pnpm run backend:test -- --filter "FullyQualifiedName~Speaking"`
+- [ ] `pnpm test`
+- [ ] `pnpm run lint`
+- [ ] `pnpm exec tsc --noEmit`
 - [ ] Local smoke: `./scripts/speaking-smoke.sh`
-- [ ] Playwright (if E2E-relevant): `npx playwright test tests/e2e/speaking-*.spec.ts`
-- [ ] Axe (if UI-touching): `npx playwright test tests/a11y`
+- [ ] Playwright (if E2E-relevant): `pnpm exec playwright test tests/e2e/speaking-*.spec.ts`
+- [ ] Axe (if UI-touching): `pnpm exec playwright test tests/a11y`
 
 ## Screenshots / recordings
 

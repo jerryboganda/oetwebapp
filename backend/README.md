@@ -59,7 +59,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\probe-production.ps1
 Or from `package.json`:
 
 ```bash
-npm run backend:run
-npm run backend:build
-npm run backend:test
+pnpm run backend:run
+pnpm run backend:build
+pnpm run backend:test
 ```

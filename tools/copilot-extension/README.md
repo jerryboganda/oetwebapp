@@ -55,14 +55,14 @@ You can also use natural language — the extension detects intent automatically
 
 ```bash
 cd tools/copilot-extension
-npm install
-npm start
+pnpm install
+pnpm start
 ```
 
 For development with auto-reload:
 
 ```bash
-npm run dev
+pnpm run dev
 ```
 
 ### 4. Docker
