@@ -1399,11 +1399,13 @@ public sealed class ListeningLearnerPathwayService : IListeningLearnerPathwaySer
         // No SHA yet (e.g. diagnostic seeded before TTS synthesis) → the
         // frontend renders an "Audio coming soon" affordance.
         if (string.IsNullOrWhiteSpace(audioContentSha)) return null;
+        // ListeningTtsService writes .wav; the serving endpoint probes the
+        // content-addressed shard regardless of the advisory URL extension.
         if (string.IsNullOrWhiteSpace(trimmedBase))
         {
-            return $"/v1/listening/audio/{audioContentSha}.mp3";
+            return $"/v1/listening/audio/{audioContentSha}.wav";
         }
-        return $"{trimmedBase}/v1/listening/audio/{audioContentSha}.mp3";
+        return $"{trimmedBase}/v1/listening/audio/{audioContentSha}.wav";
     }
 
     private static List<string> DeserializeQuestionIds(string json)

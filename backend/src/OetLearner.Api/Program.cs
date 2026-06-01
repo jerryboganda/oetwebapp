@@ -2061,6 +2061,7 @@ app.MapReadingLearnerEndpoints();
 app.MapReadingTutorAdminEndpoints();
 app.MapReadingPathwayEndpoints();
 app.MapListeningPathwayEndpoints();
+app.MapListeningAudioEndpoints();
 app.MapListeningLearnerEndpoints();
 app.MapListeningV2Endpoints();
 app.MapListeningExpertEndpoints();
