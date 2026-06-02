@@ -9,7 +9,8 @@ namespace OetLearner.Api.Services.Content;
 public sealed class MediaAssetAccessService(
     LearnerDbContext db,
     IContentEntitlementService contentEntitlements,
-    IReadingPolicyService readingPolicy)
+    IReadingPolicyService readingPolicy,
+    MaterialAccessService materialAccess)
 {
     public async Task<bool> CanAccessAsync(ClaimsPrincipal principal, string mediaAssetId, CancellationToken ct)
     {
@@ -76,6 +77,11 @@ public sealed class MediaAssetAccessService(
         }
 
         if (await CanLearnerAccessSpeakingSharedResourceAsync(media.Id, normalizedProfession, ct))
+        {
+            return true;
+        }
+
+        if (await materialAccess.CanCandidateAccessMaterialFileAsync(userId, media.Id, ct))
         {
             return true;
         }

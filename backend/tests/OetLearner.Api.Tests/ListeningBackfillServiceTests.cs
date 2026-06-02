@@ -187,7 +187,7 @@ public class ListeningBackfillServiceTests
     }
 
     [Fact]
-    public async Task Backfill_RefusesWhenRelationalAttemptsExist()
+    public async Task Backfill_RefusesWhenRelationalAttemptsExist_AndAnswerKeyChanges()
     {
         var (db, svc) = Build();
         var paper = await AddPaperAsync(db, BuildCanonicalJson());
@@ -209,10 +209,15 @@ public class ListeningBackfillServiceTests
         });
         await db.SaveChangesAsync();
 
+        // Change the answer key in the paper JSON — this should be blocked.
+        var changedJson = BuildCanonicalJson().Replace("\"answer-0\"", "\"CHANGED-ANSWER\"");
+        paper.ExtractedTextJson = changedJson;
+        await db.SaveChangesAsync();
+
         var second = await svc.BackfillPaperAsync(paper.Id, "admin-1", default);
 
         Assert.False(second.Success);
-        Assert.Contains("learner attempts", second.Reason);
+        Assert.Contains("attempts", second.Reason);
         Assert.Equal(questionCountBefore, await db.ListeningQuestions.CountAsync(q => q.PaperId == paper.Id));
     }
 

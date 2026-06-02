@@ -773,6 +773,7 @@ builder.Services.AddScoped<RemediationPlanService>();
 builder.Services.AddScoped<AdminWalletTierService>();
 builder.Services.AddScoped<NativeIapService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Content.MediaAssetAccessService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Content.MaterialAccessService>();
 builder.Services.AddScoped<MockDiagnosticEntitlementService>();
 builder.Services.AddScoped<IMockEntitlementService, MockEntitlementService>();
 builder.Services.AddScoped<MockItemAnalysisService>();
@@ -2073,6 +2074,8 @@ app.MapScoringPolicyEndpoints();
 app.MapRulebookReferencePdfEndpoints();
 app.MapResultTemplatesEndpoints();
 app.MapSpeakingSharedResourcesEndpoints();
+app.MapMaterialsAdminEndpoints();
+app.MapMaterialsLearnerEndpoints();
 app.MapRealContentFolderImportEndpoints();
 
 // ── Phase 1 new endpoints ──

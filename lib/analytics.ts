@@ -309,6 +309,9 @@ const TRACKED_EVENTS = [
   'expert_review_sla_warning_shown',
   // Generic page view
   'page_viewed',
+  // Materials library
+  'materials_page_viewed',
+  'material_file_downloaded',
 ] as const;
 
 export type AnalyticsEvent = typeof TRACKED_EVENTS[number];

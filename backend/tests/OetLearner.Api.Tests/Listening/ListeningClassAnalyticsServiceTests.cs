@@ -52,7 +52,18 @@ public class ListeningClassAnalyticsServiceTests
             .AddInterceptors(capture)
             .Options;
         await using var db = new LearnerDbContext(options);
-        await db.Database.EnsureCreatedAsync();
+        // EF Core 10 has a regression in EnsureCreatedAsync for SQLite where it
+        // can try to CREATE the same table twice for large models.  Work around by
+        // using GenerateCreateScript() which is known to produce each CREATE TABLE
+        // exactly once, then execute the statements directly via the underlying connection.
+        var createScript = db.Database.GenerateCreateScript();
+        foreach (var statement in createScript.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                     .Where(s => s.Length > 0))
+        {
+            using var cmd = connection.CreateCommand();
+            cmd.CommandText = statement + ";";
+            await cmd.ExecuteNonQueryAsync();
+        }
 
         var now = DateTimeOffset.UtcNow;
         var outOfWindow = now.AddDays(-45);

@@ -146,7 +146,10 @@ export function ReadingPdfViewer({
               resolve();
             };
             image.onerror = () => reject(new Error('Image could not be loaded.'));
-            image.src = asset.downloadPath;
+            // src is the authenticated blob URL (fetched via fetchAuthorizedObjectUrl
+            // above) — NOT the raw /v1/media path, which 404s on the web origin and
+            // carries no Bearer auth.
+            image.src = src;
           });
           return;
         }
@@ -341,7 +344,7 @@ export function ReadingPdfViewer({
                 <canvas ref={(el) => { if (el) canvases.current.set(page.pageNumber, el); else canvases.current.delete(page.pageNumber); }} />
               ) : (
                 <img
-                  src={asset.downloadPath}
+                  src={pdfSrc ?? undefined}
                   alt={asset.title}
                   className="block h-full w-full select-none"
                   draggable={false}

@@ -43,6 +43,20 @@ public class ListeningRelationalRuntimeTests
             LastActiveAt = now,
             AccountStatus = "active",
         };
+        // H11 guard: exam-like modes (home, diagnostic, paper) verify a primary
+        // audio asset exists before allowing the attempt to start.
+        var media = new MediaAsset
+        {
+            Id = "media-audio-1",
+            OriginalFilename = "paper-1.mp3",
+            MimeType = "audio/mpeg",
+            Format = "mp3",
+            SizeBytes = 1024,
+            StoragePath = "content/paper-1.mp3",
+            Status = MediaAssetStatus.Ready,
+            MediaKind = "audio",
+            UploadedAt = now,
+        };
         var paper = new ContentPaper
         {
             Id = "paper-1",
@@ -57,6 +71,18 @@ public class ListeningRelationalRuntimeTests
             UpdatedAt = now,
             PublishedAt = now,
             ExtractedTextJson = "{}",
+            Assets =
+            [
+                new ContentPaperAsset
+                {
+                    Id = "asset-audio-1",
+                    PaperId = "paper-1",
+                    Role = PaperAssetRole.Audio,
+                    MediaAssetId = media.Id,
+                    MediaAsset = media,
+                    IsPrimary = true,
+                },
+            ],
         };
         var part = new ListeningPart
         {
@@ -103,11 +129,23 @@ public class ListeningRelationalRuntimeTests
             UpdatedAt = now,
         };
         db.Users.Add(user);
+        db.MediaAssets.Add(media);
         db.ContentPapers.Add(paper);
         db.ListeningParts.Add(part);
         db.ListeningExtracts.Add(extract);
         db.ListeningQuestions.Add(question);
         db.ListeningPolicies.Add(new ListeningPolicy { Id = "global", FullPaperTimerMinutes = 45, GracePeriodSeconds = 10 });
+        // WS2: exam/home mode requires a passed audio check within 24 h.
+        db.LearnerListeningProfiles.Add(new LearnerListeningProfile
+        {
+            UserId = user.Id,
+            TargetBand = "B",
+            Profession = "medicine",
+            CurrentStage = "practice",
+            OnboardingCompletedAt = now,
+            AudioCheckPassedAt = now,
+            UpdatedAt = now,
+        });
         await db.SaveChangesAsync();
         return (user.Id, paper.Id, question.Id);
     }

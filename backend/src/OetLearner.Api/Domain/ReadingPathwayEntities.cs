@@ -253,6 +253,10 @@ public class StreakRecord
 }
 
 /// <summary>Per-learner XP total and level state (gamification).</summary>
+// Explicit table name to avoid case-collision with the platform-wide
+// GamificationEntities.LearnerXP → "LearnerXPs". SQLite is case-insensitive,
+// so "LearnerXps" == "LearnerXPs" at the DB level.
+[System.ComponentModel.DataAnnotations.Schema.Table("ReadingLearnerXps")]
 public class LearnerXp
 {
     public Guid Id { get; set; }

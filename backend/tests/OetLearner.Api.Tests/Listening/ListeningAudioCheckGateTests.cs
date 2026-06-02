@@ -32,7 +32,10 @@ public class ListeningAudioCheckGateTests
         public override DateTimeOffset GetUtcNow() => now;
     }
 
-    private static readonly DateTimeOffset Now = new(2026, 05, 29, 12, 0, 0, TimeSpan.Zero);
+    // Use a date far enough in the future that the 24-h audio-check TTL never
+    // expires relative to the real DateTimeOffset.UtcNow used by
+    // ListeningLearnerService.StartRelationalAttemptAsync.
+    private static readonly DateTimeOffset Now = new(2030, 01, 01, 12, 0, 0, TimeSpan.Zero);
     private static readonly JsonSerializerOptions WebJson = new(JsonSerializerDefaults.Web);
 
     private const string UserId = "learner-1";

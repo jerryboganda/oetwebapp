@@ -32,6 +32,7 @@ import {
   BookMarked,
   MessageSquare,
   AlertTriangle,
+  FolderOpen,
 } from 'lucide-react';
 
 export interface NavItem {
@@ -61,6 +62,7 @@ export const mainNavItems: NavItem[] = [
   { href: '/reading', label: 'Reading', icon: <BookOpen className="w-5 h-5" />, matchPrefix: '/reading' },
   { href: '/listening', label: 'Listening', icon: <Headphones className="w-5 h-5" />, matchPrefix: '/listening' },
   { href: '/mocks', label: 'Mocks', icon: <FileQuestion className="w-5 h-5" />, matchPrefix: '/mocks' },
+  { href: '/materials', label: 'Materials', icon: <FolderOpen className="w-5 h-5" />, matchPrefix: '/materials' },
   { href: '/readiness', label: 'Readiness', icon: <Target className="w-5 h-5" />, matchPrefix: '/readiness' },
   { href: '/progress', label: 'Progress', icon: <TrendingUp className="w-5 h-5" />, matchPrefix: '/progress' },
   { href: '/billing', label: 'Billing', icon: <CreditCard className="w-5 h-5" />, matchPrefix: '/billing' },
@@ -81,6 +83,7 @@ export const learnerMainNavItems: NavItem[] = [
   { href: '/speaking', label: 'Speaking', icon: <Mic className="w-5 h-5" />, matchPrefix: '/speaking' },
   { href: '/mocks', label: 'Mocks', icon: <FileQuestion className="w-5 h-5" />, matchPrefix: '/mocks' },
   { href: '/recalls', label: 'Recalls', icon: <Brain className="w-5 h-5" />, matchPrefix: '/recalls' },
+  { href: '/materials', label: 'Materials', icon: <FolderOpen className="w-5 h-5" />, matchPrefix: '/materials' },
   { href: '/progress', label: 'Progress', icon: <TrendingUp className="w-5 h-5" />, matchPrefix: '/progress' },
   { href: '/billing', label: 'Billing', icon: <CreditCard className="w-5 h-5" />, matchPrefix: '/billing' },
 ];
@@ -107,8 +110,18 @@ export const mobileNavItems: NavItem[] = [
   mainNavItems[6], // Mocks
 ];
 
-// Same learner nav list, exposed for the mobile bottom-nav surface.
-export const learnerMobileNavItems: NavItem[] = learnerMainNavItems;
+// Curated 7-item learner bottom-nav (fits grid-cols-7 without overflow).
+// The full learnerMainNavItems list has 10 items — Progress and Billing
+// remain reachable via the desktop sidebar and Settings page.
+export const learnerMobileNavItems: NavItem[] = [
+  learnerMainNavItems[0], // Dashboard
+  learnerMainNavItems[1], // Listening
+  learnerMainNavItems[2], // Reading
+  learnerMainNavItems[3], // Writing
+  learnerMainNavItems[4], // Speaking
+  learnerMainNavItems[5], // Mocks
+  learnerMainNavItems[7], // Materials
+];
 
 function isActive(pathname: string | null, item: NavItem): boolean {
   if (!pathname) return false;

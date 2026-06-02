@@ -183,7 +183,8 @@ public static class MediaEndpoints
             || await db.ReviewVoiceNotes.AnyAsync(note => note.MediaAssetId == asset.Id, ct)
             || await db.RulebookVersions.AnyAsync(rulebook => rulebook.ReferencePdfAssetId == asset.Id, ct)
             || await db.ResultTemplateAssets.AnyAsync(template => template.MediaAssetId == asset.Id, ct)
-            || await db.SpeakingSharedResources.AnyAsync(resource => resource.MediaAssetId == asset.Id, ct);
+            || await db.SpeakingSharedResources.AnyAsync(resource => resource.MediaAssetId == asset.Id, ct)
+            || await db.MaterialFiles.AnyAsync(f => f.MediaAssetId == asset.Id, ct);
         if (isInUse)
         {
             return Results.Json(

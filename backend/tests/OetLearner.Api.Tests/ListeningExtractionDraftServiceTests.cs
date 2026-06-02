@@ -40,6 +40,7 @@ public class ListeningExtractionDraftServiceTests
             Slug = $"listening-{Guid.NewGuid():N}",
             Status = ContentStatus.Draft,
             ExtractedTextJson = "{}",
+            SourceProvenance = "Test", // required by ReplaceStructureAsync H6 guard
             CreatedAt = now,
             UpdatedAt = now,
         };

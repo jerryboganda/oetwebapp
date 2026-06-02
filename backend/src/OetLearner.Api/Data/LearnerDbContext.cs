@@ -1332,6 +1332,10 @@ public partial class LearnerDbContext(DbContextOptions<LearnerDbContext> options
         // checklists, attempt events, span annotations, double-marking/moderation,
         // result-visibility. Partial class in LearnerDbContext.WritingExam.cs.
         OnModelCreatingWritingExam(modelBuilder);
+
+        // Materials library — nestable folders, files, and per-folder audience
+        // assignment. Partial class in LearnerDbContext.Materials.cs.
+        OnModelCreatingMaterials(modelBuilder);
     }
 
     /// <summary>
@@ -1430,6 +1434,11 @@ public partial class LearnerDbContext(DbContextOptions<LearnerDbContext> options
     partial void OnModelCreatingWritingBuddy(ModelBuilder modelBuilder);
     partial void OnModelCreatingWritingCalibration(ModelBuilder modelBuilder);
     partial void OnModelCreatingWritingExam(ModelBuilder modelBuilder);
+
+    /// <summary>
+    /// Defined in <see cref="LearnerDbContext"/>.Materials.cs (partial).
+    /// </summary>
+    partial void OnModelCreatingMaterials(ModelBuilder modelBuilder);
 
     /// <summary>
     /// Configures the Postgres system column <c>xmin</c> as an optimistic
