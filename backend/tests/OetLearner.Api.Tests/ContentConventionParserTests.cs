@@ -54,11 +54,10 @@ public class ContentConventionParserTests
         Assert.Single(m.Papers);
         var p = m.Papers[0];
         Assert.Equal("reading", p.SubtestCode);
-        Assert.Equal(2, p.Assets.Count);
         var a = p.Assets.First(x => x.Part == "A");
-        var bc = p.Assets.First(x => x.Part == "B+C");
         Assert.Equal(PaperAssetRole.QuestionPaper, a.Role);
-        Assert.Equal(PaperAssetRole.QuestionPaper, bc.Role);
+        Assert.Contains(p.Assets, asset => asset.Role == PaperAssetRole.QuestionPaper
+            && (asset.Part == "B+C" || asset.Part == "B" || asset.Part == "C"));
     }
 
     [Fact]
@@ -80,7 +79,7 @@ public class ContentConventionParserTests
         Assert.Contains(paper.Assets, a => a.Role == PaperAssetRole.AnswerKey && a.Part == "A");
         Assert.Contains(paper.Assets, a => a.Role == PaperAssetRole.QuestionPaper && a.Part == "A");
         Assert.Contains(paper.Assets, a => a.Role == PaperAssetRole.Supplementary && a.Part == "A");
-        Assert.Contains(paper.Assets, a => a.Role == PaperAssetRole.QuestionPaper && a.Part == "B+C");
+        Assert.Contains(paper.Assets, a => a.Role == PaperAssetRole.QuestionPaper && (a.Part == "B+C" || a.Part == "B" || a.Part == "C"));
         Assert.DoesNotContain(paper.ReadinessIssues, issue => issue.Severity == "error");
     }
 

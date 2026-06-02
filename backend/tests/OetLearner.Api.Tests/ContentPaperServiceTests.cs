@@ -439,7 +439,7 @@ public class ContentPaperServiceTests
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
             svc.PublishAsync(paper.Id, "admin-1", default));
-        Assert.Contains("Part B requires exactly one primary QuestionPaper PDF asset", ex.Message);
+        Assert.Contains("Part B requires exactly one primary QuestionPaper PDF", ex.Message);
         await db.DisposeAsync();
     }
 

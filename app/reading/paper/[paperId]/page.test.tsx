@@ -147,7 +147,7 @@ describe('Reading paper player page', () => {
     // PDF-only rebuild: the Part A passage is delivered as a PDF region with
     // an in-viewer annotation toolbar (no separate "answer sheet" / printed
     // paper-sim surface).
-    expect(await screen.findByLabelText(/part a pdf/i)).toBeInTheDocument();
+    expect(await screen.findByLabelText(/part a document/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /text highlight/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /^marker$/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /clear pdf/i })).toBeInTheDocument();
@@ -201,7 +201,7 @@ describe('Reading paper player page', () => {
 
     // The PDF-only rebuild replaced the old HTML passage-text highlight scope
     // with the PDF viewer's annotation toolbar.
-    expect(await screen.findByLabelText(/part a pdf/i)).toBeInTheDocument();
+    expect(await screen.findByLabelText(/part a document/i)).toBeInTheDocument();
     expect(document.querySelector('[data-reading-highlight-scope="passage"]')).toBeNull();
     expect(screen.getByRole('button', { name: /text highlight/i })).toBeInTheDocument();
 
@@ -282,10 +282,10 @@ function buildStructure(opts?: { allowPaperReadingMode?: boolean; partAMatching?
     ];
   const partAQuestions = opts?.partAMatching
     ? [
-      { id: 'q-a-1', readingTextId: 'text-a-1', displayOrder: 1, points: 1, questionType: 'MatchingTextReference' as const, stem: 'Which text discusses triage?', options: [] },
+      { id: 'q-a-1', readingTextId: 'text-a-1', readingSectionId: null, displayOrder: 1, points: 1, questionType: 'MatchingTextReference' as const, stem: 'Which text discusses triage?', options: [] },
     ]
     : [
-      { id: 'q-a-1', readingTextId: 'text-a-1', displayOrder: 1, points: 1, questionType: 'ShortAnswer' as const, stem: 'Name the medication.', options: [] },
+      { id: 'q-a-1', readingTextId: 'text-a-1', readingSectionId: null, displayOrder: 1, points: 1, questionType: 'ShortAnswer' as const, stem: 'Name the medication.', options: [] },
     ];
 
   return {
@@ -324,7 +324,7 @@ function buildStructure(opts?: { allowPaperReadingMode?: boolean; partAMatching?
           { id: 'text-b-1', displayOrder: 1, title: 'Text B', source: 'Policy', bodyHtml: '<p>Policy extract.</p>', wordCount: 2, topicTag: null },
         ],
         questions: [
-          { id: 'q-b-1', readingTextId: 'text-b-1', displayOrder: 21, points: 1, questionType: 'MultipleChoice3', stem: 'What is the policy purpose?', options: ['A', 'B', 'C'] },
+          { id: 'q-b-1', readingTextId: 'text-b-1', readingSectionId: null, displayOrder: 21, points: 1, questionType: 'MultipleChoice3', stem: 'What is the policy purpose?', options: ['A', 'B', 'C'] },
         ],
       },
       {
@@ -337,7 +337,7 @@ function buildStructure(opts?: { allowPaperReadingMode?: boolean; partAMatching?
           { id: 'text-c-1', displayOrder: 1, title: 'Text C', source: 'Journal', bodyHtml: '<p>Journal extract.</p>', wordCount: 2, topicTag: null },
         ],
         questions: [
-          { id: 'q-c-1', readingTextId: 'text-c-1', displayOrder: 27, points: 1, questionType: 'MultipleChoice4', stem: 'What can be inferred?', options: ['A', 'B', 'C', 'D'] },
+          { id: 'q-c-1', readingTextId: 'text-c-1', readingSectionId: null, displayOrder: 27, points: 1, questionType: 'MultipleChoice4', stem: 'What can be inferred?', options: ['A', 'B', 'C', 'D'] },
         ],
       },
     ],

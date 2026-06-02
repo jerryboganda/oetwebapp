@@ -500,8 +500,19 @@ public sealed class GroundedReadingExtractionAi(
         ReadingPartCode.A => questionType is ReadingQuestionType.MatchingTextReference
             or ReadingQuestionType.ShortAnswer
             or ReadingQuestionType.SentenceCompletion,
-        ReadingPartCode.B => questionType == ReadingQuestionType.MultipleChoice3,
-        ReadingPartCode.C => questionType == ReadingQuestionType.MultipleChoice4,
+        ReadingPartCode.B => questionType is ReadingQuestionType.MultipleChoice3
+            or ReadingQuestionType.MultipleChoice4
+            or ReadingQuestionType.FillInBlank
+            or ReadingQuestionType.ShortAnswer
+            or ReadingQuestionType.SentenceCompletion
+            or ReadingQuestionType.ShortAnswerLabeled
+            or ReadingQuestionType.MultipleChoiceFlexible,
+        ReadingPartCode.C => questionType is ReadingQuestionType.MultipleChoice4
+            or ReadingQuestionType.FillInBlank
+            or ReadingQuestionType.ShortAnswer
+            or ReadingQuestionType.SentenceCompletion
+            or ReadingQuestionType.ShortAnswerLabeled
+            or ReadingQuestionType.MultipleChoiceFlexible,
         _ => false,
     };
 
@@ -574,7 +585,8 @@ public sealed class StubReadingExtractionAi : IReadingExtractionAi
                     CaseSensitive: false,
                     ExplanationMarkdown: null,
                     SkillTag: "scan",
-                    ReadingTextDisplayOrder: 1)).ToList());
+                    ReadingTextDisplayOrder: 1)).ToList(),
+            QuestionPaperAsset: null);
 
         var partB = new ReadingPartManifest(
             ReadingPartCode.B, null, "Choose the option that best matches the text.",
@@ -595,7 +607,8 @@ public sealed class StubReadingExtractionAi : IReadingExtractionAi
                     CaseSensitive: false,
                     ExplanationMarkdown: null,
                     SkillTag: "purpose",
-                    ReadingTextDisplayOrder: 1)).ToList());
+                    ReadingTextDisplayOrder: 1)).ToList(),
+            QuestionPaperAsset: null);
 
         var partC = new ReadingPartManifest(
             ReadingPartCode.C, null, "Choose the option that best answers the question.",
@@ -616,7 +629,8 @@ public sealed class StubReadingExtractionAi : IReadingExtractionAi
                     CaseSensitive: false,
                     ExplanationMarkdown: null,
                     SkillTag: "inference",
-                    ReadingTextDisplayOrder: 1)).ToList());
+                    ReadingTextDisplayOrder: 1)).ToList(),
+            QuestionPaperAsset: null);
 
         var manifest = new ReadingStructureManifest(new[] { partA, partB, partC });
         return Task.FromResult(new ReadingExtractionAiResult(

@@ -35,16 +35,25 @@ import {
 } from '@/lib/reading-authoring-api';
 
 type PartCode = 'A' | 'B' | 'C';
+type SectionSlotCode = 'B1' | 'B2' | 'B3' | 'B4' | 'B5' | 'B6' | 'C1' | 'C2';
+type SlotCode = PartCode | SectionSlotCode;
 type ToastState = { message: string; variant: 'success' | 'error' };
 
 const REQUIRED_PARTS: readonly PartCode[] = ['A', 'B', 'C'];
+const B_SECTION_SLOTS: readonly SectionSlotCode[] = ['B1', 'B2', 'B3', 'B4', 'B5', 'B6'];
+const C_SECTION_SLOTS: readonly SectionSlotCode[] = ['C1', 'C2'];
 
 function isPartCode(value: string | null | undefined): value is PartCode {
   return value === 'A' || value === 'B' || value === 'C';
 }
 
+function isSlotCode(value: string | null | undefined): boolean {
+  if (!value) return false;
+  return isPartCode(value) || ['B1','B2','B3','B4','B5','B6','C1','C2'].includes(value);
+}
+
 function isReadingQuestionPaperAsset(asset: ContentPaperAssetDto): boolean {
-  return asset.role === 'QuestionPaper' && isPartCode(asset.part);
+  return asset.role === 'QuestionPaper' && isSlotCode(asset.part);
 }
 
 function formatBytes(bytes: number): string {
@@ -53,7 +62,7 @@ function formatBytes(bytes: number): string {
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
-function primaryForPart(assets: ContentPaperAssetDto[], partCode: PartCode): ContentPaperAssetDto | null {
+function primaryForPart(assets: ContentPaperAssetDto[], partCode: SlotCode): ContentPaperAssetDto | null {
   const partAssets = assets.filter((asset) => asset.role === 'QuestionPaper' && asset.part === partCode);
   return partAssets.find((asset) => asset.isPrimary) ?? null;
 }
@@ -71,7 +80,7 @@ export default function ReadingPdfAssetsPage() {
   const [validation, setValidation] = useState<ReadingValidationReport | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [uploadingPart, setUploadingPart] = useState<PartCode | null>(null);
+  const [uploadingPart, setUploadingPart] = useState<SlotCode | null>(null);
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [removingAssetId, setRemovingAssetId] = useState<string | null>(null);
   const [toast, setToast] = useState<ToastState | null>(null);
@@ -107,10 +116,11 @@ export default function ReadingPdfAssetsPage() {
   const errorCount = validation?.issues.filter((issue) => issue.severity === 'error').length ?? 0;
   const warningCount = validation?.issues.filter((issue) => issue.severity === 'warning').length ?? 0;
 
-  async function handleUpload(partCode: PartCode, file: File): Promise<void> {
+  async function handleUpload(partCode: SlotCode, file: File): Promise<void> {
     const looksLikePdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
-    if (!looksLikePdf) {
-      setToast({ message: 'Upload a PDF file for the question paper slot.', variant: 'error' });
+    const looksLikePaperAsset = looksLikePdf || file.type.startsWith('image/') || /\.(png|jpe?g|gif|webp|avif)$/i.test(file.name);
+    if (!looksLikePaperAsset) {
+      setToast({ message: 'Upload a PDF or image file for the question paper slot.', variant: 'error' });
       return;
     }
 
@@ -118,21 +128,24 @@ export default function ReadingPdfAssetsPage() {
     setUploadProgress(0);
     try {
       const result = await uploadFileChunked(file, 'QuestionPaper', (pct) => setUploadProgress(pct));
+      const displayOrder = isPartCode(partCode)
+        ? REQUIRED_PARTS.indexOf(partCode) + 1
+        : [...B_SECTION_SLOTS, ...C_SECTION_SLOTS].indexOf(partCode as SectionSlotCode) + 1;
       await attachPaperAsset(paperId, {
         role: 'QuestionPaper',
         mediaAssetId: result.mediaAssetId,
         part: partCode,
         title: file.name,
-        displayOrder: REQUIRED_PARTS.indexOf(partCode) + 1,
+        displayOrder,
         makePrimary: true,
       });
       setToast({
-        message: result.deduplicated ? `Part ${partCode} PDF attached from existing media.` : `Part ${partCode} PDF uploaded.`,
+        message: result.deduplicated ? `Part ${partCode} asset attached from existing media.` : `Part ${partCode} asset uploaded.`,
         variant: 'success',
       });
       await load();
     } catch (err) {
-      setToast({ message: err instanceof Error ? err.message : 'PDF upload failed', variant: 'error' });
+      setToast({ message: err instanceof Error ? err.message : 'Asset upload failed', variant: 'error' });
     } finally {
       setUploadingPart(null);
       setUploadProgress(null);
@@ -173,8 +186,8 @@ export default function ReadingPdfAssetsPage() {
 
   return (
     <AdminSettingsLayout
-      title="Reading PDFs"
-      description="Attach the three primary question paper PDFs used by the learner Reading player."
+    title="Reading assets"
+    description="Attach the three primary question paper PDFs or images used by the learner Reading player."
       eyebrow="Reading authoring"
       breadcrumbs={[
         { label: 'Admin', href: '/admin' },
@@ -191,7 +204,7 @@ export default function ReadingPdfAssetsPage() {
 
         <SettingsSection
           title="Question paper slots"
-          description="Each Reading paper needs one primary QuestionPaper PDF for Part A, Part B, and Part C before it can publish."
+          description="Each Reading paper needs one primary QuestionPaper PDF or image for Part A, Part B, and Part C before it can publish."
         >
           {loading ? (
             <div className="grid gap-4 lg:grid-cols-3">
@@ -236,6 +249,62 @@ export default function ReadingPdfAssetsPage() {
             </div>
           )}
         </SettingsSection>
+
+        {!loading && (
+          <SettingsSection
+            title="Per-section PDFs (optional)"
+            description="Part B (B1–B6) and Part C (C1, C2) can each have their own PDF or image. When present these override the shared Part B/C PDF for that section tab. Leave slots empty to use the shared Part PDF."
+          >
+            <div className="space-y-4">
+              <div>
+                <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-admin-fg-muted">Part B sections</p>
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  {B_SECTION_SLOTS.map((slotCode) => {
+                    const assets = readingQuestionPaperAssets.filter((a) => a.part === slotCode);
+                    const primaryAsset = primaryForPart(readingQuestionPaperAssets, slotCode);
+                    return (
+                      <PdfSlotCard
+                        key={slotCode}
+                        partCode={slotCode}
+                        assets={assets}
+                        primaryAsset={primaryAsset}
+                        requiredIssue={null}
+                        uploading={uploadingPart === slotCode}
+                        uploadProgress={uploadProgress}
+                        removingAssetId={removingAssetId}
+                        onUpload={handleUpload}
+                        onRemove={handleRemove}
+                      />
+                    );
+                  })}
+                </div>
+              </div>
+              <div>
+                <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-admin-fg-muted">Part C sections</p>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {C_SECTION_SLOTS.map((slotCode) => {
+                    const assets = readingQuestionPaperAssets.filter((a) => a.part === slotCode);
+                    const primaryAsset = primaryForPart(readingQuestionPaperAssets, slotCode);
+                    return (
+                      <PdfSlotCard
+                        key={slotCode}
+                        partCode={slotCode}
+                        assets={assets}
+                        primaryAsset={primaryAsset}
+                        requiredIssue={null}
+                        uploading={uploadingPart === slotCode}
+                        uploadProgress={uploadProgress}
+                        removingAssetId={removingAssetId}
+                        onUpload={handleUpload}
+                        onRemove={handleRemove}
+                      />
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          </SettingsSection>
+        )}
 
         <div className="flex items-center justify-between pt-2">
           <Button asChild variant="ghost" size="sm" startIcon={<ArrowLeft className="h-4 w-4" />}>
@@ -282,14 +351,14 @@ function PdfSlotCard({
   onUpload,
   onRemove,
 }: {
-  partCode: PartCode;
+  partCode: SlotCode;
   assets: ContentPaperAssetDto[];
   primaryAsset: ContentPaperAssetDto | null;
   requiredIssue: string | null;
   uploading: boolean;
   uploadProgress: number | null;
   removingAssetId: string | null;
-  onUpload: (partCode: PartCode, file: File) => Promise<void>;
+  onUpload: (partCode: SlotCode, file: File) => Promise<void>;
   onRemove: (assetId: string) => Promise<void>;
 }) {
   const inputId = `reading-part-${partCode.toLowerCase()}-pdf`;
@@ -298,9 +367,9 @@ function PdfSlotCard({
   async function handleFileChange(event: ChangeEvent<HTMLInputElement>): Promise<void> {
     const file = event.currentTarget.files?.[0];
     if (!file) return;
-      const input = event.currentTarget;
-      await onUpload(partCode, file);
-      input.value = '';
+    const input = event.currentTarget;
+    await onUpload(partCode, file);
+    input.value = '';
   }
 
   return (
@@ -311,7 +380,7 @@ function PdfSlotCard({
             <FileText className="h-4 w-4 text-admin-fg-muted" />
             Part {partCode}
           </CardTitle>
-          <CardDescription>Primary QuestionPaper PDF</CardDescription>
+          <CardDescription>Primary QuestionPaper PDF or image</CardDescription>
         </div>
         <CardAction>
           {primaryAsset ? (
@@ -354,7 +423,7 @@ function PdfSlotCard({
           <input
             id={inputId}
             type="file"
-            accept="application/pdf,.pdf"
+            accept="application/pdf,.pdf,image/png,image/jpeg,image/gif,image/webp,.png,.jpg,.jpeg,.gif,.webp"
             className="sr-only"
             onChange={(event) => void handleFileChange(event)}
             disabled={uploading}
@@ -367,7 +436,7 @@ function PdfSlotCard({
           >
             <label htmlFor={inputId} aria-disabled={uploading} className="inline-flex items-center justify-center gap-2">
               {uploading ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Upload className="h-4 w-4" aria-hidden="true" />}
-              {uploading ? 'Uploading...' : primaryAsset ? 'Replace primary PDF' : 'Upload PDF'}
+              {uploading ? 'Uploading...' : primaryAsset ? 'Replace' : 'Upload PDF / image'}
             </label>
           </Button>
           {uploading && uploadProgress !== null ? (

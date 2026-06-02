@@ -90,14 +90,13 @@ public sealed class ReadingReviewService(LearnerDbContext db) : IReadingReviewSe
             ?? throw new InvalidOperationException("Question not found.");
 
         if (q.QuestionType != ReadingQuestionType.MultipleChoice3
-            && q.QuestionType != ReadingQuestionType.MultipleChoice4)
+            && q.QuestionType != ReadingQuestionType.MultipleChoice4
+            && q.QuestionType != ReadingQuestionType.MultipleChoiceFlexible)
             throw new InvalidOperationException("Distractor metadata is only supported on multiple-choice questions.");
 
         // Normalise keys to single uppercase letters; reject anything that
         // doesn't match the question's option count.
-        var allowedKeys = q.QuestionType == ReadingQuestionType.MultipleChoice3
-            ? new[] { "A", "B", "C" }
-            : new[] { "A", "B", "C", "D" };
+        var allowedKeys = GetAllowedMcqKeys(q);
         var correctKey = JsonSerializer.Deserialize<string>(q.CorrectAnswerJson)?.Trim().ToUpperInvariant();
 
         var normalised = new Dictionary<string, string>(StringComparer.Ordinal);
@@ -128,6 +127,40 @@ public sealed class ReadingReviewService(LearnerDbContext db) : IReadingReviewSe
         });
         await db.SaveChangesAsync(ct);
         return q;
+    }
+
+    private static IReadOnlyList<string> GetAllowedMcqKeys(ReadingQuestion question)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(question.OptionsJson);
+            if (doc.RootElement.ValueKind == JsonValueKind.Array)
+            {
+                var optionCount = doc.RootElement.GetArrayLength();
+                if (optionCount > 0)
+                {
+                    return optionCount switch
+                    {
+                        1 => new[] { "A" },
+                        2 => new[] { "A", "B" },
+                        3 => new[] { "A", "B", "C" },
+                        4 => new[] { "A", "B", "C", "D" },
+                        5 => new[] { "A", "B", "C", "D", "E" },
+                        _ => new[] { "A", "B", "C", "D", "E", "F" },
+                    };
+                }
+            }
+        }
+        catch (JsonException)
+        {
+            // Fall through to the type-based defaults below.
+        }
+
+        return question.QuestionType == ReadingQuestionType.MultipleChoice3
+            ? new[] { "A", "B", "C" }
+            : question.QuestionType == ReadingQuestionType.MultipleChoice4
+                ? new[] { "A", "B", "C", "D" }
+                : new[] { "A", "B", "C", "D", "E", "F" };
     }
 
     public async Task<ReadingReviewTransitionResult> TransitionStateAsync(

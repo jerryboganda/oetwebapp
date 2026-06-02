@@ -262,7 +262,8 @@ public sealed class ReadingGradingService(
             return q.QuestionType switch
             {
                 ReadingQuestionType.MultipleChoice3 or
-                ReadingQuestionType.MultipleChoice4 => GradeMcq(q, a),
+                ReadingQuestionType.MultipleChoice4 or
+                ReadingQuestionType.MultipleChoiceFlexible => GradeMcq(q, a),
 
                 ReadingQuestionType.MatchingTextReference => strictPartA
                     ? GradeStrictSingleLetter(q, a)
@@ -272,6 +273,10 @@ public sealed class ReadingGradingService(
                 ReadingQuestionType.SentenceCompletion => strictPartA
                     ? GradeStrictTextAnswer(q, a, policy)
                     : GradeShortAnswer(q, a, policy),
+
+                ReadingQuestionType.FillInBlank => GradeShortAnswer(q, a, policy),
+
+                ReadingQuestionType.ShortAnswerLabeled => GradeLabeledShortAnswer(q, a, policy),
 
                 _ => ApplyUnknownFallback(q, a, policy),
             };
@@ -298,6 +303,47 @@ public sealed class ReadingGradingService(
 
         var ok = !string.IsNullOrEmpty(correct) && correct == user;
         return (ok, ok ? q.Points : 0);
+    }
+
+    private static (bool, int) GradeLabeledShortAnswer(ReadingQuestion q, ReadingAnswer a, ReadingResolvedPolicy policy)
+    {
+        if (!TryParseStringMap(q.CorrectAnswerJson, out var correctAnswers)
+            || !TryParseStringMap(a.UserAnswerJson, out var userAnswers))
+        {
+            return GradeShortAnswer(q, a, policy);
+        }
+
+        if (correctAnswers.Count == 0 || userAnswers.Count != correctAnswers.Count)
+            return (false, 0);
+
+        ParseLabeledSynonyms(q.AcceptedSynonymsJson, out var globalSynonyms, out var labeledSynonyms);
+
+        foreach (var (label, correctValue) in correctAnswers)
+        {
+            if (!userAnswers.TryGetValue(label, out var userValue))
+                return (false, 0);
+
+            var candidates = new List<string> { correctValue };
+            if (labeledSynonyms.TryGetValue(label, out var labelSyns))
+            {
+                candidates.AddRange(labelSyns);
+            }
+            else if (globalSynonyms is not null)
+            {
+                candidates.AddRange(globalSynonyms);
+            }
+
+            var matched = candidates.Any(candidate =>
+                StringsMatch(
+                    ApplyTextNormalization(userValue, policy),
+                    ApplyTextNormalization(candidate, policy),
+                    q.CaseSensitive,
+                    policy.ShortAnswerNormalisation));
+            if (!matched)
+                return (false, 0);
+        }
+
+        return (true, q.Points);
     }
 
     /// <summary>
@@ -334,7 +380,8 @@ public sealed class ReadingGradingService(
     private static ReadingDistractorCategory? ResolveSelectedDistractor(ReadingQuestion q, ReadingAnswer a)
     {
         if (q.QuestionType != ReadingQuestionType.MultipleChoice3
-            && q.QuestionType != ReadingQuestionType.MultipleChoice4)
+            && q.QuestionType != ReadingQuestionType.MultipleChoice4
+            && q.QuestionType != ReadingQuestionType.MultipleChoiceFlexible)
             return null;
         if (string.IsNullOrWhiteSpace(q.OptionDistractorsJson)) return null;
 
@@ -636,7 +683,8 @@ public sealed class ReadingGradingService(
         }
 
         if ((q.QuestionType is ReadingQuestionType.MultipleChoice3
-                or ReadingQuestionType.MultipleChoice4)
+                or ReadingQuestionType.MultipleChoice4
+                or ReadingQuestionType.MultipleChoiceFlexible)
             && a.SelectedDistractorCategory is not null)
         {
             return "distractor";
@@ -682,6 +730,88 @@ public sealed class ReadingGradingService(
         if (string.IsNullOrWhiteSpace(json)) return null;
         try { return JsonSerializer.Deserialize<string>(json); }
         catch (JsonException) { return null; }
+    }
+
+    private static bool TryParseStringMap(string? json, out Dictionary<string, string> values)
+    {
+        values = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        if (string.IsNullOrWhiteSpace(json)) return false;
+
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            if (doc.RootElement.ValueKind != JsonValueKind.Object) return false;
+
+            foreach (var prop in doc.RootElement.EnumerateObject())
+            {
+                if (prop.Value.ValueKind != JsonValueKind.String)
+                    return false;
+
+                var key = prop.Name.Trim();
+                if (key.Length == 0)
+                    return false;
+
+                values[key] = prop.Value.GetString() ?? string.Empty;
+            }
+
+            return values.Count > 0;
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+    }
+
+    private static void ParseLabeledSynonyms(
+        string? json,
+        out string[]? globalSynonyms,
+        out Dictionary<string, string[]> labeledSynonyms)
+    {
+        globalSynonyms = null;
+        labeledSynonyms = new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase);
+
+        if (string.IsNullOrWhiteSpace(json)) return;
+
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            if (doc.RootElement.ValueKind == JsonValueKind.Array)
+            {
+                var global = new List<string>();
+                foreach (var item in doc.RootElement.EnumerateArray())
+                {
+                    if (item.ValueKind == JsonValueKind.String && item.GetString() is { Length: > 0 } s)
+                        global.Add(s);
+                }
+
+                if (global.Count > 0)
+                    globalSynonyms = global.ToArray();
+                return;
+            }
+
+            if (doc.RootElement.ValueKind != JsonValueKind.Object)
+                return;
+
+            foreach (var prop in doc.RootElement.EnumerateObject())
+            {
+                if (string.IsNullOrWhiteSpace(prop.Name) || prop.Value.ValueKind != JsonValueKind.Array)
+                    continue;
+
+                var list = new List<string>();
+                foreach (var item in prop.Value.EnumerateArray())
+                {
+                    if (item.ValueKind == JsonValueKind.String && item.GetString() is { Length: > 0 } s)
+                        list.Add(s);
+                }
+
+                if (list.Count > 0)
+                    labeledSynonyms[prop.Name.Trim()] = list.ToArray();
+            }
+        }
+        catch (JsonException)
+        {
+            // Malformed synonyms are ignored; grading still falls back to the primary answer.
+        }
     }
 
     /// <summary>

@@ -283,6 +283,7 @@ public partial class LearnerDbContext(DbContextOptions<LearnerDbContext> options
 
     // Reading Authoring subsystem (Reading Slice R1).
     public DbSet<ReadingPart> ReadingParts => Set<ReadingPart>();
+    public DbSet<ReadingSection> ReadingSections => Set<ReadingSection>();
     public DbSet<ReadingText> ReadingTexts => Set<ReadingText>();
     public DbSet<ReadingQuestion> ReadingQuestions => Set<ReadingQuestion>();
     public DbSet<ReadingAttempt> ReadingAttempts => Set<ReadingAttempt>();
@@ -775,6 +776,16 @@ public partial class LearnerDbContext(DbContextOptions<LearnerDbContext> options
             .WithMany()
             .HasForeignKey(x => x.PaperId)
             .OnDelete(DeleteBehavior.Restrict);
+        modelBuilder.Entity<ReadingSection>()
+            .HasOne(x => x.Part)
+            .WithMany(p => p.Sections)
+            .HasForeignKey(x => x.ReadingPartId)
+            .OnDelete(DeleteBehavior.Cascade);
+        modelBuilder.Entity<ReadingSection>()
+            .HasOne(x => x.ContentPaperAsset)
+            .WithMany()
+            .HasForeignKey(x => x.ContentPaperAssetId)
+            .OnDelete(DeleteBehavior.SetNull);
         modelBuilder.Entity<ReadingText>()
             .HasOne(x => x.Part)
             .WithMany(p => p.Texts)
@@ -785,6 +796,11 @@ public partial class LearnerDbContext(DbContextOptions<LearnerDbContext> options
             .WithMany(p => p.Questions)
             .HasForeignKey(x => x.ReadingPartId)
             .OnDelete(DeleteBehavior.Cascade);
+        modelBuilder.Entity<ReadingQuestion>()
+            .HasOne(x => x.Section)
+            .WithMany(s => s.Questions)
+            .HasForeignKey(x => x.ReadingSectionId)
+            .OnDelete(DeleteBehavior.SetNull);
         modelBuilder.Entity<ReadingQuestion>()
             .HasOne(x => x.Text)
             .WithMany()

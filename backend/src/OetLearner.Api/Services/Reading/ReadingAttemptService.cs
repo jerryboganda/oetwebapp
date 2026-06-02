@@ -1085,6 +1085,9 @@ public sealed class ReadingAttemptService(
                 nameof(ReadingQuestionType.SentenceCompletion),
                 nameof(ReadingQuestionType.MultipleChoice3),
                 nameof(ReadingQuestionType.MultipleChoice4),
+                nameof(ReadingQuestionType.FillInBlank),
+                nameof(ReadingQuestionType.ShortAnswerLabeled),
+                nameof(ReadingQuestionType.MultipleChoiceFlexible),
             },
             ShortAnswerNormalisation: "trim_only",
             // OET-faithful default. Synonym acceptance is non-standard mode.

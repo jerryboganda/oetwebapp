@@ -18,6 +18,19 @@ import {
 
 const OPTION_LABELS = ['A', 'B', 'C', 'D', 'E', 'F'];
 
+type PreviewSectionCode = 'B1' | 'B2' | 'B3' | 'B4' | 'B5' | 'B6' | 'C1' | 'C2';
+
+const SECTION_LABELS: Record<PreviewSectionCode, string> = {
+  B1: 'B1',
+  B2: 'B2',
+  B3: 'B3',
+  B4: 'B4',
+  B5: 'B5',
+  B6: 'B6',
+  C1: 'C1',
+  C2: 'C2',
+};
+
 type PreviewPartCode = 'A' | 'B' | 'C';
 type PreviewTimerWindow = 'A' | 'BC';
 
@@ -48,6 +61,42 @@ function asOptionList(options: unknown): string[] {
   return [];
 }
 
+function getSectionCodeForQuestion(partCode: PreviewPartCode, displayOrder: number): PreviewSectionCode | null {
+  if (partCode === 'B') {
+    return (`B${Math.min(6, Math.max(1, displayOrder))}` as PreviewSectionCode);
+  }
+  if (partCode === 'C') {
+    return displayOrder <= 8 ? 'C1' : 'C2';
+  }
+  return null;
+}
+
+function getSectionsForPart(part: ReadingLearnerStructureDto['parts'][number]) {
+  if (part.partCode === 'A') {
+    return [] as Array<{ code: PreviewSectionCode; label: string; questionCount: number; questions: ReadingLearnerStructureDto['parts'][number]['questions'] }>;
+  }
+
+  if (part.sections && part.sections.length > 0) {
+    return part.sections.map((section) => ({
+      code: section.sectionCode,
+      label: SECTION_LABELS[section.sectionCode],
+      questionCount: section.questions.length,
+      questions: section.questions,
+    }));
+  }
+
+  const sectionOrder: PreviewSectionCode[] = part.partCode === 'B'
+    ? ['B1', 'B2', 'B3', 'B4', 'B5', 'B6']
+    : ['C1', 'C2'];
+
+  return sectionOrder.map((code) => ({
+    code,
+    label: SECTION_LABELS[code],
+    questionCount: part.questions.filter((question) => getSectionCodeForQuestion(part.partCode, question.displayOrder) === code).length,
+    questions: part.questions.filter((question) => getSectionCodeForQuestion(part.partCode, question.displayOrder) === code),
+  }));
+}
+
 export default function ReadingPreviewAsStudentPage() {
   const params = useParams<{ paperId: string }>();
   const paperId = params?.paperId ?? '';
@@ -57,6 +106,7 @@ export default function ReadingPreviewAsStudentPage() {
   const [error, setError] = useState<string | null>(null);
   const [previewStarted, setPreviewStarted] = useState(false);
   const [activePart, setActivePart] = useState<PreviewPartCode>('A');
+  const [activeSection, setActiveSection] = useState<PreviewSectionCode | null>(null);
   const activeTimerWindow = timerWindowForPart(activePart);
   const [remainingSeconds, setRemainingSeconds] = useState(initialTimerSeconds('A'));
 
@@ -82,6 +132,22 @@ export default function ReadingPreviewAsStudentPage() {
     setPreviewStarted(false);
     setRemainingSeconds(initialTimerSeconds(activeTimerWindow));
   }, [activeTimerWindow]);
+
+  const activePartStructure = structure?.parts.find((part) => part.partCode === activePart) ?? null;
+  const activePartSections = activePartStructure ? getSectionsForPart(activePartStructure) : [];
+
+  useEffect(() => {
+    if (!activePartStructure) {
+      setActiveSection(null);
+      return;
+    }
+    if (activePartStructure.partCode === 'A') {
+      setActiveSection(null);
+      return;
+    }
+    const firstSection = activePartSections[0]?.code ?? null;
+    setActiveSection((current) => (activePartSections.some((section) => section.code === current) ? current : firstSection));
+  }, [activePartSections, activePartStructure]);
 
   useEffect(() => {
     if (!previewStarted || remainingSeconds <= 0) return;
@@ -202,7 +268,23 @@ export default function ReadingPreviewAsStudentPage() {
                     </div>
                   </div>
 
-                  <PreviewAnswerSheet structure={structure} activePart={activePart} />
+                  {activePartStructure && activePartSections.length > 0 ? (
+                    <div className="flex flex-wrap gap-2">
+                      {activePartSections.map((section) => (
+                        <button
+                          key={section.code}
+                          type="button"
+                          onClick={() => setActiveSection(section.code)}
+                          className={`rounded-admin-md border px-3 py-1.5 text-xs font-semibold transition-colors ${activeSection === section.code ? 'border-transparent bg-[var(--admin-primary)] text-[var(--admin-primary-fg)]' : 'border-admin-border text-admin-fg-muted hover:bg-admin-bg-subtle'}`}
+                        >
+                          {section.label}
+                          {section.questionCount > 0 ? ` (${section.questionCount})` : ''}
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
+
+                  <PreviewAnswerSheet part={activePartStructure} activeSection={activeSection} />
                 </div>
               </div>
             </SettingsSection>
@@ -273,18 +355,23 @@ function PreviewTimerTile({ label, value, detail }: { label: string; value: stri
   );
 }
 
-function PreviewAnswerSheet({ structure, activePart }: { structure: ReadingLearnerStructureDto; activePart: PreviewPartCode }) {
-  const part = structure.parts.find((item) => item.partCode === activePart);
+function PreviewAnswerSheet({ part, activeSection }: { part: ReadingLearnerStructureDto['parts'][number] | null; activeSection: PreviewSectionCode | null }) {
   if (!part) return null;
+
+  const sections = getSectionsForPart(part);
+  const selectedSection = part.partCode === 'A'
+    ? null
+    : sections.find((section) => section.code === activeSection) ?? sections[0] ?? null;
+  const questions = selectedSection?.questions ?? part.questions;
 
   return (
     <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-      {part.questions.map((question) => {
+      {questions.map((question) => {
         const options = asOptionList(question.options);
         return (
           <label key={question.id} className="rounded-admin-lg border border-admin-border bg-admin-bg-surface p-3 text-sm">
             <span className="mb-2 block text-xs font-semibold text-admin-fg-muted">
-              Part {part.partCode} - Q{question.displayOrder}
+              Part {part.partCode}{selectedSection ? ` ${selectedSection.label}` : ''} - Q{question.displayOrder}
             </span>
             {options.length > 0 ? (
               <select className="w-full rounded-admin-md border border-admin-border bg-admin-bg-surface px-2 py-2 text-sm text-admin-fg-default">

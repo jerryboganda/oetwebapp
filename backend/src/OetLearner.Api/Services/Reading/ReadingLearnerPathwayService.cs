@@ -507,12 +507,43 @@ public sealed class ReadingLearnerPathwayService(
 
         // MCQ: direct key comparison
         if (q.QuestionType is ReadingQuestionType.MultipleChoice3
-            or ReadingQuestionType.MultipleChoice4)
+            or ReadingQuestionType.MultipleChoice4
+            or ReadingQuestionType.MultipleChoiceFlexible)
         {
             return string.Equals(correctAnswer.Trim(), selected.Trim(), comparison);
         }
 
-        // Short answer / sentence completion: check AcceptedSynonymsJson first
+        if (q.QuestionType == ReadingQuestionType.ShortAnswerLabeled)
+        {
+            if (TryParseStringMap(q.CorrectAnswerJson, out var correctAnswers)
+                && TryParseStringMap(selected, out var selectedAnswers))
+            {
+                if (correctAnswers.Count != selectedAnswers.Count)
+                    return false;
+
+                ParseLabeledSynonyms(q.AcceptedSynonymsJson, out var globalSynonyms, out var labeledSynonyms);
+
+                foreach (var (label, correctValue) in correctAnswers)
+                {
+                    if (!selectedAnswers.TryGetValue(label, out var selectedValue))
+                        return false;
+
+                    var candidates = new List<string> { correctValue };
+                    if (labeledSynonyms.TryGetValue(label, out var labelSyns))
+                        candidates.AddRange(labelSyns);
+                    else if (globalSynonyms is not null)
+                        candidates.AddRange(globalSynonyms);
+
+                    if (!candidates.Any(candidate =>
+                            string.Equals(candidate.Trim(), selectedValue.Trim(), comparison)))
+                        return false;
+                }
+
+                return true;
+            }
+        }
+
+        // Short answer / sentence completion / fill-in-blank: check AcceptedSynonymsJson first
         if (!string.IsNullOrEmpty(q.AcceptedSynonymsJson))
         {
             try
@@ -529,6 +560,88 @@ public sealed class ReadingLearnerPathwayService(
 
         // Fallback: exact match against the canonical correct answer
         return string.Equals(correctAnswer.Trim(), selected.Trim(), comparison);
+    }
+
+    private static bool TryParseStringMap(string? json, out Dictionary<string, string> values)
+    {
+        values = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        if (string.IsNullOrWhiteSpace(json)) return false;
+
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            if (doc.RootElement.ValueKind != JsonValueKind.Object) return false;
+
+            foreach (var prop in doc.RootElement.EnumerateObject())
+            {
+                if (prop.Value.ValueKind != JsonValueKind.String)
+                    return false;
+
+                var key = prop.Name.Trim();
+                if (key.Length == 0)
+                    return false;
+
+                values[key] = prop.Value.GetString() ?? string.Empty;
+            }
+
+            return values.Count > 0;
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+    }
+
+    private static void ParseLabeledSynonyms(
+        string? json,
+        out string[]? globalSynonyms,
+        out Dictionary<string, string[]> labeledSynonyms)
+    {
+        globalSynonyms = null;
+        labeledSynonyms = new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase);
+
+        if (string.IsNullOrWhiteSpace(json)) return;
+
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            if (doc.RootElement.ValueKind == JsonValueKind.Array)
+            {
+                var global = new List<string>();
+                foreach (var item in doc.RootElement.EnumerateArray())
+                {
+                    if (item.ValueKind == JsonValueKind.String && item.GetString() is { Length: > 0 } s)
+                        global.Add(s);
+                }
+
+                if (global.Count > 0)
+                    globalSynonyms = global.ToArray();
+                return;
+            }
+
+            if (doc.RootElement.ValueKind != JsonValueKind.Object)
+                return;
+
+            foreach (var prop in doc.RootElement.EnumerateObject())
+            {
+                if (string.IsNullOrWhiteSpace(prop.Name) || prop.Value.ValueKind != JsonValueKind.Array)
+                    continue;
+
+                var list = new List<string>();
+                foreach (var item in prop.Value.EnumerateArray())
+                {
+                    if (item.ValueKind == JsonValueKind.String && item.GetString() is { Length: > 0 } s)
+                        list.Add(s);
+                }
+
+                if (list.Count > 0)
+                    labeledSynonyms[prop.Name.Trim()] = list.ToArray();
+            }
+        }
+        catch (JsonException)
+        {
+            // Ignore malformed synonyms and fall back to literal matching.
+        }
     }
 
     /// <summary>

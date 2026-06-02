@@ -102,7 +102,9 @@ describe('Admin Reading preview', () => {
     expect(within(consolePanel).getByText('42')).toBeInTheDocument();
 
     await user.click(within(consolePanel).getByRole('button', { name: /^part b$/i }));
-    expect(within(consolePanel).getByText('Part B - Q1')).toBeInTheDocument();
+    // Part B now shows sections (B1–B6); the first section B1 is active by default,
+    // so the answer sheet label includes the section: "Part B B1 - Q1"
+    expect(within(consolePanel).getByText('Part B B1 - Q1')).toBeInTheDocument();
 
     expect(screen.getByRole('region', { name: 'Part A PDF preview' })).toHaveAttribute('data-readonly', 'true');
     expect(screen.getByRole('region', { name: 'Part B PDF preview' })).toHaveAttribute('data-readonly', 'true');

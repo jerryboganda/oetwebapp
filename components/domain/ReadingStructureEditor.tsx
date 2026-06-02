@@ -45,10 +45,13 @@ type ManifestModalState = { mode: 'import' | 'export'; value: string };
 
 const QUESTION_TYPE_LABELS: Record<ReadingQuestionType, string> = {
   MatchingTextReference: 'Matching (Part A)',
-  ShortAnswer: 'Short answer (Part A)',
+  ShortAnswer: 'Short answer',
   SentenceCompletion: 'Sentence completion (Part A)',
-  MultipleChoice3: '3-option MCQ (Part B)',
-  MultipleChoice4: '4-option MCQ (Part C)',
+  MultipleChoice3: '3-option MCQ',
+  MultipleChoice4: '4-option MCQ',
+  FillInBlank: 'Fill in the blank',
+  ShortAnswerLabeled: 'Short answer (labeled)',
+  MultipleChoiceFlexible: 'Multiple choice (flexible)',
 };
 
 const PART_EXPECTED: Record<ReadingPartCode, { items: number; texts: number; minutes: number; label: string; textLabel: string }> = {
@@ -729,6 +732,7 @@ function defaultQuestionDraftFor(part: ReadingPartAdminDto): QuestionDraft {
     optionDistractorsJson: null,
     reviewState: 'Draft',
     latestReviewNote: null,
+    readingSectionId: null,
   };
 }
 

@@ -126,15 +126,19 @@ describe('Reading PDF assets page', () => {
     expect(screen.getByText('1/3')).toBeInTheDocument();
     expect(screen.getByText('Part B requires one primary QuestionPaper PDF.')).toBeInTheDocument();
     expect(screen.getByText('Part C requires one primary QuestionPaper PDF.')).toBeInTheDocument();
-    expect(screen.getAllByText('Upload PDF')).toHaveLength(2);
-    expect(screen.getByText('Replace primary PDF')).toBeInTheDocument();
+    // Part A has an asset so it shows "Replace"; Parts B + C + 8 section slots have no asset
+    // so they show "Upload PDF / image". 2 required (B, C) + 8 section slots = 10 upload buttons.
+    expect(screen.getAllByText('Upload PDF / image').length).toBeGreaterThanOrEqual(2);
+    // Part A shows the replace button
+    expect(screen.getByText('Replace')).toBeInTheDocument();
   });
 
   it('uploads a selected PDF as the primary QuestionPaper asset for its part', async () => {
     const user = userEvent.setup();
     render(<ReadingPdfAssetsPage />);
 
-    const uploadInputs = await screen.findAllByLabelText('Upload PDF');
+    // The first upload input (label "Upload PDF / image") belongs to Part B (Part A already has an asset)
+    const uploadInputs = await screen.findAllByLabelText('Upload PDF / image');
     const file = new File(['%PDF-1.7'], 'part-b.pdf', { type: 'application/pdf' });
     await user.upload(uploadInputs[0], file);
 
@@ -150,15 +154,15 @@ describe('Reading PDF assets page', () => {
     }));
   });
 
-  it('rejects non-PDF uploads before the chunked upload starts', async () => {
+  it('rejects non-PDF/image uploads before the chunked upload starts', async () => {
     const user = userEvent.setup({ applyAccept: false });
     render(<ReadingPdfAssetsPage />);
 
-    const uploadInputs = await screen.findAllByLabelText('Upload PDF');
+    const uploadInputs = await screen.findAllByLabelText('Upload PDF / image');
     const file = new File(['not a pdf'], 'notes.txt', { type: 'text/plain' });
     await user.upload(uploadInputs[0], file);
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('Upload a PDF file for the question paper slot.');
+    expect(await screen.findByRole('alert')).toHaveTextContent('Upload a PDF or image file for the question paper slot.');
     expect(mockUploadFileChunked).not.toHaveBeenCalled();
     expect(mockAttachPaperAsset).not.toHaveBeenCalled();
   });

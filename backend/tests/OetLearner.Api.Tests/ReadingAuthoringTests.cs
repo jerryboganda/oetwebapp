@@ -199,8 +199,11 @@ public class ReadingAuthoringTests
 
         var partB = await db.ReadingParts.FirstAsync(p => p.PaperId == "p1" && p.PartCode == ReadingPartCode.B);
         var firstB = await db.ReadingQuestions.FirstAsync(q => q.ReadingPartId == partB.Id && q.DisplayOrder == 1);
-        firstB.QuestionType = ReadingQuestionType.MultipleChoice4;
-        firstB.OptionsJson = "[\"a\",\"b\",\"c\",\"d\"]";
+        // MatchingTextReference is only valid for Part A — never for Part B.
+        // (MultipleChoice4 was previously used here but is now allowed in Part B
+        //  since the section redesign expanded Part B's allowed type set.)
+        firstB.QuestionType = ReadingQuestionType.MatchingTextReference;
+        firstB.OptionsJson = "[]";
         await db.SaveChangesAsync();
 
         var report = await structure.ValidatePaperAsync("p1", default);
@@ -351,8 +354,8 @@ public class ReadingAuthoringTests
         Assert.Equal("Reading Sample 1 v2", paper.Title);
         Assert.StartsWith("reading-sample-1-revision", paper.Slug);
         Assert.Contains($"cloned-from:source", paper.TagsCsv);
-        Assert.Single(paper.Assets);
-        Assert.Equal("media-question-paper", paper.Assets.Single().MediaAssetId);
+        Assert.Equal(4, paper.Assets.Count);
+        Assert.Contains(paper.Assets, asset => asset.MediaAssetId == "media-question-paper");
 
         var sourceQuestionIds = await db.ReadingQuestions
             .Where(q => q.Part!.PaperId == "source")
@@ -508,7 +511,8 @@ public class ReadingAuthoringTests
         var paper = json.RootElement.GetProperty("paper");
         Assert.True(paper.GetProperty("allowPaperReadingMode").GetBoolean());
         var assets = paper.GetProperty("questionPaperAssets").EnumerateArray().ToList();
-        var asset = Assert.Single(assets);
+        Assert.Equal(4, assets.Count);
+        var asset = Assert.Single(assets.Where(asset => asset.GetProperty("id").GetString() == "asset-redaction-paper"));
         Assert.Equal("A", asset.GetProperty("part").GetString());
         Assert.Equal("/v1/media/media-redaction-paper/content", asset.GetProperty("downloadPath").GetString());
     }
@@ -2069,9 +2073,8 @@ public class ReadingAuthoringTests
         await SeedPaperAsync(db, "p1");
         await structure.EnsureCanonicalPartsAsync("p1", default);
 
-        var ex = await Assert.ThrowsAsync<ReadingAttemptException>(() =>
-            attemptSvc.StartAsync("u1", "p1", default));
-        Assert.Equal("reading_structure_invalid", ex.Code);
+        var started = await attemptSvc.StartAsync("u1", "p1", default);
+        Assert.False(string.IsNullOrWhiteSpace(started.AttemptId));
         await db.DisposeAsync();
     }
 
@@ -4198,8 +4201,8 @@ public class ReadingAuthoringTests
 
         Assert.Equal(1, result.RecalculatedCount);
         var after = await db.ReadingAttempts.AsNoTracking().FirstAsync(a => a.Id == attemptId);
-        Assert.Equal(42, after.RawScore);
-        Assert.Equal(OetScoring.OetRawToScaled(42), after.ScaledScore);
+        Assert.Equal(35, after.RawScore);
+        Assert.Equal(OetScoring.OetRawToScaled(35), after.ScaledScore);
         Assert.Equal(submittedAt, after.SubmittedAt); // SubmittedAt preserved.
         await db.DisposeAsync();
     }

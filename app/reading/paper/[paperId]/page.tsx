@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { InlineAlert } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Modal } from '@/components/ui/modal';
+import { Input } from '@/components/ui/form-controls';
 import { cn } from '@/lib/utils';
 import {
   getReadingAttempt,
@@ -36,6 +37,19 @@ import { deriveDeliveryMode, deliveryModeToReadingPresentation } from '@/lib/moc
 
 type SaveState = 'idle' | 'saving' | 'saved' | 'error';
 
+type ReadingSectionCode = 'B1' | 'B2' | 'B3' | 'B4' | 'B5' | 'B6' | 'C1' | 'C2';
+
+const SECTION_LABELS: Record<ReadingSectionCode, string> = {
+  B1: 'B1',
+  B2: 'B2',
+  B3: 'B3',
+  B4: 'B4',
+  B5: 'B5',
+  B6: 'B6',
+  C1: 'C1',
+  C2: 'C2',
+};
+
 interface ActiveAttempt {
   attemptId: string;
   startedAt: string;
@@ -57,6 +71,42 @@ interface ActiveAttempt {
   mode: 'Exam' | 'Learning' | 'Drill' | 'MiniTest' | 'ErrorBank';
   /** Subset modes only — in-scope question IDs (filter the structure to these). */
   scopeQuestionIds: string[] | null;
+}
+
+function getSectionCodeForQuestion(partCode: ReadingPartCode, displayOrder: number): ReadingSectionCode | null {
+  if (partCode === 'B') {
+    return (`B${Math.min(6, Math.max(1, displayOrder))}` as ReadingSectionCode);
+  }
+  if (partCode === 'C') {
+    return displayOrder <= 8 ? 'C1' : 'C2';
+  }
+  return null;
+}
+
+function getSectionsForPart(part: ReadingLearnerStructureDto['parts'][number]) {
+  if (part.partCode === 'A') {
+    return [] as Array<{ code: ReadingSectionCode; label: string; questions: ReadingQuestionLearnerDto[] }>;
+  }
+
+  if (part.sections && part.sections.length > 0) {
+    return part.sections.map((section) => ({
+      code: section.sectionCode,
+      label: SECTION_LABELS[section.sectionCode],
+      questions: section.questions,
+    }));
+  }
+
+  const sectionOrder: ReadingSectionCode[] = part.partCode === 'B'
+    ? ['B1', 'B2', 'B3', 'B4', 'B5', 'B6']
+    : ['C1', 'C2'];
+
+  return sectionOrder
+    .map((code) => ({
+      code,
+      label: SECTION_LABELS[code],
+      questions: part.questions.filter((question) => getSectionCodeForQuestion(part.partCode, question.displayOrder) === code),
+    }))
+    ;
 }
 
 export default function ReadingPaperPlayerPage({ params }: { params: Promise<{ paperId: string }> }) {
@@ -96,6 +146,7 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
   const [error, setError] = useState<string | null>(null);
   const [contentLockedMessage, setContentLockedMessage] = useState<string | null>(null);
   const [activePart, setActivePart] = useState<ReadingPartCode>('A');
+  const [activeSection, setActiveSection] = useState<ReadingSectionCode | null>(null);
   const [activeQuestionId, setActiveQuestionId] = useState<string | null>(null);
   const [nowMs, setNowMs] = useState(() => Date.now());
   const [showConfirm, setShowConfirm] = useState(false);
@@ -271,6 +322,10 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
         .map((part) => ({
           ...part,
           questions: part.questions.filter((q) => scope.has(q.id)),
+          sections: part.sections?.map((section) => ({
+            ...section,
+            questions: section.questions.filter((question) => scope.has(question.id)),
+          })),
         }))
         .filter((part) => part.questions.length > 0),
     };
@@ -281,6 +336,20 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
     [activePart, displayedStructure],
   );
   const firstDisplayedPart = displayedStructure?.parts.find((part) => part.questions.length > 0) ?? null;
+  const displayedSections = useMemo(() => (displayedCurrentPart ? getSectionsForPart(displayedCurrentPart) : []), [displayedCurrentPart]);
+  const displayedQuestions = useMemo(() => {
+    if (!displayedCurrentPart) return [] as ReadingQuestionLearnerDto[];
+    if (displayedCurrentPart.partCode === 'A') return displayedCurrentPart.questions;
+    const currentSection = displayedSections.find((section) => section.code === activeSection) ?? displayedSections[0] ?? null;
+    return currentSection?.questions ?? displayedCurrentPart.questions;
+  }, [activeSection, displayedCurrentPart, displayedSections]);
+  const displayedPartForRender = useMemo(() => {
+    if (!displayedCurrentPart) return null;
+    return {
+      ...displayedCurrentPart,
+      questions: displayedQuestions,
+    };
+  }, [displayedCurrentPart, displayedQuestions]);
 
   const questionPartById = useMemo(() => {
     const map = new Map<string, ReadingPartCode>();
@@ -296,10 +365,24 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
     if (activePart !== part.partCode) {
       setActivePart(part.partCode);
     }
-    if (!activeQuestionId || !part.questions.some((question) => question.id === activeQuestionId)) {
-      setActiveQuestionId(part.questions[0].id);
+  }, [activePart, displayedCurrentPart, firstDisplayedPart]);
+
+  useEffect(() => {
+    if (!displayedCurrentPart) return;
+    if (displayedCurrentPart.partCode === 'A') {
+      setActiveSection(null);
+      return;
     }
-  }, [activePart, activeQuestionId, displayedCurrentPart, firstDisplayedPart]);
+    const nextSection = displayedSections[0]?.code ?? null;
+    setActiveSection((current) => (displayedSections.some((section) => section.code === current) ? current : nextSection));
+  }, [displayedCurrentPart, displayedSections]);
+
+  useEffect(() => {
+    if (!displayedQuestions.length) return;
+    if (!activeQuestionId || !displayedQuestions.some((question) => question.id === activeQuestionId)) {
+      setActiveQuestionId(displayedQuestions[0].id);
+    }
+  }, [activeQuestionId, displayedQuestions]);
 
   /**
    * Phase 1 closure — seed/refresh the per-question focus timestamp
@@ -801,18 +884,27 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
               />
             ) : null}
 
-            {!breakPending && !showPartTransition && displayedCurrentPart ? (
+            {!breakPending && !showPartTransition && displayedSections.length > 0 ? (
+              <SectionTabs
+                sections={displayedSections}
+                activeSection={activeSection}
+                onChange={(section) => setActiveSection(section)}
+              />
+            ) : null}
+
+            {!breakPending && !showPartTransition && displayedPartForRender ? (
               <div className="origin-top" style={{ transform: 'scale(var(--reading-player-scale))', transformOrigin: 'top center' }}>
                 <PartBody
                   paperId={paperId}
-                  part={displayedCurrentPart}
+                  part={displayedPartForRender}
                   questionPaperAssets={structure.paper.questionPaperAssets ?? []}
                   pdfAnnotations={pdfAnnotations}
                   answers={answers}
                   flagged={flagged}
                   activeQuestionId={activeQuestionId}
                   eliminatedChoices={eliminatedChoices}
-                  locked={attemptInputsLocked || (displayedCurrentPart.partCode === 'A' && partALocked)}
+                  locked={attemptInputsLocked || (displayedCurrentPart?.partCode === 'A' && partALocked)}
+                  assetKey={activeSection ?? displayedCurrentPart?.partCode ?? 'A'}
                   onCreatePdfAnnotation={handleCreatePdfAnnotation}
                   onDeletePdfAnnotation={handleDeletePdfAnnotation}
                   onClearPdfAsset={handleClearPdfAsset}
@@ -1233,9 +1325,49 @@ function PartTabs({
   );
 }
 
+function SectionTabs({
+  sections,
+  activeSection,
+  onChange,
+}: {
+  sections: Array<{ code: ReadingSectionCode; label: string; questions: ReadingQuestionLearnerDto[] }>;
+  activeSection: ReadingSectionCode | null;
+  onChange: (section: ReadingSectionCode) => void;
+}) {
+  return (
+    <div
+      className="flex gap-2 overflow-x-auto rounded-2xl border border-border bg-surface p-2 shadow-sm"
+      aria-label="Reading sections"
+    >
+      {sections.map((section) => {
+        const isActive = activeSection === section.code;
+        return (
+          <button
+            key={section.code}
+            type="button"
+            aria-pressed={isActive}
+            aria-label={`Section ${section.label}, ${section.questions.length} question${section.questions.length === 1 ? '' : 's'}`}
+            onClick={() => onChange(section.code)}
+            className={cn(
+              'min-h-10 shrink-0 rounded-xl px-4 py-2 text-sm font-bold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary',
+              isActive
+                ? 'bg-primary text-white shadow-sm'
+                : 'bg-background-light text-muted hover:text-navy',
+            )}
+          >
+            {section.label}
+            <span className="ml-2 text-xs font-semibold opacity-80" aria-hidden="true">{section.questions.length}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 function PartBody({
   paperId,
   part,
+  assetKey,
   questionPaperAssets,
   pdfAnnotations,
   answers,
@@ -1254,6 +1386,7 @@ function PartBody({
 }: {
   paperId: string;
   part: ReadingLearnerStructureDto['parts'][number];
+  assetKey: string;
   questionPaperAssets: NonNullable<ReadingLearnerStructureDto['paper']['questionPaperAssets']>;
   pdfAnnotations: ReadingPaperAnnotationDto[];
   answers: Record<string, string>;
@@ -1294,7 +1427,7 @@ function PartBody({
     >
       <ReadingPdfViewer
         paperId={paperId}
-        partCode={part.partCode}
+        partCode={assetKey}
         assets={questionPaperAssets}
         annotations={pdfAnnotations}
         onCreateAnnotation={onCreatePdfAnnotation}
@@ -1449,7 +1582,9 @@ function QuestionInput({
         </Button>
       </div>
 
-      {question.questionType === 'MultipleChoice3' || question.questionType === 'MultipleChoice4' ? (
+      {question.questionType === 'MultipleChoice3'
+        || question.questionType === 'MultipleChoice4'
+        || question.questionType === 'MultipleChoiceFlexible' ? (
         <McqControl
           question={question}
           current={current}
@@ -1460,6 +1595,8 @@ function QuestionInput({
         />
       ) : question.questionType === 'MatchingTextReference' ? (
         <MatchingControl question={question} texts={texts} current={current} locked={locked} onChange={onChange} />
+      ) : question.questionType === 'ShortAnswerLabeled' ? (
+        <LabeledTextAnswerControl question={question} current={current} locked={locked} onChange={onChange} />
       ) : (
         <TextAnswerControl current={current} locked={locked} onChange={onChange} />
       )}
@@ -1595,6 +1732,52 @@ function TextAnswerControl({
   );
 }
 
+function LabeledTextAnswerControl({
+  question,
+  current,
+  locked,
+  onChange,
+}: {
+  question: ReadingQuestionLearnerDto;
+  current: unknown;
+  locked: boolean;
+  onChange: (value: unknown) => void;
+}) {
+  const options = toOptionList(question.options);
+  const answerMap = current && typeof current === 'object' && !Array.isArray(current)
+    ? current as Record<string, unknown>
+    : {};
+  const fields = options.length > 0
+    ? options
+    : [{ value: 'answer1', label: 'Answer 1' }];
+
+  const update = (key: string, value: string) => {
+    onChange({
+      ...answerMap,
+      [key]: value,
+    });
+  };
+
+  return (
+    <div className="space-y-3">
+      {fields.map((field, index) => {
+        const key = field.value || `answer${index + 1}`;
+        const value = typeof answerMap[key] === 'string' ? String(answerMap[key]) : '';
+        return (
+          <Input
+            key={key}
+            label={field.label || `Answer ${index + 1}`}
+            value={value}
+            disabled={locked}
+            onChange={(event) => update(key, event.target.value)}
+            placeholder={`Type ${field.label || `answer ${index + 1}`}...`}
+          />
+        );
+      })}
+    </div>
+  );
+}
+
 function fromStartedAttempt(started: ReadingAttemptStarted): ActiveAttempt {
   return {
     attemptId: started.attemptId,
@@ -1708,6 +1891,12 @@ function parseAnswer(valueJson: string): unknown {
 function isAnsweredJson(valueJson: string | undefined): boolean {
   const value = parseAnswer(valueJson ?? '');
   if (Array.isArray(value)) return value.length > 0;
+  if (value && typeof value === 'object') {
+    return Object.values(value as Record<string, unknown>).some((entry) => {
+      if (typeof entry === 'string') return entry.trim().length > 0;
+      return entry !== null && entry !== undefined && String(entry).trim().length > 0;
+    });
+  }
   return typeof value === 'string' ? value.trim().length > 0 : value !== null && value !== undefined;
 }
 

@@ -20,7 +20,7 @@ export interface ReadingPdfAsset {
 
 export interface ReadingPdfViewerProps {
   paperId: string;
-  partCode: 'A' | 'B' | 'C';
+  partCode: string;
   assets: ReadingPdfAsset[];
   annotations: ReadingPaperAnnotationDto[];
   readOnly?: boolean;
@@ -42,6 +42,8 @@ interface PdfPage {
   height: number;
 }
 
+type AssetKind = 'pdf' | 'image';
+
 type RectGeometry = { x: number; y: number; width: number; height: number };
 type FreehandGeometry = { points: Array<{ x: number; y: number }> };
 
@@ -56,7 +58,14 @@ export function ReadingPdfViewer({
   onClearPaper,
   className,
 }: ReadingPdfViewerProps) {
-  const asset = useMemo(() => assets.find((candidate) => candidate.part === partCode) ?? null, [assets, partCode]);
+  const asset = useMemo(() => {
+    const exact = assets.find((candidate) => candidate.part === partCode);
+    if (exact) return exact;
+    // Section codes (B1–B6, C1–C2) fall back to the parent part PDF for legacy papers.
+    const parentCode = partCode.length > 1 ? partCode.slice(0, 1) : null;
+    return (parentCode ? assets.find((candidate) => candidate.part === parentCode) : null) ?? null;
+  }, [assets, partCode]);
+  const assetKind = useMemo<AssetKind>(() => detectAssetKind(asset?.downloadPath ?? ''), [asset?.downloadPath]);
   const [zoom, setZoom] = useState(100);
   const [tool, setTool] = useState<Tool>('select');
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -76,6 +85,7 @@ export function ReadingPdfViewer({
     () => asset ? annotations.filter((annotation) => annotation.contentPaperAssetId === asset.id) : [],
     [annotations, asset],
   );
+  const documentLabel = partCode.length > 1 ? 'Section' : 'Part';
 
   // Reading media is served by the authenticated /v1/media/{id}/content endpoint
   // (Bearer token, behind the same-origin /api/backend proxy). pdf.js cannot
@@ -119,10 +129,27 @@ export function ReadingPdfViewer({
     if (!pdfSrc) return;
     const src = pdfSrc;
     let cancelled = false;
-    async function loadPdf() {
+    async function loadDocument() {
       setLoading(true);
       setError(null);
       try {
+        if (assetKind === 'image') {
+          await new Promise<void>((resolve, reject) => {
+            const image = new Image();
+            image.onload = () => {
+              if (cancelled) {
+                resolve();
+                return;
+              }
+              setPages([{ pageNumber: 1, width: image.naturalWidth, height: image.naturalHeight }]);
+              resolve();
+            };
+            image.onerror = () => reject(new Error('Image could not be loaded.'));
+            image.src = asset.downloadPath;
+          });
+          return;
+        }
+
         const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
         pdfjs.GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/legacy/build/pdf.worker.mjs', import.meta.url).toString();
         const pdf = await pdfjs.getDocument({ url: src }).promise;
@@ -134,19 +161,19 @@ export function ReadingPdfViewer({
         }
         if (!cancelled) setPages(nextPages);
       } catch (err) {
-        if (!cancelled) setError(err instanceof Error ? err.message : 'PDF could not be loaded.');
+        if (!cancelled) setError(err instanceof Error ? err.message : 'Document could not be loaded.');
       } finally {
         if (!cancelled) setLoading(false);
       }
     }
-    void loadPdf();
+    void loadDocument();
     return () => { cancelled = true; };
-  }, [asset, pdfSrc]);
+  }, [asset, pdfSrc, assetKind]);
 
   useEffect(() => {
     let cancelled = false;
     async function renderPages() {
-      if (!asset || !pdfSrc || pages.length === 0) return;
+      if (!asset || !pdfSrc || pages.length === 0 || assetKind !== 'pdf') return;
       const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
       pdfjs.GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/legacy/build/pdf.worker.mjs', import.meta.url).toString();
       const pdf = await pdfjs.getDocument({ url: pdfSrc }).promise;
@@ -165,7 +192,7 @@ export function ReadingPdfViewer({
     }
     void renderPages();
     return () => { cancelled = true; };
-  }, [asset, pages, zoom]);
+  }, [asset, assetKind, pages, zoom]);
 
   const pushCreate = useCallback(async (pageNumber: number, kind: ReadingPaperAnnotationKind, geometryJson: unknown) => {
     if (!asset || readOnly || !onCreateAnnotation) return;
@@ -236,16 +263,16 @@ export function ReadingPdfViewer({
   if (!asset) {
     return (
       <section className={cn('rounded-[20px] border border-border bg-surface p-6 text-center text-sm text-muted shadow-sm', className)}>
-        No Part {partCode} PDF is attached to this Reading paper.
+        No {documentLabel} {partCode} document is attached to this Reading paper.
       </section>
     );
   }
 
   return (
-    <section className={cn('rounded-[20px] border border-border bg-surface shadow-sm', className)} aria-label={`Part ${partCode} PDF`}>
+    <section className={cn('rounded-[20px] border border-border bg-surface shadow-sm', className)} aria-label={`${documentLabel} ${partCode} document`}>
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border p-3">
         <div className="flex items-center gap-2">
-          <Badge variant="muted">Part {partCode}</Badge>
+          <Badge variant="muted">{documentLabel} {partCode}</Badge>
           <span className="text-sm font-semibold text-navy">{asset.title}</span>
         </div>
         <div className="flex flex-wrap items-center gap-1">
@@ -268,7 +295,7 @@ export function ReadingPdfViewer({
         </div>
       </div>
       {error ? <p className="p-4 text-sm text-danger">{error}</p> : null}
-      {loading ? <p className="p-4 text-sm text-muted">Loading PDF…</p> : null}
+      {loading ? <p className="p-4 text-sm text-muted">Loading document…</p> : null}
       <div className="max-h-[72vh] space-y-4 overflow-auto bg-background-light p-4">
         {pages.map((page) => {
           const width = page.width * (zoom / 100);
@@ -309,7 +336,16 @@ export function ReadingPdfViewer({
                 void pushCreate(page.pageNumber, currentDraft.kind as ReadingPaperAnnotationKind, currentDraft.geometry);
               }}
             >
-              <canvas ref={(el) => { if (el) canvases.current.set(page.pageNumber, el); else canvases.current.delete(page.pageNumber); }} />
+              {assetKind === 'pdf' ? (
+                <canvas ref={(el) => { if (el) canvases.current.set(page.pageNumber, el); else canvases.current.delete(page.pageNumber); }} />
+              ) : (
+                <img
+                  src={asset.downloadPath}
+                  alt={asset.title}
+                  className="block h-full w-full select-none"
+                  draggable={false}
+                />
+              )}
               <div className="absolute inset-0" aria-hidden>
                 {pageAnnotations.map((annotation) => (
                   <AnnotationOverlay
@@ -424,4 +460,11 @@ function toRect(a: { x: number; y: number }, b: { x: number; y: number }): RectG
 
 function clamp01(value: number) {
   return Math.max(0, Math.min(1, value));
+}
+
+function detectAssetKind(downloadPath: string): AssetKind {
+  const normalized = downloadPath.split('?')[0].toLowerCase();
+  if (normalized.startsWith('data:image/')) return 'image';
+  if (/\.(png|jpe?g|gif|webp|bmp|svg)$/.test(normalized)) return 'image';
+  return 'pdf';
 }
