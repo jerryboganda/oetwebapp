@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using OetLearner.Api.Configuration;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services;
 using OetLearner.Api.Services.Content;
 using System.Text;
 
@@ -133,7 +134,7 @@ public class ChunkedUploadServiceTests
         var (db, storage, svc) = Build();
         var session = await svc.StartAsync(new ChunkedUploadStart("admin-1", "x.pdf", "application/pdf", 3, "QuestionPaper"), default);
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+        await Assert.ThrowsAsync<ApiException>(() =>
             svc.UploadPartAsync("admin-1", session.Id, 2, new MemoryStream(Encoding.ASCII.GetBytes("abc")), default));
 
         Assert.False(storage.Exists($"uploads/staging/admin-1/{session.Id}/00002.bin"));
@@ -146,7 +147,7 @@ public class ChunkedUploadServiceTests
         var (db, storage, svc) = Build();
         var session = await svc.StartAsync(new ChunkedUploadStart("admin-1", "x.pdf", "application/pdf", 5, "QuestionPaper"), default);
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+        await Assert.ThrowsAsync<ApiException>(() =>
             svc.UploadPartAsync("admin-1", session.Id, 1, new MemoryStream(Encoding.ASCII.GetBytes("toolong")), default));
 
         Assert.False(storage.Exists($"uploads/staging/admin-1/{session.Id}/00001.bin"));
@@ -160,7 +161,7 @@ public class ChunkedUploadServiceTests
         var session = await svc.StartAsync(new ChunkedUploadStart("admin-1", "x.pdf", "application/pdf", 6, "QuestionPaper"), default);
         await svc.UploadPartAsync("admin-1", session.Id, 1, new MemoryStream(Encoding.ASCII.GetBytes("abc")), default);
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() => svc.CompleteAsync("admin-1", session.Id, default));
+        await Assert.ThrowsAsync<ApiException>(() => svc.CompleteAsync("admin-1", session.Id, default));
 
         await db.DisposeAsync();
     }
@@ -169,7 +170,7 @@ public class ChunkedUploadServiceTests
     public async Task Start_rejects_oversize_by_role()
     {
         var (db, _, svc) = Build();
-        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+        await Assert.ThrowsAsync<ApiException>(() =>
             svc.StartAsync(new ChunkedUploadStart(
                 "admin-1", "big.mp3", "audio/mpeg",
                 200L * 1024 * 1024, // 200 MB > 150 MB audio cap
@@ -210,9 +211,9 @@ public class ChunkedUploadServiceTests
         var (db, storage, svc) = Build();
         var s = await svc.StartAsync(new ChunkedUploadStart("admin-1", "x.pdf", "application/pdf", 3, "QuestionPaper"), default);
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+        await Assert.ThrowsAsync<ApiException>(() =>
             svc.UploadPartAsync("admin-2", s.Id, 1, new MemoryStream(Encoding.ASCII.GetBytes("abc")), default));
-        await Assert.ThrowsAsync<InvalidOperationException>(() => svc.CompleteAsync("admin-2", s.Id, default));
+        await Assert.ThrowsAsync<ApiException>(() => svc.CompleteAsync("admin-2", s.Id, default));
         await svc.AbortAsync("admin-2", s.Id, default);
 
         var afterForeignAbort = await db.AdminUploadSessions.SingleAsync(x => x.Id == s.Id);

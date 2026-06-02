@@ -65,8 +65,9 @@ public sealed class ChunkedUploadService(
 
         var limit = ResolveSizeLimitForRole(args.IntendedRole);
         if (args.DeclaredSizeBytes > limit)
-            throw new InvalidOperationException(
-                $"File size {args.DeclaredSizeBytes} exceeds limit {limit} for role {args.IntendedRole}.");
+            throw ApiException.Validation(
+                "upload_too_large",
+                $"File is too large ({args.DeclaredSizeBytes / (1024 * 1024)} MB). The maximum allowed size for this slot is {limit / (1024 * 1024)} MB.");
 
         var ext = Path.GetExtension(args.OriginalFilename).TrimStart('.').ToLowerInvariant();
         var now = DateTimeOffset.UtcNow;
@@ -95,22 +96,22 @@ public sealed class ChunkedUploadService(
     {
         if (partNumber < 1) throw new ArgumentOutOfRangeException(nameof(partNumber));
         var session = await db.AdminUploadSessions.FirstOrDefaultAsync(x => x.Id == sessionId && x.AdminUserId == adminUserId, ct)
-            ?? throw new InvalidOperationException("Upload session not found.");
+            ?? throw ApiException.NotFound("upload_session_not_found", "Upload session not found. Reload the page and start the upload again.");
         if (session.State is AdminUploadState.Completed or AdminUploadState.Aborted or AdminUploadState.Expired)
-            throw new InvalidOperationException($"Upload session is {session.State} and cannot accept parts.");
+            throw ApiException.Conflict("upload_session_closed", $"This upload session is {session.State} and cannot accept more parts. Reload the page and try again.");
         if (session.ExpiresAt < DateTimeOffset.UtcNow)
-            throw new InvalidOperationException("Upload session has expired.");
+            throw ApiException.Conflict("upload_session_expired", "This upload session has expired. Reload the page and start the upload again.");
         if (partNumber > session.TotalParts)
-            throw new InvalidOperationException($"Part {partNumber} exceeds expected total part count {session.TotalParts}.");
+            throw ApiException.Validation("upload_part_out_of_range", $"Part {partNumber} exceeds the expected total of {session.TotalParts} parts. Reload the page so the latest uploader can chunk the file correctly, then try again.");
 
         var key = ContentAddressed.StagingPartKey(
             _opts.StagingSubpath, session.AdminUserId, session.Id, partNumber);
         if (storage.Exists(key))
-            throw new InvalidOperationException($"Part {partNumber} has already been uploaded.");
+            throw ApiException.Conflict("upload_part_duplicate", $"Part {partNumber} has already been uploaded.");
 
         var remaining = session.DeclaredSizeBytes - session.ReceivedBytes;
         if (remaining <= 0)
-            throw new InvalidOperationException("Upload session has already received the declared byte count.");
+            throw ApiException.Conflict("upload_already_complete", "This upload session has already received all declared bytes.");
 
         var allowedBytes = Math.Min(_opts.ChunkSizeBytes, remaining);
         long wrote;
@@ -127,7 +128,7 @@ public sealed class ChunkedUploadService(
         if (wrote <= 0)
         {
             storage.Delete(key);
-            throw new InvalidOperationException("Upload part was empty.");
+            throw ApiException.Validation("upload_part_empty", "Upload part was empty.");
         }
 
         session.ReceivedBytes += wrote;
@@ -140,18 +141,18 @@ public sealed class ChunkedUploadService(
     public async Task<ChunkedUploadCommitResult> CompleteAsync(string adminUserId, string sessionId, CancellationToken ct)
     {
         var session = await db.AdminUploadSessions.FirstOrDefaultAsync(x => x.Id == sessionId && x.AdminUserId == adminUserId, ct)
-            ?? throw new InvalidOperationException("Upload session not found.");
+            ?? throw ApiException.NotFound("upload_session_not_found", "Upload session not found. Reload the page and start the upload again.");
         if (session.State == AdminUploadState.Completed && !string.IsNullOrEmpty(session.MediaAssetId))
         {
             // Idempotent replay.
             return new ChunkedUploadCommitResult(session.MediaAssetId!, session.Sha256!, session.ReceivedBytes, Deduplicated: true);
         }
         if (session.PartsReceived == 0)
-            throw new InvalidOperationException("No parts uploaded.");
+            throw ApiException.Validation("upload_no_parts", "No parts were uploaded for this session.");
         if (session.PartsReceived != session.TotalParts)
-            throw new InvalidOperationException($"Upload is incomplete: received {session.PartsReceived} of {session.TotalParts} parts.");
+            throw ApiException.Validation("upload_incomplete", $"Upload is incomplete: received {session.PartsReceived} of {session.TotalParts} parts. Reload the page and try again.");
         if (session.ReceivedBytes != session.DeclaredSizeBytes)
-            throw new InvalidOperationException($"Upload size mismatch: received {session.ReceivedBytes} of {session.DeclaredSizeBytes} declared bytes.");
+            throw ApiException.Validation("upload_size_mismatch", $"Upload size mismatch: received {session.ReceivedBytes} of {session.DeclaredSizeBytes} declared bytes. Reload the page and try again.");
 
         // Enumerate parts in order. Streams must be disposed even on failure.
         var sessionPrefix = ContentAddressed.StagingSessionPrefix(
@@ -164,7 +165,7 @@ public sealed class ChunkedUploadService(
             .ToList();
 
         if (partKeys.Count != session.TotalParts)
-            throw new InvalidOperationException("One or more staged parts are missing on disk for this session.");
+            throw ApiException.Conflict("upload_parts_missing", "One or more staged parts are missing for this session. Reload the page and start the upload again.");
 
         // Magic-byte validation: read the first part's header and verify the
         // declared extension matches the actual content. Cheap — first chunk
@@ -178,8 +179,9 @@ public sealed class ChunkedUploadService(
                 storage.DeletePrefix(sessionPrefix);
                 session.State = AdminUploadState.Aborted;
                 await db.SaveChangesAsync(ct);
-                throw new InvalidOperationException(
-                    $"Upload rejected by content validator: {result.Reason}");
+                throw ApiException.Validation(
+                    "upload_rejected_content",
+                    $"Upload rejected: {result.Reason}");
             }
         }
 
@@ -233,7 +235,7 @@ public sealed class ChunkedUploadService(
                 storage.DeletePrefix(sessionPrefix);
                 session.State = AdminUploadState.Aborted;
                 await db.SaveChangesAsync(ct);
-                throw new InvalidOperationException($"Upload quarantined by scanner: {reason}");
+                throw ApiException.Validation("upload_quarantined", $"Upload quarantined by scanner: {reason}");
             }
         }
 
@@ -311,7 +313,9 @@ public sealed class ChunkedUploadService(
             total += read;
             if (total > maxBytes)
             {
-                throw new InvalidOperationException($"Upload part exceeds the remaining allowed size of {maxBytes} bytes.");
+                throw ApiException.Validation(
+                    "upload_part_too_large",
+                    $"This upload part exceeds the {maxBytes / (1024 * 1024)} MB chunk limit. Reload the page so the latest uploader can split the file into chunks, then try again.");
             }
 
             await destination.WriteAsync(buffer.AsMemory(0, read), ct);
