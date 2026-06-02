@@ -259,6 +259,63 @@ function readCsrfCookie(): string | null {
   return m ? decodeURIComponent(m[1]) : null;
 }
 
+// ── Error surfacing ───────────────────────────────────────────────────────
+// The .NET API emits problem payloads shaped like
+//   { code, message, fieldErrors[], retryable, supportHint, correlationId }
+// (see Program.cs UseExceptionHandler), and the same-origin /api/backend proxy
+// relays the body unchanged. A few older endpoints use ASP.NET ProblemDetails
+// ({ title, detail }). We lift the backend's own prose into Error.message so
+// the upload UI shows a real reason (e.g. "Upload rejected: Unrecognised file
+// format.") instead of a bare "HTTP 400", and we keep the structured fields on
+// the error for programmatic callers (status / code / retryable).
+interface ApiErrorPayload {
+  code?: string;
+  message?: string;
+  retryable?: boolean;
+  supportHint?: string | null;
+  correlationId?: string;
+  fieldErrors?: Array<{ field?: string; code?: string; message?: string }>;
+  title?: string; // ProblemDetails fallback
+  detail?: string; // ProblemDetails fallback
+}
+
+export interface ApiError extends Error {
+  status?: number;
+  code?: string;
+  retryable?: boolean;
+  correlationId?: string;
+  detail?: unknown;
+}
+
+async function toApiError(res: Response, fallbackPrefix?: string): Promise<ApiError> {
+  let payload: ApiErrorPayload | null = null;
+  try {
+    payload = (await res.json()) as ApiErrorPayload;
+  } catch {
+    /* non-JSON or empty body — fall back to the status line */
+  }
+
+  const prose = [payload?.message, payload?.title, payload?.detail]
+    .map((s) => (typeof s === 'string' ? s.trim() : ''))
+    .find((s) => s.length > 0);
+  const code = typeof payload?.code === 'string' ? payload.code : undefined;
+
+  const base = prose || `HTTP ${res.status}`;
+  // Append the machine code only when it adds signal the prose doesn't carry.
+  const withCode = code && !base.toLowerCase().includes(code.toLowerCase())
+    ? `${base} (${code})`
+    : base;
+  const message = fallbackPrefix ? `${fallbackPrefix} ${withCode}` : withCode;
+
+  const err = new Error(message) as ApiError;
+  err.status = res.status;
+  err.code = code;
+  err.retryable = typeof payload?.retryable === 'boolean' ? payload.retryable : undefined;
+  err.correlationId = typeof payload?.correlationId === 'string' ? payload.correlationId : undefined;
+  err.detail = payload;
+  return err;
+}
+
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const token = await ensureFreshAccessToken();
   const headers = new Headers(init?.headers);
@@ -278,12 +335,7 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
     credentials: init?.credentials ?? 'include',
   });
   if (!res.ok) {
-    let detail: unknown = null;
-    try { detail = await res.json(); } catch { /* ignore */ }
-    const err = new Error(`HTTP ${res.status}`) as Error & { status?: number; detail?: unknown };
-    err.status = res.status;
-    err.detail = detail;
-    throw err;
+    throw await toApiError(res);
   }
   if (res.status === 204) return undefined as T;
   return res.json() as Promise<T>;
@@ -405,7 +457,7 @@ export async function uploadPart(uploadId: string, partNumber: number, body: Blo
       },
     },
   );
-  if (!res.ok) throw new Error(`Upload part failed: HTTP ${res.status}`);
+  if (!res.ok) throw await toApiError(res, 'Upload part failed:');
 }
 
 export const completeUpload = (uploadId: string) =>

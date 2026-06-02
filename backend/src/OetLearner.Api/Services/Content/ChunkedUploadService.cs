@@ -232,10 +232,33 @@ public sealed class ChunkedUploadService(
             var (clean, reason) = await scanner.ScanAsync(scanStream, session.OriginalFilename, ct);
             if (!clean)
             {
-                storage.DeletePrefix(sessionPrefix);
-                session.State = AdminUploadState.Aborted;
-                await db.SaveChangesAsync(ct);
-                throw ApiException.Validation("upload_quarantined", $"Upload quarantined by scanner: {reason}");
+                // Two very different failures arrive on the same channel:
+                //   • a genuine detection — clamd answered "… FOUND". The file
+                //     is malicious: purge it and reject with 400.
+                //   • a scanner *infrastructure* failure — unreachable, timed
+                //     out, or a misconfigured endpoint/provider, surfaced
+                //     fail-closed by ClamAvUploadScanner with a "scan_"-coded
+                //     reason. That is NOT the uploaded file's fault, so a 400
+                //     that blames the file is wrong (and sent production
+                //     debugging chasing the file instead of the scanner). Keep
+                //     the staged parts so the client can retry the commit once
+                //     the scanner recovers, and return a retryable 503. Still
+                //     fail-closed: an unscanned file is never published.
+                if (IsGenuineDetection(reason))
+                {
+                    logger.LogWarning("Chunked upload {Session} rejected by scanner: {Reason}", session.Id, reason);
+                    storage.DeletePrefix(sessionPrefix);
+                    session.State = AdminUploadState.Aborted;
+                    await db.SaveChangesAsync(ct);
+                    throw ApiException.Validation("upload_quarantined", $"Upload quarantined by scanner: {reason}");
+                }
+
+                logger.LogError(
+                    "Chunked upload {Session} could not be virus-scanned ({Reason}); staged parts retained for retry, returning 503.",
+                    session.Id, reason);
+                throw ApiException.ServiceUnavailable(
+                    "scan_unavailable",
+                    "The upload could not be virus-scanned because the scanner is temporarily unavailable. Please try again in a moment.");
             }
         }
 
@@ -323,6 +346,16 @@ public sealed class ChunkedUploadService(
 
         return total;
     }
+
+    // A clamd INSTREAM detection always ends in "FOUND" (e.g.
+    // "stream: Win.Test.EICAR_HDB-1 FOUND"), and ClamAvUploadScanner only
+    // returns the raw clamd response as the reason in that case. Every other
+    // not-clean reason it produces is a fail-closed infrastructure code
+    // ("scan_unreachable", "scan_timeout", "scan_endpoint_not_allowed",
+    // "scan_provider_not_clamav", "scan_fail_open_forbidden", "scan_error: …").
+    // Only a real detection is the uploaded file's fault.
+    private static bool IsGenuineDetection(string? reason)
+        => reason is not null && reason.Contains("FOUND", StringComparison.Ordinal);
 
     private static string ClassifyKind(string mime, string ext)
     {

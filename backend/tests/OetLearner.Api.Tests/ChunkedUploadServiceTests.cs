@@ -65,7 +65,10 @@ internal sealed class InMemoryFileStorage : IFileStorage
 
 public class ChunkedUploadServiceTests
 {
-    private static (LearnerDbContext db, InMemoryFileStorage storage, ChunkedUploadService svc) Build(ContentUploadOptions? contentUploadOptions = null)
+    private static (LearnerDbContext db, InMemoryFileStorage storage, ChunkedUploadService svc) Build(
+        ContentUploadOptions? contentUploadOptions = null,
+        IUploadScanner? scanner = null,
+        IUploadContentValidator? validator = null)
     {
         var options = new DbContextOptionsBuilder<LearnerDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString("N"))
@@ -74,9 +77,16 @@ public class ChunkedUploadServiceTests
         var storage = new InMemoryFileStorage();
         var opts = Options.Create(new StorageOptions { LocalRootPath = "/tmp", ContentUpload = contentUploadOptions ?? new() });
         var svc = new ChunkedUploadService(db, storage, opts,
-            validator: null, scanner: null,
+            validator, scanner,
             NullLogger<ChunkedUploadService>.Instance);
         return (db, storage, svc);
+    }
+
+    /// <summary>Configurable IUploadScanner for the scan-outcome tests.</summary>
+    private sealed class StubScanner(bool clean, string? reason) : IUploadScanner
+    {
+        public Task<(bool clean, string? reason)> ScanAsync(Stream stream, string filename, CancellationToken ct)
+            => Task.FromResult((clean, reason));
     }
 
     [Fact]
@@ -225,6 +235,76 @@ public class ChunkedUploadServiceTests
 
         var afterOwnerAbort = await db.AdminUploadSessions.SingleAsync(x => x.Id == s.Id);
         Assert.Equal(AdminUploadState.Aborted, afterOwnerAbort.State);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Complete_with_clean_scanner_publishes_the_asset()
+    {
+        var (db, _, svc) = Build(new ContentUploadOptions { ChunkSizeBytes = 1024 },
+            scanner: new StubScanner(clean: true, reason: null));
+        var s = await svc.StartAsync(new ChunkedUploadStart("admin-1", "x.pdf", "application/pdf", 5, "QuestionPaper"), default);
+        await svc.UploadPartAsync("admin-1", s.Id, 1, new MemoryStream(Encoding.ASCII.GetBytes("hello")), default);
+
+        var result = await svc.CompleteAsync("admin-1", s.Id, default);
+
+        Assert.False(result.Deduplicated);
+        Assert.Equal(1, await db.MediaAssets.CountAsync());
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Complete_when_scanner_detects_malware_rejects_with_400_and_purges_staging()
+    {
+        var (db, storage, svc) = Build(new ContentUploadOptions { ChunkSizeBytes = 1024 },
+            scanner: new StubScanner(clean: false, reason: "stream: Win.Test.EICAR_HDB-1 FOUND"));
+        var s = await svc.StartAsync(new ChunkedUploadStart("admin-1", "x.pdf", "application/pdf", 5, "QuestionPaper"), default);
+        await svc.UploadPartAsync("admin-1", s.Id, 1, new MemoryStream(Encoding.ASCII.GetBytes("hello")), default);
+
+        var ex = await Assert.ThrowsAsync<ApiException>(() => svc.CompleteAsync("admin-1", s.Id, default));
+
+        // A real detection IS the file's fault: reject 400 and purge everything.
+        Assert.Equal(400, ex.StatusCode);
+        Assert.Equal("upload_quarantined", ex.ErrorCode);
+        var session = await db.AdminUploadSessions.SingleAsync();
+        Assert.Equal(AdminUploadState.Aborted, session.State);
+        Assert.Null(session.MediaAssetId);
+        Assert.False(storage.AnyKeyStartsWith($"uploads/staging/admin-1/{s.Id}"));
+        Assert.Equal(0, await db.MediaAssets.CountAsync());
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Complete_when_scanner_unavailable_returns_retryable_503_and_preserves_parts_for_retry()
+    {
+        var uploadOpts = new ContentUploadOptions { ChunkSizeBytes = 1024 };
+        var (db, storage, svc) = Build(uploadOpts,
+            scanner: new StubScanner(clean: false, reason: "scan_unreachable"));
+        var s = await svc.StartAsync(new ChunkedUploadStart("admin-1", "x.pdf", "application/pdf", 5, "QuestionPaper"), default);
+        await svc.UploadPartAsync("admin-1", s.Id, 1, new MemoryStream(Encoding.ASCII.GetBytes("hello")), default);
+
+        var ex = await Assert.ThrowsAsync<ApiException>(() => svc.CompleteAsync("admin-1", s.Id, default));
+
+        // A scanner outage is NOT the file's fault: retryable 503, session left
+        // open with no media asset, and the staged part preserved.
+        Assert.Equal(503, ex.StatusCode);
+        Assert.Equal("scan_unavailable", ex.ErrorCode);
+        Assert.True(ex.Retryable);
+        var session = await db.AdminUploadSessions.SingleAsync();
+        Assert.NotEqual(AdminUploadState.Aborted, session.State);
+        Assert.Null(session.MediaAssetId);
+        Assert.True(storage.Exists($"uploads/staging/admin-1/{s.Id}/00001.bin"));
+        Assert.Equal(0, await db.MediaAssets.CountAsync());
+
+        // Once the scanner recovers, retrying the commit publishes the asset
+        // from the preserved parts — proving they were not discarded.
+        var recovered = new ChunkedUploadService(db, storage,
+            Options.Create(new StorageOptions { LocalRootPath = "/tmp", ContentUpload = uploadOpts }),
+            validator: null, scanner: new StubScanner(clean: true, reason: null),
+            NullLogger<ChunkedUploadService>.Instance);
+        var result = await recovered.CompleteAsync("admin-1", s.Id, default);
+        Assert.False(result.Deduplicated);
+        Assert.Equal(1, await db.MediaAssets.CountAsync());
         await db.DisposeAsync();
     }
 }
