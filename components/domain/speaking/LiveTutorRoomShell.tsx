@@ -47,10 +47,10 @@ export function LiveTutorRoomShell({
 
   useEffect(() => {
     let cancelled = false;
-    // webpackIgnore: keep the optional dep out of the bundle graph.
+    // turbopackIgnore: keep the optional dep out of the bundle graph.
     // See LearnerLiveRoomShell for the full rationale; .catch() renders
     // the placeholder when the dep isn't installed at runtime.
-    import(/* webpackIgnore: true */ '@livekit/components-react')
+    import(/* turbopackIgnore: true */ '@livekit/components-react')
       .then((mod) => {
         if (!cancelled) setLivekit(mod as LiveKitModule);
       })

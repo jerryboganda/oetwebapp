@@ -29,7 +29,7 @@
 ## Frontend
 - `NEXT_PUBLIC_API_BASE_URL` must match backend port (5198 in dev, NOT 8080/5062).
 - `.env.local` may have stale port references — backend is definitively 5198 (http profile).
-- Turbopack: `npx next dev --turbopack` (faster than webpack mode).
+- Turbopack is the default bundler for both `next dev` and `next build`. No `--webpack` flag or webpack config exists in this repo.
 
 ## Test Imports
 - Vitest globals (`describe`, `it`, `expect`, `vi`) are auto-available — no imports needed.

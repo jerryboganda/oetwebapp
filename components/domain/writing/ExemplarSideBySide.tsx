@@ -27,11 +27,7 @@ type DiffChunk = [DiffOp, string];
  */
 async function tryWordDiff(left: string, right: string): Promise<DiffChunk[] | null> {
   try {
-    // Dynamic import expressed as a string so this file type-checks even
-    // before `diff-match-patch` is installed (it's listed in package.json
-    // — install will resolve it; this string-arg `import()` is opaque to
-    // TS' module resolution).
-    const mod: unknown = await import(/* webpackIgnore: true */ 'diff-match-patch' as string);
+    const mod: unknown = await import('diff-match-patch');
     const modObj = mod as { diff_match_patch?: new () => unknown; default?: { diff_match_patch?: new () => unknown } };
     const Ctor = modObj.diff_match_patch ?? modObj.default?.diff_match_patch;
     if (!Ctor) return null;

@@ -51,13 +51,12 @@ export function LearnerLiveRoomShell({
 
   useEffect(() => {
     let cancelled = false;
-    // Dynamic import — keeps the dep optional during the migration.
-    // TODO(P3-infra): replace with a top-level static import once the
-    // package is installed. The webpackIgnore magic comment prevents
-    // the bundler from trying to resolve the (currently uninstalled)
-    // module at build time; the runtime import will fail and the
-    // .catch() below renders LiveRoomPlaceholder via setUnavailable(true).
-    import(/* webpackIgnore: true */ '@livekit/components-react')
+    // Dynamic import — keeps the dep optional until @livekit/components-react
+    // is installed. turbopackIgnore prevents the bundler resolving the absent
+    // module at build time; the runtime import rejects and .catch() renders
+    // LiveRoomPlaceholder via setUnavailable(true).
+    // TODO(P3-infra): replace with a top-level static import once installed.
+    import(/* turbopackIgnore: true */ '@livekit/components-react')
       .then((mod) => {
         if (!cancelled) setLivekit(mod as LiveKitModule);
       })

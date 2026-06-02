@@ -177,22 +177,13 @@ export function WritingEditorV2({
     e.preventDefault();
   }, []);
 
-  // Dynamic Tiptap import (client-only). Cast to `string` so TypeScript
-  // doesn't try to resolve the module at compile time — `@tiptap/react`
-  // and `@tiptap/starter-kit` are listed in package.json and will resolve
-  // once `pnpm install` runs.
   useEffect(() => {
     let cancelled = false;
     void (async () => {
       try {
-        // The annotations extension is a regular module in this repo (no
-        // `webpackIgnore`) so the bundler resolves it normally. The tiptap
-        // peer modules are dynamically imported with `webpackIgnore` so the
-        // editor remains optional — if `@tiptap/*` is not installed we stay
-        // on the textarea fallback.
         const [react, starterKitImport, annotationsImport] = await Promise.all([
-          import(/* webpackIgnore: true */ '@tiptap/react' as string) as Promise<TiptapModule>,
-          import(/* webpackIgnore: true */ '@tiptap/starter-kit' as string) as Promise<StarterKitModule>,
+          import('@tiptap/react') as Promise<TiptapModule>,
+          import('@tiptap/starter-kit') as Promise<StarterKitModule>,
           import('./tiptap-annotations') as Promise<AnnotationsModule>,
         ]);
         if (cancelled) return;

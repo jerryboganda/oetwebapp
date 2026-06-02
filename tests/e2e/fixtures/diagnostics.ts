@@ -294,7 +294,6 @@ function shouldIgnorePageError(text: string, options: DiagnosticExpectationOptio
       text.includes('/__nextjs_original-stack-frames')
       || text.includes('/?_rsc=')
       || text.includes('?_rsc=')
-      || text.includes('/_next/static/webpack/')
     )
   ) {
     return true;

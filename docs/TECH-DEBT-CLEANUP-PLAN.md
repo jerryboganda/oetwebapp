@@ -11,7 +11,7 @@ _Generated: April 2026 — scoped to the OET Prep monorepo (`app/`, `backend/`, 
 | **1b — Sentry 8 → 10** | FE + BE SDK bump | ✅ **Executed** (`@sentry/nextjs` at ^10.50.0) |
 | **1c — Secure-storage plugin swap** | `capacitor-secure-storage-plugin` → `@aparajita/capacitor-secure-storage` | ✅ **Executed** (`@aparajita/capacitor-secure-storage` ^6.0.0) |
 | **2 — Capacitor 6 → 7** | `@capacitor/*` + `cap sync` regen | ✅ **Executed** (all `@capacitor/*` at ^7.0.0) |
-| **3 — Next 15 → 16** | codemod, config, PPR opt-in | ✅ **Executed** (`next` ^16.2.6, Turbopack default for dev, --webpack for builds) |
+| **3 — Next 15 → 16** | codemod, config, PPR opt-in | ✅ **Executed** (`next` ^16.2.6, Turbopack for dev **and** prod builds; webpack removed) |
 | **4 — React 19 effect cleanup** | last `exhaustive-deps` disable → `useEffectEvent` | ✅ **Executed** (commit `d6f5b75`, April 2026) |
 | **5a — Dev-dep refresh** | `@types/node` 20 → 22 | ✅ **Executed** |
 | **5b — Infra consolidation** | compose docs, `react-select` (already at latest 5.10.2 — no v6 exists), remaining minor deps | ✅ **Executed** (DEPLOYMENT.md compose matrix documented) |
@@ -48,7 +48,7 @@ There is **no emergency debt**. The plan below is ordered by risk × leverage, n
 
 | Package | Current | Latest (Apr 2026) | Severity | Notes |
 |---|---|---|---|---|
-| `next` | `^16.2.6` | 16.x | **OK** | ✅ Upgraded from 15.5.15. Turbopack default for dev, `--webpack` for production builds (custom webpack plugin requires it). `eslint-config-next` aligned at `16.2.6`. |
+| `next` | `^16.2.6` | 16.x | **OK** | ✅ Upgraded from 15.5.15. Turbopack for dev and production builds; `--webpack` and the custom webpack hook removed. `eslint-config-next` aligned at `16.2.6`. |
 | `@capacitor/*` (7.x) | `^7.0.0` | 8.x | **Medium** | ✅ Upgraded from 6.x. Capacitor 8 is available but requires native project regeneration + mobile E2E. |
 | `@sentry/nextjs` | `^10.50.0` | 10.x | **OK** | ✅ Upgraded from 8.x. PII scrubbing verified. |
 | `@aparajita/capacitor-secure-storage` | `^6.0.0` | 8.x | Low | ✅ Swapped from abandoned community plugin. Latest 8.0.0 available for future bump. |

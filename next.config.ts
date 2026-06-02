@@ -1,6 +1,4 @@
 import type {NextConfig} from 'next';
-import { copyFileSync, existsSync, readdirSync } from 'node:fs';
-import { join } from 'node:path';
 import createNextIntlPlugin from 'next-intl/plugin';
 
 // Wraps the Next config so server components can call `useTranslations` / `getTranslations`.
@@ -87,45 +85,6 @@ const nextConfig: NextConfig = {
     ];
   },
   serverExternalPackages: ['wavesurfer.js'],
-  webpack: (config, {dev, isServer}) => {
-    config.ignoreWarnings = [
-      ...(config.ignoreWarnings ?? []),
-      {
-        module:
-          /node_modules[\\/]@prisma[\\/]instrumentation[\\/]node_modules[\\/]@opentelemetry[\\/]instrumentation[\\/]/,
-        message: /Critical dependency: the request of a dependency is an expression/,
-      },
-    ];
-
-    if (!dev && isServer) {
-      config.plugins ??= [];
-      config.plugins.push({
-        apply(compiler: { hooks: { afterEmit: { tap: (name: string, callback: (compilation: { outputOptions: { path?: string } }) => void) => void } } }) {
-          compiler.hooks.afterEmit.tap('MirrorNextServerChunks', (compilation) => {
-            const outputPath = compilation.outputOptions.path;
-            if (!outputPath) return;
-            const chunksPath = join(outputPath, 'chunks');
-            if (!existsSync(chunksPath)) return;
-
-            for (const fileName of readdirSync(chunksPath)) {
-              if (fileName.endsWith('.js')) {
-                copyFileSync(join(chunksPath, fileName), join(outputPath, fileName));
-              }
-            }
-          });
-        },
-      });
-    }
-
-    // HMR is disabled in AI Studio via DISABLE_HMR env var.
-    // Do not modify — file watching is disabled to prevent flickering during agent edits.
-    if (dev && process.env.DISABLE_HMR === 'true') {
-      config.watchOptions = {
-        ignored: /.*/,
-      };
-    }
-    return config;
-  },
 };
 
 export default withNextIntl(nextConfig);

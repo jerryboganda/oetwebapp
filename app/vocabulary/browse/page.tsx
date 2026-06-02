@@ -30,10 +30,7 @@ async function cacheVocabularyToIndexedDb(terms: unknown[]) {
   if (typeof window === 'undefined') return;
   if (typeof indexedDB === 'undefined') return;
   try {
-    const mod: typeof import('@/lib/mobile/offline-sync') = await import(
-      /* webpackChunkName: "vocab-offline-cache" */
-      '@/lib/mobile/offline-sync'
-    );
+    const mod: typeof import('@/lib/mobile/offline-sync') = await import('@/lib/mobile/offline-sync');
     await mod.cacheVocabularyTerms(terms);
   } catch {/* offline cache is best-effort */}
 }

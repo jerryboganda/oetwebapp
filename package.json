@@ -9,7 +9,7 @@
   "scripts": {
     "dev": "next dev",
     "mobile:dev": "next dev -H 0.0.0.0 -p 3000",
-    "build": "next build --webpack",
+    "build": "next build",
     "start": "next start",
     "mobile:build": "pnpm run build && cap sync",
     "mobile:sync": "cap sync",
