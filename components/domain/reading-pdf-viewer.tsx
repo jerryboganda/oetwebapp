@@ -130,6 +130,7 @@ export function ReadingPdfViewer({
     const src = pdfSrc;
     let cancelled = false;
     async function loadDocument() {
+      if (!asset) return;
       setLoading(true);
       setError(null);
       try {

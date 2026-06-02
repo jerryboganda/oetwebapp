@@ -3499,7 +3499,9 @@ public class ReadingAuthoringTests
 
         var run = await attemptSvc.StartInModeAsync(
             userId, paperId, ReadingAttemptMode.Drill, scopeJson, default);
-        await attemptSvc.SaveAnswerAsync(userId, run.AttemptId, scopedQuestions[0].Id, scopedQuestions[0].CorrectAnswerJson, default);
+        // Submit a non-secret answer so the user's submitted answer doesn't
+        // accidentally echo the secret sentinel into the reviewPayload.
+        await attemptSvc.SaveAnswerAsync(userId, run.AttemptId, scopedQuestions[0].Id, "\"user-submitted-answer\"", default);
         var submitResult = await attemptSvc.SubmitAsync(userId, run.AttemptId, default);
         Assert.Null(submitResult.ScaledScore);
 

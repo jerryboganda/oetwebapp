@@ -584,26 +584,28 @@ public static class ReadingLearnerEndpoints
                         var isCorrect = answer?.IsCorrect ?? false;
                         var includeExplanation = showExplanations
                             && (!explanationsOnlyIfWrong || !isCorrect);
-                        return new ReadingReviewItem(
-                            QuestionId: q.Id,
-                            PartCode: part.PartCode.ToString(),
-                            DisplayOrder: q.DisplayOrder,
-                            QuestionType: q.QuestionType.ToString(),
-                            Stem: q.Stem,
-                            SkillTag: q.SkillTag,
-                            UserAnswer: SafeParseJson(answer?.UserAnswerJson),
-                            IsCorrect: isCorrect,
-                            PointsEarned: answer?.PointsEarned ?? 0,
-                            MaxPoints: q.Points,
-                            CorrectAnswer: showCorrectAnswer ? DecodeCorrectAnswer(q.CorrectAnswerJson) : null,
-                            ExplanationMarkdown: includeExplanation ? q.ExplanationMarkdown : null,
-                            SelectedDistractorCategory: answer?.SelectedDistractorCategory?.ToString(),
-                            MissReason: answer?.MissReason,
-                            ElapsedMs: answer?.ElapsedMs,
-                            TotalElapsedMs: answer?.TotalElapsedMs,
-                            BoxExplanations: includeExplanation && q.QuestionType == ReadingQuestionType.ShortAnswerLabeled
+                        return new ReadingReviewItem
+                        {
+                            QuestionId = q.Id,
+                            PartCode = part.PartCode.ToString(),
+                            DisplayOrder = q.DisplayOrder,
+                            QuestionType = q.QuestionType.ToString(),
+                            Stem = q.Stem,
+                            SkillTag = q.SkillTag,
+                            UserAnswer = SafeParseJson(answer?.UserAnswerJson),
+                            IsCorrect = isCorrect,
+                            PointsEarned = answer?.PointsEarned ?? 0,
+                            MaxPoints = q.Points,
+                            CorrectAnswer = showCorrectAnswer ? DecodeCorrectAnswer(q.CorrectAnswerJson) : null,
+                            ExplanationMarkdown = includeExplanation ? q.ExplanationMarkdown : null,
+                            SelectedDistractorCategory = answer?.SelectedDistractorCategory?.ToString(),
+                            MissReason = answer?.MissReason,
+                            ElapsedMs = answer?.ElapsedMs,
+                            TotalElapsedMs = answer?.TotalElapsedMs,
+                            BoxExplanations = includeExplanation && q.QuestionType == ReadingQuestionType.ShortAnswerLabeled
                                 ? ParseBoxExplanations(q.BoxExplanationsJson)
-                                : null);
+                                : null,
+                        };
                     }))
                 .ToList();
 
@@ -1580,33 +1582,35 @@ public static class ReadingLearnerEndpoints
         string Kind,
         JsonElement GeometryJson);
 
-    private sealed record ReadingReviewItem(
-        string QuestionId,
-        string PartCode,
-        int DisplayOrder,
-        string QuestionType,
-        string Stem,
-        string? SkillTag,
-        object? UserAnswer,
-        bool IsCorrect,
-        int PointsEarned,
-        int MaxPoints,
+    private sealed class ReadingReviewItem
+    {
+        public string QuestionId { get; init; } = default!;
+        public string PartCode { get; init; } = default!;
+        public int DisplayOrder { get; init; }
+        public string QuestionType { get; init; } = default!;
+        public string Stem { get; init; } = default!;
+        public string? SkillTag { get; init; }
+        public object? UserAnswer { get; init; }
+        public bool IsCorrect { get; init; }
+        public int PointsEarned { get; init; }
+        public int MaxPoints { get; init; }
         // Wave 1 — post-submit review fields. CorrectAnswer / ExplanationMarkdown
-        // are policy-gated AND only ever populated when the attempt is
-        // Submitted (enforced at the projection site, never here).
-        // JsonIgnore(WhenWritingNull) ensures these properties are ABSENT from
-        // the JSON (not just null) when the policy forbids disclosure — the
-        // drill-review test asserts DoesNotContain("\"correctAnswer\"", ...).
-        [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
-        string? CorrectAnswer = null,
-        [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
-        string? ExplanationMarkdown = null,
-        string? SelectedDistractorCategory = null,
-        string? MissReason = null,
-        int? ElapsedMs = null,
-        int? TotalElapsedMs = null,
-        [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
-        object? BoxExplanations = null);
+        // are policy-gated AND only ever populated when the attempt is Submitted
+        // (enforced at the projection site). JsonIgnore(WhenWritingNull) ensures
+        // these properties are COMPLETELY ABSENT from the JSON (not just null)
+        // when the policy forbids disclosure — the drill-review test asserts
+        // DoesNotContain("\"correctAnswer\"", ...).
+        [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+        public string? CorrectAnswer { get; init; }
+        [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+        public string? ExplanationMarkdown { get; init; }
+        public string? SelectedDistractorCategory { get; init; }
+        public string? MissReason { get; init; }
+        public int? ElapsedMs { get; init; }
+        public int? TotalElapsedMs { get; init; }
+        [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+        public object? BoxExplanations { get; init; }
+    }
 
 }
 
