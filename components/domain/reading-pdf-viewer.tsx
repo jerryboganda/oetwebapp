@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import type { ReadingPaperAnnotationDto, ReadingPaperAnnotationKind } from '@/lib/reading-authoring-api';
+import { fetchAuthorizedObjectUrl } from '@/lib/api';
 
 type Tool = 'select' | 'Text' | 'Rectangle' | 'Freehand';
 
@@ -60,6 +61,7 @@ export function ReadingPdfViewer({
   const [tool, setTool] = useState<Tool>('select');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [pages, setPages] = useState<PdfPage[]>([]);
+  const [pdfSrc, setPdfSrc] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
@@ -75,19 +77,55 @@ export function ReadingPdfViewer({
     [annotations, asset],
   );
 
+  // Reading media is served by the authenticated /v1/media/{id}/content endpoint
+  // (Bearer token, behind the same-origin /api/backend proxy). pdf.js cannot
+  // attach the auth header to a bare-URL fetch, and a root-relative downloadPath
+  // resolves against the web origin — which has no such route (→ 307 to sign-in
+  // when signed-out, or a 404 when signed-in). So fetch the bytes authenticated
+  // and hand pdf.js a local blob URL instead.
   useEffect(() => {
+    if (!asset) {
+      setPdfSrc(null);
+      return;
+    }
+    let cancelled = false;
+    let objectUrl: string | null = null;
+    setError(null);
+    setPdfSrc(null);
+    (async () => {
+      try {
+        const url = await fetchAuthorizedObjectUrl(asset.downloadPath);
+        objectUrl = url;
+        if (cancelled) {
+          URL.revokeObjectURL(url);
+          return;
+        }
+        setPdfSrc(url);
+      } catch (err) {
+        if (!cancelled) setError(err instanceof Error ? err.message : 'PDF could not be loaded.');
+      }
+    })();
+    return () => {
+      cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [asset]);
+
+  useEffect(() => {
+    if (!asset) {
+      setPages([]);
+      return;
+    }
+    if (!pdfSrc) return;
+    const src = pdfSrc;
     let cancelled = false;
     async function loadPdf() {
-      if (!asset) {
-        setPages([]);
-        return;
-      }
       setLoading(true);
       setError(null);
       try {
         const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
         pdfjs.GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/legacy/build/pdf.worker.mjs', import.meta.url).toString();
-        const pdf = await pdfjs.getDocument({ url: asset.downloadPath, withCredentials: true }).promise;
+        const pdf = await pdfjs.getDocument({ url: src }).promise;
         const nextPages: PdfPage[] = [];
         for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
           const page = await pdf.getPage(pageNumber);
@@ -103,15 +141,15 @@ export function ReadingPdfViewer({
     }
     void loadPdf();
     return () => { cancelled = true; };
-  }, [asset]);
+  }, [asset, pdfSrc]);
 
   useEffect(() => {
     let cancelled = false;
     async function renderPages() {
-      if (!asset || pages.length === 0) return;
+      if (!asset || !pdfSrc || pages.length === 0) return;
       const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
       pdfjs.GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/legacy/build/pdf.worker.mjs', import.meta.url).toString();
-      const pdf = await pdfjs.getDocument({ url: asset.downloadPath, withCredentials: true }).promise;
+      const pdf = await pdfjs.getDocument({ url: pdfSrc }).promise;
       for (const info of pages) {
         if (cancelled) return;
         const canvas = canvases.current.get(info.pageNumber);
