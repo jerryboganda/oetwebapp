@@ -28,6 +28,19 @@ public enum ReadingPartCode
     C = 3,
 }
 
+[JsonConverter(typeof(JsonStringEnumConverter))]
+public enum ReadingSectionCode
+{
+    B1 = 1,
+    B2 = 2,
+    B3 = 3,
+    B4 = 4,
+    B5 = 5,
+    B6 = 6,
+    C1 = 7,
+    C2 = 8,
+}
+
 /// <summary>
 /// Question-type vocabulary. Changing an existing integer value is a
 /// migration-breaking change (values persist in the DB).
@@ -45,6 +58,12 @@ public enum ReadingQuestionType
     MultipleChoice3 = 3,
     /// <summary>Part C: 4-option multiple choice.</summary>
     MultipleChoice4 = 4,
+    /// <summary>Part C: fill-in-the-blank style short answer.</summary>
+    FillInBlank = 5,
+    /// <summary>Part C: one question with multiple labeled short-answer boxes.</summary>
+    ShortAnswerLabeled = 6,
+    /// <summary>Part C: multiple choice with a configurable number of options.</summary>
+    MultipleChoiceFlexible = 7,
 }
 
 /// <summary>
@@ -194,7 +213,45 @@ public class ReadingPart
     /// integrity (no orphaned ReadingPart rows after paper deletion).</summary>
     public ContentPaper? Paper { get; set; }
 
+    public ICollection<ReadingSection> Sections { get; set; } = new List<ReadingSection>();
     public ICollection<ReadingText> Texts { get; set; } = new List<ReadingText>();
+    public ICollection<ReadingQuestion> Questions { get; set; } = new List<ReadingQuestion>();
+}
+
+/// <summary>
+/// Reading sub-section within a canonical part. Parts B and C are split into
+/// section tabs (B1-B6, C1-C2) so each subsection can own its own PDF/image
+/// attachment and question cluster.
+/// </summary>
+[Index(nameof(ReadingPartId), nameof(SectionCode), IsUnique = true,
+    Name = "UX_ReadingSection_Part_SectionCode")]
+public class ReadingSection
+{
+    [Key]
+    [MaxLength(64)]
+    public string Id { get; set; } = default!;
+
+    [MaxLength(64)]
+    public string ReadingPartId { get; set; } = default!;
+
+    public ReadingSectionCode SectionCode { get; set; }
+
+    public int DisplayOrder { get; set; }
+
+    /// <summary>Max raw score for the section snapshot. For the Reading
+    /// exam this is typically 1 for B1-B6 and 8 for C1/C2, but the entity
+    /// stores the authoritative authoring value so validation can compare
+    /// the actual question points to the intended shape.</summary>
+    public int MaxRawScore { get; set; }
+
+    [MaxLength(64)]
+    public string? ContentPaperAssetId { get; set; }
+
+    public DateTimeOffset CreatedAt { get; set; }
+    public DateTimeOffset UpdatedAt { get; set; }
+
+    public ReadingPart? Part { get; set; }
+    public ContentPaperAsset? ContentPaperAsset { get; set; }
     public ICollection<ReadingQuestion> Questions { get; set; } = new List<ReadingQuestion>();
 }
 
@@ -262,6 +319,11 @@ public class ReadingQuestion
 
     [MaxLength(64)]
     public string ReadingPartId { get; set; } = default!;
+
+    /// <summary>Optional subsection. B/C questions are grouped into one of
+    /// the section tabs (B1-B6, C1-C2). Part A questions remain sectionless.</summary>
+    [MaxLength(64)]
+    public string? ReadingSectionId { get; set; }
 
     /// <summary>Optional — Part A matching items may span all texts.</summary>
     [MaxLength(64)]
@@ -340,6 +402,14 @@ public class ReadingQuestion
     [MaxLength(2048)]
     public string? OptionDistractorsJson { get; set; }
 
+    /// <summary>Per-box explanation map for <see cref="ReadingQuestionType.ShortAnswerLabeled"/>
+    /// questions. Shape: <c>{"box1":"...", "box2":"..."}</c>. Shown to learners
+    /// post-submit under the same policy gate as <see cref="ExplanationMarkdown"/>.
+    /// Authoring-only; NEVER serialised to learner DTOs mid-attempt. Null when
+    /// no per-box explanations have been authored. Capped at 4096 chars.</summary>
+    [MaxLength(4096)]
+    public string? BoxExplanationsJson { get; set; }
+
     /// <summary>Phase 4 — per-question authoring lifecycle. New questions
     /// default to <see cref="ReadingReviewState.Draft"/>; the publish gate
     /// requires every question on the paper to be
@@ -355,6 +425,7 @@ public class ReadingQuestion
     public DateTimeOffset UpdatedAt { get; set; }
 
     public ReadingPart? Part { get; set; }
+    public ReadingSection? Section { get; set; }
     public ReadingText? Text { get; set; }
 }
 
@@ -635,7 +706,7 @@ public class ReadingPolicy
 
     // §3 — Grading strategy
     public string EnabledQuestionTypesJson { get; set; } =
-        "[\"MatchingTextReference\",\"ShortAnswer\",\"SentenceCompletion\",\"MultipleChoice3\",\"MultipleChoice4\"]";
+        "[\"MatchingTextReference\",\"ShortAnswer\",\"SentenceCompletion\",\"MultipleChoice3\",\"MultipleChoice4\",\"FillInBlank\",\"ShortAnswerLabeled\",\"MultipleChoiceFlexible\"]";
     [MaxLength(32)]
     public string ShortAnswerNormalisation { get; set; } = "trim_only";
     /// <summary>

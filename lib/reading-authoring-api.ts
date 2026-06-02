@@ -14,12 +14,17 @@ import { fetchWithTimeout } from './network/fetch-with-timeout';
 
 export type ReadingPartCode = 'A' | 'B' | 'C';
 
+export type ReadingSectionCode = 'B1' | 'B2' | 'B3' | 'B4' | 'B5' | 'B6' | 'C1' | 'C2';
+
 export type ReadingQuestionType =
   | 'MatchingTextReference'
   | 'ShortAnswer'
   | 'SentenceCompletion'
   | 'MultipleChoice3'
-  | 'MultipleChoice4';
+  | 'MultipleChoice4'
+  | 'FillInBlank'
+  | 'ShortAnswerLabeled'
+  | 'MultipleChoiceFlexible';
 
 export type ReadingReviewState =
   | 'Draft'
@@ -55,6 +60,7 @@ export interface ReadingTextDto {
 export interface ReadingQuestionAdminDto {
   id: string;
   readingPartId: string;
+  readingSectionId: string | null;
   readingTextId: string | null;
   displayOrder: number;
   points: number;
@@ -77,6 +83,8 @@ export interface ReadingQuestionAdminDto {
   paragraphIndex?: number | null;
   /** Per-option rationale map, serialised as JSON on the entity. */
   distractorRationaleJson?: string | null;
+  /** Per-box explanation map for ShortAnswerLabeled; null for all other types. */
+  boxExplanationsJson?: string | null;
 }
 
 export interface ReadingReviewLogEntryDto {
@@ -98,12 +106,31 @@ export interface ReadingReviewTransitionResultDto {
 
 export interface ReadingQuestionLearnerDto {
   id: string;
+  readingSectionId: string | null;
   readingTextId: string | null;
   displayOrder: number;
   points: number;
   questionType: ReadingQuestionType;
   stem: string;
   options: unknown; // already-parsed JSON from the backend
+}
+
+export interface ReadingSectionAdminDto {
+  id: string;
+  sectionCode: ReadingSectionCode;
+  displayOrder: number;
+  maxRawScore: number;
+  contentPaperAssetId: string | null;
+  questions: ReadingQuestionAdminDto[];
+}
+
+export interface ReadingSectionLearnerDto {
+  id: string;
+  sectionCode: ReadingSectionCode;
+  displayOrder: number;
+  maxRawScore: number;
+  contentPaperAssetId: string | null;
+  questions: ReadingQuestionLearnerDto[];
 }
 
 export interface ReadingPartAdminDto {
@@ -114,6 +141,7 @@ export interface ReadingPartAdminDto {
   instructions: string | null;
   texts: ReadingTextDto[];
   questions: ReadingQuestionAdminDto[];
+  sections?: ReadingSectionAdminDto[];
 }
 
 export interface ReadingStructureAdminDto {
@@ -412,6 +440,7 @@ export interface ReadingLearnerStructureDto {
       bodyHtml: string; wordCount: number; topicTag: string | null;
     }>;
     questions: ReadingQuestionLearnerDto[];
+    sections?: ReadingSectionLearnerDto[];
   }>;
 }
 
@@ -817,6 +846,7 @@ export const removeReadingText = (paperId: string, textId: string) =>
 
 export const upsertReadingQuestion = (paperId: string, body: {
   id?: string | null; readingPartId: string; readingTextId?: string | null;
+  readingSectionId?: string | null;
   displayOrder: number; points: number;
   questionType: ReadingQuestionType;
   stem: string; optionsJson: string; correctAnswerJson: string;
@@ -828,6 +858,8 @@ export const upsertReadingQuestion = (paperId: string, body: {
   /** Per-option rationale map; serialised to the `distractorRationaleJson`
    *  string column the backend stores. */
   distractorRationale?: Record<string, string> | null;
+  /** Per-box explanation map for ShortAnswerLabeled; null for all other types. */
+  boxExplanationsJson?: string | null;
 }) => {
   const { distractorRationale, ...rest } = body;
   const payload = {

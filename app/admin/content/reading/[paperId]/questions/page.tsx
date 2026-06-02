@@ -24,11 +24,13 @@ import {
   type ReadingQuestionType,
   type ReadingQuestionAdminDto,
   type ReadingPartAdminDto,
+  type ReadingSectionAdminDto,
   type ReadingTextDto,
   type ReadingReviewState,
   type ReadingDistractorCategory,
 } from '@/lib/reading-authoring-api';
 import { AcceptedVariantManager } from './AcceptedVariantManager';
+import { LabeledBoxesManager, type LabeledBox, serializeLabeledBoxes, parseLabeledBoxes } from './LabeledBoxesManager';
 import { ReadingReviewPanel } from './ReadingReviewPanel';
 import { REVIEW_STATE_LABELS, reviewStateTone } from './review-state';
 import {
@@ -41,8 +43,8 @@ import {
 
 const ALLOWED_TYPES: Record<ReadingPartCode, ReadingQuestionType[]> = {
   A: ['MatchingTextReference', 'ShortAnswer', 'SentenceCompletion'],
-  B: ['MultipleChoice3'],
-  C: ['MultipleChoice4'],
+  B: ['MultipleChoice3', 'MultipleChoice4', 'FillInBlank', 'ShortAnswer', 'SentenceCompletion', 'ShortAnswerLabeled', 'MultipleChoiceFlexible'],
+  C: ['MultipleChoice4', 'FillInBlank', 'ShortAnswer', 'SentenceCompletion', 'ShortAnswerLabeled', 'MultipleChoiceFlexible'],
 };
 
 const TYPE_LABELS: Record<ReadingQuestionType, string> = {
@@ -51,6 +53,9 @@ const TYPE_LABELS: Record<ReadingQuestionType, string> = {
   SentenceCompletion: 'Sentence Completion',
   MultipleChoice3: 'Multiple Choice (3)',
   MultipleChoice4: 'Multiple Choice (4)',
+  FillInBlank: 'Fill in the Blank',
+  ShortAnswerLabeled: 'Short Answer (Labeled)',
+  MultipleChoiceFlexible: 'Multiple Choice (Flexible)',
 };
 
 const DIFFICULTY_OPTIONS: Array<{ value: string; label: string }> = [
@@ -73,6 +78,8 @@ const DISTRACTOR_CATEGORIES: ReadingDistractorCategory[] = [
 ];
 
 const TEXT_REFERENCE_LABELS = ['A', 'B', 'C', 'D'];
+
+const MCQ_LABELS = ['A', 'B', 'C', 'D', 'E', 'F'];
 
 function normaliseMatchingTextAnswer(answer: string, questionType: ReadingQuestionType): string {
   if (questionType !== 'MatchingTextReference') return answer;
@@ -103,6 +110,7 @@ function parseStringMap(json: string | null | undefined): Record<string, string>
 interface QuestionFormState {
   id: string | null;
   readingPartId: string;
+  readingSectionId: string | null;
   readingTextId: string | null;
   displayOrder: number;
   points: number;
@@ -112,6 +120,8 @@ interface QuestionFormState {
   correctAnswer: string;
   acceptedVariants: AcceptedVariant[];
   options: string[];
+  /** Boxes for ShortAnswerLabeled questions. */
+  labeledBoxes: LabeledBox[];
   explanationMarkdown: string;
   skillTag: string;
   difficulty: number | null;
@@ -125,12 +135,13 @@ interface QuestionFormState {
 
 type EditorMode = 'form' | 'json';
 
-function emptyFormState(partId: string, partCode: ReadingPartCode, nextOrder: number): QuestionFormState {
+function emptyFormState(partId: string, partCode: ReadingPartCode, nextOrder: number, sectionId: string | null = null): QuestionFormState {
   const defaultType = ALLOWED_TYPES[partCode][0];
   const optionCount = defaultType === 'MultipleChoice4' ? 4 : defaultType === 'MultipleChoice3' ? 3 : 0;
   return {
     id: null,
     readingPartId: partId,
+    readingSectionId: sectionId,
     readingTextId: null,
     displayOrder: nextOrder,
     points: 1,
@@ -140,6 +151,7 @@ function emptyFormState(partId: string, partCode: ReadingPartCode, nextOrder: nu
     correctAnswer: '',
     acceptedVariants: [],
     options: Array(optionCount).fill(''),
+    labeledBoxes: [],
     explanationMarkdown: '',
     skillTag: '',
     difficulty: null,
@@ -160,7 +172,8 @@ function questionToFormState(q: ReadingQuestionAdminDto): QuestionFormState {
   } catch { /* empty */ }
 
   try {
-    correctAnswer = JSON.parse(q.correctAnswerJson) ?? '';
+    const parsed = JSON.parse(q.correctAnswerJson);
+    correctAnswer = typeof parsed === 'string' ? parsed : q.correctAnswerJson ?? '';
   } catch {
     correctAnswer = q.correctAnswerJson ?? '';
   }
@@ -174,9 +187,14 @@ function questionToFormState(q: ReadingQuestionAdminDto): QuestionFormState {
       : '';
   }
 
+  const labeledBoxes = q.questionType === 'ShortAnswerLabeled'
+    ? parseLabeledBoxes(q.optionsJson, q.correctAnswerJson, q.acceptedSynonymsJson, q.boxExplanationsJson)
+    : [];
+
   return {
     id: q.id,
     readingPartId: q.readingPartId,
+    readingSectionId: q.readingSectionId,
     readingTextId: q.readingTextId,
     displayOrder: q.displayOrder,
     points: q.points,
@@ -186,6 +204,7 @@ function questionToFormState(q: ReadingQuestionAdminDto): QuestionFormState {
     correctAnswer,
     acceptedVariants: parseAcceptedVariants(q.acceptedSynonymsJson),
     options,
+    labeledBoxes,
     explanationMarkdown: q.explanationMarkdown ?? '',
     skillTag: q.skillTag ?? '',
     difficulty: q.difficulty ?? null,
@@ -221,6 +240,7 @@ export default function ReadingQuestionsEditorPage() {
 
   const [parts, setParts] = useState<ReadingPartAdminDto[]>([]);
   const [activeTab, setActiveTab] = useState<ReadingPartCode>('A');
+  const [activeSectionId, setActiveSectionId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<{ variant: 'success' | 'error'; message: string } | null>(null);
@@ -236,6 +256,8 @@ export default function ReadingQuestionsEditorPage() {
   const [reviewing, setReviewing] = useState<ReadingQuestionAdminDto | null>(null);
 
   const activePart = parts.find((p) => p.partCode === activeTab) ?? null;
+  const activeSections: ReadingSectionAdminDto[] = activePart?.sections ?? [];
+  const activeSection = activeSections.find((s) => s.id === activeSectionId) ?? activeSections[0] ?? null;
 
   const fetchData = useCallback(async () => {
     if (!paperId) return;
@@ -271,8 +293,12 @@ export default function ReadingQuestionsEditorPage() {
 
   function startAdd() {
     if (!activePart) return;
-    const nextOrder = activePart.questions.length + 1;
-    const newForm = emptyFormState(activePart.id, activeTab, nextOrder);
+    const currentSectionId = activeSections.length > 0 ? (activeSection?.id ?? null) : null;
+    const questionsInScope = currentSectionId
+      ? (activeSection?.questions.length ?? 0)
+      : activePart.questions.length;
+    const nextOrder = questionsInScope + 1;
+    const newForm = emptyFormState(activePart.id, activeTab, nextOrder, currentSectionId);
     setForm(newForm);
     setJsonText(JSON.stringify(
       {
@@ -311,19 +337,79 @@ export default function ReadingQuestionsEditorPage() {
     setReviewing(q);
   }
 
+  function addOption() {
+    if (!form || form.questionType !== 'MultipleChoiceFlexible' || form.options.length >= 6) return;
+    setForm({ ...form, options: [...form.options, ''] });
+  }
+
+  function removeOption(idx: number) {
+    if (!form || form.questionType !== 'MultipleChoiceFlexible' || form.options.length <= 2) return;
+    const surviving = form.options.filter((_, i) => i !== idx);
+    const newRationale: Record<string, string> = {};
+    const newDistractors: Record<string, import('@/lib/reading-authoring-api').ReadingDistractorCategory | ''> = {};
+    for (let j = 0; j < surviving.length; j++) {
+      const oldKey = MCQ_LABELS[j < idx ? j : j + 1];
+      const newKey = MCQ_LABELS[j];
+      if (form.distractorRationale[oldKey]) newRationale[newKey] = form.distractorRationale[oldKey];
+      if (form.optionDistractors[oldKey]) newDistractors[newKey] = form.optionDistractors[oldKey];
+    }
+    const correctIdx = MCQ_LABELS.indexOf(form.correctAnswer);
+    const correctAfterRemove = correctIdx < 0 || correctIdx === idx
+      ? ''
+      : correctIdx < idx
+        ? form.correctAnswer
+        : MCQ_LABELS[correctIdx - 1];
+    setForm({ ...form, options: surviving, distractorRationale: newRationale, optionDistractors: newDistractors, correctAnswer: correctAfterRemove });
+  }
+
   function handleTypeChange(newType: ReadingQuestionType) {
     if (!form) return;
-    const optionCount = newType === 'MultipleChoice4' ? 4 : newType === 'MultipleChoice3' ? 3 : 0;
+    if (newType === 'ShortAnswerLabeled') {
+      setForm({ ...form, questionType: newType, options: [], correctAnswer: '', labeledBoxes: [] });
+      return;
+    }
+    const optionCount = newType === 'MultipleChoiceFlexible'
+      ? 4
+      : newType === 'MultipleChoice4'
+        ? 4
+        : newType === 'MultipleChoice3'
+          ? 3
+          : 0;
     setForm({
       ...form,
       questionType: newType,
       options: Array(optionCount).fill('').map((_, i) => form.options[i] ?? ''),
       correctAnswer: '',
+      labeledBoxes: [],
     });
   }
 
   function buildPayload(f: QuestionFormState) {
-    const isMultiChoice = f.questionType === 'MultipleChoice3' || f.questionType === 'MultipleChoice4';
+    const base = {
+      id: f.id,
+      readingPartId: f.readingPartId,
+      readingSectionId: f.readingSectionId || null,
+      readingTextId: f.readingTextId || null,
+      displayOrder: f.displayOrder,
+      points: f.points,
+      questionType: f.questionType,
+      stem: f.stem,
+      caseSensitive: f.caseSensitive,
+      explanationMarkdown: f.explanationMarkdown || null,
+      skillTag: f.skillTag || null,
+      difficulty: f.difficulty,
+      evidenceSentence: f.evidenceSentence.trim() || null,
+      paragraphIndex: f.paragraphIndex,
+    };
+
+    if (f.questionType === 'ShortAnswerLabeled') {
+      const { optionsJson, correctAnswerJson, acceptedSynonymsJson, boxExplanationsJson } = serializeLabeledBoxes(f.labeledBoxes);
+      return { ...base, optionsJson, correctAnswerJson, acceptedSynonymsJson, boxExplanationsJson, distractorRationale: null };
+    }
+
+    const isMultiChoice = f.questionType === 'MultipleChoice3'
+      || f.questionType === 'MultipleChoice4'
+      || f.questionType === 'MultipleChoiceFlexible';
     const optionsJson = isMultiChoice ? JSON.stringify(f.options) : '[]';
     const correctAnswerJson = JSON.stringify(f.correctAnswer);
     const acceptedSynonymsJson = serializeAcceptedVariants(f.acceptedVariants);
@@ -332,25 +418,7 @@ export default function ReadingQuestionsEditorPage() {
       ? Object.fromEntries(rationaleEntries.map(([k, v]) => [k, v.trim()]))
       : null;
 
-    return {
-      id: f.id,
-      readingPartId: f.readingPartId,
-      readingTextId: f.readingTextId || null,
-      displayOrder: f.displayOrder,
-      points: f.points,
-      questionType: f.questionType,
-      stem: f.stem,
-      optionsJson,
-      correctAnswerJson,
-      acceptedSynonymsJson,
-      caseSensitive: f.caseSensitive,
-      explanationMarkdown: f.explanationMarkdown || null,
-      skillTag: f.skillTag || null,
-      difficulty: f.difficulty,
-      evidenceSentence: f.evidenceSentence.trim() || null,
-      paragraphIndex: f.paragraphIndex,
-      distractorRationale,
-    };
+    return { ...base, optionsJson, correctAnswerJson, acceptedSynonymsJson, distractorRationale, boxExplanationsJson: null };
   }
 
   async function handleSaveForm() {
@@ -360,7 +428,19 @@ export default function ReadingQuestionsEditorPage() {
       setToast({ variant: 'error', message: 'Question stem is required.' });
       return;
     }
-    const isMulti = form.questionType === 'MultipleChoice3' || form.questionType === 'MultipleChoice4';
+    if (form.questionType === 'ShortAnswerLabeled') {
+      if (form.labeledBoxes.length === 0) {
+        setToast({ variant: 'error', message: 'Add at least one answer box.' });
+        return;
+      }
+      if (form.labeledBoxes.some((b) => !b.title.trim() || !b.answer.trim())) {
+        setToast({ variant: 'error', message: 'Each box requires a title and correct answer.' });
+        return;
+      }
+    }
+    const isMulti = form.questionType === 'MultipleChoice3'
+      || form.questionType === 'MultipleChoice4'
+      || form.questionType === 'MultipleChoiceFlexible';
     if (isMulti && form.options.some((o) => !o.trim())) {
       setToast({ variant: 'error', message: 'All options must have text.' });
       return;
@@ -369,7 +449,10 @@ export default function ReadingQuestionsEditorPage() {
       setToast({ variant: 'error', message: 'Select the correct answer.' });
       return;
     }
-    if (!isMulti && !form.correctAnswer.trim()) {
+    const isShortAnswer = form.questionType === 'ShortAnswer'
+      || form.questionType === 'SentenceCompletion'
+      || form.questionType === 'FillInBlank';
+    if (isShortAnswer && !form.correctAnswer.trim()) {
       setToast({ variant: 'error', message: 'Correct answer is required.' });
       return;
     }
@@ -379,7 +462,7 @@ export default function ReadingQuestionsEditorPage() {
       const saved = await upsertReadingQuestion(paperId, payload);
       // Persist per-option distractor categories via the dedicated endpoint.
       if (isMulti) {
-        const optionLabels = form.questionType === 'MultipleChoice4' ? ['A', 'B', 'C', 'D'] : ['A', 'B', 'C'];
+        const optionLabels = MCQ_LABELS.slice(0, form.options.length);
         const distractors: Partial<Record<string, ReadingDistractorCategory>> = {};
         let hasDistractor = false;
         for (const key of optionLabels) {
@@ -411,6 +494,7 @@ export default function ReadingQuestionsEditorPage() {
       const payload = {
         id: form?.id ?? null,
         readingPartId: form?.readingPartId ?? activePart.id,
+        readingSectionId: form?.readingSectionId ?? null,
         readingTextId: parsed.readingTextId ?? form?.readingTextId ?? null,
         displayOrder: form?.displayOrder ?? (activePart.questions.length + 1),
         points: parsed.points ?? form?.points ?? 1,
@@ -476,7 +560,7 @@ export default function ReadingQuestionsEditorPage() {
 
   function renderQuestionList() {
     if (!activePart) return <p className="text-admin-fg-muted text-sm">No part data found.</p>;
-    const questions = activePart.questions;
+    const questions = activeSection ? activeSection.questions : activePart.questions;
 
     if (questions.length === 0) {
       return (
@@ -556,10 +640,14 @@ export default function ReadingQuestionsEditorPage() {
   function renderFormEditor() {
     if (!form || !activePart) return null;
     const allowedTypes = ALLOWED_TYPES[activeTab];
-    const isMultiChoice = form.questionType === 'MultipleChoice3' || form.questionType === 'MultipleChoice4';
-    const isShortOrSentence = form.questionType === 'ShortAnswer' || form.questionType === 'SentenceCompletion';
+    const isMultiChoice = form.questionType === 'MultipleChoice3'
+      || form.questionType === 'MultipleChoice4'
+      || form.questionType === 'MultipleChoiceFlexible';
+    const isShortOrSentence = form.questionType === 'ShortAnswer'
+      || form.questionType === 'SentenceCompletion'
+      || form.questionType === 'FillInBlank';
     const isMatching = form.questionType === 'MatchingTextReference';
-    const optionLabels = form.questionType === 'MultipleChoice4' ? ['A', 'B', 'C', 'D'] : ['A', 'B', 'C'];
+    const optionLabels = MCQ_LABELS.slice(0, form.options.length || (form.questionType === 'MultipleChoice3' ? 3 : 4));
     const matchingTextOptions = activePart.texts
       .slice()
       .sort((a, b) => a.displayOrder - b.displayOrder)
@@ -636,6 +724,18 @@ export default function ReadingQuestionsEditorPage() {
               const key = optionLabels[idx];
               return (
                 <div key={idx} className="space-y-2 rounded-lg border border-admin-border bg-admin-bg-subtle/40 p-3">
+                  {form.questionType === 'MultipleChoiceFlexible' && form.options.length > 2 && (
+                    <div className="flex justify-end">
+                      <button
+                        type="button"
+                        onClick={() => removeOption(idx)}
+                        className="p-1 text-red-400 hover:text-red-600"
+                        aria-label={`Remove option ${key}`}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  )}
                   <Input
                     label={`Option ${key}`}
                     value={opt}
@@ -696,6 +796,17 @@ export default function ReadingQuestionsEditorPage() {
                 })),
               ]}
             />
+            {form.questionType === 'MultipleChoiceFlexible' && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={addOption}
+                disabled={form.options.length >= 6}
+              >
+                <Plus className="h-4 w-4 mr-1" />
+                Add option
+              </Button>
+            )}
           </div>
         )}
 
@@ -713,6 +824,13 @@ export default function ReadingQuestionsEditorPage() {
               onChange={(acceptedVariants) => setForm({ ...form, acceptedVariants })}
             />
           </div>
+        )}
+
+        {form.questionType === 'ShortAnswerLabeled' && (
+          <LabeledBoxesManager
+            boxes={form.labeledBoxes}
+            onChange={(labeledBoxes) => setForm({ ...form, labeledBoxes })}
+          />
         )}
 
         {/* Matching Text Reference */}
@@ -890,6 +1008,28 @@ export default function ReadingQuestionsEditorPage() {
               )}
 
               <ReadingPartTabs activeTab={activeTab} onTabChange={setActiveTab} counts={counts} />
+
+              {activeSections.length > 0 && (
+                <div className="flex gap-1 flex-wrap">
+                  {activeSections.map((section) => {
+                    const isCurrent = (activeSection?.id ?? activeSections[0]?.id) === section.id;
+                    return (
+                      <button
+                        key={section.id}
+                        type="button"
+                        onClick={() => { setActiveSectionId(section.id); cancelEdit(); }}
+                        className={`px-3 py-1.5 text-xs font-semibold rounded-md border transition-colors ${
+                          isCurrent
+                            ? 'border-primary bg-primary text-white'
+                            : 'border-admin-border bg-admin-bg-surface text-admin-fg-muted hover:text-admin-fg-strong'
+                        }`}
+                      >
+                        {String(section.sectionCode)}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
 
               {!editing && !reviewing && renderQuestionList()}
 

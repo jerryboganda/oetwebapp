@@ -93,7 +93,9 @@ public sealed record ReadingQuestionUpsert(
     int? Difficulty = null,
     string? EvidenceSentence = null,
     int? ParagraphIndex = null,
-    string? DistractorRationaleJson = null);
+    string? DistractorRationaleJson = null,
+    string? ReadingSectionId = null,
+    string? BoxExplanationsJson = null);
 
 public sealed record ReadingStructure(
     string PaperId,
@@ -102,7 +104,16 @@ public sealed record ReadingStructure(
 public sealed record ReadingPartView(
     string Id, ReadingPartCode PartCode, int TimeLimitMinutes, int MaxRawScore,
     string? Instructions,
+    IReadOnlyList<ReadingSectionView> Sections,
     IReadOnlyList<ReadingText> Texts,
+    IReadOnlyList<ReadingQuestion> Questions);
+
+public sealed record ReadingSectionView(
+    string Id,
+    ReadingSectionCode SectionCode,
+    int DisplayOrder,
+    int MaxRawScore,
+    string? ContentPaperAssetId,
     IReadOnlyList<ReadingQuestion> Questions);
 
 public sealed record ReadingValidationReport(
@@ -127,7 +138,14 @@ public sealed record ReadingPartManifest(
     int? TimeLimitMinutes,
     string? Instructions,
     IReadOnlyList<ReadingTextManifest> Texts,
-    IReadOnlyList<ReadingQuestionManifest> Questions);
+    IReadOnlyList<ReadingQuestionManifest> Questions,
+    ReadingPaperAssetManifest? QuestionPaperAsset);
+
+public sealed record ReadingPaperAssetManifest(
+    string MediaAssetId,
+    string Title,
+    int DisplayOrder,
+    bool IsPrimary);
 
 public sealed record ReadingTextManifest(
     int DisplayOrder,
@@ -214,6 +232,28 @@ public sealed class ReadingStructureService : IReadingStructureService
             [ReadingPartCode.C] = 2,
         };
 
+    private static readonly IReadOnlyDictionary<ReadingPartCode, IReadOnlyList<ReadingSectionCode>> CanonicalSectionCodes =
+        new Dictionary<ReadingPartCode, IReadOnlyList<ReadingSectionCode>>
+        {
+            [ReadingPartCode.B] = new[] { ReadingSectionCode.B1, ReadingSectionCode.B2, ReadingSectionCode.B3, ReadingSectionCode.B4, ReadingSectionCode.B5, ReadingSectionCode.B6 },
+            [ReadingPartCode.C] = new[] { ReadingSectionCode.C1, ReadingSectionCode.C2 },
+        };
+
+    private static readonly IReadOnlyDictionary<ReadingSectionCode, int> CanonicalSectionRawScores =
+        new Dictionary<ReadingSectionCode, int>
+        {
+            [ReadingSectionCode.B1] = 1,
+            [ReadingSectionCode.B2] = 1,
+            [ReadingSectionCode.B3] = 1,
+            [ReadingSectionCode.B4] = 1,
+            [ReadingSectionCode.B5] = 1,
+            [ReadingSectionCode.B6] = 1,
+            [ReadingSectionCode.C1] = 8,
+            [ReadingSectionCode.C2] = 8,
+        };
+
+    private static readonly string[] McqLetters = { "A", "B", "C", "D", "E", "F" };
+
     /// <summary>Max raw score for a fully-assembled Reading paper.</summary>
     public const int CanonicalMaxRawScore = 42;
 
@@ -240,6 +280,54 @@ public sealed class ReadingStructureService : IReadingStructureService
             });
         }
         if (db.ChangeTracker.HasChanges()) await db.SaveChangesAsync(ct);
+        await EnsureCanonicalSectionsAsync(paperId, ct);
+    }
+
+    private async Task EnsureCanonicalSectionsAsync(string paperId, CancellationToken ct)
+    {
+        var parts = await db.ReadingParts
+            .Where(p => p.PaperId == paperId)
+            .Select(p => new { p.Id, p.PartCode })
+            .ToListAsync(ct);
+
+        var partIds = parts.Select(p => p.Id).ToArray();
+        if (partIds.Length == 0)
+            return;
+
+        var existing = await db.ReadingSections
+            .Where(s => partIds.Contains(s.ReadingPartId))
+            .Select(s => new { s.ReadingPartId, s.SectionCode })
+            .ToListAsync(ct);
+
+        var now = DateTimeOffset.UtcNow;
+        foreach (var part in parts.Where(p => p.PartCode is ReadingPartCode.B or ReadingPartCode.C))
+        {
+            if (!CanonicalSectionCodes.TryGetValue(part.PartCode, out var sectionCodes))
+                continue;
+
+            for (var index = 0; index < sectionCodes.Count; index++)
+            {
+                var sectionCode = sectionCodes[index];
+                var alreadyExists = existing.Any(s => string.Equals(s.ReadingPartId, part.Id, StringComparison.Ordinal)
+                    && s.SectionCode == sectionCode);
+                if (alreadyExists)
+                    continue;
+
+                db.ReadingSections.Add(new ReadingSection
+                {
+                    Id = Guid.NewGuid().ToString("N"),
+                    ReadingPartId = part.Id,
+                    SectionCode = sectionCode,
+                    DisplayOrder = index + 1,
+                    MaxRawScore = CanonicalSectionRawScores.TryGetValue(sectionCode, out var rawScore) ? rawScore : 1,
+                    CreatedAt = now,
+                    UpdatedAt = now,
+                });
+            }
+        }
+
+        if (db.ChangeTracker.HasChanges())
+            await db.SaveChangesAsync(ct);
     }
 
     public async Task<ReadingPart> UpsertPartAsync(ReadingPartUpsert args, string adminId, CancellationToken ct)
@@ -320,6 +408,15 @@ public sealed class ReadingStructureService : IReadingStructureService
     public async Task<ReadingQuestion> UpsertQuestionAsync(ReadingQuestionUpsert args, string adminId, CancellationToken ct)
     {
         await EnsurePartBelongsToReadingPaperAsync(args.ReadingPartId, ct);
+        if (!string.IsNullOrWhiteSpace(args.ReadingSectionId))
+        {
+            var section = await db.ReadingSections.AsNoTracking()
+                .FirstOrDefaultAsync(s => s.Id == args.ReadingSectionId, ct);
+            if (section is null)
+                throw new InvalidOperationException("Reading section not found.");
+            if (!string.Equals(section.ReadingPartId, args.ReadingPartId, StringComparison.Ordinal))
+                throw new InvalidOperationException("Reading question section must belong to the same part.");
+        }
         if (!string.IsNullOrWhiteSpace(args.ReadingTextId))
         {
             var textPartId = await db.ReadingTexts.AsNoTracking()
@@ -363,6 +460,8 @@ public sealed class ReadingStructureService : IReadingStructureService
                 EvidenceSentence = args.EvidenceSentence,
                 ParagraphIndex = args.ParagraphIndex,
                 DistractorRationaleJson = args.DistractorRationaleJson,
+                ReadingSectionId = args.ReadingSectionId,
+                BoxExplanationsJson = args.BoxExplanationsJson,
                 CreatedAt = now,
                 UpdatedAt = now,
             };
@@ -386,6 +485,8 @@ public sealed class ReadingStructureService : IReadingStructureService
             row.EvidenceSentence = args.EvidenceSentence;
             row.ParagraphIndex = args.ParagraphIndex;
             row.DistractorRationaleJson = args.DistractorRationaleJson;
+            row.ReadingSectionId = args.ReadingSectionId;
+            row.BoxExplanationsJson = args.BoxExplanationsJson;
             row.UpdatedAt = now;
         }
         await WriteAuditAsync("ReadingQuestionUpserted", row.Id,
@@ -456,12 +557,14 @@ public sealed class ReadingStructureService : IReadingStructureService
             .Where(p => p.PaperId == paperId)
             .Include(p => p.Texts.OrderBy(t => t.DisplayOrder))
             .Include(p => p.Questions.OrderBy(q => q.DisplayOrder))
+            .Include(p => p.Sections)
             .OrderBy(p => p.PartCode)
             .ToListAsync(ct);
         return new ReadingStructure(paperId, parts
             .Select(p => new ReadingPartView(
                 p.Id, p.PartCode, p.TimeLimitMinutes, p.MaxRawScore,
                 p.Instructions,
+                BuildSectionViews(p),
                 p.Texts.OrderBy(t => t.DisplayOrder).ToList(),
                 p.Questions.OrderBy(q => q.DisplayOrder).ToList()))
             .ToList());
@@ -470,11 +573,30 @@ public sealed class ReadingStructureService : IReadingStructureService
     public async Task<ReadingStructureManifest> ExportManifestAsync(string paperId, CancellationToken ct)
     {
         var structure = await GetAdminStructureAsync(paperId, ct);
+        var primaryAssetsByPart = (await db.ContentPaperAssets.AsNoTracking()
+                .Where(asset => asset.PaperId == paperId
+                    && asset.Role == PaperAssetRole.QuestionPaper
+                    && asset.IsPrimary)
+                .OrderBy(asset => asset.DisplayOrder)
+                .Select(asset => new
+                {
+                    asset.Part,
+                    Manifest = new ReadingPaperAssetManifest(
+                        asset.MediaAssetId,
+                        asset.Title,
+                        asset.DisplayOrder,
+                        asset.IsPrimary)
+                })
+                .ToListAsync(ct))
+            .GroupBy(asset => asset.Part, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(group => group.Key, group => group.First().Manifest, StringComparer.OrdinalIgnoreCase);
+
         return new ReadingStructureManifest(structure.Parts
             .OrderBy(p => p.PartCode)
             .Select(part =>
             {
                 var textOrderById = part.Texts.ToDictionary(t => t.Id, t => t.DisplayOrder);
+                primaryAssetsByPart.TryGetValue(part.PartCode.ToString(), out var questionPaperAsset);
                 return new ReadingPartManifest(
                     part.PartCode,
                     part.TimeLimitMinutes,
@@ -505,7 +627,8 @@ public sealed class ReadingStructureService : IReadingStructureService
                                 : null,
                             q.OptionDistractorsJson,
                             q.ReviewState))
-                        .ToList());
+                        .ToList(),
+                    questionPaperAsset);
             })
             .ToList());
     }
@@ -530,6 +653,7 @@ public sealed class ReadingStructureService : IReadingStructureService
         var sourceParts = await db.ReadingParts.AsNoTracking()
             .Where(p => p.PaperId == sourcePaperId)
             .Include(p => p.Texts)
+            .Include(p => p.Sections)
             .Include(p => p.Questions)
             .OrderBy(p => p.PartCode)
             .ToListAsync(ct);
@@ -573,11 +697,13 @@ public sealed class ReadingStructureService : IReadingStructureService
         };
         db.ContentPapers.Add(clone);
 
+        var assetIdBySourceId = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (var asset in source.Assets.OrderBy(a => a.DisplayOrder))
         {
+            var cloneAssetId = Guid.NewGuid().ToString("N");
             db.ContentPaperAssets.Add(new ContentPaperAsset
             {
-                Id = Guid.NewGuid().ToString("N"),
+                Id = cloneAssetId,
                 PaperId = clone.Id,
                 Role = asset.Role,
                 Part = asset.Part,
@@ -587,9 +713,26 @@ public sealed class ReadingStructureService : IReadingStructureService
                 IsPrimary = asset.IsPrimary,
                 CreatedAt = now,
             });
+            assetIdBySourceId[asset.Id] = cloneAssetId;
         }
 
         var textIdBySourceId = new Dictionary<string, string>(StringComparer.Ordinal);
+        var sectionIdByCode = new Dictionary<ReadingSectionCode, string>();
+        string? ResolveClonedSectionId(ReadingPart sourcePart, ReadingPartCode partCode, ReadingQuestion sourceQuestion)
+        {
+            if (sourceQuestion.ReadingSectionId is not null
+                && sourcePart.Sections.FirstOrDefault(section => section.Id == sourceQuestion.ReadingSectionId) is { } sourceSection
+                && sectionIdByCode.TryGetValue(sourceSection.SectionCode, out var mappedSectionId))
+            {
+                return mappedSectionId;
+            }
+
+            var fallbackCode = TryMapFallbackSectionCode(partCode, sourceQuestion.DisplayOrder);
+            return fallbackCode is not null && sectionIdByCode.TryGetValue(fallbackCode.Value, out var fallbackSectionId)
+                ? fallbackSectionId
+                : null;
+        }
+
         foreach (var sourcePart in sourceParts)
         {
             var part = new ReadingPart
@@ -624,6 +767,45 @@ public sealed class ReadingStructureService : IReadingStructureService
                 textIdBySourceId[sourceText.Id] = text.Id;
             }
 
+            foreach (var sourceSection in sourcePart.Sections.OrderBy(s => s.DisplayOrder))
+            {
+                var clonedSection = new ReadingSection
+                {
+                    Id = Guid.NewGuid().ToString("N"),
+                    ReadingPartId = part.Id,
+                    SectionCode = sourceSection.SectionCode,
+                    DisplayOrder = sourceSection.DisplayOrder,
+                    MaxRawScore = sourceSection.MaxRawScore,
+                    ContentPaperAssetId = sourceSection.ContentPaperAssetId is not null && assetIdBySourceId.TryGetValue(sourceSection.ContentPaperAssetId, out var cloneAssetId)
+                        ? cloneAssetId
+                        : null,
+                    CreatedAt = now,
+                    UpdatedAt = now,
+                };
+                db.ReadingSections.Add(clonedSection);
+                sectionIdByCode[sourceSection.SectionCode] = clonedSection.Id;
+            }
+
+            if (sourcePart.Sections.Count == 0 && CanonicalSectionCodes.TryGetValue(sourcePart.PartCode, out var canonicalSectionCodes))
+            {
+                for (var index = 0; index < canonicalSectionCodes.Count; index++)
+                {
+                    var sectionCode = canonicalSectionCodes[index];
+                    var clonedSection = new ReadingSection
+                    {
+                        Id = Guid.NewGuid().ToString("N"),
+                        ReadingPartId = part.Id,
+                        SectionCode = sectionCode,
+                        DisplayOrder = index + 1,
+                        MaxRawScore = CanonicalSectionRawScores.TryGetValue(sectionCode, out var sectionScore) ? sectionScore : 1,
+                        CreatedAt = now,
+                        UpdatedAt = now,
+                    };
+                    db.ReadingSections.Add(clonedSection);
+                    sectionIdByCode[sectionCode] = clonedSection.Id;
+                }
+            }
+
             foreach (var sourceQuestion in sourcePart.Questions.OrderBy(q => q.DisplayOrder))
             {
                 db.ReadingQuestions.Add(new ReadingQuestion
@@ -634,6 +816,7 @@ public sealed class ReadingStructureService : IReadingStructureService
                         && textIdBySourceId.TryGetValue(sourceQuestion.ReadingTextId, out var textId)
                             ? textId
                             : null,
+                    ReadingSectionId = ResolveClonedSectionId(sourcePart, sourcePart.PartCode, sourceQuestion),
                     DisplayOrder = sourceQuestion.DisplayOrder,
                     Points = sourceQuestion.Points,
                     QuestionType = sourceQuestion.QuestionType,
@@ -649,6 +832,7 @@ public sealed class ReadingStructureService : IReadingStructureService
                     EvidenceSentence = sourceQuestion.EvidenceSentence,
                     DistractorRationaleJson = sourceQuestion.DistractorRationaleJson,
                     OptionDistractorsJson = sourceQuestion.OptionDistractorsJson,
+                    BoxExplanationsJson = sourceQuestion.BoxExplanationsJson,
                     ReviewState = request.ResetReviewState ? ReadingReviewState.Draft : sourceQuestion.ReviewState,
                     LatestReviewNote = request.ResetReviewState ? null : sourceQuestion.LatestReviewNote,
                     CreatedAt = now,
@@ -699,6 +883,10 @@ public sealed class ReadingStructureService : IReadingStructureService
                 .ToListAsync(ct);
             db.ReadingQuestions.RemoveRange(existing.SelectMany(p => p.Questions));
             db.ReadingTexts.RemoveRange(existing.SelectMany(p => p.Texts));
+            var existingAssets = await db.ContentPaperAssets
+                .Where(asset => asset.PaperId == paperId && asset.Role == PaperAssetRole.QuestionPaper)
+                .ToListAsync(ct);
+            db.ContentPaperAssets.RemoveRange(existingAssets);
             await WriteAuditAsync("ReadingStructureManifestCleared", paperId, "replaceExisting=true", adminId, ct);
             await db.SaveChangesAsync(ct);
         }
@@ -710,6 +898,36 @@ public sealed class ReadingStructureService : IReadingStructureService
                 partManifest.PartCode,
                 partManifest.TimeLimitMinutes,
                 partManifest.Instructions ?? string.Empty), adminId, ct);
+
+            string? primaryQuestionPaperAssetId = null;
+            if (partManifest.QuestionPaperAsset is not null)
+            {
+                var questionPaperAsset = new ContentPaperAsset
+                {
+                    Id = Guid.NewGuid().ToString("N"),
+                    PaperId = paperId,
+                    Role = PaperAssetRole.QuestionPaper,
+                    Part = part.PartCode.ToString(),
+                    MediaAssetId = partManifest.QuestionPaperAsset.MediaAssetId,
+                    Title = partManifest.QuestionPaperAsset.Title,
+                    DisplayOrder = partManifest.QuestionPaperAsset.DisplayOrder,
+                    IsPrimary = partManifest.QuestionPaperAsset.IsPrimary,
+                    CreatedAt = DateTimeOffset.UtcNow,
+                };
+                db.ContentPaperAssets.Add(questionPaperAsset);
+                primaryQuestionPaperAssetId = questionPaperAsset.Id;
+            }
+
+            if (primaryQuestionPaperAssetId is not null)
+            {
+                var sections = await db.ReadingSections
+                    .Where(section => section.ReadingPartId == part.Id)
+                    .ToListAsync(ct);
+                foreach (var section in sections)
+                {
+                    section.ContentPaperAssetId = primaryQuestionPaperAssetId;
+                }
+            }
 
             var textIdByDisplayOrder = new Dictionary<int, string>();
             foreach (var textManifest in partManifest.Texts.OrderBy(t => t.DisplayOrder))
@@ -799,7 +1017,9 @@ public sealed class ReadingStructureService : IReadingStructureService
                 && (a.Part == "A" || a.Part == "B" || a.Part == "C")
                 && a.MediaAsset != null
                 && a.MediaAsset.Status == MediaAssetStatus.Ready
-                && (a.MediaAsset.Format == "pdf" || a.MediaAsset.MimeType == "application/pdf"))
+                && (a.MediaAsset.Format == "pdf"
+                    || a.MediaAsset.MimeType == "application/pdf"
+                    || a.MediaAsset.MimeType.StartsWith("image/", StringComparison.OrdinalIgnoreCase)))
             .GroupBy(a => a.Part!)
             .Select(g => new { Part = g.Key, Count = g.Count() })
             .ToListAsync(ct);
@@ -811,7 +1031,7 @@ public sealed class ReadingStructureService : IReadingStructureService
                 issues.Add(new(
                     Code: $"part_{requiredPart}_pdf_required",
                     Severity: "error",
-                    Message: $"Reading Part {requiredPart} requires exactly one primary QuestionPaper PDF asset.",
+                    Message: $"Reading Part {requiredPart} requires exactly one primary QuestionPaper PDF or image asset.",
                     TargetId: paperId));
             }
         }
@@ -936,6 +1156,24 @@ public sealed class ReadingStructureService : IReadingStructureService
                 catch (Exception ex)
                 {
                     issues.Add(new("question_payload_invalid", "error", ex.Message, q.Id));
+                }
+            }
+
+            // Part A text-link consistency — if ANY question has a text link all
+            // must. PDF-only mode (all null) is valid; mixed mode is not.
+            if (part.PartCode == ReadingPartCode.A)
+            {
+                var hasAnyTextLink = part.Questions.Any(q => q.ReadingTextId is not null && textIds.Contains(q.ReadingTextId));
+                if (hasAnyTextLink)
+                {
+                    foreach (var q in part.Questions.Where(x => x.ReadingTextId is null))
+                    {
+                        issues.Add(new(
+                            Code: "part_A_question_text_required",
+                            Severity: "error",
+                            Message: $"Part A question {q.DisplayOrder} is missing a text link. Either all Part A questions must reference a text passage (text-linked mode) or none of them should (PDF-only mode).",
+                            TargetId: q.Id));
+                    }
                 }
             }
 
@@ -1068,8 +1306,19 @@ public sealed class ReadingStructureService : IReadingStructureService
         ReadingPartCode.A => questionType is ReadingQuestionType.MatchingTextReference
             or ReadingQuestionType.ShortAnswer
             or ReadingQuestionType.SentenceCompletion,
-        ReadingPartCode.B => questionType == ReadingQuestionType.MultipleChoice3,
-        ReadingPartCode.C => questionType == ReadingQuestionType.MultipleChoice4,
+        ReadingPartCode.B => questionType is ReadingQuestionType.MultipleChoice3
+            or ReadingQuestionType.MultipleChoice4
+            or ReadingQuestionType.FillInBlank
+            or ReadingQuestionType.ShortAnswer
+            or ReadingQuestionType.SentenceCompletion
+            or ReadingQuestionType.ShortAnswerLabeled
+            or ReadingQuestionType.MultipleChoiceFlexible,
+        ReadingPartCode.C => questionType is ReadingQuestionType.MultipleChoice4
+            or ReadingQuestionType.FillInBlank
+            or ReadingQuestionType.ShortAnswer
+            or ReadingQuestionType.SentenceCompletion
+            or ReadingQuestionType.ShortAnswerLabeled
+            or ReadingQuestionType.MultipleChoiceFlexible,
         _ => false,
     };
 
@@ -1080,6 +1329,74 @@ public sealed class ReadingStructureService : IReadingStructureService
         >= 15 and <= 20 => ReadingQuestionType.SentenceCompletion,
         _ => null,
     };
+
+    private static IReadOnlyList<ReadingSectionView> BuildSectionViews(ReadingPart part)
+    {
+        if (part.PartCode == ReadingPartCode.A)
+            return Array.Empty<ReadingSectionView>();
+
+        var questions = part.Questions.OrderBy(q => q.DisplayOrder).ToList();
+        var texts = part.Texts.OrderBy(t => t.DisplayOrder).ToList();
+
+        var textSectionCodes = new Dictionary<string, ReadingSectionCode>(StringComparer.Ordinal);
+        foreach (var text in texts)
+        {
+            var fallbackCode = TryMapFallbackSectionCode(part.PartCode, text.DisplayOrder);
+            if (fallbackCode is not null)
+                textSectionCodes[text.Id] = fallbackCode.Value;
+        }
+
+        var directSectionQuestions = questions
+            .Where(question => !string.IsNullOrWhiteSpace(question.ReadingSectionId))
+            .GroupBy(question => question.ReadingSectionId!, StringComparer.Ordinal)
+            .ToDictionary(group => group.Key, group => group.OrderBy(question => question.DisplayOrder).ToList(), StringComparer.Ordinal);
+
+        var fallbackSectionQuestions = questions
+            .Where(question => string.IsNullOrWhiteSpace(question.ReadingSectionId))
+            .GroupBy(question => ResolveFallbackSectionCode(part.PartCode, question, textSectionCodes))
+            .Where(group => group.Key.HasValue)
+            .ToDictionary(group => group.Key!.Value, group => group.OrderBy(question => question.DisplayOrder).ToList());
+
+        var persistedSections = part.Sections.OrderBy(section => section.DisplayOrder).ToList();
+        if (!CanonicalSectionCodes.TryGetValue(part.PartCode, out var canonicalSectionCodes))
+            return Array.Empty<ReadingSectionView>();
+
+        return canonicalSectionCodes.Select((sectionCode, index) =>
+        {
+            var persisted = persistedSections.FirstOrDefault(section => section.SectionCode == sectionCode);
+            var sectionQuestions = persisted is not null && directSectionQuestions.TryGetValue(persisted.Id, out var directQuestions)
+                ? directQuestions
+                : fallbackSectionQuestions.TryGetValue(sectionCode, out var fallbackQuestions)
+                    ? fallbackQuestions
+                    : [];
+
+            return new ReadingSectionView(
+                persisted?.Id ?? $"{part.Id}:{sectionCode}",
+                sectionCode,
+                persisted?.DisplayOrder ?? index + 1,
+                persisted?.MaxRawScore ?? CanonicalSectionRawScores[sectionCode],
+                persisted?.ContentPaperAssetId,
+                sectionQuestions);
+        }).ToList();
+    }
+
+    private static ReadingSectionCode? ResolveFallbackSectionCode(
+        ReadingPartCode partCode,
+        ReadingQuestion question,
+        IReadOnlyDictionary<string, ReadingSectionCode> textSectionCodes)
+    {
+        if (question.ReadingTextId is not null && textSectionCodes.TryGetValue(question.ReadingTextId, out var code))
+            return code;
+        return TryMapFallbackSectionCode(partCode, question.DisplayOrder);
+    }
+
+    private static ReadingSectionCode? TryMapFallbackSectionCode(ReadingPartCode partCode, int displayOrder)
+        => partCode switch
+        {
+            ReadingPartCode.B when displayOrder is >= 1 and <= 6 => (ReadingSectionCode)((int)ReadingSectionCode.B1 + displayOrder - 1),
+            ReadingPartCode.C when displayOrder is >= 1 and <= 2 => (ReadingSectionCode)((int)ReadingSectionCode.C1 + displayOrder - 1),
+            _ => null,
+        };
 
     // ── JSON shape validation ────────────────────────────────────────────
     //
@@ -1099,18 +1416,22 @@ public sealed class ReadingStructureService : IReadingStructureService
         {
             case ReadingQuestionType.MultipleChoice3:
             case ReadingQuestionType.MultipleChoice4:
+            case ReadingQuestionType.MultipleChoiceFlexible:
                 {
                     if (options.ValueKind != JsonValueKind.Array)
                         throw new InvalidOperationException("MCQ OptionsJson must be a JSON array.");
-                    var expectedCount = type == ReadingQuestionType.MultipleChoice3 ? 3 : 4;
-                    if (options.GetArrayLength() != expectedCount)
-                        throw new InvalidOperationException($"MCQ{expectedCount} must have exactly {expectedCount} options.");
+                    var optionCount = options.GetArrayLength();
+                    if (type == ReadingQuestionType.MultipleChoice3 && optionCount != 3)
+                        throw new InvalidOperationException("MCQ3 must have exactly 3 options.");
+                    if (type == ReadingQuestionType.MultipleChoice4 && optionCount != 4)
+                        throw new InvalidOperationException("MCQ4 must have exactly 4 options.");
+                    if (type == ReadingQuestionType.MultipleChoiceFlexible && (optionCount < 2 || optionCount > McqLetters.Length))
+                        throw new InvalidOperationException($"Flexible MCQ must have between 2 and {McqLetters.Length} options.");
                     EnsureLearnerSafeMcqOptions(options);
                     if (correct.ValueKind != JsonValueKind.String)
                         throw new InvalidOperationException("MCQ CorrectAnswerJson must be a single string letter.");
                     var ans = correct.GetString() ?? string.Empty;
-                    var valid = type == ReadingQuestionType.MultipleChoice3
-                        ? new[] { "A", "B", "C" } : new[] { "A", "B", "C", "D" };
+                    var valid = GetMcqLetters(optionCount);
                     if (!valid.Contains(ans, StringComparer.OrdinalIgnoreCase))
                         throw new InvalidOperationException($"MCQ answer must be one of {string.Join(",", valid)}.");
                     break;
@@ -1126,6 +1447,7 @@ public sealed class ReadingStructureService : IReadingStructureService
                 }
             case ReadingQuestionType.ShortAnswer:
             case ReadingQuestionType.SentenceCompletion:
+            case ReadingQuestionType.FillInBlank:
                 {
                     if (correct.ValueKind != JsonValueKind.String)
                         throw new InvalidOperationException("Short-answer CorrectAnswerJson must be a string.");
@@ -1144,10 +1466,61 @@ public sealed class ReadingStructureService : IReadingStructureService
                     }
                     break;
                 }
+            case ReadingQuestionType.ShortAnswerLabeled:
+                {
+                    if (correct.ValueKind != JsonValueKind.Object)
+                        throw new InvalidOperationException("Labeled short-answer CorrectAnswerJson must be a JSON object.");
+                    foreach (var prop in correct.EnumerateObject())
+                    {
+                        if (string.IsNullOrWhiteSpace(prop.Name) || prop.Value.ValueKind != JsonValueKind.String)
+                            throw new InvalidOperationException("Labeled short-answer answers must be string values keyed by label.");
+                    }
+
+                    if (!string.IsNullOrWhiteSpace(synonymsJson))
+                    {
+                        try
+                        {
+                            var syns = JsonDocument.Parse(synonymsJson).RootElement;
+                            if (syns.ValueKind == JsonValueKind.Array)
+                            {
+                                foreach (var item in syns.EnumerateArray())
+                                {
+                                    if (item.ValueKind != JsonValueKind.String)
+                                        throw new InvalidOperationException("AcceptedSynonymsJson must contain only strings.");
+                                }
+                            }
+                            else if (syns.ValueKind == JsonValueKind.Object)
+                            {
+                                foreach (var prop in syns.EnumerateObject())
+                                {
+                                    if (string.IsNullOrWhiteSpace(prop.Name) || prop.Value.ValueKind != JsonValueKind.Array)
+                                        throw new InvalidOperationException("AcceptedSynonymsJson labeled entries must map labels to arrays of strings.");
+                                    foreach (var item in prop.Value.EnumerateArray())
+                                    {
+                                        if (item.ValueKind != JsonValueKind.String)
+                                            throw new InvalidOperationException("AcceptedSynonymsJson labeled synonyms must contain only strings.");
+                                    }
+                                }
+                            }
+                            else
+                            {
+                                throw new InvalidOperationException("AcceptedSynonymsJson must be a JSON array or object.");
+                            }
+                        }
+                        catch (JsonException)
+                        {
+                            throw new InvalidOperationException("AcceptedSynonymsJson is not valid JSON.");
+                        }
+                    }
+                    break;
+                }
             default:
                 throw new InvalidOperationException($"Unknown question type {type}.");
         }
     }
+
+    private static IReadOnlyList<string> GetMcqLetters(int optionCount)
+        => optionCount <= 0 ? Array.Empty<string>() : McqLetters.Take(Math.Min(optionCount, McqLetters.Length)).ToArray();
 
     private static void EnsureLearnerSafeMcqOptions(JsonElement options)
     {
@@ -1211,6 +1584,7 @@ public sealed class ReadingStructureService : IReadingStructureService
                 throw new InvalidOperationException($"Part {part.PartCode} must include a questions array.");
             if (!CanonicalShape.ContainsKey(part.PartCode))
                 throw new InvalidOperationException($"Unsupported Reading part code {part.PartCode}.");
+            // QuestionPaperAsset is optional in manifests — PDFs are managed via the separate asset-upload flow.
             if (part.Texts.Any(t => t.DisplayOrder <= 0))
                 throw new InvalidOperationException($"Part {part.PartCode} contains a text with an invalid display order.");
             if (part.Questions.Any(q => q.DisplayOrder <= 0))

@@ -44,7 +44,10 @@ public static class ReadingAuthoringAdminEndpoints
                 .Where(a => a.PaperId == paperId
                     && a.Role == PaperAssetRole.QuestionPaper
                     && a.IsPrimary
-                    && (a.Part == "A" || a.Part == "B" || a.Part == "C")
+                    && (a.Part == "A" || a.Part == "B" || a.Part == "C"
+                        || a.Part == "B1" || a.Part == "B2" || a.Part == "B3"
+                        || a.Part == "B4" || a.Part == "B5" || a.Part == "B6"
+                        || a.Part == "C1" || a.Part == "C2")
                     && a.MediaAsset != null
                     && a.MediaAsset.Status == MediaAssetStatus.Ready)
                 .Include(a => a.MediaAsset)
@@ -198,7 +201,7 @@ public static class ReadingAuthoringAdminEndpoints
                     dto.CorrectAnswerJson, dto.AcceptedSynonymsJson, dto.CaseSensitive,
                     dto.ExplanationMarkdown, dto.SkillTag,
                     dto.Difficulty, dto.EvidenceSentence, dto.ParagraphIndex,
-                    dto.DistractorRationaleJson), adminId, ct);
+                    dto.DistractorRationaleJson, dto.ReadingSectionId, dto.BoxExplanationsJson), adminId, ct);
                 return Results.Ok(q);
             }
             catch (InvalidOperationException ex)
@@ -416,6 +419,35 @@ public static class ReadingAuthoringAdminEndpoints
             part.TimeLimitMinutes,
             part.MaxRawScore,
             part.Instructions,
+            sections = part.Sections.Select(section => new
+            {
+                section.Id,
+                section.SectionCode,
+                section.DisplayOrder,
+                section.MaxRawScore,
+                section.ContentPaperAssetId,
+                questions = section.Questions.Select(question => new
+                {
+                    question.Id,
+                    question.ReadingPartId,
+                    question.ReadingSectionId,
+                    question.ReadingTextId,
+                    question.DisplayOrder,
+                    question.Points,
+                    question.QuestionType,
+                    question.Stem,
+                    question.OptionsJson,
+                    question.CorrectAnswerJson,
+                    question.AcceptedSynonymsJson,
+                    question.CaseSensitive,
+                    question.ExplanationMarkdown,
+                    question.SkillTag,
+                    question.OptionDistractorsJson,
+                    question.ReviewState,
+                    question.LatestReviewNote,
+                    question.BoxExplanationsJson,
+                }),
+            }),
             texts = part.Texts.Select(text => new
             {
                 text.Id,
@@ -431,6 +463,7 @@ public static class ReadingAuthoringAdminEndpoints
             {
                 question.Id,
                 question.ReadingPartId,
+                question.ReadingSectionId,
                 question.ReadingTextId,
                 question.DisplayOrder,
                 question.Points,
@@ -445,6 +478,7 @@ public static class ReadingAuthoringAdminEndpoints
                 question.OptionDistractorsJson,
                 question.ReviewState,
                 question.LatestReviewNote,
+                question.BoxExplanationsJson,
             }),
         }),
     };
@@ -470,6 +504,25 @@ public static class ReadingAuthoringAdminEndpoints
             part.TimeLimitMinutes,
             part.MaxRawScore,
             part.Instructions,
+            sections = part.Sections.Select(section => new
+            {
+                section.Id,
+                section.SectionCode,
+                section.DisplayOrder,
+                section.MaxRawScore,
+                section.ContentPaperAssetId,
+                questions = section.Questions.Select(question => new
+                {
+                    question.Id,
+                    question.ReadingSectionId,
+                    question.ReadingTextId,
+                    question.DisplayOrder,
+                    question.Points,
+                    questionType = question.QuestionType.ToString(),
+                    question.Stem,
+                    options = ReadingLearnerSafeProjection.ProjectOptions(question.OptionsJson),
+                }),
+            }),
             texts = part.Texts.Select(text => new
             {
                 text.Id,
@@ -483,6 +536,7 @@ public static class ReadingAuthoringAdminEndpoints
             questions = part.Questions.Select(question => new
             {
                 question.Id,
+                question.ReadingSectionId,
                 question.ReadingTextId,
                 question.DisplayOrder,
                 question.Points,
@@ -538,6 +592,8 @@ public sealed record ReadingQuestionUpsertDto(
     int? Difficulty = null,
     string? EvidenceSentence = null,
     int? ParagraphIndex = null,
-    string? DistractorRationaleJson = null);
+    string? DistractorRationaleJson = null,
+    string? ReadingSectionId = null,
+    string? BoxExplanationsJson = null);
 
 public sealed record ReorderDto(IReadOnlyList<string> OrderedIds);

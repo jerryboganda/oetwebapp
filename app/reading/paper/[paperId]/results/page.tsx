@@ -39,6 +39,7 @@ type ReviewItem = ReadingAttemptReviewDto['items'][number] & {
   missReason?: string | null;
   elapsedMs?: number | null;
   totalElapsedMs?: number | null;
+  boxExplanations?: Record<string, string> | null;
 };
 
 type PartBreakdownEntry = ReadingAttemptReviewDto['partBreakdown'][number] & {
@@ -575,6 +576,21 @@ function ReviewItemDetails({ item }: { item: ReviewItem }) {
         >
           <p className="text-xs font-black uppercase tracking-[0.16em] text-muted">Explanation</p>
           <MarkdownContent markdown={item.explanationMarkdown} className="mt-1 text-sm leading-6 text-navy" />
+        </div>
+      ) : null}
+
+      {item.boxExplanations && Object.keys(item.boxExplanations).length > 0 ? (
+        <div className="mt-3 space-y-2">
+          {Object.entries(item.boxExplanations).map(([key, text]) => (
+            <div
+              key={key}
+              className="rounded-xl border border-border bg-background-light p-3"
+              data-testid={`reading-box-explanation-${key}`}
+            >
+              <p className="text-xs font-black uppercase tracking-[0.16em] text-muted">Explanation ({key})</p>
+              <p className="mt-1 text-sm leading-6 text-navy">{text}</p>
+            </div>
+          ))}
         </div>
       ) : null}
     </details>

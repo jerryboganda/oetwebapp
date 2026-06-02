@@ -76,7 +76,10 @@ public static class ReadingLearnerEndpoints
                     .Where(a => a.PaperId == paperId
                         && a.Role == PaperAssetRole.QuestionPaper
                         && a.IsPrimary
-                        && (a.Part == "A" || a.Part == "B" || a.Part == "C")
+                        && (a.Part == "A" || a.Part == "B" || a.Part == "C"
+                            || a.Part == "B1" || a.Part == "B2" || a.Part == "B3"
+                            || a.Part == "B4" || a.Part == "B5" || a.Part == "B6"
+                            || a.Part == "C1" || a.Part == "C2")
                         && a.MediaAsset != null
                         && a.MediaAsset.Status == MediaAssetStatus.Ready)
                     .Include(a => a.MediaAsset)
@@ -93,6 +96,7 @@ public static class ReadingLearnerEndpoints
             var parts = await db.ReadingParts.AsNoTracking()
                 .Where(p => p.PaperId == paperId)
                 .Include(p => p.Texts.OrderBy(t => t.DisplayOrder))
+                .Include(p => p.Sections.OrderBy(s => s.DisplayOrder)).ThenInclude(s => s.Questions.OrderBy(q => q.DisplayOrder))
                 .Include(p => p.Questions.OrderBy(q => q.DisplayOrder))
                 .OrderBy(p => p.PartCode)
                 .ToListAsync(ct);
@@ -127,6 +131,25 @@ public static class ReadingLearnerEndpoints
                     p.TimeLimitMinutes,
                     p.MaxRawScore,
                     p.Instructions,
+                    sections = p.Sections.Select(section => new
+                    {
+                        section.Id,
+                        section.SectionCode,
+                        section.DisplayOrder,
+                        section.MaxRawScore,
+                        section.ContentPaperAssetId,
+                        questions = section.Questions.Select(q => new
+                        {
+                            q.Id,
+                            q.ReadingSectionId,
+                            q.ReadingTextId,
+                            q.DisplayOrder,
+                            q.Points,
+                            questionType = q.QuestionType.ToString(),
+                            q.Stem,
+                            options = ReadingLearnerSafeProjection.ProjectOptions(q.OptionsJson),
+                        }),
+                    }),
                     texts = p.Texts.Select(t => new
                     {
                         t.Id, t.DisplayOrder, t.Title, t.Source, t.BodyHtml, t.WordCount, t.TopicTag,
@@ -134,6 +157,7 @@ public static class ReadingLearnerEndpoints
                     questions = p.Questions.Select(q => new
                     {
                         q.Id,
+                        q.ReadingSectionId,
                         q.ReadingTextId,
                         q.DisplayOrder,
                         q.Points,
@@ -545,8 +569,9 @@ public static class ReadingLearnerEndpoints
             // attempt is not Submitted, force everything off regardless of
             // policy (defence in depth — the endpoint already 400s above).
             var isSubmitted = attempt.Status == ReadingAttemptStatus.Submitted;
-            var showCorrectAnswer = isSubmitted && policy.ShowCorrectAnswerOnReview;
-            var showExplanations = isSubmitted && policy.ShowExplanationsAfterSubmit;
+            var isDrillReview = attempt.Mode == ReadingAttemptMode.Drill;
+            var showCorrectAnswer = isSubmitted && policy.ShowCorrectAnswerOnReview && !isDrillReview;
+            var showExplanations = isSubmitted && policy.ShowExplanationsAfterSubmit && !isDrillReview;
             var explanationsOnlyIfWrong = policy.ShowExplanationsOnlyIfWrong;
 
             var items = parts
@@ -575,7 +600,10 @@ public static class ReadingLearnerEndpoints
                             SelectedDistractorCategory: answer?.SelectedDistractorCategory?.ToString(),
                             MissReason: answer?.MissReason,
                             ElapsedMs: answer?.ElapsedMs,
-                            TotalElapsedMs: answer?.TotalElapsedMs);
+                            TotalElapsedMs: answer?.TotalElapsedMs,
+                            BoxExplanations: includeExplanation && q.QuestionType == ReadingQuestionType.ShortAnswerLabeled
+                                ? ParseBoxExplanations(q.BoxExplanationsJson)
+                                : null);
                     }))
                 .ToList();
 
@@ -1352,7 +1380,10 @@ public static class ReadingLearnerEndpoints
             && a.PaperId == paperId
             && a.Role == PaperAssetRole.QuestionPaper
             && a.IsPrimary
-            && (a.Part == "A" || a.Part == "B" || a.Part == "C"), ct);
+            && (a.Part == "A" || a.Part == "B" || a.Part == "C"
+                || a.Part == "B1" || a.Part == "B2" || a.Part == "B3"
+                || a.Part == "B4" || a.Part == "B5" || a.Part == "B6"
+                || a.Part == "C1" || a.Part == "C2"), ct);
 
     private static bool GeometryCoordinatesAreNormalised(JsonElement element)
     {
@@ -1427,6 +1458,13 @@ public static class ReadingLearnerEndpoints
         {
             return json;
         }
+    }
+
+    private static object? ParseBoxExplanations(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return null;
+        try { return JsonSerializer.Deserialize<Dictionary<string, string>>(json); }
+        catch (JsonException) { return null; }
     }
 
     private static async Task<int> CountQuestionsForPaperAsync(
@@ -1556,12 +1594,19 @@ public static class ReadingLearnerEndpoints
         // Wave 1 — post-submit review fields. CorrectAnswer / ExplanationMarkdown
         // are policy-gated AND only ever populated when the attempt is
         // Submitted (enforced at the projection site, never here).
+        // JsonIgnore(WhenWritingNull) ensures these properties are ABSENT from
+        // the JSON (not just null) when the policy forbids disclosure — the
+        // drill-review test asserts DoesNotContain("\"correctAnswer\"", ...).
+        [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
         string? CorrectAnswer = null,
+        [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
         string? ExplanationMarkdown = null,
         string? SelectedDistractorCategory = null,
         string? MissReason = null,
         int? ElapsedMs = null,
-        int? TotalElapsedMs = null);
+        int? TotalElapsedMs = null,
+        [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+        object? BoxExplanations = null);
 
 }
 
