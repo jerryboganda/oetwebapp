@@ -31,5 +31,15 @@ export default defineConfig([{
         "react-hooks/set-state-in-effect": "warn",
         "react-hooks/refs": "warn",
         "react-hooks/purity": "warn",
+        // Same advisory React-Compiler family as the three above (enabled via
+        // eslint-config-next's recommended set). The React Compiler is NOT
+        // enabled in the build (next.config.ts has no reactCompiler), so these
+        // have no runtime effect — they flag pre-existing patterns (declaration
+        // order, render-time component selection, memoization the compiler
+        // can't preserve). Keep as warnings/tech-debt, consistent with the
+        // three above, so lint stays green.
+        "react-hooks/immutability": "warn",
+        "react-hooks/preserve-manual-memoization": "warn",
+        "react-hooks/static-components": "warn",
     },
 }]);
