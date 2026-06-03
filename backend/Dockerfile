@@ -11,10 +11,10 @@ COPY backend/src/OetLearner.Api/ backend/src/OetLearner.Api/
 COPY rulebooks/ rulebooks/
 # Scripts referenced by .csproj (e.g. StripeProductSeeder/catalog.json)
 COPY backend/scripts/ backend/scripts/
-RUN dotnet publish backend/src/OetLearner.Api/OetLearner.Api.csproj \
-    -c Release \
-    --no-incremental \
-    /p:UseAppHost=false \
+RUN rm -rf backend/src/OetLearner.Api/obj \
+    && dotnet publish backend/src/OetLearner.Api/OetLearner.Api.csproj \
+        -c Release \
+        /p:UseAppHost=false \
     && ls backend/src/OetLearner.Api/bin/Release/net10.0/publish/OetLearner.Api.dll
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final
