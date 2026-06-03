@@ -5,6 +5,12 @@
 .tools
 .vscode
 .next
+# Re-include pre-built standalone output for the Dockerfile.prebuilt deploy
+# path (assembles the runner image from artifacts built off-box or in a
+# resource-limited container, bypassing an in-image `next build`). Harmless
+# to the regular Dockerfile, which builds its own .next inside the image.
+!.next/standalone
+!.next/static
 node_modules
 .venv
 __pycache__
