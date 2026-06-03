@@ -162,9 +162,11 @@ public static class SpeakingLiveRoomEndpoints
 
         if (string.Equals(request.Role, "observer", StringComparison.OrdinalIgnoreCase) && !IsAdmin(http.User))
         {
-            return Results.Json(
-                new { errorCode = "forbidden", message = "Observer tokens require admin access." },
-                statusCode: StatusCodes.Status403Forbidden);
+            // Observer tokens are admin-only. Respond 404 (not 403) so the live
+            // room and its observer capability are not revealed to non-admin
+            // callers — including the room's own owner/participant.
+            return Results.NotFound(
+                new { errorCode = "live_room_not_found", message = "Live room not found." });
         }
 
         try

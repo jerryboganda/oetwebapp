@@ -94,6 +94,7 @@ public sealed class SpeakingDrillServiceTests : IAsyncLifetime
             Title = "Focused speaking drill",
             Difficulty = "core",
             Status = ContentStatus.Published,
+            PublishedRevisionId = $"{contentId}-r1",
             CriteriaFocusJson = criteriaJson,
             DetailJson = "{\"instructionText\":\"Record a concise response.\"}",
         });

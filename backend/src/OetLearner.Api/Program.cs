@@ -2209,6 +2209,27 @@ await using (var scope = app.Services.CreateAsyncScope())
     }
 }
 
+// Speaking drill catalogue seed (Speaking module G.5). Seeds 24 canonical
+// drills (2 per SpeakingDrillKind) + their published ContentItems. The seeder
+// existed but was never wired into startup, so no canonical SpeakingDrillItem
+// rows were ever seeded (prod or tests). Idempotent (probes the "sdi-seed-"
+// id prefix); non-fatal on failure so it never blocks startup.
+using (var speakingDrillScope = app.Services.CreateScope())
+{
+    var speakingDrillLogger = speakingDrillScope.ServiceProvider
+        .GetRequiredService<ILogger<Program>>();
+    try
+    {
+        var speakingDrillDb = speakingDrillScope.ServiceProvider
+            .GetRequiredService<OetLearner.Api.Data.LearnerDbContext>();
+        await OetLearner.Api.Services.Seeding.SpeakingDrillSeed.SeedAsync(speakingDrillDb, CancellationToken.None);
+    }
+    catch (Exception ex)
+    {
+        speakingDrillLogger.LogWarning(ex, "Speaking drill seeder failed (non-fatal)");
+    }
+}
+
 // Listening sample ingester (Slice E of docs/LISTENING-INGESTION-PRD.md).
 // Reads `Project Real Content/Listening (..)/Listening Sample {1,2,3}/` and
 // registers each as a Draft ContentPaper with all 4 required asset roles

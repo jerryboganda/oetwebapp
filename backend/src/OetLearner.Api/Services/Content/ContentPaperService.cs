@@ -413,6 +413,19 @@ public sealed class ContentPaperService(LearnerDbContext db) : IContentPaperServ
             }
         }
 
+        if (string.Equals(paper.SubtestCode, "speaking", StringComparison.OrdinalIgnoreCase))
+        {
+            var report = SpeakingContentStructure.Validate(paper);
+            if (!report.IsPublishReady)
+            {
+                var errors = report.Issues
+                    .Where(issue => string.Equals(issue.Severity, "error", StringComparison.OrdinalIgnoreCase))
+                    .Select(issue => issue.Message)
+                    .DefaultIfEmpty("Speaking structure is not publish-ready.");
+                throw new InvalidOperationException("Speaking structure is not publish-ready: " + string.Join(" ", errors));
+            }
+        }
+
         var now = DateTimeOffset.UtcNow;
         paper.Status = ContentStatus.Published;
         paper.PublishedAt = now;
