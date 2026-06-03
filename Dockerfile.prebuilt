@@ -12,6 +12,11 @@ ENV NODE_ENV=production \
 COPY .next/standalone ./
 COPY .next/static ./.next/static
 COPY public ./public
+# next-intl message bundles + locale resolver live outside the traced
+# standalone output (loaded via dynamic import at request time). Copy them
+# explicitly so server-rendered pages resolve translations.
+COPY messages ./messages
+COPY i18n.ts ./i18n.ts
 
 RUN mkdir -p /app/.next/cache \
     && chown -R nextjs:nodejs /app/.next /app/public
