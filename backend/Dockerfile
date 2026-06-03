@@ -11,7 +11,10 @@ COPY backend/src/OetLearner.Api/ backend/src/OetLearner.Api/
 COPY rulebooks/ rulebooks/
 # Scripts referenced by .csproj (e.g. StripeProductSeeder/catalog.json)
 COPY backend/scripts/ backend/scripts/
-RUN dotnet publish backend/src/OetLearner.Api/OetLearner.Api.csproj -c Release /p:UseAppHost=false
+RUN dotnet publish backend/src/OetLearner.Api/OetLearner.Api.csproj -c Release /p:UseAppHost=false \
+    && echo "=PUBLISH_PATHS=" \
+    && find /src/backend/src/OetLearner.Api/bin/Release -name "OetLearner.Api.dll" 2>/dev/null \
+    && echo "=END="
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final
 # - curl: required for the container HEALTHCHECK
