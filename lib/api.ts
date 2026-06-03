@@ -5234,6 +5234,13 @@ export async function adjustAdminUserCredits(userId: string, payload: { amount: 
   return apiRequest(`/v1/admin/users/${encodeURIComponent(userId)}/credits`, { method: 'POST', body: JSON.stringify(payload) });
 }
 
+export async function setAdminUserPassword(
+  userId: string,
+  payload: { password: string },
+): Promise<{ userId: string; email: string; revoked: number }> {
+  return apiRequest<{ userId: string; email: string; revoked: number }>(`/v1/admin/users/${encodeURIComponent(userId)}/password`, { method: 'POST', body: JSON.stringify(payload) });
+}
+
 export async function triggerAdminUserPasswordReset(userId: string) {
   return apiRequest(`/v1/admin/users/${encodeURIComponent(userId)}/password-reset`, { method: 'POST' });
 }

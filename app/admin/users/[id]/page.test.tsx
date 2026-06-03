@@ -8,11 +8,13 @@ const {
   mockGetAdminUserDetailData,
   mockFetchAdminSignupCatalog,
   mockUpdateAdminUserProfile,
+  mockSetAdminUserPassword,
 } = vi.hoisted(() => ({
   mockUseAdminAuth: vi.fn(),
   mockGetAdminUserDetailData: vi.fn(),
   mockFetchAdminSignupCatalog: vi.fn(),
   mockUpdateAdminUserProfile: vi.fn(),
+  mockSetAdminUserPassword: vi.fn(),
 }));
 
 vi.mock('next/navigation', () => ({
@@ -29,6 +31,7 @@ vi.mock('@/lib/api', () => ({
   resendAdminUserInvite: vi.fn(),
   restoreAdminUser: vi.fn(),
   revokeAdminUserSessions: vi.fn(),
+  setAdminUserPassword: (...args: unknown[]) => mockSetAdminUserPassword(...args),
   triggerAdminUserPasswordReset: vi.fn(),
   unlockAdminUser: vi.fn(),
   updateAdminUserProfile: (...args: unknown[]) => mockUpdateAdminUserProfile(...args),
@@ -71,7 +74,7 @@ function buildUser(overrides: Partial<AdminUserDetail> = {}): AdminUserDetail {
       canDelete: false,
       canRestore: false,
       canAdjustCredits: false,
-      canTriggerPasswordReset: false,
+      canTriggerPasswordReset: true,
       canForceSignOut: false,
       canUnlock: false,
       canResendInvite: false,
@@ -113,6 +116,7 @@ describe('UserDetailPage profile catalog fields', () => {
     mockGetAdminUserDetailData.mockResolvedValue(buildUser());
     mockFetchAdminSignupCatalog.mockResolvedValue(baseCatalog);
     mockUpdateAdminUserProfile.mockResolvedValue({ updated: true });
+    mockSetAdminUserPassword.mockResolvedValue({ userId: 'learner-1', email: 'learner@example.test', revoked: 0 });
   });
 
   it('treats an empty profession country list as all supported target countries', async () => {
@@ -189,5 +193,39 @@ describe('UserDetailPage profile catalog fields', () => {
     expect(mockUpdateAdminUserProfile).toHaveBeenCalledWith('learner-1', {
       mobileNumber: '+441234567892',
     });
+  });
+
+  it('renders the manual set password action for eligible users', async () => {
+    renderWithRouter(<UserDetailPage />);
+
+    expect(await screen.findByRole('button', { name: /^set password$/i })).toBeInTheDocument();
+  });
+
+  it('submits a manual password update and revokes active sessions', async () => {
+    const user = userEvent.setup();
+
+    renderWithRouter(<UserDetailPage />);
+
+    await user.click(await screen.findByRole('button', { name: /^set password$/i }));
+    await user.type(await screen.findByLabelText('New password'), 'BetterPassword123!');
+    await user.type(screen.getByLabelText('Confirm password'), 'BetterPassword123!');
+    await user.click(screen.getByRole('button', { name: /^save password$/i }));
+
+    await waitFor(() => expect(mockSetAdminUserPassword).toHaveBeenCalledWith('learner-1', { password: 'BetterPassword123!' }));
+    expect(await screen.findByText(/password updated for learner@example\.test/i)).toBeInTheDocument();
+  });
+
+  it('blocks submission when the password fields do not match', async () => {
+    const user = userEvent.setup();
+
+    renderWithRouter(<UserDetailPage />);
+
+    await user.click(await screen.findByRole('button', { name: /^set password$/i }));
+    await user.type(await screen.findByLabelText('New password'), 'BetterPassword123!');
+    await user.type(screen.getByLabelText('Confirm password'), 'DifferentPassword123!');
+    await user.click(screen.getByRole('button', { name: /^save password$/i }));
+
+    expect(mockSetAdminUserPassword).not.toHaveBeenCalled();
+    expect(await screen.findByText(/passwords do not match/i)).toBeInTheDocument();
   });
 });

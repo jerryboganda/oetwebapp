@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services;
 using OetLearner.Api.Tests.Infrastructure;
@@ -16,10 +17,12 @@ public class AdminFlowsTests : IClassFixture<FirstPartyAuthTestWebApplicationFac
 {
     private const string VocabularyImportCsvHeader = "Term,Definition,ExampleSentence,Category,Difficulty,ProfessionId,ExamTypeCode,AmericanSpelling,AudioUrl,AudioSlowUrl,AudioSentenceUrl,AudioMediaAssetId,Collocations,RelatedTerms,SourceProvenance\n";
 
+    private readonly FirstPartyAuthTestWebApplicationFactory _factory;
     private readonly HttpClient _client;
 
     public AdminFlowsTests(FirstPartyAuthTestWebApplicationFactory factory)
     {
+        _factory = factory;
         _client = factory.CreateAuthenticatedClient(SeedData.AdminEmail, SeedData.LocalSeedPassword, expectedRole: "admin");
     }
 
@@ -595,6 +598,134 @@ public class AdminFlowsTests : IClassFixture<FirstPartyAuthTestWebApplicationFac
         using var resetJson = JsonDocument.Parse(await resetResponse.Content.ReadAsStringAsync());
         Assert.Equal("reset_password", resetJson.RootElement.GetProperty("purpose").GetString());
         Assert.Equal(userId, resetJson.RootElement.GetProperty("userId").GetString());
+    }
+
+    [Fact]
+    public async Task AdminUsers_SetPassword_ReplacesCredentialsAndRevokesSessions()
+    {
+        var detailResponse = await _client.GetAsync("/v1/admin/users/mock-user-001");
+        detailResponse.EnsureSuccessStatusCode();
+
+        using var detailJson = JsonDocument.Parse(await detailResponse.Content.ReadAsStringAsync());
+        var authAccountId = detailJson.RootElement.GetProperty("authAccountId").GetString();
+        Assert.False(string.IsNullOrWhiteSpace(authAccountId));
+
+        var tokenId = Guid.NewGuid();
+        await using (var scope = _factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+            db.RefreshTokenRecords.Add(new RefreshTokenRecord
+            {
+                Id = tokenId,
+                ApplicationUserAccountId = authAccountId!,
+                TokenHash = $"hash-{Guid.NewGuid():N}",
+                FamilyId = Guid.NewGuid(),
+                ExpiresAt = DateTimeOffset.UtcNow.AddDays(30),
+                CreatedAt = DateTimeOffset.UtcNow,
+            });
+            await db.SaveChangesAsync();
+        }
+
+        var setPasswordResponse = await _client.PostAsJsonAsync("/v1/admin/users/mock-user-001/password", new
+        {
+            password = "BetterPassword123!"
+        });
+        setPasswordResponse.EnsureSuccessStatusCode();
+
+        using var setPasswordJson = JsonDocument.Parse(await setPasswordResponse.Content.ReadAsStringAsync());
+        Assert.Equal("mock-user-001", setPasswordJson.RootElement.GetProperty("userId").GetString());
+        Assert.Equal(1, setPasswordJson.RootElement.GetProperty("revoked").GetInt32());
+
+        await using (var scope = _factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+            var token = await db.RefreshTokenRecords.SingleAsync(x => x.ApplicationUserAccountId == authAccountId);
+            Assert.NotNull(token.RevokedAt);
+        }
+
+        var resetResponse = await _client.PostAsJsonAsync("/v1/admin/users/mock-user-001/password", new
+        {
+            password = SeedData.LocalSeedPassword
+        });
+        resetResponse.EnsureSuccessStatusCode();
+
+        await using (var scope = _factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+            var token = await db.RefreshTokenRecords.SingleAsync(x => x.Id == tokenId);
+            db.RefreshTokenRecords.Remove(token);
+            await db.SaveChangesAsync();
+        }
+    }
+
+    [Fact]
+    public async Task AdminUsers_SetPassword_RejectsDeletedAndAuthlessAccounts()
+    {
+        var deleteResponse = await _client.PostAsJsonAsync("/v1/admin/users/mock-user-001/delete", new
+        {
+            reason = "testing password set guard"
+        });
+        deleteResponse.EnsureSuccessStatusCode();
+
+        var deletedPasswordResponse = await _client.PostAsJsonAsync("/v1/admin/users/mock-user-001/password", new
+        {
+            password = "BetterPassword123!"
+        });
+        Assert.Equal(HttpStatusCode.BadRequest, deletedPasswordResponse.StatusCode);
+        Assert.Equal("account_deleted", await ReadErrorCodeAsync(deletedPasswordResponse));
+
+        var authlessUserId = $"authless-{Guid.NewGuid():N}";
+        await using (var scope = _factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+            db.Users.Add(new LearnerUser
+            {
+                Id = authlessUserId,
+                Role = ApplicationUserRoles.Learner,
+                DisplayName = "Authless User",
+                Email = $"authless-{Guid.NewGuid():N}@example.test",
+                Timezone = "UTC",
+                Locale = "en-AU",
+                ActiveProfessionId = "medicine",
+                CreatedAt = DateTimeOffset.UtcNow,
+                LastActiveAt = DateTimeOffset.UtcNow,
+                AccountStatus = "active"
+            });
+            await db.SaveChangesAsync();
+        }
+
+        var authlessPasswordResponse = await _client.PostAsJsonAsync($"/v1/admin/users/{authlessUserId}/password", new
+        {
+            password = "BetterPassword123!"
+        });
+        Assert.Equal(HttpStatusCode.BadRequest, authlessPasswordResponse.StatusCode);
+        Assert.Equal("password_set_unavailable", await ReadErrorCodeAsync(authlessPasswordResponse));
+
+        await using (var scope = _factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+            var authlessUser = await db.Users.SingleAsync(x => x.Id == authlessUserId);
+            db.Users.Remove(authlessUser);
+            await db.SaveChangesAsync();
+        }
+
+        var restoreResponse = await _client.PostAsJsonAsync("/v1/admin/users/mock-user-001/restore", new
+        {
+            reason = "restore seeded learner after password-set guard test"
+        });
+        restoreResponse.EnsureSuccessStatusCode();
+    }
+
+    [Fact]
+    public async Task AdminUsers_SetPassword_RejectsWeakPasswords()
+    {
+        var response = await _client.PostAsJsonAsync("/v1/admin/users/mock-user-001/password", new
+        {
+            password = "short"
+        });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal("password_too_short", await ReadErrorCodeAsync(response));
     }
 
     [Fact]

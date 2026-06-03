@@ -357,6 +357,7 @@ public class AdminSubscriptionLifecycleTests
             db,
             emailOtpService: null!,
             passwordHasher: null!,
+            passwordPolicyService: null!,
             timeProvider: TimeProvider.System,
             notifications: null!,
             learnerService: null!);

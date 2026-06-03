@@ -18,6 +18,7 @@ namespace OetLearner.Api.Services;
 public partial class AdminService(
     LearnerDbContext db,
     EmailOtpService emailOtpService,
+    PasswordPolicyService? passwordPolicyService,
     IPasswordHasher<ApplicationUserAccount> passwordHasher,
     TimeProvider timeProvider,
     NotificationService notifications,
@@ -88,6 +89,25 @@ public partial class AdminService(
         });
         await db.SaveChangesAsync(ct);
     }
+
+    private async Task<int> RevokeActiveRefreshTokensAsync(string authAccountId, CancellationToken ct)
+    {
+        var now = timeProvider.GetUtcNow();
+        var revoked = 0;
+        var activeRefreshTokens = await db.RefreshTokenRecords
+            .Where(t => t.ApplicationUserAccountId == authAccountId && t.RevokedAt == null)
+            .ToListAsync(ct);
+        foreach (var token in activeRefreshTokens)
+        {
+            token.RevokedAt = now;
+            revoked++;
+        }
+
+        return revoked;
+    }
+
+    private PasswordPolicyService GetPasswordPolicyService()
+        => passwordPolicyService ?? throw new InvalidOperationException("Password policy service is not configured.");
 
     /// <summary>Load the effective permission set for an admin user.</summary>
     private async Task<HashSet<string>> GetEffectivePermissionsAsync(string adminId, CancellationToken ct)
@@ -3924,6 +3944,57 @@ public partial class AdminService(
         };
     }
 
+    public async Task<object> SetUserPasswordAsync(
+        string adminId,
+        string adminName,
+        string userId,
+        AdminUserSetPasswordRequest request,
+        CancellationToken ct)
+    {
+        var target = await ResolveUserTargetAsync(userId, ct);
+        if (target.Status == DeletedUserStatus)
+        {
+            throw ApiException.Validation("account_deleted", "Deleted accounts cannot have passwords updated.");
+        }
+
+        if (string.IsNullOrWhiteSpace(target.AuthAccountId))
+        {
+            throw ApiException.Validation("password_set_unavailable", "This user does not have a password-based sign-in account.");
+        }
+
+        await GetPasswordPolicyService().EnsurePasswordAcceptableAsync(request.Password, target.Email, ct);
+
+        var authAccount = await db.ApplicationUserAccounts.FirstOrDefaultAsync(a => a.Id == target.AuthAccountId, ct);
+        if (authAccount is null)
+        {
+            throw ApiException.NotFound("auth_account_not_found", "Authentication account not found.");
+        }
+
+        var now = timeProvider.GetUtcNow();
+        authAccount.PasswordHash = passwordHasher.HashPassword(authAccount, request.Password);
+        authAccount.LockoutUntil = null;
+        authAccount.FailedSignInCount = 0;
+        authAccount.UpdatedAt = now;
+
+        var revoked = await RevokeActiveRefreshTokensAsync(authAccount.Id, ct);
+        await db.SaveChangesAsync(ct);
+        await LogAuditAsync(
+            adminId,
+            adminName,
+            "Set Password",
+            "User",
+            userId,
+            $"Set password for {target.Email}. Revoked {revoked} active session(s).",
+            ct);
+
+        return new
+        {
+            userId = target.Id,
+            target.Email,
+            revoked
+        };
+    }
+
     public async Task<object> RevokeUserSessionsAsync(string adminId, string adminName,
         string userId, CancellationToken ct)
     {
@@ -3933,16 +4004,7 @@ public partial class AdminService(
             throw ApiException.Validation("auth_account_missing", "This user does not have an authentication account to revoke.");
         }
 
-        var now = timeProvider.GetUtcNow();
-        var revoked = 0;
-        var activeRefreshTokens = await db.RefreshTokenRecords
-            .Where(t => t.ApplicationUserAccountId == target.AuthAccountId && t.RevokedAt == null)
-            .ToListAsync(ct);
-        foreach (var token in activeRefreshTokens)
-        {
-            token.RevokedAt = now;
-            revoked++;
-        }
+        var revoked = await RevokeActiveRefreshTokensAsync(target.AuthAccountId, ct);
         await db.SaveChangesAsync(ct);
         await LogAuditAsync(adminId, adminName, "Revoked Sessions", "User", userId,
             $"Force sign-out: revoked {revoked} active session(s).", ct);

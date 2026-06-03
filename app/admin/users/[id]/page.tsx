@@ -36,6 +36,7 @@ import {
   resendAdminUserInvite,
   restoreAdminUser,
   revokeAdminUserSessions,
+  setAdminUserPassword,
   triggerAdminUserPasswordReset,
   unlockAdminUser,
   updateAdminUserProfile,
@@ -81,6 +82,11 @@ type LearnerTextProfileField =
 
 type PageStatus = 'loading' | 'success' | 'error';
 type ToastState = { variant: 'success' | 'error'; message: string } | null;
+type PasswordForm = {
+  password: string;
+  confirmPassword: string;
+};
+type PasswordFormErrors = Partial<Record<keyof PasswordForm, string>>;
 
 function formatDate(value: string | null | undefined, fallback = '-') {
   if (!value) return fallback;
@@ -167,10 +173,15 @@ export default function UserDetailPage() {
   const [lifecycleReason, setLifecycleReason] = useState('');
   const [isMutating, setIsMutating] = useState(false);
   const adjustCreditsButtonRef = useRef<HTMLButtonElement | null>(null);
+  const setPasswordButtonRef = useRef<HTMLButtonElement | null>(null);
   const [adminPermissions, setAdminPermissions] = useState<AdminPermissionGrant[] | null>(null);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [profileForm, setProfileForm] = useState<ProfileForm | null>(null);
   const [signupCatalog, setSignupCatalog] = useState<AdminSignupCatalogResponse | null>(null);
+  const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
+  const [isPasswordSaving, setIsPasswordSaving] = useState(false);
+  const [passwordForm, setPasswordForm] = useState<PasswordForm>({ password: '', confirmPassword: '' });
+  const [passwordErrors, setPasswordErrors] = useState<PasswordFormErrors>({});
 
   useEffect(() => {
     if (!userId) return;
@@ -223,6 +234,24 @@ export default function UserDetailPage() {
     }, 50);
   }, []);
 
+  const openPasswordModal = useCallback(() => {
+    setPasswordForm({ password: '', confirmPassword: '' });
+    setPasswordErrors({});
+    setIsPasswordModalOpen(true);
+  }, []);
+
+  const closePasswordModal = useCallback(() => {
+    setIsPasswordModalOpen(false);
+    setPasswordForm({ password: '', confirmPassword: '' });
+    setPasswordErrors({});
+    window.setTimeout(() => {
+      setPasswordButtonRef.current?.focus();
+      if (document.activeElement !== setPasswordButtonRef.current) {
+        requestAnimationFrame(() => setPasswordButtonRef.current?.focus());
+      }
+    }, 50);
+  }, []);
+
   async function reloadUser() {
     if (!userId) return;
     const detail = await getAdminUserDetailData(userId);
@@ -242,6 +271,44 @@ export default function UserDetailPage() {
       setToast({ variant: 'error', message: 'Unable to trigger a password reset.' });
     } finally {
       setIsMutating(false);
+    }
+  }
+
+  async function handleSetPassword() {
+    if (!user) return;
+
+    const nextErrors: PasswordFormErrors = {};
+    if (passwordForm.password.length === 0) {
+      nextErrors.password = 'New password is required.';
+    }
+    if (passwordForm.confirmPassword.length === 0) {
+      nextErrors.confirmPassword = 'Please confirm the password.';
+    } else if (passwordForm.password !== passwordForm.confirmPassword) {
+      nextErrors.confirmPassword = 'Passwords do not match.';
+    }
+
+    if (Object.keys(nextErrors).length > 0) {
+      setPasswordErrors(nextErrors);
+      return;
+    }
+
+    setIsPasswordSaving(true);
+    try {
+      const result = await setAdminUserPassword(user.id, { password: passwordForm.password });
+      const revoked = typeof result?.revoked === 'number' ? result.revoked : 0;
+      setToast({
+        variant: 'success',
+        message: revoked > 0
+          ? `Password updated for ${user.email} and ${revoked} active session(s) were revoked.`
+          : `Password updated for ${user.email}.`,
+      });
+      closePasswordModal();
+      await reloadUser();
+    } catch (error) {
+      console.error(error);
+      setToast({ variant: 'error', message: 'Unable to set this password.' });
+    } finally {
+      setIsPasswordSaving(false);
     }
   }
 
@@ -616,6 +683,12 @@ export default function UserDetailPage() {
                     Reset Password
                   </Button>
                 ) : null}
+                {user.availableActions.canTriggerPasswordReset ? (
+                  <Button ref={setPasswordButtonRef} variant="outline" onClick={openPasswordModal} className="gap-2">
+                    <LockKeyhole className="h-4 w-4" />
+                    Set Password
+                  </Button>
+                ) : null}
                 {user.availableActions.canResendInvite ? (
                   <Button variant="outline" onClick={handleResendInvite} loading={isMutating} className="gap-2">
                     <RefreshCcw className="h-4 w-4" />
@@ -935,6 +1008,50 @@ export default function UserDetailPage() {
             </Button>
             <Button onClick={handleAdjustCredits} loading={isMutating}>
               Save Adjustment
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal open={isPasswordModalOpen} onClose={closePasswordModal} title="Set Password">
+        <div className="space-y-4 py-2">
+          <div className="rounded-[20px] border border-border bg-admin-bg-subtle p-3 text-sm text-muted">
+            This sets the login password directly for the linked auth account. No email is sent, and any active sessions are revoked.
+          </div>
+          <Input
+            label="New password"
+            type="password"
+            autoComplete="new-password"
+            value={passwordForm.password}
+            onChange={(event) => {
+              const nextPassword = event.target.value;
+              setPasswordForm((current) => ({ ...current, password: nextPassword }));
+              if (passwordErrors.password) {
+                setPasswordErrors((current) => ({ ...current, password: undefined }));
+              }
+            }}
+            error={passwordErrors.password}
+          />
+          <Input
+            label="Confirm password"
+            type="password"
+            autoComplete="new-password"
+            value={passwordForm.confirmPassword}
+            onChange={(event) => {
+              const nextConfirmPassword = event.target.value;
+              setPasswordForm((current) => ({ ...current, confirmPassword: nextConfirmPassword }));
+              if (passwordErrors.confirmPassword) {
+                setPasswordErrors((current) => ({ ...current, confirmPassword: undefined }));
+              }
+            }}
+            error={passwordErrors.confirmPassword}
+          />
+          <div className="flex justify-end gap-3 border-t border-border pt-4">
+            <Button variant="outline" onClick={closePasswordModal}>
+              Cancel
+            </Button>
+            <Button onClick={handleSetPassword} loading={isPasswordSaving}>
+              Save Password
             </Button>
           </div>
         </div>
