@@ -745,6 +745,180 @@ namespace OetLearner.Api.Data.Migrations
             migrationBuilder.Sql("CREATE INDEX \"IX_WritingShowcasePosts_Status_PublishedAt\" ON \"WritingShowcasePosts\" (\"Status\", \"PublishedAt\" DESC);");
             migrationBuilder.CreateIndex(name: "IX_WritingShowcasePosts_Profession_LetterType_Status", table: "WritingShowcasePosts", columns: new[] { "Profession", "LetterType", "Status" });
             migrationBuilder.CreateIndex(name: "IX_WritingShowcasePosts_SubmissionId", table: "WritingShowcasePosts", column: "SubmissionId", unique: true);
+
+            // ============================================================
+            // WritingScenarios additive columns + indexes, relocated from the
+            // EARLIER migration 20260530185804_AddWritingExamModuleClosure. That
+            // migration ran before this one but referenced WritingScenarios, which
+            // is created above in this migration's Up(), so a fresh-DB migrate
+            // crashed ("relation WritingScenarios does not exist"). Definitions are
+            // verbatim from the original migration. Prod is unaffected (both already
+            // applied; AutoMigrate skips them).
+            // ============================================================
+            migrationBuilder.AddColumn<string>(
+                name: "CaseNoteSectionsJson",
+                table: "WritingScenarios",
+                type: "jsonb",
+                nullable: true);
+
+            migrationBuilder.AddColumn<string>(
+                name: "ContentOwnerId",
+                table: "WritingScenarios",
+                type: "character varying(64)",
+                maxLength: 64,
+                nullable: true);
+
+            migrationBuilder.AddColumn<string>(
+                name: "ExpectedAction",
+                table: "WritingScenarios",
+                type: "text",
+                nullable: true);
+
+            migrationBuilder.AddColumn<string>(
+                name: "ExpectedPurpose",
+                table: "WritingScenarios",
+                type: "text",
+                nullable: true);
+
+            migrationBuilder.AddColumn<string>(
+                name: "FixedInstructionsJson",
+                table: "WritingScenarios",
+                type: "jsonb",
+                nullable: false,
+                defaultValue: "[]");
+
+            migrationBuilder.AddColumn<DateTimeOffset>(
+                name: "IntegrityAcknowledgedAt",
+                table: "WritingScenarios",
+                type: "timestamp with time zone",
+                nullable: true);
+
+            migrationBuilder.AddColumn<string>(
+                name: "IntegrityAcknowledgedById",
+                table: "WritingScenarios",
+                type: "character varying(64)",
+                maxLength: 64,
+                nullable: true);
+
+            migrationBuilder.AddColumn<string>(
+                name: "InternalCode",
+                table: "WritingScenarios",
+                type: "character varying(32)",
+                maxLength: 32,
+                nullable: true);
+
+            migrationBuilder.AddColumn<string>(
+                name: "MarkingMode",
+                table: "WritingScenarios",
+                type: "character varying(16)",
+                maxLength: 16,
+                nullable: false,
+                defaultValue: "");
+
+            migrationBuilder.AddColumn<Guid>(
+                name: "ModelAnswerExemplarId",
+                table: "WritingScenarios",
+                type: "uuid",
+                nullable: true);
+
+            migrationBuilder.AddColumn<int>(
+                name: "ReadingTimeSeconds",
+                table: "WritingScenarios",
+                type: "integer",
+                nullable: false,
+                defaultValue: 0);
+
+            migrationBuilder.AddColumn<string>(
+                name: "RecipientJson",
+                table: "WritingScenarios",
+                type: "jsonb",
+                nullable: true);
+
+            migrationBuilder.AddColumn<string>(
+                name: "RetakePolicyJson",
+                table: "WritingScenarios",
+                type: "jsonb",
+                nullable: true);
+
+            migrationBuilder.AddColumn<string>(
+                name: "SimulationModes",
+                table: "WritingScenarios",
+                type: "character varying(16)",
+                maxLength: 16,
+                nullable: false,
+                defaultValue: "");
+
+            migrationBuilder.AddColumn<string>(
+                name: "SourceContentPaperId",
+                table: "WritingScenarios",
+                type: "character varying(64)",
+                maxLength: 64,
+                nullable: true);
+
+            migrationBuilder.AddColumn<string>(
+                name: "SourceProvenance",
+                table: "WritingScenarios",
+                type: "character varying(512)",
+                maxLength: 512,
+                nullable: true);
+
+            migrationBuilder.AddColumn<string>(
+                name: "TaskPromptMarkdown",
+                table: "WritingScenarios",
+                type: "text",
+                nullable: true);
+
+            migrationBuilder.AddColumn<string>(
+                name: "TodayDate",
+                table: "WritingScenarios",
+                type: "character varying(64)",
+                maxLength: 64,
+                nullable: true);
+
+            migrationBuilder.AddColumn<DateTimeOffset>(
+                name: "UpdatedAt",
+                table: "WritingScenarios",
+                type: "timestamp with time zone",
+                nullable: false,
+                defaultValue: new DateTimeOffset(new DateTime(1, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)));
+
+            migrationBuilder.AddColumn<int>(
+                name: "WordGuideMax",
+                table: "WritingScenarios",
+                type: "integer",
+                nullable: false,
+                defaultValue: 0);
+
+            migrationBuilder.AddColumn<int>(
+                name: "WordGuideMin",
+                table: "WritingScenarios",
+                type: "integer",
+                nullable: false,
+                defaultValue: 0);
+
+            migrationBuilder.AddColumn<string>(
+                name: "WriterRole",
+                table: "WritingScenarios",
+                type: "character varying(256)",
+                maxLength: 256,
+                nullable: true);
+
+            migrationBuilder.AddColumn<int>(
+                name: "WritingTimeSeconds",
+                table: "WritingScenarios",
+                type: "integer",
+                nullable: false,
+                defaultValue: 0);
+
+            migrationBuilder.CreateIndex(
+                name: "IX_WritingScenarios_InternalCode",
+                table: "WritingScenarios",
+                column: "InternalCode");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_WritingScenarios_SourceContentPaperId",
+                table: "WritingScenarios",
+                column: "SourceContentPaperId");
         }
 
         /// <inheritdoc />

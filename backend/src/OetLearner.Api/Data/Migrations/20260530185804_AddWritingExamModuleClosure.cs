@@ -17,161 +17,11 @@ namespace OetLearner.Api.Data.Migrations
             // 20260610120000_AddWritingModuleV2Schema, so on a fresh database this crashed
             // ("relation WritingTutorReviews does not exist"). They now live in that
             // migration's CreateTable. Prod is unaffected (this migration is already applied).
-            migrationBuilder.AddColumn<string>(
-                name: "CaseNoteSectionsJson",
-                table: "WritingScenarios",
-                type: "jsonb",
-                nullable: true);
-
-            migrationBuilder.AddColumn<string>(
-                name: "ContentOwnerId",
-                table: "WritingScenarios",
-                type: "character varying(64)",
-                maxLength: 64,
-                nullable: true);
-
-            migrationBuilder.AddColumn<string>(
-                name: "ExpectedAction",
-                table: "WritingScenarios",
-                type: "text",
-                nullable: true);
-
-            migrationBuilder.AddColumn<string>(
-                name: "ExpectedPurpose",
-                table: "WritingScenarios",
-                type: "text",
-                nullable: true);
-
-            migrationBuilder.AddColumn<string>(
-                name: "FixedInstructionsJson",
-                table: "WritingScenarios",
-                type: "jsonb",
-                nullable: false,
-                defaultValue: "[]");
-
-            migrationBuilder.AddColumn<DateTimeOffset>(
-                name: "IntegrityAcknowledgedAt",
-                table: "WritingScenarios",
-                type: "timestamp with time zone",
-                nullable: true);
-
-            migrationBuilder.AddColumn<string>(
-                name: "IntegrityAcknowledgedById",
-                table: "WritingScenarios",
-                type: "character varying(64)",
-                maxLength: 64,
-                nullable: true);
-
-            migrationBuilder.AddColumn<string>(
-                name: "InternalCode",
-                table: "WritingScenarios",
-                type: "character varying(32)",
-                maxLength: 32,
-                nullable: true);
-
-            migrationBuilder.AddColumn<string>(
-                name: "MarkingMode",
-                table: "WritingScenarios",
-                type: "character varying(16)",
-                maxLength: 16,
-                nullable: false,
-                defaultValue: "");
-
-            migrationBuilder.AddColumn<Guid>(
-                name: "ModelAnswerExemplarId",
-                table: "WritingScenarios",
-                type: "uuid",
-                nullable: true);
-
-            migrationBuilder.AddColumn<int>(
-                name: "ReadingTimeSeconds",
-                table: "WritingScenarios",
-                type: "integer",
-                nullable: false,
-                defaultValue: 0);
-
-            migrationBuilder.AddColumn<string>(
-                name: "RecipientJson",
-                table: "WritingScenarios",
-                type: "jsonb",
-                nullable: true);
-
-            migrationBuilder.AddColumn<string>(
-                name: "RetakePolicyJson",
-                table: "WritingScenarios",
-                type: "jsonb",
-                nullable: true);
-
-            migrationBuilder.AddColumn<string>(
-                name: "SimulationModes",
-                table: "WritingScenarios",
-                type: "character varying(16)",
-                maxLength: 16,
-                nullable: false,
-                defaultValue: "");
-
-            migrationBuilder.AddColumn<string>(
-                name: "SourceContentPaperId",
-                table: "WritingScenarios",
-                type: "character varying(64)",
-                maxLength: 64,
-                nullable: true);
-
-            migrationBuilder.AddColumn<string>(
-                name: "SourceProvenance",
-                table: "WritingScenarios",
-                type: "character varying(512)",
-                maxLength: 512,
-                nullable: true);
-
-            migrationBuilder.AddColumn<string>(
-                name: "TaskPromptMarkdown",
-                table: "WritingScenarios",
-                type: "text",
-                nullable: true);
-
-            migrationBuilder.AddColumn<string>(
-                name: "TodayDate",
-                table: "WritingScenarios",
-                type: "character varying(64)",
-                maxLength: 64,
-                nullable: true);
-
-            migrationBuilder.AddColumn<DateTimeOffset>(
-                name: "UpdatedAt",
-                table: "WritingScenarios",
-                type: "timestamp with time zone",
-                nullable: false,
-                defaultValue: new DateTimeOffset(new DateTime(1, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)));
-
-            migrationBuilder.AddColumn<int>(
-                name: "WordGuideMax",
-                table: "WritingScenarios",
-                type: "integer",
-                nullable: false,
-                defaultValue: 0);
-
-            migrationBuilder.AddColumn<int>(
-                name: "WordGuideMin",
-                table: "WritingScenarios",
-                type: "integer",
-                nullable: false,
-                defaultValue: 0);
-
-            migrationBuilder.AddColumn<string>(
-                name: "WriterRole",
-                table: "WritingScenarios",
-                type: "character varying(256)",
-                maxLength: 256,
-                nullable: true);
-
-            migrationBuilder.AddColumn<int>(
-                name: "WritingTimeSeconds",
-                table: "WritingScenarios",
-                type: "integer",
-                nullable: false,
-                defaultValue: 0);
-
+            //
+            // The ~23 WritingScenarios AddColumn calls and the two WritingScenarios
+            // indexes (IX_WritingScenarios_InternalCode / _SourceContentPaperId) that
+            // used to live here were relocated to 20260610120000_AddWritingModuleV2Schema
+            // for the same reason: that later migration CREATES the WritingScenarios table.
             migrationBuilder.CreateTable(
                 name: "WritingAttemptEvents",
                 columns: table => new
@@ -283,16 +133,6 @@ namespace OetLearner.Api.Data.Migrations
                 });
 
             migrationBuilder.CreateIndex(
-                name: "IX_WritingScenarios_InternalCode",
-                table: "WritingScenarios",
-                column: "InternalCode");
-
-            migrationBuilder.CreateIndex(
-                name: "IX_WritingScenarios_SourceContentPaperId",
-                table: "WritingScenarios",
-                column: "SourceContentPaperId");
-
-            migrationBuilder.CreateIndex(
                 name: "IX_WritingAttemptEvents_SessionId_Timestamp",
                 table: "WritingAttemptEvents",
                 columns: new[] { "SessionId", "Timestamp" });
@@ -363,107 +203,10 @@ namespace OetLearner.Api.Data.Migrations
             migrationBuilder.DropTable(
                 name: "WritingResultVisibilityConfigs");
 
-            migrationBuilder.DropIndex(
-                name: "IX_WritingScenarios_InternalCode",
-                table: "WritingScenarios");
-
-            migrationBuilder.DropIndex(
-                name: "IX_WritingScenarios_SourceContentPaperId",
-                table: "WritingScenarios");
-
-            // The four WritingTutorReviews DropColumns were removed — those columns are now
-            // owned by 20260610120000_AddWritingModuleV2Schema's CreateTable (see Up()).
-            migrationBuilder.DropColumn(
-                name: "CaseNoteSectionsJson",
-                table: "WritingScenarios");
-
-            migrationBuilder.DropColumn(
-                name: "ContentOwnerId",
-                table: "WritingScenarios");
-
-            migrationBuilder.DropColumn(
-                name: "ExpectedAction",
-                table: "WritingScenarios");
-
-            migrationBuilder.DropColumn(
-                name: "ExpectedPurpose",
-                table: "WritingScenarios");
-
-            migrationBuilder.DropColumn(
-                name: "FixedInstructionsJson",
-                table: "WritingScenarios");
-
-            migrationBuilder.DropColumn(
-                name: "IntegrityAcknowledgedAt",
-                table: "WritingScenarios");
-
-            migrationBuilder.DropColumn(
-                name: "IntegrityAcknowledgedById",
-                table: "WritingScenarios");
-
-            migrationBuilder.DropColumn(
-                name: "InternalCode",
-                table: "WritingScenarios");
-
-            migrationBuilder.DropColumn(
-                name: "MarkingMode",
-                table: "WritingScenarios");
-
-            migrationBuilder.DropColumn(
-                name: "ModelAnswerExemplarId",
-                table: "WritingScenarios");
-
-            migrationBuilder.DropColumn(
-                name: "ReadingTimeSeconds",
-                table: "WritingScenarios");
-
-            migrationBuilder.DropColumn(
-                name: "RecipientJson",
-                table: "WritingScenarios");
-
-            migrationBuilder.DropColumn(
-                name: "RetakePolicyJson",
-                table: "WritingScenarios");
-
-            migrationBuilder.DropColumn(
-                name: "SimulationModes",
-                table: "WritingScenarios");
-
-            migrationBuilder.DropColumn(
-                name: "SourceContentPaperId",
-                table: "WritingScenarios");
-
-            migrationBuilder.DropColumn(
-                name: "SourceProvenance",
-                table: "WritingScenarios");
-
-            migrationBuilder.DropColumn(
-                name: "TaskPromptMarkdown",
-                table: "WritingScenarios");
-
-            migrationBuilder.DropColumn(
-                name: "TodayDate",
-                table: "WritingScenarios");
-
-            migrationBuilder.DropColumn(
-                name: "UpdatedAt",
-                table: "WritingScenarios");
-
-            migrationBuilder.DropColumn(
-                name: "WordGuideMax",
-                table: "WritingScenarios");
-
-            migrationBuilder.DropColumn(
-                name: "WordGuideMin",
-                table: "WritingScenarios");
-
-            migrationBuilder.DropColumn(
-                name: "WriterRole",
-                table: "WritingScenarios");
-
-            migrationBuilder.DropColumn(
-                name: "WritingTimeSeconds",
-                table: "WritingScenarios");
+            // The WritingScenarios DropIndex/DropColumn calls were removed — those columns
+            // and indexes are now owned by 20260610120000_AddWritingModuleV2Schema, which
+            // CREATES the WritingScenarios table (see Up()). The four WritingTutorReviews
+            // DropColumns were likewise relocated there.
         }
     }
 }
