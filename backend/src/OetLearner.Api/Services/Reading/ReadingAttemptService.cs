@@ -59,6 +59,29 @@ public interface IReadingAttemptService
         string userAnswerJson,
         int? elapsedMs = null,
         CancellationToken ct = default);
+
+    /// <summary>
+    /// R08 parity with Listening — persist the learner's rule-out
+    /// (strikethrough) + highlight annotations for an in-progress attempt.
+    /// <paramref name="annotationsJson"/> is an opaque payload capped at
+    /// <see cref="ReadingAttemptService.MaxAnnotationsBytes"/> bytes;
+    /// blank/whitespace clears it. Whole-payload last-write-wins; deliberately
+    /// never bumps the attempt's <c>RowVersion</c> so it cannot race a
+    /// concurrent answer autosave.
+    /// </summary>
+    Task SaveAnnotationsAsync(
+        string userId,
+        string attemptId,
+        string? annotationsJson,
+        CancellationToken ct = default);
+
+    /// <summary>R08 parity — read back the learner's saved annotations payload
+    /// (null when none). Owner-scoped.</summary>
+    Task<string?> GetAnnotationsAsync(
+        string userId,
+        string attemptId,
+        CancellationToken ct = default);
+
     Task<ReadingAttemptBreakState> ResumePartABreakAsync(string userId, string attemptId, CancellationToken ct);
 
     /// <summary>
@@ -609,6 +632,96 @@ public sealed class ReadingAttemptService(
             Details = $"question={questionId}; answered={(isNewAnswer ? existingAnswerCount + 1 : existingAnswerCount)}{elapsedDetail}",
         });
         await db.SaveChangesAsync(ct);
+    }
+
+    /// <summary>Hard cap on the per-attempt annotations payload (UTF-8 bytes).
+    /// Mirrors <c>ListeningSessionService.MaxAnnotationsBytes</c>. Generous but
+    /// bounded so a hostile client cannot stuff arbitrary blobs onto the row.
+    /// Oversized payloads are rejected with <c>reading_annotations_too_large</c>.</summary>
+    public const int MaxAnnotationsBytes = 64 * 1024;
+
+    public async Task SaveAnnotationsAsync(
+        string userId,
+        string attemptId,
+        string? annotationsJson,
+        CancellationToken ct = default)
+    {
+        // Prove ownership + status without tracking — the relational write goes
+        // through ExecuteUpdateAsync (which bypasses the change tracker), and a
+        // 404-style "not found" must not depend on whether the row is tracked.
+        var attempt = await db.ReadingAttempts.AsNoTracking()
+            .FirstOrDefaultAsync(a => a.Id == attemptId && a.UserId == userId, ct)
+            ?? throw new InvalidOperationException("Attempt not found.");
+
+        if (attempt.Status != ReadingAttemptStatus.InProgress)
+            throw new ReadingAttemptException(
+                "attempt_not_in_progress",
+                $"Cannot annotate an attempt that is {attempt.Status}.");
+
+        // Blank / whitespace clears the column (matches the Listening contract).
+        var normalized = string.IsNullOrWhiteSpace(annotationsJson) ? null : annotationsJson;
+        if (normalized is not null)
+        {
+            // UTF-8 byte length so a single multibyte char (e.g. a non-Latin
+            // highlight label) is counted fairly against the cap.
+            var bytes = System.Text.Encoding.UTF8.GetByteCount(normalized);
+            if (bytes > MaxAnnotationsBytes)
+                throw new ReadingAttemptException(
+                    "reading_annotations_too_large",
+                    $"Annotations payload is {bytes} bytes; limit is {MaxAnnotationsBytes}.");
+
+            // Cheap shape guard — must parse as JSON so a garbled payload cannot
+            // crash the frontend on hydrate.
+            try { using var _ = JsonDocument.Parse(normalized); }
+            catch (JsonException)
+            {
+                throw new ReadingAttemptException(
+                    "reading_annotations_invalid_json",
+                    "Annotations payload must be valid JSON.");
+            }
+        }
+
+        var now = DateTimeOffset.UtcNow;
+
+        // Persist ONLY AnnotationsJson + LastActivityAt. This is deliberately a
+        // targeted update that does NOT bump RowVersion: a concurrent answer
+        // autosave may be incrementing that [ConcurrencyCheck] token, and
+        // rule-out annotations are whole-payload last-write-wins — they must
+        // neither lose to nor clobber that race. ExecuteUpdateAsync sidesteps
+        // change-tracking + the concurrency token entirely. The EF in-memory
+        // provider (tests) does not support it, so fall back to a tracked save
+        // there — mirrors SaveAnswerAsync's relational/in-memory split.
+        if (db.Database.IsRelational())
+        {
+            await db.ReadingAttempts
+                .Where(a => a.Id == attemptId && a.UserId == userId)
+                .ExecuteUpdateAsync(s => s
+                    .SetProperty(a => a.AnnotationsJson, _ => normalized)
+                    .SetProperty(a => a.LastActivityAt, _ => now),
+                    ct);
+        }
+        else
+        {
+            var tracked = await db.ReadingAttempts
+                .FirstOrDefaultAsync(a => a.Id == attemptId && a.UserId == userId, ct)
+                ?? throw new InvalidOperationException("Attempt not found.");
+            tracked.AnnotationsJson = normalized;
+            tracked.LastActivityAt = now;
+            await db.SaveChangesAsync(ct);
+        }
+    }
+
+    public async Task<string?> GetAnnotationsAsync(
+        string userId,
+        string attemptId,
+        CancellationToken ct = default)
+    {
+        // Materialise the row then return the column — never LINQ into the
+        // jsonb payload (see LearnerDbContext + ef-core-sqlite-translation memo).
+        var attempt = await db.ReadingAttempts.AsNoTracking()
+            .FirstOrDefaultAsync(a => a.Id == attemptId && a.UserId == userId, ct)
+            ?? throw new InvalidOperationException("Attempt not found.");
+        return attempt.AnnotationsJson;
     }
 
     /// <summary>Phase 1 closure — kebab-case scope for the

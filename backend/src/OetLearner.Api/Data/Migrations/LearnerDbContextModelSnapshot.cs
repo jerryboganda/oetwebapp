@@ -15892,6 +15892,9 @@ namespace OetLearner.Api.Data.Migrations
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)");
 
+                    b.Property<string>("AnnotationsJson")
+                        .HasColumnType("jsonb");
+
                     b.Property<DateTimeOffset?>("DeadlineAt")
                         .HasColumnType("timestamp with time zone");
 

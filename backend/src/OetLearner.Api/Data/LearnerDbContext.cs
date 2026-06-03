@@ -603,6 +603,14 @@ public partial class LearnerDbContext(DbContextOptions<LearnerDbContext> options
             modelBuilder.Entity<ListeningAttempt>().Property(x => x.HumanScoreOverridesJson).HasColumnType("jsonb");
             modelBuilder.Entity<ListeningAttempt>().Property(x => x.LastQuestionVersionMapJson).HasColumnType("jsonb");
 
+            // Reading — R08 parity: rule-out / highlight annotations stored as
+            // jsonb (same hot-JSON convention as the ListeningAttempt columns
+            // above). Read the whole row then parse client-side; never LINQ
+            // into the JSON. RowVersion stays a [ConcurrencyCheck] annotation;
+            // the annotations autosave path uses a targeted ExecuteUpdateAsync
+            // that deliberately does not touch it (see ReadingAttemptService).
+            modelBuilder.Entity<ReadingAttempt>().Property(x => x.AnnotationsJson).HasColumnType("jsonb");
+
             // Gap N5: AuditEvent.Details routinely carries before/after JSON
             // snapshots that exceed the legacy varchar(1024) cap. Promote the
             // column to TEXT so full payloads survive (paired migration:

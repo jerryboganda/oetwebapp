@@ -416,6 +416,51 @@ public static class ReadingLearnerEndpoints
         // enforces a per-user ceiling consistent with submit / break /
         // error-bank deletion.
 
+        // ── Rule-out annotations (R08 parity with Listening) ───────────────
+        // Persist the learner's per-question strikethrough / highlight payload
+        // so it survives refresh, resume, and section navigation. The client
+        // debounces 400 ms and PUTs the whole payload (last-write-wins). Rate-
+        // limited for the same anti-abuse reason as autosave above; the GET is
+        // a cheap read used for hydration fallback (like GET /attempts/{id}).
+        group.MapPut("/attempts/{attemptId}/annotations", async (
+            string attemptId,
+            SaveReadingAnnotationsDto dto,
+            IReadingAttemptService svc, HttpContext http, CancellationToken ct) =>
+        {
+            var userId = http.User.FindFirstValue(ClaimTypes.NameIdentifier)
+                ?? throw new InvalidOperationException("auth required");
+            try
+            {
+                await svc.SaveAnnotationsAsync(userId, attemptId, dto.AnnotationsJson, ct);
+                return Results.NoContent();
+            }
+            catch (ReadingAttemptException ex)
+            {
+                return Results.BadRequest(new { code = ex.Code, error = ex.Message, message = ex.Message });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Results.BadRequest(new { code = "reading_annotations_rejected", error = ex.Message, message = ex.Message });
+            }
+        }).RequireRateLimiting("PerUserWrite");
+
+        group.MapGet("/attempts/{attemptId}/annotations", async (
+            string attemptId,
+            IReadingAttemptService svc, HttpContext http, CancellationToken ct) =>
+        {
+            var userId = http.User.FindFirstValue(ClaimTypes.NameIdentifier)
+                ?? throw new InvalidOperationException("auth required");
+            try
+            {
+                var json = await svc.GetAnnotationsAsync(userId, attemptId, ct);
+                return Results.Ok(new { annotationsJson = json });
+            }
+            catch (InvalidOperationException)
+            {
+                return Results.NotFound();
+            }
+        });
+
         // ── Submit ─────────────────────────────────────────────────────────
         group.MapPost("/attempts/{attemptId}/submit", async (
             string attemptId,
@@ -521,6 +566,9 @@ public static class ReadingLearnerEndpoints
                     a.AnsweredAt,
                 }),
                 showExplanations = showExplain,
+                // R08 — hydrate the learner's saved rule-out / highlight marks
+                // when resuming (or reopening a submitted attempt read-only).
+                annotationsJson = attempt.AnnotationsJson,
             });
         });
 
@@ -1621,3 +1669,8 @@ public static class ReadingLearnerEndpoints
 /// values. Pass <c>null</c> for legacy clients that don't capture timing.
 /// </summary>
 public sealed record AnswerSaveDto(string UserAnswerJson, int? ElapsedMs = null);
+
+/// <summary>R08 rule-out annotations payload — opaque JSON capped at 64 KB
+/// (see <see cref="OetLearner.Api.Services.Reading.ReadingAttemptService.MaxAnnotationsBytes"/>).
+/// Null / blank clears the learner's saved marks for the attempt.</summary>
+public sealed record SaveReadingAnnotationsDto(string? AnnotationsJson);
