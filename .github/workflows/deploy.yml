@@ -86,19 +86,20 @@ jobs:
     steps:
       - name: Deploy to VPS over SSH (pull + blue/green redeploy)
         env:
-          SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
-          VPS_HOST: ${{ secrets.VPS_HOST }}
-          VPS_USER: ${{ secrets.VPS_USER }}
-          VPS_PORT: ${{ secrets.VPS_PORT }}
-          VPS_APP_DIR: ${{ secrets.VPS_APP_DIR }}
+          # Dedicated CI deploy key (authorized on the real prod box's root).
+          # The legacy VPS_* secrets pointed at a stale/old server, so host/user/
+          # path are hardcoded to current prod (68.183.32.122 = app/api DNS).
+          SSH_KEY: ${{ secrets.PROD_SSH_KEY }}
+          VPS_HOST: "68.183.32.122"
+          VPS_USER: "root"
+          VPS_PORT: "22"
           GHCR_USER: ${{ github.actor }}
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
           PORT="${VPS_PORT:-22}"
-          # The git checkout AND the live `oetwebsite` compose project run from
-          # /opt/oetwebapp (the VPS_APP_DIR secret points at a non-git dir).
+          # git checkout + live `oetwebsite` compose project run from here.
           APP_DIR="/opt/oetwebapp"
           mkdir -p ~/.ssh
           printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy_key
