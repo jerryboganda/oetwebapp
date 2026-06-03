@@ -14,8 +14,14 @@ COPY backend/scripts/ backend/scripts/
 # Remove restore-created obj/bin so dotnet publish doesn't silently skip due to
 # Docker BuildKit setting COPY timestamps to epoch (1970), which appears older
 # than the just-restored obj/ artifacts and triggers the .NET 10 up-to-date check.
+# Also touch all .cs files to force-update timestamps past the restored obj/ cache.
 RUN rm -rf backend/src/OetLearner.Api/obj backend/src/OetLearner.Api/bin \
-    && dotnet publish backend/src/OetLearner.Api/OetLearner.Api.csproj -c Release -o /app/publish /p:UseAppHost=false
+    && find backend/src/OetLearner.Api -name "*.cs" -exec touch {} + \
+    && mkdir -p /app/publish \
+    && dotnet publish backend/src/OetLearner.Api/OetLearner.Api.csproj \
+       -c Release -o /app/publish /p:UseAppHost=false \
+    && test "$(ls -A /app/publish | wc -l)" -gt 0 \
+       || (echo "ERROR: dotnet publish wrote no output — possible OOM kill" && exit 1)
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final
 # - curl: required for the container HEALTHCHECK
