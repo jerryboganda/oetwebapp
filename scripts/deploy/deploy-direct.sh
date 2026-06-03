@@ -63,8 +63,18 @@ compose() {
 }
 
 # --- Build images from source ---
-echo "--- Building images from source (this may take a few minutes) ---"
-compose build "learner-api-$target_slot" "web-$target_slot" db-backup
+# Build sequentially with --no-cache to avoid OOM (parallel builds exhaust
+# swap) and to bypass any stale BuildKit content-store snapshot refs left
+# by interrupted prior runs.
+echo "--- Building images from source (sequential, no-cache) ---"
+echo "--- Stopping inactive slot + non-essential containers to free RAM ---"
+docker stop "oet-api-${target_slot}" "oet-web-${target_slot}" oet-clamav 2>/dev/null || true
+echo "--- Building db-backup ---"
+compose build --no-cache db-backup
+echo "--- Building learner-api-${target_slot} ---"
+compose build --no-cache "learner-api-$target_slot"
+echo "--- Building web-${target_slot} ---"
+compose build --no-cache "web-$target_slot"
 
 # --- Start target slot ---
 echo "--- Starting target slot containers ---"
