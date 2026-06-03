@@ -109,7 +109,7 @@ public sealed class MaterialAccessService(
         var (planId, planCode, planDatabaseId, cohortIds, sponsorIds) = await ResolveMembershipsAsync(userId, ct);
 
         return folders.Any(folder =>
-            IsFolderVisible(folder, folderDict, planId, planCode, cohortIds, sponsorIds));
+            IsFolderVisible(folder, folderDict, planId, planCode, planDatabaseId, cohortIds, sponsorIds));
     }
 
     private bool IsFolderVisible(

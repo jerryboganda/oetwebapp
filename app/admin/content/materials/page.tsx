@@ -452,6 +452,12 @@ export default function AdminMaterialsPage() {
             </button>
           </div>
 
+          {/* Publish requirements hint */}
+          <div className="rounded-md bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-800 mb-2 space-y-0.5">
+            <p className="font-semibold">For a folder to show to candidates:</p>
+            <p>🟢 Status = <strong>Published</strong> &nbsp;·&nbsp; 🔒 Audience assigned &nbsp;·&nbsp; 📄 ≥1 published file inside</p>
+          </div>
+
           {loading ? (
             <div className="space-y-2">
               {[1, 2, 3].map((i) => <Skeleton key={i} className="h-10 rounded-lg" />)}
@@ -692,6 +698,8 @@ function FolderTreeNode({
   onDelete,
   onAudience,
   onCreateChild,
+  onPublish,
+  onUnpublish,
   children,
 }: {
   folder: MaterialFolderDto;
@@ -703,10 +711,14 @@ function FolderTreeNode({
   onDelete: () => void;
   onAudience: () => void;
   onCreateChild: () => void;
+  onPublish: () => void;
+  onUnpublish: () => void;
   children?: React.ReactNode;
 }) {
   const [expanded, setExpanded] = useState(depth === 0);
   const hasChildren = (folder.folders?.length ?? 0) > 0;
+  const isPublished = folder.status === 'Published';
+  const isBusy = busyId === folder.id;
 
   return (
     <div className={depth > 0 ? 'ml-4 border-l border-border/40 pl-2' : ''}>
@@ -728,18 +740,49 @@ function FolderTreeNode({
             : <span className="w-3.5 inline-block" />}
         </button>
 
+        {/* Live/Draft status dot — always visible */}
+        <span
+          title={isPublished ? 'Live (published)' : 'Draft — not visible to candidates'}
+          className={[
+            'shrink-0 w-2 h-2 rounded-full',
+            isPublished ? 'bg-green-500' : 'bg-amber-400',
+          ].join(' ')}
+        />
+
         <button type="button" onClick={onSelect} className="flex-1 truncate text-left">
           <FolderOpen className="inline w-3.5 h-3.5 mr-1.5 shrink-0" />
           {folder.name}
         </button>
 
-        {/* Audience badge */}
+        {/* Audience badge — shown when hovering */}
         <span className="shrink-0 text-[10px] text-admin-fg-muted hidden group-hover:inline">
           {folder.audienceMode === 'Everyone' ? '🌐' : folder.audienceMode === 'Restricted' ? '🔒' : '↑'}
         </span>
 
         {/* Actions (shown on hover) */}
         <div className="hidden group-hover:flex items-center gap-0.5 shrink-0">
+          {/* Publish / Unpublish toggle — most important action */}
+          {isPublished ? (
+            <button
+              type="button"
+              title="Unpublish (hide from candidates)"
+              onClick={onUnpublish}
+              disabled={isBusy}
+              className="rounded p-0.5 hover:bg-amber-50 text-green-600 hover:text-amber-600 disabled:opacity-50"
+            >
+              <EyeOff className="w-3 h-3" />
+            </button>
+          ) : (
+            <button
+              type="button"
+              title="Publish (make visible to candidates)"
+              onClick={onPublish}
+              disabled={isBusy}
+              className="rounded p-0.5 hover:bg-green-50 text-admin-fg-muted hover:text-green-600 disabled:opacity-50"
+            >
+              <Eye className="w-3 h-3" />
+            </button>
+          )}
           <button type="button" title="Set audience" onClick={onAudience} className="rounded p-0.5 hover:bg-primary/10 text-admin-fg-muted hover:text-primary">
             <Users className="w-3 h-3" />
           </button>
@@ -753,7 +796,7 @@ function FolderTreeNode({
             type="button"
             title="Delete"
             onClick={onDelete}
-            disabled={busyId === folder.id}
+            disabled={isBusy}
             className="rounded p-0.5 hover:bg-red-50 text-admin-fg-muted hover:text-red-500 disabled:opacity-50"
           >
             <Trash2 className="w-3 h-3" />
