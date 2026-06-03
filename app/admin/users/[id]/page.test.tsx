@@ -228,4 +228,21 @@ describe('UserDetailPage profile catalog fields', () => {
     expect(mockSetAdminUserPassword).not.toHaveBeenCalled();
     expect(await screen.findByText(/passwords do not match/i)).toBeInTheDocument();
   });
+
+  it('shows the backend password policy reason when the update is rejected', async () => {
+    const user = userEvent.setup();
+    mockSetAdminUserPassword.mockRejectedValueOnce(
+      new Error('This password has appeared in a known public data breach. Please choose a different password.'),
+    );
+
+    renderWithRouter(<UserDetailPage />);
+
+    await user.click(await screen.findByRole('button', { name: /^set password$/i }));
+    expect(await screen.findByText(/avoid common\/leaked passwords/i)).toBeInTheDocument();
+    await user.type(await screen.findByLabelText('New password'), 'BetterPassword123!');
+    await user.type(screen.getByLabelText('Confirm password'), 'BetterPassword123!');
+    await user.click(screen.getByRole('button', { name: /^save password$/i }));
+
+    expect(await screen.findAllByText(/known public data breach/i)).not.toHaveLength(0);
+  });
 });

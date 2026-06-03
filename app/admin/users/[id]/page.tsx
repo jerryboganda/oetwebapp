@@ -88,6 +88,8 @@ type PasswordForm = {
 };
 type PasswordFormErrors = Partial<Record<keyof PasswordForm, string>>;
 
+const PASSWORD_POLICY_HINT = 'Use at least 10 characters with uppercase, lowercase, a number, a symbol, and avoid common/leaked passwords.';
+
 function formatDate(value: string | null | undefined, fallback = '-') {
   if (!value) return fallback;
   try {
@@ -280,6 +282,8 @@ export default function UserDetailPage() {
     const nextErrors: PasswordFormErrors = {};
     if (passwordForm.password.length === 0) {
       nextErrors.password = 'New password is required.';
+    } else if (passwordForm.password.length < 10) {
+      nextErrors.password = 'Password must be at least 10 characters long.';
     }
     if (passwordForm.confirmPassword.length === 0) {
       nextErrors.confirmPassword = 'Please confirm the password.';
@@ -306,7 +310,11 @@ export default function UserDetailPage() {
       await reloadUser();
     } catch (error) {
       console.error(error);
-      setToast({ variant: 'error', message: 'Unable to set this password.' });
+      const message = error instanceof Error && error.message
+        ? error.message
+        : 'Unable to set this password.';
+      setPasswordErrors((current) => ({ ...current, password: message }));
+      setToast({ variant: 'error', message });
     } finally {
       setIsPasswordSaving(false);
     }
@@ -1023,6 +1031,7 @@ export default function UserDetailPage() {
             type="password"
             autoComplete="new-password"
             value={passwordForm.password}
+            hint={PASSWORD_POLICY_HINT}
             onChange={(event) => {
               const nextPassword = event.target.value;
               setPasswordForm((current) => ({ ...current, password: nextPassword }));
