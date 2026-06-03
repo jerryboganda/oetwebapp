@@ -10,7 +10,7 @@ COPY backend/src/OetLearner.Api/ backend/src/OetLearner.Api/
 # created by the earlier `dotnet restore` step. Without this, .NET SDK
 # 10.0.300's incremental-build check sees "sources older than obj/" and
 # silently skips compilation (exits 0, no output files produced).
-RUN find backend/src/OetLearner.Api -name "*.cs" -o -name "*.json" | xargs touch
+RUN find backend/src/OetLearner.Api -name "*.cs" -not -path "*/obj/*" -not -path "*/bin/*" | xargs touch
 # Rulebooks embed as resources via ..\..\..\rulebooks\**\*.json — must be present
 # in the Docker build context at the repo-root path the .csproj expects.
 COPY rulebooks/ rulebooks/
