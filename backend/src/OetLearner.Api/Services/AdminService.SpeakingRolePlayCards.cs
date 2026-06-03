@@ -295,6 +295,14 @@ public partial class AdminService
         var script = await db.InterlocutorScripts
             .FirstOrDefaultAsync(x => x.RolePlayCardId == cardId, ct);
 
+        // Publish gate: a role-play card is not usable by learners without an
+        // interlocutor script, so refuse to publish one that is missing it.
+        if (script is null)
+        {
+            throw ApiException.Validation("role_play_card_missing_interlocutor",
+                "This role-play card cannot be published without an interlocutor script.");
+        }
+
         var now = DateTimeOffset.UtcNow;
         card.Status = ContentStatus.Published;
         card.PublishedAt = now;

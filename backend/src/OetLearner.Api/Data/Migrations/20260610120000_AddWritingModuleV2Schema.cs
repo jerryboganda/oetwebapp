@@ -566,7 +566,16 @@ namespace OetLearner.Api.Data.Migrations
                     PerCriterionCommentsJson = table.Column<string>(type: "jsonb", nullable: false, defaultValue: "{}"),
                     ScoreOverrideJson = table.Column<string>(type: "jsonb", nullable: true),
                     SubmittedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: true),
-                    CreatedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false)
+                    CreatedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
+                    // Columns relocated here from 20260530185804_AddWritingExamModuleClosure:
+                    // that earlier migration added them to WritingTutorReviews, but this
+                    // migration (which actually CREATES the table) runs later, so a fresh-DB
+                    // migrate crashed ("relation WritingTutorReviews does not exist"). Prod is
+                    // unaffected (both migrations already applied; AutoMigrate skips them).
+                    AcceptedAiPreAssessmentJson = table.Column<string>(type: "text", nullable: true),
+                    ContentChecklistVerdictJson = table.Column<string>(type: "text", nullable: false, defaultValue: ""),
+                    IsContentChecklistMarked = table.Column<bool>(type: "boolean", nullable: false, defaultValue: false),
+                    MarkerSequence = table.Column<string>(type: "character varying(16)", maxLength: 16, nullable: false, defaultValue: "")
                 },
                 constraints: table => table.PrimaryKey("PK_WritingTutorReviews", x => x.Id));
 

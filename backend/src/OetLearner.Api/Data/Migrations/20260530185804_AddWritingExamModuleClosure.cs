@@ -11,34 +11,12 @@ namespace OetLearner.Api.Data.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.AddColumn<string>(
-                name: "AcceptedAiPreAssessmentJson",
-                table: "WritingTutorReviews",
-                type: "text",
-                nullable: true);
-
-            migrationBuilder.AddColumn<string>(
-                name: "ContentChecklistVerdictJson",
-                table: "WritingTutorReviews",
-                type: "text",
-                nullable: false,
-                defaultValue: "");
-
-            migrationBuilder.AddColumn<bool>(
-                name: "IsContentChecklistMarked",
-                table: "WritingTutorReviews",
-                type: "boolean",
-                nullable: false,
-                defaultValue: false);
-
-            migrationBuilder.AddColumn<string>(
-                name: "MarkerSequence",
-                table: "WritingTutorReviews",
-                type: "character varying(16)",
-                maxLength: 16,
-                nullable: false,
-                defaultValue: "");
-
+            // NOTE: the four WritingTutorReviews columns (AcceptedAiPreAssessmentJson,
+            // ContentChecklistVerdictJson, IsContentChecklistMarked, MarkerSequence) used to
+            // be added here, but that table is created by the LATER migration
+            // 20260610120000_AddWritingModuleV2Schema, so on a fresh database this crashed
+            // ("relation WritingTutorReviews does not exist"). They now live in that
+            // migration's CreateTable. Prod is unaffected (this migration is already applied).
             migrationBuilder.AddColumn<string>(
                 name: "CaseNoteSectionsJson",
                 table: "WritingScenarios",
@@ -393,22 +371,8 @@ namespace OetLearner.Api.Data.Migrations
                 name: "IX_WritingScenarios_SourceContentPaperId",
                 table: "WritingScenarios");
 
-            migrationBuilder.DropColumn(
-                name: "AcceptedAiPreAssessmentJson",
-                table: "WritingTutorReviews");
-
-            migrationBuilder.DropColumn(
-                name: "ContentChecklistVerdictJson",
-                table: "WritingTutorReviews");
-
-            migrationBuilder.DropColumn(
-                name: "IsContentChecklistMarked",
-                table: "WritingTutorReviews");
-
-            migrationBuilder.DropColumn(
-                name: "MarkerSequence",
-                table: "WritingTutorReviews");
-
+            // The four WritingTutorReviews DropColumns were removed — those columns are now
+            // owned by 20260610120000_AddWritingModuleV2Schema's CreateTable (see Up()).
             migrationBuilder.DropColumn(
                 name: "CaseNoteSectionsJson",
                 table: "WritingScenarios");
