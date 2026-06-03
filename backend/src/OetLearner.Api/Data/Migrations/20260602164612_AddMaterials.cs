@@ -51,95 +51,19 @@ BEGIN
         END IF;
     END;
 
-    -- ReadingQuestions new columns
-    ALTER TABLE ""ReadingQuestions"" ADD COLUMN IF NOT EXISTS ""BoxExplanationsJson"" character varying(4096);
-    ALTER TABLE ""ReadingQuestions"" ADD COLUMN IF NOT EXISTS ""ReadingSectionId"" character varying(64);
-
-    -- ReadingPaperAnnotations
-    IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'ReadingPaperAnnotations') THEN
-        CREATE TABLE ""ReadingPaperAnnotations"" (
-            ""Id""                   character varying(64)    NOT NULL,
-            ""UserId""               character varying(64)    NOT NULL,
-            ""PaperId""              character varying(64)    NOT NULL,
-            ""ContentPaperAssetId"" character varying(64)    NOT NULL,
-            ""PageNumber""          integer                   NOT NULL,
-            ""Kind""                integer                   NOT NULL,
-            ""GeometryJson""        character varying(8192)   NOT NULL,
-            ""CreatedAt""           timestamp with time zone  NOT NULL,
-            ""UpdatedAt""           timestamp with time zone  NOT NULL,
-            CONSTRAINT ""PK_ReadingPaperAnnotations"" PRIMARY KEY (""Id""),
-            CONSTRAINT ""FK_ReadingPaperAnnotations_ContentPaperAssets_ContentPaperAsse~""
-                FOREIGN KEY (""ContentPaperAssetId"")
-                REFERENCES ""ContentPaperAssets"" (""Id"") ON DELETE CASCADE,
-            CONSTRAINT ""FK_ReadingPaperAnnotations_ContentPapers_PaperId""
-                FOREIGN KEY (""PaperId"")
-                REFERENCES ""ContentPapers"" (""Id"") ON DELETE CASCADE
-        );
-        CREATE INDEX ""IX_ReadingPaperAnnotations_ContentPaperAssetId""
-            ON ""ReadingPaperAnnotations"" (""ContentPaperAssetId"");
-        CREATE INDEX ""IX_ReadingPaperAnnotations_PaperId""
-            ON ""ReadingPaperAnnotations"" (""PaperId"");
-        CREATE INDEX ""IX_ReadingPaperAnnotations_UserId_PaperId""
-            ON ""ReadingPaperAnnotations"" (""UserId"", ""PaperId"");
-        CREATE INDEX ""IX_ReadingPaperAnnotations_UserId_PaperId_ContentPaperAssetId""
-            ON ""ReadingPaperAnnotations"" (""UserId"", ""PaperId"", ""ContentPaperAssetId"");
-    END IF;
-
-    -- ReadingSections
-    IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'ReadingSections') THEN
-        CREATE TABLE ""ReadingSections"" (
-            ""Id""                  character varying(64)    NOT NULL,
-            ""ReadingPartId""       character varying(64)    NOT NULL,
-            ""SectionCode""         integer                   NOT NULL,
-            ""DisplayOrder""        integer                   NOT NULL,
-            ""MaxRawScore""         integer                   NOT NULL,
-            ""ContentPaperAssetId"" character varying(64)    NULL,
-            ""CreatedAt""           timestamp with time zone  NOT NULL,
-            ""UpdatedAt""           timestamp with time zone  NOT NULL,
-            CONSTRAINT ""PK_ReadingSections"" PRIMARY KEY (""Id""),
-            CONSTRAINT ""FK_ReadingSections_ContentPaperAssets_ContentPaperAssetId""
-                FOREIGN KEY (""ContentPaperAssetId"")
-                REFERENCES ""ContentPaperAssets"" (""Id"") ON DELETE SET NULL,
-            CONSTRAINT ""FK_ReadingSections_ReadingParts_ReadingPartId""
-                FOREIGN KEY (""ReadingPartId"")
-                REFERENCES ""ReadingParts"" (""Id"") ON DELETE CASCADE
-        );
-        CREATE INDEX ""IX_ReadingSections_ContentPaperAssetId""
-            ON ""ReadingSections"" (""ContentPaperAssetId"");
-        CREATE UNIQUE INDEX ""UX_ReadingSection_Part_SectionCode""
-            ON ""ReadingSections"" (""ReadingPartId"", ""SectionCode"");
-    END IF;
-
-    -- SpeakingResultVisibilityConfigs
-    IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'SpeakingResultVisibilityConfigs') THEN
-        CREATE TABLE ""SpeakingResultVisibilityConfigs"" (
-            ""Id""                    character varying(64)    NOT NULL,
-            ""RolePlayCardId""        character varying(64)    NULL,
-            ""ShowSubmissionReceived"" boolean                  NOT NULL,
-            ""ShowAiEstimate""        boolean                  NOT NULL,
-            ""ShowReadinessBand""     boolean                  NOT NULL,
-            ""ShowTutorScore""        boolean                  NOT NULL,
-            ""ShowFullCriteria""      boolean                  NOT NULL,
-            ""ShowTranscript""        boolean                  NOT NULL,
-            ""ShowTutorComments""     boolean                  NOT NULL,
-            ""ShowRecommendedDrills"" boolean                  NOT NULL,
-            ""AllowReattempt""        boolean                  NOT NULL,
-            ""UpdatedAt""             timestamp with time zone  NOT NULL,
-            CONSTRAINT ""PK_SpeakingResultVisibilityConfigs"" PRIMARY KEY (""Id"")
-        );
-        CREATE INDEX ""IX_SpeakingResultVisibilityConfigs_RolePlayCardId""
-            ON ""SpeakingResultVisibilityConfigs"" (""RolePlayCardId"");
-    END IF;
-
-    -- ReadingQuestions → ReadingSections FK (idempotent)
-    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'FK_ReadingQuestions_ReadingSections_ReadingSectionId') THEN
-        ALTER TABLE ""ReadingQuestions""
-            ADD CONSTRAINT ""FK_ReadingQuestions_ReadingSections_ReadingSectionId""
-            FOREIGN KEY (""ReadingSectionId"")
-            REFERENCES ""ReadingSections"" (""Id"") ON DELETE SET NULL;
-    END IF;
-    CREATE INDEX IF NOT EXISTS ""IX_ReadingQuestions_ReadingSectionId""
-        ON ""ReadingQuestions"" (""ReadingSectionId"");
+    -- NOTE: an idempotent hot-patch block used to also create the
+    -- ReadingQuestions.{BoxExplanationsJson,ReadingSectionId} columns,
+    -- ReadingPaperAnnotations, ReadingSections (+ its FK/indexes) and
+    -- SpeakingResultVisibilityConfigs here. Those objects are owned by the
+    -- later canonical migrations (20260603_AddSpeakingResultVisibility,
+    -- 20260620_AddReadingPaperAnnotations, 20260620_AddReadingSections,
+    -- 20260621_AddReadingQuestionBoxExplanations). On a brand-new database this
+    -- block created them BEFORE those migrations ran, so the (non-idempotent)
+    -- canonical migrations then crashed with 'already exists' (e.g.
+    -- FK_ReadingQuestions_ReadingSections_ReadingSectionId). Removed here so the
+    -- canonical migrations create them. Prod is unaffected: AddMaterials was
+    -- already applied before this drift was added, so AutoMigrate never runs
+    -- this body again, and prod got the schema from the canonical migrations.
 END
 $$;
 ");
