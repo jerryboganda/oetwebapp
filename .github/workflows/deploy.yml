@@ -97,7 +97,10 @@ jobs:
         run: |
           set -euo pipefail
           PORT="${VPS_PORT:-22}"
-          APP_DIR="${VPS_APP_DIR:-/opt/oetwebapp}"
+          # The VPS_APP_DIR secret points at /root/oetwebsite (a non-git runtime
+          # dir). The actual git checkout AND the live `oetwebsite` compose
+          # project run from /opt/oetwebapp, so deploy from there.
+          APP_DIR="/opt/oetwebapp"
           mkdir -p ~/.ssh
           printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
