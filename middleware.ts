@@ -30,10 +30,14 @@ function generateNonce(): string {
  * Build the per-response Content-Security-Policy.
  *
  * Notes:
- * - 'strict-dynamic' is what makes nonce-based CSP work with Next.js chunk loading:
- *   trusted scripts (those carrying the nonce) can load further scripts without each
- *   one being individually allowlisted. When 'strict-dynamic' is present, host-source
- *   allowlists are ignored by modern browsers — that's by design and it's the point.
+ * - We deliberately do NOT use 'strict-dynamic'. Turbopack (unlike webpack's
+ *   __webpack_nonce__) does not stamp the per-request nonce onto its chunk-loader
+ *   scripts, so under 'strict-dynamic' Firefox/Chromium reject our own same-origin
+ *   /_next/static chunks ("script-src-elem … violates 'strict-dynamic'"), while
+ *   WebKit silently passes (it doesn't enforce 'strict-dynamic'). Instead we allowlist
+ *   'self' for our own bundles and require 'nonce-…' for inline scripts — enforced
+ *   uniformly across browsers. Dropping 'strict-dynamic' also re-activates the host
+ *   allowlists below (e.g. the Zoom origins), which it had otherwise suppressed.
  * - Styles still need 'unsafe-inline' because Tailwind's CSS-in-JS and Next.js dev-time
  *   style injection emit inline <style>. Nonce-only styles break in practice. We accept
  *   this because style-based XSS is rare and we kill script-based XSS which is the real
@@ -47,7 +51,6 @@ function buildCsp(nonce: string, apiOrigins: string[], apiWsOrigins: string[], i
   const scriptSrc = [
     "'self'",
     `'nonce-${nonce}'`,
-    "'strict-dynamic'",
     ...zoomHttpOrigins,
     ...(isDev ? ["'unsafe-eval'"] : []),
   ].join(' ');
