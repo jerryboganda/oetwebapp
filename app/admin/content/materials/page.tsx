@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ChevronRight,
   ChevronDown,
@@ -40,6 +40,7 @@ import {
   type MaterialFolderDto,
   type MaterialFileDto,
   type MaterialAudienceMode,
+  type MaterialStatus,
   type AudienceRow,
 } from '@/lib/materials-api';
 import { uploadFileChunked, type PaperAssetRole } from '@/lib/content-upload-api';
@@ -87,6 +88,75 @@ const defaultFileForm = {
   subtestCode: 'listening',
   folderId: '',
 };
+
+// ── Folder hierarchy helpers ────────────────────────────────────────────────
+
+interface FlatFolder {
+  id: string;
+  name: string;
+  depth: number;
+  subtestCode: string | null;
+  parentFolderId: string | null;
+  status: MaterialStatus;
+}
+
+/** Depth-first flatten of the nested folder tree into a depth-ordered list. */
+function flattenFolders(folders: MaterialFolderDto[], depth = 0): FlatFolder[] {
+  const out: FlatFolder[] = [];
+  for (const f of folders) {
+    out.push({
+      id: f.id,
+      name: f.name,
+      depth,
+      subtestCode: f.subtestCode ?? null,
+      parentFolderId: f.parentFolderId ?? null,
+      status: f.status,
+    });
+    if (f.folders?.length) out.push(...flattenFolders(f.folders, depth + 1));
+  }
+  return out;
+}
+
+/** Breadcrumb path for a folder id, e.g. "Medicine Profession / Reading / Reading 1". */
+function buildFolderPath(flat: FlatFolder[], id: string | null): string {
+  if (!id) return 'Root (no folder)';
+  const byId = new Map(flat.map((f) => [f.id, f]));
+  const parts: string[] = [];
+  let cur = byId.get(id);
+  let guard = 0;
+  while (cur && guard++ < 20) {
+    parts.unshift(cur.name);
+    cur = cur.parentFolderId ? byId.get(cur.parentFolderId) : undefined;
+  }
+  return parts.join(' / ') || 'Root (no folder)';
+}
+
+/** Effective subtest for a folder, walking up to the nearest classified ancestor. */
+function resolveFolderSubtest(flat: FlatFolder[], id: string | null): string {
+  if (!id) return '';
+  const byId = new Map(flat.map((f) => [f.id, f]));
+  let cur = byId.get(id);
+  let guard = 0;
+  while (cur && guard++ < 20) {
+    if (cur.subtestCode) return cur.subtestCode;
+    cur = cur.parentFolderId ? byId.get(cur.parentFolderId) : undefined;
+  }
+  return '';
+}
+
+/** Ancestor chain (self → root) that is still in Draft, in publish order (root first). */
+function draftAncestorChain(flat: FlatFolder[], id: string | null): FlatFolder[] {
+  if (!id) return [];
+  const byId = new Map(flat.map((f) => [f.id, f]));
+  const chain: FlatFolder[] = [];
+  let cur = byId.get(id);
+  let guard = 0;
+  while (cur && guard++ < 20) {
+    if (cur.status !== 'Published') chain.push(cur);
+    cur = cur.parentFolderId ? byId.get(cur.parentFolderId) : undefined;
+  }
+  return chain.reverse(); // publish root-most first
+}
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
@@ -156,12 +226,42 @@ export default function AdminMaterialsPage() {
     void loadFiles(selectedFolder?.id ?? null);
   }, [selectedFolder, loadFiles]);
 
+  // Flattened folder list (depth-ordered) for the destination picker, breadcrumbs,
+  // subtest inheritance and publish-chain resolution.
+  const flatFolders = useMemo(() => flattenFolders(tree), [tree]);
+
+  // Folder picker options: "Root" + every folder rendered as an indented path.
+  const folderOptions = useMemo(
+    () => [
+      { value: '', label: 'Root (no folder)' },
+      ...flatFolders.map((f) => ({
+        value: f.id,
+        label: `${'— '.repeat(f.depth)}${f.name}`,
+      })),
+    ],
+    [flatFolders],
+  );
+
+  /** Publish a folder's whole Draft ancestor chain (root-first). Returns published names. */
+  const publishFolderChain = useCallback(
+    async (folderId: string): Promise<string[]> => {
+      const chain = draftAncestorChain(flatFolders, folderId);
+      for (const f of chain) {
+        await adminUpdateMaterialFolder(f.id, { status: 'Published' });
+      }
+      return chain.map((f) => f.name);
+    },
+    [flatFolders],
+  );
+
   // ── Folder actions ────────────────────────────────────────────────────────
 
   function openCreateFolder(parentId: string | null = null) {
     setEditingFolder(null);
     setParentFolderIdForNew(parentId);
-    setFolderForm(defaultFolderForm);
+    // Inherit the parent's subtest classification (nearest classified ancestor),
+    // so nested folders stay consistently classified. Overridable in the form.
+    setFolderForm({ ...defaultFolderForm, subtestCode: resolveFolderSubtest(flatFolders, parentId) });
     setFolderModalOpen(true);
   }
 
@@ -229,8 +329,16 @@ export default function AdminMaterialsPage() {
   async function publishFolder(folder: MaterialFolderDto) {
     setBusyId(folder.id);
     try {
-      await adminUpdateMaterialFolder(folder.id, { status: 'Published' });
-      setToast({ variant: 'success', message: `"${folder.name}" is now live — candidates with matching access will see it.` });
+      // Publish this folder AND any still-Draft ancestors, so a nested folder
+      // actually becomes reachable instead of staying hidden behind a Draft parent.
+      const published = await publishFolderChain(folder.id);
+      const ancestors = published.filter((n) => n !== folder.name);
+      setToast({
+        variant: 'success',
+        message: ancestors.length
+          ? `"${folder.name}" is now live (also published parent folder${ancestors.length > 1 ? 's' : ''}: ${ancestors.join(', ')}).`
+          : `"${folder.name}" is now live — candidates with matching access will see it.`,
+      });
       await loadTree();
     } catch (e) {
       setToast({ variant: 'error', message: (e as Error).message });
@@ -285,14 +393,29 @@ export default function AdminMaterialsPage() {
 
   function openCreateFile() {
     setEditingFile(null);
+    const folderId = selectedFolder?.id ?? '';
+    // Auto-classify by the destination folder's subtest (nearest classified
+    // ancestor); fall back to 'listening'. Still editable in the modal.
+    const inherited = resolveFolderSubtest(flatFolders, folderId || null);
     setFileForm({
       ...defaultFileForm,
-      folderId: selectedFolder?.id ?? '',
+      folderId,
+      subtestCode: inherited || defaultFileForm.subtestCode,
     });
     setUploadFile(null);
     setUploadProgress(0);
     if (fileInputRef.current) fileInputRef.current.value = '';
     setFileModalOpen(true);
+  }
+
+  /** Change the destination folder in the file modal and auto-inherit its subtest. */
+  function changeFileFolder(folderId: string) {
+    const inherited = resolveFolderSubtest(flatFolders, folderId || null);
+    setFileForm((f) => ({
+      ...f,
+      folderId,
+      subtestCode: inherited || f.subtestCode,
+    }));
   }
 
   function openEditFile(file: MaterialFileDto) {
@@ -364,8 +487,15 @@ export default function AdminMaterialsPage() {
     setBusyId(file.id);
     try {
       await adminUpdateMaterialFile(file.id, { status: 'Published' });
-      setToast({ variant: 'success', message: `Published "${file.title}".` });
-      await loadFiles(selectedFolder?.id ?? null);
+      // Ensure the file's folder chain is published too, otherwise a published
+      // file in a Draft folder stays invisible to candidates.
+      let ancestorMsg = '';
+      if (file.folderId) {
+        const published = await publishFolderChain(file.folderId);
+        if (published.length) ancestorMsg = ` Also published folder${published.length > 1 ? 's' : ''}: ${published.join(', ')}.`;
+      }
+      setToast({ variant: 'success', message: `Published "${file.title}".${ancestorMsg}` });
+      await Promise.all([loadFiles(selectedFolder?.id ?? null), loadTree()]);
     } catch (e) {
       setToast({ variant: 'error', message: (e as Error).message });
     } finally {
@@ -489,8 +619,8 @@ export default function AdminMaterialsPage() {
         {/* File list */}
         <div className="lg:col-span-2 space-y-3">
           <div className="flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-admin-fg-strong">
-              {selectedFolder ? selectedFolder.name : 'All files'}
+            <h2 className="text-sm font-semibold text-admin-fg-strong truncate">
+              {selectedFolder ? buildFolderPath(flatFolders, selectedFolder.id) : 'All files'}
             </h2>
             <Button size="sm" onClick={openCreateFile}>
               <Plus className="h-3.5 w-3.5 mr-1" /> Add file
@@ -644,8 +774,19 @@ export default function AdminMaterialsPage() {
             onChange={(e) => setFileForm((f) => ({ ...f, description: e.target.value }))}
             maxLength={1024}
           />
+          <div>
+            <Select
+              label="Destination folder"
+              value={fileForm.folderId}
+              onChange={(e) => changeFileFolder(e.target.value)}
+              options={folderOptions}
+            />
+            <p className="mt-1 text-xs text-admin-fg-muted">
+              Saving to: <span className="font-medium text-admin-fg">{buildFolderPath(flatFolders, fileForm.folderId || null)}</span>
+            </p>
+          </div>
           <Select
-            label="Subtest"
+            label="Subtest (auto-set from folder — change if needed)"
             value={fileForm.subtestCode}
             onChange={(e) => setFileForm((f) => ({ ...f, subtestCode: e.target.value }))}
             options={SUBTEST_OPTIONS.filter((o) => o.value !== '')}

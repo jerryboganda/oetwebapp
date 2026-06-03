@@ -138,7 +138,12 @@ public static class MaterialsAdminEndpoints
             if (dto.SubtestCode != null) folder.SubtestCode = dto.SubtestCode.Trim().ToLowerInvariant();
             if (dto.AudienceMode.HasValue) folder.AudienceMode = dto.AudienceMode.Value;
             if (dto.SortOrder.HasValue) folder.SortOrder = dto.SortOrder.Value;
-            if (dto.Status.HasValue) folder.Status = dto.Status.Value;
+            if (dto.Status != null)
+            {
+                if (!TryParseStatus(dto.Status, out var parsed))
+                    return Results.BadRequest(new { code = "invalid_status" });
+                folder.Status = parsed;
+            }
             folder.UpdatedAt = DateTimeOffset.UtcNow;
 
             AddAudit(db, http, "MaterialFolderUpdated", "MaterialFolder", folder.Id, folder.Name);
@@ -444,7 +449,12 @@ public static class MaterialsAdminEndpoints
                 file.FolderId = dto.FolderId;
             }
             if (dto.SortOrder.HasValue) file.SortOrder = dto.SortOrder.Value;
-            if (dto.Status.HasValue) file.Status = dto.Status.Value;
+            if (dto.Status != null)
+            {
+                if (!TryParseStatus(dto.Status, out var parsed))
+                    return Results.BadRequest(new { code = "invalid_status" });
+                file.Status = parsed;
+            }
             file.UpdatedAt = DateTimeOffset.UtcNow;
 
             AddAudit(db, http, "MaterialFileUpdated", "MaterialFile", file.Id, file.Title);
@@ -491,6 +501,14 @@ public static class MaterialsAdminEndpoints
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Parses a status string (e.g. "Published", case-insensitive) into a
+    /// ContentStatus. The DTOs bind Status as a string because ContentStatus
+    /// carries no JsonStringEnumConverter; this is the manual parse step.
+    /// </summary>
+    private static bool TryParseStatus(string? raw, out ContentStatus status) =>
+        Enum.TryParse(raw, ignoreCase: true, out status) && Enum.IsDefined(status);
 
     /// <summary>
     /// Validates the MediaAsset format against the subtest rule and returns
@@ -634,7 +652,10 @@ file sealed record UpdateFolderDto(
     string? SubtestCode,
     MaterialAudienceMode? AudienceMode,
     int? SortOrder,
-    ContentStatus? Status);
+    // Bound as string (not ContentStatus) because ContentStatus has no
+    // JsonStringEnumConverter and there is no global one — a raw enum property
+    // would reject the JSON string "Published" with a 400 at model-binding time.
+    string? Status);
 
 file sealed record MoveFolderDto(
     string? ParentFolderId,
@@ -661,7 +682,8 @@ file sealed record UpdateFileDto(
     string? Title,
     string? Description,
     int? SortOrder,
-    ContentStatus? Status);
+    // Bound as string (see UpdateFolderDto.Status) to avoid the enum-binding 400.
+    string? Status);
 
 file sealed record ReorderDto(List<ReorderItem> Items);
 file sealed record ReorderItem(string Id, int SortOrder);
