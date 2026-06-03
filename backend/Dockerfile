@@ -14,8 +14,9 @@ COPY backend/scripts/ backend/scripts/
 RUN rm -rf backend/src/OetLearner.Api/obj \
     && dotnet publish backend/src/OetLearner.Api/OetLearner.Api.csproj \
         -c Release \
+        -o /app/publish \
         /p:UseAppHost=false \
-    && ls backend/src/OetLearner.Api/bin/Release/net10.0/publish/OetLearner.Api.dll
+    && ls /app/publish/OetLearner.Api.dll
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final
 # - curl: required for the container HEALTHCHECK
@@ -40,7 +41,7 @@ RUN groupadd --gid 10001 appgroup \
     && mkdir -p /var/opt/oet-learner/storage \
     && chown -R appuser:appgroup /app /var/opt/oet-learner /home/appuser
 
-COPY --from=build /src/backend/src/OetLearner.Api/bin/Release/net10.0/publish/ ./
+COPY --from=build /app/publish ./
 
 ENV ASPNETCORE_ENVIRONMENT=Production \
     ASPNETCORE_URLS=http://+:8080 \
