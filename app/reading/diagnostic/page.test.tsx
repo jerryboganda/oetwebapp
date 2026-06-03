@@ -142,9 +142,9 @@ describe('Reading diagnostic page', () => {
     vi.useRealTimers();
   });
 
-  it('redirects onboarding learners to profile setup before the diagnostic begins', async () => {
+  it('keeps diagnostic-stage learners on the diagnostic briefing', () => {
     mockUseReadingProfile.mockReturnValue({
-      profile: buildProfile({ currentStage: 'onboarding' }),
+      profile: buildProfile({ currentStage: 'diagnostic' }),
       isLoading: false,
       error: null,
       mutate: vi.fn(),
@@ -152,11 +152,8 @@ describe('Reading diagnostic page', () => {
 
     render(<DiagnosticPage />);
 
-    await waitFor(() => {
-      expect(mockRouterReplace).toHaveBeenCalledWith('/reading/profile-setup');
-    });
-
-    expect(screen.queryByRole('button', { name: /i'm ready, start diagnostic/i })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /i'm ready, start diagnostic/i })).toBeInTheDocument();
+    expect(mockRouterReplace).not.toHaveBeenCalled();
     expect(mockRouterPush).not.toHaveBeenCalled();
   });
 

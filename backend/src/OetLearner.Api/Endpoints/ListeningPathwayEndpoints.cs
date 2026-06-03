@@ -74,28 +74,7 @@ public static class ListeningPathwayEndpoints
             }
         })
         .WithName("ListeningGetProfile");
-
-        group.MapPost("/onboarding", async (
-            ListeningStartOnboardingRequest request,
-            HttpContext http,
-            IListeningLearnerPathwayService svc,
-            CancellationToken ct) =>
-        {
-            var userId = RequireUserId(http);
-            try
-            {
-                var profile = await svc.StartOnboardingAsync(userId, request, ct);
-                return Results.Ok(profile);
-            }
-            catch (ArgumentException ex)
-            {
-                return BadRequest("invalid_onboarding_request", ex.Message);
-            }
-        })
-        .WithName("ListeningStartOnboarding");
-
-        // ─────────────────────────────────────────────────────────────────
-        // §5.4 Audio check — must pass before diagnostic
+        // �5.4 Audio check � must pass before diagnostic
         // ─────────────────────────────────────────────────────────────────
 
         group.MapPost("/audio-check", async (
@@ -113,7 +92,7 @@ public static class ListeningPathwayEndpoints
             catch (InvalidOperationException ex) when (IsNotFound(ex))
             {
                 // Missing profile — learner attempted audio-check before
-                // onboarding. Surface as 404 so the frontend redirects
+                // listening profile missing. Surface as 404 so the frontend can guide the learner to audio check
                 // them back to the intake form.
                 return Results.NotFound(new
                 {
@@ -388,7 +367,7 @@ public static class ListeningPathwayEndpoints
             CancellationToken ct) =>
         {
             var userId = RequireUserId(http);
-            // GetStageAsync is safe pre-onboarding — returns HasProfile=false
+            // GetStageAsync is safe pre-early flow — returns HasProfile=false
             // rather than throwing — so no catch needed.
             var status = await svc.GetStageAsync(userId, ct);
             return Results.Ok(status);
@@ -890,3 +869,7 @@ public static class ListeningPathwayEndpoints
     private static string ResolveAccentLabel(string code)
         => AccentLabels.TryGetValue(code, out var label) ? label : code;
 }
+
+
+
+

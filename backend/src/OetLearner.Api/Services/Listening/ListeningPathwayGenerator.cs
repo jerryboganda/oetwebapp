@@ -6,7 +6,7 @@ namespace OetLearner.Api.Services.Listening;
 // ═════════════════════════════════════════════════════════════════════════════
 // Listening Pathway Generator — Phase 1 (A11)
 //
-// Pure-function service that turns a learner's onboarding profile + diagnostic
+// Pure-function service that turns a learner profile + diagnostic
 // results into a 12-week (or exam-date-scaled) Listening study roadmap.
 //
 // Mirrors Reading's pathway generator (see ReadingLearnerPathwayService.
@@ -37,7 +37,7 @@ namespace OetLearner.Api.Services.Listening;
 // ═════════════════════════════════════════════════════════════════════════════
 
 /// <summary>Pure-function generator that produces a Listening study roadmap
-/// from a learner's onboarding + diagnostic snapshot.</summary>
+/// from a learner profile + diagnostic snapshot.</summary>
 public interface IListeningPathwayGenerator
 {
     /// <summary>Generate the multi-week roadmap. Deterministic — never touches
@@ -362,3 +362,5 @@ public sealed class ListeningPathwayGenerator : IListeningPathwayGenerator
         return max - min;
     }
 }
+
+

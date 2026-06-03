@@ -171,7 +171,7 @@ public sealed class ListeningMockService : IListeningMockService
         var profile = await _db.LearnerListeningProfiles
             .FirstOrDefaultAsync(p => p.UserId == userId, ct)
             ?? throw new InvalidOperationException(
-                "Listening profile not found — complete onboarding first.");
+                "Listening profile not found — start the listening flow first.");
 
         if (!MockEligibleStages.Contains(profile.CurrentStage))
         {
@@ -621,3 +621,4 @@ public sealed class ListeningMockService : IListeningMockService
     private static int ClampInt(int value, int min, int max)
         => value < min ? min : value > max ? max : value;
 }
+

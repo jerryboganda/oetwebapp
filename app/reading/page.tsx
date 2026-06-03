@@ -185,12 +185,16 @@ export default function ReadingHome() {
   return (
     <LearnerDashboardShell pageTitle="Reading">
       <main className="space-y-10">
-        {profile?.currentStage === 'onboarding' ? (
+        {!profile || profile.currentStage === 'diagnostic' ? (
           <Link
-            href="/reading/profile-setup"
-            className="flex items-center justify-between rounded-xl border border-orange-300 bg-orange-50 px-5 py-3 text-sm font-semibold text-navy shadow-sm hover:bg-orange-100 transition-colors dark:border-orange-500/40 dark:bg-orange-950/30 dark:hover:bg-orange-950/50"
+            href="/reading/diagnostic"
+            className="flex items-center justify-between rounded-xl border border-info/30 bg-info/10 px-5 py-3 text-sm font-semibold text-navy shadow-sm hover:bg-info/20 transition-colors dark:border-info/40 dark:bg-info/10 dark:hover:bg-info/15"
           >
-            <span>Complete your profile setup to unlock your personalised plan</span>
+            <span>
+              {!profile
+                ? 'Start your diagnostic to unlock your personalised Reading plan'
+                : 'Continue with your reading diagnostic'}
+            </span>
             <span aria-hidden="true">→</span>
           </Link>
         ) : null}

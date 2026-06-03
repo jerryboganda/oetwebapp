@@ -2,7 +2,7 @@
  * Listening Pathway API client.
  *
  * Covers the Listening Module Phase 1 foundation:
- *   onboarding -> audio-check -> diagnostic -> pathway-generation -> results.
+ *   audio-check -> diagnostic -> pathway-generation -> results.
  *
  * Backend base route: /v1/listening-pathway/
  * (NOT /v1/listening/* — that namespace is reserved for the legacy V2
@@ -50,26 +50,6 @@ export interface ListeningProfile {
   audioCheckPassedAt: string | null;
   pathwayGeneratedAt: string | null;
   updatedAt: string;
-}
-
-/**
- * Onboarding intake captured before the audio check (§5.3).
- * Mirrors backend `StartOnboardingRequest`.
- */
-export interface OnboardingPayload {
-  targetBand: string;
-  examDate: string | null;
-  hoursPerWeek: number;
-  profession: string;
-  englishExposureSource: string;
-  comfortBritish: number;
-  comfortAustralian: number;
-  comfortVarious: number;
-  hasTakenBefore: boolean;
-  previousScore: number | null;
-  selfRatedSpeed: number;
-  selfRatedNoteTaking: number;
-  selfRatedSpelling: number;
 }
 
 /**
@@ -694,7 +674,7 @@ function readCachedDiagnosticResult(sessionId: string): DiagnosticResult | null 
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Profile & Onboarding
+// Profile
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
@@ -710,17 +690,6 @@ export async function getListeningProfile(): Promise<ListeningProfile | null> {
     if (status === 404) return null;
     throw error;
   }
-}
-
-/**
- * Submit onboarding intake and create / update the learner profile (§5.3).
- */
-export async function submitOnboarding(payload: OnboardingPayload): Promise<ListeningProfile> {
-  const raw = await api<unknown>('/v1/listening-pathway/onboarding', {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  });
-  return normalizeProfile(raw);
 }
 
 /**
@@ -1289,7 +1258,6 @@ export async function getDictationStats(): Promise<DictationStats> {
 
 export {
   getListeningProfile as fetchListeningProfile,
-  submitOnboarding as submitListeningOnboarding,
   submitAudioCheck as submitListeningAudioCheck,
   startDiagnostic as startListeningDiagnostic,
   getDiagnosticQuestions as getListeningDiagnosticQuestions,

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/auth-context';
+import { useListeningProfile } from '@/hooks/useListeningProfile';
 import {
   getDiagnosticQuestions,
   startDiagnostic,
@@ -87,6 +88,7 @@ function LoadingSpinner({ label }: { label: string }) {
 
 export default function ListeningDiagnosticPage() {
   const { isAuthenticated, loading: authLoading } = useAuth();
+  const { profile, isLoading: profileLoading } = useListeningProfile();
   const router = useRouter();
 
   const [flowState, setFlowState] = useState<FlowState>('brief');
@@ -113,6 +115,13 @@ export default function ListeningDiagnosticPage() {
       router.replace('/sign-in');
     }
   }, [authLoading, isAuthenticated, router]);
+
+  useEffect(() => {
+    if (authLoading || profileLoading) return;
+    if (!profile || profile.currentStage === 'audio_check') {
+      router.replace('/listening/audio-check?returnTo=%2Flistening%2Fdiagnostic');
+    }
+  }, [authLoading, profile, profileLoading, router]);
 
   // Per-question timer (count up)
   useEffect(() => {
@@ -279,7 +288,7 @@ export default function ListeningDiagnosticPage() {
     return `${m}:${String(s).padStart(2, '0')}`;
   }, [questionElapsed]);
 
-  if (authLoading) {
+  if (authLoading || profileLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center">
         <LoadingSpinner label="Loading…" />

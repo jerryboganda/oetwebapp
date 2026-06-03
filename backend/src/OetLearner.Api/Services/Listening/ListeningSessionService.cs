@@ -108,7 +108,7 @@ public sealed class ListeningSessionService
         }
 
         // WS2 — strict Listening exams (Exam / OET@Home, OneWayLocks) require a
-        // passed sound-check from the pathway onboarding before the learner can
+        // passed sound-check from the Listening flow before the learner can
         // leave intro. Practice / Learning / Paper / Diagnostic modes stay
         // ungated. Mirrors the tech-readiness gate above but reads the
         // learner's LearnerListeningProfile.AudioCheckPassedAt instead of the
@@ -460,7 +460,7 @@ public sealed class ListeningSessionService
 
     /// <summary>WS2 — true when the learner has a pathway sound-check that
     /// passed within <see cref="AudioCheckTtlMs"/>. Reads the same
-    /// <see cref="Domain.LearnerListeningProfile"/> row the pathway onboarding
+    /// <see cref="Domain.LearnerListeningProfile"/> row the Listening flow
     /// writes <c>AudioCheckPassedAt</c> onto. A missing profile (learner who
     /// never onboarded the Listening pathway) fails closed.</summary>
     private async Task<bool> HasValidAudioCheckAsync(
@@ -709,3 +709,5 @@ public sealed record AdvanceResultDto(
 }
 
 public sealed record AudioResumeDto(bool Resume, string ServerState, int ResumeAtMs, string Reason);
+
+

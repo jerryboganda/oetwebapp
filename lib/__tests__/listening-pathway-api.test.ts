@@ -58,51 +58,6 @@ describe('listening-pathway-api', () => {
     }
   });
 
-  it('submits onboarding with the backend field names', async () => {
-    mockFetchWithTimeout.mockResolvedValue(
-      jsonResponse({
-        userId: 'u1',
-        targetBand: 'B',
-        currentStage: 'audio_check',
-        onboardingCompletedAt: '2026-05-26T10:00:00Z',
-      }),
-    );
-
-    await api.submitOnboarding({
-      targetBand: 'B',
-      examDate: '2026-12-01',
-      hoursPerWeek: 8,
-      profession: 'Nursing',
-      englishExposureSource: 'mixed',
-      comfortBritish: 3,
-      comfortAustralian: 2,
-      comfortVarious: 3,
-      hasTakenBefore: false,
-      previousScore: null,
-      selfRatedSpeed: 3,
-      selfRatedNoteTaking: 2,
-      selfRatedSpelling: 3,
-    });
-
-    const [url, init] = lastCall();
-    expect(url).toBe('/v1/listening-pathway/onboarding');
-    expect(init.method).toBe('POST');
-    expect(JSON.parse(init.body as string)).toMatchObject({
-      targetBand: 'B',
-      examDate: '2026-12-01',
-      hoursPerWeek: 8,
-      profession: 'Nursing',
-      englishExposureSource: 'mixed',
-      comfortBritish: 3,
-      comfortAustralian: 2,
-      comfortVarious: 3,
-      hasTakenBefore: false,
-      selfRatedSpeed: 3,
-      selfRatedNoteTaking: 2,
-      selfRatedSpelling: 3,
-    });
-  });
-
   it('loads diagnostic questions from the safe session projection route', async () => {
     mockFetchWithTimeout.mockResolvedValue(jsonResponse([]));
 

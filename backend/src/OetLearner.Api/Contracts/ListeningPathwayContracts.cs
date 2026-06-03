@@ -5,28 +5,12 @@ namespace OetLearner.Api.Contracts;
 // ═════════════════════════════════════════════════════════════════════════════
 // Listening Module Pathway — Phase 1 DTOs (Foundation)
 //
-// Covers onboarding → audio-check → diagnostic → pathway-generation → results.
+// Covers early flow → audio-check → diagnostic → pathway-generation → results.
 // Mirrors the Reading pathway DTOs (ReadingPathwayContracts.cs) in shape and
 // naming. Backed by entities in Domain/ListeningPathwayEntities.cs.
 // Question/option projections are LEARNER-SAFE — they never leak correct
 // answers, accepted synonyms, transcripts, or explanation markdown.
 // ═════════════════════════════════════════════════════════════════════════════
-
-/// <summary>Onboarding intake captured before the audio check (§5.3).</summary>
-public sealed record ListeningStartOnboardingRequest(
-    [property: Required, StringLength(8)] string TargetBand,
-    DateTimeOffset? ExamDate,
-    [property: Range(0, 168)] int HoursPerWeek,
-    [property: Required, StringLength(64)] string Profession,
-    [property: Required, StringLength(32)] string EnglishExposureSource,
-    [property: Range(1, 5)] int ComfortBritish,
-    [property: Range(1, 5)] int ComfortAustralian,
-    [property: Range(1, 5)] int ComfortVarious,
-    bool HasTakenBefore,
-    [property: Range(0, 500)] int? PreviousScore,
-    [property: Range(1, 5)] int SelfRatedSpeed,
-    [property: Range(1, 5)] int SelfRatedNoteTaking,
-    [property: Range(1, 5)] int SelfRatedSpelling);
 
 /// <summary>Flattened projection of <see cref="Domain.LearnerListeningProfile"/>.</summary>
 public class LearnerListeningProfileResponse
@@ -46,7 +30,7 @@ public class LearnerListeningProfileResponse
     public int SelfRatedNoteTaking { get; set; }
     public int SelfRatedSpelling { get; set; }
 
-    /// <summary>onboarding | audio_check | diagnostic | foundation | practice | mastery</summary>
+    /// <summary>audio_check | diagnostic | foundation | practice | mastery</summary>
     public string CurrentStage { get; set; } = default!;
     public int? CurrentReadinessScore { get; set; }
     public int? PredictedScore { get; set; }
@@ -174,7 +158,7 @@ public class AccentProgressDto
     public int QuestionsAttempted { get; set; }
     public int MinutesListened { get; set; }
 
-    /// <summary>1–5 self-reported confidence at onboarding.</summary>
+    /// <summary>1–5 self-reported confidence at early flow.</summary>
     public int SelfConfidenceRating { get; set; }
 }
 
@@ -263,7 +247,7 @@ public class ListeningDiagnosticResultResponse
 public class PathwayStatusResponse
 {
     public bool HasProfile { get; set; }
-    public string CurrentStage { get; set; } = "onboarding";
+    public string CurrentStage { get; set; } = "audio_check";
     public DateTimeOffset? DiagnosticCompletedAt { get; set; }
     public DateTimeOffset? PathwayGeneratedAt { get; set; }
     public int? CurrentReadinessScore { get; set; }
@@ -351,3 +335,6 @@ public sealed record CalendarHeatmapDto(IReadOnlyList<CalendarDay> Days);
 
 /// <summary>One day of question-attempt activity.</summary>
 public sealed record CalendarDay(DateOnly Date, int QuestionsAttempted);
+
+
+

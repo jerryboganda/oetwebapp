@@ -10,7 +10,7 @@ namespace OetLearner.Api.Services.Reading;
 // Reading Learner Pathway Service — WS2
 //
 // Implements the 5-stage learning pathway:
-//   onboarding → diagnostic → foundation → practice → mastery
+//   diagnostic ? foundation ? practice ? mastery
 //
 // NAMING: This is IReadingLearnerPathwayService (NOT IReadingPathwayService
 // which already exists in ReadingPathwayService.cs for the snapshot pathway).
@@ -24,7 +24,6 @@ namespace OetLearner.Api.Services.Reading;
 // Interface for the NEW 5-stage pathway system (NOT the existing IReadingPathwayService)
 public interface IReadingLearnerPathwayService
 {
-    Task<LearnerReadingProfile> StartOnboardingAsync(string userId, StartOnboardingRequest request, CancellationToken ct);
     Task<StartDiagnosticResult> StartDiagnosticAsync(string userId, CancellationToken ct);
     Task<DiagnosticSubmitResult> SubmitDiagnosticAsync(string userId, Guid sessionId, Dictionary<string, string> answers, CancellationToken ct);
     Task<LearnerReadingPathway> GeneratePathwayAsync(string userId, CancellationToken ct);
@@ -34,15 +33,6 @@ public interface IReadingLearnerPathwayService
 
 // ── Request / Result DTOs ────────────────────────────────────────────────────
 
-public sealed record StartOnboardingRequest(
-    string TargetBand,
-    DateTimeOffset? ExamDate,
-    int HoursPerWeek,
-    string Profession,
-    bool HasTakenBefore,
-    int? PreviousScore,
-    int SelfRatedSpeed,
-    int SelfRatedVocabulary);
 
 public sealed record StartDiagnosticResult(
     Guid SessionId,
@@ -77,52 +67,6 @@ public sealed class ReadingLearnerPathwayService(
     LearnerDbContext db,
     ISkillScoringService skillScoring) : IReadingLearnerPathwayService
 {
-    /// <summary>
-    /// Upsert learner's onboarding profile and advance stage to "diagnostic".
-    /// Idempotent — calling again with updated values overwrites in place.
-    /// </summary>
-    public async Task<LearnerReadingProfile> StartOnboardingAsync(
-        string userId, StartOnboardingRequest request, CancellationToken ct)
-    {
-        var existing = await db.LearnerReadingProfiles
-            .FirstOrDefaultAsync(p => p.UserId == userId, ct);
-
-        if (existing is not null)
-        {
-            existing.TargetBand = request.TargetBand;
-            existing.ExamDate = request.ExamDate;
-            existing.HoursPerWeek = request.HoursPerWeek;
-            existing.Profession = request.Profession;
-            existing.HasTakenBefore = request.HasTakenBefore;
-            existing.PreviousScore = request.PreviousScore;
-            existing.SelfRatedSpeed = request.SelfRatedSpeed;
-            existing.SelfRatedVocabulary = request.SelfRatedVocabulary;
-            existing.CurrentStage = "diagnostic";
-            existing.UpdatedAt = DateTimeOffset.UtcNow;
-            await db.SaveChangesAsync(ct);
-            return existing;
-        }
-
-        var profile = new LearnerReadingProfile
-        {
-            Id = Guid.NewGuid(),
-            UserId = userId,
-            TargetBand = request.TargetBand,
-            ExamDate = request.ExamDate,
-            HoursPerWeek = request.HoursPerWeek,
-            Profession = request.Profession,
-            HasTakenBefore = request.HasTakenBefore,
-            PreviousScore = request.PreviousScore,
-            SelfRatedSpeed = request.SelfRatedSpeed,
-            SelfRatedVocabulary = request.SelfRatedVocabulary,
-            CurrentStage = "diagnostic",
-            OnboardingCompletedAt = DateTimeOffset.UtcNow,
-            UpdatedAt = DateTimeOffset.UtcNow
-        };
-        db.LearnerReadingProfiles.Add(profile);
-        await db.SaveChangesAsync(ct);
-        return profile;
-    }
 
     /// <summary>
     /// Select 22 diagnostic questions (10 Part A, 4 Part B, 8 Part C) and
@@ -338,7 +282,7 @@ public sealed class ReadingLearnerPathwayService(
     {
         var profile = await db.LearnerReadingProfiles
             .FirstOrDefaultAsync(p => p.UserId == userId, ct)
-            ?? throw new InvalidOperationException("Learner profile not found — complete onboarding first.");
+            ?? throw new InvalidOperationException("Learner profile not found — start the reading flow first.");
 
         var skillScores = await skillScoring.GetCurrentScoresAsync(userId, ct);
 
@@ -443,7 +387,7 @@ public sealed class ReadingLearnerPathwayService(
             .FirstOrDefaultAsync(p => p.UserId == userId, ct);
 
         if (profile is null)
-            return new PathwayStatusDto("onboarding", null, null, null, null);
+            return new PathwayStatusDto("diagnostic", null, null, null, null);
 
         int? weeksRemaining = profile.ExamDate.HasValue
             ? (int?)Math.Max(0, (int)Math.Ceiling(
@@ -659,3 +603,5 @@ public sealed class ReadingLearnerPathwayService(
 
     private static string ScaledToOetBand(int scaled) => OetScoring.OetGradeLetterFromScaled(scaled);
 }
+
+

@@ -44,29 +44,6 @@ describe('reading-pathway-api', () => {
     }
   });
 
-  it('submits onboarding with the backend field names', async () => {
-    mockFetchWithTimeout.mockResolvedValue(jsonResponse({ userId: 'u1', currentStage: 'diagnostic' }));
-
-    await api.submitOnboarding({
-      targetBand: 'B+',
-      examDate: null,
-      hoursPerWeek: 8,
-      profession: 'Medicine',
-      hasTakenBefore: true,
-      previousScore: 320,
-      selfRatedSpeed: 4,
-      selfRatedVocabulary: 3,
-    });
-
-    const [url, init] = lastCall();
-    expect(url).toBe('/v1/reading-pathway/onboarding');
-    expect(init.method).toBe('POST');
-    expect(JSON.parse(init.body as string)).toMatchObject({
-      targetBand: 'B+',
-      selfRatedVocabulary: 3,
-    });
-  });
-
   it('loads diagnostic questions from the safe session projection route', async () => {
     mockFetchWithTimeout.mockResolvedValue(jsonResponse([]));
 
@@ -151,7 +128,7 @@ describe('reading-pathway-api', () => {
 
     const [url, init, timeoutMs] = lastCall();
     expect(url).toBe('/v1/reading-pathway/diagnostic/sessions/session-5/results');
-    expect(init.method).toBe('GET');
+    expect(init.method ?? 'GET').toBe('GET');
     expect(timeoutMs).toBe(5_000);
   });
 

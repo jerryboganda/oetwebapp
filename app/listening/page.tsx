@@ -106,10 +106,6 @@ export default function ListeningHome() {
       return;
     }
     if (!profile) return;
-    if (profile.currentStage === 'onboarding') {
-      router.replace('/listening/welcome');
-      return;
-    }
     if (profile.currentStage === 'audio_check') {
       router.replace('/listening/audio-check');
       return;
@@ -183,13 +179,13 @@ export default function ListeningHome() {
           <div className="rounded-2xl border border-violet-100 bg-violet-50 p-8 text-center shadow-sm">
             <p className="text-lg font-bold text-violet-900">Get started</p>
             <p className="mt-1 text-sm text-violet-700">
-              We&apos;ll ask a few quick questions, run an audio check, and tailor your plan.
+              Start with the audio check, then move straight into your listening diagnostic and tailored plan.
             </p>
             <Link
-              href="/listening/welcome"
+              href="/listening/audio-check"
               className="mt-5 inline-flex items-center gap-2 rounded-full bg-primary px-8 py-3 text-sm font-bold text-white shadow-md transition-[color,background-color,transform] duration-200 hover:bg-primary-dark active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600"
             >
-              Start your listening journey
+              Start audio check
               <ArrowRight className="h-4 w-4" aria-hidden />
             </Link>
           </div>

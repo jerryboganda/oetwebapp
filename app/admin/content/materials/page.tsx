@@ -13,6 +13,8 @@ import {
   Trash2,
   Users,
   RotateCcw,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 
 import { AdminCatalogLayout } from '@/components/admin/layout/admin-catalog-layout';
@@ -224,6 +226,32 @@ export default function AdminMaterialsPage() {
     }
   }
 
+  async function publishFolder(folder: MaterialFolderDto) {
+    setBusyId(folder.id);
+    try {
+      await adminUpdateMaterialFolder(folder.id, { status: 'Published' });
+      setToast({ variant: 'success', message: `"${folder.name}" is now live — candidates with matching access will see it.` });
+      await loadTree();
+    } catch (e) {
+      setToast({ variant: 'error', message: (e as Error).message });
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function unpublishFolder(folder: MaterialFolderDto) {
+    setBusyId(folder.id);
+    try {
+      await adminUpdateMaterialFolder(folder.id, { status: 'Draft' });
+      setToast({ variant: 'success', message: `"${folder.name}" unpublished — hidden from candidates.` });
+      await loadTree();
+    } catch (e) {
+      setToast({ variant: 'error', message: (e as Error).message });
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   // ── Audience actions ──────────────────────────────────────────────────────
 
   function openAudienceModal(folder: MaterialFolderDto) {
@@ -387,6 +415,8 @@ export default function AdminMaterialsPage() {
         onDelete={() => void deleteFolder(folder)}
         onAudience={() => openAudienceModal(folder)}
         onCreateChild={() => openCreateFolder(folder.id)}
+        onPublish={() => void publishFolder(folder)}
+        onUnpublish={() => void unpublishFolder(folder)}
       >
         {folder.folders && folder.folders.length > 0 && renderFolderTree(folder.folders, depth + 1)}
       </FolderTreeNode>

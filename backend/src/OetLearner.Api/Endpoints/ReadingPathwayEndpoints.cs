@@ -29,22 +29,6 @@ public static class ReadingPathwayEndpoints
             return Results.Ok(ToProfileResponse(userId, profile));
         });
 
-        group.MapPost("/onboarding", async (
-            Contracts.StartOnboardingRequest request,
-            HttpContext http,
-            IReadingLearnerPathwayService svc,
-            CancellationToken ct) =>
-        {
-            var userId = http.User.FindFirstValue(ClaimTypes.NameIdentifier)
-                ?? throw new InvalidOperationException("auth required");
-            var profile = await svc.StartOnboardingAsync(userId,
-                new Services.Reading.StartOnboardingRequest(
-                    request.TargetBand, request.ExamDate, request.HoursPerWeek,
-                    request.Profession, request.HasTakenBefore, request.PreviousScore,
-                    request.SelfRatedSpeed, request.SelfRatedVocabulary), ct);
-            return Results.Ok(ToProfileResponse(userId, profile));
-        });
-
         group.MapPost("/diagnostic/start", async (
             HttpContext http,
             IReadingLearnerPathwayService svc,
@@ -974,7 +958,7 @@ public static class ReadingPathwayEndpoints
         {
             return new ReadingProfileResponse(
                 UserId: userId,
-                CurrentStage: "onboarding",
+                CurrentStage: "diagnostic",
                 TargetBand: null,
                 ExamDate: null,
                 HoursPerWeek: null,
@@ -1011,7 +995,7 @@ public static class ReadingPathwayEndpoints
             OnboardingCompletedAt: profile.OnboardingCompletedAt,
             PathwayGeneratedAt: profile.PathwayGeneratedAt,
             WeeksRemaining: weeksRemaining,
-            DiagnosticCompleted: profile.CurrentStage is not "onboarding" and not "diagnostic");
+            DiagnosticCompleted: profile.CurrentStage is not "diagnostic" and not "audio_check");
     }
 
     private static ReadingPathwayResponse ToPathwayResponse(LearnerReadingProfile? profile, LearnerReadingPathway? pathway)
@@ -1038,7 +1022,7 @@ public static class ReadingPathwayEndpoints
                 : Math.Max(0, (int)Math.Ceiling((profile.ExamDate.Value - DateTimeOffset.UtcNow).TotalDays / 7));
 
         return new ReadingPathwayResponse(
-            CurrentStage: profile?.CurrentStage ?? "onboarding",
+            CurrentStage: profile?.CurrentStage ?? "diagnostic",
             TotalWeeks: pathway?.TotalWeeks ?? weeks.Count,
             CurrentWeek: currentWeek,
             WeeksRemaining: weeksRemaining,

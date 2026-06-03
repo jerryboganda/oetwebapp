@@ -138,13 +138,13 @@ public sealed class ListeningPathwayAnalyticsService : IListeningPathwayAnalytic
             .AsNoTracking()
             .FirstOrDefaultAsync(p => p.UserId == userId, ct);
 
-        // Pre-onboarding dashboard — emit safe zeros so the frontend can
-        // render a "complete onboarding" CTA without erroring.
+        // Profile-missing dashboard — emit safe zeros so the frontend can
+        // render a direct listening CTA without erroring.
         if (profile is null)
         {
             return new ListeningDashboardDto(
                 ReadinessScore: 0,
-                CurrentStage: "onboarding",
+                CurrentStage: "audio_check",
                 DaysUntilExam: null,
                 LastMockScaledScore: null,
                 AveragePronunciationRetention: null);
@@ -547,3 +547,6 @@ public sealed class ListeningPathwayAnalyticsService : IListeningPathwayAnalytic
         }
     }
 }
+
+
+

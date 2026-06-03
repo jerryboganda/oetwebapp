@@ -20,8 +20,8 @@ namespace OetLearner.Api.Tests;
 //     questions are rejected.
 //   • Repeated diagnostic submit is idempotent (matches the service-level
 //     behaviour in ListeningLearnerPathwayService.SubmitDiagnosticAsync).
-//   • Onboarding persists profile + advances stage to "audio_check".
-//   • Audio-check advances stage to "diagnostic" and records the timestamp.
+//   • Audio-check bootstraps a hidden profile when needed and advances the
+//     learner to "diagnostic".
 //
 // Tests are written against the expected /v1/listening-pathway/* route prefix.
 // Until the endpoints file (A8) lands and the DI registration (A7) is wired,
@@ -235,73 +235,11 @@ public class ListeningPathwayEndpointTests : IClassFixture<TestWebApplicationFac
     }
 
     [Fact]
-    public async Task OnboardingEndpoint_PersistsProfileAndAdvancesStage()
-    {
-        var userId = NewUserId("listen-onboard");
-        var client = await CreateLearnerClientAsync(userId);
-
-        var response = await client.PostAsJsonAsync(
-            "/v1/listening-pathway/onboarding",
-            new
-            {
-                targetBand = "B",
-                examDate = (DateTimeOffset?)null,
-                hoursPerWeek = 8,
-                profession = "medicine",
-                englishExposureSource = "british_tv",
-                comfortBritish = 4,
-                comfortAustralian = 3,
-                comfortVarious = 3,
-                hasTakenBefore = false,
-                previousScore = (int?)null,
-                selfRatedSpeed = 3,
-                selfRatedNoteTaking = 3,
-                selfRatedSpelling = 4,
-            });
-
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-
-        await using var scope = _factory.Services.CreateAsyncScope();
-        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
-        var profile = await db.LearnerListeningProfiles
-            .SingleAsync(p => p.UserId == userId);
-
-        Assert.Equal("B", profile.TargetBand);
-        Assert.Equal(8, profile.HoursPerWeek);
-        Assert.Equal("medicine", profile.Profession);
-        // The service explicitly advances onboarding → audio_check.
-        Assert.Equal("audio_check", profile.CurrentStage);
-        Assert.NotEqual(default, profile.OnboardingCompletedAt);
-    }
-
-    [Fact]
     public async Task AudioCheckEndpoint_AdvancesStageToDiagnostic()
     {
         var userId = NewUserId("listen-audio");
         var client = await CreateLearnerClientAsync(userId);
 
-        // Step 1 — onboarding. After this, stage = "audio_check".
-        var onboardingResponse = await client.PostAsJsonAsync(
-            "/v1/listening-pathway/onboarding",
-            new
-            {
-                targetBand = "B",
-                examDate = (DateTimeOffset?)null,
-                hoursPerWeek = 8,
-                profession = "medicine",
-                englishExposureSource = "british_tv",
-                comfortBritish = 4,
-                comfortAustralian = 3,
-                comfortVarious = 3,
-                hasTakenBefore = false,
-                previousScore = (int?)null,
-                selfRatedSpeed = 3,
-                selfRatedNoteTaking = 3,
-                selfRatedSpelling = 4,
-            });
-        Assert.Equal(HttpStatusCode.OK, onboardingResponse.StatusCode);
-
-        // Step 2 — audio check passes ("clear"). Advances to "diagnostic".
         var audioResponse = await client.PostAsJsonAsync(
             "/v1/listening-pathway/audio-check",
             new

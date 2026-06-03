@@ -45,14 +45,14 @@ public sealed class MaterialAccessService(
             .OrderBy(f => f.SortOrder)
             .ToListAsync(ct);
 
-        var (planId, planCode, cohortIds, sponsorIds) = await ResolveMembershipsAsync(userId, ct);
+        var (planId, planCode, planDatabaseId, cohortIds, sponsorIds) = await ResolveMembershipsAsync(userId, ct);
 
         var folderDict = allFolders.ToDictionary(f => f.Id);
         var visibleFolderIds = new HashSet<string>();
 
         foreach (var folder in allFolders)
         {
-            if (IsFolderVisible(folder, folderDict, planId, planCode, cohortIds, sponsorIds))
+            if (IsFolderVisible(folder, folderDict, planId, planCode, planDatabaseId, cohortIds, sponsorIds))
                 visibleFolderIds.Add(folder.Id);
         }
 
@@ -106,7 +106,7 @@ public sealed class MaterialAccessService(
             .ToListAsync(ct);
 
         var folderDict = allFolders.ToDictionary(f => f.Id);
-        var (planId, planCode, cohortIds, sponsorIds) = await ResolveMembershipsAsync(userId, ct);
+        var (planId, planCode, planDatabaseId, cohortIds, sponsorIds) = await ResolveMembershipsAsync(userId, ct);
 
         return folders.Any(folder =>
             IsFolderVisible(folder, folderDict, planId, planCode, cohortIds, sponsorIds));
@@ -117,6 +117,7 @@ public sealed class MaterialAccessService(
         Dictionary<string, MaterialFolder> allFolders,
         string? planId,
         string? planCode,
+        string? planDatabaseId,
         HashSet<string> cohortIds,
         HashSet<string> sponsorIds)
     {
@@ -136,7 +137,7 @@ public sealed class MaterialAccessService(
         return effectiveMode switch
         {
             MaterialAudienceMode.Everyone => true,
-            MaterialAudienceMode.Restricted => MatchesAudience(effectiveAudiences, planId, planCode, cohortIds, sponsorIds),
+            MaterialAudienceMode.Restricted => MatchesAudience(effectiveAudiences, planId, planCode, planDatabaseId, cohortIds, sponsorIds),
             _ => false, // Inherit with no explicit ancestor → hidden (safe default)
         };
     }
@@ -162,6 +163,7 @@ public sealed class MaterialAccessService(
         IEnumerable<MaterialFolderAudience> audiences,
         string? planId,
         string? planCode,
+        string? planDatabaseId,
         HashSet<string> cohortIds,
         HashSet<string> sponsorIds)
     {
@@ -170,8 +172,14 @@ public sealed class MaterialAccessService(
             switch (row.TargetType)
             {
                 case "plan":
+                    // Compare against subscription.PlanId (usually the plan Code),
+                    // the normalised plan Code, AND the BillingPlan.Id (UUID/slug).
+                    // The admin audience picker stores BillingPlan.Id; the entitlement
+                    // snapshot carries subscription.PlanId (= BillingPlan.Code in most
+                    // deployments). Accept any of the three to tolerate either format.
                     if ((!string.IsNullOrWhiteSpace(planId) && row.TargetId == planId)
-                        || (!string.IsNullOrWhiteSpace(planCode) && row.TargetId == planCode))
+                        || (!string.IsNullOrWhiteSpace(planCode) && row.TargetId == planCode)
+                        || (!string.IsNullOrWhiteSpace(planDatabaseId) && row.TargetId == planDatabaseId))
                         return true;
                     break;
                 case "cohort":
@@ -187,10 +195,26 @@ public sealed class MaterialAccessService(
         return false;
     }
 
-    private async Task<(string? planId, string? planCode, HashSet<string> cohortIds, HashSet<string> sponsorIds)>
+    private async Task<(string? planId, string? planCode, string? planDatabaseId, HashSet<string> cohortIds, HashSet<string> sponsorIds)>
         ResolveMembershipsAsync(string userId, CancellationToken ct)
     {
         var entitlement = await entitlementResolver.ResolveAsync(userId, ct);
+
+        // Resolve the BillingPlan.Id for the user's plan.
+        // The entitlement snapshot carries subscription.PlanId which is typically
+        // the plan's Code (e.g. "premium-yearly"), but the admin audience picker
+        // stores BillingPlan.Id (e.g. "plan-premium-yearly"). We look up both so
+        // MatchesAudience can compare against whichever value was stored.
+        string? planDatabaseId = null;
+        if (!string.IsNullOrWhiteSpace(entitlement.PlanId))
+        {
+            var normalised = entitlement.PlanId.Trim().ToLowerInvariant();
+            planDatabaseId = await db.BillingPlans
+                .AsNoTracking()
+                .Where(p => p.Id.ToLower() == normalised || p.Code.ToLower() == normalised)
+                .Select(p => p.Id)
+                .FirstOrDefaultAsync(ct);
+        }
 
         var cohortIds = await db.CohortMembers
             .AsNoTracking()
@@ -207,6 +231,7 @@ public sealed class MaterialAccessService(
         return (
             entitlement.PlanId,
             entitlement.PlanCode,
+            planDatabaseId,
             new HashSet<string>(cohortIds),
             new HashSet<string>(sponsorIds)
         );

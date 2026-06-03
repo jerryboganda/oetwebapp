@@ -2563,7 +2563,7 @@ public sealed class ListeningLearnerService(
     /// <summary>WS2 — true when the learner has a pathway sound-check that
     /// passed within <see cref="ListeningSessionService.AudioCheckTtlMs"/>.
     /// Reads <see cref="LearnerListeningProfile.AudioCheckPassedAt"/>, the same
-    /// row the Listening pathway onboarding stamps on a passed check. A learner
+    /// row the Listening pathway flow stamps on a passed check. A learner
     /// with no Listening profile (never onboarded the pathway) fails closed so
     /// strict exams cannot be started without a check.</summary>
     private async Task<bool> HasValidAudioCheckAsync(string userId, DateTimeOffset now, CancellationToken ct)
@@ -3072,3 +3072,4 @@ public sealed class ListeningLearnerService(
 
 public sealed record ListeningAnswerSaveRequest(string? UserAnswer);
 public sealed record ListeningIntegrityEventRequest(string EventType, string? Details, DateTimeOffset? OccurredAt);
+

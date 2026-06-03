@@ -18,11 +18,11 @@ namespace OetLearner.Api.Services.Listening;
 //   • IListeningPathwayGenerator       (A4) — pure-function roadmap generator
 //
 // Implements the 5-stage learner flow per OET_LISTENING_MODULE_PATHWAY.md §5–§6:
-//   onboarding → audio_check → diagnostic → foundation → practice → mastery
+//   early flow → audio_check → diagnostic → foundation → practice → mastery
 //
 // Reference: mirrors ReadingLearnerPathwayService.cs in shape and convention.
 // Key differences from Reading:
-//   • Includes a dedicated "audio_check" stage between onboarding and diagnostic
+//   • Includes a dedicated "audio_check" stage before diagnostic
 //     so audio playback failures fail closed before the diagnostic starts.
 //   • Question selection is sourced from the seeded diagnostic paper id
 //     "listening-diagnostic-phase1" (cf. ListeningDiagnosticSeederOptions),
@@ -43,8 +43,6 @@ namespace OetLearner.Api.Services.Listening;
 public interface IListeningLearnerPathwayService
 {
     Task<LearnerListeningProfileResponse> GetProfileAsync(string userId, CancellationToken ct);
-    Task<LearnerListeningProfileResponse> StartOnboardingAsync(
-        string userId, ListeningStartOnboardingRequest request, CancellationToken ct);
     Task<AudioCheckResponse> SubmitAudioCheckAsync(
         string userId, AudioCheckRequest request, CancellationToken ct);
     Task<StartDiagnosticResponse> StartDiagnosticAsync(string userId, CancellationToken ct);
@@ -141,7 +139,7 @@ public sealed class ListeningLearnerPathwayService : IListeningLearnerPathwaySer
     // ─────────────────────────────────────────────────────────────────────
 
     /// <summary>
-    /// Fetch the learner's listening profile, or throw if onboarding has not
+    /// Fetch the learner's listening profile, or throw if early flow has not
     /// happened yet. Surfaces as 404 at the endpoint layer.
     /// </summary>
     public async Task<LearnerListeningProfileResponse> GetProfileAsync(
@@ -158,98 +156,6 @@ public sealed class ListeningLearnerPathwayService : IListeningLearnerPathwaySer
     }
 
     /// <summary>
-    /// Upsert the learner's listening onboarding intake and advance the stage
-    /// to "audio_check" — the next stage in the §5 flow.
-    ///
-    /// Idempotent: calling again with updated values overwrites in place.
-    /// Re-running after audio_check (or later) is allowed — we DO NOT reset
-    /// the stage backwards because a learner editing onboarding shouldn't
-    /// lose diagnostic / pathway progress.
-    /// </summary>
-    public async Task<LearnerListeningProfileResponse> StartOnboardingAsync(
-        string userId, ListeningStartOnboardingRequest request, CancellationToken ct)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(userId);
-        ArgumentNullException.ThrowIfNull(request);
-
-        var now = _clock.GetUtcNow();
-
-        var existing = await _db.LearnerListeningProfiles
-            .FirstOrDefaultAsync(p => p.UserId == userId, ct);
-
-        if (existing is not null)
-        {
-            existing.TargetBand = request.TargetBand;
-            existing.ExamDate = request.ExamDate;
-            existing.HoursPerWeek = request.HoursPerWeek;
-            existing.Profession = request.Profession;
-            existing.EnglishExposureSource = request.EnglishExposureSource;
-            existing.ComfortBritish = request.ComfortBritish;
-            existing.ComfortAustralian = request.ComfortAustralian;
-            existing.ComfortVarious = request.ComfortVarious;
-            existing.HasTakenBefore = request.HasTakenBefore;
-            existing.PreviousScore = request.PreviousScore;
-            existing.SelfRatedSpeed = request.SelfRatedSpeed;
-            existing.SelfRatedNoteTaking = request.SelfRatedNoteTaking;
-            existing.SelfRatedSpelling = request.SelfRatedSpelling;
-
-            // Only reset the stage when the learner is still in the early
-            // onboarding stages — preserve diagnostic/foundation progress
-            // for returning learners who only edit profile metadata.
-            if (existing.CurrentStage == "onboarding")
-            {
-                existing.CurrentStage = "audio_check";
-            }
-            existing.UpdatedAt = now;
-
-            // Refresh self-reported accent comfort onto LearnerAccentProgress
-            // so the chart reflects the latest input even before the diagnostic.
-            await RefreshAccentSelfConfidenceAsync(
-                userId,
-                request.ComfortBritish,
-                request.ComfortAustralian,
-                request.ComfortVarious,
-                ct);
-
-            await _db.SaveChangesAsync(ct);
-            return MapProfileToResponse(existing);
-        }
-
-        var profile = new LearnerListeningProfile
-        {
-            Id = Guid.NewGuid(),
-            UserId = userId,
-            TargetBand = request.TargetBand,
-            ExamDate = request.ExamDate,
-            HoursPerWeek = request.HoursPerWeek,
-            Profession = request.Profession,
-            EnglishExposureSource = request.EnglishExposureSource,
-            ComfortBritish = request.ComfortBritish,
-            ComfortAustralian = request.ComfortAustralian,
-            ComfortVarious = request.ComfortVarious,
-            HasTakenBefore = request.HasTakenBefore,
-            PreviousScore = request.PreviousScore,
-            SelfRatedSpeed = request.SelfRatedSpeed,
-            SelfRatedNoteTaking = request.SelfRatedNoteTaking,
-            SelfRatedSpelling = request.SelfRatedSpelling,
-            CurrentStage = "audio_check",
-            OnboardingCompletedAt = now,
-            UpdatedAt = now,
-        };
-        _db.LearnerListeningProfiles.Add(profile);
-
-        await RefreshAccentSelfConfidenceAsync(
-            userId,
-            request.ComfortBritish,
-            request.ComfortAustralian,
-            request.ComfortVarious,
-            ct);
-
-        await _db.SaveChangesAsync(ct);
-        return MapProfileToResponse(profile);
-    }
-
-    /// <summary>
     /// Record an audio-check outcome (§5.4). Pass values ("clear" / "quiet")
     /// advance the stage to "diagnostic"; "failed" keeps the learner on
     /// audio_check so they're prompted to retry hardware. Idempotent — the
@@ -261,12 +167,42 @@ public sealed class ListeningLearnerPathwayService : IListeningLearnerPathwaySer
         ArgumentException.ThrowIfNullOrWhiteSpace(userId);
         ArgumentNullException.ThrowIfNull(request);
 
-        var profile = await _db.LearnerListeningProfiles
-            .FirstOrDefaultAsync(p => p.UserId == userId, ct)
-            ?? throw new InvalidOperationException(
-                "Complete onboarding first — no listening profile exists.");
-
         var now = _clock.GetUtcNow();
+        var profile = await _db.LearnerListeningProfiles
+            .FirstOrDefaultAsync(p => p.UserId == userId, ct);
+
+        if (profile is null)
+        {
+            profile = new LearnerListeningProfile
+            {
+                Id = Guid.NewGuid(),
+                UserId = userId,
+                TargetBand = "B",
+                ExamDate = null,
+                HoursPerWeek = 5,
+                Profession = "Medicine",
+                EnglishExposureSource = "mixed",
+                ComfortBritish = 3,
+                ComfortAustralian = 3,
+                ComfortVarious = 3,
+                HasTakenBefore = false,
+                PreviousScore = null,
+                SelfRatedSpeed = 3,
+                SelfRatedNoteTaking = 3,
+                SelfRatedSpelling = 3,
+                CurrentStage = "audio_check",
+                OnboardingCompletedAt = now,
+                UpdatedAt = now,
+            };
+            _db.LearnerListeningProfiles.Add(profile);
+
+            await RefreshAccentSelfConfidenceAsync(
+                userId,
+                profile.ComfortBritish,
+                profile.ComfortAustralian,
+                profile.ComfortVarious,
+                ct);
+        }
         var outcome = (request.Outcome ?? string.Empty).Trim().ToLowerInvariant();
 
         var passed = outcome is "clear" or "quiet";
@@ -326,7 +262,7 @@ public sealed class ListeningLearnerPathwayService : IListeningLearnerPathwaySer
         var profile = await _db.LearnerListeningProfiles
             .FirstOrDefaultAsync(p => p.UserId == userId, ct)
             ?? throw new InvalidOperationException(
-                "Listening profile not found — complete onboarding first.");
+                "Listening profile not found — start the listening flow first.");
 
         if (profile.CurrentStage is not ("diagnostic" or "foundation"))
         {
@@ -584,7 +520,7 @@ public sealed class ListeningLearnerPathwayService : IListeningLearnerPathwaySer
         var profile = await _db.LearnerListeningProfiles
             .FirstOrDefaultAsync(p => p.UserId == userId, ct)
             ?? throw new InvalidOperationException(
-                "Listening profile not found — complete onboarding first.");
+                "Listening profile not found — start the listening flow first.");
 
         var now = _clock.GetUtcNow();
 
@@ -771,7 +707,7 @@ public sealed class ListeningLearnerPathwayService : IListeningLearnerPathwaySer
 
     /// <summary>
     /// Lightweight probe used by the listening landing page to decide which
-    /// CTA to surface. Safe to call even before onboarding — returns
+    /// CTA to surface. Safe to call even before early flow — returns
     /// HasProfile=false in that case rather than throwing.
     /// </summary>
     public async Task<PathwayStatusResponse> GetStageAsync(string userId, CancellationToken ct)
@@ -1018,7 +954,7 @@ public sealed class ListeningLearnerPathwayService : IListeningLearnerPathwaySer
 
     /// <summary>
     /// Push the learner's self-reported accent comfort onto the four
-    /// LearnerAccentProgress rows so the dashboard chips reflect onboarding
+    /// LearnerAccentProgress rows so the dashboard chips reflect the initial flow
     /// even before the diagnostic runs. EnglishExposureSource intentionally
     /// does not seed comfort here — it's used by the pathway generator
     /// separately, not the dashboard.
@@ -1034,7 +970,7 @@ public sealed class ListeningLearnerPathwayService : IListeningLearnerPathwaySer
             .Where(a => a.UserId == userId)
             .ToListAsync(ct);
 
-        // "various" maps to both US and non_native because onboarding only
+        // "various" maps to both US and non_native because early flow only
         // captures three buckets but the dashboard renders four. The diagnostic
         // overwrites these with measured values, so the duplication is a
         // best-effort placeholder.
@@ -1464,3 +1400,4 @@ public sealed class ListeningLearnerPathwayService : IListeningLearnerPathwaySer
         return clientReportedSeconds;
     }
 }
+

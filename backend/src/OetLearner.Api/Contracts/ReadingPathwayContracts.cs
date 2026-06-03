@@ -2,16 +2,6 @@ using System.Text.Json;
 
 namespace OetLearner.Api.Contracts;
 
-public sealed record StartOnboardingRequest(
-    string TargetBand,
-    DateTimeOffset? ExamDate,
-    int HoursPerWeek,
-    string Profession,
-    bool HasTakenBefore,
-    int? PreviousScore,
-    int SelfRatedSpeed,
-    int SelfRatedVocabulary);
-
 public sealed record StartPracticeSessionRequest(
     string SessionType,          // drill|mock|wrong_review
     string? FocusSkill,          // S1..S8

@@ -1,7 +1,7 @@
 /**
  * Reading Pathway API client.
  *
- * Covers WS7 onboarding/diagnostic, WS9 vocabulary (SM-2), and all other
+ * Covers WS7 diagnostic, WS9 vocabulary (SM-2), and all other
  * pathway sub-features (lessons, strategies, analytics, community, AI).
  *
  * Backend base route: /v1/reading-pathway/
@@ -32,17 +32,6 @@ export interface LearnerReadingProfileDto {
   pathwayGeneratedAt: string | null;
   weeksRemaining: number | null;
   diagnosticCompleted: boolean;
-}
-
-export interface OnboardingRequest {
-  targetBand: string;
-  examDate: string | null;
-  hoursPerWeek: number;
-  profession: string;
-  hasTakenBefore: boolean;
-  previousScore: number | null;
-  selfRatedSpeed: number;
-  selfRatedVocabulary: number;
 }
 
 export interface DiagnosticStartDto {
@@ -428,16 +417,10 @@ async function api<T>(path: string, init?: RequestInitWithTimeout): Promise<T> {
   return res.json() as Promise<T>;
 }
 
-// ── Profile & Onboarding ──────────────────────────────────────────────────────
+// ── Profile ──────────────────────────────────────────────────────
 
 export const getReadingProfile = () =>
   api<LearnerReadingProfileDto>('/v1/reading-pathway/profile');
-
-export const submitOnboarding = (req: OnboardingRequest) =>
-  api<LearnerReadingProfileDto>('/v1/reading-pathway/onboarding', {
-    method: 'POST',
-    body: JSON.stringify(req),
-  });
 
 // ── Diagnostic ────────────────────────────────────────────────────────────────
 
@@ -781,3 +764,4 @@ function optionText(option: unknown): string {
 
   return String(option);
 }
+

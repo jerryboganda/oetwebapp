@@ -109,7 +109,7 @@ public sealed class ListeningDailyPlanService(
         if (existing.Count > 0) return existing;
 
         // Learner profile — read but not mutated. Reserved for future
-        // target-band / exam-date gating; pre-onboarding learners still
+        // target-band / exam-date gating; learners without a profile still
         // receive a minimal "drill" plan via the default-skill fallback.
         _ = await db.LearnerListeningProfiles
             .AsNoTracking()
@@ -400,4 +400,5 @@ public sealed class ListeningDailyPlanService(
         int Minutes,
         string PayloadJson);
 }
+
 
