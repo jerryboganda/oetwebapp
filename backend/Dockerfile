@@ -6,18 +6,18 @@ COPY backend/src/OetLearner.Api/OetLearner.Api.csproj backend/src/OetLearner.Api
 RUN dotnet restore backend/src/OetLearner.Api/OetLearner.Api.csproj
 
 COPY backend/src/OetLearner.Api/ backend/src/OetLearner.Api/
+# Touch all source files so their mtime is newer than the obj/ metadata
+# created by the earlier `dotnet restore` step. Without this, .NET SDK
+# 10.0.300's incremental-build check sees "sources older than obj/" and
+# silently skips compilation (exits 0, no output files produced).
+RUN find backend/src/OetLearner.Api -name "*.cs" -o -name "*.json" | xargs touch
 # Rulebooks embed as resources via ..\..\..\rulebooks\**\*.json — must be present
 # in the Docker build context at the repo-root path the .csproj expects.
 COPY rulebooks/ rulebooks/
 # Scripts referenced by .csproj (e.g. StripeProductSeeder/catalog.json)
 COPY backend/scripts/ backend/scripts/
-RUN dotnet build backend/src/OetLearner.Api/OetLearner.Api.csproj \
+RUN dotnet publish backend/src/OetLearner.Api/OetLearner.Api.csproj \
         -c Release \
-        --no-incremental \
-        /p:UseAppHost=false \
-    && dotnet publish backend/src/OetLearner.Api/OetLearner.Api.csproj \
-        -c Release \
-        --no-build \
         -o /app/publish \
         /p:UseAppHost=false \
     && ls /app/publish/OetLearner.Api.dll
