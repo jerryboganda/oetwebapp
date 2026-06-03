@@ -1,0 +1,120 @@
+name: Build & Deploy (web + API)
+
+# Fresh deploy on every push to main: build the web (Next.js/Turbopack) and
+# API (.NET) images OFF-BOX on GitHub's 16 GB runners, push to GHCR, then SSH
+# to the prod VPS which PULLS the images and blue/green-redeploys (health-gated
+# — a broken commit fails the gate and is NOT promoted, so prod stays up).
+#
+# Why not build on the VPS: it is a shared host with 60+ co-tenant containers;
+# an in-place `next build` OOM-cascades and can take the whole box down.
+#
+# Uses pre-existing repo secrets: VPS_HOST, VPS_USER, VPS_PORT, VPS_SSH_KEY,
+# VPS_APP_DIR. No build minutes are billed (public repo).
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  packages: write
+
+# Serialize deploys so two quick pushes don't flip routers concurrently.
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  WEB_IMAGE: ghcr.io/${{ github.repository }}-web:${{ github.sha }}
+  API_IMAGE: ghcr.io/${{ github.repository }}-api:${{ github.sha }}
+
+jobs:
+  build-web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build & push web
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          target: runner
+          push: true
+          provenance: false
+          tags: |
+            ghcr.io/${{ github.repository }}-web:${{ github.sha }}
+            ghcr.io/${{ github.repository }}-web:latest
+          build-args: |
+            NEXT_PUBLIC_API_BASE_URL=https://api.oetwithdrhesham.co.uk
+            APP_URL=https://app.oetwithdrhesham.co.uk
+          cache-from: type=gha,scope=web
+          cache-to: type=gha,mode=max,scope=web
+
+  build-api:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build & push API
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./backend/Dockerfile
+          push: true
+          provenance: false
+          tags: |
+            ghcr.io/${{ github.repository }}-api:${{ github.sha }}
+            ghcr.io/${{ github.repository }}-api:latest
+          cache-from: type=gha,scope=api
+          cache-to: type=gha,mode=max,scope=api
+
+  deploy:
+    needs: [build-web, build-api]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to VPS over SSH (pull + blue/green redeploy)
+        env:
+          SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_PORT: ${{ secrets.VPS_PORT }}
+          VPS_APP_DIR: ${{ secrets.VPS_APP_DIR }}
+          GHCR_USER: ${{ github.actor }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          PORT="${VPS_PORT:-22}"
+          APP_DIR="${VPS_APP_DIR:-/opt/oetwebapp}"
+          mkdir -p ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -p "$PORT" "$VPS_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
+          ssh -i ~/.ssh/deploy_key -p "$PORT" \
+            -o StrictHostKeyChecking=accept-new -o ServerAliveInterval=30 -o ServerAliveCountMax=20 \
+            "$VPS_USER@$VPS_HOST" \
+            "set -e; cd '$APP_DIR'; \
+             echo '$GHCR_TOKEN' | docker login ghcr.io -u '$GHCR_USER' --password-stdin; \
+             git fetch origin main --quiet; git reset --hard '$SHA'; \
+             WEB_IMAGE='$WEB_IMAGE' API_IMAGE='$API_IMAGE' VPS_APP_DIR='$APP_DIR' \
+               bash scripts/deploy/auto-deploy-ghcr.sh; \
+             docker logout ghcr.io >/dev/null 2>&1 || true"
+      - name: Summary
+        if: always()
+        run: |
+          echo "### Deploy" >> "$GITHUB_STEP_SUMMARY"
+          echo "- web: \`$WEB_IMAGE\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- api: \`$API_IMAGE\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- result: ${{ job.status }}" >> "$GITHUB_STEP_SUMMARY"
