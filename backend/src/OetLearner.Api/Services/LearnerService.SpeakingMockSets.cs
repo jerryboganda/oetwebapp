@@ -101,8 +101,13 @@ public partial class LearnerService
         var normalisedMode = string.Equals(mode, "self", StringComparison.OrdinalIgnoreCase) ? "self" : "exam";
         var sessionId = $"sms-{Guid.NewGuid():N}";
 
-        var attempt1 = await CreateSpeakingMockAttemptAsync(userId, sessionId, rolePlay1.Id, normalisedMode, cancellationToken);
-        var attempt2 = await CreateSpeakingMockAttemptAsync(userId, sessionId, rolePlay2.Id, normalisedMode, cancellationToken);
+        // RP1 starts in-flight (Prep1/Active1); RP2 stays NotStarted until the
+        // learner crosses the bridge and explicitly starts role-play 2. This
+        // keeps DeriveOrchestratorState from jumping straight to Active2 the
+        // moment RP1 is submitted (docs/speaking/state-machines.md:
+        // Prep1->Active1->Finished1->Bridge->Prep2->Active2->Finished2).
+        var attempt1 = await CreateSpeakingMockAttemptAsync(userId, sessionId, rolePlay1.Id, normalisedMode, AttemptState.InProgress, cancellationToken);
+        var attempt2 = await CreateSpeakingMockAttemptAsync(userId, sessionId, rolePlay2.Id, normalisedMode, AttemptState.NotStarted, cancellationToken);
 
         var session = new SpeakingMockSession
         {
@@ -355,6 +360,7 @@ public partial class LearnerService
         string sessionId,
         string contentId,
         string mode,
+        AttemptState initialState,
         CancellationToken cancellationToken)
     {
         var attempt = new Attempt
@@ -365,7 +371,7 @@ public partial class LearnerService
             SubtestCode = "speaking",
             Context = "mock_set",
             Mode = mode,
-            State = AttemptState.InProgress,
+            State = initialState,
             StartedAt = DateTimeOffset.UtcNow,
             DeviceType = "web",
             // Sharing the session id as ComparisonGroupId lets us run

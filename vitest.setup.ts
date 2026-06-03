@@ -68,10 +68,24 @@ function stripMotionProps(props: Record<string, unknown>) {
 	return clean;
 }
 
+/**
+ * Cache one stub component per tag. The `motion` export below is a Proxy whose
+ * `get` trap runs on every `motion.div` access — i.e. on every render of a
+ * component that reads `motion.div`. Without this cache we'd hand React a brand
+ * new component function each render, so React would unmount + remount the whole
+ * subtree every render. That silently breaks controlled inputs (focus + caret
+ * are lost after the first keystroke, so `userEvent.type` only registers one
+ * character). Returning a stable reference keeps the subtree mounted.
+ */
+const motionElementCache = new Map<string, React.FunctionComponent<{ children?: React.ReactNode; [key: string]: unknown }>>();
+
 function makeMotionElement(tag: string) {
+	const cached = motionElementCache.get(tag);
+	if (cached) return cached;
 	const MotionStub = ({ children, ...props }: { children?: React.ReactNode; [key: string]: unknown }) =>
 		createElement(tag, stripMotionProps(props), children);
 	MotionStub.displayName = `motion.${tag}`;
+	motionElementCache.set(tag, MotionStub);
 	return MotionStub;
 }
 

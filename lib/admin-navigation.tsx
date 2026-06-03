@@ -109,7 +109,12 @@ export const adminNavGroups: AdminNavGroup[] = [
         label: 'Writing',
         icon: <BookOpenText className={iconClassName} />,
         matchPrefix: '/admin/writing',
-        requiredPermissions: [AdminPermission.ContentRead],
+        requiredPermissions: [
+          AdminPermission.ContentRead,
+          AdminPermission.ContentWrite,
+          AdminPermission.QualityAnalytics,
+          AdminPermission.AiConfig,
+        ],
       },
       {
         href: '/admin/speaking',
@@ -118,6 +123,7 @@ export const adminNavGroups: AdminNavGroup[] = [
         matchPrefix: '/admin/speaking',
         requiredPermissions: [
           AdminPermission.ContentRead,
+          AdminPermission.ContentWrite,
           AdminPermission.ReviewOps,
           AdminPermission.QualityAnalytics,
           AdminPermission.ContentPublish,

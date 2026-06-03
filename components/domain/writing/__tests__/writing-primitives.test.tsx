@@ -17,18 +17,18 @@ describe('writing UI primitives', () => {
   it('renders the word counter tone and aria hint for each band', () => {
     const { rerender } = render(<WordCounter count={149} />);
 
-    expect(screen.getByText('149')).toHaveClass('text-muted');
-    expect(screen.getByLabelText('149 words, keep writing, target 180 to 220')).toBeInTheDocument();
+    expect(screen.getByText('149')).toBeInTheDocument();
+    expect(screen.getByLabelText('149 words, keep writing, target 180 to 220')).toHaveClass('text-muted');
 
     rerender(<WordCounter count={180} />);
 
-    expect(screen.getByText('180')).toHaveClass('text-success');
-    expect(screen.getByLabelText('180 words, in target range, target 180 to 220')).toBeInTheDocument();
+    expect(screen.getByText('180')).toBeInTheDocument();
+    expect(screen.getByLabelText('180 words, in target range, target 180 to 220')).toHaveClass('text-success');
 
     rerender(<WordCounter count={251} />);
 
-    expect(screen.getByText('251')).toHaveClass('text-danger');
-    expect(screen.getByLabelText('251 words, over-length, target 180 to 220')).toBeInTheDocument();
+    expect(screen.getByText('251')).toBeInTheDocument();
+    expect(screen.getByLabelText('251 words, over-length, target 180 to 220')).toHaveClass('text-danger');
   });
 
   it('moves from reading to writing when reading time expires', async () => {
@@ -132,7 +132,14 @@ describe('writing UI primitives', () => {
     expect(screen.getByLabelText('Readiness score widget')).toHaveTextContent('92');
     expect(screen.getByText('Exam-ready')).toBeInTheDocument();
     expect(screen.getByText('+3 vs last week')).toBeInTheDocument();
-    expect(screen.getByText(/Likely band on exam day: B/i)).toBeInTheDocument();
+    // The predicted band label and value render in separate elements, so match on
+    // the paragraph's combined, whitespace-normalized text content.
+    expect(
+      screen.getByText((_, element) =>
+        element?.tagName === 'P' &&
+        element.textContent?.replace(/\s+/g, ' ').trim() === 'Likely band on exam day: B',
+      ),
+    ).toBeInTheDocument();
     expect(screen.getByRole('progressbar', { name: 'Mock average: 86 percent' })).toHaveAttribute(
       'aria-valuenow',
       '86',

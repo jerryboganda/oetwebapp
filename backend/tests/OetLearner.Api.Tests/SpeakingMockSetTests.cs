@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services.Content;
 using OetLearner.Api.Tests.Infrastructure;
 
 namespace OetLearner.Api.Tests;
@@ -113,6 +114,16 @@ public class SpeakingMockSetTests : IClassFixture<TestWebApplicationFactory>
             pairedAttempt.AudioUploadState = UploadState.Uploaded;
             pairedAttempt.AudioObjectKey = "audio/mock-session-bound-role1.webm";
             await db.SaveChangesAsync();
+
+            // EnsureSpeakingAudioReadyForSubmission checks the file actually
+            // exists with non-zero length, so persist real bytes via the same
+            // IFileStorage the submit path reads from (LocalFileStorage in the
+            // dev test host).
+            var fileStorage = scope.ServiceProvider.GetRequiredService<IFileStorage>();
+            await fileStorage.WriteAsync(
+                "audio/mock-session-bound-role1.webm",
+                new MemoryStream(new byte[] { 0x1A, 0x45, 0xDF, 0xA3, 1, 2, 3, 4 }),
+                CancellationToken.None);
         }
 
         var submitResponse = await client.PostAsync($"/v1/speaking/attempts/{role1AttemptId}/submit?contentId={role1ContentId}&mockSessionId={sessionId}", null);

@@ -203,6 +203,11 @@ public class ProductionReadinessTests : IClassFixture<TestWebApplicationFactory>
     public async Task SpeakingUploadPipeline_StoresBinary_AndStreamsItToExperts()
     {
         using var learner = await CreateLearnerClientAsync("audio-owner");
+        // SpeakingGrade is a paid AI feature: the gateway debits an AI grading
+        // credit and fails the evaluation with ai_credits_insufficient when the
+        // balance is < 1. A fresh learner profile has no AI credits, so grant
+        // some up front or the queued evaluation lands in Failed, never Completed.
+        await _factory.EnsureAiCreditsAsync("audio-owner");
         var attemptId = await CreateSpeakingAttemptAsync(learner, "practice");
 
         var uploadSessionResponse = await learner.PostAsync($"/v1/speaking/attempts/{attemptId}/audio/upload-session", content: null);
@@ -245,9 +250,16 @@ public class ProductionReadinessTests : IClassFixture<TestWebApplicationFactory>
         using var submitJson = JsonDocument.Parse(await submitResponse.Content.ReadAsStringAsync());
         var evaluationId = submitJson.RootElement.GetProperty("evaluationId").GetString()!;
 
+        // The hosted background-job loop is stripped from the test host, so the
+        // queued speaking evaluation never advances on its own. Drive it
+        // deterministically (the eval can chain transcription -> evaluation ->
+        // side-effects, so allow extra passes) before polling for completion.
+        await _factory.DrainBackgroundJobsAsync(passes: 5);
+
         await WaitForAsync(
             async () =>
             {
+                await _factory.DrainBackgroundJobsAsync();
                 var response = await learner.GetAsync($"/v1/speaking/evaluations/{evaluationId}/summary");
                 using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
                 return json.RootElement.GetProperty("state").GetString() == "completed";

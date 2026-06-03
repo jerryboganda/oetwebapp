@@ -84,6 +84,7 @@ export const sidebarPermissionMap: Record<string, string[]> = {
   '/admin/ai-config': [AdminPermission.AiConfig],
   '/admin/ai-providers': [AdminPermission.AiConfig],
   '/admin/ai-usage': [AdminPermission.AiConfig],
+  '/admin/voice-design': [AdminPermission.AiConfig],
   '/admin/launch-readiness': [AdminPermission.SystemAdmin],
   '/admin/review-ops': [AdminPermission.ReviewOps],
   '/admin/notifications': [AdminPermission.SystemAdmin],

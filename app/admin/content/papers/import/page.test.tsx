@@ -109,8 +109,10 @@ describe('BulkImportPage', () => {
     await user.upload(input, new File(['zip'], 'medicine.zip', { type: 'application/zip' }));
 
     expect(await screen.findByText('Reference targets (2)')).toBeInTheDocument();
-    expect(screen.getByText('Speaking Assessment Criteria')).toBeInTheDocument();
-    expect(screen.getByText('Scoring System')).toBeInTheDocument();
+    // DataTable renders both a desktop table and a mobile card view, so cell
+    // values appear more than once in jsdom. Assert at least one occurrence.
+    expect(screen.getAllByText('Speaking Assessment Criteria').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Scoring System').length).toBeGreaterThan(0);
     expect(screen.getByText('.pdf: 2')).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: /commit approved proposals/i }));

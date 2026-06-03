@@ -33,6 +33,12 @@ public class SpeakingPdfAuthorizationTests : IClassFixture<FirstPartyAuthTestWeb
     [Fact]
     public async Task AssignedExpert_CanDownloadSpeakingPdf()
     {
+        // The speaking review assignment that authorises expert-001 over
+        // attempt sa-001 (review-queue-001 / era-queue-001) lives in
+        // SeedData.EnsureDemoOperationalStateAsync, which DatabaseBootstrapper
+        // skips for in-memory test databases. Seed the equivalent Claimed
+        // speaking assignment locally so HasAssignedSpeakingReviewAsync resolves.
+        await SeedClaimedSpeakingAssignmentAsync();
         using var expert = _factory.CreateAuthenticatedClient(SeedData.ExpertEmail, SeedData.LocalSeedPassword, expectedRole: "expert");
 
         var response = await expert.GetAsync("/v1/speaking/evaluations/se-001/pdf");
@@ -71,6 +77,45 @@ public class SpeakingPdfAuthorizationTests : IClassFixture<FirstPartyAuthTestWeb
         var response = await expert.GetAsync("/v1/speaking/evaluations/se-released-pdf/pdf");
 
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    private async Task SeedClaimedSpeakingAssignmentAsync()
+    {
+        await using var scope = _factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        if (await db.ReviewRequests.AnyAsync(r => r.Id == "review-claimed-speaking-pdf"))
+        {
+            return;
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        // Mirrors SeedData.EnsureDemoOperationalStateAsync's review-queue-001 /
+        // era-queue-001 pairing: a SPEAKING ReviewRequest over the seeded
+        // attempt sa-001 (which backs evaluation se-001), Claimed by expert-001.
+        // This is exactly what HasAssignedSpeakingReviewAsync queries for.
+        db.ReviewRequests.Add(new ReviewRequest
+        {
+            Id = "review-claimed-speaking-pdf",
+            AttemptId = "sa-001",
+            SubtestCode = "speaking",
+            State = ReviewRequestState.InReview,
+            TurnaroundOption = "standard",
+            FocusAreasJson = "[]",
+            LearnerNotes = string.Empty,
+            PaymentSource = "credits",
+            PriceSnapshot = 1m,
+            CreatedAt = now.AddMinutes(-50),
+            CompletedAt = null,
+        });
+        db.ExpertReviewAssignments.Add(new ExpertReviewAssignment
+        {
+            Id = "era-claimed-speaking-pdf",
+            ReviewRequestId = "review-claimed-speaking-pdf",
+            AssignedReviewerId = "expert-001",
+            AssignedAt = now.AddMinutes(-45),
+            ClaimState = ExpertAssignmentState.Claimed,
+        });
+        await db.SaveChangesAsync();
     }
 
     private async Task SeedReleasedSpeakingAssignmentAsync()

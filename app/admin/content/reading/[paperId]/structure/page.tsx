@@ -195,21 +195,24 @@ export default function AdminReadingStructureReviewPage() {
             description="Attach or replace the Part A/B/C PDFs, then author the learner-safe questions directly."
           >
             <div className="flex flex-wrap gap-2">
-              <Link href={`/admin/content/reading/${paperId}/texts`}>
-                <Button size="sm" variant="outline" startIcon={<FileText className="h-4 w-4" />}>
+              <Button asChild size="sm" variant="outline">
+                <Link href={`/admin/content/reading/${paperId}/texts`}>
+                  <FileText className="h-4 w-4" />
                   Manage PDFs
-                </Button>
-              </Link>
-              <Link href={`/admin/content/reading/${paperId}/questions`}>
-                <Button size="sm" variant="outline" startIcon={<HelpCircle className="h-4 w-4" />}>
+                </Link>
+              </Button>
+              <Button asChild size="sm" variant="outline">
+                <Link href={`/admin/content/reading/${paperId}/questions`}>
+                  <HelpCircle className="h-4 w-4" />
                   Edit questions
-                </Button>
-              </Link>
-              <Link href={`/admin/content/reading/${paperId}`}>
-                <Button size="sm" variant="ghost" startIcon={<ArrowLeft className="h-4 w-4" />}>
+                </Link>
+              </Button>
+              <Button asChild size="sm" variant="ghost">
+                <Link href={`/admin/content/reading/${paperId}`}>
+                  <ArrowLeft className="h-4 w-4" />
                   Back to paper
-                </Button>
-              </Link>
+                </Link>
+              </Button>
             </div>
           </SettingsSection>
         </div>
