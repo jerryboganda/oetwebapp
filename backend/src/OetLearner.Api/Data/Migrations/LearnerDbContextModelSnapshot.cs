@@ -24453,6 +24453,10 @@ namespace OetLearner.Api.Data.Migrations
                         .HasMaxLength(16)
                         .HasColumnType("character varying(16)");
 
+                    b.Property<string>("StimulusPdfMediaAssetId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
                     b.Property<string>("SubDiscipline")
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)");

@@ -27,6 +27,15 @@ public class WritingScenario
 
     public string? CaseNotesStructuredJson { get; set; }
 
+    /// <summary>
+    /// Optional stimulus PDF (the exam "question paper") shown to learners during the
+    /// forced reading window and the writing view. When null, learner UIs fall back to
+    /// the case-notes text viewer. Independent of <see cref="CaseNotesMarkdown"/>, which
+    /// the grading pipeline still reads. References a <c>MediaAsset.Id</c>.
+    /// </summary>
+    [MaxLength(64)]
+    public string? StimulusPdfMediaAssetId { get; set; }
+
     public int EstimatedReadingMinutes { get; set; } = 5;
 
     public bool IsDiagnostic { get; set; }
