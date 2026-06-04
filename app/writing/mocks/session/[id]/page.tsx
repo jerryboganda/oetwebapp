@@ -13,7 +13,8 @@ import { WritingEditorV2 } from '@/components/domain/writing/WritingEditorV2';
 import { WritingTimerV2 } from '@/components/domain/writing/WritingTimerV2';
 import { WordCounter } from '@/components/domain/writing/WordCounter';
 import { SubmitBar } from '@/components/domain/writing/SubmitBar';
-import { CaseNotePdfViewer } from '@/components/domain/writing/CaseNotePdfViewer';
+import { WritingStimulus } from '@/components/domain/writing/WritingStimulus';
+import { WritingReadingWindowOverlay } from '@/components/domain/writing/WritingReadingWindowOverlay';
 import { PracticeScratchpad } from '@/components/domain/writing/PracticeScratchpad';
 import {
   beginWritingMockWriting,
@@ -22,6 +23,8 @@ import {
   putWritingDraftV2,
   submitWritingMock,
 } from '@/lib/writing/api';
+import { useDeadlineCountdown } from '@/lib/writing/useCountdown';
+import { WRITING_WINDOW_SECONDS } from '@/lib/writing/workflow';
 import { recordWritingAttemptEvent } from '@/lib/writing/exam-api';
 import type { WritingAttemptEventType } from '@/lib/writing/types';
 import type {
@@ -45,8 +48,11 @@ function WritingMockSessionInner() {
   const [scenario, setScenario] = useState<WritingScenarioDto | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [phase, setPhase] = useState<'reading' | 'writing' | 'completed'>('reading');
-  const [readingSeconds, setReadingSeconds] = useState(0);
-  const [writingSeconds, setWritingSeconds] = useState(0);
+  // Deadline-anchored countdowns (wall-clock epoch ms). Survive tab-backgrounding
+  // and refresh — the hook re-derives whole seconds from these on every tick and
+  // on tab refocus. Null until the session loads.
+  const [readingDeadlineMs, setReadingDeadlineMs] = useState<number | null>(null);
+  const [writingDeadlineMs, setWritingDeadlineMs] = useState<number | null>(null);
   const [content, setContent] = useState('');
   const [wordCount, setWordCount] = useState(0);
   const [submitting, setSubmitting] = useState(false);
@@ -60,6 +66,15 @@ function WritingMockSessionInner() {
   const lastAutosaveContent = useRef('');
   // Throttle `response_typed` to at most one event per 10s window (spec §17.7).
   const lastTypedEventAt = useRef(0);
+  // Guard so the reading→writing transition calls `beginWritingMockWriting` at
+  // most once: both the timer's onPhaseChange and the overlay's onAutoClose fire
+  // on the same tick at readingSeconds<=0.
+  const beganWritingRef = useRef(false);
+
+  // Deadline-anchored seconds. Both hooks run unconditionally (rules of hooks);
+  // each is gated to its active phase so only the live one is non-zero.
+  const readingSeconds = useDeadlineCountdown(phase === 'reading' ? readingDeadlineMs : null);
+  const writingSeconds = useDeadlineCountdown(phase === 'writing' ? writingDeadlineMs : null);
 
   // ----- Attempt-event emission (computer mode; fire-and-forget) -----
   const contentRef = useRef(content);
@@ -86,11 +101,19 @@ function WritingMockSessionInner() {
       .then(async (s) => {
         if (cancelled) return;
         setSession(s);
-        setReadingSeconds(s.readingSecondsRemaining);
-        setWritingSeconds(s.writingSecondsRemaining);
-        if (s.status === 'reading') setPhase('reading');
-        else if (s.status === 'writing') {
+        if (s.status === 'reading') {
+          setPhase('reading');
+          setReadingDeadlineMs(Date.now() + s.readingSecondsRemaining * 1000);
+        } else if (s.status === 'writing') {
           setPhase('writing');
+          // A session resumed in the writing phase has already begun on the
+          // server — don't let the transition fire begin-writing again.
+          beganWritingRef.current = true;
+          setWritingDeadlineMs(
+            s.readingPhaseEndedAt
+              ? new Date(s.readingPhaseEndedAt).getTime() + WRITING_WINDOW_SECONDS * 1000
+              : Date.now() + s.writingSecondsRemaining * 1000,
+          );
           startedAtRef.current = s.readingPhaseEndedAt ? new Date(s.readingPhaseEndedAt).getTime() : Date.now();
         }
         else setPhase('completed');
@@ -110,15 +133,6 @@ function WritingMockSessionInner() {
       cancelled = true;
     };
   }, [sessionId, router, t]);
-
-  useEffect(() => {
-    if (phase === 'completed') return;
-    const tick = window.setInterval(() => {
-      if (phase === 'reading') setReadingSeconds((s) => Math.max(0, s - 1));
-      else setWritingSeconds((s) => Math.max(0, s - 1));
-    }, 1000);
-    return () => window.clearInterval(tick);
-  }, [phase]);
 
   // Confirm on browser close/back while in writing phase (strict mode).
   useEffect(() => {
@@ -240,13 +254,22 @@ function WritingMockSessionInner() {
   }, [phase, locked, submitting, finalizeSubmit]);
 
   const handlePhaseChange = useCallback(async (next: 'reading' | 'writing' | 'completed') => {
-    if (next === 'writing' && phase !== 'writing') {
+    if (next === 'writing') {
+      // Idempotent: the timer's onPhaseChange AND the overlay's onAutoClose both
+      // fire on the same tick at reading 0:00. Only the first proceeds.
+      if (beganWritingRef.current) return;
+      beganWritingRef.current = true;
       setPhase('writing');
       try {
         const updated = await beginWritingMockWriting(sessionId);
         setSession(updated);
-        setReadingSeconds(updated.readingSecondsRemaining);
-        setWritingSeconds(updated.writingSecondsRemaining);
+        // Anchor the writing countdown to the server's reading-phase end so it
+        // stays accurate across refresh/backgrounding.
+        setWritingDeadlineMs(
+          updated.readingPhaseEndedAt
+            ? new Date(updated.readingPhaseEndedAt).getTime() + WRITING_WINDOW_SECONDS * 1000
+            : Date.now() + updated.writingSecondsRemaining * 1000,
+        );
         startedAtRef.current = updated.readingPhaseEndedAt ? new Date(updated.readingPhaseEndedAt).getTime() : Date.now();
       } catch (err) {
         setError(err instanceof Error ? err.message : t('writing.mocks.session.error.startWriting'));
@@ -255,7 +278,7 @@ function WritingMockSessionInner() {
       // Writing timer expired — the completed-phase effect auto-submits + locks.
       setPhase('completed');
     }
-  }, [phase, sessionId, t]);
+  }, [sessionId, t]);
 
   return (
     <LearnerDashboardShell pageTitle={t('writing.mocks.session.pageTitle')} distractionFree>
@@ -315,13 +338,10 @@ function WritingMockSessionInner() {
             // Case notes are OET-authored English content (spec §32) — force LTR.
             dir="ltr"
           >
-            <CaseNotePdfViewer
-              caseNotesMarkdown={scenario?.caseNotesMarkdown ?? t('writing.mocks.session.caseNotesLoading')}
-              caseNoteSections={scenario?.caseNoteSections}
-              recipient={scenario?.recipient ?? null}
-              taskPrompt={scenario?.taskPromptMarkdown ?? null}
-              title={scenario?.title ?? t('writing.mocks.session.caseNotesLabel')}
-              readingWindowLocked={phase === 'reading'}
+            <WritingStimulus
+              scenario={scenario}
+              locked={phase === 'reading'}
+              title={scenario?.title ?? undefined}
             />
           </section>
 
@@ -387,6 +407,20 @@ function WritingMockSessionInner() {
             helperText={helperText}
           />
         ) : null}
+
+        {/* Forced full-screen reading window. Renders only during the reading
+            phase; auto-closes into the writing view at 0:00. allowSkip is false
+            for BOTH strict and ?practice=1 — the mock session is server-gated
+            (early begin-writing is rejected), so this variant cannot skip. */}
+        <WritingReadingWindowOverlay
+          open={phase === 'reading' && !!session}
+          scenario={scenario}
+          secondsRemaining={readingSeconds}
+          totalSeconds={scenario?.readingTimeSeconds ?? 300}
+          allowSkip={false}
+          onAutoClose={() => void handlePhaseChange('writing')}
+          title={scenario?.title ?? undefined}
+        />
       </div>
     </LearnerDashboardShell>
   );
