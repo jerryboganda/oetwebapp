@@ -137,6 +137,25 @@ public class WritingStimulusPdfTests
         Assert.False(result, "Learner with mismatched profession should not access nursing stimulus PDF.");
     }
 
+    [Fact]
+    public async Task Learner_CanAccess_PublishedScenarioPdf_EmptyScenarioProfession()
+    {
+        await using var db = BuildDb();
+        var assetId = Guid.NewGuid().ToString("N");
+        db.MediaAssets.Add(BuildMediaAsset(assetId));
+        // Universal scenario: an empty Profession field grants any learner access,
+        // regardless of (and even without) their own profession claim.
+        db.WritingScenarios.Add(BuildScenario(assetId, status: "published", profession: ""));
+        await db.SaveChangesAsync();
+
+        var svc = BuildAccessService(db);
+        var principal = MakePrincipal("learner-001", "learner", "nursing");
+
+        var result = await svc.CanAccessAsync(principal, assetId, CancellationToken.None);
+
+        Assert.True(result, "Learner should access a published stimulus PDF when the scenario has no profession scope.");
+    }
+
     // ─── MediaAssetAccessService: expert access ─────────────────────────────────
 
     [Fact]
