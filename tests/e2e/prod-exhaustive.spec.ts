@@ -49,7 +49,7 @@ const ROUTES = [
   '/diagnostic/reading',
   '/diagnostic/results',
   '/diagnostic/speaking',
-  '/diagnostic/writing',
+  '/writing/diagnostic',
   '/escalations',
   '/exam-booking',
   '/exam-guide',

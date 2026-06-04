@@ -690,7 +690,7 @@ public partial class LearnerService(
                 startRoute = "/diagnostic",
                 subtests = new[]
                 {
-                    new { subtest = "writing", estimatedDurationMinutes = 45, state = "not_started", route = "/diagnostic/writing" },
+                    new { subtest = "writing", estimatedDurationMinutes = 45, state = "not_started", route = "/writing/diagnostic" },
                     new { subtest = "speaking", estimatedDurationMinutes = 20, state = "not_started", route = "/diagnostic/speaking" },
                     new { subtest = "listening", estimatedDurationMinutes = 25, state = "not_started", route = "/diagnostic/listening" }
                 }

@@ -35,7 +35,6 @@ Core preparation:
 - `/diagnostic/hub`
 - `/diagnostic/results`
 - `/diagnostic/insights`
-- `/diagnostic/writing`
 - `/diagnostic/speaking`
 - `/diagnostic/reading`
 - `/diagnostic/listening`
@@ -263,7 +262,7 @@ The detailed sections below still describe the original core preparation loop. T
 - Status: `partial`
 - Purpose: Measure baseline OET Writing performance through a timed draft-and-submit flow.
 - Business logic served: Establishes productive-skill baseline evidence.
-- Location: `/diagnostic/writing`
+- Location: `/writing/diagnostic`
 - Who uses it: Learners
 - When it is used: During diagnostic completion
 - Inputs:

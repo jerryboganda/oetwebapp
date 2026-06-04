@@ -59,7 +59,6 @@ export const EXCLUDED_IMMERSIVE_LEARNER_PAGE_PATHS = [
   'app/diagnostic/listening/page.tsx',
   'app/diagnostic/reading/page.tsx',
   'app/diagnostic/speaking/page.tsx',
-  'app/diagnostic/writing/page.tsx',
   'app/mocks/player/[id]/page.tsx',
   'app/reading/player/[id]/page.tsx',
   'app/listening/player/[id]/page.tsx',
