@@ -230,6 +230,61 @@ describe('WritingReadingWindowOverlay', () => {
     pushSpy.mockRestore();
   });
 
+  it('restores focus to the previously-focused element on close', () => {
+    const trigger = document.createElement('button');
+    document.body.appendChild(trigger);
+    trigger.focus();
+    expect(document.activeElement).toBe(trigger);
+
+    const { rerender } = render(
+      <WritingReadingWindowOverlay
+        open
+        scenario={scenario}
+        secondsRemaining={120}
+        onAutoClose={vi.fn()}
+      />,
+    );
+    // Focus moves into the overlay (off the trigger) on open.
+    expect(document.activeElement).not.toBe(trigger);
+
+    rerender(
+      <WritingReadingWindowOverlay
+        open={false}
+        scenario={scenario}
+        secondsRemaining={120}
+        onAutoClose={vi.fn()}
+      />,
+    );
+    // Focus returns to the original element on close.
+    expect(document.activeElement).toBe(trigger);
+
+    document.body.removeChild(trigger);
+  });
+
+  it('announces remaining time only at minute boundaries / final 10s (no per-second spam)', () => {
+    const { rerender } = render(
+      <WritingReadingWindowOverlay
+        open
+        scenario={scenario}
+        secondsRemaining={125}
+        onAutoClose={vi.fn()}
+      />,
+    );
+    // 125s is not a minute boundary and > 10s → the live region stays empty.
+    expect(document.querySelector('[aria-live="polite"]')?.textContent).toBe('');
+
+    rerender(
+      <WritingReadingWindowOverlay
+        open
+        scenario={scenario}
+        secondsRemaining={120}
+        onAutoClose={vi.fn()}
+      />,
+    );
+    // 120s = 02:00 is a minute boundary → announced.
+    expect(document.querySelector('[aria-live="polite"]')?.textContent).toContain('02:00');
+  });
+
   it('locks body scroll while open and restores it on close', () => {
     const { rerender } = render(
       <WritingReadingWindowOverlay

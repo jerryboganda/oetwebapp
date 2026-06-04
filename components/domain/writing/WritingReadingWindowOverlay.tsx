@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useId, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import type { WritingScenarioDto } from '@/lib/writing/types';
 import { cn } from '@/lib/utils';
@@ -57,6 +57,7 @@ export function WritingReadingWindowOverlay({
   title,
 }: WritingReadingWindowOverlayProps) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  const descriptionId = useId();
   // Guards `onAutoClose` so it fires exactly once per open cycle, even though the
   // effect re-runs on every render where `secondsRemaining` stays <= 0.
   const autoClosedRef = useRef(false);
@@ -163,12 +164,20 @@ export function WritingReadingWindowOverlay({
     Math.max(0, (clampedTotal - Math.max(0, secondsRemaining)) / clampedTotal),
   );
 
+  // Announce remaining time only at minute boundaries and during the final 10s,
+  // so a screen reader isn't read a new value every single second.
+  const announcement =
+    secondsRemaining <= 10 || Math.floor(secondsRemaining) % 60 === 0
+      ? `${formatHms(secondsRemaining)} remaining in the reading window`
+      : '';
+
   const overlay = (
     <div
       className="fixed inset-0 z-[100] flex flex-col items-center bg-navy/95 backdrop-blur"
       role="dialog"
       aria-modal="true"
       aria-label={title ? `Reading window — ${title}` : 'Reading window'}
+      aria-describedby={descriptionId}
     >
       {/* Header — countdown + instructions */}
       <header className="w-full max-w-4xl px-4 pt-8 pb-4 text-center select-none">
@@ -183,9 +192,9 @@ export function WritingReadingWindowOverlay({
         </div>
         {/* Politely announce the remaining time without spamming a screen reader. */}
         <div aria-live="polite" aria-atomic="true" className="sr-only">
-          {`${formatHms(secondsRemaining)} remaining in the reading window`}
+          {announcement}
         </div>
-        <p className="mt-2 text-sm text-white/80">
+        <p id={descriptionId} className="mt-2 text-sm text-white/80">
           Reading time — review the question paper. You can only scroll.
         </p>
         {/* Slim progress bar */}
