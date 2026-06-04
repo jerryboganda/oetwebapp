@@ -18,7 +18,6 @@ import {
   removeReadingText,
   reorderReadingQuestions,
   reorderReadingTexts,
-  setReadingQuestionDistractors,
   getReadingQuestionReviewHistory,
   transitionReadingQuestionReviewState,
   upsertReadingQuestion,
@@ -31,7 +30,6 @@ import {
   type ReadingQuestionType,
   type ReadingReviewLogEntryDto,
   type ReadingReviewState,
-  type ReadingDistractorCategory,
   type ReadingStructureAdminDto,
   type ReadingTextDto,
   type ReadingValidationReport,
@@ -61,16 +59,6 @@ const PART_EXPECTED: Record<ReadingPartCode, { items: number; texts: number; min
 };
 
 const REVIEW_STATES: ReadingReviewState[] = ['Draft', 'AcademicReview', 'MedicalReview', 'LanguageReview', 'Pilot', 'Published', 'Retired'];
-
-const DISTRACTOR_CATEGORY_OPTIONS: Array<{ value: ReadingDistractorCategory; label: string }> = [
-  { value: 'Opposite', label: 'Opposite' },
-  { value: 'TooBroad', label: 'Too broad' },
-  { value: 'TooSpecific', label: 'Too specific' },
-  { value: 'WrongSpeaker', label: 'Wrong speaker/source' },
-  { value: 'NotInText', label: 'Not in text' },
-  { value: 'DistortedDetail', label: 'Distorted detail' },
-  { value: 'OutOfScope', label: 'Out of scope' },
-];
 
 type ReviewHistoryState = { question: ReadingQuestionAdminDto; entries: ReadingReviewLogEntryDto[] };
 
@@ -129,7 +117,7 @@ export function ReadingStructureEditor({ paperId }: Props) {
   const saveQuestion = async (draft: QuestionDraft) => {
     setSavingDraft(true);
     try {
-      const saved = await upsertReadingQuestion(paperId, {
+      await upsertReadingQuestion(paperId, {
         id: draft.id,
         readingPartId: draft.readingPartId,
         readingTextId: draft.readingTextId,
@@ -142,11 +130,8 @@ export function ReadingStructureEditor({ paperId }: Props) {
         acceptedSynonymsJson: draft.acceptedSynonymsJson,
         caseSensitive: draft.caseSensitive,
         explanationMarkdown: draft.explanationMarkdown,
-        skillTag: draft.skillTag,
+        skillTag: null,
       });
-      if (draft.questionType === 'MultipleChoice3' || draft.questionType === 'MultipleChoice4') {
-        await setReadingQuestionDistractors(paperId, saved.id, parseDistractorJson(draft.optionDistractorsJson));
-      }
       setQuestionDraft(null);
       await load();
     } catch (e) {
@@ -571,7 +556,6 @@ function QuestionEditorModal({ draft, texts, saving, onChange, onClose, onSave }
 
   const optionCount = draft.questionType === 'MultipleChoice3' ? 3 : 4;
   const correctLetter = parseJsonString(draft.correctAnswerJson, 'A');
-  const distractors = useMemo(() => parseDistractorJson(draft.optionDistractorsJson), [draft.optionDistractorsJson]);
   const options = useMemo(() => {
     try { return JSON.parse(draft.optionsJson || '[]'); }
     catch { return []; }
@@ -592,9 +576,6 @@ function QuestionEditorModal({ draft, texts, saving, onChange, onClose, onSave }
           onChange={(e) => onChange({ ...draft, displayOrder: Number(e.target.value) })} />
         <Input type="number" label="Points" value={draft.points}
           onChange={(e) => onChange({ ...draft, points: Math.max(1, Number(e.target.value)) })} />
-        <Input label="Skill tag" value={draft.skillTag ?? ''}
-          onChange={(e) => onChange({ ...draft, skillTag: e.target.value || null })}
-          placeholder="part-a-scan | inference | vocabulary | reference" />
 
         {texts.length > 0 && (
           <Select
@@ -636,30 +617,6 @@ function QuestionEditorModal({ draft, texts, saving, onChange, onClose, onSave }
                 return { value: l, label: l };
               })}
             />
-            <div className="mt-3 space-y-2 rounded-lg border border-border bg-background-light p-3">
-              <p className="text-xs font-bold uppercase text-muted">Distractor metadata</p>
-              {Array.from({ length: optionCount }).map((_, i) => {
-                const letter = String.fromCharCode(65 + i);
-                if (letter === correctLetter) {
-                  return <p key={letter} className="text-xs text-muted">{letter} is the correct answer; no distractor tag needed.</p>;
-                }
-                return (
-                  <Select
-                    key={letter}
-                    label={`Option ${letter}`}
-                    value={distractors[letter] ?? ''}
-                    onChange={(event) => {
-                      const next = { ...distractors };
-                      const value = event.target.value as ReadingDistractorCategory | '';
-                      if (value) next[letter] = value;
-                      else delete next[letter];
-                      onChange({ ...draft, optionDistractorsJson: Object.keys(next).length ? JSON.stringify(next) : null });
-                    }}
-                    options={[{ value: '', label: 'Not tagged' }, ...DISTRACTOR_CATEGORY_OPTIONS]}
-                  />
-                );
-              })}
-            </div>
           </div>
         )}
 
@@ -729,7 +686,6 @@ function defaultQuestionDraftFor(part: ReadingPartAdminDto): QuestionDraft {
     caseSensitive: false,
     explanationMarkdown: null,
     skillTag: null,
-    optionDistractorsJson: null,
     reviewState: 'Draft',
     latestReviewNote: null,
     readingSectionId: null,
@@ -772,24 +728,5 @@ function parseJsonString(value: string, fallback: string): string {
     return typeof parsed === 'string' ? parsed : fallback;
   } catch {
     return fallback;
-  }
-}
-
-function parseDistractorJson(value?: string | null): Partial<Record<string, ReadingDistractorCategory>> {
-  if (!value) return {};
-  try {
-    const parsed = JSON.parse(value) as Record<string, unknown>;
-    const result: Partial<Record<string, ReadingDistractorCategory>> = {};
-    const allowed = new Set(DISTRACTOR_CATEGORY_OPTIONS.map((option) => option.value));
-    for (const [rawKey, rawValue] of Object.entries(parsed)) {
-      const key = rawKey.trim().toUpperCase();
-      if (!/^[A-D]$/.test(key)) continue;
-      if (typeof rawValue === 'string' && allowed.has(rawValue as ReadingDistractorCategory)) {
-        result[key] = rawValue as ReadingDistractorCategory;
-      }
-    }
-    return result;
-  } catch {
-    return {};
   }
 }

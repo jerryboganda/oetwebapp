@@ -31,13 +31,47 @@ public class ListeningPathwayProgressServiceTests
         Assert.Null(diagnostic.AttemptId);
         Assert.Null(diagnostic.ScaledScore);
 
+        // The three part-practice entry points are unlocked from the start, so a
+        // learner can practise any part without completing the diagnostic. Every
+        // other stage stays Locked behind the linear pathway.
+        var alwaysUnlocked = new HashSet<string>(StringComparer.Ordinal)
+        {
+            "diagnostic", "foundation_partA", "foundation_partB", "foundation_partC",
+        };
+
         foreach (var stage in ListeningPathwayProgressService.PathwayStages.Skip(1))
         {
             var row = rows.Single(item => item.StageCode == stage);
-            Assert.Equal(ListeningPathwayStageStatus.Locked, row.Status);
+            var expected = alwaysUnlocked.Contains(stage)
+                ? ListeningPathwayStageStatus.Unlocked
+                : ListeningPathwayStageStatus.Locked;
+            Assert.Equal(expected, row.Status);
             Assert.Null(row.AttemptId);
             Assert.Null(row.ScaledScore);
         }
+    }
+
+    [Fact]
+    public async Task RecomputeAsync_unlocks_part_foundations_without_diagnostic()
+    {
+        await using var db = NewDb();
+        var service = new ListeningPathwayProgressService(db, TimeProvider.System);
+
+        // Brand-new learner — no attempts at all, diagnostic never taken.
+        await service.RecomputeAsync("learner-no-diagnostic", CancellationToken.None);
+
+        var rows = await db.ListeningPathwayProgress
+            .Where(row => row.UserId == "learner-no-diagnostic")
+            .ToDictionaryAsync(row => row.StageCode, row => row.Status);
+
+        Assert.Equal(ListeningPathwayStageStatus.Unlocked, rows["diagnostic"]);
+        Assert.Equal(ListeningPathwayStageStatus.Unlocked, rows["foundation_partA"]);
+        Assert.Equal(ListeningPathwayStageStatus.Unlocked, rows["foundation_partB"]);
+        Assert.Equal(ListeningPathwayStageStatus.Unlocked, rows["foundation_partC"]);
+        // Downstream stages remain gated behind the linear pathway.
+        Assert.Equal(ListeningPathwayStageStatus.Locked, rows["drill_partA"]);
+        Assert.Equal(ListeningPathwayStageStatus.Locked, rows["minitest_partA"]);
+        Assert.Equal(ListeningPathwayStageStatus.Locked, rows["exam_simulation"]);
     }
 
     [Fact]
@@ -326,10 +360,14 @@ public class ListeningPathwayProgressServiceTests
         var foundationPartB = await db.ListeningPathwayProgress.SingleAsync(
             row => row.UserId == "learner-later-scope" && row.StageCode == "foundation_partB");
 
+        // foundation_partA must NOT be backfilled by the part-B-scoped attempt —
+        // it stays Unlocked with no attempt consumed.
         Assert.Equal(ListeningPathwayStageStatus.Unlocked, foundationPartA.Status);
         Assert.Null(foundationPartA.AttemptId);
-        Assert.Equal(ListeningPathwayStageStatus.Locked, foundationPartB.Status);
-        Assert.Null(foundationPartB.AttemptId);
+        // foundation_partB is an always-unlocked entry point, so its own scoped
+        // attempt (380 >= the 300 threshold) completes it.
+        Assert.Equal(ListeningPathwayStageStatus.Completed, foundationPartB.Status);
+        Assert.Equal("scoped-part-b", foundationPartB.AttemptId);
     }
 
     [Fact]

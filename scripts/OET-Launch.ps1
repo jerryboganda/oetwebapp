@@ -170,8 +170,8 @@ if (-not $backendAlive) {
     Set-Content -LiteralPath $runnerPath -Value ($runnerLines -join "`r`n") -Encoding ASCII
     Start-Process -WindowStyle Hidden -FilePath 'cmd.exe' -ArgumentList "/c ""$runnerPath""" -WorkingDirectory $projectRoot
 
-    # Wait up to 5 MINUTES (300s) - .NET build can take 2+ min on first run
-    $deadline = (Get-Date).AddSeconds(300)
+    # Wait up to 10 MINUTES (600s) - .NET build and first-run migrations can take a while
+    $deadline = (Get-Date).AddSeconds(600)
     $lastStatus = ''
     $dotCount = 0
     while ((Get-Date) -lt $deadline) {
@@ -196,7 +196,7 @@ if (-not $backendAlive) {
     if (-not $backendAlive) { Write-Host "" }
 
     if (-not $backendAlive) {
-        Write-Host "  FAILED: Backend did not start within 5 minutes." -ForegroundColor Red
+        Write-Host "  FAILED: Backend did not start within 10 minutes." -ForegroundColor Red
         Write-Host "  Log: $backendLog" -ForegroundColor Red
         if (Test-Path $backendLog) {
             Get-Content $backendLog -Tail 5 | ForEach-Object { Write-Host "    $_" -ForegroundColor DarkGray }
@@ -214,12 +214,36 @@ Write-Host "[3/4] Starting Frontend..." -ForegroundColor Yellow
 Write-Host "       (First launch compiles Next.js - may take 1-2 minutes)" -ForegroundColor DarkGray
 
 $frontendAlive = $false
+$frontendPort = 3000
+$frontendRootUrl = "http://localhost:$frontendPort"
+$frontendListenerPid = $null
 try {
-    $resp = Invoke-WebRequest -UseBasicParsing -Uri 'http://localhost:3000' -TimeoutSec 3 -ErrorAction SilentlyContinue
+    $resp = Invoke-WebRequest -UseBasicParsing -Uri $frontendRootUrl -TimeoutSec 3 -ErrorAction SilentlyContinue
     if ($resp.StatusCode -ge 200 -and $resp.StatusCode -lt 400) { $frontendAlive = $true }
 } catch {}
 
+try {
+    $listener = Get-NetTCPConnection -LocalPort $frontendPort -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($listener) {
+        $frontendListenerPid = $listener.OwningProcess
+    }
+} catch {}
+
 if (-not $frontendAlive) {
+    if ($frontendListenerPid) {
+        Write-Host "       Stopping stale frontend process on port $frontendPort (PID $frontendListenerPid)..." -ForegroundColor DarkYellow
+        try {
+            & taskkill.exe /PID $frontendListenerPid /T /F 1>$null 2>$null
+        } catch {}
+        Start-Sleep -Seconds 2
+    }
+
+    $nextDir = Join-Path $projectRoot '.next'
+    if (Test-Path -LiteralPath $nextDir) {
+        Write-Host "       Clearing generated Next build cache at $nextDir ..." -ForegroundColor DarkGray
+        Remove-Item -LiteralPath $nextDir -Recurse -Force -ErrorAction SilentlyContinue
+    }
+
     $runnerDir = Join-Path $projectRoot '.local-deploy\runners'
     New-Item -ItemType Directory -Force -Path $runnerDir | Out-Null
     $frontendLog = Join-Path $logDir 'frontend.log'

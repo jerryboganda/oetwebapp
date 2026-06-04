@@ -92,17 +92,18 @@ export default function ListeningPartPracticePage() {
   if (!part) return null;
 
   const meta = PART_DETAILS[part];
-  const diagnosticComplete = stages.some(
-    (stage) => stage.stage.toLowerCase().includes('diagnostic') && stage.status === 'Completed',
+  // The listening diagnostic is optional — any learner can start Part A/B/C
+  // practice directly, in any order. We launch the matching part-scoped pathway
+  // stage as soon as the server exposes a runnable paper for it (actionHref
+  // present and not Locked); no diagnostic completion is required.
+  const launchStage = stages.find(
+    (stage) => stage.actionHref && stage.status !== 'Locked' && stageMatchesPart(stage, part),
   );
-  const launchStage = diagnosticComplete
-    ? stages.find((stage) => stage.actionHref && stage.status !== 'Locked' && stageMatchesPart(stage, part))
-    : null;
 
   function handleStart() {
     if (!part) return;
     if (!launchStage?.actionHref) {
-      setError('Complete the listening diagnostic to unlock part-scoped practice.');
+      setError(`Part ${part} practice isn't available right now. Please try again later.`);
       return;
     }
     setStarting(true);
@@ -139,7 +140,7 @@ export default function ListeningPartPracticePage() {
           <LearnerSkeleton variant="card-grid" />
         ) : !launchStage ? (
           <InlineAlert variant="info">
-            Complete the listening diagnostic to unlock part-scoped practice.
+            No Part {part} listening paper is available yet. Please check back soon.
           </InlineAlert>
         ) : (
           <section aria-label={`Available Part ${part} practice papers`}>

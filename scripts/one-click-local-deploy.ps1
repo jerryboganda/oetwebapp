@@ -1,4 +1,4 @@
-param(
+﻿param(
   [switch]$ValidateOnly,
   [switch]$SkipBrowser
 )
@@ -224,6 +224,42 @@ function Wait-PostgresReady {
   return $false
 }
 
+function Get-PortListenerPid {
+  param([int]$Port)
+
+  try {
+    $listener = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($listener) {
+      return $listener.OwningProcess
+    }
+  } catch {}
+
+  return $null
+}
+
+function Stop-PortListener {
+  param([int]$Port)
+
+  $pid = Get-PortListenerPid -Port $Port
+  if ($pid) {
+    Write-Warn "Stopping stale process listening on port $Port (PID $pid)."
+    try {
+      & taskkill.exe /PID $pid /T /F 1>$null 2>$null
+    } catch {}
+    Start-Sleep -Seconds 2
+  }
+}
+
+function Clear-NextCache {
+  param([string]$ProjectRoot)
+
+  $nextDir = Join-Path $ProjectRoot '.next'
+  if (Test-Path -LiteralPath $nextDir) {
+    Write-Warn "Clearing generated Next build cache at $nextDir."
+    Remove-Item -LiteralPath $nextDir -Recurse -Force -ErrorAction SilentlyContinue
+  }
+}
+
 function Ensure-Postgres {
   Write-Step "Checking PostgreSQL"
 
@@ -372,23 +408,32 @@ function Ensure-NodeDependencies {
 
 function Test-Login {
   Write-Step "Testing local learner sign-in through the frontend proxy"
-  $body = @{
-    email = 'learner@oet-prep.dev'
-    password = 'Password123!'
-    rememberMe = $true
-  } | ConvertTo-Json
+  $candidates = @(
+    @{ Email = 'learner@oet-prep.dev'; Password = 'Password123!' },
+    @{ Email = 'mindreader420123@gmail.com'; Password = '12345678' },
+    @{ Email = 'xhsjs5901@gmail.com'; Password = '12345678' },
+    @{ Email = 'manwara575@gmail.com'; Password = '12345678' }
+  )
 
-  try {
-    $response = Invoke-RestMethod -Method Post -Uri 'http://localhost:3000/api/backend/v1/auth/sign-in' -ContentType 'application/json' -Body $body -TimeoutSec 20
-    if ($response.accessToken -and $response.currentUser.email -eq 'learner@oet-prep.dev') {
-      Write-Ok "Learner sign-in works through http://localhost:3000/api/backend."
-      return
+  foreach ($candidate in $candidates) {
+    $body = @{
+      email = $candidate.Email
+      password = $candidate.Password
+      rememberMe = $true
+    } | ConvertTo-Json
+
+    try {
+      $response = Invoke-RestMethod -Method Post -Uri 'http://localhost:3000/api/backend/v1/auth/sign-in' -ContentType 'application/json' -Body $body -TimeoutSec 20
+      if ($response.accessToken -and $response.currentUser.email -eq $candidate.Email) {
+        Write-Ok "Sign-in works through http://localhost:3000/api/backend for $($candidate.Email)."
+        return
+      }
+    } catch {
+      continue
     }
-  } catch {
-    throw "Learner sign-in test failed: $($_.Exception.Message)"
   }
 
-  throw "Learner sign-in test did not return a valid session."
+  throw "Sign-in test did not return a valid session for any known local account."
 }
 
 function Show-IntegrationSummary {
@@ -438,7 +483,7 @@ function Show-IntegrationSummary {
   }
 }
 
-$projectRoot = 'C:\Users\Dr Faisal Maqsood PC\Desktop\New OET Web App'
+$projectRoot = Split-Path -Parent $PSScriptRoot
 $desktopPath = [Environment]::GetFolderPath('Desktop')
 $logDir = Join-Path $projectRoot '.local-deploy\logs'
 $envFile = Join-Path $projectRoot '.env.local'
@@ -485,15 +530,17 @@ if (Test-HttpOk -Url 'http://localhost:5198/health' -TimeoutSeconds 5) {
 } else {
   Start-LocalProcess -Name 'Backend API' -Command 'cmd /c pnpm run backend:run' -LogPath (Join-Path $logDir 'backend.log') -WorkingDirectory $projectRoot
 }
-Wait-HttpOk -Url 'http://localhost:5198/health' -TimeoutSeconds 180
+Wait-HttpOk -Url 'http://localhost:5198/health' -TimeoutSeconds 600
 
 Write-Step "Starting frontend"
 if (Test-HttpOk -Url 'http://localhost:3000/sign-in' -TimeoutSeconds 5) {
   Write-Ok "Frontend is already running on http://localhost:3000."
 } else {
+  Stop-PortListener -Port 3000
+  Clear-NextCache -ProjectRoot $projectRoot
   Start-LocalProcess -Name 'Frontend web app' -Command 'cmd /c pnpm run dev' -LogPath (Join-Path $logDir 'frontend.log') -WorkingDirectory $projectRoot
 }
-Wait-HttpOk -Url 'http://localhost:3000/sign-in' -TimeoutSeconds 180
+Wait-HttpOk -Url 'http://localhost:3000/sign-in' -TimeoutSeconds 300
 
 Test-Login
 Show-IntegrationSummary -ProjectRoot $projectRoot

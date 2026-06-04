@@ -42,6 +42,19 @@ public sealed class ListeningPathwayProgressService
         "exam_simulation",
     };
 
+    /// <summary>
+    /// Part-practice entry points. These are always unlocked so a learner can
+    /// start Part A, B, or C practice in any order without first completing the
+    /// listening diagnostic (the diagnostic is optional, not a gate). Downstream
+    /// stages (drills, mini-tests, full paper, exam) keep their linear unlock.
+    /// </summary>
+    private static readonly HashSet<string> EntryStages = new(StringComparer.Ordinal)
+    {
+        "foundation_partA",
+        "foundation_partB",
+        "foundation_partC",
+    };
+
     public async Task RecomputeAsync(string userId, CancellationToken ct)
     {
         var gate = RecomputeLocks.GetOrAdd(userId, _ => new SemaphoreSlim(1, 1));
@@ -90,7 +103,9 @@ public sealed class ListeningPathwayProgressService
             }
 
             var prev = i == 0 ? null : existing.FirstOrDefault(x => x.StageCode == PathwayStages[i - 1]);
-            var unlocked = i == 0 || prev?.Status == ListeningPathwayStageStatus.Completed;
+            var unlocked = i == 0
+                || EntryStages.Contains(stage)
+                || prev?.Status == ListeningPathwayStageStatus.Completed;
 
             // Manual override always unlocks.
             if (!string.IsNullOrEmpty(row.UnlockOverrideBy)) unlocked = true;
