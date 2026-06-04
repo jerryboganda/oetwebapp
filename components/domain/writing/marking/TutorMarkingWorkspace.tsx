@@ -52,6 +52,7 @@ import type {
   WritingModerationDto,
   WritingTutorMarkingContextDto,
 } from '@/lib/writing/types';
+import { WritingStimulusViewer } from '@/components/domain/writing/WritingStimulusViewer';
 import { AnnotationLayer } from './AnnotationLayer';
 import { RubricPanel } from './RubricPanel';
 import { AiPreAnalysisPanel } from './AiPreAnalysisPanel';
@@ -392,7 +393,15 @@ export function TutorMarkingWorkspace({
             <p className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-muted">
               <NotebookText className="h-3.5 w-3.5" aria-hidden="true" /> Case notes
             </p>
-            {task.caseNoteSections.length > 0 ? (
+            {task.stimulusPdfDownloadPath ? (
+              <div className="mt-2 h-[60vh] overflow-hidden rounded-lg border border-border">
+                <WritingStimulusViewer
+                  downloadPath={task.stimulusPdfDownloadPath}
+                  title="Question paper"
+                  className="h-full"
+                />
+              </div>
+            ) : task.caseNoteSections.length > 0 ? (
               <div className="mt-2 space-y-2">
                 {task.caseNoteSections.map((section, i) => (
                   <div key={i}>
