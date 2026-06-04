@@ -1,10 +1,14 @@
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
+using OetLearner.Api.Data;
 
 #nullable disable
 
 namespace OetLearner.Api.Data.Migrations
 {
     /// <inheritdoc />
+    [DbContext(typeof(LearnerDbContext))]
+    [Migration("20260618090000_AddVocabularyFreePreview")]
     public partial class AddVocabularyFreePreview : Migration
     {
         /// <inheritdoc />
