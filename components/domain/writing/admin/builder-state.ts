@@ -131,6 +131,8 @@ export interface WritingTaskFormState {
   recipient: WritingRecipientDto;
   // Case notes
   caseNoteSections: CaseNoteSectionDraft[];
+  // Stimulus PDF (optional real exam question-paper PDF)
+  stimulusPdfMediaAssetId: string | null;
   // Word guide
   wordGuideMin: number;
   wordGuideMax: number;
@@ -162,6 +164,7 @@ export function emptyFormState(seed?: Partial<WritingTaskFormState>): WritingTas
     expectedAction: '',
     recipient: { name: '', role: '', organisation: '', address: '' },
     caseNoteSections: [],
+    stimulusPdfMediaAssetId: null,
     wordGuideMin: DEFAULT_WORD_GUIDE_MIN,
     wordGuideMax: DEFAULT_WORD_GUIDE_MAX,
     fixedInstructions: [...WRITING_DEFAULT_FIXED_INSTRUCTIONS],
@@ -222,6 +225,7 @@ export function formStateFromDto(dto: WritingTaskDto): WritingTaskFormState {
       heading: s.heading ?? '',
       items: [...(s.items ?? [])],
     })),
+    stimulusPdfMediaAssetId: dto.stimulusPdfMediaAssetId ?? null,
     wordGuideMin: dto.wordGuideMin ?? DEFAULT_WORD_GUIDE_MIN,
     wordGuideMax: dto.wordGuideMax ?? DEFAULT_WORD_GUIDE_MAX,
     fixedInstructions:
@@ -319,6 +323,7 @@ export function formStateToUpsert(form: WritingTaskFormState): WritingTaskUpsert
     })),
     sourceProvenance: form.sourceProvenance.trim(),
     integrityAcknowledged: form.integrityAcknowledged,
+    stimulusPdfMediaAssetId: form.stimulusPdfMediaAssetId ?? null,
   };
 }
 
