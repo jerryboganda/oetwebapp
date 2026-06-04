@@ -14,13 +14,16 @@ import { WordCounter } from '@/components/domain/writing/WordCounter';
 import { SubmitBar } from '@/components/domain/writing/SubmitBar';
 import { CoachPanel } from '@/components/domain/writing/CoachPanel';
 import { PracticeScratchpad } from '@/components/domain/writing/PracticeScratchpad';
-import { WritingCaseNotesPanel } from '@/components/domain/writing-case-notes-panel';
+import { WritingStimulus } from '@/components/domain/writing/WritingStimulus';
+import { WritingReadingWindowOverlay } from '@/components/domain/writing/WritingReadingWindowOverlay';
 import {
   createWritingSubmission,
   getWritingDraftV2,
   getWritingScenario,
   putWritingDraftV2,
 } from '@/lib/writing/api';
+import { useDeadlineCountdown } from '@/lib/writing/useCountdown';
+import { WRITING_READING_WINDOW_SECONDS } from '@/lib/writing/workflow';
 import type {
   WritingEditorMode,
   WritingScenarioDto,
@@ -48,6 +51,55 @@ export default function WritingPracticeSessionPage() {
   const lastAutosaveContent = useRef<string>('');
   const coachSessionId = useMemo(() => `practice-${scenarioId}`, [scenarioId]);
 
+  // ── Client-only reading window (skippable) ─────────────────────────────────
+  // Initialise to false for SSR to avoid hydration mismatch; the mount effect
+  // resolves the real value from sessionStorage synchronously.
+  const [readingActive, setReadingActive] = useState(false);
+  const [readingDeadlineMs, setReadingDeadlineMs] = useState<number | null>(null);
+
+  const storageKey = `writing-practice-reading:${scenarioId}`;
+
+  const closeReading = useCallback(() => {
+    setReadingActive(false);
+    if (typeof window !== 'undefined') {
+      // Store a past timestamp so a later refresh finds the window already closed.
+      sessionStorage.setItem(storageKey, String(Date.now() - 1));
+    }
+  }, [storageKey]);
+
+  // Resolve reading window on mount — after scenarioId is known and after the
+  // scenario has loaded (so windowSeconds is correct). Runs only client-side.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (!scenarioId || !scenario) return;
+
+    const windowSeconds = scenario.readingTimeSeconds ?? WRITING_READING_WINDOW_SECONDS;
+    const stored = sessionStorage.getItem(storageKey);
+    let deadline: number;
+
+    if (stored !== null) {
+      deadline = Number(stored);
+    } else {
+      deadline = Date.now() + windowSeconds * 1000;
+      sessionStorage.setItem(storageKey, String(deadline));
+    }
+
+    const stillActive = Date.now() < deadline;
+    setReadingDeadlineMs(deadline);
+    setReadingActive(stillActive);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scenarioId, scenario?.id]);
+  // ^ Re-run only when the scenario identity changes, not on every render.
+
+  const readingSeconds = useDeadlineCountdown(
+    readingActive ? readingDeadlineMs : null,
+    { onZero: closeReading },
+  );
+
+  const windowSeconds =
+    (scenario?.readingTimeSeconds ?? WRITING_READING_WINDOW_SECONDS);
+
+  // ── Scenario + draft load ───────────────────────────────────────────────────
   useEffect(() => {
     if (!scenarioId) return;
     let cancelled = false;
@@ -73,6 +125,7 @@ export default function WritingPracticeSessionPage() {
     };
   }, [scenarioId, mode, t]);
 
+  // ── Autosave ────────────────────────────────────────────────────────────────
   useEffect(() => {
     if (!scenarioId) return;
     const timer = window.setInterval(() => {
@@ -128,6 +181,18 @@ export default function WritingPracticeSessionPage() {
 
   return (
     <LearnerDashboardShell pageTitle={t('writing.practice.session.pageTitle')} distractionFree>
+      {/* Skippable reading window overlay — client-only, portal-rendered */}
+      <WritingReadingWindowOverlay
+        open={readingActive && !!scenario}
+        scenario={scenario}
+        secondsRemaining={readingSeconds}
+        totalSeconds={windowSeconds}
+        allowSkip
+        onSkip={closeReading}
+        onAutoClose={closeReading}
+        title={scenario?.title ?? undefined}
+      />
+
       <div className="space-y-4 pb-32" aria-busy={!scenario}>
         <header
           className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-surface p-4 shadow-sm"
@@ -183,13 +248,15 @@ export default function WritingPracticeSessionPage() {
         {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
 
         <div className={`grid gap-4 ${mode === 'coached' ? 'lg:grid-cols-12' : 'lg:grid-cols-2'}`}>
+          {/* Stimulus pane — PDF viewer or text fallback via WritingStimulus */}
           <section
             aria-label={t('writing.practice.session.caseNotesLabel')}
             className={`min-h-[60vh] overflow-hidden rounded-2xl border border-border bg-surface ${mode === 'coached' ? 'lg:col-span-4' : ''}`}
           >
-            <WritingCaseNotesPanel
-              caseNotes={scenario?.caseNotesMarkdown ?? t('writing.practice.session.caseNotesLoading')}
-              taskId={scenarioId}
+            <WritingStimulus
+              scenario={scenario}
+              locked={readingActive}
+              title={scenario?.title ?? undefined}
             />
           </section>
 
