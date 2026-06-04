@@ -1,6 +1,9 @@
 const frontendBaseUrl = process.env.PLAYWRIGHT_BASE_URL ?? 'http://localhost:3000';
 const apiBaseUrl = process.env.PLAYWRIGHT_API_URL ?? 'http://localhost:5198';
-const readinessTimeoutMs = Number.parseInt(process.env.PLAYWRIGHT_READY_TIMEOUT_MS ?? '180000', 10);
+// Fresh-DB E2E applies the FULL migration history (~170 migrations) on boot, which
+// under loaded CI runners can take several minutes before the API starts listening.
+// 180s was too short and caused flaky "stack readiness" timeouts; allow up to 7 min.
+const readinessTimeoutMs = Number.parseInt(process.env.PLAYWRIGHT_READY_TIMEOUT_MS ?? '420000', 10);
 const readinessIntervalMs = Number.parseInt(process.env.PLAYWRIGHT_READY_INTERVAL_MS ?? '3000', 10);
 
 async function check(url, expectation, options = {}) {

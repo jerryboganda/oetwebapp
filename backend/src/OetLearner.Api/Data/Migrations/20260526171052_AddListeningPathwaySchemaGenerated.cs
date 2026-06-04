@@ -25,11 +25,9 @@ namespace OetLearner.Api.Data.Migrations
                 maxLength: 64,
                 nullable: true);
 
-            migrationBuilder.AddColumn<DateTimeOffset>(
-                name: "RecoveryEmailSentAt",
-                table: "Carts",
-                type: "timestamp with time zone",
-                nullable: true);
+            // NOTE: Carts.RecoveryEmailSentAt is added by migration
+            // 20260609110000_AddDunningAttempts; this generated migration
+            // drifted and re-added it. Duplicate removed.
 
             migrationBuilder.CreateTable(
                 name: "ClassFeedbacks",
@@ -71,26 +69,9 @@ namespace OetLearner.Api.Data.Migrations
             // 20260526160100_AddClassRecordingEmbeddings; this generated
             // migration drifted and re-created it. Duplicate removed.
 
-            migrationBuilder.CreateTable(
-                name: "DunningAttempts",
-                columns: table => new
-                {
-                    Id = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: false),
-                    SubscriptionId = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: false),
-                    InvoiceId = table.Column<string>(type: "character varying(128)", maxLength: 128, nullable: false),
-                    UserId = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: false),
-                    AttemptNumber = table.Column<int>(type: "integer", nullable: false),
-                    ScheduledAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
-                    ExecutedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: true),
-                    Outcome = table.Column<int>(type: "integer", nullable: false),
-                    StripeFailureCode = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: true),
-                    FailureReason = table.Column<string>(type: "character varying(512)", maxLength: 512, nullable: true),
-                    CreatedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_DunningAttempts", x => x.Id);
-                });
+            // NOTE: DunningAttempts (and its indexes) are created by migration
+            // 20260609110000_AddDunningAttempts; this generated migration
+            // drifted and re-created it. Duplicate removed.
 
             migrationBuilder.CreateTable(
                 name: "LearnerAccentProgresses",
@@ -335,21 +316,8 @@ namespace OetLearner.Api.Data.Migrations
             // IX_ClassRecordingEmbeddings_* indexes are created by migration
             // 20260526160100_AddClassRecordingEmbeddings. Duplicate removed.
 
-            migrationBuilder.CreateIndex(
-                name: "IX_DunningAttempts_InvoiceId_AttemptNumber",
-                table: "DunningAttempts",
-                columns: new[] { "InvoiceId", "AttemptNumber" },
-                unique: true);
-
-            migrationBuilder.CreateIndex(
-                name: "IX_DunningAttempts_Outcome_ScheduledAt",
-                table: "DunningAttempts",
-                columns: new[] { "Outcome", "ScheduledAt" });
-
-            migrationBuilder.CreateIndex(
-                name: "IX_DunningAttempts_SubscriptionId_InvoiceId",
-                table: "DunningAttempts",
-                columns: new[] { "SubscriptionId", "InvoiceId" });
+            // IX_DunningAttempts_* indexes are created by migration
+            // 20260609110000_AddDunningAttempts. Duplicate removed.
 
             migrationBuilder.CreateIndex(
                 name: "IX_LearnerAccentProgresses_UserId_Accent",
@@ -420,8 +388,8 @@ namespace OetLearner.Api.Data.Migrations
             migrationBuilder.DropTable(
                 name: "ClassMaterials");
 
-            migrationBuilder.DropTable(
-                name: "DunningAttempts");
+            // DunningAttempts is dropped by migration
+            // 20260609110000_AddDunningAttempts. Duplicate removed.
 
             migrationBuilder.DropTable(
                 name: "LearnerAccentProgresses");
@@ -458,9 +426,8 @@ namespace OetLearner.Api.Data.Migrations
                 name: "SubSkillTagsCsv",
                 table: "ListeningQuestions");
 
-            migrationBuilder.DropColumn(
-                name: "RecoveryEmailSentAt",
-                table: "Carts");
+            // Carts.RecoveryEmailSentAt is dropped by migration
+            // 20260609110000_AddDunningAttempts. Duplicate removed.
         }
     }
 }

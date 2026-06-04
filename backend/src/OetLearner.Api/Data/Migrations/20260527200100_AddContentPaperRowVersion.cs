@@ -1,4 +1,6 @@
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
+using OetLearner.Api.Data;
 
 #nullable disable
 
@@ -9,6 +11,8 @@ namespace OetLearner.Api.Data.Migrations;
 /// Counterpart of 20260527200000_AddListeningAttemptRowVersion which did the same
 /// for the ListeningAttempts table.
 /// </summary>
+[DbContext(typeof(LearnerDbContext))]
+[Migration("20260527200100_AddContentPaperRowVersion")]
 public partial class AddContentPaperRowVersion : Migration
 {
     protected override void Up(MigrationBuilder migrationBuilder)

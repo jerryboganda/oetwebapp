@@ -1,10 +1,14 @@
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
+using OetLearner.Api.Data;
 
 #nullable disable
 
 namespace OetLearner.Api.Data.Migrations
 {
     /// <inheritdoc />
+    [DbContext(typeof(LearnerDbContext))]
+    [Migration("20260609110000_AddDunningAttempts")]
     public partial class AddDunningAttempts : Migration
     {
         /// <inheritdoc />
@@ -53,39 +57,13 @@ namespace OetLearner.Api.Data.Migrations
                 type: "timestamp with time zone",
                 nullable: true);
 
-            // Wave A5 — Stripe Tax / Customer Portal / Radar runtime overrides.
-            migrationBuilder.AddColumn<bool>(
-                name: "StripeTaxAutomaticEnabled",
-                table: "RuntimeSettings",
-                type: "boolean",
-                nullable: true);
-
-            migrationBuilder.AddColumn<string>(
-                name: "StripeTaxRegistrationsCsv",
-                table: "RuntimeSettings",
-                type: "character varying(1024)",
-                maxLength: 1024,
-                nullable: true);
-
-            migrationBuilder.AddColumn<string>(
-                name: "StripeCustomerPortalConfigurationId",
-                table: "RuntimeSettings",
-                type: "character varying(128)",
-                maxLength: 128,
-                nullable: true);
-
-            migrationBuilder.AddColumn<bool>(
-                name: "StripeRadarHighRiskCountryAllowReview",
-                table: "RuntimeSettings",
-                type: "boolean",
-                nullable: true);
-
-            migrationBuilder.AddColumn<string>(
-                name: "StripeRadarBlockEmailDomainsCsv",
-                table: "RuntimeSettings",
-                type: "character varying(1024)",
-                maxLength: 1024,
-                nullable: true);
+            // NOTE: the Stripe Tax / Customer Portal / Radar runtime override
+            // columns on RuntimeSettings (StripeTaxAutomaticEnabled,
+            // StripeTaxRegistrationsCsv, StripeCustomerPortalConfigurationId,
+            // StripeRadarHighRiskCountryAllowReview, StripeRadarBlockEmailDomainsCsv)
+            // are added by the earlier migration 20260526155000_AddZoomRuntimeSettings.
+            // This migration originally re-added them; duplicate removed so a fresh
+            // database does not hit a 42701 "column already exists" error.
         }
 
         /// <inheritdoc />
@@ -95,11 +73,8 @@ namespace OetLearner.Api.Data.Migrations
 
             migrationBuilder.DropColumn(name: "RecoveryEmailSentAt", table: "Carts");
 
-            migrationBuilder.DropColumn(name: "StripeTaxAutomaticEnabled", table: "RuntimeSettings");
-            migrationBuilder.DropColumn(name: "StripeTaxRegistrationsCsv", table: "RuntimeSettings");
-            migrationBuilder.DropColumn(name: "StripeCustomerPortalConfigurationId", table: "RuntimeSettings");
-            migrationBuilder.DropColumn(name: "StripeRadarHighRiskCountryAllowReview", table: "RuntimeSettings");
-            migrationBuilder.DropColumn(name: "StripeRadarBlockEmailDomainsCsv", table: "RuntimeSettings");
+            // Stripe Tax / Customer Portal / Radar columns on RuntimeSettings are
+            // dropped by 20260526155000_AddZoomRuntimeSettings. Duplicate removed.
         }
     }
 }
