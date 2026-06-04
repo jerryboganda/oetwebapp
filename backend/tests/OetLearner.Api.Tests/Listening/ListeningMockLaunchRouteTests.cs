@@ -8,9 +8,10 @@ using OetLearner.Api.Services;
 namespace OetLearner.Api.Tests.Listening;
 
 // WORK-STREAM 1 — covers the launch route MockService.BuildLaunchRoute emits for
-// a Listening mock section. The route is consumed verbatim by the strict
-// Listening player (`/listening/player/[paperId]`), so the player relies on the
-// mockAttemptId / mockSectionId / strictness / deliveryMode query params being
+// a Listening mock section. The route is consumed verbatim by the new strict
+// one-way Listening exam player (`/listening/paper/[paperId]`), so the player
+// relies on the mockAttemptId / mockSectionId / strictness / deliveryMode query
+// params being
 // present and correctly escaped. BuildLaunchRoute is private static, so we
 // exercise it through the public StartMockSectionAsync path (which is exactly
 // how the frontend obtains the launchRoute) and assert on the projection.
@@ -40,7 +41,7 @@ public class ListeningMockLaunchRouteTests
         var launchRoute = ReadLaunchRoute(started);
 
         Assert.Equal(
-            "/listening/player/paper-listening?mockAttemptId=mock-listening&mockSectionId=section-listening&paperId=paper-listening&mockMode=exam&strictness=exam&deliveryMode=computer&strictTimer=true",
+            "/listening/paper/paper-listening?mockAttemptId=mock-listening&mockSectionId=section-listening&paperId=paper-listening&mockMode=exam&strictness=exam&deliveryMode=computer&strictTimer=true",
             launchRoute);
     }
 
@@ -62,7 +63,7 @@ public class ListeningMockLaunchRouteTests
 
         var launchRoute = ReadLaunchRoute(started);
 
-        Assert.StartsWith("/listening/player/paper-listening?", launchRoute);
+        Assert.StartsWith("/listening/paper/paper-listening?", launchRoute);
         Assert.Contains("mockAttemptId=mock-listening", launchRoute);
         Assert.Contains("mockSectionId=section-listening", launchRoute);
         Assert.Contains("deliveryMode=computer", launchRoute);

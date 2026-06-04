@@ -11,7 +11,8 @@ namespace OetLearner.Api.Tests.Listening;
 /// <summary>
 /// WS5 — full-test §19 JSON manifest import / export for
 /// <see cref="ListeningAuthoringService"/>. Verifies a complete manifest
-/// projects to the 42-item authored structure (A24 / B6 / C12) plus 5 extracts,
+/// projects to the 42-item authored structure (A24 / B6 across B1..B6 / C12)
+/// plus 10 extracts (Part B split into six independent sub-sections),
 /// the additive-vs-replace contract, the learner-attempt guard, and a clean
 /// export → import round-trip. Mirrors the in-memory DbContext + stubbed
 /// backfill setup used by <c>ListeningAuthoringServiceTests</c>.
@@ -195,7 +196,7 @@ public class ListeningManifestImportTests
     // ── Tests ───────────────────────────────────────────────────────────────
 
     [Fact]
-    public async Task Import_FullManifest_Produces42QuestionsAndFiveExtracts()
+    public async Task Import_FullManifest_Produces42QuestionsAndTenExtracts()
     {
         var (db, svc) = Build();
         var paper = await SeedPaperAsync(db);
@@ -212,7 +213,11 @@ public class ListeningManifestImportTests
         var questions = result.Structure.Questions;
         Assert.Equal(12, questions.Count(q => q.PartCode == "A1"));
         Assert.Equal(12, questions.Count(q => q.PartCode == "A2"));
-        Assert.Equal(6, questions.Count(q => q.PartCode == "B"));
+        // Part B's six extracts map to the six independent sub-sections B1..B6
+        // (one item each).
+        Assert.Equal(0, questions.Count(q => q.PartCode == "B"));
+        foreach (var bCode in new[] { "B1", "B2", "B3", "B4", "B5", "B6" })
+            Assert.Equal(1, questions.Count(q => q.PartCode == bCode));
         Assert.Equal(6, questions.Count(q => q.PartCode == "C1"));
         Assert.Equal(6, questions.Count(q => q.PartCode == "C2"));
 
@@ -223,8 +228,10 @@ public class ListeningManifestImportTests
         Assert.Equal("answer 1", a1.CorrectAnswer);
         Assert.Contains("ans 1", a1.AcceptedAnswers!);
 
-        // Part B maps options A/B/C and the single-letter answer.
+        // Part B maps options A/B/C and the single-letter answer; question #25 is
+        // the first Part B sub-section (B1).
         var b = questions.Single(q => q.Number == 25);
+        Assert.Equal("B1", b.PartCode);
         Assert.Equal("multiple_choice_3", b.Type);
         Assert.Equal(new[] { "Option A", "Option B", "Option C" }, b.Options);
         Assert.Equal("B", b.CorrectAnswer);
@@ -235,11 +242,12 @@ public class ListeningManifestImportTests
         Assert.Equal("C", c.CorrectAnswer);
         Assert.Equal("critical", c.SpeakerAttitude);
 
-        // Five authored extracts (A1, A2, B, C1, C2).
+        // Ten authored extracts (A1, A2, B1..B6, C1, C2) — Part B is no longer
+        // collapsed to a single extract.
         var extracts = await svc.GetExtractsAsync(paper.Id, default);
-        Assert.Equal(5, extracts.Count);
+        Assert.Equal(10, extracts.Count);
         Assert.Equal(
-            new[] { "A1", "A2", "B", "C1", "C2" },
+            new[] { "A1", "A2", "B1", "B2", "B3", "B4", "B5", "B6", "C1", "C2" },
             extracts.Select(e => e.PartCode).ToArray());
 
         // Report is returned and reflects the canonical counts.
@@ -334,7 +342,7 @@ public class ListeningManifestImportTests
     }
 
     [Fact]
-    public async Task Export_Then_Import_RoundTripsTo42QuestionsAndFiveExtracts()
+    public async Task Export_Then_Import_RoundTripsTo42QuestionsAndTenExtracts()
     {
         var (sourceDb, sourceSvc) = Build();
         var sourcePaper = await SeedPaperAsync(sourceDb);
@@ -346,7 +354,7 @@ public class ListeningManifestImportTests
         Assert.NotNull(exported.PartB);
         Assert.NotNull(exported.PartC);
         Assert.Equal(2, exported.PartA!.Extracts.Count);
-        Assert.Equal(1, exported.PartB!.Extracts.Count); // 6 B questions collapse into one B extract
+        Assert.Equal(6, exported.PartB!.Extracts.Count); // 6 independent B sub-sections (B1..B6)
         Assert.Equal(2, exported.PartC!.Extracts.Count);
 
         // Serialize → deserialize to prove the manifest survives JSON transport
@@ -366,7 +374,7 @@ public class ListeningManifestImportTests
         Assert.Equal(12, result.Structure.Counts.PartCCount);
 
         var extracts = await targetSvc.GetExtractsAsync(targetPaper.Id, default);
-        Assert.Equal(5, extracts.Count);
+        Assert.Equal(10, extracts.Count);
 
         // Part B/C MCQ options + answers survive the round trip.
         var b = result.Structure.Questions.Single(q => q.Number == 25);

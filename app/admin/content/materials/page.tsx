@@ -158,6 +158,54 @@ function draftAncestorChain(flat: FlatFolder[], id: string | null): FlatFolder[]
   return chain.reverse(); // publish root-most first
 }
 
+/** True if the folder (or any descendant) has at least one Published file. */
+function folderHasPublishedContent(folder: MaterialFolderDto): boolean {
+  if (folder.files?.some((f) => f.status === 'Published')) return true;
+  return folder.folders?.some(folderHasPublishedContent) ?? false;
+}
+
+/**
+ * Computes whether a folder will actually appear to candidates, and if not, WHY.
+ * Mirrors the backend visibility rules (published + audience + ≥1 published file
+ * in subtree). This is the admin-side guard rail that surfaces silent
+ * preconditions instead of leaving the admin guessing.
+ */
+function folderVisibilityHint(
+  folder: MaterialFolderDto,
+  flat: FlatFolder[],
+): { ok: boolean; label: string; reason: string } {
+  // 1) Self + every ancestor must be Published.
+  const byId = new Map(flat.map((f) => [f.id, f]));
+  let cur: FlatFolder | undefined = byId.get(folder.id);
+  let guard = 0;
+  let anyDraftInChain = false;
+  while (cur && guard++ < 20) {
+    if (cur.status !== 'Published') anyDraftInChain = true;
+    cur = cur.parentFolderId ? byId.get(cur.parentFolderId) : undefined;
+  }
+  if (folder.status !== 'Published') {
+    return { ok: false, label: 'Draft', reason: 'Not published — click Publish to make it live.' };
+  }
+  if (anyDraftInChain) {
+    return { ok: false, label: 'Parent draft', reason: 'A parent folder is still Draft — publish the whole chain.' };
+  }
+  // 2) Must contain at least one Published file somewhere in its subtree.
+  if (!folderHasPublishedContent(folder)) {
+    return { ok: false, label: 'Empty', reason: 'No published file inside — add a file and publish it.' };
+  }
+  // 3) Audience. We only have this folder's own audience here; sub-folders set to
+  //    Inherit correctly inherit a concrete ancestor audience, so only flag the
+  //    cases we can be sure about: a top-level folder with no audience, or a
+  //    Restricted folder with no plans/cohorts selected.
+  if (folder.audienceMode === 'Inherit' && !folder.parentFolderId) {
+    return { ok: false, label: 'No audience', reason: 'Set who can see it (Everyone or specific plans).' };
+  }
+  if (folder.audienceMode === 'Restricted' && (folder.audiences?.length ?? 0) === 0) {
+    return { ok: false, label: 'No plans', reason: 'Restricted but no plans/cohorts selected.' };
+  }
+  return { ok: true, label: 'Live', reason: 'Visible to matching candidates.' };
+}
+
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export default function AdminMaterialsPage() {
@@ -540,6 +588,7 @@ export default function AdminMaterialsPage() {
         depth={depth}
         selected={selectedFolder?.id === folder.id}
         busyId={busyId}
+        visibility={folderVisibilityHint(folder, flatFolders)}
         onSelect={() => setSelectedFolder(folder)}
         onEdit={() => openEditFolder(folder)}
         onDelete={() => void deleteFolder(folder)}
@@ -654,6 +703,11 @@ export default function AdminMaterialsPage() {
                           <Badge variant={file.status === 'Published' ? 'success' : file.status === 'Archived' ? 'danger' : 'secondary'}>{file.status}</Badge>
                           <Badge variant="outline">{file.subtestCode}</Badge>
                           <Badge variant="outline">{file.kind}</Badge>
+                          {!file.folderId && (
+                            <Badge variant="warning" title="Files not inside a folder are never shown to candidates. Edit the file and pick a Destination folder.">
+                              Not in a folder
+                            </Badge>
+                          )}
                         </div>
                         {file.description && (
                           <p className="text-xs text-admin-fg-muted mt-0.5 truncate">{file.description}</p>
@@ -834,6 +888,7 @@ function FolderTreeNode({
   depth,
   selected,
   busyId,
+  visibility,
   onSelect,
   onEdit,
   onDelete,
@@ -847,6 +902,7 @@ function FolderTreeNode({
   depth: number;
   selected: boolean;
   busyId: string | null;
+  visibility: { ok: boolean; label: string; reason: string };
   onSelect: () => void;
   onEdit: () => void;
   onDelete: () => void;
@@ -881,12 +937,12 @@ function FolderTreeNode({
             : <span className="w-3.5 inline-block" />}
         </button>
 
-        {/* Live/Draft status dot — always visible */}
+        {/* Visibility status dot — green = candidates will see it; amber = hidden, with the reason. */}
         <span
-          title={isPublished ? 'Live (published)' : 'Draft — not visible to candidates'}
+          title={visibility.ok ? 'Live — visible to matching candidates' : `Hidden: ${visibility.reason}`}
           className={[
             'shrink-0 w-2 h-2 rounded-full',
-            isPublished ? 'bg-green-500' : 'bg-amber-400',
+            visibility.ok ? 'bg-green-500' : 'bg-amber-400',
           ].join(' ')}
         />
 
@@ -894,6 +950,16 @@ function FolderTreeNode({
           <FolderOpen className="inline w-3.5 h-3.5 mr-1.5 shrink-0" />
           {folder.name}
         </button>
+
+        {/* Hidden-reason chip — tells the admin exactly why candidates can't see this folder. */}
+        {!visibility.ok && (
+          <span
+            title={visibility.reason}
+            className="shrink-0 rounded-full bg-amber-100 text-amber-700 px-1.5 py-0.5 text-[10px] font-medium"
+          >
+            {visibility.label}
+          </span>
+        )}
 
         {/* Audience badge — shown when hovering */}
         <span className="shrink-0 text-[10px] text-admin-fg-muted hidden group-hover:inline">

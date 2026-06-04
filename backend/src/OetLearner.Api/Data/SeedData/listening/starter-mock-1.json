@@ -31,21 +31,82 @@
       "audioEndMs": 600000
     },
     {
-      "partCode": "B",
+      "partCode": "B1",
       "displayOrder": 3,
       "kind": "workplace",
-      "title": "Workplace Extracts",
+      "title": "Workplace Extract 1",
       "accentCode": "en-GB",
       "speakers": [
         { "id": "s1", "role": "Nurse",       "gender": "f", "accent": "en-GB" },
         { "id": "s2", "role": "Junior Doctor","gender": "m", "accent": "en-GB" }
       ],
       "audioStartMs": 600000,
+      "audioEndMs": 650000
+    },
+    {
+      "partCode": "B2",
+      "displayOrder": 4,
+      "kind": "workplace",
+      "title": "Workplace Extract 2",
+      "accentCode": "en-GB",
+      "speakers": [
+        { "id": "s1", "role": "Charge Nurse", "gender": "f", "accent": "en-GB" },
+        { "id": "s2", "role": "Junior Doctor","gender": "m", "accent": "en-GB" }
+      ],
+      "audioStartMs": 650000,
+      "audioEndMs": 700000
+    },
+    {
+      "partCode": "B3",
+      "displayOrder": 5,
+      "kind": "workplace",
+      "title": "Workplace Extract 3",
+      "accentCode": "en-GB",
+      "speakers": [
+        { "id": "s1", "role": "Pharmacist", "gender": "m", "accent": "en-GB" }
+      ],
+      "audioStartMs": 700000,
+      "audioEndMs": 750000
+    },
+    {
+      "partCode": "B4",
+      "displayOrder": 6,
+      "kind": "workplace",
+      "title": "Workplace Extract 4",
+      "accentCode": "en-GB",
+      "speakers": [
+        { "id": "s1", "role": "Nurse", "gender": "f", "accent": "en-GB" }
+      ],
+      "audioStartMs": 750000,
+      "audioEndMs": 800000
+    },
+    {
+      "partCode": "B5",
+      "displayOrder": 7,
+      "kind": "workplace",
+      "title": "Workplace Extract 5",
+      "accentCode": "en-GB",
+      "speakers": [
+        { "id": "s1", "role": "Consultant", "gender": "m", "accent": "en-GB" }
+      ],
+      "audioStartMs": 800000,
+      "audioEndMs": 850000
+    },
+    {
+      "partCode": "B6",
+      "displayOrder": 8,
+      "kind": "workplace",
+      "title": "Workplace Extract 6",
+      "accentCode": "en-GB",
+      "speakers": [
+        { "id": "s1", "role": "Lead Nurse", "gender": "f", "accent": "en-GB" }
+      ],
+      "audioStartMs": 850000,
       "audioEndMs": 900000
     },
     {
       "partCode": "C1",
-      "displayOrder": 4,
+      "displayOrder": 9,
       "kind": "presentation",
       "title": "Telemedicine Adoption — Interview",
       "accentCode": "en-IE",
@@ -58,7 +119,7 @@
     },
     {
       "partCode": "C2",
-      "displayOrder": 5,
+      "displayOrder": 10,
       "kind": "presentation",
       "title": "Falls Prevention — Conference Talk",
       "accentCode": "en-US",
@@ -96,7 +157,7 @@
     { "id": "lq-starter1-23", "number": 23, "partCode": "A2", "type": "short_answer",       "stem": "Patient concerned about ____",                                  "options": [], "correctAnswer": "cost",             "acceptedAnswers": [],                          "explanation": "Patient raises concerns about medication cost.",                "skillTag": "patient_concern",  "transcriptExcerpt": "I'm worried about the cost.",                                "distractorExplanation": null, "points": 1, "transcriptEvidenceStartMs": 475000, "transcriptEvidenceEndMs": 479000 },
     { "id": "lq-starter1-24", "number": 24, "partCode": "A2", "type": "short_answer",       "stem": "Follow-up scheduled in ____ weeks",                             "options": [], "correctAnswer": "six",              "acceptedAnswers": ["6"],                       "explanation": "Follow-up appointment in six weeks.",                            "skillTag": "follow_up",        "transcriptExcerpt": "I'll see you again in six weeks.",                          "distractorExplanation": null, "points": 1, "transcriptEvidenceStartMs": 495000, "transcriptEvidenceEndMs": 499000 },
 
-    { "id": "lq-starter1-25", "number": 25, "partCode": "B", "type": "multiple_choice_3",
+    { "id": "lq-starter1-25", "number": 25, "partCode": "B1", "type": "multiple_choice_3",
       "stem": "You hear a nurse briefing a colleague. The nurse's main concern is",
       "options": ["the patient's fall risk", "the patient's medication chart", "the patient's nutrition intake"],
       "correctAnswer": "the patient's fall risk",
@@ -111,7 +172,7 @@
       "transcriptEvidenceStartMs": 610000,
       "transcriptEvidenceEndMs": 625000
     },
-    { "id": "lq-starter1-26", "number": 26, "partCode": "B", "type": "multiple_choice_3",
+    { "id": "lq-starter1-26", "number": 26, "partCode": "B2", "type": "multiple_choice_3",
       "stem": "A junior doctor is told to",
       "options": ["repeat the blood culture", "discontinue the antibiotic", "consult the senior registrar"],
       "correctAnswer": "consult the senior registrar",
@@ -126,7 +187,7 @@
       "transcriptEvidenceStartMs": 635000,
       "transcriptEvidenceEndMs": 648000
     },
-    { "id": "lq-starter1-27", "number": 27, "partCode": "B", "type": "multiple_choice_3",
+    { "id": "lq-starter1-27", "number": 27, "partCode": "B3", "type": "multiple_choice_3",
       "stem": "The pharmacist is reminding a colleague that",
       "options": ["the order is overdue", "the supplier is on leave", "the storage temperature is incorrect"],
       "correctAnswer": "the storage temperature is incorrect",
@@ -141,7 +202,7 @@
       "transcriptEvidenceStartMs": 660000,
       "transcriptEvidenceEndMs": 672000
     },
-    { "id": "lq-starter1-28", "number": 28, "partCode": "B", "type": "multiple_choice_3",
+    { "id": "lq-starter1-28", "number": 28, "partCode": "B4", "type": "multiple_choice_3",
       "stem": "During a team handover, the main change is that",
       "options": ["the patient has been discharged", "the patient's fluids have been increased", "the patient has refused treatment"],
       "correctAnswer": "the patient's fluids have been increased",
@@ -156,7 +217,7 @@
       "transcriptEvidenceStartMs": 685000,
       "transcriptEvidenceEndMs": 695000
     },
-    { "id": "lq-starter1-29", "number": 29, "partCode": "B", "type": "multiple_choice_3",
+    { "id": "lq-starter1-29", "number": 29, "partCode": "B5", "type": "multiple_choice_3",
       "stem": "A consultant tells a trainee that the priority is to",
       "options": ["update the discharge summary", "speak to the family", "reassess pain control"],
       "correctAnswer": "speak to the family",
@@ -171,7 +232,7 @@
       "transcriptEvidenceStartMs": 710000,
       "transcriptEvidenceEndMs": 720000
     },
-    { "id": "lq-starter1-30", "number": 30, "partCode": "B", "type": "multiple_choice_3",
+    { "id": "lq-starter1-30", "number": 30, "partCode": "B6", "type": "multiple_choice_3",
       "stem": "The infection-control briefing warns staff to",
       "options": ["isolate any case immediately", "report symptoms to occupational health", "review handwashing technique"],
       "correctAnswer": "isolate any case immediately",

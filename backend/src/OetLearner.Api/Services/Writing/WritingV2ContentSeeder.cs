@@ -211,6 +211,11 @@ public static class WritingV2ContentSeeder
             .Where(s => payload.Scenarios.Select(p => p.Id).Contains(s.Id))
             .Select(s => s.Id)
             .ToListAsync(ct);
+        // Track already-seen Ids in this batch too. A payload (or repeated
+        // invocation that shares the change tracker) can carry the same
+        // scenario Id twice; without this guard the second Add throws
+        // "another instance with the same key value is already being tracked",
+        // which aborts the whole Writing V2 seed at boot.
         var existing = new HashSet<Guid>(existingIds);
 
         var now = DateTimeOffset.UtcNow;
@@ -220,7 +225,7 @@ public static class WritingV2ContentSeeder
         foreach (var sc in payload.Scenarios)
         {
             if (sc.Id == Guid.Empty) continue;
-            if (existing.Contains(sc.Id)) continue;
+            if (!existing.Add(sc.Id)) continue;
 
             db.Set<WritingScenario>().Add(new WritingScenario
             {

@@ -350,7 +350,7 @@ public class ListeningPathwayEndpointTests : IClassFixture<TestWebApplicationFac
         {
             Id = partId,
             PaperId = paperId,
-            PartCode = ListeningPartCode.B,
+            PartCode = ListeningPartCode.B1,
             MaxRawScore = 6,
             CreatedAt = now,
             UpdatedAt = now,
@@ -414,7 +414,7 @@ public class ListeningPathwayEndpointTests : IClassFixture<TestWebApplicationFac
         {
             Id = partId,
             PaperId = paperId,
-            PartCode = ListeningPartCode.B,
+            PartCode = ListeningPartCode.B1,
             MaxRawScore = 6,
             CreatedAt = now,
             UpdatedAt = now,

@@ -223,16 +223,29 @@ public sealed class GroundedListeningExtractionAi(
         int partA = 0, partB = 0, partC = 0;
         foreach (var q in qs)
         {
-            switch ((q.PartCode ?? "").ToUpperInvariant())
-            {
-                case "A1": case "A2": partA++; break;
-                case "B": partB++; break;
-                case "C1": case "C2": partC++; break;
-            }
+            var code = (q.PartCode ?? "").ToUpperInvariant();
+            if (code is "A1" or "A2") partA++;
+            else if (code is "B" or "B1" or "B2" or "B3" or "B4" or "B5" or "B6") partB++;
+            else if (code is "C1" or "C2") partC++;
         }
         if (partA != 24) return (null, $"Expected 24 Part A items, got {partA}.");
         if (partB != 6) return (null, $"Expected 6 Part B items, got {partB}.");
         if (partC != 12) return (null, $"Expected 12 Part C items, got {partC}.");
+
+        // Part B is six independent sub-sections (B1..B6). Distribute any bare
+        // legacy "B" items to B1..B6 by question-number order so the emitted
+        // structure carries the post-split codes directly (items already coded
+        // B1..B6 pass through unchanged).
+        var bareBNumbers = qs
+            .Where(q => string.Equals((q.PartCode ?? "").Trim(), "B", StringComparison.OrdinalIgnoreCase))
+            .Select(q => q.Number)
+            .OrderBy(n => n)
+            .ToList();
+        var bareBSlot = new Dictionary<int, string>(bareBNumbers.Count);
+        for (var i = 0; i < bareBNumbers.Count; i++)
+        {
+            bareBSlot[bareBNumbers[i]] = $"B{Math.Min(i, 5) + 1}";
+        }
 
         var mapped = new List<ListeningAuthoredQuestion>(42);
         var seen = new HashSet<int>();
@@ -242,8 +255,12 @@ public sealed class GroundedListeningExtractionAi(
             if (!seen.Add(q.Number)) return (null, $"Duplicate question number {q.Number}.");
 
             var part = (q.PartCode ?? "").ToUpperInvariant();
+            if (string.Equals(part, "B", StringComparison.Ordinal) && bareBSlot.TryGetValue(q.Number, out var bCode))
+            {
+                part = bCode;
+            }
             var type = string.IsNullOrWhiteSpace(q.Type)
-                ? (part == "B" || part.StartsWith("C") ? "multiple_choice_3" : "short_answer")
+                ? (part.StartsWith("B") || part.StartsWith("C") ? "multiple_choice_3" : "short_answer")
                 : q.Type!;
 
             mapped.Add(new ListeningAuthoredQuestion(
@@ -287,7 +304,8 @@ public sealed class GroundedListeningExtractionAi(
         var items = new List<ListeningAuthoredQuestion>(42);
         for (var n = 1; n <= 12; n++) items.Add(BlankShortAnswer(n, "A1"));
         for (var n = 13; n <= 24; n++) items.Add(BlankShortAnswer(n, "A2"));
-        for (var n = 25; n <= 30; n++) items.Add(BlankMcq(n, "B"));
+        // Part B: six independent sub-sections B1..B6, one item each (25→B1 … 30→B6).
+        for (var n = 25; n <= 30; n++) items.Add(BlankMcq(n, $"B{n - 24}"));
         for (var n = 31; n <= 36; n++) items.Add(BlankMcq(n, "C1"));
         for (var n = 37; n <= 42; n++) items.Add(BlankMcq(n, "C2"));
         return new ListeningExtractionAiResult(items, RawResponseJson: null, IsStub: true, StubReason: reason);

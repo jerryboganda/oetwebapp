@@ -468,12 +468,25 @@ public sealed class ListeningExtractionDraftService(
 
         var a1 = questions.Count(q => IsPart(q, "A1"));
         var a2 = questions.Count(q => IsPart(q, "A2"));
-        var b = questions.Count(q => IsPart(q, "B"));
         var c1 = questions.Count(q => IsPart(q, "C1"));
         var c2 = questions.Count(q => IsPart(q, "C2"));
         if (a1 != 12 || a2 != 12) errors.Add($"Part A split must be A1=12 and A2=12; found A1={a1}, A2={a2}");
-        if (b != 6) errors.Add($"Part B must contain exactly 6 items; found {b}");
         if (c1 != 6 || c2 != 6) errors.Add($"Part C split must be C1=6 and C2=6; found C1={c1}, C2={c2}");
+
+        // Part B is six independent sub-sections (B1..B6) with exactly one item
+        // each. Bare legacy "B" counts toward the aggregate so a not-yet-split
+        // draft still surfaces the per-sub-section error rather than a vague
+        // total mismatch.
+        var bSub = Enumerable.Range(1, 6).Select(i => questions.Count(q => IsPart(q, $"B{i}"))).ToArray();
+        var bareB = questions.Count(q => IsPart(q, "B"));
+        var bTotal = bSub.Sum() + bareB;
+        if (bTotal != 6) errors.Add($"Part B must contain exactly 6 items across B1..B6; found {bTotal}");
+        if (bareB > 0 || bSub.Any(count => count != 1))
+        {
+            var detail = string.Join(", ", bSub.Select((count, i) => $"B{i + 1}={count}"));
+            if (bareB > 0) detail += $", bare-B={bareB}";
+            errors.Add($"Part B requires six independent sub-sections with exactly one item each (B1..B6); found {detail}");
+        }
 
         var blankStemCount = questions.Count(q => string.IsNullOrWhiteSpace(q.Stem));
         if (blankStemCount > 0) errors.Add($"{blankStemCount} item(s) have blank stems");
@@ -481,13 +494,16 @@ public sealed class ListeningExtractionDraftService(
         var blankAnswerCount = questions.Count(q => string.IsNullOrWhiteSpace(q.CorrectAnswer));
         if (blankAnswerCount > 0) errors.Add($"{blankAnswerCount} item(s) have blank correct answers");
 
-        var invalidMcq = questions.Count(q => (IsPart(q, "B") || IsPart(q, "C1") || IsPart(q, "C2"))
-            && (!string.Equals(q.Type, "multiple_choice_3", StringComparison.OrdinalIgnoreCase)
-                || q.Options is not { Count: 3 }
+        // Any sub-section may use any of the 3 content types; only validate
+        // 3-option shape on items that ARE typed MCQ (parity with the publish
+        // gate's listening_mcq_shape).
+        var invalidMcq = questions.Count(q =>
+            string.Equals(q.Type, "multiple_choice_3", StringComparison.OrdinalIgnoreCase)
+            && (q.Options is not { Count: 3 }
                 || !q.Options.Any(option => string.Equals(option?.Trim(), q.CorrectAnswer?.Trim(), StringComparison.OrdinalIgnoreCase))));
         if (invalidMcq > 0)
         {
-            errors.Add($"{invalidMcq} Part B/C item(s) are not 3-option MCQs with the correct answer matching one option");
+            errors.Add($"{invalidMcq} MCQ item(s) are not 3-option MCQs with the correct answer matching one option");
         }
 
         if (errors.Count > 0)

@@ -138,7 +138,7 @@ public class LearnerSpecRegressionTests : IClassFixture<TestWebApplicationFactor
         Assert.Equal(4, sectionStates.GetArrayLength());
         var sections = sectionStates.EnumerateArray().ToArray();
         Assert.Equal(new[] { "listening", "reading", "writing", "speaking" }, sections.Select(section => section.GetProperty("subtest").GetString()).ToArray());
-        Assert.Contains("/listening/player/mock-listening-regression", sections[0].GetProperty("launchRoute").GetString());
+        Assert.Contains("/listening/paper/mock-listening-regression", sections[0].GetProperty("launchRoute").GetString());
         Assert.Contains("/reading/paper/mock-reading-regression", sections[1].GetProperty("launchRoute").GetString());
         // Writing sections now use the dedicated mock-writing player route
         // (/mocks/writing/{sectionAttemptId}?...) rather than the legacy
@@ -1077,11 +1077,14 @@ public class LearnerSpecRegressionTests : IClassFixture<TestWebApplicationFactor
         var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
         await db.Database.EnsureCreatedAsync();
 
+        // GetDiagnosticTaskAsync only surfaces Reading papers carrying the
+        // "diagnostic" tag (HasDiagnosticPaperTag), so the regression papers
+        // must include it alongside their access tag.
         await SeedDiagnosticReadingPaperAsync(
             db,
             DiagnosticReadingInaccessiblePaperId,
             "Premium Diagnostic Reading Regression Paper",
-            "access:premium",
+            "diagnostic,access:premium",
             priority: 2000,
             appliesToAllProfessions: false,
             professionId: "nursing");
@@ -1089,10 +1092,25 @@ public class LearnerSpecRegressionTests : IClassFixture<TestWebApplicationFactor
             db,
             DiagnosticReadingAccessiblePaperId,
             "Diagnostic Reading Regression Paper",
-            "access:free",
+            "diagnostic,access:free",
             priority: 1000,
             appliesToAllProfessions: true,
             professionId: null);
+
+        // Writing / Speaking / Listening diagnostic tasks are sourced from
+        // published, diagnostic-eligible ContentItems. The demo seed publishes
+        // wt-001 / st-001 / lt-001 but does not flag them diagnostic-eligible,
+        // so mark them here to mirror an authored diagnostic content set.
+        foreach (var contentId in new[] { "wt-001", "st-001", "lt-001" })
+        {
+            var item = await db.ContentItems.FirstOrDefaultAsync(x => x.Id == contentId);
+            if (item is not null && !item.IsDiagnosticEligible)
+            {
+                item.IsDiagnosticEligible = true;
+            }
+        }
+
+        await db.SaveChangesAsync();
     }
 
     private static async Task SeedDiagnosticReadingPaperAsync(
@@ -1337,10 +1355,18 @@ public class LearnerSpecRegressionTests : IClassFixture<TestWebApplicationFactor
         return attemptId;
     }
 
-    private static async Task WaitForAsync(Func<Task<bool>> predicate, string reason)
+    private async Task WaitForAsync(Func<Task<bool>> predicate, string reason)
     {
+        // The hosted BackgroundService loop is stripped from the test host
+        // (see TestWebApplicationFactory.IsLongRunningHostedWorker), so queued
+        // WritingEvaluation / SpeakingEvaluation / StudyPlanRegeneration /
+        // NotificationFanout jobs never advance on their own. Drive the job
+        // pipeline deterministically before each poll so the predicate can
+        // observe the completed state — mirrors CriticalFlowsTests.
         for (var attempt = 0; attempt < 10; attempt++)
         {
+            await _factory.DrainBackgroundJobsAsync();
+
             if (await predicate())
             {
                 return;

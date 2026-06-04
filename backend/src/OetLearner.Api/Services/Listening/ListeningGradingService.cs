@@ -376,7 +376,11 @@ public sealed class ListeningGradingService
                 if (opt is null) return (false, null, null);
                 return (opt.IsCorrect, opt.IsCorrect ? null : opt.DistractorCategory, null);
             }
+            // FillInBlank grades identically to ShortAnswer (canonical +
+            // accepted-variants string compare). It is a distinct authored type
+            // so admins can pick it, but the grading rubric is the same.
             case ListeningQuestionType.ShortAnswer:
+            case ListeningQuestionType.FillInBlank:
             {
                 var user = TryReadString(ans.UserAnswerJson) ?? string.Empty;
                 var canonical = TryReadString(q.CorrectAnswerJson);
@@ -586,7 +590,9 @@ public sealed class ListeningGradingService
         var map = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (var q in questions)
         {
-            if (q.QuestionType != ListeningQuestionType.ShortAnswer) continue;
+            // FillInBlank is text-graded like ShortAnswer, so both contribute to
+            // the cross-question answer map driving the WrongSection heuristic.
+            if (q.QuestionType is not (ListeningQuestionType.ShortAnswer or ListeningQuestionType.FillInBlank)) continue;
             var canonical = TryReadString(q.CorrectAnswerJson);
             var accepted = ParseAccepted(q.AcceptedSynonymsJson);
             foreach (var raw in (canonical is null ? Enumerable.Empty<string>() : new[] { canonical }).Concat(accepted))

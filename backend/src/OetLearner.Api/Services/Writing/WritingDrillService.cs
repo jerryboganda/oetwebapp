@@ -224,14 +224,23 @@ public sealed class WritingDrillService(LearnerDbContext db, TimeProvider clock)
             .ThenBy(d => d.Difficulty)
             .ToListAsync(ct);
         var drillIds = drills.Select(d => d.Id).ToList();
-        var sentenceCounts = await db.WritingCaseNoteDrillSentences.AsNoTracking()
+        // Project the grouped count into an anonymous type before materialising.
+        // A bare GroupBy fed straight into ToDictionaryAsync cannot be translated
+        // by the EF Core InMemory provider (and is brittle on relational ones);
+        // composing the aggregate into a Select keeps the query server-side on
+        // every provider, then we build the lookup client-side.
+        var sentenceCounts = (await db.WritingCaseNoteDrillSentences.AsNoTracking()
             .Where(s => drillIds.Contains(s.DrillId))
             .GroupBy(s => s.DrillId)
-            .ToDictionaryAsync(g => g.Key, g => g.Count(), ct);
-        var attemptCounts = await db.WritingCaseNoteDrillAttempts.AsNoTracking()
+            .Select(g => new { DrillId = g.Key, Count = g.Count() })
+            .ToListAsync(ct))
+            .ToDictionary(x => x.DrillId, x => x.Count);
+        var attemptCounts = (await db.WritingCaseNoteDrillAttempts.AsNoTracking()
             .Where(a => a.UserId == userId && drillIds.Contains(a.DrillId))
             .GroupBy(a => a.DrillId)
-            .ToDictionaryAsync(g => g.Key, g => g.Count(), ct);
+            .Select(g => new { DrillId = g.Key, Count = g.Count() })
+            .ToListAsync(ct))
+            .ToDictionary(x => x.DrillId, x => x.Count);
 
         return drills.Select(d => new WritingCaseNoteDrillSummaryResponse(
             d.Id, d.Title, d.Profession, d.LetterType, d.Difficulty,

@@ -136,7 +136,8 @@ public sealed record ListeningExtractPatch(
     string? AccentCode = null,
     IReadOnlyList<ListeningAuthoredSpeaker>? Speakers = null,
     int? AudioStartMs = null,
-    int? AudioEndMs = null);
+    int? AudioEndMs = null,
+    int? TimeLimitSeconds = null);
 
 /// <summary>Server-side admin DTO for an authored Listening item. Carries the
 /// correct answer + accepted synonyms, so it MUST NOT be returned by any
@@ -176,14 +177,15 @@ public sealed record ListeningAuthoredQuestionList(
 /// surfaces in the player + review.
 /// </summary>
 public sealed record ListeningAuthoredExtract(
-    string PartCode,                                   // A1 | A2 | B | C1 | C2
+    string PartCode,                                   // A1 | A2 | B1..B6 | C1 | C2
     int DisplayOrder,
     string Kind,                                       // consultation | workplace | presentation
     string Title,
     string? AccentCode,                                // e.g. en-GB | en-AU | en-IE | en-US
     IReadOnlyList<ListeningAuthoredSpeaker> Speakers,
     int? AudioStartMs,
-    int? AudioEndMs);
+    int? AudioEndMs,
+    int? TimeLimitSeconds = null);                     // single per-sub-section countdown (seconds)
 
 public sealed record ListeningAuthoredSpeaker(
     string Id,
@@ -530,16 +532,10 @@ public sealed class ListeningAuthoringService(
         void Project(ListeningPartManifest? part, string partGroup)
         {
             if (part?.Extracts is null) return;
-            // partGroup is "A" | "B" | "C"; the two A/C extracts split into
-            // A1/A2 and C1/C2 by extract ordinal, B stays B.
-            //
-            // Part B is a single "B" part holding 6 question/clip items. The §19
-            // manifest lists each Part B item as its own `extract` entry (so each
-            // can carry its own audio file / context / accent), but the authored
-            // shape models Part B as exactly ONE extract row carrying all 6
-            // questions. So for Part B we map every entry's questions under code
-            // "B" yet emit a single collapsed extract row (from the first entry);
-            // A/C still emit one extract row per entry.
+            // partGroup is "A" | "B" | "C". Each manifest extract entry maps to a
+            // sub-section code (A1/A2, B1..B6, C1/C2 by extract ordinal) and emits
+            // its own extract row, so every sub-section carries its own audio /
+            // timer / questions. Part B is no longer collapsed to one row.
             var ordered = part.Extracts.OrderBy(e => e.ExtractNumber).ToList();
             for (var i = 0; i < ordered.Count; i++)
             {
@@ -553,10 +549,6 @@ public sealed class ListeningAuthoringService(
                     questions.Add(NormalizeManifestQuestion(
                         qm, partCode, partCode.StartsWith('C') ? extract.SpeakerAttitude : null));
                 }
-                // Collapse Part B to one extract row: only the first entry emits
-                // the "B" extract; the rest contribute questions only. A/C emit
-                // one extract row each, keyed by positional index.
-                if (partGroup == "B" && i > 0) continue;
                 extracts.Add(NormalizeManifestExtract(extract, partCode, i));
             }
         }
@@ -574,7 +566,13 @@ public sealed class ListeningAuthoringService(
     /// maps cleanly.</summary>
     private static string ResolvePartCode(string partGroup, int extractNumber, int positionalIndex)
     {
-        if (partGroup == "B") return "B";
+        if (partGroup == "B")
+        {
+            // Part B splits into B1..B6 (one clip each). Prefer the authored
+            // 1-based extractNumber; fall back to positional order; clamp 1..6.
+            var bSlot = extractNumber is >= 1 and <= 6 ? extractNumber : positionalIndex + 1;
+            return $"B{Math.Min(Math.Max(bSlot, 1), 6)}";
+        }
         var slot = extractNumber is 1 or 2 ? extractNumber - 1 : positionalIndex;
         var which = slot <= 0 ? 1 : 2;
         return $"{partGroup}{which}";
@@ -645,12 +643,9 @@ public sealed class ListeningAuthoringService(
             ?? (string.IsNullOrWhiteSpace(extract.PatientName) ? null : $"{extract.PatientName} consultation")
             ?? $"{partCode} extract").Trim();
 
-        var kind = partCode switch
-        {
-            "B" => "workplace",
-            "C1" or "C2" => "presentation",
-            _ => "consultation",
-        };
+        var kind = partCode.StartsWith('B') ? "workplace"
+            : partCode is "C1" or "C2" ? "presentation"
+            : "consultation";
 
         var speakers = (extract.Speakers ?? []).ToList();
 
@@ -662,7 +657,8 @@ public sealed class ListeningAuthoringService(
             AccentCode: extract.AccentCode,
             Speakers: speakers,
             AudioStartMs: null,
-            AudioEndMs: null);
+            AudioEndMs: null,
+            TimeLimitSeconds: null);
     }
 
     private static string NormalizeManifestQuestionType(string? raw, bool isMcq)
@@ -734,19 +730,21 @@ public sealed class ListeningAuthoringService(
                     .ToList();
 
                 var numbers = partQuestions.Select(q => q.Number).ToList();
+                var isPartB = code.StartsWith('B');
                 manifestExtracts.Add(new ListeningExtractManifest(
                     ExtractNumber: extractNumber,
-                    QuestionNumber: code == "B" && numbers.Count > 0 ? numbers[0].ToString() : null,
+                    // Each Part B sub-section carries its single question number.
+                    QuestionNumber: isPartB && numbers.Count > 0 ? numbers[0].ToString() : null,
                     QuestionRange: code.StartsWith('C') && numbers.Count > 0
                         ? $"{numbers[0]}-{numbers[^1]}"
                         : null,
                     PatientName: null,
                     ProfessionalRole: null,
-                    Context: code == "B" ? extract?.Title : null,
+                    Context: isPartB ? extract?.Title : null,
                     Topic: code.StartsWith('C') ? extract?.Title : null,
                     Format: code.StartsWith('C') ? "presentation" : null,
                     AudioFile: null,
-                    ReadingTimeSeconds: code.StartsWith('C') ? 90 : code == "B" ? 0 : 30,
+                    ReadingTimeSeconds: code.StartsWith('C') ? 90 : isPartB ? 0 : 30,
                     Transcript: null,
                     AccentCode: extract?.AccentCode,
                     SpeakerAttitude: code.StartsWith('C')
@@ -764,7 +762,9 @@ public sealed class ListeningAuthoringService(
             ModeSupport: new[] { "paper", "computer" },
             StrictMock: true,
             PartA: BuildPart("A1", "A2"),
-            PartB: BuildPart("B"),
+            // Part B is six independent sub-sections (B1..B6), each its own
+            // manifest extract carrying a single question.
+            PartB: BuildPart("B1", "B2", "B3", "B4", "B5", "B6"),
             PartC: BuildPart("C1", "C2"));
     }
 
@@ -954,7 +954,8 @@ public sealed class ListeningAuthoringService(
             AccentCode: Read("accentCode"),
             Speakers: speakers,
             AudioStartMs: ReadInt("audioStartMs"),
-            AudioEndMs: ReadInt("audioEndMs"));
+            AudioEndMs: ReadInt("audioEndMs"),
+            TimeLimitSeconds: ReadInt("timeLimitSeconds"));
     }
 
     private static ListeningAuthoredExtract NormalizeExtractForStorage(ListeningAuthoredExtract e)
@@ -981,6 +982,8 @@ public sealed class ListeningAuthoringService(
             audioEnd = null;
         }
 
+        var timeLimitSeconds = e.TimeLimitSeconds is int t && t > 0 ? t : (int?)null;
+
         return new ListeningAuthoredExtract(
             PartCode: partCode,
             DisplayOrder: displayOrder,
@@ -989,7 +992,8 @@ public sealed class ListeningAuthoringService(
             AccentCode: accentCode,
             Speakers: speakers,
             AudioStartMs: audioStart,
-            AudioEndMs: audioEnd);
+            AudioEndMs: audioEnd,
+            TimeLimitSeconds: timeLimitSeconds);
     }
 
     private static IReadOnlyList<ListeningAuthoredSpeaker> ParseAuthoredSpeakers(object? raw)
@@ -1042,8 +1046,9 @@ public sealed class ListeningAuthoringService(
         var n = raw.Trim().ToUpperInvariant();
         return n switch
         {
-            "A1" or "A2" or "B" or "C1" or "C2" => n,
+            "A1" or "A2" or "B1" or "B2" or "B3" or "B4" or "B5" or "B6" or "C1" or "C2" => n,
             "A" => "A1",
+            "B" => "B1",
             "C" => "C1",
             _ => null,
         };
@@ -1053,9 +1058,14 @@ public sealed class ListeningAuthoringService(
     {
         "A1" => 1,
         "A2" => 2,
-        "B" => 3,
-        "C1" => 4,
-        "C2" => 5,
+        "B1" => 3,
+        "B2" => 4,
+        "B3" => 5,
+        "B4" => 6,
+        "B5" => 7,
+        "B6" => 8,
+        "C1" => 9,
+        "C2" => 10,
         _ => 99,
     };
 
@@ -1220,7 +1230,9 @@ public sealed class ListeningAuthoringService(
         var v = (raw ?? string.Empty).Trim().ToUpperInvariant();
         return v switch
         {
-            "A" or "A1" or "A2" or "B" or "C" or "C1" or "C2" => v,
+            "A" or "A1" or "A2"
+                or "B" or "B1" or "B2" or "B3" or "B4" or "B5" or "B6"
+                or "C" or "C1" or "C2" => v,
             _ => "A",
         };
     }
@@ -1488,6 +1500,7 @@ public sealed class ListeningAuthoringService(
             Speakers = p.Speakers ?? existing.Speakers,
             AudioStartMs = p.AudioStartMs ?? existing.AudioStartMs,
             AudioEndMs = p.AudioEndMs ?? existing.AudioEndMs,
+            TimeLimitSeconds = p.TimeLimitSeconds ?? existing.TimeLimitSeconds,
         };
 
     private static void ApplyPatchToRelational(

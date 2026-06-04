@@ -238,7 +238,8 @@ public sealed class AdminBillingEndpointsTests : IClassFixture<TestWebApplicatio
             idempotencyKey
         };
         var first = await client.PostAsJsonAsync("/v1/admin/refunds", firstBody);
-        Assert.True(first.IsSuccessStatusCode, $"First refund failed: {(int)first.StatusCode} {await first.Content.ReadAsStringAsync()}");
+        var firstBodyText = await first.Content.ReadAsStringAsync();
+        Assert.True(first.IsSuccessStatusCode, $"REFUND_DIAG status={(int)first.StatusCode} headers=[{string.Join(";", first.Headers.Select(h => h.Key))}] body={firstBodyText}");
         var firstResult = await first.Content.ReadFromJsonAsync<RefundResultView>();
         Assert.NotNull(firstResult);
         Assert.False(firstResult!.Idempotent);

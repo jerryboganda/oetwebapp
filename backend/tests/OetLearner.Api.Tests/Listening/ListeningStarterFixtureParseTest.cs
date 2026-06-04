@@ -54,7 +54,14 @@ public class ListeningStarterFixtureParseTest
             var byPart = doc.Questions.GroupBy(q => q.PartCode).ToDictionary(g => g.Key, g => g.Count());
             Assert.Equal(12, byPart["A1"]);
             Assert.Equal(12, byPart["A2"]);
-            Assert.Equal(6,  byPart["B"]);
+            // Part B is six independent sub-sections (B1..B6) with one item each.
+            foreach (var bCode in new[] { "B1", "B2", "B3", "B4", "B5", "B6" })
+            {
+                Assert.True(byPart.TryGetValue(bCode, out var bCount) && bCount == 1,
+                    $"{Path.GetFileName(path)}: expected exactly 1 item in {bCode}.");
+            }
+            Assert.False(byPart.ContainsKey("B"),
+                $"{Path.GetFileName(path)}: bare 'B' part code is no longer allowed; use B1..B6.");
             Assert.Equal(6,  byPart["C1"]);
             Assert.Equal(6,  byPart["C2"]);
 

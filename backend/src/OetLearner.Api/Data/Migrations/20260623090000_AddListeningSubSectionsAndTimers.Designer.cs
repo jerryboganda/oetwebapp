@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using OetLearner.Api.Data;
@@ -12,9 +13,11 @@ using Pgvector;
 namespace OetLearner.Api.Data.Migrations
 {
     [DbContext(typeof(LearnerDbContext))]
-    partial class LearnerDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260623090000_AddListeningSubSectionsAndTimers")]
+    partial class AddListeningSubSectionsAndTimers
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -23905,9 +23908,6 @@ namespace OetLearner.Api.Data.Migrations
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<bool>("IsPractice")
-                        .HasColumnType("boolean");
-
                     b.Property<Guid>("MockId")
                         .HasColumnType("uuid");
 
@@ -24458,10 +24458,6 @@ namespace OetLearner.Api.Data.Migrations
                         .IsRequired()
                         .HasMaxLength(16)
                         .HasColumnType("character varying(16)");
-
-                    b.Property<string>("StimulusPdfMediaAssetId")
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
 
                     b.Property<string>("SubDiscipline")
                         .HasMaxLength(64)

@@ -75,7 +75,7 @@ public class MockItemAnalysisListeningTests
         Assert.Null(first.Flag);
 
         var second = snapshots[1];
-        Assert.Equal("Listening B · Q2", second.Label);
+        Assert.Equal("Listening B1 · Q2", second.Label);
         Assert.Equal(ListeningPaperId, second.ContentPaperId);
         Assert.Equal(5, second.TotalAttempts);
         Assert.Equal(2, second.CorrectCount);
@@ -297,7 +297,7 @@ public class MockItemAnalysisListeningTests
         await service.RecomputeAsync(BundleId, "admin-1", CancellationToken.None);
 
         var snapshot = await db.MockItemAnalysisSnapshots
-            .FirstAsync(s => s.Label == "Listening B · Q2");
+            .FirstAsync(s => s.Label == "Listening B1 · Q2");
         Assert.Equal("tempting_distractor", snapshot.Flag);
         var distractor = JsonSerializer.Deserialize<Dictionary<string, int>>(snapshot.DistractorJson)!;
         Assert.Equal(5, distractor["ReusedKeyword"]);
@@ -346,7 +346,7 @@ public class MockItemAnalysisListeningTests
         var labels = items.Cast<object>()
             .Select(item => (string)item.GetType().GetProperty("label")!.GetValue(item)!)
             .ToArray();
-        Assert.Equal(new[] { "Listening A1 · Q1", "Listening B · Q2" }, labels);
+        Assert.Equal(new[] { "Listening A1 · Q1", "Listening B1 · Q2" }, labels);
         Assert.DoesNotContain(labels, l => l.StartsWith("Reading", StringComparison.Ordinal));
     }
 
@@ -496,7 +496,7 @@ public class MockItemAnalysisListeningTests
         {
             Id = "part-b-w4",
             PaperId = ListeningPaperId,
-            PartCode = ListeningPartCode.B,
+            PartCode = ListeningPartCode.B1,
             MaxRawScore = 6,
             CreatedAt = now,
             UpdatedAt = now,

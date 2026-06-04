@@ -241,6 +241,14 @@ function PlayerContent() {
   const audioResumeInFlightRef = useRef<boolean>(false);
   const applyStrictServerStateRef = useRef<((state: ListeningV2SessionState) => void) | null>(null);
   const strictAdvanceTargetRef = useRef<ListeningFsmState | null>(null);
+  // Tracks the attempt id whose strict-resume FSM state has already been
+  // hydrated from the server. The hydration effect below also re-runs whenever
+  // `applyStrictServerState` changes identity (it depends on `sectionsInPaper`,
+  // which in turn depends on `strictServerState.state`). Applying a resume thus
+  // mutates a dependency of the effect, so without this guard the effect would
+  // re-fetch `getState` after the resume already committed — clobbering the
+  // hydrated phase (e.g. snapping an `a2_audio` resume back to `a1_preview`).
+  const hydratedAttemptIdRef = useRef<string | null>(null);
   const [session, setSession] = useState<ListeningSessionDto | null>(null);
   const [attempt, setAttempt] = useState<ListeningAttemptDto | null>(null);
   const [answers, setAnswers] = useState<Record<string, string>>({});
@@ -880,15 +888,22 @@ function PlayerContent() {
   useEffect(() => {
     if (!session) return;
     if (!attemptIdFromRoute) {
+      hydratedAttemptIdRef.current = null;
       setStrictServerState(null);
       setHasStarted(false);
       return;
     }
     if (!strictReadinessRequired) {
+      hydratedAttemptIdRef.current = null;
       setStrictServerState(null);
       setHasStarted(true);
       return;
     }
+    // One-time strict-resume hydration per attempt. Applying the resumed state
+    // changes a dependency of this effect (`applyStrictServerState`), so re-runs
+    // are expected; bail out instead of re-fetching and clobbering the phase.
+    if (hydratedAttemptIdRef.current === attemptIdFromRoute) return;
+    hydratedAttemptIdRef.current = attemptIdFromRoute;
     let alive = true;
     listeningV2Api
       .getState(attemptIdFromRoute)
@@ -901,11 +916,13 @@ function PlayerContent() {
           setTechReadiness(null);
           return;
         }
-        applyStrictServerState(state);
+        applyStrictServerStateRef.current?.(state);
         setHasStarted(true);
       })
       .catch(() => {
         if (!alive) return;
+        // Allow a later dependency change (e.g. session reload) to retry.
+        hydratedAttemptIdRef.current = null;
         setStrictServerState(null);
         setHasStarted(false);
         setStartError('Could not verify this strict Listening attempt with the server. Run the readiness check again before starting.');

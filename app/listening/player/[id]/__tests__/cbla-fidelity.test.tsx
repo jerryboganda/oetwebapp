@@ -1,5 +1,5 @@
 import { createElement } from 'react';
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { LISTENING_PREVIEW_SECONDS } from '@/lib/listening-sections';
 
 const {
@@ -299,7 +299,14 @@ describe('Listening player — CBLA fidelity (preview / attempt timer / one-play
   let playCalls: number;
 
   beforeEach(() => {
-    vi.clearAllMocks();
+    // resetAllMocks (not clearAllMocks) so per-test `mockResolvedValueOnce`
+    // queues are also flushed. clearAllMocks only wipes call history; it leaves
+    // any *unconsumed* one-shot resolution from a prior test queued, which then
+    // shifts this test's `mockV2Advance` sequence (e.g. the intended
+    // confirm-required result gets served the leftover applied result instead,
+    // so the confirm follow-up advance never fires). The defaults below are
+    // re-established immediately after the reset.
+    vi.resetAllMocks();
     // Default-resolve all backend mocks so background timers (heartbeat,
     // autosave) never blow up when fake timers tick past 15s.
     mockHeartbeat.mockResolvedValue({ attemptId: 'attempt-1', elapsedSeconds: 0, lastClientSyncAt: '' });
@@ -341,7 +348,12 @@ describe('Listening player — CBLA fidelity (preview / attempt timer / one-play
     proto.pause = () => undefined;
   });
 
-  afterEach(() => {
+  afterEach(async () => {
+    cleanup();
+    await act(async () => {
+      for (let i = 0; i < 5; i += 1) await Promise.resolve();
+    });
+    vi.clearAllTimers();
     vi.useRealTimers();
   });
 

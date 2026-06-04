@@ -156,10 +156,12 @@ public sealed class ListeningDiagnosticSeeder(
             instructions: "Diagnostic Part A — Consultation (gap-fill).",
             now, ct);
 
+        // Diagnostic keeps a single workplace sub-section (B1) — it is a short
+        // placement test, not a full 6-extract Part B exam.
         var partB = await UpsertPartAsync(
             paperId,
             PartWorkplaceId,
-            ListeningPartCode.B,
+            ListeningPartCode.B1,
             maxRawScore: 3,
             instructions: "Diagnostic Part B — Workplace extracts (MCQ).",
             now, ct);

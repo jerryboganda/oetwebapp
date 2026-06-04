@@ -304,7 +304,7 @@ public class ListeningClassAnalyticsServiceTests
         {
             Id = "part-b",
             PaperId = "paper-b",
-            PartCode = ListeningPartCode.B,
+            PartCode = ListeningPartCode.B1,
             MaxRawScore = 1,
             CreatedAt = now,
             UpdatedAt = now,

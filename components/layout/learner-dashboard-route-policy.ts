@@ -24,6 +24,7 @@ export const INCLUDED_LEARNER_DASHBOARD_PAGE_PATHS = [
   'app/submissions/compare/page.tsx',
   'app/listening/page.tsx',
   'app/listening/drills/[id]/page.tsx',
+  'app/listening/paper/[paperId]/page.tsx',
   'app/listening/results/[id]/page.tsx',
   'app/listening/review/[id]/page.tsx',
   'app/mocks/page.tsx',

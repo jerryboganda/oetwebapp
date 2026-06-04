@@ -377,11 +377,18 @@ public sealed class WritingLearnerPathwayService(LearnerDbContext db, TimeProvid
         if (scores.Count == 0) return new PathwayState("diagnostic", 0, null, null, false);
 
         var avg = scores.Count == 0 ? 0 : (int)Math.Round(scores.Average());
-        var recentBCount = scores.Take(3).Count(s => OetScoring.GradeWriting(s, profile.TargetCountry).Passed == true);
+        var recentPassCount = scores.Take(3).Count(s => OetScoring.GradeWriting(s, profile.TargetCountry).Passed == true);
         var violations = await db.WritingRuleViolations.AsNoTracking()
             .CountAsync(v => v.UserId == userId && v.GeneratedAt >= clock.GetUtcNow().AddDays(-21), ct);
         var readiness = Math.Clamp((int)Math.Round(avg / 5.0) - Math.Min(20, violations), 0, 100);
-        var stage = readiness >= 80 && recentBCount >= 3 ? "mastery" : readiness >= 55 ? "practice" : "foundation";
+        // Mastery is gated on the country-aware Writing pass mark, not a fixed
+        // scaled-400 readiness floor: a C+ country (e.g. US, pass 300/500)
+        // reaches mastery at a lower raw score than a Grade-B country
+        // (pass 350/500). Three consecutive recent passes of the learner's
+        // destination-country bar is the mastery signal; below that we fall
+        // back to the readiness-based practice/foundation split.
+        var masteredCountryBar = recentPassCount >= 3;
+        var stage = masteredCountryBar ? "mastery" : readiness >= 55 ? "practice" : "foundation";
         return new PathwayState(stage, readiness, avg > 0 ? avg : null, diagnosticEvaluation.Id, true);
     }
 

@@ -11,11 +11,16 @@ namespace OetLearner.Api.Services.Listening;
 // Validates the canonical OET Listening shape before a ContentPaper flips
 // to Published. Non-configurable invariant:
 //
-//   Part A = 24 items (two consultations, 12 items each; partCode A / A1 / A2)
-//   Part B =  6 items (six workplace extracts, one 3-option MCQ each; partCode B)
-//   Part C = 12 items (two presentations, 6 items each; partCode C / C1 / C2)
+//   Part A = 24 items (two consultations, 12 items each; partCode A1 / A2)
+//   Part B =  6 items (six INDEPENDENT sub-sections B1..B6, exactly 1 item each)
+//   Part C = 12 items (two presentations, 6 items each; partCode C1 / C2)
 //   ───────────────
 //   Total  = 42 items  (30 / 42 ≡ 350 / 500 pass anchor via OetScoring)
+//
+// Any sub-section may use any of the 3 content types (MCQ / fill-in-the-blank /
+// free-text). Audio for a sub-section is either an uploaded ContentPaperAsset
+// (Role=Audio, Part=<code>) or a TTS-synthesised extract; the publish gate
+// requires one of the two for every sub-section that carries questions.
 //
 // Questions are authored in ContentPaper.ExtractedTextJson under the
 // "listeningQuestions" key — the same shape the learner player consumes
@@ -72,6 +77,26 @@ public sealed class ListeningStructureService(LearnerDbContext db) : IListeningS
         "copyright-cleared",
     };
 
+    /// <summary>
+    /// Pedagogical authoring gates that are advisory (warning) rather than
+    /// publish-blocking for the uploaded-audio Listening flow. They still
+    /// surface to authors; they just don't block Publish. Audio source, the
+    /// 42-item structure, MCQ shape, blank stem/answer, and source provenance
+    /// remain hard publish blockers.
+    /// </summary>
+    private static readonly HashSet<string> AdvisoryPublishGateCodes = new(StringComparer.Ordinal)
+    {
+        "listening_extract_difficulty",
+        "listening_question_difficulty",
+        "listening_skill_tags",
+        "listening_skill_tags_invalid",
+        "listening_transcript_evidence",
+        "listening_transcript_evidence_missing",
+        "listening_distractor_categories",
+        "listening_distractor_categories_invalid",
+        "listening_preview_window_missing",
+    };
+
     public async Task<ListeningValidationReport> ValidatePaperAsync(string paperId, CancellationToken ct)
     {
         var paper = await db.ContentPapers.AsNoTracking()
@@ -120,15 +145,32 @@ public sealed class ListeningStructureService(LearnerDbContext db) : IListeningS
             if (partA != CanonicalPartACount)
                 issues.Add(new("listening_part_a_count", "error",
                     $"Part A has {partA} item(s); OET requires exactly {CanonicalPartACount} (12 per consultation)."));
+            // Part B is six independent sub-sections (B1..B6), one item each.
+            // The per-sub-section split is enforced by listening_part_b_split
+            // (emitted by the count methods). The aggregate Part B total must
+            // still be 6 across all sub-sections.
             if (partB != CanonicalPartBCount)
                 issues.Add(new("listening_part_b_count", "error",
-                    $"Part B has {partB} item(s); OET requires exactly {CanonicalPartBCount} (one per workplace extract)."));
+                    $"Part B has {partB} item(s) across B1..B6; OET requires exactly {CanonicalPartBCount} (one per workplace sub-section)."));
             if (partC != CanonicalPartCCount)
                 issues.Add(new("listening_part_c_count", "error",
                     $"Part C has {partC} item(s); OET requires exactly {CanonicalPartCCount} (6 per presentation)."));
         }
 
-        // All "error"-severity issues block publishing. Warnings are advisory only.
+        // Owner decision (uploaded-audio Listening flow): a paper publishes on
+        // audio + timer + valid questions, the 42-item count, and source
+        // provenance. The pedagogical authoring gates below are retained as
+        // ADVISORY warnings (still surfaced to authors) but no longer block
+        // publishing. Downgrade them from "error" to "warning" in one place so
+        // the per-rule emit sites stay readable.
+        issues = issues
+            .Select(issue => AdvisoryPublishGateCodes.Contains(issue.Code)
+                    && string.Equals(issue.Severity, "error", StringComparison.OrdinalIgnoreCase)
+                ? issue with { Severity = "warning" }
+                : issue)
+            .ToList();
+
+        // All remaining "error"-severity issues block publishing. Warnings are advisory only.
         var isPublishReady = !issues.Any(i =>
             string.Equals(i.Severity, "error", StringComparison.OrdinalIgnoreCase));
         return new ListeningValidationReport(
@@ -175,6 +217,21 @@ public sealed class ListeningStructureService(LearnerDbContext db) : IListeningS
             .AsNoTracking()
             .Where(extract => extractIds.Contains(extract.Id))
             .ToDictionaryAsync(extract => extract.Id, StringComparer.Ordinal, ct);
+        // Per-sub-section uploaded-audio asset map (Role==Audio && IsPrimary),
+        // keyed by the part code string (A1..C2, case-insensitive). Drives the
+        // listening_audio_source_missing gate and relaxes the TTS-window checks
+        // for sub-sections whose audio is an uploaded file (no start/end window).
+        var uploadedAudioParts = (await db.Set<ContentPaperAsset>()
+            .AsNoTracking()
+            .Where(a => a.PaperId == paperId
+                && a.Role == PaperAssetRole.Audio
+                && a.IsPrimary
+                && a.Part != null)
+            .Select(a => a.Part!)
+            .ToListAsync(ct))
+            .Select(p => p.Trim().ToUpperInvariant())
+            .Where(p => p.Length > 0)
+            .ToHashSet(StringComparer.Ordinal);
         // Singleton (id = "global") Listening policy — drives the effective
         // preview-window resolution below. Null when no policy row is authored
         // yet; the resolver then falls back to ListeningPolicyDefaults.
@@ -203,11 +260,25 @@ public sealed class ListeningStructureService(LearnerDbContext db) : IListeningS
 
         var a1 = rows.Count(row => row.PartCode == ListeningPartCode.A1);
         var a2 = rows.Count(row => row.PartCode == ListeningPartCode.A2);
-        var b = rows.Count(row => row.PartCode == ListeningPartCode.B);
+        var b = rows.Count(row => IsPartB(row.PartCode));
         var c1 = rows.Count(row => row.PartCode == ListeningPartCode.C1);
         var c2 = rows.Count(row => row.PartCode == ListeningPartCode.C2);
         var a = a1 + a2;
         var c = c1 + c2;
+
+        // Part B split: each of the six sub-sections B1..B6 must carry exactly
+        // one item (replaces the legacy single Part-B=6 shape). Only fires when
+        // any Part B sub-section is present so a Part-A-only draft still
+        // validates other rules.
+        var bSubCounts = PartBSubSections
+            .Select(code => (Code: code, Count: rows.Count(row => row.PartCode == code)))
+            .ToArray();
+        if (bSubCounts.Any(sub => sub.Count > 0) && bSubCounts.Any(sub => sub.Count != 1))
+        {
+            var detail = string.Join(", ", bSubCounts.Select(sub => $"{sub.Code}={sub.Count}"));
+            warnings.Add(new("listening_part_b_split", "error",
+                $"Part B requires six independent sub-sections with exactly one item each (B1..B6); found {detail}."));
+        }
 
         var duplicateNumbers = rows
             .GroupBy(row => row.QuestionNumber)
@@ -274,31 +345,19 @@ public sealed class ListeningStructureService(LearnerDbContext db) : IListeningS
                 $"Every Listening item requires a non-empty correct answer; {blankAnswers} item(s) are missing one."));
         }
 
-        // Part A is note-completion (short-answer) only per OET spec — MCQ
-        // items in Part A break the canonical UX and grading rubric.
-        var partAItemsWithWrongType = rows.Count(row =>
-            (row.PartCode == ListeningPartCode.A1 || row.PartCode == ListeningPartCode.A2)
-            && row.QuestionType != ListeningQuestionType.ShortAnswer);
-        if (partAItemsWithWrongType > 0)
-        {
-            warnings.Add(new("listening_part_a_type", "error",
-                $"Part A items must be short-answer (note-completion); {partAItemsWithWrongType} item(s) use a different question type."));
-        }
-
-        var partBItemsWithoutThreeOptions = rows.Count(row => row.PartCode == ListeningPartCode.B
+        // Any sub-section may now use any of the 3 content types (MCQ /
+        // fill-in-the-blank / free-text), so the old per-part type-coupling
+        // rules (listening_part_a_type / listening_part_b_mcq_shape /
+        // listening_part_c_mcq_shape) are dropped. We still validate that an
+        // item which IS typed MultipleChoice3 has a valid 3-option single-select
+        // shape, regardless of which part it lives in.
+        var mcqItemsWithBadShape = rows.Count(row =>
+            row.QuestionType == ListeningQuestionType.MultipleChoice3
             && !HasValidMcqShape(row.QuestionType, ReadJsonString(row.CorrectAnswerJson), row.Options));
-        if (partBItemsWithoutThreeOptions > 0)
+        if (mcqItemsWithBadShape > 0)
         {
-            warnings.Add(new("listening_part_b_mcq_shape", "error",
-                $"Part B requires single-select MCQ with exactly 3 options and a matching correct answer per item; {partBItemsWithoutThreeOptions} item(s) violate this."));
-        }
-
-        var partCItemsWithoutThreeOptions = rows.Count(row => (row.PartCode == ListeningPartCode.C1 || row.PartCode == ListeningPartCode.C2)
-            && !HasValidMcqShape(row.QuestionType, ReadJsonString(row.CorrectAnswerJson), row.Options));
-        if (partCItemsWithoutThreeOptions > 0)
-        {
-            warnings.Add(new("listening_part_c_mcq_shape", "error",
-                $"Part C requires single-select MCQ with exactly 3 options and a matching correct answer per item; {partCItemsWithoutThreeOptions} item(s) violate this."));
+            warnings.Add(new("listening_mcq_shape", "error",
+                $"Every MCQ item requires single-select shape with exactly 3 options and one matching correct answer; {mcqItemsWithBadShape} item(s) violate this."));
         }
 
         var missingExtractLinks = rows.Count(row => string.IsNullOrWhiteSpace(row.ListeningExtractId)
@@ -309,11 +368,47 @@ public sealed class ListeningStructureService(LearnerDbContext db) : IListeningS
                 $"Every Listening question must be linked to an authored audio extract; {missingExtractLinks} item(s) are missing a valid extract link."));
         }
 
-        var invalidExtractTimings = extracts.Values.Count(extract => !HasValidTimingWindow(extract.AudioStartMs, extract.AudioEndMs));
+        // Audio source gate. Each sub-section that HAS questions must have an
+        // audio source: either an uploaded primary Audio asset for its part code
+        // OR a TTS AudioContentSha on its extract. (Uploaded files carry no
+        // start/end window, so they are exempt from the cue-window checks below.)
+        bool PartHasUploadedAudio(ListeningPartCode code)
+            => uploadedAudioParts.Contains(PartCodeKey(code));
+        bool PartHasTtsAudio(ListeningPartCode code)
+            => extracts.Values.Any(extract =>
+                parts.GetValueOrDefault(extract.ListeningPartId) == code
+                && !string.IsNullOrWhiteSpace(extract.AudioContentSha));
+
+        var partsWithQuestions = rows
+            .Select(row => row.PartCode)
+            .Where(code => code != default)
+            .Distinct()
+            .ToArray();
+        var partsMissingAudioSource = partsWithQuestions
+            .Where(code => !PartHasUploadedAudio(code) && !PartHasTtsAudio(code))
+            .Select(PartCodeKey)
+            .OrderBy(label => label, StringComparer.Ordinal)
+            .ToArray();
+        if (partsMissingAudioSource.Length > 0)
+        {
+            warnings.Add(new("listening_audio_source_missing", "error",
+                $"Every Listening sub-section with questions requires an audio source (an uploaded audio file for its part code, or TTS-synthesised extract audio); part(s) {string.Join(", ", partsMissingAudioSource)} have neither."));
+        }
+
+        // Cue-window checks apply ONLY to extracts whose audio is TTS-windowed.
+        // Sub-sections backed by an uploaded audio file have no [start,end) cue
+        // window, so skip them rather than demanding fabricated timings.
+        bool ExtractUsesUploadedAudio(ListeningExtract extract)
+            => parts.TryGetValue(extract.ListeningPartId, out var code) && PartHasUploadedAudio(code);
+        var windowedExtracts = extracts.Values
+            .Where(extract => !ExtractUsesUploadedAudio(extract))
+            .ToList();
+
+        var invalidExtractTimings = windowedExtracts.Count(extract => !HasValidTimingWindow(extract.AudioStartMs, extract.AudioEndMs));
         if (invalidExtractTimings > 0)
         {
             warnings.Add(new("listening_extract_timing", "error",
-                $"Every Listening extract requires valid audio cue timings; {invalidExtractTimings} extract(s) are missing start/end ms or have an invalid window."));
+                $"Every TTS-windowed Listening extract requires valid audio cue timings; {invalidExtractTimings} extract(s) are missing start/end ms or have an invalid window."));
         }
 
         var missingExtractDifficulty = extracts.Values.Count(extract => !IsValidDifficulty(extract.DifficultyRating));
@@ -364,15 +459,35 @@ public sealed class ListeningStructureService(LearnerDbContext db) : IListeningS
 
         // WS-7c additive publish-gate rules. Each emits an "error" issue so a
         // violation blocks Publish; none mutate the count tally or the report
-        // contract.
-        warnings.AddRange(EvaluateExtractCueOverlap(parts, extracts.Values));
-        warnings.AddRange(EvaluatePreviewWindows(parts.Values, policy));
+        // contract. Cue-overlap + preview-window checks operate only on
+        // TTS-windowed sub-sections — sub-sections backed by an uploaded audio
+        // file have no start/end window to validate.
+        warnings.AddRange(EvaluateExtractCueOverlap(parts, windowedExtracts));
+        warnings.AddRange(EvaluatePreviewWindows(
+            parts.Values.Where(code => !PartHasUploadedAudio(code)), policy));
         warnings.AddRange(EvaluateResultsCalc(
             authoredPoints: questions.Sum(q => q.Points),
             partMaxRawScores: partMaxRawScores));
 
         return (a, b, c, a + b + c, warnings);
     }
+
+    /// <summary>True for any Part B sub-section code (B1..B6).</summary>
+    private static bool IsPartB(ListeningPartCode code) => code
+        is ListeningPartCode.B1 or ListeningPartCode.B2 or ListeningPartCode.B3
+        or ListeningPartCode.B4 or ListeningPartCode.B5 or ListeningPartCode.B6;
+
+    /// <summary>The six Part B sub-section codes, in order.</summary>
+    private static readonly ListeningPartCode[] PartBSubSections =
+    {
+        ListeningPartCode.B1, ListeningPartCode.B2, ListeningPartCode.B3,
+        ListeningPartCode.B4, ListeningPartCode.B5, ListeningPartCode.B6,
+    };
+
+    /// <summary>Canonical part-code key (A1..C2) used to match against the
+    /// uploaded-audio <see cref="ContentPaperAsset.Part"/> column. The enum
+    /// names already coincide with the asset part labels.</summary>
+    private static string PartCodeKey(ListeningPartCode code) => code.ToString().ToUpperInvariant();
 
     // ─────────────────────────────────────────────────────────────────────
     // WS-7c — three additive Listening publish-validation rules. Kept as
@@ -572,9 +687,8 @@ public sealed class ListeningStructureService(LearnerDbContext db) : IListeningS
 
         int a = 0, b = 0, c = 0;
         int a1 = 0, a2 = 0, c1 = 0, c2 = 0;
-        var partAItemsWithWrongType = 0;
-        var partBItemsWithoutThreeOptions = 0;
-        var partCItemsWithoutThreeOptions = 0;
+        var bSub = new int[6]; // B1..B6 counts
+        var mcqItemsWithBadShape = 0;
         var blankAnswers = 0;
         var blankStems = 0;
         var numbers = new Dictionary<int, int>();
@@ -611,37 +725,40 @@ public sealed class ListeningStructureService(LearnerDbContext db) : IListeningS
             var partCode = (q.GetValueOrDefault("partCode") ?? q.GetValueOrDefault("part"))?.ToString()
                 ?.Trim().ToUpperInvariant() ?? "A";
 
+            // Any sub-section may use any of the 3 content types — only validate
+            // 3-option shape on items that ARE typed MCQ (parity with relational
+            // path's listening_mcq_shape). Distractor-category checks likewise
+            // apply to any MCQ-typed item.
+            var qType = (ReadString(q, "type") ?? ReadString(q, "questionType") ?? string.Empty).Trim();
+            var isMcq = string.Equals(qType, "multiple_choice_3", StringComparison.OrdinalIgnoreCase);
+            if (isMcq)
+            {
+                if (!HasValidMcqShape(q)) mcqItemsWithBadShape++;
+                var distractorIssues = CountJsonDistractorCategoryIssues(q);
+                wrongOptionsMissingDistractorCategory += distractorIssues.Missing;
+                wrongOptionsInvalidDistractorCategory += distractorIssues.Invalid;
+            }
+
             if (partCode.StartsWith("A", StringComparison.Ordinal))
             {
                 a++;
                 if (partCode == "A1") a1++;
                 else if (partCode == "A2") a2++;
-                // Part A is short-answer (note-completion) only — see relational
-                // path for the matching rule.
-                var qType = ReadString(q, "type") ?? ReadString(q, "questionType");
-                if (!string.IsNullOrWhiteSpace(qType)
-                    && !string.Equals(qType.Trim(), "short_answer", StringComparison.OrdinalIgnoreCase))
-                {
-                    partAItemsWithWrongType++;
-                }
             }
             else if (partCode.StartsWith("B", StringComparison.Ordinal))
             {
                 b++;
-                if (!HasValidMcqShape(q)) partBItemsWithoutThreeOptions++;
-                var distractorIssues = CountJsonDistractorCategoryIssues(q);
-                wrongOptionsMissingDistractorCategory += distractorIssues.Missing;
-                wrongOptionsInvalidDistractorCategory += distractorIssues.Invalid;
+                // B1..B6 sub-section tally. Bare legacy "B" floors to B1 so a
+                // not-yet-split paper still aggregates; the split rule then flags
+                // the missing sub-sections.
+                var slot = partCode.Length >= 2 && partCode[1] is >= '1' and <= '6' ? partCode[1] - '1' : 0;
+                bSub[slot]++;
             }
             else if (partCode.StartsWith("C", StringComparison.Ordinal))
             {
                 c++;
                 if (partCode == "C1") c1++;
                 else if (partCode == "C2") c2++;
-                if (!HasValidMcqShape(q)) partCItemsWithoutThreeOptions++;
-                var distractorIssues = CountJsonDistractorCategoryIssues(q);
-                wrongOptionsMissingDistractorCategory += distractorIssues.Missing;
-                wrongOptionsInvalidDistractorCategory += distractorIssues.Invalid;
             }
         }
 
@@ -656,6 +773,13 @@ public sealed class ListeningStructureService(LearnerDbContext db) : IListeningS
         {
             warnings.Add(new("listening_part_a_split", "error",
                 $"Part A requires two consultations with exactly 12 items each; found A1={a1}, A2={a2}."));
+        }
+        // Part B split: six independent sub-sections (B1..B6), one item each.
+        if (bSub.Any(count => count > 0) && bSub.Any(count => count != 1))
+        {
+            var detail = string.Join(", ", bSub.Select((count, i) => $"B{i + 1}={count}"));
+            warnings.Add(new("listening_part_b_split", "error",
+                $"Part B requires six independent sub-sections with exactly one item each (B1..B6); found {detail}."));
         }
         if ((c1 > 0 || c2 > 0) && (c1 != 6 || c2 != 6))
         {
@@ -675,22 +799,10 @@ public sealed class ListeningStructureService(LearnerDbContext db) : IListeningS
                 $"Every Listening item requires a non-empty correct answer; {blankAnswers} item(s) are missing one."));
         }
 
-        if (partAItemsWithWrongType > 0)
+        if (mcqItemsWithBadShape > 0)
         {
-            warnings.Add(new("listening_part_a_type", "error",
-                $"Part A items must be short-answer (note-completion); {partAItemsWithWrongType} item(s) use a different question type."));
-        }
-
-        if (partBItemsWithoutThreeOptions > 0)
-        {
-            warnings.Add(new("listening_part_b_mcq_shape", "error",
-                $"Part B requires single-select MCQ with exactly 3 options and a matching correct answer per item; {partBItemsWithoutThreeOptions} item(s) violate this."));
-        }
-
-        if (partCItemsWithoutThreeOptions > 0)
-        {
-            warnings.Add(new("listening_part_c_mcq_shape", "error",
-                $"Part C requires single-select MCQ with exactly 3 options and a matching correct answer per item; {partCItemsWithoutThreeOptions} item(s) violate this."));
+            warnings.Add(new("listening_mcq_shape", "error",
+                $"Every MCQ item requires single-select shape with exactly 3 options and one matching correct answer; {mcqItemsWithBadShape} item(s) violate this."));
         }
 
         if (extracts.Count == 0)
