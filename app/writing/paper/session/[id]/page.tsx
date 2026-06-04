@@ -9,6 +9,7 @@ import {
   type PaperBookletContent,
   type WritingPhase,
 } from '@/components/domain/writing/PaperBookletSimulation';
+import { WritingReadingWindowOverlay } from '@/components/domain/writing/WritingReadingWindowOverlay';
 import {
   beginWritingMockWriting,
   createWritingSubmission,
@@ -18,7 +19,11 @@ import {
   submitWritingMock,
 } from '@/lib/writing/api';
 import { getWritingTask } from '@/lib/writing/exam-api';
-import { WRITING_READING_WINDOW_SECONDS, WRITING_WINDOW_SECONDS } from '@/lib/writing/workflow';
+import { useDeadlineCountdown } from '@/lib/writing/useCountdown';
+import {
+  WRITING_READING_WINDOW_SECONDS,
+  WRITING_WINDOW_SECONDS,
+} from '@/lib/writing/workflow';
 import {
   WRITING_PROFESSION_LABELS,
   type WritingMockSessionDto,
@@ -67,6 +72,49 @@ function buildContentFromScenario(scenario: WritingScenarioDto): PaperBookletCon
 }
 
 /**
+ * The reading-window overlay's body renders `<WritingStimulus scenario>`, which
+ * only reads `stimulusPdfDownloadPath` (→ real PDF) or the case-note text
+ * fields (→ printed fallback). When the route resolves only to an authored task
+ * we synthesise a minimal scenario-shaped object from it rather than firing a
+ * second `getWritingScenario` request: the task already carries everything the
+ * stimulus needs, and a task id is NOT guaranteed to also resolve as a scenario
+ * id (the task lookup is a distinct admin endpoint). This keeps a single load
+ * path that works whether the id resolves to a task or a scenario.
+ */
+function scenarioFromTask(task: WritingTaskDto): WritingScenarioDto {
+  return {
+    id: task.id,
+    title: task.title,
+    letterType: task.letterType,
+    profession: task.profession,
+    subDiscipline: null,
+    topics: [],
+    difficulty: task.difficulty,
+    caseNotesMarkdown: task.caseNotesMarkdown ?? '',
+    caseNotesStructured: [],
+    isDiagnostic: false,
+    status: task.status,
+    createdAt: task.createdAt,
+    updatedAt: task.updatedAt,
+    internalCode: task.internalCode,
+    taskPromptMarkdown: task.taskPromptMarkdown,
+    writerRole: task.writerRole,
+    todayDate: task.todayDate,
+    recipient: task.recipient,
+    caseNoteSections: task.caseNoteSections ?? [],
+    fixedInstructions: task.fixedInstructions ?? [],
+    wordGuideMin: task.wordGuideMin,
+    wordGuideMax: task.wordGuideMax,
+    readingTimeSeconds: task.readingTimeSeconds,
+    writingTimeSeconds: task.writingTimeSeconds,
+    simulationModes: task.simulationModes,
+    markingMode: task.markingMode,
+    stimulusPdfMediaAssetId: task.stimulusPdfMediaAssetId ?? null,
+    stimulusPdfDownloadPath: task.stimulusPdfDownloadPath ?? null,
+  };
+}
+
+/**
  * PAPER-mode visual exam simulation (spec §9).
  *
  * The route param `[id]` is resolved leniently to match how the learner can
@@ -77,10 +125,14 @@ function buildContentFromScenario(scenario: WritingScenarioDto): PaperBookletCon
  *      path used when paper mode is launched from the mocks list.
  *   2. As a SCENARIO/TASK id (direct launch). We then create a paper-mode
  *      submission with `createWritingSubmission` on submit and drive the timer
- *      locally.
+ *      locally (client-only deadline; no server session to anchor against).
  *
  * Either way the visual presentation is the booklet; only the data plumbing
- * differs, mirroring the existing computer-mode mock session page.
+ * differs, mirroring the existing computer-mode mock session page. Timing is
+ * deadline-anchored in BOTH cases: the mock path anchors to the server's
+ * reading-phase end; the direct path anchors to a deadline fixed when the
+ * reading window opens. `WritingReadingWindowOverlay` shows the real PDF during
+ * reading (exam simulation — `allowSkip={false}`, no early start).
  */
 export default function WritingPaperSessionPage() {
   const t = useTranslations();
@@ -92,10 +144,17 @@ export default function WritingPaperSessionPage() {
   const [session, setSession] = useState<WritingMockSessionDto | null>(null);
   const [scenarioId, setScenarioId] = useState<string | null>(null);
   const [content, setContent] = useState<PaperBookletContent | null>(null);
+  // Scenario-shaped object feeding the reading-window overlay's stimulus body.
+  // Resolved from the real scenario when available, else synthesised from the
+  // authored task (see scenarioFromTask).
+  const [scenario, setScenario] = useState<WritingScenarioDto | null>(null);
 
   const [phase, setPhase] = useState<WritingPhase>('reading');
-  const [readingSeconds, setReadingSeconds] = useState(WRITING_READING_WINDOW_SECONDS);
-  const [writingSeconds, setWritingSeconds] = useState(WRITING_WINDOW_SECONDS);
+  // Deadline-anchored countdowns (wall-clock epoch ms). Survive tab-backgrounding
+  // and refresh — `useDeadlineCountdown` re-derives whole seconds on every tick
+  // and on tab refocus. Null until the session/window is resolved.
+  const [readingDeadlineMs, setReadingDeadlineMs] = useState<number | null>(null);
+  const [writingDeadlineMs, setWritingDeadlineMs] = useState<number | null>(null);
 
   const [text, setText] = useState('');
   const [wordCount, setWordCount] = useState(0);
@@ -105,6 +164,11 @@ export default function WritingPaperSessionPage() {
   const [error, setError] = useState<string | null>(null);
 
   const startedAtRef = useRef<number>(Date.now());
+  // Guard so the reading→writing transition runs at most once: the reading
+  // countdown's null-guarded onZero AND the overlay's onAutoClose both fire on
+  // the same tick at reading 0:00. Only the first proceeds (mirrors the mock
+  // page's begin-writing idempotency).
+  const beganWritingRef = useRef(false);
   // Mirror latest content into refs for the timer-expiry auto-submit, which
   // must not re-bind on every keystroke.
   const textRef = useRef('');
@@ -117,17 +181,23 @@ export default function WritingPaperSessionPage() {
     if (!routeId) return;
     let cancelled = false;
 
+    // Resolve the booklet content AND the overlay's scenario object from the
+    // richest source: prefer the enriched authored task, fall back to the plain
+    // scenario.
     const loadTaskOrScenarioContent = async (id: string) => {
-      // Prefer the enriched authored task; fall back to plain scenario.
       const task = await getWritingTask(id).catch(() => null);
       if (cancelled) return;
       if (task) {
         setContent(buildContentFromTask(task));
+        setScenario(scenarioFromTask(task));
         return;
       }
-      const scenario = await getWritingScenario(id).catch(() => null);
+      const scenarioDto = await getWritingScenario(id).catch(() => null);
       if (cancelled) return;
-      if (scenario) setContent(buildContentFromScenario(scenario));
+      if (scenarioDto) {
+        setContent(buildContentFromScenario(scenarioDto));
+        setScenario(scenarioDto);
+      }
     };
 
     const run = async () => {
@@ -139,11 +209,16 @@ export default function WritingPaperSessionPage() {
         setResolution('mock');
         setSession(mock);
         setScenarioId(mock.scenarioId);
-        setReadingSeconds(mock.readingSecondsRemaining);
-        setWritingSeconds(mock.writingSecondsRemaining);
         setSubmissionId(mock.submissionId);
         if (mock.status === 'writing') {
           setPhase('writing');
+          // Already begun on the server — the transition must not begin again.
+          beganWritingRef.current = true;
+          setWritingDeadlineMs(
+            mock.readingPhaseEndedAt
+              ? new Date(mock.readingPhaseEndedAt).getTime() + WRITING_WINDOW_SECONDS * 1000
+              : Date.now() + mock.writingSecondsRemaining * 1000,
+          );
           startedAtRef.current = mock.readingPhaseEndedAt
             ? new Date(mock.readingPhaseEndedAt).getTime()
             : Date.now();
@@ -152,14 +227,20 @@ export default function WritingPaperSessionPage() {
           setSubmitted(mock.status === 'submitted');
         } else {
           setPhase('reading');
+          setReadingDeadlineMs(Date.now() + mock.readingSecondsRemaining * 1000);
         }
         if (mock.scenarioId) await loadTaskOrScenarioContent(mock.scenarioId);
         return;
       }
 
-      // 2) Treat the id as a scenario/task id (direct launch).
+      // 2) Treat the id as a scenario/task id (direct launch). No server session
+      //    to anchor against — open a client-only reading window with a deadline
+      //    fixed now (mirrors the practice page, but allowSkip is false because
+      //    paper mode is an exam simulation).
       setResolution('scenario');
       setScenarioId(routeId);
+      setPhase('reading');
+      setReadingDeadlineMs(Date.now() + WRITING_READING_WINDOW_SECONDS * 1000);
       await loadTaskOrScenarioContent(routeId);
     };
 
@@ -173,16 +254,6 @@ export default function WritingPaperSessionPage() {
       cancelled = true;
     };
   }, [routeId, t]);
-
-  // ── Local countdown for the active window (mirrors mock session) ──────────
-  useEffect(() => {
-    if (phase === 'completed' || submitted) return;
-    const tick = window.setInterval(() => {
-      if (phase === 'reading') setReadingSeconds((s) => Math.max(0, s - 1));
-      else setWritingSeconds((s) => Math.max(0, s - 1));
-    }, 1000);
-    return () => window.clearInterval(tick);
-  }, [phase, submitted]);
 
   // ── beforeunload guard while actively writing (strict) ────────────────────
   useEffect(() => {
@@ -218,32 +289,40 @@ export default function WritingPaperSessionPage() {
     setWordCount(words);
   }, []);
 
-  // ── Phase transition: reading → writing (record server-side for mocks) ────
-  const handlePhaseChange = useCallback(
-    (next: WritingPhase) => {
-      if (next === 'writing' && phase !== 'writing') {
-        setPhase('writing');
-        startedAtRef.current = Date.now();
-        if (resolution === 'mock' && session?.id) {
-          void beginWritingMockWriting(session.id)
-            .then((updated) => {
-              setSession(updated);
-              setReadingSeconds(updated.readingSecondsRemaining);
-              setWritingSeconds(updated.writingSecondsRemaining);
-              startedAtRef.current = updated.readingPhaseEndedAt
-                ? new Date(updated.readingPhaseEndedAt).getTime()
-                : Date.now();
-            })
-            .catch((err) => {
-              setError(err instanceof Error ? err.message : t('writing.paper.error.startWriting'));
-            });
-        }
-      } else if (next === 'completed') {
-        setPhase('completed');
-      }
-    },
-    [phase, resolution, session?.id, t],
-  );
+  // ── Phase transition: reading → writing ───────────────────────────────────
+  // Idempotent: the reading countdown's onZero AND the overlay's onAutoClose
+  // both fire on the same tick at reading 0:00. Only the first proceeds. For the
+  // mock path this records the transition server-side; for the direct path it
+  // simply anchors the writing deadline locally.
+  const beginWriting = useCallback(() => {
+    if (beganWritingRef.current) return;
+    beganWritingRef.current = true;
+    // Provisional deadline BEFORE flipping phase so the writing countdown never
+    // momentarily reads 0:00 during the begin-writing round-trip; corrected from
+    // the server response below for the mock path.
+    setWritingDeadlineMs(Date.now() + WRITING_WINDOW_SECONDS * 1000);
+    startedAtRef.current = Date.now();
+    setPhase('writing');
+    if (resolution === 'mock' && session?.id) {
+      void beginWritingMockWriting(session.id)
+        .then((updated) => {
+          setSession(updated);
+          // Anchor the writing countdown to the server's reading-phase end so it
+          // stays accurate across refresh/backgrounding.
+          setWritingDeadlineMs(
+            updated.readingPhaseEndedAt
+              ? new Date(updated.readingPhaseEndedAt).getTime() + WRITING_WINDOW_SECONDS * 1000
+              : Date.now() + updated.writingSecondsRemaining * 1000,
+          );
+          startedAtRef.current = updated.readingPhaseEndedAt
+            ? new Date(updated.readingPhaseEndedAt).getTime()
+            : Date.now();
+        })
+        .catch((err) => {
+          setError(err instanceof Error ? err.message : t('writing.paper.error.startWriting'));
+        });
+    }
+  }, [resolution, session?.id, t]);
 
   // ── Submit ────────────────────────────────────────────────────────────────
   const doSubmit = useCallback(
@@ -291,12 +370,25 @@ export default function WritingPaperSessionPage() {
 
   // Auto-submit + lock when the writing window expires.
   const expiredRef = useRef(false);
-  useEffect(() => {
-    if (phase === 'writing' && writingSeconds <= 0 && !submitted && !expiredRef.current) {
-      expiredRef.current = true;
-      void doSubmit(textRef.current, wordCountRef.current, { auto: true });
-    }
-  }, [phase, writingSeconds, submitted, doSubmit]);
+  const handleWritingExpired = useCallback(() => {
+    if (submitted || expiredRef.current) return;
+    expiredRef.current = true;
+    void doSubmit(textRef.current, wordCountRef.current, { auto: true });
+  }, [submitted, doSubmit]);
+
+  // Deadline-anchored seconds. Both hooks run unconditionally (rules of hooks);
+  // each gated to its active phase so only the live one counts. The null-guarded
+  // onZero fires only for a REAL elapsed deadline — never on the 0 a null
+  // deadline yields before load or during the begin-writing round-trip — so
+  // transitions cannot fire spuriously. WritingTimerV2 is display-only.
+  const readingSeconds = useDeadlineCountdown(
+    phase === 'reading' && !submitted ? readingDeadlineMs : null,
+    { onZero: beginWriting },
+  );
+  const writingSeconds = useDeadlineCountdown(
+    phase === 'writing' && !submitted ? writingDeadlineMs : null,
+    { onZero: handleWritingExpired },
+  );
 
   return (
     <LearnerDashboardShell pageTitle={t('writing.paper.pageTitle')} distractionFree>
@@ -305,6 +397,7 @@ export default function WritingPaperSessionPage() {
         scenarioId={scenarioId}
         submissionId={submissionId}
         content={content}
+        stimulus={{ downloadPath: scenario?.stimulusPdfDownloadPath ?? null }}
         phase={phase}
         readingSecondsRemaining={readingSeconds}
         writingSecondsRemaining={writingSeconds}
@@ -315,9 +408,21 @@ export default function WritingPaperSessionPage() {
         minWords={MIN_WORDS}
         resultsHref={resultsHref}
         onContentChange={handleContentChange}
-        onPhaseChange={handlePhaseChange}
         onSubmit={handleSubmit}
         onAutosave={handleAutosave}
+      />
+
+      {/* Forced full-screen reading window. Renders only during the reading
+          phase; auto-closes into the writing view at 0:00. allowSkip is false —
+          paper mode is always an exam simulation, so there is no early start. */}
+      <WritingReadingWindowOverlay
+        open={phase === 'reading' && !submitted && !!scenario}
+        scenario={scenario}
+        secondsRemaining={readingSeconds}
+        totalSeconds={scenario?.readingTimeSeconds ?? WRITING_READING_WINDOW_SECONDS}
+        allowSkip={false}
+        onAutoClose={beginWriting}
+        title={scenario?.title ?? content?.title ?? undefined}
       />
     </LearnerDashboardShell>
   );

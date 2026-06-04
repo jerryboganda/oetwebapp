@@ -19,6 +19,7 @@ import {
 } from '@/components/domain/writing/WritingTimerV2';
 import { WordCounter } from '@/components/domain/writing/WordCounter';
 import { SubmitBar } from '@/components/domain/writing/SubmitBar';
+import { WritingStimulusViewer } from '@/components/domain/writing/WritingStimulusViewer';
 import { recordWritingAttemptEvent } from '@/lib/writing/exam-api';
 import type {
   WritingAttemptEventType,
@@ -70,6 +71,14 @@ export interface PaperBookletSimulationProps {
   /** Submission id once known (mock session may surface it on transition). */
   submissionId?: string | null;
   content: PaperBookletContent | null;
+  /**
+   * Real exam question-paper PDF for the booklet's case-notes page. When
+   * `downloadPath` is a non-empty string the booklet shows the authenticated
+   * PDF (via {@link WritingStimulusViewer}) instead of the printed case-notes
+   * text; when absent/falsy the printed case-notes JSX is the fallback. The
+   * separate Writing-Task instructions page is unaffected either way.
+   */
+  stimulus?: { downloadPath: string | null };
   /** Lifecycle phase, owned by the page (mirrors the mock session). */
   phase: WritingPhase;
   readingSecondsRemaining: number;
@@ -87,7 +96,6 @@ export interface PaperBookletSimulationProps {
   /** Where the locked post-submit booklet links the learner. */
   resultsHref: string;
   onContentChange: (text: string, wordCount: number) => void;
-  onPhaseChange: (next: WritingPhase) => void;
   onSubmit: () => void;
   /**
    * Fired ~5s while writing when the text changed. The page performs the
@@ -160,6 +168,7 @@ export function PaperBookletSimulation({
   scenarioId,
   submissionId,
   content,
+  stimulus,
   phase,
   readingSecondsRemaining,
   writingSecondsRemaining,
@@ -170,7 +179,6 @@ export function PaperBookletSimulation({
   minWords = 100,
   resultsHref,
   onContentChange,
-  onPhaseChange,
   onSubmit,
   onAutosave,
 }: PaperBookletSimulationProps) {
@@ -311,6 +319,12 @@ export function PaperBookletSimulation({
   }, [submitted, phase, wordCount, minWords, t]);
 
   const hasStructuredNotes = (content?.caseNoteSections.length ?? 0) > 0;
+  // Product decision: show the real exam question-paper PDF for the case-notes
+  // page when one is available; the printed case-notes JSX is the fallback.
+  const stimulusDownloadPath =
+    typeof stimulus?.downloadPath === 'string' && stimulus.downloadPath.length > 0
+      ? stimulus.downloadPath
+      : null;
 
   return (
     <div className="space-y-4 pb-32" aria-busy={loading}>
@@ -334,11 +348,13 @@ export function PaperBookletSimulation({
             target={{ min: content?.wordGuideMin ?? 180, max: content?.wordGuideMax ?? 200 }}
             ariaLabelPrefix={t('writing.paper.wordCountLabel')}
           />
+          {/* Display-only: the page drives reading→writing→completed transitions
+              via deadline-anchored countdowns + the reading-window overlay, so
+              the timer must NOT also fire them (would double-drive). */}
           <WritingTimerV2
             phase={phase}
             readingSecondsRemaining={readingSecondsRemaining}
             writingSecondsRemaining={writingSecondsRemaining}
-            onPhaseChange={onPhaseChange}
             strict
           />
         </div>
@@ -401,8 +417,21 @@ export function PaperBookletSimulation({
             </div>
           </BookletPage>
 
-          {/* Case notes — structured pages, or markdown fallback. */}
-          {hasStructuredNotes ? (
+          {/* Case notes — real question-paper PDF when available; otherwise the
+              printed structured pages or markdown fallback. */}
+          {stimulusDownloadPath ? (
+            <BookletPage ariaLabel={t('writing.paper.caseNotesLabel')}>
+              {/* Fixed-height PDF surface framed inside the booklet page; the
+                  viewer is internally hardened (copy/drag/print blocked). */}
+              <div className="h-[70vh] overflow-hidden rounded-sm border border-amber-200">
+                <WritingStimulusViewer
+                  downloadPath={stimulusDownloadPath}
+                  title="Question paper"
+                  className="h-full"
+                />
+              </div>
+            </BookletPage>
+          ) : hasStructuredNotes ? (
             <BookletPage ariaLabel={t('writing.paper.caseNotesLabel')}>
               {content?.writerRole ? (
                 <p className="mb-4 font-serif text-sm font-semibold text-amber-950">
