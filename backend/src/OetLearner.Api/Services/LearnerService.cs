@@ -1354,7 +1354,7 @@ public partial class LearnerService(
         {
             "reading" => $"/reading/paper/{Uri.EscapeDataString(contentId)}",
             "listening" => $"/listening/player/{Uri.EscapeDataString(contentId)}",
-            "writing" => $"/writing/player?taskId={Uri.EscapeDataString(contentId)}",
+            "writing" => "/writing/practice/library",
             "speaking" => $"/speaking/task/{Uri.EscapeDataString(contentId)}",
             _ => $"/{lower}"
         };
@@ -2527,7 +2527,7 @@ public partial class LearnerService(
             deltaSummary,
             unresolvedIssues,
             priorRevisions = related.Select(x => new { attemptId = x.Id, submittedAt = x.SubmittedAt, state = ToApiState(x.State) }),
-            actions = new[] { new { label = "Submit Revision", route = $"/writing/revision/{attempt.Id}" } }
+            actions = new[] { new { label = "Open writing", route = "/writing" } }
         };
     }
 
@@ -6802,7 +6802,7 @@ public partial class LearnerService(
 
         return item.SubtestCode.ToLowerInvariant() switch
         {
-            "writing" => $"/writing/player?taskId={Uri.EscapeDataString(item.ContentId)}",
+            "writing" => "/writing/practice/library",
             "speaking" => $"/speaking/task/{Uri.EscapeDataString(item.ContentId)}",
             "reading" => "/reading",
             "listening" => $"/listening/player/{Uri.EscapeDataString(item.ContentId)}",

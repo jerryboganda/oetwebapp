@@ -69,7 +69,7 @@ describe('mocks workflow policy', () => {
           state: 'ready',
           reviewAvailable: true,
           reviewSelected: true,
-          launchRoute: '/writing/player?taskId=wt-1&mode=exam',
+          launchRoute: '/writing',
         },
       ],
       reviewReservation: null,
@@ -123,7 +123,7 @@ describe('mocks workflow policy', () => {
     expect(plan[1]).toMatchObject({
       day: 'Day 2',
       title: 'Repair Content selection',
-      route: '/writing/library',
+      route: '/writing/practice/library',
     });
   });
 });

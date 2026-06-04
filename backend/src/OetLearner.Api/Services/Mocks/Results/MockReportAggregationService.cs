@@ -493,7 +493,7 @@ public sealed class MockReportAggregationService(
         {
             var s when s.Contains("listening", StringComparison.OrdinalIgnoreCase) => "/listening",
             var s when s.Contains("reading", StringComparison.OrdinalIgnoreCase) => "/reading/practice",
-            var s when s.Contains("writing", StringComparison.OrdinalIgnoreCase) => "/writing/library",
+            var s when s.Contains("writing", StringComparison.OrdinalIgnoreCase) => "/writing/practice/library",
             var s when s.Contains("speaking", StringComparison.OrdinalIgnoreCase) => "/speaking/selection",
             _ => "/practice"
         };

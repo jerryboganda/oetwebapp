@@ -90,7 +90,10 @@ test.describe('Learner immersive completion workflows @learner', () => {
     await attachDiagnostics(testInfo, diagnostics);
   });
 
-  test('writing player autosaves, protects unsaved navigation, and submits successfully', async ({ page }, testInfo) => {
+  // TODO(writing-v2): the legacy /writing/player surface this exercised was
+  // retired with the V1 hub. Re-author against the V2 mock/practice session flow
+  // (session-id URLs, reading-window overlay, WritingStimulus) before re-enabling.
+  test.skip('writing player autosaves, protects unsaved navigation, and submits successfully', async ({ page }, testInfo) => {
     if (testInfo.project.name !== 'chromium-learner') {
       test.skip();
     }

@@ -43,10 +43,8 @@ export const INCLUDED_LEARNER_DASHBOARD_PAGE_PATHS = [
   'app/speaking/transcript/[id]/page.tsx',
   'app/writing/page.tsx',
   'app/writing/expert-request/page.tsx',
-  'app/writing/library/page.tsx',
   'app/writing/model/page.tsx',
   'app/writing/result/page.tsx',
-  'app/writing/revision/page.tsx',
   'app/recalls/page.tsx',
   'app/recalls/words/page.tsx',
   'app/recalls/cards/page.tsx',
@@ -62,7 +60,6 @@ export const EXCLUDED_IMMERSIVE_LEARNER_PAGE_PATHS = [
   'app/mocks/player/[id]/page.tsx',
   'app/reading/player/[id]/page.tsx',
   'app/listening/player/[id]/page.tsx',
-  'app/writing/player/page.tsx',
   'app/writing/feedback/page.tsx',
   'app/speaking/task/[id]/page.tsx',
 ] as const;

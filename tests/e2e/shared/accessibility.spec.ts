@@ -86,13 +86,13 @@ test.describe('Accessibility smoke @a11y', () => {
     await attachDiagnostics(testInfo, diagnostics);
   });
 
-  test('writing player is free of critical axe violations', async ({ page }, testInfo) => {
+  test('writing landing is free of critical axe violations', async ({ page }, testInfo) => {
     if (!testInfo.project.name.includes('chromium-learner')) {
       test.skip();
     }
 
     const diagnostics = observePage(page);
-    await page.goto('/writing/player?taskId=wt-001', { waitUntil: 'domcontentloaded' });
+    await page.goto('/writing', { waitUntil: 'domcontentloaded' });
     await expect(page.getByRole('main').getByRole('heading').first()).toBeVisible();
     await expectNoSeriousAxeViolations(page);
 

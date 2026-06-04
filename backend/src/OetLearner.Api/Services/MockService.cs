@@ -2591,7 +2591,7 @@ public sealed class MockService(LearnerDbContext db)
     {
         "listening" => "/listening",
         "reading" => "/reading/practice",
-        "writing" => "/writing/library",
+        "writing" => "/writing/practice/library",
         "speaking" => "/speaking/selection",
         _ => "/practice"
     };

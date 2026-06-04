@@ -279,11 +279,6 @@ test.describe('Electron desktop surface validation', () => {
       const page = await getDesktopPage(app);
       const diagnostics = observePage(page);
       const client4xx: string[] = [];
-      const writingContent = [
-        'Dear Dr Patterson,',
-        'I am writing to refer Mrs Eleanor Vance following her recent admission after surgery.',
-        'She still requires wound monitoring, pain review, and clear escalation advice for community follow-up.',
-      ].join(' ');
 
       page.on('response', (response) => {
         if (response.status() >= 400 && response.status() < 500) {
@@ -303,15 +298,6 @@ test.describe('Electron desktop surface validation', () => {
       await page.getByRole('button', { name: /submit answers/i }).click();
       await expect(page).toHaveURL(/\/listening\/results\/lt-001$/);
       await expect(page.getByText(/detailed review/i)).toBeVisible();
-
-      await loadAbsolute(page, '/writing/player?taskId=wt-001');
-      await expect(page.getByLabel('Writing editor')).toBeVisible();
-      await page.getByLabel('Writing editor').fill(writingContent);
-      await expect(page.getByText(/saving\.\.\./i)).toBeVisible();
-      await expect(page.getByText(/^Saved$/i)).toBeVisible({ timeout: 15_000 });
-      await page.getByRole('button', { name: /^submit$/i }).click();
-      await expect(page).toHaveURL(/\/writing\/result\?id=/);
-      await expect(page.getByRole('heading', { name: /evaluation summary/i })).toBeVisible();
 
       await installFakeRecordingMedia(page);
       await loadAbsolute(page, '/speaking/task/st-001?mode=self');

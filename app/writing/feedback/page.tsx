@@ -17,7 +17,6 @@ import { MotionItem } from '@/components/ui/motion-primitives';
 import { WritingIssueList, type IssueType } from '@/components/domain/writing-issue-list';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
 import { PageSkeleton, Skeleton } from '@/components/ui/skeleton';
 import { fetchWritingResult } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
@@ -122,9 +121,6 @@ function WritingDetailedFeedbackContent() {
             <div className="truncate text-xs text-muted">{result.taskTitle}</div>
           </div>
         </div>
-        <Button size="sm" asChild>
-          <Link href={`/writing/revision?id=${resultId}`}>Revise Submission</Link>
-        </Button>
       </header>
 
       <main className="flex min-h-0 flex-1 flex-col overflow-y-auto md:flex-row md:gap-6 md:overflow-hidden">

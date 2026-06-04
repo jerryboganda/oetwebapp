@@ -100,8 +100,8 @@ describe('learner route normalization', () => {
     expect(payload.reviewCredits.route).toBe('/submissions');
     expect(payload.dashboardRoute).toBe('/');
     expect(payload.historyRoute).toBe('/submissions');
-    expect(payload.writingLibraryRoute).toBe('/writing/library');
-    expect(payload.writingTaskRoute).toBe('/writing/player?taskId=wt-001');
+    expect(payload.writingLibraryRoute).toBe('/writing/practice/library');
+    expect(payload.writingTaskRoute).toBe('/writing');
     expect(payload.readingTaskRoute).toBe('/reading');
     expect(payload.listeningTaskRoute).toBe('/listening/player/lt-001');
   });

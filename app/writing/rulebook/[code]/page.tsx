@@ -106,7 +106,7 @@ export default function WritingRulePage() {
       <LearnerDashboardShell pageTitle="Writing Rulebook">
         <div className="space-y-6">
           <div className="flex items-center gap-3 text-sm text-muted">
-            <Link href="/writing/library" className="inline-flex items-center gap-2 font-semibold text-primary hover:underline">
+            <Link href="/writing/practice/library" className="inline-flex items-center gap-2 font-semibold text-primary hover:underline">
               <ArrowLeft className="h-4 w-4" /> Back to writing library
             </Link>
           </div>
@@ -129,7 +129,7 @@ export default function WritingRulePage() {
     <LearnerDashboardShell pageTitle={`Writing Rule ${rule.id}`}>
       <div className="space-y-6">
         <div className="flex items-center gap-3 text-sm text-muted">
-          <Link href="/writing/library" className="inline-flex items-center gap-2 font-semibold text-primary hover:underline">
+          <Link href="/writing/practice/library" className="inline-flex items-center gap-2 font-semibold text-primary hover:underline">
             <ArrowLeft className="h-4 w-4" /> Back to writing library
           </Link>
         </div>

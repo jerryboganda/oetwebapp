@@ -270,7 +270,7 @@ public class ContentPicker(LearnerDbContext db)
         {
             "reading" => $"/reading/paper/{Uri.EscapeDataString(contentId)}",
             "listening" => $"/listening/player/{Uri.EscapeDataString(contentId)}",
-            "writing" => $"/writing/player?taskId={Uri.EscapeDataString(contentId)}",
+            "writing" => "/writing/practice/library",
             "speaking" => $"/speaking/task/{Uri.EscapeDataString(contentId)}",
             "vocabulary" => "/vocabulary",
             _ => $"/{lower}"

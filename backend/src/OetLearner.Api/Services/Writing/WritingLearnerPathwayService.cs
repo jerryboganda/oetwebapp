@@ -294,7 +294,7 @@ public sealed class WritingLearnerPathwayService(LearnerDbContext db, TimeProvid
             items.Add(NewPlanItem(userId, date, 1, "diagnostic", "W1", "purpose", 45,
                 "Take the Writing diagnostic",
                 "Write one full letter under the existing exam-mode player. This creates your baseline and unlocks targeted practice.",
-                practiceTask is null ? "/writing/diagnostic" : $"/writing/player?taskId={Uri.EscapeDataString(practiceTask.Id)}&mode=exam&pathwayStage=diagnostic",
+                "/writing/diagnostic",
                 practiceTask?.Id, state.Stage, now));
         }
         else
@@ -307,7 +307,7 @@ public sealed class WritingLearnerPathwayService(LearnerDbContext db, TimeProvid
             items.Add(NewPlanItem(userId, date, 2, "full_letter", weakness.SkillCode, weakness.Criterion, 45,
                 practiceTask?.Title ?? "Full Writing letter",
                 "Complete a full letter using the existing writing player, autosave, paper mode, and grounded grading pipeline.",
-                practiceTask is null ? "/writing/library" : $"/writing/player?taskId={Uri.EscapeDataString(practiceTask.Id)}&mode=exam&pathwayStage={state.Stage}",
+                "/writing/practice/library",
                 practiceTask?.Id, state.Stage, now));
             items.Add(NewPlanItem(userId, date, 3, "canon_review", "W6", "genre", 5,
                 "Review one canon rule",

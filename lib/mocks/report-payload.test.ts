@@ -211,7 +211,7 @@ describe('MockReportPayloadV1 schema shape integrity', () => {
             subtest: 'Writing',
             description: 'Missed discharge-plan medications.',
             drillId: 'drill-1',
-            drillRouteHref: '/writing/library',
+            drillRouteHref: '/writing/practice/library',
           },
         ],
       },
