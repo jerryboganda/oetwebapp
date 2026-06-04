@@ -67,14 +67,9 @@ function WritingMockSessionInner() {
   // Throttle `response_typed` to at most one event per 10s window (spec §17.7).
   const lastTypedEventAt = useRef(0);
   // Guard so the reading→writing transition calls `beginWritingMockWriting` at
-  // most once: both the timer's onPhaseChange and the overlay's onAutoClose fire
-  // on the same tick at readingSeconds<=0.
+  // most once: the reading countdown's onZero AND the overlay's onAutoClose both
+  // fire on the same tick at reading 0:00.
   const beganWritingRef = useRef(false);
-
-  // Deadline-anchored seconds. Both hooks run unconditionally (rules of hooks);
-  // each is gated to its active phase so only the live one is non-zero.
-  const readingSeconds = useDeadlineCountdown(phase === 'reading' ? readingDeadlineMs : null);
-  const writingSeconds = useDeadlineCountdown(phase === 'writing' ? writingDeadlineMs : null);
 
   // ----- Attempt-event emission (computer mode; fire-and-forget) -----
   const contentRef = useRef(content);
@@ -259,6 +254,10 @@ function WritingMockSessionInner() {
       // fire on the same tick at reading 0:00. Only the first proceeds.
       if (beganWritingRef.current) return;
       beganWritingRef.current = true;
+      // Provisional deadline BEFORE flipping phase so the writing countdown never
+      // momentarily reads 0:00 during the begin-writing round-trip; corrected
+      // from the server response below.
+      setWritingDeadlineMs(Date.now() + WRITING_WINDOW_SECONDS * 1000);
       setPhase('writing');
       try {
         const updated = await beginWritingMockWriting(sessionId);
@@ -279,6 +278,20 @@ function WritingMockSessionInner() {
       setPhase('completed');
     }
   }, [sessionId, t]);
+
+  // Deadline-anchored seconds. Both hooks run unconditionally (rules of hooks);
+  // each gated to its active phase so only the live one counts. The null-guarded
+  // onZero fires only for a REAL elapsed deadline — never on the 0 a null deadline
+  // yields before load or during the begin-writing round-trip — so transitions
+  // cannot fire spuriously. WritingTimerV2 is display/beep only.
+  const readingSeconds = useDeadlineCountdown(
+    phase === 'reading' ? readingDeadlineMs : null,
+    { onZero: () => void handlePhaseChange('writing') },
+  );
+  const writingSeconds = useDeadlineCountdown(
+    phase === 'writing' ? writingDeadlineMs : null,
+    { onZero: () => void handlePhaseChange('completed') },
+  );
 
   return (
     <LearnerDashboardShell pageTitle={t('writing.mocks.session.pageTitle')} distractionFree>
@@ -323,7 +336,6 @@ function WritingMockSessionInner() {
               phase={phase}
               readingSecondsRemaining={readingSeconds}
               writingSecondsRemaining={writingSeconds}
-              onPhaseChange={(next) => void handlePhaseChange(next)}
               strict
             />
           </div>
