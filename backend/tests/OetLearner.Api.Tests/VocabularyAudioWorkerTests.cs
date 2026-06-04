@@ -81,6 +81,7 @@ public sealed class VocabularyAudioWorkerTests
             fixture.Db,
             emailOtpService: null!,
             passwordHasher: null!,
+            passwordPolicyService: null!,
             timeProvider: TimeProvider.System,
             notifications: null!,
             learnerService: null!,

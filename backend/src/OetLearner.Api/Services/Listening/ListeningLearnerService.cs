@@ -16,6 +16,17 @@ public sealed class ListeningLearnerService(
     private const string Subtest = "listening";
     private const int CanonicalRawMax = OetScoring.ListeningReadingRawMax;
 
+    /// <summary>
+    /// Reserved key under which the monotonic one-way <c>sectionCursor</c> is
+    /// persisted inside a generic <see cref="Attempt.AnswersJson"/> map. Generic
+    /// attempts have no dedicated <c>NavigationStateJson</c> column (only the
+    /// relational <see cref="ListeningAttempt"/> store does), so the cursor
+    /// piggybacks on the answers map. The <c>__</c> prefix keeps it from ever
+    /// colliding with an authored question id and ensures grading (which keys by
+    /// question id) ignores it. It is also filtered out of every answered-count.
+    /// </summary>
+    private const string GenericSectionCursorKey = "__listeningSectionCursor";
+
     public async Task<object> GetHomeAsync(string userId, CancellationToken ct)
     {
         await EnsureLearnerAsync(userId, ct);
@@ -102,7 +113,9 @@ public sealed class ListeningLearnerService(
                 mode = a.Mode,
                 a.StartedAt,
                 a.LastClientSyncAt,
-                answeredCount = DeserializeAnswers(a.AnswersJson).Count(kv => !string.IsNullOrWhiteSpace(kv.Value)),
+                // Exclude reserved navigation keys (e.g. the section cursor) so
+                // they never inflate the learner-facing answered count.
+                answeredCount = DeserializeAnswers(a.AnswersJson).Count(kv => !IsReservedAnswerKey(kv.Key) && !string.IsNullOrWhiteSpace(kv.Value)),
                 route = $"/listening/player/{Uri.EscapeDataString(a.ContentId)}?attemptId={Uri.EscapeDataString(a.Id)}&mode={Uri.EscapeDataString(a.Mode)}"
             })
             .Concat(relationalAttempts
@@ -519,6 +532,150 @@ public sealed class ListeningLearnerService(
         attempt.AnswersJson = JsonSupport.Serialize(answers);
         attempt.LastClientSyncAt = DateTimeOffset.UtcNow;
         await db.SaveChangesAsync(ct);
+    }
+
+    /// <summary>
+    /// One-way section navigation. Stores a monotonically non-decreasing
+    /// <c>sectionCursor</c> integer, rejecting any request that would move the
+    /// cursor backwards. The client also enforces one-way; this is the
+    /// server-authoritative guard.
+    /// <para>
+    /// For a relational <see cref="ListeningAttempt"/> the cursor lives in its
+    /// <see cref="ListeningAttempt.NavigationStateJson"/> column (merged
+    /// alongside any existing FSM <c>state</c>/<c>locks</c> keys). Generic
+    /// <see cref="Attempt"/> rows — which back real exam attempts on
+    /// JSON-fallback / legacy papers — have no NavigationStateJson column, so
+    /// the cursor is persisted under the reserved
+    /// <see cref="GenericSectionCursorKey"/> key inside the attempt's
+    /// <c>AnswersJson</c> map (excluded from answered-counts and ignored by the
+    /// answer-keyed grader). Both stores apply identical forward-only
+    /// validation.
+    /// </para>
+    /// </summary>
+    public async Task<object> AdvanceSectionAsync(
+        string userId,
+        string attemptId,
+        ListeningAdvanceSectionRequest request,
+        CancellationToken ct)
+    {
+        await EnsureLearnerMutationAllowedAsync(userId, ct);
+
+        var requested = request?.SectionCursor ?? 0;
+        if (requested < 0)
+        {
+            throw ApiException.Validation(
+                "listening_section_cursor_invalid",
+                "Section cursor must be a non-negative integer.");
+        }
+
+        var relationalAttempt = await TryGetRelationalAttemptOwnedByUserAsync(userId, attemptId, asNoTracking: false, ct);
+        if (relationalAttempt is not null)
+        {
+            await EnsureRelationalAttemptCanMutateAsync(relationalAttempt, ct);
+
+            var current = ReadSectionCursor(relationalAttempt.NavigationStateJson);
+            if (requested < current)
+            {
+                throw ApiException.Validation(
+                    "listening_section_one_way",
+                    $"Listening sections advance one-way: cannot move from section {current} back to {requested}.");
+            }
+
+            var nowRelational = DateTimeOffset.UtcNow;
+            relationalAttempt.NavigationStateJson = WriteSectionCursor(relationalAttempt.NavigationStateJson, requested);
+            relationalAttempt.LastActivityAt = nowRelational;
+            relationalAttempt.RowVersion++;
+            try { await db.SaveChangesAsync(ct); }
+            catch (DbUpdateConcurrencyException)
+            {
+                throw ApiException.Conflict("listening_attempt_concurrent_update",
+                    "This attempt was modified by another process. Please retry.");
+            }
+
+            return new { attemptId = relationalAttempt.Id, sectionCursor = requested, lastClientSyncAt = relationalAttempt.LastActivityAt };
+        }
+
+        // Generic-store fallback: real exam attempts on JSON-fallback / legacy
+        // papers live here (the relational ListeningAttempts table is empty for
+        // them). Persist the same monotonic cursor under a reserved AnswersJson
+        // key, applying identical forward-only validation.
+        var attempt = await GetAttemptOwnedByUserAsync(userId, attemptId, ct);
+        EnsureAttemptCanMutate(attempt);
+
+        var answers = DeserializeAnswers(attempt.AnswersJson);
+        var currentGeneric = ReadGenericSectionCursor(answers);
+        if (requested < currentGeneric)
+        {
+            throw ApiException.Validation(
+                "listening_section_one_way",
+                $"Listening sections advance one-way: cannot move from section {currentGeneric} back to {requested}.");
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        answers[GenericSectionCursorKey] = requested.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        attempt.AnswersJson = JsonSupport.Serialize(answers);
+        attempt.LastClientSyncAt = now;
+        await db.SaveChangesAsync(ct);
+
+        return new { attemptId = attempt.Id, sectionCursor = requested, lastClientSyncAt = attempt.LastClientSyncAt };
+    }
+
+    /// <summary>Read the monotonic <c>sectionCursor</c> from a generic attempt's
+    /// answers map (under <see cref="GenericSectionCursorKey"/>). Returns 0 when
+    /// absent or non-numeric.</summary>
+    private static int ReadGenericSectionCursor(IReadOnlyDictionary<string, string?> answers)
+        => answers.TryGetValue(GenericSectionCursorKey, out var raw)
+            && int.TryParse(raw, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var cursor)
+            && cursor >= 0
+                ? cursor
+                : 0;
+
+    /// <summary>Read the monotonic <c>sectionCursor</c> from a navigation-state
+    /// JSON object. Returns 0 when absent, null, or malformed.</summary>
+    private static int ReadSectionCursor(string? navigationStateJson)
+    {
+        if (string.IsNullOrWhiteSpace(navigationStateJson)) return 0;
+        try
+        {
+            using var doc = JsonDocument.Parse(navigationStateJson);
+            if (doc.RootElement.ValueKind != JsonValueKind.Object) return 0;
+            if (!doc.RootElement.TryGetProperty("sectionCursor", out var value)) return 0;
+            return value.ValueKind == JsonValueKind.Number && value.TryGetInt32(out var cursor) ? cursor : 0;
+        }
+        catch (JsonException)
+        {
+            return 0;
+        }
+    }
+
+    /// <summary>Merge a new <c>sectionCursor</c> into the navigation-state JSON,
+    /// preserving any sibling FSM keys (<c>state</c>, <c>locks</c>, …). Starts a
+    /// fresh object when the existing column is null or not a JSON object.</summary>
+    private static string WriteSectionCursor(string? navigationStateJson, int cursor)
+    {
+        var fields = new Dictionary<string, JsonElement>(StringComparer.Ordinal);
+        if (!string.IsNullOrWhiteSpace(navigationStateJson))
+        {
+            try
+            {
+                using var doc = JsonDocument.Parse(navigationStateJson);
+                if (doc.RootElement.ValueKind == JsonValueKind.Object)
+                {
+                    foreach (var prop in doc.RootElement.EnumerateObject())
+                    {
+                        if (string.Equals(prop.Name, "sectionCursor", StringComparison.Ordinal)) continue;
+                        fields[prop.Name] = prop.Value.Clone();
+                    }
+                }
+            }
+            catch (JsonException)
+            {
+                fields.Clear();
+            }
+        }
+
+        fields["sectionCursor"] = JsonSerializer.SerializeToElement(cursor);
+        return JsonSerializer.Serialize(fields);
     }
 
     public async Task<object> HeartbeatAsync(string userId, string attemptId, HeartbeatRequest request, CancellationToken ct)
@@ -1415,6 +1572,20 @@ public sealed class ListeningLearnerService(
             .GroupBy(a => a.Role)
             .ToDictionary(g => g.Key, g => g.OrderBy(a => a.DisplayOrder).First());
 
+        // Per-sub-section uploaded-audio map: at most one primary Audio asset
+        // per part code (A1..C2). Mirrors ReadingLearnerEndpoints' per-Part
+        // questionPaperAssets. Keyed case-insensitively because the Part column
+        // is author-entered free text. Served at /v1/media/{id}/content.
+        var audioByPart = assets
+            .Where(a => a.Role == PaperAssetRole.Audio
+                && a.MediaAsset is not null
+                && !string.IsNullOrWhiteSpace(a.Part))
+            .GroupBy(a => a.Part!.Trim().ToUpperInvariant(), StringComparer.Ordinal)
+            .ToDictionary(
+                g => g.Key,
+                g => $"/v1/media/{g.OrderBy(a => a.DisplayOrder).First().MediaAsset!.Id}/content",
+                StringComparer.Ordinal);
+
         var relationalQuestions = await db.ListeningQuestions.AsNoTracking()
             .Include(q => q.Part)
             .Include(q => q.Options)
@@ -1429,9 +1600,15 @@ public sealed class ListeningLearnerService(
 
         if (usesRelationalStructure)
         {
-            var parts = await db.ListeningParts.AsNoTracking()
+            var partRows = await db.ListeningParts.AsNoTracking()
                 .Where(part => part.PaperId == paper.Id)
-                .ToDictionaryAsync(part => part.Id, part => part.PartCode, ct);
+                .ToListAsync(ct);
+            var parts = partRows.ToDictionary(part => part.Id, part => part.PartCode);
+            // Per-sub-section countdown sourced from ListeningPart.TimeLimitSeconds.
+            var timeLimitByPartCode = partRows
+                .Where(part => part.TimeLimitSeconds is > 0)
+                .GroupBy(part => part.PartCode)
+                .ToDictionary(g => g.Key, g => g.First().TimeLimitSeconds);
             var partIds = parts.Keys.ToList();
             var relationalExtracts = partIds.Count == 0
                 ? new List<ListeningExtract>()
@@ -1442,7 +1619,17 @@ public sealed class ListeningLearnerService(
 
             questions = relationalQuestions.Select(MapRelationalQuestion).ToList();
             extracts = relationalExtracts
-                .Select((extract, index) => MapRelationalExtract(extract, parts.GetValueOrDefault(extract.ListeningPartId), index))
+                .Select((extract, index) =>
+                {
+                    var code = parts.GetValueOrDefault(extract.ListeningPartId);
+                    var codeString = PartCodeString(code);
+                    return MapRelationalExtract(
+                        extract,
+                        code,
+                        index,
+                        ResolveSubSectionAudioUrl(audioByPart, codeString, extract.AudioContentSha),
+                        timeLimitByPartCode.GetValueOrDefault(code));
+                })
                 .OrderBy(extract => PartCodeOrder(extract.PartCode))
                 .ThenBy(extract => extract.DisplayOrder)
                 .ToList();
@@ -1461,7 +1648,7 @@ public sealed class ListeningLearnerService(
                     : questionMap.GetValueOrDefault("questions"))
                 .ToList();
             segments = ExtractTranscriptSegments(questionMap.GetValueOrDefault("listeningTranscriptSegments"));
-            extracts = ExtractExtractMetadata(questionMap.GetValueOrDefault("listeningExtracts"));
+            extracts = ExtractExtractMetadata(questionMap.GetValueOrDefault("listeningExtracts"), audioByPart);
         }
 
         return new ListeningSource(
@@ -1568,9 +1755,12 @@ public sealed class ListeningLearnerService(
     /// Defensive: any malformed payload yields an empty list rather than
     /// poisoning the session/review response.
     /// </summary>
-    private static IReadOnlyList<ListeningExtractMetaDto> ExtractExtractMetadata(object? raw)
+    private static IReadOnlyList<ListeningExtractMetaDto> ExtractExtractMetadata(
+        object? raw,
+        IReadOnlyDictionary<string, string>? audioByPart = null)
     {
         if (raw is null) return [];
+        audioByPart ??= new Dictionary<string, string>(StringComparer.Ordinal);
         try
         {
             var list = JsonSupport.Deserialize<List<Dictionary<string, object?>>>(
@@ -1593,7 +1783,11 @@ public sealed class ListeningLearnerService(
                 {
                     audioEndMs = null;
                 }
+                int? timeLimitSeconds = ReadIntField(seg, "timeLimitSeconds") is var t and > 0 ? t : null;
                 var speakers = ParseSpeakers(seg.GetValueOrDefault("speakers"));
+                // JSON-path papers have no TTS extract sha here, so only uploaded
+                // per-part Audio assets resolve; else null.
+                var audioUrl = audioByPart.GetValueOrDefault(partCode.Trim().ToUpperInvariant());
                 output.Add(new ListeningExtractMetaDto(
                     PartCode: partCode,
                     DisplayOrder: displayOrder,
@@ -1602,7 +1796,9 @@ public sealed class ListeningLearnerService(
                     AccentCode: accentCode,
                     Speakers: speakers,
                     AudioStartMs: audioStartMs,
-                    AudioEndMs: audioEndMs));
+                    AudioEndMs: audioEndMs,
+                    AudioUrl: audioUrl,
+                    TimeLimitSeconds: timeLimitSeconds));
             }
             return output
                 .OrderBy(e => PartCodeOrder(e.PartCode))
@@ -1646,8 +1842,13 @@ public sealed class ListeningLearnerService(
         var normalized = raw.Trim().ToUpperInvariant();
         return normalized switch
         {
-            "A1" or "A2" or "B" or "C1" or "C2" => normalized,
+            "A1" or "A2"
+                or "B1" or "B2" or "B3" or "B4" or "B5" or "B6"
+                or "C1" or "C2" => normalized,
             "A" => "A1",
+            // Legacy bare-"B" extract metadata floors to the first Part B
+            // sub-section so a not-yet-split paper still surfaces something.
+            "B" => "B1",
             "C" => "C1",
             _ => null,
         };
@@ -1657,9 +1858,14 @@ public sealed class ListeningLearnerService(
     {
         "A1" => 1,
         "A2" => 2,
-        "B" => 3,
-        "C1" => 4,
-        "C2" => 5,
+        "B1" => 3,
+        "B2" => 4,
+        "B3" => 5,
+        "B4" => 6,
+        "B5" => 7,
+        "B6" => 8,
+        "C1" => 9,
+        "C2" => 10,
         _ => 99,
     };
 
@@ -1669,7 +1875,7 @@ public sealed class ListeningLearnerService(
         if (normalized is "consultation" or "workplace" or "presentation") return normalized;
         return partCode switch
         {
-            "B" => "workplace",
+            "B1" or "B2" or "B3" or "B4" or "B5" or "B6" => "workplace",
             "C1" or "C2" => "presentation",
             _ => "consultation",
         };
@@ -1704,6 +1910,9 @@ public sealed class ListeningLearnerService(
             Number: question.QuestionNumber,
             PartCode: PartCodeString(question.Part?.PartCode ?? ListeningPartCode.A1),
             Text: question.Stem,
+            // FillInBlank surfaces to the learner as a text-input gap-fill —
+            // identical wire type to ShortAnswer so the answer never leaks via
+            // option text and the player renders a free-text box.
             Type: question.QuestionType == ListeningQuestionType.MultipleChoice3 ? "multiple_choice_3" : "short_answer",
             Options: optionTexts,
             CorrectAnswer: correctDisplay,
@@ -1733,7 +1942,9 @@ public sealed class ListeningLearnerService(
     private static ListeningExtractMetaDto MapRelationalExtract(
         ListeningExtract extract,
         ListeningPartCode partCode,
-        int index)
+        int index,
+        string? audioUrl,
+        int? timeLimitSeconds)
         => new(
             PartCode: PartCodeString(partCode),
             DisplayOrder: extract.DisplayOrder,
@@ -1742,7 +1953,30 @@ public sealed class ListeningLearnerService(
             AccentCode: extract.AccentCode,
             Speakers: ReadSpeakersJson(extract.SpeakersJson),
             AudioStartMs: extract.AudioStartMs,
-            AudioEndMs: extract.AudioEndMs);
+            AudioEndMs: extract.AudioEndMs,
+            AudioUrl: audioUrl,
+            TimeLimitSeconds: timeLimitSeconds);
+
+    /// <summary>Resolve the per-sub-section audio URL. Priority: an uploaded
+    /// primary <see cref="ContentPaperAsset"/> of role Audio for this part code
+    /// (served at <c>/v1/media/{id}/content</c>) → the extract's TTS WAV
+    /// (<c>/v1/listening/audio/{sha}.wav</c>, served by
+    /// <c>ListeningAudioEndpoints</c>) → null (frontend shows "no audio").</summary>
+    private static string? ResolveSubSectionAudioUrl(
+        IReadOnlyDictionary<string, string> audioByPart,
+        string? partCodeString,
+        string? audioContentSha)
+    {
+        if (!string.IsNullOrWhiteSpace(partCodeString)
+            && audioByPart.TryGetValue(partCodeString.Trim().ToUpperInvariant(), out var uploaded))
+        {
+            return uploaded;
+        }
+
+        return string.IsNullOrWhiteSpace(audioContentSha)
+            ? null
+            : $"/v1/listening/audio/{audioContentSha}.wav";
+    }
 
     private static IReadOnlyList<ListeningSpeakerDto> ReadSpeakersJson(string? json)
     {
@@ -1885,7 +2119,8 @@ public sealed class ListeningLearnerService(
     {
         ListeningPartCode.A1 => "A1",
         ListeningPartCode.A2 => "A2",
-        ListeningPartCode.B => "B",
+        // B1..B6 are distinct navigable sub-sections for the learner; fall
+        // through to the enum name ("B1".."B6"). Only analytics rolls them up.
         ListeningPartCode.C1 => "C1",
         ListeningPartCode.C2 => "C2",
         _ => partCode.ToString(),
@@ -2171,10 +2406,30 @@ public sealed class ListeningLearnerService(
         q.Number,
         q.PartCode,
         text = q.Text,
-        q.Type,
+        // Learner wire type. The 3 authored content types collapse to 2 input
+        // shapes for the player: MCQ renders options; FillInBlank + ShortAnswer
+        // both render a free-text box. Never surface "fill_in_blank" raw — it
+        // would have no renderer and could imply a different (answer-leaking)
+        // shape. Options are only non-empty for MCQ items.
+        type = LearnerWireType(q.Type),
         options = q.Options,
         q.Points
     };
+
+    /// <summary>Map an authored question type to the learner-facing wire type.
+    /// MCQ stays <c>multiple_choice_3</c>; every text-input type (short_answer /
+    /// fill_in_blank / gap_fill / note_completion) collapses to
+    /// <c>short_answer</c> so the player renders a single free-text input and no
+    /// answer detail ever leaks.</summary>
+    private static string LearnerWireType(string? authoredType)
+    {
+        var normalized = (authoredType ?? string.Empty).Trim().ToLowerInvariant();
+        return normalized switch
+        {
+            "multiple_choice_3" or "mcq" or "mcq3" => "multiple_choice_3",
+            _ => "short_answer",
+        };
+    }
 
     private static object SourceDto(ListeningSource source) => new
     {
@@ -2206,6 +2461,11 @@ public sealed class ListeningLearnerService(
             speakers = e.Speakers,
             audioStartMs = e.AudioStartMs,
             audioEndMs = e.AudioEndMs,
+            // Per-sub-section audio + countdown. audioUrl is uploaded-asset-first
+            // with a TTS fallback; null when neither exists. timeLimitSeconds is
+            // null when unauthored (frontend applies a default).
+            audioUrl = e.AudioUrl,
+            timeLimitSeconds = e.TimeLimitSeconds,
         }).ToList()
     };
 
@@ -2221,8 +2481,24 @@ public sealed class ListeningLearnerService(
         attempt.ElapsedSeconds,
         attempt.LastClientSyncAt,
         expiresAt = (DateTimeOffset?)null,
-        answers
+        // Strip reserved navigation keys (e.g. the one-way section cursor) so
+        // they never leak into the player's answer map or get re-submitted as a
+        // bogus answer. The cursor is surfaced separately via advance-section.
+        answers = StripReservedAnswerKeys(answers),
+        sectionCursor = ReadGenericSectionCursor(answers)
     };
+
+    /// <summary>True for reserved, non-question answer-map keys (currently just
+    /// the one-way section cursor). Such keys are persisted in a generic
+    /// attempt's <c>AnswersJson</c> but must never be treated as a learner
+    /// answer, counted, graded, or echoed back to the player.</summary>
+    private static bool IsReservedAnswerKey(string key)
+        => string.Equals(key, GenericSectionCursorKey, StringComparison.Ordinal);
+
+    private static Dictionary<string, string?> StripReservedAnswerKeys(IReadOnlyDictionary<string, string?> answers)
+        => answers
+            .Where(kv => !IsReservedAnswerKey(kv.Key))
+            .ToDictionary(kv => kv.Key, kv => kv.Value, StringComparer.Ordinal);
 
     private static object RelationalAttemptDto(ListeningAttempt attempt, Dictionary<string, string?> answers) => new
     {
@@ -2938,14 +3214,20 @@ public sealed class ListeningLearnerService(
         bool UsesRelationalStructure);
 
     private sealed record ListeningExtractMetaDto(
-        string PartCode,                     // A1 | A2 | B | C1 | C2
+        string PartCode,                     // A1 | A2 | B1..B6 | C1 | C2
         int DisplayOrder,
         string Kind,                          // consultation | workplace | presentation
         string Title,
         string? AccentCode,                   // e.g. en-GB | en-AU | en-IE | en-US
         IReadOnlyList<ListeningSpeakerDto> Speakers,
         int? AudioStartMs,
-        int? AudioEndMs);
+        int? AudioEndMs,
+        // Per-sub-section audio URL the player should load for this section.
+        // Resolution order: uploaded ContentPaperAsset(Audio, partCode) →
+        // /v1/media/{id}/content; else the extract's TTS wav; else null.
+        string? AudioUrl = null,
+        // Per-sub-section countdown (seconds). Null → frontend applies default.
+        int? TimeLimitSeconds = null);
 
     private sealed record ListeningSpeakerDto(
         string Id,
@@ -3072,4 +3354,5 @@ public sealed class ListeningLearnerService(
 
 public sealed record ListeningAnswerSaveRequest(string? UserAnswer);
 public sealed record ListeningIntegrityEventRequest(string EventType, string? Details, DateTimeOffset? OccurredAt);
+public sealed record ListeningAdvanceSectionRequest(int SectionCursor);
 

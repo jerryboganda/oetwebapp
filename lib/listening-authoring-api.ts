@@ -13,8 +13,75 @@ import { fetchWithTimeout } from './network/fetch-with-timeout';
 import { env } from './env';
 
 export type ListeningPartCode = 'A1' | 'A2' | 'B' | 'C1' | 'C2';
-export type ListeningQuestionType = 'short_answer' | 'multiple_choice_3';
+export type ListeningQuestionType = 'short_answer' | 'fill_in_blank' | 'multiple_choice_3';
 export type ListeningExtractKind = 'consultation' | 'workplace' | 'presentation';
+
+/**
+ * The 10 restructured Listening sub-sections. Part B was split into B1–B6, so a
+ * paper now has its own audio + countdown timer + questions per sub-section.
+ * These codes are accepted verbatim by the backend authoring service
+ * (`NormalizePartCode` / `NormalizeExtractPartCode` in
+ * `Services/Listening/ListeningAuthoringService.cs`).
+ */
+export type ListeningSubSectionCode =
+  | 'A1' | 'A2'
+  | 'B1' | 'B2' | 'B3' | 'B4' | 'B5' | 'B6'
+  | 'C1' | 'C2';
+
+/** All 10 sub-section codes in canonical display order. */
+export const LISTENING_SUB_SECTION_CODES: readonly ListeningSubSectionCode[] = [
+  'A1', 'A2', 'B1', 'B2', 'B3', 'B4', 'B5', 'B6', 'C1', 'C2',
+] as const;
+
+/** Per-sub-section canonical question counts (A1=12, A2=12, B1..B6=1, C1=6, C2=6 → 42). */
+export const LISTENING_SUB_SECTION_QUESTION_TARGETS: Record<ListeningSubSectionCode, number> = {
+  A1: 12, A2: 12,
+  B1: 1, B2: 1, B3: 1, B4: 1, B5: 1, B6: 1,
+  C1: 6, C2: 6,
+};
+
+/**
+ * Admin-facing content types offered in every sub-section, mapped to the
+ * backend wire `type`. There are three distinct stored types:
+ * `multiple_choice_3` (MCQ), `fill_in_blank`, and `short_answer` (free text).
+ * `FillInBlank` and `ShortAnswer` are grading-identical (stem + correct answer
+ * + accepted variants, no options) and both render as a text box for the
+ * learner, but they persist distinctly so the admin round-trips the author's
+ * choice (the backend projects `fill_in_blank` → `ListeningQuestionType.FillInBlank`).
+ */
+export type ListeningContentType = 'MultipleChoice3' | 'FillInBlank' | 'ShortAnswer';
+
+export const LISTENING_CONTENT_TYPE_LABELS: Record<ListeningContentType, string> = {
+  MultipleChoice3: 'Multiple choice (3 options)',
+  FillInBlank: 'Fill in the blank',
+  ShortAnswer: 'Short answer',
+};
+
+/** Map an admin content type to the backend runtime wire `type`. */
+export function contentTypeToWire(type: ListeningContentType): ListeningQuestionType {
+  switch (type) {
+    case 'MultipleChoice3': return 'multiple_choice_3';
+    case 'FillInBlank': return 'fill_in_blank';
+    default: return 'short_answer';
+  }
+}
+
+/**
+ * Map a stored runtime wire `type` back to an admin content type. All three
+ * types persist distinctly; an unknown/legacy value resolves to `ShortAnswer`.
+ */
+export function wireToContentType(type: string | null | undefined): ListeningContentType {
+  switch (type) {
+    case 'multiple_choice_3': return 'MultipleChoice3';
+    case 'fill_in_blank': return 'FillInBlank';
+    default: return 'ShortAnswer';
+  }
+}
+
+/** True when a sub-section code belongs to Part A (note-completion consultations). */
+export function isPartASubSection(code: string): boolean {
+  return code === 'A1' || code === 'A2';
+}
 
 /** Phase 4: per-option distractor category for Part B/C MCQ analysis. */
 export type ListeningDistractorCategory =
@@ -68,7 +135,7 @@ export interface ListeningAuthoredSpeaker {
 }
 
 export interface ListeningAuthoredExtract {
-  partCode: ListeningPartCode;
+  partCode: ListeningPartCode | ListeningSubSectionCode;
   displayOrder: number;
   kind: ListeningExtractKind;
   title: string;
@@ -76,6 +143,12 @@ export interface ListeningAuthoredExtract {
   speakers: ListeningAuthoredSpeaker[];
   audioStartMs: number | null;
   audioEndMs: number | null;
+  /**
+   * Per-sub-section countdown shown to the learner before/while playing
+   * (seconds). Optional for backward-compatibility with extract builders that
+   * predate the per-sub-section timer; treated as "no timer" when absent.
+   */
+  timeLimitSeconds?: number | null;
 }
 
 export interface ListeningAuthoredExtractList {
@@ -239,11 +312,13 @@ export interface ListeningExtractPatchBody {
   speakers?: ListeningAuthoredSpeaker[];
   audioStartMs?: number | null;
   audioEndMs?: number | null;
+  /** Per-sub-section countdown (seconds). `null` clears it. */
+  timeLimitSeconds?: number | null;
 }
 
 export const patchListeningExtract = (
   paperId: string,
-  extractCode: ListeningPartCode,
+  extractCode: ListeningPartCode | ListeningSubSectionCode,
   patch: ListeningExtractPatchBody,
 ) =>
   api<ListeningAuthoredExtractList>(
@@ -253,6 +328,55 @@ export const patchListeningExtract = (
       body: JSON.stringify(patch),
     },
   );
+
+/**
+ * Set (or clear) the countdown timer for a single sub-section.
+ *
+ * The backend stores the timer on the per-sub-section extract row, so this
+ * upserts that extract: it PATCHes when the extract already exists, and falls
+ * back to appending a minimal extract row via `replaceListeningExtracts` when
+ * the sub-section has no extract yet (e.g. a freshly-created paper that has not
+ * been through extract authoring). Pass `null` to clear the timer.
+ *
+ * Returns the re-read extract list so callers can refresh in one round-trip.
+ */
+export async function setListeningSubSectionTimer(
+  paperId: string,
+  code: ListeningSubSectionCode,
+  timeLimitSeconds: number | null,
+): Promise<ListeningAuthoredExtractList> {
+  const current = await getListeningExtracts(paperId);
+  const existing = current.extracts.find(
+    (e) => String(e.partCode).toUpperCase() === code,
+  );
+  if (existing) {
+    return patchListeningExtract(paperId, code, { timeLimitSeconds });
+  }
+
+  // No extract row yet for this sub-section — append a minimal one carrying the
+  // timer. Kind is inferred from the part group so the backend keeps a sensible
+  // default; title/audio windows can be filled in later via extract authoring.
+  const kind: ListeningExtractKind = code.startsWith('B')
+    ? 'workplace'
+    : code.startsWith('C')
+      ? 'presentation'
+      : 'consultation';
+  const next: ListeningAuthoredExtract[] = [
+    ...current.extracts,
+    {
+      partCode: code,
+      displayOrder: current.extracts.length,
+      kind,
+      title: `${code} extract`,
+      accentCode: null,
+      speakers: [],
+      audioStartMs: null,
+      audioEndMs: null,
+      timeLimitSeconds,
+    },
+  ];
+  return replaceListeningExtracts(paperId, next);
+}
 
 export const backfillListeningPaper = (paperId: string) =>
   api<ListeningBackfillReport>(`/v1/admin/papers/${paperId}/listening/backfill`, {

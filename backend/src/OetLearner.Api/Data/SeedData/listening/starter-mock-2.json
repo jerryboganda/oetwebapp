@@ -31,21 +31,86 @@
       "audioEndMs": 600000
     },
     {
-      "partCode": "B",
+      "partCode": "B1",
       "displayOrder": 3,
       "kind": "workplace",
-      "title": "Workplace Extracts",
+      "title": "Workplace Extract 1",
       "accentCode": "en-GB",
       "speakers": [
         { "id": "s1", "role": "Senior Nurse", "gender": "f", "accent": "en-GB" },
         { "id": "s2", "role": "Colleague",    "gender": "m", "accent": "en-GB" }
       ],
       "audioStartMs": 605000,
+      "audioEndMs": 654000
+    },
+    {
+      "partCode": "B2",
+      "displayOrder": 4,
+      "kind": "workplace",
+      "title": "Workplace Extract 2",
+      "accentCode": "en-GB",
+      "speakers": [
+        { "id": "s1", "role": "Senior Nurse", "gender": "f", "accent": "en-GB" },
+        { "id": "s2", "role": "Colleague",    "gender": "m", "accent": "en-GB" }
+      ],
+      "audioStartMs": 654000,
+      "audioEndMs": 703000
+    },
+    {
+      "partCode": "B3",
+      "displayOrder": 5,
+      "kind": "workplace",
+      "title": "Workplace Extract 3",
+      "accentCode": "en-GB",
+      "speakers": [
+        { "id": "s1", "role": "Senior Nurse", "gender": "f", "accent": "en-GB" },
+        { "id": "s2", "role": "Colleague",    "gender": "m", "accent": "en-GB" }
+      ],
+      "audioStartMs": 703000,
+      "audioEndMs": 752000
+    },
+    {
+      "partCode": "B4",
+      "displayOrder": 6,
+      "kind": "workplace",
+      "title": "Workplace Extract 4",
+      "accentCode": "en-GB",
+      "speakers": [
+        { "id": "s1", "role": "Senior Nurse", "gender": "f", "accent": "en-GB" },
+        { "id": "s2", "role": "Colleague",    "gender": "m", "accent": "en-GB" }
+      ],
+      "audioStartMs": 752000,
+      "audioEndMs": 801000
+    },
+    {
+      "partCode": "B5",
+      "displayOrder": 7,
+      "kind": "workplace",
+      "title": "Workplace Extract 5",
+      "accentCode": "en-GB",
+      "speakers": [
+        { "id": "s1", "role": "Senior Nurse", "gender": "f", "accent": "en-GB" },
+        { "id": "s2", "role": "Colleague",    "gender": "m", "accent": "en-GB" }
+      ],
+      "audioStartMs": 801000,
+      "audioEndMs": 850000
+    },
+    {
+      "partCode": "B6",
+      "displayOrder": 8,
+      "kind": "workplace",
+      "title": "Workplace Extract 6",
+      "accentCode": "en-GB",
+      "speakers": [
+        { "id": "s1", "role": "Senior Nurse", "gender": "f", "accent": "en-GB" },
+        { "id": "s2", "role": "Colleague",    "gender": "m", "accent": "en-GB" }
+      ],
+      "audioStartMs": 850000,
       "audioEndMs": 900000
     },
     {
       "partCode": "C1",
-      "displayOrder": 4,
+      "displayOrder": 9,
       "kind": "presentation",
       "title": "Infection Control Policy Presentation",
       "accentCode": "en-IE",
@@ -57,7 +122,7 @@
     },
     {
       "partCode": "C2",
-      "displayOrder": 5,
+      "displayOrder": 10,
       "kind": "presentation",
       "title": "Mental Health in Primary Care Talk",
       "accentCode": "en-US",
@@ -95,7 +160,7 @@
     { "id": "lq-starter2-23", "number": 23, "partCode": "A2", "type": "short_answer", "stem": "Follow-up appointment: ____ weeks",                                 "options": [], "correctAnswer": "eight",            "acceptedAnswers": ["8"],                               "explanation": "Next review booked for eight weeks' time.",                                   "skillTag": "follow_up",        "transcriptExcerpt": "Come back and see me in eight weeks.",                                  "distractorExplanation": null, "points": 1, "transcriptEvidenceStartMs": 493000, "transcriptEvidenceEndMs": 497000 },
     { "id": "lq-starter2-24", "number": 24, "partCode": "A2", "type": "short_answer", "stem": "Patient concern: safety in ____",                                   "options": [], "correctAnswer": "pregnancy",        "acceptedAnswers": [],                                  "explanation": "Patient asks whether her inhalers are safe if she becomes pregnant.",          "skillTag": "patient_concern",  "transcriptExcerpt": "Is the inhaler safe if I get pregnant?",                                "distractorExplanation": null, "points": 1, "transcriptEvidenceStartMs": 510000, "transcriptEvidenceEndMs": 514000 },
 
-    { "id": "lq-starter2-25", "number": 25, "partCode": "B", "type": "multiple_choice_3",
+    { "id": "lq-starter2-25", "number": 25, "partCode": "B1", "type": "multiple_choice_3",
       "stem": "You hear a ward sister briefing a healthcare assistant. The main instruction is to",
       "options": ["take observations every two hours", "record fluid intake hourly", "reposition the patient every four hours"],
       "correctAnswer": "record fluid intake hourly",
@@ -110,7 +175,7 @@
       "transcriptEvidenceStartMs": 615000,
       "transcriptEvidenceEndMs": 628000
     },
-    { "id": "lq-starter2-26", "number": 26, "partCode": "B", "type": "multiple_choice_3",
+    { "id": "lq-starter2-26", "number": 26, "partCode": "B2", "type": "multiple_choice_3",
       "stem": "A hospital pharmacist tells a nurse that the priority is to",
       "options": ["check the patient's allergies again", "use the new drug chart format", "contact the prescriber about the dose"],
       "correctAnswer": "use the new drug chart format",
@@ -125,7 +190,7 @@
       "transcriptEvidenceStartMs": 638000,
       "transcriptEvidenceEndMs": 651000
     },
-    { "id": "lq-starter2-27", "number": 27, "partCode": "B", "type": "multiple_choice_3",
+    { "id": "lq-starter2-27", "number": 27, "partCode": "B3", "type": "multiple_choice_3",
       "stem": "During a charge nurse handover, the reason the patient cannot be discharged today is",
       "options": ["the family is not available", "physiotherapy has not been completed", "CT results are still awaited"],
       "correctAnswer": "CT results are still awaited",
@@ -140,7 +205,7 @@
       "transcriptEvidenceStartMs": 662000,
       "transcriptEvidenceEndMs": 675000
     },
-    { "id": "lq-starter2-28", "number": 28, "partCode": "B", "type": "multiple_choice_3",
+    { "id": "lq-starter2-28", "number": 28, "partCode": "B4", "type": "multiple_choice_3",
       "stem": "A GP receptionist tells a colleague that the action needed is to",
       "options": ["cancel the morning clinic", "reschedule three afternoon appointments", "book a locum for the afternoon"],
       "correctAnswer": "reschedule three afternoon appointments",
@@ -155,7 +220,7 @@
       "transcriptEvidenceStartMs": 686000,
       "transcriptEvidenceEndMs": 698000
     },
-    { "id": "lq-starter2-29", "number": 29, "partCode": "B", "type": "multiple_choice_3",
+    { "id": "lq-starter2-29", "number": 29, "partCode": "B5", "type": "multiple_choice_3",
       "stem": "A senior nurse tells a student nurse that the error made was",
       "options": ["administering the wrong dose", "omitting the allergy check", "using the wrong site"],
       "correctAnswer": "omitting the allergy check",
@@ -170,7 +235,7 @@
       "transcriptEvidenceStartMs": 712000,
       "transcriptEvidenceEndMs": 724000
     },
-    { "id": "lq-starter2-30", "number": 30, "partCode": "B", "type": "multiple_choice_3",
+    { "id": "lq-starter2-30", "number": 30, "partCode": "B6", "type": "multiple_choice_3",
       "stem": "A team leader tells a community nurse that the priority visit today is",
       "options": ["the elderly housebound patient", "the diabetic patient", "the post-operative patient"],
       "correctAnswer": "the post-operative patient",

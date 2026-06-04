@@ -59,7 +59,7 @@ public class AdminEndpointAuthorizationInventoryTests : IClassFixture<TestWebApp
             .Order(StringComparer.Ordinal)
             .ToArray();
 
-        Assert.Empty(offenders);
+        Assert.True(offenders.Length == 0, "RATELIMIT_OFFENDERS:\n" + string.Join("\n", offenders));
     }
 
     [Theory]

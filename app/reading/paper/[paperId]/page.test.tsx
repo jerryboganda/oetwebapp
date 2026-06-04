@@ -13,6 +13,8 @@ const {
   mockPush,
   mockResumeReadingBreak,
   mockSaveReadingAnswer,
+  mockSaveReadingAnnotations,
+  mockGetReadingAnnotations,
   mockSearchParams,
   mockStartReadingAttempt,
   mockSubmitReadingAttempt,
@@ -26,6 +28,8 @@ const {
   mockPush: vi.fn(),
   mockResumeReadingBreak: vi.fn(),
   mockSaveReadingAnswer: vi.fn(),
+  mockSaveReadingAnnotations: vi.fn(),
+  mockGetReadingAnnotations: vi.fn(),
   mockSearchParams: { current: new URLSearchParams() },
   mockStartReadingAttempt: vi.fn(),
   mockSubmitReadingAttempt: vi.fn(),
@@ -55,6 +59,14 @@ vi.mock('@/lib/reading-authoring-api', async () => {
     getReadingStructureLearner: mockGetReadingStructureLearner,
     resumeReadingBreak: mockResumeReadingBreak,
     saveReadingAnswer: mockSaveReadingAnswer,
+    saveReadingAnnotations: mockSaveReadingAnnotations,
+    getReadingAnnotations: mockGetReadingAnnotations,
+    // useReadingAnnotations consumes this adapter; point it at the mocked fns
+    // so rule-out toggles don't hit the real network layer.
+    readingAnnotationsApi: {
+      saveAnnotations: mockSaveReadingAnnotations,
+      getAnnotations: mockGetReadingAnnotations,
+    },
     startReadingAttempt: mockStartReadingAttempt,
     submitReadingAttempt: mockSubmitReadingAttempt,
   };
@@ -99,6 +111,8 @@ describe('Reading paper player page', () => {
     });
     mockGetReadingAttempt.mockResolvedValue(buildAttempt());
     mockSaveReadingAnswer.mockResolvedValue(undefined);
+    mockSaveReadingAnnotations.mockResolvedValue(undefined);
+    mockGetReadingAnnotations.mockResolvedValue({ annotationsJson: null });
     mockSubmitReadingAttempt.mockResolvedValue({
       rawScore: 1,
       maxRawScore: 3,
@@ -227,13 +241,56 @@ describe('Reading paper player page', () => {
     expect(main).toHaveAttribute('aria-describedby', expect.stringContaining('reading-a11y-hints'));
     expect(screen.getByText(/screen reader hints are enabled/i)).toBeInTheDocument();
   });
+
+  it('persists an MCQ rule-out (strikethrough) to the attempt', async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    mockGetReadingStructureLearner.mockResolvedValueOnce(buildStructure({ partAMcq: true }));
+
+    await renderPlayer();
+    await user.click(await screen.findByRole('button', { name: /start attempt/i }));
+
+    // Rule out option A via the visible strike button (parity with Listening).
+    await user.click(await screen.findByRole('button', { name: /rule out option a/i }));
+
+    // Derived hook state flows back to the option renderer: the toggle flips to
+    // "restore" (pressed) and the row renders struck-through.
+    const restore = await screen.findByRole('button', { name: /restore option a/i });
+    expect(restore).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByText('Aspirin').closest('label')).toHaveClass('line-through');
+
+    // The debounced autosave PUTs the rule-out payload to the attempt.
+    await act(async () => {
+      vi.advanceTimersByTime(450);
+      await Promise.resolve();
+    });
+    await waitFor(() => expect(mockSaveReadingAnnotations).toHaveBeenCalled());
+    const lastCall = mockSaveReadingAnnotations.mock.calls.at(-1)!;
+    expect(lastCall[0]).toBe('attempt-1');
+    expect(JSON.parse(lastCall[1] as string).byQuestion['q-a-1'].struckOptions).toEqual(['A']);
+  });
+
+  it('hydrates persisted rule-out marks when resuming an attempt', async () => {
+    mockSearchParams.current = new URLSearchParams('attemptId=attempt-1');
+    mockGetReadingStructureLearner.mockResolvedValueOnce(buildStructure({ partAMcq: true }));
+    mockGetReadingAttempt.mockResolvedValueOnce(buildAttempt({
+      annotationsJson: JSON.stringify({ byQuestion: { 'q-a-1': { struckOptions: ['B'] } } }),
+    }));
+
+    await renderPlayer();
+
+    // Option B (Paracetamol) shows ruled-out straight from the persisted payload.
+    expect(await screen.findByRole('button', { name: /restore option b/i })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByText('Paracetamol').closest('label')).toHaveClass('line-through');
+    // Hydration must not trigger a write-back.
+    expect(mockSaveReadingAnnotations).not.toHaveBeenCalled();
+  });
 });
 
-function buildAttempt() {
+function buildAttempt(overrides?: { status?: string; annotationsJson?: string | null }) {
   return {
     id: 'attempt-1',
     paperId: 'paper-1',
-    status: 'InProgress',
+    status: overrides?.status ?? 'InProgress',
     mode: 'Exam',
     scopeQuestionIds: null,
     startedAt,
@@ -254,6 +311,7 @@ function buildAttempt() {
     canResume: true,
     answers: [],
     showExplanations: false,
+    annotationsJson: overrides?.annotationsJson ?? null,
   };
 }
 
@@ -271,7 +329,7 @@ function resolvedParams<T>(value: T): Promise<T> {
   return promise;
 }
 
-function buildStructure(opts?: { allowPaperReadingMode?: boolean; partAMatching?: boolean }): ReadingLearnerStructureDto {
+function buildStructure(opts?: { allowPaperReadingMode?: boolean; partAMatching?: boolean; partAMcq?: boolean }): ReadingLearnerStructureDto {
   const partATexts = opts?.partAMatching
     ? [
       { id: 'text-a-2', displayOrder: 2, title: 'Medication extract', source: 'Clinic', bodyHtml: '<p>Use aspirin carefully.</p>', wordCount: 4, topicTag: null },
@@ -280,7 +338,11 @@ function buildStructure(opts?: { allowPaperReadingMode?: boolean; partAMatching?
     : [
       { id: 'text-a-1', displayOrder: 1, title: 'Text A', source: 'Clinic', bodyHtml: '<p>Use aspirin carefully.</p>', wordCount: 4, topicTag: null },
     ];
-  const partAQuestions = opts?.partAMatching
+  const partAQuestions = opts?.partAMcq
+    ? [
+      { id: 'q-a-1', readingTextId: 'text-a-1', readingSectionId: null, displayOrder: 1, points: 1, questionType: 'MultipleChoice3' as const, stem: 'Which medication is described?', options: ['Aspirin', 'Paracetamol', 'Ibuprofen'] },
+    ]
+    : opts?.partAMatching
     ? [
       { id: 'q-a-1', readingTextId: 'text-a-1', readingSectionId: null, displayOrder: 1, points: 1, questionType: 'MatchingTextReference' as const, stem: 'Which text discusses triage?', options: [] },
     ]

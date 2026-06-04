@@ -10797,6 +10797,9 @@ namespace OetLearner.Api.Data.Migrations
                     b.Property<int>("PartCode")
                         .HasColumnType("integer");
 
+                    b.Property<int?>("TimeLimitSeconds")
+                        .HasColumnType("integer");
+
                     b.Property<DateTimeOffset>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -15891,6 +15894,9 @@ namespace OetLearner.Api.Data.Migrations
                     b.Property<string>("Id")
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)");
+
+                    b.Property<string>("AnnotationsJson")
+                        .HasColumnType("jsonb");
 
                     b.Property<DateTimeOffset?>("DeadlineAt")
                         .HasColumnType("timestamp with time zone");
@@ -23899,6 +23905,9 @@ namespace OetLearner.Api.Data.Migrations
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<bool>("IsPractice")
+                        .HasColumnType("boolean");
+
                     b.Property<Guid>("MockId")
                         .HasColumnType("uuid");
 
@@ -24449,6 +24458,10 @@ namespace OetLearner.Api.Data.Migrations
                         .IsRequired()
                         .HasMaxLength(16)
                         .HasColumnType("character varying(16)");
+
+                    b.Property<string>("StimulusPdfMediaAssetId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
 
                     b.Property<string>("SubDiscipline")
                         .HasMaxLength(64)

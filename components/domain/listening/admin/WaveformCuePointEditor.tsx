@@ -31,6 +31,7 @@ import { fetchAuthorizedObjectUrl } from '@/lib/api';
 import {
   patchListeningExtract,
   type ListeningPartCode,
+  type ListeningSubSectionCode,
 } from '@/lib/listening-authoring-api';
 
 declare global {
@@ -52,8 +53,12 @@ type ActiveHandle = 'start' | 'end' | null;
 
 export interface WaveformCuePointEditorProps {
   paperId: string;
-  /** Canonical part code identifying the extract row (A1 | A2 | B | C1 | C2). */
-  extractCode: ListeningPartCode;
+  /**
+   * Canonical part code identifying the extract row. Accepts the legacy part
+   * codes (A1 | A2 | B | C1 | C2) and the restructured sub-section codes
+   * (A1, A2, B1–B6, C1, C2) — both are valid `patchListeningExtract` targets.
+   */
+  extractCode: ListeningPartCode | ListeningSubSectionCode;
   /**
    * Authorized media path for the paper's section audio (e.g.
    * `/v1/media/{id}/content`). `null` when no audio asset is attached yet.

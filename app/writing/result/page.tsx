@@ -219,7 +219,7 @@ function WritingResultContent() {
         <LearnerSurfaceSectionHeader
           eyebrow="What to do next"
           title="Turn the summary into action"
-          description="Use the links below to inspect feedback, revise the submission, or send it to a tutor reviewer."
+          description="Use the links below to inspect feedback or send it to a tutor reviewer."
         />
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
@@ -261,16 +261,11 @@ function WritingResultContent() {
           </MotionSection>
         </div>
 
-        <MotionSection delayIndex={7} className="grid grid-cols-1 sm:grid-cols-3 gap-4 pb-8">
+        <MotionSection delayIndex={7} className="grid grid-cols-1 sm:grid-cols-2 gap-4 pb-8">
           <Link href={`/writing/feedback?id=${resultId}`} className="group rounded-2xl border border-primary/20 bg-primary px-4 py-5 text-center text-white transition-[color,background-color,border-color,box-shadow,transform,opacity,filter] duration-200 shadow-sm hover:bg-primary/90 active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600 hover:shadow-md">
             <BarChart3 className="w-6 h-6 mb-2 opacity-80 group-hover:opacity-100 transition-opacity" />
             <span className="font-bold">View Detailed Feedback</span>
             <span className="text-xs text-info mt-1">See criterion breakdown</span>
-          </Link>
-          <Link href={`/writing/revision?id=${resultId}`} className="group rounded-2xl border border-border bg-surface px-4 py-5 text-center text-navy transition-[color,background-color,border-color,box-shadow,transform,opacity,filter] duration-200 shadow-sm hover:border-primary/30 hover:shadow-md">
-            <Edit3 className="w-6 h-6 mb-2 text-muted/60 group-hover:text-primary transition-colors" />
-            <span className="font-bold group-hover:text-primary transition-colors">Revise Submission</span>
-            <span className="text-xs text-muted mt-1">Rewrite as a linked attempt</span>
           </Link>
           <Link href={`/writing/expert-request?id=${resultId}`} className="group rounded-2xl border border-border bg-surface px-4 py-5 text-center text-navy transition-[color,background-color,border-color,box-shadow,transform,opacity,filter] duration-200 shadow-sm hover:border-warning/30 hover:shadow-md">
             <Star className="w-6 h-6 mb-2 text-muted/60 group-hover:text-warning transition-colors" />

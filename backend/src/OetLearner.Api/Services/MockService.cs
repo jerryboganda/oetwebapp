@@ -2591,7 +2591,7 @@ public sealed class MockService(LearnerDbContext db)
     {
         "listening" => "/listening",
         "reading" => "/reading/practice",
-        "writing" => "/writing/library",
+        "writing" => "/writing/practice/library",
         "speaking" => "/speaking/selection",
         _ => "/practice"
     };
@@ -2818,7 +2818,13 @@ public sealed class MockService(LearnerDbContext db)
         return section.SubtestCode switch
         {
             "reading" => $"/reading/paper/{Uri.EscapeDataString(section.ContentPaperId)}?{query}",
-            "listening" => $"/listening/player/{Uri.EscapeDataString(section.ContentPaperId)}?{query}",
+            // Listening exam mocks launch the new strict one-way sub-section
+            // player (A1..B1-B6..C2, per-section audio + countdown + auto-advance).
+            // It reads mockAttemptId/mockSectionId for score write-back and
+            // defaults to exam mode (normalizeExamMode) for a launch with no
+            // explicit ?mode=. The legacy /listening/player/{id} stays for
+            // diagnostic / practice / direct review.
+            "listening" => $"/listening/paper/{Uri.EscapeDataString(section.ContentPaperId)}?{query}",
             "writing" => $"/mocks/writing/{Uri.EscapeDataString(sectionAttemptId ?? section.ContentPaperId)}?{query}",
             "speaking" => $"/speaking/task/{Uri.EscapeDataString(section.ContentPaperId)}?{query}",
             _ => $"/mocks/player/{Uri.EscapeDataString(attemptId)}"

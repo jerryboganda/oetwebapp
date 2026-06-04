@@ -2,7 +2,7 @@
 
 import { Suspense, use, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { AlertCircle, Clock, Eye, Flag, Loader2, Play, RotateCcw, Save, Send, Settings, ZoomIn, ZoomOut } from 'lucide-react';
+import { AlertCircle, Clock, Eye, Flag, Loader2, Play, RotateCcw, Save, Send, Settings, Strikethrough, ZoomIn, ZoomOut } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -11,6 +11,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Modal } from '@/components/ui/modal';
 import { Input } from '@/components/ui/form-controls';
 import { cn } from '@/lib/utils';
+import { useReadingAnnotations } from '@/hooks/use-reading-annotations';
 import {
   getReadingAttempt,
   getReadingPaperAnnotations,
@@ -164,7 +165,36 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
   const [highContrast, setHighContrast] = useState(false);
   const [screenReaderHints, setScreenReaderHints] = useState(false);
   const [displayWarnings, setDisplayWarnings] = useState<string[]>([]);
-  const [eliminatedChoices, setEliminatedChoices] = useState<Set<string>>(() => new Set());
+  // R08 — rule-out (strikethrough) marks are persisted on the attempt via
+  // useReadingAnnotations so they survive refresh, resume, and navigation
+  // (previously ephemeral local state). The hook stores per-question
+  // `struckOptions[]`; `initialAnnotationsJson` is hydrated from the resume
+  // load below. Editing is gated to in-progress attempts (a reopened submitted
+  // attempt shows marks read-only).
+  const [initialAnnotationsJson, setInitialAnnotationsJson] = useState<string | null>(null);
+  const annotations = useReadingAnnotations({
+    attemptId: attempt?.attemptId ?? null,
+    initialAnnotationsJson,
+    disabled: attempt?.status !== 'InProgress',
+  });
+  // Flatten the hook's per-question struckOptions into the
+  // "{questionId}:{letter}" Set the existing option renderer already consumes,
+  // so the PartBody → McqControl prop chain stays unchanged.
+  const eliminatedChoices = useMemo(() => {
+    const set = new Set<string>();
+    for (const [questionId, annotation] of Object.entries(annotations.state.byQuestion)) {
+      for (const letter of annotation.struckOptions ?? []) set.add(`${questionId}:${letter}`);
+    }
+    return set;
+  }, [annotations.state]);
+  const toggleEliminated = useCallback((questionId: string, optionValue: string) => {
+    annotations.update(questionId, (current) => {
+      const next = new Set(current.struckOptions ?? []);
+      if (next.has(optionValue)) next.delete(optionValue);
+      else next.add(optionValue);
+      return { ...current, struckOptions: Array.from(next) };
+    });
+  }, [annotations.update]);
   /**
    * One-shot acknowledgement for the Part A → Parts B/C transition screen.
    * Once the learner presses Continue (or resumes a break, which already
@@ -296,6 +326,8 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
           scopeQuestionIds: saved.scopeQuestionIds,
         });
         setAnswers(restoredAnswers);
+        // R08 — hydrate persisted rule-out / highlight marks for this attempt.
+        setInitialAnnotationsJson(saved.annotationsJson);
         dirtyQuestionIds.current.clear();
       }
     } catch (err) {
@@ -530,7 +562,7 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
       }
       setAnswers({});
       setFlagged(new Set());
-      setEliminatedChoices(new Set());
+      setInitialAnnotationsJson(null);
       autoSubmitTriggered.current = false;
       warnedMiniTest2min.current = false;
       warnedMiniTest1min.current = false;
@@ -642,6 +674,8 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
         questionFocusStartedAt.current[questionId] = Date.now();
         dirtyQuestionIds.current.delete(questionId);
       });
+      // R08 — land any debounced rule-out / highlight edits before grading.
+      await annotations.flush();
       const graded = await submitReadingAttempt(attempt.attemptId);
       if (mockAttemptId && mockSectionId) {
         try {
@@ -911,7 +945,7 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
                   onClearPdfPaper={handleClearPdfPaper}
                   onActiveQuestionChange={setActiveQuestionId}
                   onToggleFlag={(questionId) => setFlagged((prev) => toggleSetValue(prev, questionId))}
-                  onToggleEliminated={(questionId, optionValue) => setEliminatedChoices((prev) => toggleSetValue(prev, `${questionId}:${optionValue}`))}
+                  onToggleEliminated={toggleEliminated}
                   onAnswerChange={setAnswer}
                 />
               </div>
@@ -1620,6 +1654,17 @@ function McqControl({
   onChange: (value: unknown) => void;
 }) {
   const options = toOptionList(question.options);
+  // R08 — accessible status mirroring BCQuestionRenderer: announce how many
+  // options the learner has ruled out so screen-reader users get parity with
+  // the visual line-through.
+  const statusId = `mcq-${question.id}-status`;
+  const struckCount = options.reduce((count, option, index) => {
+    const letter = option.value || String.fromCharCode(65 + index);
+    return count + (eliminatedChoices.has(`${question.id}:${letter}`) ? 1 : 0);
+  }, 0);
+  const struckSummary = struckCount === 0
+    ? 'No options are ruled out.'
+    : `${struckCount} option${struckCount === 1 ? '' : 's'} ruled out.`;
 
   return (
     <div className="space-y-2">
@@ -1627,33 +1672,53 @@ function McqControl({
         const letter = option.value || String.fromCharCode(65 + index);
         const eliminated = eliminatedChoices.has(`${question.id}:${letter}`);
         return (
-          <label
-            key={`${letter}-${option.label}`}
-            data-reading-answer-choice="true"
-            onContextMenu={(event) => {
-              event.preventDefault();
-              if (!locked) onToggleEliminated(letter);
-            }}
-            className={cn(
-              'flex min-h-11 cursor-pointer items-start gap-3 rounded-lg border border-border bg-background-light p-3 text-sm transition-colors',
-              current === letter && 'border-primary bg-primary/5',
-              eliminated && 'text-muted line-through decoration-2',
-              locked && 'cursor-not-allowed opacity-70',
-            )}
-          >
-            <input
-              type="radio"
-              name={question.id}
-              className="mt-1"
+          <div key={`${letter}-${option.label}`} className="flex items-stretch gap-2">
+            <label
+              data-reading-answer-choice="true"
+              aria-describedby={eliminated ? statusId : undefined}
+              onContextMenu={(event) => {
+                event.preventDefault();
+                if (!locked) onToggleEliminated(letter);
+              }}
+              className={cn(
+                'flex min-h-11 flex-1 cursor-pointer items-start gap-3 rounded-lg border border-border bg-background-light p-3 text-sm transition-colors',
+                current === letter && 'border-primary bg-primary/5',
+                eliminated && 'text-muted line-through decoration-2',
+                locked && 'cursor-not-allowed opacity-70',
+              )}
+            >
+              <input
+                type="radio"
+                name={question.id}
+                className="mt-1"
+                disabled={locked}
+                checked={current === letter}
+                onChange={() => onChange(letter)}
+              />
+              <span className="font-mono font-bold text-navy">{letter}.</span>
+              <span className={cn('leading-6 text-navy', eliminated && 'text-muted')}>{option.label}</span>
+            </label>
+            {/* Visible rule-out toggle (parity with Listening's BCQuestionRenderer).
+                Sits outside the label so it never toggles the radio; right-click
+                on the option still works for mouse users. */}
+            <Button
+              type="button"
+              variant={eliminated ? 'secondary' : 'outline'}
+              size="sm"
+              aria-pressed={eliminated}
+              aria-label={`${eliminated ? 'Restore' : 'Rule out'} option ${letter}`}
+              onClick={() => { if (!locked) onToggleEliminated(letter); }}
               disabled={locked}
-              checked={current === letter}
-              onChange={() => onChange(letter)}
-            />
-            <span className="font-mono font-bold text-navy">{letter}.</span>
-            <span className={cn('leading-6 text-navy', eliminated && 'text-muted')}>{option.label}</span>
-          </label>
+              className="self-stretch px-3"
+            >
+              <Strikethrough className="h-4 w-4" aria-hidden="true" />
+            </Button>
+          </div>
         );
       })}
+      <p id={statusId} className="sr-only" aria-live="polite">
+        {struckSummary}
+      </p>
     </div>
   );
 }

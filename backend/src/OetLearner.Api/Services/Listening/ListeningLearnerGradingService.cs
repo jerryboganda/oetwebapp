@@ -101,7 +101,10 @@ public sealed class ListeningLearnerGradingService : IListeningLearnerGradingSer
         return question.QuestionType switch
         {
             ListeningQuestionType.MultipleChoice3 => Task.FromResult(GradeMcq(attempt, question)),
+            // FillInBlank grades identically to ShortAnswer (spelling-tolerant
+            // canonical + accepted-variants compare).
             ListeningQuestionType.ShortAnswer => Task.FromResult(GradeShortAnswer(attempt, question)),
+            ListeningQuestionType.FillInBlank => Task.FromResult(GradeShortAnswer(attempt, question)),
             _ => Task.FromResult(GradeUnsupported(attempt, question)),
         };
     }

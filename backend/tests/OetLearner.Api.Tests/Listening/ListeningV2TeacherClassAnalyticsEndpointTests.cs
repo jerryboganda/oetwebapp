@@ -178,7 +178,7 @@ public class ListeningV2TeacherClassAnalyticsEndpointTests : IClassFixture<TestW
         {
             Id = partId,
             PaperId = paperId,
-            PartCode = ListeningPartCode.B,
+            PartCode = ListeningPartCode.B1,
             MaxRawScore = 1,
             CreatedAt = now,
             UpdatedAt = now,

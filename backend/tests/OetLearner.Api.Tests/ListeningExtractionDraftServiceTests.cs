@@ -216,7 +216,8 @@ public class ListeningExtractionDraftServiceTests
             var items = new List<ListeningAuthoredQuestion>(42);
             for (var n = 1; n <= 12; n++) items.Add(ShortAnswer(n, "A1"));
             for (var n = 13; n <= 24; n++) items.Add(ShortAnswer(n, "A2"));
-            for (var n = 25; n <= 30; n++) items.Add(Mcq(n, "B"));
+            // Part B is six independent sub-sections B1..B6 (one item each).
+            for (var n = 25; n <= 30; n++) items.Add(Mcq(n, $"B{n - 24}"));
             for (var n = 31; n <= 36; n++) items.Add(Mcq(n, "C1"));
             for (var n = 37; n <= 42; n++) items.Add(Mcq(n, "C2"));
             return Task.FromResult(new ListeningExtractionAiResult(items, "{}", IsStub: false, StubReason: null));

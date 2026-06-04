@@ -28,7 +28,8 @@ public sealed record WritingScenarioView(
     IReadOnlyList<WritingScenarioStructuredSentenceDto> CaseNotesStructured,
     bool IsDiagnostic,
     string Status,
-    DateTimeOffset CreatedAt);
+    DateTimeOffset CreatedAt,
+    string? StimulusPdfMediaAssetId = null);
 
 public interface IWritingScenarioService
 {
@@ -205,7 +206,8 @@ public sealed class WritingScenarioService(LearnerDbContext db, TimeProvider clo
             sentences.Select(s => new WritingScenarioStructuredSentenceDto(s.Ordinal, s.SentenceText, s.RelevanceLabel, s.Notes)).ToList(),
             row.IsDiagnostic,
             row.Status,
-            row.CreatedAt);
+            row.CreatedAt,
+            row.StimulusPdfMediaAssetId);
     }
 
     private static string NormalizeRelevance(string? value)

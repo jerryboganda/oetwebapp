@@ -6,8 +6,11 @@ namespace OetLearner.Api.Endpoints;
 /// <summary>
 /// Admin endpoints for the 50-letter calibration harness (spec §33).
 /// Three GETs + one POST + one runner action under
-/// <c>/v1/admin/writing/calibration</c>. All routes are gated by the
-/// existing <c>AdminOnly</c> policy.
+/// <c>/v1/admin/writing/calibration</c>. Routes layer granular content
+/// permissions on top of the group-level <c>AdminOnly</c> gate — reads use
+/// <c>AdminContentRead</c>, writes use <c>AdminContentWrite</c> with the
+/// per-user write rate-limit bucket — mirroring the sibling writing-admin
+/// surfaces (e.g. <see cref="WritingTaskAdminEndpoints"/>).
 /// </summary>
 public static class WritingCalibrationEndpoints
 {
@@ -22,7 +25,8 @@ public static class WritingCalibrationEndpoints
             IWritingCalibrationService service,
             CancellationToken ct)
             => Results.Ok(await service.ListLettersAsync(http.WritingV2UserId(), ct)))
-            .WithName("WritingCalibrationListLetters");
+            .WithName("WritingCalibrationListLetters")
+            .WithAdminRead("AdminContentRead");
 
         group.MapPost("/letters", async (
             [FromBody] WritingCalibrationLetterCreateRequest request,
@@ -30,14 +34,16 @@ public static class WritingCalibrationEndpoints
             IWritingCalibrationService service,
             CancellationToken ct)
             => Results.Ok(await service.AddCalibrationLetterAsync(http.WritingV2UserId(), request, ct)))
-            .WithName("WritingCalibrationAddLetter");
+            .WithName("WritingCalibrationAddLetter")
+            .WithAdminWrite("AdminContentWrite");
 
         group.MapPost("/run", async (
             HttpContext http,
             IWritingCalibrationService service,
             CancellationToken ct)
             => Results.Ok(await service.RunCalibrationAsync(http.WritingV2UserId(), ct)))
-            .WithName("WritingCalibrationRun");
+            .WithName("WritingCalibrationRun")
+            .WithAdminWrite("AdminContentWrite");
 
         group.MapGet("/runs/latest", async (
             IWritingCalibrationService service,
@@ -46,7 +52,8 @@ public static class WritingCalibrationEndpoints
             var run = await service.GetLatestRunAsync(ct);
             return run is null ? Results.NoContent() : Results.Ok(run);
         })
-        .WithName("WritingCalibrationLatestRun");
+        .WithName("WritingCalibrationLatestRun")
+        .WithAdminRead("AdminContentRead");
 
         return app;
     }

@@ -104,25 +104,19 @@ test('prod — module drill-down: open first practice item in each module', asyn
   // Listening: /listening/(drills|player|review)/<id>
   await drillInto('/listening', /\/listening\/(drills|player|review|results)\//, 'listening');
 
-  // Writing: /writing/(player|library|model)
+  // Writing: landing → V2 mock catalogue (the editor lives behind a generated
+  // session id reached via the mock/practice flow, so it can't be deep-linked).
   surface = 'writing-list';
   await page.goto(`${PROD_URL}/writing`, { waitUntil: 'domcontentloaded', timeout: 30_000 });
   await page.waitForLoadState('networkidle', { timeout: 12_000 }).catch(() => {});
-  // The editor lives at /writing/player. Verify it loads without 5xx.
-  surface = 'writing-player';
-  const wResp = await page.goto(`${PROD_URL}/writing/player`, {
+  // Verify the V2 mock catalogue loads without 5xx.
+  surface = 'writing-mocks';
+  const wResp = await page.goto(`${PROD_URL}/writing/mocks`, {
     waitUntil: 'domcontentloaded',
     timeout: 30_000,
   });
-  expect(wResp?.status() ?? 0, 'writing player status').toBeLessThan(500);
+  expect(wResp?.status() ?? 0, 'writing mocks status').toBeLessThan(500);
   await page.waitForLoadState('networkidle', { timeout: 15_000 }).catch(() => {});
-  // Spot-check editor presence (textarea OR contenteditable surface)
-  const editorVisible =
-    (await page.locator('textarea, [contenteditable="true"]').first().isVisible().catch(() => false));
-  test.info().annotations.push({
-    type: 'writing:editor',
-    description: editorVisible ? 'editor rendered' : 'editor not detected',
-  });
 
   // Speaking: /speaking/(roleplay|task|phrasing|transcript)/<id>
   await drillInto('/speaking', /\/speaking\/(roleplay|task|phrasing|transcript|results)\//, 'speaking');

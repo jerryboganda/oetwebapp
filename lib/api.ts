@@ -19,7 +19,6 @@ import type {
   WritingSubmission,
   CriteriaDelta,
   ModelAnswer,
-  ChecklistItem,
   SpeakingTask,
   RoleCard,
   SpeakingResult,
@@ -1174,15 +1173,14 @@ function rewriteLegacyLearnerRoute(pathname: string, search: string, hash: strin
   }
 
   if (pathname === '/writing/tasks') {
-    return `/writing/library${search}${hash}`;
+    return `/writing/practice/library${search}${hash}`;
   }
 
   if (pathname.startsWith('/writing/tasks/')) {
-    const taskId = pathname.slice('/writing/tasks/'.length);
-    const params = new URLSearchParams(search);
-    params.set('taskId', taskId);
-    const nextSearch = params.toString();
-    return `/writing/player${nextSearch ? `?${nextSearch}` : ''}${hash}`;
+    // Legacy V1 task IDs have no mapping into the V2 scenario library, so the
+    // deep link can't be preserved. Route to the writing landing instead of the
+    // retired V1 player.
+    return `/writing${search}${hash}`;
   }
 
   if (pathname.startsWith('/reading/task/')) {
@@ -1791,28 +1789,13 @@ export async function applyStudyPlanSwap(taskId: string, replacementContentId: s
   };
 }
 
-export async function fetchWritingTasks(): Promise<WritingTask[]> {
-  const items = await apiRequest<ApiRecord[]>('/v1/writing/tasks');
-  return items.map(mapWritingTask);
-}
-
+// `fetchWritingTask` is retained: it is still used by `submitWritingTask` below
+// to resolve the task title after a submit. The V1 `fetchWritingTasks` (list),
+// `fetchWritingChecklist`, and `submitWritingDraft` were removed with the
+// retired /writing/library and /writing/player surfaces.
 export async function fetchWritingTask(taskId: string): Promise<WritingTask> {
   const item = await apiRequest<ApiRecord>(`/v1/writing/tasks/${taskId}`);
   return mapWritingTask(item);
-}
-
-export async function fetchWritingChecklist(): Promise<ChecklistItem[]> {
-  const criteria = await apiRequest<ApiRecord[]>('/v1/reference/criteria?subtest=writing');
-  return criteria.map((criterion, index) => ({ id: index + 1, text: criterion.label, completed: false }));
-}
-
-export async function submitWritingDraft(taskId: string, content: string, mode: WritingAttemptMode = 'exam'): Promise<{ saved: boolean }> {
-  const attempt = await ensureAttempt('writing', taskId, mode);
-  const saved = await apiRequest<ApiRecord>(`/v1/writing/attempts/${attempt.attemptId}/draft`, {
-    method: 'PATCH',
-    body: JSON.stringify({ content, scratchpad: null, checklist: null, draftVersion: attempt.draftVersion ?? 1 }),
-  });
-  return { saved: Boolean(saved.saved) };
 }
 
 export type WritingExamMode = 'computer' | 'paper';
@@ -1964,54 +1947,6 @@ export async function fetchCriteriaDeltas(): Promise<CriteriaDelta[]> {
     revised: criterion.score,
     max: criterion.maxScore,
   }));
-}
-
-export async function fetchWritingRevisionData(referenceId: string): Promise<{
-  originalText: string;
-  revisedText: string;
-  deltas: CriteriaDelta[];
-  unresolvedIssues: string[];
-  attemptId: string;
-}> {
-  let attemptId = referenceId;
-  if (referenceId.startsWith('we-')) {
-    const summary = await apiRequest<ApiRecord>(`/v1/writing/evaluations/${referenceId}/summary`);
-    attemptId = summary.attemptId;
-  }
-
-  const revision = await apiRequest<ApiRecord>(`/v1/writing/revisions/${attemptId}`);
-  return {
-    originalText: revision.baseAttempt?.content ?? '',
-    revisedText: revision.revisionDraft?.content ?? revision.baseAttempt?.content ?? '',
-    deltas: (revision.deltaSummary ?? []).map((item: ApiRecord) => ({
-      name: item.name,
-      original: item.original,
-      revised: item.revised,
-      max: item.max,
-    })),
-    unresolvedIssues: revision.unresolvedIssues ?? [],
-    attemptId: revision.baseAttempt?.attemptId ?? attemptId,
-  };
-}
-
-export async function submitWritingRevision(attemptId: string, content: string, idempotencyKey?: string): Promise<{
-  attemptId: string;
-  evaluationId: string;
-  state: EvalStatus;
-}> {
-  const submitted = await apiRequest<ApiRecord>(`/v1/writing/revisions/${encodeURIComponent(attemptId)}/submit`, {
-    method: 'POST',
-    body: JSON.stringify({
-      content,
-      idempotencyKey: idempotencyKey ?? crypto.randomUUID?.() ?? String(Date.now()),
-    }),
-  });
-
-  return {
-    attemptId: String(submitted.attemptId ?? ''),
-    evaluationId: String(submitted.evaluationId ?? ''),
-    state: toEvalStatus(submitted.state),
-  };
 }
 
 export async function fetchModelAnswer(taskId: string): Promise<ModelAnswer> {
@@ -5232,6 +5167,13 @@ export async function restoreAdminUser(userId: string, payload?: { reason?: stri
 
 export async function adjustAdminUserCredits(userId: string, payload: { amount: number; reason?: string }) {
   return apiRequest(`/v1/admin/users/${encodeURIComponent(userId)}/credits`, { method: 'POST', body: JSON.stringify(payload) });
+}
+
+export async function setAdminUserPassword(
+  userId: string,
+  payload: { password: string },
+): Promise<{ userId: string; email: string; revoked: number }> {
+  return apiRequest<{ userId: string; email: string; revoked: number }>(`/v1/admin/users/${encodeURIComponent(userId)}/password`, { method: 'POST', body: JSON.stringify(payload) });
 }
 
 export async function triggerAdminUserPasswordReset(userId: string) {

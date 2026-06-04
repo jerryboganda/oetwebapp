@@ -39,5 +39,12 @@ public class WritingMockSession
     [MaxLength(16)]
     public string Status { get; set; } = "started";
 
+    /// <summary>
+    /// True when the session was started as the relaxed "practice" variant
+    /// (?practice=1). Lets the learner skip the reading window early; strict
+    /// mocks must wait out the full reading window server-side.
+    /// </summary>
+    public bool IsPractice { get; set; }
+
     public DateTimeOffset CreatedAt { get; set; }
 }

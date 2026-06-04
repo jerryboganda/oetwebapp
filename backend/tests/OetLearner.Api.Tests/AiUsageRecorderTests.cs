@@ -264,7 +264,44 @@ public class AiGatewayRecorderIntegrationTests
         var db = new LearnerDbContext(options);
         var recorder = new AiUsageRecorder(db, NullLogger<AiUsageRecorder>.Instance);
         var providers = new[] { provider ?? new MockAiProvider() };
-        return (new AiGatewayService(_loader, providers, recorder), db);
+        // WritingGrade is a paid feature; AiGatewayService fails closed unless
+        // a credit service is wired (the prospective-debit gate). Supply a stub
+        // that always reports sufficient balance so these recorder-focused tests
+        // reach the provider call and persist a usage row.
+        var creditService = new UnlimitedCreditStub();
+        return (new AiGatewayService(_loader, providers, recorder, creditService: creditService), db);
+    }
+
+    /// <summary>
+    /// Test stub for <see cref="OetLearner.Api.Services.AiManagement.IAiCreditService"/>
+    /// that reports an effectively unlimited balance and treats debits as
+    /// no-ops. These integration tests assert on persisted AiUsageRecords, not
+    /// on credit accounting, so the stub only needs to clear the gateway's
+    /// fail-closed paid-feature gate.
+    /// </summary>
+    private sealed class UnlimitedCreditStub : OetLearner.Api.Services.AiManagement.IAiCreditService
+    {
+        public Task<OetLearner.Api.Services.AiManagement.AiCreditBalance> GetBalanceAsync(string userId, CancellationToken ct)
+            => Task.FromResult(new OetLearner.Api.Services.AiManagement.AiCreditBalance(
+                TokensAvailable: 1_000_000,
+                CostAvailableUsd: 1_000m,
+                TokensGrantedLifetime: 1_000_000,
+                TokensConsumedLifetime: 0));
+
+        public Task<AiCreditLedgerEntry> GrantAsync(
+            string userId, int tokens, decimal costUsd, AiCreditSource source,
+            string? description, string? referenceId, DateTimeOffset? expiresAt,
+            string? adminId, CancellationToken ct)
+            => Task.FromResult(new AiCreditLedgerEntry { Id = Guid.NewGuid().ToString("N"), UserId = userId, TokensDelta = tokens });
+
+        public Task<bool> DebitUsageAsync(OetLearner.Api.Services.AiManagement.AiCreditUsageDebitRequest request, CancellationToken ct)
+            => Task.FromResult(true);
+
+        public Task<IReadOnlyList<AiCreditLedgerEntry>> ListAsync(string userId, int page, int pageSize, CancellationToken ct)
+            => Task.FromResult<IReadOnlyList<AiCreditLedgerEntry>>(Array.Empty<AiCreditLedgerEntry>());
+
+        public Task<int> SweepExpiredAsync(DateTimeOffset asOf, CancellationToken ct)
+            => Task.FromResult(0);
     }
 
     [Fact]

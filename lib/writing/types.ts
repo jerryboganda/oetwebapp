@@ -268,6 +268,11 @@ export interface WritingScenarioDto {
   writingTimeSeconds?: number;
   simulationModes?: WritingSimulationMode;
   markingMode?: WritingMarkingMode;
+
+  /** Optional real exam question-paper PDF. Present when the scenario has a stimulus PDF. */
+  stimulusPdfMediaAssetId?: string | null;
+  /** Pre-computed content path for the stimulus PDF: /v1/media/{id}/content */
+  stimulusPdfDownloadPath?: string | null;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -545,6 +550,7 @@ export interface WritingMockSessionDto {
   submissionId: string | null;
   readingSecondsRemaining: number;
   writingSecondsRemaining: number;
+  isPractice: boolean;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -865,6 +871,8 @@ export interface WritingTaskDto {
   sourceProvenance: string | null;
   createdAt: string;
   updatedAt: string;
+  stimulusPdfMediaAssetId?: string | null;
+  stimulusPdfDownloadPath?: string | null;
 }
 
 /** Admin create/update payload for a writing task (subset that is editable). */
@@ -893,6 +901,7 @@ export interface WritingTaskUpsertDto {
   irrelevantContentChecklist: WritingContentChecklistItemDto[];
   sourceProvenance: string;
   integrityAcknowledged: boolean;
+  stimulusPdfMediaAssetId?: string | null;
 }
 
 export interface WritingTaskValidationDto {

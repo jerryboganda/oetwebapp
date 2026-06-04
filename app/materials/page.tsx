@@ -100,9 +100,6 @@ function MaterialFileRow({ file }: { file: LearnerMaterialFileDto }) {
 function FolderNode({ folder, depth = 0 }: { folder: LearnerMaterialFolderDto; depth?: number }) {
   const [open, setOpen] = useState(depth === 0);
 
-  const hasContent = folder.files.length > 0 || folder.folders.length > 0;
-  if (!hasContent) return null;
-
   return (
     <div className={cn('rounded-2xl border border-border/60 overflow-hidden', depth === 0 ? 'bg-surface/70' : 'bg-surface/40')}>
       <button
@@ -136,6 +133,9 @@ function FolderNode({ folder, depth = 0 }: { folder: LearnerMaterialFolderDto; d
                 <MaterialFileRow key={file.id} file={file} />
               ))}
             </div>
+          )}
+          {folder.folders.length === 0 && folder.files.length === 0 && (
+            <p className="text-xs text-muted">No files in this folder yet.</p>
           )}
         </div>
       )}

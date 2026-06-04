@@ -149,6 +149,18 @@ public static class ListeningLearnerEndpoints
             .WithName("HeartbeatListeningPaperAttempt")
             .WithSummary("Persist Listening attempt playback/activity heartbeat");
 
+        group.MapPost("/attempts/{attemptId}/advance-section", async (
+            string attemptId,
+            ListeningAdvanceSectionRequest request,
+            HttpContext http,
+            ListeningLearnerService service,
+            CancellationToken ct) =>
+            Results.Ok(await service.AdvanceSectionAsync(http.UserId(), attemptId, request, ct)))
+            .RequireRateLimiting("PerUserWrite")
+            .WithName("AdvanceListeningPaperSection")
+            .WithSummary("Advance the one-way Listening section cursor")
+            .WithDescription("Stores a monotonic sectionCursor on the attempt; rejects any request that would move it backwards (server-side one-way enforcement).");
+
         group.MapPost("/attempts/{attemptId}/integrity-events", async (
             string attemptId,
             ListeningIntegrityEventRequest request,

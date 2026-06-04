@@ -52,7 +52,7 @@ import { buildTechReadinessProbe } from '@/lib/listening/tech-readiness-probe';
 import { presentationModeFromSession } from '@/lib/listening/modes';
 import { ListeningPlayerSkinShell } from '@/components/domain/listening/player/skins/ListeningPlayerSkinShell';
 import { NotePanel } from '@/components/domain/listening/NotePanel';
-import type { ListeningQuestionAnnotation } from '@/hooks/use-listening-annotations';
+import { useListeningAnnotations, type ListeningQuestionAnnotation } from '@/hooks/use-listening-annotations';
 
 const FIRST_STRICT_STATE: ListeningFsmState = 'a1_preview';
 
@@ -241,6 +241,14 @@ function PlayerContent() {
   const audioResumeInFlightRef = useRef<boolean>(false);
   const applyStrictServerStateRef = useRef<((state: ListeningV2SessionState) => void) | null>(null);
   const strictAdvanceTargetRef = useRef<ListeningFsmState | null>(null);
+  // Tracks the attempt id whose strict-resume FSM state has already been
+  // hydrated from the server. The hydration effect below also re-runs whenever
+  // `applyStrictServerState` changes identity (it depends on `sectionsInPaper`,
+  // which in turn depends on `strictServerState.state`). Applying a resume thus
+  // mutates a dependency of the effect, so without this guard the effect would
+  // re-fetch `getState` after the resume already committed — clobbering the
+  // hydrated phase (e.g. snapping an `a2_audio` resume back to `a1_preview`).
+  const hydratedAttemptIdRef = useRef<string | null>(null);
   const [session, setSession] = useState<ListeningSessionDto | null>(null);
   const [attempt, setAttempt] = useState<ListeningAttemptDto | null>(null);
   const [answers, setAnswers] = useState<Record<string, string>>({});
@@ -284,11 +292,17 @@ function PlayerContent() {
   // C8c — tracks which extracts have been listened-to-completion so the
   // section panel can render a checkmark next to each.
   const [completedExtractIds, setCompletedExtractIds] = useState<Set<string>>(() => new Set());
-  // R08 annotations (highlight + strikethrough) for Part B/C questions. Kept
-  // as light controlled state here purely so the §17.11 attempt-event stream
-  // can emit `highlight` / `strikethrough` on each toggle (durable annotation
-  // persistence is handled separately by useListeningAnnotations).
-  const [questionAnnotations, setQuestionAnnotations] = useState<Record<string, ListeningQuestionAnnotation>>({});
+  // R08 — durable highlight + strikethrough (rule-out) annotations for Part B/C
+  // questions. Debounced-autosaved to the attempt via useListeningAnnotations so
+  // marks survive refresh, resume, and section navigation. The §17.11 attempt-
+  // event stream still emits `highlight` / `strikethrough` on each toggle (see
+  // handleAnnotationChange). `activeAttemptId` is the live attempt (resumed via
+  // the route param or created by ensureAttempt).
+  const activeAttemptId = attempt?.attemptId ?? attemptIdFromRoute ?? null;
+  const annotations = useListeningAnnotations({
+    attemptId: activeAttemptId,
+    initialAnnotationsJson: null,
+  });
   const reducedMotion = prefersReducedMotion(useReducedMotion());
   const sectionMotion = getSurfaceMotion('section', reducedMotion);
   const listMotion = getSurfaceMotion('list', reducedMotion);
@@ -381,6 +395,18 @@ function PlayerContent() {
       Object.values(timers).forEach(clearTimeout);
     };
   }, [attemptIdFromRoute, id, mode, pathwayStage]);
+
+  // R08 — hydrate the learner's saved rule-out / highlight marks once the
+  // attempt id is known (resume or fresh start). The V1 session DTO doesn't
+  // carry the annotations payload, so pull it via the dedicated GET. reload()
+  // no-ops when there's no attempt id.
+  useEffect(() => {
+    if (!activeAttemptId) return;
+    void annotations.reload();
+    // reload() is keyed on (attemptId, disabled); intentionally re-runs only
+    // when the active attempt id changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeAttemptId]);
 
   useEffect(() => {
     if (!attempt?.attemptId || !hasStarted || isSubmitting) return;
@@ -688,21 +714,21 @@ function PlayerContent() {
     questionId: string,
     mutator: (current: ListeningQuestionAnnotation) => ListeningQuestionAnnotation,
   ) => {
-    setQuestionAnnotations((current) => {
-      const previous = current[questionId] ?? {};
-      const next = mutator(previous);
-      const prevStruck = new Set(previous.struckOptions ?? []);
-      const nextStruck = new Set(next.struckOptions ?? []);
-      if (Boolean(next.stemHighlighted) !== Boolean(previous.stemHighlighted)) {
-        logAttemptEvent('highlight', { questionId, target: 'stem', active: Boolean(next.stemHighlighted) });
-      }
-      if (prevStruck.size !== nextStruck.size) {
-        const added = next.struckOptions?.find((option) => !prevStruck.has(option));
-        const removed = previous.struckOptions?.find((option) => !nextStruck.has(option));
-        logAttemptEvent('strikethrough', { questionId, option: added ?? removed, active: nextStruck.size > prevStruck.size });
-      }
-      return { ...current, [questionId]: next };
-    });
+    // Diff against the current persisted state to emit the §17.11 telemetry,
+    // then route the mutation through the durable hook (debounced autosave).
+    const previous = annotations.state.byQuestion[questionId] ?? {};
+    const next = mutator(previous);
+    const prevStruck = new Set(previous.struckOptions ?? []);
+    const nextStruck = new Set(next.struckOptions ?? []);
+    if (Boolean(next.stemHighlighted) !== Boolean(previous.stemHighlighted)) {
+      logAttemptEvent('highlight', { questionId, target: 'stem', active: Boolean(next.stemHighlighted) });
+    }
+    if (prevStruck.size !== nextStruck.size) {
+      const added = next.struckOptions?.find((option) => !prevStruck.has(option));
+      const removed = previous.struckOptions?.find((option) => !nextStruck.has(option));
+      logAttemptEvent('strikethrough', { questionId, option: added ?? removed, active: nextStruck.size > prevStruck.size });
+    }
+    annotations.update(questionId, mutator);
   };
 
   const handleSubmit = async ({ skipFinalSave = false }: { skipFinalSave?: boolean } = {}) => {
@@ -716,6 +742,9 @@ function PlayerContent() {
     saveTimers.current = {};
     try {
       const activeAttempt = await ensureAttempt();
+      // R08 — land any debounced rule-out / highlight edits while the attempt
+      // is still InProgress (the hook unmounts on the post-submit navigation).
+      await annotations.flush();
       if (!skipFinalSave) {
         await Promise.all(Object.entries(answers).map(([questionId, answer]) => listeningV2Api.saveAnswer(activeAttempt.attemptId, questionId, answer)));
       }
@@ -859,15 +888,22 @@ function PlayerContent() {
   useEffect(() => {
     if (!session) return;
     if (!attemptIdFromRoute) {
+      hydratedAttemptIdRef.current = null;
       setStrictServerState(null);
       setHasStarted(false);
       return;
     }
     if (!strictReadinessRequired) {
+      hydratedAttemptIdRef.current = null;
       setStrictServerState(null);
       setHasStarted(true);
       return;
     }
+    // One-time strict-resume hydration per attempt. Applying the resumed state
+    // changes a dependency of this effect (`applyStrictServerState`), so re-runs
+    // are expected; bail out instead of re-fetching and clobbering the phase.
+    if (hydratedAttemptIdRef.current === attemptIdFromRoute) return;
+    hydratedAttemptIdRef.current = attemptIdFromRoute;
     let alive = true;
     listeningV2Api
       .getState(attemptIdFromRoute)
@@ -880,11 +916,13 @@ function PlayerContent() {
           setTechReadiness(null);
           return;
         }
-        applyStrictServerState(state);
+        applyStrictServerStateRef.current?.(state);
         setHasStarted(true);
       })
       .catch(() => {
         if (!alive) return;
+        // Allow a later dependency change (e.g. session reload) to retry.
+        hydratedAttemptIdRef.current = null;
         setStrictServerState(null);
         setHasStarted(false);
         setStartError('Could not verify this strict Listening attempt with the server. Run the readiness check again before starting.');
@@ -1597,7 +1635,7 @@ function PlayerContent() {
                                     options={question.options}
                                     value={answers[question.id] ?? ''}
                                     onChange={(value) => handleAnswerChange(question.id, value)}
-                                    annotation={questionAnnotations[question.id] ?? {}}
+                                    annotation={annotations.state.byQuestion[question.id] ?? {}}
                                     onAnnotationChange={(mutator) => handleAnnotationChange(question.id, mutator)}
                                     locked={!canEdit}
                                   />

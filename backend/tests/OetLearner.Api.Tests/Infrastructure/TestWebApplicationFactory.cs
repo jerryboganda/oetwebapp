@@ -61,6 +61,7 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
             ["Platform:FallbackEmailDomain"] = "example.test",
             ["Billing:CheckoutBaseUrl"] = "https://app.example.test/billing/checkout",
             ["Storage:LocalRootPath"] = _storageRoot,
+            ["PasswordPolicy:BreachCheckEnabled"] = "false",
             [$"{AuthTokenOptions.SectionName}:Issuer"] = "https://api.example.test",
             [$"{AuthTokenOptions.SectionName}:Audience"] = "oet-learner-web",
             [$"{AuthTokenOptions.SectionName}:AccessTokenSigningKey"] = "access-token-signing-key-12345678901234567890",
@@ -135,7 +136,8 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
                 ["Platform:PublicWebBaseUrl"] = "http://localhost",
                 ["Platform:FallbackEmailDomain"] = "example.test",
                 ["Billing:CheckoutBaseUrl"] = "https://app.example.test/billing/checkout",
-                ["Storage:LocalRootPath"] = _storageRoot
+                ["Storage:LocalRootPath"] = _storageRoot,
+                ["PasswordPolicy:BreachCheckEnabled"] = "false"
             });
         });
     }

@@ -562,6 +562,16 @@ public class ReadingAttempt
 
     public DateTimeOffset? OverriddenAt { get; set; }
 
+    /// <summary>R08 parity with Listening — the learner's per-question rule-out
+    /// (strikethrough) + stem-highlight annotations, persisted so they survive
+    /// refresh / resume / section navigation. Opaque JSON capped at 64 KB
+    /// (enforced in <c>ReadingAttemptService.SaveAnnotationsAsync</c>). Shape:
+    /// <c>{ "byQuestion": { "&lt;questionId&gt;": { "struckOptions": ["A","C"],
+    /// "stemHighlighted": true } } }</c>. Null until the learner annotates.
+    /// Stored as jsonb on Postgres (see <c>LearnerDbContext</c>); mirrors
+    /// <see cref="ListeningAttempt.AnnotationsJson"/>.</summary>
+    public string? AnnotationsJson { get; set; }
+
     public ICollection<ReadingAnswer> Answers { get; set; } = new List<ReadingAnswer>();
 }
 

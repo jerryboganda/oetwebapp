@@ -49,7 +49,7 @@ const ROUTES = [
   '/diagnostic/reading',
   '/diagnostic/results',
   '/diagnostic/speaking',
-  '/diagnostic/writing',
+  '/writing/diagnostic',
   '/escalations',
   '/exam-booking',
   '/exam-guide',
@@ -110,12 +110,9 @@ const ROUTES = [
   '/writing/compare',
   '/writing/expert-request',
   '/writing/feedback',
-  '/writing/library',
   '/writing/model',
   '/writing/phrase-suggestions',
-  '/writing/player',
   '/writing/result',
-  '/writing/revision',
 ];
 
 test.describe.configure({ mode: 'serial' });

@@ -144,9 +144,21 @@ export interface ListeningSpeakerDto {
   accent?: string | null;
 }
 
+/**
+ * Per-sub-section part code emitted by the backend session DTO. The exam
+ * player treats every Part B extract as a distinct navigable sub-section, so
+ * this is the full ordered set A1, A2, B1..B6, C1, C2 (not the legacy rolled-up
+ * "B"). The bare "B" alias is retained for forward-compat with any not-yet-split
+ * paper the backend still floors to "B1".
+ */
+export type ListeningExtractPartCode =
+  | 'A1' | 'A2'
+  | 'B' | 'B1' | 'B2' | 'B3' | 'B4' | 'B5' | 'B6'
+  | 'C1' | 'C2';
+
 /** Phase 5 tail — paper-level extract metadata. One row per extract. */
 export interface ListeningExtractMetadataDto {
-  partCode: 'A1' | 'A2' | 'B' | 'C1' | 'C2';
+  partCode: ListeningExtractPartCode;
   displayOrder: number;
   kind: 'consultation' | 'workplace' | 'presentation';
   title: string;
@@ -154,6 +166,16 @@ export interface ListeningExtractMetadataDto {
   speakers: ListeningSpeakerDto[];
   audioStartMs: number | null;
   audioEndMs: number | null;
+  /**
+   * Per-sub-section audio URL the player loads for this section. The backend
+   * resolves it uploaded-asset-first (an authenticated `/v1/media/{id}/content`
+   * URL) with a TTS fallback (an anonymous `/v1/listening/audio/{sha}.wav`
+   * URL); null when neither exists. The exam player blob-fetches `/v1/media`
+   * URLs (Bearer auth) and uses a plain `<audio src>` for the TTS WAV.
+   */
+  audioUrl?: string | null;
+  /** Per-sub-section countdown (seconds). Null → the player applies a default. */
+  timeLimitSeconds?: number | null;
 }
 
 export interface ListeningSessionDto {
@@ -436,6 +458,29 @@ export const heartbeatListeningAttempt = (attemptId: string, elapsedSeconds: num
     {
       method: 'PATCH',
       body: JSON.stringify({ elapsedSeconds, deviceType }),
+    },
+  );
+
+export interface ListeningAdvanceSectionResult {
+  attemptId: string;
+  sectionCursor: number;
+  lastClientSyncAt: string;
+}
+
+/**
+ * One-way section navigation. Stores a monotonically non-decreasing
+ * `sectionCursor` on the relational attempt; the server rejects any request
+ * that would move it backwards (`listening_section_one_way`). The exam player
+ * calls this on every forward advance (Next or timer auto-advance). `toIndex`
+ * is the zero-based index of the sub-section being entered in the ordered
+ * A1→A2→B1..B6→C1→C2 sequence.
+ */
+export const advanceListeningSection = (attemptId: string, toIndex: number) =>
+  api<ListeningAdvanceSectionResult>(
+    `/v1/listening-papers/attempts/${encodeURIComponent(attemptId)}/advance-section`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ sectionCursor: toIndex }),
     },
   );
 

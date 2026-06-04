@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, createEvent } from '@testing-library/react';
+import { render, screen, fireEvent, createEvent, waitFor } from '@testing-library/react';
 import {
   PaperBookletSimulation,
   type PaperBookletContent,
@@ -22,6 +22,30 @@ const recordWritingAttemptEvent = vi.fn().mockResolvedValue(undefined);
 vi.mock('@/lib/writing/exam-api', () => ({
   recordWritingAttemptEvent: (...args: unknown[]) => recordWritingAttemptEvent(...args),
 }));
+
+// ── Mock @/lib/api + pdfjs-dist for the stimulus-PDF case ────────────────────
+// Copied from WritingStimulusViewer.test.tsx: the booklet's case-notes page
+// embeds <WritingStimulusViewer> when a stimulus PDF is provided, which fetches
+// an authenticated blob URL and renders pdf.js pages to <canvas>.
+vi.mock('@/lib/api', () => ({
+  fetchAuthorizedObjectUrl: vi.fn().mockResolvedValue('blob:fake-url'),
+}));
+
+vi.mock('pdfjs-dist/legacy/build/pdf.mjs', () => {
+  const fakePage = {
+    getViewport: vi.fn(() => ({ width: 100, height: 100 })),
+    render: vi.fn(() => ({ promise: Promise.resolve() })),
+  };
+  const fakePdf = {
+    numPages: 1,
+    getPage: vi.fn().mockResolvedValue(fakePage),
+  };
+  return {
+    GlobalWorkerOptions: { workerSrc: '' },
+    version: '3.x',
+    getDocument: vi.fn(() => ({ promise: Promise.resolve(fakePdf) })),
+  };
+});
 
 const ANSWER_LABEL = 'writing.paper.answerBookletLabel';
 const QUESTION_BOOKLET_LABEL = 'writing.paper.questionBookletLabel';
@@ -55,18 +79,31 @@ function baseProps(
     writingSecondsRemaining: 2400,
     resultsHref: '/writing/submissions/sub-1/results',
     onContentChange: vi.fn(),
-    onPhaseChange: vi.fn(),
     onSubmit: vi.fn(),
     onAutosave: vi.fn(),
     ...overrides,
   };
 }
 
-describe('PaperBookletSimulation', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
+// jsdom does not implement canvas 2D context. Stub getContext so the embedded
+// PDF viewer's render path does not throw (it already guards a null ctx).
+beforeEach(() => {
+  vi.clearAllMocks();
+  HTMLCanvasElement.prototype.getContext = vi.fn().mockReturnValue({
+    clearRect: vi.fn(),
+    drawImage: vi.fn(),
+    fillRect: vi.fn(),
+    putImageData: vi.fn(),
+    createImageData: vi.fn(),
+    scale: vi.fn(),
+    save: vi.fn(),
+    restore: vi.fn(),
+    transform: vi.fn(),
+    fillText: vi.fn(),
+  }) as unknown as typeof HTMLCanvasElement.prototype.getContext;
+});
 
+describe('PaperBookletSimulation', () => {
   it('renders the booklet with the task title and case notes', () => {
     render(<PaperBookletSimulation {...baseProps()} />);
 
@@ -119,5 +156,34 @@ describe('PaperBookletSimulation', () => {
     expect(recordWritingAttemptEvent).toHaveBeenCalledWith(
       expect.objectContaining({ eventType: 'paste', mode: 'paper' }),
     );
+  });
+
+  it('renders the stimulus PDF viewer in the case-notes page and hides printed case notes when a stimulus download path is provided', async () => {
+    const { fetchAuthorizedObjectUrl } = await import('@/lib/api');
+
+    render(
+      <PaperBookletSimulation
+        {...baseProps({ stimulus: { downloadPath: '/v1/media/x/content' } })}
+      />,
+    );
+
+    // The embedded WritingStimulusViewer fetches the authenticated blob URL with
+    // the provided download path (its presence proves the viewer mounted).
+    await waitFor(() => {
+      expect(fetchAuthorizedObjectUrl).toHaveBeenCalledWith('/v1/media/x/content');
+    });
+
+    // The viewer's toolbar title is shown…
+    expect(screen.getByText('Question paper')).toBeInTheDocument();
+    // …and the printed structured case-note text is NOT rendered (PDF replaces it).
+    expect(screen.queryByText(/community-acquired pneumonia/i)).not.toBeInTheDocument();
+  });
+
+  it('keeps the printed case notes when no stimulus download path is provided', () => {
+    // Explicitly-null download path behaves like the prop being absent.
+    render(<PaperBookletSimulation {...baseProps({ stimulus: { downloadPath: null } })} />);
+
+    expect(screen.getByText(/community-acquired pneumonia/i)).toBeInTheDocument();
+    expect(screen.queryByText('Question paper')).not.toBeInTheDocument();
   });
 });

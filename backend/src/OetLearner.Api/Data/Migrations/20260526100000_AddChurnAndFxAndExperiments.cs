@@ -1,5 +1,7 @@
 using System;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
+using OetLearner.Api.Data;
 
 #nullable disable
 
@@ -10,6 +12,8 @@ namespace OetLearner.Api.Data.Migrations
     /// Hand-authored to avoid absorbing EF snapshot drift; mirrors the pattern
     /// used by 20260524100000_AddBillingFullExpansion.
     /// </summary>
+    [DbContext(typeof(LearnerDbContext))]
+    [Migration("20260526100000_AddChurnAndFxAndExperiments")]
     public partial class AddChurnAndFxAndExperiments : Migration
     {
         protected override void Up(MigrationBuilder migrationBuilder)

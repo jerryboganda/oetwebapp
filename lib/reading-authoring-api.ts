@@ -1128,7 +1128,35 @@ export const getReadingAttempt = (attemptId: string) =>
       isCorrect: boolean | null; pointsEarned: number; answeredAt: string;
     }>;
     showExplanations: boolean;
+    /** R08 — the learner's persisted rule-out / highlight payload (null when
+     * none). Hydrated into the player on resume so strikethroughs survive. */
+    annotationsJson: string | null;
   }>(`/v1/reading-papers/attempts/${attemptId}`);
+
+/**
+ * R08 — persist the learner's rule-out (strikethrough) + highlight payload
+ * for an in-progress attempt. Opaque JSON capped at 64 KB server-side;
+ * `null` clears it. Mirrors the Listening `saveAnnotations` contract.
+ */
+export const saveReadingAnnotations = (attemptId: string, annotationsJson: string | null) =>
+  api<void>(`/v1/reading-papers/attempts/${attemptId}/annotations`, {
+    method: 'PUT',
+    body: JSON.stringify({ annotationsJson }),
+  });
+
+/** R08 — read back the learner's saved annotations payload (hydration fallback). */
+export const getReadingAnnotations = (attemptId: string) =>
+  api<{ annotationsJson: string | null }>(`/v1/reading-papers/attempts/${attemptId}/annotations`);
+
+/**
+ * Adapter matching `AttemptAnnotationsApi` so `useReadingAnnotations` can
+ * drive the shared `useAttemptAnnotations` hook. Declared at module scope so
+ * the reference is stable across renders (the hook keeps it in a ref).
+ */
+export const readingAnnotationsApi = {
+  saveAnnotations: saveReadingAnnotations,
+  getAnnotations: getReadingAnnotations,
+};
 
 export const getReadingAttemptReview = (attemptId: string) =>
   api<ReadingAttemptReviewDto>(`/v1/reading-papers/attempts/${attemptId}/review`);

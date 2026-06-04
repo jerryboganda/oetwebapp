@@ -73,6 +73,7 @@ public sealed class RolePlayCardSerializationTests : IAsyncLifetime
             _db,
             emailOtpService: null!,
             passwordHasher: null!,
+            passwordPolicyService: null!,
             timeProvider: TimeProvider.System,
             notifications: null!,
             learnerService: _learnerService);

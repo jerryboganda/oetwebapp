@@ -204,14 +204,22 @@ public sealed class AiCreditService(LearnerDbContext db) : IAiCreditService
 
     public async Task<int> SweepExpiredAsync(DateTimeOffset asOf, CancellationToken ct)
     {
-        var candidateUserIds = await db.AiCreditLedger.AsNoTracking()
+        // Keep the nullable DateTimeOffset comparison (`ExpiresAt <= asOf`) on
+        // the client: the SQLite EF provider cannot translate the lifted
+        // nullable comparison (it stores DateTimeOffset as TEXT), and this
+        // sweep is a batch job where pulling the small candidate projection is
+        // cheap. The relational predicate keeps only the parts every provider
+        // can translate (positive, not-yet-expired, has an expiry).
+        var candidateUserIds = (await db.AiCreditLedger.AsNoTracking()
             .Where(x => x.TokensDelta > 0
                         && x.ExpiredByEntryId == null
-                        && x.ExpiresAt != null
-                        && x.ExpiresAt <= asOf)
+                        && x.ExpiresAt != null)
+            .Select(x => new { x.UserId, x.ExpiresAt })
+            .ToListAsync(ct))
+            .Where(x => x.ExpiresAt <= asOf)
             .Select(x => x.UserId)
             .Distinct()
-            .ToListAsync(ct);
+            .ToList();
         if (candidateUserIds.Count == 0) return 0;
 
         var rows = await db.AiCreditLedger

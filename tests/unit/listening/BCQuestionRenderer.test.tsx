@@ -3,6 +3,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
 import { BCQuestionRenderer } from '@/components/domain/listening/BCQuestionRenderer';
+import type { ListeningQuestionAnnotation } from '@/hooks/use-listening-annotations';
 
 const OPTIONS = ['Ask the nurse to repeat the dose', 'Check the medication chart', 'Call the patient later'];
 
@@ -17,6 +18,29 @@ function BCHarness({ locked = false }: { locked?: boolean }) {
       value={value}
       onChange={setValue}
       locked={locked}
+    />
+  );
+}
+
+/**
+ * Drives the renderer entirely through the controlled `annotation` /
+ * `onAnnotationChange` props — the exact contract the Listening player uses to
+ * persist strikethroughs via useListeningAnnotations. No internal fallback
+ * state is exercised here.
+ */
+function ControlledBCHarness() {
+  const [value, setValue] = useState('');
+  const [annotation, setAnnotation] = useState<ListeningQuestionAnnotation>({});
+  return (
+    <BCQuestionRenderer
+      questionNumber={3}
+      partLabel="Part B"
+      prompt="What should the clinician do first?"
+      options={OPTIONS}
+      value={value}
+      onChange={setValue}
+      annotation={annotation}
+      onAnnotationChange={(mutator) => setAnnotation((current) => mutator(current))}
     />
   );
 }
@@ -79,5 +103,21 @@ describe('BCQuestionRenderer', () => {
     } finally {
       onError.mockRestore();
     }
+  });
+
+  it('round-trips strikethrough through controlled annotation props', async () => {
+    const user = userEvent.setup();
+    render(<ControlledBCHarness />);
+
+    // The struck state is driven by the controlled `annotation` prop: the
+    // click fires onAnnotationChange, the parent applies the mutator, and the
+    // new prop value re-renders the line-through.
+    await user.click(screen.getByRole('button', { name: /strike out option a/i }));
+    await waitFor(() => expect(screen.getByText(OPTIONS[0])).toHaveClass('line-through'));
+    expect(screen.getByRole('button', { name: /remove strikethrough from option a/i })).toHaveAttribute('aria-pressed', 'true');
+
+    // Toggling again clears it back through the same controlled path.
+    await user.click(screen.getByRole('button', { name: /remove strikethrough from option a/i }));
+    await waitFor(() => expect(screen.getByText(OPTIONS[0])).not.toHaveClass('line-through'));
   });
 });

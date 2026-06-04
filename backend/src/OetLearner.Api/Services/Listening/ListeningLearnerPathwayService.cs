@@ -1221,7 +1221,12 @@ public sealed class ListeningLearnerPathwayService : IListeningLearnerPathwaySer
                 case ListeningPartCode.A2:
                     partA += attempt.TimeSpentSeconds;
                     break;
-                case ListeningPartCode.B:
+                case ListeningPartCode.B1:
+                case ListeningPartCode.B2:
+                case ListeningPartCode.B3:
+                case ListeningPartCode.B4:
+                case ListeningPartCode.B5:
+                case ListeningPartCode.B6:
                     partB += attempt.TimeSpentSeconds;
                     break;
                 case ListeningPartCode.C1:
@@ -1295,6 +1300,7 @@ public sealed class ListeningLearnerPathwayService : IListeningLearnerPathwaySer
     private static string MapQuestionTypeToWire(ListeningQuestionType type) => type switch
     {
         ListeningQuestionType.ShortAnswer => "gap_fill",
+        ListeningQuestionType.FillInBlank => "gap_fill",
         ListeningQuestionType.MultipleChoice3 => "mcq3",
         _ => "unknown",
     };
@@ -1302,7 +1308,8 @@ public sealed class ListeningLearnerPathwayService : IListeningLearnerPathwaySer
     private static string MapPartCodeToLabel(ListeningPartCode? code) => code switch
     {
         ListeningPartCode.A1 or ListeningPartCode.A2 => "A",
-        ListeningPartCode.B => "B",
+        ListeningPartCode.B1 or ListeningPartCode.B2 or ListeningPartCode.B3
+            or ListeningPartCode.B4 or ListeningPartCode.B5 or ListeningPartCode.B6 => "B",
         ListeningPartCode.C1 or ListeningPartCode.C2 => "C",
         _ => "accent_test",
     };

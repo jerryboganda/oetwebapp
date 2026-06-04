@@ -488,6 +488,85 @@ public class ListeningRelationalRuntimeTests
     }
 
     [Fact]
+    public async Task AdvanceSection_PersistsMonotonicCursorForJsonFallbackGenericAttempt()
+    {
+        var (db, svc) = Build();
+        var (userId, paperId) = await SeedJsonFallbackPaperAsync(db);
+
+        await svc.StartAttemptAsync(userId, paperId, "home", default);
+        var attempt = await db.Attempts.SingleAsync(a => a.UserId == userId && a.ContentId == paperId);
+        // Relational store must be empty for a JSON-fallback paper — this is the
+        // exact case the advance-section 404 bug regressed on.
+        Assert.False(await db.ListeningAttempts.AnyAsync(a => a.Id == attempt.Id));
+
+        var first = await svc.AdvanceSectionAsync(userId, attempt.Id, new ListeningAdvanceSectionRequest(0), default);
+        var second = await svc.AdvanceSectionAsync(userId, attempt.Id, new ListeningAdvanceSectionRequest(3), default);
+
+        Assert.Contains("\"sectionCursor\":0", JsonSerializer.Serialize(first));
+        Assert.Contains("\"sectionCursor\":3", JsonSerializer.Serialize(second));
+
+        var reloaded = await db.Attempts.AsNoTracking().SingleAsync(a => a.Id == attempt.Id);
+        using var answers = JsonDocument.Parse(reloaded.AnswersJson);
+        Assert.Equal("3", answers.RootElement.GetProperty("__listeningSectionCursor").GetString());
+    }
+
+    [Fact]
+    public async Task AdvanceSection_RejectsBackwardMoveForJsonFallbackGenericAttempt()
+    {
+        var (db, svc) = Build();
+        var (userId, paperId) = await SeedJsonFallbackPaperAsync(db);
+
+        await svc.StartAttemptAsync(userId, paperId, "home", default);
+        var attempt = await db.Attempts.SingleAsync(a => a.UserId == userId && a.ContentId == paperId);
+
+        await svc.AdvanceSectionAsync(userId, attempt.Id, new ListeningAdvanceSectionRequest(5), default);
+
+        var ex = await Assert.ThrowsAsync<ApiException>(() =>
+            svc.AdvanceSectionAsync(userId, attempt.Id, new ListeningAdvanceSectionRequest(4), default));
+        Assert.Equal("listening_section_one_way", ex.Code);
+
+        var reloaded = await db.Attempts.AsNoTracking().SingleAsync(a => a.Id == attempt.Id);
+        using var answers = JsonDocument.Parse(reloaded.AnswersJson);
+        Assert.Equal("5", answers.RootElement.GetProperty("__listeningSectionCursor").GetString());
+    }
+
+    [Fact]
+    public async Task AdvanceSection_CursorDoesNotLeakIntoAnswersOrInflateAnsweredCount()
+    {
+        var (db, svc) = Build();
+        var (userId, paperId) = await SeedJsonFallbackPaperAsync(db);
+
+        await svc.StartAttemptAsync(userId, paperId, "home", default);
+        var attempt = await db.Attempts.SingleAsync(a => a.UserId == userId && a.ContentId == paperId);
+        await svc.SaveAnswerAsync(userId, attempt.Id, "json-q1", new ListeningAnswerSaveRequest("five"), default);
+        await svc.AdvanceSectionAsync(userId, attempt.Id, new ListeningAdvanceSectionRequest(2), default);
+
+        // GetAttempt (the player's resume payload) must not echo the reserved
+        // cursor key inside the answer map, but must expose the cursor field.
+        var attemptDto = await svc.GetAttemptAsync(userId, attempt.Id, default);
+        using var attemptDoc = JsonDocument.Parse(JsonSerializer.Serialize(attemptDto));
+        var answersEl = attemptDoc.RootElement.GetProperty("answers");
+        Assert.False(answersEl.TryGetProperty("__listeningSectionCursor", out _));
+        Assert.Equal("five", answersEl.GetProperty("json-q1").GetString());
+        Assert.Equal(2, attemptDoc.RootElement.GetProperty("sectionCursor").GetInt32());
+
+        // The Listening home surface's active-attempt answered count must ignore
+        // the reserved cursor key (1 real answer, not 2).
+        var home = await svc.GetHomeAsync(userId, default);
+        using var homeDoc = JsonDocument.Parse(JsonSerializer.Serialize(home));
+        var active = homeDoc.RootElement.GetProperty("activeAttempts").EnumerateArray()
+            .Single(a => a.GetProperty("attemptId").GetString() == attempt.Id);
+        Assert.Equal(1, active.GetProperty("answeredCount").GetInt32());
+
+        // Grading must ignore the reserved key (keyed by question id) — submit
+        // grades the single authored question only.
+        var review = await svc.SubmitAsync(userId, attempt.Id, default);
+        using var reviewDoc = JsonDocument.Parse(JsonSerializer.Serialize(review));
+        Assert.Equal(1, reviewDoc.RootElement.GetProperty("RawScore").GetInt32());
+        Assert.Equal(1, reviewDoc.RootElement.GetProperty("MaxRawScore").GetInt32());
+    }
+
+    [Fact]
     public async Task AdminAnalytics_CountsRelationalAttemptScoreOnce()
     {
         var (db, _) = Build();

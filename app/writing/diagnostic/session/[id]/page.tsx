@@ -13,7 +13,8 @@ import { WritingEditorV2 } from '@/components/domain/writing/WritingEditorV2';
 import { WritingTimerV2 } from '@/components/domain/writing/WritingTimerV2';
 import { WordCounter } from '@/components/domain/writing/WordCounter';
 import { SubmitBar } from '@/components/domain/writing/SubmitBar';
-import { CaseNotePdfViewer } from '@/components/domain/writing/CaseNotePdfViewer';
+import { WritingStimulus } from '@/components/domain/writing/WritingStimulus';
+import { WritingReadingWindowOverlay } from '@/components/domain/writing/WritingReadingWindowOverlay';
 import {
   beginWritingDiagnosticWriting,
   getWritingDiagnosticSession,
@@ -21,10 +22,12 @@ import {
   putWritingDraftV2,
   submitWritingDiagnostic,
 } from '@/lib/writing/api';
+import { useDeadlineCountdown } from '@/lib/writing/useCountdown';
+import { WRITING_WINDOW_SECONDS } from '@/lib/writing/workflow';
 import { connectWritingSubmissionStream } from '@/lib/writing/realtime';
 import { recordWritingAttemptEvent } from '@/lib/writing/exam-api';
 import type { WritingDiagnosticSessionDto } from '@/lib/writing/api';
-import type { WritingAttemptEventType, WritingGradeDto, WritingScenarioDto } from '@/lib/writing/types';
+import type { WritingAttemptEventType, WritingScenarioDto } from '@/lib/writing/types';
 
 export default function WritingDiagnosticSessionPage() {
   const t = useTranslations();
@@ -35,12 +38,15 @@ export default function WritingDiagnosticSessionPage() {
   const [session, setSession] = useState<WritingDiagnosticSessionDto | null>(null);
   const [scenario, setScenario] = useState<WritingScenarioDto | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [phase, setPhase] = useState<'reading' | 'writing' | 'completed'>('reading');
+  // Deadline-anchored countdowns (wall-clock epoch ms). Survive tab-backgrounding
+  // and refresh — the hook re-derives whole seconds from these on every tick and
+  // on tab refocus. Null until the session loads.
+  const [readingDeadlineMs, setReadingDeadlineMs] = useState<number | null>(null);
+  const [writingDeadlineMs, setWritingDeadlineMs] = useState<number | null>(null);
   const [content, setContent] = useState('');
   const [wordCount, setWordCount] = useState(0);
   const [submitting, setSubmitting] = useState(false);
-  const [phase, setPhase] = useState<'reading' | 'writing' | 'completed'>('reading');
-  const [readingSeconds, setReadingSeconds] = useState(0);
-  const [writingSeconds, setWritingSeconds] = useState(0);
   // Post-submit lock: freeze the letter + show a read-only "awaiting review"
   // state instead of navigating away (spec §10/§15).
   const [locked, setLocked] = useState(false);
@@ -49,6 +55,10 @@ export default function WritingDiagnosticSessionPage() {
   const lastAutosaveContent = useRef<string>('');
   // Throttle `response_typed` to at most one event per 10s window (spec §17.7).
   const lastTypedEventAt = useRef(0);
+  // Guard so the reading→writing transition calls `beginWritingDiagnosticWriting`
+  // at most once: the reading countdown's onZero AND the overlay's onAutoClose
+  // both fire on the same tick at reading 0:00.
+  const beganWritingRef = useRef(false);
 
   // ----- Attempt-event emission (computer mode; fire-and-forget) -----
   const contentRef = useRef(content);
@@ -68,67 +78,67 @@ export default function WritingDiagnosticSessionPage() {
     [sessionId, scenario?.id],
   );
 
-  const refresh = useCallback(async () => {
+  useEffect(() => {
     if (!sessionId) return;
-    try {
-      const next = await getWritingDiagnosticSession(sessionId);
-      setSession(next);
-      setReadingSeconds(next.readingSecondsRemaining);
-      setWritingSeconds(next.writingSecondsRemaining);
-      setPhase(next.phase === 'submitted' ? 'completed' : next.phase);
-      if (next.phase === 'submitted' && next.submissionId) {
-        router.replace(`/writing/diagnostic/session/${encodeURIComponent(sessionId)}/results`);
-      }
-      if (next.scenarioId) {
-        const sc = await getWritingScenario(next.scenarioId);
-        setScenario(sc);
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : t('writing.diagnostic.session.error.load'));
-    }
+    let cancelled = false;
+    void getWritingDiagnosticSession(sessionId)
+      .then(async (s) => {
+        if (cancelled) return;
+        setSession(s);
+        if (s.phase === 'reading') {
+          setPhase('reading');
+          setReadingDeadlineMs(Date.now() + s.readingSecondsRemaining * 1000);
+        } else if (s.phase === 'writing') {
+          setPhase('writing');
+          // A session resumed in the writing phase has already begun on the
+          // server — don't let the transition fire begin-writing again.
+          beganWritingRef.current = true;
+          setWritingDeadlineMs(
+            s.readingPhaseEndedAt
+              ? new Date(s.readingPhaseEndedAt).getTime() + WRITING_WINDOW_SECONDS * 1000
+              : Date.now() + s.writingSecondsRemaining * 1000,
+          );
+          startedAtRef.current = s.readingPhaseEndedAt
+            ? new Date(s.readingPhaseEndedAt).getTime()
+            : Date.now();
+        } else {
+          setPhase('completed');
+          if (s.submissionId) {
+            router.replace(`/writing/diagnostic/session/${encodeURIComponent(sessionId)}/results`);
+          }
+        }
+        if (s.scenarioId) {
+          const sc = await getWritingScenario(s.scenarioId).catch(() => null);
+          if (sc) setScenario(sc);
+        }
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setError(err instanceof Error ? err.message : t('writing.diagnostic.session.error.load'));
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [sessionId, router, t]);
 
+  // Confirm on browser close/back while in writing phase.
   useEffect(() => {
-    void refresh();
-  }, [refresh]);
-
-  // Local tick for both windows.
-  useEffect(() => {
-    if (phase === 'completed') return;
-    const tick = window.setInterval(() => {
-      if (phase === 'reading') setReadingSeconds((s) => Math.max(0, s - 1));
-      else if (phase === 'writing') setWritingSeconds((s) => Math.max(0, s - 1));
-    }, 1000);
-    return () => window.clearInterval(tick);
+    if (phase !== 'writing') return;
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
   }, [phase]);
-
-  // Phase transition: reading → writing must call backend so it can record the
-  // phase boundary and (re)issue token bookkeeping.
-  const handlePhaseChange = useCallback(
-    async (next: 'reading' | 'writing' | 'completed') => {
-      if (next === 'writing' && phase !== 'writing') {
-        setPhase('writing');
-        try {
-          const updated = await beginWritingDiagnosticWriting(sessionId);
-          setReadingSeconds(updated.readingSecondsRemaining);
-          setWritingSeconds(updated.writingSecondsRemaining);
-        } catch (err) {
-          setError(err instanceof Error ? err.message : t('writing.diagnostic.session.error.startWriting'));
-        }
-      } else if (next === 'completed') {
-        setPhase('completed');
-      }
-    },
-    [phase, sessionId, t],
-  );
 
   // Autosave every 5s during writing phase.
   useEffect(() => {
     if (phase !== 'writing' || !scenario?.id) return;
     const interval = window.setInterval(() => {
-      const elapsed = Math.round((Date.now() - startedAtRef.current) / 1000);
       if (content === lastAutosaveContent.current) return;
       lastAutosaveContent.current = content;
+      const elapsed = Math.round((Date.now() - startedAtRef.current) / 1000);
       void putWritingDraftV2(scenario.id, 'diagnostic', {
         content,
         wordCount,
@@ -239,6 +249,53 @@ export default function WritingDiagnosticSessionPage() {
     }
   }, [phase, locked, submitting, finalizeSubmit]);
 
+  const handlePhaseChange = useCallback(async (next: 'reading' | 'writing' | 'completed') => {
+    if (next === 'writing') {
+      // Idempotent: the timer's deadline onZero AND the overlay's onAutoClose
+      // both fire on the same tick at reading 0:00. Only the first proceeds.
+      if (beganWritingRef.current) return;
+      beganWritingRef.current = true;
+      // Provisional deadline BEFORE flipping phase so the writing countdown never
+      // momentarily reads 0:00 during the begin-writing round-trip; corrected
+      // from the server response below.
+      setWritingDeadlineMs(Date.now() + WRITING_WINDOW_SECONDS * 1000);
+      setPhase('writing');
+      try {
+        const updated = await beginWritingDiagnosticWriting(sessionId);
+        setSession(updated);
+        // Anchor the writing countdown to the server's reading-phase end so it
+        // stays accurate across refresh/backgrounding.
+        setWritingDeadlineMs(
+          updated.readingPhaseEndedAt
+            ? new Date(updated.readingPhaseEndedAt).getTime() + WRITING_WINDOW_SECONDS * 1000
+            : Date.now() + updated.writingSecondsRemaining * 1000,
+        );
+        startedAtRef.current = updated.readingPhaseEndedAt
+          ? new Date(updated.readingPhaseEndedAt).getTime()
+          : Date.now();
+      } catch (err) {
+        setError(err instanceof Error ? err.message : t('writing.diagnostic.session.error.startWriting'));
+      }
+    } else if (next === 'completed') {
+      // Writing timer expired — the completed-phase effect auto-submits + locks.
+      setPhase('completed');
+    }
+  }, [sessionId, t]);
+
+  // Deadline-anchored seconds. Both hooks run unconditionally (rules of hooks);
+  // each gated to its active phase so only the live one counts. The null-guarded
+  // onZero fires only for a REAL elapsed deadline — never on the 0 a null deadline
+  // yields before load or during the begin-writing round-trip — so transitions
+  // cannot fire spuriously. WritingTimerV2 is display/beep only.
+  const readingSeconds = useDeadlineCountdown(
+    phase === 'reading' ? readingDeadlineMs : null,
+    { onZero: () => void handlePhaseChange('writing') },
+  );
+  const writingSeconds = useDeadlineCountdown(
+    phase === 'writing' ? writingDeadlineMs : null,
+    { onZero: () => void handlePhaseChange('completed') },
+  );
+
   // SignalR — grade-ready push (in case backend grades quickly while still on
   // this page). Suppressed once we've shown the local locked state so the
   // learner stays on the "awaiting review" screen (they navigate via the link).
@@ -268,7 +325,7 @@ export default function WritingDiagnosticSessionPage() {
                 case-note & scenario text stays English even in Arabic UI. The
                 fallback placeholder is the only translated string here.
               */}
-              <h1 className="text-base font-bold text-navy">{scenario?.title ?? t('writing.diagnostic.session.scenarioLoading')}</h1>
+              <h1 className="text-base font-bold text-navy" dir="ltr">{scenario?.title ?? t('writing.diagnostic.session.scenarioLoading')}</h1>
               <div className="mt-1 flex flex-wrap items-center gap-1">
                 {/* Diagnostic is always strict (spec §20). */}
                 <Badge variant="warning" size="sm">Strict diagnostic</Badge>
@@ -290,7 +347,6 @@ export default function WritingDiagnosticSessionPage() {
               phase={phase}
               readingSecondsRemaining={readingSeconds}
               writingSecondsRemaining={writingSeconds}
-              onPhaseChange={(next) => void handlePhaseChange(next)}
               strict
             />
           </div>
@@ -307,21 +363,16 @@ export default function WritingDiagnosticSessionPage() {
             // chrome is RTL.
             dir="ltr"
           >
-            <CaseNotePdfViewer
-              caseNotesMarkdown={scenario?.caseNotesMarkdown ?? t('writing.diagnostic.session.caseNotesLoading')}
-              caseNoteSections={scenario?.caseNoteSections}
-              recipient={scenario?.recipient ?? null}
-              taskPrompt={scenario?.taskPromptMarkdown ?? null}
-              title={scenario?.title ?? t('writing.diagnostic.session.caseNotesLabel')}
-              readingWindowLocked={phase === 'reading'}
+            <WritingStimulus
+              scenario={scenario}
+              locked={phase === 'reading'}
+              title={scenario?.title ?? undefined}
             />
           </section>
 
           <section
             aria-label={t('writing.diagnostic.session.editorLabel')}
-            className="rounded-2xl border border-border bg-surface p-4"
-            // Learner writes the letter in English — keep the editor LTR.
-            dir="ltr"
+            className="flex flex-col gap-3 rounded-2xl border border-border bg-surface p-4"
           >
             {locked ? (
               <div className="flex min-h-[60vh] flex-col">
@@ -340,6 +391,7 @@ export default function WritingDiagnosticSessionPage() {
                 </div>
                 <div
                   className="flex-1 overflow-y-auto whitespace-pre-wrap rounded-xl border border-border bg-background-light p-4 text-sm leading-7 text-navy"
+                  dir="ltr"
                   aria-label="Submitted letter (read-only)"
                 >
                   {frozenLetter.trim() ? frozenLetter : 'No letter was written.'}
@@ -378,6 +430,20 @@ export default function WritingDiagnosticSessionPage() {
             helperText={helperText}
           />
         ) : null}
+
+        {/* Forced full-screen reading window. Renders only during the reading
+            phase; auto-closes into the writing view at 0:00. allowSkip is always
+            false for diagnostic — the session is strictly server-gated and early
+            begin-writing is rejected. */}
+        <WritingReadingWindowOverlay
+          open={phase === 'reading' && !!session}
+          scenario={scenario}
+          secondsRemaining={readingSeconds}
+          totalSeconds={scenario?.readingTimeSeconds ?? 300}
+          allowSkip={false}
+          onAutoClose={() => void handlePhaseChange('writing')}
+          title={scenario?.title ?? undefined}
+        />
       </div>
     </LearnerDashboardShell>
   );

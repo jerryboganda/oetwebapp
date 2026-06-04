@@ -1,4 +1,6 @@
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
+using OetLearner.Api.Data;
 
 #nullable disable
 
@@ -8,6 +10,8 @@ namespace OetLearner.Api.Data.Migrations
     /// Adds ExperimentAssignmentId to BillingQuotes so that a confirmed payment
     /// can mark the corresponding PricingExperimentAssignment as converted.
     /// </summary>
+    [DbContext(typeof(LearnerDbContext))]
+    [Migration("20260526200000_AddBillingQuoteExperimentAssignmentId")]
     public partial class AddBillingQuoteExperimentAssignmentId : Migration
     {
         protected override void Up(MigrationBuilder migrationBuilder)

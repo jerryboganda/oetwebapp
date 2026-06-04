@@ -19,7 +19,6 @@ import {
   upsertReadingQuestion,
   removeReadingQuestion,
   reorderReadingQuestions,
-  setReadingQuestionDistractors,
   type ReadingPartCode,
   type ReadingQuestionType,
   type ReadingQuestionAdminDto,
@@ -27,7 +26,6 @@ import {
   type ReadingSectionAdminDto,
   type ReadingTextDto,
   type ReadingReviewState,
-  type ReadingDistractorCategory,
 } from '@/lib/reading-authoring-api';
 import { AcceptedVariantManager } from './AcceptedVariantManager';
 import { LabeledBoxesManager, type LabeledBox, serializeLabeledBoxes, parseLabeledBoxes } from './LabeledBoxesManager';
@@ -58,25 +56,6 @@ const TYPE_LABELS: Record<ReadingQuestionType, string> = {
   MultipleChoiceFlexible: 'Multiple Choice (Flexible)',
 };
 
-const DIFFICULTY_OPTIONS: Array<{ value: string; label: string }> = [
-  { value: '', label: 'Not set' },
-  { value: '1', label: '1 — Easiest' },
-  { value: '2', label: '2' },
-  { value: '3', label: '3 — Medium' },
-  { value: '4', label: '4' },
-  { value: '5', label: '5 — Hardest' },
-];
-
-const DISTRACTOR_CATEGORIES: ReadingDistractorCategory[] = [
-  'Opposite',
-  'TooBroad',
-  'TooSpecific',
-  'WrongSpeaker',
-  'NotInText',
-  'DistortedDetail',
-  'OutOfScope',
-];
-
 const TEXT_REFERENCE_LABELS = ['A', 'B', 'C', 'D'];
 
 const MCQ_LABELS = ['A', 'B', 'C', 'D', 'E', 'F'];
@@ -88,21 +67,6 @@ function normaliseMatchingTextAnswer(answer: string, questionType: ReadingQuesti
     return TEXT_REFERENCE_LABELS[Number(trimmed) - 1] ?? trimmed;
   }
   return trimmed.toUpperCase();
-}
-
-function parseStringMap(json: string | null | undefined): Record<string, string> {
-  if (!json) return {};
-  try {
-    const parsed = JSON.parse(json);
-    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-      const out: Record<string, string> = {};
-      for (const [k, v] of Object.entries(parsed)) {
-        if (typeof v === 'string') out[k] = v;
-      }
-      return out;
-    }
-  } catch { /* ignore */ }
-  return {};
 }
 
 // ── Form state interfaces ──────────────────────────────────────────────
@@ -123,14 +87,7 @@ interface QuestionFormState {
   /** Boxes for ShortAnswerLabeled questions. */
   labeledBoxes: LabeledBox[];
   explanationMarkdown: string;
-  skillTag: string;
-  difficulty: number | null;
   evidenceSentence: string;
-  paragraphIndex: number | null;
-  /** Per-option-key rationale (A/B/C/D → text). */
-  distractorRationale: Record<string, string>;
-  /** Per-option-key distractor category (A/B/C/D → category). */
-  optionDistractors: Record<string, ReadingDistractorCategory | ''>;
 }
 
 type EditorMode = 'form' | 'json';
@@ -153,12 +110,7 @@ function emptyFormState(partId: string, partCode: ReadingPartCode, nextOrder: nu
     options: Array(optionCount).fill(''),
     labeledBoxes: [],
     explanationMarkdown: '',
-    skillTag: '',
-    difficulty: null,
     evidenceSentence: '',
-    paragraphIndex: null,
-    distractorRationale: {},
-    optionDistractors: {},
   };
 }
 
@@ -179,14 +131,6 @@ function questionToFormState(q: ReadingQuestionAdminDto): QuestionFormState {
   }
   correctAnswer = normaliseMatchingTextAnswer(correctAnswer, q.questionType);
 
-  const distractorRaw = parseStringMap(q.optionDistractorsJson);
-  const optionDistractors: Record<string, ReadingDistractorCategory | ''> = {};
-  for (const [key, value] of Object.entries(distractorRaw)) {
-    optionDistractors[key] = (DISTRACTOR_CATEGORIES as string[]).includes(value)
-      ? (value as ReadingDistractorCategory)
-      : '';
-  }
-
   const labeledBoxes = q.questionType === 'ShortAnswerLabeled'
     ? parseLabeledBoxes(q.optionsJson, q.correctAnswerJson, q.acceptedSynonymsJson, q.boxExplanationsJson)
     : [];
@@ -206,12 +150,7 @@ function questionToFormState(q: ReadingQuestionAdminDto): QuestionFormState {
     options,
     labeledBoxes,
     explanationMarkdown: q.explanationMarkdown ?? '',
-    skillTag: q.skillTag ?? '',
-    difficulty: q.difficulty ?? null,
     evidenceSentence: q.evidenceSentence ?? '',
-    paragraphIndex: q.paragraphIndex ?? null,
-    distractorRationale: parseStringMap(q.distractorRationaleJson),
-    optionDistractors,
   };
 }
 
@@ -225,7 +164,6 @@ function questionToJson(q: ReadingQuestionAdminDto): string {
       acceptedSynonymsJson: q.acceptedSynonymsJson,
       caseSensitive: q.caseSensitive,
       explanationMarkdown: q.explanationMarkdown,
-      skillTag: q.skillTag,
     },
     null,
     2,
@@ -274,7 +212,9 @@ export default function ReadingQuestionsEditorPage() {
   }, [paperId]);
 
   useEffect(() => {
-    void fetchData();
+    queueMicrotask(() => {
+      void fetchData();
+    });
   }, [fetchData]);
 
   const counts: { A: number; B: number; C: number } = {
@@ -309,7 +249,6 @@ export default function ReadingQuestionsEditorPage() {
         acceptedSynonymsJson: null,
         caseSensitive: false,
         explanationMarkdown: null,
-        skillTag: null,
       },
       null,
       2,
@@ -345,21 +284,13 @@ export default function ReadingQuestionsEditorPage() {
   function removeOption(idx: number) {
     if (!form || form.questionType !== 'MultipleChoiceFlexible' || form.options.length <= 2) return;
     const surviving = form.options.filter((_, i) => i !== idx);
-    const newRationale: Record<string, string> = {};
-    const newDistractors: Record<string, import('@/lib/reading-authoring-api').ReadingDistractorCategory | ''> = {};
-    for (let j = 0; j < surviving.length; j++) {
-      const oldKey = MCQ_LABELS[j < idx ? j : j + 1];
-      const newKey = MCQ_LABELS[j];
-      if (form.distractorRationale[oldKey]) newRationale[newKey] = form.distractorRationale[oldKey];
-      if (form.optionDistractors[oldKey]) newDistractors[newKey] = form.optionDistractors[oldKey];
-    }
     const correctIdx = MCQ_LABELS.indexOf(form.correctAnswer);
     const correctAfterRemove = correctIdx < 0 || correctIdx === idx
       ? ''
       : correctIdx < idx
         ? form.correctAnswer
         : MCQ_LABELS[correctIdx - 1];
-    setForm({ ...form, options: surviving, distractorRationale: newRationale, optionDistractors: newDistractors, correctAnswer: correctAfterRemove });
+    setForm({ ...form, options: surviving, correctAnswer: correctAfterRemove });
   }
 
   function handleTypeChange(newType: ReadingQuestionType) {
@@ -396,10 +327,10 @@ export default function ReadingQuestionsEditorPage() {
       stem: f.stem,
       caseSensitive: f.caseSensitive,
       explanationMarkdown: f.explanationMarkdown || null,
-      skillTag: f.skillTag || null,
-      difficulty: f.difficulty,
       evidenceSentence: f.evidenceSentence.trim() || null,
-      paragraphIndex: f.paragraphIndex,
+      skillTag: null,
+      difficulty: null,
+      paragraphIndex: null,
     };
 
     if (f.questionType === 'ShortAnswerLabeled') {
@@ -413,12 +344,7 @@ export default function ReadingQuestionsEditorPage() {
     const optionsJson = isMultiChoice ? JSON.stringify(f.options) : '[]';
     const correctAnswerJson = JSON.stringify(f.correctAnswer);
     const acceptedSynonymsJson = serializeAcceptedVariants(f.acceptedVariants);
-    const rationaleEntries = Object.entries(f.distractorRationale).filter(([, v]) => v.trim());
-    const distractorRationale = rationaleEntries.length > 0
-      ? Object.fromEntries(rationaleEntries.map(([k, v]) => [k, v.trim()]))
-      : null;
-
-    return { ...base, optionsJson, correctAnswerJson, acceptedSynonymsJson, distractorRationale, boxExplanationsJson: null };
+    return { ...base, optionsJson, correctAnswerJson, acceptedSynonymsJson, distractorRationale: null, boxExplanationsJson: null };
   }
 
   async function handleSaveForm() {
@@ -459,23 +385,7 @@ export default function ReadingQuestionsEditorPage() {
     setSaving(true);
     try {
       const payload = buildPayload(form);
-      const saved = await upsertReadingQuestion(paperId, payload);
-      // Persist per-option distractor categories via the dedicated endpoint.
-      if (isMulti) {
-        const optionLabels = MCQ_LABELS.slice(0, form.options.length);
-        const distractors: Partial<Record<string, ReadingDistractorCategory>> = {};
-        let hasDistractor = false;
-        for (const key of optionLabels) {
-          const category = form.optionDistractors[key];
-          if (category) {
-            distractors[key] = category;
-            hasDistractor = true;
-          }
-        }
-        if (hasDistractor) {
-          await setReadingQuestionDistractors(paperId, saved.id, distractors);
-        }
-      }
+      await upsertReadingQuestion(paperId, payload);
       setToast({ variant: 'success', message: form.id ? 'Question updated' : 'Question created' });
       cancelEdit();
       await fetchData();
@@ -505,7 +415,10 @@ export default function ReadingQuestionsEditorPage() {
         acceptedSynonymsJson: parsed.acceptedSynonymsJson ?? null,
         caseSensitive: parsed.caseSensitive ?? false,
         explanationMarkdown: parsed.explanationMarkdown ?? null,
-        skillTag: parsed.skillTag ?? null,
+        skillTag: null,
+        difficulty: null,
+        paragraphIndex: null,
+        distractorRationale: null,
       };
       await upsertReadingQuestion(paperId, payload);
       setToast({ variant: 'success', message: form?.id ? 'Question updated (JSON)' : 'Question created (JSON)' });
@@ -746,41 +659,6 @@ export default function ReadingQuestionsEditorPage() {
                     }}
                     placeholder={`Option ${key} text...`}
                   />
-                  {key !== form.correctAnswer && (
-                    <div className="grid gap-2 sm:grid-cols-2">
-                      <Select
-                        label="Distractor category"
-                        value={form.optionDistractors[key] ?? ''}
-                        onChange={(e) =>
-                          setForm({
-                            ...form,
-                            optionDistractors: {
-                              ...form.optionDistractors,
-                              [key]: e.target.value as ReadingDistractorCategory | '',
-                            },
-                          })
-                        }
-                        options={[
-                          { value: '', label: 'None' },
-                          ...DISTRACTOR_CATEGORIES.map((c) => ({ value: c, label: c })),
-                        ]}
-                      />
-                      <Input
-                        label="Distractor rationale"
-                        value={form.distractorRationale[key] ?? ''}
-                        onChange={(e) =>
-                          setForm({
-                            ...form,
-                            distractorRationale: {
-                              ...form.distractorRationale,
-                              [key]: e.target.value,
-                            },
-                          })
-                        }
-                        placeholder="Why a learner might pick this"
-                      />
-                    </div>
-                  )}
                 </div>
               );
             })}
@@ -850,29 +728,6 @@ export default function ReadingQuestionsEditorPage() {
 
         {/* Common fields */}
         <div className="space-y-3 border-t border-admin-border pt-4">
-          <div className="grid gap-3 sm:grid-cols-2">
-            <Select
-              label="Difficulty (1–5)"
-              value={form.difficulty != null ? String(form.difficulty) : ''}
-              onChange={(e) =>
-                setForm({ ...form, difficulty: e.target.value ? Number(e.target.value) : null })
-              }
-              options={DIFFICULTY_OPTIONS}
-            />
-            <Input
-              label="Paragraph index (optional)"
-              type="number"
-              min={0}
-              value={form.paragraphIndex != null ? form.paragraphIndex : ''}
-              onChange={(e) =>
-                setForm({
-                  ...form,
-                  paragraphIndex: e.target.value === '' ? null : Math.max(0, parseInt(e.target.value) || 0),
-                })
-              }
-              hint="Source paragraph order (drives paragraph-order lint)."
-            />
-          </div>
           <Textarea
             label="Evidence sentence (optional)"
             value={form.evidenceSentence}
@@ -886,12 +741,6 @@ export default function ReadingQuestionsEditorPage() {
             onChange={(e) => setForm({ ...form, explanationMarkdown: e.target.value })}
             rows={2}
             placeholder="Explain why this is the correct answer..."
-          />
-          <Input
-            label="Skill Tag (optional)"
-            value={form.skillTag}
-            onChange={(e) => setForm({ ...form, skillTag: e.target.value })}
-            placeholder="e.g. scanning, inference, vocabulary"
           />
         </div>
 

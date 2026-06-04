@@ -117,8 +117,11 @@ public class ListeningBackfillServiceTests
         var report = await svc.BackfillPaperAsync(paper.Id, "admin-1", default);
 
         Assert.True(report.Success);
-        Assert.Equal(5, report.PartsCreated);     // A1, A2, B, C1, C2
-        Assert.Equal(5, report.ExtractsCreated);  // one per part (default per-part extract)
+        // Part B's six bare-"B" items are split to B1..B6 (one sub-section each)
+        // by SplitLegacyPartB, so the canonical paper now projects 10 parts /
+        // 10 extracts (A1, A2, B1..B6, C1, C2).
+        Assert.Equal(10, report.PartsCreated);
+        Assert.Equal(10, report.ExtractsCreated);  // one per part (default per-part extract)
         Assert.Equal(42, report.QuestionsCreated);
         // 6 Part B + 12 Part C MCQ = 18 questions × 3 options = 54 options
         Assert.Equal(54, report.OptionsCreated);
@@ -126,7 +129,9 @@ public class ListeningBackfillServiceTests
         var parts = await db.ListeningParts.AsNoTracking().Where(p => p.PaperId == paper.Id).OrderBy(p => p.PartCode).ToListAsync();
         Assert.Equal(new[]
         {
-            ListeningPartCode.A1, ListeningPartCode.A2, ListeningPartCode.B,
+            ListeningPartCode.A1, ListeningPartCode.A2,
+            ListeningPartCode.B1, ListeningPartCode.B2, ListeningPartCode.B3,
+            ListeningPartCode.B4, ListeningPartCode.B5, ListeningPartCode.B6,
             ListeningPartCode.C1, ListeningPartCode.C2,
         }, parts.Select(p => p.PartCode));
 
@@ -179,10 +184,11 @@ public class ListeningBackfillServiceTests
         Assert.Equal(first.QuestionsCreated, second.QuestionsCreated);
         Assert.Equal(first.OptionsCreated, second.OptionsCreated);
 
-        // Second run should not duplicate rows.
+        // Second run should not duplicate rows. Part B splits to B1..B6, so a
+        // canonical paper projects 10 parts (A1, A2, B1..B6, C1, C2).
         var partCount = await db.ListeningParts.CountAsync(p => p.PaperId == paper.Id);
         var qCount = await db.ListeningQuestions.CountAsync(q => q.PaperId == paper.Id);
-        Assert.Equal(5, partCount);
+        Assert.Equal(10, partCount);
         Assert.Equal(42, qCount);
     }
 

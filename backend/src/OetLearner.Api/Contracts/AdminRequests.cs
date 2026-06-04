@@ -241,6 +241,8 @@ public record AdminUserStatusRequest(string Status, string? Reason);
 
 public record AdminUserCreditsRequest(int Amount, string? Reason);
 
+public record AdminUserSetPasswordRequest(string Password);
+
 public record AdminUserLifecycleRequest(string? Reason);
 
 /// <summary>

@@ -410,7 +410,7 @@ function parseScoreValue(value: string): number | null {
 function routeForWeakness(subtest: string): string {
   if (subtest.includes('listening')) return '/listening';
   if (subtest.includes('reading')) return '/reading/practice';
-  if (subtest.includes('writing')) return '/writing/library';
+  if (subtest.includes('writing')) return '/writing/practice/library';
   if (subtest.includes('speaking')) return '/speaking/selection';
   return '/practice';
 }

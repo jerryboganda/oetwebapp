@@ -523,7 +523,7 @@ export const completeWritingLesson = (lessonId: string, payload: { quizScore: nu
 export const listWritingMocks = () =>
   apiClient.get<{ items: WritingMockDto[] }>('/v1/writing/mocks');
 
-export const startWritingMock = (payload: { mockId: string }) =>
+export const startWritingMock = (payload: { mockId: string; isPractice?: boolean }) =>
   apiClient.post<WritingMockSessionDto>('/v1/writing/mocks/start', payload);
 
 export const getWritingMockSession = (sessionId: string) =>

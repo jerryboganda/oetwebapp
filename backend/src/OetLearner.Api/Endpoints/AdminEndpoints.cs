@@ -286,6 +286,10 @@ public static class AdminEndpoints
             => Results.Ok(await service.AdjustUserCreditsAsync(http.AdminId(), http.AdminName(), userId, request, ct)))
             .WithAdminWrite("AdminUsersWrite");
 
+        admin.MapPost("/users/{userId}/password", async (string userId, HttpContext http, AdminUserSetPasswordRequest request, AdminService service, CancellationToken ct)
+            => Results.Ok(await service.SetUserPasswordAsync(http.AdminId(), http.AdminName(), userId, request, ct)))
+            .WithAdminWrite("AdminUsersWrite");
+
         admin.MapPost("/users/{userId}/password-reset", async (string userId, HttpContext http, AdminService service, CancellationToken ct)
             => Results.Ok(await service.TriggerUserPasswordResetAsync(http.AdminId(), http.AdminName(), userId, ct)))
             .WithAdminWrite("AdminUsersWrite");

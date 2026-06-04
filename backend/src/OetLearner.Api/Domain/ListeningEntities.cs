@@ -34,19 +34,36 @@ public enum ListeningPartCode
 {
     A1 = 1,
     A2 = 2,
-    B = 3,
-    C1 = 4,
-    C2 = 5,
+    // Part B is split into six independent sub-sections (B1–B6), each its own
+    // navigable window with its own audio, timer, and single question. The old
+    // monolithic "B = 3" is renamed to B1 (same int — existing rows reinterpret
+    // cleanly). C1/C2 shift from 4/5 to 9/10 so the enum stays sequential and
+    // every `(int)partCode` / `OrderBy(PartCode)` site keeps correct display
+    // order; the 20260623090000 migration remaps the two persisted C1/C2 ints.
+    B1 = 3,
+    B2 = 4,
+    B3 = 5,
+    B4 = 6,
+    B5 = 7,
+    B6 = 8,
+    C1 = 9,
+    C2 = 10,
 }
 
 [JsonConverter(typeof(JsonStringEnumConverter))]
 public enum ListeningQuestionType
 {
-    /// <summary>Part A only. Note-completion / fill-in-the-blank, graded by
-    /// canonical-answer + accepted-variants string compare.</summary>
+    /// <summary>Free-text / note-completion short answer, graded by
+    /// canonical-answer + accepted-variants string compare. Selectable in any
+    /// sub-section (one of the 3 platform content types).</summary>
     ShortAnswer = 0,
-    /// <summary>Part B and Part C. 3-option MCQ.</summary>
+    /// <summary>3-option MCQ. Selectable in any sub-section.</summary>
     MultipleChoice3 = 1,
+    /// <summary>Fill-in-the-blank gap. Authored as a distinct type so admins
+    /// can pick it explicitly (one of the 3 platform content types: MCQ /
+    /// fill-in-the-blank / free-text), but graded identically to
+    /// <see cref="ShortAnswer"/> (canonical + accepted-variants string compare).</summary>
+    FillInBlank = 2,
 }
 
 [JsonConverter(typeof(JsonStringEnumConverter))]
@@ -169,12 +186,20 @@ public class ListeningPart
 
     public ListeningPartCode PartCode { get; set; }
 
-    /// <summary>Max raw points achievable on this part. Canonical: A1=12,
-    /// A2=12, B=6, C1=6, C2=6. Total across the paper = 42.</summary>
+    /// <summary>Max raw points achievable on this sub-section. Canonical:
+    /// A1=12, A2=12, B1–B6=1 each, C1=6, C2=6. Total across the paper = 42.</summary>
     public int MaxRawScore { get; set; }
 
     [MaxLength(1024)]
     public string? Instructions { get; set; }
+
+    /// <summary>Single per-sub-section countdown duration in seconds. The
+    /// learner player autoplays this sub-section's audio, counts down, and
+    /// auto-advances to the next sub-section on expiry (one-way; the candidate
+    /// may also advance early). Null falls back to a runtime default. This
+    /// replaces the legacy preview/playback/review window model for the
+    /// reading-style one-way player.</summary>
+    public int? TimeLimitSeconds { get; set; }
 
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }

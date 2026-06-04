@@ -1082,7 +1082,7 @@
       "author_id": "system:seed"
     },
     {
-      "id": "00000000-0000-0000-0000-000100020001",
+      "id": "00000000-0000-0000-0000-000100030001",
       "title": "Routine referral: paediatric nocturnal enuresis",
       "letter_type": "LT-RR",
       "profession": "Medicine",
@@ -1111,7 +1111,7 @@
       "author_id": "system:seed-v3"
     },
     {
-      "id": "00000000-0000-0000-0000-000100020002",
+      "id": "00000000-0000-0000-0000-000100030002",
       "title": "Routine referral: derma for chronic plaque psoriasis",
       "letter_type": "LT-RR",
       "profession": "Medicine",
@@ -1140,7 +1140,7 @@
       "author_id": "system:seed-v3"
     },
     {
-      "id": "00000000-0000-0000-0000-000100020003",
+      "id": "00000000-0000-0000-0000-000100030003",
       "title": "Discharge to GP: brief admission with acute gastritis",
       "letter_type": "LT-DG",
       "profession": "Medicine",
@@ -1169,7 +1169,7 @@
       "author_id": "system:seed-v3"
     },
     {
-      "id": "00000000-0000-0000-0000-000100020004",
+      "id": "00000000-0000-0000-0000-000100030004",
       "title": "Routine referral: MSK clinic for hip osteoarthritis",
       "letter_type": "LT-RR",
       "profession": "Medicine",
@@ -1198,7 +1198,7 @@
       "author_id": "system:seed-v3"
     },
     {
-      "id": "00000000-0000-0000-0000-000200020001",
+      "id": "00000000-0000-0000-0000-000200030001",
       "title": "Pharmacy communication: new oral contraceptive interaction with lamotrigine",
       "letter_type": "LT-NM",
       "profession": "Pharmacy",
@@ -1227,7 +1227,7 @@
       "author_id": "system:seed-v3"
     },
     {
-      "id": "00000000-0000-0000-0000-000200020002",
+      "id": "00000000-0000-0000-0000-000200030002",
       "title": "Pharmacy response: smoking cessation pharmacotherapy advice",
       "letter_type": "LT-RP",
       "profession": "Pharmacy",
@@ -1256,7 +1256,7 @@
       "author_id": "system:seed-v3"
     },
     {
-      "id": "00000000-0000-0000-0000-000200020003",
+      "id": "00000000-0000-0000-0000-000200030003",
       "title": "Pharmacy communication: missed depot antipsychotic dose",
       "letter_type": "LT-NM",
       "profession": "Pharmacy",
@@ -1285,7 +1285,7 @@
       "author_id": "system:seed-v3"
     },
     {
-      "id": "00000000-0000-0000-0000-000200020004",
+      "id": "00000000-0000-0000-0000-000200030004",
       "title": "Pharmacy communication: high-dose proton pump inhibitor and overdose risk",
       "letter_type": "LT-NM",
       "profession": "Pharmacy",
@@ -1314,7 +1314,7 @@
       "author_id": "system:seed-v3"
     },
     {
-      "id": "00000000-0000-0000-0000-000300020001",
+      "id": "00000000-0000-0000-0000-000300030001",
       "title": "Nursing communication: school nursing letter regarding asthma plan",
       "letter_type": "LT-NM",
       "profession": "Nursing",
@@ -1343,7 +1343,7 @@
       "author_id": "system:seed-v3"
     },
     {
-      "id": "00000000-0000-0000-0000-000300020002",
+      "id": "00000000-0000-0000-0000-000300030002",
       "title": "Nursing discharge: post-cataract day-case ophthalmology",
       "letter_type": "LT-DG",
       "profession": "Nursing",
@@ -1372,7 +1372,7 @@
       "author_id": "system:seed-v3"
     },
     {
-      "id": "00000000-0000-0000-0000-000300020003",
+      "id": "00000000-0000-0000-0000-000300030003",
       "title": "Nursing referral: community mental health team for low mood post-bereavement",
       "letter_type": "LT-RR",
       "profession": "Nursing",
@@ -1401,7 +1401,7 @@
       "author_id": "system:seed-v3"
     },
     {
-      "id": "00000000-0000-0000-0000-000300020004",
+      "id": "00000000-0000-0000-0000-000300030004",
       "title": "Nursing referral: community midwifery — gestational diabetes for dietitian input",
       "letter_type": "LT-RR",
       "profession": "Nursing",

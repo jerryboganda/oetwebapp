@@ -120,15 +120,21 @@ public sealed class WritingAnalyticsServiceV2(LearnerDbContext db, TimeProvider 
     public async Task<IReadOnlyList<WritingAnalyticsCanonRow>> GetCanonTrackerAsync(string userId, int days, CancellationToken ct)
     {
         var since = clock.GetUtcNow().AddDays(-Math.Clamp(days, 1, 365));
-        var rows = await db.WritingCanonViolations.AsNoTracking()
+        // Project the grouped aggregates into an anonymous type so the ORDER BY /
+        // TAKE stay translatable in SQL — EF cannot translate ordering over a
+        // property of a positional-record constructor projection
+        // (WritingAnalyticsCanonRow), only over the group/anonymous shape.
+        var grouped = await db.WritingCanonViolations.AsNoTracking()
             .Join(db.WritingSubmissions.AsNoTracking(), v => v.SubmissionId, s => s.Id, (v, s) => new { v, s })
             .Where(x => x.s.UserId == userId && x.v.DetectedAt >= since)
             .GroupBy(x => new { x.v.RuleId, x.v.Severity })
-            .Select(g => new WritingAnalyticsCanonRow(g.Key.RuleId, g.Key.Severity, g.Count(), g.Count()))
+            .Select(g => new { g.Key.RuleId, g.Key.Severity, Count = g.Count() })
             .OrderByDescending(r => r.Count)
             .Take(15)
             .ToListAsync(ct);
-        return rows;
+        return grouped
+            .Select(r => new WritingAnalyticsCanonRow(r.RuleId, r.Severity, r.Count, r.Count))
+            .ToList();
     }
 
     public async Task<IReadOnlyList<WritingAnalyticsActivityCell>> GetActivityHeatmapAsync(string userId, int days, CancellationToken ct)

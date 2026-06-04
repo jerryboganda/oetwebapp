@@ -24,8 +24,8 @@ public sealed class MaterialAccessService(
     }
 
     /// <summary>
-    /// Returns the pruned visible tree for the authenticated candidate.
-    /// Folders with no published file in their subtree are excluded.
+    /// Returns the visible tree for the authenticated candidate.
+    /// Every published, accessible folder is included — even empty ones.
     /// </summary>
     public async Task<IReadOnlyList<object>> GetVisibleTreeAsync(ClaimsPrincipal principal, CancellationToken ct)
     {
@@ -61,12 +61,9 @@ public sealed class MaterialAccessService(
             .Where(f => f.FolderId == null || visibleFolderIds.Contains(f.FolderId))
             .ToList();
 
-        // Prune: remove folders that have no published file anywhere in their subtree
-        var foldersWithContent = BuildFoldersWithContent(visibleFolderIds, visibleFiles, folderDict);
-
         var rootFolders = allFolders
-            .Where(f => f.ParentFolderId == null && foldersWithContent.Contains(f.Id))
-            .Select(f => BuildFolderNode(f, allFolders, visibleFiles, foldersWithContent))
+            .Where(f => f.ParentFolderId == null && visibleFolderIds.Contains(f.Id))
+            .Select(f => BuildFolderNode(f, allFolders, visibleFiles, visibleFolderIds))
             .Cast<object>()
             .ToList();
 
@@ -237,53 +234,15 @@ public sealed class MaterialAccessService(
         );
     }
 
-    /// <summary>
-    /// Returns the set of folder IDs that have at least one visible file
-    /// anywhere in their subtree (direct or nested).
-    /// </summary>
-    private static HashSet<string> BuildFoldersWithContent(
-        HashSet<string> visibleFolderIds,
-        IEnumerable<MaterialFile> visibleFiles,
-        Dictionary<string, MaterialFolder> folderDict)
-    {
-        // Seed: folders with at least one direct file
-        var result = visibleFiles
-            .Where(f => f.FolderId != null && visibleFolderIds.Contains(f.FolderId))
-            .Select(f => f.FolderId!)
-            .ToHashSet();
-
-        // Propagate up: if a child has content, its parent does too
-        bool changed;
-        do
-        {
-            changed = false;
-            foreach (var folderId in visibleFolderIds)
-            {
-                if (result.Contains(folderId)) continue;
-                if (!folderDict.TryGetValue(folderId, out var folder)) continue;
-
-                var childHasContent = visibleFolderIds
-                    .Where(id => folderDict.TryGetValue(id, out var child) && child.ParentFolderId == folderId)
-                    .Any(id => result.Contains(id));
-
-                if (!childHasContent) continue;
-                result.Add(folderId);
-                changed = true;
-            }
-        } while (changed);
-
-        return result;
-    }
-
     private static object BuildFolderNode(
         MaterialFolder folder,
         List<MaterialFolder> allFolders,
         List<MaterialFile> visibleFiles,
-        HashSet<string> foldersWithContent)
+        HashSet<string> visibleFolderIds)
     {
         var childFolders = allFolders
-            .Where(f => f.ParentFolderId == folder.Id && foldersWithContent.Contains(f.Id))
-            .Select(f => BuildFolderNode(f, allFolders, visibleFiles, foldersWithContent))
+            .Where(f => f.ParentFolderId == folder.Id && visibleFolderIds.Contains(f.Id))
+            .Select(f => BuildFolderNode(f, allFolders, visibleFiles, visibleFolderIds))
             .ToList();
 
         var files = visibleFiles

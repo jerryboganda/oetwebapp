@@ -536,6 +536,11 @@ public sealed class LiveClassZoomAndRefundTests
     {
         var options = new DbContextOptionsBuilder<LearnerDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString("N"))
+            // LiveClassService wraps mutations in a Serializable transaction.
+            // The in-memory provider has no transaction support and throws on
+            // BeginTransactionAsync by default; treat that as a harmless no-op
+            // so re-enrollment/refund flows exercise the real service logic.
+            .ConfigureWarnings(w => w.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.InMemoryEventId.TransactionIgnoredWarning))
             .Options;
         return new LearnerDbContext(options);
     }

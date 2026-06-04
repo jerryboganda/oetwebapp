@@ -907,6 +907,9 @@ builder.Services.AddScoped<OetLearner.Api.Services.Billing.IRegionDetector, OetL
 builder.Services.AddScoped<OetLearner.Api.Services.Billing.IPriceResolver, OetLearner.Api.Services.Billing.PriceResolver>();
 builder.Services.AddScoped<OetLearner.Api.Services.Billing.IManualPaymentService, OetLearner.Api.Services.Billing.ManualPaymentService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Billing.IDunningCampaignService, OetLearner.Api.Services.Billing.DunningCampaignService>();
+// DunningCampaignService also implements IDunningService (resolved by the BillingDunningRetry background job); register that interface too so the job doesn't throw "No service registered".
+builder.Services.AddScoped<OetLearner.Api.Services.Billing.IDunningService, OetLearner.Api.Services.Billing.DunningCampaignService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Billing.IAbandonedCartRecoveryService, OetLearner.Api.Services.Billing.AbandonedCartRecoveryService>();
 builder.Services.AddHostedService<OetLearner.Api.Services.Billing.DunningWorker>();
 builder.Services.AddScoped<OetLearner.Api.Services.Billing.IAffiliateService, OetLearner.Api.Services.Billing.AffiliateService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Billing.IBillingNotificationDispatcher, OetLearner.Api.Services.Billing.BillingNotificationDispatcher>();

@@ -408,6 +408,7 @@ public static class WritingMarkingEndpoints
             .Select(MapChecklistItem)
             .ToList();
 
+        var pdfId = scenario.StimulusPdfMediaAssetId;
         return new WritingTaskContextDto(
             scenario.Id.ToString(),
             scenario.Title,
@@ -420,7 +421,9 @@ public static class WritingMarkingEndpoints
             scenario.MarkingMode,
             key,
             irrelevant,
-            modelAnswer);
+            modelAnswer,
+            StimulusPdfMediaAssetId: pdfId,
+            StimulusPdfDownloadPath: string.IsNullOrWhiteSpace(pdfId) ? null : $"/v1/media/{pdfId}/content");
     }
 
     private static WritingChecklistItemDto MapChecklistItem(WritingContentChecklistItem c)
@@ -677,7 +680,9 @@ public sealed record WritingTaskContextDto(
     string MarkingMode,
     IReadOnlyList<WritingChecklistItemDto> KeyChecklistItems,
     IReadOnlyList<WritingChecklistItemDto> IrrelevantChecklistItems,
-    string? ModelAnswerText);
+    string? ModelAnswerText,
+    string? StimulusPdfMediaAssetId = null,
+    string? StimulusPdfDownloadPath = null);
 
 public sealed record WritingChecklistItemDto(
     string Id,

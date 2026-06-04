@@ -60,10 +60,10 @@ describe('LearnerDashboardShell', () => {
 
   it('does not render breadcrumbs in distraction-free mode', () => {
     renderWithRouter(
-      <LearnerDashboardShell pageTitle="Writing player" distractionFree>
-        <div>Writing Player</div>
+      <LearnerDashboardShell pageTitle="Writing exam" distractionFree>
+        <div>Writing Exam</div>
       </LearnerDashboardShell>,
-      { pathname: '/writing/player' },
+      { pathname: '/writing/mocks/session/abc' },
     );
 
     expect(screen.queryByRole('navigation', { name: /breadcrumb/i })).not.toBeInTheDocument();

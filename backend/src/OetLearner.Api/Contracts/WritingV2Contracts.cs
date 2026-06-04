@@ -286,7 +286,9 @@ public sealed record WritingScenarioResponse(
     bool IsDiagnostic,
     string Status,
     DateTimeOffset CreatedAt,
-    DateTimeOffset UpdatedAt);
+    DateTimeOffset UpdatedAt,
+    string? StimulusPdfMediaAssetId = null,
+    string? StimulusPdfDownloadPath = null);
 
 public sealed record WritingScenarioListResponse(
     IReadOnlyList<WritingScenarioResponse> Items,
@@ -503,7 +505,7 @@ public sealed record WritingMockResponse(
 public sealed record WritingMockListResponse(
     IReadOnlyList<WritingMockResponse> Items);
 
-public sealed record WritingMockStartRequest([property: Required] Guid MockId);
+public sealed record WritingMockStartRequest([property: Required] Guid MockId, bool IsPractice = false);
 
 public sealed record WritingMockSessionResponse(
     Guid Id,
@@ -515,7 +517,8 @@ public sealed record WritingMockSessionResponse(
     DateTimeOffset? SubmittedAt,
     Guid? SubmissionId,
     int ReadingSecondsRemaining,
-    int WritingSecondsRemaining);
+    int WritingSecondsRemaining,
+    bool IsPractice);
 
 public sealed record WritingMockSubmitRequest(
     [property: Required] string LetterContent,

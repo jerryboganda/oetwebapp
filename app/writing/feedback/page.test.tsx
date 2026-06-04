@@ -99,11 +99,4 @@ describe('Writing detailed feedback page — rule-cited findings', () => {
     expect(screen.getByText(/Suggested fix/i)).toBeInTheDocument();
     expect(screen.getByText(/Move the allergy line/i)).toBeInTheDocument();
   });
-
-  it('routes the revise action to the linked revision workspace', async () => {
-    render(<WritingDetailedFeedback />);
-
-    const link = await screen.findByRole('link', { name: /revise submission/i });
-    expect(link).toHaveAttribute('href', '/writing/revision?id=we-1');
-  });
 });

@@ -5,7 +5,6 @@ export { WeakestLinkCard } from './weakest-link-card';
 export { CriterionBreakdownCard } from './criterion-breakdown-card';
 export { StudyPlanItem } from './study-plan-item';
 export { TaskCard, SubmissionCard } from './task-card';
-export { WritingCaseNotesPanel } from './writing-case-notes-panel';
 export { WritingEditor } from './writing-editor';
 export { WritingIssueList, type IssueType } from './writing-issue-list';
 export { RevisionDiffViewer } from './revision-diff-viewer';

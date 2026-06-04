@@ -28,7 +28,7 @@ const SUBTEST_CONFIG: Record<
   string,
   { icon: typeof PenLine; color: string; bg: string; route: string }
 > = {
-  Writing: { icon: PenLine, color: 'text-info', bg: 'bg-info/10', route: '/diagnostic/writing' },
+  Writing: { icon: PenLine, color: 'text-info', bg: 'bg-info/10', route: '/writing/diagnostic' },
   Speaking: { icon: Mic, color: 'text-primary', bg: 'bg-primary/10', route: '/diagnostic/speaking' },
   Reading: { icon: BookOpen, color: 'text-success', bg: 'bg-success/10', route: '/diagnostic/reading' },
   Listening: { icon: Headphones, color: 'text-warning', bg: 'bg-amber-50', route: '/diagnostic/listening' },

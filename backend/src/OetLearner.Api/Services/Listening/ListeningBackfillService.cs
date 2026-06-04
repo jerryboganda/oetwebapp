@@ -157,6 +157,14 @@ public sealed class ListeningBackfillService(LearnerDbContext db) : IListeningBa
             await db.SaveChangesAsync(ct);
         }
 
+        // Legacy split: papers authored before the Part B sub-section split
+        // carry all six Part B items under the single "B" part code. Distribute
+        // them to B1..B6 by question-number order so the projection produces six
+        // independent sub-sections (each its own extract + timer + question),
+        // matching the post-migration relational shape. Items already coded
+        // B1..B6 are left untouched.
+        questions = SplitLegacyPartB(questions);
+
         // Build parts (one per partCode that has at least one question)
         var grouped = questions
             .GroupBy(q => NormalizePartCodeEnum(q.PartCode))
@@ -176,6 +184,8 @@ public sealed class ListeningBackfillService(LearnerDbContext db) : IListeningBa
                 PartCode = g.Key,
                 MaxRawScore = g.Sum(q => Math.Max(1, q.Points)),
                 Instructions = null,
+                TimeLimitSeconds = extracts
+                    .FirstOrDefault(e => NormalizePartCodeEnum(e.PartCode) == g.Key)?.TimeLimitSeconds,
                 CreatedAt = now,
                 UpdatedAt = now,
             });
@@ -250,9 +260,12 @@ public sealed class ListeningBackfillService(LearnerDbContext db) : IListeningBa
                 QuestionNumber = q.Number,
                 DisplayOrder = q.Number,
                 Points = Math.Max(1, q.Points),
-                QuestionType = q.Type == "multiple_choice_3"
-                    ? ListeningQuestionType.MultipleChoice3
-                    : ListeningQuestionType.ShortAnswer,
+                QuestionType = q.Type switch
+                {
+                    "multiple_choice_3" => ListeningQuestionType.MultipleChoice3,
+                    "fill_in_blank" => ListeningQuestionType.FillInBlank,
+                    _ => ListeningQuestionType.ShortAnswer,
+                },
                 Stem = q.Stem,
                 CorrectAnswerJson = canonicalAnswerJson,
                 AcceptedSynonymsJson = acceptedJson,
@@ -380,7 +393,10 @@ public sealed class ListeningBackfillService(LearnerDbContext db) : IListeningBa
         foreach (var item in raw.EnumerateArray())
         {
             if (item.ValueKind != JsonValueKind.Object) continue;
-            var partCode = NormalizePartCodeString(GetString(item, "partCode") ?? GetString(item, "part") ?? "A");
+            // Preserve a bare legacy "B" here (do NOT floor it to B1 yet) so
+            // SplitLegacyPartB can distribute the six items across B1..B6. Any
+            // other code is normalized to its canonical form.
+            var partCode = NormalizePartCodeRaw(GetString(item, "partCode") ?? GetString(item, "part") ?? "A");
             var type = GetString(item, "type") ?? GetString(item, "questionType") ?? "short_answer";
             var stem = GetString(item, "text") ?? GetString(item, "stem") ?? string.Empty;
             var correct = GetString(item, "correctAnswer") ?? GetString(item, "answer") ?? string.Empty;
@@ -438,7 +454,8 @@ public sealed class ListeningBackfillService(LearnerDbContext db) : IListeningBa
                 AccentCode: GetString(item, "accentCode"),
                 AudioStartMs: GetInt(item, "audioStartMs"),
                 AudioEndMs: GetInt(item, "audioEndMs"),
-                Speakers: speakers));
+                Speakers: speakers,
+                TimeLimitSeconds: GetInt(item, "timeLimitSeconds")));
         }
         return output;
     }
@@ -478,12 +495,59 @@ public sealed class ListeningBackfillService(LearnerDbContext db) : IListeningBa
         };
     }
 
+    private static bool IsBareLegacyB(string? raw)
+        => string.Equals((raw ?? string.Empty).Trim(), "B", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Distribute legacy single-"B" Part B items across B1..B6 by question
+    /// number order. Items already coded B1..B6 (or any non-B code) pass
+    /// through unchanged. Numbers are unique per the contiguous-1..42 rule, so
+    /// keying the assignment by question number is safe.
+    /// </summary>
+    private static List<AuthoredQuestion> SplitLegacyPartB(List<AuthoredQuestion> questions)
+    {
+        var bareB = questions.Where(q => IsBareLegacyB(q.PartCode)).OrderBy(q => q.Number).ToList();
+        if (bareB.Count == 0) return questions;
+
+        var assignment = new Dictionary<int, string>(bareB.Count);
+        for (var i = 0; i < bareB.Count; i++)
+        {
+            // Cap at B6 — well-formed Part B has exactly six items.
+            assignment[bareB[i].Number] = $"B{Math.Min(i, 5) + 1}";
+        }
+
+        return questions
+            .Select(q => IsBareLegacyB(q.PartCode) && assignment.TryGetValue(q.Number, out var code)
+                ? q with { PartCode = code }
+                : q)
+            .ToList();
+    }
+
     private static string NormalizePartCodeString(string raw)
     {
         var n = (raw ?? string.Empty).Trim().ToUpperInvariant();
         return n switch
         {
-            "A1" or "A2" or "B" or "C1" or "C2" => n,
+            "A1" or "A2" or "B1" or "B2" or "B3" or "B4" or "B5" or "B6" or "C1" or "C2" => n,
+            "A" => "A1",
+            // Legacy bare-B floor. SplitLegacyPartB distributes the six items to
+            // B1..B6 before this is reached for grouping; the floor only guards
+            // any stray bare-B that slipped past (maps to the first B window).
+            "B" => "B1",
+            "C" => "C1",
+            _ => "A1",
+        };
+    }
+
+    /// <summary>Like <see cref="NormalizePartCodeString"/> but PRESERVES a bare
+    /// legacy "B" so <see cref="SplitLegacyPartB"/> can distribute the six items
+    /// across B1..B6 before grouping. Used for question parsing only.</summary>
+    private static string NormalizePartCodeRaw(string raw)
+    {
+        var n = (raw ?? string.Empty).Trim().ToUpperInvariant();
+        return n switch
+        {
+            "A1" or "A2" or "B" or "B1" or "B2" or "B3" or "B4" or "B5" or "B6" or "C1" or "C2" => n,
             "A" => "A1",
             "C" => "C1",
             _ => "A1",
@@ -494,11 +558,20 @@ public sealed class ListeningBackfillService(LearnerDbContext db) : IListeningBa
     {
         "A1" => ListeningPartCode.A1,
         "A2" => ListeningPartCode.A2,
-        "B" => ListeningPartCode.B,
+        "B1" => ListeningPartCode.B1,
+        "B2" => ListeningPartCode.B2,
+        "B3" => ListeningPartCode.B3,
+        "B4" => ListeningPartCode.B4,
+        "B5" => ListeningPartCode.B5,
+        "B6" => ListeningPartCode.B6,
         "C1" => ListeningPartCode.C1,
         "C2" => ListeningPartCode.C2,
         _ => ListeningPartCode.A1,
     };
+
+    private static bool IsPartB(ListeningPartCode partCode) => partCode
+        is ListeningPartCode.B1 or ListeningPartCode.B2 or ListeningPartCode.B3
+        or ListeningPartCode.B4 or ListeningPartCode.B5 or ListeningPartCode.B6;
 
     private static ListeningExtractKind ResolveExtractKind(ListeningPartCode partCode, string? rawKind)
     {
@@ -506,9 +579,9 @@ public sealed class ListeningBackfillService(LearnerDbContext db) : IListeningBa
         if (n == "consultation") return ListeningExtractKind.Consultation;
         if (n == "workplace") return ListeningExtractKind.Workplace;
         if (n == "presentation") return ListeningExtractKind.Presentation;
+        if (IsPartB(partCode)) return ListeningExtractKind.Workplace;
         return partCode switch
         {
-            ListeningPartCode.B => ListeningExtractKind.Workplace,
             ListeningPartCode.C1 or ListeningPartCode.C2 => ListeningExtractKind.Presentation,
             _ => ListeningExtractKind.Consultation,
         };
@@ -518,7 +591,12 @@ public sealed class ListeningBackfillService(LearnerDbContext db) : IListeningBa
     {
         ListeningPartCode.A1 => "Consultation 1",
         ListeningPartCode.A2 => "Consultation 2",
-        ListeningPartCode.B => "Workplace extracts",
+        ListeningPartCode.B1 => "Workplace extract 1",
+        ListeningPartCode.B2 => "Workplace extract 2",
+        ListeningPartCode.B3 => "Workplace extract 3",
+        ListeningPartCode.B4 => "Workplace extract 4",
+        ListeningPartCode.B5 => "Workplace extract 5",
+        ListeningPartCode.B6 => "Workplace extract 6",
         ListeningPartCode.C1 => "Presentation 1",
         ListeningPartCode.C2 => "Presentation 2",
         _ => "Extract",
@@ -661,7 +739,8 @@ public sealed class ListeningBackfillService(LearnerDbContext db) : IListeningBa
         string? AccentCode,
         int? AudioStartMs,
         int? AudioEndMs,
-        IReadOnlyList<JsonElement> Speakers);
+        IReadOnlyList<JsonElement> Speakers,
+        int? TimeLimitSeconds = null);
 
     private sealed record AuthoredSegment(
         int StartMs,

@@ -11,6 +11,7 @@ import { QueryProvider } from '@/components/providers/query-provider';
 import { Toaster } from '@/components/admin/ui/toaster';
 import { TooltipProvider } from '@/components/admin/ui/tooltip';
 import { TourProvider } from '@/components/onboarding/tour-provider';
+import { LearnerPasteGuard } from '@/components/system/LearnerPasteGuard';
 
 function useServiceWorkerRegistration() {
   useEffect(() => {
@@ -62,6 +63,12 @@ export function AppProviders({
         <TooltipProvider delayDuration={800} skipDelayDuration={500}>
           <QueryProvider>
             <AuthProvider>
+              {/*
+                Disables copy/paste/cut/drag across the entire learner app.
+                Self-disables on /admin + auth routes via an internal path
+                check, so mounting once at the root is correct.
+              */}
+              <LearnerPasteGuard />
               <RuntimeLifecycleBridge />
               <MobileRuntimeBridge />
               <TourProvider>

@@ -925,7 +925,8 @@ public sealed class ListeningAnalyticsService(LearnerDbContext db) : IListeningA
     {
         ListeningPartCode.A1 => "A1",
         ListeningPartCode.A2 => "A2",
-        ListeningPartCode.B => "B",
+        // B1..B6 fall through to the enum name; NormalizePartKey rolls them up
+        // to a single "B" bucket for the part-accuracy breakdown.
         ListeningPartCode.C1 => "C1",
         ListeningPartCode.C2 => "C2",
         _ => partCode.ToString(),
