@@ -79,6 +79,17 @@ describe('WritingStimulusViewer', () => {
     expect(screen.getByText('My Stimulus')).toBeInTheDocument();
   });
 
+  it('shows an error message when the authenticated PDF fetch fails', async () => {
+    const api = await import('@/lib/api');
+    vi.mocked(api.fetchAuthorizedObjectUrl).mockRejectedValueOnce(new Error('forbidden'));
+
+    render(<WritingStimulusViewer downloadPath="/v1/media/denied/content" />);
+
+    await waitFor(() => {
+      expect(screen.getByText('forbidden')).toBeInTheDocument();
+    });
+  });
+
   it('prevents contextmenu default on the root container', async () => {
     const { container } = render(<WritingStimulusViewer downloadPath="/v1/media/abc123/content" />);
     const root = container.firstElementChild as HTMLElement;

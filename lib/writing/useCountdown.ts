@@ -42,7 +42,9 @@ export function useDeadlineCountdown(
     const tick = () => {
       const next = compute();
       setRemaining(next);
-      if (next === 0 && !firedRef.current) {
+      // Only fire onZero for a real elapsed deadline — never when there simply
+      // is no deadline (deadlineMs == null also computes 0).
+      if (deadlineMs != null && next === 0 && !firedRef.current) {
         firedRef.current = true;
         onZeroRef.current?.();
       }
@@ -70,6 +72,9 @@ export function useDeadlineCountdown(
         document.removeEventListener('visibilitychange', onVisibility);
       }
     };
+    // `compute` is intentionally omitted from the deps: it closes over
+    // `deadlineMs` from the same render, so a changed deadline already yields a
+    // fresh `compute` when this effect re-runs. Including it would loop.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [deadlineMs]);
 

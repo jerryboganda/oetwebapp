@@ -29,10 +29,21 @@ interface PdfPage {
   height: number;
 }
 
-const ZOOM_STOPS = [50, 75, 100, 125, 150, 175, 200] as const;
+/** Minimal structural types for the pdf.js objects we use (the dynamic import
+ *  is otherwise loosely typed). */
+interface PdfPageProxy {
+  getViewport: (options: { scale: number }) => { width: number; height: number };
+  render: (options: { canvasContext: CanvasRenderingContext2D; viewport: { width: number; height: number } }) => { promise: Promise<void> };
+}
+interface LoadedPdf {
+  numPages: number;
+  getPage: (pageNumber: number) => Promise<PdfPageProxy>;
+  destroy?: () => Promise<void> | void;
+}
+
 const DEFAULT_ZOOM = 100;
 
-/** Clamp a zoom value to the nearest stop without going below 50 or above 200. */
+/** Clamp a zoom value to the 50–200% range. */
 function clampZoom(value: number): number {
   return Math.max(50, Math.min(200, value));
 }
@@ -64,6 +75,9 @@ export function WritingStimulusViewer({
   const [error, setError] = useState<string | null>(null);
 
   const canvasRefs = useRef<Map<number, HTMLCanvasElement>>(new Map());
+  // The single loaded pdf.js document, reused for sizing and every zoom
+  // re-render so a zoom change never re-parses the PDF.
+  const pdfDocRef = useRef<LoadedPdf | null>(null);
 
   // ── Step 1: fetch authenticated blob URL ────────────────────────────────
   useEffect(() => {
@@ -95,7 +109,9 @@ export function WritingStimulusViewer({
     };
   }, [downloadPath]);
 
-  // ── Step 2: load document metadata (numPages + viewport sizes) ──────────
+  // ── Step 2: load the document ONCE, capture page sizes ──────────────────
+  // The resolved document is stored in pdfDocRef and reused by the render
+  // effect below, so changing zoom never re-parses the PDF.
   useEffect(() => {
     if (!pdfSrc) return;
     const src = pdfSrc;
@@ -112,7 +128,12 @@ export function WritingStimulusViewer({
           'pdfjs-dist/legacy/build/pdf.worker.mjs',
           import.meta.url,
         ).toString();
-        const pdf = await pdfjs.getDocument({ url: src }).promise;
+        const pdf = (await pdfjs.getDocument({ url: src }).promise) as LoadedPdf;
+        if (cancelled) {
+          void pdf.destroy?.();
+          return;
+        }
+        pdfDocRef.current = pdf;
         const nextPages: PdfPage[] = [];
         for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
           const page = await pdf.getPage(pageNumber);
@@ -130,39 +151,42 @@ export function WritingStimulusViewer({
     }
 
     void loadDocument();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+      // Free the parsed PDF in the worker when the source changes / unmounts.
+      void pdfDocRef.current?.destroy?.();
+      pdfDocRef.current = null;
+    };
   }, [pdfSrc]);
 
-  // ── Step 3: render pages to canvas at current zoom ──────────────────────
+  // ── Step 3: (re)render pages to canvas at the current zoom ──────────────
+  // Reuses the already-loaded pdfDocRef — no getDocument() on a zoom change.
   useEffect(() => {
-    if (!pdfSrc || pages.length === 0) return;
-    const src = pdfSrc;
+    if (pages.length === 0) return;
     let cancelled = false;
 
     async function renderPages() {
-      const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
-      pdfjs.GlobalWorkerOptions.workerSrc = new URL(
-        'pdfjs-dist/legacy/build/pdf.worker.mjs',
-        import.meta.url,
-      ).toString();
-      const pdf = await pdfjs.getDocument({ url: src }).promise;
+      const pdf = pdfDocRef.current;
+      if (!pdf) return;
       for (const info of pages) {
         if (cancelled) return;
         const canvas = canvasRefs.current.get(info.pageNumber);
         if (!canvas) continue;
         const page = await pdf.getPage(info.pageNumber);
+        if (cancelled) return;
         const viewport = page.getViewport({ scale: zoom / 100 });
         const ctx = canvas.getContext('2d');
         if (!ctx) continue;
         canvas.width = viewport.width;
         canvas.height = viewport.height;
         await page.render({ canvasContext: ctx, viewport }).promise;
+        if (cancelled) return;
       }
     }
 
     void renderPages();
     return () => { cancelled = true; };
-  }, [pdfSrc, pages, zoom]);
+  }, [pages, zoom]);
 
   // ── Anti-exfiltration keyboard handler ──────────────────────────────────
   function handleKeyDown(e: KeyboardEvent<HTMLDivElement>) {
