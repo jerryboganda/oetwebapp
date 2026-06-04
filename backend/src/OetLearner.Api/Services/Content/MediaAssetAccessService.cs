@@ -36,7 +36,8 @@ public sealed class MediaAssetAccessService(
         if (string.Equals(role, ApplicationUserRoles.Expert, StringComparison.OrdinalIgnoreCase))
         {
             if (await CanAssignedExpertAccessWritingPaperAssetAsync(userId, media.Id, ct)
-                || await CanAssignedExpertAccessReviewVoiceNoteAsync(userId, media.Id, ct))
+                || await CanAssignedExpertAccessReviewVoiceNoteAsync(userId, media.Id, ct)
+                || await IsPublishedWritingStimulusPdfAsync(media.Id, ct))
             {
                 return true;
             }
@@ -87,6 +88,11 @@ public sealed class MediaAssetAccessService(
         }
 
         if (await CanLearnerAccessActiveResultTemplateAsync(media.Id, normalizedProfession, ct))
+        {
+            return true;
+        }
+
+        if (await CanLearnerAccessPublishedWritingStimulusPdfAsync(media.Id, normalizedProfession, ct))
         {
             return true;
         }
@@ -224,4 +230,28 @@ public sealed class MediaAssetAccessService(
             .Join(db.ReviewRequests.AsNoTracking().Where(review => review.State == ReviewRequestState.Completed), note => note.ReviewRequestId, review => review.Id, (note, review) => review)
             .Join(db.Attempts.AsNoTracking(), review => review.AttemptId, attempt => attempt.Id, (review, attempt) => attempt)
             .AnyAsync(attempt => attempt.UserId == learnerId, ct);
+
+    /// <summary>
+    /// Returns true when the media asset is referenced by at least one <em>published</em>
+    /// WritingScenario as its stimulus PDF. Used to gate both expert and learner access.
+    /// </summary>
+    private Task<bool> IsPublishedWritingStimulusPdfAsync(string mediaAssetId, CancellationToken ct)
+        => db.WritingScenarios
+            .AsNoTracking()
+            .AnyAsync(s => s.StimulusPdfMediaAssetId == mediaAssetId && s.Status == "published", ct);
+
+    /// <summary>
+    /// Learner variant: grants access when the stimulus PDF belongs to a published scenario
+    /// whose <c>Profession</c> is empty (applies to all) OR matches the learner's profession.
+    /// Case-insensitive, mirrors <see cref="CanLearnerAccessPublishedRulebookReferencePdfAsync"/>.
+    /// </summary>
+    private Task<bool> CanLearnerAccessPublishedWritingStimulusPdfAsync(string mediaAssetId, string? normalizedProfession, CancellationToken ct)
+        => db.WritingScenarios
+            .AsNoTracking()
+            .AnyAsync(s =>
+                s.StimulusPdfMediaAssetId == mediaAssetId
+                && s.Status == "published"
+                && (string.IsNullOrEmpty(s.Profession)
+                    || (!string.IsNullOrWhiteSpace(normalizedProfession)
+                        && s.Profession.ToLower() == normalizedProfession)), ct);
 }

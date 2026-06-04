@@ -277,6 +277,7 @@ public sealed class WritingTaskAuthoringService(LearnerDbContext db, ILogger<Wri
             MarkingMode = source.MarkingMode,
             RetakePolicyJson = source.RetakePolicyJson,
             SourceProvenance = source.SourceProvenance,
+            StimulusPdfMediaAssetId = source.StimulusPdfMediaAssetId,
             AuthorId = GetUserId(user) ?? source.AuthorId ?? "system",
             ContentOwnerId = GetUserId(user) ?? source.ContentOwnerId,
             CreatedAt = now,
@@ -362,6 +363,10 @@ public sealed class WritingTaskAuthoringService(LearnerDbContext db, ILogger<Wri
         if (request.WritingTimeSeconds is { } wts) scenario.WritingTimeSeconds = wts;
         if (!string.IsNullOrWhiteSpace(request.SimulationModes)) scenario.SimulationModes = request.SimulationModes.Trim();
         if (!string.IsNullOrWhiteSpace(request.MarkingMode)) scenario.MarkingMode = request.MarkingMode.Trim();
+
+        scenario.StimulusPdfMediaAssetId = string.IsNullOrWhiteSpace(request.StimulusPdfMediaAssetId)
+            ? null
+            : request.StimulusPdfMediaAssetId.Trim();
 
         scenario.SourceProvenance = request.SourceProvenance;
 
@@ -476,6 +481,7 @@ public sealed class WritingTaskAuthoringService(LearnerDbContext db, ILogger<Wri
         List<WritingContentChecklistItem> checklist,
         WritingExemplar? exemplar)
     {
+        var pdfId = scenario.StimulusPdfMediaAssetId;
         return new WritingTaskDto
         {
             Id = scenario.Id,
@@ -513,6 +519,8 @@ public sealed class WritingTaskAuthoringService(LearnerDbContext db, ILogger<Wri
                 .ToList(),
             SourceProvenance = scenario.SourceProvenance,
             IntegrityAcknowledged = scenario.IntegrityAcknowledgedAt is not null,
+            StimulusPdfMediaAssetId = pdfId,
+            StimulusPdfDownloadPath = string.IsNullOrWhiteSpace(pdfId) ? null : $"/v1/media/{pdfId}/content",
             CreatedAt = scenario.CreatedAt,
             UpdatedAt = scenario.UpdatedAt,
         };
@@ -1047,6 +1055,8 @@ public sealed record WritingTaskDto
     public List<WritingContentChecklistItemDto> IrrelevantContentChecklist { get; init; } = new();
     public string? SourceProvenance { get; init; }
     public bool IntegrityAcknowledged { get; init; }
+    public string? StimulusPdfMediaAssetId { get; init; }
+    public string? StimulusPdfDownloadPath { get; init; }
     public DateTimeOffset CreatedAt { get; init; }
     public DateTimeOffset UpdatedAt { get; init; }
 }
@@ -1079,6 +1089,7 @@ public sealed record WritingTaskUpsertDto
     public List<WritingContentChecklistItemDto>? IrrelevantContentChecklist { get; init; }
     public string? SourceProvenance { get; init; }
     public bool? IntegrityAcknowledged { get; init; }
+    public string? StimulusPdfMediaAssetId { get; init; }
 }
 
 public sealed record WritingTaskValidationIssue

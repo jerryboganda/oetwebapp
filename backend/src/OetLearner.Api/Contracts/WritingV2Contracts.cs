@@ -286,7 +286,9 @@ public sealed record WritingScenarioResponse(
     bool IsDiagnostic,
     string Status,
     DateTimeOffset CreatedAt,
-    DateTimeOffset UpdatedAt);
+    DateTimeOffset UpdatedAt,
+    string? StimulusPdfMediaAssetId = null,
+    string? StimulusPdfDownloadPath = null);
 
 public sealed record WritingScenarioListResponse(
     IReadOnlyList<WritingScenarioResponse> Items,

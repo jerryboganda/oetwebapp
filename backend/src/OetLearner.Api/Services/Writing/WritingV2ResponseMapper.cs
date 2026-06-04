@@ -70,7 +70,9 @@ public static class WritingV2ResponseMapper
             Status: item.Status);
 
     public static WritingScenarioResponse ToResponse(WritingScenarioView view)
-        => new(
+    {
+        var pdfId = view.StimulusPdfMediaAssetId;
+        return new(
             Id: view.Id,
             Title: view.Title,
             LetterType: view.LetterType,
@@ -83,7 +85,10 @@ public static class WritingV2ResponseMapper
             IsDiagnostic: view.IsDiagnostic,
             Status: view.Status,
             CreatedAt: view.CreatedAt,
-            UpdatedAt: view.CreatedAt);
+            UpdatedAt: view.CreatedAt,
+            StimulusPdfMediaAssetId: pdfId,
+            StimulusPdfDownloadPath: string.IsNullOrWhiteSpace(pdfId) ? null : $"/v1/media/{pdfId}/content");
+    }
 
     public static WritingExemplarResponse ToResponse(WritingExemplarView view)
         => new(
