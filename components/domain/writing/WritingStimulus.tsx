@@ -7,7 +7,10 @@ import { CaseNotePdfViewer } from './CaseNotePdfViewer';
 export interface WritingStimulusProps {
   /** The writing scenario DTO, or null while loading. */
   scenario: WritingScenarioDto | null;
-  /** When true, blocks copy/drag/print exfiltration and selection. */
+  /**
+   * Reading-window lock. The PDF viewer is always hardened (copy/drag/print
+   * blocked regardless), so this only gates the text-fallback's selection lock.
+   */
   locked?: boolean;
   /** Optional document title shown in the toolbar. */
   title?: string;
@@ -35,7 +38,6 @@ export function WritingStimulus({
     return (
       <WritingStimulusViewer
         downloadPath={path}
-        locked={locked}
         title={title}
         className={className}
       />

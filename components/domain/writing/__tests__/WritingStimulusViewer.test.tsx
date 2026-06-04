@@ -132,6 +132,21 @@ describe('WritingStimulusViewer', () => {
     expect(event.defaultPrevented).toBe(true);
   });
 
+  it('prevents Ctrl+C from propagating (keyboard exfil block)', () => {
+    const { container } = render(<WritingStimulusViewer downloadPath="/v1/media/abc123/content" />);
+    const root = container.firstElementChild as HTMLElement;
+
+    const event = new KeyboardEvent('keydown', {
+      key: 'c',
+      ctrlKey: true,
+      bubbles: true,
+      cancelable: true,
+    });
+    root.dispatchEvent(event);
+
+    expect(event.defaultPrevented).toBe(true);
+  });
+
   it('carries the print:hidden class on the root element', () => {
     const { container } = render(<WritingStimulusViewer downloadPath="/v1/media/abc123/content" />);
     const root = container.firstElementChild as HTMLElement;

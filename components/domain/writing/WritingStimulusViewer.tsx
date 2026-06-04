@@ -21,11 +21,6 @@ export interface WritingStimulusViewerProps {
   title?: string;
   /** Optional extra className for the outer container. */
   className?: string;
-  /**
-   * When true, context-menu, copy, cut, drag-start, and keyboard-exfil
-   * shortcuts (Ctrl/⌘ + S / P / C) are blocked. Defaults to false.
-   */
-  locked?: boolean;
 }
 
 interface PdfPage {
@@ -61,7 +56,6 @@ export function WritingStimulusViewer({
   downloadPath,
   title = 'Stimulus',
   className,
-  locked = false,
 }: WritingStimulusViewerProps) {
   const [pdfSrc, setPdfSrc] = useState<string | null>(null);
   const [pages, setPages] = useState<PdfPage[]>([]);
