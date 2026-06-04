@@ -18,13 +18,14 @@ public sealed record WritingMockSessionView(
     DateTimeOffset? SubmittedAt,
     Guid? SubmissionId,
     int ReadingSecondsRemaining,
-    int WritingSecondsRemaining);
+    int WritingSecondsRemaining,
+    bool IsPractice);
 
 public interface IWritingMockService
 {
     Task<IReadOnlyList<WritingMockTemplate>> ListAsync(string userId, CancellationToken ct);
     Task<WritingMockTemplate> CreateAsync(string adminId, WritingMockTemplate template, CancellationToken ct);
-    Task<WritingMockSessionView> StartSessionAsync(string userId, Guid mockId, CancellationToken ct);
+    Task<WritingMockSessionView> StartSessionAsync(string userId, Guid mockId, bool isPractice = false, CancellationToken ct = default);
     Task<WritingMockSessionView?> GetSessionAsync(string userId, Guid sessionId, CancellationToken ct);
     Task<WritingMockSessionView> BeginWritingAsync(string userId, Guid sessionId, CancellationToken ct);
     Task<WritingMockSessionView> SubmitSessionAsync(string userId, Guid sessionId, Guid submissionId, CancellationToken ct);
@@ -79,7 +80,7 @@ public sealed class WritingMockService(
         return new WritingMockTemplate(entity.Id, entity.ScenarioId, entity.Title, entity.Difficulty, entity.Status);
     }
 
-    public async Task<WritingMockSessionView> StartSessionAsync(string userId, Guid mockId, CancellationToken ct)
+    public async Task<WritingMockSessionView> StartSessionAsync(string userId, Guid mockId, bool isPractice = false, CancellationToken ct = default)
     {
         var mock = await db.WritingMocks.AsNoTracking().FirstOrDefaultAsync(m => m.Id == mockId && m.Status == "published", ct)
             ?? throw ApiException.NotFound("writing_mock_not_found", "Mock template was not found.");
@@ -92,6 +93,7 @@ public sealed class WritingMockService(
             StartedAt = now,
             Status = "reading",
             CreatedAt = now,
+            IsPractice = isPractice,
         };
         db.WritingMockSessions.Add(session);
         await db.SaveChangesAsync(ct);
@@ -118,13 +120,13 @@ public sealed class WritingMockService(
         }
         var now = clock.GetUtcNow();
         var readingEndsAt = session.StartedAt.AddSeconds(ReadingPhaseSeconds);
-        if (now < readingEndsAt)
+        if (!session.IsPractice && now < readingEndsAt)
         {
             throw ApiException.Validation("writing_mock_reading_window_active", "Mock reading window is still active.");
         }
         if (session.ReadingPhaseEndedAt is null)
         {
-            session.ReadingPhaseEndedAt = readingEndsAt;
+            session.ReadingPhaseEndedAt = now < readingEndsAt ? now : readingEndsAt;
         }
         session.Status = "writing";
         await db.SaveChangesAsync(ct);
@@ -307,7 +309,8 @@ public sealed class WritingMockService(
         return new WritingMockSessionView(
             session.Id, session.MockId, scenarioId, session.Status,
             session.StartedAt, session.ReadingPhaseEndedAt, session.SubmittedAt,
-            session.SubmissionId, readingRemaining, writingRemaining);
+            session.SubmissionId, readingRemaining, writingRemaining,
+            session.IsPractice);
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -323,7 +326,7 @@ public sealed class WritingMockService(
     public async Task<WritingMockSessionResponse> StartMockAsync(string userId, WritingMockStartRequest request, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(request);
-        var view = await StartSessionAsync(userId, request.MockId, ct);
+        var view = await StartSessionAsync(userId, request.MockId, request.IsPractice, ct);
         return WritingV2ResponseMapper.ToResponse(view);
     }
 

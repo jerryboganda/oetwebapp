@@ -550,6 +550,7 @@ export interface WritingMockSessionDto {
   submissionId: string | null;
   readingSecondsRemaining: number;
   writingSecondsRemaining: number;
+  isPractice: boolean;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

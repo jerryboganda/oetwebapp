@@ -49,7 +49,7 @@ export default function WritingMocksCataloguePage() {
     setStarting(mockId);
     setError(null);
     try {
-      const session = await startWritingMock({ mockId });
+      const session = await startWritingMock({ mockId, isPractice: rigour === 'practice' });
       const id = encodeURIComponent(session.id);
       if (surface === 'paper') {
         // Paper mode opens the printable booklet session (owned elsewhere).

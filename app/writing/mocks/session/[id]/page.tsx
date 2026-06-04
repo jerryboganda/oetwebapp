@@ -421,15 +421,17 @@ function WritingMockSessionInner() {
         ) : null}
 
         {/* Forced full-screen reading window. Renders only during the reading
-            phase; auto-closes into the writing view at 0:00. allowSkip is false
-            for BOTH strict and ?practice=1 — the mock session is server-gated
-            (early begin-writing is rejected), so this variant cannot skip. */}
+            phase; auto-closes into the writing view at 0:00. allowSkip is true
+            for practice sessions (?practice=1) — the server now permits early
+            begin-writing when IsPractice is set on the session. Strict mocks
+            still block early begin-writing server-side. */}
         <WritingReadingWindowOverlay
           open={phase === 'reading' && !!session}
           scenario={scenario}
           secondsRemaining={readingSeconds}
           totalSeconds={scenario?.readingTimeSeconds ?? 300}
-          allowSkip={false}
+          allowSkip={isPractice}
+          onSkip={() => void handlePhaseChange('writing')}
           onAutoClose={() => void handlePhaseChange('writing')}
           title={scenario?.title ?? undefined}
         />

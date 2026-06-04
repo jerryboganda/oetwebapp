@@ -169,7 +169,8 @@ public static class WritingV2ResponseMapper
             SubmittedAt: view.SubmittedAt,
             SubmissionId: view.SubmissionId,
             ReadingSecondsRemaining: view.ReadingSecondsRemaining,
-            WritingSecondsRemaining: view.WritingSecondsRemaining);
+            WritingSecondsRemaining: view.WritingSecondsRemaining,
+            IsPractice: view.IsPractice);
 
     public static WritingCommonMistakeResponse ToResponse(WritingCommonMistakeView view)
         => new(

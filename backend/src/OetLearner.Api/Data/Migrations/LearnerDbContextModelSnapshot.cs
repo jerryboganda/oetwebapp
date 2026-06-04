@@ -23902,6 +23902,9 @@ namespace OetLearner.Api.Data.Migrations
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<bool>("IsPractice")
+                        .HasColumnType("boolean");
+
                     b.Property<Guid>("MockId")
                         .HasColumnType("uuid");
 
