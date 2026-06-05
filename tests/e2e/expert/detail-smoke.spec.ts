@@ -80,6 +80,22 @@ test.describe('Expert detail smoke @expert @smoke', () => {
 
       testInfo.setTimeout(150_000);
       const diagnostics = observePage(page);
+      // TEMP-DIAG (revert): capture the app's REAL marking-context fetch (with its
+      // Bearer), any console errors, and failed requests — the page renders empty
+      // in CI despite the backend returning 200 to a direct call.
+      page.on('response', (res) => {
+        if (res.url().includes('/writing/tutor/reviews/')) {
+          console.log('TEMP-DIAG appresp', res.status(), res.request().method(), res.url());
+        }
+      });
+      page.on('requestfailed', (req) => {
+        if (req.url().includes('/writing/tutor/reviews/')) {
+          console.log('TEMP-DIAG reqfailed', req.url(), req.failure()?.errorText ?? '');
+        }
+      });
+      page.on('console', (m) => {
+        if (m.type() === 'error') console.log('TEMP-DIAG console.error', m.text().slice(0, 300));
+      });
       const path = await route.resolvePath({ request });
 
       await page.goto(path, { waitUntil: 'domcontentloaded', timeout: DETAIL_EXPECT_TIMEOUT_MS });
