@@ -17,8 +17,11 @@ const learnerRoutes = [
     heading: /see whether recent effort is turning into better evidence/i,
   },
   {
+    // The readiness module was rebuilt; its hero H1 is now
+    // "Close the gap to exam day with evidence". The page renders this heading
+    // from real (incl. empty/fresh) data without severe client errors.
     path: '/readiness',
-    heading: /see what needs to close before your target date/i,
+    heading: /close the gap to exam day with evidence/i,
   },
   {
     // Per the 2026-05-27 OET sample-test alignment, the Reading hub is the

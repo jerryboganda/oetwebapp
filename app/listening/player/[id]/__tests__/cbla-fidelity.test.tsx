@@ -1,5 +1,5 @@
 import { createElement } from 'react';
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { LISTENING_PREVIEW_SECONDS } from '@/lib/listening-sections';
 
 const {
@@ -122,6 +122,30 @@ vi.mock('motion/react', () => {
 });
 
 import ListeningPlayer from '../page';
+
+/**
+ * Click the mocked TechReadinessCheck "Run mocked readiness" button reliably.
+ *
+ * The strict intro card can re-mount once more right after the async session
+ * load commits (the strict-resume effect resets `hasStarted`/`strictServerState`
+ * on its post-session run, and the motion AnimatePresence mock defers an
+ * exit-complete `setTimeout(0)`), which detaches the button instance a bare
+ * `fireEvent.click(await findByRole(...))` captured a tick earlier. Clicking a
+ * detached node is a silent no-op, so `techReadiness` is never set and the
+ * "Start audio" button stays disabled.
+ *
+ * Re-querying and clicking inside `waitFor`, asserting the click actually
+ * enabled the start button, makes the interaction robust to that transient
+ * remount without weakening any assertion: it simply retries the click against
+ * the live button until the readiness state commits.
+ */
+async function runMockedReadiness() {
+  await waitFor(() => {
+    const button = screen.getByRole('button', { name: /run mocked readiness/i });
+    fireEvent.click(button);
+    expect(screen.getByRole('button', { name: /start audio/i })).not.toBeDisabled();
+  });
+}
 
 type Mode = 'practice' | 'exam' | 'home' | 'paper';
 
@@ -348,12 +372,7 @@ describe('Listening player — CBLA fidelity (preview / attempt timer / one-play
     proto.pause = () => undefined;
   });
 
-  afterEach(async () => {
-    cleanup();
-    await act(async () => {
-      for (let i = 0; i < 5; i += 1) await Promise.resolve();
-    });
-    vi.clearAllTimers();
+  afterEach(() => {
     vi.useRealTimers();
   });
 
@@ -397,9 +416,7 @@ describe('Listening player — CBLA fidelity (preview / attempt timer / one-play
     expect(startButton).toBeDisabled();
     expect(container.querySelector('audio')).toBeNull();
 
-    fireEvent.click(screen.getByRole('button', { name: /run mocked readiness/i }));
-
-    await waitFor(() => expect(screen.getByRole('button', { name: /start audio/i })).not.toBeDisabled());
+    await runMockedReadiness();
     fireEvent.click(screen.getByRole('button', { name: /start audio/i }));
 
     await waitFor(() => {
@@ -583,7 +600,7 @@ describe('Listening player — CBLA fidelity (preview / attempt timer / one-play
 
     render(<ListeningPlayer />);
 
-    fireEvent.click(await screen.findByRole('button', { name: /run mocked readiness/i }));
+    await runMockedReadiness();
     await waitFor(() => expect(screen.getByRole('button', { name: /start audio/i })).not.toBeDisabled());
     fireEvent.click(screen.getByRole('button', { name: /start audio/i }));
 

@@ -36,7 +36,13 @@ test.describe('Writing V2 admin canon @writing-v2 @smoke @admin', () => {
     await expect(rulesTable).toBeVisible({ timeout: 30_000 });
 
     // At least 20 seeded rules (the launch canon ships 25 — allow drift).
-    const rowCount = await rulesTable.locator('tbody tr').count();
+    // The rows hydrate asynchronously after the table mounts, so wait for the
+    // 20th body row to be present before counting; reading `.count()` one-shot
+    // right after the table becomes visible races the data load and sees only
+    // the header/first row.
+    const ruleRows = rulesTable.locator('tbody tr');
+    await expect(ruleRows.nth(19)).toBeVisible({ timeout: 30_000 });
+    const rowCount = await ruleRows.count();
     expect(
       rowCount,
       `Expected ≥20 canon rules in the admin table; got ${rowCount}`,

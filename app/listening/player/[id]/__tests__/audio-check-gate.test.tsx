@@ -113,6 +113,30 @@ vi.mock('motion/react', () => {
 
 import ListeningPlayer from '../page';
 
+/**
+ * Click the mocked TechReadinessCheck "Run mocked readiness" button reliably.
+ *
+ * The strict intro card can re-mount once more right after the async session
+ * load commits (the strict-resume effect resets `hasStarted`/`strictServerState`
+ * on its post-session run, and the motion AnimatePresence mock defers an
+ * exit-complete `setTimeout(0)`), which detaches the button instance a bare
+ * `fireEvent.click(await findByRole(...))` captured a tick earlier. Clicking a
+ * detached node is a silent no-op, so `techReadiness` is never set and the
+ * "Start audio" button stays disabled — the source of the intermittent
+ * sound-check-gate failures.
+ *
+ * Re-querying and clicking inside `waitFor`, asserting the click actually
+ * enabled the start button, makes the interaction robust to that transient
+ * remount without weakening any assertion.
+ */
+async function runMockedReadiness() {
+  await waitFor(() => {
+    const button = screen.getByRole('button', { name: /run mocked readiness/i });
+    fireEvent.click(button);
+    expect(screen.getByRole('button', { name: /start audio/i })).not.toBeDisabled();
+  });
+}
+
 function makeExamSession() {
   return {
     paper: {
@@ -173,7 +197,11 @@ const EXPECTED_HREF = `/listening/audio-check?returnTo=${EXPECTED_RETURN_TO}`;
 
 describe('Listening player — WS2 sound-check gate CTA', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    // resetAllMocks (not clearAllMocks) so any per-test one-shot resolutions are
+    // also flushed between tests; the defaults below are re-established right
+    // after. clearAllMocks only clears call history, which can leave a prior
+    // test's queued resolution in place and shift this test's mock sequence.
+    vi.resetAllMocks();
     mockHeartbeat.mockResolvedValue({ attemptId: 'attempt-1', elapsedSeconds: 0, lastClientSyncAt: '' });
     mockSaveAnswer.mockResolvedValue(undefined);
     mockRecordIntegrity.mockResolvedValue(undefined);
@@ -206,16 +234,23 @@ describe('Listening player — WS2 sound-check gate CTA', () => {
 
     render(<ListeningPlayer />);
 
-    fireEvent.click(await screen.findByRole('button', { name: /run mocked readiness/i }));
-    await waitFor(() => expect(screen.getByRole('button', { name: /start audio/i })).not.toBeDisabled());
+    await runMockedReadiness();
     fireEvent.click(screen.getByRole('button', { name: /start audio/i }));
 
-    // The dedicated sound-check panel renders with the recovery CTA.
-    const panel = await screen.findByTestId('listening-audio-check-required');
-    expect(panel).toBeInTheDocument();
+    // The dedicated sound-check panel renders with the recovery CTA. Re-query
+    // inside waitFor (rather than holding the first matched node) because the
+    // intro card re-renders once as `audioCheckRequired`/`startError` settle,
+    // which can replace the panel's DOM node — a captured reference would point
+    // at the detached predecessor and fail `toBeInTheDocument`.
+    await waitFor(() => {
+      expect(screen.getByTestId('listening-audio-check-required')).toBeInTheDocument();
+    });
 
-    const cta = screen.getByRole('link', { name: /run the sound check/i });
-    expect(cta).toHaveAttribute('href', EXPECTED_HREF);
+    // The recovery CTA links back to this exact player URL with the correct
+    // returnTo. Re-query for the same reason as above.
+    await waitFor(() => {
+      expect(screen.getByRole('link', { name: /run the sound check/i })).toHaveAttribute('href', EXPECTED_HREF);
+    });
 
     // It is a recovery affordance, not the preview banner (we never started).
     expect(screen.queryByTestId('listening-preview-banner')).not.toBeInTheDocument();
@@ -231,12 +266,14 @@ describe('Listening player — WS2 sound-check gate CTA', () => {
 
     render(<ListeningPlayer />);
 
-    fireEvent.click(await screen.findByRole('button', { name: /run mocked readiness/i }));
-    await waitFor(() => expect(screen.getByRole('button', { name: /start audio/i })).not.toBeDisabled());
+    await runMockedReadiness();
     fireEvent.click(screen.getByRole('button', { name: /start audio/i }));
 
-    const cta = await screen.findByRole('link', { name: /run the sound check/i });
-    expect(cta).toHaveAttribute('href', EXPECTED_HREF);
+    // Re-query inside waitFor (see the sibling test) so a re-render that
+    // replaces the panel's DOM node cannot leave us asserting on a detached CTA.
+    await waitFor(() => {
+      expect(screen.getByRole('link', { name: /run the sound check/i })).toHaveAttribute('href', EXPECTED_HREF);
+    });
     // The first strict advance is never attempted when the start itself is gated.
     expect(mockV2Advance).not.toHaveBeenCalled();
   });

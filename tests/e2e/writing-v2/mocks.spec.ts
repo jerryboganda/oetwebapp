@@ -33,15 +33,30 @@ test.describe('Writing V2 mocks @writing-v2 @smoke', () => {
       }),
     ).toBeVisible({ timeout: 30_000 });
 
+    // The card CTA label is computed from the (default) Computer + Strict mode
+    // selection, so the button reads "Start strict mock" (it becomes "Start
+    // practice" / "Open paper mode" for the other modes). Match all variants,
+    // plus the raw next-intl key in case translations fall back to keys.
     const startButtons = page.getByRole('button', {
-      name: /(take this mock|writing\.mocks\.catalogue\.cta)/i,
+      name: /(start strict mock|start practice|open paper mode|take this mock|writing\.mocks\.catalogue\.cta)/i,
     });
+    // The empty-state copy is `writing.mocks.catalogue.list.empty`
+    // ("No mocks available yet."). Accept the translated string or the raw key.
+    const emptyState = page.getByText(
+      /(no mocks available yet|writing\.mocks\.catalogue\.list\.empty)/i,
+    );
+
+    // The catalogue hydrates asynchronously. Wait until it has settled into one
+    // of its two terminal states — at least one mock CTA, OR the empty-state
+    // message — before branching, so we never read `.count()` mid-load.
+    await expect(startButtons.first().or(emptyState)).toBeVisible({ timeout: 30_000 });
+
     const startCount = await startButtons.count();
     if (startCount === 0) {
       // Empty seed for the learner's profession → spec describes this as
       // "May show empty state if no mocks". Confirm the empty-state message
       // and pass; the API contract is covered by backend tests.
-      await expect(page.getByText(/no mocks available yet/i)).toBeVisible();
+      await expect(emptyState).toBeVisible();
       return;
     }
 

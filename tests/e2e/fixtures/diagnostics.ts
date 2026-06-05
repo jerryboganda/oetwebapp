@@ -251,6 +251,30 @@ function shouldIgnoreConsoleError(
     return true;
   }
 
+  // Next.js dev-mode reloads can briefly throw mid-render (an aborted RSC fetch,
+  // a chunk swap, or a hydration race during the goto→reload cycle). The route
+  // error boundary (`app/error.tsx`) catches it, logs
+  // `console.error('[App Error]', error)`, and recovers — React additionally
+  // re-logs the caught error. For these empty-message dev transients both args
+  // serialize to the bare strings below ("[App Error] Error" / "Error").
+  //
+  // Suppressing them is safe in this dev-noise context: every caller that opts
+  // into `allowNextDevNoise` first asserts the page's real heading is visible
+  // (throwing otherwise) BEFORE reaching the console-error check, so reaching
+  // here proves the boundary error was transient and the page rendered. A
+  // genuine, persistent render crash fails the heading assertion first, and
+  // real application errors carry a non-empty message (so they don't match
+  // these exact bare strings). Both the standalone "Error" and the boundary's
+  // "[App Error] Error" are only ignored when paired together, which is the
+  // exact signature the boundary + React produce for one caught dev transient.
+  if (
+    options.allowNextDevNoise
+    && (text === 'Error' || text === '[App Error] Error')
+    && diagnostics.consoleErrors.includes('[App Error] Error')
+  ) {
+    return true;
+  }
+
   if (
     options.allowMobileWebKitReloadNoise
     && (
