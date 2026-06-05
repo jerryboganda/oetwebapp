@@ -1,75 +1,88 @@
-# Manual Deploy (Single-Container VPS Model)
+# Manual Deploy
 
-This is now the **only** supported production deploy flow. CI/CD deployment
-pipelines and the blue/green router stack have been removed because the
-build/runtime image-name split silently shipped stale images (visual fixes
-appeared to "revert" after a build).
+Production deploys must build heavy artifacts on GitHub Actions, not on the
+production VPS.
 
-## Topology
+The VPS is a shared production host. Do not run frontend, API, backend, Next.js,
+or .NET build work there. The VPS deploy step only pulls prebuilt GHCR images,
+recreates the target containers, runs health gates, and flips traffic after the
+new slot is healthy.
 
-One container per tier, on the shared host. nginx-proxy-manager already routes
-to these exact container names — no NPM changes are ever needed:
+## Required Flow
 
-| Domain                              | Container  | Port |
-| ----------------------------------- | ---------- | ---- |
-| https://app.oetwithdrhesham.co.uk   | `oet-web`  | 3000 |
-| https://api.oetwithdrhesham.co.uk   | `oet-api`  | 8080 |
-
-Supporting containers: `oet-postgres`, `oet-clamav`, `oet-db-backup`.
-
-Compose file: [`docker-compose.vps.yml`](docker-compose.vps.yml).
-Project name is pinned to `oetwebsite` so the live volumes
-(`oetwebsite_oet_postgres_data`, `oetwebsite_oet_learner_storage`) and the
-internal network are reused.
-
-## Deploy
-
-```bash
-ssh vps
-cd /opt/oetwebapp
-git pull origin main
-docker compose -f docker-compose.vps.yml --env-file .env.production build
-docker compose -f docker-compose.vps.yml --env-file .env.production up -d
-docker compose -f docker-compose.vps.yml --env-file .env.production ps
-```
-
-Because build and run use the **same** image tags (`oetwebsite-web:local`,
-`oetwebsite-learner-api:local`), `up -d` always swaps in the freshly built
-image. No retag step, no slot juggling.
-
-`web` bakes `NEXT_PUBLIC_*` and `APP_URL` at build time, so frontend changes
-(CSS, hover states, copy) only go live after the **build** step — never skip it.
-
-## First-time cutover from blue/green (run once)
-
-Remove only the old router + slot containers. **Never** use `-v` and never
-remove volumes. Data lives in `oet_postgres_data` / `oet_learner_storage`.
-
-```bash
-cd /opt/oetwebapp
-git pull origin main
-
-# Build the new single-container images first.
-docker compose -f docker-compose.vps.yml --env-file .env.production build
-
-# Stop & remove ONLY the old OET router/slot containers (no volumes touched).
-docker rm -f oet-web oet-api oet-web-blue oet-web-green oet-api-blue oet-api-green 2>/dev/null || true
-
-# Bring up the simple stack (reuses oet-web / oet-api names NPM targets).
-docker compose -f docker-compose.vps.yml --env-file .env.production up -d
-docker compose -f docker-compose.vps.yml --env-file .env.production ps
-```
-
-Then verify:
+1. Push or merge the target commit to `main`.
+2. Let `.github/workflows/deploy.yml` run for that exact commit, or manually run
+   the `Build & Deploy (web + API)` workflow from GitHub Actions.
+3. Confirm the workflow built and pushed:
+   - `ghcr.io/jerryboganda/oetwebapp-web:<sha>`
+   - `ghcr.io/jerryboganda/oetwebapp-api:<sha>`
+4. Confirm the workflow SSH deploy step ran `scripts/deploy/auto-deploy-ghcr.sh`
+   on the VPS.
+5. Verify production:
 
 ```bash
 curl -fsS https://api.oetwithdrhesham.co.uk/health/ready
-curl -fsSI https://app.oetwithdrhesham.co.uk | head -n1
+curl -fsS https://app.oetwithdrhesham.co.uk/api/health
 ```
 
-## Safety rules (shared production host)
+## VPS Role
 
-- Only ever touch `oet-*` containers. ~50 unrelated containers share this host.
-- Never run `docker compose down -v`, `docker volume rm`, or recreate the
-  postgres/storage volumes without a verified backup and explicit approval.
-- Builds run on the VPS only.
+The VPS may run only lightweight production operations:
+
+```bash
+cd /opt/oetwebapp
+git fetch origin main
+git reset --hard <exact-sha>
+docker login ghcr.io
+WEB_IMAGE=ghcr.io/jerryboganda/oetwebapp-web:<exact-sha> \
+API_IMAGE=ghcr.io/jerryboganda/oetwebapp-api:<exact-sha> \
+bash scripts/deploy/auto-deploy-ghcr.sh
+```
+
+Those commands pull and run existing images. They must not build images.
+
+## Forbidden On The Production VPS
+
+Never run these on production unless the user explicitly approves an emergency
+source-build exception in the current conversation:
+
+```bash
+docker compose build
+docker compose up --build
+pnpm run build
+pnpm exec tsc --noEmit
+pnpm test
+dotnet build
+dotnet test
+dotnet publish
+```
+
+If GitHub Actions is unavailable or broken, stop and fix the workflow first.
+Do not silently move the heavy work to the VPS.
+
+## Topology
+
+Production currently uses the blue/green GHCR image flow:
+
+- Stable router containers: `oet-web`, `oet-api`
+- App slots: `oet-web-blue`, `oet-web-green`, `oet-api-blue`, `oet-api-green`
+- Supporting containers: `oet-postgres`, `oet-clamav`, `oet-db-backup`
+- Deploy helper: `scripts/deploy/auto-deploy-ghcr.sh`
+- Workflow: `.github/workflows/deploy.yml`
+
+Nginx Proxy Manager routes to the stable containers:
+
+| Domain | Container | Port |
+| --- | --- | --- |
+| `https://app.oetwithdrhesham.co.uk` | `oet-web` | 3000 |
+| `https://api.oetwithdrhesham.co.uk` | `oet-api` | 8080 |
+
+## Safety Rules
+
+- Only touch OET containers on the shared host.
+- Never run `docker compose down -v`, `docker volume rm`, or recreate postgres
+  or storage volumes without a verified backup and explicit approval.
+- Preserve `oetwebsite_oet_postgres_data` and
+  `oetwebsite_oet_learner_storage`.
+- All media/user files must stay on persistent storage at
+  `/var/opt/oet-learner/storage`.

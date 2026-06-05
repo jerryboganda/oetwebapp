@@ -1,18 +1,13 @@
 # =============================================================================
-# OET Prep Platform — Simple single-container production compose for the VPS.
+# OET Prep Platform — single-container compose for local rehearsal or approved
+# emergency source-build fallback.
 #
-# Replaces the old blue/green + nginx-router + CI/CD deploy machinery with one
-# container per tier. Build and run use the SAME image tag, so a plain
-# `git pull && docker compose build && docker compose up -d` actually ships
-# your latest code (the old split build/runtime image names silently shipped
-# stale images — that is why visual fixes "reverted").
-#
-# Manual deploy (the only supported flow now):
-#   ssh vps
-#   cd /opt/oetwebapp
-#   git pull origin main
-#   docker compose -f docker-compose.vps.yml --env-file .env.production build
-#   docker compose -f docker-compose.vps.yml --env-file .env.production up -d
+# PRODUCTION RULE:
+# Heavy frontend, API, backend, Next.js, and .NET builds must run on GitHub
+# Actions. The production VPS only pulls prebuilt GHCR images and runs health
+# gates through scripts/deploy/auto-deploy-ghcr.sh. Do not run this compose
+# file's build path on the production VPS unless the user explicitly approves an
+# emergency source-build exception in the current conversation.
 #
 # IMPORTANT:
 #  * `name: oetwebsite` pins the project so the LIVE volumes

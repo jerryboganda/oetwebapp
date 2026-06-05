@@ -1,4 +1,12 @@
 #!/usr/bin/env bash
+# PRODUCTION WARNING:
+# Do not use this on the production VPS unless the user explicitly approves an
+# emergency source-build exception in the current conversation. Heavy frontend,
+# API, backend, Next.js, and .NET builds belong on GitHub Actions. Normal
+# production deploys use .github/workflows/deploy.yml to build/push GHCR images,
+# then scripts/deploy/auto-deploy-ghcr.sh pulls and rolls them out on the VPS.
+#
+# This script is only for local rehearsal or approved incident fallback.
 # Direct deploy — pull from Git, build locally, and roll out.
 # Use for owner-initiated quick deploys when CI/evidence gates are not needed.
 # Usage:

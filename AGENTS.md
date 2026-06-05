@@ -34,6 +34,11 @@ installed: Node 22.x, pnpm 10.33.0, .NET 10.x.
 - Run scripts directly, e.g. `pnpm exec tsc --noEmit`, `pnpm run lint`, `pnpm test`, `pnpm run build`.
 - If PowerShell quoting breaks a script, fall back to `cmd /c "pnpm run <script>"`.
 - The VPS `oet-dev` is production deployment only. Never run validation there.
+- Heavy production builds for frontend, API, backend, Next.js, and .NET must run
+  on GitHub Actions. The VPS only pulls prebuilt GHCR images and runs health
+  gates; never run `docker compose build`, `docker compose up --build`,
+  `pnpm run build`, `dotnet build`, `dotnet test`, or `dotnet publish` there
+  unless the user explicitly approves an emergency source-build exception.
 - Docker compose files exist for deployment/packaging, not as a required local validation path.
 
 See `.github/instructions/validation.instructions.md` for the full command ladder.

@@ -34,6 +34,13 @@ Local validation is NOT done here — it runs on the host via pnpm (see `validat
 
 The VPS (`oet-dev`, production deploy target — never run validation there) has known gotchas:
 
+- **No heavy builds on the VPS:** frontend, API, backend, Next.js, and .NET
+  builds must run on GitHub Actions. The VPS only fetches the exact commit,
+  pulls prebuilt GHCR images, recreates containers, and runs health gates. Do
+  not run `docker compose build`, `docker compose up --build`, `pnpm run build`,
+  `dotnet build`, `dotnet test`, or `dotnet publish` on production unless the
+  user explicitly approves an emergency source-build exception in the current
+  conversation. If Actions is broken, fix Actions first.
 - **ROUTER_IMAGE digest bug:** `.env.production` sets `ROUTER_IMAGE=nginx:...@sha256:...`. Docker cannot
   use a digest as a build tag. Always override `ROUTER_IMAGE=oetwebsite-nginx-router:local` for build/up.
 - **Protected volumes:** never destroy `oetwebsite_oet_postgres_data` (database) or

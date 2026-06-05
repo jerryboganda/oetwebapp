@@ -119,6 +119,12 @@ Notes:
 
 ## 3. Build and start the stack
 
+Production builds run on GitHub Actions. The production VPS must not run
+frontend, API, backend, Next.js, or .NET build work. Its deploy role is limited
+to fetching the exact commit, pulling the prebuilt GHCR images, recreating
+containers, and running health gates. If Actions is unavailable, fix Actions
+first; do not silently move heavy build work to the VPS.
+
 Production rollout is exact-SHA only. First run the protected `Build Release
 Images` workflow for the target commit. It checks out the exact 40-character
 SHA, builds and pushes the web, API, DB-backup, and router images to GHCR, and
@@ -133,9 +139,9 @@ for the exact SHA, downloads the matching SBOM/SCA artifact, logs the VPS into
 GHCR with a temporary Docker config, and passes the digest refs to the VPS
 deploy helper with `DEPLOY_REF=<sha>`.
 
-Manual shell rollout is reserved for incident use. Prefer the protected
-workflow; if shell rollout is required, pass the exact SHA plus all four
-immutable image refs:
+Manual shell rollout is reserved for incident use and still uses prebuilt
+images. Prefer the protected workflow; if shell rollout is required, pass the
+exact SHA plus all four immutable image refs:
 
 ```bash
 DEPLOY_REF=<40-character-sha> \
@@ -159,8 +165,10 @@ copies the prior known-good release there before overwriting
 
 The API runs database migrations automatically on startup when `AUTO_MIGRATE=true`.
 
-Production normally uses immutable image digest inputs. Local rehearsal or
-emergency source-build fallback must opt in to the build override:
+Production normally uses immutable image digest inputs. Local rehearsal may use
+the build override away from the production VPS. Emergency source-build fallback
+on the production VPS requires explicit user approval in the current
+conversation:
 
 ```bash
 docker compose --env-file .env.production \
@@ -262,8 +270,10 @@ Back up both named volumes before upgrades or VPS maintenance.
 
 ## 8. Updating the deployment
 
-For a clean production deploy, use `Build Release Images` first, then use the
-protected deploy workflow with the exact SHA and the CI-recorded immutable image
+For a clean production deploy, use GitHub Actions first, then let the protected
+deploy workflow SSH to the VPS and run the pull-only deploy helper for the exact
+SHA. The VPS must not build frontend, API, backend, Next.js, or .NET artifacts.
+If a manual incident rollout is required, use the CI-recorded immutable image
 digest handoff:
 
 ```bash
@@ -287,7 +297,11 @@ least one previous-good SHA, slot, and image digest set available for rollback.
 
 Do **not** run `docker compose down -v`, `docker volume prune`, `docker system prune --volumes`, or manually delete `oetwebsite_*` named volumes as part of a normal redeploy. Volume cleanup is a separate destructive maintenance task and requires an explicit backup, restore plan, and approval naming the exact volume.
 
-Direct `docker compose up -d --build` is reserved for local rehearsal and emergency use after explicit approval; it bypasses the production digest-input gate.
+Direct `docker compose up -d --build`, `docker compose build`, `pnpm run build`,
+`dotnet build`, `dotnet test`, or `dotnet publish` are forbidden on the
+production VPS unless the user explicitly approves an emergency source-build
+exception in the current conversation. These commands bypass the production
+digest-input gate and can overload the shared host.
 
 Destructive or irreversible EF migrations require a maintenance window, fresh
 verified backup ID, non-live restore drill evidence, and owner approval before
