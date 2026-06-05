@@ -22,23 +22,6 @@ const expertDetailRoutes = [
       // pre-analysis panel, and a Submit review control once the marking
       // context loads. Anchor on data-independent chrome from
       // components/domain/writing/marking/*.
-      // TEMP-DIAG (revert): the backend /context returns 200 locally but the
-      // rubric never renders in CI — capture the real proxy+session response
-      // and the rendered page so we can see what the browser actually got.
-      try {
-        const diagRes = await page.request.get(
-          `/api/backend/v1/writing/tutor/reviews/${getSeededWritingSubmissionId()}/context`,
-        );
-        console.log('TEMP-DIAG ctx.status', diagRes.status());
-        console.log('TEMP-DIAG ctx.body', (await diagRes.text()).slice(0, 700));
-      } catch (diagErr) {
-        console.log('TEMP-DIAG ctx.error', String(diagErr));
-      }
-      console.log('TEMP-DIAG page.url', page.url());
-      console.log(
-        'TEMP-DIAG page.body',
-        (await page.locator('body').innerText().catch(() => '<no body>')).slice(0, 1200),
-      );
       await expect(page.getByRole('heading', { name: /rubric scores/i })).toBeVisible({ timeout: DETAIL_EXPECT_TIMEOUT_MS });
       await expect(page.getByRole('button', { name: 'Decrease C1 Purpose' })).toBeVisible({ timeout: DETAIL_EXPECT_TIMEOUT_MS });
       await expect(page.getByText(/ai pre-analysis/i).first()).toBeVisible({ timeout: DETAIL_EXPECT_TIMEOUT_MS });
@@ -80,22 +63,6 @@ test.describe('Expert detail smoke @expert @smoke', () => {
 
       testInfo.setTimeout(150_000);
       const diagnostics = observePage(page);
-      // TEMP-DIAG (revert): capture the app's REAL marking-context fetch (with its
-      // Bearer), any console errors, and failed requests — the page renders empty
-      // in CI despite the backend returning 200 to a direct call.
-      page.on('response', (res) => {
-        if (res.url().includes('/writing/tutor/reviews/')) {
-          console.log('TEMP-DIAG appresp', res.status(), res.request().method(), res.url());
-        }
-      });
-      page.on('requestfailed', (req) => {
-        if (req.url().includes('/writing/tutor/reviews/')) {
-          console.log('TEMP-DIAG reqfailed', req.url(), req.failure()?.errorText ?? '');
-        }
-      });
-      page.on('console', (m) => {
-        if (m.type() === 'error') console.log('TEMP-DIAG console.error', m.text().slice(0, 300));
-      });
       const path = await route.resolvePath({ request });
 
       await page.goto(path, { waitUntil: 'domcontentloaded', timeout: DETAIL_EXPECT_TIMEOUT_MS });

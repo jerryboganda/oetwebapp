@@ -159,7 +159,7 @@ export function AiPreAnalysisPanel({
         </div>
       ) : null}
 
-      {Object.keys(pa.suggestedCriterionFeedback).length > 0 ? (
+      {Object.keys(pa.suggestedCriterionFeedback ?? {}).length > 0 ? (
         <details className="mt-3 rounded-xl border border-border bg-surface/80 p-3">
           <summary className="cursor-pointer text-xs font-bold uppercase tracking-wider text-muted">
             Suggested per-criterion feedback
