@@ -432,7 +432,8 @@ public static class WritingMarkingEndpoints
             r.EstimatedRawTotal,
             r.EstimatedBandLabel,
             r.Confidence,
-            r.Source);
+            r.Source,
+            r.SuggestedCriterionFeedback);
 
     private static WritingFeedbackAnnotationDto MapAnnotation(WritingFeedbackAnnotation a)
         => new(
@@ -696,7 +697,12 @@ public sealed record WritingPreAssessmentDto(
     int EstimatedRawTotal,
     string EstimatedBandLabel,
     string Confidence,
-    string Source);
+    string Source,
+    // The frontend AiPreAnalysisPanel does Object.keys(suggestedCriterionFeedback);
+    // it is a required field of the lib/writing/types.ts WritingPreAssessmentDto.
+    // (Dropping it here made the marking workspace crash on render with
+    // "Cannot convert undefined or null to object".)
+    IReadOnlyDictionary<string, string> SuggestedCriterionFeedback);
 
 public sealed record WritingFeedbackAnnotationDto(
     string Id,

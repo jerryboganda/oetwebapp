@@ -157,10 +157,13 @@ test.describe('Tutor review completion workflows @expert', () => {
     // First-load fetches the marking context (submission + scenario + pre-assessment) in parallel; cold dev cache can exceed the 10s default.
     await expect(page.getByRole('heading', { name: /rubric scores/i })).toBeVisible({ timeout: 30_000 });
 
-    // Confirm the AI pre-analysis suggestion → applies estimated bands + flips to "Applied".
+    // Confirm the AI pre-analysis suggestion applied — the panel shows the
+    // "Suggestion applied — edit the rubric and comments freely." confirmation
+    // (AiPreAnalysisPanel.tsx). (The compact "Applied" badge sits next to the
+    // confidence flag, so an exact /^Applied$/ match is unreliable.)
     const aiPanel = page.getByRole('region', { name: /ai pre-analysis/i });
     await aiPanel.getByRole('button', { name: /use ai suggestion/i }).click();
-    await expect(aiPanel.getByText(/^Applied$/)).toBeVisible();
+    await expect(aiPanel.getByText(/suggestion applied/i)).toBeVisible();
 
     // Record a content-checklist verdict on the first key item (real V2 capability).
     await page.getByRole('radio', { name: 'Included' }).first().click();

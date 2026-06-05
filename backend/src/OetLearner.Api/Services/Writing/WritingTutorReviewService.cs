@@ -345,29 +345,24 @@ public sealed class WritingTutorReviewService(
             scoreOverride.GetValueOrDefault("c6Language", current.C6Language),
         };
         var rawTotal = scores.Sum();
-        db.WritingGrades.Add(new WritingGrade
-        {
-            Id = Guid.NewGuid(),
-            SubmissionId = current.SubmissionId,
-            C1Purpose = (short)scores[0],
-            C2Content = (short)scores[1],
-            C3Conciseness = (short)scores[2],
-            C4Genre = (short)scores[3],
-            C5Organisation = (short)scores[4],
-            C6Language = (short)scores[5],
-            RawTotal = (short)rawTotal,
-            EstimatedBand = rawTotal,
-            BandLabel = RawBandLabel(rawTotal),
-            PerCriterionFeedbackJson = current.PerCriterionFeedbackJson,
-            TopThreePrioritiesJson = current.TopThreePrioritiesJson,
-            ConfidenceFlag = "tutor_reviewed",
-            ModelUsed = current.ModelUsed,
-            CanonVersion = current.CanonVersion,
-            AppealedByGradeId = current.Id,
-            TutorReviewId = review.Id,
-            GradedAt = now,
-            CreatedAt = now,
-        });
+        // The DB enforces ONE grade per submission (unique IX_WritingGrades_SubmissionId),
+        // and every other consumer (GetContextAsync, result feedback) reads a single grade
+        // per submission. Fold the tutor's override into the existing grade IN PLACE rather
+        // than inserting a second row — inserting one threw 23505 duplicate-key on submit,
+        // which broke the tutor-review submit for any AI-graded submission. The tutor review
+        // is linked via TutorReviewId; per-criterion feedback / model / canon are preserved.
+        current.C1Purpose = (short)scores[0];
+        current.C2Content = (short)scores[1];
+        current.C3Conciseness = (short)scores[2];
+        current.C4Genre = (short)scores[3];
+        current.C5Organisation = (short)scores[4];
+        current.C6Language = (short)scores[5];
+        current.RawTotal = (short)rawTotal;
+        current.EstimatedBand = rawTotal;
+        current.BandLabel = RawBandLabel(rawTotal);
+        current.ConfidenceFlag = "tutor_reviewed";
+        current.TutorReviewId = review.Id;
+        current.GradedAt = now;
     }
 
     private static IReadOnlyDictionary<string, int>? NormalizeScoreOverride(IReadOnlyDictionary<string, int>? scoreOverride)
