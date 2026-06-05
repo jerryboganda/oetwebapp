@@ -692,11 +692,28 @@ export async function recoverBrowserSession(
       return null;
     }
   })();
+  // Firefox can abort a navigation kicked off right after cookie mutation with
+  // NS_BINDING_ABORTED (a transient redirect/abort race); such navigations are
+  // safe to retry.
+  const gotoTolerant = async (path: string) => {
+    for (let attempt = 0; ; attempt++) {
+      try {
+        await page.goto(path, { waitUntil: 'domcontentloaded' });
+        return;
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        if (attempt < 2 && /NS_BINDING_ABORTED|ERR_ABORTED/i.test(msg)) {
+          continue;
+        }
+        throw err;
+      }
+    }
+  };
   if (currentOrigin !== defaultAppOrigin) {
-    await page.goto('/sign-in', { waitUntil: 'domcontentloaded' });
+    await gotoTolerant('/sign-in');
   }
   await hydrateSessionStorage(page, session);
-  await page.goto(targetPath, { waitUntil: 'domcontentloaded' });
+  await gotoTolerant(targetPath);
 }
 
 function buildAuthIndicatorCookie(session: AuthSessionResponse) {

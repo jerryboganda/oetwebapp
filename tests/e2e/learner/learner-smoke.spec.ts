@@ -37,7 +37,10 @@ const learnerRoutes = [
   },
   {
     path: '/writing',
-    heading: /choose the next writing task that moves your score/i,
+    // The /writing hub was rebuilt to the V2 landing; its hero copy is now
+    // "Practise OET Writing your way" (accept the raw next-intl key too, as the
+    // writing namespace can render keys verbatim under load like other writing routes).
+    heading: /(practise oet writing your way|writing\.hub\.hero\.title)/i,
   },
   {
     path: '/speaking',
