@@ -108,6 +108,9 @@ jobs:
           # Single remote command string. Runner vars expand here; remote-only
           # subshells use \$( ) so they evaluate on the VPS. Diagnostics print
           # who/where the deploy lands; safe.directory guards root-on-uid1500 git.
+          # The repo is private, so the VPS `git fetch` authenticates with the
+          # workflow's ephemeral GITHUB_TOKEN (passed as GHCR_TOKEN; has contents:read)
+          # rather than relying on anonymous public-repo fetch (the prior behaviour).
           ssh -i ~/.ssh/deploy_key -p "$PORT" \
             -o StrictHostKeyChecking=accept-new -o ServerAliveInterval=30 -o ServerAliveCountMax=20 \
             "$VPS_USER@$VPS_HOST" \
@@ -115,7 +118,7 @@ jobs:
              cd '$APP_DIR'; echo \"[deploy] cwd=\$(pwd)\"; (ls -ld .git || echo '[deploy] no .git'); \
              git config --global --add safe.directory '$APP_DIR' 2>/dev/null || true; \
              echo '$GHCR_TOKEN' | docker login ghcr.io -u '$GHCR_USER' --password-stdin; \
-             git fetch origin main --quiet; git reset --hard '$SHA'; \
+             git fetch 'https://x-access-token:$GHCR_TOKEN@github.com/jerryboganda/oetwebapp.git' main --quiet; git reset --hard '$SHA'; \
              WEB_IMAGE='$WEB_IMAGE' API_IMAGE='$API_IMAGE' VPS_APP_DIR='$APP_DIR' \
                bash scripts/deploy/auto-deploy-ghcr.sh; \
              docker logout ghcr.io >/dev/null 2>&1 || true"
