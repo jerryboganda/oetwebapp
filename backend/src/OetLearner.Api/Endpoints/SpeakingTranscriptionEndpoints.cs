@@ -77,7 +77,13 @@ public static class SpeakingTranscriptionEndpoints
             .FirstOrDefaultAsync(s => s.Id == sessionId, ct);
         if (session is null)
         {
-            return Results.NotFound(new { errorCode = "session_not_found" });
+            // Tone is a best-effort advisory (RULE_40, meaningful only on Breaking-Bad-News
+            // cards). The learner results page fetches it fire-and-forget and degrades when
+            // it is absent, so a missing session/tone is NOT a client error — return an
+            // empty 200 instead of a client-visible 404. (A 404 here surfaced as a severe
+            // console error + 4xx in the strict immersive-completion E2E gate, and as
+            // benign-but-noisy console errors for real learners on non-BBN results.)
+            return Results.Ok((OetLearner.Api.Services.Speaking.SpeakingToneResult?)null);
         }
         if (session.UserId != userId)
         {
