@@ -476,7 +476,13 @@ public sealed class WritingTaskAuthoringService(LearnerDbContext db, ILogger<Wri
         return MapToDto(scenario, checklist, exemplar);
     }
 
-    private static WritingTaskDto MapToDto(
+    /// <summary>
+    /// Maps a scenario + its checklist + linked model-answer exemplar to the
+    /// frontend-aligned <see cref="WritingTaskDto"/>. Public so the tutor/expert
+    /// marking-context endpoint can reuse the exact same shape the admin Task
+    /// Builder serves (lib/writing/types.ts WritingTaskDto).
+    /// </summary>
+    public static WritingTaskDto MapToDto(
         WritingScenario scenario,
         List<WritingContentChecklistItem> checklist,
         WritingExemplar? exemplar)

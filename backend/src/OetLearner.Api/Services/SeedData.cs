@@ -1336,6 +1336,203 @@ public static partial class SeedData
             }
         );
 
+        // ─── Writing V2 reviewable submission (WS-F5 tutor/expert marking surface) ───
+        // A self-contained WritingScenario + content checklist + model-answer exemplar +
+        // a graded WritingSubmission so the V2 marking workspace
+        // (GET /v1/writing/tutor/reviews/{id}/context, behind
+        // /expert/review/writing/{submissionId} and /tutor/writing/reviews/{submissionId})
+        // has a deterministic, reviewable target in E2E. Fixed GUIDs keep the route
+        // stable for the expert-review specs. The whole demo seed is guarded by the
+        // mock-user-001 existence check in EnsureDemoDataAsync, so plain Add(...) is safe.
+        var writingMarkingScenarioId = Guid.Parse("22222222-2222-2222-2222-222222222222");
+        var writingMarkingSubmissionId = Guid.Parse("11111111-1111-1111-1111-111111111111");
+        var writingMarkingExemplarId = Guid.Parse("33333333-3333-3333-3333-333333333333");
+        var writingMarkingGradeId = Guid.Parse("44444444-4444-4444-4444-444444444444");
+        const string writingMarkingLetter =
+            "Dear Dr Patterson,\n\n" +
+            "Re: Mrs Eleanor Vance, 72 years old\n\n" +
+            "I am writing to refer Mrs Vance, who was admitted on 2 June following a fall at home and " +
+            "is now ready for discharge into your care. She was diagnosed with a fractured left neck of " +
+            "femur and underwent a hemiarthroplasty on 3 June, which she tolerated well.\n\n" +
+            "Her recovery has been uncomplicated. She is mobilising with a frame and physiotherapy, and " +
+            "her wound is clean and dry. Please review her in one week to monitor wound healing and " +
+            "anticoagulation, and arrange ongoing physiotherapy in the community.\n\n" +
+            "Thank you for your continued care.\n\n" +
+            "Yours sincerely,\nThe Charge Nurse";
+
+        db.WritingExemplars.Add(new WritingExemplar
+        {
+            Id = writingMarkingExemplarId,
+            ScenarioId = writingMarkingScenarioId,
+            LetterType = "referral",
+            Profession = "nursing",
+            LetterContent =
+                "Dear Dr Patterson,\n\nRe: Mrs Eleanor Vance, 72\n\nI am referring Mrs Vance for ongoing " +
+                "community care following her admission on 2 June after a fall and a left hemiarthroplasty " +
+                "on 3 June. Her recovery has been uncomplicated and she is mobilising with a frame.\n\n" +
+                "Please review her wound and anticoagulation in one week and arrange community physiotherapy.\n\n" +
+                "Yours sincerely,\nThe Charge Nurse",
+            TargetBand = "A",
+            Status = "published",
+            AuthorId = "admin-seed",
+            PublishedAt = now.AddDays(-30),
+            CreatedAt = now.AddDays(-30)
+        });
+
+        db.WritingScenarios.Add(new WritingScenario
+        {
+            Id = writingMarkingScenarioId,
+            Title = "Discharge referral — Mrs Eleanor Vance",
+            LetterType = "referral",
+            Profession = "nursing",
+            TopicsJson = JsonSupport.Serialize(new[] { "discharge", "orthopaedics" }),
+            Difficulty = 3,
+            CaseNotesMarkdown =
+                "72-year-old female admitted 2 June after a fall at home. Fractured left neck of femur; " +
+                "hemiarthroplasty performed 3 June. Uncomplicated recovery, mobilising with a frame, wound " +
+                "clean and dry. For discharge to GP with community physiotherapy and a wound/anticoagulation review.",
+            IsDiagnostic = false,
+            Status = "published",
+            Version = 1,
+            AuthorId = "admin-seed",
+            PublishedAt = now.AddDays(-30),
+            CreatedAt = now.AddDays(-30),
+            InternalCode = "NUR-WR-S01",
+            TaskPromptMarkdown =
+                "Using the case notes, write a referral letter to the patient's general practitioner, " +
+                "Dr Patterson, summarising the admission and the follow-up care required after discharge.",
+            WriterRole = "You are the charge nurse on the orthopaedic ward at Newtown General Hospital.",
+            TodayDate = "10 June 2026",
+            RecipientJson = JsonSupport.Serialize(new
+            {
+                name = "Dr Patterson",
+                role = "General Practitioner",
+                organisation = "Newtown Medical Clinic",
+                address = "14 Station Road, Newtown"
+            }),
+            ExpectedPurpose = "Refer the patient to the GP for ongoing care after a hip-fracture admission.",
+            ExpectedAction = "Review wound and anticoagulation in one week; arrange community physiotherapy.",
+            CaseNoteSectionsJson = JsonSupport.Serialize(new[]
+            {
+                new { heading = "Admission", items = new[] { "Fall at home on 2 June", "Fractured left neck of femur" } },
+                new { heading = "Treatment", items = new[] { "Hemiarthroplasty on 3 June", "Uncomplicated recovery" } },
+                new { heading = "Discharge plan", items = new[] { "Mobilising with a frame", "Community physiotherapy", "Wound and anticoagulation review in one week" } }
+            }),
+            FixedInstructionsJson = JsonSupport.Serialize(new[]
+            {
+                "Use the conventions of a formal referral letter.",
+                "Write 180–200 words.",
+                "Do not use note form."
+            }),
+            WordGuideMin = 180,
+            WordGuideMax = 200,
+            ReadingTimeSeconds = 300,
+            WritingTimeSeconds = 2400,
+            SimulationModes = "both",
+            MarkingMode = "tutor",
+            ModelAnswerExemplarId = writingMarkingExemplarId,
+            ContentOwnerId = "admin-seed",
+            UpdatedAt = now.AddDays(-30)
+        });
+
+        db.WritingContentChecklistItems.AddRange(
+            new WritingContentChecklistItem
+            {
+                Id = Guid.Parse("55555555-5555-5555-5555-555555555551"),
+                ScenarioId = writingMarkingScenarioId,
+                ItemText = "State the reason for the referral and the patient's main diagnosis.",
+                Category = "main_reason",
+                Importance = "high",
+                RequiredStatus = "required",
+                LinkedCaseNoteSection = "Admission",
+                ExpectedRepresentation = "Referral for community follow-up after a fractured neck of femur.",
+                Ordinal = 1,
+                CreatedAt = now.AddDays(-30),
+                UpdatedAt = now.AddDays(-30)
+            },
+            new WritingContentChecklistItem
+            {
+                Id = Guid.Parse("55555555-5555-5555-5555-555555555552"),
+                ScenarioId = writingMarkingScenarioId,
+                ItemText = "Request the follow-up actions: wound/anticoagulation review and community physiotherapy.",
+                Category = "follow_up",
+                Importance = "high",
+                RequiredStatus = "required",
+                LinkedCaseNoteSection = "Discharge plan",
+                ExpectedRepresentation = "Asks the GP to review in one week and arrange physiotherapy.",
+                Ordinal = 2,
+                CreatedAt = now.AddDays(-30),
+                UpdatedAt = now.AddDays(-30)
+            },
+            new WritingContentChecklistItem
+            {
+                Id = Guid.Parse("55555555-5555-5555-5555-555555555553"),
+                ScenarioId = writingMarkingScenarioId,
+                ItemText = "The patient's pre-admission gardening hobby.",
+                Category = "social_history",
+                Importance = "low",
+                RequiredStatus = "irrelevant",
+                ExpectedRepresentation = "Not clinically relevant to the receiving GP.",
+                Ordinal = 3,
+                CreatedAt = now.AddDays(-30),
+                UpdatedAt = now.AddDays(-30)
+            }
+        );
+
+        db.WritingSubmissions.Add(new WritingSubmission
+        {
+            Id = writingMarkingSubmissionId,
+            UserId = userId,
+            ScenarioId = writingMarkingScenarioId,
+            Mode = "exam",
+            LetterContent = writingMarkingLetter,
+            LetterContentHash = "seed-writing-marking-001",
+            WordCount = 168,
+            TimeSpentSeconds = 1980,
+            StartedAt = now.AddDays(-2),
+            SubmittedAt = now.AddDays(-2).AddMinutes(33),
+            IsRevision = false,
+            Status = "graded",
+            GradingTier = "batched",
+            InputSource = "typed",
+            CreatedAt = now.AddDays(-2)
+        });
+
+        db.WritingGrades.Add(new WritingGrade
+        {
+            Id = writingMarkingGradeId,
+            SubmissionId = writingMarkingSubmissionId,
+            C1Purpose = 2,
+            C2Content = 5,
+            C3Conciseness = 4,
+            C4Genre = 5,
+            C5Organisation = 5,
+            C6Language = 5,
+            RawTotal = 26,
+            EstimatedBand = 26,
+            BandLabel = "C+",
+            PerCriterionFeedbackJson = JsonSupport.Serialize(new Dictionary<string, string>
+            {
+                ["c1Purpose"] = "The purpose of the referral is clear in the opening lines.",
+                ["c2Content"] = "Most key clinical details are included accurately.",
+                ["c3Conciseness"] = "Some lower-value detail could be trimmed for the GP.",
+                ["c4Genre"] = "Register is appropriate for a referral letter.",
+                ["c5Organisation"] = "Information is logically sequenced.",
+                ["c6Language"] = "Generally well controlled with minor slips."
+            }),
+            TopThreePrioritiesJson = JsonSupport.Serialize(new[]
+            {
+                "Tighten the discharge summary to the GP-relevant essentials.",
+                "Make the requested follow-up actions more explicit.",
+                "Proofread for minor grammatical slips."
+            }),
+            ConfidenceFlag = "medium",
+            ModelUsed = "seed-heuristic",
+            CanonVersion = "v1",
+            GradedAt = now.AddDays(-2).AddMinutes(35),
+            CreatedAt = now.AddDays(-2).AddMinutes(35)
+        });
+
         db.Evaluations.AddRange(
             new Evaluation
             {

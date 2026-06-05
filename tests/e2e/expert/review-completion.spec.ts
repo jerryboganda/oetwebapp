@@ -1,10 +1,30 @@
 import { expect, test, type Page } from '@playwright/test';
 import { attachDiagnostics, expectNoSevereClientIssues, observePage } from '../fixtures/diagnostics';
-import { createDisposableSpeakingReviewRequest, createDisposableWritingReviewRequest } from '../fixtures/api-auth';
+import { createDisposableSpeakingReviewRequest, getSeededWritingSubmissionId } from '../fixtures/api-auth';
 import { waitForSessionGuardToClear } from '../fixtures/auth';
-import { installFakeRecordingMedia } from '../fixtures/media';
 
-const keyboardModifier = process.platform === 'darwin' ? 'Meta' : 'Control';
+/**
+ * Sets all six OET writing rubric scores on the V2 TutorMarkingWorkspace.
+ * Each criterion is a number input (role "spinbutton") whose accessible name
+ * comes from its `<label htmlFor="rubric-cN">` in
+ * components/domain/writing/marking/RubricPanel.tsx (lines 75-108). C1 Purpose
+ * is capped at 3; C2–C6 at 7 (shared.ts CRITERION_MAX), so we clamp per input.
+ */
+async function fillAllWritingRubricScores(page: Page) {
+  const criteria: Array<{ label: RegExp; value: string }> = [
+    { label: /C1 Purpose/, value: '3' },
+    { label: /C2 Content/, value: '5' },
+    { label: /C3 Conciseness & Clarity/, value: '5' },
+    { label: /C4 Genre & Style/, value: '5' },
+    { label: /C5 Organisation & Layout/, value: '5' },
+    { label: /C6 Language/, value: '5' },
+  ];
+  for (const { label, value } of criteria) {
+    const input = page.getByRole('spinbutton', { name: label });
+    await input.fill(value);
+    await input.blur();
+  }
+}
 
 async function fillAllRubricScores(page: Page, preferredValue = '5') {
   // Capture aria-labels + each select's option values up front. Speaking reviews
@@ -43,7 +63,12 @@ async function fillAllRubricScores(page: Page, preferredValue = '5') {
 }
 
 test.describe('Tutor review completion workflows @expert', () => {
-  test('writing review validates missing fields, supports shortcut save, and submits successfully', async ({ page, request }, testInfo) => {
+  // V2 marking is submission-based (TutorMarkingWorkspace). It has no client-side
+  // "missing field" validation, no draft/Ctrl+S, and no voice notes — a Submit
+  // review always posts to /v1/writing/tutor/reviews/{id}. This covers the real
+  // happy path: render the marking surface, score the rubric + overall feedback,
+  // submit, and land back on the expert queue.
+  test('writing review scores the rubric and submits successfully', async ({ page }, testInfo) => {
     if (testInfo.project.name !== 'chromium-expert') {
       test.skip();
     }
@@ -52,46 +77,22 @@ test.describe('Tutor review completion workflows @expert', () => {
 
     const diagnostics = observePage(page);
     const finalComment = `QA final writing review ${Date.now()}`;
-    const { reviewRequestId } = await createDisposableWritingReviewRequest(request);
-    await installFakeRecordingMedia(page);
+    const submissionId = getSeededWritingSubmissionId();
 
-    await page.goto(`/expert/review/writing/${reviewRequestId}`);
+    await page.goto(`/expert/review/writing/${submissionId}`);
     await waitForSessionGuardToClear(page);
-    // First-load fetches review detail + history + learner context in parallel; cold dev cache can exceed the 10s default.
-    await expect(page.getByRole('heading', { name: /review rubric/i })).toBeVisible({ timeout: 30_000 });
+    // First-load fetches the marking context (submission + scenario + pre-assessment) in parallel; cold dev cache can exceed the 10s default.
+    await expect(page.getByRole('heading', { name: /rubric scores/i })).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText(/ai pre-analysis/i).first()).toBeVisible();
 
-    await page.getByRole('button', { name: /submit review/i }).click();
-    await expect(page.getByText(/please complete all \d+ rubric score\(s\) before submitting\./i)).toBeVisible();
-
-    await fillAllRubricScores(page);
-
-    await page.getByRole('button', { name: /submit review/i }).click();
-    await expect(page.getByText(/please provide a final overall comment\./i)).toBeVisible();
-
-    await page.getByLabel('Final overall comment').fill(finalComment);
-    await page.keyboard.press(`${keyboardModifier}+S`);
-
-    // The success toast auto-dismisses after 5s (components/ui/alert.tsx) which races test polling under cold dev load;
-    // assert the durable indicators instead — "Unsaved" badge clearing and the persisted comment value.
-    await expect(page.getByText(/^Unsaved$/i)).toHaveCount(0, { timeout: 30_000 });
-    await expect(page.getByLabel('Final overall comment')).toHaveValue(finalComment);
-
-    await page.getByRole('tab', { name: /voice notes/i }).click();
-    await page.getByRole('button', { name: /^record$/i }).click();
-    await expect(page.getByRole('button', { name: /^stop$/i })).toBeVisible();
-    await page.getByRole('button', { name: /^stop$/i }).click();
-    await expect(page.getByText(/dr-ahmed-writing-review-.*\.webm/i).first()).toBeVisible({ timeout: 30_000 });
-    const voiceNoteSummary = 'Voice note confirms rubric strengths and priority corrections.';
-    await page.getByLabel('Written voice-note summary').fill(voiceNoteSummary);
-    await page.getByLabel('Transcript').fill('This voice note summarises the final written feedback for the learner.');
-    await page.getByRole('button', { name: /save voice note/i }).click();
-    await expect(page.getByText(/^No voice notes have been saved yet\.$/i)).toHaveCount(0, { timeout: 30_000 });
-    await expect(page.getByText(voiceNoteSummary)).toBeVisible();
+    await fillAllWritingRubricScores(page);
+    await page.getByLabel('Overall feedback').fill(finalComment);
 
     await page.getByRole('button', { name: /submit review/i }).click();
 
-    await expect(page).toHaveURL(/\/expert\/queue$/);
-    await expect(page.locator('main').getByRole('heading', { name: /^review queue$/i })).toBeVisible();
+    // onComplete pushes /expert/queue on a successful submit (app/expert/review/writing/[reviewRequestId]/page.tsx).
+    await expect(page).toHaveURL(/\/expert\/queue$/, { timeout: 30_000 });
+    await expect(page.getByRole('main', { name: /review queue/i })).toBeVisible();
 
     expectNoSevereClientIssues(diagnostics, { allowNextDevNoise: true });
     diagnostics.detach();
@@ -137,31 +138,39 @@ test.describe('Tutor review completion workflows @expert', () => {
     await attachDiagnostics(testInfo, diagnostics);
   });
 
-  test('writing review supports a real rework request after validating the reason field', async ({ page, request }, testInfo) => {
+  // V2 has no "rework request" concept. The closest real, distinct capability on
+  // the marking surface is the AI pre-analysis confirm/edit/reject affordance:
+  // "Use AI suggestion" applies the estimated bands into the editable rubric, then
+  // the marker submits. This drives that path + a content-checklist verdict.
+  test('writing review applies the AI pre-analysis suggestion and submits', async ({ page }, testInfo) => {
     if (testInfo.project.name !== 'chromium-expert') {
       test.skip();
     }
 
-    test.setTimeout(120_000); // cold dev compile of /expert/review/writing + rework submit + queue redirect
+    test.setTimeout(120_000); // cold dev compile of /expert/review/writing + AI-apply + submit + queue redirect
 
     const diagnostics = observePage(page);
-    const { reviewRequestId } = await createDisposableWritingReviewRequest(request);
+    const submissionId = getSeededWritingSubmissionId();
 
-    await page.goto(`/expert/review/writing/${reviewRequestId}`);
+    await page.goto(`/expert/review/writing/${submissionId}`);
     await waitForSessionGuardToClear(page);
-    // First-load fetches review detail + history + learner context in parallel; cold dev cache can exceed the 10s default.
-    await expect(page.getByRole('heading', { name: /review rubric/i })).toBeVisible({ timeout: 30_000 });
+    // First-load fetches the marking context (submission + scenario + pre-assessment) in parallel; cold dev cache can exceed the 10s default.
+    await expect(page.getByRole('heading', { name: /rubric scores/i })).toBeVisible({ timeout: 30_000 });
 
-    await page.getByRole('button', { name: /request rework/i }).click();
-    await page.getByRole('button', { name: /submit rework/i }).click();
-    await expect(page.getByText(/please provide a reason for the rework request\./i)).toBeVisible();
+    // Confirm the AI pre-analysis suggestion → applies estimated bands + flips to "Applied".
+    const aiPanel = page.getByRole('region', { name: /ai pre-analysis/i });
+    await aiPanel.getByRole('button', { name: /use ai suggestion/i }).click();
+    await expect(aiPanel.getByText(/^Applied$/)).toBeVisible();
 
-    await page.getByLabel('Rework reason').fill('Please tighten the opening purpose and reduce non-essential history before final review.');
-    await page.getByRole('button', { name: /submit rework/i }).click();
+    // Record a content-checklist verdict on the first key item (real V2 capability).
+    await page.getByRole('radio', { name: 'Included' }).first().click();
 
-    await expect(page.getByText(/rework request submitted\./i)).toBeVisible();
-    await expect(page).toHaveURL(/\/expert\/queue$/);
-    await expect(page.locator('main').getByRole('heading', { name: /^review queue$/i })).toBeVisible();
+    await page.getByLabel('Overall feedback').fill('Applied the AI estimate after checking the rubric and key content coverage.');
+    await page.getByRole('button', { name: /submit review/i }).click();
+
+    // onComplete pushes /expert/queue on a successful submit (app/expert/review/writing/[reviewRequestId]/page.tsx).
+    await expect(page).toHaveURL(/\/expert\/queue$/, { timeout: 30_000 });
+    await expect(page.getByRole('main', { name: /review queue/i })).toBeVisible();
 
     expectNoSevereClientIssues(diagnostics, { allowNextDevNoise: true });
     diagnostics.detach();

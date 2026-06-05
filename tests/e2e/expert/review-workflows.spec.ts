@@ -1,36 +1,52 @@
 import { expect, test } from '@playwright/test';
 import { attachDiagnostics, expectNoSevereClientIssues, observePage } from '../fixtures/diagnostics';
-import { createDisposableSpeakingReviewRequest, createDisposableWritingReviewRequest } from '../fixtures/api-auth';
+import { createDisposableSpeakingReviewRequest, getSeededWritingSubmissionId } from '../fixtures/api-auth';
 import { waitForSessionGuardToClear } from '../fixtures/auth';
 
 test.describe('Tutor review workflows @expert @smoke', () => {
-  test('writing review supports rubric edits and draft saves', async ({ page, request }, testInfo) => {
+  // V2 marking has no separate draft-save; edits live in component state until the
+  // Submit review POST. This covers the real interactive rubric editing on the V2
+  // TutorMarkingWorkspace: the per-criterion stepper updates the input + the live
+  // raw total, a per-criterion comment is captured, and the review submits.
+  test('writing review supports rubric edits and live total', async ({ page }, testInfo) => {
     if (testInfo.project.name !== 'chromium-expert') {
       test.skip();
     }
 
-    test.setTimeout(120_000); // cold dev compile of /expert/review/writing + draft save round-trip exceeds default 60s budget
+    test.setTimeout(120_000); // cold dev compile of /expert/review/writing + interactive edit + submit exceeds default 60s budget
 
     const diagnostics = observePage(page);
-    const purposeComment = `QA writing draft ${Date.now()}`;
-    const { reviewRequestId } = await createDisposableWritingReviewRequest(request);
+    const contentComment = `QA writing rubric edit ${Date.now()}`;
+    const submissionId = getSeededWritingSubmissionId();
 
-    await page.goto(`/expert/review/writing/${reviewRequestId}`);
+    await page.goto(`/expert/review/writing/${submissionId}`);
     await waitForSessionGuardToClear(page);
-    // First-load fetches review detail + history + learner context in parallel; cold dev cache can exceed the 10s default.
-    await expect(page.getByRole('heading', { name: /review rubric/i })).toBeVisible({ timeout: 30_000 });
+    // First-load fetches the marking context (submission + scenario + pre-assessment) in parallel; cold dev cache can exceed the 10s default.
+    await expect(page.getByRole('heading', { name: /rubric scores/i })).toBeVisible({ timeout: 30_000 });
 
-    await page.getByLabel('Score for Purpose').selectOption('3');
-    await page.getByLabel('Comment for Purpose').fill(purposeComment);
-    await expect(page.getByText(/unsaved/i)).toBeVisible();
+    // Step C1 Purpose up to 3 via the rubric steppers (RubricPanel.tsx aria-labels).
+    const purposeInput = page.getByRole('spinbutton', { name: /C1 Purpose/ });
+    await page.getByRole('button', { name: 'Increase C1 Purpose' }).click();
+    await expect(purposeInput).toHaveValue('1');
 
-    await page.getByRole('button', { name: /save draft/i }).click();
+    // Set the remaining criteria so the rubric is complete, then assert the live raw total.
+    await page.getByRole('spinbutton', { name: /C1 Purpose/ }).fill('3');
+    for (const label of [/C2 Content/, /C3 Conciseness/, /C4 Genre/, /C5 Organisation/, /C6 Language/]) {
+      await page.getByRole('spinbutton', { name: label }).fill('6');
+    }
+    // Raw total = 3 + 6*5 = 33 out of 38, shown in the rubric panel's "Raw total" readout.
+    const rubricPanel = page.getByRole('region', { name: /rubric scores/i });
+    await expect(rubricPanel.getByText('33/38')).toBeVisible();
 
-    // The success toast auto-dismisses after 5s (components/ui/alert.tsx) which races test polling under cold dev load;
-    // assert the durable indicators instead — "Last saved:" timestamp and the "Unsaved" badge clearing.
-    await expect(page.getByText(/last saved:/i)).toBeVisible({ timeout: 30_000 });
-    await expect(page.getByLabel('Comment for Purpose')).toHaveValue(purposeComment);
-    await expect(page.getByText(/unsaved/i)).toHaveCount(0);
+    // Per-criterion comment textarea (exact label disambiguates it from the "C2 Content (0–7)" rubric input).
+    await page.getByLabel('C2 Content', { exact: true }).fill(contentComment);
+    await expect(page.getByLabel('C2 Content', { exact: true })).toHaveValue(contentComment);
+
+    await page.getByRole('button', { name: /submit review/i }).click();
+
+    // A successful submit pushes /expert/queue (app/expert/review/writing/[reviewRequestId]/page.tsx).
+    await expect(page).toHaveURL(/\/expert\/queue$/, { timeout: 30_000 });
+    await expect(page.getByRole('main', { name: /review queue/i })).toBeVisible();
 
     expectNoSevereClientIssues(diagnostics, { allowNextDevNoise: true });
     diagnostics.detach();

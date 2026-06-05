@@ -480,6 +480,26 @@ export async function createDisposableWritingReviewRequest(request: APIRequestCo
   });
 }
 
+/**
+ * The deterministic, demo-seeded WritingSubmission that backs the V2 marking
+ * surface (`GET /v1/writing/tutor/reviews/{id}/context`). Seeded by
+ * `SeedData.SeedDemoUserData` with this exact GUID alongside its scenario,
+ * content checklist, model-answer exemplar, and AI grade, so the expert review
+ * route `/expert/review/writing/{submissionId}` and the tutor route
+ * `/tutor/writing/reviews/{submissionId}` both resolve without an API round-trip.
+ *
+ * The V2 marking context handler only requires the submission + its scenario to
+ * exist (it does NOT require a tutor claim), and the submit upserts a review
+ * keyed by submission + tutor — so any authenticated expert/tutor can drive the
+ * full flow against this constant.
+ */
+export const SEEDED_WRITING_SUBMISSION_ID = '11111111-1111-1111-1111-111111111111';
+
+/** Returns the fixed demo-seeded reviewable WritingSubmission id (see above). */
+export function getSeededWritingSubmissionId(): string {
+  return SEEDED_WRITING_SUBMISSION_ID;
+}
+
 export async function createDisposableSpeakingReviewRequest(request: APIRequestContext) {
   return createClaimedExpertReviewRequest(request, {
     attemptId: 'sa-001',

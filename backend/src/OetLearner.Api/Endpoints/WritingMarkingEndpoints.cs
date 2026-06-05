@@ -76,14 +76,13 @@ public static class WritingMarkingEndpoints
             .OrderBy(c => c.Ordinal)
             .ToListAsync(ct);
 
-        // Model answer (tutor-only) from the scenario's linked exemplar.
-        var modelAnswer = scenario.ModelAnswerExemplarId is null
+        // Model-answer exemplar (tutor-only) from the scenario's linked exemplar.
+        var exemplar = scenario.ModelAnswerExemplarId is null
             ? null
             : await db.WritingExemplars
                 .AsNoTracking()
-                .Where(e => e.Id == scenario.ModelAnswerExemplarId.Value)
-                .Select(e => e.LetterContent)
-                .FirstOrDefaultAsync(ct);
+                .FirstOrDefaultAsync(e => e.Id == scenario.ModelAnswerExemplarId.Value, ct);
+        var modelAnswer = string.IsNullOrEmpty(exemplar?.LetterContent) ? null : exemplar!.LetterContent;
 
         var grade = await db.WritingGrades
             .AsNoTracking()
@@ -112,7 +111,10 @@ public static class WritingMarkingEndpoints
 
         var dto = new WritingTutorMarkingContextDto(
             MapSubmission(submission),
-            MapTask(scenario, checklist, modelAnswer),
+            // Reuse the admin Task Builder's frontend-aligned WritingTaskDto so the
+            // marking workspace receives the exact shape lib/writing/types.ts defines
+            // (recipient object, caseNoteSections, fixedInstructions, rich checklist).
+            Services.Writing.WritingTaskAuthoringService.MapToDto(scenario, checklist, exemplar),
             grade is null ? null : MapGrade(grade),
             MapPreAssessment(preAssessment),
             existingReview is null ? null : MapReview(existingReview),
@@ -384,55 +386,23 @@ public static class WritingMarkingEndpoints
 
     // ---- Mapping to camelCase DTOs ------------------------------------------------------------
 
-    private static WritingSubmissionSummaryDto MapSubmission(WritingSubmission s)
+    private static WritingMarkingSubmissionDto MapSubmission(WritingSubmission s)
         => new(
             s.Id.ToString(),
-            s.ScenarioId.ToString(),
             s.UserId,
+            s.ScenarioId.ToString(),
+            s.Mode,
             s.LetterContent,
+            s.LetterContentHash,
             s.WordCount,
+            s.TimeSpentSeconds,
+            s.StartedAt.ToString("o"),
+            s.SubmittedAt.ToString("o"),
+            s.IsRevision,
+            s.OriginalSubmissionId?.ToString(),
             s.Status,
-            s.SubmittedAt.ToString("o"));
-
-    private static WritingTaskContextDto MapTask(
-        WritingScenario scenario,
-        IReadOnlyList<WritingContentChecklistItem> checklist,
-        string? modelAnswer)
-    {
-        var key = checklist
-            .Where(c => !string.Equals(c.RequiredStatus, "irrelevant", StringComparison.OrdinalIgnoreCase))
-            .Select(MapChecklistItem)
-            .ToList();
-        var irrelevant = checklist
-            .Where(c => string.Equals(c.RequiredStatus, "irrelevant", StringComparison.OrdinalIgnoreCase))
-            .Select(MapChecklistItem)
-            .ToList();
-
-        var pdfId = scenario.StimulusPdfMediaAssetId;
-        return new WritingTaskContextDto(
-            scenario.Id.ToString(),
-            scenario.Title,
-            scenario.Profession,
-            scenario.CaseNotesMarkdown,
-            scenario.TaskPromptMarkdown ?? string.Empty,
-            scenario.RecipientJson ?? string.Empty,
-            scenario.WordGuideMin,
-            scenario.WordGuideMax,
-            scenario.MarkingMode,
-            key,
-            irrelevant,
-            modelAnswer,
-            StimulusPdfMediaAssetId: pdfId,
-            StimulusPdfDownloadPath: string.IsNullOrWhiteSpace(pdfId) ? null : $"/v1/media/{pdfId}/content");
-    }
-
-    private static WritingChecklistItemDto MapChecklistItem(WritingContentChecklistItem c)
-        => new(
-            c.Id.ToString(),
-            c.ItemText,
-            c.RequiredStatus,
-            c.ExpectedRepresentation,
-            c.Ordinal);
+            s.GradingTier,
+            s.InputSource);
 
     private static WritingGradeDto MapGrade(WritingGrade g)
         => new(
@@ -516,7 +486,7 @@ public static class WritingMarkingEndpoints
         => new(s.C1Purpose, s.C2Content, s.C3Conciseness, s.C4Genre, s.C5Organisation, s.C6Language);
 
     private static WritingCriteriaScores ToCriteriaScores(WritingCriteriaScoresDto dto)
-        => new(dto.C1Purpose, dto.C2Content, dto.C3Conciseness, dto.C4Genre, dto.C5Organisation, dto.C6Language);
+        => new(dto.C1, dto.C2, dto.C3, dto.C4, dto.C5, dto.C6);
 
     // ---- JSON helpers -------------------------------------------------------------------------
 
@@ -650,17 +620,20 @@ public static class WritingMarkingEndpoints
 
 // ---- Response DTOs (mirror lib/writing/types.ts, camelCase JSON) -------------------------------
 
+// Criteria scores carried on the wire as the frontend's short keys {c1..c6}
+// (lib/writing/types.ts WritingCriteriaScoresDto). The internal domain holder
+// WritingCriteriaScores keeps the verbose C1Purpose..C6Language names.
 public sealed record WritingCriteriaScoresDto(
-    int C1Purpose,
-    int C2Content,
-    int C3Conciseness,
-    int C4Genre,
-    int C5Organisation,
-    int C6Language);
+    int C1,
+    int C2,
+    int C3,
+    int C4,
+    int C5,
+    int C6);
 
 public sealed record WritingTutorMarkingContextDto(
-    WritingSubmissionSummaryDto Submission,
-    WritingTaskContextDto Task,
+    WritingMarkingSubmissionDto Submission,
+    Services.Writing.WritingTaskDto Task,
     WritingGradeDto? AiGrade,
     WritingPreAssessmentDto PreAssessment,
     WritingTutorReviewDto? ExistingReview,
@@ -668,28 +641,25 @@ public sealed record WritingTutorMarkingContextDto(
     WritingModerationDto? Moderation,
     string MarkerSequence);
 
-public sealed record WritingTaskContextDto(
-    string ScenarioId,
-    string Title,
-    string Specialty,
-    string CaseNotesText,
-    string TaskPromptText,
-    string RecipientText,
-    int WordGuideMin,
-    int WordGuideMax,
-    string MarkingMode,
-    IReadOnlyList<WritingChecklistItemDto> KeyChecklistItems,
-    IReadOnlyList<WritingChecklistItemDto> IrrelevantChecklistItems,
-    string? ModelAnswerText,
-    string? StimulusPdfMediaAssetId = null,
-    string? StimulusPdfDownloadPath = null);
-
-public sealed record WritingChecklistItemDto(
+// Full submission shape the marking workspace consumes (lib/writing/types.ts
+// WritingSubmissionDto). Distinct from the leaner WritingSubmissionSummaryDto
+// still used by the learner gated-feedback bundle.
+public sealed record WritingMarkingSubmissionDto(
     string Id,
-    string ItemText,
-    string RequiredStatus,
-    string? ExpectedRepresentation,
-    int OrderIndex);
+    string UserId,
+    string ScenarioId,
+    string Mode,
+    string LetterContent,
+    string ContentHash,
+    int WordCount,
+    int TimeSpentSeconds,
+    string StartedAt,
+    string SubmittedAt,
+    bool IsRevision,
+    string? OriginalSubmissionId,
+    string Status,
+    string GradingTier,
+    string InputSource);
 
 public sealed record WritingSubmissionSummaryDto(
     string Id,
