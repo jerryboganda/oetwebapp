@@ -37,7 +37,7 @@ function toLabel(value: string) {
 
 function buildFilterGroups(metadata: ExpertQueueFilterMetadata | null): FilterGroup[] {
   return [
-    { id: 'type', label: 'Sub-test', options: (metadata?.types ?? ['writing', 'speaking']).map((value) => ({ id: value, label: toLabel(value) })) },
+    { id: 'type', label: 'Sub-test', options: (metadata?.types ?? ['speaking']).map((value) => ({ id: value, label: toLabel(value) })) },
     { id: 'profession', label: 'Profession', options: (metadata?.professions ?? []).map((value) => ({ id: value, label: toLabel(value) })) },
     { id: 'priority', label: 'Priority', options: (metadata?.priorities ?? ['high', 'normal']).map((value) => ({ id: value, label: toLabel(value) })) },
     { id: 'status', label: 'Status', options: (metadata?.statuses ?? ['queued', 'assigned', 'in_progress', 'overdue']).map((value) => ({ id: value, label: toLabel(value) })) },

@@ -448,7 +448,9 @@ public class ExpertFlowsTests : IClassFixture<FirstPartyAuthTestWebApplicationFa
         response.EnsureSuccessStatusCode();
 
         using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
-        Assert.True(json.RootElement.GetProperty("types").GetArrayLength() >= 2);
+        // Writing moved to the V2 submission flow, so the V1 expert queue only offers
+        // speaking as a subtest filter now (writing is reviewed via the writing queue).
+        Assert.True(json.RootElement.GetProperty("types").GetArrayLength() >= 1);
         Assert.True(json.RootElement.GetProperty("professions").GetArrayLength() >= 1);
         Assert.True(json.RootElement.GetProperty("assignmentStates").GetArrayLength() >= 1);
     }

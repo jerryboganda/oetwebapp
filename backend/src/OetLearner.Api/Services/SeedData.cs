@@ -1348,6 +1348,7 @@ public static partial class SeedData
         var writingMarkingSubmissionId = Guid.Parse("11111111-1111-1111-1111-111111111111");
         var writingMarkingExemplarId = Guid.Parse("33333333-3333-3333-3333-333333333333");
         var writingMarkingGradeId = Guid.Parse("44444444-4444-4444-4444-444444444444");
+        var writingMarkingAssignmentId = Guid.Parse("66666666-6666-6666-6666-666666666666");
         const string writingMarkingLetter =
             "Dear Dr Patterson,\n\n" +
             "Re: Mrs Eleanor Vance, 72 years old\n\n" +
@@ -1531,6 +1532,22 @@ public static partial class SeedData
             CanonVersion = "v1",
             GradedAt = now.AddDays(-2).AddMinutes(35),
             CreatedAt = now.AddDays(-2).AddMinutes(35)
+        });
+
+        // A pending tutor-review assignment so the seeded submission surfaces in the
+        // writing review queue (GET /v1/tutors/writing/queue), which backs both the
+        // expert writing queue (/expert/queue/assigned) and /tutor/writing/queue. This
+        // lets E2E exercise the real queue → review navigation. The submission-keyed
+        // marking submit (SubmitMarkingReviewAsync) never touches this row, so it stays
+        // queue-visible across review submissions.
+        db.WritingTutorReviewAssignments.Add(new WritingTutorReviewAssignment
+        {
+            Id = writingMarkingAssignmentId,
+            SubmissionId = writingMarkingSubmissionId,
+            TutorId = string.Empty,
+            Status = "pending",
+            ClaimedAt = now.AddDays(-2).AddMinutes(33),
+            DueAt = now.AddDays(-2).AddMinutes(33).AddHours(36)
         });
 
         db.Evaluations.AddRange(

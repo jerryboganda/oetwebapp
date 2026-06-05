@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { InlineAlert } from '@/components/ui/alert';
-import { fetchSpeakingReviewDetail, fetchWritingReviewDetail, isApiError } from '@/lib/api';
+import { fetchSpeakingReviewDetail, isApiError } from '@/lib/api';
 import { getListeningExpertBundle } from '@/lib/expert-listening-api';
 
 export default function ExpertReviewRedirectPage() {
@@ -23,42 +23,34 @@ export default function ExpertReviewRedirectPage() {
     let cancelled = false;
 
     async function resolveReviewRoute() {
+      // Writing reviews are V2 submission-based and open directly at
+      // /expert/review/writing/{submissionId} from the writing review queue. A
+      // ReviewRequest (`review-…`) id has no WritingSubmission and cannot resolve in
+      // the submission-keyed marking workspace, so this dispatcher only routes the
+      // remaining ReviewRequest-keyed surfaces (speaking, then listening).
       try {
-        await fetchWritingReviewDetail(reviewId);
+        await fetchSpeakingReviewDetail(reviewId);
         if (!cancelled) {
-          router.replace(`/expert/review/writing/${reviewId}`);
+          router.replace(`/expert/review/speaking/${reviewId}`);
         }
         return;
-      } catch (writingError) {
-        if (cancelled) {
-          return;
-        }
+      } catch (speakingError) {
+        if (cancelled) return;
 
         try {
-          await fetchSpeakingReviewDetail(reviewId);
+          await getListeningExpertBundle(reviewId);
           if (!cancelled) {
-            router.replace(`/expert/review/speaking/${reviewId}`);
+            router.replace(`/expert/review/listening/${reviewId}`);
           }
-        } catch (speakingError) {
-          if (cancelled) return;
-
-          try {
-            await getListeningExpertBundle(reviewId);
-            if (!cancelled) {
-              router.replace(`/expert/review/listening/${reviewId}`);
-            }
-          } catch (listeningError) {
-            if (!cancelled) {
-              const fallbackError =
-                isApiError(listeningError)
-                  ? listeningError.userMessage
-                  : isApiError(speakingError)
-                    ? speakingError.userMessage
-                    : isApiError(writingError)
-                      ? writingError.userMessage
-                      : 'We could not resolve this review workspace.';
-              setError(fallbackError);
-            }
+        } catch (listeningError) {
+          if (!cancelled) {
+            const fallbackError =
+              isApiError(listeningError)
+                ? listeningError.userMessage
+                : isApiError(speakingError)
+                  ? speakingError.userMessage
+                  : 'We could not resolve this review workspace.';
+            setError(fallbackError);
           }
         }
       }

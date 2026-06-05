@@ -67,9 +67,16 @@ public class ExpertService(LearnerDbContext db, ILogger<ExpertService> logger, I
         var pageSize = Math.Clamp(request.PageSize ?? 50, 1, MaxQueuePageSize);
         var now = DateTimeOffset.UtcNow;
 
+        // Writing reviews live in the V2 submission flow (WritingSubmission →
+        // WritingTutorReviewAssignment, surfaced by /v1/tutors/writing/queue and the
+        // expert writing queue at /expert/queue/assigned). A writing ReviewRequest has
+        // no WritingSubmission link, so it can never resolve in the submission-keyed
+        // marking workspace — keep it out of this V1 expert queue/dashboard. Speaking
+        // (and any future ReviewRequest-based subtest) still belongs here.
         var reviewRequests = await db.ReviewRequests
             .AsNoTracking()
-            .Where(rr => rr.State == ReviewRequestState.Queued || rr.State == ReviewRequestState.InReview)
+            .Where(rr => (rr.State == ReviewRequestState.Queued || rr.State == ReviewRequestState.InReview)
+                         && rr.SubtestCode != "writing")
             .ToListAsync(ct);
 
         if (reviewRequests.Count == 0)
@@ -1654,7 +1661,9 @@ public class ExpertService(LearnerDbContext db, ILogger<ExpertService> logger, I
             .ToListAsync(ct);
 
         return new ExpertQueueFilterMetadataResponse(
-            Types: ["writing", "speaking"],
+            // Writing is no longer a V1 ReviewRequest-queue subtest (it lives in the V2
+            // submission flow / writing review queue), so it is not offered as a filter here.
+            Types: ["speaking"],
             Professions: professions.Count > 0 ? professions : ["nursing", "medicine", "dentistry", "pharmacy", "physiotherapy", "radiography", "dietetics", "podiatry", "speech_pathology", "occupational_therapy", "optometry", "veterinary_science"],
             Priorities: ["high", "normal"],
             Statuses: ["queued", "assigned", "in_progress", "overdue", "completed"],
