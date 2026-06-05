@@ -524,7 +524,7 @@ public class ListeningRelationalRuntimeTests
 
         var ex = await Assert.ThrowsAsync<ApiException>(() =>
             svc.AdvanceSectionAsync(userId, attempt.Id, new ListeningAdvanceSectionRequest(4), default));
-        Assert.Equal("listening_section_one_way", ex.Code);
+        Assert.Equal("listening_section_one_way", ex.ErrorCode);
 
         var reloaded = await db.Attempts.AsNoTracking().SingleAsync(a => a.Id == attempt.Id);
         using var answers = JsonDocument.Parse(reloaded.AnswersJson);

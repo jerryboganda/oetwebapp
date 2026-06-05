@@ -14,11 +14,11 @@ const expertRoutes = [
 
 const adminRoutes = [
   { path: '/admin', title: 'Operations' },
-  { path: '/admin/content', title: 'Content Hub' },
+  { path: '/admin/content', title: 'Content Home' },
   { path: '/admin/criteria', title: 'Rubrics & Criteria' },
   { path: '/admin/taxonomy', title: 'Professions' },
   { path: '/admin/flags', title: 'Feature Flags' },
-  { path: '/admin/users', title: 'User Operations' },
+  { path: '/admin/users', title: 'User Management' },
   { path: '/admin/billing', title: 'Billing Ops' },
   { path: '/admin/audit-logs', title: 'Audit Logs' },
 ];

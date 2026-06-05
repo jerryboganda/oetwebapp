@@ -299,9 +299,16 @@ function PlayerContent() {
   // handleAnnotationChange). `activeAttemptId` is the live attempt (resumed via
   // the route param or created by ensureAttempt).
   const activeAttemptId = attempt?.attemptId ?? attemptIdFromRoute ?? null;
+  // R08 annotations (highlights + rule-out) persist only on RELATIONAL listening
+  // attempts (`lat-` ids). Legacy papers (e.g. seeded ContentItem lt-001) yield a
+  // generic Attempt (`la-` id) with no row in db.ListeningAttempts, so the V2
+  // annotations GET/PUT 404. Gate the hook to relational attempts so legacy papers
+  // don't fire a doomed request (which surfaces as a severe client 404 in E2E).
+  const annotationsSupported = (activeAttemptId ?? '').startsWith('lat-');
   const annotations = useListeningAnnotations({
     attemptId: activeAttemptId,
     initialAnnotationsJson: null,
+    disabled: !annotationsSupported,
   });
   const reducedMotion = prefersReducedMotion(useReducedMotion());
   const sectionMotion = getSurfaceMotion('section', reducedMotion);
@@ -401,12 +408,12 @@ function PlayerContent() {
   // carry the annotations payload, so pull it via the dedicated GET. reload()
   // no-ops when there's no attempt id.
   useEffect(() => {
-    if (!activeAttemptId) return;
+    if (!activeAttemptId || !annotationsSupported) return;
     void annotations.reload();
     // reload() is keyed on (attemptId, disabled); intentionally re-runs only
     // when the active attempt id changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeAttemptId]);
+  }, [activeAttemptId, annotationsSupported]);
 
   useEffect(() => {
     if (!attempt?.attemptId || !hasStarted || isSubmitting) return;
