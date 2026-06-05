@@ -1449,6 +1449,39 @@ public partial class LearnerDbContext(DbContextOptions<LearnerDbContext> options
     partial void OnModelCreatingMaterials(ModelBuilder modelBuilder);
 
     /// <summary>
+    /// Resolves a candidate audit actor id to a value safe to store in
+    /// <see cref="Domain.AuditEvent.ActorAuthAccountId"/>, which carries a
+    /// foreign key to <c>ApplicationUserAccounts.Id</c>
+    /// (<c>FK_AuditEvents_ApplicationUserAccounts_ActorAuthAccountId</c>).
+    ///
+    /// Returns <paramref name="candidateActorId"/> only when a matching
+    /// account row exists, otherwise <c>null</c>. The caller id frequently is
+    /// NOT an account row — e.g. under <c>DevelopmentAuthHandler</c> it is the
+    /// raw <c>X-Debug-UserId</c> header, and seeded/legacy admin ids never had
+    /// an <c>ApplicationUserAccount</c> — and writing such a dangling id into
+    /// the FK column makes <c>SaveChanges</c> throw a 500 ("An error occurred
+    /// while saving the entity changes"). Audit-writing services must resolve
+    /// the FK through this helper while keeping the raw caller id in the
+    /// non-FK <c>AuditEvent.ActorId</c> / <c>ActorName</c> columns for
+    /// traceability. See <c>ContentPaperService.WriteAuditAsync</c> for the
+    /// canonical pattern (it simply leaves the FK null).
+    /// </summary>
+    public async Task<string?> ResolveActorAuthAccountIdAsync(
+        string? candidateActorId,
+        CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(candidateActorId))
+        {
+            return null;
+        }
+
+        return await ApplicationUserAccounts
+            .AnyAsync(a => a.Id == candidateActorId, ct)
+            ? candidateActorId
+            : null;
+    }
+
+    /// <summary>
     /// Configures the Postgres system column <c>xmin</c> as an optimistic
     /// concurrency token for <typeparamref name="TEntity"/>. xmin is always
     /// present on every row, so this is purely a model-level opt-in — no DDL.

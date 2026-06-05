@@ -399,7 +399,7 @@ public sealed class ListeningSequenceService
             Id = $"audit_{Guid.NewGuid():N}",
             OccurredAt = DateTimeOffset.UtcNow,
             ActorId = adminId,
-            ActorAuthAccountId = adminId,
+            ActorAuthAccountId = await _db.ResolveActorAuthAccountIdAsync(adminId, ct),
             ActorName = adminId,
             Action = "ListeningSequenceUpdated",
             ResourceType = "ContentPaper",

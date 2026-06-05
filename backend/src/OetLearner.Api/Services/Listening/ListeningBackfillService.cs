@@ -310,13 +310,19 @@ public sealed class ListeningBackfillService(LearnerDbContext db) : IListeningBa
         }
         db.ListeningQuestions.AddRange(questionRows);
 
+        // Resolve the audit FK once for both events below: ActorAuthAccountId is
+        // FK'd to ApplicationUserAccounts.Id, so a caller id with no account row
+        // (dev-auth header, seeded/legacy admin) must be stored as null to avoid
+        // a SaveChanges 500. The raw id is still kept in ActorId for traceability.
+        var actorAuthAccountId = await db.ResolveActorAuthAccountIdAsync(adminId, ct);
+
         // Audit
         db.AuditEvents.Add(new AuditEvent
         {
             Id = $"audit_{Guid.NewGuid():N}",
             OccurredAt = now,
             ActorId = adminId,
-            ActorAuthAccountId = adminId,
+            ActorAuthAccountId = actorAuthAccountId,
             ActorName = adminId,
             Action = "ListeningRelationalBackfill",
             ResourceType = "ContentPaper",
@@ -339,7 +345,7 @@ public sealed class ListeningBackfillService(LearnerDbContext db) : IListeningBa
                 Id = $"audit_{Guid.NewGuid():N}",
                 OccurredAt = now,
                 ActorId = adminId,
-                ActorAuthAccountId = adminId,
+                ActorAuthAccountId = actorAuthAccountId,
                 ActorName = "ListeningBackfillService",
                 Action = "listening.backfill.non_destructive_update",
                 ResourceType = "ContentPaper",
