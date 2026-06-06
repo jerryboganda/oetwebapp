@@ -216,9 +216,15 @@ public static class BillingRegionEndpoints
             existing = new GatewayRoutingConfig
             {
                 Id = Guid.NewGuid().ToString("N"),
-                Region = region, Currency = currency, ProductType = product, GatewayName = gateway,
-                Priority = request.Priority, IsEnabled = request.IsEnabled,
-                CreatedAt = now, UpdatedAt = now, UpdatedByAdminId = adminId,
+                Region = region,
+                Currency = currency,
+                ProductType = product,
+                GatewayName = gateway,
+                Priority = request.Priority,
+                IsEnabled = request.IsEnabled,
+                CreatedAt = now,
+                UpdatedAt = now,
+                UpdatedByAdminId = adminId,
             };
             db.GatewayRoutingConfigs.Add(existing);
         }

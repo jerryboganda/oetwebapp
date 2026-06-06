@@ -1740,7 +1740,9 @@ public class ReadingAuthoringTests
 
         db.ReadingAttempts.Add(new ReadingAttempt
         {
-            Id = "a1", UserId = "u1", PaperId = "p1",
+            Id = "a1",
+            UserId = "u1",
+            PaperId = "p1",
             StartedAt = DateTimeOffset.UtcNow,
             LastActivityAt = DateTimeOffset.UtcNow,
             Status = ReadingAttemptStatus.InProgress,
@@ -1749,7 +1751,9 @@ public class ReadingAuthoringTests
         });
         db.ReadingAnswers.Add(new ReadingAnswer
         {
-            Id = "aa1", ReadingAttemptId = "a1", ReadingQuestionId = q.Id,
+            Id = "aa1",
+            ReadingAttemptId = "a1",
+            ReadingQuestionId = q.Id,
             UserAnswerJson = "\"oral rehydration therapy\"",
             AnsweredAt = DateTimeOffset.UtcNow,
         });
@@ -1824,13 +1828,20 @@ public class ReadingAuthoringTests
 
         db.ReadingAttempts.Add(new ReadingAttempt
         {
-            Id = "a2", UserId = "u1", PaperId = "p1",
-            StartedAt = DateTimeOffset.UtcNow, LastActivityAt = DateTimeOffset.UtcNow,
-            Status = ReadingAttemptStatus.InProgress, MaxRawScore = 42, PolicySnapshotJson = JsonSerializer.Serialize(snapshot),
+            Id = "a2",
+            UserId = "u1",
+            PaperId = "p1",
+            StartedAt = DateTimeOffset.UtcNow,
+            LastActivityAt = DateTimeOffset.UtcNow,
+            Status = ReadingAttemptStatus.InProgress,
+            MaxRawScore = 42,
+            PolicySnapshotJson = JsonSerializer.Serialize(snapshot),
         });
         db.ReadingAnswers.Add(new ReadingAnswer
         {
-            Id = "aa2", ReadingAttemptId = "a2", ReadingQuestionId = q.Id,
+            Id = "aa2",
+            ReadingAttemptId = "a2",
+            ReadingQuestionId = q.Id,
             UserAnswerJson = "[\"A\"]",
             AnsweredAt = DateTimeOffset.UtcNow,
         });
@@ -1859,7 +1870,9 @@ public class ReadingAuthoringTests
 
         db.ReadingAttempts.Add(new ReadingAttempt
         {
-            Id = "fuzzy-a1", UserId = "u1", PaperId = "p1",
+            Id = "fuzzy-a1",
+            UserId = "u1",
+            PaperId = "p1",
             StartedAt = DateTimeOffset.UtcNow,
             LastActivityAt = DateTimeOffset.UtcNow,
             Status = ReadingAttemptStatus.InProgress,
@@ -1899,15 +1912,22 @@ public class ReadingAuthoringTests
         var snapshot = await policy.ResolveForUserAsync("u1", default);
         db.ReadingAttempts.Add(new ReadingAttempt
         {
-            Id = "wave1-a1", UserId = "u1", PaperId = "p1",
-            StartedAt = DateTimeOffset.UtcNow, LastActivityAt = DateTimeOffset.UtcNow,
-            Status = ReadingAttemptStatus.InProgress, MaxRawScore = 42,
+            Id = "wave1-a1",
+            UserId = "u1",
+            PaperId = "p1",
+            StartedAt = DateTimeOffset.UtcNow,
+            LastActivityAt = DateTimeOffset.UtcNow,
+            Status = ReadingAttemptStatus.InProgress,
+            MaxRawScore = 42,
             PolicySnapshotJson = JsonSerializer.Serialize(snapshot),
         });
         db.ReadingAnswers.Add(new ReadingAnswer
         {
-            Id = "wave1-ans1", ReadingAttemptId = "wave1-a1", ReadingQuestionId = q.Id,
-            UserAnswerJson = userJson, AnsweredAt = DateTimeOffset.UtcNow,
+            Id = "wave1-ans1",
+            ReadingAttemptId = "wave1-a1",
+            ReadingQuestionId = q.Id,
+            UserAnswerJson = userJson,
+            AnsweredAt = DateTimeOffset.UtcNow,
         });
         await db.SaveChangesAsync();
 
@@ -2296,8 +2316,11 @@ public class ReadingAuthoringTests
         await FullyAuthorPaperAsync(db, structure, "p1");
         await policy.UpsertUserOverrideAsync("u1", new ReadingUserPolicyOverride
         {
-            UserId = "u1", BlockAttempts = true, Reason = "Under investigation",
-            CreatedAt = DateTimeOffset.UtcNow, UpdatedAt = DateTimeOffset.UtcNow,
+            UserId = "u1",
+            BlockAttempts = true,
+            Reason = "Under investigation",
+            CreatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow,
         }, "admin", default);
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
@@ -2315,9 +2338,12 @@ public class ReadingAuthoringTests
         await FullyAuthorPaperAsync(db, structure, "p1");
         await policy.UpsertUserOverrideAsync("u1", new ReadingUserPolicyOverride
         {
-            UserId = "u1", BlockAttempts = true, Reason = "Expired hold",
+            UserId = "u1",
+            BlockAttempts = true,
+            Reason = "Expired hold",
             ExpiresAt = DateTimeOffset.UtcNow.AddMinutes(-1),
-            CreatedAt = DateTimeOffset.UtcNow.AddDays(-1), UpdatedAt = DateTimeOffset.UtcNow.AddDays(-1),
+            CreatedAt = DateTimeOffset.UtcNow.AddDays(-1),
+            UpdatedAt = DateTimeOffset.UtcNow.AddDays(-1),
         }, "admin", default);
 
         var started = await attemptSvc.StartAsync("u1", "p1", default);
@@ -2508,8 +2534,10 @@ public class ReadingAuthoringTests
         // 25% extra time
         await policy.UpsertUserOverrideAsync("u1", new ReadingUserPolicyOverride
         {
-            UserId = "u1", ExtraTimeEntitlementPct = 25,
-            CreatedAt = DateTimeOffset.UtcNow, UpdatedAt = DateTimeOffset.UtcNow,
+            UserId = "u1",
+            ExtraTimeEntitlementPct = 25,
+            CreatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow,
         }, "admin", default);
 
         var started = await attemptSvc.StartAsync("u1", "p1", default);
@@ -2587,14 +2615,22 @@ public class ReadingAuthoringTests
 
         db.ReadingAttempts.Add(new ReadingAttempt
         {
-            Id = "aX", UserId = "u", PaperId = "p1",
-            StartedAt = DateTimeOffset.UtcNow, LastActivityAt = DateTimeOffset.UtcNow,
-            Status = ReadingAttemptStatus.InProgress, MaxRawScore = 42, PolicySnapshotJson = "{}",
+            Id = "aX",
+            UserId = "u",
+            PaperId = "p1",
+            StartedAt = DateTimeOffset.UtcNow,
+            LastActivityAt = DateTimeOffset.UtcNow,
+            Status = ReadingAttemptStatus.InProgress,
+            MaxRawScore = 42,
+            PolicySnapshotJson = "{}",
         });
         db.ReadingAnswers.Add(new ReadingAnswer
         {
-            Id = "ax", ReadingAttemptId = "aX", ReadingQuestionId = q.Id,
-            UserAnswerJson = "\"A\"", AnsweredAt = DateTimeOffset.UtcNow,
+            Id = "ax",
+            ReadingAttemptId = "aX",
+            ReadingQuestionId = q.Id,
+            UserAnswerJson = "\"A\"",
+            AnsweredAt = DateTimeOffset.UtcNow,
         });
         await db.SaveChangesAsync();
 

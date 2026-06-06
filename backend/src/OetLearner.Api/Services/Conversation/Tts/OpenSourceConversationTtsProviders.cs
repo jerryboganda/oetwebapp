@@ -29,7 +29,10 @@ public sealed class CosyVoiceConversationTtsProvider(
         {
             text = request.Text,
             voice = string.IsNullOrWhiteSpace(request.Voice) ? ReadOptions().CosyVoiceDefaultVoice : request.Voice,
-            language = request.Locale, rate = request.Rate ?? 1.0, pitch = request.Pitch ?? 0.0, format = "mp3",
+            language = request.Locale,
+            rate = request.Rate ?? 1.0,
+            pitch = request.Pitch ?? 0.0,
+            format = "mp3",
         });
         using var req = new HttpRequestMessage(HttpMethod.Post, url)
         {
@@ -71,7 +74,8 @@ public sealed class ChatTtsConversationTtsProvider(
         {
             text = request.Text,
             voice = string.IsNullOrWhiteSpace(request.Voice) ? ReadOptions().ChatTtsDefaultVoice : request.Voice,
-            language = request.Locale, format = "mp3",
+            language = request.Locale,
+            format = "mp3",
         });
         using var req = new HttpRequestMessage(HttpMethod.Post, url)
         {
@@ -298,7 +302,8 @@ public sealed class GptSoVitsConversationTtsProvider(
         {
             text = request.Text,
             voice = string.IsNullOrWhiteSpace(request.Voice) ? ReadOptions().GptSoVitsDefaultVoice : request.Voice,
-            language = request.Locale, format = "mp3",
+            language = request.Locale,
+            format = "mp3",
         });
         using var req = new HttpRequestMessage(HttpMethod.Post, url)
         {

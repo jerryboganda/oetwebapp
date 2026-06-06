@@ -78,30 +78,30 @@ switch (mode)
         gateway = new DryRunStripeCatalogGateway();
         break;
     case SeedMode.Test:
-    {
-        var key = Environment.GetEnvironmentVariable("STRIPE_TEST_SECRET_KEY");
-        if (string.IsNullOrWhiteSpace(key))
         {
-            Console.Error.WriteLine("STRIPE_TEST_SECRET_KEY is not set.");
-            return 5;
+            var key = Environment.GetEnvironmentVariable("STRIPE_TEST_SECRET_KEY");
+            if (string.IsNullOrWhiteSpace(key))
+            {
+                Console.Error.WriteLine("STRIPE_TEST_SECRET_KEY is not set.");
+                return 5;
+            }
+            StripeConfiguration.ApiKey = key;
+            gateway = new StripeCatalogGateway();
+            break;
         }
-        StripeConfiguration.ApiKey = key;
-        gateway = new StripeCatalogGateway();
-        break;
-    }
     case SeedMode.Live:
-    {
-        var key = Environment.GetEnvironmentVariable("STRIPE_LIVE_SECRET_KEY");
-        if (string.IsNullOrWhiteSpace(key))
         {
-            Console.Error.WriteLine("STRIPE_LIVE_SECRET_KEY is not set.");
-            return 5;
+            var key = Environment.GetEnvironmentVariable("STRIPE_LIVE_SECRET_KEY");
+            if (string.IsNullOrWhiteSpace(key))
+            {
+                Console.Error.WriteLine("STRIPE_LIVE_SECRET_KEY is not set.");
+                return 5;
+            }
+            StripeConfiguration.ApiKey = key;
+            gateway = new StripeCatalogGateway();
+            Console.WriteLine("!!! LIVE MODE — this will mutate the live Stripe account.");
+            break;
         }
-        StripeConfiguration.ApiKey = key;
-        gateway = new StripeCatalogGateway();
-        Console.WriteLine("!!! LIVE MODE — this will mutate the live Stripe account.");
-        break;
-    }
     default:
         throw new InvalidOperationException($"Unsupported mode {mode}");
 }

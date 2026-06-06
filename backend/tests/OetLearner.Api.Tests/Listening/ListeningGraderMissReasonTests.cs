@@ -49,16 +49,16 @@ public class ListeningGraderMissReasonTests
     // ─────────────────────────────────────────────────────────────────────
 
     [Theory]
-    [InlineData("",                     "cholesterol",  ListeningMissReason.Empty)]
-    [InlineData("   ",                  "cholesterol",  ListeningMissReason.Empty)]
-    [InlineData("cholestrol",           "cholesterol",  ListeningMissReason.SpellingError)]
-    [InlineData("cholestrl",            "cholesterol",  ListeningMissReason.SpellingError)]
-    [InlineData("aspirine",             "aspirin",      ListeningMissReason.SpellingError)]
-    [InlineData("five",                 "5",            ListeningMissReason.WrongNumber)]
-    [InlineData("12",                   "5",            ListeningMissReason.WrongNumber)]
-    [InlineData("two aspirin tablets",  "aspirin",      ListeningMissReason.ExtraInfo)]
-    [InlineData("aspirin tablets daily","aspirin",      ListeningMissReason.ExtraInfo)]
-    [InlineData("cardiologist",         "blood test",   ListeningMissReason.Paraphrase)]
+    [InlineData("", "cholesterol", ListeningMissReason.Empty)]
+    [InlineData("   ", "cholesterol", ListeningMissReason.Empty)]
+    [InlineData("cholestrol", "cholesterol", ListeningMissReason.SpellingError)]
+    [InlineData("cholestrl", "cholesterol", ListeningMissReason.SpellingError)]
+    [InlineData("aspirine", "aspirin", ListeningMissReason.SpellingError)]
+    [InlineData("five", "5", ListeningMissReason.WrongNumber)]
+    [InlineData("12", "5", ListeningMissReason.WrongNumber)]
+    [InlineData("two aspirin tablets", "aspirin", ListeningMissReason.ExtraInfo)]
+    [InlineData("aspirin tablets daily", "aspirin", ListeningMissReason.ExtraInfo)]
+    [InlineData("cardiologist", "blood test", ListeningMissReason.Paraphrase)]
     public void Classifier_assigns_expected_reason(string user, string canonical, ListeningMissReason expected)
     {
         var q = ShortAnswerQ("q", canonical);

@@ -313,7 +313,7 @@ public sealed class ListeningExtractionDraftService(
                     "listening_extraction_draft_invalid_shape",
                     $"Draft payload contains {questions.Count} question(s); OET Listening requires exactly {ListeningStructureService.CanonicalTotalItems}.");
             }
-                    ValidateCanonicalDraftQuestions(questions);
+            ValidateCanonicalDraftQuestions(questions);
 
             // Re-use the canonical replace pathway — same publish-gate
             // validation and structural audit ("ListeningStructureUpdated")

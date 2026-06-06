@@ -1,0 +1,38 @@
+name: Security — SAST (Semgrep)
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "0 5 * * 1"
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: sast-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  semgrep:
+    name: Semgrep scan (advisory)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    container:
+      image: semgrep/semgrep:latest
+    steps:
+      - uses: actions/checkout@v4
+      # Advisory for now (does not fail the build) so pre-existing findings don't block.
+      # Flip to a failing gate by removing `|| true` and adding `--error` once triaged.
+      - name: Semgrep scan
+        run: |
+          semgrep scan \
+            --config p/default \
+            --config p/security-audit \
+            --sarif --output semgrep.sarif \
+            --metrics off || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: semgrep-sarif
+          path: semgrep.sarif
+          if-no-files-found: ignore
+          retention-days: 14

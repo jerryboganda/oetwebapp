@@ -26,15 +26,25 @@ public class AiAnalyticsAndFxTests
         var now = DateTimeOffset.UtcNow;
         db.ApplicationUserAccounts.Add(new ApplicationUserAccount
         {
-            Id = "user_a", Email = "a@b", NormalizedEmail = "A@B", PasswordHash = "x",
-            CreatedAt = now.AddDays(-30), LastLoginAt = now.AddDays(-1),
+            Id = "user_a",
+            Email = "a@b",
+            NormalizedEmail = "A@B",
+            PasswordHash = "x",
+            CreatedAt = now.AddDays(-30),
+            LastLoginAt = now.AddDays(-1),
         });
         db.Subscriptions.Add(new Subscription
         {
-            Id = "sub_a", UserId = "user_a", PlanId = "premium",
-            Status = SubscriptionStatus.Active, StartedAt = now.AddDays(-30),
-            NextRenewalAt = now.AddDays(20), ChangedAt = now,
-            PriceAmount = 49m, Currency = "USD", Interval = "monthly",
+            Id = "sub_a",
+            UserId = "user_a",
+            PlanId = "premium",
+            Status = SubscriptionStatus.Active,
+            StartedAt = now.AddDays(-30),
+            NextRenewalAt = now.AddDays(20),
+            ChangedAt = now,
+            PriceAmount = 49m,
+            Currency = "USD",
+            Interval = "monthly",
         });
         await db.SaveChangesAsync();
 
@@ -52,15 +62,25 @@ public class AiAnalyticsAndFxTests
         var now = DateTimeOffset.UtcNow;
         db.ApplicationUserAccounts.Add(new ApplicationUserAccount
         {
-            Id = "user_b", Email = "b@b", NormalizedEmail = "B@B", PasswordHash = "x",
-            CreatedAt = now.AddDays(-200), LastLoginAt = now.AddDays(-30),
+            Id = "user_b",
+            Email = "b@b",
+            NormalizedEmail = "B@B",
+            PasswordHash = "x",
+            CreatedAt = now.AddDays(-200),
+            LastLoginAt = now.AddDays(-30),
         });
         db.Subscriptions.Add(new Subscription
         {
-            Id = "sub_b", UserId = "user_b", PlanId = "premium",
-            Status = SubscriptionStatus.PastDue, StartedAt = now.AddDays(-200),
-            NextRenewalAt = now.AddDays(-2), ChangedAt = now,
-            PriceAmount = 49m, Currency = "USD", Interval = "monthly",
+            Id = "sub_b",
+            UserId = "user_b",
+            PlanId = "premium",
+            Status = SubscriptionStatus.PastDue,
+            StartedAt = now.AddDays(-200),
+            NextRenewalAt = now.AddDays(-2),
+            ChangedAt = now,
+            PriceAmount = 49m,
+            Currency = "USD",
+            Interval = "monthly",
         });
         for (int i = 0; i < 3; i++)
         {
@@ -80,15 +100,24 @@ public class AiAnalyticsAndFxTests
         }
         db.DunningCampaigns.Add(new DunningCampaign
         {
-            Id = "dc_b", SubscriptionId = "sub_b", UserId = "user_b", Status = "active",
-            StartedAt = now.AddDays(-5), NextAttemptAt = now,
-            CreatedAt = now, UpdatedAt = now,
+            Id = "dc_b",
+            SubscriptionId = "sub_b",
+            UserId = "user_b",
+            Status = "active",
+            StartedAt = now.AddDays(-5),
+            NextAttemptAt = now,
+            CreatedAt = now,
+            UpdatedAt = now,
         });
         db.CancellationIntents.Add(new CancellationIntent
         {
-            Id = "ci_b", SubscriptionId = "sub_b", UserId = "user_b",
-            Reason = "too_expensive", Status = "started",
-            CreatedAt = now, UpdatedAt = now,
+            Id = "ci_b",
+            SubscriptionId = "sub_b",
+            UserId = "user_b",
+            Reason = "too_expensive",
+            Status = "started",
+            CreatedAt = now,
+            UpdatedAt = now,
         });
         // Add a refund + a second cancel intent to push the score over the high threshold.
         db.PaymentTransactions.Add(new PaymentTransaction
@@ -106,9 +135,13 @@ public class AiAnalyticsAndFxTests
         });
         db.CancellationIntents.Add(new CancellationIntent
         {
-            Id = "ci_b2", SubscriptionId = "sub_b", UserId = "user_b",
-            Reason = "passed_exam", Status = "started",
-            CreatedAt = now, UpdatedAt = now,
+            Id = "ci_b2",
+            SubscriptionId = "sub_b",
+            UserId = "user_b",
+            Reason = "passed_exam",
+            Status = "started",
+            CreatedAt = now,
+            UpdatedAt = now,
         });
         await db.SaveChangesAsync();
 
@@ -134,7 +167,8 @@ public class AiAnalyticsAndFxTests
                 UserId = "user_c",
                 FeatureCode = "writing.grade",
                 ProviderId = "openai-platform",
-                PromptTokens = 100, CompletionTokens = 50,
+                PromptTokens = 100,
+                CompletionTokens = 50,
                 CostEstimateUsd = 0.05m,
                 Outcome = AiCallOutcome.Success,
                 LatencyMs = 800,
@@ -168,7 +202,8 @@ public class AiAnalyticsAndFxTests
                 UserId = "user_d",
                 FeatureCode = i % 2 == 0 ? "writing.grade" : "vocabulary.gloss",
                 ProviderId = "openai-platform",
-                PromptTokens = 50, CompletionTokens = 25,
+                PromptTokens = 50,
+                CompletionTokens = 25,
                 CostEstimateUsd = 0.02m,
                 Outcome = i == 0 ? AiCallOutcome.GatewayRefused : AiCallOutcome.Success,
                 LatencyMs = 400,
@@ -202,7 +237,8 @@ public class AiAnalyticsAndFxTests
                 UserId = $"user_e_{i}",
                 FeatureCode = "writing.grade",
                 ProviderId = "openai-platform",
-                PromptTokens = 50, CompletionTokens = 25,
+                PromptTokens = 50,
+                CompletionTokens = 25,
                 CostEstimateUsd = 0.02m,
                 Outcome = i == 0 ? AiCallOutcome.ProviderError : AiCallOutcome.Success,
                 LatencyMs = 100 * (i + 1),
@@ -261,11 +297,17 @@ public class AiAnalyticsAndFxTests
         db.PricingExperiments.Add(new PricingExperiment
         {
             Id = "exp_1",
-            Code = "test", Name = "Test",
-            TargetType = "plan", TargetId = "premium", Region = "*",
-            Status = "running", RolloutPercent = 100,
+            Code = "test",
+            Name = "Test",
+            TargetType = "plan",
+            TargetId = "premium",
+            Region = "*",
+            Status = "running",
+            RolloutPercent = 100,
             VariantsJson = "[{\"code\":\"control\",\"weight\":50,\"priceMultiplier\":1.0},{\"code\":\"variant_a\",\"weight\":50,\"priceMultiplier\":0.9}]",
-            StartedAt = now, CreatedAt = now, UpdatedAt = now,
+            StartedAt = now,
+            CreatedAt = now,
+            UpdatedAt = now,
         });
         await db.SaveChangesAsync();
 
@@ -289,11 +331,18 @@ public class AiAnalyticsAndFxTests
         var now = DateTimeOffset.UtcNow;
         db.PricingExperiments.Add(new PricingExperiment
         {
-            Id = "exp_2", Code = "halfoff", Name = "Half off",
-            TargetType = "plan", TargetId = "premium", Region = "*",
-            Status = "running", RolloutPercent = 100,
+            Id = "exp_2",
+            Code = "halfoff",
+            Name = "Half off",
+            TargetType = "plan",
+            TargetId = "premium",
+            Region = "*",
+            Status = "running",
+            RolloutPercent = 100,
             VariantsJson = "[{\"code\":\"discount\",\"weight\":1,\"priceMultiplier\":0.5}]",
-            StartedAt = now, CreatedAt = now, UpdatedAt = now,
+            StartedAt = now,
+            CreatedAt = now,
+            UpdatedAt = now,
         });
         await db.SaveChangesAsync();
 
@@ -316,11 +365,18 @@ public class AiAnalyticsAndFxTests
         var now = DateTimeOffset.UtcNow;
         db.PricingExperiments.Add(new PricingExperiment
         {
-            Id = "exp_3", Code = "tiny", Name = "Tiny rollout",
-            TargetType = "plan", TargetId = "premium", Region = "*",
-            Status = "running", RolloutPercent = 0,
+            Id = "exp_3",
+            Code = "tiny",
+            Name = "Tiny rollout",
+            TargetType = "plan",
+            TargetId = "premium",
+            Region = "*",
+            Status = "running",
+            RolloutPercent = 0,
             VariantsJson = "[{\"code\":\"discount\",\"weight\":1,\"priceMultiplier\":0.5}]",
-            StartedAt = now, CreatedAt = now, UpdatedAt = now,
+            StartedAt = now,
+            CreatedAt = now,
+            UpdatedAt = now,
         });
         await db.SaveChangesAsync();
 

@@ -128,7 +128,7 @@ public class ListeningTtsServiceTests
             [{ "startMs": 0, "endMs": 1000, "speakerId": "s1", "text": "Hello." }]
         """);
 
-        var first  = await svc.SynthesizeAsync("extract-tts", "admin-1", CancellationToken.None);
+        var first = await svc.SynthesizeAsync("extract-tts", "admin-1", CancellationToken.None);
         var second = await svc.SynthesizeAsync("extract-tts", "admin-1", CancellationToken.None);
 
         Assert.Equal(first.Sha256, second.Sha256);

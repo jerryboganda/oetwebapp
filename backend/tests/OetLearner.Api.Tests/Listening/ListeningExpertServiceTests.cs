@@ -47,19 +47,19 @@ public class ListeningExpertServiceTests
         string userId = "user-1",
         int rawScore = 30,
         int scaledScore = 350) => new()
-    {
-        Id = id,
-        PaperId = paperId,
-        UserId = userId,
-        Status = ListeningAttemptStatus.Submitted,
-        StartedAt = Now.AddMinutes(-40),
-        SubmittedAt = Now,
-        LastActivityAt = Now,
-        RawScore = rawScore,
-        MaxRawScore = 42,
-        ScaledScore = scaledScore,
-        Mode = ListeningAttemptMode.Exam,
-    };
+        {
+            Id = id,
+            PaperId = paperId,
+            UserId = userId,
+            Status = ListeningAttemptStatus.Submitted,
+            StartedAt = Now.AddMinutes(-40),
+            SubmittedAt = Now,
+            LastActivityAt = Now,
+            RawScore = rawScore,
+            MaxRawScore = 42,
+            ScaledScore = scaledScore,
+            Mode = ListeningAttemptMode.Exam,
+        };
 
     [Fact]
     public async Task SubmitFeedbackAsync_WithRawScoreOverride_RecalculatesScaledViaOetScoring()

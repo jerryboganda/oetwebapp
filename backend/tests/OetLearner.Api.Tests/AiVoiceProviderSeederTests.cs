@@ -43,15 +43,21 @@ public sealed class AiVoiceProviderSeederTests : IAsyncDisposable
     {
         var conv = new ConversationOptions
         {
-            AzureSpeechKey = "k", AzureSpeechRegion = "uksouth", AzureLocale = "en-GB",
+            AzureSpeechKey = "k",
+            AzureSpeechRegion = "uksouth",
+            AzureLocale = "en-GB",
             ElevenLabsApiKey = "ek",
             ElevenLabsSttApiKey = "esk",
-            WhisperApiKey = "wk", WhisperBaseUrl = "https://api.openai.com/v1",
+            WhisperApiKey = "wk",
+            WhisperBaseUrl = "https://api.openai.com/v1",
         };
         var pron = new PronunciationOptions
         {
-            AzureSpeechKey = "pk", AzureSpeechRegion = "uksouth", AzureLocale = "en-GB",
-            GeminiApiKey = "gk", GeminiModel = "gemini-3.5-flash",
+            AzureSpeechKey = "pk",
+            AzureSpeechRegion = "uksouth",
+            AzureLocale = "en-GB",
+            GeminiApiKey = "gk",
+            GeminiModel = "gemini-3.5-flash",
         };
 
         var seeds = AiVoiceProviderSeeder.BuildSeeds(conv, pron);
@@ -78,11 +84,13 @@ public sealed class AiVoiceProviderSeederTests : IAsyncDisposable
     {
         var conv = new ConversationOptions
         {
-            AzureSpeechKey = "k", AzureSpeechRegion = "uksouth",
+            AzureSpeechKey = "k",
+            AzureSpeechRegion = "uksouth",
         };
         var pron = new PronunciationOptions
         {
-            AzureSpeechKey = "pk", AzureSpeechRegion = "uksouth",
+            AzureSpeechKey = "pk",
+            AzureSpeechRegion = "uksouth",
         };
 
         var seeds = AiVoiceProviderSeeder.BuildSeeds(conv, pron);
@@ -137,7 +145,8 @@ public sealed class AiVoiceProviderSeederTests : IAsyncDisposable
         var sp = BuildServiceProvider(
             new ConversationOptions
             {
-                AzureSpeechKey = "k", AzureSpeechRegion = "uksouth",
+                AzureSpeechKey = "k",
+                AzureSpeechRegion = "uksouth",
                 ElevenLabsApiKey = "ek",
             },
             new PronunciationOptions());

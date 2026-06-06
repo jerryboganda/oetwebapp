@@ -47,9 +47,9 @@ public sealed class MockSampleSeeder(
         "Source: Internal sample mock dataset (Project Real Content/), seeded for development preview only.";
 
     private const string ListeningFolder = "Listening ( IMPORTANT NOTE =  Same for All Professions )";
-    private const string ReadingFolder   = "Reading ( IMPORTANT NOTE = Same for All Professions )";
-    private const string WritingFolder   = "Writing_";
-    private const string SpeakingFolder  = "Speaking_";
+    private const string ReadingFolder = "Reading ( IMPORTANT NOTE = Same for All Professions )";
+    private const string WritingFolder = "Writing_";
+    private const string SpeakingFolder = "Speaking_";
 
     private static readonly string[] WritingDirs =
     [
@@ -121,10 +121,10 @@ public sealed class MockSampleSeeder(
         }
 
         var listeningDir = Path.Combine(sourceRoot, ListeningFolder, $"Listening Sample {index}");
-        var readingDir   = Path.Combine(sourceRoot, ReadingFolder,   $"Reading Sample {index}");
-        var writingDir   = Path.Combine(sourceRoot, WritingFolder,   WritingDirs[index - 1]);
+        var readingDir = Path.Combine(sourceRoot, ReadingFolder, $"Reading Sample {index}");
+        var writingDir = Path.Combine(sourceRoot, WritingFolder, WritingDirs[index - 1]);
         var (speakingFolderName, speakingCardType) = SpeakingCards[index - 1];
-        var speakingDir  = Path.Combine(sourceRoot, SpeakingFolder,  speakingFolderName);
+        var speakingDir = Path.Combine(sourceRoot, SpeakingFolder, speakingFolderName);
 
         if (!Directory.Exists(listeningDir) || !Directory.Exists(readingDir)
             || !Directory.Exists(writingDir) || !Directory.Exists(speakingDir))
@@ -139,9 +139,9 @@ public sealed class MockSampleSeeder(
         var now = DateTimeOffset.UtcNow;
 
         var listening = await BuildListeningPaperAsync(listeningDir, index, now, ct);
-        var reading   = await BuildReadingPaperAsync(readingDir, index, now, ct);
-        var writing   = await BuildWritingPaperAsync(writingDir, index, now, ct);
-        var speaking  = await BuildSpeakingPaperAsync(speakingDir, index, speakingCardType, now, ct);
+        var reading = await BuildReadingPaperAsync(readingDir, index, now, ct);
+        var writing = await BuildWritingPaperAsync(writingDir, index, now, ct);
+        var speaking = await BuildSpeakingPaperAsync(speakingDir, index, speakingCardType, now, ct);
 
         if (listening is null || reading is null || writing is null || speaking is null)
         {
@@ -257,10 +257,10 @@ public sealed class MockSampleSeeder(
         string dir, int index, DateTimeOffset now, CancellationToken ct)
     {
         var question = FindOne(dir, $"Listening Sample {index} Question*.pdf");
-        var script   = FindOne(dir, $"Listening Sample {index} Audio-Script.pdf");
-        var answers  = FindOne(dir, $"Listening Sample {index} Answer*.pdf");
+        var script = FindOne(dir, $"Listening Sample {index} Audio-Script.pdf");
+        var answers = FindOne(dir, $"Listening Sample {index} Answer*.pdf");
         var audioDir = Path.Combine(dir, $"Audio {index}");
-        var audio    = Directory.Exists(audioDir) ? FindOne(audioDir, "*.mp3") : null;
+        var audio = Directory.Exists(audioDir) ? FindOne(audioDir, "*.mp3") : null;
 
         if (question is null || script is null || answers is null || audio is null)
         {
@@ -277,17 +277,17 @@ public sealed class MockSampleSeeder(
             cardType: null, letterType: null,
             durationMinutes: 40, now: now);
 
-        await AttachAssetAsync(paper, PaperAssetRole.Audio,         audio,    "Audio",         0, now, ct);
+        await AttachAssetAsync(paper, PaperAssetRole.Audio, audio, "Audio", 0, now, ct);
         await AttachAssetAsync(paper, PaperAssetRole.QuestionPaper, question, "Question Paper", 1, now, ct);
-        await AttachAssetAsync(paper, PaperAssetRole.AudioScript,   script,   "Audio Script",   2, now, ct);
-        await AttachAssetAsync(paper, PaperAssetRole.AnswerKey,     answers,  "Answer Key",     3, now, ct);
+        await AttachAssetAsync(paper, PaperAssetRole.AudioScript, script, "Audio Script", 2, now, ct);
+        await AttachAssetAsync(paper, PaperAssetRole.AnswerKey, answers, "Answer Key", 3, now, ct);
         return paper;
     }
 
     private async Task<ContentPaper?> BuildReadingPaperAsync(
         string dir, int index, DateTimeOffset now, CancellationToken ct)
     {
-        var partA  = FindOne(dir, "Part A Reading*.pdf") ?? FindOne(dir, "Reading Part A*.pdf");
+        var partA = FindOne(dir, "Part A Reading*.pdf") ?? FindOne(dir, "Reading Part A*.pdf");
         var partBC = FindOne(dir, "Reading Part B*.pdf");
         if (partA is null || partBC is null)
         {
@@ -306,9 +306,9 @@ public sealed class MockSampleSeeder(
 
         // Combined B+C source PDFs are attached to both canonical part slots;
         // the (Paper, Role, Part, IsPrimary) unique index permits all three.
-        await AttachAssetAsync(paper, PaperAssetRole.QuestionPaper, partA,  "Part A",   0, now, ct, part: "A");
-        await AttachAssetAsync(paper, PaperAssetRole.QuestionPaper, partBC, "Part B",   1, now, ct, part: "B");
-        await AttachAssetAsync(paper, PaperAssetRole.QuestionPaper, partBC, "Part C",   2, now, ct, part: "C");
+        await AttachAssetAsync(paper, PaperAssetRole.QuestionPaper, partA, "Part A", 0, now, ct, part: "A");
+        await AttachAssetAsync(paper, PaperAssetRole.QuestionPaper, partBC, "Part B", 1, now, ct, part: "B");
+        await AttachAssetAsync(paper, PaperAssetRole.QuestionPaper, partBC, "Part C", 2, now, ct, part: "C");
         return paper;
     }
 
@@ -344,7 +344,7 @@ public sealed class MockSampleSeeder(
             cardType: null, letterType: letterType,
             durationMinutes: 45, now: now);
 
-        await AttachAssetAsync(paper, PaperAssetRole.CaseNotes,   caseNotes,   "Case Notes",   0, now, ct);
+        await AttachAssetAsync(paper, PaperAssetRole.CaseNotes, caseNotes, "Case Notes", 0, now, ct);
         await AttachAssetAsync(paper, PaperAssetRole.ModelAnswer, modelAnswer, "Model Answer", 1, now, ct);
         return paper;
     }
@@ -464,9 +464,9 @@ public sealed class MockSampleSeeder(
 
         var (kind, mime) = ext switch
         {
-            "mp3" => ("audio",    "audio/mpeg"),
+            "mp3" => ("audio", "audio/mpeg"),
             "pdf" => ("document", "application/pdf"),
-            _     => ("document", "application/octet-stream"),
+            _ => ("document", "application/octet-stream"),
         };
 
         var media = new MediaAsset

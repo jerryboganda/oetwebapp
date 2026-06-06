@@ -333,9 +333,17 @@ public class MockDiagnosticService(LearnerDbContext db)
             .Skip((page - 1) * pageSize).Take(pageSize)
             .Select(c => new
             {
-                c.Id, c.Title, c.SubtestCode, c.Difficulty, c.DifficultyRating,
-                c.ProfessionId, c.ScenarioType, c.IsMockEligible, c.IsDiagnosticEligible,
-                c.QualityScore, c.SourceProvenance
+                c.Id,
+                c.Title,
+                c.SubtestCode,
+                c.Difficulty,
+                c.DifficultyRating,
+                c.ProfessionId,
+                c.ScenarioType,
+                c.IsMockEligible,
+                c.IsDiagnosticEligible,
+                c.QualityScore,
+                c.SourceProvenance
             })
             .ToListAsync(ct);
 

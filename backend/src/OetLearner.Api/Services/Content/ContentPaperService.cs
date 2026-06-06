@@ -127,9 +127,9 @@ public sealed class ContentPaperService(LearnerDbContext db) : IContentPaperServ
     private static readonly Dictionary<string, HashSet<PaperAssetRole>> RequiredRoles = new(StringComparer.OrdinalIgnoreCase)
     {
         ["listening"] = new() { PaperAssetRole.Audio, PaperAssetRole.QuestionPaper, PaperAssetRole.AudioScript, PaperAssetRole.AnswerKey },
-        ["reading"]   = new() { PaperAssetRole.QuestionPaper },
-        ["writing"]   = new() { PaperAssetRole.CaseNotes, PaperAssetRole.ModelAnswer },
-        ["speaking"]  = new()
+        ["reading"] = new() { PaperAssetRole.QuestionPaper },
+        ["writing"] = new() { PaperAssetRole.CaseNotes, PaperAssetRole.ModelAnswer },
+        ["speaking"] = new()
         {
             PaperAssetRole.RoleCard,
             PaperAssetRole.AssessmentCriteria,

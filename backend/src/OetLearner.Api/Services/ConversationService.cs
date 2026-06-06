@@ -218,16 +218,26 @@ public class ConversationService(
             ?? throw ApiException.NotFound("SESSION_NOT_FOUND", "Conversation session not found.");
 
         if (session.State is not ("evaluated" or "completed"))
-            return new { sessionId, state = session.State, ready = false,
+            return new
+            {
+                sessionId,
+                state = session.State,
+                ready = false,
                 message = session.State == "evaluating"
                     ? "Evaluation is in progress. Please check back shortly."
-                    : "Session has not been completed yet." };
+                    : "Session has not been completed yet."
+            };
 
         var evaluation = await db.ConversationEvaluations.AsNoTracking()
             .FirstOrDefaultAsync(e => e.SessionId == sessionId, ct);
         if (evaluation is null)
-            return new { sessionId, state = session.State, ready = false,
-                message = "Evaluation is finalising, please check back in a moment." };
+            return new
+            {
+                sessionId,
+                state = session.State,
+                ready = false,
+                message = "Evaluation is finalising, please check back in a moment."
+            };
 
         var annotations = await db.ConversationTurnAnnotations.AsNoTracking()
             .Where(a => a.EvaluationId == evaluation.Id)
@@ -252,8 +262,13 @@ public class ConversationService(
             criteria = JsonSupport.Deserialize<object[]>(evaluation.CriteriaJson, Array.Empty<object>()),
             turnAnnotations = annotations.Select(a => new
             {
-                id = a.Id, turnNumber = a.TurnNumber, type = a.Type,
-                category = a.Category, ruleId = a.RuleId, evidence = a.Evidence, suggestion = a.Suggestion,
+                id = a.Id,
+                turnNumber = a.TurnNumber,
+                type = a.Type,
+                category = a.Category,
+                ruleId = a.RuleId,
+                evidence = a.Evidence,
+                suggestion = a.Suggestion,
             }),
             strengths = JsonSupport.Deserialize<string[]>(evaluation.StrengthsJson, Array.Empty<string>()),
             improvements = JsonSupport.Deserialize<string[]>(evaluation.ImprovementsJson, Array.Empty<string>()),
@@ -266,8 +281,12 @@ public class ConversationService(
             evaluatedAt = evaluation.CreatedAt,
             turns = turns.Select(t => new
             {
-                turnNumber = t.TurnNumber, role = t.Role, content = t.Content,
-                audioUrl = t.AudioUrl, durationMs = t.DurationMs, confidence = t.ConfidenceScore,
+                turnNumber = t.TurnNumber,
+                role = t.Role,
+                content = t.Content,
+                audioUrl = t.AudioUrl,
+                durationMs = t.DurationMs,
+                confidence = t.ConfidenceScore,
             }),
         };
     }
@@ -292,14 +311,22 @@ public class ConversationService(
         {
             items = items.Select(s => new
             {
-                id = s.Id, taskTypeCode = s.TaskTypeCode, examTypeCode = s.ExamTypeCode,
-                profession = s.Profession, state = s.State, turnCount = s.TurnCount,
-                durationSeconds = s.DurationSeconds, createdAt = s.CreatedAt, completedAt = s.CompletedAt,
+                id = s.Id,
+                taskTypeCode = s.TaskTypeCode,
+                examTypeCode = s.ExamTypeCode,
+                profession = s.Profession,
+                state = s.State,
+                turnCount = s.TurnCount,
+                durationSeconds = s.DurationSeconds,
+                createdAt = s.CreatedAt,
+                completedAt = s.CompletedAt,
                 scaledScore = evalMap.TryGetValue(s.Id, out var e) ? (int?)e.OverallScaled : null,
                 overallGrade = evalMap.TryGetValue(s.Id, out var e2) ? e2.OverallGrade : null,
                 passed = evalMap.TryGetValue(s.Id, out var e3) ? (bool?)e3.Passed : null,
             }),
-            total, page, pageSize,
+            total,
+            page,
+            pageSize,
         };
     }
 
@@ -463,7 +490,10 @@ public class ConversationService(
         var title = taskType == "oet-handover" ? "Shift Handover" : "Clinical Role Play";
         return JsonSupport.Serialize(new
         {
-            title, taskTypeCode = taskType, profession, difficulty = "medium",
+            title,
+            taskTypeCode = taskType,
+            profession,
+            difficulty = "medium",
             setting = "Clinical setting",
             patientRole = "A patient presenting with a common clinical complaint.",
             clinicianRole = "You are the clinician seeing the patient.",
@@ -487,11 +517,20 @@ public class ConversationService(
 
     private static object MapSession(ConversationSession s, IEnumerable<ConversationTurn>? turns, ConversationOptions options) => new
     {
-        id = s.Id, userId = s.UserId, contentId = s.ContentId, templateId = s.TemplateId,
-        examTypeCode = s.ExamTypeCode, subtestCode = s.SubtestCode, taskTypeCode = s.TaskTypeCode,
-        profession = s.Profession, scenarioJson = s.ScenarioJson, state = s.State,
-        turnCount = s.TurnCount, durationSeconds = s.DurationSeconds,
-        transcriptJson = s.TranscriptJson, evaluationId = s.EvaluationId,
+        id = s.Id,
+        userId = s.UserId,
+        contentId = s.ContentId,
+        templateId = s.TemplateId,
+        examTypeCode = s.ExamTypeCode,
+        subtestCode = s.SubtestCode,
+        taskTypeCode = s.TaskTypeCode,
+        profession = s.Profession,
+        scenarioJson = s.ScenarioJson,
+        state = s.State,
+        turnCount = s.TurnCount,
+        durationSeconds = s.DurationSeconds,
+        transcriptJson = s.TranscriptJson,
+        evaluationId = s.EvaluationId,
         audioConsentVersion = s.AudioConsentVersion,
         recordingConsentAcceptedAt = s.RecordingConsentAcceptedAt,
         vendorConsentAcceptedAt = s.VendorConsentAcceptedAt,
@@ -500,7 +539,9 @@ public class ConversationService(
         realtimeSttEnabled = options.RealtimeSttEnabled,
         realtimeAsrProvider = options.RealtimeAsrProvider,
         realtimeSttFallbackToBatch = options.RealtimeSttFallbackToBatch,
-        createdAt = s.CreatedAt, startedAt = s.StartedAt, completedAt = s.CompletedAt,
+        createdAt = s.CreatedAt,
+        startedAt = s.StartedAt,
+        completedAt = s.CompletedAt,
         turns = turns is null ? Array.Empty<object>() : MapTurns(turns),
     };
 

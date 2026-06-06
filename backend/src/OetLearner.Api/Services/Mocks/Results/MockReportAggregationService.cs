@@ -585,15 +585,15 @@ public sealed class MockReportAggregationService(
             // criterion scores so the projection helper stays the single
             // source of truth for the rubric → scaled mapping.
             var averagedScores = new OetScoring.SpeakingCriterionScores(
-                Intelligibility:      RoundHalfUp((ai1.Intelligibility      + ai2.Intelligibility)      / 2.0),
-                Fluency:              RoundHalfUp((ai1.Fluency              + ai2.Fluency)              / 2.0),
-                Appropriateness:      RoundHalfUp((ai1.Appropriateness      + ai2.Appropriateness)      / 2.0),
-                GrammarExpression:    RoundHalfUp((ai1.GrammarExpression    + ai2.GrammarExpression)    / 2.0),
+                Intelligibility: RoundHalfUp((ai1.Intelligibility + ai2.Intelligibility) / 2.0),
+                Fluency: RoundHalfUp((ai1.Fluency + ai2.Fluency) / 2.0),
+                Appropriateness: RoundHalfUp((ai1.Appropriateness + ai2.Appropriateness) / 2.0),
+                GrammarExpression: RoundHalfUp((ai1.GrammarExpression + ai2.GrammarExpression) / 2.0),
                 RelationshipBuilding: RoundHalfUp((ai1.RelationshipBuilding + ai2.RelationshipBuilding) / 2.0),
-                PatientPerspective:   RoundHalfUp((ai1.PatientPerspective   + ai2.PatientPerspective)   / 2.0),
-                Structure:            RoundHalfUp((ai1.Structure            + ai2.Structure)            / 2.0),
+                PatientPerspective: RoundHalfUp((ai1.PatientPerspective + ai2.PatientPerspective) / 2.0),
+                Structure: RoundHalfUp((ai1.Structure + ai2.Structure) / 2.0),
                 InformationGathering: RoundHalfUp((ai1.InformationGathering + ai2.InformationGathering) / 2.0),
-                InformationGiving:    RoundHalfUp((ai1.InformationGiving    + ai2.InformationGiving)    / 2.0));
+                InformationGiving: RoundHalfUp((ai1.InformationGiving + ai2.InformationGiving) / 2.0));
 
             // Two paths to the combined scaled score: (a) project the
             // averaged criterion scores via OetScoring; (b) average the two
@@ -666,11 +666,11 @@ public sealed class MockReportAggregationService(
 
     private static string SpeakingBandLabel(string code) => code switch
     {
-        "not_ready"  => "Not ready",
+        "not_ready" => "Not ready",
         "developing" => "Developing",
         "borderline" => "Borderline",
         "exam_ready" => "Exam-ready",
-        "strong"     => "Strong",
-        _             => "Not ready",
+        "strong" => "Strong",
+        _ => "Not ready",
     };
 }

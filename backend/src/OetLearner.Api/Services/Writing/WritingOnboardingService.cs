@@ -150,8 +150,8 @@ public sealed class WritingOnboardingService(
 
         var recommended = (weeksToExam, minutesPerDay) switch
         {
-            (<= 4, < 60) => 60,
-            (<= 8, < 45) => 45,
+            ( <= 4, < 60) => 60,
+            ( <= 8, < 45) => 45,
             _ => minutesPerDay,
         };
 

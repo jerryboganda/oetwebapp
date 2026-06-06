@@ -21,11 +21,11 @@ public class SpeakingProjectionTests
     }
 
     [Theory]
-    [InlineData(0,   0)]
-    [InlineData(50,  250)]
-    [InlineData(70,  350)] // canonical B-pass anchor
-    [InlineData(80,  400)]
-    [InlineData(90,  450)]
+    [InlineData(0, 0)]
+    [InlineData(50, 250)]
+    [InlineData(70, 350)] // canonical B-pass anchor
+    [InlineData(80, 400)]
+    [InlineData(90, 450)]
     [InlineData(100, 500)]
     public void ProjectedScaledFromPercentage_HitsAnchors(double pct, int scaled)
     {
@@ -114,7 +114,7 @@ public class SpeakingProjectionTests
     }
 
     [Theory]
-    [InlineData(0,   SpeakingReadinessBand.NotReady)]
+    [InlineData(0, SpeakingReadinessBand.NotReady)]
     [InlineData(249, SpeakingReadinessBand.NotReady)]
     [InlineData(250, SpeakingReadinessBand.Developing)]
     [InlineData(299, SpeakingReadinessBand.Developing)]
@@ -132,11 +132,11 @@ public class SpeakingProjectionTests
     }
 
     [Theory]
-    [InlineData(SpeakingReadinessBand.NotReady,   "not_ready")]
+    [InlineData(SpeakingReadinessBand.NotReady, "not_ready")]
     [InlineData(SpeakingReadinessBand.Developing, "developing")]
     [InlineData(SpeakingReadinessBand.Borderline, "borderline")]
-    [InlineData(SpeakingReadinessBand.ExamReady,  "exam_ready")]
-    [InlineData(SpeakingReadinessBand.Strong,     "strong")]
+    [InlineData(SpeakingReadinessBand.ExamReady, "exam_ready")]
+    [InlineData(SpeakingReadinessBand.Strong, "strong")]
     public void ReadinessBandCode_StableWireFormat(SpeakingReadinessBand band, string expected)
     {
         Assert.Equal(expected, OetScoring.SpeakingReadinessBandCode(band));

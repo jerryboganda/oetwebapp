@@ -135,13 +135,13 @@ public sealed class WritingShowcaseService(LearnerDbContext db, TimeProvider clo
     {
         if (string.IsNullOrWhiteSpace(letterContent)) return string.Empty;
         var redacted = NameRegex.Replace(letterContent, "[NAME]");
-          redacted = UntitledNameRegex.Replace(redacted, "[NAME]");
-          redacted = DobRegex.Replace(redacted, "[DATE]");
+        redacted = UntitledNameRegex.Replace(redacted, "[NAME]");
+        redacted = DobRegex.Replace(redacted, "[DATE]");
         redacted = DateRegex.Replace(redacted, "[DATE]");
         redacted = PhoneRegex.Replace(redacted, "[PHONE]");
         redacted = EmailRegex.Replace(redacted, "[EMAIL]");
         redacted = AddressRegex.Replace(redacted, "[ADDRESS]");
-          redacted = MedicalIdentifierRegex.Replace(redacted, "[ID]");
+        redacted = MedicalIdentifierRegex.Replace(redacted, "[ID]");
         return redacted;
     }
 

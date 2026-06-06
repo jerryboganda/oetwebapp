@@ -328,8 +328,8 @@ public partial class LearnerService(
             case "admin": row.CompletedAdminTour = true; break;
             case "expert":
             case "tutor": row.CompletedExpertTour = true; break;
-            // Unknown ids: the closed column set stays stable; the client also caches
-            // completion locally, so an unmapped id is simply not mirrored to a column.
+                // Unknown ids: the closed column set stays stable; the client also caches
+                // completion locally, so an unmapped id is simply not mirrored to a column.
         }
     }
 
@@ -3288,12 +3288,12 @@ public partial class LearnerService(
 
     private static string BuildSpeakingReadinessBandLabel(string code) => code switch
     {
-        "not_ready"  => "Not ready",
+        "not_ready" => "Not ready",
         "developing" => "Developing",
         "borderline" => "Borderline",
         "exam_ready" => "Exam-ready",
-        "strong"     => "Strong",
-        _             => "Not ready",
+        "strong" => "Strong",
+        _ => "Not ready",
     };
 
     public async Task<object> GetSpeakingReviewAsync(string userId, string evaluationId, CancellationToken cancellationToken)
@@ -3749,91 +3749,91 @@ public partial class LearnerService(
         object? idempotencyResponse = null;
         try
         {
-        if (!string.IsNullOrWhiteSpace(request.QuoteId))
-        {
-            quoteEntity = await db.BillingQuotes.FirstOrDefaultAsync(x => x.Id == request.QuoteId && x.UserId == userId, cancellationToken)
-                ?? throw ApiException.NotFound("billing_quote_not_found", "The requested billing quote could not be found.");
+            if (!string.IsNullOrWhiteSpace(request.QuoteId))
+            {
+                quoteEntity = await db.BillingQuotes.FirstOrDefaultAsync(x => x.Id == request.QuoteId && x.UserId == userId, cancellationToken)
+                    ?? throw ApiException.NotFound("billing_quote_not_found", "The requested billing quote could not be found.");
 
-            var now = DateTimeOffset.UtcNow;
-            if (quoteEntity.ExpiresAt < now)
-            {
-                var releasedCouponKeys = await ReleasePreCheckoutCouponReservationsForQuoteAsync(quoteEntity, now, cancellationToken);
-                await db.SaveChangesAsync(cancellationToken);
-                await RefreshCouponRedemptionCountsAsync(releasedCouponKeys, now, cancellationToken);
-                await db.SaveChangesAsync(cancellationToken);
-                throw ApiException.Validation("billing_quote_expired", "This billing quote has expired.");
-            }
-            EnsureQuoteIsFulfillable(quoteEntity, now);
-            if (quoteEntity.Status == BillingQuoteStatus.Applied && !string.IsNullOrWhiteSpace(quoteEntity.CheckoutSessionId))
-            {
-                throw ApiException.Conflict(
-                    "billing_quote_already_applied",
-                    "This billing quote is already attached to a checkout session. Refresh your cart before starting a new checkout.");
-            }
+                var now = DateTimeOffset.UtcNow;
+                if (quoteEntity.ExpiresAt < now)
+                {
+                    var releasedCouponKeys = await ReleasePreCheckoutCouponReservationsForQuoteAsync(quoteEntity, now, cancellationToken);
+                    await db.SaveChangesAsync(cancellationToken);
+                    await RefreshCouponRedemptionCountsAsync(releasedCouponKeys, now, cancellationToken);
+                    await db.SaveChangesAsync(cancellationToken);
+                    throw ApiException.Validation("billing_quote_expired", "This billing quote has expired.");
+                }
+                EnsureQuoteIsFulfillable(quoteEntity, now);
+                if (quoteEntity.Status == BillingQuoteStatus.Applied && !string.IsNullOrWhiteSpace(quoteEntity.CheckoutSessionId))
+                {
+                    throw ApiException.Conflict(
+                        "billing_quote_already_applied",
+                        "This billing quote is already attached to a checkout session. Refresh your cart before starting a new checkout.");
+                }
 
-            // Bind the quote snapshot to the inbound request so a stale or swapped
-            // quoteId cannot be reused with a different product, plan, coupon, or add-on.
-            var quoteAddOnCodes = JsonSupport.Deserialize<List<string>>(quoteEntity.AddOnCodesJson, []);
-            if (!string.IsNullOrWhiteSpace(request.PriceId))
-            {
-                var matchesPlan = !string.IsNullOrWhiteSpace(quoteEntity.PlanCode)
-                    && string.Equals(quoteEntity.PlanCode, request.PriceId, StringComparison.OrdinalIgnoreCase);
-                var matchesAddOn = quoteAddOnCodes.Any(code => string.Equals(code, request.PriceId, StringComparison.OrdinalIgnoreCase));
-                if (!matchesPlan && !matchesAddOn)
+                // Bind the quote snapshot to the inbound request so a stale or swapped
+                // quoteId cannot be reused with a different product, plan, coupon, or add-on.
+                var quoteAddOnCodes = JsonSupport.Deserialize<List<string>>(quoteEntity.AddOnCodesJson, []);
+                if (!string.IsNullOrWhiteSpace(request.PriceId))
+                {
+                    var matchesPlan = !string.IsNullOrWhiteSpace(quoteEntity.PlanCode)
+                        && string.Equals(quoteEntity.PlanCode, request.PriceId, StringComparison.OrdinalIgnoreCase);
+                    var matchesAddOn = quoteAddOnCodes.Any(code => string.Equals(code, request.PriceId, StringComparison.OrdinalIgnoreCase));
+                    if (!matchesPlan && !matchesAddOn)
+                    {
+                        throw ApiException.Validation(
+                            "quote_mismatch",
+                            "The supplied priceId does not match the saved quote.",
+                            [new ApiFieldError("priceId", "mismatch", "Refresh your quote before checking out.")]);
+                    }
+                }
+
+                if (!string.IsNullOrWhiteSpace(request.CouponCode)
+                    && !string.Equals(request.CouponCode, quoteEntity.CouponCode, StringComparison.OrdinalIgnoreCase))
                 {
                     throw ApiException.Validation(
                         "quote_mismatch",
-                        "The supplied priceId does not match the saved quote.",
-                        [new ApiFieldError("priceId", "mismatch", "Refresh your quote before checking out.")]);
+                        "The supplied couponCode does not match the saved quote.",
+                        [new ApiFieldError("couponCode", "mismatch", "Refresh your quote before checking out.")]);
                 }
-            }
 
-            if (!string.IsNullOrWhiteSpace(request.CouponCode)
-                && !string.Equals(request.CouponCode, quoteEntity.CouponCode, StringComparison.OrdinalIgnoreCase))
-            {
-                throw ApiException.Validation(
-                    "quote_mismatch",
-                    "The supplied couponCode does not match the saved quote.",
-                    [new ApiFieldError("couponCode", "mismatch", "Refresh your quote before checking out.")]);
-            }
-
-            if (normalizedAddOnCodes.Count > 0)
-            {
-                var requested = normalizedAddOnCodes.ToHashSet(StringComparer.OrdinalIgnoreCase);
-                var saved = new HashSet<string>(quoteAddOnCodes, StringComparer.OrdinalIgnoreCase);
-                if (!requested.SetEquals(saved))
+                if (normalizedAddOnCodes.Count > 0)
                 {
-                    throw ApiException.Validation(
-                        "quote_mismatch",
-                        "The supplied add-on codes do not match the saved quote.",
-                        [new ApiFieldError("addOnCodes", "mismatch", "Refresh your quote before checking out.")]);
+                    var requested = normalizedAddOnCodes.ToHashSet(StringComparer.OrdinalIgnoreCase);
+                    var saved = new HashSet<string>(quoteAddOnCodes, StringComparer.OrdinalIgnoreCase);
+                    if (!requested.SetEquals(saved))
+                    {
+                        throw ApiException.Validation(
+                            "quote_mismatch",
+                            "The supplied add-on codes do not match the saved quote.",
+                            [new ApiFieldError("addOnCodes", "mismatch", "Refresh your quote before checking out.")]);
+                    }
                 }
+
+                quoteResponse = DeserializeQuoteResponse(quoteEntity);
+            }
+            else
+            {
+                quoteResponse = await BuildBillingQuoteAsync(userId, new BillingQuoteRequest(
+                    normalizedProductType,
+                    request.Quantity,
+                    request.PriceId,
+                    request.CouponCode,
+                    normalizedAddOnCodes), cancellationToken, persistQuote: true);
+                quoteEntity = await db.BillingQuotes.FirstAsync(x => x.Id == quoteResponse.QuoteId && x.UserId == userId, cancellationToken);
             }
 
-            quoteResponse = DeserializeQuoteResponse(quoteEntity);
-        }
-        else
-        {
-            quoteResponse = await BuildBillingQuoteAsync(userId, new BillingQuoteRequest(
-                normalizedProductType,
-                request.Quantity,
-                request.PriceId,
-                request.CouponCode,
-                normalizedAddOnCodes), cancellationToken, persistQuote: true);
-            quoteEntity = await db.BillingQuotes.FirstAsync(x => x.Id == quoteResponse.QuoteId && x.UserId == userId, cancellationToken);
-        }
-
-        var purchaseTarget = quoteResponse.Items.FirstOrDefault()?.Code ?? quoteEntity.PlanCode ?? request.PriceId;
-        var checkoutIntent = await paymentGateways.GetGateway(gatewayLabel).CreatePaymentIntentAsync(
-            new CreatePaymentIntentRequest(
-                UserId: userId,
-                Amount: quoteEntity.TotalAmount,
-                Currency: quoteEntity.Currency,
-                ProductType: normalizedProductType,
-                ProductId: quoteEntity.Id,
-                Description: quoteResponse.Summary,
-                                Metadata: new Dictionary<string, string>
-                                {
+            var purchaseTarget = quoteResponse.Items.FirstOrDefault()?.Code ?? quoteEntity.PlanCode ?? request.PriceId;
+            var checkoutIntent = await paymentGateways.GetGateway(gatewayLabel).CreatePaymentIntentAsync(
+                new CreatePaymentIntentRequest(
+                    UserId: userId,
+                    Amount: quoteEntity.TotalAmount,
+                    Currency: quoteEntity.Currency,
+                    ProductType: normalizedProductType,
+                    ProductId: quoteEntity.Id,
+                    Description: quoteResponse.Summary,
+                                    Metadata: new Dictionary<string, string>
+                                    {
                                         ["quote_id"] = quoteEntity.Id,
                                         ["product_type"] = normalizedProductType,
                                         ["purchase_target"] = purchaseTarget ?? string.Empty,
@@ -3844,158 +3844,158 @@ public partial class LearnerService(
                                         ["plan_version_id"] = quoteEntity.PlanVersionId ?? string.Empty,
                                         ["add_on_version_ids"] = quoteEntity.AddOnVersionIdsJson,
                                         ["coupon_version_id"] = quoteEntity.CouponVersionId ?? string.Empty
-                                },
-                                SuccessUrl: platformLinks.BuildWebUrl($"/billing?payment=success&gateway={Uri.EscapeDataString(gatewayLabel)}"),
-                                    CancelUrl: platformLinks.BuildWebUrl($"/billing?payment=cancelled&gateway={Uri.EscapeDataString(gatewayLabel)}"),
-                                    IdempotencyKey: idempotencyKey),
-                        cancellationToken);
-                        providerRequestReturned = true;
+                                    },
+                                    SuccessUrl: platformLinks.BuildWebUrl($"/billing?payment=success&gateway={Uri.EscapeDataString(gatewayLabel)}"),
+                                        CancelUrl: platformLinks.BuildWebUrl($"/billing?payment=cancelled&gateway={Uri.EscapeDataString(gatewayLabel)}"),
+                                        IdempotencyKey: idempotencyKey),
+                            cancellationToken);
+            providerRequestReturned = true;
 
-        quoteEntity.CheckoutSessionId = checkoutIntent.GatewayTransactionId;
-        quoteEntity.Status = BillingQuoteStatus.Applied;
+            quoteEntity.CheckoutSessionId = checkoutIntent.GatewayTransactionId;
+            quoteEntity.Status = BillingQuoteStatus.Applied;
 
-        var response = new
-        {
-            checkoutSessionId = checkoutIntent.GatewayTransactionId,
-            quoteId = quoteEntity.Id,
-            productType = normalizedProductType,
-            quantity = request.Quantity,
-            targetPlanId = quoteEntity.PlanCode,
-            couponCode = quoteEntity.CouponCode,
-            addOnCodes = JsonSupport.Deserialize<List<string>>(quoteEntity.AddOnCodesJson, []),
-            subtotalAmount = quoteEntity.SubtotalAmount,
-            discountAmount = quoteEntity.DiscountAmount,
-            totalAmount = quoteEntity.TotalAmount,
-            currency = quoteEntity.Currency,
-            gateway = gatewayLabel,
-            quote = quoteResponse,
-            checkoutUrl = string.IsNullOrWhiteSpace(checkoutIntent.CheckoutUrl)
-                ? platformLinks.BuildCheckoutUrl(
-                    checkoutIntent.GatewayTransactionId,
-                    normalizedProductType,
-                    request.Quantity,
-                    planId: quoteEntity.PlanCode,
-                    couponCode: quoteEntity.CouponCode,
-                    addOnCodes: JsonSupport.Deserialize<List<string>>(quoteEntity.AddOnCodesJson, []),
-                    quoteId: quoteEntity.Id)
-                : checkoutIntent.CheckoutUrl,
-            state = checkoutIntent.Status
-        };
-        idempotencyResponse = response;
-
-        var paymentTransaction = await db.PaymentTransactions.FirstOrDefaultAsync(
-            transaction => transaction.GatewayTransactionId == checkoutIntent.GatewayTransactionId,
-            cancellationToken);
-        if (paymentTransaction is null)
-        {
-            var now = DateTimeOffset.UtcNow;
-            paymentTransaction = new PaymentTransaction
+            var response = new
             {
-                Id = Guid.NewGuid(),
-                LearnerUserId = userId,
-                Gateway = gatewayLabel,
-                GatewayTransactionId = checkoutIntent.GatewayTransactionId,
-                TransactionType = normalizedProductType is "plan_upgrade" or "plan_downgrade"
-                    ? "subscription_payment"
-                    : "one_time_purchase",
-                Status = "pending",
-                Amount = quoteEntity.TotalAmount,
-                Currency = quoteEntity.Currency,
-                ProductType = normalizedProductType is "plan_upgrade" or "plan_downgrade" ? "plan" : "addon",
-                ProductId = purchaseTarget ?? quoteEntity.Id,
-                QuoteId = quoteEntity.Id,
-                PlanVersionId = quoteEntity.PlanVersionId,
-                AddOnVersionIdsJson = quoteEntity.AddOnVersionIdsJson,
-                CouponVersionId = quoteEntity.CouponVersionId,
-                MetadataJson = JsonSupport.Serialize(new
-                {
-                    quoteId = quoteEntity.Id,
-                    productType = normalizedProductType,
-                    providerIntentId = checkoutIntent.ClientSecret,
-                    purchaseTarget,
-                    addOnCodes = JsonSupport.Deserialize<List<string>>(quoteEntity.AddOnCodesJson, []),
-                    planCode = quoteEntity.PlanCode,
-                    couponCode = quoteEntity.CouponCode,
-                    planVersionId = quoteEntity.PlanVersionId,
-                    addOnVersionIds = DeserializeAddOnVersionIds(quoteEntity),
-                    couponVersionId = quoteEntity.CouponVersionId
-                }),
-                CreatedAt = now,
-                UpdatedAt = now
-            };
-            db.PaymentTransactions.Add(paymentTransaction);
-        }
-
-        paymentTransaction.QuoteId = quoteEntity.Id;
-        paymentTransaction.PlanVersionId = quoteEntity.PlanVersionId;
-        paymentTransaction.AddOnVersionIdsJson = quoteEntity.AddOnVersionIdsJson;
-        paymentTransaction.CouponVersionId = quoteEntity.CouponVersionId;
-        paymentTransaction.MetadataJson = JsonSupport.Serialize(new
-        {
-            quoteId = quoteEntity.Id,
-            productType = normalizedProductType,
-            providerIntentId = checkoutIntent.ClientSecret,
-            purchaseTarget,
-            addOnCodes = JsonSupport.Deserialize<List<string>>(quoteEntity.AddOnCodesJson, []),
-            planCode = quoteEntity.PlanCode,
-            couponCode = quoteEntity.CouponCode,
-            planVersionId = quoteEntity.PlanVersionId,
-            addOnVersionIds = DeserializeAddOnVersionIds(quoteEntity),
-            couponVersionId = quoteEntity.CouponVersionId
-        });
-
-        var reservedRedemptions = await db.BillingCouponRedemptions
-            .Where(redemption => redemption.QuoteId == quoteEntity.Id && redemption.Status == BillingRedemptionStatus.Reserved)
-            .ToListAsync(cancellationToken);
-        foreach (var redemption in reservedRedemptions)
-        {
-            redemption.CheckoutSessionId = checkoutIntent.GatewayTransactionId;
-        }
-
-        db.BillingEvents.Add(new BillingEvent
-        {
-            Id = $"bill-evt-{Guid.NewGuid():N}",
-            UserId = userId,
-            QuoteId = quoteEntity.Id,
-            EventType = "checkout_session_created",
-            EntityType = "CheckoutSession",
-            EntityId = checkoutIntent.GatewayTransactionId,
-            PayloadJson = JsonSupport.Serialize(new
-            {
+                checkoutSessionId = checkoutIntent.GatewayTransactionId,
+                quoteId = quoteEntity.Id,
                 productType = normalizedProductType,
                 quantity = request.Quantity,
-                planCode = quoteEntity.PlanCode,
+                targetPlanId = quoteEntity.PlanCode,
                 couponCode = quoteEntity.CouponCode,
                 addOnCodes = JsonSupport.Deserialize<List<string>>(quoteEntity.AddOnCodesJson, []),
+                subtotalAmount = quoteEntity.SubtotalAmount,
+                discountAmount = quoteEntity.DiscountAmount,
                 totalAmount = quoteEntity.TotalAmount,
                 currency = quoteEntity.Currency,
                 gateway = gatewayLabel,
-                status = checkoutIntent.Status
-            }),
-            OccurredAt = DateTimeOffset.UtcNow
-        });
+                quote = quoteResponse,
+                checkoutUrl = string.IsNullOrWhiteSpace(checkoutIntent.CheckoutUrl)
+                    ? platformLinks.BuildCheckoutUrl(
+                        checkoutIntent.GatewayTransactionId,
+                        normalizedProductType,
+                        request.Quantity,
+                        planId: quoteEntity.PlanCode,
+                        couponCode: quoteEntity.CouponCode,
+                        addOnCodes: JsonSupport.Deserialize<List<string>>(quoteEntity.AddOnCodesJson, []),
+                        quoteId: quoteEntity.Id)
+                    : checkoutIntent.CheckoutUrl,
+                state = checkoutIntent.Status
+            };
+            idempotencyResponse = response;
 
-        if (idempotencyKey is not null && idempotencyRequestHash is not null)
-        {
-            await CompletePaymentIdempotencyAsync("checkout-session", idempotencyKey, userId, idempotencyRequestHash, response, cancellationToken);
-        }
+            var paymentTransaction = await db.PaymentTransactions.FirstOrDefaultAsync(
+                transaction => transaction.GatewayTransactionId == checkoutIntent.GatewayTransactionId,
+                cancellationToken);
+            if (paymentTransaction is null)
+            {
+                var now = DateTimeOffset.UtcNow;
+                paymentTransaction = new PaymentTransaction
+                {
+                    Id = Guid.NewGuid(),
+                    LearnerUserId = userId,
+                    Gateway = gatewayLabel,
+                    GatewayTransactionId = checkoutIntent.GatewayTransactionId,
+                    TransactionType = normalizedProductType is "plan_upgrade" or "plan_downgrade"
+                        ? "subscription_payment"
+                        : "one_time_purchase",
+                    Status = "pending",
+                    Amount = quoteEntity.TotalAmount,
+                    Currency = quoteEntity.Currency,
+                    ProductType = normalizedProductType is "plan_upgrade" or "plan_downgrade" ? "plan" : "addon",
+                    ProductId = purchaseTarget ?? quoteEntity.Id,
+                    QuoteId = quoteEntity.Id,
+                    PlanVersionId = quoteEntity.PlanVersionId,
+                    AddOnVersionIdsJson = quoteEntity.AddOnVersionIdsJson,
+                    CouponVersionId = quoteEntity.CouponVersionId,
+                    MetadataJson = JsonSupport.Serialize(new
+                    {
+                        quoteId = quoteEntity.Id,
+                        productType = normalizedProductType,
+                        providerIntentId = checkoutIntent.ClientSecret,
+                        purchaseTarget,
+                        addOnCodes = JsonSupport.Deserialize<List<string>>(quoteEntity.AddOnCodesJson, []),
+                        planCode = quoteEntity.PlanCode,
+                        couponCode = quoteEntity.CouponCode,
+                        planVersionId = quoteEntity.PlanVersionId,
+                        addOnVersionIds = DeserializeAddOnVersionIds(quoteEntity),
+                        couponVersionId = quoteEntity.CouponVersionId
+                    }),
+                    CreatedAt = now,
+                    UpdatedAt = now
+                };
+                db.PaymentTransactions.Add(paymentTransaction);
+            }
 
-        await db.SaveChangesAsync(cancellationToken);
-        idempotencyCompleted = true;
+            paymentTransaction.QuoteId = quoteEntity.Id;
+            paymentTransaction.PlanVersionId = quoteEntity.PlanVersionId;
+            paymentTransaction.AddOnVersionIdsJson = quoteEntity.AddOnVersionIdsJson;
+            paymentTransaction.CouponVersionId = quoteEntity.CouponVersionId;
+            paymentTransaction.MetadataJson = JsonSupport.Serialize(new
+            {
+                quoteId = quoteEntity.Id,
+                productType = normalizedProductType,
+                providerIntentId = checkoutIntent.ClientSecret,
+                purchaseTarget,
+                addOnCodes = JsonSupport.Deserialize<List<string>>(quoteEntity.AddOnCodesJson, []),
+                planCode = quoteEntity.PlanCode,
+                couponCode = quoteEntity.CouponCode,
+                planVersionId = quoteEntity.PlanVersionId,
+                addOnVersionIds = DeserializeAddOnVersionIds(quoteEntity),
+                couponVersionId = quoteEntity.CouponVersionId
+            });
 
-        await RecordEventAsync(userId, "checkout_started", new
-        {
-            productType = normalizedProductType,
-            quantity = request.Quantity,
-            targetPlanId = quoteEntity.PlanCode,
-            couponCode = quoteEntity.CouponCode,
-            quoteId = quoteEntity.Id,
-            totalAmount = quoteEntity.TotalAmount,
-            gateway = gatewayLabel
-        }, cancellationToken);
+            var reservedRedemptions = await db.BillingCouponRedemptions
+                .Where(redemption => redemption.QuoteId == quoteEntity.Id && redemption.Status == BillingRedemptionStatus.Reserved)
+                .ToListAsync(cancellationToken);
+            foreach (var redemption in reservedRedemptions)
+            {
+                redemption.CheckoutSessionId = checkoutIntent.GatewayTransactionId;
+            }
 
-        await db.SaveChangesAsync(cancellationToken);
-        return response;
+            db.BillingEvents.Add(new BillingEvent
+            {
+                Id = $"bill-evt-{Guid.NewGuid():N}",
+                UserId = userId,
+                QuoteId = quoteEntity.Id,
+                EventType = "checkout_session_created",
+                EntityType = "CheckoutSession",
+                EntityId = checkoutIntent.GatewayTransactionId,
+                PayloadJson = JsonSupport.Serialize(new
+                {
+                    productType = normalizedProductType,
+                    quantity = request.Quantity,
+                    planCode = quoteEntity.PlanCode,
+                    couponCode = quoteEntity.CouponCode,
+                    addOnCodes = JsonSupport.Deserialize<List<string>>(quoteEntity.AddOnCodesJson, []),
+                    totalAmount = quoteEntity.TotalAmount,
+                    currency = quoteEntity.Currency,
+                    gateway = gatewayLabel,
+                    status = checkoutIntent.Status
+                }),
+                OccurredAt = DateTimeOffset.UtcNow
+            });
+
+            if (idempotencyKey is not null && idempotencyRequestHash is not null)
+            {
+                await CompletePaymentIdempotencyAsync("checkout-session", idempotencyKey, userId, idempotencyRequestHash, response, cancellationToken);
+            }
+
+            await db.SaveChangesAsync(cancellationToken);
+            idempotencyCompleted = true;
+
+            await RecordEventAsync(userId, "checkout_started", new
+            {
+                productType = normalizedProductType,
+                quantity = request.Quantity,
+                targetPlanId = quoteEntity.PlanCode,
+                couponCode = quoteEntity.CouponCode,
+                quoteId = quoteEntity.Id,
+                totalAmount = quoteEntity.TotalAmount,
+                gateway = gatewayLabel
+            }, cancellationToken);
+
+            await db.SaveChangesAsync(cancellationToken);
+            return response;
         }
         catch
         {
@@ -4468,17 +4468,17 @@ public partial class LearnerService(
         };
     }
 
-      public async Task<object> GetBillingChangePreviewAsync(string userId, string targetPlanId, CancellationToken cancellationToken)
-      {
-          await EnsureUserAsync(userId, cancellationToken);
-          var subscription = await db.Subscriptions.FirstAsync(x => x.UserId == userId, cancellationToken);
-          var currentPlan = await FindBillingPlanAsync(subscription.PlanId, cancellationToken)
-              ?? throw ApiException.NotFound("billing_plan_not_found", "Your current billing plan could not be found.");
-          var targetPlan = await FindPurchasableBillingPlanAsync(targetPlanId, cancellationToken)
-              ?? throw ApiException.Validation(
-                  "unknown_plan",
-                  $"Unknown billing plan '{targetPlanId}'.",
-                  [new ApiFieldError("targetPlanId", "unknown", "Choose a published billing plan.")]);
+    public async Task<object> GetBillingChangePreviewAsync(string userId, string targetPlanId, CancellationToken cancellationToken)
+    {
+        await EnsureUserAsync(userId, cancellationToken);
+        var subscription = await db.Subscriptions.FirstAsync(x => x.UserId == userId, cancellationToken);
+        var currentPlan = await FindBillingPlanAsync(subscription.PlanId, cancellationToken)
+            ?? throw ApiException.NotFound("billing_plan_not_found", "Your current billing plan could not be found.");
+        var targetPlan = await FindPurchasableBillingPlanAsync(targetPlanId, cancellationToken)
+            ?? throw ApiException.Validation(
+                "unknown_plan",
+                $"Unknown billing plan '{targetPlanId}'.",
+                [new ApiFieldError("targetPlanId", "unknown", "Choose a published billing plan.")]);
 
         var delta = targetPlan.Price - currentPlan.Price;
         var direction = delta >= 0 ? "upgrade" : "downgrade";
@@ -4822,7 +4822,7 @@ public partial class LearnerService(
         bool IsRecommended,
         string? Reason);
 
-    #if false
+#if false
     public object GetExtras() => new
     {
         items = new[]
@@ -4886,7 +4886,7 @@ public partial class LearnerService(
         await db.SaveChangesAsync(cancellationToken);
         return response;
     }
-    #endif
+#endif
 
     private async Task<LearnerUser> EnsureUserAsync(string userId, CancellationToken cancellationToken)
     {
@@ -6365,7 +6365,7 @@ public partial class LearnerService(
             response
         });
 
-    #if false
+#if false
     private async Task<BillingPlan?> FindBillingPlanAsync(string planCode, CancellationToken cancellationToken)
     {
         var normalized = (planCode ?? string.Empty).Trim();
@@ -6784,7 +6784,7 @@ public partial class LearnerService(
             summary,
             validation);
     }
-    #endif
+#endif
 
     private async Task SaveIdempotentResponseAsync(string scope, string key, object response, CancellationToken cancellationToken)
     {
@@ -7113,208 +7113,208 @@ public partial class LearnerService(
                 || addOn.Id.ToLower() == normalized, cancellationToken);
     }
 
-      private async Task<BillingCoupon?> FindBillingCouponAsync(string couponCode, CancellationToken cancellationToken)
-      {
-          var normalized = NormalizeBillingCode(couponCode);
-          if (string.IsNullOrWhiteSpace(normalized))
-          {
+    private async Task<BillingCoupon?> FindBillingCouponAsync(string couponCode, CancellationToken cancellationToken)
+    {
+        var normalized = NormalizeBillingCode(couponCode);
+        if (string.IsNullOrWhiteSpace(normalized))
+        {
             return null;
         }
 
-          return await db.BillingCoupons.AsNoTracking()
-              .FirstOrDefaultAsync(coupon => coupon.Code.ToLower() == normalized
-                  || coupon.Id.ToLower() == normalized, cancellationToken);
-      }
+        return await db.BillingCoupons.AsNoTracking()
+            .FirstOrDefaultAsync(coupon => coupon.Code.ToLower() == normalized
+                || coupon.Id.ToLower() == normalized, cancellationToken);
+    }
 
-      private async Task<BillingPlan?> FindPurchasableBillingPlanAsync(string planCode, CancellationToken cancellationToken)
-      {
-          var plan = await FindBillingPlanAsync(planCode, cancellationToken);
-          return plan is not null && plan.Status == BillingPlanStatus.Active && plan.IsVisible
-              ? plan
-              : null;
-      }
+    private async Task<BillingPlan?> FindPurchasableBillingPlanAsync(string planCode, CancellationToken cancellationToken)
+    {
+        var plan = await FindBillingPlanAsync(planCode, cancellationToken);
+        return plan is not null && plan.Status == BillingPlanStatus.Active && plan.IsVisible
+            ? plan
+            : null;
+    }
 
-      private async Task<BillingAddOn?> FindPurchasableBillingAddOnAsync(string addOnCode, CancellationToken cancellationToken)
-      {
-          var addOn = await FindBillingAddOnAsync(addOnCode, cancellationToken);
-          return addOn is not null && addOn.Status == BillingAddOnStatus.Active
-              ? addOn
-              : null;
-      }
+    private async Task<BillingAddOn?> FindPurchasableBillingAddOnAsync(string addOnCode, CancellationToken cancellationToken)
+    {
+        var addOn = await FindBillingAddOnAsync(addOnCode, cancellationToken);
+        return addOn is not null && addOn.Status == BillingAddOnStatus.Active
+            ? addOn
+            : null;
+    }
 
-      private static bool IsAddOnCompatibleWithPlan(BillingAddOn addOn, BillingPlan? plan)
-      {
-          var compatiblePlanCodes = JsonSupport.Deserialize<List<string>>(addOn.CompatiblePlanCodesJson, []);
+    private static bool IsAddOnCompatibleWithPlan(BillingAddOn addOn, BillingPlan? plan)
+    {
+        var compatiblePlanCodes = JsonSupport.Deserialize<List<string>>(addOn.CompatiblePlanCodesJson, []);
 
-          if (addOn.AppliesToAllPlans)
-          {
-              return true;
-          }
+        if (addOn.AppliesToAllPlans)
+        {
+            return true;
+        }
 
-          if (!addOn.RequiresEligibleParent && compatiblePlanCodes.Count == 0)
-          {
-              return true;
-          }
+        if (!addOn.RequiresEligibleParent && compatiblePlanCodes.Count == 0)
+        {
+            return true;
+        }
 
-          if (compatiblePlanCodes.Count == 0 || plan is null)
-          {
-              return false;
-          }
+        if (compatiblePlanCodes.Count == 0 || plan is null)
+        {
+            return false;
+        }
 
-          return compatiblePlanCodes.Any(code => string.Equals(code, plan.Code, StringComparison.OrdinalIgnoreCase));
-      }
+        return compatiblePlanCodes.Any(code => string.Equals(code, plan.Code, StringComparison.OrdinalIgnoreCase));
+    }
 
-      private async Task<BillingCatalogVersionRef?> ResolvePlanVersionRefAsync(BillingPlan plan, CancellationToken cancellationToken)
-      {
-          BillingPlanVersion? version = null;
-          if (!string.IsNullOrWhiteSpace(plan.ActiveVersionId))
-          {
-              version = await db.BillingPlanVersions.AsNoTracking()
-                  .FirstOrDefaultAsync(item => item.PlanId == plan.Id && item.Id == plan.ActiveVersionId, cancellationToken);
-          }
+    private async Task<BillingCatalogVersionRef?> ResolvePlanVersionRefAsync(BillingPlan plan, CancellationToken cancellationToken)
+    {
+        BillingPlanVersion? version = null;
+        if (!string.IsNullOrWhiteSpace(plan.ActiveVersionId))
+        {
+            version = await db.BillingPlanVersions.AsNoTracking()
+                .FirstOrDefaultAsync(item => item.PlanId == plan.Id && item.Id == plan.ActiveVersionId, cancellationToken);
+        }
 
-          if (version is null && !string.IsNullOrWhiteSpace(plan.LatestVersionId))
-          {
-              version = await db.BillingPlanVersions.AsNoTracking()
-                  .FirstOrDefaultAsync(item => item.PlanId == plan.Id && item.Id == plan.LatestVersionId, cancellationToken);
-          }
+        if (version is null && !string.IsNullOrWhiteSpace(plan.LatestVersionId))
+        {
+            version = await db.BillingPlanVersions.AsNoTracking()
+                .FirstOrDefaultAsync(item => item.PlanId == plan.Id && item.Id == plan.LatestVersionId, cancellationToken);
+        }
 
-          version ??= await db.BillingPlanVersions.AsNoTracking()
-              .Where(item => item.PlanId == plan.Id)
-              .OrderByDescending(item => item.VersionNumber)
-              .FirstOrDefaultAsync(cancellationToken);
+        version ??= await db.BillingPlanVersions.AsNoTracking()
+            .Where(item => item.PlanId == plan.Id)
+            .OrderByDescending(item => item.VersionNumber)
+            .FirstOrDefaultAsync(cancellationToken);
 
-          return version is not null && BillingPlanMatchesVersion(plan, version)
-              ? new BillingCatalogVersionRef(version.Id, version.VersionNumber)
-              : null;
-      }
+        return version is not null && BillingPlanMatchesVersion(plan, version)
+            ? new BillingCatalogVersionRef(version.Id, version.VersionNumber)
+            : null;
+    }
 
-      private async Task<BillingCatalogVersionRef?> ResolveAddOnVersionRefAsync(BillingAddOn addOn, CancellationToken cancellationToken)
-      {
-          BillingAddOnVersion? version = null;
-          if (!string.IsNullOrWhiteSpace(addOn.ActiveVersionId))
-          {
-              version = await db.BillingAddOnVersions.AsNoTracking()
-                  .FirstOrDefaultAsync(item => item.AddOnId == addOn.Id && item.Id == addOn.ActiveVersionId, cancellationToken);
-          }
+    private async Task<BillingCatalogVersionRef?> ResolveAddOnVersionRefAsync(BillingAddOn addOn, CancellationToken cancellationToken)
+    {
+        BillingAddOnVersion? version = null;
+        if (!string.IsNullOrWhiteSpace(addOn.ActiveVersionId))
+        {
+            version = await db.BillingAddOnVersions.AsNoTracking()
+                .FirstOrDefaultAsync(item => item.AddOnId == addOn.Id && item.Id == addOn.ActiveVersionId, cancellationToken);
+        }
 
-          if (version is null && !string.IsNullOrWhiteSpace(addOn.LatestVersionId))
-          {
-              version = await db.BillingAddOnVersions.AsNoTracking()
-                  .FirstOrDefaultAsync(item => item.AddOnId == addOn.Id && item.Id == addOn.LatestVersionId, cancellationToken);
-          }
+        if (version is null && !string.IsNullOrWhiteSpace(addOn.LatestVersionId))
+        {
+            version = await db.BillingAddOnVersions.AsNoTracking()
+                .FirstOrDefaultAsync(item => item.AddOnId == addOn.Id && item.Id == addOn.LatestVersionId, cancellationToken);
+        }
 
-          version ??= await db.BillingAddOnVersions.AsNoTracking()
-              .Where(item => item.AddOnId == addOn.Id)
-              .OrderByDescending(item => item.VersionNumber)
-              .FirstOrDefaultAsync(cancellationToken);
+        version ??= await db.BillingAddOnVersions.AsNoTracking()
+            .Where(item => item.AddOnId == addOn.Id)
+            .OrderByDescending(item => item.VersionNumber)
+            .FirstOrDefaultAsync(cancellationToken);
 
-          return version is not null && BillingAddOnMatchesVersion(addOn, version)
-              ? new BillingCatalogVersionRef(version.Id, version.VersionNumber)
-              : null;
-      }
+        return version is not null && BillingAddOnMatchesVersion(addOn, version)
+            ? new BillingCatalogVersionRef(version.Id, version.VersionNumber)
+            : null;
+    }
 
-      private async Task<BillingCatalogVersionRef?> ResolveCouponVersionRefAsync(BillingCoupon coupon, CancellationToken cancellationToken)
-      {
-          BillingCouponVersion? version = null;
-          if (!string.IsNullOrWhiteSpace(coupon.ActiveVersionId))
-          {
-              version = await db.BillingCouponVersions.AsNoTracking()
-                  .FirstOrDefaultAsync(item => item.CouponId == coupon.Id && item.Id == coupon.ActiveVersionId, cancellationToken);
-          }
+    private async Task<BillingCatalogVersionRef?> ResolveCouponVersionRefAsync(BillingCoupon coupon, CancellationToken cancellationToken)
+    {
+        BillingCouponVersion? version = null;
+        if (!string.IsNullOrWhiteSpace(coupon.ActiveVersionId))
+        {
+            version = await db.BillingCouponVersions.AsNoTracking()
+                .FirstOrDefaultAsync(item => item.CouponId == coupon.Id && item.Id == coupon.ActiveVersionId, cancellationToken);
+        }
 
-          if (version is null && !string.IsNullOrWhiteSpace(coupon.LatestVersionId))
-          {
-              version = await db.BillingCouponVersions.AsNoTracking()
-                  .FirstOrDefaultAsync(item => item.CouponId == coupon.Id && item.Id == coupon.LatestVersionId, cancellationToken);
-          }
+        if (version is null && !string.IsNullOrWhiteSpace(coupon.LatestVersionId))
+        {
+            version = await db.BillingCouponVersions.AsNoTracking()
+                .FirstOrDefaultAsync(item => item.CouponId == coupon.Id && item.Id == coupon.LatestVersionId, cancellationToken);
+        }
 
-          version ??= await db.BillingCouponVersions.AsNoTracking()
-              .Where(item => item.CouponId == coupon.Id)
-              .OrderByDescending(item => item.VersionNumber)
-              .FirstOrDefaultAsync(cancellationToken);
+        version ??= await db.BillingCouponVersions.AsNoTracking()
+            .Where(item => item.CouponId == coupon.Id)
+            .OrderByDescending(item => item.VersionNumber)
+            .FirstOrDefaultAsync(cancellationToken);
 
-          return version is not null && BillingCouponMatchesVersion(coupon, version)
-              ? new BillingCatalogVersionRef(version.Id, version.VersionNumber)
-              : null;
-      }
+        return version is not null && BillingCouponMatchesVersion(coupon, version)
+            ? new BillingCatalogVersionRef(version.Id, version.VersionNumber)
+            : null;
+    }
 
-      private static bool BillingPlanMatchesVersion(BillingPlan plan, BillingPlanVersion version)
-          => string.Equals(plan.Code, version.Code, StringComparison.Ordinal)
-             && string.Equals(plan.Name, version.Name, StringComparison.Ordinal)
-             && string.Equals(plan.Description, version.Description, StringComparison.Ordinal)
-             && plan.Price == version.Price
-             && string.Equals(plan.Currency, version.Currency, StringComparison.Ordinal)
-             && string.Equals(plan.Interval, version.Interval, StringComparison.Ordinal)
-             && plan.DurationMonths == version.DurationMonths
-             && plan.IsVisible == version.IsVisible
-             && plan.IsRenewable == version.IsRenewable
-             && plan.TrialDays == version.TrialDays
-             && plan.DisplayOrder == version.DisplayOrder
-             && plan.IncludedCredits == version.IncludedCredits
-             && string.Equals(plan.IncludedSubtestsJson, version.IncludedSubtestsJson, StringComparison.Ordinal)
-             && string.Equals(plan.EntitlementsJson, version.EntitlementsJson, StringComparison.Ordinal)
-             && plan.Status == version.Status
-             && plan.ArchivedAt == version.ArchivedAt;
+    private static bool BillingPlanMatchesVersion(BillingPlan plan, BillingPlanVersion version)
+        => string.Equals(plan.Code, version.Code, StringComparison.Ordinal)
+           && string.Equals(plan.Name, version.Name, StringComparison.Ordinal)
+           && string.Equals(plan.Description, version.Description, StringComparison.Ordinal)
+           && plan.Price == version.Price
+           && string.Equals(plan.Currency, version.Currency, StringComparison.Ordinal)
+           && string.Equals(plan.Interval, version.Interval, StringComparison.Ordinal)
+           && plan.DurationMonths == version.DurationMonths
+           && plan.IsVisible == version.IsVisible
+           && plan.IsRenewable == version.IsRenewable
+           && plan.TrialDays == version.TrialDays
+           && plan.DisplayOrder == version.DisplayOrder
+           && plan.IncludedCredits == version.IncludedCredits
+           && string.Equals(plan.IncludedSubtestsJson, version.IncludedSubtestsJson, StringComparison.Ordinal)
+           && string.Equals(plan.EntitlementsJson, version.EntitlementsJson, StringComparison.Ordinal)
+           && plan.Status == version.Status
+           && plan.ArchivedAt == version.ArchivedAt;
 
-      private static bool BillingAddOnMatchesVersion(BillingAddOn addOn, BillingAddOnVersion version)
-          => string.Equals(addOn.Code, version.Code, StringComparison.Ordinal)
-             && string.Equals(addOn.Name, version.Name, StringComparison.Ordinal)
-             && string.Equals(addOn.Description, version.Description, StringComparison.Ordinal)
-             && addOn.Price == version.Price
-             && string.Equals(addOn.Currency, version.Currency, StringComparison.Ordinal)
-             && string.Equals(addOn.Interval, version.Interval, StringComparison.Ordinal)
-             && addOn.Status == version.Status
-             && addOn.IsRecurring == version.IsRecurring
-             && addOn.DurationDays == version.DurationDays
-             && addOn.GrantCredits == version.GrantCredits
-             && string.Equals(addOn.GrantEntitlementsJson, version.GrantEntitlementsJson, StringComparison.Ordinal)
-             && string.Equals(addOn.CompatiblePlanCodesJson, version.CompatiblePlanCodesJson, StringComparison.Ordinal)
-             && addOn.AppliesToAllPlans == version.AppliesToAllPlans
-             && addOn.IsStackable == version.IsStackable
-             && addOn.QuantityStep == version.QuantityStep
-             && addOn.MaxQuantity == version.MaxQuantity
-             && addOn.DisplayOrder == version.DisplayOrder;
+    private static bool BillingAddOnMatchesVersion(BillingAddOn addOn, BillingAddOnVersion version)
+        => string.Equals(addOn.Code, version.Code, StringComparison.Ordinal)
+           && string.Equals(addOn.Name, version.Name, StringComparison.Ordinal)
+           && string.Equals(addOn.Description, version.Description, StringComparison.Ordinal)
+           && addOn.Price == version.Price
+           && string.Equals(addOn.Currency, version.Currency, StringComparison.Ordinal)
+           && string.Equals(addOn.Interval, version.Interval, StringComparison.Ordinal)
+           && addOn.Status == version.Status
+           && addOn.IsRecurring == version.IsRecurring
+           && addOn.DurationDays == version.DurationDays
+           && addOn.GrantCredits == version.GrantCredits
+           && string.Equals(addOn.GrantEntitlementsJson, version.GrantEntitlementsJson, StringComparison.Ordinal)
+           && string.Equals(addOn.CompatiblePlanCodesJson, version.CompatiblePlanCodesJson, StringComparison.Ordinal)
+           && addOn.AppliesToAllPlans == version.AppliesToAllPlans
+           && addOn.IsStackable == version.IsStackable
+           && addOn.QuantityStep == version.QuantityStep
+           && addOn.MaxQuantity == version.MaxQuantity
+           && addOn.DisplayOrder == version.DisplayOrder;
 
-      private static bool BillingCouponMatchesVersion(BillingCoupon coupon, BillingCouponVersion version)
-          => string.Equals(coupon.Code, version.Code, StringComparison.Ordinal)
-             && string.Equals(coupon.Name, version.Name, StringComparison.Ordinal)
-             && string.Equals(coupon.Description, version.Description, StringComparison.Ordinal)
-             && coupon.DiscountType == version.DiscountType
-             && coupon.DiscountValue == version.DiscountValue
-             && string.Equals(coupon.Currency, version.Currency, StringComparison.Ordinal)
-             && coupon.Status == version.Status
-             && coupon.StartsAt == version.StartsAt
-             && coupon.EndsAt == version.EndsAt
-             && coupon.UsageLimitTotal == version.UsageLimitTotal
-             && coupon.UsageLimitPerUser == version.UsageLimitPerUser
-             && coupon.MinimumSubtotal == version.MinimumSubtotal
-             && string.Equals(coupon.ApplicablePlanCodesJson, version.ApplicablePlanCodesJson, StringComparison.Ordinal)
-             && string.Equals(coupon.ApplicableAddOnCodesJson, version.ApplicableAddOnCodesJson, StringComparison.Ordinal)
-             && coupon.IsStackable == version.IsStackable
-             && string.Equals(coupon.Notes, version.Notes, StringComparison.Ordinal);
+    private static bool BillingCouponMatchesVersion(BillingCoupon coupon, BillingCouponVersion version)
+        => string.Equals(coupon.Code, version.Code, StringComparison.Ordinal)
+           && string.Equals(coupon.Name, version.Name, StringComparison.Ordinal)
+           && string.Equals(coupon.Description, version.Description, StringComparison.Ordinal)
+           && coupon.DiscountType == version.DiscountType
+           && coupon.DiscountValue == version.DiscountValue
+           && string.Equals(coupon.Currency, version.Currency, StringComparison.Ordinal)
+           && coupon.Status == version.Status
+           && coupon.StartsAt == version.StartsAt
+           && coupon.EndsAt == version.EndsAt
+           && coupon.UsageLimitTotal == version.UsageLimitTotal
+           && coupon.UsageLimitPerUser == version.UsageLimitPerUser
+           && coupon.MinimumSubtotal == version.MinimumSubtotal
+           && string.Equals(coupon.ApplicablePlanCodesJson, version.ApplicablePlanCodesJson, StringComparison.Ordinal)
+           && string.Equals(coupon.ApplicableAddOnCodesJson, version.ApplicableAddOnCodesJson, StringComparison.Ordinal)
+           && coupon.IsStackable == version.IsStackable
+           && string.Equals(coupon.Notes, version.Notes, StringComparison.Ordinal);
 
-      private async Task<int> CountCouponRedemptionsAsync(BillingCoupon coupon, string? userId, CancellationToken cancellationToken)
-      {
-          var normalizedCouponCode = NormalizeBillingCode(coupon.Code);
-          var query = db.BillingCouponRedemptions.Where(redemption =>
-              redemption.Status != BillingRedemptionStatus.Voided
-              && (redemption.CouponId == coupon.Id
-                  || (redemption.CouponId == null && redemption.CouponCode.ToLower() == normalizedCouponCode)));
+    private async Task<int> CountCouponRedemptionsAsync(BillingCoupon coupon, string? userId, CancellationToken cancellationToken)
+    {
+        var normalizedCouponCode = NormalizeBillingCode(coupon.Code);
+        var query = db.BillingCouponRedemptions.Where(redemption =>
+            redemption.Status != BillingRedemptionStatus.Voided
+            && (redemption.CouponId == coupon.Id
+                || (redemption.CouponId == null && redemption.CouponCode.ToLower() == normalizedCouponCode)));
 
-          if (!string.IsNullOrWhiteSpace(userId))
-          {
-              query = query.Where(redemption => redemption.UserId == userId);
-          }
+        if (!string.IsNullOrWhiteSpace(userId))
+        {
+            query = query.Where(redemption => redemption.UserId == userId);
+        }
 
-          return await query.CountAsync(cancellationToken);
-      }
+        return await query.CountAsync(cancellationToken);
+    }
 
-      private static Dictionary<string, string> DeserializeAddOnVersionIds(BillingQuote quote)
-          => new(JsonSupport.Deserialize<Dictionary<string, string>>(quote.AddOnVersionIdsJson, new Dictionary<string, string>()), StringComparer.OrdinalIgnoreCase);
+    private static Dictionary<string, string> DeserializeAddOnVersionIds(BillingQuote quote)
+        => new(JsonSupport.Deserialize<Dictionary<string, string>>(quote.AddOnVersionIdsJson, new Dictionary<string, string>()), StringComparer.OrdinalIgnoreCase);
 
-      private static string NormalizeBillingCode(string? value)
-          => (value ?? string.Empty).Trim().ToLowerInvariant();
+    private static string NormalizeBillingCode(string? value)
+        => (value ?? string.Empty).Trim().ToLowerInvariant();
 
     private static List<string> NormalizeCodes(IEnumerable<string>? codes)
         => (codes ?? Array.Empty<string>()).Where(code => !string.IsNullOrWhiteSpace(code))
@@ -8669,63 +8669,63 @@ public partial class LearnerService(
         object? idempotencyResponse = null;
         try
         {
-        var session = await walletService.CreateTopUpSessionAsync(userId, request.Amount, gateway, idempotencyKey, ct);
-        providerRequestReturned = true;
-        var response = new
-        {
-            sessionId = session.SessionId,
-            gateway = session.Gateway,
-            amountAud = session.AmountDollars,
-            creditsGranted = session.CreditsGranted,
-            bonusCredits = session.BonusCredits,
-            totalCredits = session.TotalCredits,
-            checkoutUrl = session.CheckoutUrl,
-            status = "pending_payment",
-            expiresAt = session.ExpiresAt
-        };
-
-        idempotencyResponse = response;
-
-        if (idempotencyKey is not null && idempotencyRequestHash is not null)
-        {
-            await CompletePaymentIdempotencyAsync("wallet-top-up", idempotencyKey, userId, idempotencyRequestHash, response, ct);
-        }
-
-        await db.SaveChangesAsync(ct);
-        idempotencyCompleted = true;
-
-        // Audit the successful top-up session creation so billing operators can
-        // reconcile against payment-gateway events later.
-        db.BillingEvents.Add(new BillingEvent
-        {
-            Id = $"bill-evt-{Guid.NewGuid():N}",
-            UserId = userId,
-            EventType = "wallet_top_up_session_created",
-            EntityType = "WalletTopUpSession",
-            EntityId = session.SessionId,
-            PayloadJson = JsonSupport.Serialize(new
+            var session = await walletService.CreateTopUpSessionAsync(userId, request.Amount, gateway, idempotencyKey, ct);
+            providerRequestReturned = true;
+            var response = new
             {
+                sessionId = session.SessionId,
                 gateway = session.Gateway,
-                amountDollars = session.AmountDollars,
+                amountAud = session.AmountDollars,
                 creditsGranted = session.CreditsGranted,
                 bonusCredits = session.BonusCredits,
+                totalCredits = session.TotalCredits,
+                checkoutUrl = session.CheckoutUrl,
+                status = "pending_payment",
+                expiresAt = session.ExpiresAt
+            };
+
+            idempotencyResponse = response;
+
+            if (idempotencyKey is not null && idempotencyRequestHash is not null)
+            {
+                await CompletePaymentIdempotencyAsync("wallet-top-up", idempotencyKey, userId, idempotencyRequestHash, response, ct);
+            }
+
+            await db.SaveChangesAsync(ct);
+            idempotencyCompleted = true;
+
+            // Audit the successful top-up session creation so billing operators can
+            // reconcile against payment-gateway events later.
+            db.BillingEvents.Add(new BillingEvent
+            {
+                Id = $"bill-evt-{Guid.NewGuid():N}",
+                UserId = userId,
+                EventType = "wallet_top_up_session_created",
+                EntityType = "WalletTopUpSession",
+                EntityId = session.SessionId,
+                PayloadJson = JsonSupport.Serialize(new
+                {
+                    gateway = session.Gateway,
+                    amountDollars = session.AmountDollars,
+                    creditsGranted = session.CreditsGranted,
+                    bonusCredits = session.BonusCredits,
+                    totalCredits = session.TotalCredits
+                }),
+                OccurredAt = DateTimeOffset.UtcNow
+            });
+            await RecordEventAsync(userId, "wallet_top_up_started", new
+            {
+                sessionId = session.SessionId,
+                gateway = session.Gateway,
+                amountDollars = session.AmountDollars,
                 totalCredits = session.TotalCredits
-            }),
-            OccurredAt = DateTimeOffset.UtcNow
-        });
-        await RecordEventAsync(userId, "wallet_top_up_started", new
-        {
-            sessionId = session.SessionId,
-            gateway = session.Gateway,
-            amountDollars = session.AmountDollars,
-            totalCredits = session.TotalCredits
-        }, ct);
+            }, ct);
 
-        await db.SaveChangesAsync(ct);
+            await db.SaveChangesAsync(ct);
 
-        // Learners observe refund/payment status through billing invoices; wallet
-        // top-up session creation intentionally returns only the checkout contract.
-        return response;
+            // Learners observe refund/payment status through billing invoices; wallet
+            // top-up session creation intentionally returns only the checkout contract.
+            return response;
         }
         catch
         {
@@ -9203,22 +9203,22 @@ public partial class LearnerService(
         switch (targetStatus)
         {
             case "completed":
-            {
-                var confirmed = await privateSpeakingService.ConfirmBookingPaymentAsync(
-                    checkoutSessionId,
-                    ExtractStripePaymentIntentId(webhookEvent.PayloadJson),
-                    ct);
-                if (!confirmed)
                 {
-                    throw new InvalidOperationException($"No private-speaking booking found for Stripe checkout session {checkoutSessionId}.");
-                }
+                    var confirmed = await privateSpeakingService.ConfirmBookingPaymentAsync(
+                        checkoutSessionId,
+                        ExtractStripePaymentIntentId(webhookEvent.PayloadJson),
+                        ct);
+                    if (!confirmed)
+                    {
+                        throw new InvalidOperationException($"No private-speaking booking found for Stripe checkout session {checkoutSessionId}.");
+                    }
 
-                webhookEvent.ProcessingStatus = "completed";
-                webhookEvent.ErrorMessage = null;
-                webhookEvent.ProcessedAt = now;
-                await db.SaveChangesAsync(ct);
-                return true;
-            }
+                    webhookEvent.ProcessingStatus = "completed";
+                    webhookEvent.ErrorMessage = null;
+                    webhookEvent.ProcessedAt = now;
+                    await db.SaveChangesAsync(ct);
+                    return true;
+                }
 
             case "failed":
                 if (string.Equals(webhookEvent.EventType, "checkout.session.expired", StringComparison.OrdinalIgnoreCase))
@@ -10517,9 +10517,9 @@ public partial class LearnerService(
         try
         {
             using var doc = JsonDocument.Parse(grantEntitlementsJson);
-                 return doc.RootElement.ValueKind == JsonValueKind.Object
-                     && TryReadAiCreditGrantValue(doc.RootElement, out var value)
-                     && value > 0;
+            return doc.RootElement.ValueKind == JsonValueKind.Object
+                && TryReadAiCreditGrantValue(doc.RootElement, out var value)
+                && value > 0;
         }
         catch (JsonException)
         {

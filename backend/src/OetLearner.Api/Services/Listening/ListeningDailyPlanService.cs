@@ -66,15 +66,15 @@ public sealed class ListeningDailyPlanService(
     // ── Estimated minutes per item type (§10) ────────────────────────────────
     private static int MinutesFor(string itemType) => itemType switch
     {
-        "drill"                 => 18,
-        "accent_drill"          => 8,
-        "dictation"             => 6,
-        "pronunciation_review"  => 6,
-        "wrong_review"          => 5,
-        "strategy_read"         => 3,
-        "lesson"                => 25,
-        "mock"                  => 45,
-        _                       => 10,
+        "drill" => 18,
+        "accent_drill" => 8,
+        "dictation" => 6,
+        "pronunciation_review" => 6,
+        "wrong_review" => 5,
+        "strategy_read" => 3,
+        "lesson" => 25,
+        "mock" => 45,
+        _ => 10,
     };
 
     // ── Default fallback target counts when no skill score row exists ─────

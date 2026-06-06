@@ -498,7 +498,12 @@ public static partial class SeedData
                 State = "submitted",
                 RubricEntriesJson = JsonSupport.Serialize(new Dictionary<string, int>
                 {
-                    ["purpose"] = 2, ["content"] = 5, ["conciseness_clarity"] = 5, ["genre_style"] = 5, ["organisation_layout"] = 5, ["language"] = 5
+                    ["purpose"] = 2,
+                    ["content"] = 5,
+                    ["conciseness_clarity"] = 5,
+                    ["genre_style"] = 5,
+                    ["organisation_layout"] = 5,
+                    ["language"] = 5
                 }),
                 CriterionCommentsJson = JsonSupport.Serialize(new Dictionary<string, string>
                 {
@@ -528,7 +533,12 @@ public static partial class SeedData
                 State = "saved",
                 RubricEntriesJson = JsonSupport.Serialize(new Dictionary<string, int>
                 {
-                    ["purpose"] = 2, ["content"] = 4, ["conciseness_clarity"] = 4, ["genre_style"] = 5, ["organisation_layout"] = 5, ["language"] = 4
+                    ["purpose"] = 2,
+                    ["content"] = 4,
+                    ["conciseness_clarity"] = 4,
+                    ["genre_style"] = 5,
+                    ["organisation_layout"] = 5,
+                    ["language"] = 4
                 }),
                 CriterionCommentsJson = JsonSupport.Serialize(new Dictionary<string, string>
                 {
@@ -1914,7 +1924,12 @@ public static partial class SeedData
             State = "submitted",
             RubricEntriesJson = JsonSupport.Serialize(new Dictionary<string, int>
             {
-                ["purpose"] = 2, ["content"] = 5, ["conciseness_clarity"] = 5, ["genre_style"] = 5, ["organisation_layout"] = 5, ["language"] = 5
+                ["purpose"] = 2,
+                ["content"] = 5,
+                ["conciseness_clarity"] = 5,
+                ["genre_style"] = 5,
+                ["organisation_layout"] = 5,
+                ["language"] = 5
             }),
             CriterionCommentsJson = JsonSupport.Serialize(new Dictionary<string, string>
             {
@@ -2677,23 +2692,23 @@ public static partial class SeedData
         PronunciationDrill D(string id, string phoneme, string label, string profession, string focus,
             string primaryRuleId, string difficulty, string exampleWords, string minimalPairs,
             string sentences, string tipsHtml, int order = 0) => new()
-        {
-            Id = id,
-            TargetPhoneme = phoneme,
-            Label = label,
-            Profession = profession,
-            Focus = focus,
-            PrimaryRuleId = primaryRuleId,
-            Difficulty = difficulty,
-            ExampleWordsJson = exampleWords,
-            MinimalPairsJson = minimalPairs,
-            SentencesJson = sentences,
-            TipsHtml = tipsHtml,
-            Status = "active",
-            OrderIndex = order,
-            CreatedAt = DateTimeOffset.UtcNow,
-            UpdatedAt = DateTimeOffset.UtcNow,
-        };
+            {
+                Id = id,
+                TargetPhoneme = phoneme,
+                Label = label,
+                Profession = profession,
+                Focus = focus,
+                PrimaryRuleId = primaryRuleId,
+                Difficulty = difficulty,
+                ExampleWordsJson = exampleWords,
+                MinimalPairsJson = minimalPairs,
+                SentencesJson = sentences,
+                TipsHtml = tipsHtml,
+                Status = "active",
+                OrderIndex = order,
+                CreatedAt = DateTimeOffset.UtcNow,
+                UpdatedAt = DateTimeOffset.UtcNow,
+            };
 
         // ── Phoneme pack (20 drills) ─────────────────────────────────────────
         drills.Add(D("pd-001", "\u03B8", "th (voiceless) - as in 'think'", "all", "phoneme", "P01.1", "medium",
@@ -3016,59 +3031,125 @@ public static partial class SeedData
         db.ContentPackages.AddRange(
             new ContentPackage
             {
-                Id = "pkg-full-en-2026", Code = "full-en-2026", Title = "Full OET Course 2026 (English)",
+                Id = "pkg-full-en-2026",
+                Code = "full-en-2026",
+                Title = "Full OET Course 2026 (English)",
                 Description = "Comprehensive OET preparation covering all four subtests with structured modules, practice tasks, and model answers.",
-                PackageType = "full_course", InstructionLanguage = "en", BillingPlanId = "premium-monthly",
-                Status = ContentStatus.Published, DisplayOrder = 1, CreatedAt = now, UpdatedAt = now, PublishedAt = now
+                PackageType = "full_course",
+                InstructionLanguage = "en",
+                BillingPlanId = "premium-monthly",
+                Status = ContentStatus.Published,
+                DisplayOrder = 1,
+                CreatedAt = now,
+                UpdatedAt = now,
+                PublishedAt = now
             },
             new ContentPackage
             {
-                Id = "pkg-full-ar-nursing-2026", Code = "full-ar-nursing-2026", Title = "Full OET Nursing Course 2026 (Arabic)",
+                Id = "pkg-full-ar-nursing-2026",
+                Code = "full-ar-nursing-2026",
+                Title = "Full OET Nursing Course 2026 (Arabic)",
                 Description = "Complete OET Nursing course with Arabic instruction. All subtests covered with profession-specific materials.",
-                PackageType = "full_course", ProfessionId = "nursing", InstructionLanguage = "ar",
-                BillingPlanId = "premium-monthly", Status = ContentStatus.Published, DisplayOrder = 2, CreatedAt = now, UpdatedAt = now, PublishedAt = now
+                PackageType = "full_course",
+                ProfessionId = "nursing",
+                InstructionLanguage = "ar",
+                BillingPlanId = "premium-monthly",
+                Status = ContentStatus.Published,
+                DisplayOrder = 2,
+                CreatedAt = now,
+                UpdatedAt = now,
+                PublishedAt = now
             },
             new ContentPackage
             {
-                Id = "pkg-full-ar-medicine-2026", Code = "full-ar-medicine-2026", Title = "Full OET Medicine Course 2026 (Arabic)",
+                Id = "pkg-full-ar-medicine-2026",
+                Code = "full-ar-medicine-2026",
+                Title = "Full OET Medicine Course 2026 (Arabic)",
                 Description = "Complete OET Medicine course with Arabic instruction for doctors.",
-                PackageType = "full_course", ProfessionId = "medicine", InstructionLanguage = "ar",
-                BillingPlanId = "premium-monthly", Status = ContentStatus.Published, DisplayOrder = 3, CreatedAt = now, UpdatedAt = now, PublishedAt = now
+                PackageType = "full_course",
+                ProfessionId = "medicine",
+                InstructionLanguage = "ar",
+                BillingPlanId = "premium-monthly",
+                Status = ContentStatus.Published,
+                DisplayOrder = 3,
+                CreatedAt = now,
+                UpdatedAt = now,
+                PublishedAt = now
             },
             new ContentPackage
             {
-                Id = "pkg-crash-en-general", Code = "crash-en-general", Title = "OET Crash Course (English)",
+                Id = "pkg-crash-en-general",
+                Code = "crash-en-general",
+                Title = "OET Crash Course (English)",
                 Description = "Intensive short-format OET preparation covering key strategies and high-impact practice across all subtests.",
-                PackageType = "crash_course", InstructionLanguage = "en", BillingPlanId = "basic-monthly",
-                Status = ContentStatus.Published, DisplayOrder = 4, CreatedAt = now, UpdatedAt = now, PublishedAt = now
+                PackageType = "crash_course",
+                InstructionLanguage = "en",
+                BillingPlanId = "basic-monthly",
+                Status = ContentStatus.Published,
+                DisplayOrder = 4,
+                CreatedAt = now,
+                UpdatedAt = now,
+                PublishedAt = now
             },
             new ContentPackage
             {
-                Id = "pkg-crash-ar-general", Code = "crash-ar-general", Title = "OET Crash Course (Arabic)",
+                Id = "pkg-crash-ar-general",
+                Code = "crash-ar-general",
+                Title = "OET Crash Course (Arabic)",
                 Description = "Condensed OET preparation with Arabic instruction.",
-                PackageType = "crash_course", InstructionLanguage = "ar", BillingPlanId = "basic-monthly",
-                Status = ContentStatus.Published, DisplayOrder = 5, CreatedAt = now, UpdatedAt = now, PublishedAt = now
+                PackageType = "crash_course",
+                InstructionLanguage = "ar",
+                BillingPlanId = "basic-monthly",
+                Status = ContentStatus.Published,
+                DisplayOrder = 5,
+                CreatedAt = now,
+                UpdatedAt = now,
+                PublishedAt = now
             },
             new ContentPackage
             {
-                Id = "pkg-crash-en-pharmacy", Code = "crash-en-pharmacy", Title = "OET Pharmacy Crash Course (English)",
+                Id = "pkg-crash-en-pharmacy",
+                Code = "crash-en-pharmacy",
+                Title = "OET Pharmacy Crash Course (English)",
                 Description = "Pharmacy-focused OET crash course with profession-specific tasks and strategies.",
-                PackageType = "crash_course", ProfessionId = "pharmacy", InstructionLanguage = "en",
-                BillingPlanId = "basic-monthly", Status = ContentStatus.Published, DisplayOrder = 6, CreatedAt = now, UpdatedAt = now, PublishedAt = now
+                PackageType = "crash_course",
+                ProfessionId = "pharmacy",
+                InstructionLanguage = "en",
+                BillingPlanId = "basic-monthly",
+                Status = ContentStatus.Published,
+                DisplayOrder = 6,
+                CreatedAt = now,
+                UpdatedAt = now,
+                PublishedAt = now
             },
             new ContentPackage
             {
-                Id = "pkg-combo-lr-recalls", Code = "combo-lr-recalls", Title = "Listening, Reading & Recalls Combo",
+                Id = "pkg-combo-lr-recalls",
+                Code = "combo-lr-recalls",
+                Title = "Listening, Reading & Recalls Combo",
                 Description = "Combined package for Listening and Reading practice including recent recall materials.",
-                PackageType = "combo", InstructionLanguage = "en", BillingPlanId = "basic-monthly",
-                Status = ContentStatus.Published, DisplayOrder = 7, CreatedAt = now, UpdatedAt = now, PublishedAt = now
+                PackageType = "combo",
+                InstructionLanguage = "en",
+                BillingPlanId = "basic-monthly",
+                Status = ContentStatus.Published,
+                DisplayOrder = 7,
+                CreatedAt = now,
+                UpdatedAt = now,
+                PublishedAt = now
             },
             new ContentPackage
             {
-                Id = "pkg-foundation-basic-en", Code = "foundation-basic-en", Title = "Basic English for OET",
+                Id = "pkg-foundation-basic-en",
+                Code = "foundation-basic-en",
+                Title = "Basic English for OET",
                 Description = "Foundation English course to build core language skills before starting OET-specific preparation.",
-                PackageType = "foundation", InstructionLanguage = "en",
-                Status = ContentStatus.Published, DisplayOrder = 8, CreatedAt = now, UpdatedAt = now, PublishedAt = now
+                PackageType = "foundation",
+                InstructionLanguage = "en",
+                Status = ContentStatus.Published,
+                DisplayOrder = 8,
+                CreatedAt = now,
+                UpdatedAt = now,
+                PublishedAt = now
             }
         );
 
@@ -3093,10 +3174,18 @@ public static partial class SeedData
         // ── Full English OET Course 2026 ──
         db.ContentPrograms.Add(new ContentProgram
         {
-            Id = "prg-full-en-2026", Code = "full-en-2026", Title = "Full OET Online Course 2026",
+            Id = "prg-full-en-2026",
+            Code = "full-en-2026",
+            Title = "Full OET Online Course 2026",
             Description = "Comprehensive OET preparation covering Writing, Speaking, Reading, and Listening with structured progression.",
-            InstructionLanguage = "en", ProgramType = "full_course", Status = ContentStatus.Published,
-            DisplayOrder = 1, EstimatedDurationMinutes = 4800, CreatedAt = now, UpdatedAt = now, PublishedAt = now
+            InstructionLanguage = "en",
+            ProgramType = "full_course",
+            Status = ContentStatus.Published,
+            DisplayOrder = 1,
+            EstimatedDurationMinutes = 4800,
+            CreatedAt = now,
+            UpdatedAt = now,
+            PublishedAt = now
         });
 
         db.ContentTracks.AddRange(
@@ -3129,11 +3218,19 @@ public static partial class SeedData
         // ── Arabic Nursing Course ──
         db.ContentPrograms.Add(new ContentProgram
         {
-            Id = "prg-full-ar-nursing-2026", Code = "full-ar-nursing-2026", Title = "Full OET Nursing Course 2026 (Arabic)",
+            Id = "prg-full-ar-nursing-2026",
+            Code = "full-ar-nursing-2026",
+            Title = "Full OET Nursing Course 2026 (Arabic)",
             Description = "Comprehensive nursing-focused OET course with Arabic instruction.",
-            ProfessionId = "nursing", InstructionLanguage = "ar", ProgramType = "full_course",
-            Status = ContentStatus.Published, DisplayOrder = 2, EstimatedDurationMinutes = 4800,
-            CreatedAt = now, UpdatedAt = now, PublishedAt = now
+            ProfessionId = "nursing",
+            InstructionLanguage = "ar",
+            ProgramType = "full_course",
+            Status = ContentStatus.Published,
+            DisplayOrder = 2,
+            EstimatedDurationMinutes = 4800,
+            CreatedAt = now,
+            UpdatedAt = now,
+            PublishedAt = now
         });
 
         db.ContentTracks.AddRange(
@@ -3146,46 +3243,86 @@ public static partial class SeedData
         // ── Arabic Medicine Course ──
         db.ContentPrograms.Add(new ContentProgram
         {
-            Id = "prg-full-ar-medicine-2026", Code = "full-ar-medicine-2026", Title = "Full OET Medicine Course 2026 (Arabic Doctors)",
+            Id = "prg-full-ar-medicine-2026",
+            Code = "full-ar-medicine-2026",
+            Title = "Full OET Medicine Course 2026 (Arabic Doctors)",
             Description = "Medicine-focused OET course with Arabic instruction for doctors.",
-            ProfessionId = "medicine", InstructionLanguage = "ar", ProgramType = "full_course",
-            Status = ContentStatus.Published, DisplayOrder = 3, EstimatedDurationMinutes = 4800,
-            CreatedAt = now, UpdatedAt = now, PublishedAt = now
+            ProfessionId = "medicine",
+            InstructionLanguage = "ar",
+            ProgramType = "full_course",
+            Status = ContentStatus.Published,
+            DisplayOrder = 3,
+            EstimatedDurationMinutes = 4800,
+            CreatedAt = now,
+            UpdatedAt = now,
+            PublishedAt = now
         });
 
         // ── Crash Courses ──
         db.ContentPrograms.AddRange(
             new ContentProgram
             {
-                Id = "prg-crash-en-general", Code = "crash-en-general", Title = "OET Crash Course (English)",
+                Id = "prg-crash-en-general",
+                Code = "crash-en-general",
+                Title = "OET Crash Course (English)",
                 Description = "Intensive short-format OET preparation.",
-                InstructionLanguage = "en", ProgramType = "crash_course", Status = ContentStatus.Published,
-                DisplayOrder = 4, EstimatedDurationMinutes = 1200, CreatedAt = now, UpdatedAt = now, PublishedAt = now
+                InstructionLanguage = "en",
+                ProgramType = "crash_course",
+                Status = ContentStatus.Published,
+                DisplayOrder = 4,
+                EstimatedDurationMinutes = 1200,
+                CreatedAt = now,
+                UpdatedAt = now,
+                PublishedAt = now
             },
             new ContentProgram
             {
-                Id = "prg-crash-ar-general", Code = "crash-ar-general", Title = "OET Crash Course (Arabic)",
+                Id = "prg-crash-ar-general",
+                Code = "crash-ar-general",
+                Title = "OET Crash Course (Arabic)",
                 Description = "Condensed OET preparation with Arabic instruction.",
-                InstructionLanguage = "ar", ProgramType = "crash_course", Status = ContentStatus.Published,
-                DisplayOrder = 5, EstimatedDurationMinutes = 1200, CreatedAt = now, UpdatedAt = now, PublishedAt = now
+                InstructionLanguage = "ar",
+                ProgramType = "crash_course",
+                Status = ContentStatus.Published,
+                DisplayOrder = 5,
+                EstimatedDurationMinutes = 1200,
+                CreatedAt = now,
+                UpdatedAt = now,
+                PublishedAt = now
             },
             new ContentProgram
             {
-                Id = "prg-crash-en-pharmacy", Code = "crash-en-pharmacy", Title = "OET Pharmacy Crash Course",
+                Id = "prg-crash-en-pharmacy",
+                Code = "crash-en-pharmacy",
+                Title = "OET Pharmacy Crash Course",
                 Description = "Pharmacy-focused crash course with profession-specific tasks.",
-                ProfessionId = "pharmacy", InstructionLanguage = "en", ProgramType = "crash_course",
-                Status = ContentStatus.Published, DisplayOrder = 6, EstimatedDurationMinutes = 900,
-                CreatedAt = now, UpdatedAt = now, PublishedAt = now
+                ProfessionId = "pharmacy",
+                InstructionLanguage = "en",
+                ProgramType = "crash_course",
+                Status = ContentStatus.Published,
+                DisplayOrder = 6,
+                EstimatedDurationMinutes = 900,
+                CreatedAt = now,
+                UpdatedAt = now,
+                PublishedAt = now
             }
         );
 
         // ── Foundation English ──
         db.ContentPrograms.Add(new ContentProgram
         {
-            Id = "prg-foundation-basic-en", Code = "foundation-basic-en", Title = "Basic English for OET Preparation",
+            Id = "prg-foundation-basic-en",
+            Code = "foundation-basic-en",
+            Title = "Basic English for OET Preparation",
             Description = "Foundation level English course to build language skills before starting OET-specific preparation.",
-            InstructionLanguage = "en", ProgramType = "foundation", Status = ContentStatus.Published,
-            DisplayOrder = 7, EstimatedDurationMinutes = 2400, CreatedAt = now, UpdatedAt = now, PublishedAt = now
+            InstructionLanguage = "en",
+            ProgramType = "foundation",
+            Status = ContentStatus.Published,
+            DisplayOrder = 7,
+            EstimatedDurationMinutes = 2400,
+            CreatedAt = now,
+            UpdatedAt = now,
+            PublishedAt = now
         });
 
         db.ContentTracks.Add(
@@ -3914,11 +4051,14 @@ public static partial class SeedData
             new AiQuotaPlan
             {
                 Id = Guid.NewGuid().ToString("N"),
-                Code = "free", Name = "Free tier",
+                Code = "free",
+                Name = "Free tier",
                 Description = "Entry tier — tight caps, conversational features only.",
                 Period = AiQuotaPeriod.Monthly,
-                MonthlyTokenCap = 20_000, DailyTokenCap = 5_000,
-                RolloverPolicy = AiQuotaRolloverPolicy.Expire, RolloverCapPct = 0,
+                MonthlyTokenCap = 20_000,
+                DailyTokenCap = 5_000,
+                RolloverPolicy = AiQuotaRolloverPolicy.Expire,
+                RolloverCapPct = 0,
                 OveragePolicy = AiOveragePolicy.Deny,
                 AllowedFeaturesCsv = string.Join(",",
                     AiFeatureCodes.ConversationReply,
@@ -3929,48 +4069,65 @@ public static partial class SeedData
                     AiFeatureCodes.PronunciationFeedback,
                     AiFeatureCodes.VocabularyGloss,
                     AiFeatureCodes.SummarisePassage),
-                IsActive = true, DisplayOrder = 10,
-                CreatedAt = now, UpdatedAt = now,
+                IsActive = true,
+                DisplayOrder = 10,
+                CreatedAt = now,
+                UpdatedAt = now,
             },
             new AiQuotaPlan
             {
                 Id = Guid.NewGuid().ToString("N"),
-                Code = "starter", Name = "Starter",
+                Code = "starter",
+                Name = "Starter",
                 Description = "Entry paid tier — all practice features, capped grading.",
                 Period = AiQuotaPeriod.Monthly,
-                MonthlyTokenCap = 200_000, DailyTokenCap = 50_000,
-                RolloverPolicy = AiQuotaRolloverPolicy.Expire, RolloverCapPct = 0,
+                MonthlyTokenCap = 200_000,
+                DailyTokenCap = 50_000,
+                RolloverPolicy = AiQuotaRolloverPolicy.Expire,
+                RolloverCapPct = 0,
                 OveragePolicy = AiOveragePolicy.Deny,
                 AllowedFeaturesCsv = string.Empty, // all features
-                IsActive = true, DisplayOrder = 20,
-                CreatedAt = now, UpdatedAt = now,
+                IsActive = true,
+                DisplayOrder = 20,
+                CreatedAt = now,
+                UpdatedAt = now,
             },
             new AiQuotaPlan
             {
                 Id = Guid.NewGuid().ToString("N"),
-                Code = "pro", Name = "Pro",
+                Code = "pro",
+                Name = "Pro",
                 Description = "Unlimited practice + generous grading allowance.",
                 Period = AiQuotaPeriod.Monthly,
-                MonthlyTokenCap = 1_000_000, DailyTokenCap = 200_000,
-                RolloverPolicy = AiQuotaRolloverPolicy.RolloverCapped, RolloverCapPct = 20,
+                MonthlyTokenCap = 1_000_000,
+                DailyTokenCap = 200_000,
+                RolloverPolicy = AiQuotaRolloverPolicy.RolloverCapped,
+                RolloverCapPct = 20,
                 OveragePolicy = AiOveragePolicy.Deny,
                 AllowedFeaturesCsv = string.Empty,
-                IsActive = true, DisplayOrder = 30,
-                CreatedAt = now, UpdatedAt = now,
+                IsActive = true,
+                DisplayOrder = 30,
+                CreatedAt = now,
+                UpdatedAt = now,
             },
             new AiQuotaPlan
             {
                 Id = Guid.NewGuid().ToString("N"),
-                Code = "enterprise", Name = "Enterprise",
+                Code = "enterprise",
+                Name = "Enterprise",
                 Description = "Sponsored / institutional tier, very high limits.",
                 Period = AiQuotaPeriod.Monthly,
-                MonthlyTokenCap = 10_000_000, DailyTokenCap = 2_000_000,
-                RolloverPolicy = AiQuotaRolloverPolicy.RolloverCapped, RolloverCapPct = 50,
+                MonthlyTokenCap = 10_000_000,
+                DailyTokenCap = 2_000_000,
+                RolloverPolicy = AiQuotaRolloverPolicy.RolloverCapped,
+                RolloverCapPct = 50,
                 OveragePolicy = AiOveragePolicy.AllowWithCharge,
                 OverageRatePer1kTokens = 0.004m,
                 AllowedFeaturesCsv = string.Empty,
-                IsActive = true, DisplayOrder = 40,
-                CreatedAt = now, UpdatedAt = now,
+                IsActive = true,
+                DisplayOrder = 40,
+                CreatedAt = now,
+                UpdatedAt = now,
             }
         );
     }

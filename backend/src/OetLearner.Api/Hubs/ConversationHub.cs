@@ -123,10 +123,16 @@ public partial class ConversationHub(
 
             db.ConversationTurns.Add(new ConversationTurn
             {
-                Id = Guid.NewGuid(), SessionId = sessionId, TurnNumber = turnNumber,
-                Role = "ai", Content = reply.Text, AudioUrl = audioUrl,
-                DurationMs = reply.Text.Split(' ').Length * 300, TimestampMs = 0,
-                ConfidenceScore = 1.0, AnalysisJson = "{}",
+                Id = Guid.NewGuid(),
+                SessionId = sessionId,
+                TurnNumber = turnNumber,
+                Role = "ai",
+                Content = reply.Text,
+                AudioUrl = audioUrl,
+                DurationMs = reply.Text.Split(' ').Length * 300,
+                TimestampMs = 0,
+                ConfidenceScore = 1.0,
+                AnalysisJson = "{}",
                 AiFeatureCode = AiFeatureCodes.ConversationOpening,
                 CreatedAt = DateTimeOffset.UtcNow,
             });
@@ -136,7 +142,9 @@ public partial class ConversationHub(
 
             await Clients.Caller.SendAsync("ReceiveAIResponse", turnNumber, reply.Text, new
             {
-                audioUrl, emotionHint = reply.EmotionHint, appliedRuleIds = reply.AppliedRuleIds,
+                audioUrl,
+                emotionHint = reply.EmotionHint,
+                appliedRuleIds = reply.AppliedRuleIds,
             });
         }
         catch (PromptNotGroundedException)
@@ -151,9 +159,15 @@ public partial class ConversationHub(
             session.TurnCount++;
             db.ConversationTurns.Add(new ConversationTurn
             {
-                Id = Guid.NewGuid(), SessionId = sessionId, TurnNumber = session.TurnCount,
-                Role = "ai", Content = fallback, DurationMs = 3000, TimestampMs = 0,
-                ConfidenceScore = 1.0, AnalysisJson = JsonSupport.Serialize(new { fallback = true }),
+                Id = Guid.NewGuid(),
+                SessionId = sessionId,
+                TurnNumber = session.TurnCount,
+                Role = "ai",
+                Content = fallback,
+                DurationMs = 3000,
+                TimestampMs = 0,
+                ConfidenceScore = 1.0,
+                AnalysisJson = JsonSupport.Serialize(new { fallback = true }),
                 AiFeatureCode = AiFeatureCodes.ConversationOpening,
                 CreatedAt = DateTimeOffset.UtcNow,
             });
@@ -776,18 +790,18 @@ public partial class ConversationHub(
             asr = preTranscribed;
         }
         else try
-        {
-            using var asrStream = new MemoryStream(audioBytes);
-            var provider = await asrSelector.SelectAsync(ct);
-            asr = await provider.TranscribeAsync(new ConversationAsrRequest(
-                asrStream, audioMime, "en-GB", audioBytes.LongLength, EnableDiarization: true), ct);
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "STT failed for {SessionId}", sessionId);
-            await Clients.Caller.SendAsync("ConversationError", "STT_ERROR", "Speech-to-text failed.", ct);
-            return false;
-        }
+            {
+                using var asrStream = new MemoryStream(audioBytes);
+                var provider = await asrSelector.SelectAsync(ct);
+                asr = await provider.TranscribeAsync(new ConversationAsrRequest(
+                    asrStream, audioMime, "en-GB", audioBytes.LongLength, EnableDiarization: true), ct);
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "STT failed for {SessionId}", sessionId);
+                await Clients.Caller.SendAsync("ConversationError", "STT_ERROR", "Speech-to-text failed.", ct);
+                return false;
+            }
 
         if (string.IsNullOrWhiteSpace(asr.Text))
         {
@@ -806,9 +820,14 @@ public partial class ConversationHub(
         var elapsedMs = (int)(DateTimeOffset.UtcNow - (session.StartedAt ?? DateTimeOffset.UtcNow)).TotalMilliseconds;
         db.ConversationTurns.Add(new ConversationTurn
         {
-            Id = Guid.NewGuid(), SessionId = sessionId, TurnNumber = learnerTurnNumber,
-            Role = "learner", Content = asr.Text, AudioUrl = learnerAudioRef.Url,
-            DurationMs = asr.DurationMs, TimestampMs = elapsedMs,
+            Id = Guid.NewGuid(),
+            SessionId = sessionId,
+            TurnNumber = learnerTurnNumber,
+            Role = "learner",
+            Content = asr.Text,
+            AudioUrl = learnerAudioRef.Url,
+            DurationMs = asr.DurationMs,
+            TimestampMs = elapsedMs,
             ConfidenceScore = asr.Confidence,
             AnalysisJson = JsonSupport.Serialize(new
             {
@@ -873,9 +892,14 @@ public partial class ConversationHub(
 
         db.ConversationTurns.Add(new ConversationTurn
         {
-            Id = Guid.NewGuid(), SessionId = sessionId, TurnNumber = aiTurnNumber,
-            Role = "ai", Content = reply.Text, AudioUrl = aiAudioUrl,
-            DurationMs = reply.Text.Split(' ').Length * 300, TimestampMs = elapsedMs + 800,
+            Id = Guid.NewGuid(),
+            SessionId = sessionId,
+            TurnNumber = aiTurnNumber,
+            Role = "ai",
+            Content = reply.Text,
+            AudioUrl = aiAudioUrl,
+            DurationMs = reply.Text.Split(' ').Length * 300,
+            TimestampMs = elapsedMs + 800,
             ConfidenceScore = 1.0,
             AnalysisJson = JsonSupport.Serialize(new { reply.EmotionHint, reply.ShouldEnd, reply.AppliedRuleIds }),
             AiFeatureCode = AiFeatureCodes.ConversationReply,
@@ -887,7 +911,9 @@ public partial class ConversationHub(
 
         await Clients.Caller.SendAsync("ReceiveAIResponse", aiTurnNumber, reply.Text, new
         {
-            audioUrl = aiAudioUrl, emotionHint = reply.EmotionHint, appliedRuleIds = reply.AppliedRuleIds,
+            audioUrl = aiAudioUrl,
+            emotionHint = reply.EmotionHint,
+            appliedRuleIds = reply.AppliedRuleIds,
         }, ct);
 
         if (reply.ShouldEnd || remaining <= 10)

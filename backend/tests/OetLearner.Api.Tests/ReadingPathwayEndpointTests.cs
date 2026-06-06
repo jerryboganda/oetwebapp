@@ -404,7 +404,7 @@ public class ReadingPathwayEndpointTests : IClassFixture<TestWebApplicationFacto
             Points = 1,
             QuestionType = ReadingQuestionType.MultipleChoice3,
             Stem = "What should the nurse do first?",
-                        OptionsJson = """
+            OptionsJson = """
                                 [
                                     {"value":"A","label":"Check the policy","correctAnswer":"SECRET-OPTION","acceptedSynonyms":["SECRET-OPTION-SYNONYM"],"explanationMarkdown":"SECRET-OPTION-EXPLANATION","isCorrect":true},
                                     {"value":"B","label":"Call reception"},

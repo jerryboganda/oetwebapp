@@ -309,7 +309,9 @@ public sealed class ReadingAttemptService(
         db.AuditEvents.Add(new AuditEvent
         {
             Id = Guid.NewGuid().ToString("N"),
-            OccurredAt = now, ActorId = userId, ActorName = userId,
+            OccurredAt = now,
+            ActorId = userId,
+            ActorName = userId,
             Action = mode == ReadingAttemptMode.Exam
                 ? "ReadingAttemptStarted"
                 : $"ReadingAttemptStarted_{mode}",

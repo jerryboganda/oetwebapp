@@ -62,8 +62,8 @@ public class ListeningStarterFixtureParseTest
             }
             Assert.False(byPart.ContainsKey("B"),
                 $"{Path.GetFileName(path)}: bare 'B' part code is no longer allowed; use B1..B6.");
-            Assert.Equal(6,  byPart["C1"]);
-            Assert.Equal(6,  byPart["C2"]);
+            Assert.Equal(6, byPart["C1"]);
+            Assert.Equal(6, byPart["C2"]);
 
             // Every MCQ row carries exactly 3 options + a correct-answer that
             // appears in that option list. (Catches typos in hand-edits.)

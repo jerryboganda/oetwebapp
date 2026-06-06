@@ -169,18 +169,18 @@ public class WritingRuleViolationAnalyticsTests
         string ruleId,
         string severity,
         DateTimeOffset generatedAt) => new()
-    {
-        Id = id,
-        AttemptId = attemptId,
-        EvaluationId = $"eval-{attemptId}",
-        UserId = userId,
-        Profession = profession,
-        LetterType = letterType,
-        RuleId = ruleId,
-        Severity = severity,
-        Source = "rulebook",
-        Message = $"Violation {ruleId}",
-        Quote = null,
-        GeneratedAt = generatedAt,
-    };
+        {
+            Id = id,
+            AttemptId = attemptId,
+            EvaluationId = $"eval-{attemptId}",
+            UserId = userId,
+            Profession = profession,
+            LetterType = letterType,
+            RuleId = ruleId,
+            Severity = severity,
+            Source = "rulebook",
+            Message = $"Violation {ruleId}",
+            Quote = null,
+            GeneratedAt = generatedAt,
+        };
 }

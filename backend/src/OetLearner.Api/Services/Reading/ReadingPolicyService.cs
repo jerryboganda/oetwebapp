@@ -244,10 +244,13 @@ public sealed class ReadingPolicyService(LearnerDbContext db, Microsoft.Extensio
         db.AuditEvents.Add(new AuditEvent
         {
             Id = Guid.NewGuid().ToString("N"),
-            OccurredAt = now, ActorId = adminId, ActorName = adminId,
+            OccurredAt = now,
+            ActorId = adminId,
+            ActorName = adminId,
             Action = "ReadingUserPolicyOverrideUpserted",
             ResourceType = "ReadingUserPolicyOverride",
-            ResourceId = userId, Details = next.Reason,
+            ResourceId = userId,
+            Details = next.Reason,
         });
         await db.SaveChangesAsync(ct);
         return row;

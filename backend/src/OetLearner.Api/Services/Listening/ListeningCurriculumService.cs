@@ -128,7 +128,7 @@ public sealed class ListeningCurriculumService(LearnerDbContext db) : IListening
             "Part A" => ("Open Part A drill", $"/listening/drills/part-a-{code}"),
             "Part B" => ("Open Part B drill", $"/listening/drills/part-b-{code}"),
             "Part C" => ("Open Part C drill", $"/listening/drills/part-c-{code}"),
-            _        => ("Open drill", $"/listening/drills/{code}"),
+            _ => ("Open drill", $"/listening/drills/{code}"),
         },
     };
 }

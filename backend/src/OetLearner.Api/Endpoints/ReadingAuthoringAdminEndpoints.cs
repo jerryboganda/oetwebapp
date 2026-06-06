@@ -487,31 +487,53 @@ public static class ReadingAuthoringAdminEndpoints
         ContentPaper paper,
         IReadOnlyList<object> questionPaperAssets,
         ReadingStructure structure) => new
-    {
-        paper = new
         {
-            paper.Id,
-            paper.Title,
-            paper.Slug,
-            paper.SubtestCode,
-            allowPaperReadingMode = true,
-            questionPaperAssets,
-        },
-        parts = structure.Parts.Select(part => new
-        {
-            part.Id,
-            partCode = part.PartCode.ToString(),
-            part.TimeLimitMinutes,
-            part.MaxRawScore,
-            part.Instructions,
-            sections = part.Sections.Select(section => new
+            paper = new
             {
-                section.Id,
-                section.SectionCode,
-                section.DisplayOrder,
-                section.MaxRawScore,
-                section.ContentPaperAssetId,
-                questions = section.Questions.Select(question => new
+                paper.Id,
+                paper.Title,
+                paper.Slug,
+                paper.SubtestCode,
+                allowPaperReadingMode = true,
+                questionPaperAssets,
+            },
+            parts = structure.Parts.Select(part => new
+            {
+                part.Id,
+                partCode = part.PartCode.ToString(),
+                part.TimeLimitMinutes,
+                part.MaxRawScore,
+                part.Instructions,
+                sections = part.Sections.Select(section => new
+                {
+                    section.Id,
+                    section.SectionCode,
+                    section.DisplayOrder,
+                    section.MaxRawScore,
+                    section.ContentPaperAssetId,
+                    questions = section.Questions.Select(question => new
+                    {
+                        question.Id,
+                        question.ReadingSectionId,
+                        question.ReadingTextId,
+                        question.DisplayOrder,
+                        question.Points,
+                        questionType = question.QuestionType.ToString(),
+                        question.Stem,
+                        options = ReadingLearnerSafeProjection.ProjectOptions(question.OptionsJson),
+                    }),
+                }),
+                texts = part.Texts.Select(text => new
+                {
+                    text.Id,
+                    text.DisplayOrder,
+                    text.Title,
+                    text.Source,
+                    text.BodyHtml,
+                    text.WordCount,
+                    text.TopicTag,
+                }),
+                questions = part.Questions.Select(question => new
                 {
                     question.Id,
                     question.ReadingSectionId,
@@ -523,29 +545,7 @@ public static class ReadingAuthoringAdminEndpoints
                     options = ReadingLearnerSafeProjection.ProjectOptions(question.OptionsJson),
                 }),
             }),
-            texts = part.Texts.Select(text => new
-            {
-                text.Id,
-                text.DisplayOrder,
-                text.Title,
-                text.Source,
-                text.BodyHtml,
-                text.WordCount,
-                text.TopicTag,
-            }),
-            questions = part.Questions.Select(question => new
-            {
-                question.Id,
-                question.ReadingSectionId,
-                question.ReadingTextId,
-                question.DisplayOrder,
-                question.Points,
-                questionType = question.QuestionType.ToString(),
-                question.Stem,
-                options = ReadingLearnerSafeProjection.ProjectOptions(question.OptionsJson),
-            }),
-        }),
-    };
+        };
 }
 
 public sealed record ReadingExtractionRequestDto(string? MediaAssetId);

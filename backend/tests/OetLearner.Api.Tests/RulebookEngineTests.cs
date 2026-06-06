@@ -472,7 +472,10 @@ Doctor";
         }
         static int Rank(RuleSeverity s) => s switch
         {
-            RuleSeverity.Critical => 0, RuleSeverity.Major => 1, RuleSeverity.Minor => 2, _ => 3,
+            RuleSeverity.Critical => 0,
+            RuleSeverity.Major => 1,
+            RuleSeverity.Minor => 2,
+            _ => 3,
         };
     }
 

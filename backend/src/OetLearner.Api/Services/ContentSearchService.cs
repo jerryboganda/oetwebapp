@@ -50,11 +50,22 @@ public class ContentSearchService(LearnerDbContext db)
             .Skip((query.Page - 1) * query.PageSize).Take(query.PageSize)
             .Select(c => new
             {
-                c.Id, c.Title, c.SubtestCode, c.ContentType, c.ProfessionId,
-                c.Difficulty, c.DifficultyRating, c.EstimatedDurationMinutes,
-                c.ScenarioType, c.InstructionLanguage, c.SourceProvenance,
-                c.QualityScore, c.IsPreviewEligible, c.IsMockEligible,
-                c.IsDiagnosticEligible, c.CreatedAt
+                c.Id,
+                c.Title,
+                c.SubtestCode,
+                c.ContentType,
+                c.ProfessionId,
+                c.Difficulty,
+                c.DifficultyRating,
+                c.EstimatedDurationMinutes,
+                c.ScenarioType,
+                c.InstructionLanguage,
+                c.SourceProvenance,
+                c.QualityScore,
+                c.IsPreviewEligible,
+                c.IsMockEligible,
+                c.IsDiagnosticEligible,
+                c.CreatedAt
             })
             .ToListAsync(ct);
 
@@ -139,8 +150,14 @@ public class ContentSearchService(LearnerDbContext db)
             .Take(count)
             .Select(c => new
             {
-                c.Id, c.Title, c.SubtestCode, c.Difficulty, c.ProfessionId,
-                c.ScenarioType, c.EstimatedDurationMinutes, c.QualityScore,
+                c.Id,
+                c.Title,
+                c.SubtestCode,
+                c.Difficulty,
+                c.ProfessionId,
+                c.ScenarioType,
+                c.EstimatedDurationMinutes,
+                c.QualityScore,
                 reason = c.SubtestCode == weakest ? "Weakest subtest — needs more practice"
                     : "Not yet attempted"
             })

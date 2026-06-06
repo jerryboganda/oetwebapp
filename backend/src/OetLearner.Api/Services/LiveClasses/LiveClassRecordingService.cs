@@ -533,12 +533,12 @@ public sealed class LiveClassRecordingService(
     {
         db.BackgroundJobs.Add(new BackgroundJobItem
         {
-            Id          = $"bgj-{Guid.NewGuid():N}",
-            Type        = type,
-            ResourceId  = resourceId,
-            State       = AsyncState.Queued,
+            Id = $"bgj-{Guid.NewGuid():N}",
+            Type = type,
+            ResourceId = resourceId,
+            State = AsyncState.Queued,
             AvailableAt = now,
-            CreatedAt   = now,
+            CreatedAt = now,
         });
     }
 }

@@ -180,10 +180,13 @@ public sealed class ListeningPolicyService(LearnerDbContext db, IMemoryCache cac
         db.AuditEvents.Add(new AuditEvent
         {
             Id = Guid.NewGuid().ToString("N"),
-            OccurredAt = now, ActorId = adminId, ActorName = adminId,
+            OccurredAt = now,
+            ActorId = adminId,
+            ActorName = adminId,
             Action = "ListeningUserPolicyOverrideUpserted",
             ResourceType = "ListeningUserPolicyOverride",
-            ResourceId = userId, Details = next.Reason,
+            ResourceId = userId,
+            Details = next.Reason,
         });
         await db.SaveChangesAsync(ct);
         return row;

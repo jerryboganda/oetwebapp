@@ -58,8 +58,8 @@ public sealed class ListeningTtsJobWorker(
     private async Task ProcessBatchAsync(CancellationToken ct)
     {
         await using var scope = services.CreateAsyncScope();
-        var db     = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
-        var tts    = scope.ServiceProvider.GetRequiredService<IListeningTtsService>();
+        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        var tts = scope.ServiceProvider.GetRequiredService<IListeningTtsService>();
 
         var now = DateTimeOffset.UtcNow;
         var jobs = await db.ListeningTtsJobs
@@ -87,16 +87,16 @@ public sealed class ListeningTtsJobWorker(
         CancellationToken ct)
     {
         // Mark running (visible to admin UI).
-        job.Status    = ListeningTtsJobStatus.Running;
+        job.Status = ListeningTtsJobStatus.Running;
         job.UpdatedAt = DateTimeOffset.UtcNow;
         await db.SaveChangesAsync(ct);
 
         try
         {
             var result = await tts.SynthesizeAsync(job.ExtractId, job.RequestedBy, ct);
-            job.Status       = ListeningTtsJobStatus.Completed;
+            job.Status = ListeningTtsJobStatus.Completed;
             job.ErrorMessage = null;
-            job.UpdatedAt    = DateTimeOffset.UtcNow;
+            job.UpdatedAt = DateTimeOffset.UtcNow;
             logger.LogInformation(
                 "TTS job {JobId} completed — extract {ExtractId}, {Bytes} bytes, {Segments} segments.",
                 job.Id, job.ExtractId, result.ByteLength, result.SegmentCount);
@@ -110,7 +110,7 @@ public sealed class ListeningTtsJobWorker(
 
             if (job.RetryCount >= MaxRetries)
             {
-                job.Status    = ListeningTtsJobStatus.Failed;
+                job.Status = ListeningTtsJobStatus.Failed;
                 job.UpdatedAt = DateTimeOffset.UtcNow;
                 logger.LogError(ex,
                     "TTS job {JobId} permanently failed after {Retries} retries.",
@@ -118,9 +118,9 @@ public sealed class ListeningTtsJobWorker(
             }
             else
             {
-                job.Status     = ListeningTtsJobStatus.Pending;
+                job.Status = ListeningTtsJobStatus.Pending;
                 job.RetryAfter = DateTimeOffset.UtcNow + BackoffDelays[job.RetryCount - 1];
-                job.UpdatedAt  = DateTimeOffset.UtcNow;
+                job.UpdatedAt = DateTimeOffset.UtcNow;
                 logger.LogWarning(ex,
                     "TTS job {JobId} failed (attempt {Attempt}/{Max}). Retrying after {Delay}.",
                     job.Id, job.RetryCount, MaxRetries, job.RetryAfter);

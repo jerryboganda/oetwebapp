@@ -193,15 +193,15 @@ Scoring rules:
 
         // ── Canonical scaled score: ALWAYS recomputed via OetScoring ──
         var rubricScores = new OetScoring.SpeakingCriterionScores(
-            Intelligibility:      ScoreOf(parsed, "intelligibility",      0, 6),
-            Fluency:              ScoreOf(parsed, "fluency",              0, 6),
-            Appropriateness:      ScoreOf(parsed, "appropriateness",      0, 6),
-            GrammarExpression:    ScoreOf(parsed, "grammarExpression",    0, 6),
+            Intelligibility: ScoreOf(parsed, "intelligibility", 0, 6),
+            Fluency: ScoreOf(parsed, "fluency", 0, 6),
+            Appropriateness: ScoreOf(parsed, "appropriateness", 0, 6),
+            GrammarExpression: ScoreOf(parsed, "grammarExpression", 0, 6),
             RelationshipBuilding: ScoreOf(parsed, "relationshipBuilding", 0, 3),
-            PatientPerspective:   ScoreOf(parsed, "patientPerspective",   0, 3),
-            Structure:            ScoreOf(parsed, "structure",            0, 3),
+            PatientPerspective: ScoreOf(parsed, "patientPerspective", 0, 3),
+            Structure: ScoreOf(parsed, "structure", 0, 3),
             InformationGathering: ScoreOf(parsed, "informationGathering", 0, 3),
-            InformationGiving:    ScoreOf(parsed, "informationGiving",    0, 3));
+            InformationGiving: ScoreOf(parsed, "informationGiving", 0, 3));
 
         var scaled = OetScoring.SpeakingProjectedScaled(rubricScores);
         var readinessBand = OetScoring.SpeakingReadinessBandCode(
@@ -294,15 +294,15 @@ Scoring rules:
         var rationales = ReadRationales(row.PerCriterionRationalesJson);
         IDictionary<string, CriterionScore> result = new Dictionary<string, CriterionScore>(StringComparer.OrdinalIgnoreCase)
         {
-            ["intelligibility"]      = Build(row.Intelligibility,      6, "intelligibility"),
-            ["fluency"]              = Build(row.Fluency,              6, "fluency"),
-            ["appropriateness"]      = Build(row.Appropriateness,      6, "appropriateness"),
-            ["grammarExpression"]    = Build(row.GrammarExpression,    6, "grammarExpression"),
+            ["intelligibility"] = Build(row.Intelligibility, 6, "intelligibility"),
+            ["fluency"] = Build(row.Fluency, 6, "fluency"),
+            ["appropriateness"] = Build(row.Appropriateness, 6, "appropriateness"),
+            ["grammarExpression"] = Build(row.GrammarExpression, 6, "grammarExpression"),
             ["relationshipBuilding"] = Build(row.RelationshipBuilding, 3, "relationshipBuilding"),
-            ["patientPerspective"]   = Build(row.PatientPerspective,   3, "patientPerspective"),
-            ["structure"]            = Build(row.Structure,            3, "structure"),
+            ["patientPerspective"] = Build(row.PatientPerspective, 3, "patientPerspective"),
+            ["structure"] = Build(row.Structure, 3, "structure"),
             ["informationGathering"] = Build(row.InformationGathering, 3, "informationGathering"),
-            ["informationGiving"]    = Build(row.InformationGiving,    3, "informationGiving"),
+            ["informationGiving"] = Build(row.InformationGiving, 3, "informationGiving"),
         };
         return result;
 

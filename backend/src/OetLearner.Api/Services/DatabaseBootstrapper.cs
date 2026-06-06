@@ -507,7 +507,7 @@ public static class DatabaseBootstrapper
                 """,
                 cancellationToken);
 
-                        await db.Database.ExecuteSqlRawAsync($"""
+            await db.Database.ExecuteSqlRawAsync($"""
                                 UPDATE "ConversationSettings"
                                 SET "ElevenLabsDefaultVoiceId" = '{DefaultElevenLabsVoiceId}'
                                 WHERE "Id" = 'default'
@@ -517,7 +517,7 @@ public static class DatabaseBootstrapper
                                         OR "ElevenLabsDefaultVoiceId" = '{LegacyElevenLabsVoiceId}'
                                     );
                                 """,
-                                cancellationToken);
+                    cancellationToken);
             return;
         }
 
@@ -532,7 +532,7 @@ public static class DatabaseBootstrapper
             await AddSqliteColumnIfMissingAsync(db, "ConversationSettings", @"""ElevenLabsStyle"" REAL NULL", cancellationToken);
             await AddSqliteColumnIfMissingAsync(db, "ConversationSettings", @"""ElevenLabsUseSpeakerBoost"" INTEGER NULL", cancellationToken);
 
-                        await db.Database.ExecuteSqlRawAsync($"""
+            await db.Database.ExecuteSqlRawAsync($"""
                                 UPDATE "ConversationSettings"
                                 SET "ElevenLabsDefaultVoiceId" = '{DefaultElevenLabsVoiceId}'
                                 WHERE "Id" = 'default'
@@ -542,7 +542,7 @@ public static class DatabaseBootstrapper
                                         OR "ElevenLabsDefaultVoiceId" = '{LegacyElevenLabsVoiceId}'
                                     );
                                 """,
-                                cancellationToken);
+                    cancellationToken);
         }
     }
 

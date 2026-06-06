@@ -402,13 +402,29 @@ public static class AiUsageAdminEndpoints
                 .OrderBy(p => p.FailoverPriority).ThenBy(p => p.Code)
                 .Select(p => new
                 {
-                    p.Id, p.Code, p.Name, p.Dialect, p.Category, p.BaseUrl, p.ApiKeyHint,
-                    p.DefaultModel, p.ReasoningEffort, p.AllowedModelsCsv,
-                    p.PricePer1kPromptTokens, p.PricePer1kCompletionTokens,
-                    p.RetryCount, p.CircuitBreakerThreshold, p.CircuitBreakerWindowSeconds,
-                    p.FailoverPriority, p.IsActive,
-                    p.LastTestedAt, p.LastTestStatus, p.LastTestError,
-                    p.CreatedAt, p.UpdatedAt, p.UpdatedByAdminId,
+                    p.Id,
+                    p.Code,
+                    p.Name,
+                    p.Dialect,
+                    p.Category,
+                    p.BaseUrl,
+                    p.ApiKeyHint,
+                    p.DefaultModel,
+                    p.ReasoningEffort,
+                    p.AllowedModelsCsv,
+                    p.PricePer1kPromptTokens,
+                    p.PricePer1kCompletionTokens,
+                    p.RetryCount,
+                    p.CircuitBreakerThreshold,
+                    p.CircuitBreakerWindowSeconds,
+                    p.FailoverPriority,
+                    p.IsActive,
+                    p.LastTestedAt,
+                    p.LastTestStatus,
+                    p.LastTestError,
+                    p.CreatedAt,
+                    p.UpdatedAt,
+                    p.UpdatedByAdminId,
                 })
                 .ToListAsync(ct);
             return Results.Ok(rows);
@@ -683,12 +699,22 @@ public static class AiUsageAdminEndpoints
                 .OrderBy(a => a.Priority).ThenBy(a => a.Label)
                 .Select(a => new
                 {
-                    a.Id, a.ProviderId, a.Label, a.ApiKeyHint,
-                    a.MonthlyRequestCap, a.RequestsUsedThisMonth,
-                    a.Priority, a.ExhaustedUntil, a.IsActive,
+                    a.Id,
+                    a.ProviderId,
+                    a.Label,
+                    a.ApiKeyHint,
+                    a.MonthlyRequestCap,
+                    a.RequestsUsedThisMonth,
+                    a.Priority,
+                    a.ExhaustedUntil,
+                    a.IsActive,
                     a.PeriodMonthKey,
-                    a.LastTestedAt, a.LastTestStatus, a.LastTestError,
-                    a.CreatedAt, a.UpdatedAt, a.UpdatedByAdminId,
+                    a.LastTestedAt,
+                    a.LastTestStatus,
+                    a.LastTestError,
+                    a.CreatedAt,
+                    a.UpdatedAt,
+                    a.UpdatedByAdminId,
                 })
                 .ToListAsync(ct);
             return Results.Ok(rows);
@@ -862,8 +888,14 @@ public static class AiUsageAdminEndpoints
                 .OrderBy(r => r.FeatureCode)
                 .Select(r => new
                 {
-                    r.Id, r.FeatureCode, r.ProviderCode, r.Model, r.IsActive,
-                    r.CreatedAt, r.UpdatedAt, r.UpdatedByAdminId,
+                    r.Id,
+                    r.FeatureCode,
+                    r.ProviderCode,
+                    r.Model,
+                    r.IsActive,
+                    r.CreatedAt,
+                    r.UpdatedAt,
+                    r.UpdatedByAdminId,
                 })
                 .ToListAsync(ct);
             return Results.Ok(new

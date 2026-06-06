@@ -115,14 +115,14 @@ public class PronunciationService(
         return progress
             .OrderByDescending(p => p.LastPracticedAt)
             .Select(p => new
-        {
-            phonemeCode = p.PhonemeCode,
-            averageScore = Math.Round(p.AverageScore, 1),
-            attemptCount = p.AttemptCount,
-            lastPracticedAt = p.LastPracticedAt,
-            nextDueAt = p.NextDueAt,
-            intervalDays = p.IntervalDays,
-        }).ToList();
+            {
+                phonemeCode = p.PhonemeCode,
+                averageScore = Math.Round(p.AverageScore, 1),
+                attemptCount = p.AttemptCount,
+                lastPracticedAt = p.LastPracticedAt,
+                nextDueAt = p.NextDueAt,
+                intervalDays = p.IntervalDays,
+            }).ToList();
     }
 
     public async Task<object> GetDrillsAsync(string? profession, string? difficulty, string? focus, CancellationToken ct)
@@ -557,18 +557,18 @@ public class PronunciationService(
             .OrderByDescending(a => a.CreatedAt)
             .Take(limit)
             .Select(a => new
-        {
-            id = a.Id,
-            attemptId = a.AttemptId,
-            accuracy = a.AccuracyScore,
-            fluency = a.FluencyScore,
-            completeness = a.CompletenessScore,
-            prosody = a.ProsodyScore,
-            overall = a.OverallScore,
-            projectedSpeakingScaled = a.ProjectedSpeakingScaled,
-            projectedSpeakingGrade = a.ProjectedSpeakingGrade,
-            createdAt = a.CreatedAt
-        }).ToList();
+            {
+                id = a.Id,
+                attemptId = a.AttemptId,
+                accuracy = a.AccuracyScore,
+                fluency = a.FluencyScore,
+                completeness = a.CompletenessScore,
+                prosody = a.ProsodyScore,
+                overall = a.OverallScore,
+                projectedSpeakingScaled = a.ProjectedSpeakingScaled,
+                projectedSpeakingGrade = a.ProjectedSpeakingGrade,
+                createdAt = a.CreatedAt
+            }).ToList();
     }
 
     // ── Discrimination (minimal-pair) ───────────────────────────────────────

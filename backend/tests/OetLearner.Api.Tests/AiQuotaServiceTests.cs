@@ -66,11 +66,15 @@ public class AiQuotaServiceTests
 
         db.BillingPlans.Add(new BillingPlan
         {
-            Id = "plan-pro", Code = planCode, Name = planCode,
+            Id = "plan-pro",
+            Code = planCode,
+            Name = planCode,
         });
         db.Subscriptions.Add(new Subscription
         {
-            Id = "sub-001", UserId = "user-001", PlanId = "plan-pro",
+            Id = "sub-001",
+            UserId = "user-001",
+            PlanId = "plan-pro",
             Status = SubscriptionStatus.Active,
             StartedAt = DateTimeOffset.UtcNow,
             ChangedAt = DateTimeOffset.UtcNow,
@@ -632,17 +636,26 @@ public class AiGatewayQuotaIntegrationTests
         db.AiQuotaPlans.Add(new AiQuotaPlan
         {
             Id = Guid.NewGuid().ToString("N"),
-            Code = "pro", Name = "pro", MonthlyTokenCap = 1_000_000, IsActive = true,
+            Code = "pro",
+            Name = "pro",
+            MonthlyTokenCap = 1_000_000,
+            IsActive = true,
         });
         db.BillingPlans.Add(new BillingPlan { Id = "p", Code = "pro", Name = "Pro" });
         db.Subscriptions.Add(new Subscription
         {
-            Id = "s", UserId = "u", PlanId = "p", Status = SubscriptionStatus.Active,
-            StartedAt = DateTimeOffset.UtcNow, ChangedAt = DateTimeOffset.UtcNow,
+            Id = "s",
+            UserId = "u",
+            PlanId = "p",
+            Status = SubscriptionStatus.Active,
+            StartedAt = DateTimeOffset.UtcNow,
+            ChangedAt = DateTimeOffset.UtcNow,
         });
         db.UserAiPreferences.Add(new UserAiPreferences
         {
-            UserId = "u", Mode = AiCredentialMode.Auto, AllowPlatformFallback = true,
+            UserId = "u",
+            Mode = AiCredentialMode.Auto,
+            AllowPlatformFallback = true,
             UpdatedAt = DateTimeOffset.UtcNow,
         });
         await db.SaveChangesAsync();
@@ -667,7 +680,10 @@ public class AiGatewayQuotaIntegrationTests
 
         var prompt = gateway.BuildGroundedPrompt(new AiGroundingContext
         {
-            Kind = RuleKind.Writing, Profession = ExamProfession.Medicine, Task = AiTaskMode.Score, LetterType = "routine_referral",
+            Kind = RuleKind.Writing,
+            Profession = ExamProfession.Medicine,
+            Task = AiTaskMode.Score,
+            LetterType = "routine_referral",
         });
 
         var result = await gateway.CompleteAsync(new AiGatewayRequest
@@ -703,25 +719,33 @@ public class AiGatewayQuotaIntegrationTests
         db.AiQuotaPlans.Add(new AiQuotaPlan
         {
             Id = Guid.NewGuid().ToString("N"),
-            Code = "trial", Name = "trial",
-            MonthlyTokenCap = 1, DailyTokenCap = 0,
+            Code = "trial",
+            Name = "trial",
+            MonthlyTokenCap = 1,
+            DailyTokenCap = 0,
             OveragePolicy = AiOveragePolicy.Deny,
             IsActive = true,
         });
         db.BillingPlans.Add(new BillingPlan { Id = "p", Code = "trial", Name = "Trial" });
         db.Subscriptions.Add(new Subscription
         {
-            Id = "s", UserId = "u", PlanId = "p",
+            Id = "s",
+            UserId = "u",
+            PlanId = "p",
             Status = SubscriptionStatus.Active,
-            StartedAt = DateTimeOffset.UtcNow, ChangedAt = DateTimeOffset.UtcNow,
+            StartedAt = DateTimeOffset.UtcNow,
+            ChangedAt = DateTimeOffset.UtcNow,
         });
         db.AiQuotaCounters.Add(new AiQuotaCounter
         {
             Id = Guid.NewGuid().ToString("N"),
             UserId = "u",
             PeriodKey = $"month:{DateTimeOffset.UtcNow:yyyy-MM}",
-            TokensUsed = 5, RequestsCount = 1, CostAccumulatedUsd = 0,
-            LastUpdatedAt = DateTimeOffset.UtcNow, RowVersion = 1,
+            TokensUsed = 5,
+            RequestsCount = 1,
+            CostAccumulatedUsd = 0,
+            LastUpdatedAt = DateTimeOffset.UtcNow,
+            RowVersion = 1,
         });
         await db.SaveChangesAsync();
 
@@ -731,7 +755,10 @@ public class AiGatewayQuotaIntegrationTests
 
         var prompt = gateway.BuildGroundedPrompt(new AiGroundingContext
         {
-            Kind = RuleKind.Writing, Profession = ExamProfession.Medicine, Task = AiTaskMode.Score, LetterType = "routine_referral",
+            Kind = RuleKind.Writing,
+            Profession = ExamProfession.Medicine,
+            Task = AiTaskMode.Score,
+            LetterType = "routine_referral",
         });
 
         var ex = await Assert.ThrowsAsync<AiQuotaDeniedException>(() =>
@@ -762,16 +789,20 @@ public class AiGatewayQuotaIntegrationTests
         db.AiQuotaPlans.Add(new AiQuotaPlan
         {
             Id = Guid.NewGuid().ToString("N"),
-            Code = "pro", Name = "pro",
+            Code = "pro",
+            Name = "pro",
             MonthlyTokenCap = 1_000_000,
             IsActive = true,
         });
         db.BillingPlans.Add(new BillingPlan { Id = "p", Code = "pro", Name = "Pro" });
         db.Subscriptions.Add(new Subscription
         {
-            Id = "s", UserId = "u", PlanId = "p",
+            Id = "s",
+            UserId = "u",
+            PlanId = "p",
             Status = SubscriptionStatus.Active,
-            StartedAt = DateTimeOffset.UtcNow, ChangedAt = DateTimeOffset.UtcNow,
+            StartedAt = DateTimeOffset.UtcNow,
+            ChangedAt = DateTimeOffset.UtcNow,
         });
         db.AiCreditLedger.Add(new AiCreditLedgerEntry
         {
@@ -795,7 +826,10 @@ public class AiGatewayQuotaIntegrationTests
 
         var prompt = gateway.BuildGroundedPrompt(new AiGroundingContext
         {
-            Kind = RuleKind.Writing, Profession = ExamProfession.Medicine, Task = AiTaskMode.Score, LetterType = "routine_referral",
+            Kind = RuleKind.Writing,
+            Profession = ExamProfession.Medicine,
+            Task = AiTaskMode.Score,
+            LetterType = "routine_referral",
         });
 
         var result = await gateway.CompleteAsync(new AiGatewayRequest
@@ -829,16 +863,20 @@ public class AiGatewayQuotaIntegrationTests
         db.AiQuotaPlans.Add(new AiQuotaPlan
         {
             Id = Guid.NewGuid().ToString("N"),
-            Code = "pro", Name = "pro",
+            Code = "pro",
+            Name = "pro",
             MonthlyTokenCap = 1_000_000,
             IsActive = true,
         });
         db.BillingPlans.Add(new BillingPlan { Id = "p", Code = "pro", Name = "Pro" });
         db.Subscriptions.Add(new Subscription
         {
-            Id = "s", UserId = "u", PlanId = "p",
+            Id = "s",
+            UserId = "u",
+            PlanId = "p",
             Status = SubscriptionStatus.Active,
-            StartedAt = DateTimeOffset.UtcNow, ChangedAt = DateTimeOffset.UtcNow,
+            StartedAt = DateTimeOffset.UtcNow,
+            ChangedAt = DateTimeOffset.UtcNow,
         });
         await db.SaveChangesAsync();
 
@@ -850,7 +888,10 @@ public class AiGatewayQuotaIntegrationTests
 
         var prompt = gateway.BuildGroundedPrompt(new AiGroundingContext
         {
-            Kind = RuleKind.Writing, Profession = ExamProfession.Medicine, Task = AiTaskMode.Score, LetterType = "routine_referral",
+            Kind = RuleKind.Writing,
+            Profession = ExamProfession.Medicine,
+            Task = AiTaskMode.Score,
+            LetterType = "routine_referral",
         });
 
         var ex = await Assert.ThrowsAsync<AiQuotaDeniedException>(() =>
@@ -882,16 +923,20 @@ public class AiGatewayQuotaIntegrationTests
         db.AiQuotaPlans.Add(new AiQuotaPlan
         {
             Id = Guid.NewGuid().ToString("N"),
-            Code = "pro", Name = "pro",
+            Code = "pro",
+            Name = "pro",
             MonthlyTokenCap = 1_000_000,
             IsActive = true,
         });
         db.BillingPlans.Add(new BillingPlan { Id = "p", Code = "pro", Name = "Pro" });
         db.Subscriptions.Add(new Subscription
         {
-            Id = "s", UserId = "u", PlanId = "p",
+            Id = "s",
+            UserId = "u",
+            PlanId = "p",
             Status = SubscriptionStatus.Active,
-            StartedAt = DateTimeOffset.UtcNow, ChangedAt = DateTimeOffset.UtcNow,
+            StartedAt = DateTimeOffset.UtcNow,
+            ChangedAt = DateTimeOffset.UtcNow,
         });
         await db.SaveChangesAsync();
 
@@ -902,7 +947,10 @@ public class AiGatewayQuotaIntegrationTests
 
         var prompt = gateway.BuildGroundedPrompt(new AiGroundingContext
         {
-            Kind = RuleKind.Writing, Profession = ExamProfession.Medicine, Task = AiTaskMode.Score, LetterType = "routine_referral",
+            Kind = RuleKind.Writing,
+            Profession = ExamProfession.Medicine,
+            Task = AiTaskMode.Score,
+            LetterType = "routine_referral",
         });
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
@@ -933,16 +981,20 @@ public class AiGatewayQuotaIntegrationTests
         db.AiQuotaPlans.Add(new AiQuotaPlan
         {
             Id = Guid.NewGuid().ToString("N"),
-            Code = "pro", Name = "pro",
+            Code = "pro",
+            Name = "pro",
             MonthlyTokenCap = 1_000_000,
             IsActive = true,
         });
         db.BillingPlans.Add(new BillingPlan { Id = "p", Code = "pro", Name = "Pro" });
         db.Subscriptions.Add(new Subscription
         {
-            Id = "s", UserId = "u", PlanId = "p",
+            Id = "s",
+            UserId = "u",
+            PlanId = "p",
             Status = SubscriptionStatus.Active,
-            StartedAt = DateTimeOffset.UtcNow, ChangedAt = DateTimeOffset.UtcNow,
+            StartedAt = DateTimeOffset.UtcNow,
+            ChangedAt = DateTimeOffset.UtcNow,
         });
         db.AiCreditLedger.Add(new AiCreditLedgerEntry
         {
@@ -965,7 +1017,10 @@ public class AiGatewayQuotaIntegrationTests
 
         var prompt = gateway.BuildGroundedPrompt(new AiGroundingContext
         {
-            Kind = RuleKind.Writing, Profession = ExamProfession.Medicine, Task = AiTaskMode.Score, LetterType = "routine_referral",
+            Kind = RuleKind.Writing,
+            Profession = ExamProfession.Medicine,
+            Task = AiTaskMode.Score,
+            LetterType = "routine_referral",
         });
 
         await gateway.CompleteAsync(new AiGatewayRequest
@@ -996,16 +1051,20 @@ public class AiGatewayQuotaIntegrationTests
         db.AiQuotaPlans.Add(new AiQuotaPlan
         {
             Id = Guid.NewGuid().ToString("N"),
-            Code = "pro", Name = "pro",
+            Code = "pro",
+            Name = "pro",
             MonthlyTokenCap = 1_000_000,
             IsActive = true,
         });
         db.BillingPlans.Add(new BillingPlan { Id = "p", Code = "pro", Name = "Pro" });
         db.Subscriptions.Add(new Subscription
         {
-            Id = "s", UserId = "u", PlanId = "p",
+            Id = "s",
+            UserId = "u",
+            PlanId = "p",
             Status = SubscriptionStatus.Active,
-            StartedAt = DateTimeOffset.UtcNow, ChangedAt = DateTimeOffset.UtcNow,
+            StartedAt = DateTimeOffset.UtcNow,
+            ChangedAt = DateTimeOffset.UtcNow,
         });
         await db.SaveChangesAsync();
 
@@ -1017,7 +1076,10 @@ public class AiGatewayQuotaIntegrationTests
 
         var prompt = gateway.BuildGroundedPrompt(new AiGroundingContext
         {
-            Kind = RuleKind.Writing, Profession = ExamProfession.Medicine, Task = AiTaskMode.Score, LetterType = "routine_referral",
+            Kind = RuleKind.Writing,
+            Profession = ExamProfession.Medicine,
+            Task = AiTaskMode.Score,
+            LetterType = "routine_referral",
         });
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => gateway.CompleteAsync(new AiGatewayRequest
@@ -1045,7 +1107,10 @@ public class AiGatewayQuotaIntegrationTests
 
         var prompt = gateway.BuildGroundedPrompt(new AiGroundingContext
         {
-            Kind = RuleKind.Writing, Profession = ExamProfession.Medicine, Task = AiTaskMode.Score, LetterType = "routine_referral",
+            Kind = RuleKind.Writing,
+            Profession = ExamProfession.Medicine,
+            Task = AiTaskMode.Score,
+            LetterType = "routine_referral",
         });
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => gateway.CompleteAsync(new AiGatewayRequest

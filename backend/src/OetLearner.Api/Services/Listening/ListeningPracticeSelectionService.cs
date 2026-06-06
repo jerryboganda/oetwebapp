@@ -80,10 +80,10 @@ public sealed class ListeningPracticeSelectionService(LearnerDbContext db)
     private static readonly IReadOnlyDictionary<string, string> AccentCodeToBcp =
         new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
-            ["british"]    = "en-GB",
+            ["british"] = "en-GB",
             ["australian"] = "en-AU",
-            ["us"]         = "en-US",
-            ["american"]   = "en-US",
+            ["us"] = "en-US",
+            ["american"] = "en-US",
             ["non_native"] = "en-XX",
         };
 

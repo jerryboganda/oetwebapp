@@ -1386,14 +1386,14 @@ public sealed class RulebookPromptBuilder(IRulebookLoader loader)
                 sb.AppendLine("    {");
                 sb.AppendLine("      \"partCode\": \"A|B|C\",");
                 sb.AppendLine("      \"timeLimitMinutes\": 15,");
-                sb.AppendLine("      \"instructions\": \"...\"," );
+                sb.AppendLine("      \"instructions\": \"...\",");
                 sb.AppendLine("      \"texts\": [ { \"displayOrder\": 1, \"title\": \"...\", \"source\": \"...\", \"bodyHtml\": \"<p>...</p>\", \"wordCount\": 120, \"topicTag\": \"...\" } ],");
                 sb.AppendLine("      \"questions\": [");
                 sb.AppendLine("        {");
                 sb.AppendLine("          \"displayOrder\": 1,");
                 sb.AppendLine("          \"points\": 1,");
                 sb.AppendLine("          \"questionType\": \"MatchingTextReference|ShortAnswer|SentenceCompletion|MultipleChoice3|MultipleChoice4\",");
-                sb.AppendLine("          \"stem\": \"...\"," );
+                sb.AppendLine("          \"stem\": \"...\",");
                 sb.AppendLine("          \"optionsJson\": \"[]\",");
                 sb.AppendLine("          \"correctAnswerJson\": \"\\\"A\\\"\",");
                 sb.AppendLine("          \"acceptedSynonymsJson\": null,");
