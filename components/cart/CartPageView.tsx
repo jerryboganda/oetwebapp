@@ -17,6 +17,7 @@ import {
   type CatalogRecommendation,
 } from '@/lib/api';
 import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
 import { InlineAlert } from '@/components/ui/alert';
 import { formatMoney } from '@/lib/money';
 import { openCheckoutUrl } from '@/lib/mobile/web-checkout';
@@ -277,7 +278,7 @@ export function CartPageView({ emptyStateHref = '/catalog' }: CartPageViewProps)
           </div>
 
           <aside className="space-y-4">
-            <div className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
+            <Card padding="none" className="p-5">
               <h2 className="text-sm font-semibold uppercase tracking-wider text-muted">
                 Order summary
               </h2>
@@ -317,9 +318,9 @@ export function CartPageView({ emptyStateHref = '/catalog' }: CartPageViewProps)
               <p className="mt-3 text-center text-[11px] text-muted">
                 Secure checkout - Stripe handles your card details.
               </p>
-            </div>
+            </Card>
 
-            <div className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
+            <Card padding="none" className="p-5">
               <h2 className="text-sm font-semibold uppercase tracking-wider text-muted">
                 Promo code
               </h2>
@@ -369,7 +370,7 @@ export function CartPageView({ emptyStateHref = '/catalog' }: CartPageViewProps)
                   ))}
                 </ul>
               ) : null}
-            </div>
+            </Card>
           </aside>
         </div>
       )}

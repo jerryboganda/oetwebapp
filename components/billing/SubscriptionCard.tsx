@@ -10,6 +10,7 @@ import {
   resumeSubscriptionSelf,
 } from '@/lib/api';
 import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
 import { InlineAlert } from '@/components/ui/alert';
 import { formatMoney } from '@/lib/money';
 
@@ -49,7 +50,7 @@ export function SubscriptionCard({ subscription, onChanged }: SubscriptionCardPr
   const isCancelled = subscription.status === 'cancelled' || subscription.status === 'canceled';
 
   return (
-    <article className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
+    <Card padding="none" className="p-5">
       <div className="flex items-start justify-between gap-3">
         <div>
           <h3 className="text-lg font-bold text-navy">{subscription.planName}</h3>
@@ -134,7 +135,7 @@ export function SubscriptionCard({ subscription, onChanged }: SubscriptionCardPr
           </Button>
         ) : null}
       </div>
-    </article>
+    </Card>
   );
 }
 

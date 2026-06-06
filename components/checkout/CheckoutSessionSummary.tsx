@@ -1,6 +1,7 @@
 'use client';
 
 import type { CheckoutSessionStatus } from '@/lib/api';
+import { Card } from '@/components/ui/card';
 import { formatMoney } from '@/lib/money';
 
 /**
@@ -16,7 +17,7 @@ export function CheckoutSessionSummary({ session }: CheckoutSessionSummaryProps)
   const items = session.items ?? [];
 
   return (
-    <div className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
+    <Card padding="none" className="p-5">
       <h3 className="text-sm font-semibold uppercase tracking-wider text-muted">Order details</h3>
       {items.length === 0 ? (
         <p className="mt-3 text-sm text-muted">Receipt details are still being prepared.</p>
@@ -43,6 +44,6 @@ export function CheckoutSessionSummary({ session }: CheckoutSessionSummaryProps)
           </span>
         </p>
       ) : null}
-    </div>
+    </Card>
   );
 }

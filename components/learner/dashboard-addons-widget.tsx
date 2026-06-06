@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { ShoppingBag, Sparkles, Tag } from 'lucide-react';
 import { fetchPublicCatalog } from '@/lib/api';
 import type { PublicCatalogAddOnRow } from '@/lib/types/admin';
+import { Card } from '@/components/ui/card';
 import { AddonPurchaseModal } from '@/components/billing/addon-purchase-modal';
 
 interface DashboardAddonsWidgetProps {
@@ -60,9 +61,9 @@ export function DashboardAddonsWidget({
   if (!anyFlagOn) return null;
   if (loading) {
     return (
-      <section className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
+      <Card padding="none" className="p-5">
         <div className="h-32 motion-safe:animate-pulse rounded bg-background-light" />
-      </section>
+      </Card>
     );
   }
   if (visibleAddOns.length === 0) return null;
