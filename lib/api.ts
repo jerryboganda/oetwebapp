@@ -5628,10 +5628,13 @@ export async function fetchTutorBookTelegram(): Promise<TutorBookTelegramRespons
   return apiRequest('/v1/tutor-book/telegram');
 }
 
-/** Returns the absolute URL for the watermarked PDF download. */
+/** Returns the URL for the watermarked PDF download (same-origin /api/backend proxy). */
 export function tutorBookDownloadUrl(): string {
-  const base = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:5199';
-  return `${base.replace(/\/$/, '')}/v1/tutor-book/download`;
+  // FE-003: reuse the module's resolved API base instead of re-reading env with a
+  // wrong-port (5199) localhost fallback. In the browser this is the same-origin
+  // `/api/backend` proxy path, so the download is cookie-authenticated and works
+  // without depending on NEXT_PUBLIC_API_BASE_URL being set.
+  return `${API_BASE_URL.replace(/\/$/, '')}/v1/tutor-book/download`;
 }
 
 // ── Admin Tutor Book management ──────────────────────────────────────────

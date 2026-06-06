@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { apiClient } from '@/lib/api';
+import { ErrorState } from '@/components/ui/empty-error';
 
 interface LessonItem {
   id: string;
@@ -28,11 +30,14 @@ const SKILL_LABEL: Record<string, string> = {
 export default function ListeningLessonsPage() {
   const [lessons, setLessons] = useState<LessonItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
-    fetch('/v1/listening-pathway/lessons')
-      .then((res) => (res.ok ? res.json() : []))
+    setLoading(true);
+    setError(false);
+    apiClient.get<LessonItem[]>('/v1/listening-pathway/lessons')
       .then((data: LessonItem[]) => {
         if (!cancelled) {
           setLessons(data);
@@ -40,12 +45,17 @@ export default function ListeningLessonsPage() {
         }
       })
       .catch(() => {
-        if (!cancelled) setLoading(false);
+        // FE-021: surface a retryable error instead of silently falling through
+        // to the empty "being seeded" state on a failed fetch.
+        if (!cancelled) {
+          setError(true);
+          setLoading(false);
+        }
       });
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [reloadKey]);
 
   return (
     <main className="mx-auto max-w-5xl px-4 py-12 space-y-8">
@@ -59,6 +69,11 @@ export default function ListeningLessonsPage() {
 
       {loading ? (
         <p className="text-muted">Loading lessons…</p>
+      ) : error ? (
+        <ErrorState
+          message="We couldn't load the foundation lessons."
+          onRetry={() => setReloadKey((k) => k + 1)}
+        />
       ) : lessons.length === 0 ? (
         <div className="rounded-2xl border border-border bg-surface p-6 text-muted">
           <p>Foundation lessons are being seeded by the content team.</p>

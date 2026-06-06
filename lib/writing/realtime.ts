@@ -66,6 +66,14 @@ function resolveRealtimeHttpBase(): string {
   if (explicitApi && /^https?:\/\//i.test(explicitApi)) {
     return explicitApi.replace(/\/$/, '');
   }
+  // FE-002: never ship a hardcoded localhost fallback to the browser bundle (it
+  // reaches every user). Use the current origin so the coach WS/poll targets a
+  // reachable host. Production MUST set NEXT_PUBLIC_REALTIME_API_BASE_URL to a
+  // WebSocket-reachable origin (the `/api/backend` route handler cannot upgrade
+  // WebSockets). Server-side keeps the dev API default for local SSR.
+  if (typeof window !== 'undefined') {
+    return window.location.origin;
+  }
   return 'http://127.0.0.1:5198';
 }
 

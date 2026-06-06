@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { apiClient } from '@/lib/api';
+import { ErrorState } from '@/components/ui/empty-error';
 
 interface Strategy {
   id: string;
@@ -28,6 +30,8 @@ export default function ListeningStrategiesPage() {
   const [strategies, setStrategies] = useState<Strategy[]>([]);
   const [category, setCategory] = useState('');
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -35,8 +39,8 @@ export default function ListeningStrategiesPage() {
       ? `/v1/listening-pathway/strategies?category=${encodeURIComponent(category)}`
       : '/v1/listening-pathway/strategies';
     setLoading(true);
-    fetch(url)
-      .then((res) => (res.ok ? res.json() : []))
+    setError(false);
+    apiClient.get<Strategy[]>(url)
       .then((d: Strategy[]) => {
         if (!cancelled) {
           setStrategies(d);
@@ -44,12 +48,16 @@ export default function ListeningStrategiesPage() {
         }
       })
       .catch(() => {
-        if (!cancelled) setLoading(false);
+        // FE-021: surface a retryable error instead of the misleading empty state.
+        if (!cancelled) {
+          setError(true);
+          setLoading(false);
+        }
       });
     return () => {
       cancelled = true;
     };
-  }, [category]);
+  }, [category, reloadKey]);
 
   return (
     <main className="mx-auto max-w-5xl px-4 py-12 space-y-8">
@@ -78,6 +86,11 @@ export default function ListeningStrategiesPage() {
 
       {loading ? (
         <p className="text-muted">Loading strategies…</p>
+      ) : error ? (
+        <ErrorState
+          message="We couldn't load the strategy library."
+          onRetry={() => setReloadKey((k) => k + 1)}
+        />
       ) : strategies.length === 0 ? (
         <div className="rounded-2xl border border-border bg-surface p-6 text-muted">
           No strategies published for this category yet.
