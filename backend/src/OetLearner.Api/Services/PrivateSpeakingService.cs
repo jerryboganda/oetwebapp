@@ -194,6 +194,27 @@ public sealed class PrivateSpeakingService(
         return rule;
     }
 
+    public async Task<PrivateSpeakingAvailabilityRule> UpdateAvailabilityRuleAsync(
+        string ruleId, int dayOfWeek, string startTime, string endTime,
+        DateOnly? effectiveFrom, DateOnly? effectiveTo, bool isActive,
+        string actorId, CancellationToken ct)
+    {
+        var rule = await db.PrivateSpeakingAvailabilityRules.FindAsync([ruleId], ct)
+            ?? throw new InvalidOperationException("Availability rule not found.");
+
+        rule.DayOfWeek = dayOfWeek;
+        rule.StartTime = startTime;
+        rule.EndTime = endTime;
+        rule.EffectiveFrom = effectiveFrom;
+        rule.EffectiveTo = effectiveTo;
+        rule.IsActive = isActive;
+
+        await db.SaveChangesAsync(ct);
+        await AuditAsync(null, actorId, "admin", "availability_rule_updated",
+            $"Rule: {ruleId}, Day: {dayOfWeek}, {startTime}-{endTime}, Active: {isActive}", ct);
+        return rule;
+    }
+
     public async Task DeleteAvailabilityRuleAsync(
         string ruleId, string adminId, CancellationToken ct)
     {
@@ -445,6 +466,7 @@ public sealed class PrivateSpeakingService(
         string learnerUserId, string tutorProfileId,
         DateTimeOffset sessionStartUtc, int durationMinutes,
         string learnerTimezone, string? learnerNotes,
+        string? professionTrack,
         string idempotencyKey, CancellationToken ct)
     {
         var config = await GetConfigAsync(ct);
@@ -571,6 +593,7 @@ public sealed class PrivateSpeakingService(
             ReservationExpiresAt = null,
             IdempotencyKey = scopedIdempotencyKey,
             LearnerNotes = learnerNotes,
+            ProfessionTrack = professionTrack,
             CreatedAt = now,
             UpdatedAt = now
         };
@@ -1615,6 +1638,264 @@ public sealed class PrivateSpeakingService(
 
         await db.SaveChangesAsync(ct);
         await AuditAsync(booking.Id, actorId, "system", "session_completed", null, ct);
+    }
+
+    // ── Admin / Tutor Booking Actions (PDF §7.1 / §7.3 / §11) ───────────
+
+    /// <summary>
+    /// Admin edits booking metadata only: scheduling time, duration, profession
+    /// track, tutor notes. Only non-null fields are applied. This does NOT change
+    /// Status or payment state and does NOT re-sync Zoom — even if
+    /// <paramref name="sessionStartUtc"/> changes (use
+    /// <see cref="AdminManualRescheduleAsync"/> for a move that recreates Zoom).
+    /// </summary>
+    public async Task<PrivateSpeakingBooking?> AdminEditBookingAsync(
+        string bookingId, string adminId,
+        DateTimeOffset? sessionStartUtc, int? durationMinutes,
+        string? professionTrack, string? tutorNotes, CancellationToken ct)
+    {
+        var booking = await db.PrivateSpeakingBookings
+            .Include(b => b.TutorProfile)
+            .FirstOrDefaultAsync(b => b.Id == bookingId, ct);
+        if (booking is null) return null;
+
+        var changes = new List<string>();
+        if (sessionStartUtc.HasValue)
+        {
+            booking.SessionStartUtc = sessionStartUtc.Value;
+            changes.Add($"sessionStartUtc={sessionStartUtc.Value:O}");
+        }
+        if (durationMinutes.HasValue)
+        {
+            booking.DurationMinutes = durationMinutes.Value;
+            changes.Add($"durationMinutes={durationMinutes.Value}");
+        }
+        if (professionTrack is not null)
+        {
+            booking.ProfessionTrack = professionTrack;
+            changes.Add($"professionTrack={professionTrack}");
+        }
+        if (tutorNotes is not null)
+        {
+            booking.TutorNotes = tutorNotes;
+            changes.Add("tutorNotes=updated");
+        }
+
+        booking.UpdatedAt = timeProvider.GetUtcNow();
+        await db.SaveChangesAsync(ct);
+        await AuditAsync(booking.Id, adminId, "admin", "admin_booking_edited",
+            changes.Count == 0 ? "no_changes" : string.Join(", ", changes), ct);
+        return booking;
+    }
+
+    /// <summary>
+    /// Admin forces a refund and/or entitlement return regardless of the
+    /// cancellation window. Restores an unconsumed-and-not-rescheduled entitlement,
+    /// issues a Stripe refund for direct-paid bookings, and flips the booking to
+    /// Refunded. Rejects bookings already in the Refunded state.
+    /// </summary>
+    public async Task<(bool Success, string? Error)> OverrideRefundAsync(
+        string bookingId, string adminId,
+        int? amountMinorUnits, string? reason, CancellationToken ct)
+    {
+        var booking = await db.PrivateSpeakingBookings.FindAsync([bookingId], ct);
+        if (booking is null) return (false, "Booking not found.");
+        if (booking.Status == PrivateSpeakingBookingStatus.Refunded)
+            return (false, "Booking has already been refunded.");
+
+        var now = timeProvider.GetUtcNow();
+        booking.RefundIssued = true;
+
+        if (booking.EntitlementConsumed
+            && booking.EntitlementRestoredAt is null
+            && booking.RescheduledToBookingId is null)
+        {
+            await RestoreSpeakingEntitlementAsync(booking, "admin_override_refund", ct);
+        }
+
+        if (!string.IsNullOrWhiteSpace(booking.StripePaymentIntentId) && booking.PriceMinorUnits > 0)
+        {
+            try
+            {
+                var refundId = await stripeService.CreateRefundAsync(
+                    booking.StripePaymentIntentId,
+                    amountMinorUnits ?? booking.PriceMinorUnits,
+                    reason ?? "admin_override",
+                    ct);
+                booking.StripeRefundId = refundId;
+                booking.RefundAmountMinorUnits = amountMinorUnits ?? booking.PriceMinorUnits;
+                booking.PaymentStatus = PrivateSpeakingPaymentStatus.Refunded;
+            }
+            catch (Exception ex)
+            {
+                // Do not fail the override — leave StripeRefundId null so an admin
+                // can retry the money refund out of band; the entitlement and
+                // status changes still apply.
+                logger.LogWarning(ex,
+                    "Stripe override refund failed for booking {BookingId}; override still completed",
+                    booking.Id);
+            }
+        }
+
+        booking.Status = PrivateSpeakingBookingStatus.Refunded;
+        booking.UpdatedAt = now;
+        await db.SaveChangesAsync(ct);
+        await AuditAsync(booking.Id, adminId, "admin", "admin_override_refund",
+            $"Amount: {amountMinorUnits?.ToString() ?? "full"}, Reason: {reason ?? "admin_override"}", ct);
+        return (true, null);
+    }
+
+    /// <summary>
+    /// Admin moves a booking to a new time IN-PLACE, bypassing window/penalty/
+    /// availability checks. Any existing Zoom meeting is deleted, then the booking
+    /// is reset to Confirmed/ZoomStatus=Pending and a Zoom-create job is re-queued
+    /// so a fresh room is provisioned at the new time. Rejects terminal-state
+    /// bookings. zoomService is only invoked when an old <see cref="PrivateSpeakingBooking.ZoomMeetingId"/>
+    /// is present.
+    /// </summary>
+    public async Task<(bool Success, string? Error)> AdminManualRescheduleAsync(
+        string bookingId, string adminId,
+        DateTimeOffset newSessionStartUtc, string? reason, CancellationToken ct)
+    {
+        var booking = await db.PrivateSpeakingBookings.FindAsync([bookingId], ct);
+        if (booking is null) return (false, "Booking not found.");
+
+        if (booking.Status is PrivateSpeakingBookingStatus.Cancelled
+            or PrivateSpeakingBookingStatus.Refunded
+            or PrivateSpeakingBookingStatus.Completed
+            or PrivateSpeakingBookingStatus.NoShow)
+            return (false, "Booking cannot be rescheduled in its current state.");
+
+        var now = timeProvider.GetUtcNow();
+        booking.SessionStartUtc = newSessionStartUtc;
+        booking.UpdatedAt = now;
+
+        // Tear down any existing Zoom room — it points at the old time.
+        if (booking.ZoomMeetingId.HasValue)
+        {
+            try { await zoomService.DeleteMeetingAsync(booking.ZoomMeetingId.Value, ct); }
+            catch (Exception ex) { logger.LogWarning(ex, "Failed to delete Zoom meeting {MeetingId} for admin-rescheduled booking", booking.ZoomMeetingId); }
+        }
+
+        // Reset Zoom state + Confirmed so the slot is recreated at the new time.
+        booking.ZoomMeetingId = null;
+        booking.ZoomJoinUrl = null;
+        booking.ZoomStartUrl = null;
+        booking.ZoomMeetingPassword = null;
+        booking.ZoomStatus = PrivateSpeakingZoomStatus.Pending;
+        booking.ZoomError = null;
+        booking.Status = PrivateSpeakingBookingStatus.Confirmed;
+
+        await db.SaveChangesAsync(ct);
+        await AuditAsync(booking.Id, adminId, "admin", "admin_manual_reschedule",
+            $"New start: {newSessionStartUtc:O}, Reason: {reason ?? "admin_manual_reschedule"}", ct);
+
+        // Re-queue Zoom creation (+confirmation) and calendar sync at the new time.
+        QueueBookingPostCommitJobs(booking.Id, includeCalendarSync: false);
+        QueueCalendarSyncJob(booking.Id);
+        await db.SaveChangesAsync(ct);
+        return (true, null);
+    }
+
+    /// <summary>
+    /// Mark a booking as a no-show (only valid from Confirmed/ZoomCreated/InProgress).
+    /// No refund or entitlement restore — a no-show forfeits the session.
+    /// </summary>
+    public async Task<(bool Success, string? Error)> MarkNoShowAsync(
+        string bookingId, string actorId, string actorRole, CancellationToken ct)
+    {
+        var booking = await db.PrivateSpeakingBookings.FindAsync([bookingId], ct);
+        if (booking is null) return (false, "Booking not found.");
+
+        if (booking.Status is not (PrivateSpeakingBookingStatus.Confirmed
+            or PrivateSpeakingBookingStatus.ZoomCreated
+            or PrivateSpeakingBookingStatus.InProgress))
+            return (false, "Booking cannot be marked as a no-show in its current state.");
+
+        var now = timeProvider.GetUtcNow();
+        booking.Status = PrivateSpeakingBookingStatus.NoShow;
+        booking.CompletedAt = null;
+        booking.UpdatedAt = now;
+        await db.SaveChangesAsync(ct);
+        await AuditAsync(booking.Id, actorId, actorRole, "marked_no_show", null, ct);
+        return (true, null);
+    }
+
+    /// <summary>
+    /// Export bookings matching the supplied filters as an RFC4180 CSV string
+    /// (header + rows, capped at 5000 rows). Mirrors the
+    /// <see cref="GetAllBookingsAsync"/> filter shape without paging.
+    /// </summary>
+    public async Task<string> ExportBookingsCsvAsync(
+        string? tutorProfileId, string? status, string? learnerId,
+        DateOnly? from, DateOnly? to, CancellationToken ct)
+    {
+        const int MaxRows = 5000;
+
+        var query = db.PrivateSpeakingBookings
+            .Include(b => b.TutorProfile)
+            .AsQueryable();
+
+        if (!string.IsNullOrEmpty(tutorProfileId))
+            query = query.Where(b => b.TutorProfileId == tutorProfileId);
+        if (!string.IsNullOrEmpty(learnerId))
+            query = query.Where(b => b.LearnerUserId == learnerId);
+        if (!string.IsNullOrEmpty(status) && Enum.TryParse<PrivateSpeakingBookingStatus>(status, true, out var parsedStatus))
+            query = query.Where(b => b.Status == parsedStatus);
+
+        var bookings = await query.ToListAsync(ct);
+        if (from.HasValue)
+        {
+            var fromUtc = from.Value.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
+            bookings = bookings.Where(b => b.SessionStartUtc >= fromUtc).ToList();
+        }
+        if (to.HasValue)
+        {
+            var toUtc = to.Value.ToDateTime(TimeOnly.MaxValue, DateTimeKind.Utc);
+            bookings = bookings.Where(b => b.SessionStartUtc <= toUtc).ToList();
+        }
+
+        bookings = bookings
+            .OrderByDescending(b => b.SessionStartUtc)
+            .Take(MaxRows)
+            .ToList();
+
+        var sb = new StringBuilder();
+        sb.Append("Id,LearnerUserId,TutorProfileId,TutorName,Status,SessionStartUtc,DurationMinutes,")
+          .Append("ProfessionTrack,PriceMinorUnits,Currency,PaymentStatus,RefundIssued,")
+          .Append("RefundAmountMinorUnits,PenaltyAmountMinorUnits,CreatedAt")
+          .Append('\n');
+
+        foreach (var b in bookings)
+        {
+            sb.Append(CsvEscape(b.Id)).Append(',')
+              .Append(CsvEscape(b.LearnerUserId)).Append(',')
+              .Append(CsvEscape(b.TutorProfileId)).Append(',')
+              .Append(CsvEscape(b.TutorProfile?.DisplayName)).Append(',')
+              .Append(CsvEscape(b.Status.ToString())).Append(',')
+              .Append(CsvEscape(b.SessionStartUtc.ToString("O", CultureInfo.InvariantCulture))).Append(',')
+              .Append(CsvEscape(b.DurationMinutes.ToString(CultureInfo.InvariantCulture))).Append(',')
+              .Append(CsvEscape(b.ProfessionTrack)).Append(',')
+              .Append(CsvEscape(b.PriceMinorUnits.ToString(CultureInfo.InvariantCulture))).Append(',')
+              .Append(CsvEscape(b.Currency)).Append(',')
+              .Append(CsvEscape(b.PaymentStatus.ToString())).Append(',')
+              .Append(CsvEscape(b.RefundIssued ? "true" : "false")).Append(',')
+              .Append(CsvEscape(b.RefundAmountMinorUnits?.ToString(CultureInfo.InvariantCulture))).Append(',')
+              .Append(CsvEscape(b.PenaltyAmountMinorUnits?.ToString(CultureInfo.InvariantCulture))).Append(',')
+              .Append(CsvEscape(b.CreatedAt.ToString("O", CultureInfo.InvariantCulture)))
+              .Append('\n');
+        }
+
+        return sb.ToString();
+    }
+
+    /// <summary>RFC4180 CSV field escaping: wrap in quotes and double internal
+    /// quotes when the value contains a comma, quote, CR or LF.</summary>
+    private static string CsvEscape(string? value)
+    {
+        if (string.IsNullOrEmpty(value)) return string.Empty;
+        if (value.IndexOfAny([',', '"', '\n', '\r']) < 0) return value;
+        return $"\"{value.Replace("\"", "\"\"")}\"";
     }
 
     public async Task RateSessionAsync(
