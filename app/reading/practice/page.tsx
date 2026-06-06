@@ -61,6 +61,12 @@ import {
   type ReadingPathwaySnapshot,
 } from '@/lib/reading-authoring-api';
 
+/**
+ * Fallback mini-test duration (minutes), used until the reading pathway API
+ * exposes a recommended duration on ReadingPathwayAction (see `start_mini_test`).
+ */
+const DEFAULT_MINI_TEST_DURATION_MINUTES = 10;
+
 function isPaperAccessible(paper: ReadingHomePaperDto): boolean {
   return paper.entitlement?.allowed !== false;
 }
@@ -232,7 +238,7 @@ export default function ReadingPracticePage() {
             return;
           }
           // TODO: use pathway-recommended duration when API exposes it (ReadingPathwayAction has no durationMinutes yet)
-          const started = await startReadingMiniTest(paperId, 10);
+          const started = await startReadingMiniTest(paperId, DEFAULT_MINI_TEST_DURATION_MINUTES);
           router.push(started.playerRoute);
           return;
         }
