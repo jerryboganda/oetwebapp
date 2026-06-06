@@ -111,7 +111,7 @@ export default function AdminCampaignsPage() {
     setPageStatus('loading');
     try {
       const data = await apiClient.get<{ items: Campaign[] }>(
-        '/v1/admin/notification-campaigns'
+        '/v1/admin/campaigns'
       );
       setCampaigns(data.items ?? []);
       setPageStatus(data.items?.length ? 'success' : 'empty');
@@ -176,7 +176,7 @@ export default function AdminCampaignsPage() {
     setIsSaving(true);
     try {
       if (form.id) {
-        await apiClient.put(`/v1/admin/notification-campaigns/${form.id}`, {
+        await apiClient.put(`/v1/admin/campaigns/${form.id}`, {
           name: form.name,
           subject: form.subject,
           body: form.body,
@@ -187,7 +187,7 @@ export default function AdminCampaignsPage() {
         });
         setToast({ variant: 'success', message: 'Campaign updated.' });
       } else {
-        await apiClient.post('/v1/admin/notification-campaigns', {
+        await apiClient.post('/v1/admin/campaigns', {
           name: form.name,
           subject: form.subject,
           body: form.body,
@@ -215,7 +215,7 @@ export default function AdminCampaignsPage() {
   ) => {
     setActionLoadingId(campaignId);
     try {
-      await apiClient.post(`/v1/admin/notification-campaigns/${campaignId}/${action}`);
+      await apiClient.post(`/v1/admin/campaigns/${campaignId}/${action}`);
       setToast({ variant: 'success', message: `Campaign ${action} succeeded.` });
       loadCampaigns();
     } catch (err: any) {

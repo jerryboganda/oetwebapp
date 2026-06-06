@@ -22,6 +22,30 @@ const sizeStyles: Record<string, string> = {
   lg: 'max-w-[calc(100vw-1.5rem)] sm:max-w-2xl',
 };
 
+// FE-031: shared body-scroll lock with a refcount + captured previous value.
+// Without this, two stacked overlays (e.g. a confirm Modal opened from a Drawer)
+// each toggle `body.overflow` independently, so closing the inner one releases
+// the lock while the outer is still open and the background scrolls.
+let scrollLockCount = 0;
+let previousBodyOverflow = '';
+function lockBodyScroll(): () => void {
+  if (typeof document === 'undefined') return () => {};
+  if (scrollLockCount === 0) {
+    previousBodyOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+  }
+  scrollLockCount += 1;
+  let released = false;
+  return () => {
+    if (released) return;
+    released = true;
+    scrollLockCount = Math.max(0, scrollLockCount - 1);
+    if (scrollLockCount === 0) {
+      document.body.style.overflow = previousBodyOverflow;
+    }
+  };
+}
+
 type FocusRestoreDescriptor = {
   id?: string;
   tagName: string;
@@ -213,7 +237,7 @@ export function Modal({ open, onClose, title, children, className, size = 'md' }
       trapFocus(event);
     };
     document.addEventListener('keydown', handler);
-    document.body.style.overflow = 'hidden';
+    const releaseScrollLock = lockBodyScroll();
     requestAnimationFrame(() => {
       const first = dialogRef.current?.querySelector<HTMLElement>(
         'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
@@ -222,7 +246,7 @@ export function Modal({ open, onClose, title, children, className, size = 'md' }
     });
     return () => {
       document.removeEventListener('keydown', handler);
-      document.body.style.overflow = '';
+      releaseScrollLock();
     };
   }, [open, trapFocus]);
 
@@ -366,7 +390,7 @@ export function Drawer({ open, onClose, title, children, side = 'right', classNa
       trapFocus(event);
     };
     document.addEventListener('keydown', handler);
-    document.body.style.overflow = 'hidden';
+    const releaseScrollLock = lockBodyScroll();
     requestAnimationFrame(() => {
       const first = drawerRef.current?.querySelector<HTMLElement>(
         'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
@@ -375,7 +399,7 @@ export function Drawer({ open, onClose, title, children, side = 'right', classNa
     });
     return () => {
       document.removeEventListener('keydown', handler);
-      document.body.style.overflow = '';
+      releaseScrollLock();
     };
   }, [open, trapFocus]);
 

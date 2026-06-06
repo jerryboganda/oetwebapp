@@ -7,7 +7,6 @@ import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domai
 import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Toast } from '@/components/ui/alert';
 import { analytics } from '@/lib/analytics';
 
 interface ReminderPreference {
@@ -33,15 +32,11 @@ const INITIAL_PREFS: ReminderPreference[] = [
   { id: 'new_content', label: 'New Content Available', description: 'When new practice tasks are added for your profession.', icon: <Bell className="w-5 h-5" />, enabled: false },
 ];
 
-type ToastState = { variant: 'success' | 'error'; message: string } | null;
-
 export default function SmartRemindersPage() {
   const [prefs, setPrefs] = useState<ReminderPreference[]>(INITIAL_PREFS);
   const [preferredSlot, setPreferredSlot] = useState('morning');
   const [pushEnabled, setPushEnabled] = useState(true);
   const [emailEnabled, setEmailEnabled] = useState(true);
-  const [toast, setToast] = useState<ToastState>(null);
-  const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
     analytics.track('content_view', { page: 'smart-reminders' });
@@ -51,24 +46,8 @@ export default function SmartRemindersPage() {
     setPrefs((prev) => prev.map((p) => (p.id === id ? { ...p, enabled: !p.enabled } : p)));
   }
 
-  async function handleSave() {
-    setIsSaving(true);
-    // TODO(backend): wire to POST /v1/settings/reminders when backend endpoint exists
-    await new Promise((resolve) => setTimeout(resolve, 500));
-    setToast({ variant: 'success', message: 'Reminder preferences saved!' });
-    analytics.track('reminders_preferences_saved', {
-      preferredSlot,
-      pushEnabled,
-      emailEnabled,
-      enabledReminders: prefs.filter((p: ReminderPreference) => p.enabled).map((p: ReminderPreference) => p.id).join(','),
-    });
-    setIsSaving(false);
-  }
-
   return (
     <LearnerDashboardShell>
-      {toast && <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} />}
-
       <LearnerPageHero
         title="Smart Study Reminders"
         description="Customise when and how you receive study notifications."
@@ -179,10 +158,17 @@ export default function SmartRemindersPage() {
         </div>
       </MotionSection>
 
-      {/* Save Button */}
-      <div className="mt-6 flex justify-end">
-        <Button onClick={handleSave} disabled={isSaving} size="lg">
-          {isSaving ? 'Saving…' : 'Save Preferences'}
+      {/* FE-005: not yet wired to a persistence endpoint. The previous version
+          faked a 500ms delay, popped a "saved" toast, and fired a
+          `reminders_preferences_saved` analytics event — telling users their
+          changes were saved when nothing persisted (and reset on reload). Until
+          the notifications settings sync ships, be explicit instead of faking it. */}
+      <div className="mt-6 flex flex-col items-end gap-2">
+        <p className="text-xs text-muted">
+          Reminder syncing is coming soon — your selections aren’t saved yet.
+        </p>
+        <Button disabled size="lg">
+          Save Preferences
         </Button>
       </div>
     </LearnerDashboardShell>
