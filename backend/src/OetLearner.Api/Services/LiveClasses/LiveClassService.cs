@@ -904,6 +904,63 @@ public sealed class LiveClassService(
             .ToListAsync(ct);
     }
 
+    // ── Tutor-portal object-level authorization ──────────────────────────
+    // Tutor routes under /v1/tutor/me/classes/* reuse the admin-surface mutators
+    // (Create/Update/Cancel/AddSession), which load by id with NO owner predicate.
+    // These helpers scope a tutor's actions to classes they own — keyed on
+    // LiveClass.TutorProfile.ExpertUserId, the same owner model used by
+    // ListExpertClassesAsync and GetSessionAttendanceForTutorAsync.
+
+    /// <summary>
+    /// Create a live class owned by the calling tutor. Resolves the tutor's
+    /// PrivateSpeakingTutorProfile and stamps it on the class so the ownership
+    /// guards (and the tutor's "my classes" list) can recognise it. The legacy
+    /// tutor create passed TutorProfileId: null, which left classes unowned.
+    /// </summary>
+    public async Task<LiveClassDetailDto> CreateTutorClassAsync(AdminLiveClassUpsertRequest request, string tutorUserId, string actorName, CancellationToken ct)
+    {
+        var profileId = await db.PrivateSpeakingTutorProfiles.AsNoTracking()
+            .Where(profile => profile.ExpertUserId == tutorUserId)
+            .Select(profile => (string?)profile.Id)
+            .FirstOrDefaultAsync(ct)
+            ?? throw ApiException.Validation("tutor_profile_required", "Set up your tutor profile before creating live classes.");
+        return await CreateAdminClassAsync(request with { TutorProfileId = profileId }, tutorUserId, actorName, ct);
+    }
+
+    /// <summary>Throws Forbidden unless the class is owned by <paramref name="tutorUserId"/>.</summary>
+    public async Task EnsureTutorOwnsClassAsync(string classId, string tutorUserId, CancellationToken ct)
+    {
+        var row = await db.LiveClasses.AsNoTracking()
+            .Where(liveClass => liveClass.Id == classId)
+            .Select(liveClass => new { OwnerId = liveClass.TutorProfile != null ? liveClass.TutorProfile.ExpertUserId : null })
+            .FirstOrDefaultAsync(ct);
+        if (row is null)
+        {
+            return; // class doesn't exist — let the core method surface NotFound
+        }
+        if (row.OwnerId != tutorUserId)
+        {
+            throw ApiException.Forbidden("live_class_not_assigned", "This live class is assigned to another tutor.");
+        }
+    }
+
+    /// <summary>Throws Forbidden unless the session's class is owned by <paramref name="tutorUserId"/>.</summary>
+    public async Task EnsureTutorOwnsSessionAsync(string sessionId, string tutorUserId, CancellationToken ct)
+    {
+        var row = await db.LiveClassSessions.AsNoTracking()
+            .Where(session => session.Id == sessionId)
+            .Select(session => new { OwnerId = session.LiveClass.TutorProfile != null ? session.LiveClass.TutorProfile.ExpertUserId : null })
+            .FirstOrDefaultAsync(ct);
+        if (row is null)
+        {
+            return; // session doesn't exist — let the core method surface NotFound
+        }
+        if (row.OwnerId != tutorUserId)
+        {
+            throw ApiException.Forbidden("live_class_not_assigned", "This live class is assigned to another tutor.");
+        }
+    }
+
     private async Task ProvisionZoomMeetingAsync(string sessionId, CancellationToken ct)
     {
         var session = await db.LiveClassSessions.Include(item => item.LiveClass).FirstOrDefaultAsync(item => item.Id == sessionId, ct)

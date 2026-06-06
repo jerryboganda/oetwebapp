@@ -117,7 +117,7 @@ public static class TutorEndpoints
                 request.CoverImageUrl,
                 request.Tags,
                 request.AutoPublish);
-            var created = await service.CreateAdminClassAsync(adminRequest, userId, GetActorName(http), ct);
+            var created = await service.CreateTutorClassAsync(adminRequest, userId, GetActorName(http), ct);
             return Results.Created($"/v1/tutor/me/classes/{created.Id}", created);
         });
 
@@ -148,6 +148,7 @@ public static class TutorEndpoints
             CancellationToken ct) =>
         {
             var userId = GetRequiredUserId(http);
+            await service.EnsureTutorOwnsClassAsync(classId, userId, ct);
             var addRequest = new AdminLiveClassSessionAddRequest(
                 request.ScheduledStartAt,
                 request.DurationMinutes,
@@ -164,6 +165,7 @@ public static class TutorEndpoints
             CancellationToken ct) =>
         {
             var userId = GetRequiredUserId(http);
+            await service.EnsureTutorOwnsSessionAsync(sessionId, userId, ct);
             return Results.Ok(await service.UpdateSessionAsync(sessionId, request, userId, GetActorName(http), ct));
         });
 
@@ -174,6 +176,7 @@ public static class TutorEndpoints
             CancellationToken ct) =>
         {
             var userId = GetRequiredUserId(http);
+            await service.EnsureTutorOwnsSessionAsync(sessionId, userId, ct);
             await service.CancelSessionAsync(sessionId, userId, GetActorName(http), "Session cancelled by tutor.", ct);
             return Results.NoContent();
         });

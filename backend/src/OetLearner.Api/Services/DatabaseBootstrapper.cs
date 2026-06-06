@@ -55,6 +55,7 @@ public static class DatabaseBootstrapper
         await EnsureVoiceDesignSchemaCompatibilityAsync(db, cancellationToken);
         await EnsurePronunciationSchemaCompatibilityAsync(db, cancellationToken);
         await EnsureFreezePolicyAsync(db, cancellationToken);
+        await EnsureLiveClassTutorOwnerBackfillAsync(db, cancellationToken);
 
         // Reference data (professions, subtests, criteria, content) is always seeded
         await SeedData.EnsureReferenceDataAsync(db, cancellationToken);
@@ -702,6 +703,44 @@ public static class DatabaseBootstrapper
         });
 
         await db.SaveChangesAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// Backfill <c>LiveClass.TutorProfileId</c> for tutor-created classes saved
+    /// with a null owner link (the legacy tutor create passed
+    /// <c>TutorProfileId: null</c>). The owner is recovered from the
+    /// <c>LiveClassCreated</c> audit event's actor, mapped to their
+    /// <c>PrivateSpeakingTutorProfile</c>. Without this, the tutor-portal
+    /// ownership guards would 403 a tutor from their own pre-existing classes.
+    /// Idempotent — only touches rows whose <c>TutorProfileId</c> is still null.
+    /// Postgres-only; test databases create owned classes directly.
+    /// </summary>
+    private static async Task EnsureLiveClassTutorOwnerBackfillAsync(LearnerDbContext db, CancellationToken cancellationToken)
+    {
+        if (!db.Database.IsNpgsql())
+        {
+            return;
+        }
+
+        await db.Database.ExecuteSqlRawAsync(
+            """
+            UPDATE "LiveClasses" lc
+            SET "TutorProfileId" = creator.profile_id,
+                "TutorDisplayName" = COALESCE(lc."TutorDisplayName", creator.display_name)
+            FROM (
+                SELECT DISTINCT ON (ae."ResourceId")
+                    ae."ResourceId" AS class_id,
+                    tp."Id" AS profile_id,
+                    tp."DisplayName" AS display_name
+                FROM "AuditEvents" ae
+                JOIN "PrivateSpeakingTutorProfiles" tp ON tp."ExpertUserId" = ae."ActorId"
+                WHERE ae."Action" = 'LiveClassCreated' AND ae."ResourceType" = 'LiveClass'
+                ORDER BY ae."ResourceId", ae."OccurredAt" ASC
+            ) creator
+            WHERE lc."Id" = creator.class_id
+              AND lc."TutorProfileId" IS NULL;
+            """,
+            cancellationToken);
     }
 
     private static string QuoteIdentifier(string identifier)
