@@ -227,6 +227,24 @@ public sealed class PrivateSpeakingCancellationTests
         DateTimeOffset sessionStartUtc,
         Action<PrivateSpeakingBooking>? configure = null)
     {
+        // Seed the required principal so the `.Include(b => b.TutorProfile)` in
+        // CancelBookingAsync resolves under the EF InMemory provider (which drops a
+        // dependent from an Include when its required principal is absent).
+        // ExpertUserId is set but no ExpertUser row is seeded, so the expert
+        // notification safely early-returns.
+        if (!db.PrivateSpeakingTutorProfiles.Local.Any(p => p.Id == "tutor-profile-1"))
+        {
+            db.PrivateSpeakingTutorProfiles.Add(new PrivateSpeakingTutorProfile
+            {
+                Id = "tutor-profile-1",
+                ExpertUserId = "expert-1",
+                DisplayName = "Tutor",
+                Timezone = "UTC",
+                CreatedAt = Now.AddMonths(-2),
+                UpdatedAt = Now.AddMonths(-2)
+            });
+        }
+
         var booking = new PrivateSpeakingBooking
         {
             Id = "booking-1",
