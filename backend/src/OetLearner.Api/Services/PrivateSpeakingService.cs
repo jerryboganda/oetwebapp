@@ -1100,6 +1100,202 @@ public sealed class PrivateSpeakingService(
         }
     }
 
+    // ── No-show Sweep ───────────────────────────────────────────────────
+
+    /// <summary>Grace period (minutes) after a session's scheduled end before the
+    /// sweep is allowed to flag a non-attending booking as a no-show. Gives late
+    /// joiners and webhook-delivery lag room before the booking is forfeited.</summary>
+    private const int NoShowGraceMinutes = 15;
+
+    /// <summary>Maximum bookings processed per sweep pass, to bound DB/notification work.</summary>
+    private const int NoShowSweepBatchCap = 500;
+
+    /// <summary>
+    /// T5 (PDF §3.3.6/§13) — automatic no-show sweep. Finds bookings whose session
+    /// has ended (start + duration + <see cref="NoShowGraceMinutes"/> grace is in the
+    /// past), are still in an "expected to run" state (Confirmed/ZoomCreated/InProgress),
+    /// and where the learner's attendance was never verified by the Zoom attendance
+    /// webhook (<see cref="PrivateSpeakingBooking.AttendanceVerified"/> == false), and
+    /// marks each as a no-show via <see cref="MarkNoShowAsync"/> (which also emits the
+    /// learner + tutor no-show notifications). Each booking is processed in its own
+    /// try/catch so a single failure does not abort the batch.
+    /// </summary>
+    public async Task ProcessNoShowSweepAsync(CancellationToken ct)
+    {
+        var now = timeProvider.GetUtcNow();
+
+        // The end-of-session predicate (SessionStartUtc + DurationMinutes + grace < now)
+        // cannot be translated to SQL with AddMinutes on an entity column, so filter on
+        // status/attendance in the DB and apply the time cutoff in memory. The candidate
+        // set is small (only sessions still in a running state), so this is cheap.
+        var candidates = await db.PrivateSpeakingBookings
+            .Where(b => (b.Status == PrivateSpeakingBookingStatus.Confirmed
+                    || b.Status == PrivateSpeakingBookingStatus.ZoomCreated
+                    || b.Status == PrivateSpeakingBookingStatus.InProgress)
+                && !b.AttendanceVerified)
+            .OrderBy(b => b.SessionStartUtc)
+            .Take(NoShowSweepBatchCap)
+            .ToListAsync(ct);
+
+        var due = candidates
+            .Where(b => b.SessionStartUtc.AddMinutes(b.DurationMinutes + NoShowGraceMinutes) < now)
+            .ToList();
+
+        foreach (var booking in due)
+        {
+            try
+            {
+                var (success, error) = await MarkNoShowAsync(booking.Id, "system", "system", ct);
+                if (!success)
+                {
+                    logger.LogWarning(
+                        "No-show sweep skipped booking {BookingId}: {Error}", booking.Id, error);
+                }
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                logger.LogError(ex, "No-show sweep failed to mark booking {BookingId}", booking.Id);
+            }
+        }
+    }
+
+    // ── Zoom Attendance Webhook ─────────────────────────────────────────
+
+    /// <summary>
+    /// T5 (PDF §3.3.6/§13) — apply a Zoom meeting webhook event to a Private
+    /// Speaking booking's attendance fields. Invoked from the shared Zoom webhook
+    /// receiver (<c>LiveClassService.HandleZoomWebhookAsync</c>), which has already
+    /// verified the signature, handled the <c>endpoint.url_validation</c> handshake,
+    /// and deduped the delivery — so this method only mutates booking state.
+    ///
+    /// <para><b>Attendance-matching rule (documented so the no-show sweep is
+    /// unambiguous):</b> a booking is treated as "attended"
+    /// (<see cref="PrivateSpeakingBooking.AttendanceVerified"/> = true) only when a
+    /// <c>meeting.participant_joined</c> event arrives whose participant email
+    /// matches the booking learner's email (case-insensitive). Any join still
+    /// stamps <see cref="PrivateSpeakingBooking.AttendanceJoinedAt"/> as a
+    /// diagnostic fallback, but a host/unknown/email-less join never flips
+    /// <c>AttendanceVerified</c>. The sweep keys exclusively off
+    /// <c>AttendanceVerified</c>, so only a verified learner join prevents a
+    /// no-show. <see cref="PrivateSpeakingBooking.AttendanceLeftAt"/> is recorded
+    /// only for the matched learner.</para>
+    /// </summary>
+    public async Task ApplyZoomAttendanceWebhookAsync(string eventType, JsonElement root, CancellationToken ct)
+    {
+        if (eventType is not ("meeting.participant_joined" or "meeting.participant_left"))
+        {
+            // meeting.ended and all other events are no-ops here — the sweep, not
+            // the meeting-ended signal, decides no-shows.
+            return;
+        }
+
+        if (!root.TryGetProperty("payload", out var payload) || payload.ValueKind != JsonValueKind.Object
+            || !payload.TryGetProperty("object", out var meetingObject) || meetingObject.ValueKind != JsonValueKind.Object)
+        {
+            return;
+        }
+
+        var meetingId = TryReadMeetingId(meetingObject);
+        if (meetingId is null) return;
+
+        var booking = await db.PrivateSpeakingBookings
+            .FirstOrDefaultAsync(b => b.ZoomMeetingId == meetingId.Value, ct);
+        if (booking is null) return;
+
+        var (participantEmail, eventTime) = ReadZoomParticipant(
+            meetingObject,
+            timeField: eventType == "meeting.participant_joined" ? "join_time" : "leave_time");
+
+        var learnerEmail = await db.Users.AsNoTracking()
+            .Where(u => u.Id == booking.LearnerUserId)
+            .Select(u => u.Email)
+            .FirstOrDefaultAsync(ct);
+        var isLearner = !string.IsNullOrWhiteSpace(participantEmail)
+            && !string.IsNullOrWhiteSpace(learnerEmail)
+            && string.Equals(participantEmail, learnerEmail, StringComparison.OrdinalIgnoreCase);
+
+        var changed = false;
+        if (eventType == "meeting.participant_joined")
+        {
+            // Diagnostic fallback: first observed join wins, regardless of who joined.
+            if (booking.AttendanceJoinedAt is null)
+            {
+                booking.AttendanceJoinedAt = eventTime;
+                changed = true;
+            }
+            // Verified attendance requires a learner-email match.
+            if (isLearner && !booking.AttendanceVerified)
+            {
+                booking.AttendanceVerified = true;
+                changed = true;
+            }
+        }
+        else if (isLearner)
+        {
+            // Only record the learner's leave time.
+            booking.AttendanceLeftAt = eventTime;
+            changed = true;
+        }
+
+        if (changed)
+        {
+            booking.UpdatedAt = timeProvider.GetUtcNow();
+            await db.SaveChangesAsync(ct);
+            logger.LogInformation(
+                "Zoom {EventType} applied to Private Speaking booking {BookingId} (verified={Verified})",
+                eventType, booking.Id, booking.AttendanceVerified);
+        }
+    }
+
+    /// <summary>Read the Zoom meeting id (sent as a numeric string or number under <c>payload.object.id</c>).</summary>
+    private static long? TryReadMeetingId(JsonElement meetingObject)
+    {
+        if (!meetingObject.TryGetProperty("id", out var idProp)) return null;
+        return idProp.ValueKind switch
+        {
+            JsonValueKind.String => long.TryParse(idProp.GetString(), out var s) ? s : null,
+            JsonValueKind.Number => idProp.TryGetInt64(out var n) ? n : null,
+            _ => null
+        };
+    }
+
+    /// <summary>
+    /// Extract the participant email + event timestamp from <c>payload.object.participant</c>.
+    /// Zoom uses <c>user_email</c> for the participant address (matching the Live Class
+    /// receiver). Falls back to <c>email</c>. The timestamp falls back to "now" when Zoom
+    /// omits or sends an unparseable join/leave time.
+    /// </summary>
+    private (string? Email, DateTimeOffset Timestamp) ReadZoomParticipant(JsonElement meetingObject, string timeField)
+    {
+        string? email = null;
+        var timestamp = timeProvider.GetUtcNow();
+
+        if (meetingObject.TryGetProperty("participant", out var participant)
+            && participant.ValueKind == JsonValueKind.Object)
+        {
+            email = ReadJsonString(participant, "user_email") ?? ReadJsonString(participant, "email");
+            var rawTime = ReadJsonString(participant, timeField);
+            if (!string.IsNullOrWhiteSpace(rawTime)
+                && DateTimeOffset.TryParse(
+                    rawTime,
+                    CultureInfo.InvariantCulture,
+                    System.Globalization.DateTimeStyles.AdjustToUniversal | System.Globalization.DateTimeStyles.AssumeUniversal,
+                    out var parsed))
+            {
+                timestamp = parsed;
+            }
+        }
+
+        return (email, timestamp);
+    }
+
+    private static string? ReadJsonString(JsonElement el, string name)
+    {
+        if (el.ValueKind != JsonValueKind.Object) return null;
+        if (!el.TryGetProperty(name, out var prop)) return null;
+        return prop.ValueKind == JsonValueKind.String ? prop.GetString() : null;
+    }
+
     // ── Cancellation ────────────────────────────────────────────────────
 
     public async Task<(bool Success, string? Error)> CancelBookingAsync(
