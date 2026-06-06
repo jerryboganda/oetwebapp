@@ -1,0 +1,48 @@
+name: Code Format (cloud auto-fix)
+# Formats in the cloud and commits the result back to the PR, so nobody runs a formatter locally.
+on:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: format-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+jobs:
+  autoformat:
+    name: ESLint --fix + dotnet format
+    # Skip forks (no write token) and the in-flight speaking feature branch (remove that guard after it merges).
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.pull_request.head.repo.full_name == github.repository &&
+       github.head_ref != 'feat/speaking-booking-pdf-conformance')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+        with: { version: 10.33.0 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: pnpm }
+      - uses: actions/setup-dotnet@v4
+        with: { dotnet-version: 10.0.x }
+      - run: pnpm install --frozen-lockfile
+      - name: ESLint --fix
+        run: pnpm run lint -- --fix || true
+      - name: dotnet format
+        run: dotnet format backend/OetLearner.sln || true
+      - name: Commit & push formatting
+        run: |
+          if [ -n "$(git status --porcelain)" ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add -A
+            git commit -m "style: auto-format (eslint --fix + dotnet format) [skip ci]"
+            git push origin HEAD:${{ github.head_ref }}
+          else
+            echo "Already formatted — no changes."
+          fi
