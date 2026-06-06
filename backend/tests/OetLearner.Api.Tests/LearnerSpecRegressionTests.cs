@@ -928,6 +928,7 @@ public class LearnerSpecRegressionTests : IClassFixture<TestWebApplicationFactor
     private async Task<HttpClient> CreateClientForUserAsync(string userId)
     {
         await _factory.EnsureLearnerProfileAsync(userId, $"{userId}@example.test", userId);
+        await _factory.EnsureAiCreditsAsync(userId);
         var client = _factory.CreateClient();
         client.DefaultRequestHeaders.Add("X-Debug-UserId", userId);
         client.DefaultRequestHeaders.Add("X-Debug-Email", $"{userId}@example.test");
@@ -1375,6 +1376,43 @@ public class LearnerSpecRegressionTests : IClassFixture<TestWebApplicationFactor
             await Task.Delay(TimeSpan.FromSeconds(1));
         }
 
-        throw new TimeoutException($"Timed out waiting for {reason}.");
+        throw new TimeoutException($"Timed out waiting for {reason}. {await DescribeBackgroundStateAsync()}");
+    }
+
+    private async Task<string> DescribeBackgroundStateAsync()
+    {
+        await using var scope = _factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+
+        var jobs = await db.BackgroundJobs
+            .OrderByDescending(job => job.CreatedAt)
+            .Take(5)
+            .Select(job => new
+            {
+                job.Type,
+                job.State,
+                job.StatusReasonCode,
+                job.StatusMessage,
+                job.RetryCount,
+                job.AttemptId,
+                job.ResourceId
+            })
+            .ToListAsync();
+
+        var evaluations = await db.Evaluations
+            .OrderByDescending(evaluation => evaluation.CreatedAt)
+            .Take(5)
+            .Select(evaluation => new
+            {
+                evaluation.Id,
+                evaluation.AttemptId,
+                evaluation.State,
+                evaluation.StatusReasonCode,
+                evaluation.StatusMessage,
+                evaluation.Retryable
+            })
+            .ToListAsync();
+
+        return JsonSerializer.Serialize(new { jobs, evaluations });
     }
 }

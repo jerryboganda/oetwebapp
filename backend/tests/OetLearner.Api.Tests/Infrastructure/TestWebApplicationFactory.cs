@@ -501,7 +501,7 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
 
         public Task<AiProviderCompletion> CompleteAsync(AiProviderRequest request, CancellationToken ct)
         {
-            const string text = """
+            const string writingText = """
                 {
                     "findings": [],
                     "criteriaScores": {
@@ -520,6 +520,33 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
                     "strengths": ["Clear purpose."]
                 }
                 """;
+
+            const string speakingText = """
+                {
+                    "findings": [],
+                    "criterionScores": {
+                        "intelligibility": 5,
+                        "fluency": 5,
+                        "appropriateness": 5,
+                        "grammarExpression": 5,
+                        "relationshipBuilding": 2,
+                        "patientPerspective": 2,
+                        "structure": 2,
+                        "informationGathering": 2,
+                        "informationGiving": 2
+                    },
+                    "estimatedScaledScore": 360,
+                    "estimatedGrade": "B",
+                    "passed": true,
+                    "advisory": "Test AI provider returned a complete grounded Speaking scoring contract.",
+                    "strengths": ["Clear interaction structure."]
+                }
+                """;
+
+            var isSpeakingPrompt = request.UserPrompt.Contains("advisory Speaking feedback", StringComparison.OrdinalIgnoreCase);
+            var text = isSpeakingPrompt
+                ? speakingText
+                : writingText;
 
             return Task.FromResult(new AiProviderCompletion { Text = text, Usage = new AiUsage() });
         }

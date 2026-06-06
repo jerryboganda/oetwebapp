@@ -294,7 +294,7 @@ public sealed class WritingLearnerPathwayService(LearnerDbContext db, TimeProvid
             items.Add(NewPlanItem(userId, date, 1, "diagnostic", "W1", "purpose", 45,
                 "Take the Writing diagnostic",
                 "Write one full letter under the existing exam-mode player. This creates your baseline and unlocks targeted practice.",
-                "/writing/diagnostic",
+                $"/writing/player/{practiceTask?.Id ?? "diagnostic"}?pathwayStage=diagnostic",
                 practiceTask?.Id, state.Stage, now));
         }
         else

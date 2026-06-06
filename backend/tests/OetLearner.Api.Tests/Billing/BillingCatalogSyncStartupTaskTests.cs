@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -16,6 +17,7 @@ namespace OetLearner.Api.Tests.Billing;
 public sealed class BillingCatalogSyncStartupTaskTests : IDisposable
 {
     private readonly string _contentRoot;
+    private readonly SqliteConnection _connection;
     private readonly LearnerDbContext _db;
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ServiceProvider _provider;
@@ -25,12 +27,11 @@ public sealed class BillingCatalogSyncStartupTaskTests : IDisposable
         _contentRoot = Path.Combine(Path.GetTempPath(), $"oet-catalog-sync-{Guid.NewGuid():N}");
         Directory.CreateDirectory(Path.Combine(_contentRoot, "Data", "Seeds"));
 
-        // Single InMemory database name shared across every scope the task
-        // creates, so the reconciler and the verifying queries all see the
-        // same rows.
-        var databaseName = $"catalog-sync-{Guid.NewGuid():N}";
+        _connection = new SqliteConnection("Data Source=:memory:");
+        _connection.Open();
+
         var services = new ServiceCollection();
-        services.AddDbContext<LearnerDbContext>(opt => opt.UseInMemoryDatabase(databaseName));
+        services.AddDbContext<LearnerDbContext>(opt => opt.UseSqlite(_connection));
         _provider = services.BuildServiceProvider();
         _scopeFactory = _provider.GetRequiredService<IServiceScopeFactory>();
         var rootScope = _provider.CreateScope();
@@ -41,6 +42,7 @@ public sealed class BillingCatalogSyncStartupTaskTests : IDisposable
     public void Dispose()
     {
         _provider.Dispose();
+        _connection.Dispose();
         if (Directory.Exists(_contentRoot))
         {
             try { Directory.Delete(_contentRoot, recursive: true); } catch { /* best-effort */ }

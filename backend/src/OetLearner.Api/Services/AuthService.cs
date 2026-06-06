@@ -1343,13 +1343,7 @@ public sealed class AuthService(
         string? subscriptionTier = null;
         if (account.Role == "learner")
         {
-            var now = timeProvider.GetUtcNow();
-            var hasActiveSub = await db.Subscriptions
-                .AsNoTracking()
-                .AnyAsync(s => s.UserId == userId
-                    && (s.Status == Domain.SubscriptionStatus.Active || s.Status == Domain.SubscriptionStatus.Trial)
-                    && (s.ExpiresAt == null || s.ExpiresAt > now),
-                    cancellationToken);
+            var hasActiveSub = await HasActiveLearnerSubscriptionAsync(userId, cancellationToken);
             if (hasActiveSub) subscriptionTier = "paid";
         }
 
@@ -1369,6 +1363,30 @@ public sealed class AuthService(
             ActiveProfessionId: activeProfessionId,
             ActiveProfessionLabel: activeProfessionLabel,
             SubscriptionTier: subscriptionTier);
+    }
+
+    private async Task<bool> HasActiveLearnerSubscriptionAsync(string userId, CancellationToken cancellationToken)
+    {
+        var now = timeProvider.GetUtcNow();
+        var activeStatuses = new[] { Domain.SubscriptionStatus.Active, Domain.SubscriptionStatus.Trial };
+
+        if (!db.Database.IsSqlite())
+        {
+            return await db.Subscriptions
+                .AsNoTracking()
+                .AnyAsync(s => s.UserId == userId
+                    && activeStatuses.Contains(s.Status)
+                    && (s.ExpiresAt == null || s.ExpiresAt > now),
+                    cancellationToken);
+        }
+
+        var subscriptions = await db.Subscriptions
+            .AsNoTracking()
+            .Where(s => s.UserId == userId && activeStatuses.Contains(s.Status))
+            .Select(s => new { s.Status, s.ExpiresAt })
+            .ToListAsync(cancellationToken);
+
+        return subscriptions.Any(s => s.ExpiresAt is null || s.ExpiresAt > now);
     }
 
     private static CurrentUserResponse BuildCurrentUserResponse(AuthenticatedSessionSubject subject)

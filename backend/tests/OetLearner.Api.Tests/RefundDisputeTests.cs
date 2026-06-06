@@ -16,7 +16,8 @@ namespace OetLearner.Api.Tests;
 /// </summary>
 public class RefundDisputeTests
 {
-    private static (LearnerDbContext db, RefundService refundService, DisputeService disputeService) Build()
+    private static (LearnerDbContext db, RefundService refundService, DisputeService disputeService) Build(
+        IPaymentGatewayProvider? gatewayProvider = null)
     {
         var options = new DbContextOptionsBuilder<LearnerDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString("N"))
@@ -30,7 +31,7 @@ public class RefundDisputeTests
             new OetLearner.Api.Services.Billing.Gateways.PayTabsGateway(new HttpClient(), billingOpts),
             new OetLearner.Api.Services.Billing.Gateways.PaymobGateway(new HttpClient(), billingOpts),
             new OetLearner.Api.Services.Billing.Gateways.CheckoutComGateway(new HttpClient(), billingOpts));
-        return (db, new RefundService(db, gateways), new DisputeService(db));
+        return (db, new RefundService(db, gatewayProvider ?? gateways), new DisputeService(db));
     }
 
     private static async Task SeedCompletedSubscriptionPaymentAsync(LearnerDbContext db, string userId, string txId, decimal amount, int includedCredits = 0)
@@ -132,6 +133,83 @@ public class RefundDisputeTests
 
         // Audit ledger entry was written.
         Assert.True(await db.BillingEvents.AnyAsync(e => e.EventType == "refund_full_issued"));
+    }
+
+    [Fact]
+    public async Task PendingIdempotentFullRefund_ReplaysProviderAndCompletesLocalReversals()
+    {
+        var (db, refundService, _) = Build();
+        await SeedCompletedSubscriptionPaymentAsync(db, "u-resume", "tx_resume_refund", 100m, includedCredits: 20);
+        var now = DateTimeOffset.UtcNow;
+        db.OrderRefunds.Add(new OrderRefund
+        {
+            Id = Guid.NewGuid(),
+            PaymentTransactionId = "tx_resume_refund",
+            LearnerUserId = "u-resume",
+            Gateway = "stripe",
+            GatewayRefundId = "pending:idem-resume-refund",
+            IdempotencyKey = "idem-resume-refund",
+            RefundType = "full",
+            Amount = 100m,
+            Currency = "AUD",
+            Status = "pending",
+            Reason = "requested_by_customer",
+            CreatedAt = now,
+            UpdatedAt = now,
+        });
+        await db.SaveChangesAsync();
+
+        var result = await refundService.IssueRefundAsync(
+            new RefundRequest("tx_resume_refund", 100m, "requested_by_customer", "idem-resume-refund"),
+            default);
+
+        Assert.True(result.Idempotent);
+        Assert.Equal("succeeded", result.Status);
+        Assert.True(result.ReversedWalletCredits);
+        Assert.True(result.ReversedEntitlements);
+
+        var refund = await db.OrderRefunds.SingleAsync();
+        Assert.Equal("succeeded", refund.Status);
+        Assert.False(refund.GatewayRefundId.StartsWith("pending:", StringComparison.Ordinal));
+
+        var tx = await db.PaymentTransactions.SingleAsync();
+        Assert.Equal("refunded", tx.Status);
+
+        var sub = await db.Subscriptions.SingleAsync();
+        Assert.Equal(SubscriptionStatus.Cancelled, sub.Status);
+
+        var wallet = await db.Wallets.SingleAsync();
+        Assert.Equal(0, wallet.CreditBalance);
+    }
+
+    [Fact]
+    public async Task PendingProviderRefund_DoesNotWriteIssuedEventUntilReplaySucceeds()
+    {
+        var gateway = new ScriptedRefundGateway(
+            new RefundResult("re-pending-first", "pending", 100m),
+            new RefundResult("re-succeeded-replay", "succeeded", 100m));
+        var (db, refundService, _) = Build(new SingleGatewayProvider(gateway));
+        await SeedCompletedSubscriptionPaymentAsync(db, "u-pending-provider", "tx_provider_pending", 100m, includedCredits: 20);
+
+        var first = await refundService.IssueRefundAsync(
+            new RefundRequest("tx_provider_pending", 100m, "requested_by_customer", "idem-provider-pending"),
+            default);
+
+        Assert.Equal("pending", first.Status);
+        Assert.Empty(await db.BillingEvents.Where(e => e.EventType == "refund_full_issued").ToListAsync());
+
+        var replay = await refundService.IssueRefundAsync(
+            new RefundRequest("tx_provider_pending", 100m, "requested_by_customer", "idem-provider-pending"),
+            default);
+
+        Assert.True(replay.Idempotent);
+        Assert.Equal("succeeded", replay.Status);
+        Assert.True(replay.ReversedWalletCredits);
+        Assert.True(replay.ReversedEntitlements);
+        Assert.Equal(new[] { "idem-provider-pending", "idem-provider-pending" }, gateway.IdempotencyKeys);
+        var refundEvent = await db.BillingEvents.SingleAsync(e => e.EventType == "refund_full_issued");
+        Assert.Contains("\"reversedWalletCredits\":true", refundEvent.PayloadJson);
+        Assert.Contains("\"reversedEntitlements\":true", refundEvent.PayloadJson);
     }
 
     [Fact]
@@ -324,5 +402,40 @@ public class RefundDisputeTests
         var dispute = await db.PaymentDisputes.SingleAsync();
         Assert.Equal("funds_withdrawn", dispute.Status);
         Assert.NotNull(dispute.FundsWithdrawnAt);
+    }
+
+    private sealed class SingleGatewayProvider(IPaymentGateway gateway) : IPaymentGatewayProvider
+    {
+        public IPaymentGateway GetGateway(string name) => gateway;
+
+        public IReadOnlyList<string> SupportedGateways { get; } = ["stripe"];
+    }
+
+    private sealed class ScriptedRefundGateway(params RefundResult[] refundResults) : IPaymentGateway
+    {
+        private readonly Queue<RefundResult> _refundResults = new(refundResults);
+        private readonly List<string> _idempotencyKeys = [];
+
+        public string GatewayName => "stripe";
+
+        public IReadOnlyList<string> IdempotencyKeys => _idempotencyKeys;
+
+        public Task<PaymentIntentResult> CreatePaymentIntentAsync(CreatePaymentIntentRequest request, CancellationToken ct)
+            => throw new NotSupportedException();
+
+        public Task<WebhookProcessResult> HandleWebhookAsync(string payload, IReadOnlyDictionary<string, string> headers, CancellationToken ct)
+            => throw new NotSupportedException();
+
+        public Task<RefundResult> ProcessRefundAsync(
+            string transactionId,
+            decimal amount,
+            string currency,
+            string reason,
+            string idempotencyKey,
+            CancellationToken ct)
+        {
+            _idempotencyKeys.Add(idempotencyKey);
+            return Task.FromResult(_refundResults.Dequeue());
+        }
     }
 }

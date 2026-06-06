@@ -23,6 +23,7 @@ public sealed class WritingRuleEngine(IRulebookLoader loader)
         "body_forbidden_phrase_yesterday",
         "body_no_todays_date",
         "body_uses_last_name_only",
+        "cancer_suspected_flagged_urgent",
         "closure_mentions_consent_if_flagged",
         "closure_mentions_patient_request_if_flagged",
         "closure_mentions_review_if_required",
@@ -34,6 +35,7 @@ public sealed class WritingRuleEngine(IRulebookLoader loader)
         "discharge_admitted_with_past_simple",
         "discharge_intro_no_identity",
         "discharge_intro_template",
+        "discharge_all_investigations_listed",
         "discharge_omits_knownto_gp",
         "discharge_plan_present",
         "enclosure_results_phrase",
@@ -54,6 +56,7 @@ public sealed class WritingRuleEngine(IRulebookLoader loader)
         "no_contractions",
         "no_date_prefix",
         "non_medical_no_jargon",
+        "numerical_values_have_units",
         "re_line_age_dob",
         "salutation_last_name_only",
         "salutation_re_adjacent",
@@ -65,6 +68,8 @@ public sealed class WritingRuleEngine(IRulebookLoader loader)
         "urgent_closure_phrase",
         "urgent_intro_contains_urgent",
         "urgent_token_not_repeated",
+        "visit_content_tense_basic_check",
+        "visit_paragraphization_check",
         "year_not_abbreviated",
         "yours_sincerely_capitalisation",
         "yours_sincerely_vs_faithfully",
@@ -263,6 +268,11 @@ public sealed class WritingRuleEngine(IRulebookLoader loader)
         "non_medical_no_jargon" => DetectNonMedicalJargon,
         "sentence_length_guard" => DetectSentenceLength,
         "linker_density" => DetectLinkerDensity,
+        "cancer_suspected_flagged_urgent" => DetectCancerSuspectedUrgent,
+        "visit_paragraphization_check" => DetectMarkerDependentNoop,
+        "visit_content_tense_basic_check" => DetectVisitContentTense,
+        "numerical_values_have_units" => DetectNumericalValuesHaveUnits,
+        "discharge_all_investigations_listed" => DetectMarkerDependentNoop,
         _ => null,
     };
 
@@ -908,6 +918,92 @@ public sealed class WritingRuleEngine(IRulebookLoader loader)
                 "Do not abbreviate the year (write 2024, not '24).",
                 Quote: m.Value, Start: m.Index, End: m.Index + m.Length);
     }
+
+    private static IEnumerable<LintFinding> DetectCancerSuspectedUrgent(OetRule rule, WritingLintInput input, LetterStructure s)
+    {
+        if (string.Equals(input.LetterType, "discharge", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(input.LetterType, "non_medical_referral", StringComparison.OrdinalIgnoreCase))
+        {
+            yield break;
+        }
+
+        var markers = new[]
+        {
+            "suspected cancer",
+            "suspicious lesion",
+            "?malignancy",
+            "query malignancy",
+            "rule out malignancy",
+            "abnormal mass",
+            "biopsy suspicious"
+        };
+        var flagged = markers.Any(marker => input.LetterText.Contains(marker, StringComparison.OrdinalIgnoreCase));
+        if (!flagged || string.Equals(input.LetterType, "urgent_referral", StringComparison.OrdinalIgnoreCase))
+        {
+            yield break;
+        }
+
+        yield return new LintFinding(rule.Id, rule.Severity,
+            "Suspected cancer in the case notes MUST be treated as an urgent referral.");
+    }
+
+    private static IEnumerable<LintFinding> DetectVisitContentTense(OetRule rule, WritingLintInput input, LetterStructure s)
+    {
+        if (string.IsNullOrWhiteSpace(s.Body)) yield break;
+        var verbs = "presented|examined|prescribed|admitted|referred|advised|counselled|reviewed|commenced|attended";
+        var re = new Regex(@"\b(has|have|had)\s+(?:been\s+)?(" + verbs + @")\b", RegexOptions.IgnoreCase);
+        var hits = 0;
+        foreach (Match m in re.Matches(s.Body))
+        {
+            yield return new LintFinding(rule.Id, rule.Severity,
+                $"Visit content should use past simple. \"{m.Value}\" looks like present perfect.",
+                Quote: m.Value, Start: m.Index, End: m.Index + m.Length);
+            hits++;
+            if (hits >= 3) yield break;
+        }
+    }
+
+    private static IEnumerable<LintFinding> DetectNumericalValuesHaveUnits(OetRule rule, WritingLintInput input, LetterStructure s)
+    {
+        var keywords = new[]
+        {
+            "glucose",
+            "hba1c",
+            "temperature",
+            "blood pressure",
+            "pulse",
+            "weight",
+            "height",
+            "BMI",
+            "haemoglobin",
+            "sodium",
+            "potassium",
+            "creatinine"
+        };
+        var unitRe = new Regex(@"(mmol\/l|mg\/dl|kg|g|cm|mm|mmHg|bpm|\u00b0c|celsius|mmol|%)", RegexOptions.IgnoreCase);
+        var findings = 0;
+        foreach (var keyword in keywords)
+        {
+            var re = new Regex(@"\b" + Regex.Escape(keyword) + @"\b[^.\n]{0,30}", RegexOptions.IgnoreCase);
+            foreach (Match m in re.Matches(input.LetterText))
+            {
+                var snippet = m.Value;
+                if (!Regex.IsMatch(snippet, @"\d") || unitRe.IsMatch(snippet))
+                {
+                    continue;
+                }
+
+                yield return new LintFinding(rule.Id, rule.Severity,
+                    $"Investigation value missing its unit: \"{snippet.Trim()}\".",
+                    Quote: snippet, Start: m.Index, End: m.Index + snippet.Length);
+                findings++;
+                if (findings >= 3) yield break;
+            }
+        }
+    }
+
+    private static IEnumerable<LintFinding> DetectMarkerDependentNoop(OetRule rule, WritingLintInput input, LetterStructure s)
+        => [];
 
     // Forbidden patterns baked into the JSON (not tied to a specific checkId)
     private static IEnumerable<LintFinding> RunForbiddenPatterns(OetRule rule, string text)

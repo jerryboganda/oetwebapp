@@ -170,7 +170,7 @@ public sealed class BillingCatalogSyncStartupTask(
             var existing = product.Prices.FirstOrDefault(p => PriceMatches(p, priceDto));
             if (existing is null)
             {
-                product.Prices.Add(new BillingPrice
+                db.BillingPrices.Add(new BillingPrice
                 {
                     Id = Guid.NewGuid(),
                     BillingProductId = product.Id,

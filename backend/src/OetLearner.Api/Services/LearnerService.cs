@@ -1451,45 +1451,96 @@ public partial class LearnerService(
     {
         await EnsureUserAsync(userId, cancellationToken);
         var pageSize = CursorPagination.NormalizeLimit(limit);
-        var ordered = (await db.Attempts
-            .Where(x => x.UserId == userId)
-            .ToListAsync(cancellationToken))
-            .OrderByDescending(x => x.SubmittedAt ?? x.StartedAt)
-            .ThenByDescending(x => x.Id, StringComparer.Ordinal)
-            .ToList();
+        var hasCursor = CursorPagination.TryDecode(cursor, out var decoded);
 
-        IEnumerable<Attempt> window = ordered;
-        if (CursorPagination.TryDecode(cursor, out var decoded))
+        List<Attempt> page;
+        if (db.Database.IsSqlite())
         {
-            window = ordered.Where(x =>
+            // SQLite (test DB) cannot ORDER BY / compare DateTimeOffset in SQL, so the cursor
+            // window and ordering are evaluated client-side here. Postgres (prod) uses the
+            // DB-side query below. Mirrors AuthService.HasActiveLearnerSubscriptionAsync.
+            IEnumerable<Attempt> ordered = (await db.Attempts
+                    .AsNoTracking()
+                    .Where(x => x.UserId == userId)
+                    .ToListAsync(cancellationToken))
+                .OrderByDescending(x => x.SubmittedAt ?? x.StartedAt)
+                .ThenByDescending(x => x.Id, StringComparer.Ordinal);
+            if (hasCursor)
             {
-                var ts = x.SubmittedAt ?? x.StartedAt;
-                if (ts < decoded.Timestamp) return true;
-                if (ts == decoded.Timestamp) return string.CompareOrdinal(x.Id, decoded.Id) < 0;
-                return false;
-            });
+                ordered = ordered.Where(x =>
+                {
+                    var ts = x.SubmittedAt ?? x.StartedAt;
+                    if (ts < decoded.Timestamp) return true;
+                    if (ts == decoded.Timestamp) return string.CompareOrdinal(x.Id, decoded.Id) < 0;
+                    return false;
+                });
+            }
+            page = ordered.Take(pageSize + 1).ToList();
         }
-
-        var page = window.Take(pageSize + 1).ToList();
+        else
+        {
+            var query = db.Attempts
+                .AsNoTracking()
+                .Where(x => x.UserId == userId);
+            if (hasCursor)
+            {
+                query = query.Where(x => (x.SubmittedAt ?? x.StartedAt) < decoded.Timestamp);
+            }
+            page = await query
+                .OrderByDescending(x => x.SubmittedAt ?? x.StartedAt)
+                .ThenByDescending(x => x.Id)
+                .Take(pageSize + 1)
+                .ToListAsync(cancellationToken);
+        }
         var hasMore = page.Count > pageSize;
         var pageAttempts = hasMore ? page.Take(pageSize).ToList() : page;
+        var attemptIds = pageAttempts.Select(x => x.Id).ToArray();
+        var contentIds = pageAttempts.Select(x => x.ContentId).Distinct().ToArray();
+
+        var contentsById = await db.ContentItems
+            .AsNoTracking()
+            .Where(x => contentIds.Contains(x.Id))
+            .ToDictionaryAsync(x => x.Id, cancellationToken);
+
+        var evaluationsByAttemptId = (await db.Evaluations
+                .AsNoTracking()
+                .Where(x => attemptIds.Contains(x.AttemptId))
+                .ToListAsync(cancellationToken))
+            .OrderByDescending(x => x.GeneratedAt)
+            .GroupBy(x => x.AttemptId)
+            .ToDictionary(x => x.Key, x => x.First());
+
+        var reviewsByAttemptId = (await db.ReviewRequests
+                .AsNoTracking()
+                .Where(x => attemptIds.Contains(x.AttemptId))
+                .ToListAsync(cancellationToken))
+            .OrderByDescending(x => x.CreatedAt)
+            .GroupBy(x => x.AttemptId)
+            .ToDictionary(x => x.Key, x => x.First());
+
+        var completedReviewIds = reviewsByAttemptId.Values
+            .Where(x => x.State == ReviewRequestState.Completed)
+            .Select(x => x.Id)
+            .ToArray();
+        var voiceNoteCountsByReviewId = completedReviewIds.Length == 0
+            ? new Dictionary<string, int>()
+            : await db.ReviewVoiceNotes
+                .AsNoTracking()
+                .Where(note => completedReviewIds.Contains(note.ReviewRequestId) && note.Status == "ready")
+                .GroupBy(note => note.ReviewRequestId)
+                .Select(group => new { ReviewRequestId = group.Key, Count = group.Count() })
+                .ToDictionaryAsync(x => x.ReviewRequestId, x => x.Count, cancellationToken);
+
         var items = new List<object>();
 
         foreach (var attempt in pageAttempts)
         {
-            var content = await db.ContentItems.FirstAsync(x => x.Id == attempt.ContentId, cancellationToken);
-            var eval = (await db.Evaluations
-                .Where(x => x.AttemptId == attempt.Id)
-                .ToListAsync(cancellationToken))
-                .OrderByDescending(x => x.GeneratedAt)
-                .FirstOrDefault();
-            var review = (await db.ReviewRequests
-                .Where(x => x.AttemptId == attempt.Id)
-                .ToListAsync(cancellationToken))
-                .OrderByDescending(x => x.CreatedAt)
-                .FirstOrDefault();
-            var voiceNoteCount = review?.State == ReviewRequestState.Completed
-                ? await db.ReviewVoiceNotes.CountAsync(note => note.ReviewRequestId == review.Id && note.Status == "ready", cancellationToken)
+            var content = contentsById[attempt.ContentId];
+            evaluationsByAttemptId.TryGetValue(attempt.Id, out var eval);
+            reviewsByAttemptId.TryGetValue(attempt.Id, out var review);
+            var voiceNoteCount = review is not null
+                                 && voiceNoteCountsByReviewId.TryGetValue(review.Id, out var count)
+                ? count
                 : 0;
             var canRequestReview = attempt.State == AttemptState.Completed && attempt.SubtestCode is "writing" or "speaking";
             var metadata = ReadWritingSubmissionMetadata(attempt);

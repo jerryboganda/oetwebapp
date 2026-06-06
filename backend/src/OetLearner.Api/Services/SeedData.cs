@@ -43,7 +43,7 @@ public static partial class SeedData
             hasChanges = true;
         }
 
-        if (!await db.BillingPlans.AnyAsync(cancellationToken))
+        if (await HasSeededBillingCatalogGapAsync(db, cancellationToken))
         {
             SeedBillingPlans(db);
             hasChanges = true;
@@ -279,6 +279,58 @@ public static partial class SeedData
         }
 
         return hasChanges;
+    }
+
+    private static async Task<bool> HasSeededBillingCatalogGapAsync(
+        LearnerDbContext db,
+        CancellationToken cancellationToken)
+    {
+        if (!await db.BillingPlans.AnyAsync(cancellationToken))
+        {
+            return true;
+        }
+
+        var requiredPlanIds = new[]
+        {
+            "plan-basic-monthly",
+            "plan-premium-monthly",
+            "plan-premium-yearly",
+            "plan-intensive-monthly",
+            "plan-legacy-trial"
+        };
+        var requiredAddOnIds = new[]
+        {
+            "addon-credits-3",
+            "addon-credits-5",
+            "addon-priority-review"
+        };
+        var requiredCouponIds = new[]
+        {
+            "coupon-welcome10",
+            "coupon-review5"
+        };
+
+        var planCount = await db.BillingPlans
+            .CountAsync(plan => requiredPlanIds.Contains(plan.Id), cancellationToken);
+        if (planCount != requiredPlanIds.Length)
+        {
+            return true;
+        }
+
+        var addOnCount = await db.BillingAddOns
+            .CountAsync(addOn =>
+                (addOn.Id == "addon-credits-3" && addOn.Status == BillingAddOnStatus.Active && addOn.GrantCredits == 3)
+                || (addOn.Id == "addon-credits-5" && addOn.Status == BillingAddOnStatus.Active && addOn.GrantCredits == 5)
+                || (addOn.Id == "addon-priority-review" && addOn.Status == BillingAddOnStatus.Active),
+                cancellationToken);
+        if (addOnCount != requiredAddOnIds.Length)
+        {
+            return true;
+        }
+
+        var couponCount = await db.BillingCoupons
+            .CountAsync(coupon => requiredCouponIds.Contains(coupon.Id), cancellationToken);
+        return couponCount != requiredCouponIds.Length;
     }
 
     public static async Task EnsureDemoDataAsync(LearnerDbContext db, CancellationToken cancellationToken = default)
@@ -2376,6 +2428,49 @@ public static partial class SeedData
     private static void SeedBillingPlans(LearnerDbContext db)
     {
         var now = DateTimeOffset.UtcNow;
+        var billingPlanIds = new[]
+        {
+            "plan-basic-monthly",
+            "plan-premium-monthly",
+            "plan-premium-yearly",
+            "plan-intensive-monthly",
+            "plan-legacy-trial"
+        };
+        var billingAddOnIds = new[]
+        {
+            "addon-credits-3",
+            "addon-credits-5",
+            "addon-priority-review"
+        };
+        var billingCouponIds = new[]
+        {
+            "coupon-welcome10",
+            "coupon-review5"
+        };
+
+        var existingBillingPlans = db.BillingPlans
+            .Where(plan => billingPlanIds.Contains(plan.Id))
+            .ToList();
+        if (existingBillingPlans.Count > 0)
+        {
+            db.BillingPlans.RemoveRange(existingBillingPlans);
+        }
+
+        var existingBillingAddOns = db.BillingAddOns
+            .Where(addOn => billingAddOnIds.Contains(addOn.Id))
+            .ToList();
+        if (existingBillingAddOns.Count > 0)
+        {
+            db.BillingAddOns.RemoveRange(existingBillingAddOns);
+        }
+
+        var existingBillingCoupons = db.BillingCoupons
+            .Where(coupon => billingCouponIds.Contains(coupon.Id))
+            .ToList();
+        if (existingBillingCoupons.Count > 0)
+        {
+            db.BillingCoupons.RemoveRange(existingBillingCoupons);
+        }
 
         db.BillingPlans.AddRange(
             new BillingPlan { Id = "plan-basic-monthly", Code = "basic-monthly", Name = "Basic Monthly", Description = "Core OET practice with AI evaluation and learner analytics.", Price = 19.99m, Currency = "AUD", Interval = "monthly", DurationMonths = 1, IsVisible = true, IsRenewable = true, TrialDays = 0, DisplayOrder = 10, IncludedCredits = 0, IncludedSubtestsJson = JsonSupport.Serialize(new[] { "writing", "speaking" }), EntitlementsJson = JsonSupport.Serialize(new { productiveSkillReviewsEnabled = true, invoiceDownloadsAvailable = true, ai = new { quotaPlanCode = "starter" } }), ActiveSubscribers = 3400, Status = BillingPlanStatus.Active, CreatedAt = now.AddMonths(-18), UpdatedAt = now.AddDays(-10) },
@@ -2383,6 +2478,17 @@ public static partial class SeedData
             new BillingPlan { Id = "plan-premium-yearly", Code = "premium-yearly", Name = "Premium Yearly", Description = "Annual premium access with the same learner benefits and stronger retention value.", Price = 399.99m, Currency = "AUD", Interval = "yearly", DurationMonths = 12, IsVisible = true, IsRenewable = true, TrialDays = 0, DisplayOrder = 30, IncludedCredits = 6, IncludedSubtestsJson = JsonSupport.Serialize(new[] { "writing", "speaking" }), EntitlementsJson = JsonSupport.Serialize(new { productiveSkillReviewsEnabled = true, invoiceDownloadsAvailable = true, ai = new { quotaPlanCode = "pro" } }), ActiveSubscribers = 820, Status = BillingPlanStatus.Active, CreatedAt = now.AddMonths(-12), UpdatedAt = now.AddDays(-5) },
             new BillingPlan { Id = "plan-intensive-monthly", Code = "intensive-monthly", Name = "Intensive Monthly", Description = "Higher review capacity for repeated writing and speaking feedback before the exam window.", Price = 79.99m, Currency = "AUD", Interval = "monthly", DurationMonths = 1, IsVisible = true, IsRenewable = true, TrialDays = 0, DisplayOrder = 40, IncludedCredits = 8, IncludedSubtestsJson = JsonSupport.Serialize(new[] { "writing", "speaking" }), EntitlementsJson = JsonSupport.Serialize(new { productiveSkillReviewsEnabled = true, invoiceDownloadsAvailable = true, ai = new { quotaPlanCode = "pro" } }), ActiveSubscribers = 540, Status = BillingPlanStatus.Active, CreatedAt = now.AddMonths(-10), UpdatedAt = now.AddDays(-3) },
             new BillingPlan { Id = "plan-legacy-trial", Code = "legacy-trial", Name = "Legacy Trial", Description = "Legacy trial plan retained for compatibility.", Price = 0m, Currency = "AUD", Interval = "monthly", DurationMonths = 1, IsVisible = false, IsRenewable = false, TrialDays = 14, DisplayOrder = 0, IncludedCredits = 0, IncludedSubtestsJson = JsonSupport.Serialize(new[] { "writing", "speaking" }), EntitlementsJson = JsonSupport.Serialize(new { productiveSkillReviewsEnabled = true, invoiceDownloadsAvailable = true, ai = new { quotaPlanCode = "free" } }), ActiveSubscribers = 0, Status = BillingPlanStatus.Legacy, CreatedAt = now.AddMonths(-24), UpdatedAt = now.AddMonths(-6) }
+        );
+
+        db.BillingAddOns.AddRange(
+            new BillingAddOn { Id = "addon-credits-3", Code = "credits-3", Name = "3 Review Credits", Description = "Pack of 3 tutor review credits.", Price = 9.99m, Currency = "AUD", Interval = "one_time", Status = BillingAddOnStatus.Active, IsRecurring = false, DurationDays = 0, GrantCredits = 3, GrantEntitlementsJson = JsonSupport.Serialize(new { ai_credits = 3 }), CompatiblePlanCodesJson = JsonSupport.Serialize(new[] { "basic-monthly", "premium-monthly", "premium-yearly", "intensive-monthly" }), AppliesToAllPlans = true, IsStackable = true, QuantityStep = 1, MaxQuantity = 5, DisplayOrder = 10, CreatedAt = now.AddMonths(-8), UpdatedAt = now },
+            new BillingAddOn { Id = "addon-credits-5", Code = "credits-5", Name = "5 Review Credits", Description = "Pack of 5 tutor review credits.", Price = 14.99m, Currency = "AUD", Interval = "one_time", Status = BillingAddOnStatus.Active, IsRecurring = false, DurationDays = 0, GrantCredits = 5, GrantEntitlementsJson = JsonSupport.Serialize(new { ai_credits = 5 }), CompatiblePlanCodesJson = JsonSupport.Serialize(new[] { "basic-monthly", "premium-monthly", "premium-yearly", "intensive-monthly" }), AppliesToAllPlans = true, IsStackable = true, QuantityStep = 1, MaxQuantity = 5, DisplayOrder = 20, CreatedAt = now.AddMonths(-8), UpdatedAt = now },
+            new BillingAddOn { Id = "addon-priority-review", Code = "priority-review", Name = "Priority Review Pack", Description = "Temporary priority review handling for one request.", Price = 4.99m, Currency = "AUD", Interval = "one_time", Status = BillingAddOnStatus.Active, IsRecurring = false, DurationDays = 30, GrantCredits = 0, GrantEntitlementsJson = JsonSupport.Serialize(new { priorityReview = true }), CompatiblePlanCodesJson = JsonSupport.Serialize(new[] { "premium-monthly", "premium-yearly", "intensive-monthly" }), AppliesToAllPlans = false, IsStackable = true, QuantityStep = 1, MaxQuantity = 1, DisplayOrder = 30, CreatedAt = now.AddMonths(-6), UpdatedAt = now }
+        );
+
+        db.BillingCoupons.AddRange(
+            new BillingCoupon { Id = "coupon-welcome10", Code = "WELCOME10", Name = "Welcome 10", Description = "10% off your first premium plan or add-on purchase.", DiscountType = BillingDiscountType.Percentage, DiscountValue = 10m, Currency = "AUD", Status = BillingCouponStatus.Active, StartsAt = now.AddMonths(-2), EndsAt = now.AddMonths(6), UsageLimitTotal = 1000, UsageLimitPerUser = 1, MinimumSubtotal = 19.99m, ApplicablePlanCodesJson = JsonSupport.Serialize(new[] { "premium-monthly", "premium-yearly", "intensive-monthly" }), ApplicableAddOnCodesJson = JsonSupport.Serialize(new[] { "credits-3", "credits-5", "priority-review" }), IsStackable = false, Notes = "Seeded welcome coupon.", RedemptionCount = 0, CreatedAt = now.AddMonths(-2), UpdatedAt = now.AddDays(-1) },
+            new BillingCoupon { Id = "coupon-review5", Code = "REVIEW5", Name = "Review Pack 5", Description = "5 AUD off review credit packs.", DiscountType = BillingDiscountType.FixedAmount, DiscountValue = 5m, Currency = "AUD", Status = BillingCouponStatus.Active, StartsAt = now.AddMonths(-1), EndsAt = now.AddMonths(2), UsageLimitTotal = 500, UsageLimitPerUser = 2, MinimumSubtotal = 29.99m, ApplicablePlanCodesJson = JsonSupport.Serialize(new string[0]), ApplicableAddOnCodesJson = JsonSupport.Serialize(new[] { "credits-3", "credits-5" }), IsStackable = true, Notes = "Seeded add-on coupon.", RedemptionCount = 0, CreatedAt = now.AddMonths(-1), UpdatedAt = now.AddDays(-1) }
         );
     }
 

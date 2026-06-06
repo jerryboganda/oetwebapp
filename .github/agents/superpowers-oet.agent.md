@@ -3,7 +3,7 @@ name: "OET Superpowers"
 description: "Use when: the user wants the primary OET repo agent, all-purpose future OET tasks, Superpowers workflows, maximum-autonomy OET implementation, brainstorming, planning, TDD, systematic debugging, code review, subagent-driven development, verification-before-completion, OET ultrawork, or resilient end-to-end implementation."
 target: vscode
 argument-hint: "Describe any OET task to plan, debug, build, review, verify, deploy, or automate."
-tools: [vscode, execute, read, search, edit, web, agent, todo]
+tools: [vscode, execute, read, agent, browser, edit, search, web, todo]
 user-invocable: true
 disable-model-invocation: false
 agents:

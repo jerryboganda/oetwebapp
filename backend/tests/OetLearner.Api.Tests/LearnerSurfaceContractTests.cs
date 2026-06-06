@@ -1,6 +1,10 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using OetLearner.Api.Data;
+using OetLearner.Api.Domain;
 using OetLearner.Api.Services;
 using OetLearner.Api.Tests.Infrastructure;
 
@@ -16,6 +20,7 @@ public class LearnerSurfaceContractTests : IClassFixture<TestWebApplicationFacto
         _factory = factory;
         _factory.EnsureLearnerProfileAsync("mock-user-001", "mock-user-001@example.test", "mock-user-001").GetAwaiter().GetResult();
         _client = factory.CreateClient();
+        EnsureObjectiveEvaluationSeedAsync().GetAwaiter().GetResult();
     }
 
     [Fact]
@@ -124,8 +129,9 @@ public class LearnerSurfaceContractTests : IClassFixture<TestWebApplicationFacto
         Assert.Equal("reading_legacy_gone", readingJson.RootElement.GetProperty("code").GetString());
 
         var listeningResponse = await _client.GetAsync("/v1/listening/evaluations/le-001");
-        listeningResponse.EnsureSuccessStatusCode();
-        using var listeningJson = JsonDocument.Parse(await listeningResponse.Content.ReadAsStringAsync());
+        var listeningBody = await listeningResponse.Content.ReadAsStringAsync();
+        Assert.True(listeningResponse.IsSuccessStatusCode, $"Listening evaluation failed: {(int)listeningResponse.StatusCode} :: {listeningBody}");
+        using var listeningJson = JsonDocument.Parse(listeningBody);
         Assert.True(listeningJson.RootElement.TryGetProperty("itemReview", out var listeningReview));
         Assert.NotEqual(0, listeningReview.GetArrayLength());
         Assert.True(listeningJson.RootElement.TryGetProperty("transcriptAccess", out _));
@@ -160,6 +166,93 @@ public class LearnerSurfaceContractTests : IClassFixture<TestWebApplicationFacto
         var firstItem = submissionsJson.RootElement.GetProperty("items")[0];
         Assert.True(firstItem.TryGetProperty("actions", out _));
         Assert.True(firstItem.TryGetProperty("canRequestReview", out _));
+    }
+
+    private async Task EnsureObjectiveEvaluationSeedAsync()
+    {
+        await using var scope = _factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        var now = DateTimeOffset.UtcNow;
+
+        if (!await db.ContentItems.AnyAsync(x => x.Id == "lt-001"))
+        {
+            db.ContentItems.Add(new ContentItem
+            {
+                Id = "lt-001",
+                ContentType = "listening_task",
+                SubtestCode = "listening",
+                Title = "Consultation: Asthma Management Review",
+                Difficulty = "medium",
+                EstimatedDurationMinutes = 25,
+                CriteriaFocusJson = JsonSupport.Serialize(new[] { "detail_capture", "distractor_control" }),
+                ScenarioType = "consultation",
+                ModeSupportJson = JsonSupport.Serialize(new[] { "practice", "exam" }),
+                PublishedRevisionId = "lt-001-r1",
+                Status = ContentStatus.Published,
+                CreatedAt = now,
+                UpdatedAt = now,
+                PublishedAt = now,
+                DetailJson = JsonSupport.Serialize(new
+                {
+                    questions = new object[]
+                    {
+                        new { id = "lq-1", number = 1, text = "What is the patient's main concern?", type = "mcq", options = new[] { "Increasing breathlessness at night", "Side effects", "Difficulty using inhaler" }, correctAnswer = "Increasing breathlessness at night", allowTranscriptReveal = true, transcriptExcerpt = "Patient: I've been waking up at night feeling quite breathless." },
+                        new { id = "lq-2", number = 2, text = "How often is the reliever inhaler used?", type = "short_answer", options = (string[]?)null, correctAnswer = "3-4 times per week", allowTranscriptReveal = true, transcriptExcerpt = "Patient: Maybe three or four times a week.", distractorExplanation = "The exact frequency is three or four times per week." },
+                        new { id = "lq-3", number = 3, text = "What treatment change is recommended?", type = "mcq", options = new[] { "Increase preventer dose", "Combination inhaler", "Refer specialist" }, correctAnswer = "Combination inhaler", allowTranscriptReveal = false }
+                    }
+                })
+            });
+        }
+
+        if (!await db.Attempts.AnyAsync(x => x.Id == "la-001"))
+        {
+            db.Attempts.Add(new Attempt
+            {
+                Id = "la-001",
+                UserId = "mock-user-001",
+                ContentId = "lt-001",
+                SubtestCode = "listening",
+                Context = "practice",
+                Mode = "exam",
+                State = AttemptState.Completed,
+                StartedAt = now.AddDays(-1),
+                SubmittedAt = now.AddDays(-1).AddMinutes(18),
+                CompletedAt = now.AddDays(-1).AddMinutes(18),
+                ElapsedSeconds = 1080,
+                AnswersJson = JsonSupport.Serialize(new Dictionary<string, string?>
+                {
+                    ["lq-1"] = "Increasing breathlessness at night",
+                    ["lq-2"] = "daily",
+                    ["lq-3"] = "Combination inhaler"
+                })
+            });
+        }
+
+        if (!await db.Evaluations.AnyAsync(x => x.Id == "le-001"))
+        {
+            db.Evaluations.Add(new Evaluation
+            {
+                Id = "le-001",
+                AttemptId = "la-001",
+                SubtestCode = "listening",
+                State = AsyncState.Completed,
+                ScoreRange = "66%",
+                GradeRange = "C+",
+                ConfidenceBand = ConfidenceBand.High,
+                StrengthsJson = JsonSupport.Serialize(new[] { "Main concern was captured correctly" }),
+                IssuesJson = JsonSupport.Serialize(new[] { "A frequency distractor caused one incorrect answer" }),
+                CriterionScoresJson = "[]",
+                FeedbackItemsJson = "[]",
+                GeneratedAt = now.AddDays(-1).AddMinutes(18),
+                ModelExplanationSafe = "This listening result is based on answer accuracy and transcript alignment.",
+                LearnerDisclaimer = "Practice estimate only.",
+                StatusReasonCode = "completed",
+                StatusMessage = "Listening result ready.",
+                LastTransitionAt = now.AddDays(-1).AddMinutes(18)
+            });
+        }
+
+        await db.SaveChangesAsync();
     }
 
     [Fact]

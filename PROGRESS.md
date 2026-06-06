@@ -8,8 +8,8 @@ available through git history. Do not paste long historical ledgers back here.
 
 ## Current Operating Goal
 
-Backend/API investigation and fix pass for confirmed authorization,
-frontend/backend contract, deployment config, and focused regression gaps.
+Backend/API security remediation pass for confirmed high-risk findings,
+currently focused on billing refund saga/idempotency hardening.
 
 ## Current State
 
@@ -30,6 +30,10 @@ frontend/backend contract, deployment config, and focused regression gaps.
   materialize-then-sort behavior, matching the existing learner-goal lookup.
 - Investigation report and issue register:
   `docs/backend-api-investigation-2026-06-06.md`.
+- RefundService working-tree patch adds resumable idempotent refund finalization:
+  pending refund replays retry the gateway with the same idempotency key,
+  successful full refunds complete local reversals in a serializable transaction,
+  and refund-issued audit events are delayed until provider success.
 
 ## Validation Snapshot
 
@@ -63,3 +67,7 @@ frontend/backend contract, deployment config, and focused regression gaps.
   intentionally falls back to local questions.
 - Local app-level `/health/live` and `/health/ready` were not exercised after
   this patch set.
+- RefundService post-review validation is not fully complete because local
+  `dotnet build` repeatedly stalled/canceled in `CoreCompile` after the final
+  audit-event patch. See `.github/agent-state.local.md` for exact RED/GREEN
+  evidence and next validation command.

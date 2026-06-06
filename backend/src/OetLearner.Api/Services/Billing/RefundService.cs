@@ -33,9 +33,9 @@ public sealed record RefundResponse(
 public sealed class RefundService
 {
     private readonly LearnerDbContext _db;
-    private readonly PaymentGatewayService _gateways;
+    private readonly IPaymentGatewayProvider _gateways;
 
-    public RefundService(LearnerDbContext db, PaymentGatewayService gateways)
+    public RefundService(LearnerDbContext db, IPaymentGatewayProvider gateways)
     {
         _db = db;
         _gateways = gateways;
@@ -53,21 +53,12 @@ public sealed class RefundService
             throw new ArgumentOutOfRangeException(nameof(request), "Refund amount must be positive.");
         }
 
-        // Idempotency short-circuit: replays of the same key return the same outcome.
+        // Idempotency replays return the same outcome, resuming pending local finalization when needed.
         var existing = await _db.Set<OrderRefund>()
             .FirstOrDefaultAsync(r => r.IdempotencyKey == request.IdempotencyKey, ct);
         if (existing is not null)
         {
-            var remaining = await ComputeRemainingAuthorisedAsync(existing.PaymentTransactionId, existing.Currency, ct);
-            return new RefundResponse(
-                existing.Id,
-                existing.Status,
-                existing.RefundType,
-                existing.Amount,
-                remaining,
-                existing.ReversedWalletCredits,
-                existing.ReversedEntitlements,
-                Idempotent: true);
+            return await ResumeOrReturnExistingRefundAsync(existing, request, ct);
         }
 
         await using var reservationTransaction = IsInMemoryProvider(_db)
@@ -132,41 +123,144 @@ public sealed class RefundService
             await reservationTransaction.CommitAsync(ct);
         }
 
-        var gateway = _gateways.GetGateway(transaction.Gateway);
+        return await ProcessGatewayAndFinalizeAsync(
+            refund,
+            transaction,
+            request.Reason ?? "requested_by_customer",
+            Idempotent: false,
+            ct);
+    }
+
+    private async Task<RefundResponse> ResumeOrReturnExistingRefundAsync(
+        OrderRefund refund,
+        RefundRequest request,
+        CancellationToken ct)
+    {
+        var transaction = await _db.PaymentTransactions
+            .FirstOrDefaultAsync(t => t.GatewayTransactionId == refund.PaymentTransactionId, ct);
+        if (transaction is not null)
+        {
+            if (string.Equals(refund.Status, "pending", StringComparison.OrdinalIgnoreCase))
+            {
+                return await ProcessGatewayAndFinalizeAsync(
+                    refund,
+                    transaction,
+                    refund.Reason ?? request.Reason ?? "requested_by_customer",
+                    Idempotent: true,
+                    ct);
+            }
+
+            if (IsFullRefund(refund)
+                && string.Equals(refund.Status, "succeeded", StringComparison.OrdinalIgnoreCase)
+                && !string.Equals(transaction.Status, "refunded", StringComparison.OrdinalIgnoreCase))
+            {
+                await FinalizeSuccessfulFullRefundAsync(refund, transaction, ct);
+            }
+
+            if (string.Equals(refund.Status, "succeeded", StringComparison.OrdinalIgnoreCase))
+            {
+                await EnsureRefundBillingEventAsync(refund, transaction, IsFullRefund(refund), DateTimeOffset.UtcNow, ct);
+            }
+        }
+
+        var remaining = await ComputeRemainingAuthorisedAsync(refund.PaymentTransactionId, refund.Currency, ct);
+        return ToResponse(refund, remaining, Idempotent: true);
+    }
+
+    private async Task<RefundResponse> ProcessGatewayAndFinalizeAsync(
+        OrderRefund refund,
+        PaymentTransaction transaction,
+        string reason,
+        bool Idempotent,
+        CancellationToken ct)
+    {
+        var gateway = _gateways.GetGateway(refund.Gateway);
         RefundResult providerResult;
         try
         {
             providerResult = await gateway.ProcessRefundAsync(
                 transaction.GatewayTransactionId,
-                request.Amount,
-                transaction.Currency,
-                request.Reason ?? "requested_by_customer",
-                request.IdempotencyKey,
+                refund.Amount,
+                refund.Currency,
+                reason,
+                refund.IdempotencyKey,
                 ct);
         }
         catch
         {
-            refund.Status = "failed";
-            refund.UpdatedAt = DateTimeOffset.UtcNow;
-            await _db.SaveChangesAsync(ct);
+            if (!Idempotent)
+            {
+                refund.Status = "failed";
+                refund.UpdatedAt = DateTimeOffset.UtcNow;
+                await _db.SaveChangesAsync(ct);
+            }
+
             throw;
         }
+
         var providerSucceeded = string.Equals(providerResult.Status, "succeeded", StringComparison.OrdinalIgnoreCase);
+        var isFull = IsFullRefund(refund);
+        var now = DateTimeOffset.UtcNow;
 
         refund.GatewayRefundId = providerResult.RefundId;
         refund.Status = providerSucceeded ? "succeeded" : "pending";
-        refund.UpdatedAt = DateTimeOffset.UtcNow;
+        refund.UpdatedAt = now;
+        await _db.SaveChangesAsync(ct);
+
+        if (isFull && providerSucceeded)
+        {
+            await FinalizeSuccessfulFullRefundAsync(refund, transaction, ct);
+        }
+
+        if (providerSucceeded)
+        {
+            await EnsureRefundBillingEventAsync(refund, transaction, isFull, DateTimeOffset.UtcNow, ct);
+        }
+
+        var remaining = await ComputeRemainingAuthorisedAsync(refund.PaymentTransactionId, refund.Currency, ct);
+        return ToResponse(refund, remaining, Idempotent);
+    }
+
+    private async Task FinalizeSuccessfulFullRefundAsync(OrderRefund refund, PaymentTransaction transaction, CancellationToken ct)
+    {
+        await using var finalizationTransaction = IsInMemoryProvider(_db)
+            ? null
+            : await _db.Database.BeginTransactionAsync(IsolationLevel.Serializable, ct);
 
         // By design, partial refunds are monetary adjustments only; AI credits
         // and other entitlements are revoked when the purchase is fully refunded.
-        if (isFull && providerSucceeded)
+        refund.ReversedWalletCredits = refund.ReversedWalletCredits
+                                       || await ReverseWalletCreditsAsync(transaction, ct);
+        var reversedEntitlements = await ReverseEntitlementsAsync(transaction, ct);
+        var reversedAiCredits = await ReverseAiPackageCreditsAsync(transaction, refund.Id.ToString("N"), ct);
+        refund.ReversedEntitlements = refund.ReversedEntitlements || reversedEntitlements || reversedAiCredits;
+        transaction.Status = "refunded";
+        transaction.UpdatedAt = DateTimeOffset.UtcNow;
+        refund.UpdatedAt = DateTimeOffset.UtcNow;
+
+        await _db.SaveChangesAsync(ct);
+        if (finalizationTransaction is not null)
         {
-            refund.ReversedWalletCredits = await ReverseWalletCreditsAsync(transaction, ct);
-            var reversedEntitlements = await ReverseEntitlementsAsync(transaction, ct);
-            var reversedAiCredits = await ReverseAiPackageCreditsAsync(transaction, refund.Id.ToString("N"), ct);
-            refund.ReversedEntitlements = reversedEntitlements || reversedAiCredits;
-            transaction.Status = "refunded";
-            transaction.UpdatedAt = now;
+            await finalizationTransaction.CommitAsync(ct);
+        }
+    }
+
+    private async Task EnsureRefundBillingEventAsync(
+        OrderRefund refund,
+        PaymentTransaction transaction,
+        bool isFull,
+        DateTimeOffset now,
+        CancellationToken ct)
+    {
+        var entityId = refund.Id.ToString();
+        var eventExists = await _db.BillingEvents.AnyAsync(e =>
+            e.EntityType == nameof(OrderRefund)
+            && e.EntityId == entityId
+            && (e.EventType == "refund_full_issued" || e.EventType == "refund_partial_issued"),
+            ct);
+        if (eventExists)
+        {
+            return;
         }
 
         _db.BillingEvents.Add(new BillingEvent
@@ -175,7 +269,7 @@ public sealed class RefundService
             UserId = transaction.LearnerUserId,
             EventType = isFull ? "refund_full_issued" : "refund_partial_issued",
             EntityType = nameof(OrderRefund),
-            EntityId = refund.Id.ToString(),
+            EntityId = entityId,
             PayloadJson = System.Text.Json.JsonSerializer.Serialize(new
             {
                 paymentTransactionId = transaction.GatewayTransactionId,
@@ -189,19 +283,19 @@ public sealed class RefundService
             }),
             OccurredAt = now
         });
-
         await _db.SaveChangesAsync(ct);
+    }
 
-        return new RefundResponse(
+    private static RefundResponse ToResponse(OrderRefund refund, decimal remaining, bool Idempotent)
+        => new(
             refund.Id,
             refund.Status,
             refund.RefundType,
             refund.Amount,
-            transaction.Amount - newTotal,
+            remaining,
             refund.ReversedWalletCredits,
             refund.ReversedEntitlements,
-            Idempotent: false);
-    }
+            Idempotent);
 
     private async Task<decimal> ComputeRemainingAuthorisedAsync(string paymentTransactionId, string currency, CancellationToken ct)
     {
@@ -397,6 +491,9 @@ public sealed class RefundService
 
         return null;
     }
+
+    private static bool IsFullRefund(OrderRefund refund)
+        => string.Equals(refund.RefundType, "full", StringComparison.OrdinalIgnoreCase);
 
     private static bool IsInMemoryProvider(LearnerDbContext context)
         => context.Database.ProviderName?.Contains("InMemory", StringComparison.OrdinalIgnoreCase) == true;

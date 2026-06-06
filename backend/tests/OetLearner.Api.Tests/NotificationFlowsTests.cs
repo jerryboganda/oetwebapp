@@ -19,7 +19,7 @@ public class NotificationFlowsTests
     [Fact]
     public async Task ProofTrigger_CreatesInboxItems_AndSupportsReadFlows()
     {
-        await using var factory = new TestWebApplicationFactory();
+        await using var factory = new FirstPartyAuthTestWebApplicationFactory();
         using var adminClient = await CreateAuthenticatedClientAsync(factory, SeedData.AdminEmail, SeedData.LocalSeedPassword);
         using var learnerClient = await CreateAuthenticatedClientAsync(factory, SeedData.LearnerEmail, SeedData.LocalSeedPassword);
 
@@ -157,7 +157,7 @@ public class NotificationFlowsTests
     [Fact]
     public async Task AdminPolicyOverride_DisablesEmail_ButKeepsInAppDelivery()
     {
-        await using var factory = new TestWebApplicationFactory();
+        await using var factory = new FirstPartyAuthTestWebApplicationFactory();
         using var adminClient = await CreateAuthenticatedClientAsync(factory, SeedData.AdminEmail, SeedData.LocalSeedPassword);
         using var learnerClient = await CreateAuthenticatedClientAsync(factory, SeedData.LearnerEmail, SeedData.LocalSeedPassword);
 
@@ -213,7 +213,7 @@ public class NotificationFlowsTests
     [Fact]
     public async Task AdminGlobalChannelSwitches_AreReturnedForEachAudience()
     {
-        await using var factory = new TestWebApplicationFactory();
+        await using var factory = new FirstPartyAuthTestWebApplicationFactory();
         using var adminClient = await CreateAuthenticatedClientAsync(factory, SeedData.AdminEmail, SeedData.LocalSeedPassword);
 
         var updateResponse = await adminClient.PutAsJsonAsync(
@@ -318,7 +318,7 @@ public class NotificationFlowsTests
     [Fact]
     public async Task AdminPolicyFrequencyCaps_CanBeCleared_AndContinueInheritingGlobalCaps()
     {
-        await using var factory = new TestWebApplicationFactory();
+        await using var factory = new FirstPartyAuthTestWebApplicationFactory();
         using var adminClient = await CreateAuthenticatedClientAsync(factory, SeedData.AdminEmail, SeedData.LocalSeedPassword);
 
         var globalCapResponse = await adminClient.PutAsJsonAsync(
@@ -461,7 +461,7 @@ public class NotificationFlowsTests
     [Fact]
     public async Task AdminCatalog_CoversExpandedOetLifecycleEvents()
     {
-        await using var factory = new TestWebApplicationFactory();
+        await using var factory = new FirstPartyAuthTestWebApplicationFactory();
         using var adminClient = await CreateAuthenticatedClientAsync(factory, SeedData.AdminEmail, SeedData.LocalSeedPassword);
 
         var catalog = await adminClient.GetFromJsonAsync<IReadOnlyList<AdminNotificationCatalogEntry>>(
@@ -487,7 +487,7 @@ public class NotificationFlowsTests
     [Fact]
     public async Task ProtectedCriticalPolicies_CannotBeDisabled_ByAdminOrPreferenceOptOut()
     {
-        await using var factory = new TestWebApplicationFactory();
+        await using var factory = new FirstPartyAuthTestWebApplicationFactory();
         using var adminClient = await CreateAuthenticatedClientAsync(factory, SeedData.AdminEmail, SeedData.LocalSeedPassword);
         using var learnerClient = await CreateAuthenticatedClientAsync(factory, SeedData.LearnerEmail, SeedData.LocalSeedPassword);
 
@@ -638,7 +638,7 @@ public class NotificationFlowsTests
     [Fact]
     public async Task QuietHoursPreference_DefersPushIntoQueuedFanoutJob()
     {
-        await using var factory = new TestWebApplicationFactory();
+        await using var factory = new FirstPartyAuthTestWebApplicationFactory();
         using var adminClient = await CreateAuthenticatedClientAsync(factory, SeedData.AdminEmail, SeedData.LocalSeedPassword);
         using var learnerClient = await CreateAuthenticatedClientAsync(factory, SeedData.LearnerEmail, SeedData.LocalSeedPassword);
 
@@ -740,7 +740,7 @@ public class NotificationFlowsTests
     [Fact]
     public async Task SmsConsent_CanBeStoredByCategory_AndReturnedWithGlobalDefaults()
     {
-        await using var factory = new TestWebApplicationFactory();
+        await using var factory = new FirstPartyAuthTestWebApplicationFactory();
         using var adminClient = await CreateAuthenticatedClientAsync(factory, SeedData.AdminEmail, SeedData.LocalSeedPassword);
         using var learnerClient = await CreateAuthenticatedClientAsync(factory, SeedData.LearnerEmail, SeedData.LocalSeedPassword);
 
@@ -783,7 +783,7 @@ public class NotificationFlowsTests
     [Fact]
     public async Task AdminSuppression_DisablesEmailFanout_AndCanBeReleased()
     {
-        await using var factory = new TestWebApplicationFactory();
+        await using var factory = new FirstPartyAuthTestWebApplicationFactory();
         using var adminClient = await CreateAuthenticatedClientAsync(factory, SeedData.AdminEmail, SeedData.LocalSeedPassword);
         using var learnerClient = await CreateAuthenticatedClientAsync(factory, SeedData.LearnerEmail, SeedData.LocalSeedPassword);
 
@@ -853,8 +853,9 @@ public class NotificationFlowsTests
     private static async Task<AuthSessionResponse> SignInAsync(HttpClient client, string email, string password)
     {
         var response = await client.PostAsJsonAsync("/v1/auth/sign-in", new PasswordSignInRequest(email, password, true));
-        response.EnsureSuccessStatusCode();
-        return (await response.Content.ReadFromJsonAsync<AuthSessionResponse>(JsonSupport.Options))
+        var body = await response.Content.ReadAsStringAsync();
+        Assert.True(response.IsSuccessStatusCode, $"Sign-in failed for {email}: {(int)response.StatusCode} :: {body}");
+        return (JsonSerializer.Deserialize<AuthSessionResponse>(body, JsonSupport.Options))
             ?? throw new InvalidOperationException("Expected a valid auth session response.");
     }
 
@@ -870,7 +871,7 @@ public class NotificationFlowsTests
         Action<IServiceCollection> configureServices,
         IReadOnlyDictionary<string, string?>? configurationValues = null)
     {
-        return new TestWebApplicationFactory().WithWebHostBuilder(builder =>
+        return new FirstPartyAuthTestWebApplicationFactory().WithWebHostBuilder(builder =>
         {
             if (configurationValues is not null)
             {

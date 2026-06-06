@@ -53,12 +53,26 @@ public class BillingIntegrationE2ETests : IClassFixture<TestWebApplicationFactor
 
         // 2. Quote ─ ask for a small review-credits pack so we don't disturb
         //    the seeded subscription. quantity is in credits.
+        await using (var catalogScope = _factory.Services.CreateAsyncScope())
+        {
+            var catalogDb = catalogScope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+            var addOns = await catalogDb.BillingAddOns.AsNoTracking()
+                .Select(addOn => new { addOn.Id, addOn.Code, addOn.Status, addOn.GrantCredits })
+                .ToListAsync();
+            var hasCreditsPack = await catalogDb.BillingAddOns
+                .AnyAsync(addOn => addOn.Status == BillingAddOnStatus.Active && addOn.GrantCredits == 3);
+            Assert.True(
+                hasCreditsPack,
+                "Expected the test billing catalog to contain an active 3-credit review pack. " +
+                $"Actual add-ons: {JsonSerializer.Serialize(addOns)}");
+        }
+
         string? quoteId = null;
         using (var quoteResponse = await client.GetAsync(
             "/v1/billing/quote?productType=review_credits&quantity=3"))
         {
-            Assert.Equal(HttpStatusCode.OK, quoteResponse.StatusCode);
             var body = await quoteResponse.Content.ReadAsStringAsync();
+            Assert.True(quoteResponse.StatusCode == HttpStatusCode.OK, $"Quote failed: {(int)quoteResponse.StatusCode} :: {body}");
             using var json = JsonDocument.Parse(body);
             // The quote endpoint may or may not persist a quote id depending
             // on configuration; capture it when present so we can flow it
