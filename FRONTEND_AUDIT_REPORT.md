@@ -275,3 +275,33 @@ surfaces) · FE-038 (optimizePackageImports) · FE-041 (broken PWA screenshots).
 - **FE-016** `middleware`→`proxy` (owns CSP/CSRF — needs care + a live check); **FE-013** per-page
   metadata (auth/learner pages are client components → needs a server-wrapper refactor).
 - **FE-042** z-index scale + toast ids — low value.
+
+---
+
+# Part 4 — Live Runtime Sweep (browser-verified)
+
+Drove a real (headless) browser against the app on the Podman stack — the runtime sweep Parts 1–3
+deferred for lack of a connected browser. Three new findings, all **fixed and verified live**. The two
+code fixes are committed on `fix/frontend-remediation-cont`; the config fix is local-only
+(`.env.local`, gitignored).
+
+| ID | Sev | Category | File(s) | Symptom → Root cause | Fix | Verification |
+|---|---|---|---|---|---|---|
+| FE-044 | **High (dev/ops)** | Config | `.env.local` (main + worktree) | **"localhost not working"**: page shell loads but *every* browser API call 500s. The browser uses the same-origin proxy `/api/backend/*` (`lib/env.ts:15`); the proxy route (`app/api/backend/[...path]/route.ts:29`) reads `API_PROXY_TARGET_URL`, which was **unset** → fell back to the native-dev default `http://127.0.0.1:5198` (dead in the Podman setup; API is on :8080) → `ECONNREFUSED 5198` | Add `API_PROXY_TARGET_URL=http://127.0.0.1:8080` to `.env.local` (gitignored — re-add after env resets). `.env.example` still advertises `5198` (native); update if standardizing on Podman | **Live**: `GET /api/backend/v1/auth/catalog/signup` **500 → 200** (2282 B JSON); `/register` renders with populated catalog pickers; 0 console errors; 0 failed requests |
+| FE-045 | **Medium** | PWA/assets | `public/sw.js:18-23,202-203`; `public/notification-worker.js:19-20` | SW precached `/icon.svg` in `APP_SHELL_URLS`, but no `icon.svg` exists (only `icon-192/512.png`). `cache.addAll()` rejects atomically on any 404 → **the SW install fails entirely** → offline/PWA caching never activates; push icon/badge also broken | Point all 3 references at the existing `/icon-192.png` | `GET /icon.svg → 404` observed live; asset `/icon-192.png` confirmed present; commit `1f0d1c9b`; lint+tsc+1865 tests green |
+| FE-046 | **Medium** | Motion/A11y (extends FE-008) | `components/ui/motion-primitives.tsx` (`MotionReveal`) | Hydration mismatch on every `(auth)` page **under `prefers-reduced-motion`**: the `hidden` variant shape-shifts by reduced-motion (`{opacity:0}` vs `{opacity:0,y,scale}`), but the server can't read the client preference → SSR emits the transform, the reduced-motion client emits opacity-only → React *"tree hydrated but … didn't match"* (flooded console) | Route `reducedMotion` through the file's existing `useSyncExternalStore` hydration gate (already used for `runtimeKind`) so SSR + first client render agree, then adopt the real preference post-hydration. Non-reduced users unaffected | **Gold-standard live**: reproduced on unfixed `:3000`; **zero** new hydration errors on fixed `:3001` (same reduced-motion browser; forgot-password + sign-in); commit `41b0985f`; tsc + 1865 tests green |
+
+### Public-page sweep — clean
+`/sign-in`, `/register`, `/forgot-password` render correctly with real catalog data, no console errors,
+no failed requests (after FE-044). Register multi-step wizard, password/email inputs, and back-links present.
+
+### Still blocked / deferred (honest)
+- **Authenticated runtime verification** (cart FE-017/018, dashboards, expert/tutor/admin) needs login —
+  the agent cannot type passwords, so these must be verified by a human in their own browser at
+  `localhost:3000` (now working).
+- **FE-016** `middleware`→`proxy`: deferred — `middleware.ts` owns app-wide CSP-nonce / CSRF /
+  auth-redirects; a wrong Next-16 migration white-screens the whole app to silence a non-urgent
+  deprecation. Needs explicit sign-off + a focused CSP/CSRF live check.
+- **FE-040** icon-bundle unify (subtly changes icon visuals — design), **FE-013** per-page metadata,
+  **FE-024** client-boundary refactor, **FE-006/FE-036** remainder, **FE-010** backend DTO fields —
+  unchanged from Part 3 (large / design-affecting / backend-dependent).
