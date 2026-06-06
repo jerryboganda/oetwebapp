@@ -14,6 +14,7 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
     private DateTimeOffset _lastSpeakingTranscriptionPollAt = DateTimeOffset.MinValue;
     private DateTimeOffset _lastBillingAbandonedCartSweepAt = DateTimeOffset.MinValue;
     private DateTimeOffset _lastBillingDunningRetryDispatchAt = DateTimeOffset.MinValue;
+    private DateTimeOffset _lastPrivateSpeakingNoShowSweepAt = DateTimeOffset.MinValue;
     private static readonly TimeSpan ReconciliationInterval = TimeSpan.FromHours(1);
     private static readonly TimeSpan ExpertAutoAssignInterval = TimeSpan.FromSeconds(30);
     private static readonly TimeSpan ExpertSlaCheckInterval = TimeSpan.FromSeconds(60);
@@ -21,6 +22,8 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
     private static readonly TimeSpan SpeakingTranscriptionPollInterval = TimeSpan.FromSeconds(10);
     /// <summary>How often to poll <c>DunningAttempts</c> for rows ready to retry.</summary>
     private static readonly TimeSpan BillingDunningRetryDispatchInterval = TimeSpan.FromMinutes(5);
+    /// <summary>How often to enqueue the Private Speaking no-show sweep (T5).</summary>
+    private static readonly TimeSpan PrivateSpeakingNoShowSweepInterval = TimeSpan.FromMinutes(5);
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         while (!stoppingToken.IsCancellationRequested)
@@ -236,6 +239,52 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
                 logger.LogError(ex, "Billing abandoned-cart sweep enqueue failed");
             }
         }
+
+        // ── Private Speaking — automatic no-show sweep (T5, PDF §3.3.6/§13) ──
+        // Enqueue a singleton sweep job every 5 minutes, mirroring the interval-
+        // gated enqueue used by the Billing sweeps above. The job is processed by
+        // the standard pipeline (JobType.PrivateSpeakingNoShowSweep dispatch).
+        if (now - _lastPrivateSpeakingNoShowSweepAt >= PrivateSpeakingNoShowSweepInterval)
+        {
+            _lastPrivateSpeakingNoShowSweepAt = now;
+            try
+            {
+                await EnqueuePrivateSpeakingNoShowSweepJobAsync(db, now, cancellationToken);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                logger.LogError(ex, "Private Speaking no-show sweep enqueue failed");
+            }
+        }
+    }
+
+    /// <summary>
+    /// T5 — enqueue a single <see cref="JobType.PrivateSpeakingNoShowSweep"/> job,
+    /// skipping if one is already queued/processing. The BackgroundJobs queue is
+    /// the source of truth, so this stays idempotent across multiple API replicas.
+    /// </summary>
+    private static async Task EnqueuePrivateSpeakingNoShowSweepJobAsync(
+        LearnerDbContext db, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        var alreadyQueued = await db.BackgroundJobs
+            .AsNoTracking()
+            .AnyAsync(j => j.Type == JobType.PrivateSpeakingNoShowSweep
+                && (j.State == AsyncState.Queued || j.State == AsyncState.Processing),
+                cancellationToken);
+        if (alreadyQueued) return;
+
+        db.BackgroundJobs.Add(new BackgroundJobItem
+        {
+            Id = $"jb-ps-noshow-sweep-{Guid.NewGuid():N}",
+            Type = JobType.PrivateSpeakingNoShowSweep,
+            State = AsyncState.Queued,
+            StatusReasonCode = "queued",
+            StatusMessage = "Private Speaking no-show sweep queued.",
+            CreatedAt = now,
+            AvailableAt = now,
+            LastTransitionAt = now,
+        });
+        await db.SaveChangesAsync(cancellationToken);
     }
 
     private static async Task RunSpeakingTranscriptionQueueAsync(IServiceProvider services, CancellationToken cancellationToken)
@@ -465,6 +514,12 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
             {
                 var psSvc = services.GetRequiredService<PrivateSpeakingService>();
                 await psSvc.ExpireStaleReservationsAsync(cancellationToken);
+                break;
+            }
+            case JobType.PrivateSpeakingNoShowSweep:
+            {
+                var psSvc = services.GetRequiredService<PrivateSpeakingService>();
+                await psSvc.ProcessNoShowSweepAsync(cancellationToken);
                 break;
             }
             case JobType.SubscriptionLifecycleCheck:
