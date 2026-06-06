@@ -50,12 +50,12 @@ public sealed class CheckoutService : ICheckoutService
                 existing.Currency);
         }
 
-        // Load cart with items and prices
-        var cart = await _cartService.GetCartByIdAsync(cartId, ct)
-            ?? throw new InvalidOperationException($"Cart '{cartId}' not found.");
+        // Load cart with items and prices (owner-scoped to the checkout caller)
+        var cart = await _cartService.GetCartByIdAsync(cartId, userId, ct)
+            ?? throw ApiException.NotFound("cart_not_found", "Cart not found.");
 
         if (cart.Items.Count == 0)
-            throw new InvalidOperationException("Cart is empty.");
+            throw ApiException.Validation("cart_empty", "Cart is empty.");
 
         // Determine checkout mode: "subscription" if any item has a recurring interval
         var mode = cart.Items.Any(i => i.Interval is not null) ? "subscription" : "payment";
@@ -133,11 +133,13 @@ public sealed class CheckoutService : ICheckoutService
     }
 
     public async Task<CheckoutSessionStatusDto?> GetSessionStatusAsync(
-        Guid sessionId, CancellationToken ct = default)
+        string userId, Guid sessionId, CancellationToken ct = default)
     {
+        // Object-level authorization: scope the lookup to the caller so a learner
+        // can only read the status of their OWN checkout session (not any session by guid).
         var session = await _db.CheckoutSessions
             .AsNoTracking()
-            .FirstOrDefaultAsync(s => s.Id == sessionId, ct);
+            .FirstOrDefaultAsync(s => s.Id == sessionId && s.UserId == userId, ct);
 
         return session is null
             ? null

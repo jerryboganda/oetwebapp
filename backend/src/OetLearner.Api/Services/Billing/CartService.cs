@@ -58,26 +58,26 @@ public sealed class CartService : ICartService
         return MapCart(cart);
     }
 
-    public async Task<CartDto> AddItemAsync(string cartId, AddCartItemRequest request, CancellationToken ct = default)
+    public async Task<CartDto> AddItemAsync(string cartId, string userId, AddCartItemRequest request, CancellationToken ct = default)
     {
-        var cart = await LoadCartAsync(cartId, ct);
+        var cart = await LoadCartAsync(cartId, userId, ct);
 
         // Validate product exists and is active
         var product = await _db.BillingProducts
             .Include(p => p.Prices)
             .Where(p => p.Code == request.ProductCode && p.IsActive)
             .FirstOrDefaultAsync(ct)
-            ?? throw new InvalidOperationException($"Product '{request.ProductCode}' not found or inactive.");
+            ?? throw ApiException.NotFound("product_not_found", $"Product '{request.ProductCode}' not found or inactive.");
 
         var price = product.Prices.FirstOrDefault(p => p.Id == request.BillingPriceId && p.IsActive)
-            ?? throw new InvalidOperationException($"Price {request.BillingPriceId} not found for product '{request.ProductCode}'.");
+            ?? throw ApiException.NotFound("price_not_found", $"Price {request.BillingPriceId} not found for product '{request.ProductCode}'.");
 
         // Enforce: max 1 subscription per cart
         if (product.ProductType == "subscription")
         {
             var hasSubscription = cart.Items.Any(i => i.BillingProduct.ProductType == "subscription");
             if (hasSubscription)
-                throw new InvalidOperationException("Only one subscription can be added to the cart.");
+                throw ApiException.Validation("cart_one_subscription", "Only one subscription can be added to the cart.");
         }
 
         var existing = cart.Items.FirstOrDefault(i =>
@@ -107,14 +107,14 @@ public sealed class CartService : ICartService
         return MapCart(cart);
     }
 
-    public async Task<CartDto> UpdateItemQuantityAsync(string cartId, Guid itemId, int quantity, CancellationToken ct = default)
+    public async Task<CartDto> UpdateItemQuantityAsync(string cartId, string userId, Guid itemId, int quantity, CancellationToken ct = default)
     {
         if (quantity <= 0)
-            throw new ArgumentOutOfRangeException(nameof(quantity), "Quantity must be positive.");
+            throw ApiException.Validation("invalid_quantity", "Quantity must be positive.");
 
-        var cart = await LoadCartAsync(cartId, ct);
+        var cart = await LoadCartAsync(cartId, userId, ct);
         var item = cart.Items.FirstOrDefault(i => i.Id == itemId)
-            ?? throw new InvalidOperationException($"Cart item {itemId} not found.");
+            ?? throw ApiException.NotFound("cart_item_not_found", $"Cart item {itemId} not found.");
 
         item.Quantity = quantity;
         item.UpdatedAt = DateTimeOffset.UtcNow;
@@ -123,11 +123,11 @@ public sealed class CartService : ICartService
         return MapCart(cart);
     }
 
-    public async Task<CartDto> RemoveItemAsync(string cartId, Guid itemId, CancellationToken ct = default)
+    public async Task<CartDto> RemoveItemAsync(string cartId, string userId, Guid itemId, CancellationToken ct = default)
     {
-        var cart = await LoadCartAsync(cartId, ct);
+        var cart = await LoadCartAsync(cartId, userId, ct);
         var item = cart.Items.FirstOrDefault(i => i.Id == itemId)
-            ?? throw new InvalidOperationException($"Cart item {itemId} not found.");
+            ?? throw ApiException.NotFound("cart_item_not_found", $"Cart item {itemId} not found.");
 
         _db.CartItems.Remove(item);
         cart.Items.Remove(item);
@@ -136,9 +136,9 @@ public sealed class CartService : ICartService
         return MapCart(cart);
     }
 
-    public async Task<CartDto> ApplyPromoCodeAsync(string cartId, string code, CancellationToken ct = default)
+    public async Task<CartDto> ApplyPromoCodeAsync(string cartId, string userId, string code, CancellationToken ct = default)
     {
-        var cart = await LoadCartAsync(cartId, ct);
+        var cart = await LoadCartAsync(cartId, userId, ct);
 
         // Validate against BillingCoupon (EndsAt is the expiry field in this entity)
         var coupon = await _db.BillingCoupons
@@ -146,7 +146,7 @@ public sealed class CartService : ICartService
             .Where(c => c.StartsAt == null || c.StartsAt <= DateTimeOffset.UtcNow)
             .Where(c => c.EndsAt == null || c.EndsAt >= DateTimeOffset.UtcNow)
             .FirstOrDefaultAsync(ct)
-            ?? throw new InvalidOperationException($"Promo code '{code}' is not valid or expired.");
+            ?? throw ApiException.Validation("promo_code_invalid", $"Promo code '{code}' is not valid or expired.");
 
         // Don't apply the same code twice
         if (cart.AppliedPromoCodes.Any(p => p.Code == code))
@@ -172,9 +172,9 @@ public sealed class CartService : ICartService
         return MapCart(cart);
     }
 
-    public async Task<CartDto> RemovePromoCodeAsync(string cartId, string code, CancellationToken ct = default)
+    public async Task<CartDto> RemovePromoCodeAsync(string cartId, string userId, string code, CancellationToken ct = default)
     {
-        var cart = await LoadCartAsync(cartId, ct);
+        var cart = await LoadCartAsync(cartId, userId, ct);
         var promo = cart.AppliedPromoCodes.FirstOrDefault(p => p.Code == code);
         if (promo is not null)
         {
@@ -186,9 +186,9 @@ public sealed class CartService : ICartService
         return MapCart(cart);
     }
 
-    public async Task ClearCartAsync(string cartId, CancellationToken ct = default)
+    public async Task ClearCartAsync(string cartId, string userId, CancellationToken ct = default)
     {
-        var cart = await LoadCartAsync(cartId, ct);
+        var cart = await LoadCartAsync(cartId, userId, ct);
         _db.CartItems.RemoveRange(cart.Items);
         _db.AppliedPromoCodes.RemoveRange(cart.AppliedPromoCodes);
         cart.Items.Clear();
@@ -250,28 +250,31 @@ public sealed class CartService : ICartService
         await _db.SaveChangesAsync(ct);
     }
 
-    public async Task<CartDto?> GetCartByIdAsync(string cartId, CancellationToken ct = default)
+    public async Task<CartDto?> GetCartByIdAsync(string cartId, string userId, CancellationToken ct = default)
     {
         if (!Guid.TryParse(cartId, out var id)) return null;
+        // Owner-scoped: checkout may only read the caller's own cart by id.
         var cart = await _db.Carts
             .Include(c => c.Items).ThenInclude(i => i.BillingProduct)
             .Include(c => c.Items).ThenInclude(i => i.BillingPrice)
             .Include(c => c.AppliedPromoCodes)
-            .FirstOrDefaultAsync(c => c.Id == id, ct);
+            .FirstOrDefaultAsync(c => c.Id == id && c.UserId == userId, ct);
         return cart is null ? null : MapCart(cart);
     }
 
-    private async Task<Cart> LoadCartAsync(string cartId, CancellationToken ct)
+    private async Task<Cart> LoadCartAsync(string cartId, string userId, CancellationToken ct)
     {
         if (!Guid.TryParse(cartId, out var id))
-            throw new InvalidOperationException("Invalid cart ID.");
+            throw ApiException.Validation("invalid_cart_id", "Invalid cart ID.");
 
+        // Scope by owner so a learner can only load (and therefore mutate) their
+        // own cart — a foreign cartId is indistinguishable from a missing one.
         return await _db.Carts
             .Include(c => c.Items).ThenInclude(i => i.BillingProduct)
             .Include(c => c.Items).ThenInclude(i => i.BillingPrice)
             .Include(c => c.AppliedPromoCodes)
-            .FirstOrDefaultAsync(c => c.Id == id && c.Status == "active", ct)
-            ?? throw new InvalidOperationException($"Cart {cartId} not found or not active.");
+            .FirstOrDefaultAsync(c => c.Id == id && c.UserId == userId && c.Status == "active", ct)
+            ?? throw ApiException.NotFound("cart_not_found", "Cart not found.");
     }
 
     private static CartDto MapCart(Cart cart)

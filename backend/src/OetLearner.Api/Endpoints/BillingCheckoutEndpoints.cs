@@ -38,11 +38,13 @@ public static class BillingCheckoutEndpoints
     }
 
     private static async Task<Results<Ok<CheckoutSessionStatusDto>, NotFound>> GetSessionStatus(
+        HttpContext http,
         Guid sessionId,
         ICheckoutService checkoutService,
         CancellationToken ct)
     {
-        var status = await checkoutService.GetSessionStatusAsync(sessionId, ct);
+        var userId = http.User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        var status = await checkoutService.GetSessionStatusAsync(userId, sessionId, ct);
         return status is null ? TypedResults.NotFound() : TypedResults.Ok(status);
     }
 

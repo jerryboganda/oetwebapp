@@ -26,10 +26,16 @@ public static class BillingCartEndpoints
     private static string? GetUserId(HttpContext http)
         => http.User.FindFirstValue(ClaimTypes.NameIdentifier);
 
+    // Cart routes all RequireAuthorization, so the caller id is always present.
+    // Every cartId mutation is scoped to this owner (object-level authorization).
+    private static string RequireUserId(HttpContext http)
+        => http.User.FindFirstValue(ClaimTypes.NameIdentifier)
+           ?? throw new InvalidOperationException("Authenticated user id is required.");
+
     private static async Task<Ok<CartDto>> GetCart(
         HttpContext http,
         [FromQuery] string? sessionToken,
-        ICartService cartService,
+        [FromServices] ICartService cartService,
         CancellationToken ct)
     {
         var userId = GetUserId(http);
@@ -41,16 +47,16 @@ public static class BillingCartEndpoints
         HttpContext http,
         [FromQuery] string? cartId,
         AddCartItemRequest request,
-        ICartService cartService,
+        [FromServices] ICartService cartService,
         CancellationToken ct)
     {
-        var userId = GetUserId(http);
+        var userId = RequireUserId(http);
         if (string.IsNullOrWhiteSpace(cartId))
         {
             var newCart = await cartService.GetOrCreateCartAsync(userId, null, ct);
             cartId = newCart.Id;
         }
-        var cart = await cartService.AddItemAsync(cartId, request, ct);
+        var cart = await cartService.AddItemAsync(cartId, userId, request, ct);
         return TypedResults.Ok(cart);
     }
 
@@ -59,56 +65,60 @@ public static class BillingCartEndpoints
         Guid itemId,
         [FromQuery] string cartId,
         [FromBody] UpdateQuantityRequest request,
-        ICartService cartService,
+        [FromServices] ICartService cartService,
         CancellationToken ct)
     {
-        var cart = await cartService.UpdateItemQuantityAsync(cartId, itemId, request.Quantity, ct);
+        var cart = await cartService.UpdateItemQuantityAsync(cartId, RequireUserId(http), itemId, request.Quantity, ct);
         return TypedResults.Ok(cart);
     }
 
     private static async Task<Results<Ok<CartDto>, NotFound>> RemoveItem(
+        HttpContext http,
         Guid itemId,
         [FromQuery] string cartId,
-        ICartService cartService,
+        [FromServices] ICartService cartService,
         CancellationToken ct)
     {
-        var cart = await cartService.RemoveItemAsync(cartId, itemId, ct);
+        var cart = await cartService.RemoveItemAsync(cartId, RequireUserId(http), itemId, ct);
         return TypedResults.Ok(cart);
     }
 
     private static async Task<Ok<CartDto>> ApplyPromoCode(
+        HttpContext http,
         [FromQuery] string cartId,
         ApplyPromoCodeRequest request,
-        ICartService cartService,
+        [FromServices] ICartService cartService,
         CancellationToken ct)
     {
-        var cart = await cartService.ApplyPromoCodeAsync(cartId, request.Code, ct);
+        var cart = await cartService.ApplyPromoCodeAsync(cartId, RequireUserId(http), request.Code, ct);
         return TypedResults.Ok(cart);
     }
 
     private static async Task<Ok<CartDto>> RemovePromoCode(
+        HttpContext http,
         [FromQuery] string cartId,
         string code,
-        ICartService cartService,
+        [FromServices] ICartService cartService,
         CancellationToken ct)
     {
-        var cart = await cartService.RemovePromoCodeAsync(cartId, code, ct);
+        var cart = await cartService.RemovePromoCodeAsync(cartId, RequireUserId(http), code, ct);
         return TypedResults.Ok(cart);
     }
 
     private static async Task<NoContent> ClearCart(
+        HttpContext http,
         [FromQuery] string cartId,
-        ICartService cartService,
+        [FromServices] ICartService cartService,
         CancellationToken ct)
     {
-        await cartService.ClearCartAsync(cartId, ct);
+        await cartService.ClearCartAsync(cartId, RequireUserId(http), ct);
         return TypedResults.NoContent();
     }
 
     private static async Task<NoContent> MergeAnonymousCart(
         HttpContext http,
         MergeCartRequest request,
-        ICartService cartService,
+        [FromServices] ICartService cartService,
         CancellationToken ct)
     {
         var userId = GetUserId(http)

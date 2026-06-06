@@ -944,6 +944,14 @@ builder.Services.AddScoped<EngagementService>();
 builder.Services.AddSingleton<OetLearner.Api.Services.Billing.IStripeService, OetLearner.Api.Services.Billing.StripeService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Billing.IBillingCatalogService, OetLearner.Api.Services.Billing.BillingCatalogService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Billing.IFulfillmentService, OetLearner.Api.Services.Billing.FulfillmentService>();
+// Cart / checkout / subscription / promo-code commerce services. These back the
+// /v1/cart, /v1/checkout, /v1/subscriptions/me and /v1/promo-codes endpoints;
+// without these registrations route-building infers the service params as a
+// request body and the app fails to boot.
+builder.Services.AddScoped<OetLearner.Api.Services.Billing.ICartService, OetLearner.Api.Services.Billing.CartService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Billing.ICheckoutService, OetLearner.Api.Services.Billing.CheckoutService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Billing.ISubscriptionService, OetLearner.Api.Services.Billing.SubscriptionService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Billing.IPromoCodeService, OetLearner.Api.Services.Billing.PromoCodeService>();
 builder.Services.AddHostedService<BackgroundJobProcessor>();
 
 // ── Phase 1 new services ──
@@ -1347,6 +1355,9 @@ builder.Services.AddScoped<OetLearner.Api.Services.Reading.ISkillScoringService,
 builder.Services.AddScoped<OetLearner.Api.Services.Listening.IListeningLearnerPathwayService, OetLearner.Api.Services.Listening.ListeningLearnerPathwayService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Listening.IListeningSkillScoringService, OetLearner.Api.Services.Listening.ListeningSkillScoringService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Listening.IListeningLearnerGradingService, OetLearner.Api.Services.Listening.ListeningLearnerGradingService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Listening.IListeningLessonService, OetLearner.Api.Services.Listening.ListeningLessonService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Listening.IListeningStrategyService, OetLearner.Api.Services.Listening.ListeningStrategyService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Listening.IListeningMockService, OetLearner.Api.Services.Listening.ListeningMockService>();
 // Listening dictation drill subsystem (Phase 4 of OET_LISTENING_MODULE_PATHWAY.md §14).
 builder.Services.AddScoped<OetLearner.Api.Services.Listening.IDictationService, OetLearner.Api.Services.Listening.DictationService>();
 // Listening pronunciation library — SM-2 spaced repetition (Phase 4 of §15).
@@ -2009,6 +2020,10 @@ app.MapBillingExpansionEndpoints();
 app.MapBillingExpansionV2Endpoints();
 app.MapOet2026CatalogEndpoints();
 app.MapBillingCatalogEndpoints();
+app.MapBillingCartEndpoints();
+app.MapBillingCheckoutEndpoints();
+app.MapBillingSubscriptionEndpoints();
+app.MapBillingPromoCodeEndpoints();
 app.MapStripeWebhookEndpoints();
 // Wave B4 — finance/ops admin surface (revenue/MRR/churn/LTV/refunds + product
 // & coupon CRUD + Stripe Tax registrations). Each route requires a specific

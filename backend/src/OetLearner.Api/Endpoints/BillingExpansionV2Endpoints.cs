@@ -138,11 +138,15 @@ public static class BillingExpansionV2Endpoints
         return TypedResults.Ok(new CancellationIntentResponse(intent.Id, intent.Status, offeredCoupon));
     }
 
-    private static async Task<Results<Ok<Subscription>, BadRequest<string>>> ConfirmCancelIntent(string id, LearnerDbContext db, CancellationToken ct)
+    private static async Task<Results<Ok<Subscription>, BadRequest<string>>> ConfirmCancelIntent(HttpContext http, string id, LearnerDbContext db, CancellationToken ct)
     {
-        var intent = await db.CancellationIntents.FirstOrDefaultAsync(i => i.Id == id, ct);
+        // Object-level authorization: scope the intent (and its subscription) to the
+        // caller so a learner can only confirm-cancel their OWN intent. Without this,
+        // any authenticated user could cancel another user's subscription by id.
+        var userId = http.UserId();
+        var intent = await db.CancellationIntents.FirstOrDefaultAsync(i => i.Id == id && i.UserId == userId, ct);
         if (intent is null) return TypedResults.BadRequest("Intent not found.");
-        var sub = await db.Subscriptions.FirstOrDefaultAsync(s => s.Id == intent.SubscriptionId, ct);
+        var sub = await db.Subscriptions.FirstOrDefaultAsync(s => s.Id == intent.SubscriptionId && s.UserId == userId, ct);
         if (sub is null) return TypedResults.BadRequest("Subscription not found.");
 
         SubscriptionStateMachine.Transition(sub, SubscriptionStatus.Cancelled, "learner_confirmed_cancel");
@@ -153,9 +157,11 @@ public static class BillingExpansionV2Endpoints
         return TypedResults.Ok(sub);
     }
 
-    private static async Task<Results<Ok<CancellationIntent>, BadRequest<string>>> RetainCancelIntent(string id, LearnerDbContext db, CancellationToken ct)
+    private static async Task<Results<Ok<CancellationIntent>, BadRequest<string>>> RetainCancelIntent(HttpContext http, string id, LearnerDbContext db, CancellationToken ct)
     {
-        var intent = await db.CancellationIntents.FirstOrDefaultAsync(i => i.Id == id, ct);
+        // Object-level authorization: only the owner may retain their own intent.
+        var userId = http.UserId();
+        var intent = await db.CancellationIntents.FirstOrDefaultAsync(i => i.Id == id && i.UserId == userId, ct);
         if (intent is null) return TypedResults.BadRequest("Intent not found.");
         intent.Status = "retained";
         intent.ResolvedAt = DateTimeOffset.UtcNow;
