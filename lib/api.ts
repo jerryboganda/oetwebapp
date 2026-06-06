@@ -576,6 +576,29 @@ async function apiRequest<T = any>(path: string, init?: RequestInit, options?: {
   throw lastError ?? new Error('Request failed');
 }
 
+async function apiBlobRequest(path: string, init?: RequestInit): Promise<Blob> {
+  const response = await fetchWithTimeout(resolveApiUrl(path), {
+    ...init,
+    credentials: init?.credentials ?? 'include',
+    headers: await getHeaders(path, init?.headers),
+  });
+
+  if (!response.ok) {
+    let code = response.status === 401 ? 'not_authenticated' : response.status === 403 ? 'forbidden' : 'unknown_error';
+    let message = `Request failed: ${response.status}`;
+    try {
+      const error = await response.json();
+      code = error.code ?? code;
+      message = error.message ?? error.title ?? message;
+    } catch {
+      // Binary endpoints often return non-JSON error bodies; status/code still carry the failure.
+    }
+    throw new ApiError(response.status, code, message, isRetryable(response.status));
+  }
+
+  return response.blob();
+}
+
 type ApiClientInit = Omit<RequestInit, 'body' | 'method'>;
 type ApiClientBody = unknown;
 
@@ -9354,20 +9377,10 @@ export async function updateAdminLaunchReadinessSettings(
 }
 
 export async function adminConversationTtsPreview(body: { text?: string; voice?: string; locale?: string; modelVariant?: string; instructions?: string }) {
-  const base = (process.env.NEXT_PUBLIC_API_BASE_URL ?? '').replace(/\/$/, '');
-  const { ensureFreshAccessToken } = await import('@/lib/auth-client');
-  const token = await ensureFreshAccessToken();
-  const res = await fetch(`${base}/v1/admin/conversation/tts-preview`, {
+  return apiBlobRequest('/v1/admin/conversation/tts-preview', {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
     body: JSON.stringify(body),
-    credentials: 'include',
   });
-  if (!res.ok) throw new Error(`TTS preview failed (${res.status})`);
-  return res.blob();
 }
 
 // ── Qwen3 Voice Studio (Phase Q1) ──────────────────────────────────
@@ -9400,15 +9413,8 @@ export async function previewAdminQwen3Voice(body: {
   text?: string;
   locale?: string;
 }): Promise<Blob> {
-  const base = (process.env.NEXT_PUBLIC_API_BASE_URL ?? '').replace(/\/$/, '');
-  const { ensureFreshAccessToken } = await import('@/lib/auth-client');
-  const token = await ensureFreshAccessToken();
-  const res = await fetch(`${base}/v1/admin/conversation/tts/qwen3/preview-voice`, {
+  return apiBlobRequest('/v1/admin/conversation/tts/qwen3/preview-voice', {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
     body: JSON.stringify({
       modelVariant: body.modelVariant,
       voice: body.voiceId ?? '',
@@ -9416,17 +9422,7 @@ export async function previewAdminQwen3Voice(body: {
       text: body.text ?? '',
       locale: body.locale ?? 'en-GB',
     }),
-    credentials: 'include',
   });
-  if (!res.ok) {
-    let msg = `Qwen3 preview failed (${res.status})`;
-    try {
-      const j = (await res.json()) as { message?: string };
-      if (j?.message) msg = j.message;
-    } catch { /* non-json error body */ }
-    throw new Error(msg);
-  }
-  return res.blob();
 }
 
 // Bulk regenerate vocabulary audio with a pinned voice. dryRun=true returns
@@ -13258,27 +13254,10 @@ export async function previewAdminVoiceDesign(body: {
   pitch?: number;
   emotion?: string;
 }): Promise<Blob> {
-  const base = (process.env.NEXT_PUBLIC_API_BASE_URL ?? '').replace(/\/$/, '');
-  const { ensureFreshAccessToken } = await import('@/lib/auth-client');
-  const token = await ensureFreshAccessToken();
-  const res = await fetch(`${base}/v1/admin/voice-design/preview`, {
+  return apiBlobRequest('/v1/admin/voice-design/preview', {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
     body: JSON.stringify(body),
-    credentials: 'include',
   });
-  if (!res.ok) {
-    let msg = `Voice design preview failed (${res.status})`;
-    try {
-      const j = (await res.json()) as { message?: string };
-      if (j?.message) msg = j.message;
-    } catch { /* non-json error body */ }
-    throw new Error(msg);
-  }
-  return res.blob();
 }
 
 /** Bulk regenerate audio across the platform with specified voice config */
@@ -13619,6 +13598,59 @@ function emptyCart(): Cart {
   };
 }
 
+// FE-017: the backend serialises CartDto/CartItemDto in camelCase with different
+// field names than the FE `Cart` shape the UI consumes (id↔cartId, subtotal↔
+// subtotalAmount, unitPrice↔unitAmount, appliedPromoCodes:string[]↔promoCodes).
+// Map at the API boundary so the cart renders real numbers (not 0/undefined) and
+// the UI components stay untouched.
+interface BackendCartItemDto {
+  id: string;
+  productCode: string;
+  productName: string;
+  productType: string;
+  billingPriceId: string;
+  unitPrice: number;
+  currency: string;
+  interval?: string | null;
+  quantity: number;
+  lineTotal: number;
+}
+interface BackendCartDto {
+  id: string;
+  status: string;
+  items: BackendCartItemDto[];
+  appliedPromoCodes: string[];
+  subtotal: number;
+  discount: number;
+  total: number;
+  currency: string;
+  expiresAt: string;
+}
+function mapCart(dto: BackendCartDto): Cart {
+  return {
+    cartId: dto.id,
+    currency: dto.currency,
+    items: (dto.items ?? []).map((it) => ({
+      itemId: it.id,
+      productCode: it.productCode,
+      productName: it.productName,
+      description: null,
+      quantity: it.quantity,
+      unitAmount: it.unitPrice,
+      totalAmount: it.lineTotal,
+      currency: it.currency,
+      productType: it.productType,
+      imageUrl: null,
+    })),
+    promoCodes: (dto.appliedPromoCodes ?? []).map((code) => ({ code, discountAmount: 0 })),
+    subtotalAmount: dto.subtotal,
+    discountAmount: dto.discount,
+    taxAmount: 0,
+    totalAmount: dto.total,
+    updatedAt: dto.expiresAt,
+  };
+}
+
 async function maybe<T>(promise: Promise<T>, fallback: T | null = null): Promise<T | null> {
   try {
     return await promise;
@@ -13632,7 +13664,7 @@ async function maybe<T>(promise: Promise<T>, fallback: T | null = null): Promise
 
 export async function fetchCart(): Promise<Cart> {
   try {
-    return await apiRequest<Cart>('/v1/cart');
+    return mapCart(await apiRequest<BackendCartDto>('/v1/cart'));
   } catch (err) {
     if (err instanceof ApiError && err.status === 404) {
       return emptyCart();
@@ -13642,39 +13674,53 @@ export async function fetchCart(): Promise<Cart> {
 }
 
 export async function createCart(): Promise<Cart> {
-  return apiRequest<Cart>('/v1/cart', { method: 'POST' });
+  return mapCart(await apiRequest<BackendCartDto>('/v1/cart', { method: 'POST' }));
 }
 
 export async function addCartItem(payload: {
   productCode: string;
+  billingPriceId: string;
   quantity?: number;
 }): Promise<Cart> {
-  return apiRequest<Cart>('/v1/cart/items', {
+  // FE-017: backend AddCartItemRequest requires billingPriceId (Guid).
+  return mapCart(await apiRequest<BackendCartDto>('/v1/cart/items', {
     method: 'POST',
-    body: JSON.stringify({ productCode: payload.productCode, quantity: payload.quantity ?? 1 }),
-  });
+    body: JSON.stringify({
+      productCode: payload.productCode,
+      billingPriceId: payload.billingPriceId,
+      quantity: payload.quantity ?? 1,
+    }),
+  }));
 }
 
-export async function updateCartItem(itemId: string, quantity: number): Promise<Cart> {
-  return apiRequest<Cart>(`/v1/cart/items/${encodeURIComponent(itemId)}`, {
-    method: 'PATCH',
-    body: JSON.stringify({ quantity }),
-  });
+// FE-017: the backend cart-item / promo mutation endpoints require the owning
+// cart id as a query param (object-level authorization); thread it from callers.
+export async function updateCartItem(cartId: string, itemId: string, quantity: number): Promise<Cart> {
+  return mapCart(await apiRequest<BackendCartDto>(
+    `/v1/cart/items/${encodeURIComponent(itemId)}?cartId=${encodeURIComponent(cartId)}`,
+    { method: 'PATCH', body: JSON.stringify({ quantity }) },
+  ));
 }
 
-export async function removeCartItem(itemId: string): Promise<Cart> {
-  return apiRequest<Cart>(`/v1/cart/items/${encodeURIComponent(itemId)}`, { method: 'DELETE' });
+export async function removeCartItem(cartId: string, itemId: string): Promise<Cart> {
+  return mapCart(await apiRequest<BackendCartDto>(
+    `/v1/cart/items/${encodeURIComponent(itemId)}?cartId=${encodeURIComponent(cartId)}`,
+    { method: 'DELETE' },
+  ));
 }
 
-export async function applyCartPromoCode(code: string): Promise<Cart> {
-  return apiRequest<Cart>('/v1/cart/promo-codes', {
-    method: 'POST',
-    body: JSON.stringify({ code }),
-  });
+export async function applyCartPromoCode(cartId: string, code: string): Promise<Cart> {
+  return mapCart(await apiRequest<BackendCartDto>(
+    `/v1/cart/promo-codes?cartId=${encodeURIComponent(cartId)}`,
+    { method: 'POST', body: JSON.stringify({ code }) },
+  ));
 }
 
-export async function removeCartPromoCode(code: string): Promise<Cart> {
-  return apiRequest<Cart>(`/v1/cart/promo-codes/${encodeURIComponent(code)}`, { method: 'DELETE' });
+export async function removeCartPromoCode(cartId: string, code: string): Promise<Cart> {
+  return mapCart(await apiRequest<BackendCartDto>(
+    `/v1/cart/promo-codes/${encodeURIComponent(code)}?cartId=${encodeURIComponent(cartId)}`,
+    { method: 'DELETE' },
+  ));
 }
 
 export interface CheckoutSessionResponse {

@@ -58,12 +58,13 @@ export function CartDrawer({ open, onClose }: CartDrawerProps) {
 
   const onQty = useCallback(
     async (itemId: string, qty: number) => {
+      if (!cart) return;
       setBusy(true);
       try {
         if (qty <= 0) {
-          setCart(await removeCartItem(itemId));
+          setCart(await removeCartItem(cart.cartId, itemId));
         } else {
-          setCart(await updateCartItem(itemId, qty));
+          setCart(await updateCartItem(cart.cartId, itemId, qty));
         }
         broadcast();
       } catch (err) {
@@ -72,7 +73,7 @@ export function CartDrawer({ open, onClose }: CartDrawerProps) {
         setBusy(false);
       }
     },
-    [broadcast],
+    [cart, broadcast],
   );
 
   if (!open) return null;

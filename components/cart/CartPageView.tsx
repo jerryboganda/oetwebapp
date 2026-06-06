@@ -76,14 +76,14 @@ export function CartPageView({ emptyStateHref = '/catalog' }: CartPageViewProps)
 
   const onUpdateQuantity = useCallback(
     async (item: CartLineItem, nextQty: number) => {
-      if (nextQty < 0 || nextQty === item.quantity) return;
+      if (!cart || nextQty < 0 || nextQty === item.quantity) return;
       setBusy(true);
       try {
         if (nextQty === 0) {
-          const next = await removeCartItem(item.itemId);
+          const next = await removeCartItem(cart.cartId, item.itemId);
           setCart(next);
         } else {
-          const next = await updateCartItem(item.itemId, nextQty);
+          const next = await updateCartItem(cart.cartId, item.itemId, nextQty);
           setCart(next);
         }
         broadcast();
@@ -94,14 +94,15 @@ export function CartPageView({ emptyStateHref = '/catalog' }: CartPageViewProps)
         setBusy(false);
       }
     },
-    [broadcast],
+    [cart, broadcast],
   );
 
   const onRemoveItem = useCallback(
     async (item: CartLineItem) => {
+      if (!cart) return;
       setBusy(true);
       try {
-        const next = await removeCartItem(item.itemId);
+        const next = await removeCartItem(cart.cartId, item.itemId);
         setCart(next);
         broadcast();
       } catch (err) {
@@ -111,15 +112,15 @@ export function CartPageView({ emptyStateHref = '/catalog' }: CartPageViewProps)
         setBusy(false);
       }
     },
-    [broadcast],
+    [cart, broadcast],
   );
 
   const onApplyPromo = useCallback(async () => {
-    if (!promoInput.trim()) return;
+    if (!cart || !promoInput.trim()) return;
     setPromoError(null);
     setBusy(true);
     try {
-      const next = await applyCartPromoCode(promoInput.trim().toUpperCase());
+      const next = await applyCartPromoCode(cart.cartId, promoInput.trim().toUpperCase());
       setCart(next);
       setPromoInput('');
       broadcast();
@@ -129,13 +130,14 @@ export function CartPageView({ emptyStateHref = '/catalog' }: CartPageViewProps)
     } finally {
       setBusy(false);
     }
-  }, [promoInput, broadcast]);
+  }, [cart, promoInput, broadcast]);
 
   const onRemovePromo = useCallback(
     async (code: string) => {
+      if (!cart) return;
       setBusy(true);
       try {
-        const next = await removeCartPromoCode(code);
+        const next = await removeCartPromoCode(cart.cartId, code);
         setCart(next);
         broadcast();
       } catch (err) {
@@ -145,7 +147,7 @@ export function CartPageView({ emptyStateHref = '/catalog' }: CartPageViewProps)
         setBusy(false);
       }
     },
-    [broadcast],
+    [cart, broadcast],
   );
 
   const onCheckout = useCallback(async () => {
