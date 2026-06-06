@@ -232,6 +232,45 @@ public sealed class PrivateSpeakingRescheduleTests
         Assert.Null(savedOriginal.RescheduledToBookingId);
     }
 
+    // ── Background sweep safety net: expired penalty reservation reverts too ──
+
+    [Fact]
+    public async Task ExpireStaleReservations_PenaltyReplacement_RevertsAndNeutralizesEntitlement()
+    {
+        await using var db = CreateDb();
+        var stripe = new FakeStripeService();
+        var service = CreateService(db, stripe);
+
+        SeedTutorWithMondayAvailability(db);
+        SeedSubscription(db, "sub-1", "learner-1", speakingRemaining: 0);
+        SeedLearnerUser(db);
+        var original = SeedConfirmedBooking(db, Now.AddHours(2)); // same-day → penalty path
+        await db.SaveChangesAsync();
+
+        var result = await service.RescheduleBookingAsync(
+            original.Id, "learner-1", NewSlotUtc, "UTC", null, NewKey(), CancellationToken.None);
+        Assert.True(result.Success, result.Error);
+
+        // Simulate the Stripe webhook never arriving: force the reservation stale so the
+        // background sweep (not the webhook) is what expires the penalty replacement.
+        var replacement = await db.PrivateSpeakingBookings.FindAsync(result.BookingId);
+        replacement!.ReservationExpiresAt = Now.AddMinutes(-1);
+        await db.SaveChangesAsync();
+
+        await service.ExpireStaleReservationsAsync(CancellationToken.None);
+
+        // Replacement expired AND its inherited entitlement neutralized (no phantom credit).
+        var savedReplacement = await db.PrivateSpeakingBookings.FindAsync(replacement.Id);
+        Assert.Equal(PrivateSpeakingBookingStatus.Expired, savedReplacement!.Status);
+        Assert.False(savedReplacement.EntitlementConsumed);
+        Assert.Null(savedReplacement.EntitlementSubscriptionId);
+
+        // Original restored to a standalone Confirmed booking (link cleared) — not stranded.
+        var savedOriginal = await db.PrivateSpeakingBookings.FindAsync(original.Id);
+        Assert.Equal(PrivateSpeakingBookingStatus.Confirmed, savedOriginal!.Status);
+        Assert.Null(savedOriginal.RescheduledToBookingId);
+    }
+
     // ── Helpers ─────────────────────────────────────────────────────────
 
     private static string NewKey() => Guid.NewGuid().ToString();

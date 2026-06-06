@@ -726,6 +726,15 @@ public sealed class PrivateSpeakingService(
 
         original.RescheduledToBookingId = null;
         original.UpdatedAt = timeProvider.GetUtcNow();
+
+        // The replacement only inherited the entitlement reference from the original; it never
+        // independently consumed a credit. Now that the reschedule is aborted, neutralize the
+        // replacement's entitlement fields so a later cancellation of this Expired/Failed row
+        // cannot restore a phantom credit (the original retains the real consumption).
+        replacement.EntitlementConsumed = false;
+        replacement.EntitlementSubscriptionId = null;
+        replacement.UpdatedAt = timeProvider.GetUtcNow();
+
         await db.SaveChangesAsync(ct);
     }
 
@@ -954,6 +963,15 @@ public sealed class PrivateSpeakingService(
 
         if (staleBookings.Count > 0)
             await db.SaveChangesAsync(ct);
+
+        // A same-day reschedule penalty replacement is a PendingPayment row with a reservation
+        // timeout. If its Stripe checkout never resolves and this sweep (the safety net) expires
+        // it, mirror the webhook revert so the original booking is freed and no credit is stranded.
+        // RevertRescheduleIfPendingAsync is a no-op for normal (non-reschedule) reservations.
+        foreach (var booking in staleBookings)
+        {
+            await RevertRescheduleIfPendingAsync(booking, ct);
+        }
     }
 
     // ── Cancellation ────────────────────────────────────────────────────
