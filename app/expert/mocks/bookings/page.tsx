@@ -164,6 +164,13 @@ export default function ExpertMockBookingsPage() {
   return (
     <ExpertRouteWorkspace>
       <div className="space-y-8">
+        {/* FE-004: the heatmap / queue / consistency figures below are hardcoded
+            synthetic data (MOCK_*). Make that unmistakable instead of letting it
+            read as live cohort data. */}
+        <div role="status" className="rounded-2xl border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-warning">
+          <strong className="font-semibold">Sample data — preview.</strong> These figures are synthetic
+          placeholders while the teacher-batch mock endpoints are wired up; they are not live.
+        </div>
         <ExpertRouteHero
           eyebrow="Mocks V2"
           title="Teacher batch mocks dashboard"

@@ -1,6 +1,6 @@
 'use client';
 
-import { HubConnection, HubConnectionBuilder, HttpTransportType, LogLevel } from '@microsoft/signalr';
+import type { HubConnection } from '@microsoft/signalr';
 import { Toast } from '@/components/ui/alert';
 import { ensureFreshAccessToken } from '@/lib/auth-client';
 import { env } from '@/lib/env';
@@ -73,12 +73,6 @@ const NotificationActionsContext = createContext<NotificationActionsValue | null
 const PAGE_SIZE = 20;
 const POLL_INTERVAL_MS = 30_000;
 const PUSH_STORAGE_KEY = 'oet.notification.push-registration';
-// Same-origin `/api/backend` is implemented via a Next route handler, which can proxy HTTP
-// requests but not a SignalR WebSocket upgrade. Fall back to long polling in that topology.
-const PROXY_SAFE_SIGNALR_TRANSPORT = env.apiBaseUrl.startsWith('/')
-  ? HttpTransportType.LongPolling
-  : HttpTransportType.WebSockets;
-
 interface StoredPushRegistration {
   endpoint: string;
   subscriptionId: string;
@@ -539,49 +533,64 @@ export function NotificationCenterProvider({ children }: { children: ReactNode }
     }
 
     let disposed = false;
-    const connection = new HubConnectionBuilder()
-      .withUrl(`${env.apiBaseUrl}/v1/notifications/hub`, {
-        accessTokenFactory: async () => (await ensureFreshAccessToken()) ?? '',
-        transport: PROXY_SAFE_SIGNALR_TRANSPORT,
-      })
-      .configureLogging(LogLevel.None)
-      .withAutomaticReconnect([0, 2_000, 5_000, 10_000])
-      .build();
 
-    hubConnectionRef.current = connection;
-    setConnectionStatus('connecting');
-    connection.on('notification', (envelope: NotificationRealtimeEnvelope) => {
-      handleRealtimeEnvelope(envelope);
-    });
-    connection.onreconnecting(() => {
-      setConnectionStatus('reconnecting');
-    });
-    connection.onreconnected(() => {
-      setConnectionStatus('connected');
-      void refreshFeed({ silent: true });
-    });
-    connection.onclose(() => {
-      if (!disposed) {
-        setConnectionStatus('disconnected');
-      }
-    });
+    // FE-022: lazy-load @microsoft/signalr so it stays out of the shared client
+    // bundle on every authenticated page (this provider mounts app-wide via the
+    // app shell). It is only needed once a notification hub connection is opened.
+    void (async () => {
+      const { HubConnectionBuilder, HttpTransportType, LogLevel } = await import('@microsoft/signalr');
+      if (disposed) return;
 
-    void connection.start()
-      .then(() => {
-        if (!disposed) {
-          setConnectionStatus('connected');
-        }
-      })
-      .catch(() => {
+      // `/api/backend` is a Next route handler that can proxy HTTP but not a
+      // SignalR WebSocket upgrade — fall back to long polling on that topology.
+      const transport = env.apiBaseUrl.startsWith('/')
+        ? HttpTransportType.LongPolling
+        : HttpTransportType.WebSockets;
+
+      const connection = new HubConnectionBuilder()
+        .withUrl(`${env.apiBaseUrl}/v1/notifications/hub`, {
+          accessTokenFactory: async () => (await ensureFreshAccessToken()) ?? '',
+          transport,
+        })
+        .configureLogging(LogLevel.None)
+        .withAutomaticReconnect([0, 2_000, 5_000, 10_000])
+        .build();
+
+      hubConnectionRef.current = connection;
+      setConnectionStatus('connecting');
+      connection.on('notification', (envelope: NotificationRealtimeEnvelope) => {
+        handleRealtimeEnvelope(envelope);
+      });
+      connection.onreconnecting(() => {
+        setConnectionStatus('reconnecting');
+      });
+      connection.onreconnected(() => {
+        setConnectionStatus('connected');
+        void refreshFeed({ silent: true });
+      });
+      connection.onclose(() => {
         if (!disposed) {
           setConnectionStatus('disconnected');
         }
       });
 
+      try {
+        await connection.start();
+        if (!disposed) {
+          setConnectionStatus('connected');
+        }
+      } catch {
+        if (!disposed) {
+          setConnectionStatus('disconnected');
+        }
+      }
+    })();
+
     return () => {
       disposed = true;
+      const connection = hubConnectionRef.current;
       hubConnectionRef.current = null;
-      void connection.stop();
+      void connection?.stop();
     };
   }, [handleRealtimeEnvelope, isAuthenticated, refreshFeed]);
 
