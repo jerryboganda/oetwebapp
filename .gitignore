@@ -185,6 +185,8 @@ Reading (*/
 
 # Database backup dumps
 *.sql.bak
+*.dump
+.db-sync/
 oet_learner_dev_backup_*.sql
 
 # Production DB sync (contains real production data/PII — NEVER commit)

@@ -89,6 +89,7 @@ jobs:
         run: dotnet tool install --global dotnet-ef
       - name: Pending model changes?
         run: |
+          dotnet restore backend/src/OetLearner.Api/OetLearner.Api.csproj --nologo
           cd backend/src/OetLearner.Api
           if dotnet ef migrations has-pending-model-changes 2>&1 | tee /tmp/ef.out | grep -qi "no changes"; then
             echo "OK: no pending model changes."
