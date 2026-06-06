@@ -31,22 +31,6 @@
       "purpose": "maskable"
     }
   ],
-  "screenshots": [
-    {
-      "src": "/screenshots/dashboard-wide.png",
-      "sizes": "1280x720",
-      "type": "image/png",
-      "form_factor": "wide",
-      "label": "Dashboard — your learning hub"
-    },
-    {
-      "src": "/screenshots/dashboard-narrow.png",
-      "sizes": "750x1334",
-      "type": "image/png",
-      "form_factor": "narrow",
-      "label": "Dashboard on mobile"
-    }
-  ],
   "shortcuts": [
     {
       "name": "Dashboard",

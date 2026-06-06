@@ -137,6 +137,9 @@ export function ReadingPdfViewer({
         if (assetKind === 'image') {
           await new Promise<void>((resolve, reject) => {
             const image = new Image();
+            // FE-012: off-DOM image used only to measure natural dimensions; it is
+            // never inserted into the document, so mark it explicitly decorative.
+            image.alt = '';
             image.onload = () => {
               if (cancelled) {
                 resolve();

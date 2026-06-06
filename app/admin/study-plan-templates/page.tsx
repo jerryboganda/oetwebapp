@@ -24,7 +24,7 @@ import {
   SelectValue,
 } from '@/components/admin/ui/select';
 import { Label } from '@/components/admin/ui/label';
-import { Toaster, toast as adminToast } from '@/components/admin/ui/toaster';
+import { toast as adminToast } from '@/components/admin/ui/toaster';
 
 type Filter = { tier: string; active: 'all' | 'active' | 'inactive' };
 
@@ -256,8 +256,6 @@ export default function StudyPlanTemplatesAdminPage() {
           </div>
         )}
       </AdminTableLayout>
-
-      <Toaster />
     </>
   );
 }

@@ -9899,8 +9899,9 @@ export async function fetchMarketplaceProfile() {
 }
 
 export async function updateMarketplaceProfile(data: { displayName?: string; bio?: string }) {
+  // FE-026: backend registers PATCH /v1/marketplace/profile (not PUT) → PUT 405s.
   return apiRequest('/v1/marketplace/profile', {
-    method: 'PUT',
+    method: 'PATCH',
     body: JSON.stringify(data),
   });
 }
