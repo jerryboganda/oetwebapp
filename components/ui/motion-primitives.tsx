@@ -12,7 +12,6 @@ import {
   prefersReducedMotion,
   type MotionSurface,
 } from '@/lib/motion';
-import { type AppRuntimeKind } from '@/lib/runtime-signals';
 import { cn } from '@/lib/utils';
 import { useSyncExternalStore, type ReactNode } from 'react';
 
@@ -26,14 +25,12 @@ const subscribeToHydrationSnapshot = () => () => undefined;
 const getHydratedSnapshot = () => true;
 const getServerHydrationSnapshot = () => false;
 
-function useInitialMotionRuntimeKind(): AppRuntimeKind | undefined {
-  const hasHydrated = useSyncExternalStore(
+function useHasHydrated(): boolean {
+  return useSyncExternalStore(
     subscribeToHydrationSnapshot,
     getHydratedSnapshot,
     getServerHydrationSnapshot,
   );
-
-  return hasHydrated ? undefined : 'web';
 }
 
 function MotionReveal({
@@ -45,8 +42,17 @@ function MotionReveal({
   transition,
   ...props
 }: MotionRevealProps) {
-  const reducedMotion = prefersReducedMotion(useReducedMotion());
-  const runtimeKind = useInitialMotionRuntimeKind();
+  const hasHydrated = useHasHydrated();
+  const reducedMotionPreference = prefersReducedMotion(useReducedMotion());
+  // The server cannot read the client's prefers-reduced-motion, so SSR always
+  // emits the full (non-reduced) variant — including its transform. If the
+  // client's first render adopted a different reduced-motion value, the variant
+  // markup would diverge from the server HTML and React would report a hydration
+  // mismatch. Gate the preference behind hydration (mirroring runtimeKind) so
+  // the server and first client render agree, then honor the real preference on
+  // the post-hydration render.
+  const reducedMotion = hasHydrated ? reducedMotionPreference : false;
+  const runtimeKind = hasHydrated ? undefined : 'web';
   const motionProps = getSurfaceMotion(surface, reducedMotion, runtimeKind);
   const baseTransition = {
     ...getSurfaceTransition(surface, reducedMotion, runtimeKind),
