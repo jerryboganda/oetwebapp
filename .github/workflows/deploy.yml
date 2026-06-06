@@ -113,6 +113,7 @@ jobs:
           # workflow's ephemeral GITHUB_TOKEN (passed as GHCR_TOKEN; has contents:read)
           # rather than relying on anonymous public-repo fetch (the prior behaviour).
           ssh -i ~/.ssh/deploy_key -p "$PORT" \
+            -o IdentitiesOnly=yes -o PreferredAuthentications=publickey -o PasswordAuthentication=no -o BatchMode=yes \
             -o StrictHostKeyChecking=accept-new -o ServerAliveInterval=30 -o ServerAliveCountMax=20 \
             "$VPS_USER@$VPS_HOST" \
             "set -e; echo \"[deploy] whoami=\$(whoami) pwd0=\$(pwd)\"; \
