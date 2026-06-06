@@ -103,6 +103,64 @@ public sealed class StripeService : IStripeService
         return (session.Id, session.Url);
     }
 
+    public async Task<(string SessionId, string Url)> CreateAdHocPaymentCheckoutSessionAsync(
+        string stripeCustomerId, string userId, string userEmail,
+        string currency, long amountMinorUnits, string productName,
+        string successUrl, string cancelUrl, string? idempotencyKey,
+        IReadOnlyDictionary<string, string>? metadata = null, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(_opts.SecretKey))
+        {
+            _logger.LogWarning("Stripe SecretKey not configured — returning sandbox ad-hoc checkout session.");
+            return ($"cs_sandbox_{Guid.NewGuid():N}", $"{successUrl}?session_id=sandbox");
+        }
+
+        var mergedMetadata = new Dictionary<string, string>
+        {
+            ["userId"] = userId,
+            ["userEmail"] = userEmail
+        };
+        if (metadata is not null)
+        {
+            foreach (var (key, value) in metadata)
+                mergedMetadata[key] = value;
+        }
+
+        var options = new SessionCreateOptions
+        {
+            Customer = stripeCustomerId,
+            Mode = "payment",
+            LineItems =
+            [
+                new SessionLineItemOptions
+                {
+                    Quantity = 1,
+                    PriceData = new SessionLineItemPriceDataOptions
+                    {
+                        Currency = currency,
+                        UnitAmount = amountMinorUnits,
+                        ProductData = new SessionLineItemPriceDataProductDataOptions
+                        {
+                            Name = productName
+                        }
+                    }
+                }
+            ],
+            SuccessUrl = successUrl,
+            CancelUrl = cancelUrl,
+            AutomaticTax = new SessionAutomaticTaxOptions { Enabled = false },
+            Metadata = mergedMetadata
+        };
+
+        var requestOptions = idempotencyKey is not null
+            ? new RequestOptions { IdempotencyKey = idempotencyKey }
+            : null;
+
+        var service = new SessionService();
+        var session = await service.CreateAsync(options, requestOptions, ct);
+        return (session.Id, session.Url);
+    }
+
     public async Task<Session> RetrieveCheckoutSessionAsync(string sessionId, CancellationToken ct = default)
     {
         var service = new SessionService();

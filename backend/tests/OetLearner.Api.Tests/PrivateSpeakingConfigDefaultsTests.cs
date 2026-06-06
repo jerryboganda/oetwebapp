@@ -47,6 +47,7 @@ public sealed class PrivateSpeakingConfigDefaultsTests
             calendarService: null!,
             entitlementResolver: null!,
             stripeService: null!,
+            platformLinks: null!,
             timeProvider: new FixedTimeProvider(new DateTimeOffset(2026, 06, 06, 12, 0, 0, TimeSpan.Zero)),
             logger: NullLogger<PrivateSpeakingService>.Instance);
 

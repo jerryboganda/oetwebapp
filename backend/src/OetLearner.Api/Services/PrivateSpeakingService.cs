@@ -24,6 +24,7 @@ public sealed class PrivateSpeakingService(
     PrivateSpeakingCalendarService calendarService,
     IEffectiveEntitlementResolver entitlementResolver,
     IStripeService stripeService,
+    PlatformLinkService platformLinks,
     TimeProvider timeProvider,
     ILogger<PrivateSpeakingService> logger)
 {
@@ -634,6 +635,33 @@ public sealed class PrivateSpeakingService(
         await AuditAsync(booking.Id, "system", "system", "payment_confirmed",
             $"Stripe session: {stripeCheckoutSessionId}", ct);
 
+        // Same-day reschedule penalty paid → finalize the reschedule by cancelling
+        // the original (which has been holding the slot). Entitlement is NOT restored:
+        // RescheduledToBookingId is set, so it carried to this replacement.
+        if (booking.RescheduledFromBookingId is not null)
+        {
+            var original = await db.PrivateSpeakingBookings
+                .FirstOrDefaultAsync(b => b.Id == booking.RescheduledFromBookingId, ct);
+            if (original is not null && original.Status != PrivateSpeakingBookingStatus.Cancelled)
+            {
+                var nowReschedule = timeProvider.GetUtcNow();
+                original.Status = PrivateSpeakingBookingStatus.Cancelled;
+                original.CancellationReason = "rescheduled";
+                original.CancelledAt = nowReschedule;
+                original.UpdatedAt = nowReschedule;
+                await db.SaveChangesAsync(ct);
+
+                if (original.ZoomMeetingId.HasValue)
+                {
+                    try { await zoomService.DeleteMeetingAsync(original.ZoomMeetingId.Value, ct); }
+                    catch (Exception ex) { logger.LogWarning(ex, "Failed to delete Zoom meeting {MeetingId} for rescheduled-original booking", original.ZoomMeetingId); }
+                }
+
+                QueueCalendarSyncJob(original.Id);
+                await db.SaveChangesAsync(ct);
+            }
+        }
+
         QueueBookingPostCommitJobs(booking.Id, includeCalendarSync: false);
         await db.SaveChangesAsync(ct);
 
@@ -655,6 +683,8 @@ public sealed class PrivateSpeakingService(
         booking.UpdatedAt = timeProvider.GetUtcNow();
         await db.SaveChangesAsync(ct);
 
+        await RevertRescheduleIfPendingAsync(booking, ct);
+
         await AuditAsync(booking.Id, "system", "system", "payment_failed",
             $"Stripe session: {stripeCheckoutSessionId}", ct);
     }
@@ -674,8 +704,29 @@ public sealed class PrivateSpeakingService(
         booking.UpdatedAt = timeProvider.GetUtcNow();
         await db.SaveChangesAsync(ct);
 
+        await RevertRescheduleIfPendingAsync(booking, ct);
+
         await AuditAsync(booking.Id, "system", "system", "checkout_expired",
             $"Stripe session: {stripeCheckoutSessionId}", ct);
+    }
+
+    /// <summary>
+    /// When a same-day reschedule penalty checkout expires or fails, abort the
+    /// reschedule: clear the original's <see cref="PrivateSpeakingBooking.RescheduledToBookingId"/>
+    /// link so the original booking stays intact/Confirmed and the learner keeps
+    /// their slot. No penalty is applied.
+    /// </summary>
+    private async Task RevertRescheduleIfPendingAsync(PrivateSpeakingBooking replacement, CancellationToken ct)
+    {
+        if (replacement.RescheduledFromBookingId is null) return;
+
+        var original = await db.PrivateSpeakingBookings
+            .FirstOrDefaultAsync(b => b.Id == replacement.RescheduledFromBookingId, ct);
+        if (original is null) return;
+
+        original.RescheduledToBookingId = null;
+        original.UpdatedAt = timeProvider.GetUtcNow();
+        await db.SaveChangesAsync(ct);
     }
 
     // ── Zoom Meeting Creation ───────────────────────────────────────────
@@ -1113,14 +1164,27 @@ public sealed class PrivateSpeakingService(
             return BookingCheckoutResult.Fail("This booking has already been rescheduled.");
 
         var now = timeProvider.GetUtcNow();
+
+        // PDF §2.3 / §9 reschedule tiers:
+        //  • After the session has started → rejected.
+        //  • >24h before start, OR <24h but a DIFFERENT calendar day (learner tz)
+        //    → FREE reschedule (entitlement carries, no payment).
+        //  • SAME calendar day (learner tz), before start → 50% Stripe penalty
+        //    (entitlement carries; learner pays the penalty to confirm the slot).
+        if (now >= original.SessionStartUtc)
+            return BookingCheckoutResult.Fail("This session has already started and can no longer be rescheduled.");
+
         var hoursUntilOriginal = (original.SessionStartUtc - now).TotalHours;
-        if (hoursUntilOriginal < config.RescheduleWindowHours)
-            return BookingCheckoutResult.Fail($"Reschedules must be made at least {config.RescheduleWindowHours} hours before the session.");
+        var sameCalendarDay = AreSameCalendarDayInTimezone(now, original.SessionStartUtc, original.LearnerTimezone);
 
         var profile = original.TutorProfile
             ?? await db.PrivateSpeakingTutorProfiles.FindAsync([original.TutorProfileId], ct);
         if (profile is null || !profile.IsActive)
             return BookingCheckoutResult.Fail("Tutor is not available.");
+
+        // Penalty base = the tutor's catalog price (NOT original.PriceMinorUnits,
+        // which is 0 for entitlement-funded bookings).
+        var sessionPriceMinorUnits = profile.PriceOverrideMinorUnits ?? config.DefaultPriceMinorUnits;
 
         var minBookingTime = now.AddHours(config.MinBookingLeadTimeHours);
         if (newSessionStartUtc <= minBookingTime)
@@ -1169,61 +1233,141 @@ public sealed class PrivateSpeakingService(
                 return BookingCheckoutResult.Fail("Tutor calendar shows this slot is no longer available. Please select another slot.");
         }
 
-        var replacement = new PrivateSpeakingBooking
+        // FREE tier: outside the free window, OR inside the window but a different
+        // calendar day in the learner's timezone.
+        var isFreeTier = hoursUntilOriginal > config.RescheduleFreeWindowHours
+            || (hoursUntilOriginal <= config.RescheduleFreeWindowHours && !sameCalendarDay);
+
+        if (isFreeTier)
+        {
+            var freeReplacement = new PrivateSpeakingBooking
+            {
+                Id = $"psb-{Guid.NewGuid():N}",
+                LearnerUserId = learnerUserId,
+                TutorProfileId = original.TutorProfileId,
+                Status = PrivateSpeakingBookingStatus.Confirmed,
+                SessionStartUtc = newSessionStartUtc,
+                DurationMinutes = durationMinutes,
+                TutorTimezone = profile.Timezone,
+                LearnerTimezone = learnerTimezone,
+                PriceMinorUnits = original.PriceMinorUnits,
+                Currency = original.Currency,
+                PaymentStatus = original.PaymentStatus,
+                PaymentConfirmedAt = original.PaymentConfirmedAt,
+                EntitlementSubscriptionId = original.EntitlementSubscriptionId,
+                EntitlementConsumed = original.EntitlementConsumed,
+                EntitlementConsumedAt = original.EntitlementConsumedAt,
+                StripeCheckoutSessionId = null,
+                LearnerNotes = learnerNotes ?? original.LearnerNotes,
+                IdempotencyKey = scopedIdempotencyKey,
+                RescheduledFromBookingId = original.Id,
+                CreatedAt = now,
+                UpdatedAt = now
+            };
+
+            db.PrivateSpeakingBookings.Add(freeReplacement);
+            original.Status = PrivateSpeakingBookingStatus.Cancelled;
+            original.CancelledBy = learnerUserId;
+            original.CancellationReason = "rescheduled";
+            original.CancelledAt = now;
+            original.RescheduledToBookingId = freeReplacement.Id;
+            original.UpdatedAt = now;
+
+            await db.SaveChangesAsync(ct);
+            await AuditAsync(original.Id, learnerUserId, "learner", "booking_rescheduled_from", freeReplacement.Id, ct);
+            await AuditAsync(freeReplacement.Id, learnerUserId, "learner", "booking_rescheduled_to", original.Id, ct);
+            QueueCalendarSyncJob(original.Id);
+            QueueBookingPostCommitJobs(freeReplacement.Id, includeCalendarSync: false);
+            await db.SaveChangesAsync(ct);
+            await transaction.CommitAsync(ct);
+
+            if (original.ZoomMeetingId.HasValue)
+            {
+                try { await zoomService.DeleteMeetingAsync(original.ZoomMeetingId.Value, ct); }
+                catch (Exception ex) { logger.LogWarning(ex, "Failed to delete Zoom meeting {MeetingId} for rescheduled booking", original.ZoomMeetingId); }
+            }
+
+            return new BookingCheckoutResult(
+                true,
+                null,
+                freeReplacement.Id,
+                null,
+                null,
+                freeReplacement.EntitlementConsumed,
+                null);
+        }
+
+        // SAME-DAY PENALTY tier: 50% of the session price via an ad-hoc Stripe
+        // checkout. The original booking holds the slot (stays Confirmed/ZoomCreated)
+        // until the penalty is paid; payment confirmation flips it to Cancelled.
+        var penalty = (long)Math.Ceiling(sessionPriceMinorUnits * config.RescheduleSameDayPenaltyPercent / 100.0);
+
+        var penaltyReplacement = new PrivateSpeakingBooking
         {
             Id = $"psb-{Guid.NewGuid():N}",
             LearnerUserId = learnerUserId,
             TutorProfileId = original.TutorProfileId,
-            Status = PrivateSpeakingBookingStatus.Confirmed,
+            Status = PrivateSpeakingBookingStatus.PendingPayment,
             SessionStartUtc = newSessionStartUtc,
             DurationMinutes = durationMinutes,
             TutorTimezone = profile.Timezone,
             LearnerTimezone = learnerTimezone,
             PriceMinorUnits = original.PriceMinorUnits,
-            Currency = original.Currency,
-            PaymentStatus = original.PaymentStatus,
-            PaymentConfirmedAt = original.PaymentConfirmedAt,
+            Currency = config.Currency,
+            PaymentStatus = PrivateSpeakingPaymentStatus.Pending,
             EntitlementSubscriptionId = original.EntitlementSubscriptionId,
             EntitlementConsumed = original.EntitlementConsumed,
             EntitlementConsumedAt = original.EntitlementConsumedAt,
+            PenaltyAmountMinorUnits = (int)penalty,
+            RescheduledFromBookingId = original.Id,
+            ReservationExpiresAt = now.AddMinutes(config.ReservationTimeoutMinutes),
             StripeCheckoutSessionId = null,
             LearnerNotes = learnerNotes ?? original.LearnerNotes,
             IdempotencyKey = scopedIdempotencyKey,
-            RescheduledFromBookingId = original.Id,
             CreatedAt = now,
             UpdatedAt = now
         };
 
-        db.PrivateSpeakingBookings.Add(replacement);
-        original.Status = PrivateSpeakingBookingStatus.Cancelled;
-        original.CancelledBy = learnerUserId;
-        original.CancellationReason = "rescheduled";
-        original.CancelledAt = now;
-        original.RescheduledToBookingId = replacement.Id;
+        var learner = await db.Users.FirstOrDefaultAsync(user => user.Id == learnerUserId, ct);
+        if (learner is null)
+            return BookingCheckoutResult.Fail("Learner profile not found.");
+
+        var customerId = await stripeService.EnsureCustomerAsync(learnerUserId, learner.Email, ct);
+        var (penaltySessionId, penaltyUrl) = await stripeService.CreateAdHocPaymentCheckoutSessionAsync(
+            customerId,
+            learnerUserId,
+            learner.Email,
+            config.Currency.ToLowerInvariant(),
+            penalty,
+            "OET same-day reschedule penalty (50%)",
+            platformLinks.BuildWebUrl("/private-speaking?reschedule=success"),
+            platformLinks.BuildWebUrl("/private-speaking?reschedule=cancelled"),
+            idempotencyKey: $"{scopedIdempotencyKey}-penalty",
+            metadata: new Dictionary<string, string> { ["privateSpeakingBookingId"] = penaltyReplacement.Id },
+            ct);
+        penaltyReplacement.StripeCheckoutSessionId = penaltySessionId;
+
+        db.PrivateSpeakingBookings.Add(penaltyReplacement);
+
+        // Mark the link so entitlement is not double-restored, but keep the
+        // original live (slot held) until the penalty payment confirms.
+        original.RescheduledToBookingId = penaltyReplacement.Id;
         original.UpdatedAt = now;
 
         await db.SaveChangesAsync(ct);
-        await AuditAsync(original.Id, learnerUserId, "learner", "booking_rescheduled_from", replacement.Id, ct);
-        await AuditAsync(replacement.Id, learnerUserId, "learner", "booking_rescheduled_to", original.Id, ct);
-        QueueCalendarSyncJob(original.Id);
-        QueueBookingPostCommitJobs(replacement.Id, includeCalendarSync: false);
+        await AuditAsync(penaltyReplacement.Id, learnerUserId, "learner", "booking_reschedule_pending_payment",
+            $"Original: {original.Id}, Penalty minor units: {penalty}, Stripe session: {penaltySessionId}", ct);
         await db.SaveChangesAsync(ct);
         await transaction.CommitAsync(ct);
 
-        if (original.ZoomMeetingId.HasValue)
-        {
-            try { await zoomService.DeleteMeetingAsync(original.ZoomMeetingId.Value, ct); }
-            catch (Exception ex) { logger.LogWarning(ex, "Failed to delete Zoom meeting {MeetingId} for rescheduled booking", original.ZoomMeetingId); }
-        }
-
         return new BookingCheckoutResult(
-            true,
-            null,
-            replacement.Id,
-            null,
-            null,
-            replacement.EntitlementConsumed,
-            null);
+            Success: true,
+            Error: null,
+            BookingId: penaltyReplacement.Id,
+            CheckoutSessionId: penaltySessionId,
+            CheckoutUrl: penaltyUrl,
+            EntitlementUsed: true,
+            SpeakingSessionsRemaining: null);
     }
 
     // ── Learner Queries ─────────────────────────────────────────────────
@@ -1732,6 +1876,34 @@ public sealed class PrivateSpeakingService(
 
     private static DateTimeOffset Min(DateTimeOffset left, DateTimeOffset right)
         => left <= right ? left : right;
+
+    /// <summary>
+    /// Whether two instants fall on the same calendar day when projected into the
+    /// supplied IANA/Windows timezone. Falls back to UTC if the timezone id is
+    /// unknown/invalid, so a bad timezone never throws on the reschedule path.
+    /// </summary>
+    private static bool AreSameCalendarDayInTimezone(DateTimeOffset left, DateTimeOffset right, string? timezoneId)
+    {
+        TimeZoneInfo tz;
+        try
+        {
+            tz = string.IsNullOrWhiteSpace(timezoneId)
+                ? TimeZoneInfo.Utc
+                : TimeZoneInfo.FindSystemTimeZoneById(timezoneId);
+        }
+        catch (TimeZoneNotFoundException)
+        {
+            tz = TimeZoneInfo.Utc;
+        }
+        catch (InvalidTimeZoneException)
+        {
+            tz = TimeZoneInfo.Utc;
+        }
+
+        var leftLocal = TimeZoneInfo.ConvertTime(left, tz);
+        var rightLocal = TimeZoneInfo.ConvertTime(right, tz);
+        return DateOnly.FromDateTime(leftLocal.DateTime) == DateOnly.FromDateTime(rightLocal.DateTime);
+    }
 
     private static string BuildIdempotencyScopeKey(params string[] parts)
     {
