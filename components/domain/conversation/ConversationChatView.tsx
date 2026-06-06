@@ -1,7 +1,8 @@
 'use client';
 
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import { Loader2, Volume2 } from 'lucide-react';
+import { prefersReducedMotion } from '@/lib/motion';
 import { resolveApiMediaUrl } from '@/lib/media-url';
 import type { ConversationTurnState, PartialTranscriptDraft } from '@/lib/types/conversation';
 
@@ -24,6 +25,8 @@ interface Props {
 }
 
 export function ConversationChatView({ turns, aiThinking, aiSpeakingTurn, partialTranscript, turnState, onReplay }: Props) {
+  // FE-008: honor prefers-reduced-motion for the per-message entrance animation.
+  const reducedMotion = prefersReducedMotion(useReducedMotion());
   return (
     <div className="flex-1 overflow-y-auto space-y-3 px-1 pb-4" role="log" aria-live="polite" aria-atomic="false">
       <AnimatePresence>
@@ -32,9 +35,9 @@ export function ConversationChatView({ turns, aiThinking, aiSpeakingTurn, partia
           const isSpeaking = !isLearner && aiSpeakingTurn === turn.turnNumber;
           return (
             <motion.div key={`${turn.turnNumber}-${i}`}
-              initial={{ opacity: 0, y: 12, scale: 0.97 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              transition={{ type: 'spring', damping: 20 }}
+              initial={reducedMotion ? false : { opacity: 0, y: 12, scale: 0.97 }}
+              animate={reducedMotion ? { opacity: 1 } : { opacity: 1, y: 0, scale: 1 }}
+              transition={reducedMotion ? { duration: 0.12 } : { type: 'spring', damping: 20 }}
               className={`flex ${isLearner ? 'justify-end' : 'justify-start'}`}>
               <div className={`max-w-[75%] rounded-2xl px-4 py-3 ${
                 isLearner
