@@ -295,6 +295,18 @@ code fixes are committed on `fix/frontend-remediation-cont`; the config fix is l
 `/sign-in`, `/register`, `/forgot-password` render correctly with real catalog data, no console errors,
 no failed requests (after FE-044). Register multi-step wizard, password/email inputs, and back-links present.
 
+### FE-047 (low / likely dev-only) — hidden duplicate of the auth form post-hydration
+`/sign-in` renders **two** `<form>` / `#email` / `<h1>` client-side, yet the SSR HTML has exactly one
+(verified via `curl`); the second copy sits inside React's streaming Suspense segment
+`<div hidden id="S:0">` (`display:none`). Root cause: `app/(auth)/sign-in/page.tsx` is `'use client'`
+and calls `useSearchParams()` at the top level **without an explicit `<Suspense>`**, so the whole page
+suspends and the streamed segment lingers. Impact is low — the duplicate is invisible and
+screen-reader-ignored — and it reproduces identically on fixed (:3001) and unfixed (:3000) code, so it
+is **unrelated to FE-046**. Likely a Turbopack-dev streaming artifact; **verify against a production
+build** before acting. If confirmed real, wrap the search-param read in `<Suspense>` (also silences the
+Next `useSearchParams` CSR-bailout warning); the same pattern recurs on other `'use client'` +
+`useSearchParams` pages.
+
 ### Still blocked / deferred (honest)
 - **Authenticated runtime verification** (cart FE-017/018, dashboards, expert/tutor/admin) needs login —
   the agent cannot type passwords, so these must be verified by a human in their own browser at
