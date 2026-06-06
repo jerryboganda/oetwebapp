@@ -53,6 +53,7 @@ export default function AdminProductEditorPage() {
   const [product, setProduct] = useState<AdminBillingProduct | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({
     name: '',
@@ -98,6 +99,7 @@ export default function AdminProductEditorPage() {
   const submit = useCallback(async () => {
     if (!product) return;
     setSaving(true);
+    setSaveError(null);
     try {
       const next = await updateAdminBillingProduct(product.productCode, {
         name: form.name.trim(),
@@ -111,7 +113,9 @@ export default function AdminProductEditorPage() {
       toast.success(`Saved "${next.name}".`);
     } catch (err) {
       console.error(err);
-      toast.error(err instanceof Error ? err.message : 'Save failed.');
+      const message = err instanceof Error ? err.message : 'Save failed.';
+      setSaveError(message);
+      toast.error(message);
     } finally {
       setSaving(false);
     }
@@ -204,6 +208,11 @@ export default function AdminProductEditorPage() {
                 disabled={!canWrite || saving}
               />
             </div>
+            {saveError ? (
+              <InlineAlert variant="error" title="Save failed">
+                {saveError}
+              </InlineAlert>
+            ) : null}
             <div className="flex justify-end">
               <Button onClick={() => void submit()} loading={saving} disabled={!canWrite || saving} startIcon={<Save className="h-4 w-4" />}>
                 Save changes

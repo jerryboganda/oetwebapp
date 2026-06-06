@@ -50,6 +50,7 @@ export default function AdminCouponEditorPage() {
   const [loading, setLoading] = useState(!isNew);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [existing, setExisting] = useState<AdminBillingCoupon | null>(null);
   const [form, setForm] = useState({
     code: '',
@@ -115,6 +116,7 @@ export default function AdminCouponEditorPage() {
 
   const submit = useCallback(async () => {
     setSaving(true);
+    setSaveError(null);
     try {
       const payload = {
         code: form.code.trim().toUpperCase(),
@@ -144,7 +146,9 @@ export default function AdminCouponEditorPage() {
       }
     } catch (err) {
       console.error(err);
-      toast.error(err instanceof Error ? err.message : 'Save failed.');
+      const message = err instanceof Error ? err.message : 'Save failed.';
+      setSaveError(message);
+      toast.error(message);
     } finally {
       setSaving(false);
     }
@@ -329,6 +333,11 @@ export default function AdminCouponEditorPage() {
             onChange={(event) => setForm((s) => ({ ...s, notes: event.target.value }))}
             disabled={!canWrite || saving}
           />
+          {saveError ? (
+            <InlineAlert variant="error" title="Save failed">
+              {saveError}
+            </InlineAlert>
+          ) : null}
           <div className="flex justify-end">
             <Button
               onClick={() => void submit()}
