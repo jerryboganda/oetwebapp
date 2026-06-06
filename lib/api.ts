@@ -10457,6 +10457,10 @@ export async function updateExpertPrivateSpeakingAvailability(payload: { dayOfWe
   return apiRequest('/v1/expert/private-speaking/availability', { method: 'POST', body: JSON.stringify(payload) });
 }
 
+export async function updateExpertPrivateSpeakingAvailabilityRule(ruleId: string, payload: { dayOfWeek: number; startTime: string; endTime: string; effectiveFrom?: string | null; effectiveTo?: string | null; isActive: boolean }) {
+  return apiRequest(`/v1/expert/private-speaking/availability/${encodeURIComponent(ruleId)}`, { method: 'PUT', body: JSON.stringify(payload) });
+}
+
 export async function deleteExpertPrivateSpeakingAvailability(ruleId: string) {
   return apiRequest(`/v1/expert/private-speaking/availability/${encodeURIComponent(ruleId)}`, { method: 'DELETE' });
 }

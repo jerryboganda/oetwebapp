@@ -5,7 +5,7 @@ import { ZoomMeetingEmbed } from '@/components/class/ZoomMeetingEmbed';
 import { ExpertRouteHero, ExpertRouteSectionHeader } from '@/components/domain/expert-route-surface';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
-import { Calendar, Clock, Video, Star, Plus, Trash2, X, Link2, Unlink, Download } from 'lucide-react';
+import { Calendar, Clock, Video, Star, Plus, Trash2, Pencil, X, Link2, Unlink, Download } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   type LiveClassJoinToken,
@@ -14,6 +14,7 @@ import {
   fetchExpertPrivateSpeakingSessions,
   fetchExpertPrivateSpeakingAvailability,
   updateExpertPrivateSpeakingAvailability,
+  updateExpertPrivateSpeakingAvailabilityRule,
   deleteExpertPrivateSpeakingAvailability,
   cancelExpertPrivateSpeakingSession,
   fetchExpertPrivateSpeakingJoinToken,
@@ -80,6 +81,11 @@ export default function ExpertPrivateSpeakingPage() {
   // New availability rule form
   const [newRule, setNewRule] = useState({ dayOfWeek: 1, startTime: '09:00', endTime: '17:00' });
 
+  // Edit availability rule state
+  const [editingRuleId, setEditingRuleId] = useState<string | null>(null);
+  const [editRule, setEditRule] = useState({ dayOfWeek: 1, startTime: '09:00', endTime: '17:00', isActive: true });
+  const [savingRule, setSavingRule] = useState(false);
+
   // Cancel session state
   const [cancelTarget, setCancelTarget] = useState<ExpertSession | null>(null);
   const [cancelReason, setCancelReason] = useState('');
@@ -138,6 +144,41 @@ export default function ExpertPrivateSpeakingPage() {
       setAvailability(prev => prev.filter(r => r.id !== ruleId));
     } catch {
       setError('Failed to delete rule.');
+    }
+  }
+
+  function startEditRule(rule: AvailabilityRule) {
+    setEditingRuleId(rule.id);
+    setEditRule({
+      dayOfWeek: rule.dayOfWeek,
+      startTime: rule.startTime,
+      endTime: rule.endTime,
+      isActive: rule.isActive,
+    });
+  }
+
+  function cancelEditRule() {
+    setEditingRuleId(null);
+  }
+
+  async function handleSaveRule(rule: AvailabilityRule) {
+    setSavingRule(true);
+    setError(null);
+    try {
+      await updateExpertPrivateSpeakingAvailabilityRule(rule.id, {
+        dayOfWeek: editRule.dayOfWeek,
+        startTime: editRule.startTime,
+        endTime: editRule.endTime,
+        effectiveFrom: rule.effectiveFrom,
+        effectiveTo: rule.effectiveTo,
+        isActive: editRule.isActive,
+      });
+      setEditingRuleId(null);
+      await loadAvailability();
+    } catch {
+      setError('Failed to update availability rule.');
+    } finally {
+      setSavingRule(false);
     }
   }
 
@@ -431,16 +472,53 @@ export default function ExpertPrivateSpeakingPage() {
           <div className="space-y-2">
             {availability.map(rule => (
               <div key={rule.id} className="rounded-2xl border border-border bg-surface p-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <span className="text-sm font-medium text-navy">{DAY_NAMES[rule.dayOfWeek]}</span>
-                    <span className="text-sm text-muted ml-2">{rule.startTime} – {rule.endTime}</span>
-                    {rule.effectiveFrom && <span className="text-xs text-muted ml-2">from {rule.effectiveFrom}</span>}
+                {editingRuleId === rule.id ? (
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <select value={editRule.dayOfWeek} onChange={e => setEditRule(r => ({ ...r, dayOfWeek: Number(e.target.value) }))}
+                      disabled={savingRule}
+                      className="px-3 py-2 border border-border rounded-lg text-sm bg-surface">
+                      {DAY_NAMES.map((name, i) => <option key={i} value={i}>{name}</option>)}
+                    </select>
+                    <input type="time" value={editRule.startTime} onChange={e => setEditRule(r => ({ ...r, startTime: e.target.value }))}
+                      disabled={savingRule}
+                      className="px-3 py-2 border border-border rounded-lg text-sm bg-surface" />
+                    <span className="text-sm text-muted">to</span>
+                    <input type="time" value={editRule.endTime} onChange={e => setEditRule(r => ({ ...r, endTime: e.target.value }))}
+                      disabled={savingRule}
+                      className="px-3 py-2 border border-border rounded-lg text-sm bg-surface" />
+                    <label className="flex items-center gap-1.5 text-sm text-muted">
+                      <input type="checkbox" checked={editRule.isActive} onChange={e => setEditRule(r => ({ ...r, isActive: e.target.checked }))}
+                        disabled={savingRule}
+                        className="rounded border-border" />
+                      Active
+                    </label>
+                    <div className="flex items-center gap-2 ml-auto">
+                      <Button onClick={() => handleSaveRule(rule)} size="sm" disabled={savingRule}>
+                        {savingRule ? 'Saving…' : 'Save'}
+                      </Button>
+                      <Button onClick={cancelEditRule} size="sm" variant="outline" disabled={savingRule}>
+                        Cancel
+                      </Button>
+                    </div>
                   </div>
-                  <button onClick={() => handleDeleteRule(rule.id)} className="text-red-400 hover:text-red-600 p-2.5 -m-1">
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
+                ) : (
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <span className="text-sm font-medium text-navy">{DAY_NAMES[rule.dayOfWeek]}</span>
+                      <span className="text-sm text-muted ml-2">{rule.startTime} – {rule.endTime}</span>
+                      {rule.effectiveFrom && <span className="text-xs text-muted ml-2">from {rule.effectiveFrom}</span>}
+                      {!rule.isActive && <span className="text-xs text-muted ml-2 italic">(inactive)</span>}
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <button onClick={() => startEditRule(rule)} className="text-muted hover:text-navy p-2.5 -m-1" aria-label="Edit rule">
+                        <Pencil className="w-4 h-4" />
+                      </button>
+                      <button onClick={() => handleDeleteRule(rule.id)} className="text-red-400 hover:text-red-600 p-2.5 -m-1" aria-label="Delete rule">
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             ))}
           </div>
