@@ -1,8 +1,4 @@
-import { ensureFreshAccessToken } from './auth-client';
-import { env } from './env';
-import { fetchWithTimeout } from './network/fetch-with-timeout';
-
-type HttpError = Error & { status?: number; detail?: unknown };
+import { apiClient } from './api';
 
 export interface ListeningHomePaperDto {
   id: string;
@@ -347,53 +343,16 @@ export interface ListeningReviewDto {
   generatedAt: string | null;
 }
 
-function resolveUrl(path: string): string {
-  if (path.startsWith('http')) return path;
-  const base = env.apiBaseUrl || '';
-  return base ? `${base.replace(/\/$/, '')}${path}` : path;
-}
-
+// Delegates to the shared API client (lib/api.ts) so every listening call
+// inherits auth (Bearer), the CSRF header (required by the /api/backend proxy
+// on non-safe methods — listening autosave PUTs and section-transition
+// heartbeats 403 without it), credentials, timeout, retry-on-5xx/408/429, and a
+// normalized `ApiError` (carries status + code + retryable, and surfaces the
+// backend's own prose as the message instead of a bare `HTTP <status>`).
+// Call sites keep passing `JSON.stringify(...)` string bodies, forwarded
+// verbatim with a JSON Content-Type.
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
-  const token = await ensureFreshAccessToken();
-  const headers = new Headers(init?.headers);
-  headers.set('Accept', 'application/json');
-  if (token) headers.set('Authorization', `Bearer ${token}`);
-  if (init?.body && typeof init.body === 'string' && !headers.has('Content-Type')) {
-    headers.set('Content-Type', 'application/json');
-  }
-
-  // Attach CSRF token (double-submit cookie pattern) for mutation requests.
-  // The Next.js /api/backend proxy enforces matching header + cookie on
-  // non-safe methods whenever a refresh cookie is present, so listening
-  // autosave PUTs and section-transition heartbeats must include it or
-  // they 403 out and the player drops into "Listening task unavailable".
-  const method = (init?.method ?? 'GET').toUpperCase();
-  if (typeof document !== 'undefined' && method !== 'GET' && method !== 'HEAD' && method !== 'OPTIONS') {
-    const csrfMatch = document.cookie.match(/(?:^|;\s*)oet_csrf=([^;]+)/);
-    if (csrfMatch && !headers.has('x-csrf-token')) {
-      headers.set('x-csrf-token', csrfMatch[1]);
-    }
-  }
-
-  const response = await fetchWithTimeout(resolveUrl(path), { ...init, headers });
-  if (!response.ok) {
-    let detail: unknown = null;
-    try {
-      detail = await response.json();
-    } catch {
-      detail = null;
-    }
-    const message = typeof detail === 'object' && detail && 'message' in detail
-      ? String((detail as { message?: unknown }).message)
-      : `HTTP ${response.status}`;
-    const error = new Error(message) as HttpError;
-    error.status = response.status;
-    error.detail = detail;
-    throw error;
-  }
-
-  if (response.status === 204) return undefined as T;
-  return response.json() as Promise<T>;
+  return apiClient.request<T>(path, init);
 }
 
 export const getListeningHome = () =>

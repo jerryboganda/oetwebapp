@@ -8,6 +8,7 @@
  * Pattern mirrors lib/reading-authoring-api.ts.
  */
 
+import { apiClient } from './api';
 import { env } from './env';
 import { ensureFreshAccessToken } from './auth-client';
 import { fetchWithTimeout } from './network/fetch-with-timeout';
@@ -377,6 +378,21 @@ interface RawMockResultDto {
 }
 
 // ── HTTP helper ───────────────────────────────────────────────────────────────
+//
+// The common case delegates to the shared API client (lib/api.ts) so calls
+// inherit auth (Bearer), CSRF header, credentials, timeout,
+// retry-on-5xx/408/429, and a normalized `ApiError` (carries status + code +
+// retryable, detectable via `isApiError`). Call sites keep passing
+// `JSON.stringify(...)` string bodies, forwarded verbatim with a JSON
+// Content-Type.
+//
+// The diagnostic submit/results endpoints need a *bespoke per-call timeout*
+// (120s for the slow grading submit; a short ~5s budget for the fast
+// poll-with-fallback that recovers a just-submitted result). The shared client
+// hard-caps every request at its own 30s default and exposes no timeout knob,
+// so those calls — and only those — stay on the raw `fetchWithTimeout` path
+// that honors `timeoutMs` exactly. They keep their existing `{ status, detail }`
+// error shape, which the diagnostic page's recovery loop already inspects.
 
 function resolveUrl(path: string): string {
   if (path.startsWith('http')) return path;
@@ -390,9 +406,9 @@ interface RequestInitWithTimeout extends RequestInit {
   timeoutMs?: number;
 }
 
-async function api<T>(path: string, init?: RequestInitWithTimeout): Promise<T> {
+async function apiWithTimeout<T>(path: string, init: RequestInitWithTimeout): Promise<T> {
   const token = await ensureFreshAccessToken();
-  const { timeoutMs, ...requestInit } = init ?? {};
+  const { timeoutMs, ...requestInit } = init;
   const headers = new Headers(requestInit.headers);
   headers.set('Accept', 'application/json');
   if (token) headers.set('Authorization', `Bearer ${token}`);
@@ -415,6 +431,15 @@ async function api<T>(path: string, init?: RequestInitWithTimeout): Promise<T> {
   }
   if (res.status === 204) return undefined as T;
   return res.json() as Promise<T>;
+}
+
+async function api<T>(path: string, init?: RequestInitWithTimeout): Promise<T> {
+  // A bespoke per-call timeout can't go through the shared client (it caps at
+  // its own default and offers no override), so keep those on the raw path.
+  if (init?.timeoutMs !== undefined) {
+    return apiWithTimeout<T>(path, init);
+  }
+  return apiClient.request<T>(path, init);
 }
 
 // ── Profile ──────────────────────────────────────────────────────

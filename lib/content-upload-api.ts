@@ -3,6 +3,7 @@
  * `ContentPapersAdminEndpoints.cs`. See `docs/CONTENT-UPLOAD-PLAN.md`.
  */
 
+import { apiClient } from './api';
 import { env } from './env';
 import { ensureFreshAccessToken } from './auth-client';
 import { fetchWithTimeout } from './network/fetch-with-timeout';
@@ -245,8 +246,6 @@ function resolveUrl(path: string): string {
   return base ? `${base.replace(/\/$/, '')}${path}` : path;
 }
 
-const CSRF_SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
-
 /**
  * Reads the double-submit CSRF cookie value (set by the auth flow). The
  * Next.js backend proxy at /api/backend/* requires this header for any
@@ -316,29 +315,16 @@ async function toApiError(res: Response, fallbackPrefix?: string): Promise<ApiEr
   return err;
 }
 
+// JSON endpoints delegate to the shared API client (lib/api.ts) so they inherit
+// auth (Bearer), CSRF, credentials, timeout, retry-on-5xx/408/429, and a
+// normalized `ApiError` (status + code + retryable + fieldErrors, detectable via
+// `isApiError`). The shared client already lifts the backend's `message`/`title`
+// prose into `ApiError.message`, matching what `toApiError` did for the JSON
+// path. The chunked binary upload (`uploadPart`) stays on the raw
+// `fetchWithTimeout` path below because it streams an octet-stream `Blob` and
+// must not be forced through JSON handling.
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
-  const token = await ensureFreshAccessToken();
-  const headers = new Headers(init?.headers);
-  headers.set('Accept', 'application/json');
-  if (token) headers.set('Authorization', `Bearer ${token}`);
-  if (init?.body && typeof init.body === 'string' && !headers.has('Content-Type')) {
-    headers.set('Content-Type', 'application/json');
-  }
-  const method = (init?.method ?? 'GET').toUpperCase();
-  if (!CSRF_SAFE_METHODS.has(method) && !headers.has('x-csrf-token')) {
-    const csrf = readCsrfCookie();
-    if (csrf) headers.set('x-csrf-token', csrf);
-  }
-  const res = await fetchWithTimeout(resolveUrl(path), {
-    ...init,
-    headers,
-    credentials: init?.credentials ?? 'include',
-  });
-  if (!res.ok) {
-    throw await toApiError(res);
-  }
-  if (res.status === 204) return undefined as T;
-  return res.json() as Promise<T>;
+  return apiClient.request<T>(path, init);
 }
 
 // ── Papers ──────────────────────────────────────────────────────────────

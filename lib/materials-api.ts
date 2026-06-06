@@ -6,9 +6,7 @@
  * its own module to keep lib/api.ts from growing further.
  */
 
-import { env } from './env';
-import { ensureFreshAccessToken } from './auth-client';
-import { fetchWithTimeout } from './network/fetch-with-timeout';
+import { apiClient } from './api';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -93,48 +91,16 @@ export interface LearnerMaterialsTreeDto {
   folders: LearnerMaterialFolderDto[];
 }
 
-// ── Fetch helpers ─────────────────────────────────────────────────────────────
-
-const API_BASE = env.apiBaseUrl;
-
-function resolveUrl(path: string): string {
-  if (/^https?:\/\//i.test(path)) return path;
-  const base = API_BASE.endsWith('/') ? API_BASE.slice(0, -1) : API_BASE;
-  return `${base}${path}`;
-}
-
-function readCsrf(): string | null {
-  if (typeof document === 'undefined') return null;
-  const m = document.cookie.match(/(?:^|;\s*)oet_csrf=([^;]+)/);
-  return m ? m[1] : null;
-}
-
-const SAFE = new Set(['GET', 'HEAD', 'OPTIONS', 'TRACE']);
+// ── Fetch helper ────────────────────────────────────────────────────────────
+//
+// Delegates to the shared API client (lib/api.ts) so every call inherits its
+// auth (Bearer), CSRF header, credentials, timeout, retry-on-5xx/408/429, and
+// normalized `ApiError` (carries status + code + retryable, detectable via
+// `isApiError`). The local call sites keep passing `JSON.stringify(...)` string
+// bodies, which the shared client forwards verbatim with a JSON Content-Type.
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const token = await ensureFreshAccessToken();
-  const headers = new Headers(init?.headers);
-  headers.set('Accept', 'application/json');
-  if (token) headers.set('Authorization', `Bearer ${token}`);
-  if (init?.body && typeof init.body === 'string' && !headers.has('Content-Type')) {
-    headers.set('Content-Type', 'application/json');
-  }
-  const method = (init?.method ?? 'GET').toUpperCase();
-  if (!SAFE.has(method) && !headers.has('x-csrf-token')) {
-    const csrf = readCsrf();
-    if (csrf) headers.set('x-csrf-token', csrf);
-  }
-  const res = await fetchWithTimeout(resolveUrl(path), { ...init, headers, credentials: 'include' });
-  if (!res.ok) {
-    let message = `${method} ${path} failed: ${res.status}`;
-    try {
-      const body = await res.json() as { message?: string; error?: string };
-      message = body.message ?? body.error ?? message;
-    } catch { /* non-JSON error body */ }
-    throw new Error(message);
-  }
-  if (res.status === 204) return undefined as T;
-  return res.json() as Promise<T>;
+  return apiClient.request<T>(path, init);
 }
 
 // ── Learner API ───────────────────────────────────────────────────────────────
