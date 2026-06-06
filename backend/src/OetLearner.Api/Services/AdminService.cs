@@ -2265,7 +2265,7 @@ public partial class AdminService(
                 routingRule = a.RoutingRule,
                 experimentFlag = a.ExperimentFlag,
                 promptLabel = a.PromptLabel,
-            confidencePolicy = JsonSupport.Deserialize<Dictionary<string, object>>(a.ConfidencePolicyJson, new Dictionary<string, object>())
+                confidencePolicy = JsonSupport.Deserialize<Dictionary<string, object>>(a.ConfidencePolicyJson, new Dictionary<string, object>())
             };
         });
 
@@ -8661,10 +8661,17 @@ public partial class AdminService(
         {
             items = sponsors.Select(s => new
             {
-                id = s.Id, name = s.Name, type = s.Type, contactEmail = s.ContactEmail,
-                organizationName = s.OrganizationName, status = s.Status, createdAt = s.CreatedAt
+                id = s.Id,
+                name = s.Name,
+                type = s.Type,
+                contactEmail = s.ContactEmail,
+                organizationName = s.OrganizationName,
+                status = s.Status,
+                createdAt = s.CreatedAt
             }).ToList(),
-            total, page, pageSize
+            total,
+            page,
+            pageSize
         };
     }
 
@@ -8721,11 +8728,20 @@ public partial class AdminService(
         {
             items = cohorts.Select(c => new
             {
-                id = c.Id, sponsorId = c.SponsorId, name = c.Name, examTypeCode = c.ExamTypeCode,
-                startDate = c.StartDate, endDate = c.EndDate, maxSeats = c.MaxSeats,
-                enrolledCount = c.EnrolledCount, status = c.Status, createdAt = c.CreatedAt
+                id = c.Id,
+                sponsorId = c.SponsorId,
+                name = c.Name,
+                examTypeCode = c.ExamTypeCode,
+                startDate = c.StartDate,
+                endDate = c.EndDate,
+                maxSeats = c.MaxSeats,
+                enrolledCount = c.EnrolledCount,
+                status = c.Status,
+                createdAt = c.CreatedAt
             }).ToList(),
-            total, page, pageSize
+            total,
+            page,
+            pageSize
         };
     }
 
@@ -8784,10 +8800,15 @@ public partial class AdminService(
         {
             items = members.Select(m => new
             {
-                id = m.Id, cohortId = m.CohortId, learnerId = m.LearnerId,
-                status = m.Status, enrolledAt = m.EnrolledAt
+                id = m.Id,
+                cohortId = m.CohortId,
+                learnerId = m.LearnerId,
+                status = m.Status,
+                enrolledAt = m.EnrolledAt
             }).ToList(),
-            total, page, pageSize
+            total,
+            page,
+            pageSize
         };
     }
 
@@ -8836,10 +8857,16 @@ public partial class AdminService(
         {
             items = links.Select(l => new
             {
-                id = l.Id, sponsorId = l.SponsorId, learnerId = l.LearnerId,
-                learnerConsented = l.LearnerConsented, linkedAt = l.LinkedAt, consentedAt = l.ConsentedAt
+                id = l.Id,
+                sponsorId = l.SponsorId,
+                learnerId = l.LearnerId,
+                learnerConsented = l.LearnerConsented,
+                linkedAt = l.LinkedAt,
+                consentedAt = l.ConsentedAt
             }).ToList(),
-            total, page, pageSize
+            total,
+            page,
+            pageSize
         };
     }
 
@@ -8957,10 +8984,13 @@ public partial class AdminService(
                 breached++;
                 alerts.Add(new
                 {
-                    reviewId = review.Id, severity = "breached",
+                    reviewId = review.Id,
+                    severity = "breached",
                     message = $"SLA breached by {Math.Round(-remaining, 1)}h",
-                    turnaround = review.TurnaroundOption, subtestCode = review.SubtestCode,
-                    createdAt = review.CreatedAt, hoursOverdue = Math.Round(-remaining, 1)
+                    turnaround = review.TurnaroundOption,
+                    subtestCode = review.SubtestCode,
+                    createdAt = review.CreatedAt,
+                    hoursOverdue = Math.Round(-remaining, 1)
                 });
             }
             else if (remaining < 6)
@@ -8968,10 +8998,13 @@ public partial class AdminService(
                 atRisk++;
                 alerts.Add(new
                 {
-                    reviewId = review.Id, severity = "at-risk",
+                    reviewId = review.Id,
+                    severity = "at-risk",
                     message = $"Only {Math.Round(remaining, 1)}h remaining",
-                    turnaround = review.TurnaroundOption, subtestCode = review.SubtestCode,
-                    createdAt = review.CreatedAt, hoursRemaining = Math.Round(remaining, 1)
+                    turnaround = review.TurnaroundOption,
+                    subtestCode = review.SubtestCode,
+                    createdAt = review.CreatedAt,
+                    hoursRemaining = Math.Round(remaining, 1)
                 });
             }
             else healthy++;
@@ -9001,7 +9034,10 @@ public partial class AdminService(
             summary = new
             {
                 totalOpen = openReviews.Count,
-                breached, atRisk, healthy, unassigned,
+                breached,
+                atRisk,
+                healthy,
+                unassigned,
                 activeExperts = assignedExperts,
                 queueDepthPerExpert,
                 capacityAlert = queueDepthPerExpert > 8
@@ -9217,12 +9253,12 @@ public partial class AdminService(
                 .ToListAsync(ct);
 
             var completedCount = drafts.Count;
-var draftTimeEstimates = drafts.Select(d =>
-                {
-                    // Estimate time from draft save patterns — no explicit TimeSpentSeconds field
-                    return 15.0; // Default estimate in minutes per review
-                }).ToList();
-                var avgReviewMinutes = draftTimeEstimates.Count > 0 ? Math.Round(draftTimeEstimates.Average(), 1) : (double?)null;
+            var draftTimeEstimates = drafts.Select(d =>
+                            {
+                                // Estimate time from draft save patterns — no explicit TimeSpentSeconds field
+                                return 15.0; // Default estimate in minutes per review
+                            }).ToList();
+            var avgReviewMinutes = draftTimeEstimates.Count > 0 ? Math.Round(draftTimeEstimates.Average(), 1) : (double?)null;
 
             // Quality alignment — compare with AI
             var aiDiffs = new List<double>();

@@ -225,12 +225,12 @@ public sealed class MockItemAnalysisService
                                select new { q.Id, p.PartCode, q.QuestionNumber })
                               .ToListAsync(ct);
 
-            var submittedAttemptIds = attemptScores.Keys.ToArray();
-            var answers = submittedAttemptIds.Length == 0
-            ? new List<ListeningAnswer>()
-            : await _db.Set<ListeningAnswer>().AsNoTracking()
-                .Where(a => submittedAttemptIds.Contains(a.ListeningAttemptId))
-                .ToListAsync(ct);
+        var submittedAttemptIds = attemptScores.Keys.ToArray();
+        var answers = submittedAttemptIds.Length == 0
+        ? new List<ListeningAnswer>()
+        : await _db.Set<ListeningAnswer>().AsNoTracking()
+            .Where(a => submittedAttemptIds.Contains(a.ListeningAttemptId))
+            .ToListAsync(ct);
 
         var byQuestion = answers.GroupBy(a => a.ListeningQuestionId)
             .ToDictionary(g => g.Key, g => g.ToList());
@@ -301,11 +301,11 @@ public sealed class MockItemAnalysisService
                                select new { q.Id, PartCode = p.PartCode, QuestionNumber = q.DisplayOrder })
                               .ToListAsync(ct);
 
-            var submittedAttemptIds = attemptScores.Keys.ToArray();
-            var answers = await _db.Set<ReadingAnswer>().AsNoTracking()
-                .Where(a => submittedAttemptIds.Contains(a.ReadingAttemptId))
-                .Select(a => new { a.ReadingAttemptId, a.ReadingQuestionId, a.IsCorrect, a.SelectedDistractorCategory })
-                .ToListAsync(ct);
+        var submittedAttemptIds = attemptScores.Keys.ToArray();
+        var answers = await _db.Set<ReadingAnswer>().AsNoTracking()
+            .Where(a => submittedAttemptIds.Contains(a.ReadingAttemptId))
+            .Select(a => new { a.ReadingAttemptId, a.ReadingQuestionId, a.IsCorrect, a.SelectedDistractorCategory })
+            .ToListAsync(ct);
 
         var byQuestion = answers.GroupBy(a => a.ReadingQuestionId)
             .ToDictionary(g => g.Key, g => g.ToList());

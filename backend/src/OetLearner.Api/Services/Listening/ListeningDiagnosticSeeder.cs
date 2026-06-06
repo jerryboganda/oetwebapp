@@ -68,21 +68,21 @@ public sealed class ListeningDiagnosticSeeder(
     // Fixed slugs for the four parts. ListeningPart.Id is a string (max 64),
     // so we keep them human-readable for log / DB inspection.
     private const string PartConsultationId = "diagnostic-A";
-    private const string PartWorkplaceId    = "diagnostic-B";
+    private const string PartWorkplaceId = "diagnostic-B";
     private const string PartPresentationId = "diagnostic-C";
-    private const string PartAccentId       = "diagnostic-accent";
+    private const string PartAccentId = "diagnostic-accent";
 
     // Deterministic GUIDs for extracts. Parsing fixed strings keeps the values
     // stable across machines / restarts so re-runs of the seeder are no-ops.
-    private static readonly string ExtractAConsultationId  = "11111111-aaaa-4000-8000-000000000001";
-    private static readonly string ExtractB1Id             = "11111111-aaaa-4000-8000-000000000002";
-    private static readonly string ExtractB2Id             = "11111111-aaaa-4000-8000-000000000003";
-    private static readonly string ExtractB3Id             = "11111111-aaaa-4000-8000-000000000004";
-    private static readonly string ExtractCPresentationId  = "11111111-aaaa-4000-8000-000000000005";
-    private static readonly string ExtractAccentGBId       = "11111111-aaaa-4000-8000-000000000006";
-    private static readonly string ExtractAccentAUId       = "11111111-aaaa-4000-8000-000000000007";
-    private static readonly string ExtractAccentUSId       = "11111111-aaaa-4000-8000-000000000008";
-    private static readonly string ExtractAccentNNId       = "11111111-aaaa-4000-8000-000000000009";
+    private static readonly string ExtractAConsultationId = "11111111-aaaa-4000-8000-000000000001";
+    private static readonly string ExtractB1Id = "11111111-aaaa-4000-8000-000000000002";
+    private static readonly string ExtractB2Id = "11111111-aaaa-4000-8000-000000000003";
+    private static readonly string ExtractB3Id = "11111111-aaaa-4000-8000-000000000004";
+    private static readonly string ExtractCPresentationId = "11111111-aaaa-4000-8000-000000000005";
+    private static readonly string ExtractAccentGBId = "11111111-aaaa-4000-8000-000000000006";
+    private static readonly string ExtractAccentAUId = "11111111-aaaa-4000-8000-000000000007";
+    private static readonly string ExtractAccentUSId = "11111111-aaaa-4000-8000-000000000008";
+    private static readonly string ExtractAccentNNId = "11111111-aaaa-4000-8000-000000000009";
 
     public async Task SeedAsync(CancellationToken ct)
     {

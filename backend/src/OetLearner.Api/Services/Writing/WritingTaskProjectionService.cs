@@ -372,15 +372,15 @@ public sealed class WritingTaskProjectionService(LearnerDbContext db, ILogger<Wr
             case IDictionary<string, object?> dict:
                 return new Dictionary<string, object?>(dict);
             case JsonElement { ValueKind: JsonValueKind.Object } element:
-            {
-                var result = new Dictionary<string, object?>();
-                foreach (var prop in element.EnumerateObject())
                 {
-                    result[prop.Name] = prop.Value;
-                }
+                    var result = new Dictionary<string, object?>();
+                    foreach (var prop in element.EnumerateObject())
+                    {
+                        result[prop.Name] = prop.Value;
+                    }
 
-                return result;
-            }
+                    return result;
+                }
             default:
                 return new Dictionary<string, object?>();
         }

@@ -212,32 +212,32 @@ public sealed class ProductionProviderSafetyValidatorTests
         bool allowManagedLearnerRealtime = false,
         bool realtimeReady = false,
         string realtimeTopology = "single-instance") => new()
-    {
-        Enabled = true,
-        AsrProvider = asrProvider,
-        DeepgramApiKey = "deepgram-key",
-        TtsProvider = ttsProvider,
-        ElevenLabsApiKey = "elevenlabs-key",
-        RealtimeSttEnabled = realtimeEnabled,
-        RealtimeAsrProvider = realtimeProvider,
-        RealtimeSttAllowManagedLearnerRealProvider = allowManagedLearnerRealtime,
-        ElevenLabsSttApiKey = realtimeReady ? "elevenlabs-stt-key" : string.Empty,
-        RealtimeSttAllowRealProvider = realtimeReady,
-        RealtimeSttRealProviderProductionAuthorized = realtimeReady,
-        RealtimeSttEstimatedCostUsdPerMinute = realtimeReady ? 0.02m : 0m,
-        RealtimeSttAssumeLearnersAdult = realtimeReady,
-        RealtimeSttProviderSessionTopology = realtimeTopology,
-        RealtimeSttRegionId = realtimeReady ? "eu-west-1" : string.Empty,
-    };
+        {
+            Enabled = true,
+            AsrProvider = asrProvider,
+            DeepgramApiKey = "deepgram-key",
+            TtsProvider = ttsProvider,
+            ElevenLabsApiKey = "elevenlabs-key",
+            RealtimeSttEnabled = realtimeEnabled,
+            RealtimeAsrProvider = realtimeProvider,
+            RealtimeSttAllowManagedLearnerRealProvider = allowManagedLearnerRealtime,
+            ElevenLabsSttApiKey = realtimeReady ? "elevenlabs-stt-key" : string.Empty,
+            RealtimeSttAllowRealProvider = realtimeReady,
+            RealtimeSttRealProviderProductionAuthorized = realtimeReady,
+            RealtimeSttEstimatedCostUsdPerMinute = realtimeReady ? 0.02m : 0m,
+            RealtimeSttAssumeLearnersAdult = realtimeReady,
+            RealtimeSttProviderSessionTopology = realtimeTopology,
+            RealtimeSttRegionId = realtimeReady ? "eu-west-1" : string.Empty,
+        };
 
     private static AiProviderOptions ValidAiProvider(
         string providerId = "digitalocean-serverless",
         string apiKey = "real-ai-provider-key",
         string baseUrl = "https://inference.do-ai.run/v1") => new()
-    {
-        ProviderId = providerId,
-        BaseUrl = baseUrl,
-        ApiKey = apiKey,
-        DefaultModel = "glm-5",
-    };
+        {
+            ProviderId = providerId,
+            BaseUrl = baseUrl,
+            ApiKey = apiKey,
+            DefaultModel = "glm-5",
+        };
 }

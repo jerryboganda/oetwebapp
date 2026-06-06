@@ -626,12 +626,12 @@ public static class ListeningAuthoringAdminEndpoints
 
             var job = new ListeningTtsJob
             {
-                Id          = Guid.NewGuid().ToString("N"),
-                ExtractId   = extractId,
+                Id = Guid.NewGuid().ToString("N"),
+                ExtractId = extractId,
                 RequestedBy = adminId,
-                Status      = ListeningTtsJobStatus.Pending,
-                CreatedAt   = DateTimeOffset.UtcNow,
-                UpdatedAt   = DateTimeOffset.UtcNow,
+                Status = ListeningTtsJobStatus.Pending,
+                CreatedAt = DateTimeOffset.UtcNow,
+                UpdatedAt = DateTimeOffset.UtcNow,
             };
             db.ListeningTtsJobs.Add(job);
             await db.SaveChangesAsync(ct);
@@ -657,11 +657,11 @@ public static class ListeningAuthoringAdminEndpoints
 
             return Results.Ok(new
             {
-                jobId      = job.Id,
-                status     = job.Status.ToString().ToLowerInvariant(),
+                jobId = job.Id,
+                status = job.Status.ToString().ToLowerInvariant(),
                 retryCount = job.RetryCount,
-                error      = job.ErrorMessage,
-                updatedAt  = job.UpdatedAt,
+                error = job.ErrorMessage,
+                updatedAt = job.UpdatedAt,
             });
         })
         .WithName("GetListeningTtsJobStatus")

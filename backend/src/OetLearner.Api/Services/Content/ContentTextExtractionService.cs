@@ -61,7 +61,7 @@ public sealed class ContentTextExtractionService(
             .FirstOrDefaultAsync(p => p.Id == paperId, ct);
         if (paper is null) return 0;
 
-            var existing = ReadExistingPayload(paper.ExtractedTextJson);
+        var existing = ReadExistingPayload(paper.ExtractedTextJson);
 
         int processed = 0;
         foreach (var asset in paper.Assets)

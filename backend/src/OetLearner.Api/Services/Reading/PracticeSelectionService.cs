@@ -84,7 +84,7 @@ public sealed class PracticeSelectionService(LearnerDbContext db) : IPracticeSel
         // NOTE: ReadingQuestion has no DifficultyScore column in the current
         // schema — difficulty filtering is a planned extension.  The query
         // currently selects all published questions for the skill.
-        var diffLow  = Math.Max(0m, skillScore - 1);
+        var diffLow = Math.Max(0m, skillScore - 1);
         var diffHigh = Math.Min(10m, skillScore + 1);
         _ = (diffLow, diffHigh); // suppress unused-var warning until column is added
 

@@ -176,10 +176,10 @@ public sealed class AiCreditRenewalWorker(
 
     private static bool IsUniqueConstraintViolation(DbUpdateException exception)
         => exception.InnerException is PostgresException
-            {
-                SqlState: PostgresErrorCodes.UniqueViolation,
-                ConstraintName: RenewalReferenceIndexName,
-            }
+        {
+            SqlState: PostgresErrorCodes.UniqueViolation,
+            ConstraintName: RenewalReferenceIndexName,
+        }
             || (exception.InnerException?.Message.Contains("UNIQUE constraint failed", StringComparison.OrdinalIgnoreCase) ?? false);
 
     private static DateTimeOffset EndOfMonth(DateTimeOffset from)

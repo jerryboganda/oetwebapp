@@ -152,7 +152,13 @@ public static class ReadingLearnerEndpoints
                     }),
                     texts = p.Texts.Select(t => new
                     {
-                        t.Id, t.DisplayOrder, t.Title, t.Source, t.BodyHtml, t.WordCount, t.TopicTag,
+                        t.Id,
+                        t.DisplayOrder,
+                        t.Title,
+                        t.Source,
+                        t.BodyHtml,
+                        t.WordCount,
+                        t.TopicTag,
                     }),
                     questions = p.Questions.Select(q => new
                     {

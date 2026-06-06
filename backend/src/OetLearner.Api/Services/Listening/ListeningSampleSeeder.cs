@@ -154,8 +154,8 @@ public sealed class ListeningSampleSeeder(
         }
 
         var question = FindOne(sampleDir, $"Listening Sample {sampleIndex} Question*.pdf");
-        var script   = FindOne(sampleDir, $"Listening Sample {sampleIndex} Audio-Script.pdf");
-        var answers  = FindOne(sampleDir, $"Listening Sample {sampleIndex} Answer*.pdf")
+        var script = FindOne(sampleDir, $"Listening Sample {sampleIndex} Audio-Script.pdf");
+        var answers = FindOne(sampleDir, $"Listening Sample {sampleIndex} Answer*.pdf")
                     ?? FindOne(sampleDir, $"Listening Sample {sampleIndex} Answers.pdf");
         var audioPath = Path.Combine(sampleDir, $"Audio {sampleIndex}", $"Audio {sampleIndex}.mp3");
         var audio = File.Exists(audioPath) ? audioPath : null;
@@ -206,9 +206,9 @@ public sealed class ListeningSampleSeeder(
 
         // Idempotently upsert each role's MediaAsset + ContentPaperAsset.
         await UpsertAssetAsync(paper, PaperAssetRole.QuestionPaper, question, ct);
-        await UpsertAssetAsync(paper, PaperAssetRole.AudioScript,   script,   ct);
-        await UpsertAssetAsync(paper, PaperAssetRole.AnswerKey,     answers,  ct);
-        await UpsertAssetAsync(paper, PaperAssetRole.Audio,         audio,    ct);
+        await UpsertAssetAsync(paper, PaperAssetRole.AudioScript, script, ct);
+        await UpsertAssetAsync(paper, PaperAssetRole.AnswerKey, answers, ct);
+        await UpsertAssetAsync(paper, PaperAssetRole.Audio, audio, ct);
 
         return createdNew;
     }
@@ -271,9 +271,9 @@ public sealed class ListeningSampleSeeder(
 
         var (kind, mime) = ext switch
         {
-            "mp3"  => ("audio",    "audio/mpeg"),
-            "pdf"  => ("document", "application/pdf"),
-            _      => ("document", "application/octet-stream"),
+            "mp3" => ("audio", "audio/mpeg"),
+            "pdf" => ("document", "application/pdf"),
+            _ => ("document", "application/octet-stream"),
         };
 
         var media = new MediaAsset

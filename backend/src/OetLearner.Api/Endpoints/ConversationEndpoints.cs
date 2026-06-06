@@ -69,8 +69,12 @@ public static class ConversationEndpoints
             if (stream is null) return Results.NotFound();
             var mime = ext.ToLowerInvariant() switch
             {
-                "mp3" => "audio/mpeg", "webm" => "audio/webm", "ogg" => "audio/ogg",
-                "wav" => "audio/wav", "m4a" => "audio/mp4", _ => "application/octet-stream",
+                "mp3" => "audio/mpeg",
+                "webm" => "audio/webm",
+                "ogg" => "audio/ogg",
+                "wav" => "audio/wav",
+                "m4a" => "audio/mp4",
+                _ => "application/octet-stream",
             };
             return Results.Stream(stream, mime);
         });

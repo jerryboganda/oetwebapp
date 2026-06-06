@@ -44,7 +44,7 @@ public sealed class CouponVariantApplicator : ICouponVariantApplicator
                     }
                     break;
                 }
-            // Other variants apply at quote time (handled in LearnerService.Billing); nothing to do here.
+                // Other variants apply at quote time (handled in LearnerService.Billing); nothing to do here.
         }
     }
 

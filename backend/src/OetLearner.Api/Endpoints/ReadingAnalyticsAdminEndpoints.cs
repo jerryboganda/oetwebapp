@@ -591,14 +591,14 @@ public static class ReadingAnalyticsAdminEndpoints
                 "warning"));
         }
 
-            if (summary.SubmittedAttempts == 0)
-            {
-                insights.Add(new ReadingActionInsightDto(
-                "no_submitted_attempts",
-                "Collect submitted Reading attempts",
-                "Published Reading content exists, but this window has no submitted attempts to analyse yet.",
-                "warning"));
-            }
+        if (summary.SubmittedAttempts == 0)
+        {
+            insights.Add(new ReadingActionInsightDto(
+            "no_submitted_attempts",
+            "Collect submitted Reading attempts",
+            "Published Reading content exists, but this window has no submitted attempts to analyse yet.",
+            "warning"));
+        }
 
         var weakestPart = parts
             .Where(p => p.Opportunities > 0 && p.AccuracyPercent.HasValue)

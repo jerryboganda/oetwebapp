@@ -128,9 +128,16 @@ public class ContentAccessService(LearnerDbContext db, ContentHierarchyService h
 
         var result = programs.Select(p => new
         {
-            p.Id, p.Code, p.Title, p.Description, p.ProfessionId,
-            p.InstructionLanguage, p.ProgramType, p.ThumbnailUrl,
-            p.DisplayOrder, p.EstimatedDurationMinutes,
+            p.Id,
+            p.Code,
+            p.Title,
+            p.Description,
+            p.ProfessionId,
+            p.InstructionLanguage,
+            p.ProgramType,
+            p.ThumbnailUrl,
+            p.DisplayOrder,
+            p.EstimatedDurationMinutes,
             isAccessible = accessibleProgramIds.Contains(p.Id),
             trackCount = db.ContentTracks.Count(t => t.ProgramId == p.Id)
         }).ToList();

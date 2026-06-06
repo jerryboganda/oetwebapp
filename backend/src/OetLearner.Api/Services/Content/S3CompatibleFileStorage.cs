@@ -70,8 +70,8 @@ public sealed class S3CompatibleFileStorage : IFileStorage, IAsyncDisposable
 
         var req = new PutObjectRequest
         {
-            BucketName  = Bucket,
-            Key         = key,
+            BucketName = Bucket,
+            Key = key,
             InputStream = ms,
             AutoCloseStream = false,
         };
@@ -106,9 +106,9 @@ public sealed class S3CompatibleFileStorage : IFileStorage, IAsyncDisposable
         var req = new GetPreSignedUrlRequest
         {
             BucketName = Bucket,
-            Key        = key,
-            Verb       = HttpVerb.GET,
-            Expires    = DateTime.UtcNow.Add(ttl),
+            Key = key,
+            Verb = HttpVerb.GET,
+            Expires = DateTime.UtcNow.Add(ttl),
         };
         var url = _client.GetPreSignedURL(req);
         return new Uri(url, UriKind.Absolute);
@@ -169,10 +169,10 @@ public sealed class S3CompatibleFileStorage : IFileStorage, IAsyncDisposable
         // S3 copy + delete.
         var copy = new CopyObjectRequest
         {
-            SourceBucket      = Bucket,
-            SourceKey         = sourceKey,
+            SourceBucket = Bucket,
+            SourceKey = sourceKey,
             DestinationBucket = Bucket,
-            DestinationKey    = destKey,
+            DestinationKey = destKey,
         };
 #pragma warning disable CA2012
         _client.CopyObjectAsync(copy).GetAwaiter().GetResult();
@@ -234,7 +234,7 @@ public sealed class S3CompatibleFileStorage : IFileStorage, IAsyncDisposable
             if (disposing && !_uploaded)
             {
                 _uploaded = true;
-                Position  = 0;
+                Position = 0;
                 owner.WriteAsync(key, this, CancellationToken.None).GetAwaiter().GetResult();
             }
             base.Dispose(disposing);
@@ -245,7 +245,7 @@ public sealed class S3CompatibleFileStorage : IFileStorage, IAsyncDisposable
             if (!_uploaded)
             {
                 _uploaded = true;
-                Position  = 0;
+                Position = 0;
                 await owner.WriteAsync(key, this, CancellationToken.None);
             }
             await base.DisposeAsync();

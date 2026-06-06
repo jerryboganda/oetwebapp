@@ -1082,11 +1082,11 @@ public sealed class NotificationService(
                 null);
         }
 
-            var isPolicyProtected = NotificationCatalog.IsPolicyProtected(catalogEntry);
-            var globalOverride = await db.NotificationPolicyOverrides
-                .AsNoTracking()
-                .FirstOrDefaultAsync(existingOverride => existingOverride.AudienceRole == audienceRole && existingOverride.EventKey == NotificationCatalog.GlobalPolicyEventKey, ct);
-            var frequencyCap = ResolveEffectiveFrequencyCap(catalogEntry, globalOverride, null, isPolicyProtected);
+        var isPolicyProtected = NotificationCatalog.IsPolicyProtected(catalogEntry);
+        var globalOverride = await db.NotificationPolicyOverrides
+            .AsNoTracking()
+            .FirstOrDefaultAsync(existingOverride => existingOverride.AudienceRole == audienceRole && existingOverride.EventKey == NotificationCatalog.GlobalPolicyEventKey, ct);
+        var frequencyCap = ResolveEffectiveFrequencyCap(catalogEntry, globalOverride, null, isPolicyProtected);
 
         return new AdminNotificationPolicyRow(
             audienceRole,

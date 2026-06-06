@@ -77,10 +77,18 @@ public static class ContentPapersLearnerEndpoints
                 .Take(s2)
                 .Select(p => new
                 {
-                    p.Id, p.SubtestCode, p.Title, p.Slug,
-                    p.ProfessionId, p.AppliesToAllProfessions,
-                    p.Difficulty, p.EstimatedDurationMinutes,
-                    p.CardType, p.LetterType, p.Priority, p.TagsCsv,
+                    p.Id,
+                    p.SubtestCode,
+                    p.Title,
+                    p.Slug,
+                    p.ProfessionId,
+                    p.AppliesToAllProfessions,
+                    p.Difficulty,
+                    p.EstimatedDurationMinutes,
+                    p.CardType,
+                    p.LetterType,
+                    p.Priority,
+                    p.TagsCsv,
                     p.PublishedAt,
                 })
                 .ToListAsync(ct);
@@ -151,14 +159,24 @@ public static class ContentPapersLearnerEndpoints
 
             return Results.Ok(new
             {
-                paper.Id, paper.SubtestCode, paper.Title, paper.Slug,
-                paper.ProfessionId, paper.AppliesToAllProfessions,
-                paper.Difficulty, paper.EstimatedDurationMinutes,
-                paper.CardType, paper.LetterType, paper.TagsCsv,
+                paper.Id,
+                paper.SubtestCode,
+                paper.Title,
+                paper.Slug,
+                paper.ProfessionId,
+                paper.AppliesToAllProfessions,
+                paper.Difficulty,
+                paper.EstimatedDurationMinutes,
+                paper.CardType,
+                paper.LetterType,
+                paper.TagsCsv,
                 paper.PublishedAt,
                 assets = visibleAssets.Select(a => new
                 {
-                    a.Id, role = a.Role.ToString(), a.Part, a.Title,
+                    a.Id,
+                    role = a.Role.ToString(),
+                    a.Part,
+                    a.Title,
                     media = a.MediaAsset is null ? null : new
                     {
                         a.MediaAsset.Id,

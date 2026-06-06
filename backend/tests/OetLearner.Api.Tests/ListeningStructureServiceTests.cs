@@ -77,18 +77,39 @@ public class ListeningStructureServiceTests
             num++;
         }
         for (var i = 0; i < partB; i++)
-            list.Add(new { id = $"b-{i}", number = num++, partCode = i < 6 ? PartBCodes[i] : "B6", type = "multiple_choice_3", text = "q",
+            list.Add(new
+            {
+                id = $"b-{i}",
+                number = num++,
+                partCode = i < 6 ? PartBCodes[i] : "B6",
+                type = "multiple_choice_3",
+                text = "q",
                 options = Enumerable.Range(0, partBOptionCount).Select(x => $"opt-{x}").ToArray(),
-                correctAnswer = "opt-0", skillTag = "detail", transcriptExcerpt = "opt-0",
-                transcriptEvidenceStartMs = num * 1000, transcriptEvidenceEndMs = num * 1000 + 500,
+                correctAnswer = "opt-0",
+                skillTag = "detail",
+                transcriptExcerpt = "opt-0",
+                transcriptEvidenceStartMs = num * 1000,
+                transcriptEvidenceEndMs = num * 1000 + 500,
                 difficultyLevel = 3,
-                optionDistractorCategory = Enumerable.Range(0, partBOptionCount).Select(index => index == 0 ? null : "reused_keyword").ToArray() });
+                optionDistractorCategory = Enumerable.Range(0, partBOptionCount).Select(index => index == 0 ? null : "reused_keyword").ToArray()
+            });
         for (var i = 0; i < partC; i++)
-            list.Add(new { id = $"c-{i}", number = num++, partCode = i < partC / 2 ? "C1" : "C2", type = "multiple_choice_3", text = "q",
-                options = new[] { "1", "2", "3" }, correctAnswer = "1", skillTag = "attitude",
-                transcriptExcerpt = "1", transcriptEvidenceStartMs = num * 1000,
-                transcriptEvidenceEndMs = num * 1000 + 500, difficultyLevel = 3,
-                optionDistractorCategory = new string?[] { null, "too_weak", "opposite_meaning" } });
+            list.Add(new
+            {
+                id = $"c-{i}",
+                number = num++,
+                partCode = i < partC / 2 ? "C1" : "C2",
+                type = "multiple_choice_3",
+                text = "q",
+                options = new[] { "1", "2", "3" },
+                correctAnswer = "1",
+                skillTag = "attitude",
+                transcriptExcerpt = "1",
+                transcriptEvidenceStartMs = num * 1000,
+                transcriptEvidenceEndMs = num * 1000 + 500,
+                difficultyLevel = 3,
+                optionDistractorCategory = new string?[] { null, "too_weak", "opposite_meaning" }
+            });
         // One extract per sub-section, each with a non-overlapping audio window.
         var extracts = new List<object>
         {
@@ -96,8 +117,16 @@ public class ListeningStructureServiceTests
             new { partCode = "A2", displayOrder = 2, kind = "consultation", title = "A2", audioStartMs = 60_000, audioEndMs = 120_000, difficultyRating = 3 },
         };
         for (var i = 0; i < 6; i++)
-            extracts.Add(new { partCode = PartBCodes[i], displayOrder = 3 + i, kind = "workplace", title = PartBCodes[i],
-                audioStartMs = 120_000 + i * 10_000, audioEndMs = 120_000 + (i + 1) * 10_000, difficultyRating = 3 });
+            extracts.Add(new
+            {
+                partCode = PartBCodes[i],
+                displayOrder = 3 + i,
+                kind = "workplace",
+                title = PartBCodes[i],
+                audioStartMs = 120_000 + i * 10_000,
+                audioEndMs = 120_000 + (i + 1) * 10_000,
+                difficultyRating = 3
+            });
         extracts.Add(new { partCode = "C1", displayOrder = 9, kind = "presentation", title = "C1", audioStartMs = 180_000, audioEndMs = 240_000, difficultyRating = 3 });
         extracts.Add(new { partCode = "C2", displayOrder = 10, kind = "presentation", title = "C2", audioStartMs = 240_000, audioEndMs = 300_000, difficultyRating = 3 });
         return JsonSerializer.Serialize(new { listeningQuestions = list, listeningExtracts = extracts });
@@ -280,8 +309,22 @@ public class ListeningStructureServiceTests
         for (var i = 0; i < 24; i++)
             list.Add(new { id = $"a-{i}", number = num++, partCode = "A", type = "short_answer", text = "q", correctAnswer = "x", skillTag = "note_completion", transcriptExcerpt = "x", transcriptEvidenceStartMs = num * 1000, transcriptEvidenceEndMs = num * 1000 + 500, difficultyLevel = 3 });
         for (var i = 0; i < 6; i++)
-            list.Add(new { id = $"b-{i}", number = num++, partCode = PartBCodes[i], type = "multiple_choice_3", text = "q",
-                options = new[] { "1", "2", "3" }, correctAnswer = "1", skillTag = "detail", transcriptExcerpt = "1", transcriptEvidenceStartMs = num * 1000, transcriptEvidenceEndMs = num * 1000 + 500, difficultyLevel = 3, optionDistractorCategory = new string?[] { null, "too_weak", "reused_keyword" } });
+            list.Add(new
+            {
+                id = $"b-{i}",
+                number = num++,
+                partCode = PartBCodes[i],
+                type = "multiple_choice_3",
+                text = "q",
+                options = new[] { "1", "2", "3" },
+                correctAnswer = "1",
+                skillTag = "detail",
+                transcriptExcerpt = "1",
+                transcriptEvidenceStartMs = num * 1000,
+                transcriptEvidenceEndMs = num * 1000 + 500,
+                difficultyLevel = 3,
+                optionDistractorCategory = new string?[] { null, "too_weak", "reused_keyword" }
+            });
         for (var i = 0; i < 12; i++)
             list.Add(new { id = $"c-{i}", number = num++, partCode = "C", type = "multiple_choice_3", text = "q", options = new[] { "1", "2", "3" }, correctAnswer = "1", skillTag = "attitude", transcriptExcerpt = "1", transcriptEvidenceStartMs = num * 1000, transcriptEvidenceEndMs = num * 1000 + 500, difficultyLevel = 3, optionDistractorCategory = new string?[] { null, "too_weak", "opposite_meaning" } });
         var extracts = new List<object>
@@ -289,8 +332,16 @@ public class ListeningStructureServiceTests
             new { partCode = "A", displayOrder = 1, kind = "consultation", title = "A", audioStartMs = 0, audioEndMs = 120_000, difficultyRating = 3 },
         };
         for (var i = 0; i < 6; i++)
-            extracts.Add(new { partCode = PartBCodes[i], displayOrder = 3 + i, kind = "workplace", title = PartBCodes[i],
-                audioStartMs = 120_000 + i * 10_000, audioEndMs = 120_000 + (i + 1) * 10_000, difficultyRating = 3 });
+            extracts.Add(new
+            {
+                partCode = PartBCodes[i],
+                displayOrder = 3 + i,
+                kind = "workplace",
+                title = PartBCodes[i],
+                audioStartMs = 120_000 + i * 10_000,
+                audioEndMs = 120_000 + (i + 1) * 10_000,
+                difficultyRating = 3
+            });
         extracts.Add(new { partCode = "C", displayOrder = 9, kind = "presentation", title = "C", audioStartMs = 180_000, audioEndMs = 300_000, difficultyRating = 3 });
         var json = JsonSerializer.Serialize(new { listeningQuestions = list, listeningExtracts = extracts });
         var paper = await AddPaperAsync(db, json);

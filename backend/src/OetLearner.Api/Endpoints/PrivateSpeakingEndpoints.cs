@@ -39,9 +39,15 @@ public static class PrivateSpeakingEndpoints
             var profiles = await svc.ListTutorProfilesAsync(activeOnly: true, ct);
             return Results.Ok(profiles.Select(p => new
             {
-                p.Id, p.DisplayName, p.Bio, p.Timezone,
-                p.PriceOverrideMinorUnits, p.SlotDurationOverrideMinutes,
-                p.SpecialtiesJson, p.AverageRating, p.TotalSessions
+                p.Id,
+                p.DisplayName,
+                p.Bio,
+                p.Timezone,
+                p.PriceOverrideMinorUnits,
+                p.SlotDurationOverrideMinutes,
+                p.SpecialtiesJson,
+                p.AverageRating,
+                p.TotalSessions
             }));
         });
 
@@ -224,10 +230,16 @@ public static class PrivateSpeakingEndpoints
             if (profile is null) return Results.Ok((object?)null);
             return Results.Ok(new
             {
-                profile.Id, profile.DisplayName, profile.Bio, profile.Timezone,
-                profile.PriceOverrideMinorUnits, profile.SlotDurationOverrideMinutes,
-                profile.SpecialtiesJson, profile.IsActive,
-                profile.AverageRating, profile.TotalSessions
+                profile.Id,
+                profile.DisplayName,
+                profile.Bio,
+                profile.Timezone,
+                profile.PriceOverrideMinorUnits,
+                profile.SlotDurationOverrideMinutes,
+                profile.SpecialtiesJson,
+                profile.IsActive,
+                profile.AverageRating,
+                profile.TotalSessions
             });
         });
 
@@ -358,8 +370,13 @@ public static class PrivateSpeakingEndpoints
             var rules = await svc.GetAvailabilityRulesAsync(profile.Id, ct);
             return Results.Ok(rules.Select(r => new
             {
-                r.Id, r.DayOfWeek, r.StartTime, r.EndTime,
-                r.EffectiveFrom, r.EffectiveTo, r.IsActive
+                r.Id,
+                r.DayOfWeek,
+                r.StartTime,
+                r.EndTime,
+                r.EffectiveFrom,
+                r.EffectiveTo,
+                r.IsActive
             }));
         });
 
@@ -377,8 +394,13 @@ public static class PrivateSpeakingEndpoints
                 req.EffectiveFrom, req.EffectiveTo, http.UserId(), ct);
             return Results.Created($"/v1/expert/private-speaking/availability/{rule.Id}", new
             {
-                rule.Id, rule.DayOfWeek, rule.StartTime, rule.EndTime,
-                rule.EffectiveFrom, rule.EffectiveTo, rule.IsActive
+                rule.Id,
+                rule.DayOfWeek,
+                rule.StartTime,
+                rule.EndTime,
+                rule.EffectiveFrom,
+                rule.EffectiveTo,
+                rule.IsActive
             });
         });
 

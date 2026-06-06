@@ -91,21 +91,21 @@ public sealed class DualAssessmentTests : IAsyncLifetime
         var aiAfter = await _db.SpeakingAiAssessments.AsNoTracking()
             .FirstAsync(a => a.Id == aiId);
 
-        Assert.Equal(aiBefore.Intelligibility,        aiAfter.Intelligibility);
-        Assert.Equal(aiBefore.Fluency,                aiAfter.Fluency);
-        Assert.Equal(aiBefore.Appropriateness,        aiAfter.Appropriateness);
-        Assert.Equal(aiBefore.GrammarExpression,      aiAfter.GrammarExpression);
-        Assert.Equal(aiBefore.RelationshipBuilding,   aiAfter.RelationshipBuilding);
-        Assert.Equal(aiBefore.PatientPerspective,     aiAfter.PatientPerspective);
-        Assert.Equal(aiBefore.Structure,              aiAfter.Structure);
-        Assert.Equal(aiBefore.InformationGathering,   aiAfter.InformationGathering);
-        Assert.Equal(aiBefore.InformationGiving,      aiAfter.InformationGiving);
-        Assert.Equal(aiBefore.EstimatedScaledScore,   aiAfter.EstimatedScaledScore);
-        Assert.Equal(aiBefore.ReadinessBand,          aiAfter.ReadinessBand);
-        Assert.Equal(aiBefore.OverallSummary,         aiAfter.OverallSummary);
-        Assert.Equal(aiBefore.ConfidenceBand,         aiAfter.ConfidenceBand);
-        Assert.Equal(aiBefore.GeneratedAt,            aiAfter.GeneratedAt);
-        Assert.Equal(aiBefore.RulebookFindingsJson,   aiAfter.RulebookFindingsJson);
+        Assert.Equal(aiBefore.Intelligibility, aiAfter.Intelligibility);
+        Assert.Equal(aiBefore.Fluency, aiAfter.Fluency);
+        Assert.Equal(aiBefore.Appropriateness, aiAfter.Appropriateness);
+        Assert.Equal(aiBefore.GrammarExpression, aiAfter.GrammarExpression);
+        Assert.Equal(aiBefore.RelationshipBuilding, aiAfter.RelationshipBuilding);
+        Assert.Equal(aiBefore.PatientPerspective, aiAfter.PatientPerspective);
+        Assert.Equal(aiBefore.Structure, aiAfter.Structure);
+        Assert.Equal(aiBefore.InformationGathering, aiAfter.InformationGathering);
+        Assert.Equal(aiBefore.InformationGiving, aiAfter.InformationGiving);
+        Assert.Equal(aiBefore.EstimatedScaledScore, aiAfter.EstimatedScaledScore);
+        Assert.Equal(aiBefore.ReadinessBand, aiAfter.ReadinessBand);
+        Assert.Equal(aiBefore.OverallSummary, aiAfter.OverallSummary);
+        Assert.Equal(aiBefore.ConfidenceBand, aiAfter.ConfidenceBand);
+        Assert.Equal(aiBefore.GeneratedAt, aiAfter.GeneratedAt);
+        Assert.Equal(aiBefore.RulebookFindingsJson, aiAfter.RulebookFindingsJson);
         Assert.True(aiAfter.IsAdvisory);
     }
 
@@ -146,20 +146,20 @@ public sealed class DualAssessmentTests : IAsyncLifetime
         var tutorAfter = await _db.SpeakingTutorAssessments.AsNoTracking()
             .FirstAsync(t => t.Id == submitted.AssessmentId);
 
-        Assert.Equal(tutorBefore.Intelligibility,      tutorAfter.Intelligibility);
-        Assert.Equal(tutorBefore.Fluency,              tutorAfter.Fluency);
-        Assert.Equal(tutorBefore.Appropriateness,      tutorAfter.Appropriateness);
-        Assert.Equal(tutorBefore.GrammarExpression,    tutorAfter.GrammarExpression);
+        Assert.Equal(tutorBefore.Intelligibility, tutorAfter.Intelligibility);
+        Assert.Equal(tutorBefore.Fluency, tutorAfter.Fluency);
+        Assert.Equal(tutorBefore.Appropriateness, tutorAfter.Appropriateness);
+        Assert.Equal(tutorBefore.GrammarExpression, tutorAfter.GrammarExpression);
         Assert.Equal(tutorBefore.RelationshipBuilding, tutorAfter.RelationshipBuilding);
-        Assert.Equal(tutorBefore.PatientPerspective,   tutorAfter.PatientPerspective);
-        Assert.Equal(tutorBefore.Structure,            tutorAfter.Structure);
+        Assert.Equal(tutorBefore.PatientPerspective, tutorAfter.PatientPerspective);
+        Assert.Equal(tutorBefore.Structure, tutorAfter.Structure);
         Assert.Equal(tutorBefore.InformationGathering, tutorAfter.InformationGathering);
-        Assert.Equal(tutorBefore.InformationGiving,    tutorAfter.InformationGiving);
+        Assert.Equal(tutorBefore.InformationGiving, tutorAfter.InformationGiving);
         Assert.Equal(tutorBefore.EstimatedScaledScore, tutorAfter.EstimatedScaledScore);
-        Assert.Equal(tutorBefore.ReadinessBand,        tutorAfter.ReadinessBand);
+        Assert.Equal(tutorBefore.ReadinessBand, tutorAfter.ReadinessBand);
         Assert.Equal(tutorBefore.OverallFeedbackMarkdown, tutorAfter.OverallFeedbackMarkdown);
-        Assert.Equal(tutorBefore.IsFinal,              tutorAfter.IsFinal);
-        Assert.Equal(tutorBefore.SubmittedAt,          tutorAfter.SubmittedAt);
+        Assert.Equal(tutorBefore.IsFinal, tutorAfter.IsFinal);
+        Assert.Equal(tutorBefore.SubmittedAt, tutorAfter.SubmittedAt);
     }
 
     // ── Dual GET surfaces both columns ───────────────────────────────────
@@ -236,9 +236,9 @@ public sealed class DualAssessmentTests : IAsyncLifetime
     // ── Divergence agreement bands ───────────────────────────────────────
 
     [Theory]
-    [InlineData(2,  "close")]
-    [InlineData(4,  "close")]
-    [InlineData(7,  "moderate")]
+    [InlineData(2, "close")]
+    [InlineData(4, "close")]
+    [InlineData(7, "moderate")]
     [InlineData(10, "moderate")]
     [InlineData(15, "wide")]
     public void DivergenceCalculation_ComputesAgreementBand(int sumOfAbs, string expectedBand)

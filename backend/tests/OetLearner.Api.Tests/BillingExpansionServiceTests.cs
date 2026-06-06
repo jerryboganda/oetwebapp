@@ -19,18 +19,33 @@ public class BillingExpansionServiceTests
 
     private static TaxRule UkVat() => new()
     {
-        Id = "uk_vat", Country = "GB", Region = "UK", TaxType = "vat", DisplayName = "UK VAT",
-        RatePercent = 20m, EffectiveFrom = DateTimeOffset.UtcNow.AddDays(-30),
-        ZeroRateForB2BReverseCharge = true, IsTaxInclusiveDisplay = true, IsActive = true,
-        CreatedAt = DateTimeOffset.UtcNow, UpdatedAt = DateTimeOffset.UtcNow,
+        Id = "uk_vat",
+        Country = "GB",
+        Region = "UK",
+        TaxType = "vat",
+        DisplayName = "UK VAT",
+        RatePercent = 20m,
+        EffectiveFrom = DateTimeOffset.UtcNow.AddDays(-30),
+        ZeroRateForB2BReverseCharge = true,
+        IsTaxInclusiveDisplay = true,
+        IsActive = true,
+        CreatedAt = DateTimeOffset.UtcNow,
+        UpdatedAt = DateTimeOffset.UtcNow,
     };
 
     private static TaxRule EgVat() => new()
     {
-        Id = "eg_vat", Country = "EG", Region = "EGYPT", TaxType = "vat", DisplayName = "Egypt VAT",
-        RatePercent = 14m, EffectiveFrom = DateTimeOffset.UtcNow.AddDays(-30),
-        ZeroRateForB2BReverseCharge = true, IsActive = true,
-        CreatedAt = DateTimeOffset.UtcNow, UpdatedAt = DateTimeOffset.UtcNow,
+        Id = "eg_vat",
+        Country = "EG",
+        Region = "EGYPT",
+        TaxType = "vat",
+        DisplayName = "Egypt VAT",
+        RatePercent = 14m,
+        EffectiveFrom = DateTimeOffset.UtcNow.AddDays(-30),
+        ZeroRateForB2BReverseCharge = true,
+        IsActive = true,
+        CreatedAt = DateTimeOffset.UtcNow,
+        UpdatedAt = DateTimeOffset.UtcNow,
     };
 
     [Fact]

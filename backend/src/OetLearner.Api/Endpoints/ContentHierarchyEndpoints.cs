@@ -262,9 +262,18 @@ public static class ContentHierarchyEndpoints
             => Results.Ok(await importService.GetContentInventoryAsync(
                 new ContentInventoryQuery
                 {
-                    SubtestCode = subtest, ProfessionId = profession, Language = language, Provenance = provenance,
-                    Freshness = freshness, QaStatus = qaStatus, Status = status, PackageId = packageId,
-                    ImportBatchId = importBatchId, Search = search, Page = page ?? 1, PageSize = pageSize ?? 20
+                    SubtestCode = subtest,
+                    ProfessionId = profession,
+                    Language = language,
+                    Provenance = provenance,
+                    Freshness = freshness,
+                    QaStatus = qaStatus,
+                    Status = status,
+                    PackageId = packageId,
+                    ImportBatchId = importBatchId,
+                    Search = search,
+                    Page = page ?? 1,
+                    PageSize = pageSize ?? 20
                 }, ct)))
             .WithAdminRead("AdminContentRead");
 
@@ -287,11 +296,18 @@ public static class ContentHierarchyEndpoints
             => Results.Ok(await searchService.SearchContentAsync(
                 new ContentSearchQuery
                 {
-                    Text = q, SubtestCode = subtest, ProfessionId = profession, Difficulty = difficulty,
-                    Language = language, Provenance = provenance, ContentType = contentType,
-                    MinQuality = minQuality ?? 0, MockEligibleOnly = mockEligible ?? false,
+                    Text = q,
+                    SubtestCode = subtest,
+                    ProfessionId = profession,
+                    Difficulty = difficulty,
+                    Language = language,
+                    Provenance = provenance,
+                    ContentType = contentType,
+                    MinQuality = minQuality ?? 0,
+                    MockEligibleOnly = mockEligible ?? false,
                     PreviewEligibleOnly = previewEligible ?? false,
-                    Page = page ?? 1, PageSize = pageSize ?? 20
+                    Page = page ?? 1,
+                    PageSize = pageSize ?? 20
                 }, ct)));
 
         learner.MapGet("/search/facets", async (ContentSearchService searchService, CancellationToken ct)

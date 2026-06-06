@@ -126,40 +126,71 @@ public class ListeningGradingServiceTests
         var now = DateTimeOffset.UtcNow;
         db.ContentPapers.Add(new ContentPaper
         {
-            Id = "paper-0", SubtestCode = "listening", Title = "T", Slug = "t",
-            Status = ContentStatus.Published, Difficulty = "standard",
-            CreatedAt = now, UpdatedAt = now, ExtractedTextJson = "{}",
+            Id = "paper-0",
+            SubtestCode = "listening",
+            Title = "T",
+            Slug = "t",
+            Status = ContentStatus.Published,
+            Difficulty = "standard",
+            CreatedAt = now,
+            UpdatedAt = now,
+            ExtractedTextJson = "{}",
         });
         db.ListeningParts.Add(new ListeningPart
         {
-            Id = "p-0", PaperId = "paper-0", PartCode = ListeningPartCode.A1,
-            MaxRawScore = 1, CreatedAt = now, UpdatedAt = now,
+            Id = "p-0",
+            PaperId = "paper-0",
+            PartCode = ListeningPartCode.A1,
+            MaxRawScore = 1,
+            CreatedAt = now,
+            UpdatedAt = now,
         });
         db.ListeningExtracts.Add(new ListeningExtract
         {
-            Id = "e-0", ListeningPartId = "p-0", DisplayOrder = 0,
-            Kind = ListeningExtractKind.Consultation, Title = "E", AccentCode = "en-GB",
-            SpeakersJson = "[]", TranscriptSegmentsJson = "[]",
-            CreatedAt = now, UpdatedAt = now,
+            Id = "e-0",
+            ListeningPartId = "p-0",
+            DisplayOrder = 0,
+            Kind = ListeningExtractKind.Consultation,
+            Title = "E",
+            AccentCode = "en-GB",
+            SpeakersJson = "[]",
+            TranscriptSegmentsJson = "[]",
+            CreatedAt = now,
+            UpdatedAt = now,
         });
         db.ListeningQuestions.Add(new ListeningQuestion
         {
-            Id = "q-0", PaperId = "paper-0", ListeningPartId = "p-0", ListeningExtractId = "e-0",
-            QuestionNumber = 1, DisplayOrder = 1, Points = 1,
-            QuestionType = ListeningQuestionType.ShortAnswer, Stem = "?",
-            CorrectAnswerJson = "\"yes\"", AcceptedSynonymsJson = "[]",
-            CaseSensitive = false, CreatedAt = now, UpdatedAt = now,
+            Id = "q-0",
+            PaperId = "paper-0",
+            ListeningPartId = "p-0",
+            ListeningExtractId = "e-0",
+            QuestionNumber = 1,
+            DisplayOrder = 1,
+            Points = 1,
+            QuestionType = ListeningQuestionType.ShortAnswer,
+            Stem = "?",
+            CorrectAnswerJson = "\"yes\"",
+            AcceptedSynonymsJson = "[]",
+            CaseSensitive = false,
+            CreatedAt = now,
+            UpdatedAt = now,
         });
         db.ListeningAttempts.Add(new ListeningAttempt
         {
-            Id = "att-0", UserId = "u", PaperId = "paper-0",
-            StartedAt = now, LastActivityAt = now, MaxRawScore = 1,
+            Id = "att-0",
+            UserId = "u",
+            PaperId = "paper-0",
+            StartedAt = now,
+            LastActivityAt = now,
+            MaxRawScore = 1,
             Mode = ListeningAttemptMode.Exam,
             LastQuestionVersionMapJson = "{\"q-0\":1}",
         });
         db.ListeningAnswers.Add(new ListeningAnswer
         {
-            Id = "a-0", ListeningAttemptId = "att-0", ListeningQuestionId = "q-0",
+            Id = "a-0",
+            ListeningAttemptId = "att-0",
+            ListeningQuestionId = "q-0",
             UserAnswerJson = "\"no\"",
         });
         await db.SaveChangesAsync();

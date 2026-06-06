@@ -42,10 +42,10 @@ public interface IXpService
 // ── XP amount constants (spec §14.2) ─────────────────────────────────────────
 public static class XpAmounts
 {
-    public const int PerQuestionAnswered  = 10;
-    public const int PerCorrectAnswer     = 25;
-    public const int PerLessonCompleted   = 100;
-    public const int PerMockCompleted     = 250;
+    public const int PerQuestionAnswered = 10;
+    public const int PerCorrectAnswer = 25;
+    public const int PerLessonCompleted = 100;
+    public const int PerMockCompleted = 250;
 }
 
 public sealed class XpService(LearnerDbContext db) : IXpService

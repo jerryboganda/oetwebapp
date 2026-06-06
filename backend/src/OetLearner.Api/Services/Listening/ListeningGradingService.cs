@@ -368,34 +368,34 @@ public sealed class ListeningGradingService
         switch (q.QuestionType)
         {
             case ListeningQuestionType.MultipleChoice3:
-            {
-                var selected = TryReadString(ans.UserAnswerJson);
-                if (string.IsNullOrEmpty(selected)) return (false, null, null);
-                var opt = q.Options.FirstOrDefault(o =>
-                    string.Equals(o.OptionKey, selected, StringComparison.OrdinalIgnoreCase));
-                if (opt is null) return (false, null, null);
-                return (opt.IsCorrect, opt.IsCorrect ? null : opt.DistractorCategory, null);
-            }
+                {
+                    var selected = TryReadString(ans.UserAnswerJson);
+                    if (string.IsNullOrEmpty(selected)) return (false, null, null);
+                    var opt = q.Options.FirstOrDefault(o =>
+                        string.Equals(o.OptionKey, selected, StringComparison.OrdinalIgnoreCase));
+                    if (opt is null) return (false, null, null);
+                    return (opt.IsCorrect, opt.IsCorrect ? null : opt.DistractorCategory, null);
+                }
             // FillInBlank grades identically to ShortAnswer (canonical +
             // accepted-variants string compare). It is a distinct authored type
             // so admins can pick it, but the grading rubric is the same.
             case ListeningQuestionType.ShortAnswer:
             case ListeningQuestionType.FillInBlank:
-            {
-                var user = TryReadString(ans.UserAnswerJson) ?? string.Empty;
-                var canonical = TryReadString(q.CorrectAnswerJson);
-                var accepted = ParseAccepted(q.AcceptedSynonymsJson).ToList();
-                var candidates = (canonical is null ? Enumerable.Empty<string>() : new[] { canonical })
-                    .Concat(accepted)
-                    .Where(c => !string.IsNullOrWhiteSpace(c))
-                    .ToList();
+                {
+                    var user = TryReadString(ans.UserAnswerJson) ?? string.Empty;
+                    var canonical = TryReadString(q.CorrectAnswerJson);
+                    var accepted = ParseAccepted(q.AcceptedSynonymsJson).ToList();
+                    var candidates = (canonical is null ? Enumerable.Empty<string>() : new[] { canonical })
+                        .Concat(accepted)
+                        .Where(c => !string.IsNullOrWhiteSpace(c))
+                        .ToList();
 
-                bool matches = candidates.Any(c => StringsMatch(user, c, q.CaseSensitive, normalisation));
-                if (matches) return (true, null, ListeningMissReason.Match);
+                    bool matches = candidates.Any(c => StringsMatch(user, c, q.CaseSensitive, normalisation));
+                    if (matches) return (true, null, ListeningMissReason.Match);
 
-                var miss = ClassifyMiss(user, candidates, q, paperAnswerMap, normalisation);
-                return (false, null, miss);
-            }
+                    var miss = ClassifyMiss(user, candidates, q, paperAnswerMap, normalisation);
+                    return (false, null, miss);
+                }
             default:
                 return (false, null, null);
         }

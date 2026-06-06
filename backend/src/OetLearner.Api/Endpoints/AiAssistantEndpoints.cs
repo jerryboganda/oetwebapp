@@ -94,8 +94,13 @@ public static class AiAssistantEndpoints
                 .Skip(skip).Take(take)
                 .Select(t => new
                 {
-                    t.Id, t.UserId, t.Role, t.Title,
-                    t.IsArchived, t.CreatedAt, t.UpdatedAt,
+                    t.Id,
+                    t.UserId,
+                    t.Role,
+                    t.Title,
+                    t.IsArchived,
+                    t.CreatedAt,
+                    t.UpdatedAt,
                     MessageCount = db.AiAssistantMessages.Count(m => m.ThreadId == t.Id)
                 })
                 .ToListAsync(ct);
@@ -141,8 +146,11 @@ public static class AiAssistantEndpoints
 
             return Results.Ok(new
             {
-                totalThreads, activeToday, totalMessages,
-                messagesToday, uniqueUsersWeek,
+                totalThreads,
+                activeToday,
+                totalMessages,
+                messagesToday,
+                uniqueUsersWeek,
             });
         });
 

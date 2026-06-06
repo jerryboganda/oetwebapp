@@ -290,9 +290,13 @@ public class VocabularyServiceTests
         await SeedAsync(db, 3);
         db.VocabularyTerms.Add(new VocabularyTerm
         {
-            Id = "vt-unique", Term = "hypertension",
-            Definition = "High BP.", ExampleSentence = "He has hypertension.",
-            ExamTypeCode = "oet", Category = "medical", Status = "active",
+            Id = "vt-unique",
+            Term = "hypertension",
+            Definition = "High BP.",
+            ExampleSentence = "He has hypertension.",
+            ExamTypeCode = "oet",
+            Category = "medical",
+            Status = "active",
         });
         await db.SaveChangesAsync();
 
@@ -310,9 +314,13 @@ public class VocabularyServiceTests
         var (db, svc) = Build();
         db.VocabularyTerms.Add(new VocabularyTerm
         {
-            Id = "vt-locked", Term = "hypertension",
-            Definition = "High BP.", ExampleSentence = "He has hypertension.",
-            ExamTypeCode = "oet", Category = "medical", Status = "active",
+            Id = "vt-locked",
+            Term = "hypertension",
+            Definition = "High BP.",
+            ExampleSentence = "He has hypertension.",
+            ExamTypeCode = "oet",
+            Category = "medical",
+            Status = "active",
             IsFreePreview = false,
         });
         await db.SaveChangesAsync();
@@ -332,15 +340,23 @@ public class VocabularyServiceTests
         var (db, svc) = Build();
         db.VocabularyTerms.Add(new VocabularyTerm
         {
-            Id = "vt-a", Term = "hypertension",
-            Definition = "High BP.", ExampleSentence = "x.",
-            ExamTypeCode = "oet", Category = "medical", Status = "active",
+            Id = "vt-a",
+            Term = "hypertension",
+            Definition = "High BP.",
+            ExampleSentence = "x.",
+            ExamTypeCode = "oet",
+            Category = "medical",
+            Status = "active",
         });
         db.VocabularyTerms.Add(new VocabularyTerm
         {
-            Id = "vt-b", Term = "hypoxia",
-            Definition = "Low O2.", ExampleSentence = "x.",
-            ExamTypeCode = "oet", Category = "medical", Status = "active",
+            Id = "vt-b",
+            Term = "hypoxia",
+            Definition = "Low O2.",
+            ExampleSentence = "x.",
+            ExamTypeCode = "oet",
+            Category = "medical",
+            Status = "active",
         });
         await db.SaveChangesAsync();
 
@@ -357,16 +373,24 @@ public class VocabularyServiceTests
         var (db, svc) = Build();
         db.VocabularyTerms.Add(new VocabularyTerm
         {
-            Id = "vt-a", Term = "hypertension",
-            Definition = "High BP.", ExampleSentence = "x.",
-            ExamTypeCode = "oet", Category = "medical", Status = "active",
+            Id = "vt-a",
+            Term = "hypertension",
+            Definition = "High BP.",
+            ExampleSentence = "x.",
+            ExamTypeCode = "oet",
+            Category = "medical",
+            Status = "active",
             IsFreePreview = false,
         });
         db.VocabularyTerms.Add(new VocabularyTerm
         {
-            Id = "vt-b", Term = "hypoxia",
-            Definition = "Low O2.", ExampleSentence = "x.",
-            ExamTypeCode = "oet", Category = "medical", Status = "active",
+            Id = "vt-b",
+            Term = "hypoxia",
+            Definition = "Low O2.",
+            ExampleSentence = "x.",
+            ExamTypeCode = "oet",
+            Category = "medical",
+            Status = "active",
             IsFreePreview = true,
         });
         await db.SaveChangesAsync();

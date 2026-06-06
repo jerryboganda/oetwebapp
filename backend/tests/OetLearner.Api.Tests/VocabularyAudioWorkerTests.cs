@@ -57,19 +57,28 @@ public sealed class VocabularyAudioWorkerTests
         fixture.Db.VocabularyTerms.AddRange(
             new VocabularyTerm
             {
-                Id = "VOC-A", Term = "alpha", ExamTypeCode = "oet", Category = "c",
+                Id = "VOC-A",
+                Term = "alpha",
+                ExamTypeCode = "oet",
+                Category = "c",
                 Status = "active",
                 SourceProvenance = "batch=B1;source=admin-vocabulary-import",
             },
             new VocabularyTerm
             {
-                Id = "VOC-B", Term = "beta", ExamTypeCode = "oet", Category = "c",
+                Id = "VOC-B",
+                Term = "beta",
+                ExamTypeCode = "oet",
+                Category = "c",
                 Status = "active",
                 SourceProvenance = "batch=B1;source=admin-vocabulary-import",
             },
             new VocabularyTerm
             {
-                Id = "VOC-C", Term = "gamma", ExamTypeCode = "oet", Category = "c",
+                Id = "VOC-C",
+                Term = "gamma",
+                ExamTypeCode = "oet",
+                Category = "c",
                 Status = "active",
                 SourceProvenance = "batch=B1;source=admin-vocabulary-import",
                 AudioMediaAssetId = "MA-existing",

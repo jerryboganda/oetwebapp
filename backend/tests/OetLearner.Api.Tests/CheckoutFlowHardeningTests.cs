@@ -196,21 +196,21 @@ public class CheckoutFlowHardeningTests : IClassFixture<TestWebApplicationFactor
         string? id = null,
         BillingQuoteStatus status = BillingQuoteStatus.Created,
         DateTimeOffset? expiresAt = null) => new()
-    {
-        Id = id ?? Guid.NewGuid().ToString("N"),
-        UserId = userId ?? "user-1",
-        Currency = "AUD",
-        SubtotalAmount = 49m,
-        DiscountAmount = 0m,
-        TotalAmount = 49m,
-        Status = status,
-        CreatedAt = DateTimeOffset.UtcNow,
-        ExpiresAt = expiresAt ?? DateTimeOffset.UtcNow.AddMinutes(15),
-        AddOnCodesJson = "[]",
-        AddOnVersionIdsJson = "{}",
-        SnapshotJson = "{}",
-        IdempotencyKey = idempotencyKey,
-    };
+        {
+            Id = id ?? Guid.NewGuid().ToString("N"),
+            UserId = userId ?? "user-1",
+            Currency = "AUD",
+            SubtotalAmount = 49m,
+            DiscountAmount = 0m,
+            TotalAmount = 49m,
+            Status = status,
+            CreatedAt = DateTimeOffset.UtcNow,
+            ExpiresAt = expiresAt ?? DateTimeOffset.UtcNow.AddMinutes(15),
+            AddOnCodesJson = "[]",
+            AddOnVersionIdsJson = "{}",
+            SnapshotJson = "{}",
+            IdempotencyKey = idempotencyKey,
+        };
 
     private async Task SeedInvoicesAsync(string userId, int count)
     {

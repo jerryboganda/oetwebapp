@@ -350,15 +350,15 @@ public sealed class SpeakingEvaluationPipeline(
                 int Read6(string key) => ReadJsonInt(critElement, key) ?? 0;
                 int Read3(string key) => ReadJsonInt(critElement, key) ?? 0;
                 criterionScores = new OetScoring.SpeakingCriterionScores(
-                    Intelligibility:      Read6("intelligibility"),
-                    Fluency:              Read6("fluency"),
-                    Appropriateness:      Read6("appropriateness"),
-                    GrammarExpression:    Read6("grammarExpression"),
+                    Intelligibility: Read6("intelligibility"),
+                    Fluency: Read6("fluency"),
+                    Appropriateness: Read6("appropriateness"),
+                    GrammarExpression: Read6("grammarExpression"),
                     RelationshipBuilding: Read3("relationshipBuilding"),
-                    PatientPerspective:   Read3("patientPerspective"),
-                    Structure:            Read3("structure"),
+                    PatientPerspective: Read3("patientPerspective"),
+                    Structure: Read3("structure"),
                     InformationGathering: Read3("informationGathering"),
-                    InformationGiving:    Read3("informationGiving"));
+                    InformationGiving: Read3("informationGiving"));
             }
 
             return (score, findings, criterionScores);

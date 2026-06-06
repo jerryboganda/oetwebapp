@@ -118,18 +118,18 @@ public sealed class SpeakingCoursePathwayServiceTests : IAsyncLifetime
         string userId,
         string? mockSetId,
         string? mockSessionId) => new()
-    {
-        Id = id,
-        UserId = userId,
-        RolePlayCardId = $"card-{id}",
-        MockSetId = mockSetId,
-        MockSessionId = mockSessionId,
-        State = SpeakingSessionState.Finished,
-        Mode = SpeakingSessionMode.AiExam,
-        CreatedAt = DateTimeOffset.UtcNow.AddMinutes(-30),
-        UpdatedAt = DateTimeOffset.UtcNow,
-        EndedAt = DateTimeOffset.UtcNow,
-    };
+        {
+            Id = id,
+            UserId = userId,
+            RolePlayCardId = $"card-{id}",
+            MockSetId = mockSetId,
+            MockSessionId = mockSessionId,
+            State = SpeakingSessionState.Finished,
+            Mode = SpeakingSessionMode.AiExam,
+            CreatedAt = DateTimeOffset.UtcNow.AddMinutes(-30),
+            UpdatedAt = DateTimeOffset.UtcNow,
+            EndedAt = DateTimeOffset.UtcNow,
+        };
 
     private static JsonElement FindStage(JsonElement root, int orderIndex)
     {

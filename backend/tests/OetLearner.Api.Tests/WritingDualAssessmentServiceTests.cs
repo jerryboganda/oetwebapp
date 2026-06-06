@@ -140,19 +140,30 @@ public class WritingDualAssessmentServiceTests
         // Insert a draft that has NOT been submitted yet.
         db.ReviewRequests.Add(new ReviewRequest
         {
-            Id = "rr-1", AttemptId = AttemptId, SubtestCode = "writing",
-            State = ReviewRequestState.Submitted, TurnaroundOption = "standard",
-            PaymentSource = "wallet", PriceSnapshot = 25m, CreatedAt = DateTimeOffset.UtcNow,
+            Id = "rr-1",
+            AttemptId = AttemptId,
+            SubtestCode = "writing",
+            State = ReviewRequestState.Submitted,
+            TurnaroundOption = "standard",
+            PaymentSource = "wallet",
+            PriceSnapshot = 25m,
+            CreatedAt = DateTimeOffset.UtcNow,
         });
         db.ExpertUsers.Add(new ExpertUser
         {
-            Id = "expert-1", AuthAccountId = "auth-x", DisplayName = "X", Email = "x@x",
+            Id = "expert-1",
+            AuthAccountId = "auth-x",
+            DisplayName = "X",
+            Email = "x@x",
             CreatedAt = DateTimeOffset.UtcNow,
         });
         db.ExpertReviewDrafts.Add(new ExpertReviewDraft
         {
-            Id = "erd-1", ReviewRequestId = "rr-1", ReviewerId = "expert-1",
-            State = "editing", RubricEntriesJson = "{\"purpose\":3}",
+            Id = "erd-1",
+            ReviewRequestId = "rr-1",
+            ReviewerId = "expert-1",
+            State = "editing",
+            RubricEntriesJson = "{\"purpose\":3}",
             DraftSavedAt = DateTimeOffset.UtcNow,
         });
         await db.SaveChangesAsync();

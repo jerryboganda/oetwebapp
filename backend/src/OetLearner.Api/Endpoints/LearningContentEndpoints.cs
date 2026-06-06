@@ -98,9 +98,15 @@ public static class LearningContentEndpoints
             var progress = await db.LearnerGrammarProgress.FirstOrDefaultAsync(p => p.UserId == http.UserId() && p.LessonId == lessonId, ct);
             return Results.Ok(new
             {
-                id = lesson.Id, title = lesson.Title, description = lesson.Description, category = lesson.Category,
-                level = lesson.Level, contentHtml = lesson.ContentHtml, exercisesJson = lesson.ExercisesJson,
-                estimatedMinutes = lesson.EstimatedMinutes, prerequisiteLessonId = lesson.PrerequisiteLessonId,
+                id = lesson.Id,
+                title = lesson.Title,
+                description = lesson.Description,
+                category = lesson.Category,
+                level = lesson.Level,
+                contentHtml = lesson.ContentHtml,
+                exercisesJson = lesson.ExercisesJson,
+                estimatedMinutes = lesson.EstimatedMinutes,
+                prerequisiteLessonId = lesson.PrerequisiteLessonId,
                 progress = GrammarLessonEndpointHelpers.MapGrammarProgress(progress)
             });
         });
@@ -444,159 +450,177 @@ file sealed record GrammarAttemptGrade(
 
 file static class GrammarLessonEndpointHelpers
 {
-internal static object? MapGrammarProgress(LearnerGrammarProgress? progress)
-    => progress == null
-        ? null
-        : new
-        {
-            status = progress.Status,
-            score = progress.ExerciseScore,
-            exerciseScore = progress.ExerciseScore,
-            masteryScore = progress.ExerciseScore,
-            startedAt = progress.StartedAt,
-            completedAt = progress.CompletedAt
-        };
-
-internal static async Task<GrammarAttemptGrade> GradeGrammarAttemptAsync(
-    GrammarLesson lesson,
-    string answersJson,
-    LearnerDbContext db,
-    string userId,
-    CancellationToken ct)
-{
-    var document = ParseGrammarLessonDocument(lesson);
-    var exercises = GetGrammarExercises(lesson, document);
-    var submittedAnswers = JsonSupport.Deserialize<Dictionary<string, JsonElement>>(answersJson, new Dictionary<string, JsonElement>());
-    var serializedAnswersJson = JsonSupport.Serialize(submittedAnswers);
-
-    var gradedExercises = new List<GrammarExerciseGrade>(exercises.Count);
-    var totalPointsPossible = 0;
-    var totalPointsAwarded = 0;
-    var correctCount = 0;
-    var incorrectCount = 0;
-    var reviewItemsCreated = 0;
-
-    foreach (var exercise in exercises)
-    {
-        var exerciseId = GetGrammarExerciseId(exercise);
-        var submittedAnswer = submittedAnswers.TryGetValue(exerciseId, out var answer) ? answer : (JsonElement?)null;
-        var result = GradeGrammarExercise(exercise, submittedAnswer);
-
-        gradedExercises.Add(result);
-        totalPointsPossible += result.PointsPossible;
-        totalPointsAwarded += result.PointsAwarded;
-
-        if (result.IsCorrect)
-        {
-            correctCount++;
-            continue;
-        }
-
-        incorrectCount++;
-
-        if (!await db.ReviewItems.AnyAsync(r => r.UserId == userId && r.SourceType == "grammar_error" && r.SourceId == $"{lesson.Id}:{exerciseId}", ct))
-        {
-            db.ReviewItems.Add(new ReviewItem
+    internal static object? MapGrammarProgress(LearnerGrammarProgress? progress)
+        => progress == null
+            ? null
+            : new
             {
-                Id = $"ri-{Guid.NewGuid():N}",
-                UserId = userId,
-                ExamTypeCode = lesson.ExamTypeCode,
-                SourceType = "grammar_error",
-                SourceId = $"{lesson.Id}:{exerciseId}",
-                SubtestCode = "grammar",
-                CriterionCode = NormalizeGrammarExerciseType(exercise.Type),
-                QuestionJson = JsonSupport.Serialize(new
+                status = progress.Status,
+                score = progress.ExerciseScore,
+                exerciseScore = progress.ExerciseScore,
+                masteryScore = progress.ExerciseScore,
+                startedAt = progress.StartedAt,
+                completedAt = progress.CompletedAt
+            };
+
+    internal static async Task<GrammarAttemptGrade> GradeGrammarAttemptAsync(
+        GrammarLesson lesson,
+        string answersJson,
+        LearnerDbContext db,
+        string userId,
+        CancellationToken ct)
+    {
+        var document = ParseGrammarLessonDocument(lesson);
+        var exercises = GetGrammarExercises(lesson, document);
+        var submittedAnswers = JsonSupport.Deserialize<Dictionary<string, JsonElement>>(answersJson, new Dictionary<string, JsonElement>());
+        var serializedAnswersJson = JsonSupport.Serialize(submittedAnswers);
+
+        var gradedExercises = new List<GrammarExerciseGrade>(exercises.Count);
+        var totalPointsPossible = 0;
+        var totalPointsAwarded = 0;
+        var correctCount = 0;
+        var incorrectCount = 0;
+        var reviewItemsCreated = 0;
+
+        foreach (var exercise in exercises)
+        {
+            var exerciseId = GetGrammarExerciseId(exercise);
+            var submittedAnswer = submittedAnswers.TryGetValue(exerciseId, out var answer) ? answer : (JsonElement?)null;
+            var result = GradeGrammarExercise(exercise, submittedAnswer);
+
+            gradedExercises.Add(result);
+            totalPointsPossible += result.PointsPossible;
+            totalPointsAwarded += result.PointsAwarded;
+
+            if (result.IsCorrect)
+            {
+                correctCount++;
+                continue;
+            }
+
+            incorrectCount++;
+
+            if (!await db.ReviewItems.AnyAsync(r => r.UserId == userId && r.SourceType == "grammar_error" && r.SourceId == $"{lesson.Id}:{exerciseId}", ct))
+            {
+                db.ReviewItems.Add(new ReviewItem
                 {
-                    text = exercise.PromptMarkdown ?? string.Empty,
-                    lessonId = lesson.Id,
-                    exerciseId
-                }),
-                AnswerJson = JsonSupport.Serialize(new
-                {
-                    text = FormatGrammarExerciseAnswer(exercise),
-                    explanation = exercise.ExplanationMarkdown ?? string.Empty
-                }),
-                DueDate = DateOnly.FromDateTime(DateTime.UtcNow),
-                CreatedAt = DateTimeOffset.UtcNow,
-                Status = "active"
-            });
-            reviewItemsCreated++;
-            result = result with { ReviewItemCreated = true };
-            gradedExercises[^1] = result;
+                    Id = $"ri-{Guid.NewGuid():N}",
+                    UserId = userId,
+                    ExamTypeCode = lesson.ExamTypeCode,
+                    SourceType = "grammar_error",
+                    SourceId = $"{lesson.Id}:{exerciseId}",
+                    SubtestCode = "grammar",
+                    CriterionCode = NormalizeGrammarExerciseType(exercise.Type),
+                    QuestionJson = JsonSupport.Serialize(new
+                    {
+                        text = exercise.PromptMarkdown ?? string.Empty,
+                        lessonId = lesson.Id,
+                        exerciseId
+                    }),
+                    AnswerJson = JsonSupport.Serialize(new
+                    {
+                        text = FormatGrammarExerciseAnswer(exercise),
+                        explanation = exercise.ExplanationMarkdown ?? string.Empty
+                    }),
+                    DueDate = DateOnly.FromDateTime(DateTime.UtcNow),
+                    CreatedAt = DateTimeOffset.UtcNow,
+                    Status = "active"
+                });
+                reviewItemsCreated++;
+                result = result with { ReviewItemCreated = true };
+                gradedExercises[^1] = result;
+            }
         }
+
+        var score = totalPointsPossible > 0
+            ? (int)Math.Round(totalPointsAwarded * 100.0 / totalPointsPossible, MidpointRounding.AwayFromZero)
+            : 0;
+        var masteryScore = score;
+        var mastered = masteryScore >= 80;
+        var xpAwarded = exercises.Count == 0
+            ? 0
+            : 10 + (correctCount * 2) + (mastered ? 10 : 0);
+
+        return new GrammarAttemptGrade(
+            gradedExercises,
+            serializedAnswersJson,
+            score,
+            masteryScore,
+            correctCount,
+            incorrectCount,
+            mastered,
+            xpAwarded,
+            reviewItemsCreated);
     }
 
-    var score = totalPointsPossible > 0
-        ? (int)Math.Round(totalPointsAwarded * 100.0 / totalPointsPossible, MidpointRounding.AwayFromZero)
-        : 0;
-    var masteryScore = score;
-    var mastered = masteryScore >= 80;
-    var xpAwarded = exercises.Count == 0
-        ? 0
-        : 10 + (correctCount * 2) + (mastered ? 10 : 0);
-
-    return new GrammarAttemptGrade(
-        gradedExercises,
-        serializedAnswersJson,
-        score,
-        masteryScore,
-        correctCount,
-        incorrectCount,
-        mastered,
-        xpAwarded,
-        reviewItemsCreated);
-}
-
-internal static GrammarLessonDocument ParseGrammarLessonDocument(GrammarLesson lesson)
-{
-    var document = JsonSupport.Deserialize<GrammarLessonDocument>(lesson.ContentHtml, new GrammarLessonDocument());
-    return document with
+    internal static GrammarLessonDocument ParseGrammarLessonDocument(GrammarLesson lesson)
     {
-        TopicId = string.IsNullOrWhiteSpace(document.TopicId) ? lesson.Category : document.TopicId,
-        Category = string.IsNullOrWhiteSpace(document.Category) ? lesson.Category : document.Category,
-        SourceProvenance = document.SourceProvenance,
-        PrerequisiteLessonIds = document.PrerequisiteLessonIds ?? [],
-        ContentBlocks = document.ContentBlocks ?? [],
-        Exercises = document.Exercises ?? [],
-        UpdatedAt = document.UpdatedAt
-    };
-}
+        var document = JsonSupport.Deserialize<GrammarLessonDocument>(lesson.ContentHtml, new GrammarLessonDocument());
+        return document with
+        {
+            TopicId = string.IsNullOrWhiteSpace(document.TopicId) ? lesson.Category : document.TopicId,
+            Category = string.IsNullOrWhiteSpace(document.Category) ? lesson.Category : document.Category,
+            SourceProvenance = document.SourceProvenance,
+            PrerequisiteLessonIds = document.PrerequisiteLessonIds ?? [],
+            ContentBlocks = document.ContentBlocks ?? [],
+            Exercises = document.Exercises ?? [],
+            UpdatedAt = document.UpdatedAt
+        };
+    }
 
-internal static List<GrammarExerciseDocument> GetGrammarExercises(GrammarLesson lesson, GrammarLessonDocument document)
-{
-    var exercises = document.Exercises is { Count: > 0 }
-        ? document.Exercises.ToList()
-        : JsonSupport.Deserialize<List<GrammarExerciseDocument>>(lesson.ExercisesJson, []);
-
-    return exercises
-        .OrderBy(exercise => exercise.SortOrder)
-        .ToList();
-}
-
-internal static GrammarExerciseGrade GradeGrammarExercise(
-    GrammarExerciseDocument exercise,
-    JsonElement? submittedAnswer)
-{
-    var exerciseType = NormalizeGrammarExerciseType(exercise.Type);
-    var pointsPossible = Math.Max(1, exercise.Points);
-    var correctAnswer = exercise.CorrectAnswer.ValueKind == JsonValueKind.Undefined ? (JsonElement?)null : exercise.CorrectAnswer;
-
-    if (exerciseType == "matching")
+    internal static List<GrammarExerciseDocument> GetGrammarExercises(GrammarLesson lesson, GrammarLessonDocument document)
     {
-        var correctPairs = ReadGrammarMatchingPairs(correctAnswer);
-        var userPairs = ReadGrammarMatchingPairs(submittedAnswer);
-        var matchedPairs = correctPairs.Count == 0
-            ? 0
-            : correctPairs.Count(pair => userPairs.TryGetValue(pair.Key, out var value) && string.Equals(value, pair.Value, StringComparison.OrdinalIgnoreCase));
-        var isCorrect = correctPairs.Count > 0 && matchedPairs == correctPairs.Count && userPairs.Count == correctPairs.Count;
-        var pointsAwarded = isCorrect
-            ? pointsPossible
-            : (int)Math.Round(pointsPossible * (correctPairs.Count == 0 ? 0 : matchedPairs / (double)correctPairs.Count), MidpointRounding.AwayFromZero);
+        var exercises = document.Exercises is { Count: > 0 }
+            ? document.Exercises.ToList()
+            : JsonSupport.Deserialize<List<GrammarExerciseDocument>>(lesson.ExercisesJson, []);
+
+        return exercises
+            .OrderBy(exercise => exercise.SortOrder)
+            .ToList();
+    }
+
+    internal static GrammarExerciseGrade GradeGrammarExercise(
+        GrammarExerciseDocument exercise,
+        JsonElement? submittedAnswer)
+    {
+        var exerciseType = NormalizeGrammarExerciseType(exercise.Type);
+        var pointsPossible = Math.Max(1, exercise.Points);
+        var correctAnswer = exercise.CorrectAnswer.ValueKind == JsonValueKind.Undefined ? (JsonElement?)null : exercise.CorrectAnswer;
+
+        if (exerciseType == "matching")
+        {
+            var correctPairs = ReadGrammarMatchingPairs(correctAnswer);
+            var userPairs = ReadGrammarMatchingPairs(submittedAnswer);
+            var matchedPairs = correctPairs.Count == 0
+                ? 0
+                : correctPairs.Count(pair => userPairs.TryGetValue(pair.Key, out var value) && string.Equals(value, pair.Value, StringComparison.OrdinalIgnoreCase));
+            var isCorrect = correctPairs.Count > 0 && matchedPairs == correctPairs.Count && userPairs.Count == correctPairs.Count;
+            var pointsAwarded = isCorrect
+                ? pointsPossible
+                : (int)Math.Round(pointsPossible * (correctPairs.Count == 0 ? 0 : matchedPairs / (double)correctPairs.Count), MidpointRounding.AwayFromZero);
+
+            return new GrammarExerciseGrade(
+                GetGrammarExerciseId(exercise),
+                isCorrect,
+                Math.Max(0, Math.Min(pointsPossible, pointsAwarded)),
+                pointsPossible,
+                submittedAnswer,
+                correctAnswer,
+                exercise.ExplanationMarkdown,
+                false);
+        }
+
+        var userAnswer = ReadGrammarScalarAnswer(submittedAnswer);
+        var acceptableAnswers = new List<string>();
+        acceptableAnswers.AddRange(ReadGrammarTextVariants(correctAnswer));
+        acceptableAnswers.AddRange(exercise.AcceptedAnswers ?? []);
+        var isCorrectText = !string.IsNullOrWhiteSpace(userAnswer)
+            && acceptableAnswers.Any(answer => string.Equals(NormalizeGrammarAnswerText(answer), NormalizeGrammarAnswerText(userAnswer), StringComparison.OrdinalIgnoreCase));
 
         return new GrammarExerciseGrade(
             GetGrammarExerciseId(exercise),
-            isCorrect,
-            Math.Max(0, Math.Min(pointsPossible, pointsAwarded)),
+            isCorrectText,
+            isCorrectText ? pointsPossible : 0,
             pointsPossible,
             submittedAnswer,
             correctAnswer,
@@ -604,135 +628,117 @@ internal static GrammarExerciseGrade GradeGrammarExercise(
             false);
     }
 
-    var userAnswer = ReadGrammarScalarAnswer(submittedAnswer);
-    var acceptableAnswers = new List<string>();
-    acceptableAnswers.AddRange(ReadGrammarTextVariants(correctAnswer));
-    acceptableAnswers.AddRange(exercise.AcceptedAnswers ?? []);
-    var isCorrectText = !string.IsNullOrWhiteSpace(userAnswer)
-        && acceptableAnswers.Any(answer => string.Equals(NormalizeGrammarAnswerText(answer), NormalizeGrammarAnswerText(userAnswer), StringComparison.OrdinalIgnoreCase));
+    internal static string GetGrammarExerciseId(GrammarExerciseDocument exercise)
+        => !string.IsNullOrWhiteSpace(exercise.Id) ? exercise.Id : $"exercise-{exercise.SortOrder}";
 
-    return new GrammarExerciseGrade(
-        GetGrammarExerciseId(exercise),
-        isCorrectText,
-        isCorrectText ? pointsPossible : 0,
-        pointsPossible,
-        submittedAnswer,
-        correctAnswer,
-        exercise.ExplanationMarkdown,
-        false);
-}
-
-internal static string GetGrammarExerciseId(GrammarExerciseDocument exercise)
-    => !string.IsNullOrWhiteSpace(exercise.Id) ? exercise.Id : $"exercise-{exercise.SortOrder}";
-
-internal static string NormalizeGrammarExerciseType(string? value)
-{
-    var normalized = (value ?? string.Empty).Trim().ToLowerInvariant();
-    return normalized is "mcq" or "fill_blank" or "error_correction" or "sentence_transformation" or "matching"
-        ? normalized
-        : "fill_blank";
-}
-
-internal static string NormalizeGrammarAnswerText(string? value)
-{
-    if (string.IsNullOrWhiteSpace(value))
+    internal static string NormalizeGrammarExerciseType(string? value)
     {
-        return string.Empty;
+        var normalized = (value ?? string.Empty).Trim().ToLowerInvariant();
+        return normalized is "mcq" or "fill_blank" or "error_correction" or "sentence_transformation" or "matching"
+            ? normalized
+            : "fill_blank";
     }
 
-    var normalized = Regex.Replace(value.Trim().ToLowerInvariant(), "\\s+", " ");
-    return normalized.Trim().TrimEnd('.', ',', ';', ':', '!', '?');
-}
-
-internal static string? ReadGrammarScalarAnswer(JsonElement? value)
-{
-    if (value is null)
+    internal static string NormalizeGrammarAnswerText(string? value)
     {
-        return null;
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return string.Empty;
+        }
+
+        var normalized = Regex.Replace(value.Trim().ToLowerInvariant(), "\\s+", " ");
+        return normalized.Trim().TrimEnd('.', ',', ';', ':', '!', '?');
     }
 
-    return value.Value.ValueKind switch
+    internal static string? ReadGrammarScalarAnswer(JsonElement? value)
     {
-        JsonValueKind.String => value.Value.GetString(),
-        JsonValueKind.Number => value.Value.ToString(),
-        JsonValueKind.True => "true",
-        JsonValueKind.False => "false",
-        JsonValueKind.Null or JsonValueKind.Undefined => null,
-        _ => value.Value.GetRawText()
-    };
-}
+        if (value is null)
+        {
+            return null;
+        }
 
-internal static IReadOnlyList<string> ReadGrammarTextVariants(JsonElement? value)
-{
-    if (value is null)
-    {
-        return [];
+        return value.Value.ValueKind switch
+        {
+            JsonValueKind.String => value.Value.GetString(),
+            JsonValueKind.Number => value.Value.ToString(),
+            JsonValueKind.True => "true",
+            JsonValueKind.False => "false",
+            JsonValueKind.Null or JsonValueKind.Undefined => null,
+            _ => value.Value.GetRawText()
+        };
     }
 
-    return value.Value.ValueKind switch
+    internal static IReadOnlyList<string> ReadGrammarTextVariants(JsonElement? value)
     {
-        JsonValueKind.String => [value.Value.GetString() ?? string.Empty],
-        JsonValueKind.Number => [value.Value.ToString()],
-        JsonValueKind.True => ["true"],
-        JsonValueKind.False => ["false"],
-        JsonValueKind.Array => value.Value.EnumerateArray().SelectMany(item => ReadGrammarTextVariants(item)).ToArray(),
-        JsonValueKind.Object when value.Value.TryGetProperty("text", out var text) => ReadGrammarTextVariants(text),
-        JsonValueKind.Object when value.Value.TryGetProperty("label", out var label) => ReadGrammarTextVariants(label),
-        _ => []
-    };
-}
+        if (value is null)
+        {
+            return [];
+        }
 
-internal static Dictionary<string, string> ReadGrammarMatchingPairs(JsonElement? value)
-{
-    var pairs = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        return value.Value.ValueKind switch
+        {
+            JsonValueKind.String => [value.Value.GetString() ?? string.Empty],
+            JsonValueKind.Number => [value.Value.ToString()],
+            JsonValueKind.True => ["true"],
+            JsonValueKind.False => ["false"],
+            JsonValueKind.Array => value.Value.EnumerateArray().SelectMany(item => ReadGrammarTextVariants(item)).ToArray(),
+            JsonValueKind.Object when value.Value.TryGetProperty("text", out var text) => ReadGrammarTextVariants(text),
+            JsonValueKind.Object when value.Value.TryGetProperty("label", out var label) => ReadGrammarTextVariants(label),
+            _ => []
+        };
+    }
 
-    if (value is null)
+    internal static Dictionary<string, string> ReadGrammarMatchingPairs(JsonElement? value)
     {
+        var pairs = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+        if (value is null)
+        {
+            return pairs;
+        }
+
+        switch (value.Value.ValueKind)
+        {
+            case JsonValueKind.Array:
+                foreach (var item in value.Value.EnumerateArray())
+                {
+                    if (item.ValueKind != JsonValueKind.Object) continue;
+                    if (!item.TryGetProperty("left", out var left) || !item.TryGetProperty("right", out var right)) continue;
+                    var leftText = ReadGrammarScalarAnswer(left);
+                    var rightText = ReadGrammarScalarAnswer(right);
+                    if (string.IsNullOrWhiteSpace(leftText) || string.IsNullOrWhiteSpace(rightText)) continue;
+                    pairs[NormalizeGrammarAnswerText(leftText)] = NormalizeGrammarAnswerText(rightText);
+                }
+                break;
+            case JsonValueKind.Object:
+                foreach (var property in value.Value.EnumerateObject())
+                {
+                    var rightText = ReadGrammarScalarAnswer(property.Value);
+                    if (string.IsNullOrWhiteSpace(property.Name) || string.IsNullOrWhiteSpace(rightText)) continue;
+                    pairs[NormalizeGrammarAnswerText(property.Name)] = NormalizeGrammarAnswerText(rightText);
+                }
+                break;
+        }
+
         return pairs;
     }
 
-    switch (value.Value.ValueKind)
+    internal static string FormatGrammarExerciseAnswer(GrammarExerciseDocument exercise)
     {
-        case JsonValueKind.Array:
-            foreach (var item in value.Value.EnumerateArray())
-            {
-                if (item.ValueKind != JsonValueKind.Object) continue;
-                if (!item.TryGetProperty("left", out var left) || !item.TryGetProperty("right", out var right)) continue;
-                var leftText = ReadGrammarScalarAnswer(left);
-                var rightText = ReadGrammarScalarAnswer(right);
-                if (string.IsNullOrWhiteSpace(leftText) || string.IsNullOrWhiteSpace(rightText)) continue;
-                pairs[NormalizeGrammarAnswerText(leftText)] = NormalizeGrammarAnswerText(rightText);
-            }
-            break;
-        case JsonValueKind.Object:
-            foreach (var property in value.Value.EnumerateObject())
-            {
-                var rightText = ReadGrammarScalarAnswer(property.Value);
-                if (string.IsNullOrWhiteSpace(property.Name) || string.IsNullOrWhiteSpace(rightText)) continue;
-                pairs[NormalizeGrammarAnswerText(property.Name)] = NormalizeGrammarAnswerText(rightText);
-            }
-            break;
+        var exerciseType = NormalizeGrammarExerciseType(exercise.Type);
+        var rawCorrectAnswer = exercise.CorrectAnswer.ValueKind == JsonValueKind.Undefined
+            ? string.Empty
+            : exercise.CorrectAnswer.GetRawText();
+
+        if (exerciseType == "matching")
+        {
+            var pairs = ReadGrammarMatchingPairs(exercise.CorrectAnswer.ValueKind == JsonValueKind.Undefined ? null : exercise.CorrectAnswer);
+            return pairs.Count == 0
+                ? rawCorrectAnswer
+                : string.Join("\n", pairs.Select(pair => $"{pair.Key} → {pair.Value}"));
+        }
+
+        var answers = ReadGrammarTextVariants(exercise.CorrectAnswer.ValueKind == JsonValueKind.Undefined ? null : exercise.CorrectAnswer);
+        return answers.Count > 0 ? string.Join(" / ", answers) : rawCorrectAnswer;
     }
-
-    return pairs;
-}
-
-internal static string FormatGrammarExerciseAnswer(GrammarExerciseDocument exercise)
-{
-    var exerciseType = NormalizeGrammarExerciseType(exercise.Type);
-    var rawCorrectAnswer = exercise.CorrectAnswer.ValueKind == JsonValueKind.Undefined
-        ? string.Empty
-        : exercise.CorrectAnswer.GetRawText();
-
-    if (exerciseType == "matching")
-    {
-        var pairs = ReadGrammarMatchingPairs(exercise.CorrectAnswer.ValueKind == JsonValueKind.Undefined ? null : exercise.CorrectAnswer);
-        return pairs.Count == 0
-            ? rawCorrectAnswer
-            : string.Join("\n", pairs.Select(pair => $"{pair.Key} → {pair.Value}"));
-    }
-
-    var answers = ReadGrammarTextVariants(exercise.CorrectAnswer.ValueKind == JsonValueKind.Undefined ? null : exercise.CorrectAnswer);
-    return answers.Count > 0 ? string.Join(" / ", answers) : rawCorrectAnswer;
-}
 }

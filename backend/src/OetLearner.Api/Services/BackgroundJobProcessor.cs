@@ -438,35 +438,35 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
                 await CompletePronunciationAnalysisAsync(db, job, cancellationToken);
                 break;
             case JobType.PrivateSpeakingZoomCreate:
-            {
-                var psSvc = services.GetRequiredService<PrivateSpeakingService>();
-                await psSvc.CreateZoomMeetingForBookingAsync(job.ResourceId!, cancellationToken);
-                break;
-            }
+                {
+                    var psSvc = services.GetRequiredService<PrivateSpeakingService>();
+                    await psSvc.CreateZoomMeetingForBookingAsync(job.ResourceId!, cancellationToken);
+                    break;
+                }
             case JobType.PrivateSpeakingBookingConfirmation:
-            {
-                var psSvc = services.GetRequiredService<PrivateSpeakingService>();
-                await psSvc.SendBookingConfirmationNotificationsAsync(job.ResourceId!, cancellationToken);
-                break;
-            }
+                {
+                    var psSvc = services.GetRequiredService<PrivateSpeakingService>();
+                    await psSvc.SendBookingConfirmationNotificationsAsync(job.ResourceId!, cancellationToken);
+                    break;
+                }
             case JobType.PrivateSpeakingCalendarSync:
-            {
-                var calendarSvc = services.GetRequiredService<PrivateSpeakingCalendarService>();
-                await calendarSvc.SyncBookingAsync(job.ResourceId!, cancellationToken);
-                break;
-            }
+                {
+                    var calendarSvc = services.GetRequiredService<PrivateSpeakingCalendarService>();
+                    await calendarSvc.SyncBookingAsync(job.ResourceId!, cancellationToken);
+                    break;
+                }
             case JobType.PrivateSpeakingReminder:
-            {
-                var psSvc = services.GetRequiredService<PrivateSpeakingService>();
-                await psSvc.ProcessRemindersAsync(cancellationToken);
-                break;
-            }
+                {
+                    var psSvc = services.GetRequiredService<PrivateSpeakingService>();
+                    await psSvc.ProcessRemindersAsync(cancellationToken);
+                    break;
+                }
             case JobType.PrivateSpeakingReservationExpiry:
-            {
-                var psSvc = services.GetRequiredService<PrivateSpeakingService>();
-                await psSvc.ExpireStaleReservationsAsync(cancellationToken);
-                break;
-            }
+                {
+                    var psSvc = services.GetRequiredService<PrivateSpeakingService>();
+                    await psSvc.ExpireStaleReservationsAsync(cancellationToken);
+                    break;
+                }
             case JobType.SubscriptionLifecycleCheck:
                 await RunSubscriptionLifecycleCheckAsync(db, notifications, cancellationToken);
                 break;
@@ -487,57 +487,57 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
 
             // ── Live Classes ──
             case JobType.LiveClassRecordingDownload:
-            {
-                var svc = services.GetRequiredService<OetLearner.Api.Services.LiveClasses.LiveClassRecordingService>();
-                await svc.ProcessDownloadAsync(job.ResourceId!, cancellationToken);
-                break;
-            }
+                {
+                    var svc = services.GetRequiredService<OetLearner.Api.Services.LiveClasses.LiveClassRecordingService>();
+                    await svc.ProcessDownloadAsync(job.ResourceId!, cancellationToken);
+                    break;
+                }
             case JobType.LiveClassRecordingTranscribe:
-            {
-                // Wave A2 — when AI processing is enabled, the processor service
-                // calls Whisper (or reuses Zoom AI Companion's transcript) and
-                // queues the Summarize stage. Flag-off ⇒ recording stays Pending.
-                var processor = services.GetRequiredService<OetLearner.Api.Services.LiveClasses.LiveClassRecordingProcessingService>();
-                await processor.ProcessTranscribeAsync(job.ResourceId!, cancellationToken);
-                break;
-            }
+                {
+                    // Wave A2 — when AI processing is enabled, the processor service
+                    // calls Whisper (or reuses Zoom AI Companion's transcript) and
+                    // queues the Summarize stage. Flag-off ⇒ recording stays Pending.
+                    var processor = services.GetRequiredService<OetLearner.Api.Services.LiveClasses.LiveClassRecordingProcessingService>();
+                    await processor.ProcessTranscribeAsync(job.ResourceId!, cancellationToken);
+                    break;
+                }
             case JobType.LiveClassRecordingSummarize:
-            {
-                // Wave A2 — Sonnet-4.6 cached-prompt summarise → JSON
-                // {summary, chapters, actionItems, keyTopics} and queue Translate.
-                var processor = services.GetRequiredService<OetLearner.Api.Services.LiveClasses.LiveClassRecordingProcessingService>();
-                await processor.ProcessSummarizeAsync(job.ResourceId!, cancellationToken);
-                break;
-            }
+                {
+                    // Wave A2 — Sonnet-4.6 cached-prompt summarise → JSON
+                    // {summary, chapters, actionItems, keyTopics} and queue Translate.
+                    var processor = services.GetRequiredService<OetLearner.Api.Services.LiveClasses.LiveClassRecordingProcessingService>();
+                    await processor.ProcessSummarizeAsync(job.ResourceId!, cancellationToken);
+                    break;
+                }
             case JobType.LiveClassRecordingTranslate:
-            {
-                // Wave A2 — Sonnet-4.6 EN→AR translation, mark Ready, fan-out
-                // learner "recording ready" notifications, queue Embed.
-                var processor = services.GetRequiredService<OetLearner.Api.Services.LiveClasses.LiveClassRecordingProcessingService>();
-                await processor.ProcessTranslateAsync(job.ResourceId!, cancellationToken);
-                await NotifyLiveClassRecordingReadyAsync(services, db, job.ResourceId!, cancellationToken);
-                break;
-            }
+                {
+                    // Wave A2 — Sonnet-4.6 EN→AR translation, mark Ready, fan-out
+                    // learner "recording ready" notifications, queue Embed.
+                    var processor = services.GetRequiredService<OetLearner.Api.Services.LiveClasses.LiveClassRecordingProcessingService>();
+                    await processor.ProcessTranslateAsync(job.ResourceId!, cancellationToken);
+                    await NotifyLiveClassRecordingReadyAsync(services, db, job.ResourceId!, cancellationToken);
+                    break;
+                }
             case JobType.LiveClassRecordingEmbed:
-            {
-                // Wave A2 — chunk transcript + persist 1536-d vectors for the
-                // "Ask AI about this class" RAG surface. Best-effort.
-                var processor = services.GetRequiredService<OetLearner.Api.Services.LiveClasses.LiveClassRecordingProcessingService>();
-                await processor.ProcessEmbedAsync(job.ResourceId!, cancellationToken);
-                break;
-            }
+                {
+                    // Wave A2 — chunk transcript + persist 1536-d vectors for the
+                    // "Ask AI about this class" RAG surface. Best-effort.
+                    var processor = services.GetRequiredService<OetLearner.Api.Services.LiveClasses.LiveClassRecordingProcessingService>();
+                    await processor.ProcessEmbedAsync(job.ResourceId!, cancellationToken);
+                    break;
+                }
             case JobType.LiveClassSessionReminderDispatch:
-            {
-                var svc = services.GetRequiredService<OetLearner.Api.Services.LiveClasses.LiveClassRecordingService>();
-                await svc.ProcessReminderDispatchAsync(job.ResourceId!, cancellationToken);
-                break;
-            }
+                {
+                    var svc = services.GetRequiredService<OetLearner.Api.Services.LiveClasses.LiveClassRecordingService>();
+                    await svc.ProcessReminderDispatchAsync(job.ResourceId!, cancellationToken);
+                    break;
+                }
             case JobType.LiveClassNoShowPingDispatch:
-            {
-                var svc = services.GetRequiredService<OetLearner.Api.Services.LiveClasses.LiveClassRecordingService>();
-                await svc.ProcessNoShowPingAsync(job.ResourceId!, cancellationToken);
-                break;
-            }
+                {
+                    var svc = services.GetRequiredService<OetLearner.Api.Services.LiveClasses.LiveClassRecordingService>();
+                    await svc.ProcessNoShowPingAsync(job.ResourceId!, cancellationToken);
+                    break;
+                }
 
             case JobType.LiveClassWaitlistPromotion:
                 services.GetRequiredService<ILoggerFactory>()
@@ -1685,7 +1685,11 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
             CountryVariant = null,
             CriteriaJson = JsonSupport.Serialize(aiEval.Criteria.Select(c => new
             {
-                id = c.Id, score06 = c.Score06, maxScore = 6.0, evidence = c.Evidence, quotes = c.Quotes,
+                id = c.Id,
+                score06 = c.Score06,
+                maxScore = 6.0,
+                evidence = c.Evidence,
+                quotes = c.Quotes,
             })),
             StrengthsJson = JsonSupport.Serialize(aiEval.Strengths),
             ImprovementsJson = JsonSupport.Serialize(aiEval.Improvements),

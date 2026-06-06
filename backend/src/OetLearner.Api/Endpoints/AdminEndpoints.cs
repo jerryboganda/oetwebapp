@@ -1527,11 +1527,27 @@ public static class AdminEndpoints
                 var total = await Microsoft.EntityFrameworkCore.EntityFrameworkQueryableExtensions.CountAsync(q, ct);
                 var items = await Microsoft.EntityFrameworkCore.EntityFrameworkQueryableExtensions.ToListAsync(
                     q.OrderByDescending(s => s.CreatedAt).Skip((p - 1) * ps).Take(ps), ct);
-                return Results.Ok(new { total, page = p, pageSize = ps, items = items.Select(s => new
+                return Results.Ok(new
                 {
-                    s.Id, s.UserId, s.TaskTypeCode, s.Profession, s.State, s.TurnCount, s.DurationSeconds,
-                    s.TemplateId, s.LastErrorCode, s.CreatedAt, s.StartedAt, s.CompletedAt,
-                }) });
+                    total,
+                    page = p,
+                    pageSize = ps,
+                    items = items.Select(s => new
+                    {
+                        s.Id,
+                        s.UserId,
+                        s.TaskTypeCode,
+                        s.Profession,
+                        s.State,
+                        s.TurnCount,
+                        s.DurationSeconds,
+                        s.TemplateId,
+                        s.LastErrorCode,
+                        s.CreatedAt,
+                        s.StartedAt,
+                        s.CompletedAt,
+                    })
+                });
             })
             .WithAdminRead("AdminContentRead");
 
@@ -1555,25 +1571,56 @@ public static class AdminEndpoints
                 {
                     session = new
                     {
-                        session.Id, session.UserId, session.TaskTypeCode, session.Profession, session.State,
-                        session.TurnCount, session.DurationSeconds, session.TemplateId, session.LastErrorCode,
-                        session.CreatedAt, session.StartedAt, session.CompletedAt, session.ScenarioJson,
+                        session.Id,
+                        session.UserId,
+                        session.TaskTypeCode,
+                        session.Profession,
+                        session.State,
+                        session.TurnCount,
+                        session.DurationSeconds,
+                        session.TemplateId,
+                        session.LastErrorCode,
+                        session.CreatedAt,
+                        session.StartedAt,
+                        session.CompletedAt,
+                        session.ScenarioJson,
                     },
                     turns = turns.Select(t => new
                     {
-                        t.TurnNumber, t.Role, t.Content, t.AudioUrl, t.DurationMs,
-                        t.TimestampMs, t.ConfidenceScore, t.AiFeatureCode, t.CreatedAt,
+                        t.TurnNumber,
+                        t.Role,
+                        t.Content,
+                        t.AudioUrl,
+                        t.DurationMs,
+                        t.TimestampMs,
+                        t.ConfidenceScore,
+                        t.AiFeatureCode,
+                        t.CreatedAt,
                     }),
                     evaluation = evaluation is null ? null : new
                     {
-                        evaluation.Id, evaluation.OverallScaled, evaluation.OverallGrade, evaluation.Passed,
-                        evaluation.CriteriaJson, evaluation.StrengthsJson, evaluation.ImprovementsJson,
-                        evaluation.SuggestedPracticeJson, evaluation.AppliedRuleIdsJson,
-                        evaluation.RulebookVersion, evaluation.Advisory, evaluation.CreatedAt,
+                        evaluation.Id,
+                        evaluation.OverallScaled,
+                        evaluation.OverallGrade,
+                        evaluation.Passed,
+                        evaluation.CriteriaJson,
+                        evaluation.StrengthsJson,
+                        evaluation.ImprovementsJson,
+                        evaluation.SuggestedPracticeJson,
+                        evaluation.AppliedRuleIdsJson,
+                        evaluation.RulebookVersion,
+                        evaluation.Advisory,
+                        evaluation.CreatedAt,
                     },
                     annotations = annotations.Select(a => new
                     {
-                        a.TurnNumber, a.Type, a.Category, a.RuleId, a.Evidence, a.Suggestion, a.CreatedAt,
+                        a.TurnNumber,
+                        a.Type,
+                        a.Category,
+                        a.RuleId,
+                        a.Evidence,
+                        a.Suggestion,
+                        a.CreatedAt,
                     }),
                 });
             })

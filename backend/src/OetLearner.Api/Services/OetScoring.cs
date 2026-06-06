@@ -485,16 +485,16 @@ public static class OetScoring
     public static int SpeakingProjectedScaled(SpeakingCriterionScores scores)
     {
         var linguistic =
-            ClampInt(scores.Intelligibility,    0, 6) +
-            ClampInt(scores.Fluency,            0, 6) +
-            ClampInt(scores.Appropriateness,    0, 6) +
-            ClampInt(scores.GrammarExpression,  0, 6);
+            ClampInt(scores.Intelligibility, 0, 6) +
+            ClampInt(scores.Fluency, 0, 6) +
+            ClampInt(scores.Appropriateness, 0, 6) +
+            ClampInt(scores.GrammarExpression, 0, 6);
         var clinical =
-            ClampInt(scores.RelationshipBuilding,  0, 3) +
-            ClampInt(scores.PatientPerspective,    0, 3) +
-            ClampInt(scores.Structure,             0, 3) +
-            ClampInt(scores.InformationGathering,  0, 3) +
-            ClampInt(scores.InformationGiving,     0, 3);
+            ClampInt(scores.RelationshipBuilding, 0, 3) +
+            ClampInt(scores.PatientPerspective, 0, 3) +
+            ClampInt(scores.Structure, 0, 3) +
+            ClampInt(scores.InformationGathering, 0, 3) +
+            ClampInt(scores.InformationGiving, 0, 3);
         var pct = (linguistic + clinical) * 100.0 / SpeakingRubricMax;
         return SpeakingProjectedScaledFromPercentage(pct);
     }
@@ -571,11 +571,11 @@ public static class OetScoring
     /// <summary>Stable wire-format code for a <see cref="SpeakingReadinessBand"/>.</summary>
     public static string SpeakingReadinessBandCode(SpeakingReadinessBand band) => band switch
     {
-        SpeakingReadinessBand.NotReady   => "not_ready",
+        SpeakingReadinessBand.NotReady => "not_ready",
         SpeakingReadinessBand.Developing => "developing",
         SpeakingReadinessBand.Borderline => "borderline",
-        SpeakingReadinessBand.ExamReady  => "exam_ready",
-        SpeakingReadinessBand.Strong     => "strong",
+        SpeakingReadinessBand.ExamReady => "exam_ready",
+        SpeakingReadinessBand.Strong => "strong",
         _ => "not_ready",
     };
 

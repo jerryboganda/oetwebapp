@@ -186,7 +186,7 @@ public sealed class StripeWebhookPrivateSpeakingTests
 
         Assert.Equal("completed", result.ProcessingStatus);
         Assert.Equal(new[] { invoiceId }, fulfillment.RenewalInvoiceIds);
-    Assert.Empty(fulfillment.SubscriptionRenewalIds);
+        Assert.Empty(fulfillment.SubscriptionRenewalIds);
 
         var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
         var webhook = await db.PaymentWebhookEvents.SingleAsync(evt => evt.Id == webhookId);

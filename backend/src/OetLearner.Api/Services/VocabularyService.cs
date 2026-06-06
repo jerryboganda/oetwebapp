@@ -556,124 +556,124 @@ public class VocabularyService(
         switch (format)
         {
             case "definition_match":
-            {
-                var distractors = allTerms
-                    .Where(t => t.Id != term.Id && !string.IsNullOrWhiteSpace(t.Definition) && t.Definition != term.Definition)
-                    .Select(t => t.Definition)
-                    .Distinct()
-                    .OrderBy(_ => rng.Next())
-                    .Take(3)
-                    .ToList();
-                while (distractors.Count < 3) distractors.Add($"(no distractor {distractors.Count + 1})");
-                var options = distractors.Append(term.Definition).OrderBy(_ => rng.Next()).ToList();
-                return new VocabularyQuizQuestionDto(
-                    TermId: term.Id,
-                    Term: term.Term,
-                    Format: format,
-                    Prompt: term.Term,
-                    Options: options,
-                    CorrectIndex: options.FindIndex(o => o == term.Definition),
-                    CorrectAnswer: term.Definition,
-                    ExampleSentence: term.ExampleSentence,
-                    AudioUrl: null);
-            }
+                {
+                    var distractors = allTerms
+                        .Where(t => t.Id != term.Id && !string.IsNullOrWhiteSpace(t.Definition) && t.Definition != term.Definition)
+                        .Select(t => t.Definition)
+                        .Distinct()
+                        .OrderBy(_ => rng.Next())
+                        .Take(3)
+                        .ToList();
+                    while (distractors.Count < 3) distractors.Add($"(no distractor {distractors.Count + 1})");
+                    var options = distractors.Append(term.Definition).OrderBy(_ => rng.Next()).ToList();
+                    return new VocabularyQuizQuestionDto(
+                        TermId: term.Id,
+                        Term: term.Term,
+                        Format: format,
+                        Prompt: term.Term,
+                        Options: options,
+                        CorrectIndex: options.FindIndex(o => o == term.Definition),
+                        CorrectAnswer: term.Definition,
+                        ExampleSentence: term.ExampleSentence,
+                        AudioUrl: null);
+                }
 
             case "fill_blank":
-            {
-                if (string.IsNullOrWhiteSpace(term.ExampleSentence)) return null;
-                // Replace the first occurrence of the term (case-insensitive) with ____.
-                var prompt = System.Text.RegularExpressions.Regex.Replace(
-                    term.ExampleSentence,
-                    System.Text.RegularExpressions.Regex.Escape(term.Term),
-                    "______",
-                    System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-                if (prompt == term.ExampleSentence) return null;
-                return new VocabularyQuizQuestionDto(
-                    TermId: term.Id,
-                    Term: term.Term,
-                    Format: format,
-                    Prompt: prompt,
-                    Options: Array.Empty<string>(),
-                    CorrectIndex: -1,
-                    CorrectAnswer: term.Term,
-                    ExampleSentence: term.ExampleSentence,
-                    AudioUrl: null);
-            }
+                {
+                    if (string.IsNullOrWhiteSpace(term.ExampleSentence)) return null;
+                    // Replace the first occurrence of the term (case-insensitive) with ____.
+                    var prompt = System.Text.RegularExpressions.Regex.Replace(
+                        term.ExampleSentence,
+                        System.Text.RegularExpressions.Regex.Escape(term.Term),
+                        "______",
+                        System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                    if (prompt == term.ExampleSentence) return null;
+                    return new VocabularyQuizQuestionDto(
+                        TermId: term.Id,
+                        Term: term.Term,
+                        Format: format,
+                        Prompt: prompt,
+                        Options: Array.Empty<string>(),
+                        CorrectIndex: -1,
+                        CorrectAnswer: term.Term,
+                        ExampleSentence: term.ExampleSentence,
+                        AudioUrl: null);
+                }
 
             case "synonym_match":
-            {
-                var synonyms = ParseStringArray(term.SynonymsJson);
-                if (synonyms.Count == 0) return null;
-                var correct = synonyms[rng.Next(synonyms.Count)];
-
-                var distractorPool = allTerms
-                    .Where(t => t.Id != term.Id)
-                    .SelectMany(t => ParseStringArray(t.SynonymsJson))
-                    .Where(s => !string.IsNullOrWhiteSpace(s) && !synonyms.Contains(s, StringComparer.OrdinalIgnoreCase))
-                    .Distinct(StringComparer.OrdinalIgnoreCase)
-                    .OrderBy(_ => rng.Next())
-                    .Take(3)
-                    .ToList();
-                while (distractorPool.Count < 3)
                 {
-                    var fillerTerm = allTerms[rng.Next(allTerms.Count)];
-                    if (!distractorPool.Contains(fillerTerm.Term, StringComparer.OrdinalIgnoreCase)
-                        && !synonyms.Contains(fillerTerm.Term, StringComparer.OrdinalIgnoreCase))
-                        distractorPool.Add(fillerTerm.Term);
-                    else
-                        distractorPool.Add($"(filler {distractorPool.Count + 1})");
+                    var synonyms = ParseStringArray(term.SynonymsJson);
+                    if (synonyms.Count == 0) return null;
+                    var correct = synonyms[rng.Next(synonyms.Count)];
+
+                    var distractorPool = allTerms
+                        .Where(t => t.Id != term.Id)
+                        .SelectMany(t => ParseStringArray(t.SynonymsJson))
+                        .Where(s => !string.IsNullOrWhiteSpace(s) && !synonyms.Contains(s, StringComparer.OrdinalIgnoreCase))
+                        .Distinct(StringComparer.OrdinalIgnoreCase)
+                        .OrderBy(_ => rng.Next())
+                        .Take(3)
+                        .ToList();
+                    while (distractorPool.Count < 3)
+                    {
+                        var fillerTerm = allTerms[rng.Next(allTerms.Count)];
+                        if (!distractorPool.Contains(fillerTerm.Term, StringComparer.OrdinalIgnoreCase)
+                            && !synonyms.Contains(fillerTerm.Term, StringComparer.OrdinalIgnoreCase))
+                            distractorPool.Add(fillerTerm.Term);
+                        else
+                            distractorPool.Add($"(filler {distractorPool.Count + 1})");
+                    }
+                    var options = distractorPool.Append(correct).OrderBy(_ => rng.Next()).ToList();
+                    return new VocabularyQuizQuestionDto(
+                        TermId: term.Id,
+                        Term: term.Term,
+                        Format: format,
+                        Prompt: term.Term,
+                        Options: options,
+                        CorrectIndex: options.FindIndex(o => string.Equals(o, correct, StringComparison.OrdinalIgnoreCase)),
+                        CorrectAnswer: correct,
+                        ExampleSentence: term.ExampleSentence,
+                        AudioUrl: null);
                 }
-                var options = distractorPool.Append(correct).OrderBy(_ => rng.Next()).ToList();
-                return new VocabularyQuizQuestionDto(
-                    TermId: term.Id,
-                    Term: term.Term,
-                    Format: format,
-                    Prompt: term.Term,
-                    Options: options,
-                    CorrectIndex: options.FindIndex(o => string.Equals(o, correct, StringComparison.OrdinalIgnoreCase)),
-                    CorrectAnswer: correct,
-                    ExampleSentence: term.ExampleSentence,
-                    AudioUrl: null);
-            }
 
             case "context_usage":
-            {
-                if (string.IsNullOrWhiteSpace(term.ExampleSentence)) return null;
-                // Correct: sentence using THIS term.
-                // Distractors: sentences from other terms.
-                var distractors = allTerms
-                    .Where(t => t.Id != term.Id && !string.IsNullOrWhiteSpace(t.ExampleSentence))
-                    .OrderBy(_ => rng.Next())
-                    .Take(3)
-                    .Select(t => t.ExampleSentence)
-                    .ToList();
-                if (distractors.Count < 3) return null;
-                var options = distractors.Append(term.ExampleSentence).OrderBy(_ => rng.Next()).ToList();
-                return new VocabularyQuizQuestionDto(
-                    TermId: term.Id,
-                    Term: term.Term,
-                    Format: format,
-                    Prompt: $"Which sentence uses '{term.Term}' correctly?",
-                    Options: options,
-                    CorrectIndex: options.FindIndex(o => o == term.ExampleSentence),
-                    CorrectAnswer: term.ExampleSentence,
-                    ExampleSentence: term.ExampleSentence,
-                    AudioUrl: null);
-            }
+                {
+                    if (string.IsNullOrWhiteSpace(term.ExampleSentence)) return null;
+                    // Correct: sentence using THIS term.
+                    // Distractors: sentences from other terms.
+                    var distractors = allTerms
+                        .Where(t => t.Id != term.Id && !string.IsNullOrWhiteSpace(t.ExampleSentence))
+                        .OrderBy(_ => rng.Next())
+                        .Take(3)
+                        .Select(t => t.ExampleSentence)
+                        .ToList();
+                    if (distractors.Count < 3) return null;
+                    var options = distractors.Append(term.ExampleSentence).OrderBy(_ => rng.Next()).ToList();
+                    return new VocabularyQuizQuestionDto(
+                        TermId: term.Id,
+                        Term: term.Term,
+                        Format: format,
+                        Prompt: $"Which sentence uses '{term.Term}' correctly?",
+                        Options: options,
+                        CorrectIndex: options.FindIndex(o => o == term.ExampleSentence),
+                        CorrectAnswer: term.ExampleSentence,
+                        ExampleSentence: term.ExampleSentence,
+                        AudioUrl: null);
+                }
 
             case "audio_recognition":
-            {
-                return new VocabularyQuizQuestionDto(
-                    TermId: term.Id,
-                    Term: term.Term,
-                    Format: format,
-                    Prompt: "Listen and type the word you hear.",
-                    Options: Array.Empty<string>(),
-                    CorrectIndex: -1,
-                    CorrectAnswer: term.Term,
-                    ExampleSentence: term.ExampleSentence,
-                        AudioUrl: null);
-            }
+                {
+                    return new VocabularyQuizQuestionDto(
+                        TermId: term.Id,
+                        Term: term.Term,
+                        Format: format,
+                        Prompt: "Listen and type the word you hear.",
+                        Options: Array.Empty<string>(),
+                        CorrectIndex: -1,
+                        CorrectAnswer: term.Term,
+                        ExampleSentence: term.ExampleSentence,
+                            AudioUrl: null);
+                }
 
             default:
                 return null;

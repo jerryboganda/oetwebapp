@@ -2309,12 +2309,21 @@ public partial class AdminService
 
         return new
         {
-            total, page, pageSize,
+            total,
+            page,
+            pageSize,
             items = items.Select(t => new
             {
-                t.Id, t.Title, t.TaskTypeCode, t.ProfessionId, t.Difficulty,
+                t.Id,
+                t.Title,
+                t.TaskTypeCode,
+                t.ProfessionId,
+                t.Difficulty,
                 estimatedDurationSeconds = t.EstimatedDurationSeconds,
-                t.Status, t.PublishedAtUtc, t.CreatedAt, t.UpdatedAt,
+                t.Status,
+                t.PublishedAtUtc,
+                t.CreatedAt,
+                t.UpdatedAt,
             })
         };
     }
@@ -2326,15 +2335,26 @@ public partial class AdminService
 
         return new
         {
-            t.Id, t.Title, t.TaskTypeCode, t.ProfessionId, t.Scenario, t.RoleDescription,
-            t.PatientContext, t.ExpectedOutcomes, t.Difficulty,
+            t.Id,
+            t.Title,
+            t.TaskTypeCode,
+            t.ProfessionId,
+            t.Scenario,
+            t.RoleDescription,
+            t.PatientContext,
+            t.ExpectedOutcomes,
+            t.Difficulty,
             estimatedDurationSeconds = t.EstimatedDurationSeconds,
             objectives = JsonSupport.Deserialize<string[]>(t.ObjectivesJson, Array.Empty<string>()),
             expectedRedFlags = JsonSupport.Deserialize<string[]>(t.ExpectedRedFlagsJson, Array.Empty<string>()),
             keyVocabulary = JsonSupport.Deserialize<string[]>(t.KeyVocabularyJson, Array.Empty<string>()),
             patientVoice = JsonSupport.Deserialize<Dictionary<string, object?>>(t.PatientVoiceJson, new Dictionary<string, object?>()),
-            t.Status, t.PublishedAtUtc, t.CreatedAt, t.UpdatedAt,
-            t.CreatedByUserId, t.UpdatedByUserId,
+            t.Status,
+            t.PublishedAtUtc,
+            t.CreatedAt,
+            t.UpdatedAt,
+            t.CreatedByUserId,
+            t.UpdatedByUserId,
         };
     }
 

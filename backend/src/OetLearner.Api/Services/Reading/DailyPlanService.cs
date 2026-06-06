@@ -42,13 +42,13 @@ public sealed class DailyPlanService(
     // ── Estimated minutes per item type ──────────────────────────────────────
     private static int MinutesFor(string itemType) => itemType switch
     {
-        "drill"          => 15,
-        "vocab_review"   => 10,
-        "wrong_review"   => 10,
-        "strategy_read"  => 5,
-        "lesson"         => 30,
-        "mock"           => 60,
-        _                => 15,
+        "drill" => 15,
+        "vocab_review" => 10,
+        "wrong_review" => 10,
+        "strategy_read" => 5,
+        "lesson" => 30,
+        "mock" => 60,
+        _ => 15,
     };
 
     // ═══════════════════════════════════════════════════════════════════════

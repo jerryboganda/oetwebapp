@@ -116,31 +116,31 @@ public class MockSectionResultResolverTests
         string subtestCode,
         string paperId,
         DateTimeOffset now) => new()
-    {
-        Id = id,
-        MockBundleId = bundleId,
-        SectionOrder = 1,
-        SubtestCode = subtestCode,
-        ContentPaperId = paperId,
-        TimeLimitMinutes = 60,
-        CreatedAt = now,
-    };
+        {
+            Id = id,
+            MockBundleId = bundleId,
+            SectionOrder = 1,
+            SubtestCode = subtestCode,
+            ContentPaperId = paperId,
+            TimeLimitMinutes = 60,
+            CreatedAt = now,
+        };
 
     private static MockSectionAttempt SeedSectionAttempt(
         string id,
         string mockAttemptId,
         MockBundleSection bundleSection,
         string contentAttemptId) => new()
-    {
-        Id = id,
-        MockAttemptId = mockAttemptId,
-        MockBundleSectionId = bundleSection.Id,
-        SubtestCode = bundleSection.SubtestCode,
-        ContentPaperId = bundleSection.ContentPaperId,
-        LaunchRoute = "/mocks",
-        ContentAttemptId = contentAttemptId,
-        State = AttemptState.Completed,
-    };
+        {
+            Id = id,
+            MockAttemptId = mockAttemptId,
+            MockBundleSectionId = bundleSection.Id,
+            SubtestCode = bundleSection.SubtestCode,
+            ContentPaperId = bundleSection.ContentPaperId,
+            LaunchRoute = "/mocks",
+            ContentAttemptId = contentAttemptId,
+            State = AttemptState.Completed,
+        };
 
     private static string? ReadFeedbackSource(string json)
     {

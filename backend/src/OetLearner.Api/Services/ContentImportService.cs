@@ -157,13 +157,25 @@ public class ContentImportService(LearnerDbContext db)
             .Skip((query.Page - 1) * query.PageSize).Take(query.PageSize)
             .Select(c => new
             {
-                c.Id, c.Title, c.ContentType, c.SubtestCode, c.ProfessionId,
-                c.Difficulty, c.InstructionLanguage, c.SourceProvenance,
-                c.FreshnessConfidence, c.QaStatus, c.QualityScore,
+                c.Id,
+                c.Title,
+                c.ContentType,
+                c.SubtestCode,
+                c.ProfessionId,
+                c.Difficulty,
+                c.InstructionLanguage,
+                c.SourceProvenance,
+                c.FreshnessConfidence,
+                c.QaStatus,
+                c.QualityScore,
                 status = c.Status.ToString(),
-                c.ImportBatchId, c.DuplicateGroupId, c.IsPreviewEligible,
-                c.IsMockEligible, c.IsDiagnosticEligible,
-                c.CreatedAt, c.UpdatedAt
+                c.ImportBatchId,
+                c.DuplicateGroupId,
+                c.IsPreviewEligible,
+                c.IsMockEligible,
+                c.IsDiagnosticEligible,
+                c.CreatedAt,
+                c.UpdatedAt
             })
             .ToListAsync(ct);
 

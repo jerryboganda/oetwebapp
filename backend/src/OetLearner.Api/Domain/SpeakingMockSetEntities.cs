@@ -39,16 +39,16 @@ public enum SpeakingMockSessionState
 // can extend it in future without an enum migration.
 public static class SpeakingMockOrchestratorStates
 {
-    public const string Prep1       = "prep1";
-    public const string Active1     = "active1";
-    public const string Finished1   = "finished1";
+    public const string Prep1 = "prep1";
+    public const string Active1 = "active1";
+    public const string Finished1 = "finished1";
     /// <summary>Short interlocutor handoff between the two role-plays. Started by
     /// <c>POST .../bridge/start</c>, ended by <c>POST .../bridge/finish</c>.</summary>
-    public const string Bridge      = "bridge";
-    public const string Prep2       = "prep2";
-    public const string Active2     = "active2";
-    public const string Finished2   = "finished2";
-    public const string Aggregated  = "aggregated";
+    public const string Bridge = "bridge";
+    public const string Prep2 = "prep2";
+    public const string Active2 = "active2";
+    public const string Finished2 = "finished2";
+    public const string Aggregated = "aggregated";
 
     /// <summary>Canonical ordering for the state machine, used by transition
     /// guards. Index of the current state must equal index of the target - 1

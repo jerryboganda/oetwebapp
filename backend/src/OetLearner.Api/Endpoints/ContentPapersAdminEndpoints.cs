@@ -443,16 +443,23 @@ public static class ContentPapersAdminEndpoints
                 expiresAt = session.ExpiresAt,
                 papers = session.Manifest.Papers.Select(p => new
                 {
-                    p.ProposalId, p.SubtestCode, p.Title,
-                    p.ProfessionId, p.AppliesToAllProfessions,
-                    p.CardType, p.LetterType, p.SourceProvenance,
+                    p.ProposalId,
+                    p.SubtestCode,
+                    p.Title,
+                    p.ProfessionId,
+                    p.AppliesToAllProfessions,
+                    p.CardType,
+                    p.LetterType,
+                    p.SourceProvenance,
                     p.DeliveryModes,
                     p.OfficialShape,
                     readinessIssues = p.ReadinessIssues.Select(i => new { i.Code, i.Severity, i.Message }),
                     assets = p.Assets.Select(a => new
                     {
-                        a.SourceRelativePath, role = a.Role.ToString(),
-                        a.Part, a.SuggestedTitle,
+                        a.SourceRelativePath,
+                        role = a.Role.ToString(),
+                        a.Part,
+                        a.SuggestedTitle,
                     }),
                 }),
                 references = session.Manifest.References.Select(r => new
@@ -495,11 +502,27 @@ public static class ContentPapersAdminEndpoints
 
     private static object ProjectPaper(ContentPaper p) => new
     {
-        p.Id, p.SubtestCode, p.Title, p.Slug, p.ProfessionId, p.AppliesToAllProfessions,
-        p.Difficulty, p.EstimatedDurationMinutes, status = p.Status.ToString(),
-        p.PublishedRevisionId, p.CardType, p.LetterType, p.Priority, p.TagsCsv,
-        p.SourceProvenance, p.CreatedAt, p.UpdatedAt, p.PublishedAt, p.ArchivedAt,
-        p.IntegrityAcknowledgedByAdminId, p.IntegrityAcknowledgedAt,
+        p.Id,
+        p.SubtestCode,
+        p.Title,
+        p.Slug,
+        p.ProfessionId,
+        p.AppliesToAllProfessions,
+        p.Difficulty,
+        p.EstimatedDurationMinutes,
+        status = p.Status.ToString(),
+        p.PublishedRevisionId,
+        p.CardType,
+        p.LetterType,
+        p.Priority,
+        p.TagsCsv,
+        p.SourceProvenance,
+        p.CreatedAt,
+        p.UpdatedAt,
+        p.PublishedAt,
+        p.ArchivedAt,
+        p.IntegrityAcknowledgedByAdminId,
+        p.IntegrityAcknowledgedAt,
         assets = p.Assets.Select(ProjectAsset),
     };
 
