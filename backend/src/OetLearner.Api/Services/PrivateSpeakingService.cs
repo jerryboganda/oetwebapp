@@ -683,6 +683,11 @@ public sealed class PrivateSpeakingService(
                 QueueCalendarSyncJob(original.Id);
                 await db.SaveChangesAsync(ct);
             }
+
+            // PDF §10 reschedule confirmation for the same-day penalty path. The
+            // confirmed replacement carries PenaltyAmountMinorUnits, so the learner
+            // message surfaces the penalty amount.
+            await SendRescheduleConfirmationNotificationsAsync(booking.Id, ct);
         }
 
         QueueBookingPostCommitJobs(booking.Id, includeCalendarSync: false);
@@ -891,49 +896,117 @@ public sealed class PrivateSpeakingService(
             ct);
     }
 
+    /// <summary>
+    /// PDF §10 reschedule confirmation: notify the learner and the tutor that a
+    /// private speaking session has been moved to a new start time. For a same-day
+    /// penalty reschedule the learner message also surfaces the penalty amount.
+    /// </summary>
+    public async Task SendRescheduleConfirmationNotificationsAsync(string bookingId, CancellationToken ct)
+    {
+        var booking = await db.PrivateSpeakingBookings
+            .Include(b => b.TutorProfile)
+            .FirstOrDefaultAsync(b => b.Id == bookingId, ct);
+
+        if (booking is null) return;
+
+        var sessionTime = booking.SessionStartUtc.ToString("yyyy-MM-dd HH:mm 'UTC'");
+        var dedupeBucket = booking.UpdatedAt.ToString("yyyyMMddHHmm");
+
+        // Penalty phrase appended to the learner body (empty when no penalty applies).
+        var penaltyText = booking.PenaltyAmountMinorUnits is int penaltyMinor && penaltyMinor > 0
+            ? $" A reschedule penalty of {FormatCurrency(penaltyMinor, booking.Currency)} was applied."
+            : string.Empty;
+
+        // Notify learner
+        await notificationService.CreateForLearnerAsync(
+            NotificationEventKey.LearnerPrivateSpeakingRescheduled,
+            booking.LearnerUserId,
+            "private_speaking_booking",
+            booking.Id,
+            dedupeBucket,
+            new Dictionary<string, object?>
+            {
+                ["sessionTime"] = sessionTime,
+                ["bookingId"] = booking.Id,
+                ["penalty"] = penaltyText
+            },
+            ct);
+
+        // Notify tutor
+        if (booking.TutorProfile?.ExpertUserId is not null)
+        {
+            await notificationService.CreateForExpertAsync(
+                NotificationEventKey.ExpertPrivateSpeakingRescheduled,
+                booking.TutorProfile.ExpertUserId,
+                "private_speaking_booking",
+                booking.Id,
+                dedupeBucket,
+                new Dictionary<string, object?>
+                {
+                    ["sessionTime"] = sessionTime,
+                    ["bookingId"] = booking.Id
+                },
+                ct);
+        }
+    }
+
+    /// <summary>Format a minor-units amount as "{CURRENCY} {amount:0.00}" (e.g. "GBP 25.00").</summary>
+    private static string FormatCurrency(int minorUnits, string currency)
+        => $"{currency} {(minorUnits / 100.0).ToString("0.00", CultureInfo.InvariantCulture)}";
+
     // ── Reminder Processing ─────────────────────────────────────────────
 
-    /// <summary>Process scheduled reminders for upcoming sessions.</summary>
+    /// <summary>
+    /// Process scheduled reminders for upcoming sessions. PDF §10 mandates reminders
+    /// at 24h, 1h, and 15 minutes before the session start, so offsets are expressed
+    /// in MINUTES (default [1440, 60, 15]) to support sub-hour granularity.
+    /// </summary>
     public async Task ProcessRemindersAsync(CancellationToken ct)
     {
         var config = await GetConfigAsync(ct);
         var now = timeProvider.GetUtcNow();
 
-        var reminderOffsets = JsonSerializer.Deserialize<int[]>(config.ReminderOffsetsHoursJson) ?? [24, 1];
+        var reminderOffsets = JsonSerializer.Deserialize<int[]>(config.ReminderOffsetsMinutesJson) ?? [1440, 60, 15];
+        if (reminderOffsets.Length == 0) return;
+        var maxOffset = reminderOffsets.Max();
 
         var upcomingBookings = await db.PrivateSpeakingBookings
             .Include(b => b.TutorProfile)
             .Where(b => (b.Status == PrivateSpeakingBookingStatus.Confirmed
                 || b.Status == PrivateSpeakingBookingStatus.ZoomCreated)
                 && b.SessionStartUtc > now
-                && b.SessionStartUtc <= now.AddHours(reminderOffsets.Max() + 1))
+                && b.SessionStartUtc <= now.AddMinutes(maxOffset + 5))
             .ToListAsync(ct);
 
         foreach (var booking in upcomingBookings)
         {
             var sentReminders = JsonSerializer.Deserialize<List<int>>(booking.RemindersSentJson) ?? [];
-            var hoursUntilSession = (booking.SessionStartUtc - now).TotalHours;
+            var minutesUntilSession = (booking.SessionStartUtc - now).TotalMinutes;
+            var changed = false;
 
-            foreach (var offsetHours in reminderOffsets)
+            // Process descending so the nearest-due offset fires last and any
+            // collapsed multi-offset window (e.g. a booking already 15 min out)
+            // marks every elapsed offset.
+            foreach (var offsetMinutes in reminderOffsets.OrderByDescending(o => o))
             {
-                if (sentReminders.Contains(offsetHours)) continue;
-                if (hoursUntilSession > offsetHours) continue;
+                if (sentReminders.Contains(offsetMinutes)) continue;
+                if (minutesUntilSession > offsetMinutes) continue;
 
-                // Send reminder
                 var tutorName = booking.TutorProfile?.DisplayName ?? "Tutor";
                 var sessionTime = booking.SessionStartUtc.ToString("yyyy-MM-dd HH:mm 'UTC'");
+                var timeUntil = FormatReminderTimeUntil(offsetMinutes);
 
                 await notificationService.CreateForLearnerAsync(
                     NotificationEventKey.LearnerPrivateSpeakingReminder,
                     booking.LearnerUserId,
                     "private_speaking_reminder",
                     booking.Id,
-                    $"reminder-{offsetHours}h",
+                    $"reminder-{offsetMinutes}m",
                     new Dictionary<string, object?>
                     {
                         ["tutorName"] = tutorName,
                         ["sessionTime"] = sessionTime,
-                        ["hoursUntil"] = offsetHours.ToString(),
+                        ["timeUntil"] = timeUntil,
                         ["bookingId"] = booking.Id
                     },
                     ct);
@@ -945,24 +1018,54 @@ public sealed class PrivateSpeakingService(
                         booking.TutorProfile.ExpertUserId,
                         "private_speaking_reminder",
                         booking.Id,
-                        $"reminder-{offsetHours}h",
+                        $"reminder-{offsetMinutes}m",
                         new Dictionary<string, object?>
                         {
                             ["sessionTime"] = sessionTime,
-                            ["hoursUntil"] = offsetHours.ToString(),
+                            ["timeUntil"] = timeUntil,
                             ["bookingId"] = booking.Id
                         },
                         ct);
                 }
 
-                sentReminders.Add(offsetHours);
+                sentReminders.Add(offsetMinutes);
+                changed = true;
             }
 
-            booking.RemindersSentJson = JsonSerializer.Serialize(sentReminders);
-            booking.UpdatedAt = timeProvider.GetUtcNow();
+            if (changed)
+            {
+                booking.RemindersSentJson = JsonSerializer.Serialize(sentReminders);
+                booking.UpdatedAt = timeProvider.GetUtcNow();
+            }
         }
 
         await db.SaveChangesAsync(ct);
+    }
+
+    /// <summary>
+    /// Render a friendly "time until session" phrase from a minute offset, matching
+    /// the PDF §10 wording: 1440 → "24 hours", 60 → "1 hour", 15 → "15 minutes".
+    /// General rule for other values: whole days → "{n} day(s)", whole hours →
+    /// "{n} hour(s)", else "{n} minute(s)".
+    /// </summary>
+    private static string FormatReminderTimeUntil(int offsetMinutes)
+    {
+        // PDF mandates the day-before reminder be phrased as "24 hours", not "1 day".
+        if (offsetMinutes == 1440) return "24 hours";
+
+        if (offsetMinutes >= 1440 && offsetMinutes % 1440 == 0)
+        {
+            var days = offsetMinutes / 1440;
+            return days == 1 ? "1 day" : $"{days} days";
+        }
+
+        if (offsetMinutes >= 60 && offsetMinutes % 60 == 0)
+        {
+            var hours = offsetMinutes / 60;
+            return hours == 1 ? "1 hour" : $"{hours} hours";
+        }
+
+        return offsetMinutes == 1 ? "1 minute" : $"{offsetMinutes} minutes";
     }
 
     /// <summary>Expire reservation-only bookings that timed out without payment.</summary>
@@ -1327,6 +1430,9 @@ public sealed class PrivateSpeakingService(
                 try { await zoomService.DeleteMeetingAsync(original.ZoomMeetingId.Value, ct); }
                 catch (Exception ex) { logger.LogWarning(ex, "Failed to delete Zoom meeting {MeetingId} for rescheduled booking", original.ZoomMeetingId); }
             }
+
+            // PDF §10 reschedule confirmation (free tier → no penalty token).
+            await SendRescheduleConfirmationNotificationsAsync(freeReplacement.Id, ct);
 
             return new BookingCheckoutResult(
                 true,
@@ -1804,7 +1910,9 @@ public sealed class PrivateSpeakingService(
     public async Task<(bool Success, string? Error)> MarkNoShowAsync(
         string bookingId, string actorId, string actorRole, CancellationToken ct)
     {
-        var booking = await db.PrivateSpeakingBookings.FindAsync([bookingId], ct);
+        var booking = await db.PrivateSpeakingBookings
+            .Include(b => b.TutorProfile)
+            .FirstOrDefaultAsync(b => b.Id == bookingId, ct);
         if (booking is null) return (false, "Booking not found.");
 
         if (booking.Status is not (PrivateSpeakingBookingStatus.Confirmed
@@ -1818,6 +1926,40 @@ public sealed class PrivateSpeakingService(
         booking.UpdatedAt = now;
         await db.SaveChangesAsync(ct);
         await AuditAsync(booking.Id, actorId, actorRole, "marked_no_show", null, ct);
+
+        // PDF §10 no-show notifications. The T5 auto-sweep calls this method too, so
+        // it inherits these. No-show forfeits the session per policy (no refund).
+        var sessionTime = booking.SessionStartUtc.ToString("yyyy-MM-dd HH:mm 'UTC'");
+
+        await notificationService.CreateForLearnerAsync(
+            NotificationEventKey.LearnerPrivateSpeakingNoShow,
+            booking.LearnerUserId,
+            "private_speaking_booking",
+            booking.Id,
+            $"noshow-{now:yyyyMMddHHmm}",
+            new Dictionary<string, object?>
+            {
+                ["sessionTime"] = sessionTime,
+                ["bookingId"] = booking.Id
+            },
+            ct);
+
+        if (booking.TutorProfile?.ExpertUserId is not null)
+        {
+            await notificationService.CreateForExpertAsync(
+                NotificationEventKey.ExpertPrivateSpeakingNoShow,
+                booking.TutorProfile.ExpertUserId,
+                "private_speaking_booking",
+                booking.Id,
+                $"noshow-{now:yyyyMMddHHmm}",
+                new Dictionary<string, object?>
+                {
+                    ["sessionTime"] = sessionTime,
+                    ["bookingId"] = booking.Id
+                },
+                ct);
+        }
+
         return (true, null);
     }
 
