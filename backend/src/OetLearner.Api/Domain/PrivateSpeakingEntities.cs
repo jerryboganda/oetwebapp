@@ -267,7 +267,7 @@ public class PrivateSpeakingBooking
     public int PriceMinorUnits { get; set; }
 
     [MaxLength(8)]
-    public string Currency { get; set; } = "AUD";
+    public string Currency { get; set; } = "GBP";
 
     /// <summary>Profession track: Medicine/Nursing/Pharmacy/Dentistry/Other (validated elsewhere).</summary>
     [MaxLength(32)]

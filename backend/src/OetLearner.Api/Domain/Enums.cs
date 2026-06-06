@@ -151,7 +151,6 @@ public enum JobType
     PrivateSpeakingCalendarSync,         // Sync connected tutor Google Calendar event
     PrivateSpeakingReminder,             // Session reminder notifications
     PrivateSpeakingReservationExpiry,     // Expire unpaid reservations
-    PrivateSpeakingNoShowSweep,          // Detect/mark no-shows from Zoom attendance data
 
     // ── Subscription Lifecycle & Engagement ──
     SubscriptionLifecycleCheck,          // Check upcoming renewals, expiries, past-due
@@ -175,7 +174,11 @@ public enum JobType
     // ── Wave A5 — Billing background jobs ──
     BillingDunningRetry,                 // Smart-retry a Stripe invoice (Stripe.InvoiceService.PayAsync) on 24h/72h/168h cadence
     BillingAbandonedCartEmail,           // Daily sweep at 03:00 UTC; emails carts idle >24h that have not been recovered yet
-    BillingRenewalReminder               // 3-day "heads up renewal" email triggered by Stripe invoice.upcoming webhook
+    BillingRenewalReminder,              // 3-day "heads up renewal" email triggered by Stripe invoice.upcoming webhook
+
+    // NOTE: keep this value LAST. JobType is persisted as an int ordinal, so any new value
+    // MUST be appended at the very end to avoid renumbering existing BackgroundJobs rows.
+    PrivateSpeakingNoShowSweep           // Detect/mark no-shows from Zoom attendance data (logically Private Speaking)
 }
 
 public enum ConfidenceBand
