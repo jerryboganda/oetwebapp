@@ -233,46 +233,45 @@ the live browser sweep is unblocked on the backend side (still pending a browser
 
 ---
 
-# Part 3 — Remediation Status (branch `fix/frontend-audit-remediation`)
+# Part 3 — Remediation Status
 
-Each item below was implemented as a small, verified commit (lint + `tsc` + affected tests green).
-Findings were **re-verified before fixing** — a few turned out to be false positives or backend/product
-gaps, which are recorded honestly rather than force-changed.
+Implemented as small, verified commits (lint + `tsc` + affected tests green), now on branch
+**`fix/frontend-remediation-cont`** — created in an isolated git worktree off the team's
+`fix/liveclass-tutor-idor` (so it carries all this work + the cart fix) and worked there to avoid
+disturbing a parallel session active in the same checkout. Findings were **re-verified before fixing**;
+several turned out to be false positives / already-fixed / backend gaps and are recorded honestly.
 
-### ✅ Fixed & committed (17)
-FE-001 (logout state leak + regression test) · FE-002 (coach realtime localhost fallback) ·
-FE-003 (tutor-book download wrong port) · FE-004 (mock-bookings "sample data" banner) ·
-FE-005 (reminders fake-save → honest gate) · FE-009 + FE-039 (brand/OET/gold `@theme` tokens) ·
-FE-012 (pdf measurement-image alt) · FE-019 (admin campaigns base path 404) · FE-021 (listening
-infinite-spinner → error states) · FE-022 (lazy-load SignalR) · FE-026 (marketplace PATCH) ·
-FE-030 (duplicate Toasters) · FE-031 (ref-counted modal/drawer scroll-lock) · FE-032 (AI panel
-mobile width — partial) · FE-038 (optimizePackageImports) · FE-041 (broken PWA screenshots).
+### ✅ Fixed & committed (~28)
+FE-001 (logout state leak +test) · FE-002 (coach realtime fallback) · FE-003 (tutor-book port) ·
+FE-004 (mock-bookings "sample data" banner) · FE-005 (reminders fake-save → honest gate) ·
+FE-006 #1 (`useApiMutation` infra + listening read flows → `useQuery`, +test) · FE-008 (conversation
+reduced-motion, partial) · FE-009/039 (brand/OET/gold tokens) · FE-011 (admin billing inline save
+errors) · FE-012 (pdf measurement-image alt) · **FE-017 (cart contract: `mapCart` + `cartId` threading
+— tsc-verified; needs a live smoke-test)** · FE-019 (campaigns base path + drop unsupported actions) ·
+FE-021 (listening error states) · FE-022 (lazy SignalR) · FE-025 (ai-config honest "not built" state) ·
+FE-026 (marketplace PATCH) · FE-027 (hide community edit/delete — no backend route) · FE-029 (7 api
+modules → shared `apiClient`/`ApiError`) · FE-030 (dup Toasters) · FE-031 (ref-counted scroll-lock) ·
+FE-032 (AI panel + grid/popover/table mobile fixes) · FE-036 (Card consolidation, 5 exact-match
+surfaces) · FE-038 (optimizePackageImports) · FE-041 (broken PWA screenshots).
 
-### 🟡 Re-assessed — not a defect / lower impact than rated
-- **FE-035 (CanonViolationCard "invisible dark text")** — FALSE POSITIVE: the line already uses `dark:text-white`.
-- **FE-032 (metric-grid-2x2)** — 2-col metric tiles are mobile-acceptable; no change.
-- **FE-020 (key={index})** — real, but inputs are *controlled*, so it's a focus/transition glitch on
-  middle-delete, not value corruption. Safe fix is a multi-spot client-`_uid` refactor of the grammar/
-  template content editors → best done with live testing. **Deferred.**
+### 🟡 Re-assessed — not a defect / already resolved
+- **FE-035 CanonViolationCard** — FALSE POSITIVE (already `dark:text-white`).
+- **FE-032 metric-grid-2x2** — 2-col tiles are mobile-fine; no change.
+- **FE-028 TTS proxy bypass** — already resolved upstream (uses `apiBlobRequest`/proxy now).
+- **FE-020 key={index}** — controlled inputs → focus glitch, not value corruption; safe fix is a
+  content-editor `_uid` refactor best done with live testing.
+- **FE-029 reading-authoring-api** — its migration was reverted (it regressed a results-page test); the
+  other 7 modules migrated cleanly.
 
-### 🟠 Deferred — backend/product gap (frontend already graceful, or needs a backend route/decision)
-- **FE-019 (action names)** `test-send/schedule/pause` have no backend route (base path fixed).
-- **FE-025** `/v1/admin/ai-assistant/config` not implemented backend-side (page already shows an error state).
-- **FE-027** community thread edit/delete have no backend route.
-- **FE-010** reading cooldown/duration/errorBankCleared DTO fields.
+### 🔴 Needs the live browser (reconnect the Chrome extension)
+- **FE-017/018** — a ~2-min cart→checkout click-through to confirm the contract fix end-to-end.
+- The per-route **runtime/responsive/console/keyboard sweep**; **FE-007** (axe vs the dev server);
+  **FE-033/034** (live state/form checks); **FE-014** dark-mode, **FE-023** charts-lazy, **FE-040** icon
+  unify — all visual; must be *seen* to verify (esp. the recharts composed-chart child-type risk).
 
-### 🔴 Deferred — needs the live browser (open a normal Chrome window)
-FE-017 + FE-018 (cart/checkout DTO alignment — revenue path, fix against the live API) · the per-route
-runtime/responsive/console/keyboard sweep · FE-007 (axe specs run against the dev server) · FE-033 /
-FE-034 state + form checks (verify live).
-
-### 🟠 Deferred — large refactor (dedicated effort)
-FE-006 (React-Query migration) · FE-023 (recharts lazy, 13 sites) · FE-024 (client-boundary, 514 pages) ·
-FE-029 (error-handling migration, 9 modules) · FE-036 (design-system consolidation, ~50 files) ·
-FE-040 (icon-library unify, 11 files).
-
-### 🟢 Remaining tractable (safe, not yet done)
-FE-008 (reduced-motion gating) · FE-011 (admin inline form errors) · FE-013 (per-page metadata — note:
-auth/learner pages are client components, so needs server-wrapper) · FE-014 (dark-mode variants — verify
-learner-surface intent first) · FE-016 (`middleware`→`proxy` — handle carefully, it owns CSP/CSRF) ·
-FE-028 (TTS via apiClient/Blob) · FE-042 (z-index scale + toast ids).
+### 🟠 Backend-dependent / large / risky (not safely doable headless)
+- **FE-010** — reading cooldown/duration/errorBankCleared need backend DTO fields.
+- **FE-024** client-boundary (514 `'use client'` pages); **FE-006** / **FE-036** remainder — multi-day, verified passes.
+- **FE-016** `middleware`→`proxy` (owns CSP/CSRF — needs care + a live check); **FE-013** per-page
+  metadata (auth/learner pages are client components → needs a server-wrapper refactor).
+- **FE-042** z-index scale + toast ids — low value.
