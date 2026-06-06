@@ -12,6 +12,7 @@ using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Contracts;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services.Billing;
 using OetLearner.Api.Services.Entitlements;
 
 namespace OetLearner.Api.Services;
@@ -22,6 +23,7 @@ public sealed class PrivateSpeakingService(
     ZoomMeetingService zoomService,
     PrivateSpeakingCalendarService calendarService,
     IEffectiveEntitlementResolver entitlementResolver,
+    IStripeService stripeService,
     TimeProvider timeProvider,
     ILogger<PrivateSpeakingService> logger)
 {
@@ -35,7 +37,12 @@ public sealed class PrivateSpeakingService(
         var config = await db.PrivateSpeakingConfigs.FirstOrDefaultAsync(ct);
         if (config is not null) return config;
 
-        config = new PrivateSpeakingConfig { UpdatedAt = timeProvider.GetUtcNow() };
+        config = new PrivateSpeakingConfig
+        {
+            UpdatedAt = timeProvider.GetUtcNow(),
+            CancellationPolicyText = "You may cancel your Speaking session with a full refund if the cancellation is made more than 48 hours before the scheduled start time. If you cancel less than 48 hours before the session, the booking will be cancelled without refund.",
+            BookingPolicyText = "You may reschedule your Speaking session before the session starts, subject to available tutor slots. Same-day rescheduling is allowed; however, 50% of the session fee will be lost according to the platform policy.",
+        };
         db.PrivateSpeakingConfigs.Add(config);
         await db.SaveChangesAsync(ct);
         return config;
@@ -911,35 +918,93 @@ public sealed class PrivateSpeakingService(
 
         if (booking.Status is PrivateSpeakingBookingStatus.Cancelled
             or PrivateSpeakingBookingStatus.Refunded
-            or PrivateSpeakingBookingStatus.Completed)
+            or PrivateSpeakingBookingStatus.Completed
+            or PrivateSpeakingBookingStatus.NoShow)
             return (false, "Booking cannot be cancelled in its current state.");
 
-        // Check cancellation window for learners
+        var config = await GetConfigAsync(ct);
+        var now = timeProvider.GetUtcNow();
+        var hoursUntil = (booking.SessionStartUtc - now).TotalHours;
+
+        // PDF §2.2 / §8 refund tiers. Learners forfeit refund inside the 48h
+        // window and cannot cancel after the session has started; admin/expert
+        // (PDF edge case #7) always get a full refund and may cancel even after
+        // the start time.
+        bool fullRefund;
         if (actorRole == "learner")
         {
-            var config = await GetConfigAsync(ct);
-            var hoursUntil = (booking.SessionStartUtc - timeProvider.GetUtcNow()).TotalHours;
-            if (hoursUntil < config.CancellationWindowHours)
-                return (false, $"Cancellations must be made at least {config.CancellationWindowHours} hours before the session.");
-
-            // Verify the actor is the learner who booked
+            // Verify the actor is the learner who booked.
             if (booking.LearnerUserId != actorId)
                 return (false, "You can only cancel your own bookings.");
+
+            if (now >= booking.SessionStartUtc)
+                return (false, "This session has already started and can no longer be cancelled. It will be handled as a no-show if you do not attend.");
+
+            fullRefund = hoursUntil > config.CancellationWindowHours;
+        }
+        else
+        {
+            // expert / admin — always full refund regardless of timing.
+            fullRefund = true;
         }
 
         booking.Status = PrivateSpeakingBookingStatus.Cancelled;
         booking.CancelledBy = actorId;
         booking.CancellationReason = reason;
-        booking.CancelledAt = timeProvider.GetUtcNow();
-        booking.UpdatedAt = timeProvider.GetUtcNow();
+        booking.CancelledAt = now;
+        booking.UpdatedAt = now;
 
-        if (booking.EntitlementConsumed && booking.EntitlementRestoredAt is null && booking.RescheduledToBookingId is null)
+        string refundDetail;
+        if (fullRefund)
         {
-            await RestoreSpeakingEntitlementAsync(booking, $"cancelled_by_{actorRole}", ct);
+            booking.RefundIssued = true;
+
+            if (booking.EntitlementConsumed && booking.EntitlementRestoredAt is null && booking.RescheduledToBookingId is null)
+            {
+                await RestoreSpeakingEntitlementAsync(booking, $"cancelled_by_{actorRole}", ct);
+            }
+
+            // Direct-paid bookings (Stripe PaymentIntent) get a money refund.
+            // Most current bookings are entitlement-only and skip this branch.
+            if (!string.IsNullOrWhiteSpace(booking.StripePaymentIntentId)
+                && booking.PaymentStatus == PrivateSpeakingPaymentStatus.Succeeded
+                && booking.PriceMinorUnits > 0)
+            {
+                try
+                {
+                    var refundId = await stripeService.CreateRefundAsync(
+                        booking.StripePaymentIntentId,
+                        booking.PriceMinorUnits,
+                        "requested_by_customer",
+                        ct);
+                    booking.StripeRefundId = refundId;
+                    booking.RefundAmountMinorUnits = booking.PriceMinorUnits;
+                    booking.PaymentStatus = PrivateSpeakingPaymentStatus.Refunded;
+                }
+                catch (Exception ex)
+                {
+                    // Do not fail the cancellation — leave StripeRefundId null so
+                    // an admin can retry the refund out of band.
+                    logger.LogWarning(ex,
+                        "Stripe refund failed for cancelled booking {BookingId}; cancellation still completed",
+                        booking.Id);
+                }
+            }
+
+            refundDetail = "full_refund";
+        }
+        else
+        {
+            booking.RefundIssued = false;
+            booking.RefundAmountMinorUnits = 0;
+            refundDetail = "no_refund_within_window";
         }
 
         await db.SaveChangesAsync(ct);
-        await AuditAsync(booking.Id, actorId, actorRole, "booking_cancelled", reason, ct);
+        await AuditAsync(
+            booking.Id, actorId, actorRole, "booking_cancelled",
+            string.IsNullOrWhiteSpace(reason) ? refundDetail : $"{reason} | {refundDetail}",
+            ct);
 
         // Delete Zoom meeting if it exists
         if (booking.ZoomMeetingId.HasValue)
@@ -954,6 +1019,9 @@ public sealed class PrivateSpeakingService(
         // Notify parties
         var tutorName = booking.TutorProfile?.DisplayName ?? "Tutor";
         var sessionTime = booking.SessionStartUtc.ToString("yyyy-MM-dd HH:mm 'UTC'");
+        var cancellationMessage = fullRefund
+            ? "Your private speaking session has been cancelled and a full refund/credit has been issued."
+            : "Your private speaking session has been cancelled. As this was within 48 hours of the start time, no refund or credit applies per the cancellation policy.";
 
         await notificationService.CreateForLearnerAsync(
             NotificationEventKey.LearnerPrivateSpeakingCancelled,
@@ -964,7 +1032,9 @@ public sealed class PrivateSpeakingService(
             {
                 ["tutorName"] = tutorName,
                 ["sessionTime"] = sessionTime,
-                ["cancelledBy"] = actorRole
+                ["cancelledBy"] = actorRole,
+                ["refundIssued"] = fullRefund ? "true" : "false",
+                ["message"] = cancellationMessage
             }, ct);
 
         if (booking.TutorProfile?.ExpertUserId is not null)
@@ -977,7 +1047,8 @@ public sealed class PrivateSpeakingService(
                 new Dictionary<string, object?>
                 {
                     ["sessionTime"] = sessionTime,
-                    ["cancelledBy"] = actorRole
+                    ["cancelledBy"] = actorRole,
+                    ["refundIssued"] = fullRefund ? "true" : "false"
                 }, ct);
         }
 
