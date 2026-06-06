@@ -23,7 +23,13 @@ const readNextBuildWorkers = () => {
 const nextBuildWorkers = readNextBuildWorkers();
 
 const nextConfig: NextConfig = {
-  ...(nextBuildWorkers ? { experimental: { cpus: nextBuildWorkers } } : {}),
+  experimental: {
+    // FE-038: rewrite barrel imports (lucide-react is imported by ~250 files,
+    // plus tabler/recharts/motion) to deep imports so unused members tree-shake
+    // out of each route bundle.
+    optimizePackageImports: ['lucide-react', '@tabler/icons-react', 'recharts', 'motion'],
+    ...(nextBuildWorkers ? { cpus: nextBuildWorkers } : {}),
+  },
   reactStrictMode: true,
   typescript: { ignoreBuildErrors: true },
   images: {

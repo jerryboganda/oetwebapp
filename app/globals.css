@@ -46,6 +46,15 @@
   --color-disabled: #94a3b8;
   --color-border: #d8e0e8;
   --color-border-hover: #b9c6d1;
+
+  /* FE-009/FE-039: brand accent + OET corporate colors, previously hardcoded as
+     arbitrary Tailwind hexes (text-[#996F1F], bg-[#0E2841], …) across
+     billing/pricing/learner widgets. Use bg-gold / text-gold-fg / bg-oet-navy. */
+  --color-gold: #d4a44f;
+  --color-gold-dark: #bf8e3d;
+  --color-gold-fg: #996f1f;
+  --color-oet-navy: #0e2841;
+  --color-oet-teal: #156082;
   
   --color-admin-surface:           #ffffff;
   --color-admin-surface-raised:    #f8fafc;
