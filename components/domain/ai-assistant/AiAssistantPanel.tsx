@@ -36,7 +36,7 @@ export function AiAssistantPanel({ onClose }: AiAssistantPanelProps) {
 
   return (
     <div
-      className="fixed bottom-24 right-6 z-50 flex h-[600px] w-[400px] flex-col rounded-2xl border border-border bg-surface shadow-xl md:w-[450px]"
+      className="fixed bottom-24 right-6 z-50 flex h-[600px] max-h-[calc(100dvh-8rem)] w-[400px] max-w-[calc(100vw-3rem)] flex-col rounded-2xl border border-border bg-surface shadow-xl md:w-[450px]"
       role="dialog"
       aria-label="AI Assistant"
     >
