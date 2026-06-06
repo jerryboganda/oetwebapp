@@ -100,11 +100,12 @@ public sealed class WritingEvaluationPipeline(
         // submission for this user. SQLite-friendly: simple Where + ToList.
         var profileCountry = string.IsNullOrWhiteSpace(attempt.UserId)
             ? null
-            : await db.Set<LearnerWritingProfile>()
+            : (await db.Set<LearnerWritingProfile>()
                 .Where(p => p.UserId == attempt.UserId)
+                .ToListAsync(cancellationToken))
                 .OrderByDescending(p => p.UpdatedAt)
                 .Select(p => p.TargetCountry)
-                .FirstOrDefaultAsync(cancellationToken);
+                .FirstOrDefault(c => !string.IsNullOrWhiteSpace(c));
         var goalCountry = string.IsNullOrWhiteSpace(attempt.UserId)
             ? null
             : (await db.Set<LearnerGoal>()

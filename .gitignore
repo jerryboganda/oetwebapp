@@ -187,6 +187,11 @@ Reading (*/
 *.sql.bak
 oet_learner_dev_backup_*.sql
 
+# Production DB sync (contains real production data/PII — NEVER commit)
+.db-sync/
+*.dump
+*.dump.gpg
+
 # Misc scratch
 *.bat
 _pwhash*

@@ -132,12 +132,111 @@ public class WritingWave6ServiceTests
                 new Dictionary<string, int> { ["c1"] = 3, ["c2"] = 7, ["c3"] = 7, ["c4"] = 7, ["c5"] = 7, ["c6"] = 7 }),
             CancellationToken.None);
 
-        var grades = await db.WritingGrades.AsNoTracking().Where(g => g.SubmissionId == submissionId).ToListAsync();
-        Assert.Equal(2, grades.Count);
-        Assert.Contains(grades, g => g.Id == originalGradeId && g.RawTotal == 30);
-        var adjusted = Assert.Single(grades, g => g.AppealedByGradeId == originalGradeId);
+        var adjusted = Assert.Single(await db.WritingGrades.AsNoTracking().Where(g => g.SubmissionId == submissionId).ToListAsync());
+        Assert.Equal(originalGradeId, adjusted.Id);
         Assert.Equal(38, adjusted.RawTotal);
         Assert.NotNull(adjusted.TutorReviewId);
+
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task MarkingSurfaceSubmit_RequiresClaimedAssignment()
+    {
+        var db = BuildDb();
+        var clock = new FixedClock();
+        var scenarioId = Guid.NewGuid();
+        var submissionId = Guid.NewGuid();
+        db.WritingScenarios.Add(Scenario(scenarioId));
+        db.WritingSubmissions.Add(Submission(submissionId, UserId, scenarioId, clock.GetUtcNow()));
+        db.WritingGrades.Add(Grade(Guid.NewGuid(), submissionId, 30, clock.GetUtcNow()));
+        db.WritingTutorReviewAssignments.Add(new WritingTutorReviewAssignment
+        {
+            Id = Guid.NewGuid(),
+            SubmissionId = submissionId,
+            TutorId = "tutor-1",
+            ClaimedAt = clock.GetUtcNow(),
+            DueAt = clock.GetUtcNow().AddHours(24),
+            Status = "claimed",
+        });
+        await db.SaveChangesAsync();
+        var service = new WritingTutorReviewService(
+            db,
+            clock,
+            Options.Create(new WritingV2Options()),
+            new WritingModerationService(db, NullLogger<WritingModerationService>.Instance),
+            NullLogger<WritingTutorReviewService>.Instance);
+
+        var ex = await Assert.ThrowsAsync<ApiException>(() => service.SubmitMarkingReviewAsync(
+            submissionId,
+            "tutor-2",
+            new WritingTutorReviewSubmitInput(
+                "feedback",
+                null,
+                new WritingCriteriaScores(3, 7, 7, 7, 7, 7),
+                null,
+                "first",
+                false),
+            CancellationToken.None));
+
+        Assert.Equal("writing_tutor_assignment_forbidden", ex.ErrorCode);
+        Assert.Empty(await db.WritingTutorReviews.AsNoTracking().ToListAsync());
+        Assert.Single(await db.WritingGrades.AsNoTracking().Where(g => g.SubmissionId == submissionId).ToListAsync());
+
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task MarkingSurfaceSubmit_ClaimedTutorCreatesLinkedAdjustedGrade()
+    {
+        var db = BuildDb();
+        var clock = new FixedClock();
+        var scenarioId = Guid.NewGuid();
+        var submissionId = Guid.NewGuid();
+        db.WritingScenarios.Add(Scenario(scenarioId));
+        db.WritingSubmissions.Add(Submission(submissionId, UserId, scenarioId, clock.GetUtcNow()));
+        var originalGradeId = Guid.NewGuid();
+        db.WritingGrades.Add(Grade(originalGradeId, submissionId, 30, clock.GetUtcNow()));
+        db.WritingTutorReviewAssignments.Add(new WritingTutorReviewAssignment
+        {
+            Id = Guid.NewGuid(),
+            SubmissionId = submissionId,
+            TutorId = "tutor-1",
+            ClaimedAt = clock.GetUtcNow(),
+            DueAt = clock.GetUtcNow().AddHours(24),
+            Status = "claimed",
+        });
+        await db.SaveChangesAsync();
+        var service = new WritingTutorReviewService(
+            db,
+            clock,
+            Options.Create(new WritingV2Options()),
+            new WritingModerationService(db, NullLogger<WritingModerationService>.Instance),
+            NullLogger<WritingTutorReviewService>.Instance);
+
+        await service.SubmitMarkingReviewAsync(
+            submissionId,
+            "tutor-1",
+            new WritingTutorReviewSubmitInput(
+                "feedback",
+                null,
+                new WritingCriteriaScores(3, 7, 7, 7, 7, 7),
+                null,
+                "first",
+                false),
+            CancellationToken.None);
+
+        var review = Assert.Single(await db.WritingTutorReviews.AsNoTracking().ToListAsync());
+        Assert.Equal("tutor-1", review.TutorId);
+        var assignment = Assert.Single(await db.WritingTutorReviewAssignments.AsNoTracking().ToListAsync());
+        Assert.Equal("submitted", assignment.Status);
+        Assert.NotNull(assignment.ReleasedAt);
+        var adjusted = Assert.Single(await db.WritingGrades.AsNoTracking()
+            .Where(g => g.SubmissionId == submissionId)
+            .ToListAsync());
+        Assert.Equal(originalGradeId, adjusted.Id);
+        Assert.Equal(review.Id, adjusted.TutorReviewId);
+        Assert.Equal(38, adjusted.RawTotal);
 
         await db.DisposeAsync();
     }

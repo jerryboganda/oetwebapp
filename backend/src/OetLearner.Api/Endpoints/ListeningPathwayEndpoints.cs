@@ -108,6 +108,148 @@ public static class ListeningPathwayEndpoints
         })
         .WithName("ListeningSubmitAudioCheck");
 
+        group.MapGet("/lessons", async (
+            HttpContext http,
+            IListeningLessonService svc,
+            CancellationToken ct,
+            string? skillCode) =>
+        {
+            var userId = RequireUserId(http);
+            return Results.Ok(await svc.ListAsync(userId, skillCode, ct));
+        })
+        .WithName("ListeningListLessons");
+
+        group.MapGet("/lessons/{slug}", async (
+            string slug,
+            HttpContext http,
+            IListeningLessonService svc,
+            CancellationToken ct) =>
+        {
+            var userId = RequireUserId(http);
+            var lesson = await svc.GetBySlugAsync(userId, slug, ct);
+            return lesson is null
+                ? Results.NotFound(new { code = "listening_lesson_not_found", message = "Listening lesson not found." })
+                : Results.Ok(lesson);
+        })
+        .WithName("ListeningGetLesson");
+
+        group.MapPatch("/lessons/{lessonId:guid}/progress", async (
+            Guid lessonId,
+            LessonProgressUpdate request,
+            HttpContext http,
+            IListeningLessonService svc,
+            CancellationToken ct) =>
+        {
+            var userId = RequireUserId(http);
+            try
+            {
+                return Results.Ok(await svc.UpdateProgressAsync(userId, lessonId, request, ct));
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Results.NotFound(new { code = "listening_lesson_not_found", message = ex.Message });
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest("invalid_lesson_progress", ex.Message);
+            }
+        })
+        .WithName("ListeningUpdateLessonProgress")
+        .RequireRateLimiting("PerUserWrite");
+
+        group.MapGet("/strategies", async (
+            HttpContext http,
+            IListeningStrategyService svc,
+            CancellationToken ct,
+            string? category) =>
+        {
+            var userId = RequireUserId(http);
+            return Results.Ok(await svc.ListAsync(userId, category, ct));
+        })
+        .WithName("ListeningListStrategies");
+
+        group.MapGet("/strategies/{slug}", async (
+            string slug,
+            HttpContext http,
+            IListeningStrategyService svc,
+            CancellationToken ct) =>
+        {
+            var userId = RequireUserId(http);
+            var strategy = await svc.GetBySlugAsync(userId, slug, ct);
+            return strategy is null
+                ? Results.NotFound(new { code = "listening_strategy_not_found", message = "Listening strategy not found." })
+                : Results.Ok(strategy);
+        })
+        .WithName("ListeningGetStrategy");
+
+        group.MapPost("/strategies/{strategyId:guid}/mark-read", async (
+            Guid strategyId,
+            HttpContext http,
+            IListeningStrategyService svc,
+            CancellationToken ct) =>
+        {
+            var userId = RequireUserId(http);
+            try
+            {
+                return Results.Ok(await svc.MarkReadAsync(userId, strategyId, ct));
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Results.NotFound(new { code = "listening_strategy_not_found", message = ex.Message });
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest("invalid_strategy_progress", ex.Message);
+            }
+        })
+        .WithName("ListeningMarkStrategyRead")
+        .RequireRateLimiting("PerUserWrite");
+
+        group.MapPost("/strategies/{strategyId:guid}/favorite", async (
+            Guid strategyId,
+            HttpContext http,
+            IListeningStrategyService svc,
+            CancellationToken ct) =>
+        {
+            var userId = RequireUserId(http);
+            try
+            {
+                return Results.Ok(await svc.ToggleFavoriteAsync(userId, strategyId, ct));
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Results.NotFound(new { code = "listening_strategy_not_found", message = ex.Message });
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest("invalid_strategy_progress", ex.Message);
+            }
+        })
+        .WithName("ListeningToggleStrategyFavorite")
+        .RequireRateLimiting("PerUserWrite");
+
+        group.MapGet("/mocks/sessions/{sessionId:guid}/results", async (
+            Guid sessionId,
+            HttpContext http,
+            IListeningMockService svc,
+            CancellationToken ct) =>
+        {
+            var userId = RequireUserId(http);
+            try
+            {
+                return Results.Ok(await svc.GetResultsAsync(userId, sessionId, ct));
+            }
+            catch (InvalidOperationException ex) when (IsNotFound(ex))
+            {
+                return Results.NotFound(new { code = "listening_mock_results_not_found", message = ex.Message });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest("listening_mock_results_unavailable", ex.Message);
+            }
+        })
+        .WithName("ListeningGetMockResults");
+
         // ─────────────────────────────────────────────────────────────────
         // §6.1 Diagnostic — start
         // ─────────────────────────────────────────────────────────────────

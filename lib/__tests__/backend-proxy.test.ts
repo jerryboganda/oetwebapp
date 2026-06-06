@@ -155,4 +155,21 @@ describe('backend proxy helpers', () => {
       expect(validateProxyCsrf(request)).toBe(false);
     }
   });
+
+  it('exempts bearer-protected SignalR hub negotiation from proxy CSRF', () => {
+    for (const hubPath of [
+      'v1/notifications/hub/negotiate',
+      'v1/conversations/hub/negotiate',
+      'v1/ai-assistant/hub/negotiate',
+    ]) {
+      const request = new Request(`https://app.example.com/api/backend/${hubPath}`, {
+        method: 'POST',
+        headers: {
+          Cookie: 'oet_rt=active-refresh',
+        },
+      });
+
+      expect(validateProxyCsrf(request)).toBe(true);
+    }
+  });
 });

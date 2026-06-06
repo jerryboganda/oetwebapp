@@ -44,10 +44,12 @@ public static class SpeakingReviewVoiceNoteEndpoints
 
         expert.MapGet("/reviews/{reviewRequestId}/voice-notes", async (
                 string reviewRequestId,
+                HttpContext http,
                 SpeakingReviewVoiceNoteService service,
                 CancellationToken ct) =>
             {
-                var notes = await service.ListForReviewAsync(reviewRequestId, ct);
+                var expertId = http.ExpertId();
+                var notes = await service.ListForReviewAsync(reviewRequestId, expertId, ct);
                 return Results.Ok(new
                 {
                     reviewRequestId,

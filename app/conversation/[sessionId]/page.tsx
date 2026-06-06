@@ -337,7 +337,7 @@ export default function ConversationSessionPage() {
     try {
       const signalR = await import('@microsoft/signalr');
       const connection = new signalR.HubConnectionBuilder()
-        .withUrl(`${process.env.NEXT_PUBLIC_API_BASE_URL || ''}/v1/conversations/hub`, {
+        .withUrl('/api/backend/v1/conversations/hub', {
           accessTokenFactory: async () => {
             const { ensureFreshAccessToken } = await import('@/lib/auth-client');
             return (await ensureFreshAccessToken()) || '';

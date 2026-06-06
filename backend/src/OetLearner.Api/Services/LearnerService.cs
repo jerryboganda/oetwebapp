@@ -11783,6 +11783,7 @@ public partial class LearnerService(
             .AsNoTracking()
             .Where(e => e.UserId == userId)
             .OrderByDescending(e => e.CreatedAt)
+            .Take(200)
             .Select(e => new
             {
                 id = e.Id,

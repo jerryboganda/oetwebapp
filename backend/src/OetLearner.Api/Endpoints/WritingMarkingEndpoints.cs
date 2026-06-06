@@ -25,7 +25,7 @@ public static class WritingMarkingEndpoints
         // Mirror WritingTutorPortalEndpoints authorization: authenticated tutor, id from claims.
         var group = app.MapGroup("/v1/writing/tutor/reviews")
             .WithTags("WritingMarking")
-            .RequireAuthorization();
+            .RequireAuthorization("ExpertOnly");
 
         group.MapGet("/{id:guid}/context", GetContextAsync);
         group.MapGet("/{id:guid}/pre-assessment", GetPreAssessmentAsync);
@@ -60,6 +60,10 @@ public static class WritingMarkingEndpoints
         if (submission is null)
         {
             return Results.NotFound();
+        }
+        if (!await CanAccessSubmissionAsync(db, id, tutorId, ct))
+        {
+            return Results.Forbid();
         }
 
         var scenario = await db.WritingScenarios
@@ -147,6 +151,10 @@ public static class WritingMarkingEndpoints
         {
             return Results.NotFound();
         }
+        if (!await CanAccessSubmissionAsync(db, id, tutorId, ct))
+        {
+            return Results.Forbid();
+        }
 
         var scenario = await db.WritingScenarios
             .AsNoTracking()
@@ -181,6 +189,7 @@ public static class WritingMarkingEndpoints
 
     private static async Task<IResult> ListAnnotationsAsync(
         ClaimsPrincipal user,
+        LearnerDbContext db,
         IWritingAnnotationService annotations,
         Guid id,
         CancellationToken ct)
@@ -189,6 +198,11 @@ public static class WritingMarkingEndpoints
         if (string.IsNullOrWhiteSpace(tutorId))
         {
             return Results.Unauthorized();
+        }
+
+        if (!await CanAccessSubmissionAsync(db, id, tutorId, ct))
+        {
+            return Results.Forbid();
         }
 
         var items = await annotations.ListAsync(id, ct);
@@ -221,6 +235,10 @@ public static class WritingMarkingEndpoints
         {
             return Results.NotFound();
         }
+        if (!await CanAccessSubmissionAsync(db, id, tutorId, ct))
+        {
+            return Results.Forbid();
+        }
 
         var created = await annotations.CreateAsync(
             id,
@@ -240,6 +258,7 @@ public static class WritingMarkingEndpoints
 
     private static async Task<IResult> DeleteAnnotationAsync(
         ClaimsPrincipal user,
+        LearnerDbContext db,
         IWritingAnnotationService annotations,
         Guid id,
         Guid annotationId,
@@ -251,6 +270,11 @@ public static class WritingMarkingEndpoints
             return Results.Unauthorized();
         }
 
+        if (!await CanAccessSubmissionAsync(db, id, tutorId, ct))
+        {
+            return Results.Forbid();
+        }
+
         var deleted = await annotations.DeleteAsync(id, annotationId, tutorId, ct);
         return deleted ? Results.NoContent() : Results.NotFound();
     }
@@ -259,6 +283,7 @@ public static class WritingMarkingEndpoints
 
     private static async Task<IResult> SubmitReviewAsync(
         ClaimsPrincipal user,
+        LearnerDbContext db,
         IWritingTutorReviewService reviews,
         Guid id,
         [FromBody] SubmitReviewRequest body,
@@ -271,6 +296,11 @@ public static class WritingMarkingEndpoints
         }
 
         body ??= new SubmitReviewRequest();
+
+        if (!await CanAccessSubmissionAsync(db, id, tutorId, ct))
+        {
+            return Results.Forbid();
+        }
 
         var result = await reviews.SubmitMarkingReviewAsync(
             id,
@@ -295,6 +325,7 @@ public static class WritingMarkingEndpoints
 
     private static async Task<IResult> GetModerationAsync(
         ClaimsPrincipal user,
+        LearnerDbContext db,
         IWritingModerationService moderation,
         Guid id,
         CancellationToken ct)
@@ -305,12 +336,18 @@ public static class WritingMarkingEndpoints
             return Results.Unauthorized();
         }
 
+        if (!await CanAccessSubmissionAsync(db, id, tutorId, ct))
+        {
+            return Results.Forbid();
+        }
+
         var row = await moderation.GetAsync(id, ct);
         return Results.Ok(row is null ? null : MapModeration(row));
     }
 
     private static async Task<IResult> FinalizeModerationAsync(
         ClaimsPrincipal user,
+        LearnerDbContext db,
         IWritingModerationService moderation,
         Guid id,
         [FromBody] FinalizeModerationRequest body,
@@ -320,6 +357,11 @@ public static class WritingMarkingEndpoints
         if (string.IsNullOrWhiteSpace(tutorId))
         {
             return Results.Unauthorized();
+        }
+
+        if (!await CanAccessSubmissionAsync(db, id, tutorId, ct))
+        {
+            return Results.Forbid();
         }
 
         if (body?.FinalScore is null)
@@ -383,6 +425,19 @@ public static class WritingMarkingEndpoints
             ?? user.FindFirstValue("sub")
             ?? user.FindFirstValue("uid");
     }
+
+    private static Task<bool> CanAccessSubmissionAsync(
+        LearnerDbContext db,
+        Guid submissionId,
+        string tutorId,
+        CancellationToken ct)
+        => db.WritingTutorReviewAssignments
+            .AsNoTracking()
+            .AnyAsync(a =>
+                a.SubmissionId == submissionId
+                && a.TutorId == tutorId
+                && (a.Status == "claimed" || a.Status == "submitted"),
+                ct);
 
     // ---- Mapping to camelCase DTOs ------------------------------------------------------------
 

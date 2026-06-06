@@ -190,6 +190,7 @@ public static class ReadingLearnerEndpoints
                 .OrderBy(a => a.ContentPaperAssetId)
                 .ThenBy(a => a.PageNumber)
                 .ThenBy(a => a.CreatedAt)
+                .Take(2000)
                 .ToListAsync(ct);
             return Results.Ok(rows.Select(a => new ReadingPaperAnnotationDto(
                 a.Id,

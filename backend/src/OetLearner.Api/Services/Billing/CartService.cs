@@ -8,6 +8,7 @@ public sealed class CartService : ICartService
 {
     private readonly LearnerDbContext _db;
     private static readonly TimeSpan CartTtl = TimeSpan.FromDays(7);
+    private const int MaxCartItemQuantity = 100;
 
     public CartService(LearnerDbContext db)
     {
@@ -60,6 +61,9 @@ public sealed class CartService : ICartService
 
     public async Task<CartDto> AddItemAsync(string cartId, string userId, AddCartItemRequest request, CancellationToken ct = default)
     {
+        if (request.Quantity is < 1 or > MaxCartItemQuantity)
+            throw ApiException.Validation("invalid_quantity", $"Quantity must be between 1 and {MaxCartItemQuantity}.");
+
         var cart = await LoadCartAsync(cartId, userId, ct);
 
         // Validate product exists and is active
@@ -109,8 +113,8 @@ public sealed class CartService : ICartService
 
     public async Task<CartDto> UpdateItemQuantityAsync(string cartId, string userId, Guid itemId, int quantity, CancellationToken ct = default)
     {
-        if (quantity <= 0)
-            throw ApiException.Validation("invalid_quantity", "Quantity must be positive.");
+        if (quantity is < 1 or > MaxCartItemQuantity)
+            throw ApiException.Validation("invalid_quantity", $"Quantity must be between 1 and {MaxCartItemQuantity}.");
 
         var cart = await LoadCartAsync(cartId, userId, ct);
         var item = cart.Items.FirstOrDefault(i => i.Id == itemId)

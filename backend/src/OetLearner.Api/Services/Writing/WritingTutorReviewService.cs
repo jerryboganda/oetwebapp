@@ -244,6 +244,14 @@ public sealed class WritingTutorReviewService(
         var scenario = await db.WritingScenarios.AsNoTracking()
             .FirstOrDefaultAsync(s => s.Id == submission.ScenarioId, ct)
             ?? throw ApiException.NotFound("writing_scenario_not_found", "Writing scenario was not found.");
+        var assignment = await db.WritingTutorReviewAssignments
+            .FirstOrDefaultAsync(a => a.SubmissionId == submissionId, ct)
+            ?? throw ApiException.NotFound("writing_tutor_assignment_not_found", "Tutor assignment was not found.");
+        if (!string.Equals(assignment.TutorId, tutorId, StringComparison.Ordinal)
+            || assignment.Status != "claimed")
+        {
+            throw ApiException.Forbidden("writing_tutor_assignment_forbidden", "This submission is not claimed by the current tutor.");
+        }
 
         var now = clock.GetUtcNow();
         var review = await db.WritingTutorReviews
@@ -282,6 +290,8 @@ public sealed class WritingTutorReviewService(
         }
         review.Status = "submitted";
         review.SubmittedAt = now;
+        assignment.Status = "submitted";
+        assignment.ReleasedAt = now;
 
         await ApplyTutorGradeAsync(review, scoreOverride, now, ct);
 

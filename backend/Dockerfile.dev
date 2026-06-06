@@ -1,0 +1,43 @@
+# Development Dockerfile for .NET backend with hot reload
+# Uses dotnet watch for automatic rebuild on file changes
+# Usage: docker compose -f docker-compose.hotreload.yml up
+
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS dev
+WORKDIR /app
+
+# Install runtime dependencies
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        curl \
+        wget \
+        tesseract-ocr \
+        tesseract-ocr-eng \
+        libleptonica-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create app user
+RUN groupadd --gid 10001 appgroup \
+    && useradd --uid 10001 --gid appgroup --create-home --home-dir /home/appuser appuser \
+    && mkdir -p /var/opt/oet-learner/storage \
+    && chown -R appuser:appgroup /app /var/opt/oet-learner /home/appuser
+
+ENV ASPNETCORE_ENVIRONMENT=Development \
+    ASPNETCORE_URLS=http://+:8080 \
+    DOTNET_EnableDiagnostics=1 \
+    DOTNET_USE_POLLING_FILE_WATCHER=1
+
+# Copy project files
+COPY backend/src/OetLearner.Api/OetLearner.Api.csproj backend/src/OetLearner.Api/
+COPY rulebooks/ rulebooks/
+COPY backend/scripts/ backend/scripts/
+
+# Restore dependencies
+RUN dotnet restore backend/src/OetLearner.Api/OetLearner.Api.csproj
+
+# Copy source code
+COPY backend/src/ backend/src/
+
+EXPOSE 8080
+
+# Use dotnet watch for hot reload on file changes
+CMD ["dotnet", "watch", "--project", "backend/src/OetLearner.Api/OetLearner.Api.csproj", "run"]

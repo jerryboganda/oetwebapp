@@ -57,7 +57,7 @@ x-learner-api-slot: &learner-api-slot
     Billing__CheckoutBaseUrl: ${CHECKOUT_BASE_URL}
     Storage__LocalRootPath: /var/opt/oet-learner/storage
     Storage__MaxUploadBytes: ${MAX_UPLOAD_BYTES:-1073741824}
-    Bootstrap__AutoMigrate: ${AUTO_MIGRATE:-true}
+    Bootstrap__AutoMigrate: ${AUTO_MIGRATE:-false}
     Bootstrap__SeedDemoData: ${SEED_DEMO_DATA:-false}
     # Writing-sample seeder (Data/Seeds/writing-samples.v1.json). Idempotent
     # - once papers exist they are not re-seeded. Keep enabled to allow

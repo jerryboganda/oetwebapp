@@ -571,7 +571,7 @@ else
 
 builder.Services.AddAuthorization(options =>
 {
-    options.AddPolicy("LearnerOnly", policy => policy.RequireAuthenticatedUser().RequireRole(ApplicationUserRoles.Learner, ApplicationUserRoles.Admin));
+    options.AddPolicy("LearnerOnly", policy => policy.RequireAuthenticatedUser().RequireRole(ApplicationUserRoles.Learner));
     options.AddPolicy("ExpertOnly", policy => policy
         .RequireAuthenticatedUser()
         .RequireRole(ApplicationUserRoles.Expert)
@@ -658,6 +658,9 @@ builder.Services.AddAuthorization(options =>
     options.AddPolicy("AdminFeatureFlags", policy => policy
         .RequireAuthenticatedUser().RequireRole("admin")
         .RequireAssertion(ctx => HasAdminPermission(ctx, "feature_flags", "system_admin")));
+    options.AddPolicy("AdminNotifications", policy => policy
+        .RequireAuthenticatedUser().RequireRole("admin")
+        .RequireAssertion(ctx => HasAdminPermission(ctx, "notifications", "system_admin")));
     options.AddPolicy("AdminAuditLogs", policy => policy
         .RequireAuthenticatedUser().RequireRole("admin")
         .RequireAssertion(ctx => HasAdminPermission(ctx, "audit_logs", "system_admin")));

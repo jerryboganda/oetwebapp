@@ -17,7 +17,7 @@ public static class SocialEndpoints
 
         certs.MapGet("/", async (HttpContext http, LearnerDbContext db, CancellationToken ct) =>
         {
-            var list = await db.Certificates.Where(c => c.UserId == http.UserId()).OrderByDescending(c => c.IssuedAt).ToListAsync(ct);
+            var list = await db.Certificates.Where(c => c.UserId == http.UserId()).OrderByDescending(c => c.IssuedAt).Take(200).ToListAsync(ct);
             return Results.Ok(list.Select(c => new { id = c.Id, type = c.Type, title = c.Title, description = c.Description, pdfUrl = c.PdfUrl, verificationCode = c.VerificationCode, issuedAt = c.IssuedAt }));
         });
 
@@ -57,7 +57,7 @@ public static class SocialEndpoints
         referrals.MapGet("/my-referrals", async (HttpContext http, LearnerDbContext db, CancellationToken ct) =>
         {
             var refs = await db.Referrals.Where(r => r.ReferrerUserId == http.UserId())
-                .OrderByDescending(r => r.CreatedAt).ToListAsync(ct);
+                .OrderByDescending(r => r.CreatedAt).Take(200).ToListAsync(ct);
             return Results.Ok(refs.Select(r => new { id = r.Id, referredEmail = r.ReferredEmail, status = r.Status, creditAmount = r.CreditAmount, createdAt = r.CreatedAt, convertedAt = r.ConvertedAt }));
         });
 
@@ -90,7 +90,7 @@ public static class SocialEndpoints
 
         bookings.MapGet("/", async (HttpContext http, LearnerDbContext db, CancellationToken ct) =>
         {
-            var list = await db.ExamBookings.Where(b => b.UserId == http.UserId()).OrderByDescending(b => b.ExamDate).ToListAsync(ct);
+            var list = await db.ExamBookings.Where(b => b.UserId == http.UserId()).OrderByDescending(b => b.ExamDate).Take(200).ToListAsync(ct);
             return Results.Ok(list.Select(b => new { id = b.Id, examTypeCode = b.ExamTypeCode, examDate = b.ExamDate, status = b.Status, testCenter = b.TestCenter, bookingReference = b.BookingReference, externalUrl = b.ExternalUrl, createdAt = b.CreatedAt }));
         });
 
@@ -127,7 +127,7 @@ public static class SocialEndpoints
 
         tutoring.MapGet("/sessions", async (HttpContext http, LearnerDbContext db, CancellationToken ct) =>
         {
-            var sessions = await db.TutoringSessions.Where(s => s.LearnerUserId == http.UserId()).OrderByDescending(s => s.ScheduledAt).ToListAsync(ct);
+            var sessions = await db.TutoringSessions.Where(s => s.LearnerUserId == http.UserId()).OrderByDescending(s => s.ScheduledAt).Take(200).ToListAsync(ct);
             return Results.Ok(sessions.Select(s => new { id = s.Id, expertUserId = s.ExpertUserId, examTypeCode = s.ExamTypeCode, subtestFocus = s.SubtestFocus, scheduledAt = s.ScheduledAt, durationMinutes = s.DurationMinutes, state = s.State, price = s.Price, learnerRating = s.LearnerRating }));
         });
 

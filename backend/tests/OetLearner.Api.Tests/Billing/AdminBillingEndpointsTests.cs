@@ -227,7 +227,7 @@ public sealed class AdminBillingEndpointsTests : IClassFixture<TestWebApplicatio
             await db.SaveChangesAsync();
         }
 
-        using var client = CreateClient(role: "admin", permissions: AdminPermissions.BillingRefundWrite);
+        using var client = CreateClient(role: "admin", permissions: AdminPermissions.BillingRead + "," + AdminPermissions.BillingRefundWrite);
         var idempotencyKey = $"refund-{Guid.NewGuid():N}";
         var firstBody = new
         {
@@ -258,7 +258,8 @@ public sealed class AdminBillingEndpointsTests : IClassFixture<TestWebApplicatio
         Assert.Single(refunds);
         Assert.Equal(50m, refunds[0].Amount);
 
-        var listResponse = await client.GetAsync($"/v1/admin/refunds?from={DateTimeOffset.UtcNow.AddDays(-1):o}");
+        var from = Uri.EscapeDataString(DateTimeOffset.UtcNow.AddDays(-1).ToString("o"));
+        var listResponse = await client.GetAsync($"/v1/admin/refunds?from={from}");
         listResponse.EnsureSuccessStatusCode();
         var listed = await listResponse.Content.ReadFromJsonAsync<List<RefundListView>>();
         Assert.Contains(listed!, r => r.PaymentTransactionId == sessionId);
@@ -289,6 +290,20 @@ public sealed class AdminBillingEndpointsTests : IClassFixture<TestWebApplicatio
         var json = await response.Content.ReadFromJsonAsync<JsonElement>();
         Assert.True(json.TryGetProperty("grossAmount", out _));
         Assert.True(json.TryGetProperty("netAmount", out _));
+    }
+
+    [Fact]
+    public async Task AnalyticsEndpoint_ReturnsFrontendContractShape()
+    {
+        using var client = CreateClient(role: "admin", permissions: AdminPermissions.BillingRead);
+        var response = await client.GetAsync("/v1/admin/billing/analytics?from=2026-01-01T00:00:00Z&to=2026-01-02T00:00:00Z");
+        response.EnsureSuccessStatusCode();
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.True(body.GetProperty("available").GetBoolean());
+        Assert.Equal("AUD", body.GetProperty("currency").GetString());
+        Assert.Equal(JsonValueKind.Array, body.GetProperty("mrr").ValueKind);
+        Assert.Equal(JsonValueKind.Array, body.GetProperty("churnRate").ValueKind);
+        Assert.Equal(JsonValueKind.Array, body.GetProperty("ltv").ValueKind);
     }
 
     [Fact]
@@ -332,7 +347,7 @@ public sealed class AdminBillingEndpointsTests : IClassFixture<TestWebApplicatio
     [Fact]
     public async Task StripeTaxCreate_Returns501NotImplemented_ForCountryOptions()
     {
-        using var client = CreateClient(role: "admin", permissions: AdminPermissions.BillingCatalogWrite);
+        using var client = CreateClient(role: "admin", permissions: AdminPermissions.BillingRead + "," + AdminPermissions.BillingCatalogWrite);
         var response = await client.PostAsJsonAsync("/v1/admin/billing/stripe-tax/registrations", new
         {
             country = "US",

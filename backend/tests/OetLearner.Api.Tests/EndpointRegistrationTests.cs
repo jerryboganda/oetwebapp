@@ -23,8 +23,10 @@ public class EndpointRegistrationTests : IClassFixture<TestWebApplicationFactory
         new("/v1/admin/imports/real-content-folder/stage", "POST", "AdminContentWrite", "PerUserWrite"),
         new("/v1/admin/result-templates", "POST", "AdminContentWrite", "PerUserWrite"),
         new("/v1/admin/rulebooks/{id}/reference-pdf", "POST", "AdminContentWrite", "PerUserWrite"),
+        new("/v1/admin/speaking/role-play-cards/import", "POST", "AdminContentWrite", "PerUserWrite"),
         new("/v1/admin/speaking/shared-resources", "POST", "AdminContentWrite", "PerUserWrite"),
         new("/v1/speaking/drills/attempts/{aid}/recordings", "POST", "LearnerOnly", "PerUserWrite"),
+        new("/v1/writing/ocr/upload", "POST", "LearnerOnly", "writing-ocr-free"),
     ];
 
     public EndpointRegistrationTests(TestWebApplicationFactory factory)
@@ -48,9 +50,21 @@ public class EndpointRegistrationTests : IClassFixture<TestWebApplicationFactory
     [InlineData("/v1/admin/reading/analytics")]
     [InlineData("/v1/admin/writing/analytics/rule-violations")]
     [InlineData("/v1/admin/writing/analytics/rule-violations/{attemptId}")]
+    [InlineData("/v1/cart")]
+    [InlineData("/v1/cart/items")]
+    [InlineData("/v1/checkout/sessions")]
+    [InlineData("/v1/subscriptions/me")]
+    [InlineData("/v1/subscriptions/me/portal-session")]
+    [InlineData("/v1/promo-codes/validate")]
+    [InlineData("/v1/listening-pathway/lessons")]
+    [InlineData("/v1/listening-pathway/lessons/{slug}")]
+    [InlineData("/v1/listening-pathway/strategies")]
+    [InlineData("/v1/listening-pathway/strategies/{slug}")]
+    [InlineData("/v1/listening-pathway/mocks/sessions/{sessionId:guid}/results")]
     [InlineData("/v1/writing/attempts/{attemptId}/pdf")]
     [InlineData("/v1/mocks/attempts/{mockAttemptId}/sections/writing/pdf")]
     [InlineData("/v1/speaking/evaluations/{evaluationId}/pdf")]
+    [InlineData("/v1/ai-assistant/hub/negotiate")]
     public void Program_RegistersFeatureRoutes(string routePattern)
     {
         using var client = _factory.CreateClient();

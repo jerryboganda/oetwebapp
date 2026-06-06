@@ -9,6 +9,20 @@ namespace OetLearner.Api.Endpoints;
 
 public static class CommunityEndpoints
 {
+    private const int MaxForumBodyLength = 20_000;
+    private const int MaxForumTitleLength = 256;
+
+    // DataAnnotations are not enforced on minimal-API DTOs in this project, so
+    // forum text is bounded explicitly here. Without this a learner could
+    // persist ~25 MB posts (capped only by the request-body limit).
+    private static void ValidateForumText(string? value, int maxLength, string field)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            throw ApiException.Validation($"community_{field}_required", $"A {field} is required.");
+        if (value.Length > maxLength)
+            throw ApiException.Validation($"community_{field}_too_long", $"The {field} must be {maxLength} characters or fewer.");
+    }
+
     public static IEndpointRouteBuilder MapCommunityEndpoints(this IEndpointRouteBuilder app)
     {
         var v1 = app.MapGroup("/v1").RequireAuthorization("LearnerOnly");
@@ -35,10 +49,12 @@ public static class CommunityEndpoints
         {
             var query = db.ForumThreads.AsQueryable();
             if (!string.IsNullOrEmpty(categoryId)) query = query.Where(t => t.CategoryId == categoryId);
+            var ps = Math.Clamp(pageSize <= 0 ? 20 : pageSize, 1, 100);
+            var pg = page <= 0 ? 1 : page;
             var total = await query.CountAsync(ct);
             var threads = await query.OrderByDescending(t => t.IsPinned).ThenByDescending(t => t.LastActivityAt)
-                .Skip(((page <= 0 ? 1 : page) - 1) * (pageSize <= 0 ? 20 : pageSize))
-                .Take(pageSize <= 0 ? 20 : pageSize)
+                .Skip((pg - 1) * ps)
+                .Take(ps)
                 .ToListAsync(ct);
             return Results.Ok(new { total, threads = threads.Select(t => new { id = t.Id, categoryId = t.CategoryId, title = t.Title, authorDisplayName = t.AuthorDisplayName, authorRole = t.AuthorRole, isPinned = t.IsPinned, isLocked = t.IsLocked, replyCount = t.ReplyCount, viewCount = t.ViewCount, likeCount = t.LikeCount, createdAt = t.CreatedAt, lastActivityAt = t.LastActivityAt }) });
         });
@@ -54,6 +70,8 @@ public static class CommunityEndpoints
 
         community.MapPost("/threads", async (HttpContext http, CreateCommunityThreadRequest req, LearnerDbContext db, CancellationToken ct) =>
         {
+            ValidateForumText(req.Title, MaxForumTitleLength, "title");
+            ValidateForumText(req.Body, MaxForumBodyLength, "body");
             var user = await db.Users.FindAsync([http.UserId()], ct);
             var thread = new ForumThread
             {
@@ -70,7 +88,7 @@ public static class CommunityEndpoints
             db.ForumThreads.Add(thread);
             await db.SaveChangesAsync(ct);
             return Results.Ok(new { id = thread.Id });
-        });
+        }).RequireRateLimiting("PerUserWrite");
 
         // ── Forum replies ────────────────────────────────────────────────
         community.MapGet("/threads/{threadId}/replies", async (
@@ -79,7 +97,7 @@ public static class CommunityEndpoints
             [FromQuery] int pageSize,
             LearnerDbContext db, CancellationToken ct) =>
         {
-            var ps = pageSize <= 0 ? 20 : pageSize;
+            var ps = Math.Clamp(pageSize <= 0 ? 20 : pageSize, 1, 100);
             var pg = page <= 0 ? 1 : page;
             var total = await db.ForumReplies.CountAsync(r => r.ThreadId == threadId, ct);
             var replies = await db.ForumReplies.Where(r => r.ThreadId == threadId)
@@ -92,6 +110,7 @@ public static class CommunityEndpoints
             var thread = await db.ForumThreads.FindAsync([threadId], ct);
             if (thread == null) return Results.NotFound(new { error = "THREAD_NOT_FOUND" });
             if (thread.IsLocked) return Results.Json(new { error = "THREAD_LOCKED" }, statusCode: 403);
+            ValidateForumText(req.Body, MaxForumBodyLength, "body");
 
             var user = await db.Users.FindAsync([http.UserId()], ct);
             var reply = new ForumReply
@@ -109,7 +128,7 @@ public static class CommunityEndpoints
             thread.LastActivityAt = DateTimeOffset.UtcNow;
             await db.SaveChangesAsync(ct);
             return Results.Ok(new { id = reply.Id });
-        });
+        }).RequireRateLimiting("PerUserWrite");
 
         // ── Study groups ─────────────────────────────────────────────────
         community.MapGet("/study-groups", async (
