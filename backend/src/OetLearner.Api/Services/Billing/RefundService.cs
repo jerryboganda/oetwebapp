@@ -188,12 +188,9 @@ public sealed class RefundService
         }
         catch
         {
-            if (!Idempotent)
-            {
-                refund.Status = "failed";
-                refund.UpdatedAt = DateTimeOffset.UtcNow;
-                await _db.SaveChangesAsync(ct);
-            }
+            refund.Status = "pending";
+            refund.UpdatedAt = DateTimeOffset.UtcNow;
+            await _db.SaveChangesAsync(ct);
 
             throw;
         }

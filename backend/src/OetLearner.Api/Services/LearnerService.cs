@@ -1451,47 +1451,48 @@ public partial class LearnerService(
     {
         await EnsureUserAsync(userId, cancellationToken);
         var pageSize = CursorPagination.NormalizeLimit(limit);
-        var hasCursor = CursorPagination.TryDecode(cursor, out var decoded);
+        if (IsSqliteProvider(db))
+        {
+            return await BuildSubmissionsResponseAsync(
+                await GetSubmissionsSqlitePageAsync(userId, cursor, pageSize, cancellationToken),
+                pageSize,
+                cancellationToken);
+        }
 
-        List<Attempt> page;
-        if (db.Database.IsSqlite())
+        var query = db.Attempts
+            .AsNoTracking()
+            .Where(x => x.UserId == userId);
+
+        if (CursorPagination.TryDecode(cursor, out var decoded))
         {
-            // SQLite (test DB) cannot ORDER BY / compare DateTimeOffset in SQL, so the cursor
-            // window and ordering are evaluated client-side here. Postgres (prod) uses the
-            // DB-side query below. Mirrors AuthService.HasActiveLearnerSubscriptionAsync.
-            IEnumerable<Attempt> ordered = (await db.Attempts
-                    .AsNoTracking()
-                    .Where(x => x.UserId == userId)
-                    .ToListAsync(cancellationToken))
-                .OrderByDescending(x => x.SubmittedAt ?? x.StartedAt)
-                .ThenByDescending(x => x.Id, StringComparer.Ordinal);
-            if (hasCursor)
-            {
-                ordered = ordered.Where(x =>
-                {
-                    var ts = x.SubmittedAt ?? x.StartedAt;
-                    if (ts < decoded.Timestamp) return true;
-                    if (ts == decoded.Timestamp) return string.CompareOrdinal(x.Id, decoded.Id) < 0;
-                    return false;
-                });
-            }
-            page = ordered.Take(pageSize + 1).ToList();
+            query = query.Where(x =>
+                (x.SubmittedAt ?? x.StartedAt) < decoded.Timestamp
+                || ((x.SubmittedAt ?? x.StartedAt) == decoded.Timestamp && x.Id.CompareTo(decoded.Id) < 0));
         }
-        else
-        {
-            var query = db.Attempts
-                .AsNoTracking()
-                .Where(x => x.UserId == userId);
-            if (hasCursor)
-            {
-                query = query.Where(x => (x.SubmittedAt ?? x.StartedAt) < decoded.Timestamp);
-            }
-            page = await query
-                .OrderByDescending(x => x.SubmittedAt ?? x.StartedAt)
-                .ThenByDescending(x => x.Id)
-                .Take(pageSize + 1)
-                .ToListAsync(cancellationToken);
-        }
+
+        var page = await query
+            .OrderByDescending(x => x.SubmittedAt ?? x.StartedAt)
+            .ThenByDescending(x => x.Id)
+            .Take(pageSize + 1)
+            .Select(x => new AttemptSubmissionRow(
+                x.Id,
+                x.ContentId,
+                x.SubtestCode,
+                x.State,
+                x.StartedAt,
+                x.SubmittedAt,
+                x.AnalysisJson,
+                x.ComparisonGroupId))
+            .ToListAsync(cancellationToken);
+
+        return await BuildSubmissionsResponseAsync(page, pageSize, cancellationToken);
+    }
+
+    private async Task<object> BuildSubmissionsResponseAsync(
+        List<AttemptSubmissionRow> page,
+        int pageSize,
+        CancellationToken cancellationToken)
+    {
         var hasMore = page.Count > pageSize;
         var pageAttempts = hasMore ? page.Take(pageSize).ToList() : page;
         var attemptIds = pageAttempts.Select(x => x.Id).ToArray();
@@ -1506,17 +1507,15 @@ public partial class LearnerService(
                 .AsNoTracking()
                 .Where(x => attemptIds.Contains(x.AttemptId))
                 .ToListAsync(cancellationToken))
-            .OrderByDescending(x => x.GeneratedAt)
             .GroupBy(x => x.AttemptId)
-            .ToDictionary(x => x.Key, x => x.First());
+            .ToDictionary(x => x.Key, x => x.OrderByDescending(evaluation => evaluation.GeneratedAt).First());
 
         var reviewsByAttemptId = (await db.ReviewRequests
                 .AsNoTracking()
                 .Where(x => attemptIds.Contains(x.AttemptId))
                 .ToListAsync(cancellationToken))
-            .OrderByDescending(x => x.CreatedAt)
             .GroupBy(x => x.AttemptId)
-            .ToDictionary(x => x.Key, x => x.First());
+            .ToDictionary(x => x.Key, x => x.OrderByDescending(review => review.CreatedAt).First());
 
         var completedReviewIds = reviewsByAttemptId.Values
             .Where(x => x.State == ReviewRequestState.Completed)
@@ -1543,7 +1542,7 @@ public partial class LearnerService(
                 ? count
                 : 0;
             var canRequestReview = attempt.State == AttemptState.Completed && attempt.SubtestCode is "writing" or "speaking";
-            var metadata = ReadWritingSubmissionMetadata(attempt);
+            var metadata = ReadWritingSubmissionMetadata(attempt.SubtestCode, attempt.AnalysisJson);
             items.Add(new
             {
                 submissionId = attempt.Id,
@@ -1581,16 +1580,76 @@ public partial class LearnerService(
         return new { items, nextCursor };
     }
 
-    private static (string ExamMode, string AssessorType) ReadWritingSubmissionMetadata(Attempt attempt)
+    private sealed record AttemptSubmissionRow(
+        string Id,
+        string ContentId,
+        string SubtestCode,
+        AttemptState State,
+        DateTimeOffset StartedAt,
+        DateTimeOffset? SubmittedAt,
+        string AnalysisJson,
+        string? ComparisonGroupId);
+
+    private async Task<List<AttemptSubmissionRow>> GetSubmissionsSqlitePageAsync(
+        string userId,
+        string? cursor,
+        int pageSize,
+        CancellationToken cancellationToken)
     {
-        if (!string.Equals(attempt.SubtestCode, "writing", StringComparison.OrdinalIgnoreCase))
+        IQueryable<Attempt> query;
+        if (CursorPagination.TryDecode(cursor, out var decoded))
+        {
+            query = db.Attempts.FromSqlInterpolated($@"
+                SELECT *
+                FROM ""Attempts""
+                WHERE ""UserId"" = {userId}
+                  AND (
+                    COALESCE(""SubmittedAt"", ""StartedAt"") < {decoded.Timestamp}
+                    OR (COALESCE(""SubmittedAt"", ""StartedAt"") = {decoded.Timestamp} AND ""Id"" < {decoded.Id})
+                  )
+                ORDER BY COALESCE(""SubmittedAt"", ""StartedAt"") DESC, ""Id"" DESC
+                LIMIT {pageSize + 1}");
+        }
+        else
+        {
+            query = db.Attempts.FromSqlInterpolated($@"
+                SELECT *
+                FROM ""Attempts""
+                WHERE ""UserId"" = {userId}
+                ORDER BY COALESCE(""SubmittedAt"", ""StartedAt"") DESC, ""Id"" DESC
+                LIMIT {pageSize + 1}");
+        }
+
+        return await query
+            .AsNoTracking()
+            .Select(x => new AttemptSubmissionRow(
+                x.Id,
+                x.ContentId,
+                x.SubtestCode,
+                x.State,
+                x.StartedAt,
+                x.SubmittedAt,
+                x.AnalysisJson,
+                x.ComparisonGroupId))
+            .ToListAsync(cancellationToken);
+    }
+
+    private static bool IsSqliteProvider(LearnerDbContext context)
+        => context.Database.ProviderName?.Contains("Sqlite", StringComparison.OrdinalIgnoreCase) == true;
+
+    private static (string ExamMode, string AssessorType) ReadWritingSubmissionMetadata(Attempt attempt)
+        => ReadWritingSubmissionMetadata(attempt.SubtestCode, attempt.AnalysisJson);
+
+    private static (string ExamMode, string AssessorType) ReadWritingSubmissionMetadata(string subtestCode, string? analysisJson)
+    {
+        if (!string.Equals(subtestCode, "writing", StringComparison.OrdinalIgnoreCase))
         {
             return ("computer", "ai");
         }
 
         try
         {
-            using var doc = JsonDocument.Parse(attempt.AnalysisJson ?? "{}");
+            using var doc = JsonDocument.Parse(analysisJson ?? "{}");
             if (doc.RootElement.TryGetProperty("writingSubmission", out var submission)
                 && submission.ValueKind == JsonValueKind.Object)
             {

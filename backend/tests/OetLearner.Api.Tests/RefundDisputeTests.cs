@@ -213,6 +213,38 @@ public class RefundDisputeTests
     }
 
     [Fact]
+    public async Task GatewayException_KeepsRefundPendingAndReplayableWithoutAllowingSecondKey()
+    {
+        var gateway = new ScriptedRefundGateway(
+            new InvalidOperationException("gateway timeout after request accepted"),
+            new RefundResult("re-timeout-replay", "succeeded", 100m));
+        var (db, refundService, _) = Build(new SingleGatewayProvider(gateway));
+        await SeedCompletedSubscriptionPaymentAsync(db, "u-timeout", "tx_timeout_refund", 100m, includedCredits: 20);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => refundService.IssueRefundAsync(
+            new RefundRequest("tx_timeout_refund", 100m, "requested_by_customer", "idem-timeout"),
+            default));
+
+        var pending = await db.OrderRefunds.SingleAsync();
+        Assert.Equal("pending", pending.Status);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => refundService.IssueRefundAsync(
+            new RefundRequest("tx_timeout_refund", 100m, "requested_by_customer", "idem-second-key"),
+            default));
+
+        var replay = await refundService.IssueRefundAsync(
+            new RefundRequest("tx_timeout_refund", 100m, "requested_by_customer", "idem-timeout"),
+            default);
+
+        Assert.True(replay.Idempotent);
+        Assert.Equal("succeeded", replay.Status);
+        Assert.True(replay.ReversedWalletCredits);
+        Assert.True(replay.ReversedEntitlements);
+        Assert.Equal(new[] { "idem-timeout", "idem-timeout" }, gateway.IdempotencyKeys);
+        Assert.Equal(1, await db.OrderRefunds.CountAsync());
+    }
+
+    [Fact]
     public async Task FullRefund_ReversesAiPackageCreditsAndLedgerBalance()
     {
         var (db, refundService, _) = Build();
@@ -411,9 +443,9 @@ public class RefundDisputeTests
         public IReadOnlyList<string> SupportedGateways { get; } = ["stripe"];
     }
 
-    private sealed class ScriptedRefundGateway(params RefundResult[] refundResults) : IPaymentGateway
+    private sealed class ScriptedRefundGateway(params object[] refundResults) : IPaymentGateway
     {
-        private readonly Queue<RefundResult> _refundResults = new(refundResults);
+        private readonly Queue<object> _refundResults = new(refundResults);
         private readonly List<string> _idempotencyKeys = [];
 
         public string GatewayName => "stripe";
@@ -435,7 +467,13 @@ public class RefundDisputeTests
             CancellationToken ct)
         {
             _idempotencyKeys.Add(idempotencyKey);
-            return Task.FromResult(_refundResults.Dequeue());
+            var next = _refundResults.Dequeue();
+            if (next is Exception exception)
+            {
+                return Task.FromException<RefundResult>(exception);
+            }
+
+            return Task.FromResult((RefundResult)next);
         }
     }
 }

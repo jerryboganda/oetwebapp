@@ -1,0 +1,36 @@
+name: Backend Security Remediation Validation
+
+on:
+  push:
+    branches:
+      - fix/backend-security-remediation
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: backend-security-remediation-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend-focused:
+    name: Backend focused xUnit
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - name: Restore backend tests
+        run: dotnet restore backend/tests/OetLearner.Api.Tests/OetLearner.Api.Tests.csproj
+      - name: Run focused remediation tests
+        run: >
+          dotnet test backend/tests/OetLearner.Api.Tests/OetLearner.Api.Tests.csproj
+          --no-restore
+          -p:RunAnalyzers=false
+          -p:UseAppHost=false
+          --logger "console;verbosity=normal"
+          --filter "FullyQualifiedName~RefundDisputeTests|FullyQualifiedName~LearnerSubmissionsPaginationTests.GetSubmissionsAsync_UsesDatabaseCursorPageAndBatchLoadsRelatedRows"

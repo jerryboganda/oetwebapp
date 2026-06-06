@@ -1,4 +1,5 @@
 using System.Data.Common;
+using System.Text.Json;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
@@ -42,8 +43,30 @@ public sealed class LearnerSubmissionsPaginationTests : IAsyncLifetime
         var service = CreateLearnerService(db);
         _sql.Commands.Clear();
 
-        await service.GetSubmissionsAsync("learner-submissions", cursor: null, limit: 3, CancellationToken.None);
+        var firstPage = JsonSerializer.SerializeToElement(await service.GetSubmissionsAsync(
+            "learner-submissions",
+            cursor: null,
+            limit: 3,
+            CancellationToken.None));
 
+        AssertSubmissionPage(firstPage, expectedIds: ["attempt-00", "attempt-01", "attempt-02"], expectNextCursor: true);
+        AssertSqlSidePageAndBatchLoad();
+
+        var nextCursor = firstPage.GetProperty("nextCursor").GetString();
+        _sql.Commands.Clear();
+
+        var secondPage = JsonSerializer.SerializeToElement(await service.GetSubmissionsAsync(
+            "learner-submissions",
+            cursor: nextCursor,
+            limit: 3,
+            CancellationToken.None));
+
+        AssertSubmissionPage(secondPage, expectedIds: ["attempt-03", "attempt-04", "attempt-05"], expectNextCursor: true);
+        AssertSqlSidePageAndBatchLoad();
+    }
+
+    private void AssertSqlSidePageAndBatchLoad()
+    {
         var attemptQueries = _sql.Commands
             .Where(command => command.Contains("Attempts", StringComparison.OrdinalIgnoreCase)
                               && command.Contains("SELECT", StringComparison.OrdinalIgnoreCase))
@@ -52,6 +75,15 @@ public sealed class LearnerSubmissionsPaginationTests : IAsyncLifetime
         Assert.DoesNotContain(attemptQueries, command => command.Contains("SELECT \"a\".", StringComparison.OrdinalIgnoreCase)
                                                         && !command.Contains("LIMIT", StringComparison.OrdinalIgnoreCase));
         Assert.True(_sql.Commands.Count <= 6, string.Join("\n---\n", _sql.Commands));
+    }
+
+    private static void AssertSubmissionPage(JsonElement page, string[] expectedIds, bool expectNextCursor)
+    {
+        var items = page.GetProperty("items").EnumerateArray().ToArray();
+        Assert.Equal(expectedIds.Length, items.Length);
+        Assert.Equal(expectedIds, items.Select(item => item.GetProperty("submissionId").GetString()).ToArray());
+        Assert.All(items, item => Assert.Equal(1, item.GetProperty("voiceNoteCount").GetInt32()));
+        Assert.Equal(expectNextCursor, page.GetProperty("nextCursor").ValueKind == JsonValueKind.String);
     }
 
     private static async Task SeedSubmissionsAsync(LearnerDbContext db, string userId)
