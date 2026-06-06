@@ -90,6 +90,7 @@ public static class PrivateSpeakingEndpoints
                 userId, req.TutorProfileId,
                 req.SessionStartUtc, req.DurationMinutes,
                 req.LearnerTimezone, req.LearnerNotes,
+                req.ProfessionTrack,
                 req.IdempotencyKey, ct);
 
             if (!result.Success)
@@ -282,6 +283,27 @@ public static class PrivateSpeakingEndpoints
                 : Results.BadRequest(new { error });
         });
 
+        expert.MapPost("/sessions/{bookingId}/mark-no-show", async (
+            HttpContext http,
+            string bookingId,
+            PrivateSpeakingService svc,
+            CancellationToken ct) =>
+        {
+            // Verify this expert owns the session via their tutor profile.
+            var profile = await svc.GetTutorProfileByExpertIdAsync(http.UserId(), ct);
+            if (profile is null) return Results.NotFound(new { error = "NO_PROFILE" });
+
+            var booking = await svc.GetBookingAsync(bookingId, ct);
+            if (booking is null || booking.TutorProfileId != profile.Id)
+                return Results.NotFound(new { error = "NOT_FOUND" });
+
+            var (success, error) = await svc.MarkNoShowAsync(
+                bookingId, http.UserId(), "expert", ct);
+            return success
+                ? Results.Ok(new { noShow = true })
+                : Results.BadRequest(new { error });
+        });
+
         expert.MapPost("/sessions/{bookingId}/join-token", async (
             HttpContext http,
             string bookingId,
@@ -382,6 +404,39 @@ public static class PrivateSpeakingEndpoints
                 rule.Id, rule.DayOfWeek, rule.StartTime, rule.EndTime,
                 rule.EffectiveFrom, rule.EffectiveTo, rule.IsActive
             });
+        });
+
+        expert.MapPut("/availability/{ruleId}", async (
+            HttpContext http,
+            string ruleId,
+            UpdateAvailabilityRuleRequest req,
+            PrivateSpeakingService svc,
+            LearnerDbContext db,
+            CancellationToken ct) =>
+        {
+            var profile = await svc.GetTutorProfileByExpertIdAsync(http.UserId(), ct);
+            if (profile is null) return Results.NotFound(new { error = "NO_PROFILE" });
+
+            // Verify the rule belongs to this expert's tutor profile.
+            var owned = await db.PrivateSpeakingAvailabilityRules
+                .AnyAsync(r => r.Id == ruleId && r.TutorProfileId == profile.Id, ct);
+            if (!owned) return Results.NotFound(new { error = "NOT_FOUND" });
+
+            try
+            {
+                var rule = await svc.UpdateAvailabilityRuleAsync(
+                    ruleId, req.DayOfWeek, req.StartTime, req.EndTime,
+                    req.EffectiveFrom, req.EffectiveTo, req.IsActive, http.UserId(), ct);
+                return Results.Ok(new
+                {
+                    rule.Id, rule.DayOfWeek, rule.StartTime, rule.EndTime,
+                    rule.EffectiveFrom, rule.EffectiveTo, rule.IsActive
+                });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Results.BadRequest(new { error = ex.Message });
+            }
         });
 
         expert.MapDelete("/availability/{ruleId}", async (
@@ -548,6 +603,26 @@ public static class PrivateSpeakingEndpoints
             return Results.Ok(rule);
         }).WithAdminWrite("AdminReviewOps");
 
+        admin.MapPut("/tutors/{profileId}/availability/{ruleId}", async (
+            HttpContext http,
+            string profileId, string ruleId,
+            UpdateAvailabilityRuleRequest req,
+            PrivateSpeakingService svc,
+            CancellationToken ct) =>
+        {
+            try
+            {
+                var rule = await svc.UpdateAvailabilityRuleAsync(
+                    ruleId, req.DayOfWeek, req.StartTime, req.EndTime,
+                    req.EffectiveFrom, req.EffectiveTo, req.IsActive, http.UserId(), ct);
+                return Results.Ok(rule);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Results.BadRequest(new { error = ex.Message });
+            }
+        }).WithAdminWrite("AdminReviewOps");
+
         admin.MapDelete("/tutors/{profileId}/availability/{ruleId}", async (
             HttpContext http,
             string profileId, string ruleId,
@@ -641,6 +716,23 @@ public static class PrivateSpeakingEndpoints
             });
         }).WithAdminRead("AdminReviewOps");
 
+        admin.MapGet("/bookings/export", async (
+            [FromQuery] string? tutorProfileId,
+            [FromQuery] string? status,
+            [FromQuery] string? learnerId,
+            [FromQuery] string? from,
+            [FromQuery] string? to,
+            PrivateSpeakingService svc,
+            CancellationToken ct) =>
+        {
+            DateOnly? fromDate = from is not null ? DateOnly.Parse(from) : null;
+            DateOnly? toDate = to is not null ? DateOnly.Parse(to) : null;
+
+            var csv = await svc.ExportBookingsCsvAsync(
+                tutorProfileId, status, learnerId, fromDate, toDate, ct);
+            return Results.File(Encoding.UTF8.GetBytes(csv), "text/csv", "speaking-bookings.csv");
+        }).WithAdminRead("AdminReviewOps");
+
         admin.MapGet("/bookings/{bookingId}", async (
             string bookingId, PrivateSpeakingService svc, CancellationToken ct) =>
         {
@@ -649,6 +741,22 @@ public static class PrivateSpeakingEndpoints
                 ? Results.NotFound(new { error = "NOT_FOUND" })
                 : Results.Ok(MapAdminBookingDetailResponse(booking));
         }).WithAdminRead("AdminReviewOps");
+
+        admin.MapPut("/bookings/{bookingId}", async (
+            HttpContext http,
+            string bookingId,
+            AdminEditBookingRequest req,
+            PrivateSpeakingService svc,
+            CancellationToken ct) =>
+        {
+            var booking = await svc.AdminEditBookingAsync(
+                bookingId, http.UserId(),
+                req.SessionStartUtc, req.DurationMinutes,
+                req.ProfessionTrack, req.TutorNotes, ct);
+            return booking is null
+                ? Results.NotFound(new { error = "NOT_FOUND" })
+                : Results.Ok(MapAdminBookingDetailResponse(booking));
+        }).WithAdminWrite("AdminReviewOps");
 
         admin.MapPost("/bookings/{bookingId}/cancel", async (
             HttpContext http,
@@ -686,6 +794,47 @@ public static class PrivateSpeakingEndpoints
             {
                 return Results.BadRequest(new { error = ex.Message });
             }
+        }).WithAdminWrite("AdminReviewOps");
+
+        admin.MapPost("/bookings/{bookingId}/override-refund", async (
+            HttpContext http,
+            string bookingId,
+            OverrideRefundRequest? req,
+            PrivateSpeakingService svc,
+            CancellationToken ct) =>
+        {
+            var (success, error) = await svc.OverrideRefundAsync(
+                bookingId, http.UserId(), req?.AmountMinorUnits, req?.Reason, ct);
+            return success
+                ? Results.Ok(new { refunded = true })
+                : Results.BadRequest(new { error });
+        }).WithAdminWrite("AdminReviewOps");
+
+        admin.MapPost("/bookings/{bookingId}/manual-reschedule", async (
+            HttpContext http,
+            string bookingId,
+            AdminManualRescheduleRequest req,
+            PrivateSpeakingService svc,
+            CancellationToken ct) =>
+        {
+            var (success, error) = await svc.AdminManualRescheduleAsync(
+                bookingId, http.UserId(), req.NewSessionStartUtc, req.Reason, ct);
+            return success
+                ? Results.Ok(new { rescheduled = true })
+                : Results.BadRequest(new { error });
+        }).WithAdminWrite("AdminReviewOps");
+
+        admin.MapPost("/bookings/{bookingId}/mark-no-show", async (
+            HttpContext http,
+            string bookingId,
+            PrivateSpeakingService svc,
+            CancellationToken ct) =>
+        {
+            var (success, error) = await svc.MarkNoShowAsync(
+                bookingId, http.UserId(), "admin", ct);
+            return success
+                ? Results.Ok(new { noShow = true })
+                : Results.BadRequest(new { error });
         }).WithAdminWrite("AdminReviewOps");
 
         // Audit logs
@@ -870,7 +1019,8 @@ public record CreatePrivateSpeakingBookingRequest(
     int DurationMinutes,
     string LearnerTimezone,
     string? LearnerNotes,
-    string IdempotencyKey);
+    string IdempotencyKey,
+    string? ProfessionTrack = null);
 
 public record CancelBookingRequest(string? Reason);
 
@@ -922,6 +1072,28 @@ public record CreateAvailabilityRuleRequest(
     string EndTime,
     DateOnly? EffectiveFrom,
     DateOnly? EffectiveTo);
+
+public record UpdateAvailabilityRuleRequest(
+    int DayOfWeek,
+    string StartTime,
+    string EndTime,
+    DateOnly? EffectiveFrom,
+    DateOnly? EffectiveTo,
+    bool IsActive);
+
+public record OverrideRefundRequest(
+    int? AmountMinorUnits,
+    string? Reason);
+
+public record AdminManualRescheduleRequest(
+    DateTimeOffset NewSessionStartUtc,
+    string? Reason);
+
+public record AdminEditBookingRequest(
+    DateTimeOffset? SessionStartUtc,
+    int? DurationMinutes,
+    string? ProfessionTrack,
+    string? TutorNotes);
 
 public record CreateOverrideRequest(
     DateOnly Date,
