@@ -151,6 +151,7 @@ public enum JobType
     PrivateSpeakingCalendarSync,         // Sync connected tutor Google Calendar event
     PrivateSpeakingReminder,             // Session reminder notifications
     PrivateSpeakingReservationExpiry,     // Expire unpaid reservations
+    PrivateSpeakingNoShowSweep,          // Detect/mark no-shows from Zoom attendance data
 
     // ── Subscription Lifecycle & Engagement ──
     SubscriptionLifecycleCheck,          // Check upcoming renewals, expiries, past-due
