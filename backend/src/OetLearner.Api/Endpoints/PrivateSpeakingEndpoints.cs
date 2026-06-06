@@ -163,7 +163,9 @@ public static class PrivateSpeakingEndpoints
                 {
                     result.BookingId,
                     result.EntitlementUsed,
-                    result.SpeakingSessionsRemaining
+                    result.SpeakingSessionsRemaining,
+                    result.CheckoutSessionId,
+                    result.CheckoutUrl
                 })
                 : Results.BadRequest(new { error = result.Error });
         });

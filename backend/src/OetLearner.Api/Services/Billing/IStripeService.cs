@@ -11,6 +11,19 @@ public interface IStripeService
     /// <summary>Create a Stripe Checkout Session and return (sessionId, url).</summary>
     Task<(string SessionId, string Url)> CreateCheckoutSessionAsync(CreateCheckoutSessionRequest request, CancellationToken ct = default);
 
+    /// <summary>
+    /// Create a one-off (ad-hoc) variable-amount Stripe Checkout Session in "payment"
+    /// mode using inline price_data, and return (sessionId, url). Unlike
+    /// <see cref="CreateCheckoutSessionAsync"/> this does not require a pre-made
+    /// Stripe Price; the amount is supplied directly. Used for same-day reschedule
+    /// penalties where the charge is computed at runtime.
+    /// </summary>
+    Task<(string SessionId, string Url)> CreateAdHocPaymentCheckoutSessionAsync(
+        string stripeCustomerId, string userId, string userEmail,
+        string currency, long amountMinorUnits, string productName,
+        string successUrl, string cancelUrl, string? idempotencyKey,
+        IReadOnlyDictionary<string, string>? metadata = null, CancellationToken ct = default);
+
     /// <summary>Retrieve a Stripe Checkout Session by ID.</summary>
     Task<Session> RetrieveCheckoutSessionAsync(string sessionId, CancellationToken ct = default);
 

@@ -296,6 +296,10 @@ public sealed class PrivateSpeakingCancellationTests
             environment: null!,
             logger: NullLogger<NotificationService>.Instance);
 
+        var platformLinks = new PlatformLinkService(
+            Options.Create(new PlatformOptions()),
+            Options.Create(new BillingOptions()));
+
         return new PrivateSpeakingService(
             db,
             notificationService,
@@ -303,6 +307,7 @@ public sealed class PrivateSpeakingCancellationTests
             calendarService: null!,
             entitlementResolver: null!,
             stripeService: stripe,
+            platformLinks: platformLinks,
             timeProvider: new FixedTimeProvider(Now),
             logger: NullLogger<PrivateSpeakingService>.Instance);
     }
@@ -333,6 +338,11 @@ public sealed class PrivateSpeakingCancellationTests
         public Task<string> EnsureCustomerAsync(string userId, string email, CancellationToken ct = default)
             => throw new NotImplementedException();
         public Task<(string SessionId, string Url)> CreateCheckoutSessionAsync(CreateCheckoutSessionRequest request, CancellationToken ct = default)
+            => throw new NotImplementedException();
+        public Task<(string SessionId, string Url)> CreateAdHocPaymentCheckoutSessionAsync(
+            string stripeCustomerId, string userId, string userEmail, string currency, long amountMinorUnits,
+            string productName, string successUrl, string cancelUrl, string? idempotencyKey,
+            IReadOnlyDictionary<string, string>? metadata = null, CancellationToken ct = default)
             => throw new NotImplementedException();
         public Task<Stripe.Checkout.Session> RetrieveCheckoutSessionAsync(string sessionId, CancellationToken ct = default)
             => throw new NotImplementedException();
