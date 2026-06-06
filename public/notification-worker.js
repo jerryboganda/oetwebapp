@@ -16,8 +16,8 @@ self.addEventListener('push', (event) => {
   const title = payload.title || 'OET Prep notification';
   const options = {
     body: payload.body || '',
-    icon: '/icon.svg',
-    badge: '/icon.svg',
+    icon: '/icon-192.png',
+    badge: '/icon-192.png',
     data: {
       actionUrl: payload.actionUrl || '/',
       notificationId: payload.notificationId || null,

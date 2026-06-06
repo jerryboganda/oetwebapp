@@ -19,7 +19,7 @@ const APP_SHELL_URLS = [
   '/',
   '/dashboard',
   '/manifest.json',
-  '/icon.svg',
+  '/icon-192.png',
 ];
 
 const STATIC_EXTENSIONS = /\.(js|css|woff2?|ttf|eot|svg|png|jpg|jpeg|webp|ico|json)$/i;
@@ -199,8 +199,8 @@ self.addEventListener('push', (event) => {
     const title = payload.title || 'OET Prep';
     const options = {
       body: payload.body || '',
-      icon: '/icon.svg',
-      badge: '/icon.svg',
+      icon: '/icon-192.png',
+      badge: '/icon-192.png',
       tag: payload.tag || 'oet-notification',
       data: { url: payload.url || '/dashboard' },
     };
