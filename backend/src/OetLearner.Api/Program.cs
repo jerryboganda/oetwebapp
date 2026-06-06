@@ -2132,6 +2132,7 @@ if (app.Configuration.GetValue<bool>("Features:SponsorPortalEnabled"))
 
 // ── Private Speaking Sessions ──
 app.MapPrivateSpeakingEndpoints();
+app.MapSpeakingAliasEndpoints();
 app.MapLiveClassEndpoints();
 app.MapTutorEndpoints();
 app.MapSpeakingCalibrationEndpoints();
