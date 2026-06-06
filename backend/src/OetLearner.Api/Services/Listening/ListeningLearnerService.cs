@@ -70,19 +70,32 @@ public sealed class ListeningLearnerService(
                 .ToListAsync(ct);
 
         var relationalAttemptIds = relationalAttempts.Select(a => a.Id).ToList();
-        var relationalAnswerCounts = relationalAttemptIds.Count == 0
-            ? new Dictionary<string, int>(StringComparer.Ordinal)
-            : await db.ListeningAnswers.AsNoTracking()
+        var relationalAnswerCounts = new Dictionary<string, int>(StringComparer.Ordinal);
+        if (relationalAttemptIds.Count > 0)
+        {
+            var relationalAnswerRows = await db.ListeningAnswers.AsNoTracking()
                 .Where(answer => relationalAttemptIds.Contains(answer.ListeningAttemptId))
-                .GroupBy(answer => answer.ListeningAttemptId)
-                .ToDictionaryAsync(group => group.Key, group => group.Count(), StringComparer.Ordinal, ct);
+                .Select(answer => new
+                {
+                    answer.ListeningAttemptId,
+                    answer.UserAnswerJson
+                })
+                .ToListAsync(ct);
+            relationalAnswerCounts = relationalAnswerRows
+                .Where(answer => HasAnsweredValue(answer.UserAnswerJson))
+                .GroupBy(answer => answer.ListeningAttemptId, StringComparer.Ordinal)
+                .ToDictionary(group => group.Key, group => group.Count(), StringComparer.Ordinal);
+        }
 
-        var relationalQuestionCounts = paperIds.Count == 0
-            ? new Dictionary<string, int>(StringComparer.Ordinal)
+        var relationalQuestionRows = paperIds.Count == 0
+            ? new List<string>()
             : await db.ListeningQuestions.AsNoTracking()
                 .Where(q => paperIds.Contains(q.PaperId))
-                .GroupBy(q => q.PaperId)
-                .ToDictionaryAsync(group => group.Key, group => group.Count(), StringComparer.Ordinal, ct);
+                .Select(q => q.PaperId)
+                .ToListAsync(ct);
+        var relationalQuestionCounts = relationalQuestionRows
+            .GroupBy(paperId => paperId, StringComparer.Ordinal)
+            .ToDictionary(group => group.Key, group => group.Count(), StringComparer.Ordinal);
 
         var evaluationAttemptIds = attempts.Select(a => a.Id)
             .Concat(relationalAttempts.Select(a => a.Id))
@@ -115,7 +128,7 @@ public sealed class ListeningLearnerService(
                 a.LastClientSyncAt,
                 // Exclude reserved navigation keys (e.g. the section cursor) so
                 // they never inflate the learner-facing answered count.
-                answeredCount = DeserializeAnswers(a.AnswersJson).Count(kv => !IsReservedAnswerKey(kv.Key) && !string.IsNullOrWhiteSpace(kv.Value)),
+                answeredCount = DeserializeAnswers(a.AnswersJson).Count(kv => !IsReservedAnswerKey(kv.Key) && HasAnsweredValue(kv.Value)),
                 route = $"/listening/player/{Uri.EscapeDataString(a.ContentId)}?attemptId={Uri.EscapeDataString(a.Id)}&mode={Uri.EscapeDataString(a.Mode)}"
             })
             .Concat(relationalAttempts
@@ -2041,6 +2054,7 @@ public sealed class ListeningLearnerService(
                 JsonValueKind.Number => doc.RootElement.ToString(),
                 JsonValueKind.True => "true",
                 JsonValueKind.False => "false",
+                JsonValueKind.Null => null,
                 _ => doc.RootElement.ToString(),
             };
         }
@@ -2191,8 +2205,15 @@ public sealed class ListeningLearnerService(
             .Select(q => ReviewItemDto(q, Answers.GetValueOrDefault(q.Id), orderedQuestions))
             .Select(item => ApplyHumanScoreOverride(item, ScoreOverrides))
             .ToList();
-        var raw = Math.Clamp(items.Sum(i => i.PointsEarned), 0, CanonicalRawMax);
-        var score = OetScoring.GradeListeningReading(Subtest, raw);
+        var maxRaw = Math.Clamp(items.Sum(i => i.MaxPoints), 1, CanonicalRawMax);
+        var raw = Math.Clamp(items.Sum(i => i.PointsEarned), 0, maxRaw);
+        var canonicalScore = OetScoring.GradeListeningReading(Subtest, raw);
+        var score = new ListeningScoreDto(
+            canonicalScore.RawCorrect,
+            maxRaw,
+            canonicalScore.ScaledScore,
+            canonicalScore.Grade,
+            canonicalScore.Passed);
         var clusters = BuildErrorClusters(items);
         var recommended = clusters.Count > 0
             ? BuildDrill(clusters[0].ErrorType, Source.Id, AttemptId)
@@ -2206,12 +2227,12 @@ public sealed class ListeningLearnerService(
             EvaluationId: Evaluation?.Id,
             AttemptId: AttemptId,
             Paper: SourceDto(Source),
-            RawScore: score.RawCorrect,
-            MaxRawScore: score.RawMax,
+            RawScore: score.RawScore,
+            MaxRawScore: score.MaxRawScore,
             ScaledScore: score.ScaledScore,
             Grade: score.Grade,
             Passed: score.Passed,
-            ScoreDisplay: $"{score.RawCorrect} / {score.RawMax} \u2022 {score.ScaledScore} / 500 \u2022 Grade {score.Grade}",
+            ScoreDisplay: FormatScoreDisplay(score),
             CorrectCount: items.Count(i => i.IsCorrect),
             IncorrectCount: items.Count(i => !i.IsCorrect && !string.IsNullOrWhiteSpace(i.LearnerAnswer)),
             UnansweredCount: items.Count(i => string.IsNullOrWhiteSpace(i.LearnerAnswer)),
@@ -2224,7 +2245,7 @@ public sealed class ListeningLearnerService(
                 AllowedQuestionIds: allowedTranscriptIds,
                 Reason: "Transcript snippets and answer evidence are revealed only after submit and only for items whose authored policy allows it."),
             TranscriptSegments: Source.TranscriptSegments,
-            Strengths: BuildStrengths(score.RawCorrect, items),
+            Strengths: BuildStrengths(score.RawScore, items),
             Issues: BuildIssues(items),
             GeneratedAt: Evaluation?.GeneratedAt ?? CompletedAt);
     }
@@ -2778,14 +2799,16 @@ public sealed class ListeningLearnerService(
             var rows = JsonSupport.Deserialize<List<Dictionary<string, object?>>>(evaluation.CriterionScoresJson, []);
             var row = rows.FirstOrDefault();
             var raw = ReadInt(row?.GetValueOrDefault("rawScore"));
+            var maxRaw = ReadInt(row?.GetValueOrDefault("maxRawScore"));
             var scaled = ReadInt(row?.GetValueOrDefault("scaledScore"));
             if (raw.HasValue || scaled.HasValue)
             {
-                var rawValue = Math.Clamp(raw ?? 0, 0, CanonicalRawMax);
+                var maxRawValue = Math.Clamp(maxRaw ?? CanonicalRawMax, 1, CanonicalRawMax);
+                var rawValue = Math.Clamp(raw ?? 0, 0, maxRawValue);
                 var scaledValue = scaled ?? OetScoring.OetRawToScaled(rawValue);
                 return new ListeningScoreDto(
                     rawValue,
-                    CanonicalRawMax,
+                    maxRawValue,
                     scaledValue,
                     OetScoring.OetGradeLetterFromScaled(scaledValue),
                     OetScoring.IsListeningReadingPassByScaled(scaledValue));
@@ -2863,6 +2886,32 @@ public sealed class ListeningLearnerService(
 
     private static Dictionary<string, string?> DeserializeAnswers(string json)
         => JsonSupport.Deserialize<Dictionary<string, string?>>(json, new Dictionary<string, string?>());
+
+    private static bool HasAnsweredValue(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return false;
+        try
+        {
+            using var doc = JsonDocument.Parse(value);
+            return HasAnsweredJsonValue(doc.RootElement);
+        }
+        catch (JsonException)
+        {
+            return !string.IsNullOrWhiteSpace(value);
+        }
+    }
+
+    private static bool HasAnsweredJsonValue(JsonElement element)
+        => element.ValueKind switch
+        {
+            JsonValueKind.String => !string.IsNullOrWhiteSpace(element.GetString()),
+            JsonValueKind.Number => true,
+            JsonValueKind.True => true,
+            JsonValueKind.False => true,
+            JsonValueKind.Array => element.EnumerateArray().Any(HasAnsweredJsonValue),
+            JsonValueKind.Object => element.EnumerateObject().Any(property => HasAnsweredJsonValue(property.Value)),
+            _ => false
+        };
 
     /// <summary>
     /// Phase 9 tail: accept the learner-visible Listening modes.
@@ -3355,4 +3404,3 @@ public sealed class ListeningLearnerService(
 public sealed record ListeningAnswerSaveRequest(string? UserAnswer);
 public sealed record ListeningIntegrityEventRequest(string EventType, string? Details, DateTimeOffset? OccurredAt);
 public sealed record ListeningAdvanceSectionRequest(int SectionCursor);
-

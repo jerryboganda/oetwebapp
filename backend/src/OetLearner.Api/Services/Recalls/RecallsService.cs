@@ -482,26 +482,27 @@ public sealed class RecallsService(
         string[] PickDistractTerms(string canonical, IReadOnlyList<string> similar)
         {
             var bag = new List<string>(similar.Where(s => !string.Equals(s, canonical, StringComparison.OrdinalIgnoreCase)));
-            while (bag.Count < 3 && pool.Count > 0)
-            {
-                var pick = pool[rng.Next(pool.Count)].Term;
-                if (!bag.Contains(pick) && !string.Equals(pick, canonical, StringComparison.OrdinalIgnoreCase))
-                    bag.Add(pick);
-            }
+            bag.AddRange(pool
+                .Select(p => p.Term)
+                .Where(p => !string.IsNullOrWhiteSpace(p))
+                .Where(p => !bag.Contains(p, StringComparer.OrdinalIgnoreCase))
+                .Where(p => !string.Equals(p, canonical, StringComparison.OrdinalIgnoreCase))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(_ => rng.Next())
+                .Take(3 - Math.Min(3, bag.Count)));
             return bag.Take(3).ToArray();
         }
 
         string[] PickDistractDefs(string canonicalDef)
-        {
-            var bag = new List<string>();
-            while (bag.Count < 3 && pool.Count > 0)
-            {
-                var pick = pool[rng.Next(pool.Count)].Definition;
-                if (!string.IsNullOrWhiteSpace(pick) && !bag.Contains(pick) && pick != canonicalDef)
-                    bag.Add(pick);
-            }
-            return bag.Take(3).ToArray();
-        }
+            => pool
+                .Select(p => p.Definition)
+                .Where(p => !string.IsNullOrWhiteSpace(p))
+                .Where(p => !string.Equals(p, canonicalDef, StringComparison.Ordinal))
+                .Select(p => p!)
+                .Distinct(StringComparer.Ordinal)
+                .OrderBy(_ => rng.Next())
+                .Take(3)
+                .ToArray();
 
         static string BlankSentence(string sentence, string term)
         {
