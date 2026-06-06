@@ -354,7 +354,7 @@ export function AnnotationLayer({
               &ldquo;{pending.text.slice(0, 90)}{pending.text.length > 90 ? '…' : ''}&rdquo;
             </p>
 
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               <label className="flex flex-col gap-1 text-[11px] font-bold uppercase tracking-wider text-muted">
                 Criterion
                 <select

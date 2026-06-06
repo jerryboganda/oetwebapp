@@ -49,7 +49,7 @@ export function PronunciationDrillForm({ form, onChange }: PronunciationDrillFor
             placeholder="theta, eth, v, short i, ash, stress, intonation"
           />
         </label>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <label className="block">
             <span className="text-sm text-navy">Profession</span>
             <select
@@ -82,7 +82,7 @@ export function PronunciationDrillForm({ form, onChange }: PronunciationDrillFor
             </select>
           </label>
         </div>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <label className="block">
             <span className="text-sm text-navy">Difficulty</span>
             <select

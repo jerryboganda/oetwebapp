@@ -432,7 +432,7 @@ export function NotificationCenter() {
             <Popover.Content
               align="end"
               sideOffset={12}
-              className="z-[100] w-[24rem] origin-[var(--radix-popover-content-transform-origin)] rounded-2xl glass-panel p-4 shadow-2xl shadow-black/[0.08] data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-[0.97] data-[state=open]:slide-in-from-top-3 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-[0.97] duration-200"
+              className="z-[100] w-[24rem] max-w-[calc(100vw-2rem)] origin-[var(--radix-popover-content-transform-origin)] rounded-2xl glass-panel p-4 shadow-2xl shadow-black/[0.08] data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-[0.97] data-[state=open]:slide-in-from-top-3 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-[0.97] duration-200"
             >
               <NotificationCenterContent onNavigate={() => setDesktopOpen(false)} />
             </Popover.Content>

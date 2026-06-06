@@ -205,7 +205,7 @@ export function SpeakingStructureEditor({ paperId }: { paperId: string }) {
             onChange={(e) => patch({ warmUpQuestions: multilineToArray(e.target.value) })}
             hint="One question per line."
           />
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Input type="number" label="Prep seconds" value={structure.prepTimeSeconds ?? 180} onChange={(e) => patch({ prepTimeSeconds: Number(e.target.value) })} />
             <Input type="number" label="Role-play seconds" value={structure.roleplayTimeSeconds ?? 300} onChange={(e) => patch({ roleplayTimeSeconds: Number(e.target.value) })} />
           </div>

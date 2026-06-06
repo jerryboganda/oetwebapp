@@ -68,7 +68,7 @@ export function GrammarTopicCard({ topic }: { topic: GrammarTopicLearner }) {
             <p className="mt-4 line-clamp-2 text-sm leading-6 text-muted">{topic.description}</p>
           ) : null}
 
-          <div className="mt-5 grid grid-cols-3 gap-2">
+          <div className="mt-5 grid grid-cols-1 sm:grid-cols-3 gap-2">
             <StatPill icon={LayoutGrid} label="Lessons" value={topic.lessonCount} />
             <StatPill icon={CheckCircle2} label="Done" value={topic.completedLessonCount} />
             <StatPill icon={Trophy} label="Mastered" value={topic.masteredLessonCount} />

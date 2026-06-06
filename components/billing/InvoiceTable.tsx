@@ -37,7 +37,7 @@ export function InvoiceTable({ invoices, loading, emptyMessage }: InvoiceTablePr
   }
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-border bg-surface shadow-sm">
+    <div className="overflow-x-auto rounded-2xl border border-border bg-surface shadow-sm">
       <table className="min-w-full divide-y divide-border text-sm">
         <thead className="bg-background-light text-left text-xs font-medium uppercase tracking-wider text-muted">
           <tr>
