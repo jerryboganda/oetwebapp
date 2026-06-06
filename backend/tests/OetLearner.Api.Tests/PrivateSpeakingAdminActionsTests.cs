@@ -327,6 +327,47 @@ public sealed class PrivateSpeakingAdminActionsTests
         Assert.Equal("Medicine", saved!.ProfessionTrack);
     }
 
+    // ── AdminEditBookingAsync (partial update) ──────────────────────────
+
+    [Fact]
+    public async Task AdminEditBooking_UpdatesOnlyProvidedFields_DoesNotChangeStatusOrPayment()
+    {
+        await using var db = CreateDb();
+        var service = CreateService(db, new FakeStripeService());
+
+        var originalStart = Now.AddHours(48);
+        var booking = SeedConfirmedBooking(db, originalStart, b =>
+        {
+            b.DurationMinutes = 30;
+            b.ProfessionTrack = "Nursing";
+            b.PaymentStatus = PrivateSpeakingPaymentStatus.Succeeded;
+        });
+        await db.SaveChangesAsync();
+
+        var updated = await service.AdminEditBookingAsync(
+            booking.Id, "admin-1",
+            sessionStartUtc: null, durationMinutes: null,
+            professionTrack: "Medicine", tutorNotes: "bring case notes",
+            CancellationToken.None);
+
+        Assert.NotNull(updated);
+
+        var saved = await db.PrivateSpeakingBookings.FindAsync(booking.Id);
+        // Provided fields changed:
+        Assert.Equal("Medicine", saved!.ProfessionTrack);
+        Assert.Equal("bring case notes", saved.TutorNotes);
+        // Omitted fields untouched (incl. Status + payment):
+        Assert.Equal(originalStart, saved.SessionStartUtc);
+        Assert.Equal(30, saved.DurationMinutes);
+        Assert.Equal(PrivateSpeakingBookingStatus.Confirmed, saved.Status);
+        Assert.Equal(PrivateSpeakingPaymentStatus.Succeeded, saved.PaymentStatus);
+
+        // Audit row written.
+        var audited = await db.PrivateSpeakingAuditLogs.AnyAsync(a =>
+            a.BookingId == booking.Id && a.Action == "admin_booking_edited");
+        Assert.True(audited);
+    }
+
     // ── Helpers ─────────────────────────────────────────────────────────
 
     private static string NewKey() => Guid.NewGuid().ToString();
