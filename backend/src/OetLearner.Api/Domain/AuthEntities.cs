@@ -208,6 +208,7 @@ public static class AdminPermissions
     public const string QualityAnalytics = "quality_analytics";
     public const string AiConfig = "ai_config";
     public const string FeatureFlags = "feature_flags";
+    public const string Notifications = "notifications";
     public const string AuditLogs = "audit_logs";
     public const string SystemAdmin = "system_admin";
     public const string ManagePermissions = "manage_permissions";
@@ -222,7 +223,7 @@ public static class AdminPermissions
         LearnerRead, LearnerWrite,
         UsersRead, UsersWrite,
         ReviewOps, QualityAnalytics, AiConfig,
-        FeatureFlags, AuditLogs, SystemAdmin,
+        FeatureFlags, Notifications, AuditLogs, SystemAdmin,
         ManagePermissions
     ];
 }

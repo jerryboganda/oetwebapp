@@ -400,6 +400,13 @@ public sealed class ContentPaperService(LearnerDbContext db) : IContentPaperServ
             .FirstOrDefaultAsync(x => x.Id == paperId, ct)
             ?? throw new InvalidOperationException("Paper not found.");
 
+        if (string.IsNullOrWhiteSpace(paper.SourceProvenance))
+        {
+            throw new InvalidOperationException("SourceProvenance is required before publishing.");
+        }
+
+        EnforceRequiredAssetRoles(paper);
+
         if (string.Equals(paper.SubtestCode, "reading", StringComparison.OrdinalIgnoreCase))
         {
             var report = await new ReadingStructureService(db).ValidatePaperAsync(paper.Id, ct);
@@ -426,6 +433,19 @@ public sealed class ContentPaperService(LearnerDbContext db) : IContentPaperServ
             }
         }
 
+        if (string.Equals(paper.SubtestCode, "writing", StringComparison.OrdinalIgnoreCase))
+        {
+            var report = WritingContentStructure.Validate(paper);
+            if (!report.IsPublishReady)
+            {
+                var errors = report.Issues
+                    .Where(issue => string.Equals(issue.Severity, "error", StringComparison.OrdinalIgnoreCase))
+                    .Select(issue => issue.Message)
+                    .DefaultIfEmpty("Writing structure is not publish-ready.");
+                throw new InvalidOperationException("Writing structure is not publish-ready: " + string.Join(" ", errors));
+            }
+        }
+
         var now = DateTimeOffset.UtcNow;
         paper.Status = ContentStatus.Published;
         paper.PublishedAt = now;
@@ -440,6 +460,23 @@ public sealed class ContentPaperService(LearnerDbContext db) : IContentPaperServ
         }
         await WriteAuditAsync("ContentPaperPublished", paper.Id, paper.Title, adminId, ct);
         await db.SaveChangesAsync(ct);
+    }
+
+    private void EnforceRequiredAssetRoles(ContentPaper paper)
+    {
+        if (!RequiredRoles.TryGetValue(paper.SubtestCode, out var requiredRoles) || requiredRoles.Count == 0)
+        {
+            return;
+        }
+
+        var presentRoles = paper.Assets.Select(a => a.Role).ToHashSet();
+        var missingRoles = requiredRoles.Where(role => !presentRoles.Contains(role)).ToList();
+        if (missingRoles.Count > 0)
+        {
+            throw new InvalidOperationException(
+                "Content paper is missing required asset roles before publishing: "
+                + string.Join(", ", missingRoles));
+        }
     }
 
     public async Task<ContentPaperAsset> AttachAssetAsync(

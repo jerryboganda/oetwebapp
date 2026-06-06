@@ -1,0 +1,2913 @@
+{
+  "summary": {
+    "project": {
+      "total": 9,
+      "ok": 9,
+      "errors": 0,
+      "warnings": 0
+    },
+    "user": {
+      "total": 404,
+      "ok": 404,
+      "errors": 0,
+      "warnings": 0
+    }
+  },
+  "report": {
+    "project": [
+      {
+        "path": ".codex\\skills\\oet-agent-references",
+        "name": "oet-agent-references",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": ".codex\\skills\\oet-explorer",
+        "name": "oet-explorer",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": ".codex\\skills\\oet-implementer",
+        "name": "oet-implementer",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": ".codex\\skills\\oet-omo-orchestrator",
+        "name": "oet-omo-orchestrator",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": ".codex\\skills\\oet-planner",
+        "name": "oet-planner",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": ".codex\\skills\\oet-qa-validator",
+        "name": "oet-qa-validator",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": ".codex\\skills\\oet-ralph-coordinator",
+        "name": "oet-ralph-coordinator",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": ".codex\\skills\\oet-reviewer",
+        "name": "oet-reviewer",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": ".codex\\skills\\oet-security-reviewer",
+        "name": "oet-security-reviewer",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      }
+    ],
+    "user": [
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\acquire-codebase-knowledge",
+        "name": "acquire-codebase-knowledge",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\acreadiness-assess",
+        "name": "acreadiness-assess",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\acreadiness-generate-instructions",
+        "name": "acreadiness-generate-instructions",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\acreadiness-policy",
+        "name": "acreadiness-policy",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\activator-authoring-cli",
+        "name": "activator-authoring-cli",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\activator-consumption-cli",
+        "name": "activator-consumption-cli",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\add-educational-comments",
+        "name": "add-educational-comments",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\adobe-illustrator-scripting",
+        "name": "adobe-illustrator-scripting",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\agent-governance",
+        "name": "agent-governance",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\agent-owasp-compliance",
+        "name": "agent-owasp-compliance",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\agent-supply-chain",
+        "name": "agent-supply-chain",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\agentic-eval",
+        "name": "agentic-eval",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\ai-prompt-engineering-safety-review",
+        "name": "ai-prompt-engineering-safety-review",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\ai-ready",
+        "name": "ai-ready",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\ai-team-orchestration",
+        "name": "ai-team-orchestration",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\appinsights-instrumentation",
+        "name": "appinsights-instrumentation",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\apple-appstore-reviewer",
+        "name": "apple-appstore-reviewer",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\arch-linux-triage",
+        "name": "arch-linux-triage",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\architecture-blueprint-generator",
+        "name": "architecture-blueprint-generator",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\arduino-azure-iot-edge-integration",
+        "name": "arduino-azure-iot-edge-integration",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\arize-ai-provider-integration",
+        "name": "arize-ai-provider-integration",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\arize-annotation",
+        "name": "arize-annotation",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\arize-dataset",
+        "name": "arize-dataset",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\arize-evaluator",
+        "name": "arize-evaluator",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\arize-experiment",
+        "name": "arize-experiment",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\arize-instrumentation",
+        "name": "arize-instrumentation",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\arize-link",
+        "name": "arize-link",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\arize-prompt-optimization",
+        "name": "arize-prompt-optimization",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\arize-trace",
+        "name": "arize-trace",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\aspire",
+        "name": "aspire",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\aspnet-minimal-api-openapi",
+        "name": "aspnet-minimal-api-openapi",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\audit-integrity",
+        "name": "audit-integrity",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\automate-this",
+        "name": "automate-this",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\autoresearch",
+        "name": "autoresearch",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\aws-cdk-python-setup",
+        "name": "aws-cdk-python-setup",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\az-cost-optimize",
+        "name": "az-cost-optimize",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\azure-architecture-autopilot",
+        "name": "azure-architecture-autopilot",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\azure-deployment-preflight",
+        "name": "azure-deployment-preflight",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\azure-devops-cli",
+        "name": "azure-devops-cli",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\azure-pricing",
+        "name": "azure-pricing",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\azure-resource-health-diagnose",
+        "name": "azure-resource-health-diagnose",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\azure-resource-visualizer",
+        "name": "azure-resource-visualizer",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\azure-role-selector",
+        "name": "azure-role-selector",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\azure-smart-city-iot-solution-builder",
+        "name": "azure-smart-city-iot-solution-builder",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\azure-static-web-apps",
+        "name": "azure-static-web-apps",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\batch-files",
+        "name": "batch-files",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\bigquery-pipeline-audit",
+        "name": "bigquery-pipeline-audit",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\boost-prompt",
+        "name": "boost-prompt",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\brag-sheet",
+        "name": "brag-sheet",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\brainstorming",
+        "name": "brainstorming",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\breakdown-epic-arch",
+        "name": "breakdown-epic-arch",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\breakdown-epic-pm",
+        "name": "breakdown-epic-pm",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\breakdown-feature-implementation",
+        "name": "breakdown-feature-implementation",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\breakdown-feature-prd",
+        "name": "breakdown-feature-prd",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\breakdown-plan",
+        "name": "breakdown-plan",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\breakdown-test",
+        "name": "breakdown-test",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\centos-linux-triage",
+        "name": "centos-linux-triage",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\check-updates",
+        "name": "check-updates",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\chrome-devtools",
+        "name": "chrome-devtools",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\cli-mastery",
+        "name": "cli-mastery",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\cloud-design-patterns",
+        "name": "cloud-design-patterns",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\code-exemplars-blueprint-generator",
+        "name": "code-exemplars-blueprint-generator",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\code-tour",
+        "name": "code-tour",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\codeql",
+        "name": "codeql",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\comment-code-generate-a-tutorial",
+        "name": "comment-code-generate-a-tutorial",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\commit-message-storyteller",
+        "name": "commit-message-storyteller",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\containerize-aspnet-framework",
+        "name": "containerize-aspnet-framework",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\containerize-aspnetcore",
+        "name": "containerize-aspnetcore",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\content-management-systems",
+        "name": "content-management-systems",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\context-map",
+        "name": "context-map",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\conventional-branch",
+        "name": "conventional-branch",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\conventional-commit",
+        "name": "conventional-commit",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\convert-plaintext-to-md",
+        "name": "convert-plaintext-to-md",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\copilot-cli-quickstart",
+        "name": "copilot-cli-quickstart",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\copilot-instructions-blueprint-generator",
+        "name": "copilot-instructions-blueprint-generator",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\copilot-sdk",
+        "name": "copilot-sdk",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\copilot-spaces",
+        "name": "copilot-spaces",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\copilot-usage-metrics",
+        "name": "copilot-usage-metrics",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\cosmosdb-datamodeling",
+        "name": "cosmosdb-datamodeling",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\create-agentsmd",
+        "name": "create-agentsmd",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\create-architectural-decision-record",
+        "name": "create-architectural-decision-record",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\create-github-action-workflow-specification",
+        "name": "create-github-action-workflow-specification",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\create-github-issue-feature-from-specification",
+        "name": "create-github-issue-feature-from-specification",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\create-github-issues-feature-from-implementation-plan",
+        "name": "create-github-issues-feature-from-implementation-plan",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\create-github-issues-for-unmet-specification-requirements",
+        "name": "create-github-issues-for-unmet-specification-requirements",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\create-implementation-plan",
+        "name": "create-implementation-plan",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\create-llms",
+        "name": "create-llms",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\create-readme",
+        "name": "create-readme",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\create-specification",
+        "name": "create-specification",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\create-spring-boot-java-project",
+        "name": "create-spring-boot-java-project",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\create-spring-boot-kotlin-project",
+        "name": "create-spring-boot-kotlin-project",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\create-technical-spike",
+        "name": "create-technical-spike",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\create-tldr-page",
+        "name": "create-tldr-page",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\creating-oracle-to-postgres-master-migration-plan",
+        "name": "creating-oracle-to-postgres-master-migration-plan",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\creating-oracle-to-postgres-migration-bug-report",
+        "name": "creating-oracle-to-postgres-migration-bug-report",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\creating-oracle-to-postgres-migration-integration-tests",
+        "name": "creating-oracle-to-postgres-migration-integration-tests",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\csharp-async",
+        "name": "csharp-async",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\csharp-docs",
+        "name": "csharp-docs",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\csharp-mstest",
+        "name": "csharp-mstest",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\csharp-nunit",
+        "name": "csharp-nunit",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\csharp-tunit",
+        "name": "csharp-tunit",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\csharp-xunit",
+        "name": "csharp-xunit",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\daily-prep",
+        "name": "daily-prep",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\data-breach-blast-radius",
+        "name": "data-breach-blast-radius",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\databricks-migration",
+        "name": "databricks-migration",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\dataflows-authoring-cli",
+        "name": "dataflows-authoring-cli",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\dataflows-consumption-cli",
+        "name": "dataflows-consumption-cli",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\dataflows-save-as-authoring-cli",
+        "name": "dataflows-save-as-authoring-cli",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\datanalysis-credit-risk",
+        "name": "datanalysis-credit-risk",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\dataverse-python-advanced-patterns",
+        "name": "dataverse-python-advanced-patterns",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\dataverse-python-production-code",
+        "name": "dataverse-python-production-code",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\dataverse-python-quickstart",
+        "name": "dataverse-python-quickstart",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\dataverse-python-usecase-builder",
+        "name": "dataverse-python-usecase-builder",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\debian-linux-triage",
+        "name": "debian-linux-triage",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\declarative-agents",
+        "name": "declarative-agents",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\dependabot",
+        "name": "dependabot",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\dependency-scanning",
+        "name": "dependency-scanning",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\devops-rollout-plan",
+        "name": "devops-rollout-plan",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\diagnose",
+        "name": "diagnose",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\dispatching-parallel-agents",
+        "name": "dispatching-parallel-agents",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\documentation-writer",
+        "name": "documentation-writer",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\dotnet-best-practices",
+        "name": "dotnet-best-practices",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\dotnet-design-pattern-review",
+        "name": "dotnet-design-pattern-review",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\dotnet-mcp-builder",
+        "name": "dotnet-mcp-builder",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\dotnet-timezone",
+        "name": "dotnet-timezone",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\dotnet-upgrade",
+        "name": "dotnet-upgrade",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\doublecheck",
+        "name": "doublecheck",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\draw-io-diagram-generator",
+        "name": "draw-io-diagram-generator",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\drawio",
+        "name": "drawio",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\e2e-medallion-architecture",
+        "name": "e2e-medallion-architecture",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\editorconfig",
+        "name": "editorconfig",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\ef-core",
+        "name": "ef-core",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\efcore-d2-db-diagram",
+        "name": "efcore-d2-db-diagram",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\email-drafter",
+        "name": "email-drafter",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\entra-agent-user",
+        "name": "entra-agent-user",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\eval-driven-dev",
+        "name": "eval-driven-dev",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\eventhouse-authoring-cli",
+        "name": "eventhouse-authoring-cli",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\eventhouse-consumption-cli",
+        "name": "eventhouse-consumption-cli",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\eventstream-authoring-cli",
+        "name": "eventstream-authoring-cli",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\eventstream-consumption-cli",
+        "name": "eventstream-consumption-cli",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\exam-ready",
+        "name": "exam-ready",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\excalidraw-diagram-generator",
+        "name": "excalidraw-diagram-generator",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\executing-plans",
+        "name": "executing-plans",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\eyeball",
+        "name": "eyeball",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\fabric-lakehouse",
+        "name": "fabric-lakehouse",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\fedora-linux-triage",
+        "name": "fedora-linux-triage",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\finalize-agent-prompt",
+        "name": "finalize-agent-prompt",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\finishing-a-development-branch",
+        "name": "finishing-a-development-branch",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\finnish-humanizer",
+        "name": "finnish-humanizer",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\first-ask",
+        "name": "first-ask",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\flowstudio-power-automate-build",
+        "name": "flowstudio-power-automate-build",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\flowstudio-power-automate-debug",
+        "name": "flowstudio-power-automate-debug",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\flowstudio-power-automate-governance",
+        "name": "flowstudio-power-automate-governance",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\flowstudio-power-automate-mcp",
+        "name": "flowstudio-power-automate-mcp",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\flowstudio-power-automate-monitoring",
+        "name": "flowstudio-power-automate-monitoring",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\fluentui-blazor",
+        "name": "fluentui-blazor",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\folder-structure-blueprint-generator",
+        "name": "folder-structure-blueprint-generator",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\foundry-agent-sync",
+        "name": "foundry-agent-sync",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\freecad-scripts",
+        "name": "freecad-scripts",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\from-the-other-side-anitta",
+        "name": "from-the-other-side-anitta",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\from-the-other-side-quinn",
+        "name": "from-the-other-side-quinn",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\from-the-other-side-vega",
+        "name": "from-the-other-side-vega",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\from-the-other-side-wiggins",
+        "name": "from-the-other-side-wiggins",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\game-engine",
+        "name": "game-engine",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\gdpr-compliant",
+        "name": "gdpr-compliant",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\gen-specs-as-issues",
+        "name": "gen-specs-as-issues",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\generate-custom-instructions-from-codebase",
+        "name": "generate-custom-instructions-from-codebase",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\generate-image",
+        "name": "generate-image",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\geofeed-tuner",
+        "name": "geofeed-tuner",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\git-commit",
+        "name": "git-commit",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\git-flow-branch-creator",
+        "name": "git-flow-branch-creator",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\github-actions-efficiency",
+        "name": "github-actions-efficiency",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\github-codespaces-efficiency",
+        "name": "github-codespaces-efficiency",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\github-copilot-starter",
+        "name": "github-copilot-starter",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\github-issues",
+        "name": "github-issues",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\github-release",
+        "name": "github-release",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\go-mcp-server-generator",
+        "name": "go-mcp-server-generator",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\gsap-framer-scroll-animation",
+        "name": "gsap-framer-scroll-animation",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\gtm-0-to-1-launch",
+        "name": "gtm-0-to-1-launch",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\gtm-ai-gtm",
+        "name": "gtm-ai-gtm",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\gtm-board-and-investor-communication",
+        "name": "gtm-board-and-investor-communication",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\gtm-developer-ecosystem",
+        "name": "gtm-developer-ecosystem",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\gtm-enterprise-account-planning",
+        "name": "gtm-enterprise-account-planning",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\gtm-enterprise-onboarding",
+        "name": "gtm-enterprise-onboarding",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\gtm-operating-cadence",
+        "name": "gtm-operating-cadence",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\gtm-partnership-architecture",
+        "name": "gtm-partnership-architecture",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\gtm-positioning-strategy",
+        "name": "gtm-positioning-strategy",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\gtm-product-led-growth",
+        "name": "gtm-product-led-growth",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\gtm-technical-product-pricing",
+        "name": "gtm-technical-product-pricing",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\hdinsight-migration",
+        "name": "hdinsight-migration",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\image-annotations",
+        "name": "image-annotations",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\image-manipulation-image-magick",
+        "name": "image-manipulation-image-magick",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\impediment-prioritization",
+        "name": "impediment-prioritization",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\import-infrastructure-as-code",
+        "name": "import-infrastructure-as-code",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\integrate-context-matic",
+        "name": "integrate-context-matic",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\issue-fields-migration",
+        "name": "issue-fields-migration",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\java-add-graalvm-native-image-support",
+        "name": "java-add-graalvm-native-image-support",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\java-docs",
+        "name": "java-docs",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\java-junit",
+        "name": "java-junit",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\java-mcp-server-generator",
+        "name": "java-mcp-server-generator",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\java-refactoring-extract-method",
+        "name": "java-refactoring-extract-method",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\java-refactoring-remove-parameter",
+        "name": "java-refactoring-remove-parameter",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\java-springboot",
+        "name": "java-springboot",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\javascript-typescript-jest",
+        "name": "javascript-typescript-jest",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\javax-to-jakarta-migration",
+        "name": "javax-to-jakarta-migration",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\kotlin-mcp-server-generator",
+        "name": "kotlin-mcp-server-generator",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\kotlin-springboot",
+        "name": "kotlin-springboot",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\legacy-circuit-mockups",
+        "name": "legacy-circuit-mockups",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\linkedin-post-formatter",
+        "name": "linkedin-post-formatter",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\lsp-setup",
+        "name": "lsp-setup",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\make-repo-contribution",
+        "name": "make-repo-contribution",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\markdown-to-html",
+        "name": "markdown-to-html",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\mcp-cli",
+        "name": "mcp-cli",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\mcp-copilot-studio-server-generator",
+        "name": "mcp-copilot-studio-server-generator",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\mcp-create-adaptive-cards",
+        "name": "mcp-create-adaptive-cards",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\mcp-create-declarative-agent",
+        "name": "mcp-create-declarative-agent",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\mcp-deploy-manage-agents",
+        "name": "mcp-deploy-manage-agents",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\mcp-security-audit",
+        "name": "mcp-security-audit",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\md-to-docx",
+        "name": "md-to-docx",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\meeting-minutes",
+        "name": "meeting-minutes",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\memory-merger",
+        "name": "memory-merger",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\mentoring-juniors",
+        "name": "mentoring-juniors",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\microsoft-agent-framework",
+        "name": "microsoft-agent-framework",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\microsoft-code-reference",
+        "name": "microsoft-code-reference",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\microsoft-docs",
+        "name": "microsoft-docs",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\microsoft-skill-creator",
+        "name": "microsoft-skill-creator",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\migrating-oracle-to-postgres-stored-procedures",
+        "name": "migrating-oracle-to-postgres-stored-procedures",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\minecraft-plugin-development",
+        "name": "minecraft-plugin-development",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\mini-context-graph",
+        "name": "mini-context-graph",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\mkdocs-translations",
+        "name": "mkdocs-translations",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\msgraph-sdk",
+        "name": "msgraph-sdk",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\msstore-cli",
+        "name": "msstore-cli",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\multi-stage-dockerfile",
+        "name": "multi-stage-dockerfile",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\mvvm-toolkit",
+        "name": "mvvm-toolkit",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\mvvm-toolkit-di",
+        "name": "mvvm-toolkit-di",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\mvvm-toolkit-messenger",
+        "name": "mvvm-toolkit-messenger",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\nano-banana-pro-openrouter",
+        "name": "nano-banana-pro-openrouter",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\napkin",
+        "name": "napkin",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\next-intl-add-language",
+        "name": "next-intl-add-language",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\noob-mode",
+        "name": "noob-mode",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\nuget-manager",
+        "name": "nuget-manager",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\onboard-context-matic",
+        "name": "onboard-context-matic",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\oo-component-documentation",
+        "name": "oo-component-documentation",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\openapi-to-application-code",
+        "name": "openapi-to-application-code",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\optimize-simplicite-logs",
+        "name": "optimize-simplicite-logs",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\pdftk-server",
+        "name": "pdftk-server",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\penpot-uiux-design",
+        "name": "penpot-uiux-design",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\performance-review-writer",
+        "name": "performance-review-writer",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\phoenix-cli",
+        "name": "phoenix-cli",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\phoenix-evals",
+        "name": "phoenix-evals",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\phoenix-tracing",
+        "name": "phoenix-tracing",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\php-mcp-server-generator",
+        "name": "php-mcp-server-generator",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\planning-oracle-to-postgres-migration-integration-testing",
+        "name": "planning-oracle-to-postgres-migration-integration-testing",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\plantuml-ascii",
+        "name": "plantuml-ascii",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\playwright-automation-fill-in-form",
+        "name": "playwright-automation-fill-in-form",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\playwright-explore-website",
+        "name": "playwright-explore-website",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\playwright-generate-test",
+        "name": "playwright-generate-test",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\postgresql-code-review",
+        "name": "postgresql-code-review",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\postgresql-optimization",
+        "name": "postgresql-optimization",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\power-apps-code-app-scaffold",
+        "name": "power-apps-code-app-scaffold",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\power-bi-dax-optimization",
+        "name": "power-bi-dax-optimization",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\power-bi-model-design-review",
+        "name": "power-bi-model-design-review",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\power-bi-performance-troubleshooting",
+        "name": "power-bi-performance-troubleshooting",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\power-bi-report-design-consultation",
+        "name": "power-bi-report-design-consultation",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\power-platform-architect",
+        "name": "power-platform-architect",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\power-platform-mcp-connector-suite",
+        "name": "power-platform-mcp-connector-suite",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\powerbi-authoring-cli",
+        "name": "powerbi-authoring-cli",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\powerbi-consumption-cli",
+        "name": "powerbi-consumption-cli",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\powerbi-modeling",
+        "name": "powerbi-modeling",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\pr-dashboard",
+        "name": "pr-dashboard",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\pr-screenshots",
+        "name": "pr-screenshots",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\prd",
+        "name": "prd",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\premium-frontend-ui",
+        "name": "premium-frontend-ui",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\project-workflow-analysis-blueprint-generator",
+        "name": "project-workflow-analysis-blueprint-generator",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\prompt-optimizer",
+        "name": "prompt-optimizer",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\publish-to-pages",
+        "name": "publish-to-pages",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\pytest-coverage",
+        "name": "pytest-coverage",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\python-azure-iot-edge-modules",
+        "name": "python-azure-iot-edge-modules",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\python-mcp-server-generator",
+        "name": "python-mcp-server-generator",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\python-pypi-package-builder",
+        "name": "python-pypi-package-builder",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\qdrant-clients-sdk",
+        "name": "qdrant-clients-sdk",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\qdrant-deployment-options",
+        "name": "qdrant-deployment-options",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\qdrant-horizontal-scaling",
+        "name": "qdrant-horizontal-scaling",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\qdrant-indexing-performance-optimization",
+        "name": "qdrant-indexing-performance-optimization",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\qdrant-memory-usage-optimization",
+        "name": "qdrant-memory-usage-optimization",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\qdrant-minimize-latency",
+        "name": "qdrant-minimize-latency",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\qdrant-model-migration",
+        "name": "qdrant-model-migration",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\qdrant-monitoring",
+        "name": "qdrant-monitoring",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\qdrant-monitoring-debugging",
+        "name": "qdrant-monitoring-debugging",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\qdrant-monitoring-setup",
+        "name": "qdrant-monitoring-setup",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\qdrant-performance-optimization",
+        "name": "qdrant-performance-optimization",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\qdrant-scaling",
+        "name": "qdrant-scaling",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\qdrant-scaling-data-volume",
+        "name": "qdrant-scaling-data-volume",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\qdrant-scaling-qps",
+        "name": "qdrant-scaling-qps",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\qdrant-scaling-query-volume",
+        "name": "qdrant-scaling-query-volume",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\qdrant-search-quality",
+        "name": "qdrant-search-quality",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\qdrant-search-quality-diagnosis",
+        "name": "qdrant-search-quality-diagnosis",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\qdrant-search-speed-optimization",
+        "name": "qdrant-search-speed-optimization",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\qdrant-search-strategies",
+        "name": "qdrant-search-strategies",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\qdrant-sliding-time-window",
+        "name": "qdrant-sliding-time-window",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\qdrant-tenant-scaling",
+        "name": "qdrant-tenant-scaling",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\qdrant-version-upgrade",
+        "name": "qdrant-version-upgrade",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\qdrant-vertical-scaling",
+        "name": "qdrant-vertical-scaling",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\quality-playbook",
+        "name": "quality-playbook",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\quasi-coder",
+        "name": "quasi-coder",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\react-audit-grep-patterns",
+        "name": "react-audit-grep-patterns",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\react18-batching-patterns",
+        "name": "react18-batching-patterns",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\react18-dep-compatibility",
+        "name": "react18-dep-compatibility",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\react18-enzyme-to-rtl",
+        "name": "react18-enzyme-to-rtl",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\react18-legacy-context",
+        "name": "react18-legacy-context",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\react18-lifecycle-patterns",
+        "name": "react18-lifecycle-patterns",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\react18-string-refs",
+        "name": "react18-string-refs",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\react19-concurrent-patterns",
+        "name": "react19-concurrent-patterns",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\react19-source-patterns",
+        "name": "react19-source-patterns",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\react19-test-patterns",
+        "name": "react19-test-patterns",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\readme-blueprint-generator",
+        "name": "readme-blueprint-generator",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\receiving-code-review",
+        "name": "receiving-code-review",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\refactor",
+        "name": "refactor",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\refactor-method-complexity-reduce",
+        "name": "refactor-method-complexity-reduce",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\refactor-plan",
+        "name": "refactor-plan",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\remember",
+        "name": "remember",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\remember-interactive-programming",
+        "name": "remember-interactive-programming",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\repo-story-time",
+        "name": "repo-story-time",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\requesting-code-review",
+        "name": "requesting-code-review",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\resemble-detect",
+        "name": "resemble-detect",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\review-and-refactor",
+        "name": "review-and-refactor",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\reviewing-oracle-to-postgres-migration",
+        "name": "reviewing-oracle-to-postgres-migration",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\rhino3d-scripts",
+        "name": "rhino3d-scripts",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\roundup",
+        "name": "roundup",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\roundup-setup",
+        "name": "roundup-setup",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\ruby-mcp-server-generator",
+        "name": "ruby-mcp-server-generator",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\ruff-recursive-fix",
+        "name": "ruff-recursive-fix",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\rust-mcp-server-generator",
+        "name": "rust-mcp-server-generator",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\salesforce-apex-quality",
+        "name": "salesforce-apex-quality",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\salesforce-component-standards",
+        "name": "salesforce-component-standards",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\salesforce-flow-design",
+        "name": "salesforce-flow-design",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\sandbox-npm-install",
+        "name": "sandbox-npm-install",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\scaffolding-oracle-to-postgres-migration-test-project",
+        "name": "scaffolding-oracle-to-postgres-migration-test-project",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\scoutqa-test",
+        "name": "scoutqa-test",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\screen-recording",
+        "name": "screen-recording",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\search-consumption-cli",
+        "name": "search-consumption-cli",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\secret-scanning",
+        "name": "secret-scanning",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\security-review",
+        "name": "security-review",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\semantic-kernel",
+        "name": "semantic-kernel",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\shuffle-json-data",
+        "name": "shuffle-json-data",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\slang-shader-engineer",
+        "name": "slang-shader-engineer",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\snowflake-semanticview",
+        "name": "snowflake-semanticview",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\spark-app-template",
+        "name": "spark-app-template",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\spark-authoring-cli",
+        "name": "spark-authoring-cli",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\spark-consumption-cli",
+        "name": "spark-consumption-cli",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\spark-operations-cli",
+        "name": "spark-operations-cli",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\sponsor-finder",
+        "name": "sponsor-finder",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\spring-boot-testing",
+        "name": "spring-boot-testing",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\sql-code-review",
+        "name": "sql-code-review",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\sql-optimization",
+        "name": "sql-optimization",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\sql-server-table-reconciliation",
+        "name": "sql-server-table-reconciliation",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\sqldw-authoring-cli",
+        "name": "sqldw-authoring-cli",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\sqldw-consumption-cli",
+        "name": "sqldw-consumption-cli",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\sqldw-operations-cli",
+        "name": "sqldw-operations-cli",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\ssma-console",
+        "name": "ssma-console",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\structured-autonomy-generate",
+        "name": "structured-autonomy-generate",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\structured-autonomy-implement",
+        "name": "structured-autonomy-implement",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\structured-autonomy-plan",
+        "name": "structured-autonomy-plan",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\subagent-driven-development",
+        "name": "subagent-driven-development",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\suggest-awesome-github-copilot-agents",
+        "name": "suggest-awesome-github-copilot-agents",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\suggest-awesome-github-copilot-instructions",
+        "name": "suggest-awesome-github-copilot-instructions",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\suggest-awesome-github-copilot-skills",
+        "name": "suggest-awesome-github-copilot-skills",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\swift-mcp-server-generator",
+        "name": "swift-mcp-server-generator",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\synapse-migration",
+        "name": "synapse-migration",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\systematic-debugging",
+        "name": "systematic-debugging",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\technology-stack-blueprint-generator",
+        "name": "technology-stack-blueprint-generator",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\terraform-azurerm-set-diff-analyzer",
+        "name": "terraform-azurerm-set-diff-analyzer",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\test-driven-development",
+        "name": "test-driven-development",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\threat-model-analyst",
+        "name": "threat-model-analyst",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\tldr-prompt",
+        "name": "tldr-prompt",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\transloadit-media-processing",
+        "name": "transloadit-media-processing",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\typescript-mcp-server-generator",
+        "name": "typescript-mcp-server-generator",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\typespec-api-operations",
+        "name": "typespec-api-operations",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\typespec-create-agent",
+        "name": "typespec-create-agent",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\typespec-create-api-plugin",
+        "name": "typespec-create-api-plugin",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\ui-screenshots",
+        "name": "ui-screenshots",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\unit-test-vue-pinia",
+        "name": "unit-test-vue-pinia",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\update-avm-modules-in-bicep",
+        "name": "update-avm-modules-in-bicep",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\update-implementation-plan",
+        "name": "update-implementation-plan",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\update-llms",
+        "name": "update-llms",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\update-markdown-file-index",
+        "name": "update-markdown-file-index",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\update-specification",
+        "name": "update-specification",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\using-git-worktrees",
+        "name": "using-git-worktrees",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\using-superpowers",
+        "name": "using-superpowers",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\vardoger-analyze",
+        "name": "vardoger-analyze",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\verification-before-completion",
+        "name": "verification-before-completion",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\vscode-ext-commands",
+        "name": "vscode-ext-commands",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\vscode-ext-localization",
+        "name": "vscode-ext-localization",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\web-design-reviewer",
+        "name": "web-design-reviewer",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\webapp-testing",
+        "name": "webapp-testing",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\what-context-needed",
+        "name": "what-context-needed",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\winmd-api-search",
+        "name": "winmd-api-search",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\winui3-migration-guide",
+        "name": "winui3-migration-guide",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\workiq",
+        "name": "workiq",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\workiq-copilot",
+        "name": "workiq-copilot",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\write-coding-standards-from-file",
+        "name": "write-coding-standards-from-file",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\writing-plans",
+        "name": "writing-plans",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\writing-skills",
+        "name": "writing-skills",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      },
+      {
+        "path": "C:\\Users\\Administrator\\.codex\\skills\\x-twitter-scraper",
+        "name": "x-twitter-scraper",
+        "ok": true,
+        "errors": [],
+        "warnings": []
+      }
+    ]
+  }
+}

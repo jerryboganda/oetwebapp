@@ -24,6 +24,9 @@ echo "=== AUTO_DEPLOY_START $(date -u +%Y-%m-%dT%H:%M:%SZ) ==="
 echo "WEB_IMAGE=$WEB_IMAGE"
 echo "API_IMAGE=$API_IMAGE"
 
+echo "--- validating production env ---"
+bash scripts/deploy/validate-production-env.sh .env.production
+
 # --- pick the inactive (target) slot ---
 prev_slot="green"
 if [ -s .deploy/active-slot.env ]; then

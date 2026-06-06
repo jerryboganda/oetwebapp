@@ -12,7 +12,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { InlineAlert } from '@/components/ui/alert';
 import { MotionSection } from '@/components/ui/motion-primitives';
-import { downloadSpeakingEvaluationPdf, fetchPronunciationSpeakingLinked, fetchSpeakingResult } from '@/lib/api';
+import { apiClient, downloadSpeakingEvaluationPdf, fetchPronunciationSpeakingLinked, fetchSpeakingResult } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
 import { trackSpeaking } from '@/lib/analytics/speaking-events';
 import { SpeakingSelfPracticeButton } from '@/components/domain/speaking-self-practice-button';
@@ -89,8 +89,7 @@ export default function SpeakingResultSummary() {
           setAnalysing(false);
           // RULE_40 tone — fetch advisory score from the Whisper/AI tone pipeline.
           // Failure is non-fatal (BBN cards only have meaningful tone data).
-          void fetch(`/v1/speaking/sessions/${encodeURIComponent(id)}/tone`)
-            .then((r) => (r.ok ? r.json() : null))
+          void apiClient.get(`/v1/speaking/sessions/${encodeURIComponent(id)}/tone`)
             .then((data) => { if (!cancelled && data) setTone(data); })
             .catch(() => { /* tone is best-effort */ });
           return;

@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { MarkdownContent } from '@/components/ui/markdown-content';
+import { apiClient } from '@/lib/api';
 
 interface LessonDetail {
   id: string;
@@ -42,8 +43,7 @@ export default function ListeningLessonPage() {
 
   useEffect(() => {
     let cancelled = false;
-    fetch(`/v1/listening-pathway/lessons/${encodeURIComponent(slug)}`)
-      .then((res) => (res.ok ? res.json() : null))
+    apiClient.get<LessonDetail | null>(`/v1/listening-pathway/lessons/${encodeURIComponent(slug)}`)
       .then((d: LessonDetail | null) => {
         if (!cancelled) {
           setLesson(d);

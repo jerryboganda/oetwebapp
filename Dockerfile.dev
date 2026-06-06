@@ -1,0 +1,44 @@
+# Development Dockerfile for Next.js frontend with hot reload
+# Uses Next.js (Turbopack) HMR for instant code changes.
+#
+# IMPORTANT: This uses the Debian-based node image (glibc), NOT alpine (musl).
+# Tailwind CSS v4 relies on the native @tailwindcss/oxide binary, which hangs
+# under musl inside Turbopack's PostCSS worker (manifests as a Turbopack panic:
+# "timeout while receiving message from process" when compiling globals.css).
+# The glibc image installs the correct prebuilt native binaries and is reliable.
+#
+# Source is bind-mounted at runtime; node_modules + .next live in named volumes
+# so the container keeps its own Linux-native install (see docker-compose).
+
+FROM node:22-bookworm-slim AS dev
+WORKDIR /app
+
+# libc/build basics + curl for healthcheck. build-essential/python3 let any
+# native addon that lacks a prebuilt binary compile instead of silently failing.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        curl \
+        python3 \
+        build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install pnpm (pinned to the version in package.json's packageManager field)
+RUN npm install -g pnpm@10.33.0
+
+# Copy only manifests first for layer caching
+COPY package.json pnpm-lock.yaml ./
+
+# Install dependencies (builds Linux-glibc native binaries: oxide, sharp, etc.)
+RUN pnpm install --frozen-lockfile
+
+# Copy the rest of the source (overridden by the bind mount at runtime)
+COPY . .
+
+EXPOSE 3000
+
+ENV NEXT_TELEMETRY_DISABLED=1 \
+    NODE_ENV=development \
+    WATCHPACK_POLLING=100
+
+# Next.js dev server with hot reload
+CMD ["pnpm", "run", "dev"]

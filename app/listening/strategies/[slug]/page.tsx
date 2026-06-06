@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { MarkdownContent } from '@/components/ui/markdown-content';
+import { apiClient } from '@/lib/api';
 
 interface StrategyDetail {
   id: string;
@@ -29,8 +30,7 @@ export default function ListeningStrategyDetailPage() {
 
   useEffect(() => {
     let cancelled = false;
-    fetch(`/v1/listening-pathway/strategies/${encodeURIComponent(slug)}`)
-      .then((res) => (res.ok ? res.json() : null))
+    apiClient.get<StrategyDetail | null>(`/v1/listening-pathway/strategies/${encodeURIComponent(slug)}`)
       .then((d: StrategyDetail | null) => {
         if (!cancelled) {
           setStrategy(d);
@@ -47,20 +47,19 @@ export default function ListeningStrategyDetailPage() {
 
   async function markRead() {
     if (!strategy) return;
-    await fetch(`/v1/listening-pathway/strategies/${strategy.id}/mark-read`, {
-      method: 'POST',
-    });
-    setStrategy({ ...strategy, progress: { ...strategy.progress!, markedAsRead: true } });
+    await apiClient.post(`/v1/listening-pathway/strategies/${strategy.id}/mark-read`);
+    setStrategy({ ...strategy, progress: { markedAsRead: true, favorited: strategy.progress?.favorited ?? false } });
   }
 
   async function toggleFavorite() {
     if (!strategy) return;
-    await fetch(`/v1/listening-pathway/strategies/${strategy.id}/favorite`, {
-      method: 'POST',
-    });
+    await apiClient.post(`/v1/listening-pathway/strategies/${strategy.id}/favorite`);
     setStrategy({
       ...strategy,
-      progress: { ...strategy.progress!, favorited: !strategy.progress?.favorited },
+      progress: {
+        markedAsRead: strategy.progress?.markedAsRead ?? false,
+        favorited: !strategy.progress?.favorited,
+      },
     });
   }
 

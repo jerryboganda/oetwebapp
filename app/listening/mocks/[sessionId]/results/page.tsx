@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
+import { apiClient } from '@/lib/api';
 
 interface MockResult {
   sessionId: string;
@@ -19,8 +20,7 @@ export default function ListeningMockResultsPage() {
 
   useEffect(() => {
     let cancelled = false;
-    fetch(`/v1/listening-pathway/mocks/sessions/${sessionId}/results`)
-      .then((res) => (res.ok ? res.json() : null))
+    apiClient.get<MockResult | null>(`/v1/listening-pathway/mocks/sessions/${encodeURIComponent(sessionId)}/results`)
       .then((r) => {
         if (!cancelled) {
           setResult(r);

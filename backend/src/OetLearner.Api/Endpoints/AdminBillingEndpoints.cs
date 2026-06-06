@@ -30,6 +30,7 @@ public static class AdminBillingEndpoints
         var billing = app.MapGroup("/v1/admin/billing").RequireAuthorization("AdminBillingRead");
 
         // ── Analytics ──────────────────────────────────────────────────────────
+        billing.MapGet("/analytics", GetAnalytics);
         billing.MapGet("/revenue", GetRevenue);
         billing.MapGet("/mrr", GetMrr);
         billing.MapGet("/churn", GetChurn);
@@ -65,6 +66,31 @@ public static class AdminBillingEndpoints
     }
 
     // ─────────────────────── Analytics ───────────────────────
+
+    private static async Task<Ok<AdminBillingAnalyticsResponse>> GetAnalytics(
+        [FromQuery] DateTimeOffset? from,
+        [FromQuery] DateTimeOffset? to,
+        LearnerDbContext db,
+        CancellationToken ct)
+    {
+        var fromTs = from ?? DateTimeOffset.UtcNow.AddDays(-30);
+        var toTs = to ?? DateTimeOffset.UtcNow;
+        if (toTs < fromTs)
+        {
+            (fromTs, toTs) = (toTs, fromTs);
+        }
+
+        var mrr = (await GetMrr(db, ct)).Value!;
+        var churn = (await GetChurn(null, db, ct)).Value!;
+        var ltv = (await GetLtv(null, db, ct)).Value!;
+
+        return TypedResults.Ok(new AdminBillingAnalyticsResponse(
+            Mrr: [new AdminBillingAnalyticsSeriesPoint(toTs, decimal.Round(mrr.MrrCents / 100m, 2))],
+            ChurnRate: [new AdminBillingAnalyticsSeriesPoint(toTs, churn.ChurnPercent)],
+            Ltv: [new AdminBillingAnalyticsSeriesPoint(toTs, ltv.AverageLtv)],
+            Currency: "AUD",
+            Available: true));
+    }
 
     private static async Task<Ok<RevenueResponse>> GetRevenue(
         [FromQuery] DateTimeOffset? from,
@@ -707,6 +733,15 @@ public static class AdminBillingEndpoints
     public sealed record ChurnResponse(TimeSpan Window, int ActiveAtStart, int CanceledInWindow, decimal ChurnPercent);
 
     public sealed record LtvResponse(string? Segment, int Cohort, decimal AverageLtv, decimal TotalLtv);
+
+    public sealed record AdminBillingAnalyticsSeriesPoint(DateTimeOffset Date, decimal Value);
+
+    public sealed record AdminBillingAnalyticsResponse(
+        IReadOnlyList<AdminBillingAnalyticsSeriesPoint> Mrr,
+        IReadOnlyList<AdminBillingAnalyticsSeriesPoint> ChurnRate,
+        IReadOnlyList<AdminBillingAnalyticsSeriesPoint> Ltv,
+        string Currency,
+        bool Available);
 
     public sealed record IssueRefundRequest(
         string CheckoutSessionId,

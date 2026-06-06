@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services.Content;
 
 namespace OetLearner.Api.Services.Speaking;
 
@@ -18,12 +19,19 @@ namespace OetLearner.Api.Services.Speaking;
 //   * List voice notes for a review, newest first, for the marker UI.
 //   * Delete a voice note — only the original author or an admin caller.
 //
-// Validation of the linked MediaAsset (mime type, ownership, ready
-// state) is performed by the caller (endpoint layer / upload pipeline)
-// to keep this service free of HTTP/upload concerns. The service still
-// confirms the row + the review exist before saving.
-public sealed class SpeakingReviewVoiceNoteService(LearnerDbContext db)
+// The service owns the review + media authorization boundary because the
+// HTTP route and future workers all converge here.
+public sealed class SpeakingReviewVoiceNoteService
 {
+    private readonly LearnerDbContext _db;
+    private readonly IFileStorage _fileStorage;
+
+    public SpeakingReviewVoiceNoteService(LearnerDbContext db, IFileStorage fileStorage)
+    {
+        _db = db;
+        _fileStorage = fileStorage;
+    }
+
     private const int MaxDurationSeconds = 3600;
     private const int MaxWrittenNotesLength = 4000;
     private const int MaxRubricJsonLength = 8000;
@@ -87,26 +95,39 @@ public sealed class SpeakingReviewVoiceNoteService(LearnerDbContext db)
                     $"Voice note rubric JSON cannot exceed {MaxRubricJsonLength} characters.")]);
         }
 
-        var review = await db.ReviewRequests
-            .AsNoTracking()
-            .FirstOrDefaultAsync(r => r.Id == reviewRequestId, ct)
-            ?? throw ApiException.NotFound("review_request_not_found", "Review request not found.");
-
-        if (!string.Equals(review.SubtestCode, "speaking", StringComparison.OrdinalIgnoreCase))
+        var review = await LoadOwnedSpeakingReviewAsync(reviewRequestId, expertUserId, ct);
+        if (review.State is ReviewRequestState.Completed or ReviewRequestState.Cancelled)
         {
-            throw ApiException.Validation(
-                "review_type_mismatch",
-                "Voice notes can only be attached to speaking reviews.");
+            throw ApiException.Conflict(
+                "review_not_editable",
+                "Completed or cancelled reviews cannot be modified.");
         }
 
-        var mediaExists = await db.MediaAssets
+        var media = await _db.MediaAssets
             .AsNoTracking()
-            .AnyAsync(m => m.Id == mediaAssetId, ct);
-        if (!mediaExists)
-        {
-            throw ApiException.NotFound(
+            .FirstOrDefaultAsync(m => m.Id == mediaAssetId, ct)
+            ?? throw ApiException.NotFound(
                 "voice_note_media_not_found",
                 "Upload the voice note before attaching it to the review.");
+        if (!string.Equals(media.UploadedBy, expertUserId, StringComparison.OrdinalIgnoreCase))
+        {
+            throw ApiException.Forbidden(
+                "voice_note_forbidden",
+                "You can only attach voice notes uploaded by your expert account.");
+        }
+        if (!media.MimeType.StartsWith("audio/", StringComparison.OrdinalIgnoreCase))
+        {
+            throw ApiException.Validation(
+                "invalid_voice_note_type",
+                "Voice notes must be audio files.",
+                [new ApiFieldError("mediaAssetId", "invalid_type", "Upload mp3, m4a, wav, ogg, or webm audio.")]);
+        }
+        if (media.Status != MediaAssetStatus.Ready || string.IsNullOrWhiteSpace(media.StoragePath) || !_fileStorage.Exists(media.StoragePath))
+        {
+            throw ApiException.Validation(
+                "voice_note_media_not_ready",
+                "Voice note upload must finish processing before it can be attached to the review.",
+                [new ApiFieldError("mediaAssetId", "not_ready", "Wait for the audio upload to finish, then attach the voice note again.")]);
         }
 
         // NB: TranscriptText is intentionally left null on create — the ASR
@@ -124,13 +145,14 @@ public sealed class SpeakingReviewVoiceNoteService(LearnerDbContext db)
             CreatedAt = DateTimeOffset.UtcNow,
         };
 
-        db.SpeakingReviewVoiceNotes.Add(note);
-        await db.SaveChangesAsync(ct);
+        _db.SpeakingReviewVoiceNotes.Add(note);
+        await _db.SaveChangesAsync(ct);
         return note;
     }
 
     public async Task<IReadOnlyList<SpeakingReviewVoiceNote>> ListForReviewAsync(
         string reviewRequestId,
+        string expertUserId,
         CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(reviewRequestId))
@@ -139,8 +161,16 @@ public sealed class SpeakingReviewVoiceNoteService(LearnerDbContext db)
                 "review_request_required",
                 "Review request id is required.");
         }
+        if (string.IsNullOrWhiteSpace(expertUserId))
+        {
+            throw ApiException.Validation(
+                "expert_user_required",
+                "Expert user id is required.");
+        }
 
-        return await db.SpeakingReviewVoiceNotes
+        _ = await LoadOwnedSpeakingReviewAsync(reviewRequestId, expertUserId, ct);
+
+        return await _db.SpeakingReviewVoiceNotes
             .AsNoTracking()
             .Where(n => n.ReviewRequestId == reviewRequestId)
             .OrderByDescending(n => n.CreatedAt)
@@ -164,7 +194,7 @@ public sealed class SpeakingReviewVoiceNoteService(LearnerDbContext db)
                 "Voice note id is required.");
         }
 
-        var note = await db.SpeakingReviewVoiceNotes
+        var note = await _db.SpeakingReviewVoiceNotes
             .FirstOrDefaultAsync(n => n.Id == voiceNoteId, ct)
             ?? throw ApiException.NotFound("voice_note_not_found", "Voice note not found.");
 
@@ -175,7 +205,41 @@ public sealed class SpeakingReviewVoiceNoteService(LearnerDbContext db)
                 "Only the original author or an admin can delete this voice note.");
         }
 
-        db.SpeakingReviewVoiceNotes.Remove(note);
-        await db.SaveChangesAsync(ct);
+        _db.SpeakingReviewVoiceNotes.Remove(note);
+        await _db.SaveChangesAsync(ct);
+    }
+
+    private async Task<ReviewRequest> LoadOwnedSpeakingReviewAsync(
+        string reviewRequestId,
+        string expertUserId,
+        CancellationToken ct)
+    {
+        var review = await _db.ReviewRequests
+            .AsNoTracking()
+            .FirstOrDefaultAsync(r => r.Id == reviewRequestId, ct)
+            ?? throw ApiException.NotFound("review_request_not_found", "Review request not found.");
+
+        if (!string.Equals(review.SubtestCode, "speaking", StringComparison.OrdinalIgnoreCase))
+        {
+            throw ApiException.Validation(
+                "review_type_mismatch",
+                "Voice notes can only be attached to speaking reviews.");
+        }
+
+        var assigned = await _db.ExpertReviewAssignments
+            .AsNoTracking()
+            .AnyAsync(a =>
+                a.ReviewRequestId == reviewRequestId
+                && a.AssignedReviewerId == expertUserId
+                && a.ClaimState != ExpertAssignmentState.Released,
+                ct);
+        if (!assigned)
+        {
+            throw ApiException.Forbidden(
+                "review_not_owned",
+                "You can only access voice notes for speaking reviews assigned to you.");
+        }
+
+        return review;
     }
 }

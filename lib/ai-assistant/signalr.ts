@@ -1,6 +1,6 @@
 /**
  * AI Assistant SignalR hub connection manager.
- * Connects to /hubs/ai-assistant with auto-reconnect and exponential backoff.
+ * Connects to /v1/ai-assistant/hub with auto-reconnect and exponential backoff.
  */
 
 import {
@@ -53,11 +53,11 @@ function getRetryDelay(previousRetryCount: number): number | null {
 function resolveHubUrl(): string {
   // In browser, use same-origin proxy path
   if (typeof window !== 'undefined') {
-    return '/api/backend/hubs/ai-assistant';
+    return '/api/backend/v1/ai-assistant/hub';
   }
   // Server-side (shouldn't be needed for SignalR, but defensive)
   const base = env.apiBaseUrl ?? 'http://127.0.0.1:5198';
-  return `${base}/hubs/ai-assistant`;
+  return `${base}/v1/ai-assistant/hub`;
 }
 
 // ─── Connection Factory ─────────────────────────────────────────────────────

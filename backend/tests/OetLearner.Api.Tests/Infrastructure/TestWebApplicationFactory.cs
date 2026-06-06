@@ -94,7 +94,7 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
         {
             for (var i = services.Count - 1; i >= 0; i--)
             {
-                if (IsLongRunningHostedWorker(services[i]))
+                if (IsHostedService(services[i]))
                 {
                     services.RemoveAt(i);
                 }
@@ -142,10 +142,8 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
         });
     }
 
-    private static bool IsLongRunningHostedWorker(ServiceDescriptor descriptor)
-        => descriptor.ServiceType == typeof(IHostedService)
-           && descriptor.ImplementationType is { } implementationType
-           && typeof(BackgroundService).IsAssignableFrom(implementationType);
+    private static bool IsHostedService(ServiceDescriptor descriptor)
+        => descriptor.ServiceType == typeof(IHostedService);
 
     public HttpClient CreateAuthenticatedClient(string email, string password, string? expectedRole = null)
     {
@@ -206,7 +204,7 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
     /// <summary>
     /// Drives one or more passes of the background job pipeline so tests can
     /// drain queued evaluations deterministically. The hosted-service loop is
-    /// stripped from the test host (see <c>IsLongRunningHostedWorker</c>) so
+    /// stripped from the test host (see <c>IsHostedService</c>) so
     /// queued <c>JobType.WritingEvaluation</c> / <c>JobType.SpeakingEvaluation</c>
     /// rows would otherwise never advance past "queued". Default 3 passes
     /// covers the common "evaluation → side-effects → notification fan-out"

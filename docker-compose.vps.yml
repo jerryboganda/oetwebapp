@@ -115,7 +115,7 @@ services:
       Billing__CheckoutBaseUrl: ${CHECKOUT_BASE_URL}
       Storage__LocalRootPath: /var/opt/oet-learner/storage
       Storage__MaxUploadBytes: ${MAX_UPLOAD_BYTES:-1073741824}
-      Bootstrap__AutoMigrate: ${AUTO_MIGRATE:-true}
+      Bootstrap__AutoMigrate: ${AUTO_MIGRATE:-false}
       Bootstrap__SeedDemoData: ${SEED_DEMO_DATA:-false}
       Content__WritingSeed__Enabled: ${CONTENT__WRITINGSEED__ENABLED:-true}
       Proxy__TrustForwardHeaders: true
