@@ -499,9 +499,27 @@ public sealed class PrivateSpeakingAdminActionsTests
             timeProvider: new FixedTimeProvider(Now),
             logger: NullLogger<PrivateSpeakingCalendarService>.Instance);
 
+        // MarkNoShowAsync now dispatches no-show notifications, so a real
+        // NotificationService is required. No LearnerUser/ExpertUser rows are seeded,
+        // so CreateForLearnerAsync/CreateForExpertAsync early-return and the
+        // collaborators passed as null! are never exercised.
+        var notificationService = new NotificationService(
+            db,
+            emailSender: null!,
+            webPushDispatcher: null!,
+            mobilePushDispatcher: null!,
+            hubContext: null!,
+            platformLinks: null!,
+            timeProvider: new FixedTimeProvider(Now),
+            webPushOptions: Options.Create(new WebPushOptions()),
+            runtimeSettingsProvider: TestRuntimeSettingsProvider.FromZoomOptions(new ZoomOptions()),
+            notificationProofOptions: Options.Create(new NotificationProofHarnessOptions()),
+            environment: null!,
+            logger: NullLogger<NotificationService>.Instance);
+
         return new PrivateSpeakingService(
             db,
-            notificationService: null!,
+            notificationService,
             zoomService: null!,
             calendarService: calendarService,
             entitlementResolver: resolver!,
