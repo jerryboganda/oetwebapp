@@ -1,4 +1,5 @@
 import {
+  useMutation,
   useQuery,
   useQueryClient,
   type UseQueryOptions,
@@ -48,6 +49,11 @@ export const queryKeys = {
   onboardingTours: {
     _def: ['onboarding-tours'] as const,
     state: ['onboarding-tours', 'state'] as const,
+  },
+  listening: {
+    _def: ['listening'] as const,
+    lessons: ['listening', 'lessons'] as const,
+    strategies: (category: string) => ['listening', 'strategies', category] as const,
   },
 } as const;
 
@@ -107,5 +113,26 @@ export function useStudyPlan(options: QueryOpts<Awaited<ReturnType<typeof fetchS
   });
 }
 
+
+/**
+ * FE-006: mutation helper that invalidates the given query keys on success, so
+ * call sites stop hand-rolling `queryClient.invalidateQueries` (or forgetting to,
+ * which is the stale-data-after-write bug). Pass the keys whose data the write
+ * affects; everything else is a normal TanStack mutation.
+ */
+export function useApiMutation<TData, TVars>(
+  mutationFn: (vars: TVars) => Promise<TData>,
+  invalidate: ReadonlyArray<readonly unknown[]> = [],
+) {
+  const queryClient = useQueryClient();
+  return useMutation<TData, Error, TVars>({
+    mutationFn,
+    onSuccess: () => {
+      invalidate.forEach((queryKey) => {
+        void queryClient.invalidateQueries({ queryKey });
+      });
+    },
+  });
+}
 
 export { useQueryClient };

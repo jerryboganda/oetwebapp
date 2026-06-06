@@ -1,9 +1,10 @@
 'use client';
 
-import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api';
 import { ErrorState } from '@/components/ui/empty-error';
+import { queryKeys } from '@/lib/query/hooks';
 
 interface LessonItem {
   id: string;
@@ -28,34 +29,12 @@ const SKILL_LABEL: Record<string, string> = {
 };
 
 export default function ListeningLessonsPage() {
-  const [lessons, setLessons] = useState<LessonItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(false);
-  const [reloadKey, setReloadKey] = useState(0);
-
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    setError(false);
-    apiClient.get<LessonItem[]>('/v1/listening-pathway/lessons')
-      .then((data: LessonItem[]) => {
-        if (!cancelled) {
-          setLessons(data);
-          setLoading(false);
-        }
-      })
-      .catch(() => {
-        // FE-021: surface a retryable error instead of silently falling through
-        // to the empty "being seeded" state on a failed fetch.
-        if (!cancelled) {
-          setError(true);
-          setLoading(false);
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [reloadKey]);
+  // FE-006: TanStack Query gives loading/error/retry + caching for free, replacing
+  // the hand-rolled useState+useEffect+reloadKey (FE-021's manual error handling).
+  const { data: lessons = [], isPending, isError, refetch } = useQuery({
+    queryKey: queryKeys.listening.lessons,
+    queryFn: () => apiClient.get<LessonItem[]>('/v1/listening-pathway/lessons'),
+  });
 
   return (
     <main className="mx-auto max-w-5xl px-4 py-12 space-y-8">
@@ -67,12 +46,12 @@ export default function ListeningLessonsPage() {
         </p>
       </header>
 
-      {loading ? (
+      {isPending ? (
         <p className="text-muted">Loading lessons…</p>
-      ) : error ? (
+      ) : isError ? (
         <ErrorState
           message="We couldn't load the foundation lessons."
-          onRetry={() => setReloadKey((k) => k + 1)}
+          onRetry={() => void refetch()}
         />
       ) : lessons.length === 0 ? (
         <div className="rounded-2xl border border-border bg-surface p-6 text-muted">

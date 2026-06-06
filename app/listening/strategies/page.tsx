@@ -1,9 +1,11 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import Link from 'next/link';
+import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api';
 import { ErrorState } from '@/components/ui/empty-error';
+import { queryKeys } from '@/lib/query/hooks';
 
 interface Strategy {
   id: string;
@@ -27,37 +29,19 @@ const CATEGORIES = [
 ];
 
 export default function ListeningStrategiesPage() {
-  const [strategies, setStrategies] = useState<Strategy[]>([]);
   const [category, setCategory] = useState('');
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(false);
-  const [reloadKey, setReloadKey] = useState(0);
 
-  useEffect(() => {
-    let cancelled = false;
-    const url = category
-      ? `/v1/listening-pathway/strategies?category=${encodeURIComponent(category)}`
-      : '/v1/listening-pathway/strategies';
-    setLoading(true);
-    setError(false);
-    apiClient.get<Strategy[]>(url)
-      .then((d: Strategy[]) => {
-        if (!cancelled) {
-          setStrategies(d);
-          setLoading(false);
-        }
-      })
-      .catch(() => {
-        // FE-021: surface a retryable error instead of the misleading empty state.
-        if (!cancelled) {
-          setError(true);
-          setLoading(false);
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [category, reloadKey]);
+  // FE-006: TanStack Query keys on `category`, so changing the filter refetches
+  // (and caches per category) — replacing the manual effect + reloadKey (FE-021).
+  const { data: strategies = [], isPending, isError, refetch } = useQuery({
+    queryKey: queryKeys.listening.strategies(category),
+    queryFn: () => {
+      const url = category
+        ? `/v1/listening-pathway/strategies?category=${encodeURIComponent(category)}`
+        : '/v1/listening-pathway/strategies';
+      return apiClient.get<Strategy[]>(url);
+    },
+  });
 
   return (
     <main className="mx-auto max-w-5xl px-4 py-12 space-y-8">
@@ -84,12 +68,12 @@ export default function ListeningStrategiesPage() {
         ))}
       </div>
 
-      {loading ? (
+      {isPending ? (
         <p className="text-muted">Loading strategies…</p>
-      ) : error ? (
+      ) : isError ? (
         <ErrorState
           message="We couldn't load the strategy library."
-          onRetry={() => setReloadKey((k) => k + 1)}
+          onRetry={() => void refetch()}
         />
       ) : strategies.length === 0 ? (
         <div className="rounded-2xl border border-border bg-surface p-6 text-muted">
