@@ -18,6 +18,7 @@
 
 import { create } from 'zustand';
 import type { WritingEditorMode } from './types';
+import { registerResettable } from '@/lib/stores/registry';
 
 export interface WritingEditorState {
   editorMode: WritingEditorMode;
@@ -69,6 +70,9 @@ export const useWritingEditorStore = create<WritingEditorStore>((set) => ({
   resetTimer: () => set({ secondsElapsed: 0 }),
   reset: () => set({ ...INITIAL_STATE }),
 }));
+
+// FE-001: reset editor/coach/timer UI state on logout (in-memory only).
+registerResettable(() => useWritingEditorStore.getState().reset());
 
 /**
  * Selector helpers for fine-grained subscriptions (avoid re-renders

@@ -41,7 +41,7 @@ function makeQueryClient(): QueryClient {
 
 let browserQueryClient: QueryClient | undefined;
 
-function getQueryClient(): QueryClient {
+export function getQueryClient(): QueryClient {
   if (isServer) {
     // Always make a new one on the server; never cache across requests.
     return makeQueryClient();

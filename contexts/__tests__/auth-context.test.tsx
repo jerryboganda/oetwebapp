@@ -1,5 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { AuthProvider, useAuth } from '@/contexts/auth-context';
+import { getQueryClient } from '@/components/providers/query-provider';
+import { useExpertStore } from '@/lib/stores/expert-store';
 import type { AuthSession } from '@/lib/types/auth';
 
 const authClientMock = vi.hoisted(() => ({
@@ -103,5 +105,42 @@ describe('AuthProvider', () => {
     await waitFor(() => {
       expect(screen.getByTestId('role')).toHaveTextContent('anonymous');
     });
+  });
+
+  it('clears the query cache and persisted Zustand stores on sign-out (FE-001)', async () => {
+    authClientMock.restoreSession.mockResolvedValue(createSession());
+    authClientMock.signOut.mockResolvedValue(undefined);
+
+    // Seed user-scoped client state that must NOT survive logout.
+    getQueryClient().setQueryData(['dashboard', 'home'], { hello: 'world' });
+    useExpertStore.getState().upsertReviewDraft('review-1', {
+      scores: { C1: 5 },
+      criterionComments: {},
+      finalComment: 'draft',
+      anchoredComments: [],
+      timestampComments: [],
+      scratchpad: '',
+      checklistItems: [],
+    });
+
+    render(
+      <AuthProvider>
+        <AuthConsumer />
+      </AuthProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('email')).toHaveTextContent('learner@oet-prep.dev');
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Sign out' }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('role')).toHaveTextContent('anonymous');
+    });
+
+    // FE-001: both the TanStack Query cache and the persisted expert store are wiped.
+    expect(getQueryClient().getQueryCache().getAll()).toHaveLength(0);
+    expect(useExpertStore.getState().reviewDrafts).toEqual({});
   });
 });

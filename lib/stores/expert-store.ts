@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { AnchoredComment, ExpertChecklistItem, TimestampComment } from '@/lib/types/expert';
+import { registerResettable } from './registry';
 
 export interface LocalReviewDraft {
   reviewId: string;
@@ -27,6 +28,7 @@ interface ExpertState {
   upsertReviewDraft: (reviewId: string, draft: Omit<LocalReviewDraft, 'reviewId' | 'updatedAt'> & { updatedAt?: string }) => void;
   getReviewDraft: (reviewId: string) => LocalReviewDraft | null;
   clearReviewDraft: (reviewId: string) => void;
+  reset: () => void;
 }
 
 export const useExpertStore = create<ExpertState>()(
@@ -62,6 +64,7 @@ export const useExpertStore = create<ExpertState>()(
         const { [reviewId]: _removed, ...rest } = state.reviewDrafts;
         return { reviewDrafts: rest };
       }),
+      reset: () => set({ playbackSpeed: 1, currentTimestamp: 0, isPlaying: false, reviewDrafts: {} }),
     }),
     {
       name: 'expert-console-store',
@@ -69,3 +72,10 @@ export const useExpertStore = create<ExpertState>()(
     },
   ),
 );
+
+// FE-001: clear in-memory state AND purge the persisted localStorage entry on
+// logout, so the next user on a shared device can't see prior review drafts.
+registerResettable(() => {
+  useExpertStore.getState().reset();
+  useExpertStore.persist.clearStorage();
+});

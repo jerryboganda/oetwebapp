@@ -24,6 +24,8 @@ import type {
   UserRole,
 } from '@/lib/types/auth';
 import { initializeAnalyticsTransport } from '@/lib/analytics';
+import { resetAllStores } from '@/lib/stores/registry';
+import { getQueryClient } from '@/components/providers/query-provider';
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 
 interface AuthState {
@@ -179,6 +181,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       try {
         await signOutFromBackend();
       } finally {
+        // FE-001: wipe ALL client-side state on logout so a shared device never
+        // leaks the previous user's cached data or persisted review drafts.
+        // getQueryClient() returns the same browser singleton the provider uses.
+        getQueryClient().clear();
+        resetAllStores();
         setState({
           session: null,
           user: null,
