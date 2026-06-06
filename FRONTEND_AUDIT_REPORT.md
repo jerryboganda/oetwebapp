@@ -230,3 +230,49 @@ the live browser sweep is unblocked on the backend side (still pending a browser
 > shifting; re-verify against the current `ICartService`/`BillingCheckoutEndpoints` before fixing.
 
 **Remediation:** see **`FRONTEND_FIX_PLAN.md`** for the wave-by-wave fix design for every FE-0xx.
+
+---
+
+# Part 3 — Remediation Status (branch `fix/frontend-audit-remediation`)
+
+Each item below was implemented as a small, verified commit (lint + `tsc` + affected tests green).
+Findings were **re-verified before fixing** — a few turned out to be false positives or backend/product
+gaps, which are recorded honestly rather than force-changed.
+
+### ✅ Fixed & committed (17)
+FE-001 (logout state leak + regression test) · FE-002 (coach realtime localhost fallback) ·
+FE-003 (tutor-book download wrong port) · FE-004 (mock-bookings "sample data" banner) ·
+FE-005 (reminders fake-save → honest gate) · FE-009 + FE-039 (brand/OET/gold `@theme` tokens) ·
+FE-012 (pdf measurement-image alt) · FE-019 (admin campaigns base path 404) · FE-021 (listening
+infinite-spinner → error states) · FE-022 (lazy-load SignalR) · FE-026 (marketplace PATCH) ·
+FE-030 (duplicate Toasters) · FE-031 (ref-counted modal/drawer scroll-lock) · FE-032 (AI panel
+mobile width — partial) · FE-038 (optimizePackageImports) · FE-041 (broken PWA screenshots).
+
+### 🟡 Re-assessed — not a defect / lower impact than rated
+- **FE-035 (CanonViolationCard "invisible dark text")** — FALSE POSITIVE: the line already uses `dark:text-white`.
+- **FE-032 (metric-grid-2x2)** — 2-col metric tiles are mobile-acceptable; no change.
+- **FE-020 (key={index})** — real, but inputs are *controlled*, so it's a focus/transition glitch on
+  middle-delete, not value corruption. Safe fix is a multi-spot client-`_uid` refactor of the grammar/
+  template content editors → best done with live testing. **Deferred.**
+
+### 🟠 Deferred — backend/product gap (frontend already graceful, or needs a backend route/decision)
+- **FE-019 (action names)** `test-send/schedule/pause` have no backend route (base path fixed).
+- **FE-025** `/v1/admin/ai-assistant/config` not implemented backend-side (page already shows an error state).
+- **FE-027** community thread edit/delete have no backend route.
+- **FE-010** reading cooldown/duration/errorBankCleared DTO fields.
+
+### 🔴 Deferred — needs the live browser (open a normal Chrome window)
+FE-017 + FE-018 (cart/checkout DTO alignment — revenue path, fix against the live API) · the per-route
+runtime/responsive/console/keyboard sweep · FE-007 (axe specs run against the dev server) · FE-033 /
+FE-034 state + form checks (verify live).
+
+### 🟠 Deferred — large refactor (dedicated effort)
+FE-006 (React-Query migration) · FE-023 (recharts lazy, 13 sites) · FE-024 (client-boundary, 514 pages) ·
+FE-029 (error-handling migration, 9 modules) · FE-036 (design-system consolidation, ~50 files) ·
+FE-040 (icon-library unify, 11 files).
+
+### 🟢 Remaining tractable (safe, not yet done)
+FE-008 (reduced-motion gating) · FE-011 (admin inline form errors) · FE-013 (per-page metadata — note:
+auth/learner pages are client components, so needs server-wrapper) · FE-014 (dark-mode variants — verify
+learner-surface intent first) · FE-016 (`middleware`→`proxy` — handle carefully, it owns CSP/CSRF) ·
+FE-028 (TTS via apiClient/Blob) · FE-042 (z-index scale + toast ids).
