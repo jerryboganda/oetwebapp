@@ -15,7 +15,6 @@ import {
   ChevronRight,
   ShieldCheck,
   User,
-  PenLine,
   Trash2,
 } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout';
@@ -28,7 +27,7 @@ import { InlineAlert, Toast } from '@/components/ui/alert';
 import { Modal } from '@/components/ui/modal';
 import { Skeleton, EmptyState } from '@/components/ui';
 import { useAuth } from '@/contexts/auth-context';
-import { apiClient, fetchForumThread, fetchThreadReplies, createReply, pinCommunityThread, lockCommunityThread, adminDeleteCommunityThread, adminDeleteCommunityReply } from '@/lib/api';
+import { fetchForumThread, fetchThreadReplies, createReply, pinCommunityThread, lockCommunityThread, adminDeleteCommunityThread, adminDeleteCommunityReply } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
 
 interface ForumThread {
@@ -105,7 +104,6 @@ export default function ThreadPage() {
   const [submittingReply, setSubmittingReply] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [replyError, setReplyError] = useState<string | null>(null);
-  const [deleting, setDeleting] = useState(false);
   const [moderating, setModerating] = useState(false);
   const [deleteReplyTarget, setDeleteReplyTarget] = useState<ForumReply | null>(null);
   const [deleteThreadConfirm, setDeleteThreadConfirm] = useState(false);
@@ -235,19 +233,6 @@ export default function ThreadPage() {
     }
   }
 
-  async function handleDelete() {
-    if (!threadId || !confirm('Are you sure you want to delete this thread?')) return;
-    setDeleting(true);
-    try {
-      await apiClient.delete(`/v1/community/threads/${encodeURIComponent(threadId)}`);
-      analytics.track('community_thread_deleted', { threadId });
-      router.push('/community');
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete thread');
-      setDeleting(false);
-    }
-  }
-
   return (
     <LearnerDashboardShell pageTitle={thread?.title ?? 'Thread'}>
       <MotionSection className="space-y-4">
@@ -287,26 +272,6 @@ export default function ThreadPage() {
                   )}
                 </div>
                 <h1 className="text-2xl font-bold text-navy">{thread.title}</h1>
-                {isAuthor && (
-                  <div className="flex items-center gap-2 mt-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => router.push(`/community/threads/${thread.id}/edit`)}
-                    >
-                      <PenLine className="mr-1 h-3.5 w-3.5" /> Edit
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={handleDelete}
-                      disabled={deleting}
-                      className="text-danger hover:bg-danger/10"
-                    >
-                      <Trash2 className="mr-1 h-3.5 w-3.5" /> {deleting ? 'Deleting…' : 'Delete'}
-                    </Button>
-                  </div>
-                )}
                 {isAdmin && (
                   <div className="flex flex-wrap items-center gap-2 mt-2 rounded-lg border border-danger/30 bg-danger/10 p-2">
                     <Badge variant="outline" className="text-danger border-danger/30 bg-danger/10 text-xs mr-1">Admin</Badge>

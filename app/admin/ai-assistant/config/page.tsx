@@ -131,7 +131,7 @@ export default function AiAssistantConfigPage() {
       eyebrow="AI Assistant"
       breadcrumbs={breadcrumbs}
       actions={
-        <Button variant="primary" onClick={handleSave} disabled={saving} size="sm">
+        <Button variant="primary" onClick={handleSave} disabled={saving || !config} size="sm">
           <Save className="h-4 w-4" />
           {saving ? 'Saving…' : 'Save Configuration'}
         </Button>
@@ -139,7 +139,10 @@ export default function AiAssistantConfigPage() {
     >
       {toast && <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} />}
 
-      <AsyncStateWrapper status={status} onRetry={loadConfig}>
+      <AsyncStateWrapper
+        status={status}
+        errorMessage="AI Assistant configuration isn't available yet. This admin surface hasn't been built on the backend, so there's nothing to load or save here. Use the AI Assistant monitoring and safety pages in the meantime."
+      >
         {config && (
           <>
             <SettingsSection title="Section" description="Choose what to configure.">

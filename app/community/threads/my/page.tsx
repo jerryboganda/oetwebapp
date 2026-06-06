@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { User, MessageCircle, Eye, ThumbsUp, Clock, Pin, Lock, ArrowLeft, Plus, Trash2, PenLine } from 'lucide-react';
+import { User, MessageCircle, Eye, ThumbsUp, Clock, Pin, Lock, ArrowLeft, Plus } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero } from '@/components/domain';
 import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
@@ -67,7 +67,6 @@ export default function MyThreadsPage() {
   const [pageSize, setPageSize] = useState(20);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [deleting, setDeleting] = useState<string | null>(null);
 
   const loadCategories = useCallback(async () => {
     try {
@@ -103,20 +102,6 @@ export default function MyThreadsPage() {
     analytics.track('community_my_threads_viewed');
   }, [loadCategories, loadThreads]);
 
-
-  async function handleDelete(threadId: string) {
-    if (!confirm('Are you sure you want to delete this thread?')) return;
-    setDeleting(threadId);
-    try {
-      await apiClient.delete(`/v1/community/threads/${encodeURIComponent(threadId)}`);
-      analytics.track('community_thread_deleted', { threadId });
-      setThreads(prev => prev.filter(t => t.id !== threadId));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete thread');
-    } finally {
-      setDeleting(null);
-    }
-  }
 
   const categoryMap = new Map(categories.map(c => [c.id, c.name]));
 
@@ -196,24 +181,6 @@ export default function MyThreadsPage() {
                           <Clock className="h-3 w-3" /> {formatRelativeDate(thread.lastActivityAt)}
                         </span>
                       </div>
-                    </div>
-                    <div className="flex shrink-0 items-center gap-1">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => router.push(`/community/threads/${thread.id}/edit`)}
-                      >
-                        <PenLine className="h-3.5 w-3.5" />
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleDelete(thread.id)}
-                        disabled={deleting === thread.id}
-                        className="text-danger hover:bg-danger/10"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
                     </div>
                   </div>
                 </Card>

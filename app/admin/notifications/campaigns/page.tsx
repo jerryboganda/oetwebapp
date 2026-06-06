@@ -6,12 +6,9 @@ import {
   CheckCircle2,
   Clock,
   Edit3,
-  Eye,
   Loader2,
   Mail,
   Megaphone,
-  Pause,
-  Play,
   Plus,
   Search,
   Send,
@@ -211,7 +208,7 @@ export default function AdminCampaignsPage() {
 
   const handleAction = async (
     campaignId: string,
-    action: 'test-send' | 'approve' | 'schedule' | 'pause' | 'cancel'
+    action: 'approve' | 'cancel'
   ) => {
     setActionLoadingId(campaignId);
     try {
@@ -304,14 +301,6 @@ export default function AdminCampaignsPage() {
                   <Edit3 className="h-3.5 w-3.5" />
                 </Button>
                 <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => handleAction(campaign.id, 'test-send')}
-                  disabled={isLoading}
-                >
-                  <Eye className="h-3.5 w-3.5" />
-                </Button>
-                <Button
                   variant="primary"
                   size="sm"
                   onClick={() => handleAction(campaign.id, 'approve')}
@@ -322,24 +311,14 @@ export default function AdminCampaignsPage() {
               </>
             )}
             {campaign.status === 'scheduled' && (
-              <>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => handleAction(campaign.id, 'pause')}
-                  disabled={isLoading}
-                >
-                  <Pause className="h-3.5 w-3.5" />
-                </Button>
-                <Button
-                  variant="destructive"
-                  size="sm"
-                  onClick={() => handleAction(campaign.id, 'cancel')}
-                  disabled={isLoading}
-                >
-                  <XCircle className="h-3.5 w-3.5" />
-                </Button>
-              </>
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={() => handleAction(campaign.id, 'cancel')}
+                disabled={isLoading}
+              >
+                <XCircle className="h-3.5 w-3.5" />
+              </Button>
             )}
             {campaign.status === 'sending' && (
               <Button
