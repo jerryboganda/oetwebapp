@@ -17,7 +17,7 @@ namespace OetLearner.Api.Data.Migrations
                 type: "character varying(256)",
                 maxLength: 256,
                 nullable: false,
-                defaultValue: "");
+                defaultValue: "[1440, 60, 15]");
 
             migrationBuilder.AddColumn<int>(
                 name: "RescheduleFreeWindowHours",
