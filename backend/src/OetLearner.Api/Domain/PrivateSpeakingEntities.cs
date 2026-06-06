@@ -33,10 +33,10 @@ public class PrivateSpeakingConfig
     public int DefaultPriceMinorUnits { get; set; } = 5000; // $50.00
 
     [MaxLength(8)]
-    public string Currency { get; set; } = "AUD";
+    public string Currency { get; set; } = "GBP";
 
-    /// <summary>Cancellation window in hours before session start.</summary>
-    public int CancellationWindowHours { get; set; } = 24;
+    /// <summary>Cancellation window in hours before session start. PDF mandates a 48h full-refund window.</summary>
+    public int CancellationWindowHours { get; set; } = 48;
 
     /// <summary>Whether learners can reschedule confirmed bookings.</summary>
     public bool AllowReschedule { get; set; } = true;
@@ -44,9 +44,19 @@ public class PrivateSpeakingConfig
     /// <summary>Reschedule window in hours before session start.</summary>
     public int RescheduleWindowHours { get; set; } = 24;
 
+    /// <summary>Free reschedule window in hours before session start (no penalty applied).</summary>
+    public int RescheduleFreeWindowHours { get; set; } = 24;
+
+    /// <summary>Penalty percent (of session fee) for same-day reschedules inside the free window.</summary>
+    public int RescheduleSameDayPenaltyPercent { get; set; } = 50;
+
     /// <summary>JSON array of reminder offsets in hours before session, e.g. [24, 1].</summary>
     [MaxLength(256)]
     public string ReminderOffsetsHoursJson { get; set; } = "[24, 1]";
+
+    /// <summary>JSON array of reminder offsets in minutes before session (supports sub-hour offsets), e.g. [1440, 60, 15].</summary>
+    [MaxLength(256)]
+    public string ReminderOffsetsMinutesJson { get; set; } = "[1440, 60, 15]";
 
     /// <summary>Whether to send daily digest reminders for upcoming sessions.</summary>
     public bool DailyReminderEnabled { get; set; } = true;
@@ -259,6 +269,10 @@ public class PrivateSpeakingBooking
     [MaxLength(8)]
     public string Currency { get; set; } = "AUD";
 
+    /// <summary>Profession track: Medicine/Nursing/Pharmacy/Dentistry/Other (validated elsewhere).</summary>
+    [MaxLength(32)]
+    public string? ProfessionTrack { get; set; }
+
     // ── Payment ──
 
     [MaxLength(256)]
@@ -270,6 +284,17 @@ public class PrivateSpeakingBooking
     public PrivateSpeakingPaymentStatus PaymentStatus { get; set; } = PrivateSpeakingPaymentStatus.Pending;
 
     public DateTimeOffset? PaymentConfirmedAt { get; set; }
+
+    /// <summary>Refund amount issued in minor units (cents/pence).</summary>
+    public int? RefundAmountMinorUnits { get; set; }
+
+    /// <summary>Penalty amount withheld in minor units (cents/pence).</summary>
+    public int? PenaltyAmountMinorUnits { get; set; }
+
+    [MaxLength(256)]
+    public string? StripeRefundId { get; set; }
+
+    public bool RefundIssued { get; set; }
 
     // ── Entitlement accounting ──
 
@@ -355,6 +380,25 @@ public class PrivateSpeakingBooking
     public string? GoogleCalendarSyncError { get; set; }
 
     public DateTimeOffset? GoogleCalendarSyncedAt { get; set; }
+
+    // ── Attendance (Zoom-webhook no-show detection) ──
+
+    public DateTimeOffset? AttendanceJoinedAt { get; set; }
+
+    public DateTimeOffset? AttendanceLeftAt { get; set; }
+
+    public bool AttendanceVerified { get; set; }
+
+    // ── Recording / AI feedback (Phase 3) ──
+
+    [MaxLength(32)]
+    public string? RecordingStatus { get; set; }
+
+    [MaxLength(1024)]
+    public string? RecordingUrl { get; set; }
+
+    [MaxLength(32)]
+    public string? AiFeedbackStatus { get; set; }
 
     // ── Reminders ──
 

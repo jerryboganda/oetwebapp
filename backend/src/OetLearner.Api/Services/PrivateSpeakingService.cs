@@ -35,7 +35,12 @@ public sealed class PrivateSpeakingService(
         var config = await db.PrivateSpeakingConfigs.FirstOrDefaultAsync(ct);
         if (config is not null) return config;
 
-        config = new PrivateSpeakingConfig { UpdatedAt = timeProvider.GetUtcNow() };
+        config = new PrivateSpeakingConfig
+        {
+            UpdatedAt = timeProvider.GetUtcNow(),
+            CancellationPolicyText = "You may cancel your Speaking session with a full refund if the cancellation is made more than 48 hours before the scheduled start time. If you cancel less than 48 hours before the session, the booking will be cancelled without refund.",
+            BookingPolicyText = "You may reschedule your Speaking session before the session starts, subject to available tutor slots. Same-day rescheduling is allowed; however, 50% of the session fee will be lost according to the platform policy.",
+        };
         db.PrivateSpeakingConfigs.Add(config);
         await db.SaveChangesAsync(ct);
         return config;
