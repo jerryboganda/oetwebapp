@@ -391,11 +391,13 @@ public sealed class ContentPaperService(
             }
         }
 
-        // One summary audit row for the whole bulk op.
+        // One summary audit row for the whole bulk op. The affected ids go in
+        // the unbounded `Details` (text) column — never in ResourceId, which is
+        // varchar(64) and overflows once more than one ~32-char id is joined.
         await WriteAuditAsync(
             "ContentPaperBulkAction",
-            string.Join(",", distinctIds.Take(50)),
-            $"action={normalized}; requested={totalRequested}; succeeded={succeeded}; skipped={skipped}; failed={errors.Count}",
+            "bulk",
+            $"action={normalized}; requested={totalRequested}; succeeded={succeeded}; skipped={skipped}; failed={errors.Count}; ids={string.Join(",", distinctIds.Take(50))}",
             adminId, ct);
         await db.SaveChangesAsync(ct);
 

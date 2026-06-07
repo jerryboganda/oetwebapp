@@ -651,8 +651,8 @@ public partial class AdminService
                 await db.SaveChangesAsync(ct);
                 await LogAuditAsync(adminId, adminName,
                     request.IsFreePreview ? "EnabledFreePreview" : "DisabledFreePreview",
-                    "VocabularyTerm", string.Join(",", found.Take(50)),
-                    $"Bulk free-preview={request.IsFreePreview} applied to {updated} term(s).", ct);
+                    "VocabularyTerm", "bulk",
+                    $"Bulk free-preview={request.IsFreePreview} applied to {updated} term(s). ids={string.Join(",", found.Take(50))}", ct);
             }
         }
 

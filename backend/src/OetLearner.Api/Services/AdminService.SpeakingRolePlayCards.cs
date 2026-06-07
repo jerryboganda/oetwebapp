@@ -645,8 +645,8 @@ public partial class AdminService
         await LogAuditAsync(adminId, adminName,
             normalisedAction == "publish" ? "BulkPublished" : "BulkArchived",
             "RolePlayCard",
-            string.Join(",", distinctIds.Take(50)),
-            $"Bulk {normalisedAction}: {succeeded} succeeded, {skipped} skipped, {failed} failed of {requested.Length} requested.",
+            "bulk",
+            $"Bulk {normalisedAction}: {succeeded} succeeded, {skipped} skipped, {failed} failed of {requested.Length} requested. ids={string.Join(",", distinctIds.Take(50))}",
             ct);
         await CommitIfOwnedAsync(tx, ct);
 

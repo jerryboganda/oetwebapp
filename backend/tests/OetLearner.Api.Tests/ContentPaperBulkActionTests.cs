@@ -176,6 +176,14 @@ public class ContentPaperBulkActionTests
         Assert.Single(bulkAudits);
         Assert.Equal("admin-9", bulkAudits[0].ActorId);
         Assert.Contains("action=archive", bulkAudits[0].Details);
+        // Regression: the affected ids belong in Details, not ResourceId, which is
+        // varchar(64) in Postgres and overflowed when 2+ ~32-char ids were joined
+        // (the InMemory test provider does not enforce the length, so this guards
+        // the column invariant explicitly). See the bulk "Bulk action failed" 500.
+        Assert.Equal("bulk", bulkAudits[0].ResourceId);
+        Assert.True((bulkAudits[0].ResourceId?.Length ?? 0) <= 64);
+        Assert.Contains(p1.Id, bulkAudits[0].Details);
+        Assert.Contains(p2.Id, bulkAudits[0].Details);
 
         // No per-item archive audit rows leaked from the suppressed path.
         Assert.Empty(await db.AuditEvents.AsNoTracking()
