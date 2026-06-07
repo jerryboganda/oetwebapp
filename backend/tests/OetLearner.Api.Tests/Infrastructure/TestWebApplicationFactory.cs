@@ -21,6 +21,7 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
     private readonly string _storageRoot = Path.Combine(Path.GetTempPath(), $"oet-learner-tests-storage-{Guid.NewGuid():N}");
     private readonly string _databaseName = $"oet-learner-tests-{Guid.NewGuid():N}";
     private readonly bool _useFirstPartyAuth;
+    private readonly bool _seedDemoData;
     private readonly Dictionary<string, string?> _previousEnvironmentValues = new();
     private readonly Dictionary<string, string?>? _firstPartyConfiguration;
 
@@ -37,6 +38,7 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
     protected TestWebApplicationFactory(bool useFirstPartyAuth, bool seedDemoData)
     {
         _useFirstPartyAuth = useFirstPartyAuth;
+        _seedDemoData = seedDemoData;
 
         if (!_useFirstPartyAuth)
         {
@@ -142,7 +144,7 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
             {
                 ["ConnectionStrings:DefaultConnection"] = $"InMemory:{_databaseName}",
                 ["Auth:UseDevelopmentAuth"] = "true",
-                ["Bootstrap:SeedDemoData"] = seedDemoData ? "true" : "false",
+                ["Bootstrap:SeedDemoData"] = _seedDemoData ? "true" : "false",
                 ["Platform:PublicApiBaseUrl"] = "http://localhost",
                 ["Platform:PublicWebBaseUrl"] = "http://localhost",
                 ["Platform:FallbackEmailDomain"] = "example.test",
