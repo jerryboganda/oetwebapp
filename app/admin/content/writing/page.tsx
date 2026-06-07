@@ -9,7 +9,12 @@ import { Button } from '@/components/admin/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/admin/ui/card';
 import { KpiTile } from '@/components/admin/ui/kpi-tile';
 import { AdminTableLayout } from '@/components/admin/layout/admin-table-layout';
-import { DataTable, type Column } from '@/components/ui/data-table';
+import { type Column } from '@/components/ui/data-table';
+import {
+  AdminManagedTable,
+  type ManagedBulkAction,
+  type BulkResult,
+} from '@/components/admin/managed-table/admin-managed-table';
 import { Input, Select } from '@/components/ui/form-controls';
 import { Toast } from '@/components/ui/alert';
 import { AdminPermission, hasPermission } from '@/lib/admin-permissions';
@@ -18,13 +23,13 @@ import { useCurrentUser } from '@/lib/hooks/use-current-user';
 import {
   approvePublishWritingPaper,
   archiveContentPaper,
+  bulkContentPapers,
   listContentPapers,
   rejectWritingPaper,
   submitWritingPaperForReview,
   type ContentPaperDto,
   type PaperAssetRole,
 } from '@/lib/content-upload-api';
-import { BulkActionBar } from '@/components/ui/bulk-action-bar';
 
 type PageStatus = 'loading' | 'success' | 'error';
 type ToastState = { variant: 'success' | 'error'; message: string } | null;
@@ -74,6 +79,12 @@ function letterTypeLabel(value: string | null) {
   return LETTER_TYPES.find((option) => option.value === value)?.label ?? value ?? 'Missing';
 }
 
+function summarize(verb: string, result: BulkResult): string {
+  const n = result.succeeded;
+  const noun = n === 1 ? 'paper' : 'papers';
+  return `${verb} ${n} ${noun} (${result.skipped ?? 0} skipped, ${result.failed ?? 0} failed)`;
+}
+
 export default function AdminWritingPapersPage() {
   const { isAuthenticated, role } = useAdminAuth();
   const { user } = useCurrentUser();
@@ -87,7 +98,8 @@ export default function AdminWritingPapersPage() {
   const [filterStatus, setFilterStatus] = useState('');
   const [filterLetterType, setFilterLetterType] = useState('');
   const [search, setSearch] = useState('');
-  const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
 
   const load = useCallback(async () => {
     if (!isAuthenticated || role !== 'admin') return;
@@ -160,6 +172,82 @@ export default function AdminWritingPapersPage() {
       setToast({ variant: 'error', message: `Reject failed: ${(e as Error).message}` });
     }
   }, [canPublishContent, load]);
+
+  const pagedRows = useMemo(
+    () => rows.slice((page - 1) * pageSize, page * pageSize),
+    [rows, page, pageSize],
+  );
+
+  const bulkActions = useMemo<ManagedBulkAction<ContentPaperDto>[]>(() => [
+    {
+      key: 'submit-for-review',
+      label: 'Submit for review',
+      variant: 'primary',
+      isEligible: (row) => row.status === 'Draft',
+      run: (ids) => bulkContentPapers('submit-for-review', ids),
+    },
+    {
+      key: 'approve-publish',
+      label: 'Approve & publish',
+      variant: 'primary',
+      isEligible: (row) => canPublishContent && row.status === 'InReview',
+      confirm: {
+        title: (n) => `Approve & publish ${n} ${n === 1 ? 'paper' : 'papers'}?`,
+        description: (n) =>
+          `${n} ${n === 1 ? 'paper' : 'papers'} will be published and visible to learners immediately.`,
+        confirmLabel: 'Approve & publish',
+        destructive: false,
+      },
+      run: (ids) => bulkContentPapers('approve-publish', ids),
+    },
+    {
+      key: 'reject',
+      label: 'Reject',
+      variant: 'danger',
+      isEligible: (row) => canPublishContent && row.status === 'InReview',
+      confirm: {
+        title: (n) => `Reject ${n} ${n === 1 ? 'paper' : 'papers'}?`,
+        description: (n) =>
+          `${n} ${n === 1 ? 'paper' : 'papers'} will be returned to the author. The reason is recorded on the audit trail.`,
+        confirmLabel: 'Reject',
+        destructive: true,
+        requireReason: true,
+        reasonLabel: 'Rejection reason',
+        reasonPlaceholder: 'Explain what needs to change before this can be published…',
+      },
+      run: (ids, reason) => bulkContentPapers('reject', ids, reason),
+    },
+    {
+      key: 'archive',
+      label: 'Archive',
+      icon: <ArchiveIcon className="h-4 w-4" />,
+      variant: 'danger',
+      isEligible: (row) => row.status !== 'Archived',
+      confirm: {
+        title: (n) => `Archive ${n} ${n === 1 ? 'paper' : 'papers'}?`,
+        description: (n) =>
+          `${n} ${n === 1 ? 'paper' : 'papers'} will be archived and learners will no longer see them. This can be undone by an admin later.`,
+        confirmLabel: 'Archive',
+        destructive: true,
+      },
+      run: (ids) => bulkContentPapers('archive', ids),
+    },
+  ], [canPublishContent]);
+
+  const handleBulkResult = useCallback((action: ManagedBulkAction<ContentPaperDto>, result: BulkResult) => {
+    const verbs: Record<string, string> = {
+      'submit-for-review': 'Submitted',
+      'approve-publish': 'Published',
+      reject: 'Rejected',
+      archive: 'Archived',
+    };
+    setToast({ variant: 'success', message: summarize(verbs[action.key] ?? 'Updated', result) });
+    void load();
+  }, [load]);
+
+  const handleBulkError = useCallback((action: ManagedBulkAction<ContentPaperDto>, error: unknown) => {
+    setToast({ variant: 'error', message: `${action.label} failed: ${(error as Error).message}` });
+  }, []);
 
   const stats = useMemo(() => {
     let published = 0;
@@ -317,9 +405,9 @@ export default function AdminWritingPapersPage() {
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-            <Select label="Status" value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} options={STATUSES} />
-            <Select label="Letter type" value={filterLetterType} onChange={(e) => setFilterLetterType(e.target.value)} options={LETTER_TYPES} />
-            <Input label="Search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Title or slug" />
+            <Select label="Status" value={filterStatus} onChange={(e) => { setFilterStatus(e.target.value); setPage(1); }} options={STATUSES} />
+            <Select label="Letter type" value={filterLetterType} onChange={(e) => { setFilterLetterType(e.target.value); setPage(1); }} options={LETTER_TYPES} />
+            <Input label="Search" value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} placeholder="Title or slug" />
           </div>
         </CardContent>
       </Card>
@@ -378,21 +466,22 @@ export default function AdminWritingPapersPage() {
                 Writing papers ({rows.length})
               </p>
             </div>
-            <DataTable
-              data={rows}
+            <AdminManagedTable
               columns={columns}
+              data={pagedRows}
               keyExtractor={(paper) => paper.id}
-              selectable
-              selectedKeys={selectedKeys}
-              onSelectionChange={setSelectedKeys}
-            />
-            <BulkActionBar
-              selectedCount={selectedKeys.size}
-              onClearSelection={() => setSelectedKeys(new Set())}
-              actions={[
-                { key: 'archive', label: 'Archive selected', variant: 'danger', onClick: () => {} },
-                { key: 'publish', label: 'Publish selected', onClick: () => {} },
-              ]}
+              total={rows.length}
+              loading={status === 'loading'}
+              page={page}
+              pageSize={pageSize}
+              onPageChange={setPage}
+              onPageSizeChange={(s) => { setPageSize(s); setPage(1); }}
+              pageSizeOptions={[10, 25, 50, 100]}
+              itemLabel="paper"
+              itemLabelPlural="papers"
+              bulkActions={canWriteContent ? bulkActions : []}
+              onResult={handleBulkResult}
+              onError={handleBulkError}
             />
           </div>
         </AsyncStateWrapper>

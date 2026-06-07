@@ -1783,6 +1783,201 @@ public sealed class MockService(LearnerDbContext db)
         return await GetBundleAsync(bundle.Id, ct);
     }
 
+    /// <summary>
+    /// Atomic bulk action over mock bundles. <paramref name="action"/> is one
+    /// of <c>publish</c>, <c>archive</c>, or <c>delete</c>. Every requested id
+    /// is processed inside a SINGLE transaction and exactly ONE audit row is
+    /// written for the whole operation; if any unexpected (non-gate) error is
+    /// thrown mid-batch the transaction rolls back and nothing is persisted.
+    ///
+    /// Per-item status-gate / not-found failures (surfaced as
+    /// <see cref="ApiException"/> by the per-item code paths) are caught and
+    /// recorded as <c>Failed</c> with a capped error list — they do NOT abort
+    /// the batch, mirroring the gold-standard vocabulary bulk endpoints.
+    ///
+    /// Returns an anonymous object whose shape is wire-compatible with the
+    /// shared <c>BulkActionResult</c> record
+    /// (<c>{ totalRequested, succeeded, skipped, failed, errors }</c>).
+    /// </summary>
+    public async Task<object> BulkAsync(string action, string[] ids, string adminId, CancellationToken ct)
+    {
+        var normalizedAction = (action ?? string.Empty).Trim().ToLowerInvariant();
+        if (normalizedAction is not ("publish" or "archive" or "delete"))
+        {
+            throw ApiException.Validation(
+                "mock_bundle_bulk_action_invalid",
+                "Action must be one of: publish, archive, delete.");
+        }
+
+        // Action-specific permission gate. The route only guarantees
+        // AdminContentWrite (the minimum shared by all three actions); the
+        // stricter publish grant is enforced here because the required
+        // permission depends on the request body, not the route. archive and
+        // delete need only AdminContentWrite, already enforced by the route.
+        // Mirrors the sibling AdminService.BulkSpeakingDrillsAsync gate.
+        if (normalizedAction == "publish")
+        {
+            var perms = await GetEffectiveAdminPermissionsAsync(adminId, ct);
+            if (!perms.Contains(AdminPermissions.ContentPublish)
+                && !perms.Contains(AdminPermissions.SystemAdmin))
+            {
+                throw ApiException.Forbidden(
+                    "insufficient_permission",
+                    "Bulk publishing mock bundles requires the content:publish permission.");
+            }
+        }
+
+        var requestedIds = (ids ?? Array.Empty<string>())
+            .Select(id => id?.Trim() ?? string.Empty)
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+
+        if (requestedIds.Count == 0)
+        {
+            throw ApiException.Validation(
+                "mock_bundle_bulk_empty",
+                "Select at least one mock bundle.");
+        }
+
+        if (requestedIds.Count > 2000)
+        {
+            throw ApiException.Validation(
+                "mock_bundle_bulk_limit",
+                "Bulk actions are limited to 2000 mock bundles at a time.");
+        }
+
+        const int maxErrors = 20;
+        var succeeded = 0;
+        var skipped = 0;
+        var failed = 0;
+        var errors = new List<string>();
+
+        await using var tx = db.Database.IsRelational() && db.Database.CurrentTransaction is null
+            ? await db.Database.BeginTransactionAsync(ct)
+            : null;
+        try
+        {
+            foreach (var id in requestedIds)
+            {
+                try
+                {
+                    var outcome = await ApplyBulkActionToBundleAsync(normalizedAction, id, adminId, ct);
+                    if (outcome) succeeded++; else skipped++;
+                }
+                catch (ApiException ex)
+                {
+                    failed++;
+                    if (errors.Count < maxErrors)
+                    {
+                        errors.Add($"{id}: {ex.Message}");
+                    }
+                }
+            }
+
+            LogAudit(
+                adminId,
+                $"BulkBundle.{char.ToUpperInvariant(normalizedAction[0])}{normalizedAction[1..]}",
+                "MockBundle",
+                "bulk",
+                JsonSupport.Serialize(new
+                {
+                    action = normalizedAction,
+                    totalRequested = requestedIds.Count,
+                    succeeded,
+                    skipped,
+                    failed,
+                }));
+
+            await db.SaveChangesAsync(ct);
+            if (tx is not null) await tx.CommitAsync(ct);
+        }
+        catch
+        {
+            if (tx is not null) await tx.RollbackAsync(ct);
+            throw;
+        }
+
+        return new
+        {
+            totalRequested = requestedIds.Count,
+            succeeded,
+            skipped,
+            failed,
+            errors = errors.ToArray(),
+        };
+    }
+
+    /// <summary>
+    /// Apply a single bulk action to one bundle WITHOUT committing — the caller
+    /// owns the transaction, the single audit row, and the single
+    /// <c>SaveChangesAsync</c>. Returns <c>true</c> when the bundle changed and
+    /// <c>false</c> when it was already in the target state (skipped). Throws
+    /// <see cref="ApiException"/> for not-found / status-gate failures so the
+    /// caller can record them per-id.
+    /// </summary>
+    /// <summary>
+    /// Resolve the effective admin permission set for <paramref name="adminId"/>.
+    /// Mirrors <c>AdminService.GetEffectivePermissionsAsync</c>: an admin with
+    /// no explicit grants is treated as a system admin (backward compat).
+    /// </summary>
+    private async Task<HashSet<string>> GetEffectiveAdminPermissionsAsync(string adminId, CancellationToken ct)
+    {
+        var grants = await db.AdminPermissionGrants
+            .AsNoTracking()
+            .Where(g => g.AdminUserId == adminId)
+            .Select(g => g.Permission)
+            .ToListAsync(ct);
+        var perms = new HashSet<string>(grants, StringComparer.OrdinalIgnoreCase);
+        if (perms.Count == 0)
+        {
+            perms.Add(AdminPermissions.SystemAdmin);
+        }
+        return perms;
+    }
+
+    private async Task<bool> ApplyBulkActionToBundleAsync(string action, string id, string adminId, CancellationToken ct)
+    {
+        var now = DateTimeOffset.UtcNow;
+
+        if (action == "publish")
+        {
+            var bundle = await GetBundleEntityAsync(id, track: true, ct);
+            if (bundle.Status == ContentStatus.Published) return false;
+
+            var sections = await db.MockBundleSections
+                .Where(x => x.MockBundleId == bundle.Id)
+                .Include(x => x.ContentPaper)
+                .OrderBy(x => x.SectionOrder)
+                .ToListAsync(ct);
+
+            var gate = ValidatePublishGate(bundle, sections);
+            if (gate.Count > 0)
+            {
+                throw ApiException.Validation("mock_publish_gate_failed", "The mock bundle is not ready to publish.", gate);
+            }
+
+            bundle.Status = ContentStatus.Published;
+            bundle.PublishedAt = now;
+            bundle.UpdatedAt = now;
+            bundle.UpdatedByAdminId = adminId;
+            bundle.EstimatedDurationMinutes = sections.Sum(x => x.TimeLimitMinutes);
+            return true;
+        }
+
+        // archive | delete — both perform a soft-archive, matching the per-item
+        // DELETE endpoint (which maps to ArchiveBundleAsync). There is no hard
+        // delete for mock bundles.
+        var target = await GetBundleEntityAsync(id, track: true, ct);
+        if (target.Status == ContentStatus.Archived) return false;
+
+        target.Status = ContentStatus.Archived;
+        target.ArchivedAt = now;
+        target.UpdatedAt = now;
+        target.UpdatedByAdminId = adminId;
+        return true;
+    }
+
     private IQueryable<MockBundle> QueryPublishedBundles()
         => db.MockBundles.AsNoTracking().Where(x => x.Status == ContentStatus.Published);
 

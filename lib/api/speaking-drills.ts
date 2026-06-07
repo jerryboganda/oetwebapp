@@ -22,6 +22,7 @@
 import { apiClient } from '@/lib/api';
 import { ensureFreshAccessToken } from '@/lib/auth-client';
 import { env } from '@/lib/env';
+import type { BulkActionResultDto } from '@/lib/types/admin';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Enums
@@ -334,6 +335,23 @@ export async function deleteAdminDrill(drillId: string): Promise<AdminDrillDetai
     `/v1/admin/speaking/drills/${encodeURIComponent(drillId)}`,
     { method: 'DELETE' },
   );
+}
+
+export type DrillBulkAction = 'publish' | 'archive' | 'delete';
+
+/**
+ * Bulk action over speaking drills. `POST /v1/admin/speaking/drills/bulk`.
+ * Backend record is PascalCase `(Action, Ids)`; ASP.NET binds the camelCase
+ * JSON case-insensitively (matches the other admin POSTs in this module).
+ */
+export async function bulkAdminDrills(
+  action: DrillBulkAction,
+  ids: string[],
+): Promise<BulkActionResultDto> {
+  return apiClient.post<BulkActionResultDto>('/v1/admin/speaking/drills/bulk', {
+    action,
+    ids,
+  });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

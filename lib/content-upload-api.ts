@@ -7,6 +7,7 @@ import { apiClient } from './api';
 import { env } from './env';
 import { ensureFreshAccessToken } from './auth-client';
 import { fetchWithTimeout } from './network/fetch-with-timeout';
+import type { BulkActionResultDto } from './types/admin';
 
 // ── Types mirror the .NET contracts 1:1 ─────────────────────────────────
 
@@ -340,6 +341,66 @@ export const listContentPapers = (query: Partial<{
   });
   return api<ContentPaperDto[]>(`/v1/admin/papers?${qs.toString()}`);
 };
+
+export type PaperBulkAction =
+  | 'archive'
+  | 'publish'
+  | 'unpublish'
+  | 'submit-for-review'
+  | 'approve-publish'
+  | 'reject';
+
+/**
+ * Bulk lifecycle action over reading/listening/writing papers.
+ * `POST /v1/admin/papers/bulk`. The backend record is PascalCase
+ * `(Action, Ids, Reason)` but ASP.NET binds JSON case-insensitively, so the
+ * camelCase body below binds correctly (matches every other POST client here,
+ * e.g. `rejectWritingPaper` which sends `{ reason }`).
+ */
+export const bulkContentPapers = (
+  action: PaperBulkAction,
+  ids: string[],
+  reason?: string,
+) =>
+  api<BulkActionResultDto>('/v1/admin/papers/bulk', {
+    method: 'POST',
+    body: JSON.stringify({ action, ids, ...(reason !== undefined ? { reason } : {}) }),
+  });
+
+/**
+ * Paged variant of `listContentPapers` that also returns the total row count
+ * from the `X-Total-Count` response header (body is unchanged — a bare
+ * `ContentPaperDto[]`). Added as a separate function so existing callers of
+ * `listContentPapers` (which expect a bare array) are not disrupted.
+ * Goes through the raw `fetchWithTimeout` path (mirroring `uploadPart`'s
+ * auth/CSRF handling) because the shared `apiClient` only surfaces the parsed
+ * JSON body, not response headers.
+ */
+export async function listContentPapersPaged(query: Partial<{
+  subtest: string; profession: string; status: string;
+  cardType: string; letterType: string; search: string;
+  page: number; pageSize: number;
+}>): Promise<{ items: ContentPaperDto[]; total: number }> {
+  const qs = new URLSearchParams();
+  Object.entries(query).forEach(([k, v]) => {
+    if (v !== undefined && v !== null && v !== '') qs.append(k, String(v));
+  });
+  const token = await ensureFreshAccessToken();
+  const csrf = readCsrfCookie();
+  const res = await fetchWithTimeout(resolveUrl(`/v1/admin/papers?${qs.toString()}`), {
+    method: 'GET',
+    credentials: 'include',
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(csrf ? { 'x-csrf-token': csrf } : {}),
+    },
+  });
+  if (!res.ok) throw await toApiError(res, 'Failed to list papers:');
+  const items = (await res.json()) as ContentPaperDto[];
+  const headerTotal = Number(res.headers.get('X-Total-Count'));
+  const total = Number.isFinite(headerTotal) && headerTotal >= 0 ? headerTotal : items.length;
+  return { items, total };
+}
 
 export const getContentPaper = (id: string) => api<ContentPaperDto>(`/v1/admin/papers/${id}`);
 export const createContentPaper = (body: ContentPaperCreateDto) =>

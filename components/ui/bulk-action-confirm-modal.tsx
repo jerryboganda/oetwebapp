@@ -1,8 +1,10 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import { AlertTriangle } from 'lucide-react';
 
 import { Button } from './button';
+import { Textarea } from './form-controls';
 import { Modal } from './modal';
 
 interface BulkActionConfirmModalProps {
@@ -13,7 +15,17 @@ interface BulkActionConfirmModalProps {
   cancelLabel?: string;
   destructive?: boolean;
   loading?: boolean;
-  onConfirm: () => void;
+  /**
+   * When true, renders a reason textarea. The entered reason is passed to
+   * `onConfirm`. Backward-compatible: existing callers that ignore the
+   * argument keep working unchanged.
+   */
+  requireReason?: boolean;
+  /** Label for the reason textarea. Defaults to "Reason". */
+  reasonLabel?: string;
+  /** Placeholder for the reason textarea. */
+  reasonPlaceholder?: string;
+  onConfirm: (reason?: string) => void;
   onClose: () => void;
 }
 
@@ -25,9 +37,22 @@ export function BulkActionConfirmModal({
   cancelLabel = 'Cancel',
   destructive,
   loading,
+  requireReason = false,
+  reasonLabel = 'Reason',
+  reasonPlaceholder,
   onConfirm,
   onClose,
 }: BulkActionConfirmModalProps) {
+  const [reason, setReason] = useState('');
+
+  // Reset the reason whenever the modal is (re)opened so a stale value from a
+  // previous action never leaks into the next confirmation.
+  useEffect(() => {
+    if (open) setReason('');
+  }, [open]);
+
+  const reasonMissing = requireReason && reason.trim().length === 0;
+
   return (
     <Modal open={open} onClose={loading ? () => {} : onClose} title={title} size="sm">
       <div className="space-y-5">
@@ -37,6 +62,15 @@ export function BulkActionConfirmModal({
           </span>
           <p className="text-sm leading-6 text-muted">{description}</p>
         </div>
+        {requireReason ? (
+          <Textarea
+            label={reasonLabel}
+            placeholder={reasonPlaceholder}
+            value={reason}
+            onChange={(event) => setReason(event.target.value)}
+            disabled={loading}
+          />
+        ) : null}
         <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
           <Button type="button" variant="outline" onClick={onClose} disabled={loading}>
             {cancelLabel}
@@ -45,7 +79,8 @@ export function BulkActionConfirmModal({
             type="button"
             variant={destructive ? 'destructive' : 'primary'}
             loading={loading}
-            onClick={onConfirm}
+            disabled={reasonMissing}
+            onClick={() => onConfirm(requireReason ? reason : undefined)}
           >
             {confirmLabel}
           </Button>

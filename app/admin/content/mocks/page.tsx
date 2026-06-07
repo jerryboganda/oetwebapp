@@ -1,27 +1,31 @@
 'use client';
 
-import { type FormEvent, useCallback, useEffect, useState } from 'react';
+import { type FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { Archive, ArrowDown, ArrowUp, BarChart3, CalendarClock, CheckCircle, Layers, Pencil, Plus, Search, ShieldAlert, Sparkles } from 'lucide-react';
+import { Archive, BarChart3, CalendarClock, CheckCircle, Layers, Pencil, Plus, Search, ShieldAlert, Sparkles } from 'lucide-react';
 import { AdminOperationsLayout } from '@/components/admin/layout/admin-operations-layout';
 import { Card, CardContent } from '@/components/admin/ui/card';
 import { Button } from '@/components/admin/ui/button';
 import { Badge } from '@/components/admin/ui/badge';
 import { Input } from '@/components/admin/ui/input';
 import { NativeSelect } from '@/components/admin/ui/native-select';
-import { Skeleton } from '@/components/admin/ui/skeleton';
 import { EmptyState } from '@/components/admin/ui/empty-state';
-import { InlineAlert, Toast } from '@/components/ui/alert';
+import { Toast } from '@/components/ui/alert';
 import { Modal } from '@/components/ui/modal';
+import { type Column } from '@/components/ui/data-table';
+import {
+  AdminManagedTable,
+  type ManagedBulkAction,
+  type BulkResult,
+} from '@/components/admin/managed-table/admin-managed-table';
 import { AdminPermission, hasPermission } from '@/lib/admin-permissions';
 import {
   addAdminMockBundleSection,
-  archiveAdminMockBundle,
+  bulkAdminMockBundles,
   createAdminMockBundle,
   fetchAdminMockBundles,
   listAdminMockLeakReports,
   publishAdminMockBundle,
-  reorderAdminMockBundleSections,
   updateAdminMockBundle,
 } from '@/lib/api';
 import { listContentPapers, type ContentPaperDto } from '@/lib/content-upload-api';
@@ -136,6 +140,8 @@ export default function AdminMockBundlesPage() {
   const [editingRow, setEditingRow] = useState<MockBundleRow | null>(null);
   const [editForm, setEditForm] = useState<MockBundleFormState | null>(null);
   const [savingEdit, setSavingEdit] = useState(false);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -268,22 +274,6 @@ export default function AdminMockBundlesPage() {
     }
   }
 
-  async function handleReorder(row: MockBundleRow, sectionId: string, direction: 'up' | 'down') {
-    const ordered = row.sections.slice().sort((a, b) => a.sectionOrder - b.sectionOrder);
-    const index = ordered.findIndex((section) => section.id === sectionId);
-    const targetIndex = direction === 'up' ? index - 1 : index + 1;
-    if (index < 0 || targetIndex < 0 || targetIndex >= ordered.length) return;
-    const next = ordered.slice();
-    [next[index], next[targetIndex]] = [next[targetIndex], next[index]];
-    try {
-      await reorderAdminMockBundleSections(row.id, next.map((section) => section.id));
-      setToast({ variant: 'success', message: 'Section order updated.' });
-      await load();
-    } catch (err) {
-      setToast({ variant: 'error', message: err instanceof Error ? err.message : 'Reorder failed.' });
-    }
-  }
-
   async function handlePublish(id: string) {
     try {
       await publishAdminMockBundle(id);
@@ -294,14 +284,132 @@ export default function AdminMockBundlesPage() {
     }
   }
 
-  async function handleArchive(id: string) {
-    try {
-      await archiveAdminMockBundle(id);
-      setToast({ variant: 'success', message: 'Mock bundle archived.' });
-      await load();
-    } catch {
-      setToast({ variant: 'error', message: 'Archive failed.' });
+  const pagedRows = useMemo(
+    () => rows.slice((page - 1) * pageSize, page * pageSize),
+    [rows, page, pageSize],
+  );
+
+  const columns = useMemo<Column<MockBundleRow>[]>(() => [
+    {
+      key: 'title',
+      header: 'Title',
+      render: (row) => (
+        <div className="min-w-0">
+          <p className="font-semibold text-admin-fg-strong line-clamp-1">{row.title}</p>
+          <p className="mt-0.5 font-mono text-xs text-admin-fg-muted line-clamp-1">{row.id}</p>
+        </div>
+      ),
+    },
+    {
+      key: 'mockType',
+      header: 'Type',
+      render: (row) => <Badge variant="default">{row.mockType.replace(/_/g, ' ')}</Badge>,
+    },
+    {
+      key: 'subtest',
+      header: 'Subtest',
+      render: (row) => (row.subtestCode ? <Badge variant="default">{row.subtestCode}</Badge> : <span className="text-admin-fg-muted">—</span>),
+      hideOnMobile: true,
+    },
+    {
+      key: 'status',
+      header: 'Status',
+      render: (row) => (
+        <Badge variant={row.status === 'published' ? 'success' : row.status === 'archived' ? 'muted' : 'info'}>
+          {row.status}
+        </Badge>
+      ),
+    },
+    {
+      key: 'quality',
+      header: 'Quality',
+      render: (row) => (row.qualityStatus
+        ? <Badge variant={row.qualityStatus === 'approved' ? 'success' : row.qualityStatus === 'draft' ? 'muted' : 'warning'}>{row.qualityStatus}</Badge>
+        : <span className="text-admin-fg-muted">—</span>),
+      hideOnMobile: true,
+    },
+    {
+      key: 'sections',
+      header: 'Sections',
+      render: (row) => <span className="text-sm text-admin-fg-default">{row.sections.length}</span>,
+      hideOnMobile: true,
+    },
+    {
+      key: 'actions',
+      header: '',
+      render: (row) => (
+        <div className="flex items-center justify-end gap-2">
+          <Link
+            href={`/admin/content/mocks/${encodeURIComponent(row.id)}/item-analysis`}
+            aria-label={`Item analysis for ${row.title}`}
+            className="inline-flex items-center rounded-lg border border-border px-2.5 py-1.5 text-sm font-medium text-admin-fg-strong hover:bg-admin-bg-subtle"
+          >
+            <BarChart3 className="h-4 w-4" />
+          </Link>
+          {canPublishBundles && row.status !== 'published' ? (
+            <Button size="sm" variant="primary" onClick={() => handlePublish(row.id)} aria-label={`Publish ${row.title}`}>
+              <CheckCircle className="mr-1 h-4 w-4" /> Publish
+            </Button>
+          ) : null}
+          {canManageBundles && row.status !== 'archived' ? (
+            <Button size="sm" variant="outline" onClick={() => openEdit(row)} aria-label={`Edit ${row.title}`}>
+              <Pencil className="mr-1 h-4 w-4" /> Edit
+            </Button>
+          ) : null}
+          {canManageBundles ? (
+            <Button size="sm" variant="outline" onClick={() => setSectionBundleId(row.id)} aria-label={`Add section to ${row.title}`}>
+              <Plus className="mr-1 h-4 w-4" /> Section
+            </Button>
+          ) : null}
+        </div>
+      ),
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  ], [canManageBundles, canPublishBundles]);
+
+  const bulkActions = useMemo<ManagedBulkAction<MockBundleRow>[]>(() => {
+    if (!canManageBundles) return [];
+    const actions: ManagedBulkAction<MockBundleRow>[] = [];
+    if (canPublishBundles) {
+      actions.push({
+        key: 'publish',
+        label: 'Publish',
+        icon: <CheckCircle className="h-4 w-4" />,
+        variant: 'primary',
+        isEligible: (row) => row.status === 'draft',
+        run: (ids) => bulkAdminMockBundles('publish', ids),
+      });
     }
+    actions.push({
+      key: 'archive',
+      label: 'Archive',
+      icon: <Archive className="h-4 w-4" />,
+      variant: 'danger',
+      isEligible: (row) => row.status !== 'archived',
+      confirm: {
+        title: (n) => `Archive ${n} ${n === 1 ? 'bundle' : 'bundles'}?`,
+        description: (n) =>
+          `${n} ${n === 1 ? 'bundle' : 'bundles'} will be archived (soft) and hidden from learners. An admin can restore them later.`,
+        confirmLabel: 'Archive',
+        destructive: true,
+      },
+      run: (ids) => bulkAdminMockBundles('archive', ids),
+    });
+    return actions;
+  }, [canManageBundles, canPublishBundles]);
+
+  function handleBulkResult(action: ManagedBulkAction<MockBundleRow>, result: BulkResult) {
+    const verb = action.key === 'publish' ? 'Published' : 'Archived';
+    const noun = result.succeeded === 1 ? 'bundle' : 'bundles';
+    setToast({
+      variant: 'success',
+      message: `${verb} ${result.succeeded} ${noun} (${result.skipped ?? 0} skipped, ${result.failed ?? 0} failed)`,
+    });
+    void load();
+  }
+
+  function handleBulkError() {
+    setToast({ variant: 'error', message: 'Bulk action failed.' });
   }
 
   return (
@@ -468,13 +576,13 @@ export default function AdminMockBundlesPage() {
           ) : null}
 
           <div className="mb-4 grid gap-3 sm:grid-cols-2 lg:max-w-xl">
-            <NativeSelect label="Status" value={status} onChange={(e) => setStatus(e.target.value)} options={[
+            <NativeSelect label="Status" value={status} onChange={(e) => { setStatus(e.target.value); setPage(1); }} options={[
               { value: '', label: 'All' },
               { value: 'draft', label: 'Draft' },
               { value: 'published', label: 'Published' },
               { value: 'archived', label: 'Archived' },
             ]} />
-            <NativeSelect label="Type" value={mockType} onChange={(e) => setMockType(e.target.value)} options={[
+            <NativeSelect label="Type" value={mockType} onChange={(e) => { setMockType(e.target.value); setPage(1); }} options={[
               { value: '', label: 'All' },
               { value: 'full', label: 'Full' },
               { value: 'lrw', label: 'LRW' },
@@ -486,117 +594,32 @@ export default function AdminMockBundlesPage() {
             ]} />
           </div>
 
-          {loading ? (
-            <div className="space-y-3">
-              {Array.from({ length: 4 }).map((_, index) => <Skeleton key={index} className="h-24 rounded-2xl" />)}
-            </div>
-          ) : rows.length === 0 ? (
-            <EmptyState
-              icon={<Layers className="h-6 w-6" />}
-              title="No mock bundles yet"
-              description="Create a bundle, attach published ContentPaper sections, then publish it for learners."
-            />
-          ) : (
-            <div className="space-y-3">
-              {rows.map((row) => (
-                <div key={row.id} className="rounded-admin border border-admin-border bg-admin-bg-surface p-4">
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <p className="font-semibold text-admin-fg-strong">{row.title}</p>
-                        <Badge variant={row.status === 'published' ? 'success' : row.status === 'archived' ? 'muted' : 'info'}>{row.status}</Badge>
-                        <Badge variant="default">{row.mockType}</Badge>
-                        {row.subtestCode ? <Badge variant="default">{row.subtestCode}</Badge> : null}
-                        {row.qualityStatus ? <Badge variant={row.qualityStatus === 'approved' ? 'success' : row.qualityStatus === 'draft' ? 'muted' : 'warning'}>{row.qualityStatus}</Badge> : null}
-                      </div>
-                      <p className="mt-1 font-mono text-xs text-admin-fg-muted">{row.id}</p>
-                      <p className="mt-2 text-xs text-admin-fg-muted">
-                        {row.sections.length} section{row.sections.length === 1 ? '' : 's'} / {row.estimatedDurationMinutes} min / provenance {row.sourceProvenance ? 'present' : 'missing'}
-                      </p>
-                      <p className="mt-1 text-xs text-admin-fg-muted">
-                        Source {row.sourceStatus ?? 'needs_review'} / Release {row.releasePolicy ?? 'instant'} / Difficulty {row.difficulty ?? 'exam_ready'}
-                      </p>
-                      {(row.topicTagsCsv || row.skillTagsCsv) ? (
-                        <p className="mt-1 text-xs text-admin-fg-muted">Tags: {row.topicTagsCsv} {row.skillTagsCsv}</p>
-                      ) : null}
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      <Link
-                        href={`/admin/content/mocks/${encodeURIComponent(row.id)}/item-analysis`}
-                        className="inline-flex items-center rounded-lg border border-border px-3 py-2 text-sm font-medium text-admin-fg-strong hover:bg-admin-bg-subtle"
-                      >
-                        <BarChart3 className="mr-1 h-4 w-4" /> Analysis
-                      </Link>
-                      {canPublishBundles && row.status !== 'published' ? (
-                        <Button variant="primary" onClick={() => handlePublish(row.id)}>
-                          <CheckCircle className="mr-1 h-4 w-4" /> Publish
-                        </Button>
-                      ) : null}
-                      {canManageBundles && row.status !== 'archived' ? (
-                        <Button variant="outline" onClick={() => openEdit(row)}>
-                          <Pencil className="mr-1 h-4 w-4" /> Edit
-                        </Button>
-                      ) : null}
-                      {canManageBundles ? (
-                        <Button variant="outline" onClick={() => setSectionBundleId(row.id)}>
-                          <Plus className="mr-1 h-4 w-4" /> Add section
-                        </Button>
-                      ) : null}
-                      {canManageBundles && row.status !== 'archived' ? (
-                        <Button variant="secondary" onClick={() => handleArchive(row.id)}>
-                          <Archive className="mr-1 h-4 w-4" /> Archive
-                        </Button>
-                      ) : null}
-                    </div>
-                  </div>
-
-                  {row.sections.length === 0 ? (
-                    <div className="mt-4">
-                      <InlineAlert variant="warning">Attach published ContentPaper sections before publishing.</InlineAlert>
-                    </div>
-                  ) : (
-                    <div className="mt-4 grid gap-2">
-                      {row.sections.slice().sort((a, b) => a.sectionOrder - b.sectionOrder).map((section, index, orderedSections) => (
-                        <div key={section.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-admin-bg-subtle px-3 py-2 text-sm">
-                          <div>
-                            <span className="font-semibold text-admin-fg-strong">{section.sectionOrder}. {section.subtestCode}</span>
-                            <span className="ml-2 text-admin-fg-muted">{section.contentPaperTitle ?? section.contentPaperId}</span>
-                          </div>
-                          <div className="flex flex-wrap items-center gap-2 text-xs text-admin-fg-muted">
-                            <span>{section.timeLimitMinutes}m</span>
-                            <span>{section.reviewEligible ? 'review eligible' : 'no review'}</span>
-                            <span>{section.contentPaperStatus ?? 'unknown'}</span>
-                            {canManageBundles ? (
-                              <>
-                                <Button
-                                  aria-label={`Move ${section.subtestCode} section up`}
-                                  size="sm"
-                                  variant="ghost"
-                                  onClick={() => handleReorder(row, section.id, 'up')}
-                                  disabled={index === 0}
-                                >
-                                  <ArrowUp className="h-3.5 w-3.5" />
-                                </Button>
-                                <Button
-                                  aria-label={`Move ${section.subtestCode} section down`}
-                                  size="sm"
-                                  variant="ghost"
-                                  onClick={() => handleReorder(row, section.id, 'down')}
-                                  disabled={index === orderedSections.length - 1}
-                                >
-                                  <ArrowDown className="h-3.5 w-3.5" />
-                                </Button>
-                              </>
-                            ) : null}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
+          <AdminManagedTable
+            columns={columns}
+            data={pagedRows}
+            keyExtractor={(r) => r.id}
+            total={rows.length}
+            loading={loading}
+            page={page}
+            pageSize={pageSize}
+            onPageChange={setPage}
+            onPageSizeChange={(s) => { setPageSize(s); setPage(1); }}
+            pageSizeOptions={[10, 25, 50, 100]}
+            itemLabel="bundle"
+            itemLabelPlural="bundles"
+            bulkActions={bulkActions}
+            onResult={handleBulkResult}
+            onError={handleBulkError}
+            emptyState={
+              loading ? undefined : (
+                <EmptyState
+                  icon={<Layers className="h-6 w-6" />}
+                  title="No mock bundles yet"
+                  description="Create a bundle, attach published ContentPaper sections, then publish it for learners."
+                />
+              )
+            }
+          />
           </CardContent>
         </Card>
       </AdminOperationsLayout>

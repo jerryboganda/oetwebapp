@@ -158,6 +158,22 @@ public static class SpeakingDrillEndpoints
                 AdminId(http), AdminName(http), id, ct)))
             .WithAdminWrite("AdminContentWrite");
 
+        // ── Bulk action (publish | archive | delete) ────────────────────────
+        //
+        // T3: one atomic endpoint over a set of drills. The route enforces the
+        // shared minimum (AdminContentWrite); the service additionally requires
+        // content:publish when action=publish (the required grant depends on the
+        // request body, so it can't be a static route policy). Unknown actions
+        // → 400 from the service.
+        admin.MapPost("/bulk", async (
+            SpeakingDrillBulkRequest request,
+            AdminService service,
+            HttpContext http,
+            CancellationToken ct) =>
+            Results.Ok(await service.BulkSpeakingDrillsAsync(
+                AdminId(http), AdminName(http), request.Action, request.Ids, ct)))
+            .WithAdminWrite("AdminContentWrite");
+
         // ── Phase 11 (G.11) — AI-assisted draft ─────────────────────────────
         //
         // Routes through the grounded gateway via

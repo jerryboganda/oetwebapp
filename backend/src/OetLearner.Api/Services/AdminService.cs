@@ -25,7 +25,8 @@ public partial class AdminService(
     NotificationService notifications,
     LearnerService learnerService,
     OetLearner.Api.Services.Vocabulary.IVocabularyAudioQueue? vocabularyAudioQueue = null,
-    IConversationOptionsProvider? conversationOptionsProvider = null)
+    IConversationOptionsProvider? conversationOptionsProvider = null,
+    OetLearner.Api.Services.VoiceDesign.IVoiceDesignRegenerationService? voiceDesignRegeneration = null)
 {
     private const string ActiveUserStatus = "active";
     private const string SuspendedUserStatus = "suspended";

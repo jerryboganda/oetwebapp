@@ -352,22 +352,13 @@ public partial class AdminService
         string term, string definition, string example, string category,
         string? sourceProvenance, string? ipa, string? audioUrl)
     {
+        // All metadata fields (definition, example sentence, category,
+        // source provenance, pronunciation) are OPTIONAL for publishing —
+        // admins can publish term-only recall rows and enrich them later.
+        // The only hard requirement is a non-empty term, since a term with no
+        // text cannot be displayed or have audio generated.
         var missing = new List<ApiFieldError>();
         if (string.IsNullOrWhiteSpace(term)) missing.Add(new ApiFieldError("term", "REQUIRED", "Term is required."));
-        if (string.IsNullOrWhiteSpace(example)) missing.Add(new ApiFieldError("exampleSentence", "REQUIRED", "Example sentence is required."));
-        if (string.IsNullOrWhiteSpace(category)) missing.Add(new ApiFieldError("category", "REQUIRED", "Category is required."));
-        if (string.IsNullOrWhiteSpace(sourceProvenance)) missing.Add(new ApiFieldError("sourceProvenance", "REQUIRED", "Source provenance is required before publishing."));
-
-        var medicalCategories = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-        {
-            "medical", "anatomy", "pharmacology", "procedures", "symptoms", "conditions", "diagnostics"
-        };
-        if (!string.IsNullOrWhiteSpace(category) && medicalCategories.Contains(category)
-            && string.IsNullOrWhiteSpace(ipa) && string.IsNullOrWhiteSpace(audioUrl))
-        {
-            missing.Add(new ApiFieldError("pronunciation", "REQUIRED_EITHER",
-                "Medical categories require either ipaPronunciation or audioUrl before publishing."));
-        }
 
         if (missing.Count > 0)
             throw ApiException.Validation("VOCAB_PUBLISH_GATE",
@@ -748,31 +739,74 @@ public partial class AdminService
     /// </summary>
     public async Task<object> ResumeVocabularyAudioAsync(CancellationToken ct)
     {
-        if (vocabularyAudioQueue is null)
-            return new { enqueued = 0, skipped = "queue-not-configured" };
+        // Delegate to the proven batch-regeneration path. The previous
+        // hand-rolled enqueue set ProviderName=null, which the audio worker
+        // rejects for recall terms ("invalid_recall_audio_provider"), so recall
+        // audio could never be generated. EnqueueBulkRegenerationAsync forces
+        // the correct provider/voice/model, validates the ElevenLabs API key,
+        // and creates an AudioRegenerationBatch (enabling auto-resume after a
+        // container restart). ApiException (e.g. elevenlabs_api_key_required) is
+        // allowed to propagate so the admin sees a real error, not a silent stall.
+        if (voiceDesignRegeneration is null)
+            return new { enqueued = 0, skipped = "regeneration-service-not-configured" };
 
-        var rows = await db.VocabularyTerms.AsNoTracking()
+        // Split pending (no stored audio) terms into recall vs non-recall so we
+        // run each through its correct audio pipeline.
+        var pendingTerms = await db.VocabularyTerms.AsNoTracking()
             .Where(t => t.AudioMediaAssetId == null
-                && (t.AudioUrl == null || t.AudioUrl == ""))
-            .OrderBy(t => t.Id)
-            .Take(5000)
-            .Select(t => new { t.Id, t.Term })
+                && (t.AudioUrl == null || t.AudioUrl == "")
+                && t.Status != "archived")
+            .Select(t => new { t.RecallSetCodesJson })
             .ToListAsync(ct);
 
+        var hasRecallPending = pendingTerms.Any(t =>
+            !string.IsNullOrWhiteSpace(t.RecallSetCodesJson) && t.RecallSetCodesJson != "[]");
+        var hasVocabPending = pendingTerms.Any(t =>
+            string.IsNullOrWhiteSpace(t.RecallSetCodesJson) || t.RecallSetCodesJson == "[]");
+
+        const string requestedBy = "vocabulary-resume-button";
         var enqueued = 0;
-        foreach (var row in rows)
+
+        if (hasRecallPending)
         {
-            if (string.IsNullOrWhiteSpace(row.Term)) continue;
-            await vocabularyAudioQueue.EnqueueAsync(
-                new OetLearner.Api.Services.Vocabulary.VocabularyAudioJob(
-                    TermId: row.Id,
-                    Text: row.Term,
-                    Voice: null,
-                    Locale: "en-GB",
-                    BatchId: string.Empty),
+            var result = await voiceDesignRegeneration.EnqueueBulkRegenerationAsync(
+                new AdminAudioRegenerateRequest(
+                    AudioType: "recalls",
+                    Scope: "missing",
+                    ModelVariant: null,
+                    VoiceId: null,
+                    Instructions: null,
+                    Speed: null,
+                    Pitch: null,
+                    Emotion: null,
+                    ProviderName: null,
+                    ForceRegenerate: false,
+                    DryRun: false),
+                requestedBy,
                 ct);
-            enqueued++;
+            enqueued += result.TotalItems;
         }
+
+        if (hasVocabPending)
+        {
+            var result = await voiceDesignRegeneration.EnqueueBulkRegenerationAsync(
+                new AdminAudioRegenerateRequest(
+                    AudioType: "vocabulary",
+                    Scope: "missing",
+                    ModelVariant: null,
+                    VoiceId: null,
+                    Instructions: null,
+                    Speed: null,
+                    Pitch: null,
+                    Emotion: null,
+                    ProviderName: null,
+                    ForceRegenerate: false,
+                    DryRun: false),
+                requestedBy,
+                ct);
+            enqueued += result.TotalItems;
+        }
+
         return new { enqueued };
     }
 

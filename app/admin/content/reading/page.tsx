@@ -3,18 +3,22 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Plus, Search, BookOpen, FileCheck2, ArrowRight, Trash2 } from 'lucide-react';
+import { Plus, Search, BookOpen, FileCheck2, ArrowRight, Upload, Archive, EyeOff } from 'lucide-react';
 import { AdminTableLayout } from '@/components/admin/layout/admin-table-layout';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
-import { DataTable as LegacyDataTable, type Column } from '@/components/ui/data-table';
+import { type Column } from '@/components/ui/data-table';
+import {
+  AdminManagedTable,
+  type ManagedBulkAction,
+  type BulkResult,
+} from '@/components/admin/managed-table/admin-managed-table';
 import { Badge } from '@/components/ui/badge';
 import { Button as LegacyButton } from '@/components/ui/button';
 import { Button } from '@/components/admin/ui/button';
 import { Input, Select } from '@/components/ui/form-controls';
 import { Toast } from '@/components/ui/alert';
 import { EmptyState } from '@/components/ui/empty-error';
-import { Pagination } from '@/components/ui/pagination';
-import { archiveContentPaper, listContentPapers, type ContentPaperDto, type ContentStatus } from '@/lib/content-upload-api';
+import { bulkContentPapers, listContentPapersPaged, type ContentPaperDto, type ContentStatus } from '@/lib/content-upload-api';
 import type { AdminContentRow } from '@/lib/types/admin';
 
 type PageStatus = 'loading' | 'success' | 'empty' | 'error';
@@ -45,6 +49,12 @@ function toContentRow(paper: ContentPaperDto): AdminContentRow {
   };
 }
 
+function summarize(verb: string, result: BulkResult, itemLabel: string, itemLabelPlural: string): string {
+  const n = result.succeeded;
+  const noun = n === 1 ? itemLabel : itemLabelPlural;
+  return `${verb} ${n} ${noun} (${result.skipped ?? 0} skipped, ${result.failed ?? 0} failed)`;
+}
+
 export default function AdminReadingPapersPage() {
   const router = useRouter();
   const [pageStatus, setPageStatus] = useState<PageStatus>('loading');
@@ -54,6 +64,7 @@ export default function AdminReadingPapersPage() {
   const [pageSize, setPageSize] = useState(25);
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState<string>('');
+  const [reloadToken, setReloadToken] = useState(0);
   const [toast, setToast] = useState<{ variant: 'success' | 'error'; message: string } | null>(null);
 
   useEffect(() => {
@@ -61,19 +72,18 @@ export default function AdminReadingPapersPage() {
     const t = setTimeout(async () => {
       setPageStatus('loading');
       try {
-        const papers = await listContentPapers({
-          page: 1,
-          pageSize: 500,
+        const { items, total: totalCount } = await listContentPapersPaged({
+          page,
+          pageSize,
           subtest: 'reading',
           search: search.trim() || undefined,
           status: toQueryStatus(status),
         });
         if (cancelled) return;
-        const resultRows = papers.map(toContentRow);
-        const pageStart = (page - 1) * pageSize;
-        setRows(resultRows.slice(pageStart, pageStart + pageSize));
-        setTotal(resultRows.length);
-        setPageStatus(resultRows.length > 0 ? 'success' : 'empty');
+        const resultRows = items.map(toContentRow);
+        setRows(resultRows);
+        setTotal(totalCount);
+        setPageStatus(totalCount > 0 ? 'success' : 'empty');
       } catch {
         if (!cancelled) {
           setPageStatus('error');
@@ -82,28 +92,13 @@ export default function AdminReadingPapersPage() {
       }
     }, 300);
     return () => { cancelled = true; clearTimeout(t); };
-  }, [search, status, page, pageSize]);
+  }, [search, status, page, pageSize, reloadToken]);
 
   function formatDate(iso: string): string {
     try {
       return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
     } catch {
       return iso;
-    }
-  }
-
-  const [archiveTarget, setArchiveTarget] = useState<AdminContentRow | null>(null);
-
-  async function handleArchive(row: AdminContentRow) {
-    try {
-      await archiveContentPaper(row.id);
-      setRows((prev) => prev.filter((r) => r.id !== row.id));
-      setTotal((prev) => prev - 1);
-      setToast({ variant: 'success', message: `"${row.title}" archived.` });
-    } catch {
-      setToast({ variant: 'error', message: 'Archive failed.' });
-    } finally {
-      setArchiveTarget(null);
     }
   }
 
@@ -161,43 +156,64 @@ export default function AdminReadingPapersPage() {
               <ArrowRight className="h-4 w-4" />
             </LegacyButton>
           </Link>
-          <LegacyButton
-            variant="ghost"
-            size="sm"
-            aria-label={`Archive ${row.title}`}
-            onClick={() => setArchiveTarget(row)}
-          >
-            <Trash2 className="h-4 w-4 text-[var(--admin-danger)]" />
-          </LegacyButton>
         </div>
       ),
     },
   ], []);
 
+  const bulkActions = useMemo<ManagedBulkAction<AdminContentRow>[]>(() => [
+    {
+      key: 'publish',
+      label: 'Publish',
+      icon: <Upload className="h-4 w-4" />,
+      variant: 'primary',
+      isEligible: (row) => row.status === 'draft',
+      run: (ids) => bulkContentPapers('publish', ids),
+    },
+    {
+      key: 'unpublish',
+      label: 'Unpublish',
+      icon: <EyeOff className="h-4 w-4" />,
+      variant: 'secondary',
+      isEligible: (row) => row.status === 'published',
+      run: (ids) => bulkContentPapers('unpublish', ids),
+    },
+    {
+      key: 'archive',
+      label: 'Archive',
+      icon: <Archive className="h-4 w-4" />,
+      variant: 'danger',
+      isEligible: (row) => row.status !== 'archived',
+      confirm: {
+        title: (n) => `Archive ${n} ${n === 1 ? 'paper' : 'papers'}?`,
+        description: (n) =>
+          `${n} ${n === 1 ? 'paper' : 'papers'} will be archived. This can be undone by an admin later.`,
+        confirmLabel: 'Archive',
+        destructive: true,
+      },
+      run: (ids) => bulkContentPapers('archive', ids),
+    },
+  ], []);
+
+  function handleResult(action: ManagedBulkAction<AdminContentRow>, result: BulkResult) {
+    const verbs: Record<string, string> = {
+      publish: 'Published',
+      unpublish: 'Unpublished',
+      archive: 'Archived',
+    };
+    const verb = verbs[action.key] ?? 'Updated';
+    setToast({ variant: 'success', message: summarize(verb, result, 'paper', 'papers') });
+    setReloadToken((t) => t + 1);
+  }
+
+  function handleError() {
+    setToast({ variant: 'error', message: 'Bulk action failed.' });
+  }
+
   return (
     <>
       {toast && (
         <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} />
-      )}
-
-      {/* Archive Confirm Dialog */}
-      {archiveTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-navy/50">
-          <div className="bg-admin-bg-surface rounded-admin-lg p-6 shadow-admin-lg max-w-sm w-full mx-4 border border-admin-border">
-            <h3 className="text-base font-semibold text-admin-fg-strong mb-2">Archive Paper?</h3>
-            <p className="text-sm text-admin-fg-muted mb-4">
-              &ldquo;{archiveTarget.title}&rdquo; will be archived. This can be undone by an admin later.
-            </p>
-            <div className="flex justify-end gap-2">
-              <Button variant="ghost" size="sm" onClick={() => setArchiveTarget(null)}>
-                Cancel
-              </Button>
-              <Button variant="destructive" size="sm" onClick={() => handleArchive(archiveTarget)}>
-                Archive
-              </Button>
-            </div>
-          </div>
-        </div>
       )}
 
       <AdminTableLayout
@@ -251,20 +267,22 @@ export default function AdminReadingPapersPage() {
               />
             }
           >
-            <LegacyDataTable
+            <AdminManagedTable
               columns={columns}
               data={rows}
               keyExtractor={(r) => r.id}
-            />
-            <Pagination
+              total={total}
+              loading={pageStatus === 'loading'}
               page={page}
               pageSize={pageSize}
-              total={total}
               onPageChange={setPage}
               onPageSizeChange={setPageSize}
               pageSizeOptions={[10, 25, 50, 100]}
               itemLabel="paper"
               itemLabelPlural="papers"
+              bulkActions={bulkActions}
+              onResult={handleResult}
+              onError={handleError}
             />
           </AsyncStateWrapper>
         </div>

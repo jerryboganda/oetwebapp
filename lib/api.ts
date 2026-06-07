@@ -79,6 +79,7 @@ import type {
   AiPackagesResponse,
 } from './billing-types';
 import type { FreezePolicy } from './types/freeze';
+import type { BulkActionResultDto } from './types/admin';
 import type {
   CalibrationCaseDetail,
   CalibrationCase,
@@ -9811,6 +9812,23 @@ export async function publishAdminMockBundle(bundleId: string) {
 export async function archiveAdminMockBundle(bundleId: string) {
   return apiRequest(`/v1/admin/mock-bundles/${encodeURIComponent(bundleId)}`, {
     method: 'DELETE',
+  });
+}
+
+export type MockBundleBulkAction = 'publish' | 'archive' | 'delete';
+
+/**
+ * Bulk action over mock bundles. `POST /v1/admin/mock-bundles/bulk`.
+ * Backend record is PascalCase `(Action, Ids)`; ASP.NET binds the camelCase
+ * JSON below case-insensitively (matches the rest of this file's POST style).
+ */
+export async function bulkAdminMockBundles(
+  action: MockBundleBulkAction,
+  ids: string[],
+): Promise<BulkActionResultDto> {
+  return apiRequest<BulkActionResultDto>('/v1/admin/mock-bundles/bulk', {
+    method: 'POST',
+    body: JSON.stringify({ action, ids }),
   });
 }
 

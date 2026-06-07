@@ -94,6 +94,24 @@ public static class AdminSpeakingContentEndpoints
                 AdminId(http), AdminName(http), id, ct)))
             .WithAdminWrite("AdminContentWrite");
 
+        // ── Bulk lifecycle (publish | archive) ────────────────────────────
+        //
+        // One atomic transaction + one audit row over a set of cards. Duplicate
+        // is intentionally NOT bulk-able. The action-specific permission gate
+        // (publish → content:publish; archive → content:write) and the unknown-
+        // action 400 are enforced in `AdminService.BulkAsync`, because the
+        // required permission depends on the request body, not the route. The
+        // route guarantees the baseline AdminContentWrite shared by both
+        // actions. Mirrors the sibling speaking-drills `/bulk` endpoint.
+        group.MapPost("/bulk", async (
+            RolePlayCardBulkRequest request,
+            AdminService service,
+            HttpContext http,
+            CancellationToken ct) =>
+            Results.Ok(await service.BulkAsync(
+                AdminId(http), AdminName(http), request.Action, request.Ids, ct)))
+            .WithAdminWrite("AdminContentWrite");
+
         // ── Phase 11 (G.11) — AI-assisted draft ───────────────────────────
         //
         // Routes through the grounded gateway via

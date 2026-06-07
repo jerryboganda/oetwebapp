@@ -5,8 +5,11 @@ using Microsoft.Extensions.Options;
 using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Configuration;
+using OetLearner.Api.Contracts;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Security;
+using OetLearner.Api.Services;
 using OetLearner.Api.Services.Content;
 using OetLearner.Api.Services.Writing;
 
@@ -29,14 +32,20 @@ public static class ContentPapersAdminEndpoints
 
         // ── List / get ─────────────────────────────────────────────────────
         group.MapGet("", async (
-            IContentPaperService svc, CancellationToken ct,
+            IContentPaperService svc, HttpContext http, CancellationToken ct,
             string? subtest, string? profession, string? status,
             string? cardType, string? letterType, string? search,
             int? page, int? pageSize) =>
         {
-            var rows = await svc.ListAsync(new ContentPaperQuery(
+            var query = new ContentPaperQuery(
                 subtest, profession, status, cardType, letterType, search,
-                page ?? 1, pageSize ?? 50), ct);
+                page ?? 1, pageSize ?? 50);
+            var rows = await svc.ListAsync(query, ct);
+            // Backward-compatible paging: the body is still the bare paper array
+            // existing callers expect; the unfiltered-by-page total is exposed
+            // via the X-Total-Count header so the admin UI can paginate server-side.
+            var total = await svc.CountAsync(query, ct);
+            http.Response.Headers["X-Total-Count"] = total.ToString();
             return Results.Ok(rows.Select(ProjectPaper));
         });
 
@@ -201,6 +210,51 @@ public static class ContentPapersAdminEndpoints
             return Results.NoContent();
         })
         .RequireAuthorization("AdminContentPublish")
+        .RequireRateLimiting("PerUserWrite");
+
+        // ── Bulk workflow actions (T1) ─────────────────────────────────────
+        // ONE transaction + ONE summary audit row, delegating to the per-item
+        // service methods. Permission is split per action (see below) because a
+        // single route can't carry two RequireAuthorization policies.
+        group.MapPost("/bulk", async (
+            ContentPaperBulkRequest req, IContentPaperService svc, HttpContext http, CancellationToken ct) =>
+        {
+            var action = (req.Action ?? string.Empty).Trim().ToLowerInvariant();
+
+            // publish/unpublish/approve-publish/reject require content:publish;
+            // archive/submit-for-review require content:write.
+            var requiresPublish = action is "publish" or "unpublish" or "approve-publish" or "reject";
+            var requiresWrite = action is "archive" or "submit-for-review";
+            if (!requiresPublish && !requiresWrite)
+            {
+                return Results.BadRequest(new { error = $"Unknown bulk action '{req.Action}'." });
+            }
+
+            var perms = http.User.FindFirstValue(AuthTokenService.AdminPermissionsClaimType);
+            var allowed = requiresPublish
+                ? AdminPermissionEvaluator.HasAny(perms, "content:publish", "system_admin")
+                : AdminPermissionEvaluator.HasAny(perms, "content:write", "system_admin");
+            if (!allowed)
+            {
+                return Results.StatusCode(StatusCodes.Status403Forbidden);
+            }
+
+            if (action == "reject" && string.IsNullOrWhiteSpace(req.Reason))
+            {
+                return Results.BadRequest(new { error = "Rejection reason is required.", code = "rejection_reason_required" });
+            }
+
+            var adminId = http.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "system";
+            try
+            {
+                var result = await svc.BulkAsync(action, req.Ids ?? Array.Empty<string>(), adminId, req.Reason, ct);
+                return Results.Ok(result);
+            }
+            catch (ArgumentException ex)
+            {
+                return Results.BadRequest(new { error = ex.Message });
+            }
+        })
         .RequireRateLimiting("PerUserWrite");
 
         // Speaking-specific structure editor. Hidden interlocutor data stays

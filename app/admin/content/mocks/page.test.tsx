@@ -55,8 +55,10 @@ describe('AdminMockBundlesPage', () => {
   it('shows read-only bundles without write or publish controls', async () => {
     renderWithRouter(<AdminMockBundlesPage />);
 
-    expect(await screen.findByText('Route 1')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /item analysis/i })).toBeInTheDocument();
+    // The responsive DataTable renders both a desktop <table> and a mobile
+    // card view, so the title + per-row links appear twice in jsdom.
+    expect((await screen.findAllByText('Route 1')).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('link', { name: /item analysis/i }).length).toBeGreaterThan(0);
     expect(screen.queryByText('Create bundle')).not.toBeInTheDocument();
     expect(screen.queryByText('Build a complete mock end-to-end')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /create/i })).not.toBeInTheDocument();

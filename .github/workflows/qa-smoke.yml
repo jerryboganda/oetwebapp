@@ -14,9 +14,28 @@ concurrency:
 
 jobs:
   backend-tests:
-    name: Backend tests (.NET)
+    name: Backend tests (.NET) · shard ${{ matrix.shard }}/${{ strategy.job-total }}
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    # Per-shard cap. The full suite ran sequentially (the test assembly sets
+    # [CollectionBehavior(DisableTestParallelization = true)] in AssemblyInfo.cs,
+    # and the fixtures use isolated in-memory EF Core DBs — one unique
+    # `InMemory:{Guid}` database per TestWebApplicationFactory — so there is NO
+    # shared Postgres/Respawn state across classes). Because xunit will not
+    # parallelize within a single process, parallelism comes from this matrix:
+    # each shard is its own `dotnet test` process running a DISJOINT subset of
+    # test CLASSES, so each finishes well under the cap.
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        # 4 disjoint shards. There is a single test project
+        # (OetLearner.Api.Tests) with a mostly-flat namespace, so we shard by
+        # round-robining distinct test CLASSES (not methods — keeps the
+        # --filter compact) into N buckets via a stable, deterministic
+        # partition computed at runtime from `dotnet test --list-tests`.
+        shard: [1, 2, 3, 4]
+    env:
+      TOTAL_SHARDS: 4
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
@@ -24,23 +43,75 @@ jobs:
           dotnet-version: 10.0.x
       - name: Restore
         run: dotnet restore backend/OetLearner.sln
-      - name: Test
+      - name: Build (Release, once per shard)
+        run: dotnet build backend/OetLearner.sln --configuration Release --no-restore --nologo
+      - name: Compute test-class filter for this shard
+        id: filter
+        env:
+          SHARD_INDEX: ${{ matrix.shard }}
         run: |
-          mkdir -p test-results
-          dotnet test backend/OetLearner.sln \
+          set -euo pipefail
+          TEST_PROJ="backend/tests/OetLearner.Api.Tests/OetLearner.Api.Tests.csproj"
+          # Discover every fully-qualified test name without rebuilding, then
+          # reduce to the set of distinct test CLASSES (strip the trailing
+          # `.Method` and any `(args...)` theory data). Round-robin the sorted,
+          # de-duplicated class list across TOTAL_SHARDS buckets so the split is
+          # deterministic and balanced regardless of discovery order.
+          dotnet test "$TEST_PROJ" \
             --configuration Release \
-            --no-restore \
+            --no-build \
+            --nologo \
+            --list-tests \
+            | sed -n 's/^[[:space:]]\{4,\}\(.*\)$/\1/p' \
+            | sed 's/(.*//' \
+            | sed 's/\.[A-Za-z0-9_]*$//' \
+            | sort -u > all-classes.txt
+
+          TOTAL_CLASSES=$(wc -l < all-classes.txt | tr -d ' ')
+          echo "Discovered $TOTAL_CLASSES distinct test classes."
+          if [ "$TOTAL_CLASSES" -eq 0 ]; then
+            echo "::error::No test classes discovered — failing rather than running an empty shard."
+            exit 1
+          fi
+
+          # Round-robin: class on line i (1-based) belongs to shard ((i-1) % N)+1.
+          awk -v shard="$SHARD_INDEX" -v n="$TOTAL_SHARDS" \
+            'NR % n == (shard - 1) % n { print }' all-classes.txt > shard-classes.txt
+
+          COUNT=$(wc -l < shard-classes.txt | tr -d ' ')
+          echo "Shard $SHARD_INDEX owns $COUNT classes."
+          if [ "$COUNT" -eq 0 ]; then
+            echo "::error::Shard $SHARD_INDEX resolved to 0 classes."
+            exit 1
+          fi
+
+          # Build a compact filter: FullyQualifiedName~Class1|FullyQualifiedName~Class2|...
+          # `~` is a substring match anchored on the fully-qualified class name,
+          # which is unambiguous because each line is a complete namespace+class.
+          FILTER=$(awk '{ printf "%sFullyQualifiedName~%s", (NR==1 ? "" : "|"), $0 }' shard-classes.txt)
+          {
+            echo "value<<EOF"
+            echo "$FILTER"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+      - name: Test (shard ${{ matrix.shard }})
+        run: |
+          mkdir -p "test-results-shard-${{ matrix.shard }}"
+          dotnet test backend/tests/OetLearner.Api.Tests/OetLearner.Api.Tests.csproj \
+            --configuration Release \
+            --no-build \
             --nologo \
             --verbosity normal \
+            --filter "${{ steps.filter.outputs.value }}" \
             --logger "console;verbosity=normal" \
             --logger "trx;LogFileName=results.trx" \
-            --results-directory test-results
+            --results-directory "test-results-shard-${{ matrix.shard }}"
       - name: Upload backend test results
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: backend-test-results
-          path: test-results/
+          name: backend-test-results-shard-${{ matrix.shard }}
+          path: test-results-shard-${{ matrix.shard }}/
           if-no-files-found: ignore
           retention-days: 14
 

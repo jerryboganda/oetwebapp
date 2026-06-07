@@ -40,6 +40,7 @@ import { PronunciationDashboardTile } from '@/components/domain/pronunciation';
 import { SafeRichText } from '@/components/domain/grammar/grammar-content-renderer';
 import { AsyncStateWrapper } from '@/components/state';
 import { DashboardAddonsWidget } from '@/components/learner/dashboard-addons-widget';
+import { ExtendAccessCta } from '@/components/learner/extend-access-cta';
 import { OnboardingChecklist } from '@/components/onboarding/onboarding-checklist';
 import { useDashboardHome } from '@/lib/hooks/use-dashboard-home';
 import { learnerGetScoringPolicy, fetchMyEntitlementSnapshot, type ScoringPolicyLearnerDto, type MyEntitlementSnapshot } from '@/lib/api';
@@ -461,6 +462,14 @@ export default function Dashboard() {
                 writingAddonsEnabled={entitlement?.writingAddonsEnabled ?? false}
                 speakingAddonsEnabled={entitlement?.speakingAddonsEnabled ?? false}
                 tutorBookDiscountEnabled={entitlement?.tutorBookDiscountEnabled ?? false}
+              />
+
+              {/* OET 2026 — Extend Access CTA. Shows only when an eligible
+                  subscription is lapsing/lapsed; opens the addon-extend-90
+                  purchase flow (eligibility resolved server-side). */}
+              <ExtendAccessCta
+                hasEligibleSubscription={entitlement?.hasEligibleSubscription ?? false}
+                expiresAt={entitlement?.expiresAt}
               />
 
               {scoringPolicy ? (

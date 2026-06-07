@@ -1649,7 +1649,7 @@ public class AdminFlowsTests : IClassFixture<FirstPartyAuthTestWebApplicationFac
     }
 
     [Fact]
-    public async Task AdminVocabularyImport_ImportedTermsLandAsDraft_AndPublishGateRejectsMissingDefinition()
+    public async Task AdminVocabularyImport_ImportedTermsLandAsDraft_AndCanBePublishedWithoutOptionalFields()
     {
         var term = $"draft-gate-{Guid.NewGuid():N}";
         var csv = $"{term}\n";
@@ -1677,12 +1677,18 @@ public class AdminFlowsTests : IClassFixture<FirstPartyAuthTestWebApplicationFac
         Assert.Equal("draft", item.GetProperty("status").GetString());
         var id = item.GetProperty("id").GetString()!;
 
-        // Attempt to publish (status=active) without supplying Definition → must be rejected by the publish gate.
+        // Publish (status=active) without supplying optional fields → now allowed.
+        // All metadata fields are optional; only a non-empty term is required.
         var publishBody = JsonContent.Create(new { status = "active" });
         var publish = await _client.PutAsync($"/v1/admin/vocabulary/items/{id}", publishBody);
-        Assert.Equal(HttpStatusCode.BadRequest, publish.StatusCode);
-        var code = await ReadErrorCodeAsync(publish);
-        Assert.Equal("VOCAB_PUBLISH_GATE", code);
+        publish.EnsureSuccessStatusCode();
+
+        var listAfter = await _client.GetAsync($"/v1/admin/vocabulary/items?search={Uri.EscapeDataString(term)}");
+        listAfter.EnsureSuccessStatusCode();
+        using var listAfterJson = JsonDocument.Parse(await listAfter.Content.ReadAsStringAsync());
+        var itemAfter = listAfterJson.RootElement.GetProperty("items").EnumerateArray()
+            .Single(x => x.GetProperty("term").GetString() == term);
+        Assert.Equal("active", itemAfter.GetProperty("status").GetString());
     }
 
     [Fact]

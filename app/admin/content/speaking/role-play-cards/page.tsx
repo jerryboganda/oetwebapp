@@ -3,35 +3,47 @@
 /**
  * Phase 1 (C.2) of the OET Speaking module roadmap.
  *
- * Admin list view for role-play cards. Mirrors the structure of
- * `app/admin/content/speaking/shared-resources/page.tsx`:
+ * Admin list view for role-play cards. Mirrors the structure of the other
+ * admin content lists (listening/reading/writing/mocks):
  *   - AdminCatalogLayout (filters + actions)
  *   - Filter row (profession / difficulty / status)
- *   - Card list with badges, has-interlocutor pill, published-at column,
- *     and action buttons.
+ *   - AdminManagedTable (selectable table + bulk publish/archive bar)
+ *     with per-row edit / interlocutor / preview / duplicate actions.
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Copy, Plus, RotateCcw, Sparkles, Upload } from 'lucide-react';
+import {
+  Archive as ArchiveIcon,
+  CheckCircle2,
+  Copy,
+  Plus,
+  RotateCcw,
+  Sparkles,
+  Upload,
+  XCircle,
+} from 'lucide-react';
 
 import { AdminCatalogLayout } from '@/components/admin/layout/admin-catalog-layout';
 import { Badge } from '@/components/admin/ui/badge';
 import { Button } from '@/components/admin/ui/button';
-import { Card, CardContent } from '@/components/admin/ui/card';
-import { Skeleton } from '@/components/admin/ui/skeleton';
 import { EmptyState } from '@/components/admin/ui/empty-state';
+import {
+  AdminManagedTable,
+  type ManagedBulkAction,
+  type BulkResult,
+} from '@/components/admin/managed-table/admin-managed-table';
 
+import { type Column } from '@/components/ui/data-table';
 import { Select } from '@/components/ui/form-controls';
 import { Toast } from '@/components/ui/alert';
 import {
   DIFFICULTY_OPTIONS,
   PROFESSION_OPTIONS,
-  adminArchiveRolePlayCard,
   adminDuplicateRolePlayCard,
   adminListRolePlayCards,
-  adminPublishRolePlayCard,
+  bulkAdminRolePlayCards,
   type RolePlayCardSummary,
 } from '@/lib/api/speaking-role-play-cards';
 
@@ -51,6 +63,9 @@ const BREADCRUMBS = [
   { label: 'Role-play cards' },
 ];
 
+const cardHref = (cardId: string, suffix = '') =>
+  `/admin/content/speaking/role-play-cards/${encodeURIComponent(cardId)}${suffix}`;
+
 export default function AdminSpeakingRolePlayCardsPage() {
   const router = useRouter();
   const [rows, setRows] = useState<RolePlayCardSummary[]>([]);
@@ -61,6 +76,9 @@ export default function AdminSpeakingRolePlayCardsPage() {
   const [profession, setProfession] = useState('');
   const [difficulty, setDifficulty] = useState('');
   const [status, setStatus] = useState('');
+
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
 
   const reload = useCallback(async () => {
     setLoading(true);
@@ -76,6 +94,7 @@ export default function AdminSpeakingRolePlayCardsPage() {
         : ((data as unknown as { rolePlayCards?: RolePlayCardSummary[] })
             .rolePlayCards ?? []);
       setRows(items);
+      setPage(1);
     } catch (e) {
       setToast({ variant: 'error', message: (e as Error).message });
     } finally {
@@ -87,49 +106,177 @@ export default function AdminSpeakingRolePlayCardsPage() {
     void reload();
   }, [reload]);
 
-  async function handlePublish(row: RolePlayCardSummary) {
-    setBusyId(row.cardId);
-    try {
-      await adminPublishRolePlayCard(row.cardId);
-      setToast({ variant: 'success', message: `Published "${row.title}".` });
-      await reload();
-    } catch (e) {
-      setToast({ variant: 'error', message: (e as Error).message });
-    } finally {
-      setBusyId(null);
-    }
-  }
+  const handleDuplicate = useCallback(
+    async (row: RolePlayCardSummary) => {
+      setBusyId(row.cardId);
+      try {
+        const created = await adminDuplicateRolePlayCard(row.cardId);
+        setToast({ variant: 'success', message: `Duplicated as "${created.scenarioTitle}".` });
+        await reload();
+      } catch (e) {
+        setToast({ variant: 'error', message: (e as Error).message });
+      } finally {
+        setBusyId(null);
+      }
+    },
+    [reload],
+  );
 
-  async function handleArchive(row: RolePlayCardSummary) {
-    if (!confirm(`Archive "${row.title}"? Archived cards are read-only.`)) return;
-    setBusyId(row.cardId);
-    try {
-      await adminArchiveRolePlayCard(row.cardId);
-      setToast({ variant: 'success', message: `Archived "${row.title}".` });
-      await reload();
-    } catch (e) {
-      setToast({ variant: 'error', message: (e as Error).message });
-    } finally {
-      setBusyId(null);
-    }
-  }
+  const bulkActions: ManagedBulkAction<RolePlayCardSummary>[] = useMemo(
+    () => [
+      {
+        key: 'publish',
+        label: 'Publish selected',
+        icon: <CheckCircle2 className="h-4 w-4" />,
+        variant: 'primary',
+        // Gate on Draft AND interlocutor-ready (the DTO exposes the flag). The
+        // backend re-checks per card and reports any that slip through as failed.
+        isEligible: (r) => r.status === 'Draft' && r.hasInterlocutorScript,
+        run: (ids) => bulkAdminRolePlayCards('publish', ids),
+      },
+      {
+        key: 'archive',
+        label: 'Archive selected',
+        icon: <ArchiveIcon className="h-4 w-4" />,
+        variant: 'danger',
+        isEligible: (r) => r.status === 'Published',
+        confirm: {
+          title: (n) => `Archive ${n} role-play card${n === 1 ? '' : 's'}?`,
+          description: () => 'Archived cards become read-only and are hidden from learners.',
+          confirmLabel: 'Archive',
+          destructive: true,
+        },
+        run: (ids) => bulkAdminRolePlayCards('archive', ids),
+      },
+    ],
+    [],
+  );
 
-  async function handleDuplicate(row: RolePlayCardSummary) {
-    setBusyId(row.cardId);
-    try {
-      const created = await adminDuplicateRolePlayCard(row.cardId);
-      setToast({ variant: 'success', message: `Duplicated as "${created.scenarioTitle}".` });
-      await reload();
-    } catch (e) {
-      setToast({ variant: 'error', message: (e as Error).message });
-    } finally {
-      setBusyId(null);
-    }
-  }
+  const handleBulkResult = useCallback(
+    (action: ManagedBulkAction<RolePlayCardSummary>, result: BulkResult) => {
+      const verb = action.key === 'archive' ? 'Archived' : 'Published';
+      const failed = result.failed ?? 0;
+      const skipped = result.skipped ?? 0;
+      const parts = [`${verb} ${result.succeeded} of ${result.totalRequested}`];
+      if (skipped > 0) parts.push(`${skipped} skipped`);
+      if (failed > 0) {
+        // Publish fails per-card for cards missing an interlocutor script.
+        parts.push(
+          action.key === 'publish'
+            ? `${failed} failed (missing interlocutor script or not publishable)`
+            : `${failed} failed`,
+        );
+      }
+      setToast({
+        variant: failed > 0 ? 'error' : 'success',
+        message: `${parts.join(', ')}.`,
+      });
+      void reload();
+    },
+    [reload],
+  );
+
+  const handleBulkError = useCallback(
+    (action: ManagedBulkAction<RolePlayCardSummary>, error: unknown) => {
+      const verb = action.key === 'archive' ? 'Archive' : 'Publish';
+      setToast({ variant: 'error', message: `${verb} failed: ${(error as Error).message}` });
+    },
+    [],
+  );
 
   const filterCount = useMemo(
     () => [profession, difficulty, status].filter(Boolean).length,
     [profession, difficulty, status],
+  );
+
+  const pagedRows = useMemo(
+    () => rows.slice((page - 1) * pageSize, page * pageSize),
+    [rows, page, pageSize],
+  );
+
+  const columns: Column<RolePlayCardSummary>[] = useMemo(
+    () => [
+      {
+        key: 'title',
+        header: 'Title',
+        render: (r) => (
+          <Link href={cardHref(r.cardId)} className="font-semibold hover:text-[var(--admin-primary)]">
+            {r.title}
+          </Link>
+        ),
+      },
+      {
+        key: 'profession',
+        header: 'Profession',
+        render: (r) => <Badge variant="default" intensity="tinted">{r.professionId}</Badge>,
+      },
+      {
+        key: 'difficulty',
+        header: 'Difficulty',
+        render: (r) => <Badge variant="default" intensity="tinted">{r.difficulty}</Badge>,
+      },
+      {
+        key: 'status',
+        header: 'Status',
+        render: (r) => (
+          <Badge variant={statusVariant(r.status)} intensity="tinted">{r.status}</Badge>
+        ),
+      },
+      {
+        key: 'interlocutor',
+        header: 'Interlocutor',
+        render: (r) =>
+          r.hasInterlocutorScript ? (
+            <span className="inline-flex items-center gap-1 text-xs font-semibold text-[var(--admin-success)]">
+              <CheckCircle2 className="h-3.5 w-3.5" /> Ready
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1 text-xs font-semibold text-[var(--admin-warning)]">
+              <XCircle className="h-3.5 w-3.5" /> Missing
+            </span>
+          ),
+      },
+      {
+        key: 'published',
+        header: 'Published',
+        hideOnMobile: true,
+        render: (r) =>
+          r.publishedAt ? (
+            <span className="text-xs text-admin-fg-muted">
+              {new Date(r.publishedAt).toLocaleDateString()}
+            </span>
+          ) : (
+            <span className="text-xs text-admin-fg-muted">-</span>
+          ),
+      },
+      {
+        key: 'actions',
+        header: 'Actions',
+        render: (r) => (
+          <div className="flex flex-wrap items-center gap-2">
+            <Link href={cardHref(r.cardId)} className="text-sm font-semibold text-admin-primary hover:underline">
+              Edit
+            </Link>
+            <Link href={cardHref(r.cardId, '/interlocutor')} className="text-sm font-semibold text-admin-primary hover:underline">
+              Interlocutor
+            </Link>
+            <Link href={cardHref(r.cardId, '/preview')} className="text-sm font-semibold text-admin-primary hover:underline">
+              Preview
+            </Link>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => void handleDuplicate(r)}
+              disabled={busyId === r.cardId}
+              title="Duplicate as draft"
+            >
+              <Copy className="h-4 w-4" />
+            </Button>
+          </div>
+        ),
+      },
+    ],
+    [busyId, handleDuplicate],
   );
 
   const filtersNode = (
@@ -183,109 +330,36 @@ export default function AdminSpeakingRolePlayCardsPage() {
         {rows.length} card(s){filterCount > 0 ? ` matching ${filterCount} filter(s)` : ''}.
       </p>
 
-      {loading ? (
-        <div className="col-span-full space-y-3">
-          {[1, 2, 3].map((i) => (
-            <Skeleton key={i} className="h-24" />
-          ))}
-        </div>
-      ) : rows.length === 0 ? (
-        <div className="col-span-full">
-          <EmptyState
-            illustration={<Sparkles />}
-            title="No role-play cards yet"
-            description="Click 'New role-play card' to author the first one."
-          />
-        </div>
-      ) : (
-        <div className="col-span-full space-y-3">
-          {rows.map((row) => (
-            <Card key={row.cardId}>
-              <CardContent className="p-4">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div className="min-w-0 flex-1">
-                    <div className="mb-1 flex flex-wrap items-center gap-2">
-                      <h3 className="truncate font-semibold text-admin-fg-strong">{row.title}</h3>
-                      <Badge variant={statusVariant(row.status)} intensity="tinted">
-                        {row.status}
-                      </Badge>
-                      <Badge variant="default" intensity="tinted">{row.professionId}</Badge>
-                      <Badge variant="default" intensity="tinted">{row.difficulty}</Badge>
-                      {row.hasInterlocutorScript ? (
-                        <Badge variant="success" intensity="tinted">interlocutor ready</Badge>
-                      ) : (
-                        <Badge variant="warning" intensity="tinted">no interlocutor</Badge>
-                      )}
-                      {row.isLiveTutorEligible ? (
-                        <Badge variant="info" intensity="tinted">live-tutor</Badge>
-                      ) : null}
-                    </div>
-                    <p className="mt-1 text-xs text-admin-fg-muted">
-                      {row.setting} - {row.clinicalTopic}
-                      {' - '}
-                      Published:{' '}
-                      {row.publishedAt ? new Date(row.publishedAt).toLocaleDateString() : '-'}
-                    </p>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Link
-                      href={`/admin/content/speaking/role-play-cards/${encodeURIComponent(row.cardId)}`}
-                      className="text-sm font-semibold text-admin-primary hover:underline"
-                    >
-                      Edit
-                    </Link>
-                    <Link
-                      href={`/admin/content/speaking/role-play-cards/${encodeURIComponent(row.cardId)}/interlocutor`}
-                      className="text-sm font-semibold text-admin-primary hover:underline"
-                    >
-                      Interlocutor
-                    </Link>
-                    <Link
-                      href={`/admin/content/speaking/role-play-cards/${encodeURIComponent(row.cardId)}/preview`}
-                      className="text-sm font-semibold text-admin-primary hover:underline"
-                    >
-                      Preview
-                    </Link>
-                    {row.status !== 'Published' && row.status !== 'Archived' ? (
-                      <Button
-                        size="sm"
-                        onClick={() => void handlePublish(row)}
-                        disabled={busyId === row.cardId || !row.hasInterlocutorScript}
-                        title={
-                          row.hasInterlocutorScript
-                            ? 'Publish card'
-                            : 'Add an interlocutor script before publishing'
-                        }
-                      >
-                        Publish
-                      </Button>
-                    ) : null}
-                    {row.status === 'Published' ? (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => void handleArchive(row)}
-                        disabled={busyId === row.cardId}
-                      >
-                        Archive
-                      </Button>
-                    ) : null}
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => void handleDuplicate(row)}
-                      disabled={busyId === row.cardId}
-                      title="Duplicate as draft"
-                    >
-                      <Copy className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      )}
+      <div className="col-span-full">
+        <AdminManagedTable
+          columns={columns}
+          data={pagedRows}
+          keyExtractor={(r) => r.cardId}
+          total={rows.length}
+          loading={loading}
+          page={page}
+          pageSize={pageSize}
+          onPageChange={setPage}
+          onPageSizeChange={(s) => {
+            setPageSize(s);
+            setPage(1);
+          }}
+          itemLabel="card"
+          itemLabelPlural="cards"
+          bulkActions={bulkActions}
+          onResult={handleBulkResult}
+          onError={handleBulkError}
+          emptyState={
+            !loading && rows.length === 0 ? (
+              <EmptyState
+                illustration={<Sparkles />}
+                title="No role-play cards yet"
+                description="Click 'New role-play card' to author the first one."
+              />
+            ) : undefined
+          }
+        />
+      </div>
 
       {toast ? (
         <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} />

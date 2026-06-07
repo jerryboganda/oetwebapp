@@ -12,6 +12,7 @@ using OetLearner.Api.Services.Content;
 using OetLearner.Api.Services.Conversation;
 using OetLearner.Api.Services.Conversation.Tts;
 using OetLearner.Api.Services.Vocabulary;
+using OetLearner.Api.Services.VoiceDesign;
 using Xunit;
 
 namespace OetLearner.Api.Tests;
@@ -231,6 +232,51 @@ public sealed class VocabularyAudioWorkerTests
         Assert.NotEqual(existingKey, term.AudioUrl);
     }
 
+    [Fact]
+    public async Task ResumeVocabularyAudio_RecallTerms_EnqueuesElevenLabsJobsAndCreatesRunningBatch()
+    {
+        // Regression: the Resume button used to enqueue recall jobs with
+        // ProviderName=null, which the worker rejects, so audio never generated.
+        // It must now route recall terms through the recalls batch path
+        // (ProviderName=elevenlabs + a running AudioRegenerationBatch).
+        await using var fixture = await Fixture.CreateAsync(ttsProvider: "elevenlabs");
+        fixture.Db.VocabularyTerms.AddRange(
+            new VocabularyTerm
+            {
+                Id = "VOC-R1", Term = "amlodipine", ExamTypeCode = "oet",
+                Category = "recall", Status = "draft", RecallSetCodesJson = "[\"2026\"]",
+            },
+            new VocabularyTerm
+            {
+                Id = "VOC-R2", Term = "cholecystitis", ExamTypeCode = "oet",
+                Category = "recall", Status = "draft", RecallSetCodesJson = "[\"2026\"]",
+            });
+        await fixture.Db.SaveChangesAsync();
+
+        var admin = new OetLearner.Api.Services.AdminService(
+            fixture.Db,
+            emailOtpService: null!,
+            passwordHasher: null!,
+            passwordPolicyService: null!,
+            timeProvider: TimeProvider.System,
+            notifications: null!,
+            learnerService: null!,
+            vocabularyAudioQueue: fixture.Queue,
+            voiceDesignRegeneration: fixture.Regen);
+
+        var result = await admin.ResumeVocabularyAudioAsync(CancellationToken.None);
+
+        var enqueued = (int)result.GetType().GetProperty("enqueued")!.GetValue(result)!;
+        Assert.Equal(2, enqueued);
+        Assert.Equal(2, fixture.Queue.PendingCount);
+
+        var batch = await fixture.Db.AudioRegenerationBatches.AsNoTracking()
+            .SingleAsync(b => b.AudioType == "recalls");
+        Assert.Equal("running", batch.Status);
+        Assert.Equal("elevenlabs", batch.ProviderName);
+        Assert.Equal(2, batch.TotalItems);
+    }
+
     // ─────────────────────────────────────────────────────────────────────
 
     private sealed class Fixture : IAsyncDisposable
@@ -238,6 +284,7 @@ public sealed class VocabularyAudioWorkerTests
         public required LearnerDbContext Db { get; init; }
         public required IVocabularyAudioQueue Queue { get; init; }
         public required VocabularyAudioWorker Worker { get; init; }
+        public required IVoiceDesignRegenerationService Regen { get; init; }
         public required string StorageRoot { get; init; }
         public required IServiceProvider Root { get; init; }
 
@@ -257,7 +304,15 @@ public sealed class VocabularyAudioWorkerTests
             services.AddDbContext<LearnerDbContext>(o => o.UseInMemoryDatabase(dbName));
 
             services.AddSingleton<IConversationOptionsProvider>(
-                new StubOptionsProvider(new ConversationOptions { TtsProvider = ttsProvider }));
+                new StubOptionsProvider(new ConversationOptions
+                {
+                    TtsProvider = ttsProvider,
+                    // Present so the recalls regeneration path passes its API-key
+                    // guard in tests; the stub TTS providers ignore it.
+                    ElevenLabsApiKey = "test-elevenlabs-key",
+                    ElevenLabsDefaultVoiceId = "voice-default",
+                    ElevenLabsModel = "eleven_multilingual_v2",
+                }));
             if (string.Equals(ttsProvider, "elevenlabs", StringComparison.OrdinalIgnoreCase))
             {
                 services.AddScoped<IConversationTtsProvider, TestElevenLabsTtsProvider>();
@@ -270,6 +325,7 @@ public sealed class VocabularyAudioWorkerTests
 
             services.AddSingleton<IVocabularyAudioQueue, VocabularyAudioQueue>();
             services.AddSingleton<VocabularyAudioWorker>();
+            services.AddScoped<IVoiceDesignRegenerationService, VoiceDesignRegenerationService>();
 
             var sp = services.BuildServiceProvider(new ServiceProviderOptions
             {
@@ -280,11 +336,14 @@ public sealed class VocabularyAudioWorkerTests
             await db.Database.EnsureCreatedAsync();
             var queue = sp.GetRequiredService<IVocabularyAudioQueue>();
             var worker = sp.GetRequiredService<VocabularyAudioWorker>();
+            // Resolve from the same scope as Db so they share one DbContext.
+            var regen = assertionScope.ServiceProvider.GetRequiredService<IVoiceDesignRegenerationService>();
             return new Fixture
             {
                 Db = db,
                 Queue = queue,
                 Worker = worker,
+                Regen = regen,
                 StorageRoot = storageRoot,
                 Root = sp,
                 Scope = assertionScope,

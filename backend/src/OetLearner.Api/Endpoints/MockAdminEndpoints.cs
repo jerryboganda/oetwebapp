@@ -79,6 +79,21 @@ public static class MockAdminEndpoints
             Results.Ok(await service.PublishBundleAsync(id, AdminId(http), ct)))
             .WithAdminWrite("AdminContentPublish");
 
+        // Atomic bulk action over mock bundles (publish | archive | delete).
+        // The whole batch runs in a single transaction with one audit row.
+        // Permission is action-dependent: archive/delete need AdminContentWrite
+        // (enforced here at the route); the stricter content:publish grant for
+        // the publish action is enforced inside MockService.BulkAsync because
+        // the required permission depends on the request body, not the route
+        // (a write-only caller publishing → 403). Unknown action → 400.
+        group.MapPost("/bulk", async (
+            MockBundleBulkRequest request,
+            MockService service,
+            HttpContext http,
+            CancellationToken ct) =>
+            Results.Ok(await service.BulkAsync(request.Action, request.Ids ?? Array.Empty<string>(), AdminId(http), ct)))
+            .WithAdminWrite("AdminContentWrite");
+
         // Mocks V2 Wave 3 — item analysis dashboard.
         group.MapGet("/{id}/item-analysis", async (
             string id,
@@ -339,6 +354,12 @@ public static class MockAdminEndpoints
         return response;
     }
 }
+
+/// <summary>
+/// Request body for <c>POST /v1/admin/mock-bundles/bulk</c>.
+/// <see cref="Action"/> is one of <c>publish</c>, <c>archive</c>, <c>delete</c>.
+/// </summary>
+public sealed record MockBundleBulkRequest(string Action, string[] Ids);
 
 /// <summary>
 /// Request body for <c>PATCH /v1/admin/mocks/items/{itemId}</c>.
