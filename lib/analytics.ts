@@ -74,6 +74,8 @@ const TRACKED_EVENTS = [
   'recalls_cards_viewed',
   'recalls_library_viewed',
   'recalls_favourites_viewed',
+  'recalls_term_favourited',
+  'recalls_term_unfavourited',
   'recalls_word_audio_played',
   'recalls_word_audio_blocked',
   'flashcards_viewed',

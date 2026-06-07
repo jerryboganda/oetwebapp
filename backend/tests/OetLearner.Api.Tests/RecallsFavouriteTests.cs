@@ -111,6 +111,75 @@ public class RecallsFavouriteTests(TestWebApplicationFactory factory)
         Assert.Null(card.StarReason);
     }
 
+    [Fact]
+    public async Task Favourite_by_term_creates_card_when_none_exists()
+    {
+        var learnerId = $"learner-{Guid.NewGuid():N}";
+        await SeedLearnerWithSubscriptionAsync(learnerId);
+        var termId = await SeedTermOnlyAsync();
+
+        using var client = CreateLearnerClient(learnerId);
+        var response = await client.PostAsJsonAsync("/v1/recalls/star", new
+        {
+            kind = "term",
+            id = termId,
+            starred = true,
+            reason = (string?)null,
+        });
+
+        var payload = await response.Content.ReadAsStringAsync();
+        Assert.True(response.IsSuccessStatusCode, payload);
+
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        var card = await db.LearnerVocabularies.SingleAsync(lv => lv.UserId == learnerId && lv.TermId == termId);
+        Assert.True(card.Starred);
+        Assert.Null(card.StarReason);
+        Assert.Equal("browse", card.SourceRef);
+    }
+
+    [Fact]
+    public async Task Favourite_by_term_unfavourite_without_card_is_noop()
+    {
+        var learnerId = $"learner-{Guid.NewGuid():N}";
+        await SeedLearnerWithSubscriptionAsync(learnerId);
+        var termId = await SeedTermOnlyAsync();
+
+        using var client = CreateLearnerClient(learnerId);
+        var response = await client.PostAsJsonAsync("/v1/recalls/star", new
+        {
+            kind = "term",
+            id = termId,
+            starred = false,
+            reason = (string?)null,
+        });
+
+        var payload = await response.Content.ReadAsStringAsync();
+        Assert.True(response.IsSuccessStatusCode, payload);
+
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        Assert.False(await db.LearnerVocabularies.AnyAsync(lv => lv.UserId == learnerId && lv.TermId == termId));
+    }
+
+    [Fact]
+    public async Task Favourite_by_term_toggles_existing_card_off()
+    {
+        var learnerId = $"learner-{Guid.NewGuid():N}";
+        await SeedLearnerWithSubscriptionAsync(learnerId);
+        var termId = await SeedTermOnlyAsync();
+
+        using var client = CreateLearnerClient(learnerId);
+        await client.PostAsJsonAsync("/v1/recalls/star", new { kind = "term", id = termId, starred = true, reason = (string?)null });
+        await client.PostAsJsonAsync("/v1/recalls/star", new { kind = "term", id = termId, starred = false, reason = (string?)null });
+
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        var card = await db.LearnerVocabularies.SingleAsync(lv => lv.UserId == learnerId && lv.TermId == termId);
+        Assert.False(card.Starred);
+        Assert.Null(card.StarReason);
+    }
+
     private HttpClient CreateLearnerClient(string learnerId)
     {
         var client = factory.CreateClient();
@@ -173,6 +242,33 @@ public class RecallsFavouriteTests(TestWebApplicationFactory factory)
         });
 
         await db.SaveChangesAsync();
+    }
+
+    private async Task<string> SeedTermOnlyAsync()
+    {
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        await db.Database.EnsureCreatedAsync();
+        var now = DateTimeOffset.UtcNow;
+        var termId = $"term-{Guid.NewGuid():N}";
+
+        db.VocabularyTerms.Add(new VocabularyTerm
+        {
+            Id = termId,
+            Term = "amlodipine",
+            Definition = "A calcium-channel blocker used for hypertension.",
+            ExampleSentence = "She was started on amlodipine for her blood pressure.",
+            ExamTypeCode = "oet",
+            ProfessionId = "medicine",
+            Category = "spelling",
+            RecallSetCodesJson = "[\"2026\"]",
+            Status = "active",
+            CreatedAt = now,
+            UpdatedAt = now
+        });
+
+        await db.SaveChangesAsync();
+        return termId;
     }
 
     private async Task<Guid> SeedVocabularyCardAsync(string learnerId)
