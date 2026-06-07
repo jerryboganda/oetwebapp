@@ -142,7 +142,13 @@ public static class Oet2026CatalogEndpoints
         bool BundledTutorBook,
         bool BundledBasicEnglish,
         IReadOnlyList<string> DashboardModules,
-        int DisplayOrder);
+        int DisplayOrder,
+        // Spec-aligned public id. The two standalone Speaking-session plans keep the
+        // stable DB codes `speaking-1session-plan`/`speaking-2sessions-plan` (the bare
+        // `speaking-1session`/`speaking-2sessions` codes belong to the add-on SKUs),
+        // so the spec's bare product id is surfaced here for catalogue display/URLs
+        // without a risky rename of live codes. For every other plan PublicSlug == Code.
+        string PublicSlug);
 
     private sealed record PublicAddOnRow(
         string Code,
@@ -192,7 +198,8 @@ public static class Oet2026CatalogEndpoints
             p.BundledTutorBook,
             p.BundledBasicEnglish,
             DeserializeStringArray(p.DashboardModulesJson),
-            p.DisplayOrder)).ToList();
+            p.DisplayOrder,
+            p.Code.EndsWith("-plan", StringComparison.Ordinal) ? p.Code[..^5] : p.Code)).ToList();
 
         var addOnRows = addOns.Select(a => new PublicAddOnRow(
             a.Code,
