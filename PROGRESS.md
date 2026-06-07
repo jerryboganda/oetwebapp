@@ -52,6 +52,10 @@ Implement the OET 2026 product portfolio plan on `feat/oet-2026-entitlement-conf
 - QA Smoke run `27103739757` passed frontend typecheck/lint/unit/build and every E2E shard. Backend shards still failed after the global demo-seed pin because unrelated tests saw seeded content/entitlements.
 - Default `TestWebApplicationFactory` now keeps `Bootstrap:SeedDemoData=false`; a dedicated `SeededTestWebApplicationFactory` opts in only the demo-seed auth/critical flow tests that assert seeded rows.
 - Focused local `dotnet test` attempts for `AuthFlowsTests.SeedData_EnsuresUnifiedAuthAccountsForLearnerExpertAndAdmin` and `ContentBulkImportE2ETests.Full_pipeline_creates_papers_assets_and_dedupes_identical_content` timed out locally after 4 minutes. Stray local `dotnet` processes from those timed-out checks were stopped.
+- QA Smoke run `27105430281` passed frontend typecheck/lint/unit/build and every E2E shard. Backend build was green, but backend shards still failed.
+- Several backend failures were traced to legacy tests using `CreateAuthenticatedClient` after default demo seeding was narrowed. `TestWebApplicationFactory.CreateAuthenticatedClient` now seeds only the requested local auth identity/profile/permission row before password sign-in, without re-enabling full demo seed globally.
+- Focused local `dotnet test backend/tests/OetLearner.Api.Tests/OetLearner.Api.Tests.csproj --no-build --filter "FullyQualifiedName=OetLearner.Api.Tests.ExpertFlowsTests.ExpertDashboard_UsesBearerToken_WhenDevelopmentAuthIsEnabled" --nologo`: passed, 1 test.
+- `git diff --check -- backend/tests/OetLearner.Api.Tests/Infrastructure/TestWebApplicationFactory.cs`: passed.
 
 ## Next-Step Protocol For New Agent Runs
 
@@ -63,5 +67,5 @@ Implement the OET 2026 product portfolio plan on `feat/oet-2026-entitlement-conf
 
 ## Active Risks
 
-- GitHub Actions must validate the latest seeded-factory narrowing after the next push; do not merge/deploy until QA Smoke and required checks are green.
+- GitHub Actions must validate the latest authenticated-client minimal seeding after the next push; do not merge/deploy until QA Smoke and required checks are green.
 - Existing branch/workspace has an unrelated untracked `.codex/config.toml`; do not stage it unless explicitly requested.
