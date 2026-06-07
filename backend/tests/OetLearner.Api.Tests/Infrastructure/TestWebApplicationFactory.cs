@@ -23,6 +23,7 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
     private readonly string _databaseName = $"oet-learner-tests-{Guid.NewGuid():N}";
     private readonly bool _useFirstPartyAuth;
     private readonly bool _seedDemoData;
+    private readonly Dictionary<string, string?> _previousEnvironmentValues = new();
     private readonly Dictionary<string, string?>? _firstPartyConfiguration;
 
     public TestWebApplicationFactory()
@@ -76,6 +77,23 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
             [$"{AuthTokenOptions.SectionName}:OtpLifetime"] = "00:10:00",
             [$"{AuthTokenOptions.SectionName}:AuthenticatorIssuer"] = "OET Learner"
         };
+        foreach (var key in new[]
+        {
+            "Auth:UseDevelopmentAuth",
+            "Bootstrap:AutoMigrate",
+            "Bootstrap:SeedDemoData",
+            $"{AuthTokenOptions.SectionName}:Issuer",
+            $"{AuthTokenOptions.SectionName}:Audience",
+            $"{AuthTokenOptions.SectionName}:AccessTokenSigningKey",
+            $"{AuthTokenOptions.SectionName}:RefreshTokenSigningKey",
+            $"{AuthTokenOptions.SectionName}:AccessTokenLifetime",
+            $"{AuthTokenOptions.SectionName}:RefreshTokenLifetime",
+            $"{AuthTokenOptions.SectionName}:OtpLifetime",
+            $"{AuthTokenOptions.SectionName}:AuthenticatorIssuer"
+        })
+        {
+            SetEnvironmentOverride(ToEnvironmentVariableName(key), _firstPartyConfiguration[key]);
+        }
         // _firstPartyConfiguration is applied per-host via ConfigureAppConfiguration
         // (in-memory) in ConfigureWebHost — NOT pushed to process env vars.
     }
@@ -143,8 +161,32 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
         });
     }
 
+    protected override IHost CreateHost(IHostBuilder builder)
+    {
+        var host = base.CreateHost(builder);
+        RestoreEnvironmentOverrides();
+        return host;
+    }
+
     private static bool IsHostedService(ServiceDescriptor descriptor)
         => descriptor.ServiceType == typeof(IHostedService);
+
+    private void SetEnvironmentOverride(string key, string? value)
+    {
+        _previousEnvironmentValues.TryAdd(key, Environment.GetEnvironmentVariable(key));
+        Environment.SetEnvironmentVariable(key, value);
+    }
+
+    private static string ToEnvironmentVariableName(string configurationKey)
+        => configurationKey.Replace(":", "__", StringComparison.Ordinal);
+
+    private void RestoreEnvironmentOverrides()
+    {
+        foreach (var (key, value) in _previousEnvironmentValues)
+        {
+            Environment.SetEnvironmentVariable(key, value);
+        }
+    }
 
     public HttpClient CreateAuthenticatedClient(string email, string password, string? expectedRole = null)
     {
@@ -624,6 +666,8 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
         {
             return;
         }
+
+        RestoreEnvironmentOverrides();
 
         try
         {

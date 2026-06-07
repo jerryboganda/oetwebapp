@@ -4382,14 +4382,19 @@ public partial class LearnerService(
         string userId,
         DateTimeOffset now,
         CancellationToken cancellationToken)
-        => await db.Subscriptions
+    {
+        var candidates = await db.Subscriptions
             .Where(subscription => subscription.UserId == userId
-                && subscription.WritingAssessmentsRemaining > 0
-                && (subscription.Status == SubscriptionStatus.Active || subscription.Status == SubscriptionStatus.Trial)
-                && (subscription.ExpiresAt == null || subscription.ExpiresAt > now))
+                && subscription.WritingAssessmentsRemaining > 0)
+            .ToListAsync(cancellationToken);
+
+        return candidates
+            .Where(subscription => subscription.Status is SubscriptionStatus.Active or SubscriptionStatus.Trial)
+            .Where(subscription => subscription.ExpiresAt is null || subscription.ExpiresAt > now)
             .OrderBy(subscription => subscription.ExpiresAt == null)
             .ThenBy(subscription => subscription.ExpiresAt)
-            .FirstOrDefaultAsync(cancellationToken);
+            .FirstOrDefault();
+    }
 
     public async Task<object> GetReviewRequestAsync(string userId, string reviewRequestId, CancellationToken cancellationToken)
     {

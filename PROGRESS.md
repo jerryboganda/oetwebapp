@@ -59,6 +59,12 @@ Implement the OET 2026 product portfolio plan on `feat/oet-2026-entitlement-conf
 - Merged latest `origin/main` after PR #38 became dirty again. The merge kept main's per-host test configuration/no process-global environment mutation fix, while preserving portfolio's `SeededTestWebApplicationFactory` opt-in and authenticated-client minimal identity seed.
 - Post-merge focused local `dotnet test backend/tests/OetLearner.Api.Tests/OetLearner.Api.Tests.csproj --no-build --filter "FullyQualifiedName=OetLearner.Api.Tests.ExpertFlowsTests.ExpertDashboard_UsesBearerToken_WhenDevelopmentAuthIsEnabled" --nologo`: passed, 1 test.
 - Post-merge `git diff --check -- backend/tests/OetLearner.Api.Tests/Infrastructure/TestWebApplicationFactory.cs`: passed.
+- QA Smoke run `27106968196` passed frontend typecheck/lint/unit/build, SBOM/SCA, and every E2E shard. Backend shards still failed, dominated by first-party JWT validation 401s and EF InMemory translation for writing entitlement lookup.
+- `FirstPartyAuthTestWebApplicationFactory` now mirrors only startup-critical Auth/AuthToken/Bootstrap values before host creation, then restores them immediately after the host is built so unrelated tests do not observe process-global overrides.
+- `ResolveEligibleWritingSubscriptionAsync` now loads only positive-counter subscriptions from EF, then applies status/expiry eligibility in memory to avoid EF InMemory translation flattening while preserving active/trial and unexpired semantics.
+- Focused local `dotnet test backend/tests/OetLearner.Api.Tests/OetLearner.Api.Tests.csproj --filter "FullyQualifiedName=OetLearner.Api.Tests.AdminWalletTierTests.Get_ReturnsAppsettingsFallback_WhenNoDbRows" --nologo`: passed, 1 test.
+- Focused local `dotnet test backend/tests/OetLearner.Api.Tests/OetLearner.Api.Tests.csproj --filter "FullyQualifiedName=OetLearner.Api.Tests.WritingReviewEntitlementConsumptionTests.WritingReview_WithEligibleEntitlement_ConsumesOneAndSkipsWallet" --nologo`: passed, 1 test.
+- `git diff --check -- backend/tests/OetLearner.Api.Tests/Infrastructure/TestWebApplicationFactory.cs backend/src/OetLearner.Api/Services/LearnerService.cs`: passed.
 
 ## Next-Step Protocol For New Agent Runs
 
