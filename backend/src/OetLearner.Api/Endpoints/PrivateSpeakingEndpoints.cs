@@ -490,6 +490,9 @@ public static class PrivateSpeakingEndpoints
                 if (req.RescheduleWindowHours.HasValue) c.RescheduleWindowHours = req.RescheduleWindowHours.Value;
                 if (req.ReservationTimeoutMinutes.HasValue) c.ReservationTimeoutMinutes = req.ReservationTimeoutMinutes.Value;
                 if (req.ReminderOffsetsHoursJson is not null) c.ReminderOffsetsHoursJson = req.ReminderOffsetsHoursJson;
+                if (req.ReminderOffsetsMinutesJson is not null) c.ReminderOffsetsMinutesJson = req.ReminderOffsetsMinutesJson;
+                if (req.RescheduleFreeWindowHours.HasValue) c.RescheduleFreeWindowHours = req.RescheduleFreeWindowHours.Value;
+                if (req.RescheduleSameDayPenaltyPercent.HasValue) c.RescheduleSameDayPenaltyPercent = req.RescheduleSameDayPenaltyPercent.Value;
             }, http.UserId(), ct);
             return Results.Ok(config);
         }).WithAdminWrite("AdminReviewOps");
@@ -885,7 +888,11 @@ public static class PrivateSpeakingEndpoints
         b.LearnerTimezone,
         b.PriceMinorUnits,
         b.Currency,
+        b.ProfessionTrack,
         b.PaymentStatus,
+        b.RefundIssued,
+        b.RefundAmountMinorUnits,
+        b.PenaltyAmountMinorUnits,
         b.ZoomStatus,
         b.EntitlementConsumed,
         b.EntitlementRestoredAt,
@@ -908,7 +915,11 @@ public static class PrivateSpeakingEndpoints
         b.LearnerTimezone,
         b.PriceMinorUnits,
         b.Currency,
+        b.ProfessionTrack,
         b.PaymentStatus,
+        b.RefundIssued,
+        b.RefundAmountMinorUnits,
+        b.PenaltyAmountMinorUnits,
         b.ZoomStatus,
         b.EntitlementConsumed,
         b.EntitlementRestoredAt,
@@ -930,8 +941,12 @@ public static class PrivateSpeakingEndpoints
         b.LearnerTimezone,
         b.PriceMinorUnits,
         b.Currency,
+        b.ProfessionTrack,
         b.PaymentStatus,
         b.PaymentConfirmedAt,
+        b.RefundIssued,
+        b.RefundAmountMinorUnits,
+        b.PenaltyAmountMinorUnits,
         b.ZoomStatus,
         b.EntitlementConsumed,
         b.EntitlementRestoredAt,
@@ -962,8 +977,12 @@ public static class PrivateSpeakingEndpoints
         b.LearnerTimezone,
         b.PriceMinorUnits,
         b.Currency,
+        b.ProfessionTrack,
         b.PaymentStatus,
         b.PaymentConfirmedAt,
+        b.RefundIssued,
+        b.RefundAmountMinorUnits,
+        b.PenaltyAmountMinorUnits,
         b.ZoomStatus,
         b.EntitlementConsumed,
         b.EntitlementRestoredAt,
@@ -995,8 +1014,13 @@ public static class PrivateSpeakingEndpoints
         b.LearnerTimezone,
         b.PriceMinorUnits,
         b.Currency,
+        b.ProfessionTrack,
         b.PaymentStatus,
         b.PaymentConfirmedAt,
+        b.RefundIssued,
+        b.RefundAmountMinorUnits,
+        b.PenaltyAmountMinorUnits,
+        b.StripeRefundId,
         b.ZoomStatus,
         b.ZoomJoinUrl,
         b.ZoomStartUrl,
@@ -1054,7 +1078,10 @@ public record UpdatePrivateSpeakingConfigRequest(
     bool? AllowReschedule,
     int? RescheduleWindowHours,
     int? ReservationTimeoutMinutes,
-    string? ReminderOffsetsHoursJson);
+    string? ReminderOffsetsHoursJson,
+    string? ReminderOffsetsMinutesJson,
+    int? RescheduleFreeWindowHours,
+    int? RescheduleSameDayPenaltyPercent);
 
 public record CreateTutorProfileRequest(
     string ExpertUserId,
