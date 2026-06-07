@@ -9,7 +9,7 @@
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { Sparkles } from 'lucide-react';
+import { Sparkles, ArrowRight, Upload, Archive, Trash2 } from 'lucide-react';
 
 import { AdminCatalogLayout } from '@/components/admin/layout/admin-catalog-layout';
 import { Button } from '@/components/admin/ui/button';
@@ -18,14 +18,19 @@ import { Badge } from '@/components/admin/ui/badge';
 import { Skeleton } from '@/components/admin/ui/skeleton';
 import { EmptyState } from '@/components/admin/ui/empty-state';
 
-import { InlineAlert } from '@/components/ui/alert';
+import { InlineAlert, Toast } from '@/components/ui/alert';
+import { Button as LegacyButton } from '@/components/ui/button';
+import { type Column } from '@/components/ui/data-table';
+import {
+  AdminManagedTable,
+  type ManagedBulkAction,
+  type BulkResult,
+} from '@/components/admin/managed-table/admin-managed-table';
 import { Input, Select } from '@/components/ui/form-controls';
 import {
-  archiveAdminDrill,
+  bulkAdminDrills,
   createAdminDrill,
-  deleteAdminDrill,
   listAdminDrills,
-  publishAdminDrill,
   SPEAKING_DRILL_KINDS,
   type AdminDrillCreateInput,
   type AdminDrillSummary,
@@ -46,14 +51,22 @@ const BREADCRUMBS = [
   { label: 'Drill bank' },
 ];
 
+function summarizeResult(verb: string, result: BulkResult): string {
+  const n = result.succeeded;
+  const noun = n === 1 ? 'drill' : 'drills';
+  return `${verb} ${n} ${noun} (${result.skipped ?? 0} skipped, ${result.failed ?? 0} failed)`;
+}
+
 export default function AdminSpeakingDrillsPage() {
   const [drills, setDrills] = useState<AdminDrillSummary[]>([]);
   const [statusFilter, setStatusFilter] = useState<string>('');
   const [kindFilter, setKindFilter] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
-  const [busyId, setBusyId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
+  const [toast, setToast] = useState<{ variant: 'success' | 'error'; message: string } | null>(null);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
 
   const [draft, setDraft] = useState<AdminDrillCreateInput>({
     drillKind: 'fluency_relay',
@@ -83,43 +96,136 @@ export default function AdminSpeakingDrillsPage() {
     reload();
   }, [reload]);
 
-  const visible = useMemo(() => drills, [drills]);
+  // Reset to the first page whenever the filtered set changes.
+  useEffect(() => {
+    setPage(1);
+  }, [statusFilter, kindFilter]);
 
-  async function publish(id: string) {
-    setBusyId(id);
-    try {
-      await publishAdminDrill(id);
-      await reload();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Publish failed.');
-    } finally {
-      setBusyId(null);
-    }
+  // listAdminDrills returns the full list with no server-side pagination, so we
+  // slice client-side for the current page while passing the full count as total.
+  const pageRows = useMemo(
+    () => drills.slice((page - 1) * pageSize, page * pageSize),
+    [drills, page, pageSize],
+  );
+
+  const columns = useMemo<Column<AdminDrillSummary>[]>(() => [
+    {
+      key: 'title',
+      header: 'Title',
+      render: (row) => (
+        <Link
+          href={`/admin/content/speaking/drills/${encodeURIComponent(row.drillId)}`}
+          className="font-medium text-admin-fg-strong hover:underline line-clamp-1"
+        >
+          {row.title}
+        </Link>
+      ),
+    },
+    {
+      key: 'drillKind',
+      header: 'Kind',
+      render: (row) => (
+        <Badge variant="default" intensity="tinted">{String(row.drillKind)}</Badge>
+      ),
+      hideOnMobile: true,
+    },
+    {
+      key: 'profession',
+      header: 'Profession',
+      render: (row) => (
+        <span className="text-sm text-admin-fg-default">{row.professionId ?? 'All'}</span>
+      ),
+      hideOnMobile: true,
+    },
+    {
+      key: 'status',
+      header: 'Status',
+      render: (row) => {
+        const variant = STATUS_VARIANT[row.status] ?? 'default';
+        return (
+          <Badge variant={variant as any} intensity="tinted">{row.status}</Badge>
+        );
+      },
+    },
+    {
+      key: 'instruction',
+      header: 'Instruction',
+      render: (row) => (
+        <span className="text-sm text-admin-fg-muted line-clamp-1">{row.instructionText}</span>
+      ),
+      hideOnMobile: true,
+    },
+    {
+      key: 'actions',
+      header: '',
+      render: (row) => (
+        <div className="flex items-center justify-end gap-2">
+          <Link
+            href={`/admin/content/speaking/drills/${encodeURIComponent(row.drillId)}`}
+            aria-label={`Edit ${row.title}`}
+          >
+            <LegacyButton variant="ghost" size="sm">
+              <ArrowRight className="h-4 w-4" />
+            </LegacyButton>
+          </Link>
+        </div>
+      ),
+    },
+  ], []);
+
+  const bulkActions = useMemo<ManagedBulkAction<AdminDrillSummary>[]>(() => [
+    {
+      key: 'publish',
+      label: 'Publish',
+      icon: <Upload className="h-4 w-4" />,
+      variant: 'primary',
+      isEligible: (row) => row.status !== 'published',
+      run: (ids) => bulkAdminDrills('publish', ids),
+    },
+    {
+      key: 'archive',
+      label: 'Archive',
+      icon: <Archive className="h-4 w-4" />,
+      variant: 'danger',
+      isEligible: (row) => row.status !== 'archived',
+      confirm: {
+        title: (n) => `Archive ${n} ${n === 1 ? 'drill' : 'drills'}?`,
+        description: (n) =>
+          `${n} ${n === 1 ? 'drill' : 'drills'} will be archived. This can be undone by an admin later.`,
+        confirmLabel: 'Archive',
+        destructive: true,
+      },
+      run: (ids) => bulkAdminDrills('archive', ids),
+    },
+    {
+      key: 'delete',
+      label: 'Delete',
+      icon: <Trash2 className="h-4 w-4" />,
+      variant: 'danger',
+      confirm: {
+        title: (n) => `Delete ${n} ${n === 1 ? 'drill' : 'drills'}?`,
+        description: (n) =>
+          `${n} ${n === 1 ? 'drill' : 'drills'} will be deleted (soft-archived) and removed from the bank.`,
+        confirmLabel: 'Delete',
+        destructive: true,
+      },
+      run: (ids) => bulkAdminDrills('delete', ids),
+    },
+  ], []);
+
+  function handleResult(action: ManagedBulkAction<AdminDrillSummary>, result: BulkResult) {
+    const verbs: Record<string, string> = {
+      publish: 'Published',
+      archive: 'Archived',
+      delete: 'Deleted',
+    };
+    const verb = verbs[action.key] ?? 'Updated';
+    setToast({ variant: 'success', message: summarizeResult(verb, result) });
+    void reload();
   }
 
-  async function archive(id: string) {
-    setBusyId(id);
-    try {
-      await archiveAdminDrill(id);
-      await reload();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Archive failed.');
-    } finally {
-      setBusyId(null);
-    }
-  }
-
-  async function destroy(id: string) {
-    if (typeof window !== 'undefined' && !window.confirm('Delete this drill? This cannot be undone.')) return;
-    setBusyId(id);
-    try {
-      await deleteAdminDrill(id);
-      await reload();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Delete failed.');
-    } finally {
-      setBusyId(null);
-    }
+  function handleError() {
+    setToast({ variant: 'error', message: 'Bulk action failed.' });
   }
 
   async function submitDraft(e: React.FormEvent) {
@@ -179,6 +285,10 @@ export default function AdminSpeakingDrillsPage() {
   );
 
   return (
+    <>
+    {toast && (
+      <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} />
+    )}
     <AdminCatalogLayout
       title="Speaking drill bank"
       description="Curate the post-session remediation drills that the speaking analytics console recommends to learners after low-scoring criteria."
@@ -255,73 +365,35 @@ export default function AdminSpeakingDrillsPage() {
         <div className="col-span-full">
           <Skeleton className="h-48 w-full" />
         </div>
-      ) : visible.length === 0 ? (
+      ) : (
         <div className="col-span-full">
-          <EmptyState
-            illustration={<Sparkles />}
-            title="No drills match the current filters"
-            description="Adjust filters or create a new drill above."
+          <AdminManagedTable
+            columns={columns}
+            data={pageRows}
+            keyExtractor={(d) => d.drillId}
+            total={drills.length}
+            loading={loading}
+            page={page}
+            pageSize={pageSize}
+            onPageChange={setPage}
+            onPageSizeChange={(s) => { setPageSize(s); setPage(1); }}
+            pageSizeOptions={[10, 25, 50, 100]}
+            itemLabel="drill"
+            itemLabelPlural="drills"
+            bulkActions={bulkActions}
+            onResult={handleResult}
+            onError={handleError}
+            emptyState={
+              <EmptyState
+                illustration={<Sparkles />}
+                title="No drills match the current filters"
+                description="Adjust filters or create a new drill above."
+              />
+            }
           />
         </div>
-      ) : (
-        <Card className="col-span-full">
-          <ul className="divide-y divide-admin-border">
-            {visible.map((d) => {
-              const variant = STATUS_VARIANT[d.status] ?? 'default';
-              return (
-                <li key={d.drillId} className="flex flex-wrap items-center gap-3 p-4">
-                  <div className="flex-1 min-w-[16rem]">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Link
-                        href={`/admin/content/speaking/drills/${encodeURIComponent(d.drillId)}`}
-                        className="font-medium text-admin-fg-strong hover:underline"
-                      >
-                        {d.title}
-                      </Link>
-                      <Badge variant={variant as any} intensity="tinted">{d.status}</Badge>
-                      <Badge variant="default" intensity="tinted">{String(d.drillKind)}</Badge>
-                      {d.professionId && <Badge variant="default" intensity="tinted">{d.professionId}</Badge>}
-                    </div>
-                    <p className="mt-1 text-sm text-admin-fg-muted line-clamp-2">
-                      {d.instructionText}
-                    </p>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    {d.status !== 'published' && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => publish(d.drillId)}
-                        disabled={busyId === d.drillId}
-                      >
-                        Publish
-                      </Button>
-                    )}
-                    {d.status !== 'archived' && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => archive(d.drillId)}
-                        disabled={busyId === d.drillId}
-                      >
-                        Archive
-                      </Button>
-                    )}
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => destroy(d.drillId)}
-                      disabled={busyId === d.drillId}
-                    >
-                      Delete
-                    </Button>
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
-        </Card>
       )}
     </AdminCatalogLayout>
+    </>
   );
 }
