@@ -1,6 +1,6 @@
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
 import { attachDiagnostics, expectNoSevereClientIssues, observePage } from '../fixtures/diagnostics';
-import { createDisposableSpeakingReviewRequest, createDisposableWritingReviewRequest } from '../fixtures/api-auth';
+import { createDisposableSpeakingReviewRequest, createDisposableWritingSubmissionForReview } from '../fixtures/api-auth';
 import { waitForSessionGuardToClear } from '../fixtures/auth';
 import { recoverBrowserSession } from '../fixtures/auth-bootstrap';
 
@@ -13,9 +13,9 @@ const DETAIL_EXPECT_TIMEOUT_MS = 60_000;
 const expertDetailRoutes = [
   {
     name: 'writing review workspace',
-    resolvePath: async ({ request }: ResolvePathContext) => {
-      const { reviewRequestId } = await createDisposableWritingReviewRequest(request);
-      return `/expert/review/writing/${reviewRequestId}`;
+    resolvePath: async () => {
+      const { submissionId } = createDisposableWritingSubmissionForReview();
+      return `/expert/review/writing/${submissionId}`;
     },
     assertions: async (page: Page) => {
       // V2 TutorMarkingWorkspace renders the OET rubric editor, the AI

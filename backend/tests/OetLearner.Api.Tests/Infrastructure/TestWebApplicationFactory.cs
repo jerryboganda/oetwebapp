@@ -132,6 +132,7 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
             {
                 ["ConnectionStrings:DefaultConnection"] = $"InMemory:{_databaseName}",
                 ["Auth:UseDevelopmentAuth"] = "true",
+                ["Bootstrap:SeedDemoData"] = "true",
                 ["Platform:PublicApiBaseUrl"] = "http://localhost",
                 ["Platform:PublicWebBaseUrl"] = "http://localhost",
                 ["Platform:FallbackEmailDomain"] = "example.test",

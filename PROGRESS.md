@@ -38,6 +38,10 @@ Implement the OET 2026 product portfolio plan on `feat/oet-2026-entitlement-conf
 - QA Smoke run `27100311659` failed early in frontend `tsc` because the new writing `resolvePath` destructuring needed an explicit `ResolvePathContext`; fixed.
 - Backend explorer found two fast conformance failures behind the previous timeout: the manifest add-on test was counting non-portfolio `addon-extend-90`, and public catalog slug generation stripped `-plan` globally. The manifest test now filters by portfolio eligibility flags, and public slug stripping is limited to the intended speaking-session aliases.
 - Focused local `dotnet test` reruns for `Oet2026CatalogManifestTests` and `PublicCatalogPricing_SpeakingSessionPlan_ExposesBareSpecSlug_AndBareCodeIsTheAddOn` still timed out locally before useful output; broad backend proof remains delegated to GitHub Actions.
+- QA Smoke run `27101416787` passed frontend unit/build checks, SBOM/SCA, and most E2E shards, but failed backend shards plus chromium/firefox expert E2E.
+- Backend shard failures included factories that expected demo auth/user seed rows; the default `TestWebApplicationFactory` now explicitly pins `Bootstrap:SeedDemoData=true`.
+- Expert writing E2E failures were traced to submission-keyed V2 marking routes receiving legacy review request IDs. V2 writing specs now create isolated disposable `WritingSubmission` rows with cloned grades and claimed tutor assignments, then deep-link with the submission ID.
+- `pnpm exec eslint tests/e2e/fixtures/api-auth.ts tests/e2e/expert/detail-smoke.spec.ts tests/e2e/expert/review-completion.spec.ts tests/e2e/expert/review-workflows.spec.ts`: passed.
 
 ## Next-Step Protocol For New Agent Runs
 
@@ -49,5 +53,5 @@ Implement the OET 2026 product portfolio plan on `feat/oet-2026-entitlement-conf
 
 ## Active Risks
 
-- GitHub Actions must validate the latest backend and frontend fixes after the next push; do not merge/deploy until QA Smoke and required checks are green.
+- GitHub Actions must validate the latest backend and expert E2E fixes after the next push; do not merge/deploy until QA Smoke and required checks are green.
 - Existing branch/workspace has an unrelated untracked `.codex/config.toml`; do not stage it unless explicitly requested.
