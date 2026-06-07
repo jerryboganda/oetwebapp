@@ -75,6 +75,9 @@ export default function ExpertPrivateSpeakingPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [calendarBusy, setCalendarBusy] = useState(false);
+  // True while we wait for the tutor to finish Google's OAuth consent in the
+  // separate tab; drives a short poll of the calendar status.
+  const [calendarPolling, setCalendarPolling] = useState(false);
   const [startingSessionId, setStartingSessionId] = useState<string | null>(null);
   const [activeMeeting, setActiveMeeting] = useState<ActiveMeeting | null>(null);
 
@@ -94,6 +97,66 @@ export default function ExpertPrivateSpeakingPage() {
   useEffect(() => {
     loadData();
   }, []);
+
+  // The OAuth callback redirects back here with ?calendar=connected|error
+  // (this tab when the pop-up was blocked, or the new tab on success). Surface
+  // the outcome, refresh status, and strip the query param from the URL.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const calendarResult = params.get('calendar');
+    if (calendarResult === 'connected') {
+      void fetchExpertPrivateSpeakingCalendarStatus().then(setCalendarStatus).catch(() => {});
+    } else if (calendarResult === 'error') {
+      setError('Google Calendar authorization did not complete. Please try connecting again.');
+    }
+    if (calendarResult) {
+      params.delete('calendar');
+      const query = params.toString();
+      window.history.replaceState(null, '', `${window.location.pathname}${query ? `?${query}` : ''}`);
+    }
+  }, []);
+
+  // While the tutor authorises Google Calendar in a separate tab, poll the
+  // connection status (and refresh the moment they switch back to this tab)
+  // until it reports connected, then stop. Bounded so it never polls forever.
+  useEffect(() => {
+    if (!calendarPolling) return;
+    let cancelled = false;
+    const startedAt = Date.now();
+    const POLL_INTERVAL_MS = 3000;
+    const POLL_TIMEOUT_MS = 5 * 60 * 1000;
+
+    async function check() {
+      try {
+        const status = await fetchExpertPrivateSpeakingCalendarStatus();
+        if (cancelled) return;
+        setCalendarStatus(status);
+        if (status?.connected) {
+          setCalendarPolling(false);
+        }
+      } catch {
+        // Transient — keep polling until the timeout.
+      }
+    }
+
+    const interval = setInterval(() => {
+      if (cancelled) return;
+      if (Date.now() - startedAt > POLL_TIMEOUT_MS) {
+        setCalendarPolling(false);
+        return;
+      }
+      void check();
+    }, POLL_INTERVAL_MS);
+
+    const onFocus = () => void check();
+    window.addEventListener('focus', onFocus);
+
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+      window.removeEventListener('focus', onFocus);
+    };
+  }, [calendarPolling]);
 
   async function loadData() {
     setLoading(true);
@@ -224,11 +287,26 @@ export default function ExpertPrivateSpeakingPage() {
   async function handleConnectCalendar() {
     setCalendarBusy(true);
     setError(null);
+    // Open the tab synchronously inside the click gesture so pop-up blockers
+    // allow it (a window.open after the await below would be blocked). We
+    // navigate this blank tab to Google's consent screen once the
+    // authorization URL arrives, keeping this dashboard in place and polling
+    // status (see effect) until the tutor finishes authorising.
+    const popup = window.open('', '_blank');
     try {
       const result = await connectExpertPrivateSpeakingGoogleCalendar();
-      window.location.href = result.authorizationUrl;
+      if (popup && !popup.closed) {
+        popup.location.href = result.authorizationUrl;
+        setCalendarPolling(true);
+      } else {
+        // Pop-up blocked or closed — fall back to a same-tab redirect.
+        window.location.href = result.authorizationUrl;
+        return;
+      }
     } catch (err: unknown) {
+      if (popup && !popup.closed) popup.close();
       setError(err instanceof Error ? err.message : 'Could not start Google Calendar connection.');
+    } finally {
       setCalendarBusy(false);
     }
   }
@@ -341,6 +419,9 @@ export default function ExpertPrivateSpeakingPage() {
               Calendar: {calendarStatus?.connected ? `Connected${calendarStatus.connectedEmail ? ` as ${calendarStatus.connectedEmail}` : ''}` : 'Not connected'}
               {calendarStatus?.lastError ? ` · Last sync issue: ${calendarStatus.lastError}` : ''}
             </p>
+            {calendarPolling ? (
+              <p className="mt-1 text-xs text-muted">Waiting for Google authorization in the new tab… this updates automatically once you finish.</p>
+            ) : null}
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <span className={`text-xs px-2.5 py-1 rounded-full ${profile.isActive ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300' : 'bg-background-light text-muted'}`}>
@@ -351,8 +432,8 @@ export default function ExpertPrivateSpeakingPage() {
                 <Unlink className="w-4 h-4 mr-1" /> Disconnect Calendar
               </Button>
             ) : (
-              <Button type="button" variant="primary" size="sm" onClick={handleConnectCalendar} disabled={calendarBusy}>
-                <Link2 className="w-4 h-4 mr-1" /> Connect Google Calendar
+              <Button type="button" variant="primary" size="sm" onClick={handleConnectCalendar} disabled={calendarBusy || calendarPolling}>
+                <Link2 className="w-4 h-4 mr-1" /> {calendarPolling ? 'Waiting for Google…' : 'Connect Google Calendar'}
               </Button>
             )}
           </div>
