@@ -16,9 +16,9 @@ public static class BillingCatalogEndpoints
         // Admin product management.
         var adminCatalog = v1.MapGroup("/admin/billing/catalog");
         adminCatalog.MapPost("/products", AdminCreateProduct)
-            .RequireAuthorization("AdminBillingCatalogWrite");
+            .WithAdminWrite("AdminBillingCatalogWrite");
         adminCatalog.MapPatch("/products/{productId:guid}/active", AdminSetProductActive)
-            .RequireAuthorization("AdminBillingCatalogWrite");
+            .WithAdminWrite("AdminBillingCatalogWrite");
         adminCatalog.MapGet("/products/{code}", AdminGetProductByCode)
             .RequireAuthorization("AdminBillingRead");
 

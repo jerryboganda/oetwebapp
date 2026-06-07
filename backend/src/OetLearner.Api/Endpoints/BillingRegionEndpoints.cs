@@ -28,12 +28,12 @@ public static class BillingRegionEndpoints
 
         var admin = v1.MapGroup("/admin/billing");
         admin.MapGet("/region-pricings", ListRegionPricings).RequireAuthorization("AdminBillingRead");
-        admin.MapPost("/region-pricings", UpsertRegionPricing).RequireAuthorization("AdminBillingCatalogWrite");
-        admin.MapDelete("/region-pricings/{id}", DeleteRegionPricing).RequireAuthorization("AdminBillingCatalogWrite");
+        admin.MapPost("/region-pricings", UpsertRegionPricing).WithAdminWrite("AdminBillingCatalogWrite");
+        admin.MapDelete("/region-pricings/{id}", DeleteRegionPricing).WithAdminWrite("AdminBillingCatalogWrite");
 
         admin.MapGet("/gateway-routes", ListGatewayRoutes).RequireAuthorization("AdminBillingRead");
-        admin.MapPost("/gateway-routes", UpsertGatewayRoute).RequireAuthorization("AdminBillingCatalogWrite");
-        admin.MapDelete("/gateway-routes/{id}", DeleteGatewayRoute).RequireAuthorization("AdminBillingCatalogWrite");
+        admin.MapPost("/gateway-routes", UpsertGatewayRoute).WithAdminWrite("AdminBillingCatalogWrite");
+        admin.MapDelete("/gateway-routes/{id}", DeleteGatewayRoute).WithAdminWrite("AdminBillingCatalogWrite");
 
         return app;
     }

@@ -41,26 +41,26 @@ public static class AdminBillingEndpoints
         // require AdminBillingRead, writes require AdminBillingRefundWrite.
         var refunds = app.MapGroup("/v1/admin/refunds");
         refunds.MapGet("/", ListRefunds).RequireAuthorization("AdminBillingRead");
-        refunds.MapPost("/", IssueRefund).RequireAuthorization("AdminBillingRefundWrite");
+        refunds.MapPost("/", IssueRefund).WithAdminWrite("AdminBillingRefundWrite");
 
         // ── Products (DB-only — Stripe sync is the seeder's job) ───────────────
         var products = app.MapGroup("/v1/admin/products");
         products.MapGet("/", ListProducts).RequireAuthorization("AdminBillingRead");
-        products.MapPost("/", CreateProduct).RequireAuthorization("AdminBillingCatalogWrite");
-        products.MapPatch("/{productCode}", PatchProduct).RequireAuthorization("AdminBillingCatalogWrite");
-        products.MapDelete("/{productCode}", ArchiveProduct).RequireAuthorization("AdminBillingCatalogWrite");
+        products.MapPost("/", CreateProduct).WithAdminWrite("AdminBillingCatalogWrite");
+        products.MapPatch("/{productCode}", PatchProduct).WithAdminWrite("AdminBillingCatalogWrite");
+        products.MapDelete("/{productCode}", ArchiveProduct).WithAdminWrite("AdminBillingCatalogWrite");
 
         // ── Coupons ────────────────────────────────────────────────────────────
         var coupons = app.MapGroup("/v1/admin/coupons");
         coupons.MapGet("/", ListCoupons).RequireAuthorization("AdminBillingRead");
-        coupons.MapPost("/", CreateCoupon).RequireAuthorization("AdminBillingCatalogWrite");
-        coupons.MapPatch("/{code}", PatchCoupon).RequireAuthorization("AdminBillingCatalogWrite");
-        coupons.MapDelete("/{code}", ArchiveCoupon).RequireAuthorization("AdminBillingCatalogWrite");
+        coupons.MapPost("/", CreateCoupon).WithAdminWrite("AdminBillingCatalogWrite");
+        coupons.MapPatch("/{code}", PatchCoupon).WithAdminWrite("AdminBillingCatalogWrite");
+        coupons.MapDelete("/{code}", ArchiveCoupon).WithAdminWrite("AdminBillingCatalogWrite");
 
         // ── Stripe Tax registrations ───────────────────────────────────────────
         var tax = billing.MapGroup("/stripe-tax/registrations");
         tax.MapGet("/", ListTaxRegistrations);
-        tax.MapPost("/", CreateTaxRegistration).RequireAuthorization("AdminBillingCatalogWrite");
+        tax.MapPost("/", CreateTaxRegistration).WithAdminWrite("AdminBillingCatalogWrite");
 
         return app;
     }

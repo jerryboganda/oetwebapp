@@ -44,7 +44,7 @@ public static class Oet2026CatalogEndpoints
         var admin = v1.MapGroup("/admin/billing");
         admin.MapGet("/eligibility/matrix", AdminEligibilityMatrix).RequireAuthorization("AdminBillingRead");
         // Re-seed catalog button (Wave 3.4).
-        admin.MapPost("/catalog/seed-oet-2026", AdminReseedOet2026Catalog).RequireAuthorization("AdminBillingCatalogWrite");
+        admin.MapPost("/catalog/seed-oet-2026", AdminReseedOet2026Catalog).WithAdminWrite("AdminBillingCatalogWrite");
 
         return app;
     }

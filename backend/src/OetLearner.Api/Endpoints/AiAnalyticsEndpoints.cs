@@ -34,25 +34,25 @@ public static class AiAnalyticsEndpoints
         var admin = v1.MapGroup("/admin/ai-analytics");
         admin.MapGet("/summary", AdminSummary).RequireAuthorization("AdminBillingRead");
         admin.MapGet("/churn", AdminChurnList).RequireAuthorization("AdminBillingRead");
-        admin.MapPost("/churn/recompute", AdminRecomputeChurn).RequireAuthorization("AdminBillingRead");
+        admin.MapPost("/churn/recompute", AdminRecomputeChurn).WithAdminWrite("AdminBillingRead");
         admin.MapGet("/forecast", AdminForecastList).RequireAuthorization("AdminBillingRead");
-        admin.MapPost("/forecast/recompute", AdminRecomputeForecast).RequireAuthorization("AdminBillingRead");
+        admin.MapPost("/forecast/recompute", AdminRecomputeForecast).WithAdminWrite("AdminBillingRead");
 
         var fx = v1.MapGroup("/admin/fx");
         fx.MapGet("/rates", ListRates).RequireAuthorization("AdminBillingRead");
-        fx.MapPost("/refresh", RefreshRates).RequireAuthorization("AdminBillingCatalogWrite");
+        fx.MapPost("/refresh", RefreshRates).WithAdminWrite("AdminBillingCatalogWrite");
 
         var experiments = v1.MapGroup("/admin/pricing-experiments");
         experiments.MapGet("/", ListExperiments).RequireAuthorization("AdminBillingRead");
-        experiments.MapPost("/", UpsertExperiment).RequireAuthorization("AdminBillingCatalogWrite");
-        experiments.MapPost("/{id}/start", StartExperiment).RequireAuthorization("AdminBillingCatalogWrite");
-        experiments.MapPost("/{id}/stop", StopExperiment).RequireAuthorization("AdminBillingCatalogWrite");
+        experiments.MapPost("/", UpsertExperiment).WithAdminWrite("AdminBillingCatalogWrite");
+        experiments.MapPost("/{id}/start", StartExperiment).WithAdminWrite("AdminBillingCatalogWrite");
+        experiments.MapPost("/{id}/stop", StopExperiment).WithAdminWrite("AdminBillingCatalogWrite");
         experiments.MapGet("/{id}/results", ExperimentResults).RequireAuthorization("AdminBillingRead");
         experiments.MapGet("/{id}/significance", ExperimentSignificance).RequireAuthorization("AdminBillingRead");
-        experiments.MapDelete("/{id}", DeleteExperiment).RequireAuthorization("AdminBillingCatalogWrite");
+        experiments.MapDelete("/{id}", DeleteExperiment).WithAdminWrite("AdminBillingCatalogWrite");
 
         var payouts = v1.MapGroup("/admin/billing/affiliate-payouts");
-        payouts.MapPost("/generate", GeneratePayouts).RequireAuthorization("AdminBillingCatalogWrite");
+        payouts.MapPost("/generate", GeneratePayouts).WithAdminWrite("AdminBillingCatalogWrite");
         payouts.MapGet("/{batchId}.csv", ExportPayoutCsv).RequireAuthorization("AdminBillingRead");
 
         return app;
