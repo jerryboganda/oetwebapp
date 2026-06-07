@@ -7539,6 +7539,12 @@ export async function backfillAdminVocabularyAudio(batchId?: string) {
   return apiRequest(`/v1/admin/vocabulary/audio/backfill${qs}`, { method: 'POST' });
 }
 
+export async function cancelAdminVocabularyImportAudio(importBatchId: string) {
+  return apiRequest(`/v1/admin/vocabulary/import/batches/${encodeURIComponent(importBatchId)}/audio/cancel`, {
+    method: 'POST',
+  });
+}
+
 export async function resumeAdminVocabularyAudio() {
   return apiRequest(`/v1/admin/vocabulary/audio/resume`, { method: 'POST' });
 }
@@ -10368,6 +10374,8 @@ export async function createPrivateSpeakingBooking(payload: {
   durationMinutes: number;
   learnerTimezone: string;
   learnerNotes?: string;
+  /** Candidate profession track (Medicine, Nursing, Pharmacy, Dentistry, Other). */
+  professionTrack?: string | null;
   idempotencyKey: string;
 }): Promise<PrivateSpeakingBookingResult> {
   return apiRequest<PrivateSpeakingBookingResult>('/v1/private-speaking/bookings', {
