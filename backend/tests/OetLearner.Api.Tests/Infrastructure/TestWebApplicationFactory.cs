@@ -459,6 +459,27 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
 
     protected override void Dispose(bool disposing)
     {
+        if (disposing)
+        {
+            // Free this factory's EF InMemory database BEFORE the host is torn
+            // down. WebApplicationFactory instances are created per test class,
+            // but EF Core's InMemory store lives in a statically-cached internal
+            // service provider that survives host disposal — so without an
+            // explicit delete, every class's seeded database accumulates in the
+            // process and exhausts memory across a shard (-> OOM/MSB4181 crash).
+            try
+            {
+                using var scope = Services.CreateScope();
+                var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+                db.Database.EnsureDeleted();
+            }
+            catch
+            {
+                // Best-effort; the host may never have been built or is already
+                // torn down. Memory is reclaimed on process exit regardless.
+            }
+        }
+
         base.Dispose(disposing);
 
         if (!disposing)

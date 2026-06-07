@@ -5,6 +5,16 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
+    <!--
+      The sharded QA Smoke run spins up dozens of WebApplicationFactory hosts
+      per process. Server GC reserves a heap segment per CPU core and keeps
+      memory high, which (with EF InMemory store accumulation) pushed the test
+      host into OOM/crash (MSB4181). Workstation, non-concurrent GC keeps the
+      footprint low; the suite is sequential (DisableTestParallelization) so we
+      don't need Server GC's throughput.
+    -->
+    <ServerGarbageCollection>false</ServerGarbageCollection>
+    <ConcurrentGarbageCollection>false</ConcurrentGarbageCollection>
   </PropertyGroup>
 
   <ItemGroup>

@@ -33,9 +33,9 @@ jobs:
         # round-robining distinct test CLASSES (not methods — keeps the
         # --filter compact) into N buckets via a stable, deterministic
         # partition computed at runtime from `dotnet test --list-tests`.
-        shard: [1, 2, 3, 4]
+        shard: [1, 2, 3, 4, 5, 6, 7, 8]
     env:
-      TOTAL_SHARDS: 4
+      TOTAL_SHARDS: 8
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
