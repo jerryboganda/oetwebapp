@@ -97,18 +97,12 @@ jobs:
       - name: Test (shard ${{ matrix.shard }})
         run: |
           mkdir -p "test-results-shard-${{ matrix.shard }}"
-          # --blame-crash / --blame-hang emit a Sequence_*.xml (and crash/hang
-          # dumps) into the results dir naming the exact test that crashed or
-          # hung the test host. Diagnostic-only; uploaded as an artifact below.
-          # Hang timeout (10m) sits comfortably under the 40m job cap.
           dotnet test backend/tests/OetLearner.Api.Tests/OetLearner.Api.Tests.csproj \
             --configuration Release \
             --no-build \
             --nologo \
             --verbosity normal \
             --filter "${{ steps.filter.outputs.value }}" \
-            --blame-crash \
-            --blame-hang --blame-hang-timeout 10m \
             --logger "console;verbosity=normal" \
             --logger "trx;LogFileName=results.trx" \
             --results-directory "test-results-shard-${{ matrix.shard }}"
