@@ -479,6 +479,21 @@ public record AdminSubscriptionStatusRequest(
     string? Reason = null);
 
 /// <summary>
+/// Request to inspect-and-correct a subscription's OET 2026 entitlement counters and
+/// unlock flags from the admin console. Each field is an <b>absolute SET</b>: a non-null
+/// value overwrites the stored value (counters are clamped to &gt;= 0); a null value
+/// leaves that field unchanged. <paramref name="Reason"/> is required and recorded with
+/// a before/after snapshot in the audit log.
+/// </summary>
+public record AdminSubscriptionEntitlementAdjustRequest(
+    int? WritingAssessmentsRemaining,
+    int? SpeakingSessionsRemaining,
+    int? AiCreditsRemaining,
+    bool? TutorBookUnlocked,
+    bool? BasicEnglishUnlocked,
+    string Reason);
+
+/// <summary>
 /// Request to create a brand-new subscription for a learner who does not currently have
 /// one. Useful for onboarding sponsored, comp'd, or migrated accounts.
 /// </summary>

@@ -5219,6 +5219,90 @@ public partial class AdminService(
         return ProjectSubscription(subscription, planName, learnerName);
     }
 
+    // Inspect-and-correct the OET 2026 entitlement counters / unlock flags directly on a
+    // Subscription. Each request field is an absolute SET (null = leave unchanged); the two
+    // counters are clamped to >= 0 so the operator cannot drive entitlement negative. Wrapped
+    // in the shared concurrency retry and audited with a before/after JSON snapshot.
+    public Task<object> AdjustSubscriptionEntitlementsAsync(string adminId, string adminName,
+        string subscriptionId, AdminSubscriptionEntitlementAdjustRequest request, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(request.Reason))
+        {
+            throw ApiException.Validation("reason_required",
+                "A reason is required when adjusting subscription entitlements.");
+        }
+
+        return WithSubscriptionConcurrencyRetryAsync(
+            inner => AdjustSubscriptionEntitlementsCoreAsync(adminId, adminName, subscriptionId, request, inner),
+            ct);
+    }
+
+    private async Task<object> AdjustSubscriptionEntitlementsCoreAsync(string adminId, string adminName,
+        string subscriptionId, AdminSubscriptionEntitlementAdjustRequest request, CancellationToken ct)
+    {
+        var subscription = await db.Subscriptions.FirstOrDefaultAsync(s => s.Id == subscriptionId, ct)
+            ?? throw ApiException.NotFound("subscription_not_found", "Subscription not found.");
+
+        var now = DateTimeOffset.UtcNow;
+        var before = new
+        {
+            subscription.WritingAssessmentsRemaining,
+            subscription.SpeakingSessionsRemaining,
+            subscription.AiCreditsRemaining,
+            subscription.TutorBookUnlocked,
+            subscription.BasicEnglishUnlocked,
+        };
+
+        if (request.WritingAssessmentsRemaining.HasValue)
+        {
+            subscription.WritingAssessmentsRemaining = Math.Max(0, request.WritingAssessmentsRemaining.Value);
+        }
+        if (request.SpeakingSessionsRemaining.HasValue)
+        {
+            subscription.SpeakingSessionsRemaining = Math.Max(0, request.SpeakingSessionsRemaining.Value);
+        }
+        if (request.AiCreditsRemaining.HasValue)
+        {
+            subscription.AiCreditsRemaining = Math.Max(0, request.AiCreditsRemaining.Value);
+        }
+        if (request.TutorBookUnlocked.HasValue)
+        {
+            subscription.TutorBookUnlocked = request.TutorBookUnlocked.Value;
+        }
+        if (request.BasicEnglishUnlocked.HasValue)
+        {
+            subscription.BasicEnglishUnlocked = request.BasicEnglishUnlocked.Value;
+        }
+
+        subscription.ChangedAt = now;
+
+        await db.SaveChangesAsync(ct);
+
+        var after = new
+        {
+            subscription.WritingAssessmentsRemaining,
+            subscription.SpeakingSessionsRemaining,
+            subscription.AiCreditsRemaining,
+            subscription.TutorBookUnlocked,
+            subscription.BasicEnglishUnlocked,
+        };
+        var details = $"reason: {request.Reason.Trim()}"
+            + $"; before: {JsonSerializer.Serialize(before)}"
+            + $"; after: {JsonSerializer.Serialize(after)}";
+        await LogAuditAsync(adminId, adminName, "SubscriptionEntitlementsAdjusted", "Subscription", subscriptionId, details, ct);
+
+        return new
+        {
+            subscription.Id,
+            subscription.WritingAssessmentsRemaining,
+            subscription.SpeakingSessionsRemaining,
+            subscription.AiCreditsRemaining,
+            subscription.TutorBookUnlocked,
+            subscription.BasicEnglishUnlocked,
+            subscription.ChangedAt,
+        };
+    }
+
     public Task<object> CreateSubscriptionAsync(string adminId, string adminName,
         AdminSubscriptionCreateRequest request, CancellationToken ct)
     {

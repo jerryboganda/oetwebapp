@@ -457,6 +457,10 @@ public static class AdminEndpoints
             => Results.Ok(await service.SetSubscriptionStatusAsync(http.AdminId(), http.AdminName(), subscriptionId, request, ct)))
             .WithAdminWrite("AdminBillingSubscriptionWrite");
 
+        admin.MapPost("/billing/subscriptions/{subscriptionId}/entitlements", async (string subscriptionId, HttpContext http, AdminSubscriptionEntitlementAdjustRequest request, AdminService service, CancellationToken ct)
+            => Results.Ok(await service.AdjustSubscriptionEntitlementsAsync(http.AdminId(), http.AdminName(), subscriptionId, request, ct)))
+            .WithAdminWrite("AdminBillingSubscriptionWrite");
+
         admin.MapGet("/billing/entitlement-diagnostics", async (AdminService service, CancellationToken ct)
             => Results.Ok(await service.GetBillingEntitlementDiagnosticsAsync(ct)))
             .WithAdminRead("AdminBillingRead");

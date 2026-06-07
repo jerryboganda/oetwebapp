@@ -37,6 +37,7 @@ import {
   adminReactivateSubscription,
   adminSetSubscriptionStatus,
 } from '@/lib/api';
+import { adminAdjustSubscriptionEntitlements } from '@/lib/admin-subscription-entitlements';
 import {
   getAdminBillingAddOnData,
   getAdminBillingAddOnVersionHistoryData,
@@ -695,7 +696,7 @@ export default function BillingPage() {
 
   // Subscription lifecycle action modal — single component drives all six manual
   // admin actions (create, change-plan, extend, cancel, reactivate, set-status).
-  type SubscriptionActionKind = 'create' | 'change-plan' | 'extend' | 'cancel' | 'reactivate' | 'set-status';
+  type SubscriptionActionKind = 'create' | 'change-plan' | 'extend' | 'cancel' | 'reactivate' | 'set-status' | 'entitlements';
   type SubscriptionActionState =
     | { kind: 'create' }
     | { kind: Exclude<SubscriptionActionKind, 'create'>; subscription: AdminBillingSubscription };
@@ -711,6 +712,14 @@ export default function BillingPage() {
     newRenewalAt: '',
     cancelImmediate: false,
     status: 'active',
+    // Entitlement-adjust fields. Counters use '' = "leave unchanged"; flags use a
+    // tri-state ('unchanged' | 'true' | 'false') because a plain checkbox cannot
+    // express "do not touch this flag".
+    entWriting: '',
+    entSpeaking: '',
+    entAiCredits: '',
+    entTutorBook: 'unchanged' as 'unchanged' | 'true' | 'false',
+    entBasicEnglish: 'unchanged' as 'unchanged' | 'true' | 'false',
     reason: '',
   });
   const [isSubmittingSubscriptionAction, setIsSubmittingSubscriptionAction] = useState(false);
@@ -728,6 +737,11 @@ export default function BillingPage() {
       newRenewalAt: '',
       cancelImmediate: false,
       status: state.kind === 'set-status' ? state.subscription.status : 'active',
+      entWriting: '',
+      entSpeaking: '',
+      entAiCredits: '',
+      entTutorBook: 'unchanged',
+      entBasicEnglish: 'unchanged',
       reason: '',
     });
     setSubscriptionAction(state);
@@ -839,6 +853,44 @@ export default function BillingPage() {
             reason,
           });
           setToast({ variant: 'success', message: 'Status updated.' });
+          break;
+        }
+        case 'entitlements': {
+          if (!reason) {
+            setToast({ variant: 'error', message: 'A reason is required to adjust entitlements.' });
+            setIsSubmittingSubscriptionAction(false);
+            return;
+          }
+          // Parse counter inputs: '' = leave unchanged; otherwise must be a non-negative integer.
+          const parseCounter = (raw: string, label: string): number | null | undefined => {
+            const trimmed = raw.trim();
+            if (trimmed === '') return undefined; // leave unchanged
+            const value = Number.parseInt(trimmed, 10);
+            if (!Number.isFinite(value) || String(value) !== trimmed || value < 0) {
+              setToast({ variant: 'error', message: `${label} must be a whole number ≥ 0.` });
+              return null; // signal invalid
+            }
+            return value;
+          };
+          const writing = parseCounter(subscriptionActionForm.entWriting, 'Writing assessments');
+          if (writing === null) { setIsSubmittingSubscriptionAction(false); return; }
+          const speaking = parseCounter(subscriptionActionForm.entSpeaking, 'Speaking sessions');
+          if (speaking === null) { setIsSubmittingSubscriptionAction(false); return; }
+          const aiCredits = parseCounter(subscriptionActionForm.entAiCredits, 'AI credits');
+          if (aiCredits === null) { setIsSubmittingSubscriptionAction(false); return; }
+
+          const flag = (value: 'unchanged' | 'true' | 'false'): boolean | undefined =>
+            value === 'unchanged' ? undefined : value === 'true';
+
+          await adminAdjustSubscriptionEntitlements(subscriptionAction.subscription.id, {
+            writingAssessmentsRemaining: writing,
+            speakingSessionsRemaining: speaking,
+            aiCreditsRemaining: aiCredits,
+            tutorBookUnlocked: flag(subscriptionActionForm.entTutorBook),
+            basicEnglishUnlocked: flag(subscriptionActionForm.entBasicEnglish),
+            reason: subscriptionActionForm.reason.trim(),
+          });
+          setToast({ variant: 'success', message: 'Entitlements updated.' });
           break;
         }
       }
@@ -1344,6 +1396,15 @@ export default function BillingPage() {
             aria-label={`Override status for ${subscription.userName}`}
           >
             Set status
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => openSubscriptionAction({ kind: 'entitlements', subscription })}
+            disabled={!canWriteSubscriptions}
+            aria-label={`Adjust entitlements for ${subscription.userName}`}
+          >
+            Entitlements
           </Button>
         </div>
       ),
@@ -3417,6 +3478,7 @@ export default function BillingPage() {
           subscriptionAction?.kind === 'cancel' ? `Cancel subscription: ${subscriptionAction.subscription.userName}` :
           subscriptionAction?.kind === 'reactivate' ? `Reactivate: ${subscriptionAction.subscription.userName}` :
           subscriptionAction?.kind === 'set-status' ? `Override status: ${subscriptionAction.subscription.userName}` :
+          subscriptionAction?.kind === 'entitlements' ? `Adjust entitlements: ${subscriptionAction.subscription.userName}` :
           'Subscription action'
         }
       >
@@ -3539,6 +3601,59 @@ export default function BillingPage() {
                   { value: 'expired', label: 'expired' },
                 ]}
               />
+            ) : null}
+
+            {subscriptionAction.kind === 'entitlements' ? (
+              <>
+                <p className="text-sm text-muted">
+                  Absolute set of the remaining-counter and unlock entitlements on this subscription.
+                  Leave a counter blank to keep its current value; counters are clamped to 0 or more.
+                </p>
+                <Input
+                  label="Writing assessments remaining (blank = unchanged)"
+                  type="number"
+                  min={0}
+                  value={subscriptionActionForm.entWriting}
+                  onChange={(event) => setSubscriptionActionForm((current) => ({ ...current, entWriting: event.target.value }))}
+                  placeholder="unchanged"
+                />
+                <Input
+                  label="Speaking sessions remaining (blank = unchanged)"
+                  type="number"
+                  min={0}
+                  value={subscriptionActionForm.entSpeaking}
+                  onChange={(event) => setSubscriptionActionForm((current) => ({ ...current, entSpeaking: event.target.value }))}
+                  placeholder="unchanged"
+                />
+                <Input
+                  label="AI credits remaining (blank = unchanged)"
+                  type="number"
+                  min={0}
+                  value={subscriptionActionForm.entAiCredits}
+                  onChange={(event) => setSubscriptionActionForm((current) => ({ ...current, entAiCredits: event.target.value }))}
+                  placeholder="unchanged"
+                />
+                <Select
+                  label="Tutor book unlocked"
+                  value={subscriptionActionForm.entTutorBook}
+                  onChange={(event) => setSubscriptionActionForm((current) => ({ ...current, entTutorBook: event.target.value as typeof current.entTutorBook }))}
+                  options={[
+                    { value: 'unchanged', label: 'Leave unchanged' },
+                    { value: 'true', label: 'Unlocked' },
+                    { value: 'false', label: 'Locked' },
+                  ]}
+                />
+                <Select
+                  label="Basic English unlocked"
+                  value={subscriptionActionForm.entBasicEnglish}
+                  onChange={(event) => setSubscriptionActionForm((current) => ({ ...current, entBasicEnglish: event.target.value as typeof current.entBasicEnglish }))}
+                  options={[
+                    { value: 'unchanged', label: 'Leave unchanged' },
+                    { value: 'true', label: 'Unlocked' },
+                    { value: 'false', label: 'Locked' },
+                  ]}
+                />
+              </>
             ) : null}
 
             <Textarea
