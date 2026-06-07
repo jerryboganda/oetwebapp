@@ -73,6 +73,7 @@ const TRACKED_EVENTS = [
   'recalls_words_viewed',
   'recalls_cards_viewed',
   'recalls_library_viewed',
+  'recalls_favourites_viewed',
   'recalls_word_audio_played',
   'recalls_word_audio_blocked',
   'flashcards_viewed',

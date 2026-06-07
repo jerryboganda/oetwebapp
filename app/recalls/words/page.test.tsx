@@ -41,6 +41,8 @@ vi.mock('@/components/ui/alert', () => ({
 vi.mock('@/components/ui/badge', () => ({
   Badge: ({ children }: { children: React.ReactNode }) => <span>{children}</span>,
   CategoryBadge: ({ category }: { category: string }) => <span>{category}</span>,
+  RecallTierBadge: ({ count }: { count: number }) =>
+    count >= 2 ? <span title={`Appears in ${count} recall periods`}>{count}x</span> : null,
 }));
 
 vi.mock('@/components/ui/button', () => ({
@@ -70,6 +72,7 @@ vi.mock('@/lib/recalls-audio', () => ({
 vi.mock('@/lib/api', () => ({
   fetchRecallsToday: mockFetchRecallsToday,
   fetchRecallsQueue: mockFetchRecallsQueue,
+  fetchRecallsLibrary: vi.fn().mockResolvedValue({ items: [] }),
   starRecall: vi.fn(),
   fetchRecallsAudio: mockFetchRecallsAudio,
   fetchVocabularyCategories: mockFetchVocabularyCategories,
@@ -140,20 +143,20 @@ describe('Recalls words page audio playback', () => {
     expect(mockPlayTransientAudio).not.toHaveBeenCalled();
   });
 
-  it('renders frequency badge when examFrequencyCount > 1', async () => {
-    const highFreqTerm = { ...catalogTerm, examFrequencyCount: 10 };
-    mockFetchVocabularyTerms.mockResolvedValue({ total: 1, terms: [highFreqTerm] });
+  it('renders the repeat tag when a term spans multiple recall periods', async () => {
+    const repeatedTerm = { ...catalogTerm, recallSetCodes: ['old', '2023-2025', '2026'] };
+    mockFetchVocabularyTerms.mockResolvedValue({ total: 1, terms: [repeatedTerm] });
     render(<RecallsWordsPage />);
 
-    const badge = await screen.findByTitle('This word appeared 10 times in the exam');
+    const badge = await screen.findByTitle('Appears in 3 recall periods');
     expect(badge).toBeInTheDocument();
-    expect(badge).toHaveTextContent('10x');
+    expect(badge).toHaveTextContent('3x');
   });
 
-  it('hides frequency badge when examFrequencyCount is 1 or absent', async () => {
+  it('hides the repeat tag when a term belongs to a single recall period', async () => {
     render(<RecallsWordsPage />);
 
     await screen.findByText('dyspnoea');
-    expect(screen.queryByTitle(/appeared.*times in the exam/)).not.toBeInTheDocument();
+    expect(screen.queryByTitle(/recall periods/)).not.toBeInTheDocument();
   });
 });

@@ -41,6 +41,6 @@ test.describe('Recalls module smoke @learner @smoke', () => {
     await page.goto('/recalls/cards');
     await expect(page.getByText(/Listen & type/i)).toBeVisible();
     await expect(page.getByText(/High-risk spelling/i)).toBeVisible();
-    await expect(page.getByText(/Starred only/i)).toBeVisible();
+    await expect(page.getByText(/Favourites/i)).toBeVisible();
   });
 });

@@ -1,7 +1,7 @@
 'use client';
 
 import { motion } from 'motion/react';
-import { Headphones, MessageSquare, BookOpen, FileText, AlertTriangle, Star } from 'lucide-react';
+import { Headphones, MessageSquare, BookOpen, FileText, AlertTriangle, Heart } from 'lucide-react';
 
 export type RecallQuizMode =
   | 'listen_and_type'
@@ -54,10 +54,11 @@ const MODES: { key: RecallQuizMode; label: string; description: string; icon: Re
     tile: 'bg-warning/10 text-warning',
   },
   {
+    // `starred_only` is the API mode key (unchanged) — surfaced as "Favourites".
     key: 'starred_only',
-    label: 'Starred only',
-    description: 'Drill the cards you marked difficult.',
-    icon: <Star className="h-5 w-5" />,
+    label: 'Favourites',
+    description: 'Drill the words you favourited.',
+    icon: <Heart className="h-5 w-5" />,
     tile: 'bg-amber-50 text-amber-700',
   },
 ];
