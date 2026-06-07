@@ -30,6 +30,8 @@ Implement the OET 2026 product portfolio plan on `feat/oet-2026-entitlement-conf
 - `git diff --check`: passed.
 - Node manifest assertion against `backend/src/OetLearner.Api/Data/Seeds/oet-2026-catalog.json`: passed, 22 plans / 7 parent-required portfolio add-ons.
 - Focused `dotnet test` attempts for catalog manifest/public catalog tests timed out locally before useful output. Per current rule, broad .NET/build/lint gates should run on GitHub Actions.
+- Branch `feat/oet-2026-entitlement-conformance` was pushed to origin at commit `d11b7e10`.
+- GitHub CLI Actions/PR follow-up is blocked locally because `gh auth status` reports no authenticated GitHub hosts and `gh pr list` requires `gh auth login` or `GH_TOKEN`.
 
 ## Next-Step Protocol For New Agent Runs
 
@@ -41,5 +43,5 @@ Implement the OET 2026 product portfolio plan on `feat/oet-2026-entitlement-conf
 
 ## Active Risks
 
-- Local .NET focused tests timed out; GitHub Actions must provide the authoritative backend build/test result.
+- Local .NET focused tests timed out; GitHub Actions must provide the authoritative backend build/test result after a PR is opened or workflows are manually dispatched from an authenticated GitHub session.
 - Existing branch/workspace has an unrelated untracked `.codex/config.toml`; do not stage it unless explicitly requested.
