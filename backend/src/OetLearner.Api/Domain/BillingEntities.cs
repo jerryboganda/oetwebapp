@@ -112,6 +112,9 @@ public class BillingAddOn
 
     public int LettersGranted { get; set; }
     public int SessionsGranted { get; set; }
+
+    /// <summary>Days to push <c>Subscription.ExpiresAt</c> out by for an <c>access_extension</c> add-on. Zero for all other kinds.</summary>
+    public int ExtensionDays { get; set; }
 }
 
 /// <summary>Immutable managed add-on catalog snapshot.</summary>
@@ -188,6 +191,9 @@ public class BillingAddOnVersion
 
     public int LettersGranted { get; set; }
     public int SessionsGranted { get; set; }
+
+    /// <summary>Days to push <c>Subscription.ExpiresAt</c> out by for an <c>access_extension</c> add-on. Zero for all other kinds.</summary>
+    public int ExtensionDays { get; set; }
 }
 
 /// <summary>Promo code or discount rule that can be applied at checkout.</summary>

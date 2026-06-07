@@ -2636,6 +2636,9 @@ namespace OetLearner.Api.Data.Migrations
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)");
 
+                    b.Property<int>("ExtensionDays")
+                        .HasColumnType("integer");
+
                     b.Property<int>("LettersGranted")
                         .HasColumnType("integer");
 
@@ -2757,6 +2760,9 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.Property<bool>("IsStackable")
                         .HasColumnType("boolean");
+
+                    b.Property<int>("ExtensionDays")
+                        .HasColumnType("integer");
 
                     b.Property<int>("LettersGranted")
                         .HasColumnType("integer");

@@ -9768,9 +9768,16 @@ public partial class LearnerService(
                     ? null
                     : await db.BillingAddOnVersions.AsNoTracking()
                         .FirstOrDefaultAsync(v => v.Id == resolvedAddOnVersionId, ct);
+                // Phase 6a — resolve the add-on kind + extension days from the same
+                // version/live row used for ApplyAddOnEntitlements, so the guarded
+                // access-extension branch below can advance ExpiresAt.
+                string resolvedAddonKind = string.Empty;
+                int resolvedExtensionDays = 0;
                 if (addOnVersion is not null)
                 {
                     SubscriptionBundleInitializer.ApplyAddOnEntitlements(subscription, addOnVersion);
+                    resolvedAddonKind = addOnVersion.AddonKind;
+                    resolvedExtensionDays = addOnVersion.ExtensionDays;
                 }
                 else
                 {
@@ -9778,7 +9785,25 @@ public partial class LearnerService(
                     if (liveAddOnForEntitlements is not null)
                     {
                         SubscriptionBundleInitializer.ApplyAddOnEntitlements(subscription, liveAddOnForEntitlements);
+                        resolvedAddonKind = liveAddOnForEntitlements.AddonKind;
+                        resolvedExtensionDays = liveAddOnForEntitlements.ExtensionDays;
                     }
+                }
+
+                // Phase 6a — Extend Access add-on. Strictly additive and guarded on
+                // the new `access_extension` kind: a no-op for every other add-on /
+                // plan purchase. Sits inside the once-only `existingItem is null`
+                // guard so a replayed completion never double-extends. Pushes the
+                // course expiry out from the later of (now, current expiry).
+                if (string.Equals(resolvedAddonKind, "access_extension", StringComparison.Ordinal)
+                    && resolvedExtensionDays > 0)
+                {
+                    var extensionUnits = Math.Max(1, item.Quantity);
+                    var totalExtensionDays = resolvedExtensionDays * extensionUnits;
+                    var baseline = subscription.ExpiresAt is { } currentExpiry && currentExpiry > now
+                        ? currentExpiry
+                        : now;
+                    subscription.ExpiresAt = baseline.AddDays(totalExtensionDays);
                 }
             }
 
@@ -10264,6 +10289,41 @@ public partial class LearnerService(
             item.EndsAt = DateTimeOffset.UtcNow;
             item.UpdatedAt = DateTimeOffset.UtcNow;
             changed = true;
+
+            // Phase 6a — symmetric reversal of an Extend Access add-on. Guarded on
+            // the `access_extension` kind, so it is a no-op for every other add-on.
+            // Subtracts the granted days from ExpiresAt but never pulls it below
+            // now. The grant flow has no other symmetric entitlement reversal, so
+            // this is the only place the extension is undone.
+            var reverseExtensionDays = 0;
+            if (!string.IsNullOrWhiteSpace(item.AddOnVersionId))
+            {
+                var ver = await db.BillingAddOnVersions.AsNoTracking()
+                    .FirstOrDefaultAsync(v => v.Id == item.AddOnVersionId, ct);
+                if (ver is not null && string.Equals(ver.AddonKind, "access_extension", StringComparison.Ordinal))
+                {
+                    reverseExtensionDays = ver.ExtensionDays;
+                }
+            }
+            if (reverseExtensionDays <= 0)
+            {
+                var liveAddOn = await FindBillingAddOnAsync(item.ItemCode, ct);
+                if (liveAddOn is not null && string.Equals(liveAddOn.AddonKind, "access_extension", StringComparison.Ordinal))
+                {
+                    reverseExtensionDays = liveAddOn.ExtensionDays;
+                }
+            }
+            if (reverseExtensionDays > 0)
+            {
+                var now = DateTimeOffset.UtcNow;
+                var sub = await db.Subscriptions.FirstOrDefaultAsync(s => s.Id == item.SubscriptionId, ct);
+                if (sub is not null && sub.ExpiresAt is { } currentExpiry)
+                {
+                    var totalDays = reverseExtensionDays * Math.Max(1, item.Quantity);
+                    var reduced = currentExpiry.AddDays(-totalDays);
+                    sub.ExpiresAt = reduced < now ? now : reduced;
+                }
+            }
         }
 
         if (string.Equals(transaction.TransactionType, "subscription_payment", StringComparison.OrdinalIgnoreCase))
