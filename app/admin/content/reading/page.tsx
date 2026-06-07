@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Plus, Search, BookOpen, FileCheck2, ArrowRight, Upload, Archive, EyeOff } from 'lucide-react';
+import { Plus, Search, BookOpen, FileCheck2, ArrowRight, Upload, Archive, EyeOff, Trash2 } from 'lucide-react';
 import { AdminTableLayout } from '@/components/admin/layout/admin-table-layout';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
 import { type Column } from '@/components/ui/data-table';
@@ -193,6 +193,23 @@ export default function AdminReadingPapersPage() {
       },
       run: (ids) => bulkContentPapers('archive', ids),
     },
+    {
+      key: 'delete',
+      label: 'Delete',
+      icon: <Trash2 className="h-4 w-4" />,
+      variant: 'danger',
+      // Backend permits permanent delete only for archived papers with no learner
+      // attempts; gate the button on the archived status so the UI matches.
+      isEligible: (row) => row.status === 'archived',
+      confirm: {
+        title: (n) => `Permanently delete ${n} ${n === 1 ? 'paper' : 'papers'}?`,
+        description: (n) =>
+          `${n} ${n === 1 ? 'paper' : 'papers'} and all their authoring content will be permanently removed. This cannot be undone. Papers with learner attempts are skipped.`,
+        confirmLabel: 'Delete permanently',
+        destructive: true,
+      },
+      run: (ids) => bulkContentPapers('delete', ids),
+    },
   ], []);
 
   function handleResult(action: ManagedBulkAction<AdminContentRow>, result: BulkResult) {
@@ -200,6 +217,7 @@ export default function AdminReadingPapersPage() {
       publish: 'Published',
       unpublish: 'Unpublished',
       archive: 'Archived',
+      delete: 'Deleted',
     };
     const verb = verbs[action.key] ?? 'Updated';
     setToast({ variant: 'success', message: summarize(verb, result, 'paper', 'papers') });

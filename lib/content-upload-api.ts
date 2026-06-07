@@ -348,7 +348,8 @@ export type PaperBulkAction =
   | 'unpublish'
   | 'submit-for-review'
   | 'approve-publish'
-  | 'reject';
+  | 'reject'
+  | 'delete';
 
 /**
  * Bulk lifecycle action over reading/listening/writing papers.
