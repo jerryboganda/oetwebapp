@@ -199,7 +199,10 @@ public static class Oet2026CatalogEndpoints
             p.BundledBasicEnglish,
             DeserializeStringArray(p.DashboardModulesJson),
             p.DisplayOrder,
-            p.Code.EndsWith("-plan", StringComparison.Ordinal) ? p.Code[..^5] : p.Code)).ToList();
+            // Only the two standalone Speaking-session plans surface the spec's
+            // bare product id; every other plan keeps PublicSlug == Code.
+            (p.Code is "speaking-1session-plan" or "speaking-2sessions-plan")
+                ? p.Code[..^5] : p.Code)).ToList();
 
         var addOnRows = addOns.Select(a => new PublicAddOnRow(
             a.Code,
