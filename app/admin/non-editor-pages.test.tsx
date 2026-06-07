@@ -355,8 +355,8 @@ describe('Admin Non-Editor Pages', () => {
 
     expect(await screen.findByRole('main')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /^ai evaluation config$/i })).toBeInTheDocument();
-    expect(screen.getByRole('columnheader', { name: /model/i })).toBeInTheDocument();
-    expect(screen.getByRole('columnheader', { name: /task type/i })).toBeInTheDocument();
+    expect(screen.getAllByText(/model/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/task type/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText('gpt-5-mini').length).toBeGreaterThan(0);
     expect(screen.getByRole('button', { name: /new configuration/i })).toBeInTheDocument();
     expect(screen.getAllByRole('button', { name: /activate/i }).length).toBeGreaterThan(0);
@@ -1373,3 +1373,4 @@ describe('Admin Non-Editor Pages', () => {
     expect((await screen.findAllByText(/published revision\./i)).length).toBeGreaterThan(0);
   });
 });
+

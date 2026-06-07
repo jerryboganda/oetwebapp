@@ -90,12 +90,17 @@ jobs:
       - name: Pending model changes?
         run: |
           dotnet restore backend/src/OetLearner.Api/OetLearner.Api.csproj --nologo
+          dotnet build backend/src/OetLearner.Api/OetLearner.Api.csproj --configuration Release --nologo
           cd backend/src/OetLearner.Api
-          if dotnet ef migrations has-pending-model-changes 2>&1 | tee /tmp/ef.out | grep -qi "no changes"; then
+          set +e
+          dotnet ef migrations has-pending-model-changes --configuration Release --no-build > /tmp/ef.out 2>&1
+          ef_status=$?
+          set -e
+          cat /tmp/ef.out
+          if grep -qi "no changes" /tmp/ef.out || [ "$ef_status" -eq 0 ]; then
             echo "OK: no pending model changes."
           else
-            echo "FAIL: pending model changes detected â€” create a migration." >&2
-            cat /tmp/ef.out
+            echo "FAIL: pending model changes detected or EF check failed — create a migration or fix the EF command." >&2
             exit 1
           fi
 
@@ -110,3 +115,4 @@ jobs:
         with:
           config-path: .gitleaks.toml
         continue-on-error: true
+
