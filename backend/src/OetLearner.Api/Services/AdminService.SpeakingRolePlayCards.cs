@@ -477,6 +477,189 @@ public partial class AdminService
         return ProjectCardDetail(clonedCard, clonedScript);
     }
 
+    // ── Bulk lifecycle (publish | archive) ────────────────────────────────
+    //
+    // Atomic bulk transition over a set of role-play cards in a SINGLE
+    // transaction with ONE audit entry. Mirrors the gold-standard vocabulary
+    // bulk pattern (AdminService.ContentAdmin.BulkActivateVocabularyAsync):
+    // a count-style result with totalRequested/succeeded/skipped/failed/errors.
+    //
+    // Duplicate is intentionally NOT a bulk action — it stays per-row.
+    //
+    // The publish path replicates the per-item PublishSpeakingRolePlayCardAsync
+    // logic INLINE (interlocutor-script gate + ContentItem sync). We inline
+    // rather than call the public per-item methods because each of those writes
+    // its own audit row + commits its own transaction; the plan requires the
+    // whole batch to be ONE transaction with exactly ONE audit row. Per-card
+    // gate failures (e.g. missing interlocutor script) are recorded in
+    // Failed/Errors and do NOT abort the batch — the eligible cards still
+    // commit. Errors are capped at ~20 to keep the response bounded. A genuine
+    // fatal error (e.g. SaveChanges failure) rolls back the whole batch.
+    public async Task<object> BulkAsync(
+        string adminId,
+        string adminName,
+        string action,
+        string[] ids,
+        CancellationToken ct)
+    {
+        var normalisedAction = (action ?? string.Empty).Trim().ToLowerInvariant();
+        if (normalisedAction is not ("publish" or "archive"))
+        {
+            throw ApiException.Validation("ROLE_PLAY_CARD_BULK_ACTION_INVALID",
+                "Action must be one of: publish, archive.");
+        }
+
+        // Action-specific permission gate. The route only guarantees
+        // AdminContentWrite (the minimum shared by both actions); the stricter
+        // publish grant is enforced here because the required permission depends
+        // on the request body, not the route. Archive needs only
+        // AdminContentWrite, already enforced by the route. Mirrors the sibling
+        // BulkSpeakingDrillsAsync gate.
+        if (normalisedAction == "publish")
+        {
+            var perms = await GetEffectivePermissionsAsync(adminId, ct);
+            if (!perms.Contains(AdminPermissions.ContentPublish)
+                && !perms.Contains(AdminPermissions.SystemAdmin))
+            {
+                throw ApiException.Forbidden("insufficient_permission",
+                    "Bulk publishing role-play cards requires the content:publish permission.");
+            }
+        }
+
+        var requested = ids ?? Array.Empty<string>();
+        if (requested.Length == 0)
+        {
+            throw ApiException.Validation("ROLE_PLAY_CARD_BULK_EMPTY",
+                "Select at least one role-play card.");
+        }
+        if (requested.Length > 2000)
+        {
+            throw ApiException.Validation("ROLE_PLAY_CARD_BULK_LIMIT",
+                "Bulk actions are limited to 2000 role-play cards at a time.");
+        }
+
+        const int MaxErrors = 20;
+        var distinctIds = requested
+            .Select(id => id?.Trim() ?? string.Empty)
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+
+        var cards = await db.RolePlayCards
+            .Where(c => distinctIds.Contains(c.Id))
+            .ToListAsync(ct);
+        var found = cards.ToDictionary(c => c.Id, StringComparer.Ordinal);
+
+        // Pre-load which of these cards have an interlocutor script so the
+        // publish gate doesn't issue N round-trips.
+        var scriptCardIds = await db.InterlocutorScripts
+            .Where(s => distinctIds.Contains(s.RolePlayCardId))
+            .Select(s => s.RolePlayCardId)
+            .ToListAsync(ct);
+        var hasScript = new HashSet<string>(scriptCardIds, StringComparer.Ordinal);
+
+        var succeeded = 0;
+        var skipped = 0;
+        var failed = 0;
+        var errors = new List<string>();
+
+        void RecordError(string message)
+        {
+            failed++;
+            if (errors.Count < MaxErrors) errors.Add(message);
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        var contentItemIds = cards.Select(c => c.ContentItemId).ToList();
+        var contentItems = await db.ContentItems
+            .Where(ci => contentItemIds.Contains(ci.Id))
+            .ToListAsync(ct);
+        var contentById = contentItems.ToDictionary(ci => ci.Id, StringComparer.Ordinal);
+
+        foreach (var id in distinctIds)
+        {
+            if (!found.TryGetValue(id, out var card))
+            {
+                RecordError($"{id}: role-play card not found.");
+                continue;
+            }
+
+            contentById.TryGetValue(card.ContentItemId, out var content);
+
+            if (normalisedAction == "publish")
+            {
+                if (card.Status == ContentStatus.Published)
+                {
+                    skipped++;
+                    continue;
+                }
+                // Same interlocutor-script gate the per-item publish enforces.
+                if (!hasScript.Contains(card.Id))
+                {
+                    RecordError($"{card.ScenarioTitle}: cannot be published without an interlocutor script.");
+                    continue;
+                }
+
+                card.Status = ContentStatus.Published;
+                card.PublishedAt = now;
+                card.UpdatedAt = now;
+                if (content is not null)
+                {
+                    content.Status = ContentStatus.Published;
+                    content.PublishedAt = now;
+                    content.UpdatedAt = now;
+                    if (string.IsNullOrWhiteSpace(content.PublishedRevisionId))
+                    {
+                        content.PublishedRevisionId = $"{content.Id}-r1";
+                    }
+                }
+                succeeded++;
+            }
+            else // archive
+            {
+                if (card.Status == ContentStatus.Archived)
+                {
+                    skipped++;
+                    continue;
+                }
+                card.Status = ContentStatus.Archived;
+                card.ArchivedAt = now;
+                card.UpdatedAt = now;
+                if (content is not null)
+                {
+                    content.Status = ContentStatus.Archived;
+                    content.ArchivedAt = now;
+                    content.UpdatedAt = now;
+                }
+                succeeded++;
+            }
+        }
+
+        await using var tx = await BeginTransactionIfNeededAsync(ct);
+        if (succeeded > 0)
+        {
+            await db.SaveChangesAsync(ct);
+        }
+        // ONE audit row for the whole batch (even when nothing changed, so the
+        // operation is always attributable).
+        await LogAuditAsync(adminId, adminName,
+            normalisedAction == "publish" ? "BulkPublished" : "BulkArchived",
+            "RolePlayCard",
+            string.Join(",", distinctIds.Take(50)),
+            $"Bulk {normalisedAction}: {succeeded} succeeded, {skipped} skipped, {failed} failed of {requested.Length} requested.",
+            ct);
+        await CommitIfOwnedAsync(tx, ct);
+
+        return new
+        {
+            totalRequested = requested.Length,
+            succeeded,
+            skipped,
+            failed,
+            errors = errors.ToArray(),
+        };
+    }
+
     // ── Helpers ──────────────────────────────────────────────────────────
 
     private static void ValidateCreateRequest(AdminRolePlayCardCreateRequest req)

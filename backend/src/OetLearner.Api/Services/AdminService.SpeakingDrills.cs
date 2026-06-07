@@ -239,25 +239,10 @@ public partial class AdminService
         string drillId,
         CancellationToken ct)
     {
-        var drill = await db.SpeakingDrillItems.FirstOrDefaultAsync(x => x.Id == drillId, ct)
-            ?? throw ApiException.NotFound("speaking_drill_not_found", "That speaking drill does not exist.");
-        var content = await db.ContentItems.FirstOrDefaultAsync(x => x.Id == drill.ContentItemId, ct)
-            ?? throw ApiException.NotFound("speaking_drill_content_missing",
-                "The underlying content item for this drill is missing.");
-
-        if (content.Status == ContentStatus.Archived)
-        {
-            throw ApiException.Conflict("speaking_drill_archived",
-                "Archived drills cannot be published.");
-        }
-
-        var now = DateTimeOffset.UtcNow;
-        content.Status = ContentStatus.Published;
-        content.PublishedAt = now;
-        content.UpdatedAt = now;
-        drill.UpdatedAt = now;
+        var (drill, content) = await LoadDrillWithContentAsync(drillId, ct);
 
         await using var tx = await BeginTransactionIfNeededAsync(ct);
+        ApplyPublishDrill(drill, content);
         await db.SaveChangesAsync(ct);
         await LogAuditAsync(adminId, adminName, "Published", "SpeakingDrill", drillId,
             $"Published drill: {content.Title}", ct);
@@ -272,24 +257,17 @@ public partial class AdminService
         string drillId,
         CancellationToken ct)
     {
-        var drill = await db.SpeakingDrillItems.FirstOrDefaultAsync(x => x.Id == drillId, ct)
-            ?? throw ApiException.NotFound("speaking_drill_not_found", "That speaking drill does not exist.");
-        var content = await db.ContentItems.FirstOrDefaultAsync(x => x.Id == drill.ContentItemId, ct)
-            ?? throw ApiException.NotFound("speaking_drill_content_missing",
-                "The underlying content item for this drill is missing.");
+        var (drill, content) = await LoadDrillWithContentAsync(drillId, ct);
 
+        // Already-archived drills are an idempotent no-op (no audit row),
+        // matching the original singular-endpoint behaviour.
         if (content.Status == ContentStatus.Archived)
         {
             return ProjectDetail(drill, content);
         }
 
-        var now = DateTimeOffset.UtcNow;
-        content.Status = ContentStatus.Archived;
-        content.ArchivedAt = now;
-        content.UpdatedAt = now;
-        drill.UpdatedAt = now;
-
         await using var tx = await BeginTransactionIfNeededAsync(ct);
+        ApplyArchiveDrill(drill, content);
         await db.SaveChangesAsync(ct);
         await LogAuditAsync(adminId, adminName, "Archived", "SpeakingDrill", drillId,
             $"Archived drill: {content.Title}", ct);
@@ -306,6 +284,190 @@ public partial class AdminService
     {
         // Soft-delete via Archive — keeps audit + analytics intact.
         return await ArchiveSpeakingDrillAsync(adminId, adminName, drillId, ct);
+    }
+
+    // ── Bulk (publish | archive | delete) ───────────────────────────────────
+    //
+    // T3: a single atomic bulk endpoint. The whole batch runs inside ONE
+    // transaction and emits exactly ONE audit entry summarising the op.
+    // Each id is processed through the SAME no-audit core mutators the
+    // per-item endpoints use (ApplyPublishDrill / ApplyArchiveDrill), so the
+    // behaviour stays in lock-step with the singular routes. A per-id
+    // InvalidOperationException (e.g. publishing an archived drill) is
+    // recorded as a Failed row (errors capped at ~20) without aborting the
+    // batch; an unexpected/fatal error rolls the whole transaction back.
+    private const int BulkDrillLimit = 2000;
+    private const int BulkDrillErrorCap = 20;
+
+    public async Task<object> BulkSpeakingDrillsAsync(
+        string adminId,
+        string adminName,
+        string action,
+        IReadOnlyList<string> ids,
+        CancellationToken ct)
+    {
+        var normalisedAction = (action ?? string.Empty).Trim().ToLowerInvariant();
+        if (normalisedAction is not ("publish" or "archive" or "delete"))
+        {
+            throw ApiException.Validation("SPEAKING_DRILL_BULK_ACTION_INVALID",
+                "Action must be one of: publish, archive, delete.");
+        }
+
+        // Action-specific permission gate. The route only guarantees
+        // AdminContentWrite (the minimum shared by all three actions); the
+        // stricter publish grant is enforced here because the required
+        // permission depends on the request body, not the route. archive and
+        // delete need only AdminContentWrite, already enforced by the route.
+        if (normalisedAction == "publish")
+        {
+            var perms = await GetEffectivePermissionsAsync(adminId, ct);
+            if (!perms.Contains(AdminPermissions.ContentPublish)
+                && !perms.Contains(AdminPermissions.SystemAdmin))
+            {
+                throw ApiException.Forbidden("insufficient_permission",
+                    "Bulk publishing speaking drills requires the content:publish permission.");
+            }
+        }
+
+        var requestedIds = (ids ?? Array.Empty<string>())
+            .Select(id => id?.Trim() ?? string.Empty)
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+
+        if (requestedIds.Count == 0)
+        {
+            throw ApiException.Validation("SPEAKING_DRILL_BULK_EMPTY",
+                "Select at least one speaking drill.");
+        }
+        if (requestedIds.Count > BulkDrillLimit)
+        {
+            throw ApiException.Validation("SPEAKING_DRILL_BULK_LIMIT",
+                $"Bulk {normalisedAction} is limited to {BulkDrillLimit} drills at a time.");
+        }
+
+        var succeeded = 0;
+        var skipped = 0;
+        var failed = 0;
+        var errors = new List<string>();
+
+        await using var tx = await BeginTransactionIfNeededAsync(ct);
+
+        foreach (var drillId in requestedIds)
+        {
+            var drill = await db.SpeakingDrillItems.FirstOrDefaultAsync(x => x.Id == drillId, ct);
+            if (drill is null)
+            {
+                failed++;
+                if (errors.Count < BulkDrillErrorCap) errors.Add($"{drillId}: not found");
+                continue;
+            }
+            var content = await db.ContentItems.FirstOrDefaultAsync(x => x.Id == drill.ContentItemId, ct);
+            if (content is null)
+            {
+                failed++;
+                if (errors.Count < BulkDrillErrorCap) errors.Add($"{drillId}: content item missing");
+                continue;
+            }
+
+            try
+            {
+                bool changed = normalisedAction switch
+                {
+                    "publish" => ApplyPublishDrill(drill, content),
+                    // delete is a soft-delete via archive (see DeleteSpeakingDrillAsync).
+                    _ => ApplyArchiveDrill(drill, content),
+                };
+                if (changed) succeeded++; else skipped++;
+            }
+            catch (ApiException ex)
+            {
+                // Recoverable per-item failure (e.g. publishing an archived
+                // drill → 409 conflict). Record it and keep going; the batch
+                // is NOT aborted. Any non-ApiException is treated as fatal and
+                // propagates so the whole transaction rolls back.
+                failed++;
+                if (errors.Count < BulkDrillErrorCap) errors.Add($"{drillId}: {ex.Message}");
+            }
+        }
+
+        if (succeeded > 0)
+        {
+            await db.SaveChangesAsync(ct);
+        }
+
+        var auditAction = normalisedAction switch
+        {
+            "publish" => "BulkPublished",
+            "archive" => "BulkArchived",
+            _ => "BulkDeleted",
+        };
+        await LogAuditAsync(adminId, adminName, auditAction, "SpeakingDrill",
+            $"bulk:{normalisedAction}",
+            $"Bulk {normalisedAction}: {succeeded} succeeded, {skipped} skipped, {failed} failed "
+            + $"of {requestedIds.Count} requested.", ct);
+
+        await CommitIfOwnedAsync(tx, ct);
+
+        return new
+        {
+            totalRequested = requestedIds.Count,
+            succeeded,
+            skipped,
+            failed,
+            errors = errors.ToArray(),
+        };
+    }
+
+    private async Task<(SpeakingDrillItem drill, ContentItem content)> LoadDrillWithContentAsync(
+        string drillId, CancellationToken ct)
+    {
+        var drill = await db.SpeakingDrillItems.FirstOrDefaultAsync(x => x.Id == drillId, ct)
+            ?? throw ApiException.NotFound("speaking_drill_not_found", "That speaking drill does not exist.");
+        var content = await db.ContentItems.FirstOrDefaultAsync(x => x.Id == drill.ContentItemId, ct)
+            ?? throw ApiException.NotFound("speaking_drill_content_missing",
+                "The underlying content item for this drill is missing.");
+        return (drill, content);
+    }
+
+    /// <summary>Core publish mutation (no audit, no save). Returns true when
+    /// the drill changed state. Throws <see cref="InvalidOperationException"/>
+    /// (via <see cref="ApiException.Conflict"/>) when the drill is archived.</summary>
+    private static bool ApplyPublishDrill(SpeakingDrillItem drill, ContentItem content)
+    {
+        if (content.Status == ContentStatus.Archived)
+        {
+            throw ApiException.Conflict("speaking_drill_archived",
+                "Archived drills cannot be published.");
+        }
+        if (content.Status == ContentStatus.Published)
+        {
+            return false;
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        content.Status = ContentStatus.Published;
+        content.PublishedAt = now;
+        content.UpdatedAt = now;
+        drill.UpdatedAt = now;
+        return true;
+    }
+
+    /// <summary>Core archive mutation (no audit, no save). Returns true when
+    /// the drill changed state; already-archived drills are a no-op.</summary>
+    private static bool ApplyArchiveDrill(SpeakingDrillItem drill, ContentItem content)
+    {
+        if (content.Status == ContentStatus.Archived)
+        {
+            return false;
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        content.Status = ContentStatus.Archived;
+        content.ArchivedAt = now;
+        content.UpdatedAt = now;
+        drill.UpdatedAt = now;
+        return true;
     }
 
     // ── helpers ───────────────────────────────────────────────────────────
