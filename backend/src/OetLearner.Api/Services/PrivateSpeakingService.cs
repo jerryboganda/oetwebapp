@@ -593,7 +593,7 @@ public sealed class PrivateSpeakingService(
             ReservationExpiresAt = null,
             IdempotencyKey = scopedIdempotencyKey,
             LearnerNotes = learnerNotes,
-            ProfessionTrack = professionTrack,
+            ProfessionTrack = NormalizeProfessionTrack(professionTrack),
             CreatedAt = now,
             UpdatedAt = now
         };
@@ -1992,8 +1992,8 @@ public sealed class PrivateSpeakingService(
         }
         if (professionTrack is not null)
         {
-            booking.ProfessionTrack = professionTrack;
-            changes.Add($"professionTrack={professionTrack}");
+            booking.ProfessionTrack = NormalizeProfessionTrack(professionTrack);
+            changes.Add($"professionTrack={booking.ProfessionTrack}");
         }
         if (tutorNotes is not null)
         {
@@ -2245,11 +2245,36 @@ public sealed class PrivateSpeakingService(
         return sb.ToString();
     }
 
-    /// <summary>RFC4180 CSV field escaping: wrap in quotes and double internal
+    private static readonly string[] ValidProfessionTracks =
+        ["Medicine", "Nursing", "Pharmacy", "Dentistry", "Other"];
+
+    /// <summary>Clamp a candidate-supplied profession track to the five known
+    /// values (PDF §3.2.4). Blank → null; any unknown non-blank value → "Other",
+    /// so untrusted input is never persisted raw (the booking row feeds the admin
+    /// CSV export and dashboards).</summary>
+    private static string? NormalizeProfessionTrack(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return null;
+        var trimmed = value.Trim();
+        foreach (var track in ValidProfessionTracks)
+        {
+            if (string.Equals(track, trimmed, StringComparison.OrdinalIgnoreCase))
+                return track;
+        }
+        return "Other";
+    }
+
+    /// <summary>RFC4180 CSV field escaping plus CSV-injection neutralization: a
+    /// value beginning with a formula trigger (=, +, -, @, TAB or CR) is prefixed
+    /// with a single quote so spreadsheet apps treat it as text — user-controlled
+    /// columns (tutor display name, profession track) would otherwise execute when
+    /// the export is opened in Excel/Sheets. Then wrap in quotes and double internal
     /// quotes when the value contains a comma, quote, CR or LF.</summary>
     private static string CsvEscape(string? value)
     {
         if (string.IsNullOrEmpty(value)) return string.Empty;
+        if (value[0] is '=' or '+' or '-' or '@' or '\t' or '\r')
+            value = "'" + value;
         if (value.IndexOfAny([',', '"', '\n', '\r']) < 0) return value;
         return $"\"{value.Replace("\"", "\"\"")}\"";
     }
