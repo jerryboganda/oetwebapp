@@ -131,11 +131,15 @@ public static class NotificationCatalog
             NotificationEventKey.AdminFreezePolicyChanged => "Freeze policy updated",
             NotificationEventKey.AdminFreezeLifecycleAction => "Freeze lifecycle action completed",
             NotificationEventKey.LearnerPrivateSpeakingBooked => $"Private speaking session booked with {ReadToken(tokens, "tutorName", "your tutor")}",
-            NotificationEventKey.LearnerPrivateSpeakingReminder => $"Upcoming session with {ReadToken(tokens, "tutorName", "your tutor")} in {ReadToken(tokens, "hoursUntil", "a few")} hours",
+            NotificationEventKey.LearnerPrivateSpeakingReminder => $"Upcoming session with {ReadToken(tokens, "tutorName", "your tutor")} in {ReadReminderTimeUntil(tokens)}",
             NotificationEventKey.LearnerPrivateSpeakingCancelled => "Your private speaking session has been cancelled",
+            NotificationEventKey.LearnerPrivateSpeakingRescheduled => "Your private speaking session has been rescheduled",
+            NotificationEventKey.LearnerPrivateSpeakingNoShow => "You were marked as a no-show for your private speaking session",
             NotificationEventKey.ExpertPrivateSpeakingAssigned => $"New private speaking session booked for {ReadToken(tokens, "sessionTime", "upcoming")}",
-            NotificationEventKey.ExpertPrivateSpeakingReminder => $"Upcoming session in {ReadToken(tokens, "hoursUntil", "a few")} hours",
+            NotificationEventKey.ExpertPrivateSpeakingReminder => $"Upcoming session in {ReadReminderTimeUntil(tokens)}",
             NotificationEventKey.ExpertPrivateSpeakingCancelled => "A private speaking session has been cancelled",
+            NotificationEventKey.ExpertPrivateSpeakingRescheduled => "A private speaking session has been rescheduled",
+            NotificationEventKey.ExpertPrivateSpeakingNoShow => "A learner was marked as a no-show",
             NotificationEventKey.AdminPrivateSpeakingBooked => $"Private speaking session booked: {ReadToken(tokens, "tutorName", "tutor")} at {ReadToken(tokens, "sessionTime", "time to be confirmed")}",
             // Wave A3 — class notifications
             NotificationEventKey.LearnerClassEnrollmentConfirmed => $"You're in: {ReadToken(tokens, "classTitle", "your class")} on {ReadToken(tokens, "sessionTime", "the scheduled time")}",
@@ -189,11 +193,15 @@ public static class NotificationCatalog
             NotificationEventKey.AdminFreezePolicyChanged => ReadToken(tokens, "message", "Freeze policy settings were updated."),
             NotificationEventKey.AdminFreezeLifecycleAction => ReadToken(tokens, "message", "A freeze lifecycle action was processed."),
             NotificationEventKey.LearnerPrivateSpeakingBooked => $"Your session with {ReadToken(tokens, "tutorName", "your tutor")} is confirmed for {ReadToken(tokens, "sessionTime", "the scheduled time")}. A Zoom link will be sent shortly.",
-            NotificationEventKey.LearnerPrivateSpeakingReminder => $"Your private speaking session starts in {ReadToken(tokens, "hoursUntil", "a few")} hours. Check your booking details for the Zoom link.",
+            NotificationEventKey.LearnerPrivateSpeakingReminder => $"Your private speaking session starts in {ReadReminderTimeUntil(tokens)}. Check your booking details for the Zoom link.",
             NotificationEventKey.LearnerPrivateSpeakingCancelled => ReadToken(tokens, "message", "Your private speaking session has been cancelled. If you paid, a refund will be processed."),
+            NotificationEventKey.LearnerPrivateSpeakingRescheduled => $"Your private speaking session has been rescheduled to {ReadToken(tokens, "sessionTime", "the new time")}.{ReadToken(tokens, "penalty", string.Empty)}",
+            NotificationEventKey.LearnerPrivateSpeakingNoShow => ReadToken(tokens, "message", "You were marked as a no-show for your private speaking session. No refund applies."),
             NotificationEventKey.ExpertPrivateSpeakingAssigned => $"A learner has booked a private session for {ReadToken(tokens, "sessionTime", "an upcoming time")}. Check your schedule for details.",
-            NotificationEventKey.ExpertPrivateSpeakingReminder => $"Your private speaking session starts in {ReadToken(tokens, "hoursUntil", "a few")} hours. Use the Zoom start link in your session details.",
+            NotificationEventKey.ExpertPrivateSpeakingReminder => $"Your private speaking session starts in {ReadReminderTimeUntil(tokens)}. Use the Zoom start link in your session details.",
             NotificationEventKey.ExpertPrivateSpeakingCancelled => ReadToken(tokens, "message", "A private speaking session has been cancelled by the learner or admin."),
+            NotificationEventKey.ExpertPrivateSpeakingRescheduled => $"A private speaking session has been rescheduled to {ReadToken(tokens, "sessionTime", "the new time")}.",
+            NotificationEventKey.ExpertPrivateSpeakingNoShow => ReadToken(tokens, "message", "A learner was marked as a no-show for a private speaking session."),
             NotificationEventKey.AdminPrivateSpeakingBooked => $"Private speaking session booked with {ReadToken(tokens, "tutorName", "a tutor")} at {ReadToken(tokens, "sessionTime", "time to be confirmed")}. Booking ID: {ReadToken(tokens, "bookingId", "unknown")}.",
             // Wave A3 — class notification bodies
             NotificationEventKey.LearnerClassEnrollmentConfirmed => $"Your seat is confirmed in {ReadToken(tokens, "classTitle", "the class")} at {ReadToken(tokens, "sessionTime", "the scheduled time")}. A calendar invite is attached and the Zoom link will become active 30 minutes before the start time.",
@@ -249,6 +257,8 @@ public static class NotificationCatalog
             NotificationEventKey.LearnerPrivateSpeakingBooked => $"/private-speaking/bookings/{ReadToken(tokens, "bookingId", string.Empty)}",
             NotificationEventKey.LearnerPrivateSpeakingReminder => $"/private-speaking/bookings/{ReadToken(tokens, "bookingId", string.Empty)}",
             NotificationEventKey.LearnerPrivateSpeakingCancelled => "/private-speaking",
+            NotificationEventKey.LearnerPrivateSpeakingRescheduled => $"/private-speaking/bookings/{ReadToken(tokens, "bookingId", string.Empty)}",
+            NotificationEventKey.LearnerPrivateSpeakingNoShow => $"/private-speaking/bookings/{ReadToken(tokens, "bookingId", string.Empty)}",
             NotificationEventKey.LearnerClassBookingConfirmed => $"/classes/{ReadToken(tokens, "classId", string.Empty)}",
             NotificationEventKey.LearnerLiveClassReminder => $"/classes/{ReadToken(tokens, "classId", string.Empty)}/sessions/{ReadToken(tokens, "sessionId", string.Empty)}/join",
             NotificationEventKey.LearnerLiveClassRecordingReady => $"/me/classes/recordings/{ReadToken(tokens, "sessionId", string.Empty)}",
@@ -256,6 +266,8 @@ public static class NotificationCatalog
             NotificationEventKey.ExpertPrivateSpeakingAssigned => $"/expert/private-speaking/{ReadToken(tokens, "bookingId", string.Empty)}",
             NotificationEventKey.ExpertPrivateSpeakingReminder => $"/expert/private-speaking/{ReadToken(tokens, "bookingId", string.Empty)}",
             NotificationEventKey.ExpertPrivateSpeakingCancelled => "/expert/private-speaking",
+            NotificationEventKey.ExpertPrivateSpeakingRescheduled => $"/expert/private-speaking/{ReadToken(tokens, "bookingId", string.Empty)}",
+            NotificationEventKey.ExpertPrivateSpeakingNoShow => $"/expert/private-speaking/{ReadToken(tokens, "bookingId", string.Empty)}",
             NotificationEventKey.AdminPrivateSpeakingBooked => "/admin/private-speaking",
             // Wave A3 — class notification action URLs
             NotificationEventKey.LearnerClassEnrollmentConfirmed => $"/classes/{ReadToken(tokens, "classId", string.Empty)}/sessions/{ReadToken(tokens, "sessionId", string.Empty)}/join",
@@ -316,6 +328,10 @@ public static class NotificationCatalog
             new(NotificationEventKey.ExpertPrivateSpeakingAssigned, ApplicationUserRoles.Expert, "private_speaking", "Session Assigned", "Notify experts when a learner books a private speaking session.", NotificationSeverity.Info, new(true, true, true, NotificationEmailMode.Immediate)),
             new(NotificationEventKey.ExpertPrivateSpeakingReminder, ApplicationUserRoles.Expert, "private_speaking", "Session Reminder", "Remind experts about upcoming private speaking sessions.", NotificationSeverity.Info, new(true, true, true, NotificationEmailMode.Immediate)),
             new(NotificationEventKey.ExpertPrivateSpeakingCancelled, ApplicationUserRoles.Expert, "private_speaking", "Session Cancelled", "Notify experts when a private speaking session is cancelled.", NotificationSeverity.Warning, new(true, true, true, NotificationEmailMode.Immediate)),
+            new(NotificationEventKey.LearnerPrivateSpeakingRescheduled, ApplicationUserRoles.Learner, "private_speaking", "Session Rescheduled", "Confirm to learners when a private speaking session is rescheduled.", NotificationSeverity.Info, new(true, true, true, NotificationEmailMode.Immediate)),
+            new(NotificationEventKey.ExpertPrivateSpeakingRescheduled, ApplicationUserRoles.Expert, "private_speaking", "Session Rescheduled", "Notify experts when a private speaking session is rescheduled.", NotificationSeverity.Info, new(true, true, true, NotificationEmailMode.Immediate)),
+            new(NotificationEventKey.LearnerPrivateSpeakingNoShow, ApplicationUserRoles.Learner, "private_speaking", "Session No-Show", "Notify learners when they are marked as a no-show for a private speaking session.", NotificationSeverity.Warning, new(true, true, true, NotificationEmailMode.Immediate)),
+            new(NotificationEventKey.ExpertPrivateSpeakingNoShow, ApplicationUserRoles.Expert, "private_speaking", "Session No-Show", "Notify experts when a learner is marked as a no-show for a private speaking session.", NotificationSeverity.Warning, new(true, true, true, NotificationEmailMode.Immediate)),
             new(NotificationEventKey.AdminPrivateSpeakingBooked, ApplicationUserRoles.Admin, "operations", "Private Speaking Booked", "Notify admins when a private speaking session is booked.", NotificationSeverity.Info, new(true, false, false, NotificationEmailMode.Off)),
 
             // Expanded OET lifecycle catalog
@@ -448,6 +464,27 @@ public static class NotificationCatalog
         => tokens.TryGetValue(key, out var value) && !string.IsNullOrWhiteSpace(value)
             ? value
             : fallback;
+
+    /// <summary>
+    /// Resolve the friendly "time until session" phrase for reminder notifications.
+    /// Prefers the new <c>timeUntil</c> token (e.g. "24 hours", "15 minutes"); falls
+    /// back to the legacy <c>hoursUntil</c> token (rendered as "{n} hours") for any
+    /// reminders still emitted with hour-granularity payloads.
+    /// </summary>
+    private static string ReadReminderTimeUntil(IReadOnlyDictionary<string, string?> tokens)
+    {
+        if (tokens.TryGetValue("timeUntil", out var timeUntil) && !string.IsNullOrWhiteSpace(timeUntil))
+        {
+            return timeUntil;
+        }
+
+        if (tokens.TryGetValue("hoursUntil", out var hoursUntil) && !string.IsNullOrWhiteSpace(hoursUntil))
+        {
+            return $"{hoursUntil} hours";
+        }
+
+        return "a few hours";
+    }
 
     private static string NormalizeSeverity(NotificationSeverity severity)
         => severity switch

@@ -28,6 +28,27 @@ public sealed class PrivateSpeakingConfigDefaultsTests
         Assert.Contains("50%", config.BookingPolicyText!);
     }
 
+    [Fact]
+    public async Task UpdateConfigAsync_PersistsReminderOffsetsAndSameDayPenalty()
+    {
+        await using var db = CreateDb();
+        var service = CreateService(db);
+
+        var updated = await service.UpdateConfigAsync(c =>
+        {
+            c.ReminderOffsetsMinutesJson = "[2880, 120, 30]";
+            c.RescheduleSameDayPenaltyPercent = 25;
+        }, adminId: "adm-1", CancellationToken.None);
+
+        Assert.Equal("[2880, 120, 30]", updated.ReminderOffsetsMinutesJson);
+        Assert.Equal(25, updated.RescheduleSameDayPenaltyPercent);
+
+        // Re-read from the store to confirm the mutation was actually persisted.
+        var reloaded = await service.GetConfigAsync(CancellationToken.None);
+        Assert.Equal("[2880, 120, 30]", reloaded.ReminderOffsetsMinutesJson);
+        Assert.Equal(25, reloaded.RescheduleSameDayPenaltyPercent);
+    }
+
     private static LearnerDbContext CreateDb()
     {
         var options = new DbContextOptionsBuilder<LearnerDbContext>()
@@ -47,6 +68,7 @@ public sealed class PrivateSpeakingConfigDefaultsTests
             calendarService: null!,
             entitlementResolver: null!,
             stripeService: null!,
+            platformLinks: null!,
             timeProvider: new FixedTimeProvider(new DateTimeOffset(2026, 06, 06, 12, 0, 0, TimeSpan.Zero)),
             logger: NullLogger<PrivateSpeakingService>.Instance);
 

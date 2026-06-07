@@ -1,9 +1,11 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
+import Link from 'next/link';
 import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
-import { Mic, Calendar, Star, Clock, CreditCard, Video, X, ChevronLeft, ChevronRight, User, Download } from 'lucide-react';
+import { Mic, Calendar, Star, Clock, CreditCard, Video, X, ChevronLeft, ChevronRight, User, Download, ShoppingBag, Globe } from 'lucide-react';
 import { ZoomMeetingEmbed } from '@/components/class/ZoomMeetingEmbed';
+import { Modal } from '@/components/ui/modal';
 import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -56,8 +58,28 @@ type Booking = {
   rescheduledToBookingId?: string | null;
   googleCalendarSyncStatus?: string | null;
   learnerRating: number | null; learnerFeedback: string | null;
+  refundIssued?: boolean | null;
+  refundAmountMinorUnits?: number | null;
+  penaltyAmountMinorUnits?: number | null;
   createdAt: string;
 };
+
+const PROFESSION_TRACKS = ['Medicine', 'Nursing', 'Pharmacy', 'Dentistry', 'Other'] as const;
+type ProfessionTrack = (typeof PROFESSION_TRACKS)[number];
+
+// PDF §12 — verbatim cancellation / reschedule policy text.
+const CANCELLATION_POLICY_TEXT =
+  'You may cancel your Speaking session with a full refund if the cancellation is made more than 48 hours before the scheduled start time. If you cancel less than 48 hours before the session, the booking will be cancelled without refund.';
+const RESCHEDULE_POLICY_TEXT =
+  'You may reschedule your Speaking session before the session starts, subject to available tutor slots. Same-day rescheduling is allowed; however, 50% of the session fee will be lost according to the platform policy.';
+
+// Statuses that count as an upcoming/active booking (PDF §11).
+const UPCOMING_STATUSES = new Set(['Confirmed', 'ZoomCreated', 'PendingPayment', 'InProgress', 'Reserved']);
+
+function isUpcomingBooking(booking: Booking): boolean {
+  const inFuture = new Date(booking.sessionStartUtc).getTime() > Date.now();
+  return UPCOMING_STATUSES.has(booking.status) && inFuture;
+}
 
 type ActiveMeeting = {
   token: LiveClassJoinToken;
@@ -75,6 +97,8 @@ const STATUS_COLORS: Record<string, string> = {
   Cancelled: 'bg-danger/10 text-danger',
   Expired: 'bg-background-light text-muted',
   Failed: 'bg-danger/10 text-danger',
+  Refunded: 'bg-info/10 text-info',
+  NoShow: 'bg-danger/10 text-danger',
 };
 
 const FRIENDLY_STATUS: Record<string, string> = {
@@ -98,6 +122,50 @@ function formatDate(iso: string) {
 function formatPrice(minorUnits: number, currency: string) {
   return new Intl.NumberFormat('en-AU', { style: 'currency', currency }).format(minorUnits / 100);
 }
+
+const UK_TIME_ZONE = 'Europe/London';
+
+// PDF §3.3.4 — the Join button activates 15 minutes before the session start.
+const JOIN_LEAD_MINUTES = 15;
+
+/**
+ * Format a UTC instant as a candidate-local + UK time pair (PDF §3.2.5 /
+ * edge case #8). e.g. "6:00 PM (your time) · 11:00 AM UK".
+ */
+function formatLocalAndUkTime(utcIso: string): string {
+  const instant = new Date(utcIso);
+  const timeOpts: Intl.DateTimeFormatOptions = { hour: 'numeric', minute: '2-digit' };
+  const local = new Intl.DateTimeFormat(undefined, timeOpts).format(instant);
+  const uk = new Intl.DateTimeFormat('en-GB', { ...timeOpts, timeZone: UK_TIME_ZONE }).format(instant);
+  return `${local} (your time) · ${uk} UK`;
+}
+
+/** Surface the refund / penalty outcome for a settled booking (PDF §11). */
+function refundOutcome(booking: Booking): { label: string; tone: 'success' | 'danger' | 'info' | 'muted' } | null {
+  if (booking.refundIssued || booking.status === 'Refunded') {
+    const amount = booking.refundAmountMinorUnits
+      ? ` (${formatPrice(booking.refundAmountMinorUnits, booking.currency)})`
+      : '';
+    return { label: `Refunded${amount}`, tone: 'success' };
+  }
+  if (booking.penaltyAmountMinorUnits && booking.penaltyAmountMinorUnits > 0) {
+    return { label: `Penalty: ${formatPrice(booking.penaltyAmountMinorUnits, booking.currency)}`, tone: 'danger' };
+  }
+  if (booking.status === 'Cancelled') {
+    return { label: 'Cancelled (no refund)', tone: 'muted' };
+  }
+  if (booking.status === 'NoShow') {
+    return { label: 'No show (no refund)', tone: 'danger' };
+  }
+  return null;
+}
+
+const OUTCOME_TONE: Record<'success' | 'danger' | 'info' | 'muted', string> = {
+  success: 'text-success',
+  danger: 'text-danger',
+  info: 'text-info',
+  muted: 'text-muted',
+};
 
 function getWeekRange(offset: number): { from: string; to: string; label: string } {
   const now = new Date();
@@ -128,13 +196,24 @@ export default function PrivateSpeakingPage() {
   const [selectedSlot, setSelectedSlot] = useState<Slot | null>(null);
   const [rescheduleTarget, setRescheduleTarget] = useState<Booking | null>(null);
   const [bookingNotes, setBookingNotes] = useState('');
+  const [professionTrack, setProfessionTrack] = useState<ProfessionTrack>('Medicine');
   const [bookingInProgress, setBookingInProgress] = useState(false);
+  // Policy-confirmation modals (PDF §12). Hold the booking pending confirmation.
+  const [cancelConfirm, setCancelConfirm] = useState<Booking | null>(null);
+  const [cancelInProgress, setCancelInProgress] = useState(false);
+  const [rescheduleConfirmOpen, setRescheduleConfirmOpen] = useState(false);
   const [entitlementRemaining, setEntitlementRemaining] = useState<number | null>(null);
   const [joiningBookingId, setJoiningBookingId] = useState<string | null>(null);
   const [activeMeeting, setActiveMeeting] = useState<ActiveMeeting | null>(null);
   const [ratingSession, setRatingSession] = useState<string | null>(null);
   const [ratingValue, setRatingValue] = useState(5);
   const [ratingFeedback, setRatingFeedback] = useState('');
+  // Live clock so the Join button activates exactly 15 minutes before start (PDF §3.3.4).
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 30_000);
+    return () => clearInterval(id);
+  }, []);
 
   // Initial data load
   useEffect(() => {
@@ -185,6 +264,7 @@ export default function PrivateSpeakingPage() {
         durationMinutes: selectedSlot.durationMinutes,
         learnerTimezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
         learnerNotes: bookingNotes || undefined,
+        professionTrack,
         idempotencyKey: crypto.randomUUID(),
       });
 
@@ -226,6 +306,15 @@ export default function PrivateSpeakingPage() {
       });
 
       analytics.track('private_speaking_booking_rescheduled', { bookingId: rescheduleTarget.id, newBookingId: result.bookingId });
+      setRescheduleConfirmOpen(false);
+
+      // Same-day reschedule incurs a 50% Stripe penalty — redirect to pay it.
+      if (result.checkoutUrl) {
+        window.location.href = result.checkoutUrl;
+        return;
+      }
+
+      // Free reschedule completed.
       setSelectedSlot(null);
       setRescheduleTarget(null);
       setBookingNotes('');
@@ -239,12 +328,21 @@ export default function PrivateSpeakingPage() {
     }
   }
 
-  async function handleCancel(bookingId: string) {
+  async function handleCancelConfirmed() {
+    if (!cancelConfirm || cancelInProgress) return;
+    const bookingId = cancelConfirm.id;
+    setCancelInProgress(true);
+    setError(null);
     try {
       await cancelPrivateSpeakingBooking(bookingId);
-      setBookings(prev => prev.map(b => b.id === bookingId ? { ...b, status: 'Cancelled' } : b));
+      setCancelConfirm(null);
+      // Refresh from the server so refund/penalty outcome fields are surfaced.
+      const updated = await fetchLearnerPrivateSpeakingBookings() as Booking[];
+      setBookings(updated);
     } catch {
       setError('Could not cancel booking.');
+    } finally {
+      setCancelInProgress(false);
     }
   }
 
@@ -291,6 +389,7 @@ export default function PrivateSpeakingPage() {
     setSelectedTutor(booking.tutorProfileId);
     setSelectedSlot(null);
     setBookingNotes('');
+    setRescheduleConfirmOpen(false);
     setViewMode('browse');
   }
 
@@ -312,6 +411,104 @@ export default function PrivateSpeakingPage() {
     (acc[slot.date] ??= []).push(slot);
     return acc;
   }, {});
+
+  // Split bookings into Upcoming / Past sections (PDF §11).
+  const upcomingBookings = bookings.filter(isUpcomingBooking);
+  const pastBookings = bookings.filter(b => !isUpcomingBooking(b));
+
+  // Edge case #5 — candidate has no remaining speaking entitlement.
+  const hasNoEntitlement = (entitlementRemaining ?? 0) <= 0;
+
+  function renderBookingCard(booking: Booking, i: number) {
+    const outcome = refundOutcome(booking);
+    // Join activates 15 min before start (PDF §3.3.4); `now` ticks so it auto-enables.
+    const joinOpen = new Date(booking.sessionStartUtc).getTime() - now <= JOIN_LEAD_MINUTES * 60_000;
+    return (
+      <MotionItem key={booking.id} delayIndex={i}
+        className="bg-surface rounded-xl border border-border p-4">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+          <div className="flex-1">
+            <div className="flex items-center gap-2 mb-1">
+              <span className="font-medium text-navy text-sm">{booking.tutorName ?? 'Tutor'}</span>
+              <span className={`text-xs px-2 py-0.5 rounded-full ${STATUS_COLORS[booking.status] ?? 'bg-background-light text-muted'}`}>
+                {FRIENDLY_STATUS[booking.status] ?? booking.status}
+              </span>
+              {outcome && (
+                <span className={`text-xs font-medium ${OUTCOME_TONE[outcome.tone]}`}>{outcome.label}</span>
+              )}
+            </div>
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted/60">
+              <span className="flex items-center gap-1"><Calendar className="w-3.5 h-3.5" />{formatDate(booking.sessionStartUtc)}</span>
+              <span>{booking.durationMinutes} min</span>
+              <span>{booking.entitlementConsumed ? 'Session credit' : formatPrice(booking.priceMinorUnits, booking.currency)}</span>
+            </div>
+            <div className="flex items-center gap-1 text-xs text-muted/60 mt-1">
+              <Globe className="w-3.5 h-3.5 shrink-0" aria-hidden />{formatLocalAndUkTime(booking.sessionStartUtc)}
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            {(booking.status === 'ZoomCreated' || booking.status === 'InProgress') && (
+              <button onClick={() => handleJoin(booking)} disabled={!joinOpen || joiningBookingId === booking.id}
+                title={joinOpen ? undefined : `The Join button activates ${JOIN_LEAD_MINUTES} minutes before the session starts.`}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-info hover:bg-info/90 text-white rounded-lg text-xs font-medium transition-colors disabled:opacity-50">
+                <Video className="w-3.5 h-3.5" /> {joiningBookingId === booking.id ? 'Opening...' : joinOpen ? 'Join' : 'Join soon'}
+              </button>
+            )}
+
+            {config?.allowReschedule && (booking.status === 'Confirmed' || booking.status === 'ZoomCreated') && (
+              <button onClick={() => startReschedule(booking)}
+                className="text-xs text-primary hover:text-primary font-medium">
+                Reschedule
+              </button>
+            )}
+
+            {(booking.status === 'Confirmed' || booking.status === 'ZoomCreated') && (
+              <button onClick={() => handleDownloadInvite(booking.id)}
+                className="flex items-center gap-1 text-xs text-muted hover:text-navy font-medium">
+                <Download className="w-3.5 h-3.5" /> Calendar
+              </button>
+            )}
+
+            {/* Cancel button — opens the policy confirmation modal (PDF §12). */}
+            {(booking.status === 'Confirmed' || booking.status === 'ZoomCreated') && (
+              <button onClick={() => setCancelConfirm(booking)}
+                className="text-xs text-danger hover:text-danger font-medium">
+                Cancel
+              </button>
+            )}
+
+            {/* Rating */}
+            {booking.status === 'Completed' && booking.learnerRating === null && (
+              ratingSession === booking.id ? (
+                <div className="flex flex-wrap items-center gap-2">
+                  {[1, 2, 3, 4, 5].map(v => (
+                    <button key={v} onClick={() => setRatingValue(v)}
+                      className={`w-10 h-10 rounded-full text-sm ${ratingValue >= v ? 'text-warning' : 'text-muted/40'}`}>★</button>
+                  ))}
+                  <input type="text" placeholder="Feedback" value={ratingFeedback}
+                    onChange={e => setRatingFeedback(e.target.value)}
+                    className="px-2 py-1 border border-border rounded text-xs w-24" />
+                  <button onClick={() => handleRate(booking.id)} className="text-xs px-3 py-2.5 bg-warning hover:bg-warning/90 text-white rounded-lg">Submit</button>
+                  <button onClick={() => setRatingSession(null)} className="text-xs text-muted/60 py-2 px-1">Cancel</button>
+                </div>
+              ) : (
+                <button onClick={() => setRatingSession(booking.id)} className="flex items-center gap-1.5 text-sm text-warning hover:text-warning font-medium py-2 px-1">
+                  <Star className="w-4 h-4" /> Rate
+                </button>
+              )
+            )}
+
+            {booking.learnerRating !== null && (
+              <div className="flex items-center gap-1 text-warning text-sm">
+                {'★'.repeat(booking.learnerRating)}{'☆'.repeat(5 - booking.learnerRating)}
+              </div>
+            )}
+          </div>
+        </div>
+      </MotionItem>
+    );
+  }
 
   if (loading) {
     return (
@@ -373,6 +570,21 @@ export default function PrivateSpeakingPage() {
             {entitlementRemaining ?? 0} remaining
           </span>
         </div>
+
+        {/* Edge case #5 — no remaining entitlement → purchase CTA. */}
+        {hasNoEntitlement && (
+          <div className="mt-3 flex flex-col gap-2 rounded-lg border border-warning/30 bg-warning/10 p-3 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-xs text-warning">
+              You have no speaking sessions left. Buy more to book a 1-on-1 session with a tutor.
+            </p>
+            <Link
+              href="/cart"
+              className="inline-flex w-fit shrink-0 items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-primary/90 dark:bg-violet-700 dark:hover:bg-violet-600"
+            >
+              <ShoppingBag className="h-3.5 w-3.5" aria-hidden /> Buy speaking sessions
+            </Link>
+          </div>
+        )}
       </div>
 
       {error && <InlineAlert variant="warning" className="mb-4">{error}<button onClick={() => setError(null)} aria-label="Dismiss error" className="ml-2"><X className="w-4 h-4 inline" aria-hidden /></button></InlineAlert>}
@@ -467,6 +679,10 @@ export default function PrivateSpeakingPage() {
                               : 'border-border bg-surface hover:border-primary/30'
                           }`}>
                           <div className="font-medium text-navy">{slot.startTimeLocal}</div>
+                          <div className="flex items-start gap-1 text-[11px] text-muted mt-0.5">
+                            <Globe className="w-3 h-3 mt-0.5 shrink-0 text-muted/60" aria-hidden />
+                            <span>{formatLocalAndUkTime(slot.startTimeUtc)}</span>
+                          </div>
                           <div className="text-xs text-muted mt-0.5">{slot.tutorDisplayName}</div>
                           <div className="text-xs text-primary mt-1">
                             {formatPrice(slot.priceMinorUnits, slot.currency)} · {slot.durationMinutes}m
@@ -490,9 +706,26 @@ export default function PrivateSpeakingPage() {
               <div className="space-y-2 text-sm text-muted mb-4">
                 <div className="flex items-center gap-2"><User className="w-4 h-4 text-muted/60" /> {selectedSlot.tutorDisplayName}</div>
                 <div className="flex items-center gap-2"><Calendar className="w-4 h-4 text-muted/60" /> {formatDate(selectedSlot.startTimeUtc)}</div>
+                <div className="flex items-start gap-2"><Globe className="w-4 h-4 mt-0.5 text-muted/60" /> {formatLocalAndUkTime(selectedSlot.startTimeUtc)}</div>
                 <div className="flex items-center gap-2"><Clock className="w-4 h-4 text-muted/60" /> {selectedSlot.durationMinutes} minutes</div>
                 <div className="flex items-center gap-2"><CreditCard className="w-4 h-4 text-muted/60" /> Uses 1 session credit</div>
               </div>
+              {/* Profession track (booking only — reschedule keeps the original track). */}
+              {!rescheduleTarget && (
+                <div className="mb-3">
+                  <label htmlFor="profession-track" className="mb-1 block text-xs font-medium text-navy">Profession track</label>
+                  <select
+                    id="profession-track"
+                    value={professionTrack}
+                    onChange={e => setProfessionTrack(e.target.value as ProfessionTrack)}
+                    className="w-full px-3 py-2 border border-border rounded-lg text-sm bg-surface text-navy focus:outline-none focus:ring-2 focus:ring-primary/40"
+                  >
+                    {PROFESSION_TRACKS.map(track => (
+                      <option key={track} value={track}>{track}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
               <textarea
                 placeholder="Notes for the tutor (optional)"
                 value={bookingNotes}
@@ -500,7 +733,7 @@ export default function PrivateSpeakingPage() {
                 rows={2}
                 className="w-full px-3 py-2 border border-border rounded-lg text-sm bg-surface text-navy resize-none focus:outline-none focus:ring-2 focus:ring-primary/40 mb-3"
               />
-              <button onClick={rescheduleTarget ? handleReschedule : handleBook} disabled={bookingInProgress || (!rescheduleTarget && (entitlementRemaining ?? 0) <= 0)}
+              <button onClick={rescheduleTarget ? () => setRescheduleConfirmOpen(true) : handleBook} disabled={bookingInProgress || (!rescheduleTarget && (entitlementRemaining ?? 0) <= 0)}
                 className="w-full px-5 py-2.5 bg-primary hover:bg-primary/90 active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600 text-white rounded-lg text-sm font-medium disabled:opacity-50 transition-[color,background-color,transform] duration-200">
                 {bookingInProgress ? 'Processing...' : rescheduleTarget ? 'Confirm Reschedule' : 'Use Session Credit & Book'}
               </button>
@@ -515,96 +748,80 @@ export default function PrivateSpeakingPage() {
       {/* ── My Bookings ───────────────────────────────── */}
       {viewMode === 'bookings' && (
         <>
-          <LearnerSurfaceSectionHeader title="Your Bookings" />
           {bookings.length === 0 ? (
-            <div className="text-center py-12 text-muted/60">
-              <Mic className="w-10 h-10 mx-auto mb-3 opacity-30" aria-hidden />
-              <p>No bookings yet. Browse available slots to get started.</p>
-            </div>
+            <>
+              <LearnerSurfaceSectionHeader title="Your Bookings" />
+              <div className="text-center py-12 text-muted/60">
+                <Mic className="w-10 h-10 mx-auto mb-3 opacity-30" aria-hidden />
+                <p>No bookings yet. Browse available slots to get started.</p>
+              </div>
+            </>
           ) : (
-            <div className="space-y-3">
-              {bookings.map((booking, i) => (
-                <MotionItem key={booking.id} delayIndex={i}
-                  className="bg-surface rounded-xl border border-border p-4">
-                  <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className="font-medium text-navy text-sm">{booking.tutorName ?? 'Tutor'}</span>
-                        <span className={`text-xs px-2 py-0.5 rounded-full ${STATUS_COLORS[booking.status] ?? 'bg-background-light text-muted'}`}>
-                          {FRIENDLY_STATUS[booking.status] ?? booking.status}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-3 text-xs text-muted/60">
-                        <span className="flex items-center gap-1"><Calendar className="w-3.5 h-3.5" />{formatDate(booking.sessionStartUtc)}</span>
-                        <span>{booking.durationMinutes} min</span>
-                        <span>{booking.entitlementConsumed ? 'Session credit' : formatPrice(booking.priceMinorUnits, booking.currency)}</span>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      {(booking.status === 'ZoomCreated' || booking.status === 'InProgress') && (
-                        <button onClick={() => handleJoin(booking)} disabled={joiningBookingId === booking.id}
-                          className="flex items-center gap-1.5 px-3 py-1.5 bg-info hover:bg-info/90 text-white rounded-lg text-xs font-medium transition-colors disabled:opacity-50">
-                          <Video className="w-3.5 h-3.5" /> {joiningBookingId === booking.id ? 'Opening...' : 'Join'}
-                        </button>
-                      )}
-
-                      {config.allowReschedule && (booking.status === 'Confirmed' || booking.status === 'ZoomCreated') && (
-                        <button onClick={() => startReschedule(booking)}
-                          className="text-xs text-primary hover:text-primary font-medium">
-                          Reschedule
-                        </button>
-                      )}
-
-                      {(booking.status === 'Confirmed' || booking.status === 'ZoomCreated') && (
-                        <button onClick={() => handleDownloadInvite(booking.id)}
-                          className="flex items-center gap-1 text-xs text-muted hover:text-navy font-medium">
-                          <Download className="w-3.5 h-3.5" /> Calendar
-                        </button>
-                      )}
-
-                      {/* Cancel button */}
-                      {(booking.status === 'Confirmed' || booking.status === 'ZoomCreated') && (
-                        <button onClick={() => handleCancel(booking.id)}
-                          className="text-xs text-danger hover:text-danger font-medium">
-                          Cancel
-                        </button>
-                      )}
-
-                      {/* Rating */}
-                      {booking.status === 'Completed' && booking.learnerRating === null && (
-                        ratingSession === booking.id ? (
-                          <div className="flex flex-wrap items-center gap-2">
-                            {[1, 2, 3, 4, 5].map(v => (
-                              <button key={v} onClick={() => setRatingValue(v)}
-                                className={`w-10 h-10 rounded-full text-sm ${ratingValue >= v ? 'text-warning' : 'text-muted/40'}`}>★</button>
-                            ))}
-                            <input type="text" placeholder="Feedback" value={ratingFeedback}
-                              onChange={e => setRatingFeedback(e.target.value)}
-                              className="px-2 py-1 border border-border rounded text-xs w-24" />
-                            <button onClick={() => handleRate(booking.id)} className="text-xs px-3 py-2.5 bg-warning hover:bg-warning/90 text-white rounded-lg">Submit</button>
-                            <button onClick={() => setRatingSession(null)} className="text-xs text-muted/60 py-2 px-1">Cancel</button>
-                          </div>
-                        ) : (
-                          <button onClick={() => setRatingSession(booking.id)} className="flex items-center gap-1.5 text-sm text-warning hover:text-warning font-medium py-2 px-1">
-                            <Star className="w-4 h-4" /> Rate
-                          </button>
-                        )
-                      )}
-
-                      {booking.learnerRating !== null && (
-                        <div className="flex items-center gap-1 text-warning text-sm">
-                          {'★'.repeat(booking.learnerRating)}{'☆'.repeat(5 - booking.learnerRating)}
-                        </div>
-                      )}
-                    </div>
+            <div className="space-y-8">
+              {/* Upcoming Speaking Sessions (PDF §11) */}
+              <section>
+                <LearnerSurfaceSectionHeader title="Upcoming Speaking Sessions" />
+                {upcomingBookings.length === 0 ? (
+                  <p className="text-sm text-muted/60 py-2">No upcoming sessions. Browse slots to book one.</p>
+                ) : (
+                  <div className="space-y-3">
+                    {upcomingBookings.map((booking, i) => renderBookingCard(booking, i))}
                   </div>
-                </MotionItem>
-              ))}
+                )}
+              </section>
+
+              {/* Past Speaking Sessions (PDF §11) */}
+              {pastBookings.length > 0 && (
+                <section>
+                  <LearnerSurfaceSectionHeader title="Past Speaking Sessions" />
+                  <div className="space-y-3">
+                    {pastBookings.map((booking, i) => renderBookingCard(booking, i))}
+                  </div>
+                </section>
+              )}
             </div>
           )}
         </>
       )}
+
+      {/* Cancellation policy confirmation modal (PDF §12) */}
+      <Modal open={cancelConfirm !== null} onClose={() => { if (!cancelInProgress) setCancelConfirm(null); }} title="Cancel Speaking session" size="sm">
+        <div className="space-y-4">
+          <p className="text-sm text-muted">{CANCELLATION_POLICY_TEXT}</p>
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <button type="button" onClick={() => setCancelConfirm(null)} disabled={cancelInProgress}
+              className="rounded-lg border border-border px-4 py-2 text-sm font-medium text-muted hover:text-navy disabled:opacity-50">
+              Keep booking
+            </button>
+            <button type="button" onClick={handleCancelConfirmed} disabled={cancelInProgress}
+              className="rounded-lg bg-danger px-4 py-2 text-sm font-medium text-white hover:bg-danger/90 disabled:opacity-50">
+              {cancelInProgress ? 'Cancelling...' : 'Confirm cancellation'}
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Reschedule policy confirmation modal (PDF §12) */}
+      <Modal open={rescheduleConfirmOpen} onClose={() => { if (!bookingInProgress) setRescheduleConfirmOpen(false); }} title="Reschedule Speaking session" size="sm">
+        <div className="space-y-4">
+          <p className="text-sm text-muted">{RESCHEDULE_POLICY_TEXT}</p>
+          {selectedSlot && (
+            <p className="text-xs text-muted/60">
+              New time: {formatLocalAndUkTime(selectedSlot.startTimeUtc)}
+            </p>
+          )}
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <button type="button" onClick={() => setRescheduleConfirmOpen(false)} disabled={bookingInProgress}
+              className="rounded-lg border border-border px-4 py-2 text-sm font-medium text-muted hover:text-navy disabled:opacity-50">
+              Back
+            </button>
+            <button type="button" onClick={handleReschedule} disabled={bookingInProgress}
+              className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary/90 dark:bg-violet-700 dark:hover:bg-violet-600 disabled:opacity-50">
+              {bookingInProgress ? 'Processing...' : 'Confirm reschedule'}
+            </button>
+          </div>
+        </div>
+      </Modal>
     </LearnerDashboardShell>
   );
 }

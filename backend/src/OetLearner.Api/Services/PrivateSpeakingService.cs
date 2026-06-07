@@ -24,6 +24,7 @@ public sealed class PrivateSpeakingService(
     PrivateSpeakingCalendarService calendarService,
     IEffectiveEntitlementResolver entitlementResolver,
     IStripeService stripeService,
+    PlatformLinkService platformLinks,
     TimeProvider timeProvider,
     ILogger<PrivateSpeakingService> logger)
 {
@@ -190,6 +191,27 @@ public sealed class PrivateSpeakingService(
         await db.SaveChangesAsync(ct);
         await AuditAsync(null, adminId, "admin", "availability_rule_created",
             $"Tutor: {tutorProfileId}, Day: {dayOfWeek}, {startTime}-{endTime}", ct);
+        return rule;
+    }
+
+    public async Task<PrivateSpeakingAvailabilityRule> UpdateAvailabilityRuleAsync(
+        string ruleId, int dayOfWeek, string startTime, string endTime,
+        DateOnly? effectiveFrom, DateOnly? effectiveTo, bool isActive,
+        string actorId, CancellationToken ct)
+    {
+        var rule = await db.PrivateSpeakingAvailabilityRules.FindAsync([ruleId], ct)
+            ?? throw new InvalidOperationException("Availability rule not found.");
+
+        rule.DayOfWeek = dayOfWeek;
+        rule.StartTime = startTime;
+        rule.EndTime = endTime;
+        rule.EffectiveFrom = effectiveFrom;
+        rule.EffectiveTo = effectiveTo;
+        rule.IsActive = isActive;
+
+        await db.SaveChangesAsync(ct);
+        await AuditAsync(null, actorId, "admin", "availability_rule_updated",
+            $"Rule: {ruleId}, Day: {dayOfWeek}, {startTime}-{endTime}, Active: {isActive}", ct);
         return rule;
     }
 
@@ -444,6 +466,7 @@ public sealed class PrivateSpeakingService(
         string learnerUserId, string tutorProfileId,
         DateTimeOffset sessionStartUtc, int durationMinutes,
         string learnerTimezone, string? learnerNotes,
+        string? professionTrack,
         string idempotencyKey, CancellationToken ct)
     {
         var config = await GetConfigAsync(ct);
@@ -570,6 +593,7 @@ public sealed class PrivateSpeakingService(
             ReservationExpiresAt = null,
             IdempotencyKey = scopedIdempotencyKey,
             LearnerNotes = learnerNotes,
+            ProfessionTrack = NormalizeProfessionTrack(professionTrack),
             CreatedAt = now,
             UpdatedAt = now
         };
@@ -634,6 +658,38 @@ public sealed class PrivateSpeakingService(
         await AuditAsync(booking.Id, "system", "system", "payment_confirmed",
             $"Stripe session: {stripeCheckoutSessionId}", ct);
 
+        // Same-day reschedule penalty paid → finalize the reschedule by cancelling
+        // the original (which has been holding the slot). Entitlement is NOT restored:
+        // RescheduledToBookingId is set, so it carried to this replacement.
+        if (booking.RescheduledFromBookingId is not null)
+        {
+            var original = await db.PrivateSpeakingBookings
+                .FirstOrDefaultAsync(b => b.Id == booking.RescheduledFromBookingId, ct);
+            if (original is not null && original.Status != PrivateSpeakingBookingStatus.Cancelled)
+            {
+                var nowReschedule = timeProvider.GetUtcNow();
+                original.Status = PrivateSpeakingBookingStatus.Cancelled;
+                original.CancellationReason = "rescheduled";
+                original.CancelledAt = nowReschedule;
+                original.UpdatedAt = nowReschedule;
+                await db.SaveChangesAsync(ct);
+
+                if (original.ZoomMeetingId.HasValue)
+                {
+                    try { await zoomService.DeleteMeetingAsync(original.ZoomMeetingId.Value, ct); }
+                    catch (Exception ex) { logger.LogWarning(ex, "Failed to delete Zoom meeting {MeetingId} for rescheduled-original booking", original.ZoomMeetingId); }
+                }
+
+                QueueCalendarSyncJob(original.Id);
+                await db.SaveChangesAsync(ct);
+            }
+
+            // PDF §10 reschedule confirmation for the same-day penalty path. The
+            // confirmed replacement carries PenaltyAmountMinorUnits, so the learner
+            // message surfaces the penalty amount.
+            await SendRescheduleConfirmationNotificationsAsync(booking.Id, ct);
+        }
+
         QueueBookingPostCommitJobs(booking.Id, includeCalendarSync: false);
         await db.SaveChangesAsync(ct);
 
@@ -655,6 +711,8 @@ public sealed class PrivateSpeakingService(
         booking.UpdatedAt = timeProvider.GetUtcNow();
         await db.SaveChangesAsync(ct);
 
+        await RevertRescheduleIfPendingAsync(booking, ct);
+
         await AuditAsync(booking.Id, "system", "system", "payment_failed",
             $"Stripe session: {stripeCheckoutSessionId}", ct);
     }
@@ -674,8 +732,38 @@ public sealed class PrivateSpeakingService(
         booking.UpdatedAt = timeProvider.GetUtcNow();
         await db.SaveChangesAsync(ct);
 
+        await RevertRescheduleIfPendingAsync(booking, ct);
+
         await AuditAsync(booking.Id, "system", "system", "checkout_expired",
             $"Stripe session: {stripeCheckoutSessionId}", ct);
+    }
+
+    /// <summary>
+    /// When a same-day reschedule penalty checkout expires or fails, abort the
+    /// reschedule: clear the original's <see cref="PrivateSpeakingBooking.RescheduledToBookingId"/>
+    /// link so the original booking stays intact/Confirmed and the learner keeps
+    /// their slot. No penalty is applied.
+    /// </summary>
+    private async Task RevertRescheduleIfPendingAsync(PrivateSpeakingBooking replacement, CancellationToken ct)
+    {
+        if (replacement.RescheduledFromBookingId is null) return;
+
+        var original = await db.PrivateSpeakingBookings
+            .FirstOrDefaultAsync(b => b.Id == replacement.RescheduledFromBookingId, ct);
+        if (original is null) return;
+
+        original.RescheduledToBookingId = null;
+        original.UpdatedAt = timeProvider.GetUtcNow();
+
+        // The replacement only inherited the entitlement reference from the original; it never
+        // independently consumed a credit. Now that the reschedule is aborted, neutralize the
+        // replacement's entitlement fields so a later cancellation of this Expired/Failed row
+        // cannot restore a phantom credit (the original retains the real consumption).
+        replacement.EntitlementConsumed = false;
+        replacement.EntitlementSubscriptionId = null;
+        replacement.UpdatedAt = timeProvider.GetUtcNow();
+
+        await db.SaveChangesAsync(ct);
     }
 
     // ── Zoom Meeting Creation ───────────────────────────────────────────
@@ -808,49 +896,135 @@ public sealed class PrivateSpeakingService(
             ct);
     }
 
+    /// <summary>
+    /// PDF §10 reschedule confirmation: notify the learner and the tutor that a
+    /// private speaking session has been moved to a new start time. For a same-day
+    /// penalty reschedule the learner message also surfaces the penalty amount.
+    /// </summary>
+    public async Task SendRescheduleConfirmationNotificationsAsync(string bookingId, CancellationToken ct)
+    {
+        var booking = await db.PrivateSpeakingBookings
+            .Include(b => b.TutorProfile)
+            .FirstOrDefaultAsync(b => b.Id == bookingId, ct);
+
+        if (booking is null) return;
+
+        var sessionTime = booking.SessionStartUtc.ToString("yyyy-MM-dd HH:mm 'UTC'");
+        var dedupeBucket = booking.UpdatedAt.ToString("yyyyMMddHHmm");
+
+        // Penalty phrase appended to the learner body (empty when no penalty applies).
+        var penaltyText = booking.PenaltyAmountMinorUnits is int penaltyMinor && penaltyMinor > 0
+            ? $" A reschedule penalty of {FormatCurrency(penaltyMinor, booking.Currency)} was applied."
+            : string.Empty;
+
+        // Notify learner
+        await notificationService.CreateForLearnerAsync(
+            NotificationEventKey.LearnerPrivateSpeakingRescheduled,
+            booking.LearnerUserId,
+            "private_speaking_booking",
+            booking.Id,
+            dedupeBucket,
+            new Dictionary<string, object?>
+            {
+                ["sessionTime"] = sessionTime,
+                ["bookingId"] = booking.Id,
+                ["penalty"] = penaltyText
+            },
+            ct);
+
+        // Notify tutor
+        if (booking.TutorProfile?.ExpertUserId is not null)
+        {
+            await notificationService.CreateForExpertAsync(
+                NotificationEventKey.ExpertPrivateSpeakingRescheduled,
+                booking.TutorProfile.ExpertUserId,
+                "private_speaking_booking",
+                booking.Id,
+                dedupeBucket,
+                new Dictionary<string, object?>
+                {
+                    ["sessionTime"] = sessionTime,
+                    ["bookingId"] = booking.Id
+                },
+                ct);
+        }
+    }
+
+    /// <summary>Format a minor-units amount as "{CURRENCY} {amount:0.00}" (e.g. "GBP 25.00").</summary>
+    private static string FormatCurrency(int minorUnits, string currency)
+        => $"{currency} {(minorUnits / 100.0).ToString("0.00", CultureInfo.InvariantCulture)}";
+
     // ── Reminder Processing ─────────────────────────────────────────────
 
-    /// <summary>Process scheduled reminders for upcoming sessions.</summary>
+    /// <summary>
+    /// Process scheduled reminders for upcoming sessions. PDF §10 mandates reminders
+    /// at 24h, 1h, and 15 minutes before the session start, so offsets are expressed
+    /// in MINUTES (default [1440, 60, 15]) to support sub-hour granularity.
+    /// </summary>
     public async Task ProcessRemindersAsync(CancellationToken ct)
     {
         var config = await GetConfigAsync(ct);
         var now = timeProvider.GetUtcNow();
 
-        var reminderOffsets = JsonSerializer.Deserialize<int[]>(config.ReminderOffsetsHoursJson) ?? [24, 1];
+        int[] reminderOffsets;
+        try
+        {
+            reminderOffsets = JsonSerializer.Deserialize<int[]>(config.ReminderOffsetsMinutesJson) ?? [1440, 60, 15];
+        }
+        catch (JsonException ex)
+        {
+            logger.LogWarning(ex, "Malformed ReminderOffsetsMinutesJson '{Json}'; falling back to default offsets [1440, 60, 15].", config.ReminderOffsetsMinutesJson);
+            reminderOffsets = [1440, 60, 15];
+        }
+        if (reminderOffsets.Length == 0) return;
+        var maxOffset = reminderOffsets.Max();
 
         var upcomingBookings = await db.PrivateSpeakingBookings
             .Include(b => b.TutorProfile)
             .Where(b => (b.Status == PrivateSpeakingBookingStatus.Confirmed
                 || b.Status == PrivateSpeakingBookingStatus.ZoomCreated)
                 && b.SessionStartUtc > now
-                && b.SessionStartUtc <= now.AddHours(reminderOffsets.Max() + 1))
+                && b.SessionStartUtc <= now.AddMinutes(maxOffset + 5))
             .ToListAsync(ct);
 
         foreach (var booking in upcomingBookings)
         {
-            var sentReminders = JsonSerializer.Deserialize<List<int>>(booking.RemindersSentJson) ?? [];
-            var hoursUntilSession = (booking.SessionStartUtc - now).TotalHours;
-
-            foreach (var offsetHours in reminderOffsets)
+            List<int> sentReminders;
+            try
             {
-                if (sentReminders.Contains(offsetHours)) continue;
-                if (hoursUntilSession > offsetHours) continue;
+                sentReminders = JsonSerializer.Deserialize<List<int>>(booking.RemindersSentJson) ?? [];
+            }
+            catch (JsonException ex)
+            {
+                logger.LogWarning(ex, "Malformed RemindersSentJson '{Json}' on booking {BookingId}; treating as no reminders sent.", booking.RemindersSentJson, booking.Id);
+                sentReminders = [];
+            }
+            var minutesUntilSession = (booking.SessionStartUtc - now).TotalMinutes;
+            var changed = false;
 
-                // Send reminder
+            // Process descending so the nearest-due offset fires last and any
+            // collapsed multi-offset window (e.g. a booking already 15 min out)
+            // marks every elapsed offset.
+            foreach (var offsetMinutes in reminderOffsets.OrderByDescending(o => o))
+            {
+                if (sentReminders.Contains(offsetMinutes)) continue;
+                if (minutesUntilSession > offsetMinutes) continue;
+
                 var tutorName = booking.TutorProfile?.DisplayName ?? "Tutor";
                 var sessionTime = booking.SessionStartUtc.ToString("yyyy-MM-dd HH:mm 'UTC'");
+                var timeUntil = FormatReminderTimeUntil(offsetMinutes);
 
                 await notificationService.CreateForLearnerAsync(
                     NotificationEventKey.LearnerPrivateSpeakingReminder,
                     booking.LearnerUserId,
                     "private_speaking_reminder",
                     booking.Id,
-                    $"reminder-{offsetHours}h",
+                    $"reminder-{offsetMinutes}m",
                     new Dictionary<string, object?>
                     {
                         ["tutorName"] = tutorName,
                         ["sessionTime"] = sessionTime,
-                        ["hoursUntil"] = offsetHours.ToString(),
+                        ["timeUntil"] = timeUntil,
                         ["bookingId"] = booking.Id
                     },
                     ct);
@@ -862,24 +1036,54 @@ public sealed class PrivateSpeakingService(
                         booking.TutorProfile.ExpertUserId,
                         "private_speaking_reminder",
                         booking.Id,
-                        $"reminder-{offsetHours}h",
+                        $"reminder-{offsetMinutes}m",
                         new Dictionary<string, object?>
                         {
                             ["sessionTime"] = sessionTime,
-                            ["hoursUntil"] = offsetHours.ToString(),
+                            ["timeUntil"] = timeUntil,
                             ["bookingId"] = booking.Id
                         },
                         ct);
                 }
 
-                sentReminders.Add(offsetHours);
+                sentReminders.Add(offsetMinutes);
+                changed = true;
             }
 
-            booking.RemindersSentJson = JsonSerializer.Serialize(sentReminders);
-            booking.UpdatedAt = timeProvider.GetUtcNow();
+            if (changed)
+            {
+                booking.RemindersSentJson = JsonSerializer.Serialize(sentReminders);
+                booking.UpdatedAt = timeProvider.GetUtcNow();
+            }
         }
 
         await db.SaveChangesAsync(ct);
+    }
+
+    /// <summary>
+    /// Render a friendly "time until session" phrase from a minute offset, matching
+    /// the PDF §10 wording: 1440 → "24 hours", 60 → "1 hour", 15 → "15 minutes".
+    /// General rule for other values: whole days → "{n} day(s)", whole hours →
+    /// "{n} hour(s)", else "{n} minute(s)".
+    /// </summary>
+    private static string FormatReminderTimeUntil(int offsetMinutes)
+    {
+        // PDF mandates the day-before reminder be phrased as "24 hours", not "1 day".
+        if (offsetMinutes == 1440) return "24 hours";
+
+        if (offsetMinutes >= 1440 && offsetMinutes % 1440 == 0)
+        {
+            var days = offsetMinutes / 1440;
+            return days == 1 ? "1 day" : $"{days} days";
+        }
+
+        if (offsetMinutes >= 60 && offsetMinutes % 60 == 0)
+        {
+            var hours = offsetMinutes / 60;
+            return hours == 1 ? "1 hour" : $"{hours} hours";
+        }
+
+        return offsetMinutes == 1 ? "1 minute" : $"{offsetMinutes} minutes";
     }
 
     /// <summary>Expire reservation-only bookings that timed out without payment.</summary>
@@ -903,6 +1107,211 @@ public sealed class PrivateSpeakingService(
 
         if (staleBookings.Count > 0)
             await db.SaveChangesAsync(ct);
+
+        // A same-day reschedule penalty replacement is a PendingPayment row with a reservation
+        // timeout. If its Stripe checkout never resolves and this sweep (the safety net) expires
+        // it, mirror the webhook revert so the original booking is freed and no credit is stranded.
+        // RevertRescheduleIfPendingAsync is a no-op for normal (non-reschedule) reservations.
+        foreach (var booking in staleBookings)
+        {
+            await RevertRescheduleIfPendingAsync(booking, ct);
+        }
+    }
+
+    // ── No-show Sweep ───────────────────────────────────────────────────
+
+    /// <summary>Grace period (minutes) after a session's scheduled end before the
+    /// sweep is allowed to flag a non-attending booking as a no-show. Gives late
+    /// joiners and webhook-delivery lag room before the booking is forfeited.</summary>
+    private const int NoShowGraceMinutes = 15;
+
+    /// <summary>Maximum bookings processed per sweep pass, to bound DB/notification work.</summary>
+    private const int NoShowSweepBatchCap = 500;
+
+    /// <summary>
+    /// T5 (PDF §3.3.6/§13) — automatic no-show sweep. Finds bookings whose session
+    /// has ended (start + duration + <see cref="NoShowGraceMinutes"/> grace is in the
+    /// past), are still in an "expected to run" state (Confirmed/ZoomCreated/InProgress),
+    /// and where the learner's attendance was never verified by the Zoom attendance
+    /// webhook (<see cref="PrivateSpeakingBooking.AttendanceVerified"/> == false), and
+    /// marks each as a no-show via <see cref="MarkNoShowAsync"/> (which also emits the
+    /// learner + tutor no-show notifications). Each booking is processed in its own
+    /// try/catch so a single failure does not abort the batch.
+    /// </summary>
+    public async Task ProcessNoShowSweepAsync(CancellationToken ct)
+    {
+        var now = timeProvider.GetUtcNow();
+
+        // The end-of-session predicate (SessionStartUtc + DurationMinutes + grace < now)
+        // cannot be translated to SQL with AddMinutes on an entity column, so filter on
+        // status/attendance in the DB and apply the time cutoff in memory. The candidate
+        // set is small (only sessions still in a running state), so this is cheap.
+        var candidates = await db.PrivateSpeakingBookings
+            .Where(b => (b.Status == PrivateSpeakingBookingStatus.Confirmed
+                    || b.Status == PrivateSpeakingBookingStatus.ZoomCreated
+                    || b.Status == PrivateSpeakingBookingStatus.InProgress)
+                && !b.AttendanceVerified)
+            .OrderBy(b => b.SessionStartUtc)
+            .Take(NoShowSweepBatchCap)
+            .ToListAsync(ct);
+
+        var due = candidates
+            .Where(b => b.SessionStartUtc.AddMinutes(b.DurationMinutes + NoShowGraceMinutes) < now)
+            .ToList();
+
+        foreach (var booking in due)
+        {
+            try
+            {
+                var (success, error) = await MarkNoShowAsync(booking.Id, "system", "system", ct);
+                if (!success)
+                {
+                    logger.LogWarning(
+                        "No-show sweep skipped booking {BookingId}: {Error}", booking.Id, error);
+                }
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                logger.LogError(ex, "No-show sweep failed to mark booking {BookingId}", booking.Id);
+            }
+        }
+    }
+
+    // ── Zoom Attendance Webhook ─────────────────────────────────────────
+
+    /// <summary>
+    /// T5 (PDF §3.3.6/§13) — apply a Zoom meeting webhook event to a Private
+    /// Speaking booking's attendance fields. Invoked from the shared Zoom webhook
+    /// receiver (<c>LiveClassService.HandleZoomWebhookAsync</c>), which has already
+    /// verified the signature, handled the <c>endpoint.url_validation</c> handshake,
+    /// and deduped the delivery — so this method only mutates booking state.
+    ///
+    /// <para><b>Attendance-matching rule (documented so the no-show sweep is
+    /// unambiguous):</b> a booking is treated as "attended"
+    /// (<see cref="PrivateSpeakingBooking.AttendanceVerified"/> = true) only when a
+    /// <c>meeting.participant_joined</c> event arrives whose participant email
+    /// matches the booking learner's email (case-insensitive). Any join still
+    /// stamps <see cref="PrivateSpeakingBooking.AttendanceJoinedAt"/> as a
+    /// diagnostic fallback, but a host/unknown/email-less join never flips
+    /// <c>AttendanceVerified</c>. The sweep keys exclusively off
+    /// <c>AttendanceVerified</c>, so only a verified learner join prevents a
+    /// no-show. <see cref="PrivateSpeakingBooking.AttendanceLeftAt"/> is recorded
+    /// only for the matched learner.</para>
+    /// </summary>
+    public async Task ApplyZoomAttendanceWebhookAsync(string eventType, JsonElement root, CancellationToken ct)
+    {
+        if (eventType is not ("meeting.participant_joined" or "meeting.participant_left"))
+        {
+            // meeting.ended and all other events are no-ops here — the sweep, not
+            // the meeting-ended signal, decides no-shows.
+            return;
+        }
+
+        if (!root.TryGetProperty("payload", out var payload) || payload.ValueKind != JsonValueKind.Object
+            || !payload.TryGetProperty("object", out var meetingObject) || meetingObject.ValueKind != JsonValueKind.Object)
+        {
+            return;
+        }
+
+        var meetingId = TryReadMeetingId(meetingObject);
+        if (meetingId is null) return;
+
+        var booking = await db.PrivateSpeakingBookings
+            .FirstOrDefaultAsync(b => b.ZoomMeetingId == meetingId.Value, ct);
+        if (booking is null) return;
+
+        var (participantEmail, eventTime) = ReadZoomParticipant(
+            meetingObject,
+            timeField: eventType == "meeting.participant_joined" ? "join_time" : "leave_time");
+
+        var learnerEmail = await db.Users.AsNoTracking()
+            .Where(u => u.Id == booking.LearnerUserId)
+            .Select(u => u.Email)
+            .FirstOrDefaultAsync(ct);
+        var isLearner = !string.IsNullOrWhiteSpace(participantEmail)
+            && !string.IsNullOrWhiteSpace(learnerEmail)
+            && string.Equals(participantEmail, learnerEmail, StringComparison.OrdinalIgnoreCase);
+
+        var changed = false;
+        if (eventType == "meeting.participant_joined")
+        {
+            // Diagnostic fallback: first observed join wins, regardless of who joined.
+            if (booking.AttendanceJoinedAt is null)
+            {
+                booking.AttendanceJoinedAt = eventTime;
+                changed = true;
+            }
+            // Verified attendance requires a learner-email match.
+            if (isLearner && !booking.AttendanceVerified)
+            {
+                booking.AttendanceVerified = true;
+                changed = true;
+            }
+        }
+        else if (isLearner)
+        {
+            // Only record the learner's leave time.
+            booking.AttendanceLeftAt = eventTime;
+            changed = true;
+        }
+
+        if (changed)
+        {
+            booking.UpdatedAt = timeProvider.GetUtcNow();
+            await db.SaveChangesAsync(ct);
+            logger.LogInformation(
+                "Zoom {EventType} applied to Private Speaking booking {BookingId} (verified={Verified})",
+                eventType, booking.Id, booking.AttendanceVerified);
+        }
+    }
+
+    /// <summary>Read the Zoom meeting id (sent as a numeric string or number under <c>payload.object.id</c>).</summary>
+    private static long? TryReadMeetingId(JsonElement meetingObject)
+    {
+        if (!meetingObject.TryGetProperty("id", out var idProp)) return null;
+        return idProp.ValueKind switch
+        {
+            JsonValueKind.String => long.TryParse(idProp.GetString(), out var s) ? s : null,
+            JsonValueKind.Number => idProp.TryGetInt64(out var n) ? n : null,
+            _ => null
+        };
+    }
+
+    /// <summary>
+    /// Extract the participant email + event timestamp from <c>payload.object.participant</c>.
+    /// Zoom uses <c>user_email</c> for the participant address (matching the Live Class
+    /// receiver). Falls back to <c>email</c>. The timestamp falls back to "now" when Zoom
+    /// omits or sends an unparseable join/leave time.
+    /// </summary>
+    private (string? Email, DateTimeOffset Timestamp) ReadZoomParticipant(JsonElement meetingObject, string timeField)
+    {
+        string? email = null;
+        var timestamp = timeProvider.GetUtcNow();
+
+        if (meetingObject.TryGetProperty("participant", out var participant)
+            && participant.ValueKind == JsonValueKind.Object)
+        {
+            email = ReadJsonString(participant, "user_email") ?? ReadJsonString(participant, "email");
+            var rawTime = ReadJsonString(participant, timeField);
+            if (!string.IsNullOrWhiteSpace(rawTime)
+                && DateTimeOffset.TryParse(
+                    rawTime,
+                    CultureInfo.InvariantCulture,
+                    System.Globalization.DateTimeStyles.AdjustToUniversal | System.Globalization.DateTimeStyles.AssumeUniversal,
+                    out var parsed))
+            {
+                timestamp = parsed;
+            }
+        }
+
+        return (email, timestamp);
+    }
+
+    private static string? ReadJsonString(JsonElement el, string name)
+    {
+        if (el.ValueKind != JsonValueKind.Object) return null;
+        if (!el.TryGetProperty(name, out var prop)) return null;
+        return prop.ValueKind == JsonValueKind.String ? prop.GetString() : null;
     }
 
     // ── Cancellation ────────────────────────────────────────────────────
@@ -1113,14 +1522,27 @@ public sealed class PrivateSpeakingService(
             return BookingCheckoutResult.Fail("This booking has already been rescheduled.");
 
         var now = timeProvider.GetUtcNow();
+
+        // PDF §2.3 / §9 reschedule tiers:
+        //  • After the session has started → rejected.
+        //  • >24h before start, OR <24h but a DIFFERENT calendar day (learner tz)
+        //    → FREE reschedule (entitlement carries, no payment).
+        //  • SAME calendar day (learner tz), before start → 50% Stripe penalty
+        //    (entitlement carries; learner pays the penalty to confirm the slot).
+        if (now >= original.SessionStartUtc)
+            return BookingCheckoutResult.Fail("This session has already started and can no longer be rescheduled.");
+
         var hoursUntilOriginal = (original.SessionStartUtc - now).TotalHours;
-        if (hoursUntilOriginal < config.RescheduleWindowHours)
-            return BookingCheckoutResult.Fail($"Reschedules must be made at least {config.RescheduleWindowHours} hours before the session.");
+        var sameCalendarDay = AreSameCalendarDayInTimezone(now, original.SessionStartUtc, original.LearnerTimezone);
 
         var profile = original.TutorProfile
             ?? await db.PrivateSpeakingTutorProfiles.FindAsync([original.TutorProfileId], ct);
         if (profile is null || !profile.IsActive)
             return BookingCheckoutResult.Fail("Tutor is not available.");
+
+        // Penalty base = the tutor's catalog price (NOT original.PriceMinorUnits,
+        // which is 0 for entitlement-funded bookings).
+        var sessionPriceMinorUnits = profile.PriceOverrideMinorUnits ?? config.DefaultPriceMinorUnits;
 
         var minBookingTime = now.AddHours(config.MinBookingLeadTimeHours);
         if (newSessionStartUtc <= minBookingTime)
@@ -1169,61 +1591,144 @@ public sealed class PrivateSpeakingService(
                 return BookingCheckoutResult.Fail("Tutor calendar shows this slot is no longer available. Please select another slot.");
         }
 
-        var replacement = new PrivateSpeakingBooking
+        // FREE tier: outside the free window, OR inside the window but a different
+        // calendar day in the learner's timezone.
+        var isFreeTier = hoursUntilOriginal > config.RescheduleFreeWindowHours
+            || (hoursUntilOriginal <= config.RescheduleFreeWindowHours && !sameCalendarDay);
+
+        if (isFreeTier)
+        {
+            var freeReplacement = new PrivateSpeakingBooking
+            {
+                Id = $"psb-{Guid.NewGuid():N}",
+                LearnerUserId = learnerUserId,
+                TutorProfileId = original.TutorProfileId,
+                Status = PrivateSpeakingBookingStatus.Confirmed,
+                SessionStartUtc = newSessionStartUtc,
+                DurationMinutes = durationMinutes,
+                TutorTimezone = profile.Timezone,
+                LearnerTimezone = learnerTimezone,
+                PriceMinorUnits = original.PriceMinorUnits,
+                Currency = original.Currency,
+                PaymentStatus = original.PaymentStatus,
+                PaymentConfirmedAt = original.PaymentConfirmedAt,
+                EntitlementSubscriptionId = original.EntitlementSubscriptionId,
+                EntitlementConsumed = original.EntitlementConsumed,
+                EntitlementConsumedAt = original.EntitlementConsumedAt,
+                StripeCheckoutSessionId = null,
+                LearnerNotes = learnerNotes ?? original.LearnerNotes,
+                IdempotencyKey = scopedIdempotencyKey,
+                RescheduledFromBookingId = original.Id,
+                CreatedAt = now,
+                UpdatedAt = now
+            };
+
+            db.PrivateSpeakingBookings.Add(freeReplacement);
+            original.Status = PrivateSpeakingBookingStatus.Cancelled;
+            original.CancelledBy = learnerUserId;
+            original.CancellationReason = "rescheduled";
+            original.CancelledAt = now;
+            original.RescheduledToBookingId = freeReplacement.Id;
+            original.UpdatedAt = now;
+
+            await db.SaveChangesAsync(ct);
+            await AuditAsync(original.Id, learnerUserId, "learner", "booking_rescheduled_from", freeReplacement.Id, ct);
+            await AuditAsync(freeReplacement.Id, learnerUserId, "learner", "booking_rescheduled_to", original.Id, ct);
+            QueueCalendarSyncJob(original.Id);
+            QueueBookingPostCommitJobs(freeReplacement.Id, includeCalendarSync: false);
+            await db.SaveChangesAsync(ct);
+            await transaction.CommitAsync(ct);
+
+            if (original.ZoomMeetingId.HasValue)
+            {
+                try { await zoomService.DeleteMeetingAsync(original.ZoomMeetingId.Value, ct); }
+                catch (Exception ex) { logger.LogWarning(ex, "Failed to delete Zoom meeting {MeetingId} for rescheduled booking", original.ZoomMeetingId); }
+            }
+
+            // PDF §10 reschedule confirmation (free tier → no penalty token).
+            await SendRescheduleConfirmationNotificationsAsync(freeReplacement.Id, ct);
+
+            return new BookingCheckoutResult(
+                true,
+                null,
+                freeReplacement.Id,
+                null,
+                null,
+                freeReplacement.EntitlementConsumed,
+                null);
+        }
+
+        // SAME-DAY PENALTY tier: 50% of the session price via an ad-hoc Stripe
+        // checkout. The original booking holds the slot (stays Confirmed/ZoomCreated)
+        // until the penalty is paid; payment confirmation flips it to Cancelled.
+        var penalty = (long)Math.Ceiling(sessionPriceMinorUnits * config.RescheduleSameDayPenaltyPercent / 100.0);
+
+        var penaltyReplacement = new PrivateSpeakingBooking
         {
             Id = $"psb-{Guid.NewGuid():N}",
             LearnerUserId = learnerUserId,
             TutorProfileId = original.TutorProfileId,
-            Status = PrivateSpeakingBookingStatus.Confirmed,
+            Status = PrivateSpeakingBookingStatus.PendingPayment,
             SessionStartUtc = newSessionStartUtc,
             DurationMinutes = durationMinutes,
             TutorTimezone = profile.Timezone,
             LearnerTimezone = learnerTimezone,
             PriceMinorUnits = original.PriceMinorUnits,
-            Currency = original.Currency,
-            PaymentStatus = original.PaymentStatus,
-            PaymentConfirmedAt = original.PaymentConfirmedAt,
+            Currency = config.Currency,
+            PaymentStatus = PrivateSpeakingPaymentStatus.Pending,
             EntitlementSubscriptionId = original.EntitlementSubscriptionId,
             EntitlementConsumed = original.EntitlementConsumed,
             EntitlementConsumedAt = original.EntitlementConsumedAt,
+            PenaltyAmountMinorUnits = (int)penalty,
+            RescheduledFromBookingId = original.Id,
+            ReservationExpiresAt = now.AddMinutes(config.ReservationTimeoutMinutes),
             StripeCheckoutSessionId = null,
             LearnerNotes = learnerNotes ?? original.LearnerNotes,
             IdempotencyKey = scopedIdempotencyKey,
-            RescheduledFromBookingId = original.Id,
             CreatedAt = now,
             UpdatedAt = now
         };
 
-        db.PrivateSpeakingBookings.Add(replacement);
-        original.Status = PrivateSpeakingBookingStatus.Cancelled;
-        original.CancelledBy = learnerUserId;
-        original.CancellationReason = "rescheduled";
-        original.CancelledAt = now;
-        original.RescheduledToBookingId = replacement.Id;
+        var learner = await db.Users.FirstOrDefaultAsync(user => user.Id == learnerUserId, ct);
+        if (learner is null)
+            return BookingCheckoutResult.Fail("Learner profile not found.");
+
+        var customerId = await stripeService.EnsureCustomerAsync(learnerUserId, learner.Email, ct);
+        var (penaltySessionId, penaltyUrl) = await stripeService.CreateAdHocPaymentCheckoutSessionAsync(
+            customerId,
+            learnerUserId,
+            learner.Email,
+            config.Currency.ToLowerInvariant(),
+            penalty,
+            "OET same-day reschedule penalty (50%)",
+            platformLinks.BuildWebUrl("/private-speaking?reschedule=success"),
+            platformLinks.BuildWebUrl("/private-speaking?reschedule=cancelled"),
+            idempotencyKey: $"{scopedIdempotencyKey}-penalty",
+            metadata: new Dictionary<string, string> { ["privateSpeakingBookingId"] = penaltyReplacement.Id },
+            ct);
+        penaltyReplacement.StripeCheckoutSessionId = penaltySessionId;
+
+        db.PrivateSpeakingBookings.Add(penaltyReplacement);
+
+        // Mark the link so entitlement is not double-restored, but keep the
+        // original live (slot held) until the penalty payment confirms.
+        original.RescheduledToBookingId = penaltyReplacement.Id;
         original.UpdatedAt = now;
 
         await db.SaveChangesAsync(ct);
-        await AuditAsync(original.Id, learnerUserId, "learner", "booking_rescheduled_from", replacement.Id, ct);
-        await AuditAsync(replacement.Id, learnerUserId, "learner", "booking_rescheduled_to", original.Id, ct);
-        QueueCalendarSyncJob(original.Id);
-        QueueBookingPostCommitJobs(replacement.Id, includeCalendarSync: false);
+        await AuditAsync(penaltyReplacement.Id, learnerUserId, "learner", "booking_reschedule_pending_payment",
+            $"Original: {original.Id}, Penalty minor units: {penalty}, Stripe session: {penaltySessionId}", ct);
         await db.SaveChangesAsync(ct);
         await transaction.CommitAsync(ct);
 
-        if (original.ZoomMeetingId.HasValue)
-        {
-            try { await zoomService.DeleteMeetingAsync(original.ZoomMeetingId.Value, ct); }
-            catch (Exception ex) { logger.LogWarning(ex, "Failed to delete Zoom meeting {MeetingId} for rescheduled booking", original.ZoomMeetingId); }
-        }
-
         return new BookingCheckoutResult(
-            true,
-            null,
-            replacement.Id,
-            null,
-            null,
-            replacement.EntitlementConsumed,
-            null);
+            Success: true,
+            Error: null,
+            BookingId: penaltyReplacement.Id,
+            CheckoutSessionId: penaltySessionId,
+            CheckoutUrl: penaltyUrl,
+            EntitlementUsed: true,
+            SpeakingSessionsRemaining: null);
     }
 
     // ── Learner Queries ─────────────────────────────────────────────────
@@ -1453,6 +1958,325 @@ public sealed class PrivateSpeakingService(
 
         await db.SaveChangesAsync(ct);
         await AuditAsync(booking.Id, actorId, "system", "session_completed", null, ct);
+    }
+
+    // ── Admin / Tutor Booking Actions (PDF §7.1 / §7.3 / §11) ───────────
+
+    /// <summary>
+    /// Admin edits booking metadata only: scheduling time, duration, profession
+    /// track, tutor notes. Only non-null fields are applied. This does NOT change
+    /// Status or payment state and does NOT re-sync Zoom — even if
+    /// <paramref name="sessionStartUtc"/> changes (use
+    /// <see cref="AdminManualRescheduleAsync"/> for a move that recreates Zoom).
+    /// </summary>
+    public async Task<PrivateSpeakingBooking?> AdminEditBookingAsync(
+        string bookingId, string adminId,
+        DateTimeOffset? sessionStartUtc, int? durationMinutes,
+        string? professionTrack, string? tutorNotes, CancellationToken ct)
+    {
+        var booking = await db.PrivateSpeakingBookings
+            .Include(b => b.TutorProfile)
+            .FirstOrDefaultAsync(b => b.Id == bookingId, ct);
+        if (booking is null) return null;
+
+        var changes = new List<string>();
+        if (sessionStartUtc.HasValue)
+        {
+            booking.SessionStartUtc = sessionStartUtc.Value;
+            changes.Add($"sessionStartUtc={sessionStartUtc.Value:O}");
+        }
+        if (durationMinutes.HasValue)
+        {
+            booking.DurationMinutes = durationMinutes.Value;
+            changes.Add($"durationMinutes={durationMinutes.Value}");
+        }
+        if (professionTrack is not null)
+        {
+            booking.ProfessionTrack = NormalizeProfessionTrack(professionTrack);
+            changes.Add($"professionTrack={booking.ProfessionTrack}");
+        }
+        if (tutorNotes is not null)
+        {
+            booking.TutorNotes = tutorNotes;
+            changes.Add("tutorNotes=updated");
+        }
+
+        booking.UpdatedAt = timeProvider.GetUtcNow();
+        await db.SaveChangesAsync(ct);
+        await AuditAsync(booking.Id, adminId, "admin", "admin_booking_edited",
+            changes.Count == 0 ? "no_changes" : string.Join(", ", changes), ct);
+        return booking;
+    }
+
+    /// <summary>
+    /// Admin forces a refund and/or entitlement return regardless of the
+    /// cancellation window. Restores an unconsumed-and-not-rescheduled entitlement,
+    /// issues a Stripe refund for direct-paid bookings, and flips the booking to
+    /// Refunded. Rejects bookings already in the Refunded state.
+    /// </summary>
+    public async Task<(bool Success, string? Error)> OverrideRefundAsync(
+        string bookingId, string adminId,
+        int? amountMinorUnits, string? reason, CancellationToken ct)
+    {
+        var booking = await db.PrivateSpeakingBookings.FindAsync([bookingId], ct);
+        if (booking is null) return (false, "Booking not found.");
+        if (booking.Status == PrivateSpeakingBookingStatus.Refunded)
+            return (false, "Booking has already been refunded.");
+
+        var now = timeProvider.GetUtcNow();
+        booking.RefundIssued = true;
+
+        if (booking.EntitlementConsumed
+            && booking.EntitlementRestoredAt is null
+            && booking.RescheduledToBookingId is null)
+        {
+            await RestoreSpeakingEntitlementAsync(booking, "admin_override_refund", ct);
+        }
+
+        if (!string.IsNullOrWhiteSpace(booking.StripePaymentIntentId) && booking.PriceMinorUnits > 0)
+        {
+            try
+            {
+                var refundId = await stripeService.CreateRefundAsync(
+                    booking.StripePaymentIntentId,
+                    amountMinorUnits ?? booking.PriceMinorUnits,
+                    reason ?? "admin_override",
+                    ct);
+                booking.StripeRefundId = refundId;
+                booking.RefundAmountMinorUnits = amountMinorUnits ?? booking.PriceMinorUnits;
+                booking.PaymentStatus = PrivateSpeakingPaymentStatus.Refunded;
+            }
+            catch (Exception ex)
+            {
+                // Do not fail the override — leave StripeRefundId null so an admin
+                // can retry the money refund out of band; the entitlement and
+                // status changes still apply.
+                logger.LogWarning(ex,
+                    "Stripe override refund failed for booking {BookingId}; override still completed",
+                    booking.Id);
+            }
+        }
+
+        booking.Status = PrivateSpeakingBookingStatus.Refunded;
+        booking.UpdatedAt = now;
+        await db.SaveChangesAsync(ct);
+        await AuditAsync(booking.Id, adminId, "admin", "admin_override_refund",
+            $"Amount: {amountMinorUnits?.ToString() ?? "full"}, Reason: {reason ?? "admin_override"}", ct);
+        return (true, null);
+    }
+
+    /// <summary>
+    /// Admin moves a booking to a new time IN-PLACE, bypassing window/penalty/
+    /// availability checks. Any existing Zoom meeting is deleted, then the booking
+    /// is reset to Confirmed/ZoomStatus=Pending and a Zoom-create job is re-queued
+    /// so a fresh room is provisioned at the new time. Rejects terminal-state
+    /// bookings. zoomService is only invoked when an old <see cref="PrivateSpeakingBooking.ZoomMeetingId"/>
+    /// is present.
+    /// </summary>
+    public async Task<(bool Success, string? Error)> AdminManualRescheduleAsync(
+        string bookingId, string adminId,
+        DateTimeOffset newSessionStartUtc, string? reason, CancellationToken ct)
+    {
+        var booking = await db.PrivateSpeakingBookings.FindAsync([bookingId], ct);
+        if (booking is null) return (false, "Booking not found.");
+
+        if (booking.Status is PrivateSpeakingBookingStatus.Cancelled
+            or PrivateSpeakingBookingStatus.Refunded
+            or PrivateSpeakingBookingStatus.Completed
+            or PrivateSpeakingBookingStatus.NoShow)
+            return (false, "Booking cannot be rescheduled in its current state.");
+
+        var now = timeProvider.GetUtcNow();
+        booking.SessionStartUtc = newSessionStartUtc;
+        booking.UpdatedAt = now;
+
+        // Tear down any existing Zoom room — it points at the old time.
+        if (booking.ZoomMeetingId.HasValue)
+        {
+            try { await zoomService.DeleteMeetingAsync(booking.ZoomMeetingId.Value, ct); }
+            catch (Exception ex) { logger.LogWarning(ex, "Failed to delete Zoom meeting {MeetingId} for admin-rescheduled booking", booking.ZoomMeetingId); }
+        }
+
+        // Reset Zoom state + Confirmed so the slot is recreated at the new time.
+        booking.ZoomMeetingId = null;
+        booking.ZoomJoinUrl = null;
+        booking.ZoomStartUrl = null;
+        booking.ZoomMeetingPassword = null;
+        booking.ZoomStatus = PrivateSpeakingZoomStatus.Pending;
+        booking.ZoomError = null;
+        booking.Status = PrivateSpeakingBookingStatus.Confirmed;
+
+        await db.SaveChangesAsync(ct);
+        await AuditAsync(booking.Id, adminId, "admin", "admin_manual_reschedule",
+            $"New start: {newSessionStartUtc:O}, Reason: {reason ?? "admin_manual_reschedule"}", ct);
+
+        // Re-queue Zoom creation (+confirmation) and calendar sync at the new time.
+        QueueBookingPostCommitJobs(booking.Id, includeCalendarSync: false);
+        QueueCalendarSyncJob(booking.Id);
+        await db.SaveChangesAsync(ct);
+        return (true, null);
+    }
+
+    /// <summary>
+    /// Mark a booking as a no-show (only valid from Confirmed/ZoomCreated/InProgress).
+    /// No refund or entitlement restore — a no-show forfeits the session.
+    /// </summary>
+    public async Task<(bool Success, string? Error)> MarkNoShowAsync(
+        string bookingId, string actorId, string actorRole, CancellationToken ct)
+    {
+        var booking = await db.PrivateSpeakingBookings
+            .Include(b => b.TutorProfile)
+            .FirstOrDefaultAsync(b => b.Id == bookingId, ct);
+        if (booking is null) return (false, "Booking not found.");
+
+        if (booking.Status is not (PrivateSpeakingBookingStatus.Confirmed
+            or PrivateSpeakingBookingStatus.ZoomCreated
+            or PrivateSpeakingBookingStatus.InProgress))
+            return (false, "Booking cannot be marked as a no-show in its current state.");
+
+        var now = timeProvider.GetUtcNow();
+        booking.Status = PrivateSpeakingBookingStatus.NoShow;
+        booking.CompletedAt = null;
+        booking.UpdatedAt = now;
+        await db.SaveChangesAsync(ct);
+        await AuditAsync(booking.Id, actorId, actorRole, "marked_no_show", null, ct);
+
+        // PDF §10 no-show notifications. The T5 auto-sweep calls this method too, so
+        // it inherits these. No-show forfeits the session per policy (no refund).
+        var sessionTime = booking.SessionStartUtc.ToString("yyyy-MM-dd HH:mm 'UTC'");
+
+        await notificationService.CreateForLearnerAsync(
+            NotificationEventKey.LearnerPrivateSpeakingNoShow,
+            booking.LearnerUserId,
+            "private_speaking_booking",
+            booking.Id,
+            $"noshow-{now:yyyyMMddHHmm}",
+            new Dictionary<string, object?>
+            {
+                ["sessionTime"] = sessionTime,
+                ["bookingId"] = booking.Id
+            },
+            ct);
+
+        if (booking.TutorProfile?.ExpertUserId is not null)
+        {
+            await notificationService.CreateForExpertAsync(
+                NotificationEventKey.ExpertPrivateSpeakingNoShow,
+                booking.TutorProfile.ExpertUserId,
+                "private_speaking_booking",
+                booking.Id,
+                $"noshow-{now:yyyyMMddHHmm}",
+                new Dictionary<string, object?>
+                {
+                    ["sessionTime"] = sessionTime,
+                    ["bookingId"] = booking.Id
+                },
+                ct);
+        }
+
+        return (true, null);
+    }
+
+    /// <summary>
+    /// Export bookings matching the supplied filters as an RFC4180 CSV string
+    /// (header + rows, capped at 5000 rows). Mirrors the
+    /// <see cref="GetAllBookingsAsync"/> filter shape without paging.
+    /// </summary>
+    public async Task<string> ExportBookingsCsvAsync(
+        string? tutorProfileId, string? status, string? learnerId,
+        DateOnly? from, DateOnly? to, CancellationToken ct)
+    {
+        const int MaxRows = 5000;
+
+        var query = db.PrivateSpeakingBookings
+            .Include(b => b.TutorProfile)
+            .AsQueryable();
+
+        if (!string.IsNullOrEmpty(tutorProfileId))
+            query = query.Where(b => b.TutorProfileId == tutorProfileId);
+        if (!string.IsNullOrEmpty(learnerId))
+            query = query.Where(b => b.LearnerUserId == learnerId);
+        if (!string.IsNullOrEmpty(status) && Enum.TryParse<PrivateSpeakingBookingStatus>(status, true, out var parsedStatus))
+            query = query.Where(b => b.Status == parsedStatus);
+
+        var bookings = await query.ToListAsync(ct);
+        if (from.HasValue)
+        {
+            var fromUtc = from.Value.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
+            bookings = bookings.Where(b => b.SessionStartUtc >= fromUtc).ToList();
+        }
+        if (to.HasValue)
+        {
+            var toUtc = to.Value.ToDateTime(TimeOnly.MaxValue, DateTimeKind.Utc);
+            bookings = bookings.Where(b => b.SessionStartUtc <= toUtc).ToList();
+        }
+
+        bookings = bookings
+            .OrderByDescending(b => b.SessionStartUtc)
+            .Take(MaxRows)
+            .ToList();
+
+        var sb = new StringBuilder();
+        sb.Append("Id,LearnerUserId,TutorProfileId,TutorName,Status,SessionStartUtc,DurationMinutes,")
+          .Append("ProfessionTrack,PriceMinorUnits,Currency,PaymentStatus,RefundIssued,")
+          .Append("RefundAmountMinorUnits,PenaltyAmountMinorUnits,CreatedAt")
+          .Append('\n');
+
+        foreach (var b in bookings)
+        {
+            sb.Append(CsvEscape(b.Id)).Append(',')
+              .Append(CsvEscape(b.LearnerUserId)).Append(',')
+              .Append(CsvEscape(b.TutorProfileId)).Append(',')
+              .Append(CsvEscape(b.TutorProfile?.DisplayName)).Append(',')
+              .Append(CsvEscape(b.Status.ToString())).Append(',')
+              .Append(CsvEscape(b.SessionStartUtc.ToString("O", CultureInfo.InvariantCulture))).Append(',')
+              .Append(CsvEscape(b.DurationMinutes.ToString(CultureInfo.InvariantCulture))).Append(',')
+              .Append(CsvEscape(b.ProfessionTrack)).Append(',')
+              .Append(CsvEscape(b.PriceMinorUnits.ToString(CultureInfo.InvariantCulture))).Append(',')
+              .Append(CsvEscape(b.Currency)).Append(',')
+              .Append(CsvEscape(b.PaymentStatus.ToString())).Append(',')
+              .Append(CsvEscape(b.RefundIssued ? "true" : "false")).Append(',')
+              .Append(CsvEscape(b.RefundAmountMinorUnits?.ToString(CultureInfo.InvariantCulture))).Append(',')
+              .Append(CsvEscape(b.PenaltyAmountMinorUnits?.ToString(CultureInfo.InvariantCulture))).Append(',')
+              .Append(CsvEscape(b.CreatedAt.ToString("O", CultureInfo.InvariantCulture)))
+              .Append('\n');
+        }
+
+        return sb.ToString();
+    }
+
+    private static readonly string[] ValidProfessionTracks =
+        ["Medicine", "Nursing", "Pharmacy", "Dentistry", "Other"];
+
+    /// <summary>Clamp a candidate-supplied profession track to the five known
+    /// values (PDF §3.2.4). Blank → null; any unknown non-blank value → "Other",
+    /// so untrusted input is never persisted raw (the booking row feeds the admin
+    /// CSV export and dashboards).</summary>
+    private static string? NormalizeProfessionTrack(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return null;
+        var trimmed = value.Trim();
+        foreach (var track in ValidProfessionTracks)
+        {
+            if (string.Equals(track, trimmed, StringComparison.OrdinalIgnoreCase))
+                return track;
+        }
+        return "Other";
+    }
+
+    /// <summary>RFC4180 CSV field escaping plus CSV-injection neutralization: a
+    /// value beginning with a formula trigger (=, +, -, @, TAB or CR) is prefixed
+    /// with a single quote so spreadsheet apps treat it as text — user-controlled
+    /// columns (tutor display name, profession track) would otherwise execute when
+    /// the export is opened in Excel/Sheets. Then wrap in quotes and double internal
+    /// quotes when the value contains a comma, quote, CR or LF.</summary>
+    private static string CsvEscape(string? value)
+    {
+        if (string.IsNullOrEmpty(value)) return string.Empty;
+        if (value[0] is '=' or '+' or '-' or '@' or '\t' or '\r')
+            value = "'" + value;
+        if (value.IndexOfAny([',', '"', '\n', '\r']) < 0) return value;
+        return $"\"{value.Replace("\"", "\"\"")}\"";
     }
 
     public async Task RateSessionAsync(
@@ -1732,6 +2556,34 @@ public sealed class PrivateSpeakingService(
 
     private static DateTimeOffset Min(DateTimeOffset left, DateTimeOffset right)
         => left <= right ? left : right;
+
+    /// <summary>
+    /// Whether two instants fall on the same calendar day when projected into the
+    /// supplied IANA/Windows timezone. Falls back to UTC if the timezone id is
+    /// unknown/invalid, so a bad timezone never throws on the reschedule path.
+    /// </summary>
+    private static bool AreSameCalendarDayInTimezone(DateTimeOffset left, DateTimeOffset right, string? timezoneId)
+    {
+        TimeZoneInfo tz;
+        try
+        {
+            tz = string.IsNullOrWhiteSpace(timezoneId)
+                ? TimeZoneInfo.Utc
+                : TimeZoneInfo.FindSystemTimeZoneById(timezoneId);
+        }
+        catch (TimeZoneNotFoundException)
+        {
+            tz = TimeZoneInfo.Utc;
+        }
+        catch (InvalidTimeZoneException)
+        {
+            tz = TimeZoneInfo.Utc;
+        }
+
+        var leftLocal = TimeZoneInfo.ConvertTime(left, tz);
+        var rightLocal = TimeZoneInfo.ConvertTime(right, tz);
+        return DateOnly.FromDateTime(leftLocal.DateTime) == DateOnly.FromDateTime(rightLocal.DateTime);
+    }
 
     private static string BuildIdempotencyScopeKey(params string[] parts)
     {

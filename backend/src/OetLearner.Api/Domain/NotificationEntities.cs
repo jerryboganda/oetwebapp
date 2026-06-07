@@ -136,7 +136,13 @@ public enum NotificationEventKey
     LearnerClassFeedbackRequest,
     TutorClassStarting15Min,
     TutorRecordingReady,
-    TutorFeedbackReceivedDigest
+    TutorFeedbackReceivedDigest,
+
+    // T4 — Private Speaking reschedule + no-show notifications (PDF §10)
+    LearnerPrivateSpeakingRescheduled,
+    ExpertPrivateSpeakingRescheduled,
+    LearnerPrivateSpeakingNoShow,
+    ExpertPrivateSpeakingNoShow
 }
 
 public enum NotificationChannel

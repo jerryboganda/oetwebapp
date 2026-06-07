@@ -56,6 +56,7 @@ public static class DatabaseBootstrapper
         await EnsurePronunciationSchemaCompatibilityAsync(db, cancellationToken);
         await EnsureFreezePolicyAsync(db, cancellationToken);
         await EnsureLiveClassTutorOwnerBackfillAsync(db, cancellationToken);
+        await EnsurePrivateSpeakingConfigDefaultsBackfillAsync(db, cancellationToken);
 
         // Reference data (professions, subtests, criteria, content) is always seeded
         await SeedData.EnsureReferenceDataAsync(db, cancellationToken);
@@ -739,6 +740,52 @@ public static class DatabaseBootstrapper
             ) creator
             WHERE lc."Id" = creator.class_id
               AND lc."TutorProfileId" IS NULL;
+            """,
+            cancellationToken);
+    }
+
+    /// <summary>
+    /// Backfill PDF-policy defaults onto the <c>PrivateSpeakingConfig</c> singleton
+    /// for a row created before the reschedule-tier columns existed. Migration
+    /// <c>20260606213420</c> adds <c>RescheduleFreeWindowHours</c> /
+    /// <c>RescheduleSameDayPenaltyPercent</c> with a 0 default, so a pre-existing
+    /// config row reads 0/0 — which silently makes every same-day reschedule free
+    /// and zeroes the penalty even after the reschedule tiers ship. Heal it to the
+    /// PDF policy (24h free window, 50% same-day penalty) and seed the
+    /// candidate-facing policy texts where missing. Idempotent — only touches the
+    /// 0/0 sentinel and empty policy texts. Postgres-only; fresh/test databases get
+    /// the entity defaults from <c>PrivateSpeakingService.GetConfigAsync</c>.
+    /// </summary>
+    private static async Task EnsurePrivateSpeakingConfigDefaultsBackfillAsync(LearnerDbContext db, CancellationToken cancellationToken)
+    {
+        if (!db.Database.IsNpgsql())
+        {
+            return;
+        }
+
+        await db.Database.ExecuteSqlRawAsync(
+            """
+            UPDATE "PrivateSpeakingConfigs"
+            SET "RescheduleFreeWindowHours" = 24,
+                "RescheduleSameDayPenaltyPercent" = 50
+            WHERE "RescheduleFreeWindowHours" = 0
+              AND "RescheduleSameDayPenaltyPercent" = 0;
+            """,
+            cancellationToken);
+
+        await db.Database.ExecuteSqlRawAsync(
+            """
+            UPDATE "PrivateSpeakingConfigs"
+            SET "CancellationPolicyText" = 'You may cancel your Speaking session with a full refund if the cancellation is made more than 48 hours before the scheduled start time. If you cancel less than 48 hours before the session, the booking will be cancelled without refund.'
+            WHERE "CancellationPolicyText" IS NULL OR "CancellationPolicyText" = '';
+            """,
+            cancellationToken);
+
+        await db.Database.ExecuteSqlRawAsync(
+            """
+            UPDATE "PrivateSpeakingConfigs"
+            SET "BookingPolicyText" = 'You may reschedule your Speaking session before the session starts, subject to available tutor slots. Same-day rescheduling is allowed; however, 50% of the session fee will be lost according to the platform policy.'
+            WHERE "BookingPolicyText" IS NULL OR "BookingPolicyText" = '';
             """,
             cancellationToken);
     }

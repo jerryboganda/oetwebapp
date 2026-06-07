@@ -402,7 +402,7 @@ public class PrivateSpeakingBooking
 
     // ── Reminders ──
 
-    /// <summary>JSON array of reminder offsets already sent, e.g. [24, 1].</summary>
+    /// <summary>JSON array of reminder MINUTE offsets already sent, e.g. [1440, 60, 15].</summary>
     [MaxLength(256)]
     public string RemindersSentJson { get; set; } = "[]";
 

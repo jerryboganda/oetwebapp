@@ -10374,6 +10374,8 @@ export async function createPrivateSpeakingBooking(payload: {
   durationMinutes: number;
   learnerTimezone: string;
   learnerNotes?: string;
+  /** Candidate profession track (Medicine, Nursing, Pharmacy, Dentistry, Other). */
+  professionTrack?: string | null;
   idempotencyKey: string;
 }): Promise<PrivateSpeakingBookingResult> {
   return apiRequest<PrivateSpeakingBookingResult>('/v1/private-speaking/bookings', {
@@ -10455,6 +10457,10 @@ export async function fetchExpertPrivateSpeakingAvailability() {
 
 export async function updateExpertPrivateSpeakingAvailability(payload: { dayOfWeek: number; startTime: string; endTime: string; effectiveFrom?: string; effectiveTo?: string }) {
   return apiRequest('/v1/expert/private-speaking/availability', { method: 'POST', body: JSON.stringify(payload) });
+}
+
+export async function updateExpertPrivateSpeakingAvailabilityRule(ruleId: string, payload: { dayOfWeek: number; startTime: string; endTime: string; effectiveFrom?: string | null; effectiveTo?: string | null; isActive: boolean }) {
+  return apiRequest(`/v1/expert/private-speaking/availability/${encodeURIComponent(ruleId)}`, { method: 'PUT', body: JSON.stringify(payload) });
 }
 
 export async function deleteExpertPrivateSpeakingAvailability(ruleId: string) {
@@ -10580,6 +10586,67 @@ export async function completeAdminPrivateSpeakingBooking(bookingId: string) {
 
 export async function retryAdminPrivateSpeakingZoom(bookingId: string) {
   return apiRequest(`/v1/admin/private-speaking/bookings/${encodeURIComponent(bookingId)}/retry-zoom`, { method: 'POST' });
+}
+
+export async function adminOverridePrivateSpeakingRefund(
+  bookingId: string,
+  payload: { amountMinorUnits?: number | null; reason?: string | null },
+) {
+  return apiRequest(`/v1/admin/private-speaking/bookings/${encodeURIComponent(bookingId)}/override-refund`, {
+    method: 'POST', body: JSON.stringify(payload),
+  });
+}
+
+export async function adminManualReschedulePrivateSpeaking(
+  bookingId: string,
+  payload: { newSessionStartUtc: string; reason?: string | null },
+) {
+  return apiRequest(`/v1/admin/private-speaking/bookings/${encodeURIComponent(bookingId)}/manual-reschedule`, {
+    method: 'POST', body: JSON.stringify(payload),
+  });
+}
+
+export async function adminEditPrivateSpeakingBooking(
+  bookingId: string,
+  payload: { sessionStartUtc?: string | null; durationMinutes?: number | null; professionTrack?: string | null; tutorNotes?: string | null },
+) {
+  return apiRequest(`/v1/admin/private-speaking/bookings/${encodeURIComponent(bookingId)}`, {
+    method: 'PUT', body: JSON.stringify(payload),
+  });
+}
+
+export async function adminMarkPrivateSpeakingNoShow(bookingId: string) {
+  return apiRequest(`/v1/admin/private-speaking/bookings/${encodeURIComponent(bookingId)}/mark-no-show`, { method: 'POST' });
+}
+
+export async function adminUpdatePrivateSpeakingAvailabilityRule(
+  profileId: string,
+  ruleId: string,
+  payload: { dayOfWeek: number; startTime: string; endTime: string; effectiveFrom?: string | null; effectiveTo?: string | null; isActive: boolean },
+) {
+  return apiRequest(`/v1/admin/private-speaking/tutors/${encodeURIComponent(profileId)}/availability/${encodeURIComponent(ruleId)}`, {
+    method: 'PUT', body: JSON.stringify(payload),
+  });
+}
+
+export async function downloadAdminPrivateSpeakingBookingsCsv(params?: {
+  tutorProfileId?: string; status?: string; learnerId?: string; from?: string; to?: string;
+}): Promise<Blob> {
+  const qs = new URLSearchParams();
+  if (params?.tutorProfileId) qs.set('tutorProfileId', params.tutorProfileId);
+  if (params?.status) qs.set('status', params.status);
+  if (params?.learnerId) qs.set('learnerId', params.learnerId);
+  if (params?.from) qs.set('from', params.from);
+  if (params?.to) qs.set('to', params.to);
+  const query = qs.toString();
+  const path = `/v1/admin/private-speaking/bookings/export${query ? `?${query}` : ''}`;
+  const response = await fetchWithTimeout(resolveApiUrl(path), {
+    headers: await getHeaders(path, undefined, { json: false }),
+  });
+  if (!response.ok) {
+    throw new ApiError(response.status, 'bookings_export_failed', 'Could not export bookings.', false);
+  }
+  return response.blob();
 }
 
 export async function fetchAdminPrivateSpeakingAuditLogs(params?: { bookingId?: string; page?: number; pageSize?: number }) {
