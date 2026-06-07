@@ -21,7 +21,6 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
     private readonly string _storageRoot = Path.Combine(Path.GetTempPath(), $"oet-learner-tests-storage-{Guid.NewGuid():N}");
     private readonly string _databaseName = $"oet-learner-tests-{Guid.NewGuid():N}";
     private readonly bool _useFirstPartyAuth;
-    private readonly Dictionary<string, string?> _previousEnvironmentValues = new();
     private readonly Dictionary<string, string?>? _firstPartyConfiguration;
 
     public TestWebApplicationFactory()
@@ -33,18 +32,16 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
     {
         _useFirstPartyAuth = useFirstPartyAuth;
 
-        if (!_useFirstPartyAuth)
-        {
-            foreach (var key in new[] { "ASPNETCORE_ENVIRONMENT", "DOTNET_ENVIRONMENT" })
-            {
-                _previousEnvironmentValues[key] = Environment.GetEnvironmentVariable(key);
-                Environment.SetEnvironmentVariable(key, "Development");
-            }
-
-            _previousEnvironmentValues["Billing__CheckoutBaseUrl"] = Environment.GetEnvironmentVariable("Billing__CheckoutBaseUrl");
-            Environment.SetEnvironmentVariable("Billing__CheckoutBaseUrl", "https://app.example.test/billing/checkout");
-        }
-
+        // Configuration is supplied PER-HOST below via builder.UseEnvironment(
+        // "Development") and ConfigureAppConfiguration's in-memory collection —
+        // never via process-global environment variables. Mutating Environment
+        // here (with a capture/restore on Dispose) leaked across test classes:
+        // WebApplicationFactory builds its host lazily, so factory lifetimes
+        // overlap, and one factory's Dispose could restore ASPNETCORE_ENVIRONMENT
+        // /Auth settings out from under another still-live factory. That flipped
+        // builder.Environment.IsDevelopment() (-> dev auth off -> 401) and auth
+        // config for OTHER classes sharing the shard process, which is the root
+        // cause of the chronically flaky/red sharded QA Smoke backend run.
         if (!_useFirstPartyAuth)
         {
             return;
@@ -71,13 +68,8 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
             [$"{AuthTokenOptions.SectionName}:OtpLifetime"] = "00:10:00",
             [$"{AuthTokenOptions.SectionName}:AuthenticatorIssuer"] = "OET Learner"
         };
-
-        foreach (var (key, value) in _firstPartyConfiguration)
-        {
-            var environmentVariableName = ToEnvironmentVariableName(key);
-            _previousEnvironmentValues[environmentVariableName] = Environment.GetEnvironmentVariable(environmentVariableName);
-            Environment.SetEnvironmentVariable(environmentVariableName, value);
-        }
+        // _firstPartyConfiguration is applied per-host via ConfigureAppConfiguration
+        // (in-memory) in ConfigureWebHost — NOT pushed to process env vars.
     }
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
@@ -474,11 +466,6 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
             return;
         }
 
-        foreach (var (key, value) in _previousEnvironmentValues)
-        {
-            Environment.SetEnvironmentVariable(key, value);
-        }
-
         try
         {
             if (Directory.Exists(_storageRoot))
@@ -491,9 +478,6 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
             // Best-effort cleanup only for test temp files.
         }
     }
-
-    private static string ToEnvironmentVariableName(string configurationKey)
-        => configurationKey.Replace(":", "__", StringComparison.Ordinal);
 
     private sealed class TestAiModelProvider : IAiModelProvider
     {
