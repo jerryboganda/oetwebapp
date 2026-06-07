@@ -204,7 +204,7 @@ public static class Oet2026CatalogEndpoints
             p.BundledBasicEnglish,
             DeserializeStringArray(p.DashboardModulesJson),
             p.DisplayOrder,
-            p.Code.EndsWith("-plan", StringComparison.Ordinal) ? p.Code[..^5] : p.Code)).ToList();
+            PublicSlugForPlanCode(p.Code))).ToList();
 
         var addOnRows = addOns.Select(a => new PublicAddOnRow(
             a.Code,
@@ -224,6 +224,13 @@ public static class Oet2026CatalogEndpoints
     }
 
     // ── Add-on quote ─────────────────────────────────────────────────────
+
+    private static string PublicSlugForPlanCode(string code)
+    {
+        return code is "speaking-1session-plan" or "speaking-2sessions-plan"
+            ? code[..^5]
+            : code;
+    }
 
     private sealed record AddonQuoteRequest(string AddOnCode);
 

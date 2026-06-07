@@ -16,7 +16,7 @@ const expertDetailRoutes = [
     // V2 submission-based marking: the expert review route param is the seeded
     // WritingSubmission id (the marking context only needs the submission + its
     // scenario to exist), so no disposable ReviewRequest is created here.
-    resolvePath: async ({ request }) => `/expert/review/writing/${await ensureSeededWritingReviewClaimed(request)}`,
+    resolvePath: async ({ request }: ResolvePathContext) => `/expert/review/writing/${await ensureSeededWritingReviewClaimed(request)}`,
     assertions: async (page: Page) => {
       // V2 TutorMarkingWorkspace renders the OET rubric editor, the AI
       // pre-analysis panel, and a Submit review control once the marking

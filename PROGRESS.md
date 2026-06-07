@@ -35,6 +35,9 @@ Implement the OET 2026 product portfolio plan on `feat/oet-2026-entitlement-conf
 - GitHub Actions QA Smoke run `27095089189` passed frontend unit, SBOM/SCA, and most E2E smoke shards, but failed learner/expert E2E shards and cancelled/timed out backend tests.
 - Learner E2E failure was traced to the mini listening result page correctly showing `Practice Score`; the smoke assertion now accepts both canonical and practice result headings.
 - Expert E2E failures were traced to direct seeded writing review deep-links needing the expert tutor to claim the seeded assignment first; direct writing review smoke paths now call `ensureSeededWritingReviewClaimed`.
+- QA Smoke run `27100311659` failed early in frontend `tsc` because the new writing `resolvePath` destructuring needed an explicit `ResolvePathContext`; fixed.
+- Backend explorer found two fast conformance failures behind the previous timeout: the manifest add-on test was counting non-portfolio `addon-extend-90`, and public catalog slug generation stripped `-plan` globally. The manifest test now filters by portfolio eligibility flags, and public slug stripping is limited to the intended speaking-session aliases.
+- Focused local `dotnet test` reruns for `Oet2026CatalogManifestTests` and `PublicCatalogPricing_SpeakingSessionPlan_ExposesBareSpecSlug_AndBareCodeIsTheAddOn` still timed out locally before useful output; broad backend proof remains delegated to GitHub Actions.
 
 ## Next-Step Protocol For New Agent Runs
 
@@ -46,5 +49,5 @@ Implement the OET 2026 product portfolio plan on `feat/oet-2026-entitlement-conf
 
 ## Active Risks
 
-- GitHub Actions backend test job in QA Smoke run `27095089189` timed out/cancelled at the workflow limit; inspect or rerun the backend job through Actions after the E2E fixes are pushed.
+- GitHub Actions must validate the latest backend and frontend fixes after the next push; do not merge/deploy until QA Smoke and required checks are green.
 - Existing branch/workspace has an unrelated untracked `.codex/config.toml`; do not stage it unless explicitly requested.

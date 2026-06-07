@@ -42,6 +42,13 @@ public sealed class Oet2026CatalogManifestTests
         "tutor-book-addon"
     ];
 
+    private static readonly string[] PortfolioEligibilityFlags =
+    [
+        "writing_addons",
+        "speaking_addons",
+        "tutor_book_discount"
+    ];
+
     [Fact]
     public async Task PortfolioPlanCodes_MatchSpecExactlyOnce()
     {
@@ -64,7 +71,9 @@ public sealed class Oet2026CatalogManifestTests
             .GetProperty("addOns")
             .EnumerateArray()
             .Where(addOn => addOn.TryGetProperty("requiresEligibleParent", out var requiresParent)
-                && requiresParent.GetBoolean())
+                && requiresParent.GetBoolean()
+                && addOn.TryGetProperty("eligibilityFlag", out var eligibilityFlag)
+                && PortfolioEligibilityFlags.Contains(eligibilityFlag.GetString(), StringComparer.Ordinal))
             .ToArray();
         var codes = addOns
             .Select(addOn => addOn.GetProperty("code").GetString())
