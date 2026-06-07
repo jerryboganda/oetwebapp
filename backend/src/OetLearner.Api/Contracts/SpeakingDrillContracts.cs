@@ -38,6 +38,12 @@ public record AdminDrillUpdateRequest(
     string[]? TargetCriteria = null,
     int? RecommendedAfterSessionScoreBelow = null);
 
+/// <summary>Atomic bulk action over a set of speaking drills.
+/// <c>Action</c> is one of <c>publish</c> | <c>archive</c> | <c>delete</c>.
+/// All matching per-item operations run inside a single transaction with
+/// exactly one audit entry (mirrors the vocabulary bulk surface).</summary>
+public sealed record SpeakingDrillBulkRequest(string Action, string[] Ids);
+
 // ── Learner-facing response shapes ───────────────────────────────────────
 
 /// <summary>Compact drill record for the learner-facing list. Includes

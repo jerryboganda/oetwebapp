@@ -9,7 +9,7 @@ import { KpiTile } from '@/components/admin/ui/kpi-tile';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { DataTable, type Column } from '@/components/ui/data-table';
+import { type Column } from '@/components/ui/data-table';
 import { Input, Select } from '@/components/ui/form-controls';
 import { Toast } from '@/components/ui/alert';
 import { AdminPermission, hasPermission } from '@/lib/admin-permissions';
@@ -17,12 +17,16 @@ import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
 import { useCurrentUser } from '@/lib/hooks/use-current-user';
 import {
   archiveContentPaper,
+  bulkContentPapers,
   listContentPapers,
-  publishContentPaper,
   type ContentPaperDto,
   type PaperAssetRole,
 } from '@/lib/content-upload-api';
-import { BulkActionBar } from '@/components/ui/bulk-action-bar';
+import {
+  AdminManagedTable,
+  type ManagedBulkAction,
+  type BulkResult,
+} from '@/components/admin/managed-table/admin-managed-table';
 
 type PageStatus = 'loading' | 'success' | 'error';
 type ToastState = { variant: 'success' | 'error'; message: string } | null;
@@ -74,8 +78,8 @@ export default function AdminListeningPapersPage() {
 
   const [filterStatus, setFilterStatus] = useState('');
   const [search, setSearch] = useState('');
-  const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
-  const [bulkBusy, setBulkBusy] = useState(false);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
 
   const load = useCallback(async () => {
     if (!isAuthenticated || role !== 'admin') return;
@@ -88,6 +92,7 @@ export default function AdminListeningPapersPage() {
         pageSize: 100,
       });
       setRows(data);
+      setPage(1);
       setStatus('success');
     } catch (e) {
       setStatus('error');
@@ -112,48 +117,63 @@ export default function AdminListeningPapersPage() {
     }
   }, [canWriteContent, load]);
 
-  const runBulk = useCallback(async (
-    action: 'archive' | 'publish',
-    op: (id: string) => Promise<unknown>,
-  ) => {
-    if (!canWriteContent || bulkBusy || selectedKeys.size === 0) return;
-    const ids = Array.from(selectedKeys);
-    const selectedPapers = rows.filter((p) => selectedKeys.has(p.id));
-    const titles = selectedPapers.map((p) => `• ${p.title}`).join('\n');
-    const verb = action === 'archive' ? 'Archive' : 'Publish';
-    const consequence = action === 'archive'
-      ? 'Learners will no longer see them.'
-      : 'They become visible to entitled learners immediately.';
-    if (!confirm(`${verb} ${ids.length} listening paper${ids.length === 1 ? '' : 's'}?\n\n${titles}\n\n${consequence}`)) {
-      return;
-    }
-    setBulkBusy(true);
-    const failures: string[] = [];
-    for (const id of ids) {
-      try {
-        await op(id);
-      } catch (e) {
-        const paper = selectedPapers.find((p) => p.id === id);
-        failures.push(`${paper?.title ?? id}: ${(e as Error).message}`);
-      }
-    }
-    setBulkBusy(false);
-    setSelectedKeys(new Set());
-    if (failures.length === 0) {
-      setToast({ variant: 'success', message: `${verb}d ${ids.length} paper${ids.length === 1 ? '' : 's'}.` });
-    } else if (failures.length === ids.length) {
-      setToast({ variant: 'error', message: `${verb} failed for all ${ids.length}: ${failures[0]}` });
-    } else {
-      setToast({
-        variant: 'error',
-        message: `${verb}d ${ids.length - failures.length} of ${ids.length}. First failure: ${failures[0]}`,
-      });
-    }
-    await load();
-  }, [bulkBusy, canWriteContent, load, rows, selectedKeys]);
+  const bulkActions: ManagedBulkAction<ContentPaperDto>[] = useMemo(() => {
+    if (!canWriteContent) return [];
+    return [
+      {
+        key: 'publish',
+        label: 'Publish selected',
+        icon: <CheckCircle2 className="h-4 w-4" />,
+        variant: 'primary',
+        isEligible: (p) => p.status === 'Draft' || p.status === 'InReview',
+        run: (ids) => bulkContentPapers('publish', ids),
+      },
+      {
+        key: 'archive',
+        label: 'Archive selected',
+        icon: <ArchiveIcon className="h-4 w-4" />,
+        variant: 'danger',
+        isEligible: (p) => p.status !== 'Archived',
+        confirm: {
+          title: (n) => `Archive ${n} listening paper${n === 1 ? '' : 's'}?`,
+          description: () => 'Learners will no longer see them.',
+          confirmLabel: 'Archive',
+          destructive: true,
+        },
+        run: (ids) => bulkContentPapers('archive', ids),
+      },
+    ];
+  }, [canWriteContent]);
 
-  const bulkArchive = useCallback(() => { void runBulk('archive', archiveContentPaper); }, [runBulk]);
-  const bulkPublish = useCallback(() => { void runBulk('publish', publishContentPaper); }, [runBulk]);
+  const handleBulkResult = useCallback(
+    (action: ManagedBulkAction<ContentPaperDto>, result: BulkResult) => {
+      const verb = action.key === 'archive' ? 'Archived' : 'Published';
+      const failed = result.failed ?? 0;
+      const skipped = result.skipped ?? 0;
+      const parts = [`${verb} ${result.succeeded} of ${result.totalRequested}`];
+      if (skipped > 0) parts.push(`${skipped} skipped`);
+      if (failed > 0) parts.push(`${failed} failed`);
+      setToast({
+        variant: failed > 0 ? 'error' : 'success',
+        message: `${parts.join(', ')}.`,
+      });
+      void load();
+    },
+    [load],
+  );
+
+  const handleBulkError = useCallback(
+    (action: ManagedBulkAction<ContentPaperDto>, error: unknown) => {
+      const verb = action.key === 'archive' ? 'Archive' : 'Publish';
+      setToast({ variant: 'error', message: `${verb} failed: ${(error as Error).message}` });
+    },
+    [],
+  );
+
+  const pagedRows = useMemo(
+    () => rows.slice((page - 1) * pageSize, page * pageSize),
+    [rows, page, pageSize],
+  );
 
   const stats = useMemo(() => {
     let published = 0;
@@ -362,17 +382,21 @@ export default function AdminListeningPapersPage() {
       }
     >
       <AsyncStateWrapper status={status}>
-        <DataTable data={rows} columns={columns} keyExtractor={(p) => p.id} selectable selectedKeys={selectedKeys} onSelectionChange={setSelectedKeys} />
-        <div className="p-4">
-          <BulkActionBar
-            selectedCount={selectedKeys.size}
-            onClearSelection={() => setSelectedKeys(new Set())}
-            actions={[
-              { key: 'archive', label: bulkBusy ? 'Archiving…' : 'Archive selected', variant: 'danger', onClick: bulkArchive },
-              { key: 'publish', label: bulkBusy ? 'Publishing…' : 'Publish selected', onClick: bulkPublish },
-            ]}
-          />
-        </div>
+        <AdminManagedTable
+          columns={columns}
+          data={pagedRows}
+          keyExtractor={(p) => p.id}
+          total={rows.length}
+          page={page}
+          pageSize={pageSize}
+          onPageChange={setPage}
+          onPageSizeChange={(s) => { setPageSize(s); setPage(1); }}
+          itemLabel="paper"
+          itemLabelPlural="papers"
+          bulkActions={bulkActions}
+          onResult={handleBulkResult}
+          onError={handleBulkError}
+        />
       </AsyncStateWrapper>
 
       {toast && <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} />}

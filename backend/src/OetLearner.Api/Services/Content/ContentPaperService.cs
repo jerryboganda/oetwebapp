@@ -1,8 +1,10 @@
 using Microsoft.EntityFrameworkCore;
+using OetLearner.Api.Contracts;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services;
 using OetLearner.Api.Services.Reading;
+using OetLearner.Api.Services.Writing;
 
 namespace OetLearner.Api.Services.Content;
 
@@ -29,6 +31,12 @@ public interface IContentPaperService
     Task<ContentPaper> UpdateAsync(string paperId, ContentPaperUpdate args, string adminId, CancellationToken ct);
     Task<ContentPaper?> GetAsync(string paperId, CancellationToken ct);
     Task<IReadOnlyList<ContentPaper>> ListAsync(ContentPaperQuery query, CancellationToken ct);
+
+    /// <summary>Total number of papers matching the same filters as
+    /// <see cref="ListAsync"/> (ignoring paging). Lets the admin UI paginate
+    /// server-side. Surfaced via the <c>X-Total-Count</c> response header.</summary>
+    Task<int> CountAsync(ContentPaperQuery query, CancellationToken ct);
+
     Task ArchiveAsync(string paperId, string adminId, CancellationToken ct);
     Task PublishAsync(string paperId, string adminId, CancellationToken ct);
 
@@ -58,6 +66,18 @@ public interface IContentPaperService
 
     /// <summary>Required roles for a given subtest. Publish gate uses this.</summary>
     IReadOnlySet<PaperAssetRole> RequiredRolesFor(string subtestCode);
+
+    /// <summary>
+    /// Atomically applies a single workflow <paramref name="action"/>
+    /// (archive | publish | unpublish | submit-for-review | approve-publish |
+    /// reject) to every paper in <paramref name="ids"/> inside ONE transaction,
+    /// delegating to the matching per-item method. Per-item validation/status
+    /// failures (<see cref="InvalidOperationException"/>) are recorded in the
+    /// result rather than aborting the batch; any other exception rolls the
+    /// whole batch back. Exactly one summary audit row is written.
+    /// </summary>
+    Task<BulkActionResult> BulkAsync(
+        string action, string[] ids, string adminId, string? reason, CancellationToken ct);
 }
 
 public sealed record ContentPaperCreate(
@@ -120,8 +140,20 @@ public sealed record ContentPaperAssetAttach(
     int DisplayOrder,
     bool MakePrimary);
 
-public sealed class ContentPaperService(LearnerDbContext db) : IContentPaperService
+public sealed class ContentPaperService(
+    LearnerDbContext db,
+    IWritingTaskProjectionService? writingProjection = null) : IContentPaperService
 {
+    /// <summary>Upper bound on ids accepted by a single bulk call (mirrors the
+    /// vocabulary bulk cap). Keeps one transaction from growing unbounded.</summary>
+    private const int BulkIdLimit = 2000;
+
+    /// <summary>Errors list cap so a huge failing batch doesn't bloat the
+    /// response / audit detail.</summary>
+    private const int BulkErrorCap = 20;
+
+    private static readonly string[] BulkActions =
+        ["archive", "publish", "unpublish", "submit-for-review", "approve-publish", "reject"];
     /// <summary>Publish gate — each subtest's minimum required roles. Keep
     /// this in sync with §2 of <c>docs/CONTENT-UPLOAD-PLAN.md</c>.</summary>
     private static readonly Dictionary<string, HashSet<PaperAssetRole>> RequiredRoles = new(StringComparer.OrdinalIgnoreCase)
@@ -218,7 +250,10 @@ public sealed class ContentPaperService(LearnerDbContext db) : IContentPaperServ
         return paper;
     }
 
-    public async Task SubmitForReviewAsync(string paperId, string adminId, CancellationToken ct)
+    public Task SubmitForReviewAsync(string paperId, string adminId, CancellationToken ct)
+        => SubmitForReviewAsync(paperId, adminId, writeAudit: true, ct);
+
+    private async Task SubmitForReviewAsync(string paperId, string adminId, bool writeAudit, CancellationToken ct)
     {
         var paper = await db.ContentPapers.FirstOrDefaultAsync(x => x.Id == paperId, ct)
             ?? throw new InvalidOperationException("Paper not found.");
@@ -228,11 +263,14 @@ public sealed class ContentPaperService(LearnerDbContext db) : IContentPaperServ
 
         paper.Status = ContentStatus.InReview;
         paper.UpdatedAt = DateTimeOffset.UtcNow;
-        await WriteAuditAsync("ContentPaperSubmittedForReview", paper.Id, paper.Title, adminId, ct);
+        if (writeAudit) await WriteAuditAsync("ContentPaperSubmittedForReview", paper.Id, paper.Title, adminId, ct);
         await db.SaveChangesAsync(ct);
     }
 
-    public async Task ApproveAndPublishAsync(string paperId, string adminId, CancellationToken ct)
+    public Task ApproveAndPublishAsync(string paperId, string adminId, CancellationToken ct)
+        => ApproveAndPublishAsync(paperId, adminId, writeAudit: true, ct);
+
+    private async Task ApproveAndPublishAsync(string paperId, string adminId, bool writeAudit, CancellationToken ct)
     {
         var paper = await db.ContentPapers.FirstOrDefaultAsync(x => x.Id == paperId, ct)
             ?? throw new InvalidOperationException("Paper not found.");
@@ -242,15 +280,18 @@ public sealed class ContentPaperService(LearnerDbContext db) : IContentPaperServ
 
         // Audit the approval before publish runs — keeps the reviewer ID on
         // the trail even if a publish-gate exception aborts the transaction.
-        await WriteAuditAsync("ContentPaperApprovedForPublish", paper.Id, paper.Title, adminId, ct);
+        if (writeAudit) await WriteAuditAsync("ContentPaperApprovedForPublish", paper.Id, paper.Title, adminId, ct);
         await db.SaveChangesAsync(ct);
 
         // Delegate to the existing publish path so all gate logic (assets,
         // provenance, subtest validators) is reused untouched.
-        await PublishAsync(paperId, adminId, ct);
+        await PublishAsync(paperId, adminId, writeAudit, ct);
     }
 
-    public async Task RejectAsync(string paperId, string adminId, string reason, CancellationToken ct)
+    public Task RejectAsync(string paperId, string adminId, string reason, CancellationToken ct)
+        => RejectAsync(paperId, adminId, reason, writeAudit: true, ct);
+
+    private async Task RejectAsync(string paperId, string adminId, string reason, bool writeAudit, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(reason))
             throw new ArgumentException("Rejection reason is required.", nameof(reason));
@@ -264,18 +305,182 @@ public sealed class ContentPaperService(LearnerDbContext db) : IContentPaperServ
         var now = DateTimeOffset.UtcNow;
         paper.Status = ContentStatus.Rejected;
         paper.UpdatedAt = now;
-        db.AuditEvents.Add(new AuditEvent
+        if (writeAudit)
         {
-            Id = Guid.NewGuid().ToString("N"),
-            OccurredAt = now,
-            ActorId = adminId,
-            ActorName = adminId,
-            Action = "ContentPaperRejected",
-            ResourceType = "ContentPaper",
-            ResourceId = paper.Id,
-            Details = $"{paper.Title} — {reason.Trim()}",
-        });
+            db.AuditEvents.Add(new AuditEvent
+            {
+                Id = Guid.NewGuid().ToString("N"),
+                OccurredAt = now,
+                ActorId = adminId,
+                ActorName = adminId,
+                Action = "ContentPaperRejected",
+                ResourceType = "ContentPaper",
+                ResourceId = paper.Id,
+                Details = $"{paper.Title} — {reason.Trim()}",
+            });
+        }
         await db.SaveChangesAsync(ct);
+    }
+
+    public async Task<BulkActionResult> BulkAsync(
+        string action, string[] ids, string adminId, string? reason, CancellationToken ct)
+    {
+        var normalized = (action ?? string.Empty).Trim().ToLowerInvariant();
+        if (!BulkActions.Contains(normalized))
+            throw new ArgumentException($"Unknown bulk action '{action}'.", nameof(action));
+        if (string.Equals(normalized, "reject", StringComparison.Ordinal)
+            && string.IsNullOrWhiteSpace(reason))
+            throw new ArgumentException("Rejection reason is required.", nameof(reason));
+
+        var distinctIds = (ids ?? Array.Empty<string>())
+            .Select(id => id?.Trim() ?? string.Empty)
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+        if (distinctIds.Count > BulkIdLimit)
+            throw new ArgumentException(
+                $"Bulk action is limited to {BulkIdLimit} papers at a time.", nameof(ids));
+
+        var totalRequested = ids?.Length ?? 0;
+        var succeeded = 0;
+        var skipped = 0;
+        var errors = new List<string>();
+
+        // Single transaction across all per-item mutations so a mid-batch fatal
+        // (non-validation) error rolls the whole batch back. The InMemory test
+        // provider doesn't support transactions, so guard the call.
+        var supportsTransactions = !string.Equals(
+            db.Database.ProviderName,
+            "Microsoft.EntityFrameworkCore.InMemory",
+            StringComparison.Ordinal);
+        await using var tx = supportsTransactions ? await db.Database.BeginTransactionAsync(ct) : null;
+
+        // Papers that successfully published via approve-publish and need the
+        // writing→scenario projection bridge replayed after the batch commits.
+        var writingToProject = new List<string>();
+
+        foreach (var id in distinctIds)
+        {
+            try
+            {
+                var outcome = await ApplyOneAsync(normalized, id, adminId, reason, ct);
+                switch (outcome)
+                {
+                    case BulkItemOutcome.Succeeded:
+                        succeeded++;
+                        // Only approve-publish replicates the writing→scenario
+                        // bridge, matching the single-item endpoint (the plain
+                        // /publish endpoint does not run the projection).
+                        if (string.Equals(normalized, "approve-publish", StringComparison.Ordinal))
+                        {
+                            writingToProject.Add(id);
+                        }
+                        break;
+                    case BulkItemOutcome.Skipped:
+                        skipped++;
+                        break;
+                }
+            }
+            catch (InvalidOperationException ex)
+            {
+                // Validation / status-gate failure for this id — record and continue.
+                if (errors.Count < BulkErrorCap)
+                    errors.Add($"{id}: {ex.Message}");
+                else if (errors.Count == BulkErrorCap)
+                    errors.Add($"… and more (cap {BulkErrorCap} reached).");
+            }
+        }
+
+        // One summary audit row for the whole bulk op.
+        await WriteAuditAsync(
+            "ContentPaperBulkAction",
+            string.Join(",", distinctIds.Take(50)),
+            $"action={normalized}; requested={totalRequested}; succeeded={succeeded}; skipped={skipped}; failed={errors.Count}",
+            adminId, ct);
+        await db.SaveChangesAsync(ct);
+
+        if (tx is not null) await tx.CommitAsync(ct);
+
+        // WS-B2 bridge: replicate the single-item approve-publish behavior for
+        // each successfully published writing paper. Runs AFTER commit so a
+        // projection failure can't roll back the publish (matches the single
+        // endpoint, which logs-and-swallows).
+        if (writingProjection is not null && writingToProject.Count > 0)
+        {
+            foreach (var id in writingToProject)
+            {
+                var paper = await db.ContentPapers.Include(p => p.Assets)
+                    .FirstOrDefaultAsync(p => p.Id == id, ct);
+                if (paper is null
+                    || !string.Equals(paper.SubtestCode, "writing", StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+                try { await writingProjection.ProjectFromContentPaperAsync(paper, ct); }
+                catch { /* logged-and-swallowed by the projection service; publish stands. */ }
+            }
+        }
+
+        return new BulkActionResult(
+            totalRequested, succeeded, skipped, errors.Count, errors.ToArray());
+    }
+
+    private enum BulkItemOutcome { Succeeded, Skipped }
+
+    /// <summary>Applies one workflow action to one paper, with per-item audit
+    /// suppressed (the bulk op writes a single summary row). Returns whether the
+    /// paper was mutated or was already in the target state (Skipped).</summary>
+    private async Task<BulkItemOutcome> ApplyOneAsync(
+        string action, string id, string adminId, string? reason, CancellationToken ct)
+    {
+        switch (action)
+        {
+            case "archive":
+            {
+                var status = await GetStatusAsync(id, ct);
+                if (status == ContentStatus.Archived) return BulkItemOutcome.Skipped;
+                await ArchiveAsync(id, adminId, writeAudit: false, ct);
+                return BulkItemOutcome.Succeeded;
+            }
+            case "publish":
+            {
+                var status = await GetStatusAsync(id, ct);
+                if (status == ContentStatus.Published) return BulkItemOutcome.Skipped;
+                await PublishAsync(id, adminId, writeAudit: false, ct);
+                return BulkItemOutcome.Succeeded;
+            }
+            case "unpublish":
+            {
+                var status = await GetStatusAsync(id, ct);
+                if (status == ContentStatus.Draft) return BulkItemOutcome.Skipped;
+                await UnpublishAsync(id, adminId, writeAudit: false, ct);
+                return BulkItemOutcome.Succeeded;
+            }
+            case "submit-for-review":
+            {
+                var status = await GetStatusAsync(id, ct);
+                if (status == ContentStatus.InReview) return BulkItemOutcome.Skipped;
+                await SubmitForReviewAsync(id, adminId, writeAudit: false, ct);
+                return BulkItemOutcome.Succeeded;
+            }
+            case "approve-publish":
+                await ApproveAndPublishAsync(id, adminId, writeAudit: false, ct);
+                return BulkItemOutcome.Succeeded;
+            case "reject":
+                await RejectAsync(id, adminId, reason!, writeAudit: false, ct);
+                return BulkItemOutcome.Succeeded;
+            default:
+                throw new ArgumentException($"Unknown bulk action '{action}'.", nameof(action));
+        }
+    }
+
+    private async Task<ContentStatus> GetStatusAsync(string id, CancellationToken ct)
+    {
+        var paper = await db.ContentPapers
+            .Select(p => new { p.Id, p.Status })
+            .FirstOrDefaultAsync(p => p.Id == id, ct)
+            ?? throw new InvalidOperationException("Paper not found.");
+        return paper.Status;
     }
 
     public async Task<ContentPaper> UpdateAsync(string paperId, ContentPaperUpdate args, string adminId, CancellationToken ct)
@@ -315,11 +520,28 @@ public sealed class ContentPaperService(LearnerDbContext db) : IContentPaperServ
 
     public async Task<IReadOnlyList<ContentPaper>> ListAsync(ContentPaperQuery query, CancellationToken ct)
     {
-        var q = db.ContentPapers
-            .Include(p => p.Assets)
-                .ThenInclude(a => a.MediaAsset)
-            .AsNoTracking()
-            .AsQueryable();
+        var q = ApplyFilters(
+            db.ContentPapers
+                .Include(p => p.Assets)
+                    .ThenInclude(a => a.MediaAsset)
+                .AsNoTracking()
+                .AsQueryable(),
+            query);
+        var page = Math.Max(1, query.Page);
+        var size = Math.Clamp(query.PageSize, 1, 200);
+        return await q
+            .OrderByDescending(p => p.Priority)
+            .ThenByDescending(p => p.UpdatedAt)
+            .Skip((page - 1) * size)
+            .Take(size)
+            .ToListAsync(ct);
+    }
+
+    public Task<int> CountAsync(ContentPaperQuery query, CancellationToken ct)
+        => ApplyFilters(db.ContentPapers.AsNoTracking().AsQueryable(), query).CountAsync(ct);
+
+    private static IQueryable<ContentPaper> ApplyFilters(IQueryable<ContentPaper> q, ContentPaperQuery query)
+    {
         if (!string.IsNullOrWhiteSpace(query.SubtestCode))
             q = q.Where(p => p.SubtestCode == query.SubtestCode!.ToLowerInvariant());
         if (!string.IsNullOrWhiteSpace(query.ProfessionId))
@@ -337,17 +559,13 @@ public sealed class ContentPaperService(LearnerDbContext db) : IContentPaperServ
             var s = query.Search.Trim().ToLowerInvariant();
             q = q.Where(p => p.Title.ToLower().Contains(s) || p.Slug.Contains(s));
         }
-        var page = Math.Max(1, query.Page);
-        var size = Math.Clamp(query.PageSize, 1, 200);
-        return await q
-            .OrderByDescending(p => p.Priority)
-            .ThenByDescending(p => p.UpdatedAt)
-            .Skip((page - 1) * size)
-            .Take(size)
-            .ToListAsync(ct);
+        return q;
     }
 
-    public async Task ArchiveAsync(string paperId, string adminId, CancellationToken ct)
+    public Task ArchiveAsync(string paperId, string adminId, CancellationToken ct)
+        => ArchiveAsync(paperId, adminId, writeAudit: true, ct);
+
+    private async Task ArchiveAsync(string paperId, string adminId, bool writeAudit, CancellationToken ct)
     {
         var paper = await db.ContentPapers.FirstOrDefaultAsync(x => x.Id == paperId, ct)
             ?? throw new InvalidOperationException("Paper not found.");
@@ -365,11 +583,14 @@ public sealed class ContentPaperService(LearnerDbContext db) : IContentPaperServ
                 content.UpdatedAt = paper.UpdatedAt;
             }
         }
-        await WriteAuditAsync("ContentPaperArchived", paper.Id, paper.Title, adminId, ct);
+        if (writeAudit) await WriteAuditAsync("ContentPaperArchived", paper.Id, paper.Title, adminId, ct);
         await db.SaveChangesAsync(ct);
     }
 
-    public async Task UnpublishAsync(string paperId, string adminId, CancellationToken ct)
+    public Task UnpublishAsync(string paperId, string adminId, CancellationToken ct)
+        => UnpublishAsync(paperId, adminId, writeAudit: true, ct);
+
+    private async Task UnpublishAsync(string paperId, string adminId, bool writeAudit, CancellationToken ct)
     {
         var paper = await db.ContentPapers.FirstOrDefaultAsync(x => x.Id == paperId, ct)
             ?? throw new InvalidOperationException("Paper not found.");
@@ -389,11 +610,14 @@ public sealed class ContentPaperService(LearnerDbContext db) : IContentPaperServ
                 content.UpdatedAt = paper.UpdatedAt;
             }
         }
-        await WriteAuditAsync("ContentPaperUnpublished", paper.Id, paper.Title, adminId, ct);
+        if (writeAudit) await WriteAuditAsync("ContentPaperUnpublished", paper.Id, paper.Title, adminId, ct);
         await db.SaveChangesAsync(ct);
     }
 
-    public async Task PublishAsync(string paperId, string adminId, CancellationToken ct)
+    public Task PublishAsync(string paperId, string adminId, CancellationToken ct)
+        => PublishAsync(paperId, adminId, writeAudit: true, ct);
+
+    private async Task PublishAsync(string paperId, string adminId, bool writeAudit, CancellationToken ct)
     {
         var paper = await db.ContentPapers
             .Include(p => p.Assets)
@@ -458,7 +682,7 @@ public sealed class ContentPaperService(LearnerDbContext db) : IContentPaperServ
         {
             await UpsertWritingContentItemAsync(paper, adminId, now, ct);
         }
-        await WriteAuditAsync("ContentPaperPublished", paper.Id, paper.Title, adminId, ct);
+        if (writeAudit) await WriteAuditAsync("ContentPaperPublished", paper.Id, paper.Title, adminId, ct);
         await db.SaveChangesAsync(ct);
     }
 

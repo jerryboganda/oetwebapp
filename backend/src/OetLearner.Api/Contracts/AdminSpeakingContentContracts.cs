@@ -40,6 +40,13 @@ public record AdminRolePlayCardCreateRequest(
     string? Disclaimer,
     bool? IsLiveTutorEligible);
 
+/// <summary>Bulk lifecycle action over a set of role-play cards. <c>Action</c>
+/// is one of <c>publish</c> | <c>archive</c> (duplicate stays a per-row action
+/// and is intentionally NOT bulk-able). The whole batch runs inside ONE
+/// transaction with ONE audit row; per-card publish-gate failures land in the
+/// result's <c>Failed</c>/<c>Errors</c> rather than aborting the batch.</summary>
+public sealed record RolePlayCardBulkRequest(string Action, string[] Ids);
+
 /// <summary>Partial update for an existing role-play card. Every field is
 /// optional — only supplied (non-null) fields are applied so admins can
 /// patch a single task or background paragraph without re-supplying the
