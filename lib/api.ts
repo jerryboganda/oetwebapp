@@ -10374,6 +10374,8 @@ export async function createPrivateSpeakingBooking(payload: {
   durationMinutes: number;
   learnerTimezone: string;
   learnerNotes?: string;
+  /** Candidate profession track (Medicine, Nursing, Pharmacy, Dentistry, Other). */
+  professionTrack?: string | null;
   idempotencyKey: string;
 }): Promise<PrivateSpeakingBookingResult> {
   return apiRequest<PrivateSpeakingBookingResult>('/v1/private-speaking/bookings', {
