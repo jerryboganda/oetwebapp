@@ -456,7 +456,7 @@ export default function PrivateSpeakingPage() {
               </button>
             )}
 
-            {config.allowReschedule && (booking.status === 'Confirmed' || booking.status === 'ZoomCreated') && (
+            {config?.allowReschedule && (booking.status === 'Confirmed' || booking.status === 'ZoomCreated') && (
               <button onClick={() => startReschedule(booking)}
                 className="text-xs text-primary hover:text-primary font-medium">
                 Reschedule
