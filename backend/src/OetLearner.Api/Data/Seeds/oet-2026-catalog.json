@@ -164,7 +164,7 @@
       "speakingAddons": false,
       "tutorBookDiscount": true,
       "bundled": { "writingAssessments": 0, "speakingSessions": 0, "aiCredits": 0, "tutorBook": false, "basicEnglish": false },
-      "isDraft": false,
+      "isDraft": true,
       "isVisible": true,
       "extensionAllowed": true,
       "recallUpdatesEnabled": true,
