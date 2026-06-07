@@ -232,7 +232,9 @@ public static class WritingAdminContentEndpoints
             var result = await service.AdminTestGradeExemplarAsync(http.WritingV2UserId(), id, ct);
             return result is null ? Results.NotFound() : Results.Ok(result);
         })
-            .WithAdminRead("AdminContentRead");
+            // POST mutation verb: needs the per-user write limiter even though
+            // authorization is read-scoped (it only test-grades, no mutation).
+            .WithAdminRead("AdminContentRead").RequireRateLimiting("PerUserWrite");
     }
 
     private static void MapDrillRoutes(RouteGroupBuilder g)
@@ -396,7 +398,9 @@ public static class WritingAdminContentEndpoints
             var result = await engine.TestRuleAsync(http.WritingV2UserId(), ruleId, request, ct);
             return result is null ? Results.NotFound() : Results.Ok(result);
         })
-            .WithAdminRead("AdminContentRead");
+            // POST mutation verb: needs the per-user write limiter even though
+            // authorization is read-scoped (it only tests a rule, no mutation).
+            .WithAdminRead("AdminContentRead").RequireRateLimiting("PerUserWrite");
     }
 
     private static void MapLessonRoutes(RouteGroupBuilder g)

@@ -31,11 +31,11 @@ public static class TutorBookEndpoints
 
         var admin = app.MapGroup("/v1/admin/tutor-book").RequireAuthorization("AdminBillingCatalogWrite");
         admin.MapGet("/updates", AdminListUpdates);
-        admin.MapPost("/updates", AdminUpsertUpdate);
-        admin.MapDelete("/updates/{id}", AdminDeleteUpdate);
+        admin.MapPost("/updates", AdminUpsertUpdate).RequireRateLimiting("PerUserWrite");
+        admin.MapDelete("/updates/{id}", AdminDeleteUpdate).RequireRateLimiting("PerUserWrite");
         admin.MapGet("/audio-scripts", AdminListAudioScripts);
-        admin.MapPost("/audio-scripts", AdminUpsertAudioScript);
-        admin.MapDelete("/audio-scripts/{id}", AdminDeleteAudioScript);
+        admin.MapPost("/audio-scripts", AdminUpsertAudioScript).RequireRateLimiting("PerUserWrite");
+        admin.MapDelete("/audio-scripts/{id}", AdminDeleteAudioScript).RequireRateLimiting("PerUserWrite");
 
         return app;
     }

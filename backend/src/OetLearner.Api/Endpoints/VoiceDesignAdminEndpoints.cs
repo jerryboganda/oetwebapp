@@ -213,7 +213,9 @@ public static class VoiceDesignAdminEndpoints
 
             var result = await provider.SynthesizeAsync(ttsReq, ct);
             return Results.File(result.Audio, result.MimeType, "preview.wav");
-        }).WithAdminRead("AdminAiConfig");
+            // POST mutation verb: needs the per-user write limiter even though
+            // authorization is read-scoped (it only previews audio, no mutation).
+        }).WithAdminRead("AdminAiConfig").RequireRateLimiting("PerUserWrite");
 
         // POST /regenerate — bulk regenerate audio across platform
         group.MapPost("/regenerate", async (
