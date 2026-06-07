@@ -9560,6 +9560,34 @@ public partial class LearnerService(
                         subscription.AiCreditsRemaining = checked(subscription.AiCreditsRemaining + targetPlan.BundledAiCredits);
                     }
                 }
+
+                // Provision the rest of the bundled entitlement template (writing
+                // assessments, speaking sessions, Tutor Book / Basic English
+                // unlocks, and the access-duration expiry). The plan snapshot the
+                // method already has (`targetPlan`) only carries AI credits, so we
+                // read these fields from the immutable BillingPlanVersion locked to
+                // this purchase (`quote.PlanVersionId`) and fall back to the live
+                // BillingPlan. AI credits are intentionally left untouched here —
+                // they are granted exactly once above via the AI-credit ledger, so
+                // ApplyPlanEntitlements must NOT re-touch AiCreditsRemaining. This
+                // runs once per completion (the whole method early-returns when the
+                // quote is already Completed), so replays never re-stamp.
+                var planVersion = string.IsNullOrWhiteSpace(quote.PlanVersionId)
+                    ? null
+                    : await db.BillingPlanVersions.AsNoTracking()
+                        .FirstOrDefaultAsync(v => v.Id == quote.PlanVersionId, ct);
+                if (planVersion is not null)
+                {
+                    SubscriptionBundleInitializer.ApplyPlanEntitlements(subscription, planVersion, now);
+                }
+                else
+                {
+                    var livePlanForBundle = await FindBillingPlanAsync(quote.PlanCode, ct);
+                    if (livePlanForBundle is not null)
+                    {
+                        SubscriptionBundleInitializer.ApplyPlanEntitlements(subscription, livePlanForBundle, now);
+                    }
+                }
             }
         }
 
@@ -9632,6 +9660,35 @@ public partial class LearnerService(
                     Math.Max(1, item.Quantity),
                     now,
                     ct);
+
+                // Provision the non-AI add-on entitlements (writing assessments,
+                // speaking sessions, Tutor Book unlock). The add-on snapshot
+                // (`addOn`) only carries AI/credit fields, so read the granted
+                // letters/sessions/kind from the immutable BillingAddOnVersion
+                // locked to this purchase and fall back to the live BillingAddOn.
+                // AI credits are intentionally NOT touched here — they are granted
+                // separately below via the AI-credit ledger, so
+                // ApplyAddOnEntitlements must NOT re-touch AiCreditsRemaining. This
+                // sits strictly inside the `existingItem is null` branch so a
+                // replayed/duplicate completion never double-grants.
+                var resolvedAddOnVersionId = addOn.VersionId
+                    ?? (addOnVersionIds.TryGetValue(addOn.Code, out var mappedAddOnVersionId) ? mappedAddOnVersionId : null);
+                var addOnVersion = string.IsNullOrWhiteSpace(resolvedAddOnVersionId)
+                    ? null
+                    : await db.BillingAddOnVersions.AsNoTracking()
+                        .FirstOrDefaultAsync(v => v.Id == resolvedAddOnVersionId, ct);
+                if (addOnVersion is not null)
+                {
+                    SubscriptionBundleInitializer.ApplyAddOnEntitlements(subscription, addOnVersion);
+                }
+                else
+                {
+                    var liveAddOnForEntitlements = await FindBillingAddOnAsync(addOn.Code, ct);
+                    if (liveAddOnForEntitlements is not null)
+                    {
+                        SubscriptionBundleInitializer.ApplyAddOnEntitlements(subscription, liveAddOnForEntitlements);
+                    }
+                }
             }
 
             if (addOn.GrantCredits > 0)

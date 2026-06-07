@@ -121,4 +121,181 @@ public class SubscriptionBundleInitializerTests
         Assert.Equal(0, sub.WritingAssessmentsRemaining); // clamped
         Assert.Equal(0, sub.SpeakingSessionsRemaining); // clamped
     }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // OET 2026 entitlement conformance — ApplyPlanEntitlements /
+    // ApplyAddOnEntitlements set ONLY the non-AI bundled fields. AI credits stay
+    // the single source of truth granted via the AI-credit ledger at fulfillment,
+    // so these helpers must never mutate AiCreditsRemaining (double-grant guard).
+    // ─────────────────────────────────────────────────────────────────────────
+
+    [Fact]
+    public void ApplyPlanEntitlements_FromPlan_SetsNonAiBundleAndExpiry_WithoutTouchingAiCredits()
+    {
+        var now = new DateTimeOffset(2026, 5, 23, 0, 0, 0, TimeSpan.Zero);
+        var plan = new BillingPlan
+        {
+            Code = "full-condensed-medicine",
+            Name = "Full Condensed (Medicine)",
+            BundledWritingAssessments = 5,
+            BundledSpeakingSessions = 1,
+            BundledAiCredits = 7, // must be ignored by this method
+            BundledTutorBook = false,
+            BundledBasicEnglish = false,
+            AccessDurationDays = 180,
+        };
+        // Seed a pre-existing AI balance to prove the method leaves it untouched.
+        var sub = new Subscription { Id = "sub_test", UserId = "user_test", PlanId = plan.Code, AiCreditsRemaining = 42 };
+
+        SubscriptionBundleInitializer.ApplyPlanEntitlements(sub, plan, now);
+
+        Assert.Equal(5, sub.WritingAssessmentsRemaining);
+        Assert.Equal(1, sub.SpeakingSessionsRemaining);
+        Assert.False(sub.TutorBookUnlocked);
+        Assert.False(sub.BasicEnglishUnlocked);
+        Assert.Equal(now.AddDays(180), sub.ExpiresAt);
+        Assert.Equal(42, sub.AiCreditsRemaining); // untouched — NOT 42 + 7
+    }
+
+    [Fact]
+    public void ApplyPlanEntitlements_FromVersion_PermanentTutorBook_SetsNullExpiryAndUnlock_WithoutAiCredits()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var version = new BillingPlanVersion
+        {
+            Id = "plan-version-tutor-book",
+            PlanId = "tutor-book",
+            Code = "tutor-book",
+            BundledTutorBook = true,
+            BundledAiCredits = 3, // must be ignored
+            AccessDurationDays = 9999, // permanent → no expiry
+        };
+        var sub = new Subscription { Id = "s1", UserId = "u1", PlanId = "tutor-book", AiCreditsRemaining = 5 };
+
+        SubscriptionBundleInitializer.ApplyPlanEntitlements(sub, version, now);
+
+        Assert.True(sub.TutorBookUnlocked);
+        Assert.Null(sub.ExpiresAt); // 9999 = permanent entitlement
+        Assert.Equal(5, sub.AiCreditsRemaining); // untouched
+    }
+
+    [Fact]
+    public void ApplyPlanEntitlements_FromVersion_NonPositiveDuration_SetsNullExpiry()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var version = new BillingPlanVersion
+        {
+            Id = "plan-version-free",
+            PlanId = "free-tier",
+            Code = "free-tier",
+            AccessDurationDays = 0, // <= 0 → permanent / no expiry
+        };
+        var sub = new Subscription { Id = "s1", UserId = "u1", PlanId = "free-tier" };
+
+        SubscriptionBundleInitializer.ApplyPlanEntitlements(sub, version, now);
+
+        Assert.Null(sub.ExpiresAt);
+    }
+
+    [Fact]
+    public void ApplyPlanEntitlements_FromVersion_BasicEnglishBundle_SetsFlag_WithoutAiCredits()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var version = new BillingPlanVersion
+        {
+            Id = "plan-version-nursing-premium",
+            PlanId = "full-nursing-premium",
+            Code = "full-nursing-premium",
+            BundledWritingAssessments = 5,
+            BundledAiCredits = 5, // must be ignored
+            BundledBasicEnglish = true,
+            AccessDurationDays = 180,
+        };
+        var sub = new Subscription { Id = "s1", UserId = "u1", PlanId = version.Code, AiCreditsRemaining = 0 };
+
+        SubscriptionBundleInitializer.ApplyPlanEntitlements(sub, version, now);
+
+        Assert.Equal(5, sub.WritingAssessmentsRemaining);
+        Assert.True(sub.BasicEnglishUnlocked);
+        Assert.Equal(0, sub.AiCreditsRemaining); // untouched — NOT 5
+    }
+
+    [Fact]
+    public void ApplyAddOnEntitlements_FromAddOn_IncrementsLettersAndSessions_WithoutAiCredits()
+    {
+        var addon = new BillingAddOn
+        {
+            Code = "addon-5-letters",
+            AddonKind = "writing_assessments",
+            LettersGranted = 5,
+            SessionsGranted = 0,
+            GrantCredits = 9, // must be ignored by this method
+        };
+        var sub = new Subscription
+        {
+            Id = "s1",
+            UserId = "u1",
+            PlanId = "writing-crash",
+            WritingAssessmentsRemaining = 3,
+            SpeakingSessionsRemaining = 2,
+            AiCreditsRemaining = 11,
+        };
+
+        SubscriptionBundleInitializer.ApplyAddOnEntitlements(sub, addon);
+
+        Assert.Equal(8, sub.WritingAssessmentsRemaining); // 3 + 5
+        Assert.Equal(2, sub.SpeakingSessionsRemaining); // unchanged
+        Assert.False(sub.TutorBookUnlocked);
+        Assert.Equal(11, sub.AiCreditsRemaining); // untouched — NOT 11 + 9
+    }
+
+    [Fact]
+    public void ApplyAddOnEntitlements_FromVersion_IncrementsSessions_WithoutAiCredits()
+    {
+        var version = new BillingAddOnVersion
+        {
+            Code = "speaking-2sessions",
+            AddonKind = "speaking_sessions",
+            SessionsGranted = 2,
+            LettersGranted = 0,
+            GrantCredits = 4, // must be ignored
+        };
+        var sub = new Subscription
+        {
+            Id = "s1",
+            UserId = "u1",
+            PlanId = "mega-special",
+            SpeakingSessionsRemaining = 1,
+            AiCreditsRemaining = 6,
+        };
+
+        SubscriptionBundleInitializer.ApplyAddOnEntitlements(sub, version);
+
+        Assert.Equal(3, sub.SpeakingSessionsRemaining); // 1 + 2
+        Assert.Equal(0, sub.WritingAssessmentsRemaining); // unchanged
+        Assert.Equal(6, sub.AiCreditsRemaining); // untouched
+    }
+
+    [Fact]
+    public void ApplyAddOnEntitlements_FromAddOn_TutorBookKind_FlipsUnlocked_WithoutAiCredits()
+    {
+        var addon = new BillingAddOn { Code = "tutor-book-addon", AddonKind = "tutor_book" };
+        var sub = new Subscription { Id = "s1", UserId = "u1", PlanId = "writing-crash", TutorBookUnlocked = false, AiCreditsRemaining = 2 };
+
+        SubscriptionBundleInitializer.ApplyAddOnEntitlements(sub, addon);
+
+        Assert.True(sub.TutorBookUnlocked);
+        Assert.Equal(2, sub.AiCreditsRemaining); // untouched
+    }
+
+    [Fact]
+    public void ApplyAddOnEntitlements_FromVersion_TutorBookKind_FlipsUnlocked()
+    {
+        var version = new BillingAddOnVersion { Code = "tutor-book-addon", AddonKind = "tutor_book" };
+        var sub = new Subscription { Id = "s1", UserId = "u1", PlanId = "writing-crash", TutorBookUnlocked = false };
+
+        SubscriptionBundleInitializer.ApplyAddOnEntitlements(sub, version);
+
+        Assert.True(sub.TutorBookUnlocked);
+    }
 }

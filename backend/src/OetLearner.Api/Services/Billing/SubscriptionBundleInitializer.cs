@@ -45,6 +45,99 @@ public static class SubscriptionBundleInitializer
         subscription.ExpiresAt = ResolveExpiry(now, version.AccessDurationDays);
     }
 
+    /// <summary>
+    /// Apply ONLY the non-AI bundled entitlements from a <see cref="BillingPlan"/>
+    /// to a Subscription (writing assessments, speaking sessions, Tutor Book,
+    /// Basic English, and the access-duration expiry).
+    ///
+    /// <para>Deliberately does NOT touch <c>AiCreditsRemaining</c>. AI credits are
+    /// granted exactly once at fulfillment via the AI-credit ledger
+    /// (<c>CreditAiLedgerForPlanPaymentAsync</c>) under its own idempotency guard;
+    /// this method is called alongside that flow, so it must leave AI credits as
+    /// the single source of truth to avoid double-counting.</para>
+    ///
+    /// <para>Use this from webhook fulfillment where the plan's AI credits are
+    /// handled separately. Use <see cref="ApplyBundle(Subscription, BillingPlan, DateTimeOffset)"/>
+    /// instead when you want the complete bundle (including AI credits) applied
+    /// in one shot at first activation.</para>
+    /// </summary>
+    public static void ApplyPlanEntitlements(Subscription subscription, BillingPlan plan, DateTimeOffset now)
+    {
+        subscription.WritingAssessmentsRemaining = plan.BundledWritingAssessments;
+        subscription.SpeakingSessionsRemaining = plan.BundledSpeakingSessions;
+        subscription.TutorBookUnlocked = plan.BundledTutorBook;
+        subscription.BasicEnglishUnlocked = plan.BundledBasicEnglish;
+        subscription.ExpiresAt = ResolveExpiry(now, plan.AccessDurationDays);
+    }
+
+    /// <summary>Immutable-snapshot flavour of
+    /// <see cref="ApplyPlanEntitlements(Subscription, BillingPlan, DateTimeOffset)"/>
+    /// — reads the bundled entitlements from a locked <see cref="BillingPlanVersion"/>
+    /// so the grant matches the purchased version even if the live plan was later
+    /// edited. Does NOT touch <c>AiCreditsRemaining</c> (see remarks on the
+    /// <see cref="BillingPlan"/> overload).</summary>
+    public static void ApplyPlanEntitlements(Subscription subscription, BillingPlanVersion version, DateTimeOffset now)
+    {
+        subscription.WritingAssessmentsRemaining = version.BundledWritingAssessments;
+        subscription.SpeakingSessionsRemaining = version.BundledSpeakingSessions;
+        subscription.TutorBookUnlocked = version.BundledTutorBook;
+        subscription.BasicEnglishUnlocked = version.BundledBasicEnglish;
+        subscription.ExpiresAt = ResolveExpiry(now, version.AccessDurationDays);
+    }
+
+    /// <summary>
+    /// Apply ONLY the non-AI add-on entitlements to a Subscription: increment
+    /// writing assessments by <c>LettersGranted</c>, speaking sessions by
+    /// <c>SessionsGranted</c>, and unlock the Tutor Book for <c>tutor_book</c>
+    /// add-ons.
+    ///
+    /// <para>Deliberately does NOT touch <c>AiCreditsRemaining</c>. AI-credit
+    /// add-ons are granted separately via the AI-credit ledger
+    /// (<c>CreditAiLedgerForAddOnPaymentAsync</c>) under its own idempotency
+    /// guard; this method runs alongside that flow, so it must leave AI credits
+    /// alone to avoid double-counting.</para>
+    ///
+    /// <para>Idempotent only when the caller wraps it in a once-per-grant window
+    /// (e.g. the <c>existingItem is null</c> branch in webhook fulfillment) — this
+    /// helper does not inspect history.</para>
+    /// </summary>
+    public static void ApplyAddOnEntitlements(Subscription subscription, BillingAddOn addon)
+    {
+        if (addon.LettersGranted > 0)
+        {
+            subscription.WritingAssessmentsRemaining = checked(subscription.WritingAssessmentsRemaining + addon.LettersGranted);
+        }
+        if (addon.SessionsGranted > 0)
+        {
+            subscription.SpeakingSessionsRemaining = checked(subscription.SpeakingSessionsRemaining + addon.SessionsGranted);
+        }
+        if (string.Equals(addon.AddonKind, "tutor_book", StringComparison.OrdinalIgnoreCase))
+        {
+            subscription.TutorBookUnlocked = true;
+        }
+    }
+
+    /// <summary>Immutable-snapshot flavour of
+    /// <see cref="ApplyAddOnEntitlements(Subscription, BillingAddOn)"/> — reads
+    /// <c>LettersGranted</c> / <c>SessionsGranted</c> / <c>AddonKind</c> from a
+    /// locked <see cref="BillingAddOnVersion"/>. Does NOT touch
+    /// <c>AiCreditsRemaining</c>.</summary>
+    public static void ApplyAddOnEntitlements(Subscription subscription, BillingAddOnVersion version)
+    {
+        if (version.LettersGranted > 0)
+        {
+            subscription.WritingAssessmentsRemaining = checked(subscription.WritingAssessmentsRemaining + version.LettersGranted);
+        }
+        if (version.SessionsGranted > 0)
+        {
+            subscription.SpeakingSessionsRemaining = checked(subscription.SpeakingSessionsRemaining + version.SessionsGranted);
+        }
+        if (string.Equals(version.AddonKind, "tutor_book", StringComparison.OrdinalIgnoreCase))
+        {
+            subscription.TutorBookUnlocked = true;
+        }
+    }
+
     /// <summary>Apply an add-on grant to an existing Subscription. Increments
     /// the matching counter or flips the matching flag. Idempotent only when
     /// caller wraps in their own idempotency window — this helper does not
