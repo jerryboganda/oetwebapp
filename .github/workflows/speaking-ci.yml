@@ -95,7 +95,7 @@ jobs:
           dotnet build backend/src/OetLearner.Api/OetLearner.Api.csproj --configuration Release --nologo
           cd backend/src/OetLearner.Api
           set +e
-          dotnet ef migrations has-pending-model-changes --configuration Release --no-build > /tmp/ef.out 2>&1
+          "$HOME/.dotnet/tools/dotnet-ef" migrations has-pending-model-changes --configuration Release --no-build > /tmp/ef.out 2>&1
           ef_status=$?
           set -e
           cat /tmp/ef.out
