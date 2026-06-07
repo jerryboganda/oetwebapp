@@ -277,6 +277,59 @@ public class ContentPaperBulkActionTests
             .Where(a => a.Action == "ContentPaperBulkAction").ToListAsync());
     }
 
+    [Fact]
+    public async Task Bulk_delete_removes_archived_paper_and_its_authoring_children()
+    {
+        var (db, svc) = BuildInMemory();
+        var paper = await SeedDraftListeningAsync(db, svc, "L1");
+        await svc.ArchiveAsync(paper.Id, "admin-1", default);
+        db.ReadingExtractionDrafts.Add(new ReadingExtractionDraft { Id = "draft-1", PaperId = paper.Id });
+        await db.SaveChangesAsync();
+
+        var result = await svc.BulkAsync("delete", [paper.Id], "admin-9", null, default);
+
+        Assert.Equal(1, result.Succeeded);
+        Assert.False(await db.ContentPapers.AsNoTracking().AnyAsync(p => p.Id == paper.Id));
+        Assert.False(await db.ReadingExtractionDrafts.AsNoTracking().AnyAsync(d => d.PaperId == paper.Id));
+        var audit = await db.AuditEvents.AsNoTracking()
+            .SingleAsync(a => a.Action == "ContentPaperBulkAction");
+        Assert.Contains("action=delete", audit.Details);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Bulk_delete_is_blocked_for_non_archived_papers()
+    {
+        var (db, svc) = BuildInMemory();
+        var paper = await SeedDraftListeningAsync(db, svc, "L1"); // Draft, not Archived
+
+        var result = await svc.BulkAsync("delete", [paper.Id], "admin-9", null, default);
+
+        Assert.Equal(0, result.Succeeded);
+        Assert.Equal(1, result.Failed);
+        Assert.True(await db.ContentPapers.AsNoTracking().AnyAsync(p => p.Id == paper.Id));
+        Assert.Contains(result.Errors, e => e.Contains("archived", StringComparison.OrdinalIgnoreCase));
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Bulk_delete_is_blocked_when_paper_has_learner_attempts()
+    {
+        var (db, svc) = BuildInMemory();
+        var paper = await SeedDraftListeningAsync(db, svc, "L1");
+        await svc.ArchiveAsync(paper.Id, "admin-1", default);
+        db.ListeningAttempts.Add(new ListeningAttempt { Id = "att-1", PaperId = paper.Id, UserId = "user-1" });
+        await db.SaveChangesAsync();
+
+        var result = await svc.BulkAsync("delete", [paper.Id], "admin-9", null, default);
+
+        Assert.Equal(0, result.Succeeded);
+        Assert.Equal(1, result.Failed);
+        Assert.True(await db.ContentPapers.AsNoTracking().AnyAsync(p => p.Id == paper.Id));
+        Assert.Contains(result.Errors, e => e.Contains("learner attempts", StringComparison.OrdinalIgnoreCase));
+        await db.DisposeAsync();
+    }
+
     /// <summary>Test interceptor that throws on the Nth SaveChanges once armed,
     /// simulating a fatal datastore error mid-batch.</summary>
     private sealed class ThrowOnNthSaveInterceptor(int throwOnCall) : SaveChangesInterceptor

@@ -221,19 +221,23 @@ public static class ContentPapersAdminEndpoints
         {
             var action = (req.Action ?? string.Empty).Trim().ToLowerInvariant();
 
+            // delete (permanent) requires system_admin — the most destructive action;
             // publish/unpublish/approve-publish/reject require content:publish;
             // archive/submit-for-review require content:write.
+            var requiresSystemAdmin = action is "delete";
             var requiresPublish = action is "publish" or "unpublish" or "approve-publish" or "reject";
             var requiresWrite = action is "archive" or "submit-for-review";
-            if (!requiresPublish && !requiresWrite)
+            if (!requiresSystemAdmin && !requiresPublish && !requiresWrite)
             {
                 return Results.BadRequest(new { error = $"Unknown bulk action '{req.Action}'." });
             }
 
             var perms = http.User.FindFirstValue(AuthTokenService.AdminPermissionsClaimType);
-            var allowed = requiresPublish
-                ? AdminPermissionEvaluator.HasAny(perms, "content:publish", "system_admin")
-                : AdminPermissionEvaluator.HasAny(perms, "content:write", "system_admin");
+            var allowed = requiresSystemAdmin
+                ? AdminPermissionEvaluator.HasAny(perms, "system_admin")
+                : requiresPublish
+                    ? AdminPermissionEvaluator.HasAny(perms, "content:publish", "system_admin")
+                    : AdminPermissionEvaluator.HasAny(perms, "content:write", "system_admin");
             if (!allowed)
             {
                 return Results.StatusCode(StatusCodes.Status403Forbidden);
