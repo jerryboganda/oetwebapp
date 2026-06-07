@@ -369,4 +369,41 @@ public class EffectiveEntitlementResolverTests
         Assert.Equal(4, snapshot.SpeakingSessionsRemaining);
         Assert.DoesNotContain("subscription.expired", snapshot.Trace);
     }
+
+    [Fact]
+    public async Task ResolveAsync_PermanentSubWithoutTutorBookUnlocked_GetsNoTutorBookGrant()
+    {
+        // Negative guard: the permanent-Tutor-Book grant hinges on the
+        // `&& s.TutorBookUnlocked` conjunct. A permanent (ExpiresAt==null) sub
+        // that has NOT unlocked the book must not receive the TutorBook modules
+        // or the "tutorbook.permanent" trace.
+        await using var db = CreateDb();
+        var now = DateTimeOffset.UtcNow;
+        db.BillingPlans.Add(new BillingPlan
+        {
+            Id = "plan-course",
+            Code = "full-medicine",
+            Name = "Full Medicine",
+            DashboardModulesJson = "[\"Reading\",\"Listening\"]",
+        });
+        db.Subscriptions.Add(new Subscription
+        {
+            Id = "sub-permanent-no-tb",
+            UserId = "learner-no-tb",
+            PlanId = "plan-course",
+            Status = SubscriptionStatus.Active,
+            StartedAt = now.AddMonths(-2),
+            ChangedAt = now.AddMonths(-2),
+            ExpiresAt = null,            // permanent
+            TutorBookUnlocked = false,   // never unlocked the book
+        });
+        await db.SaveChangesAsync();
+
+        var snapshot = await new EffectiveEntitlementResolver(db).ResolveAsync("learner-no-tb", default);
+
+        Assert.False(snapshot.TutorBookUnlocked);
+        Assert.DoesNotContain("tutorbook.permanent", snapshot.Trace);
+        Assert.DoesNotContain("TutorBook", snapshot.EnabledModules);
+        Assert.DoesNotContain("AudioScripts", snapshot.EnabledModules);
+    }
 }
