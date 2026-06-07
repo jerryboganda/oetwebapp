@@ -100,6 +100,9 @@ export default function RecallsWordsPage() {
   // When active, the catalog shows only the learner's favourited words (sourced
   // from the per-user `starred` library bucket) instead of the full catalog.
   const [favouritesOnly, setFavouritesOnly] = useState(false);
+  // Set of term ids the learner has favourited, so the catalog grid can render
+  // a filled/empty heart per card. Hydrated from the `starred` library bucket.
+  const [favTermIds, setFavTermIds] = useState<Set<string>>(new Set());
   const catalogPageCount = Math.max(1, Math.ceil(catalogTotal / catalogPageSize));
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -146,7 +149,38 @@ export default function RecallsWordsPage() {
       .catch(() => {
         // Non-fatal: recall set filter will simply not render.
       });
+
+    fetchRecallsLibrary({ bucket: 'starred' })
+      .then((r) => setFavTermIds(new Set(r.items.map((it) => it.termId))))
+      .catch(() => {
+        // Non-fatal: hearts default to empty until the learner favourites.
+      });
   }, []);
+
+  // Favourite/unfavourite a catalog term directly from the grid. Works even for
+  // terms the learner has no card for yet (the backend creates one on first
+  // favourite). Optimistic with rollback on failure.
+  async function handleToggleFavTerm(term: VocabularyTerm) {
+    const next = !favTermIds.has(term.id);
+    setFavTermIds((prev) => {
+      const copy = new Set(prev);
+      if (next) copy.add(term.id);
+      else copy.delete(term.id);
+      return copy;
+    });
+    try {
+      await starRecall('term', term.id, next);
+      analytics.track(next ? 'recalls_term_favourited' : 'recalls_term_unfavourited', { termId: term.id });
+    } catch {
+      setFavTermIds((prev) => {
+        const copy = new Set(prev);
+        if (next) copy.delete(term.id);
+        else copy.add(term.id);
+        return copy;
+      });
+      toast.error('Could not update favourite');
+    }
+  }
 
   useEffect(() => {
     let active = true;
@@ -509,6 +543,20 @@ export default function RecallsWordsPage() {
                             word recurs in. The word appears once and is counted,
                             rather than appearing again and again. */}
                         <RecallTierBadge count={term.recallSetCodes?.length ?? 0} />
+                        <button
+                          type="button"
+                          onClick={() => handleToggleFavTerm(term)}
+                          aria-pressed={favTermIds.has(term.id)}
+                          aria-label={favTermIds.has(term.id) ? `Remove ${term.term} from favourites` : `Favourite ${term.term}`}
+                          title={favTermIds.has(term.id) ? 'Remove from favourites' : 'Favourite'}
+                          className={`ml-auto inline-flex h-7 w-7 items-center justify-center rounded-full transition-colors ${
+                            favTermIds.has(term.id)
+                              ? 'bg-warning/10 text-warning'
+                              : 'text-muted hover:bg-warning/10 hover:text-warning'
+                          }`}
+                        >
+                          <Heart size={15} className={favTermIds.has(term.id) ? 'fill-current' : undefined} aria-hidden="true" />
+                        </button>
                       </div>
                       <div className="mt-2 flex flex-wrap items-center gap-1.5">
                         <CategoryBadge category={term.category} size="sm" />

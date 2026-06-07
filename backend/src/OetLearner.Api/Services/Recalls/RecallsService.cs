@@ -146,6 +146,38 @@ public sealed class RecallsService(
             card.StarReason = request.Starred ? request.Reason : null;
             changed++;
         }
+        else if (string.Equals(request.Kind, "term", StringComparison.OrdinalIgnoreCase))
+        {
+            // Favourite directly from the catalog by vocabulary term id. The
+            // learner may not have a personal card yet, so create one on first
+            // favourite (a card is the per-user home for a favourited term).
+            var term = await db.VocabularyTerms.FirstOrDefaultAsync(t => t.Id == request.Id, ct)
+                ?? throw ApiException.NotFound("TERM_NOT_FOUND", "Term not found.");
+            var card = await db.LearnerVocabularies.FirstOrDefaultAsync(
+                lv => lv.UserId == userId && lv.TermId == term.Id, ct);
+            if (card is null)
+            {
+                if (!request.Starred)
+                {
+                    // Nothing to unfavourite — no card exists. No-op.
+                    return new { changed = 0, starred = false };
+                }
+                card = new LearnerVocabulary
+                {
+                    Id = Guid.NewGuid(),
+                    UserId = userId,
+                    TermId = term.Id,
+                    Mastery = "new",
+                    NextReviewDate = DateOnly.FromDateTime(DateTime.UtcNow),
+                    AddedAt = DateTimeOffset.UtcNow,
+                    SourceRef = "browse",
+                };
+                db.LearnerVocabularies.Add(card);
+            }
+            card.Starred = request.Starred;
+            card.StarReason = request.Starred ? request.Reason : null;
+            changed++;
+        }
         else if (string.Equals(request.Kind, "review", StringComparison.OrdinalIgnoreCase))
         {
             var item = await db.ReviewItems.FirstOrDefaultAsync(r => r.Id == request.Id && r.UserId == userId, ct)
@@ -156,7 +188,7 @@ public sealed class RecallsService(
         }
         else
         {
-            throw ApiException.Validation("INVALID_KIND", "Kind must be 'vocab' or 'review'.");
+            throw ApiException.Validation("INVALID_KIND", "Kind must be 'vocab', 'term' or 'review'.");
         }
 
         await db.SaveChangesAsync(ct);

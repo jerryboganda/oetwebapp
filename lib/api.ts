@@ -6272,7 +6272,7 @@ export async function fetchRecallsQueue(limit = 20) {
   return apiRequest<RecallsQueueItem[]>(`/v1/recalls/queue?limit=${limit}`);
 }
 
-export async function starRecall(kind: 'vocab' | 'review', id: string, starred: boolean, reason?: RecallsStarReason) {
+export async function starRecall(kind: 'vocab' | 'term' | 'review', id: string, starred: boolean, reason?: RecallsStarReason) {
   return apiRequest('/v1/recalls/star', {
     method: 'POST',
     body: JSON.stringify({ kind, id, starred, reason }),
