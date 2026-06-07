@@ -97,6 +97,8 @@ public class MockBundleBulkActionTests
             Id = $"apg-{Guid.NewGuid():N}"[..32],
             AdminUserId = adminUserId,
             Permission = permission,
+            GrantedBy = "test-admin",
+            GrantedAt = DateTimeOffset.UtcNow,
         });
         await db.SaveChangesAsync();
     }

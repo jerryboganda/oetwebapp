@@ -244,6 +244,8 @@ public sealed class RolePlayCardBulkTests : IAsyncLifetime
             Id = $"apg-{Guid.NewGuid():N}"[..32],
             AdminUserId = adminUserId,
             Permission = permission,
+            GrantedBy = "test-admin",
+            GrantedAt = DateTimeOffset.UtcNow,
         });
         await _db.SaveChangesAsync();
     }
