@@ -637,7 +637,7 @@ public class AuthFlowsTests
     [Fact]
     public async Task SeedData_EnsuresUnifiedAuthAccountsForLearnerExpertAndAdmin()
     {
-        using var factory = new TestWebApplicationFactory();
+        using var factory = new SeededTestWebApplicationFactory();
         await using var scope = factory.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
 

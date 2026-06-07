@@ -49,6 +49,9 @@ Implement the OET 2026 product portfolio plan on `feat/oet-2026-entitlement-conf
 - `pnpm exec eslint tests/e2e/fixtures/api-auth.ts`: passed.
 - `git diff --check -- backend/tests/OetLearner.Api.Tests/Infrastructure/TestWebApplicationFactory.cs tests/e2e/fixtures/api-auth.ts .github/workflows/qa-smoke.yml`: passed.
 - Focused `dotnet test` for `CriticalFlowsTests.BootstrapEndpoint_ReturnsLearnerProfileAndReferences` timed out locally after 3 minutes; backend proof remains delegated to GitHub Actions per the validation constraint.
+- QA Smoke run `27103739757` passed frontend typecheck/lint/unit/build and every E2E shard. Backend shards still failed after the global demo-seed pin because unrelated tests saw seeded content/entitlements.
+- Default `TestWebApplicationFactory` now keeps `Bootstrap:SeedDemoData=false`; a dedicated `SeededTestWebApplicationFactory` opts in only the demo-seed auth/critical flow tests that assert seeded rows.
+- Focused local `dotnet test` attempts for `AuthFlowsTests.SeedData_EnsuresUnifiedAuthAccountsForLearnerExpertAndAdmin` and `ContentBulkImportE2ETests.Full_pipeline_creates_papers_assets_and_dedupes_identical_content` timed out locally after 4 minutes. Stray local `dotnet` processes from those timed-out checks were stopped.
 
 ## Next-Step Protocol For New Agent Runs
 
@@ -60,5 +63,5 @@ Implement the OET 2026 product portfolio plan on `feat/oet-2026-entitlement-conf
 
 ## Active Risks
 
-- GitHub Actions must validate the latest backend factory, E2E Postgres fallback, and QA Smoke retry fixes after the next push; do not merge/deploy until QA Smoke and required checks are green.
+- GitHub Actions must validate the latest seeded-factory narrowing after the next push; do not merge/deploy until QA Smoke and required checks are green.
 - Existing branch/workspace has an unrelated untracked `.codex/config.toml`; do not stage it unless explicitly requested.

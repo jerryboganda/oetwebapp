@@ -25,11 +25,16 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
     private readonly Dictionary<string, string?>? _firstPartyConfiguration;
 
     public TestWebApplicationFactory()
-        : this(useFirstPartyAuth: false)
+        : this(useFirstPartyAuth: false, seedDemoData: false)
     {
     }
 
     protected TestWebApplicationFactory(bool useFirstPartyAuth)
+        : this(useFirstPartyAuth, seedDemoData: useFirstPartyAuth)
+    {
+    }
+
+    protected TestWebApplicationFactory(bool useFirstPartyAuth, bool seedDemoData)
     {
         _useFirstPartyAuth = useFirstPartyAuth;
 
@@ -42,7 +47,7 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
 
             SetEnvironmentOverride("ConnectionStrings__DefaultConnection", $"InMemory:{_databaseName}");
             SetEnvironmentOverride("Auth__UseDevelopmentAuth", "true");
-            SetEnvironmentOverride("Bootstrap__SeedDemoData", "true");
+            SetEnvironmentOverride("Bootstrap__SeedDemoData", seedDemoData ? "true" : "false");
             SetEnvironmentOverride("Platform__PublicApiBaseUrl", "http://localhost");
             SetEnvironmentOverride("Platform__PublicWebBaseUrl", "http://localhost");
             SetEnvironmentOverride("Platform__FallbackEmailDomain", "example.test");
@@ -61,7 +66,7 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
             ["ConnectionStrings:DefaultConnection"] = $"InMemory:{_databaseName}",
             ["Auth:UseDevelopmentAuth"] = "false",
             ["Bootstrap:AutoMigrate"] = "false",
-            ["Bootstrap:SeedDemoData"] = "true",
+            ["Bootstrap:SeedDemoData"] = seedDemoData ? "true" : "false",
             ["Platform:PublicApiBaseUrl"] = "http://localhost",
             ["Platform:PublicWebBaseUrl"] = "http://localhost",
             ["Platform:FallbackEmailDomain"] = "example.test",
@@ -137,7 +142,7 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
             {
                 ["ConnectionStrings:DefaultConnection"] = $"InMemory:{_databaseName}",
                 ["Auth:UseDevelopmentAuth"] = "true",
-                ["Bootstrap:SeedDemoData"] = "true",
+                ["Bootstrap:SeedDemoData"] = seedDemoData ? "true" : "false",
                 ["Platform:PublicApiBaseUrl"] = "http://localhost",
                 ["Platform:PublicWebBaseUrl"] = "http://localhost",
                 ["Platform:FallbackEmailDomain"] = "example.test",
@@ -569,6 +574,14 @@ public sealed class FirstPartyAuthTestWebApplicationFactory : TestWebApplication
 {
     public FirstPartyAuthTestWebApplicationFactory()
         : base(useFirstPartyAuth: true)
+    {
+    }
+}
+
+public sealed class SeededTestWebApplicationFactory : TestWebApplicationFactory
+{
+    public SeededTestWebApplicationFactory()
+        : base(useFirstPartyAuth: false, seedDemoData: true)
     {
     }
 }
