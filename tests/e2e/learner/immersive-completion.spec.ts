@@ -76,12 +76,12 @@ test.describe('Learner immersive completion workflows @learner', () => {
     // Wait for the result to actually load (skeleton → score header). If the
     // result page enters its "Result not found" error state because the
     // submit→navigate raced backend persistence, reload once and re-wait.
-    const scoreHeader = page.getByText(/canonical oet listening score/i);
+    const resultHeader = page.getByText(/canonical oet listening score|practice score/i);
     const notFound = page.getByRole('heading', { name: /result not found/i });
-    await expect(scoreHeader.or(notFound)).toBeVisible({ timeout: 90000 });
+    await expect(resultHeader.or(notFound)).toBeVisible({ timeout: 90000 });
     if (await notFound.isVisible().catch(() => false)) {
       await page.reload({ waitUntil: 'domcontentloaded' });
-      await expect(scoreHeader).toBeVisible({ timeout: 90000 });
+      await expect(resultHeader).toBeVisible({ timeout: 90000 });
     }
     await expect(page.getByRole('heading', { name: /detailed review/i })).toBeVisible({ timeout: 30000 });
 

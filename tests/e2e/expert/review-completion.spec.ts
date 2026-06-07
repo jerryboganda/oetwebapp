@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { attachDiagnostics, expectNoSevereClientIssues, observePage } from '../fixtures/diagnostics';
-import { createDisposableSpeakingReviewRequest, getSeededWritingSubmissionId } from '../fixtures/api-auth';
+import { createDisposableSpeakingReviewRequest, ensureSeededWritingReviewClaimed } from '../fixtures/api-auth';
 import { waitForSessionGuardToClear } from '../fixtures/auth';
 
 /**
@@ -68,7 +68,7 @@ test.describe('Tutor review completion workflows @expert', () => {
   // review always posts to /v1/writing/tutor/reviews/{id}. This covers the real
   // happy path: render the marking surface, score the rubric + overall feedback,
   // submit, and land back on the expert queue.
-  test('writing review scores the rubric and submits successfully', async ({ page }, testInfo) => {
+  test('writing review scores the rubric and submits successfully', async ({ page, request }, testInfo) => {
     if (testInfo.project.name !== 'chromium-expert') {
       test.skip();
     }
@@ -77,7 +77,7 @@ test.describe('Tutor review completion workflows @expert', () => {
 
     const diagnostics = observePage(page);
     const finalComment = `QA final writing review ${Date.now()}`;
-    const submissionId = getSeededWritingSubmissionId();
+    const submissionId = await ensureSeededWritingReviewClaimed(request);
 
     await page.goto(`/expert/review/writing/${submissionId}`);
     await waitForSessionGuardToClear(page);
@@ -142,7 +142,7 @@ test.describe('Tutor review completion workflows @expert', () => {
   // the marking surface is the AI pre-analysis confirm/edit/reject affordance:
   // "Use AI suggestion" applies the estimated bands into the editable rubric, then
   // the marker submits. This drives that path + a content-checklist verdict.
-  test('writing review applies the AI pre-analysis suggestion and submits', async ({ page }, testInfo) => {
+  test('writing review applies the AI pre-analysis suggestion and submits', async ({ page, request }, testInfo) => {
     if (testInfo.project.name !== 'chromium-expert') {
       test.skip();
     }
@@ -150,7 +150,7 @@ test.describe('Tutor review completion workflows @expert', () => {
     test.setTimeout(120_000); // cold dev compile of /expert/review/writing + AI-apply + submit + queue redirect
 
     const diagnostics = observePage(page);
-    const submissionId = getSeededWritingSubmissionId();
+    const submissionId = await ensureSeededWritingReviewClaimed(request);
 
     await page.goto(`/expert/review/writing/${submissionId}`);
     await waitForSessionGuardToClear(page);

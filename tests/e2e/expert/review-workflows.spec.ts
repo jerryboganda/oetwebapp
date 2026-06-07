@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { attachDiagnostics, expectNoSevereClientIssues, observePage } from '../fixtures/diagnostics';
-import { createDisposableSpeakingReviewRequest, getSeededWritingSubmissionId } from '../fixtures/api-auth';
+import { createDisposableSpeakingReviewRequest, ensureSeededWritingReviewClaimed } from '../fixtures/api-auth';
 import { waitForSessionGuardToClear } from '../fixtures/auth';
 
 test.describe('Tutor review workflows @expert @smoke', () => {
@@ -8,7 +8,7 @@ test.describe('Tutor review workflows @expert @smoke', () => {
   // Submit review POST. This covers the real interactive rubric editing on the V2
   // TutorMarkingWorkspace: the per-criterion stepper updates the input + the live
   // raw total, a per-criterion comment is captured, and the review submits.
-  test('writing review supports rubric edits and live total', async ({ page }, testInfo) => {
+  test('writing review supports rubric edits and live total', async ({ page, request }, testInfo) => {
     if (testInfo.project.name !== 'chromium-expert') {
       test.skip();
     }
@@ -17,7 +17,7 @@ test.describe('Tutor review workflows @expert @smoke', () => {
 
     const diagnostics = observePage(page);
     const contentComment = `QA writing rubric edit ${Date.now()}`;
-    const submissionId = getSeededWritingSubmissionId();
+    const submissionId = await ensureSeededWritingReviewClaimed(request);
 
     await page.goto(`/expert/review/writing/${submissionId}`);
     await waitForSessionGuardToClear(page);
