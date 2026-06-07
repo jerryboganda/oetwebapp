@@ -9624,13 +9624,19 @@ public partial class LearnerService(
 
             if (existingItem is null)
             {
+                // Resolve the immutable add-on version id once (snapshot id, else the
+                // quote's add-on version map) — reused for the SubscriptionItem row
+                // and the entitlement grant below.
+                var resolvedAddOnVersionId = addOn.VersionId
+                    ?? (addOnVersionIds.TryGetValue(addOn.Code, out var mappedAddOnVersionId) ? mappedAddOnVersionId : null);
+
                 db.SubscriptionItems.Add(new SubscriptionItem
                 {
                     Id = TruncateIdentifier($"subitem-{Guid.NewGuid():N}"),
                     SubscriptionId = subscription.Id,
                     ItemCode = addOn.Code,
                     ItemType = addOn.IsRecurring ? "recurring_addon" : "addon",
-                    AddOnVersionId = addOn.VersionId ?? (addOnVersionIds.TryGetValue(addOn.Code, out var addOnVersionId) ? addOnVersionId : null),
+                    AddOnVersionId = resolvedAddOnVersionId,
                     Quantity = Math.Max(1, item.Quantity),
                     Status = SubscriptionItemStatus.Active,
                     StartsAt = now,
@@ -9671,8 +9677,6 @@ public partial class LearnerService(
                 // ApplyAddOnEntitlements must NOT re-touch AiCreditsRemaining. This
                 // sits strictly inside the `existingItem is null` branch so a
                 // replayed/duplicate completion never double-grants.
-                var resolvedAddOnVersionId = addOn.VersionId
-                    ?? (addOnVersionIds.TryGetValue(addOn.Code, out var mappedAddOnVersionId) ? mappedAddOnVersionId : null);
                 var addOnVersion = string.IsNullOrWhiteSpace(resolvedAddOnVersionId)
                     ? null
                     : await db.BillingAddOnVersions.AsNoTracking()
