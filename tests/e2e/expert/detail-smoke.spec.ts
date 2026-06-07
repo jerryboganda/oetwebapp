@@ -1,6 +1,6 @@
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
 import { attachDiagnostics, expectNoSevereClientIssues, observePage } from '../fixtures/diagnostics';
-import { createDisposableSpeakingReviewRequest, ensureSeededWritingReviewClaimed } from '../fixtures/api-auth';
+import { createDisposableSpeakingReviewRequest, createDisposableWritingReviewRequest } from '../fixtures/api-auth';
 import { waitForSessionGuardToClear } from '../fixtures/auth';
 import { recoverBrowserSession } from '../fixtures/auth-bootstrap';
 
@@ -13,10 +13,10 @@ const DETAIL_EXPECT_TIMEOUT_MS = 60_000;
 const expertDetailRoutes = [
   {
     name: 'writing review workspace',
-    // V2 submission-based marking: the expert review route param is the seeded
-    // WritingSubmission id (the marking context only needs the submission + its
-    // scenario to exist), so no disposable ReviewRequest is created here.
-    resolvePath: async ({ request }: ResolvePathContext) => `/expert/review/writing/${await ensureSeededWritingReviewClaimed(request)}`,
+    resolvePath: async ({ request }: ResolvePathContext) => {
+      const { reviewRequestId } = await createDisposableWritingReviewRequest(request);
+      return `/expert/review/writing/${reviewRequestId}`;
+    },
     assertions: async (page: Page) => {
       // V2 TutorMarkingWorkspace renders the OET rubric editor, the AI
       // pre-analysis panel, and a Submit review control once the marking

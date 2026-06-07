@@ -500,36 +500,6 @@ export function getSeededWritingSubmissionId(): string {
   return SEEDED_WRITING_SUBMISSION_ID;
 }
 
-export async function ensureSeededWritingReviewClaimed(request: APIRequestContext): Promise<string> {
-  const releaseLock = await acquireLock('expert-writing-seeded-submission');
-  try {
-    const expertHeaders = await authHeadersForRole(request, 'expert');
-    const response = await request.post(
-      `${apiBaseURL}/v1/tutors/writing/queue/${encodeURIComponent(SEEDED_WRITING_SUBMISSION_ID)}/claim`,
-      { headers: expertHeaders },
-    );
-    if (!response.ok() && response.status() !== 409) {
-      await expectOkResponse(
-        response,
-        `Expected seeded expert to claim writing submission ${SEEDED_WRITING_SUBMISSION_ID}`,
-      );
-    }
-
-    const contextResponse = await request.get(
-      `${apiBaseURL}/v1/writing/tutor/reviews/${encodeURIComponent(SEEDED_WRITING_SUBMISSION_ID)}/context`,
-      { headers: expertHeaders },
-    );
-    await expectOkResponse(
-      contextResponse,
-      `Expected seeded writing submission ${SEEDED_WRITING_SUBMISSION_ID} to be accessible after claim`,
-    );
-
-    return SEEDED_WRITING_SUBMISSION_ID;
-  } finally {
-    releaseLock();
-  }
-}
-
 export async function createDisposableSpeakingReviewRequest(request: APIRequestContext) {
   return createClaimedExpertReviewRequest(request, {
     attemptId: 'sa-001',

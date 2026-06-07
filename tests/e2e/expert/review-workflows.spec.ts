@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { attachDiagnostics, expectNoSevereClientIssues, observePage } from '../fixtures/diagnostics';
-import { createDisposableSpeakingReviewRequest, ensureSeededWritingReviewClaimed } from '../fixtures/api-auth';
+import { createDisposableSpeakingReviewRequest, createDisposableWritingReviewRequest } from '../fixtures/api-auth';
 import { waitForSessionGuardToClear } from '../fixtures/auth';
 
 test.describe('Tutor review workflows @expert @smoke', () => {
@@ -17,9 +17,9 @@ test.describe('Tutor review workflows @expert @smoke', () => {
 
     const diagnostics = observePage(page);
     const contentComment = `QA writing rubric edit ${Date.now()}`;
-    const submissionId = await ensureSeededWritingReviewClaimed(request);
+    const { reviewRequestId } = await createDisposableWritingReviewRequest(request);
 
-    await page.goto(`/expert/review/writing/${submissionId}`);
+    await page.goto(`/expert/review/writing/${reviewRequestId}`);
     await waitForSessionGuardToClear(page);
     // First-load fetches the marking context (submission + scenario + pre-assessment) in parallel; cold dev cache can exceed the 10s default.
     await expect(page.getByRole('heading', { name: /rubric scores/i })).toBeVisible({ timeout: 30_000 });
