@@ -1,4 +1,5 @@
 import { cn } from '@/lib/utils';
+import { Sparkles } from 'lucide-react';
 import { type HTMLAttributes } from 'react';
 
 /* ─── Generic Badge ─── */
@@ -133,6 +134,42 @@ export function CategoryBadge({ category, size }: { category: string; size?: 'sm
   const label = (category || '').replace(/[_-]/g, ' ');
   const variant = categoryVariantMap[key] ?? 'indigo';
   return <Badge variant={variant} size={size}>{label}</Badge>;
+}
+
+/**
+ * Recall repeat tag — "Nx" where N is the number of distinct recall-set / exam
+ * periods a term has appeared in. A term that recurs across periods is shown once
+ * and counted, rather than appearing again and again. Tiered styling escalates
+ * the visual weight with the count so high-frequency words stand out at a glance:
+ *  - 2x  → calm sky pill
+ *  - 3x  → elevated violet pill with a ring
+ *  - 4x+ → top-tier amber→rose gradient with a sparkle and ring/shadow
+ *
+ * Renders nothing for counts below 2 (a single-period term is not "repeated").
+ */
+export function RecallTierBadge({ count, className }: { count: number; className?: string }) {
+  if (!count || count < 2) return null;
+
+  const tier = count >= 4 ? 'top' : count === 3 ? 'mid' : 'base';
+  const tierClasses: Record<typeof tier, string> = {
+    base: 'bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-300',
+    mid: 'bg-violet-100 text-violet-700 ring-1 ring-violet-300/60 dark:bg-violet-900/30 dark:text-violet-300 dark:ring-violet-700/50',
+    top: 'bg-gradient-to-r from-amber-200 to-rose-200 text-rose-800 ring-1 ring-rose-300/70 shadow-sm dark:from-amber-900/40 dark:to-rose-900/40 dark:text-rose-200 dark:ring-rose-700/50',
+  };
+
+  return (
+    <span
+      title={`Appears in ${count} recall periods`}
+      className={cn(
+        'inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 text-xs font-bold',
+        tierClasses[tier],
+        className,
+      )}
+    >
+      {tier === 'top' && <Sparkles size={12} className="text-rose-500 dark:text-rose-300" aria-hidden="true" />}
+      {count}x
+    </span>
+  );
 }
 
 /**

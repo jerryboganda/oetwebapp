@@ -6,9 +6,10 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { fetchRecallsLibrary, type RecallsLibraryItem } from '@/lib/api';
 
+// `starred` is the API bucket key (unchanged) — surfaced to learners as "Favourites".
 const BUCKETS = [
   { key: 'all', label: 'All' },
-  { key: 'starred', label: 'Starred' },
+  { key: 'starred', label: 'Favourites' },
   { key: 'weak', label: 'Weak' },
   { key: 'new', label: 'New' },
   { key: 'mastered', label: 'Mastered' },
@@ -57,7 +58,7 @@ export function MasteryDashboard() {
           { label: 'Total', value: totals.total, color: 'text-navy' },
           { label: 'Mastered', value: totals.mastered, color: 'text-success' },
           { label: 'Weak', value: totals.weak, color: 'text-warning' },
-          { label: 'Starred', value: totals.starred, color: 'text-info' },
+          { label: 'Favourites', value: totals.starred, color: 'text-info' },
         ].map((s) => (
           <Card key={s.label} className="rounded-2xl p-4 text-center shadow-sm">
             <div className={`text-3xl font-bold ${s.color}`}>{s.value}</div>
@@ -99,7 +100,7 @@ export function MasteryDashboard() {
               <div className="flex-1">
                 <div className="flex items-center gap-2">
                   <span className="font-semibold text-navy">{it.term}</span>
-                  {it.starred && <Badge variant="warning">Starred</Badge>}
+                  {it.starred && <Badge variant="warning">Favourite</Badge>}
                   <Badge variant={MASTERY_BADGES[it.mastery] ?? 'muted'}>{it.mastery}</Badge>
                   {it.lastErrorTypeCode && it.lastErrorTypeCode !== 'correct' && (
                     <Badge variant="danger">{it.lastErrorTypeCode}</Badge>

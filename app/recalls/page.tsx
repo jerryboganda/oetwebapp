@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { motion } from 'motion/react';
-import { Brain, Layers, BookOpen, HelpCircle, Headphones, Flame, Sparkles, ArrowRight } from 'lucide-react';
+import { Brain, Layers, BookOpen, HelpCircle, Headphones, Flame, Sparkles, ArrowRight, Heart } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout/learner-dashboard-shell';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain/learner-surface';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -87,6 +87,15 @@ export default function RecallsHomePage() {
       description: 'See what is improving, what is mastered, and which clinical topics need work.',
       icon: <Headphones className="h-6 w-6" />,
       tile: 'bg-purple-50 text-purple-700',
+      badge: null,
+    },
+    {
+      href: '/recalls/favourites',
+      eyebrow: 'Favourites',
+      title: 'Saved words to review later',
+      description: 'Every word you favourited, in one place — ready to revisit or drill.',
+      icon: <Heart className="h-6 w-6" />,
+      tile: 'bg-warning/10 text-warning',
       badge: null,
     },
   ];

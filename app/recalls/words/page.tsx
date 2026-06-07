@@ -3,17 +3,18 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { motion } from 'motion/react';
-import { Lock, Star, Volume2 } from 'lucide-react';
+import { ChevronDown, Heart, Lock, Star, Volume2 } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
-import { Badge, CategoryBadge } from '@/components/ui/badge';
+import { Badge, CategoryBadge, RecallTierBadge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Modal } from '@/components/ui/modal';
 import {
   fetchRecallsToday,
   fetchRecallsQueue,
+  fetchRecallsLibrary,
   starRecall,
   fetchRecallsAudio,
   fetchVocabularyCategories,
@@ -96,6 +97,9 @@ export default function RecallsWordsPage() {
   const [catalogPageSize, setCatalogPageSize] = useState(24);
   const [recallSets, setRecallSets] = useState<RecallSetSummary[]>([]);
   const [selectedRecallSet, setSelectedRecallSet] = useState('');
+  // When active, the catalog shows only the learner's favourited words (sourced
+  // from the per-user `starred` library bucket) instead of the full catalog.
+  const [favouritesOnly, setFavouritesOnly] = useState(false);
   const catalogPageCount = Math.max(1, Math.ceil(catalogTotal / catalogPageSize));
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -146,6 +150,44 @@ export default function RecallsWordsPage() {
 
   useEffect(() => {
     let active = true;
+
+    if (favouritesOnly) {
+      // Favourites are the learner's per-user starred cards. Source them from
+      // the library `starred` bucket and map into the catalog card shape so the
+      // existing rich card (play, definition) renders unchanged.
+      fetchRecallsLibrary({ bucket: 'starred' })
+        .then((response) => {
+          if (!active) return;
+          const mapped = response.items.map(
+            (it) =>
+              ({
+                id: it.termId,
+                term: it.term,
+                definition: it.definition,
+                category: it.category,
+                exampleSentence: undefined,
+                recallSetCodes: undefined,
+                isLocked: false,
+              }) as unknown as VocabularyTerm,
+          );
+          setCatalogTerms(mapped);
+          setCatalogTotal(mapped.length);
+        })
+        .catch(() => {
+          if (!active) return;
+          setCatalogTerms([]);
+          setCatalogTotal(0);
+          setCatalogError('Could not load your favourites.');
+        })
+        .finally(() => {
+          if (active) setCatalogLoading(false);
+        });
+
+      return () => {
+        active = false;
+      };
+    }
+
     fetchVocabularyTerms({
       examTypeCode: 'oet',
       category: selectedCategory === 'all' ? undefined : selectedCategory,
@@ -172,7 +214,14 @@ export default function RecallsWordsPage() {
     return () => {
       active = false;
     };
-  }, [selectedCategory, selectedRecallSet, catalogPage, catalogPageSize]);
+  }, [favouritesOnly, selectedCategory, selectedRecallSet, catalogPage, catalogPageSize]);
+
+  function handleFavouritesToggle() {
+    setCatalogLoading(true);
+    setCatalogError(null);
+    setCatalogPage(1);
+    setFavouritesOnly((prev) => !prev);
+  }
 
   function handleCategoryChange(nextCategory: string) {
     if (nextCategory === selectedCategory) return;
@@ -227,10 +276,13 @@ export default function RecallsWordsPage() {
     }
   }
 
-  async function handleStar(it: RecallsQueueItem, reason: RecallsStarReason) {
+  // Favourite a card. The reason is OPTIONAL difficulty metadata — a plain
+  // favourite (tap the heart) needs none; the reason menu is a secondary,
+  // optional affordance for learners who want to record *why* they saved it.
+  async function handleStar(it: RecallsQueueItem, reason?: RecallsStarReason) {
     setStarOpenFor(null);
     setItems((prev) =>
-      prev ? prev.map((p) => (p.id === it.id ? { ...p, starred: true, starReason: reason } : p)) : prev,
+      prev ? prev.map((p) => (p.id === it.id ? { ...p, starred: true, starReason: reason ?? null } : p)) : prev,
     );
     try {
       await starRecall(it.kind, it.id, true, reason);
@@ -278,10 +330,10 @@ export default function RecallsWordsPage() {
         <LearnerPageHero
           eyebrow="Recalls / Words"
           title="Your active vocabulary"
-          description="Every term you've added, every card seeded from your drills, all in one starrable, drillable list."
+          description="Every term you've added, every card seeded from your drills, all in one favouritable, drillable list."
           icon={Star}
           highlights={[
-            { icon: Star, label: 'Starred', value: `${today?.starred ?? 0}` },
+            { icon: Heart, label: 'Favourites', value: `${today?.starred ?? 0}` },
             { icon: Star, label: 'Due today', value: `${today?.dueToday ?? 0}` },
             { icon: Star, label: 'Mastered', value: `${today?.mastered ?? 0}` },
           ]}
@@ -297,7 +349,23 @@ export default function RecallsWordsPage() {
 
         <section className="space-y-4 rounded-2xl border border-border bg-surface p-4">
           <div className="space-y-3">
-            {recallSets.length > 0 && (
+            <fieldset>
+              <legend className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">Saved</legend>
+              <button
+                type="button"
+                aria-pressed={favouritesOnly}
+                onClick={handleFavouritesToggle}
+                className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition ${
+                  favouritesOnly
+                    ? 'border-warning bg-warning/10 text-warning'
+                    : 'border-border text-muted hover:border-warning hover:text-warning'
+                }`}
+              >
+                <Heart size={13} className={favouritesOnly ? 'fill-current' : undefined} aria-hidden="true" />
+                Favourites only
+              </button>
+            </fieldset>
+            {!favouritesOnly && recallSets.length > 0 && (
               <fieldset>
                 <legend className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">Recall set</legend>
                 <div className="flex flex-wrap gap-2">
@@ -332,6 +400,7 @@ export default function RecallsWordsPage() {
                 </div>
               </fieldset>
             )}
+            {!favouritesOnly && (
             <fieldset>
               <legend className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">Functional category</legend>
               <div className="flex flex-wrap gap-2">
@@ -352,6 +421,7 @@ export default function RecallsWordsPage() {
                 ))}
               </div>
             </fieldset>
+            )}
           </div>
 
           {catalogError && <InlineAlert variant="warning">{catalogError}</InlineAlert>}
@@ -435,15 +505,10 @@ export default function RecallsWordsPage() {
                             <Volume2 size={14} strokeWidth={2} className="h-3.5 w-3.5" />
                           )}
                         </button>
-                        {(term.examFrequencyCount ?? 1) > 1 && (
-                          <span
-                            title={`This word appeared ${term.examFrequencyCount} times in the exam`}
-                            className="inline-flex items-center gap-0.5 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-700 dark:bg-amber-900/30 dark:text-amber-300"
-                          >
-                            <Star size={12} className="fill-amber-500 text-amber-500" />
-                            {term.examFrequencyCount}x
-                          </span>
-                        )}
+                        {/* Repeat tag: N = distinct recall-set / exam periods this
+                            word recurs in. The word appears once and is counted,
+                            rather than appearing again and again. */}
+                        <RecallTierBadge count={term.recallSetCodes?.length ?? 0} />
                       </div>
                       <div className="mt-2 flex flex-wrap items-center gap-1.5">
                         <CategoryBadge category={term.category} size="sm" />
@@ -456,7 +521,7 @@ export default function RecallsWordsPage() {
                   );
                 })}
               </div>
-              {catalogPageCount > 1 && (
+              {!favouritesOnly && catalogPageCount > 1 && (
                 <Pagination
                   page={catalogPage}
                   pageSize={catalogPageSize}
@@ -471,7 +536,9 @@ export default function RecallsWordsPage() {
             </div>
           ) : (
             <div className="rounded-xl border border-dashed border-border p-4 text-center text-sm text-muted">
-              No active terms match this category yet.
+              {favouritesOnly
+                ? 'No favourites yet — tap the heart on any word to save it here.'
+                : 'No active terms match this category yet.'}
             </div>
           )}
         </section>
@@ -479,7 +546,7 @@ export default function RecallsWordsPage() {
         <LearnerSurfaceSectionHeader
           eyebrow="Queue"
           title="Today's recall queue"
-          description="Starred cards float to the top. Click play to hear the British pronunciation."
+          description="Favourited cards float to the top. Click play to hear the British pronunciation."
         />
 
         {loading ? (
@@ -524,7 +591,11 @@ export default function RecallsWordsPage() {
                       <span className="font-semibold text-navy">{it.title}</span>
                     )}
                     <Badge variant={it.kind === 'vocab' ? 'info' : 'default'}>{it.kind}</Badge>
-                    {it.starred && <Badge variant="warning">Starred · {it.starReason ?? '–'}</Badge>}
+                    {it.starred && (
+                      <Badge variant="warning">
+                        {it.starReason ? `Favourite · ${it.starReason}` : 'Favourite'}
+                      </Badge>
+                    )}
                   </div>
                   {it.subtitle && <div className="text-xs text-muted">{it.subtitle}</div>}
                 </div>
@@ -533,24 +604,41 @@ export default function RecallsWordsPage() {
                     <button
                       type="button"
                       onClick={() => handleUnstar(it)}
-                      className="rounded-full border border-border px-3 py-1 text-xs font-medium text-muted hover:border-warning hover:text-warning"
+                      aria-label={`Remove ${it.title} from favourites`}
+                      className="inline-flex items-center gap-1 rounded-full border border-warning/40 bg-warning/10 px-3 py-1 text-xs font-medium text-warning hover:border-warning"
                     >
-                      Unstar
+                      <Heart size={13} className="fill-current" aria-hidden="true" />
+                      Favourited
                     </button>
                   ) : (
-                    <button
-                      type="button"
-                      onClick={() => setStarOpenFor((cur) => (cur === it.id ? null : it.id))}
-                      onKeyDown={(event) => {
-                        if (event.key === 'Escape') setStarOpenFor(null);
-                      }}
-                      aria-haspopup="menu"
-                      aria-expanded={starOpenFor === it.id}
-                      aria-controls={`star-reason-menu-${it.id}`}
-                      className="rounded-full border border-border px-3 py-1 text-xs font-medium text-muted hover:border-warning hover:text-warning"
-                    >
-                      Star
-                    </button>
+                    <div className="inline-flex items-center overflow-hidden rounded-full border border-border">
+                      {/* Primary action: one tap favourites with no reason. */}
+                      <button
+                        type="button"
+                        onClick={() => handleStar(it)}
+                        aria-label={`Favourite ${it.title}`}
+                        className="inline-flex items-center gap-1 px-3 py-1 text-xs font-medium text-muted hover:bg-warning/10 hover:text-warning"
+                      >
+                        <Heart size={13} aria-hidden="true" />
+                        Favourite
+                      </button>
+                      {/* Optional: add a difficulty reason. */}
+                      <button
+                        type="button"
+                        onClick={() => setStarOpenFor((cur) => (cur === it.id ? null : it.id))}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Escape') setStarOpenFor(null);
+                        }}
+                        aria-haspopup="menu"
+                        aria-expanded={starOpenFor === it.id}
+                        aria-controls={`star-reason-menu-${it.id}`}
+                        aria-label={`Add a reason for favouriting ${it.title}`}
+                        title="Add a reason (optional)"
+                        className="border-l border-border px-2 py-1 text-muted hover:bg-warning/10 hover:text-warning"
+                      >
+                        <ChevronDown size={13} aria-hidden="true" />
+                      </button>
+                    </div>
                   )}
                   {starOpenFor === it.id && (
                     <motion.div
