@@ -352,22 +352,13 @@ public partial class AdminService
         string term, string definition, string example, string category,
         string? sourceProvenance, string? ipa, string? audioUrl)
     {
+        // All metadata fields (definition, example sentence, category,
+        // source provenance, pronunciation) are OPTIONAL for publishing —
+        // admins can publish term-only recall rows and enrich them later.
+        // The only hard requirement is a non-empty term, since a term with no
+        // text cannot be displayed or have audio generated.
         var missing = new List<ApiFieldError>();
         if (string.IsNullOrWhiteSpace(term)) missing.Add(new ApiFieldError("term", "REQUIRED", "Term is required."));
-        if (string.IsNullOrWhiteSpace(example)) missing.Add(new ApiFieldError("exampleSentence", "REQUIRED", "Example sentence is required."));
-        if (string.IsNullOrWhiteSpace(category)) missing.Add(new ApiFieldError("category", "REQUIRED", "Category is required."));
-        if (string.IsNullOrWhiteSpace(sourceProvenance)) missing.Add(new ApiFieldError("sourceProvenance", "REQUIRED", "Source provenance is required before publishing."));
-
-        var medicalCategories = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-        {
-            "medical", "anatomy", "pharmacology", "procedures", "symptoms", "conditions", "diagnostics"
-        };
-        if (!string.IsNullOrWhiteSpace(category) && medicalCategories.Contains(category)
-            && string.IsNullOrWhiteSpace(ipa) && string.IsNullOrWhiteSpace(audioUrl))
-        {
-            missing.Add(new ApiFieldError("pronunciation", "REQUIRED_EITHER",
-                "Medical categories require either ipaPronunciation or audioUrl before publishing."));
-        }
 
         if (missing.Count > 0)
             throw ApiException.Validation("VOCAB_PUBLISH_GATE",
