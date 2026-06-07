@@ -7,7 +7,8 @@ public record BillingQuoteRequest(
     int Quantity,
     string? PriceId,
     string? CouponCode = null,
-    List<string>? AddOnCodes = null);
+    List<string>? AddOnCodes = null,
+    string? ParentSubscriptionId = null);
 
 public record BillingQuoteLineItem(
     string Kind,

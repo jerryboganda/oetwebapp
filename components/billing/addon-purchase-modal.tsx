@@ -14,7 +14,7 @@ export interface AddonPurchaseModalProps {
   addOnLabel?: string | null;
   addOnPriceGbp?: number | null;
   onClose: () => void;
-  /** Optional override for the checkout entry point. Defaults to /billing/checkout */
+  /** Optional override for the checkout entry point. Defaults to /billing */
   checkoutPath?: string;
 }
 
@@ -30,7 +30,7 @@ export function AddonPurchaseModal({
   addOnLabel,
   addOnPriceGbp,
   onClose,
-  checkoutPath = '/billing/checkout',
+  checkoutPath = '/billing',
 }: AddonPurchaseModalProps) {
   const router = useRouter();
   const [status, setStatus] = useState<Status>('idle');

@@ -124,14 +124,22 @@ function aiPackageHeadline(pkg: AiPackage): string {
   return 'Unlimited practice access';
 }
 
+function newIdempotencyKey() {
+  return typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+    ? crypto.randomUUID()
+    : `idem-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
 // ─── Component ───────────────────────────────────────────────────────
 
 export default function BillingPage() {
   const searchParams = useSearchParams();
   const paymentStatus = searchParams?.get('payment') ?? null;
   const paymentGateway = searchParams?.get('gateway') ?? null;
-  const requestedPlanId = searchParams?.get('planId') ?? null;
-  const initialTab = (searchParams?.get('tab') as BillingTabId | null) ?? 'overview';
+  const requestedPlanId = searchParams?.get('planId') ?? searchParams?.get('plan') ?? null;
+  const requestedAddOnCode = searchParams?.get('addOn') ?? null;
+  const requestedParentSubscriptionId = searchParams?.get('parent') ?? null;
+  const initialTab = (searchParams?.get('tab') as BillingTabId | null) ?? (requestedAddOnCode ? 'credits' : 'overview');
 
   const [activeTab, setActiveTab] = useState<BillingTabId>(
     BILLING_TABS.some((t) => t.id === initialTab) ? initialTab : 'overview',
@@ -166,14 +174,9 @@ export default function BillingPage() {
   // the per-button busyKey for cases where rapid clicks fire before
   // setBusyKey('…') has flushed through React's state queue.
   const submittingRef = useRef(false);
+  const autoCheckoutStartedRef = useRef(false);
 
   const reducedMotion = useReducedMotion() ?? false;
-
-  // Stable idempotency key generator for paid actions.
-  const newIdempotencyKey = () =>
-    typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
-      ? crypto.randomUUID()
-      : `idem-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 
   const paymentBanner = useMemo(
     () => getPaymentBanner(paymentStatus, paymentGateway),
@@ -257,11 +260,12 @@ export default function BillingPage() {
     [data?.addOns, data?.currentPlanCode],
   );
 
-  const startCheckout = async (
+  const startCheckout = useCallback(async (
     productType: BillingProductType,
     quantity: number,
     priceId?: string | null,
     label?: string,
+    parentSubscriptionId?: string | null,
   ) => {
     if (billingMutationsBlocked) {
       setError(billingBlockedMessage);
@@ -275,7 +279,7 @@ export default function BillingPage() {
     setError(null);
     setSuccess(null);
     try {
-      const quoteResponse = await fetchBillingQuote({ productType, quantity, priceId, couponCode: coupon });
+      const quoteResponse = await fetchBillingQuote({ productType, quantity, priceId, couponCode: coupon, parentSubscriptionId });
       setQuote(quoteResponse);
       setQuoteLabel(label ?? prettyProductType(productType));
       const checkoutPayload = {
@@ -283,6 +287,7 @@ export default function BillingPage() {
         quantity,
         priceId,
         couponCode: coupon,
+        parentSubscriptionId,
         quoteId: quoteResponse.quoteId,
         gateway: selectedGateway,
         // Optimistic idempotency key. Impl D should formally accept this in
@@ -299,7 +304,7 @@ export default function BillingPage() {
       setBusyKey(null);
       submittingRef.current = false;
     }
-  };
+  }, [billingBlockedMessage, billingMutationsBlocked, couponCode, selectedGateway]);
 
   const loadPreview = useCallback(async (planId: string) => {
     if (billingMutationsBlocked) {
@@ -330,6 +335,28 @@ export default function BillingPage() {
       void loadPreview(requestedPlan.id);
     }
   }, [activeTab, data, loadPreview, loading, previewPlanId, requestedPlanId]);
+
+  useEffect(() => {
+    if (loading || !data || !requestedAddOnCode || autoCheckoutStartedRef.current) {
+      return;
+    }
+
+    const requestedAddOn = data.addOns.find((addOn) => addOn.code === requestedAddOnCode || addOn.id === requestedAddOnCode);
+    if (!requestedAddOn) {
+      setError('The requested add-on is not available for this account.');
+      return;
+    }
+
+    autoCheckoutStartedRef.current = true;
+    setActiveTab('credits');
+    void startCheckout(
+      billingAddOnCheckoutProductType(requestedAddOn.productType),
+      requestedAddOn.quantity,
+      requestedAddOn.code,
+      requestedAddOn.name,
+      requestedParentSubscriptionId,
+    );
+  }, [data, loading, requestedAddOnCode, requestedParentSubscriptionId, startCheckout]);
 
   const handleDownloadInvoice = async (invoiceId: string) => {
     if (submittingRef.current) return;

@@ -95,9 +95,9 @@ public sealed class AddonEligibilityService(LearnerDbContext db) : IAddonEligibi
             .Where(s => s.UserId == userId
                 && (s.Status == SubscriptionStatus.Active || s.Status == SubscriptionStatus.Trial)
                 && (s.ExpiresAt == null || s.ExpiresAt > now))
-            .Join(db.BillingPlans.AsNoTracking(),
-                s => s.PlanId,
-                p => p.Code,
+            .SelectMany(
+                s => db.BillingPlans.AsNoTracking()
+                    .Where(p => p.Code == s.PlanId || p.Id == s.PlanId),
                 (s, p) => new
                 {
                     s.Id,

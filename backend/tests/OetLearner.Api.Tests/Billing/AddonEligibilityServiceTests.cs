@@ -93,6 +93,25 @@ public class AddonEligibilityServiceTests : IDisposable
         _db.SaveChanges();
     }
 
+    private void GiveUserEnrolmentByPlanId(string userId, string planCode)
+    {
+        _db.Subscriptions.Add(new Subscription
+        {
+            Id = $"sub_{userId}_{planCode}_id",
+            UserId = userId,
+            PlanId = $"plan_{planCode}",
+            Status = SubscriptionStatus.Active,
+            StartedAt = DateTimeOffset.UtcNow.AddDays(-1),
+            ChangedAt = DateTimeOffset.UtcNow.AddDays(-1),
+            NextRenewalAt = DateTimeOffset.UtcNow.AddDays(180),
+            PriceAmount = 60,
+            Currency = "GBP",
+            Interval = "one_time",
+            ExpiresAt = DateTimeOffset.UtcNow.AddDays(180),
+        });
+        _db.SaveChanges();
+    }
+
     [Fact]
     public async Task NoEnrolment_ReturnsIneligibleWithRedirectSku()
     {
@@ -110,6 +129,19 @@ public class AddonEligibilityServiceTests : IDisposable
         GiveUserEnrolment("user-writing", "writing-crash");
         var service = new AddonEligibilityService(_db);
         var result = await service.ResolveAsync("user-writing", "addon-3-letters", default);
+        Assert.True(result.Eligible);
+        Assert.Single(result.EligibleParents);
+        Assert.Equal("writing-crash", result.EligibleParents[0].PlanCode);
+    }
+
+    [Fact]
+    public async Task PlanIdStoredSubscription_AllowsWritingAddon()
+    {
+        GiveUserEnrolmentByPlanId("user-writing-plan-id", "writing-crash");
+        var service = new AddonEligibilityService(_db);
+
+        var result = await service.ResolveAsync("user-writing-plan-id", "addon-3-letters", default);
+
         Assert.True(result.Eligible);
         Assert.Single(result.EligibleParents);
         Assert.Equal("writing-crash", result.EligibleParents[0].PlanCode);

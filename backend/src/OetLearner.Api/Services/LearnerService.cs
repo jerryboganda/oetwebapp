@@ -3726,7 +3726,8 @@ public partial class LearnerService(
                 couponCode = request.CouponCode?.Trim().ToUpperInvariant(),
                 addOnCodes = normalizedAddOnCodes.OrderBy(code => code, StringComparer.OrdinalIgnoreCase).ToArray(),
                 gateway = gatewayLabel,
-                quoteId = request.QuoteId?.Trim()
+                quoteId = request.QuoteId?.Trim(),
+                parentSubscriptionId = request.ParentSubscriptionId?.Trim()
             });
         if (idempotencyKey is not null && idempotencyRequestHash is not null)
         {
@@ -3819,7 +3820,8 @@ public partial class LearnerService(
                 request.Quantity,
                 request.PriceId,
                 request.CouponCode,
-                normalizedAddOnCodes), cancellationToken, persistQuote: true);
+                normalizedAddOnCodes,
+                request.ParentSubscriptionId), cancellationToken, persistQuote: true);
             quoteEntity = await db.BillingQuotes.FirstAsync(x => x.Id == quoteResponse.QuoteId && x.UserId == userId, cancellationToken);
         }
 
@@ -3841,6 +3843,7 @@ public partial class LearnerService(
                                         ["plan_code"] = quoteEntity.PlanCode ?? string.Empty,
                                         ["coupon_code"] = quoteEntity.CouponCode ?? string.Empty,
                                         ["add_on_codes"] = string.Join(',', JsonSupport.Deserialize<List<string>>(quoteEntity.AddOnCodesJson, [])),
+                                        ["parent_subscription_id"] = request.ParentSubscriptionId ?? string.Empty,
                                         ["plan_version_id"] = quoteEntity.PlanVersionId ?? string.Empty,
                                         ["add_on_version_ids"] = quoteEntity.AddOnVersionIdsJson,
                                         ["coupon_version_id"] = quoteEntity.CouponVersionId ?? string.Empty
@@ -7161,7 +7164,9 @@ public partial class LearnerService(
               return false;
           }
 
-          return compatiblePlanCodes.Any(code => string.Equals(code, plan.Code, StringComparison.OrdinalIgnoreCase));
+          return compatiblePlanCodes.Any(code =>
+              string.Equals(code, plan.Code, StringComparison.OrdinalIgnoreCase) ||
+              string.Equals(code, plan.Id, StringComparison.OrdinalIgnoreCase));
       }
 
       private async Task<BillingCatalogVersionRef?> ResolvePlanVersionRefAsync(BillingPlan plan, CancellationToken cancellationToken)
@@ -7504,7 +7509,18 @@ public partial class LearnerService(
         }
 
         var now = DateTimeOffset.UtcNow;
-        var subscription = await db.Subscriptions.FirstOrDefaultAsync(x => x.UserId == userId, cancellationToken);
+        var parentSubscriptionId = request.ParentSubscriptionId?.Trim();
+        var subscriptionQuery = db.Subscriptions.Where(x => x.UserId == userId);
+        var subscription = string.IsNullOrWhiteSpace(parentSubscriptionId)
+            ? await subscriptionQuery.FirstOrDefaultAsync(cancellationToken)
+            : await subscriptionQuery.FirstOrDefaultAsync(x => x.Id == parentSubscriptionId, cancellationToken);
+        if (subscription is null && normalizedProductType == "addon_purchase" && !string.IsNullOrWhiteSpace(parentSubscriptionId))
+        {
+            throw ApiException.Validation(
+                "parent_subscription_not_found",
+                "The selected parent enrolment could not be found.",
+                [new ApiFieldError("parentSubscriptionId", "unknown", "Choose an eligible parent enrolment.")]);
+        }
         if (subscription is null)
         {
             var defaultPlan = await db.BillingPlans.AsNoTracking()

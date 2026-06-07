@@ -4157,6 +4157,7 @@ export async function fetchBillingQuote(input: {
   priceId?: string | null;
   couponCode?: string | null;
   addOnCodes?: string[];
+  parentSubscriptionId?: string | null;
 }): Promise<BillingQuote> {
   const params = new URLSearchParams();
   params.set('productType', input.productType);
@@ -4164,6 +4165,7 @@ export async function fetchBillingQuote(input: {
   if (input.priceId) params.set('priceId', input.priceId);
   if (input.couponCode) params.set('couponCode', input.couponCode);
   if (input.addOnCodes && input.addOnCodes.length > 0) params.set('addOnCodes', input.addOnCodes.join(','));
+  if (input.parentSubscriptionId) params.set('parentSubscriptionId', input.parentSubscriptionId);
   const quote = await apiRequest<ApiRecord>(`/v1/billing/quote?${params.toString()}`);
   return {
     quoteId: quote.quoteId,
@@ -4227,6 +4229,7 @@ export async function createBillingCheckoutSession(input: {
   priceId?: string | null;
   couponCode?: string | null;
   addOnCodes?: string[];
+  parentSubscriptionId?: string | null;
   quoteId?: string | null;
   gateway?: 'stripe' | 'paypal';
   idempotencyKey?: string;
@@ -4239,6 +4242,7 @@ export async function createBillingCheckoutSession(input: {
       priceId: input.priceId ?? null,
       couponCode: input.couponCode ?? null,
       addOnCodes: input.addOnCodes ?? null,
+      parentSubscriptionId: input.parentSubscriptionId ?? null,
       quoteId: input.quoteId ?? null,
       gateway: input.gateway ?? null,
       idempotencyKey: input.idempotencyKey ?? crypto.randomUUID?.() ?? String(Date.now()),

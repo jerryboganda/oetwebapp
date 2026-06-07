@@ -388,4 +388,71 @@ describe('Billing page', () => {
     const unavailableButton = screen.getByRole('button', { name: /top up unavailable/i });
     expect(unavailableButton).toBeDisabled();
   });
+
+  it('starts add-on checkout from catalog deep links with the selected parent subscription', async () => {
+    const openSpy = vi.spyOn(window, 'open').mockReturnValue(null);
+    mockFetchBilling.mockResolvedValueOnce({
+      currentPlan: 'Speaking Crash',
+      currentPlanId: 'speaking-crash',
+      currentPlanCode: 'speaking-crash',
+      planName: 'Speaking Crash',
+      planDescription: 'Speaking prep.',
+      reviewCredits: 0,
+      nextRenewal: '2026-12-31',
+      price: '£30',
+      interval: 'one_time',
+      status: 'Active',
+      activeAddOns: [],
+      entitlements: { productiveSkillReviewsEnabled: false, supportedReviewSubtests: [], invoiceDownloadsAvailable: false },
+      plans: [],
+      addOns: [
+        {
+          id: 'speaking-1session',
+          code: 'speaking-1session',
+          name: 'Private Speaking session',
+          productType: 'addon_purchase',
+          quantity: 1,
+          price: '£18',
+          currency: 'GBP',
+          interval: 'one-time',
+          status: 'active',
+          description: 'One private speaking session.',
+          grantCredits: 0,
+          durationDays: 0,
+          isRecurring: false,
+          appliesToAllPlans: false,
+          quantityStep: 1,
+          maxQuantity: null,
+          compatiblePlanCodes: ['speaking-crash'],
+        },
+      ],
+      coupons: [],
+      quote: null,
+      invoices: [],
+    });
+
+    renderWithRouter(<BillingPage />, {
+      searchParams: new URLSearchParams('addOn=speaking-1session&parent=sub_speaking'),
+      pathname: '/billing',
+    });
+
+    expect(await screen.findByText('Your billing center')).toBeInTheDocument();
+
+    await waitFor(() => {
+      expect(mockFetchBillingQuote).toHaveBeenCalledWith(expect.objectContaining({
+        productType: 'addon_purchase',
+        quantity: 1,
+        priceId: 'speaking-1session',
+        parentSubscriptionId: 'sub_speaking',
+      }));
+      expect(mockCreateBillingCheckoutSession).toHaveBeenCalledWith(expect.objectContaining({
+        productType: 'addon_purchase',
+        quantity: 1,
+        priceId: 'speaking-1session',
+        parentSubscriptionId: 'sub_speaking',
+      }));
+    });
+
+    openSpy.mockRestore();
+  });
 });

@@ -100,7 +100,8 @@ public record CheckoutSessionCreateRequest(
     List<string>? AddOnCodes = null,
     string? QuoteId = null,
     string? IdempotencyKey = null,
-    string? Gateway = null);
+    string? Gateway = null,
+    string? ParentSubscriptionId = null);
 
 public record StudyPlanRescheduleRequest(DateOnly? DueDate);
 
