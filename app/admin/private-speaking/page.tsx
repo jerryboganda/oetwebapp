@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Users, Calendar, BarChart3, Settings, Plus, Trash2, RefreshCw, X, CheckCircle2, CreditCard, ListChecks, Video } from 'lucide-react';
+import { Users, Calendar, BarChart3, Settings, Plus, Trash2, RefreshCw, X, CheckCircle2, CreditCard, ListChecks, Video, Pencil, CalendarClock, Banknote, UserX, Download } from 'lucide-react';
 import { AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
 import { InlineAlert } from '@/components/ui/alert';
 import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
@@ -22,10 +22,16 @@ import {
   fetchAdminPrivateSpeakingAvailability,
   createAdminPrivateSpeakingAvailabilityRule,
   deleteAdminPrivateSpeakingAvailabilityRule,
+  adminUpdatePrivateSpeakingAvailabilityRule,
   fetchAdminPrivateSpeakingBookings,
   cancelAdminPrivateSpeakingBooking,
   completeAdminPrivateSpeakingBooking,
   retryAdminPrivateSpeakingZoom,
+  adminOverridePrivateSpeakingRefund,
+  adminManualReschedulePrivateSpeaking,
+  adminEditPrivateSpeakingBooking,
+  adminMarkPrivateSpeakingNoShow,
+  downloadAdminPrivateSpeakingBookingsCsv,
   fetchAdminPrivateSpeakingAuditLogs,
 } from '@/lib/api';
 
@@ -41,6 +47,8 @@ type Config = {
   minBookingLeadTimeHours: number; maxBookingAdvanceDays: number;
   cancellationWindowHours: number; allowReschedule: boolean; rescheduleWindowHours: number;
   reservationTimeoutMinutes: number; reminderOffsetsHoursJson: string;
+  reminderOffsetsMinutesJson: string; rescheduleFreeWindowHours: number;
+  rescheduleSameDayPenaltyPercent: number;
 };
 
 type TutorProfile = {
@@ -59,7 +67,10 @@ type AdminBooking = {
   id: string; tutorProfileId: string; tutorName: string | null;
   learnerUserId: string; status: string; sessionStartUtc: string;
   durationMinutes: number; priceMinorUnits: number; currency: string;
+  professionTrack?: string | null;
   paymentStatus: string; zoomStatus: string; createdAt: string;
+  refundIssued?: boolean; refundAmountMinorUnits?: number | null;
+  penaltyAmountMinorUnits?: number | null;
   entitlementConsumed?: boolean; entitlementRestoredAt?: string | null;
   googleCalendarSyncStatus?: string | null;
 };
@@ -71,10 +82,24 @@ type AuditLog = {
 
 const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
+// Matches PrivateSpeakingBookingStatus on the backend.
+const BOOKING_STATUS_FILTERS = [
+  'Reserved', 'PendingPayment', 'Confirmed', 'ZoomPending', 'ZoomCreated',
+  'InProgress', 'Completed', 'Cancelled', 'Refunded', 'NoShow', 'Expired', 'Failed',
+] as const;
+
 type AdminTab = 'overview' | 'config' | 'tutors' | 'bookings' | 'audit';
 
 function formatPrice(minorUnits: number, currency = 'aud') {
   return new Intl.NumberFormat('en-AU', { style: 'currency', currency }).format(minorUnits / 100);
+}
+
+// Convert a UTC ISO timestamp to the value expected by <input type="datetime-local"> (local time, no zone).
+function isoToLocalInput(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
 export default function AdminPrivateSpeakingPage() {
@@ -87,6 +112,7 @@ export default function AdminPrivateSpeakingPage() {
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
   // Create tutor form
@@ -97,6 +123,19 @@ export default function AdminPrivateSpeakingPage() {
   const [selectedTutorId, setSelectedTutorId] = useState<string | null>(null);
   const [availability, setAvailability] = useState<AvailabilityRule[]>([]);
   const [newRule, setNewRule] = useState({ dayOfWeek: 1, startTime: '09:00', endTime: '17:00' });
+  const [editingRule, setEditingRule] = useState<AvailabilityRule | null>(null);
+
+  // Bookings filters + export
+  const [bookingStatusFilter, setBookingStatusFilter] = useState<string>('');
+  const [exporting, setExporting] = useState(false);
+
+  // Booking action modals (one booking selected at a time)
+  type BookingModalKind = 'refund' | 'reschedule' | 'edit' | null;
+  const [bookingModal, setBookingModal] = useState<BookingModalKind>(null);
+  const [activeBooking, setActiveBooking] = useState<AdminBooking | null>(null);
+  const [refundForm, setRefundForm] = useState<{ amount: string; reason: string }>({ amount: '', reason: '' });
+  const [rescheduleForm, setRescheduleForm] = useState<{ newStart: string; reason: string }>({ newStart: '', reason: '' });
+  const [editForm, setEditForm] = useState<{ sessionStart: string; durationMinutes: string; professionTrack: string; tutorNotes: string }>({ sessionStart: '', durationMinutes: '', professionTrack: '', tutorNotes: '' });
 
   useEffect(() => {
     loadOverview();
@@ -178,9 +217,157 @@ export default function AdminPrivateSpeakingPage() {
     setAvailability(prev => prev.filter(r => r.id !== ruleId));
   }
 
+  async function handleSaveRuleEdit() {
+    if (!selectedTutorId || !editingRule) return;
+    setSaving(true);
+    try {
+      await adminUpdatePrivateSpeakingAvailabilityRule(selectedTutorId, editingRule.id, {
+        dayOfWeek: editingRule.dayOfWeek,
+        startTime: editingRule.startTime,
+        endTime: editingRule.endTime,
+        effectiveFrom: editingRule.effectiveFrom,
+        effectiveTo: editingRule.effectiveTo,
+        isActive: editingRule.isActive,
+      });
+      const rules = await fetchAdminPrivateSpeakingAvailability(selectedTutorId) as AvailabilityRule[];
+      setAvailability(rules);
+      setEditingRule(null);
+      setSuccess('Availability rule updated.');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to update availability rule.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function loadBookings() {
-    const data = await fetchAdminPrivateSpeakingBookings() as { items: AdminBooking[] };
+    const data = await fetchAdminPrivateSpeakingBookings(
+      bookingStatusFilter ? { status: bookingStatusFilter } : undefined,
+    ) as { items: AdminBooking[] };
     setBookings(data.items);
+  }
+
+  async function handleExportBookings() {
+    setExporting(true);
+    setError(null);
+    try {
+      const blob = await downloadAdminPrivateSpeakingBookingsCsv(
+        bookingStatusFilter ? { status: bookingStatusFilter } : undefined,
+      );
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'speaking-bookings.csv';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to export bookings.');
+    } finally {
+      setExporting(false);
+    }
+  }
+
+  function openRefundModal(b: AdminBooking) {
+    setActiveBooking(b);
+    setRefundForm({ amount: '', reason: '' });
+    setBookingModal('refund');
+  }
+
+  function openRescheduleModal(b: AdminBooking) {
+    setActiveBooking(b);
+    setRescheduleForm({ newStart: isoToLocalInput(b.sessionStartUtc), reason: '' });
+    setBookingModal('reschedule');
+  }
+
+  function openEditModal(b: AdminBooking) {
+    setActiveBooking(b);
+    setEditForm({
+      sessionStart: isoToLocalInput(b.sessionStartUtc),
+      durationMinutes: String(b.durationMinutes ?? ''),
+      professionTrack: b.professionTrack ?? '',
+      tutorNotes: '',
+    });
+    setBookingModal('edit');
+  }
+
+  function closeBookingModal() {
+    setBookingModal(null);
+    setActiveBooking(null);
+  }
+
+  async function handleSubmitRefund() {
+    if (!activeBooking) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const trimmedAmount = refundForm.amount.trim();
+      await adminOverridePrivateSpeakingRefund(activeBooking.id, {
+        amountMinorUnits: trimmedAmount === '' ? null : Number(trimmedAmount),
+        reason: refundForm.reason.trim() || null,
+      });
+      closeBookingModal();
+      await loadBookings();
+      setSuccess('Refund override applied.');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to override refund.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleSubmitReschedule() {
+    if (!activeBooking || !rescheduleForm.newStart) return;
+    setSaving(true);
+    setError(null);
+    try {
+      await adminManualReschedulePrivateSpeaking(activeBooking.id, {
+        newSessionStartUtc: new Date(rescheduleForm.newStart).toISOString(),
+        reason: rescheduleForm.reason.trim() || null,
+      });
+      closeBookingModal();
+      await loadBookings();
+      setSuccess('Session rescheduled.');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to reschedule session.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleSubmitEdit() {
+    if (!activeBooking) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const duration = editForm.durationMinutes.trim();
+      await adminEditPrivateSpeakingBooking(activeBooking.id, {
+        sessionStartUtc: editForm.sessionStart ? new Date(editForm.sessionStart).toISOString() : null,
+        durationMinutes: duration === '' ? null : Number(duration),
+        professionTrack: editForm.professionTrack.trim() || null,
+        tutorNotes: editForm.tutorNotes.trim() || null,
+      });
+      closeBookingModal();
+      await loadBookings();
+      setSuccess('Booking updated.');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to update booking.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleMarkNoShow(b: AdminBooking) {
+    if (!window.confirm('Mark this booking as a no-show? No refund will be issued and a penalty may apply.')) return;
+    setError(null);
+    try {
+      await adminMarkPrivateSpeakingNoShow(b.id);
+      await loadBookings();
+      setSuccess('Booking marked as no-show.');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to mark no-show.');
+    }
   }
 
   async function loadAuditLogs() {
@@ -191,7 +378,8 @@ export default function AdminPrivateSpeakingPage() {
   useEffect(() => {
     if (tab === 'bookings') loadBookings();
     if (tab === 'audit') loadAuditLogs();
-  }, [tab]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab, bookingStatusFilter]);
 
   if (loading) {
     return (
@@ -218,6 +406,7 @@ export default function AdminPrivateSpeakingPage() {
         />
 
       {error && <InlineAlert variant="warning">{error}<button onClick={() => setError(null)} className="ml-2"><X className="w-4 h-4 inline" /></button></InlineAlert>}
+      {success && <InlineAlert variant="success">{success}<button onClick={() => setSuccess(null)} className="ml-2"><X className="w-4 h-4 inline" /></button></InlineAlert>}
 
       {/* Tab navigation */}
       <div className="flex gap-1 border-b border-admin-border">
@@ -319,6 +508,25 @@ export default function AdminPrivateSpeakingPage() {
                   onChange={e => setConfig(c => c ? { ...c, reservationTimeoutMinutes: Number(e.target.value) } : c)}
                   className="w-full px-3 py-2 border border-admin-border rounded-admin-md text-sm bg-admin-bg-surface text-admin-fg-strong" />
               </div>
+              <div>
+                <label className="text-xs text-admin-fg-muted mb-1 block">Reminder Offsets (minutes JSON)</label>
+                <input type="text" value={config.reminderOffsetsMinutesJson}
+                  placeholder="[1440, 60, 15]"
+                  onChange={e => setConfig(c => c ? { ...c, reminderOffsetsMinutesJson: e.target.value } : c)}
+                  className="w-full px-3 py-2 border border-admin-border rounded-admin-md text-sm bg-admin-bg-surface text-admin-fg-strong" />
+              </div>
+              <div>
+                <label className="text-xs text-admin-fg-muted mb-1 block">Reschedule Free Window (hours)</label>
+                <input type="number" value={config.rescheduleFreeWindowHours}
+                  onChange={e => setConfig(c => c ? { ...c, rescheduleFreeWindowHours: Number(e.target.value) } : c)}
+                  className="w-full px-3 py-2 border border-admin-border rounded-admin-md text-sm bg-admin-bg-surface text-admin-fg-strong" />
+              </div>
+              <div>
+                <label className="text-xs text-admin-fg-muted mb-1 block">Reschedule Same-Day Penalty (%)</label>
+                <input type="number" value={config.rescheduleSameDayPenaltyPercent}
+                  onChange={e => setConfig(c => c ? { ...c, rescheduleSameDayPenaltyPercent: Number(e.target.value) } : c)}
+                  className="w-full px-3 py-2 border border-admin-border rounded-admin-md text-sm bg-admin-bg-surface text-admin-fg-strong" />
+              </div>
             </div>
             <Button variant="primary" onClick={handleSaveConfig} loading={saving} className="mt-4">
               {saving ? 'Saving...' : 'Save Configuration'}
@@ -365,6 +573,44 @@ export default function AdminPrivateSpeakingPage() {
             </Card>
           )}
 
+          {/* Cross-tutor overview — read-only summary. Per-rule day grids load on demand
+              via each tutor's Availability panel below. */}
+          {tutors.length > 0 && (
+            <Card className="mb-4">
+              <CardHeader><CardTitle>Tutor availability overview</CardTitle></CardHeader>
+              <CardContent>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-admin-border text-left text-xs text-admin-fg-muted uppercase">
+                        <th scope="col" className="pb-2 pr-3">Tutor</th>
+                        <th scope="col" className="pb-2 pr-3">Status</th>
+                        <th scope="col" className="pb-2 pr-3">Timezone</th>
+                        <th scope="col" className="pb-2 pr-3">Sessions</th>
+                        <th scope="col" className="pb-2">Rating</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {tutors.map(t => (
+                        <tr key={t.id} className="border-b border-admin-border">
+                          <td className="py-2 pr-3 text-admin-fg-strong">{t.displayName}</td>
+                          <td className="py-2 pr-3">
+                            <Badge variant={t.isActive ? 'success' : 'default'} intensity="tinted" size="sm">
+                              {t.isActive ? 'Active' : 'Inactive'}
+                            </Badge>
+                          </td>
+                          <td className="py-2 pr-3 text-xs text-admin-fg-muted">{t.timezone}</td>
+                          <td className="py-2 pr-3 text-xs">{t.totalSessions}</td>
+                          <td className="py-2 text-xs">{t.averageRating.toFixed(1)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           <div className="space-y-3">
             {tutors.map(tutor => (
               <Card key={tutor.id}><CardContent className="p-4">
@@ -397,14 +643,41 @@ export default function AdminPrivateSpeakingPage() {
                     {availability.length === 0 && <p className="text-xs text-admin-fg-muted mb-3">No availability rules yet.</p>}
                     <div className="space-y-2 mb-3">
                       {availability.map(rule => (
-                        <div key={rule.id} className="flex items-center justify-between bg-admin-bg-subtle rounded-admin-md px-3 py-2">
-                          <span className="text-sm text-admin-fg-strong">
-                            {DAY_NAMES[rule.dayOfWeek]} {rule.startTime} – {rule.endTime}
-                          </span>
-                          <button onClick={() => handleDeleteRule(rule.id)} className="text-[var(--admin-danger)] hover:opacity-80">
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
+                        editingRule?.id === rule.id ? (
+                          <div key={rule.id} className="flex flex-wrap items-center gap-2 bg-admin-bg-subtle rounded-admin-md px-3 py-2">
+                            <select value={editingRule.dayOfWeek} onChange={e => setEditingRule(r => r ? { ...r, dayOfWeek: Number(e.target.value) } : r)}
+                              className="px-2 py-1.5 border border-admin-border rounded text-xs bg-admin-bg-surface text-admin-fg-strong">
+                              {DAY_NAMES.map((name, i) => <option key={i} value={i}>{name}</option>)}
+                            </select>
+                            <input type="time" value={editingRule.startTime} onChange={e => setEditingRule(r => r ? { ...r, startTime: e.target.value } : r)}
+                              className="px-2 py-1.5 border border-admin-border rounded text-xs bg-admin-bg-surface text-admin-fg-strong" />
+                            <span className="text-xs text-admin-fg-muted">to</span>
+                            <input type="time" value={editingRule.endTime} onChange={e => setEditingRule(r => r ? { ...r, endTime: e.target.value } : r)}
+                              className="px-2 py-1.5 border border-admin-border rounded text-xs bg-admin-bg-surface text-admin-fg-strong" />
+                            <label className="flex items-center gap-1.5 text-xs text-admin-fg-strong">
+                              <input type="checkbox" checked={editingRule.isActive} onChange={e => setEditingRule(r => r ? { ...r, isActive: e.target.checked } : r)}
+                                className="w-3.5 h-3.5 rounded" />
+                              Active
+                            </label>
+                            <Button size="sm" variant="primary" onClick={handleSaveRuleEdit} loading={saving}>Save</Button>
+                            <Button size="sm" variant="ghost" onClick={() => setEditingRule(null)}>Cancel</Button>
+                          </div>
+                        ) : (
+                          <div key={rule.id} className="flex items-center justify-between bg-admin-bg-subtle rounded-admin-md px-3 py-2">
+                            <span className="text-sm text-admin-fg-strong">
+                              {DAY_NAMES[rule.dayOfWeek]} {rule.startTime} – {rule.endTime}
+                              {!rule.isActive && <Badge variant="default" intensity="tinted" size="sm" className="ml-2">Inactive</Badge>}
+                            </span>
+                            <div className="flex items-center gap-2">
+                              <button onClick={() => setEditingRule(rule)} className="text-admin-fg-muted hover:text-admin-fg-strong" aria-label="Edit rule">
+                                <Pencil className="w-3.5 h-3.5" />
+                              </button>
+                              <button onClick={() => handleDeleteRule(rule.id)} className="text-[var(--admin-danger)] hover:opacity-80" aria-label="Delete rule">
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </div>
+                        )
                       ))}
                     </div>
                     <div className="flex items-center gap-2">
@@ -432,7 +705,24 @@ export default function AdminPrivateSpeakingPage() {
       {/* ── Bookings Tab ─────────────────────────── */}
       {tab === 'bookings' && (
         <Card>
-          <CardHeader><CardTitle>All bookings</CardTitle></CardHeader>
+          <CardHeader>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <CardTitle>All bookings</CardTitle>
+              <div className="flex items-center gap-2">
+                <select value={bookingStatusFilter} onChange={e => setBookingStatusFilter(e.target.value)}
+                  aria-label="Filter by status"
+                  className="px-3 py-2 border border-admin-border rounded-admin-md text-sm bg-admin-bg-surface text-admin-fg-strong">
+                  <option value="">All statuses</option>
+                  {BOOKING_STATUS_FILTERS.map(s => (
+                    <option key={s} value={s}>{s === 'NoShow' ? 'No-show' : s}</option>
+                  ))}
+                </select>
+                <Button size="sm" variant="outline" onClick={handleExportBookings} loading={exporting}>
+                  <Download className="w-3.5 h-3.5 mr-1" /> Export CSV
+                </Button>
+              </div>
+            </div>
+          </CardHeader>
           <CardContent>
           {bookings.length === 0 ? (
             <p className="text-sm text-admin-fg-muted text-center py-8">No bookings found.</p>
@@ -444,8 +734,11 @@ export default function AdminPrivateSpeakingPage() {
                     <th scope="col" className="pb-2 pr-3">Booking</th>
                     <th scope="col" className="pb-2 pr-3">Tutor</th>
                     <th scope="col" className="pb-2 pr-3">Session</th>
+                    <th scope="col" className="pb-2 pr-3">Track</th>
                     <th scope="col" className="pb-2 pr-3">Status</th>
                     <th scope="col" className="pb-2 pr-3">Payment</th>
+                    <th scope="col" className="pb-2 pr-3">Refund</th>
+                    <th scope="col" className="pb-2 pr-3">Penalty</th>
                     <th scope="col" className="pb-2 pr-3">Entitlement</th>
                     <th scope="col" className="pb-2 pr-3">Zoom</th>
                     <th scope="col" className="pb-2 pr-3">Calendar</th>
@@ -458,25 +751,58 @@ export default function AdminPrivateSpeakingPage() {
                       <td className="py-2 pr-3 font-mono text-xs">{b.id.slice(0, 12)}…</td>
                       <td className="py-2 pr-3">{b.tutorName ?? '-'}</td>
                       <td className="py-2 pr-3">{new Date(b.sessionStartUtc).toLocaleString('en-AU', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</td>
-                      <td className="py-2 pr-3"><Badge variant="default" intensity="tinted" size="sm">{b.status}</Badge></td>
+                      <td className="py-2 pr-3 text-xs">
+                        {b.professionTrack
+                          ? <Badge variant="default" intensity="tinted" size="sm">{b.professionTrack}</Badge>
+                          : <span className="text-admin-fg-muted">-</span>}
+                      </td>
+                      <td className="py-2 pr-3">
+                        <Badge variant={b.status === 'NoShow' ? 'warning' : 'default'} intensity="tinted" size="sm">
+                          {b.status === 'NoShow' ? 'No-show' : b.status}
+                        </Badge>
+                      </td>
                       <td className="py-2 pr-3 text-xs">{b.paymentStatus}</td>
+                      <td className="py-2 pr-3 text-xs">
+                        {b.refundIssued
+                          ? <Badge variant="success" intensity="tinted" size="sm">{b.refundAmountMinorUnits != null ? formatPrice(b.refundAmountMinorUnits, b.currency) : 'Issued'}</Badge>
+                          : <span className="text-admin-fg-muted">-</span>}
+                      </td>
+                      <td className="py-2 pr-3 text-xs">
+                        {b.penaltyAmountMinorUnits != null && b.penaltyAmountMinorUnits > 0
+                          ? <Badge variant="warning" intensity="tinted" size="sm">{formatPrice(b.penaltyAmountMinorUnits, b.currency)}</Badge>
+                          : <span className="text-admin-fg-muted">-</span>}
+                      </td>
                       <td className="py-2 pr-3 text-xs">
                         {b.entitlementConsumed ? (b.entitlementRestoredAt ? 'Restored' : 'Consumed') : 'Legacy payment'}
                       </td>
                       <td className="py-2 pr-3 text-xs">{b.zoomStatus ?? '-'}</td>
                       <td className="py-2 pr-3 text-xs">{b.googleCalendarSyncStatus ?? '-'}</td>
-                      <td className="py-2 flex items-center gap-1.5">
-                        {(b.status === 'Confirmed' || b.status === 'ZoomCreated') && (
-                          <>
-                            <Button size="sm" variant="outline" onClick={async () => { await completeAdminPrivateSpeakingBooking(b.id); loadBookings(); }}>Complete</Button>
-                            <Button size="sm" variant="destructive" onClick={async () => { await cancelAdminPrivateSpeakingBooking(b.id, 'Admin cancelled'); loadBookings(); }}>Cancel</Button>
-                          </>
-                        )}
-                        {b.zoomStatus === 'Failed' && (
-                          <Button size="sm" variant="ghost" onClick={async () => { await retryAdminPrivateSpeakingZoom(b.id); loadBookings(); }}>
-                            <RefreshCw className="w-3 h-3" /> Retry Zoom
+                      <td className="py-2">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          {(b.status === 'Confirmed' || b.status === 'ZoomCreated') && (
+                            <>
+                              <Button size="sm" variant="outline" onClick={async () => { await completeAdminPrivateSpeakingBooking(b.id); loadBookings(); }}>Complete</Button>
+                              <Button size="sm" variant="destructive" onClick={async () => { await cancelAdminPrivateSpeakingBooking(b.id, 'Admin cancelled'); loadBookings(); }}>Cancel</Button>
+                              <Button size="sm" variant="ghost" onClick={() => handleMarkNoShow(b)}>
+                                <UserX className="w-3 h-3 mr-1" /> No-show
+                              </Button>
+                            </>
+                          )}
+                          {b.zoomStatus === 'Failed' && (
+                            <Button size="sm" variant="ghost" onClick={async () => { await retryAdminPrivateSpeakingZoom(b.id); loadBookings(); }}>
+                              <RefreshCw className="w-3 h-3 mr-1" /> Retry Zoom
+                            </Button>
+                          )}
+                          <Button size="sm" variant="ghost" onClick={() => openEditModal(b)}>
+                            <Pencil className="w-3 h-3 mr-1" /> Edit
                           </Button>
-                        )}
+                          <Button size="sm" variant="ghost" onClick={() => openRescheduleModal(b)}>
+                            <CalendarClock className="w-3 h-3 mr-1" /> Reschedule
+                          </Button>
+                          <Button size="sm" variant="ghost" onClick={() => openRefundModal(b)}>
+                            <Banknote className="w-3 h-3 mr-1" /> Refund
+                          </Button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -514,6 +840,108 @@ export default function AdminPrivateSpeakingPage() {
           )}
           </CardContent>
         </Card>
+      )}
+
+      {/* ── Booking action modals ─────────────────── */}
+      {bookingModal && activeBooking && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-navy/50 backdrop-blur-sm p-4"
+          role="dialog"
+          aria-modal="true"
+          onClick={closeBookingModal}
+        >
+          <div
+            className="w-full max-w-lg rounded-admin-lg border border-admin-border bg-admin-bg-surface shadow-lg p-6"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-admin-fg-strong">
+                {bookingModal === 'refund' && 'Override refund'}
+                {bookingModal === 'reschedule' && 'Manual reschedule'}
+                {bookingModal === 'edit' && 'Edit booking'}
+              </h3>
+              <button onClick={closeBookingModal} className="text-admin-fg-muted hover:text-admin-fg-strong" aria-label="Close">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <p className="text-xs text-admin-fg-muted mb-4 font-mono">Booking {activeBooking.id.slice(0, 12)}…</p>
+
+            {bookingModal === 'refund' && (
+              <div className="space-y-3">
+                <div>
+                  <label className="text-xs text-admin-fg-muted mb-1 block">Amount (minor units, optional)</label>
+                  <input type="number" value={refundForm.amount} placeholder="Leave blank for full refund"
+                    onChange={e => setRefundForm(f => ({ ...f, amount: e.target.value }))}
+                    className="w-full px-3 py-2 border border-admin-border rounded-admin-md text-sm bg-admin-bg-surface text-admin-fg-strong" />
+                </div>
+                <div>
+                  <label className="text-xs text-admin-fg-muted mb-1 block">Reason (optional)</label>
+                  <textarea value={refundForm.reason} rows={3}
+                    onChange={e => setRefundForm(f => ({ ...f, reason: e.target.value }))}
+                    className="w-full px-3 py-2 border border-admin-border rounded-admin-md text-sm bg-admin-bg-surface text-admin-fg-strong" />
+                </div>
+                <div className="flex justify-end gap-2 pt-2">
+                  <Button variant="ghost" onClick={closeBookingModal}>Cancel</Button>
+                  <Button variant="primary" onClick={handleSubmitRefund} loading={saving}>Apply refund</Button>
+                </div>
+              </div>
+            )}
+
+            {bookingModal === 'reschedule' && (
+              <div className="space-y-3">
+                <div>
+                  <label className="text-xs text-admin-fg-muted mb-1 block">New session start</label>
+                  <input type="datetime-local" value={rescheduleForm.newStart}
+                    onChange={e => setRescheduleForm(f => ({ ...f, newStart: e.target.value }))}
+                    className="w-full px-3 py-2 border border-admin-border rounded-admin-md text-sm bg-admin-bg-surface text-admin-fg-strong" />
+                </div>
+                <div>
+                  <label className="text-xs text-admin-fg-muted mb-1 block">Reason (optional)</label>
+                  <textarea value={rescheduleForm.reason} rows={3}
+                    onChange={e => setRescheduleForm(f => ({ ...f, reason: e.target.value }))}
+                    className="w-full px-3 py-2 border border-admin-border rounded-admin-md text-sm bg-admin-bg-surface text-admin-fg-strong" />
+                </div>
+                <div className="flex justify-end gap-2 pt-2">
+                  <Button variant="ghost" onClick={closeBookingModal}>Cancel</Button>
+                  <Button variant="primary" onClick={handleSubmitReschedule} loading={saving} disabled={!rescheduleForm.newStart}>Reschedule</Button>
+                </div>
+              </div>
+            )}
+
+            {bookingModal === 'edit' && (
+              <div className="space-y-3">
+                <div>
+                  <label className="text-xs text-admin-fg-muted mb-1 block">Session start</label>
+                  <input type="datetime-local" value={editForm.sessionStart}
+                    onChange={e => setEditForm(f => ({ ...f, sessionStart: e.target.value }))}
+                    className="w-full px-3 py-2 border border-admin-border rounded-admin-md text-sm bg-admin-bg-surface text-admin-fg-strong" />
+                </div>
+                <div>
+                  <label className="text-xs text-admin-fg-muted mb-1 block">Duration (minutes)</label>
+                  <input type="number" value={editForm.durationMinutes}
+                    onChange={e => setEditForm(f => ({ ...f, durationMinutes: e.target.value }))}
+                    className="w-full px-3 py-2 border border-admin-border rounded-admin-md text-sm bg-admin-bg-surface text-admin-fg-strong" />
+                </div>
+                <div>
+                  <label className="text-xs text-admin-fg-muted mb-1 block">Profession track</label>
+                  <input type="text" value={editForm.professionTrack}
+                    onChange={e => setEditForm(f => ({ ...f, professionTrack: e.target.value }))}
+                    className="w-full px-3 py-2 border border-admin-border rounded-admin-md text-sm bg-admin-bg-surface text-admin-fg-strong" />
+                </div>
+                <div>
+                  <label className="text-xs text-admin-fg-muted mb-1 block">Tutor notes</label>
+                  <textarea value={editForm.tutorNotes} rows={3}
+                    onChange={e => setEditForm(f => ({ ...f, tutorNotes: e.target.value }))}
+                    className="w-full px-3 py-2 border border-admin-border rounded-admin-md text-sm bg-admin-bg-surface text-admin-fg-strong" />
+                </div>
+                <div className="flex justify-end gap-2 pt-2">
+                  <Button variant="ghost" onClick={closeBookingModal}>Cancel</Button>
+                  <Button variant="primary" onClick={handleSubmitEdit} loading={saving}>Save changes</Button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
       )}
       </AdminPageShell>
     </AdminRouteWorkspace>
