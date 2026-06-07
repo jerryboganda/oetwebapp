@@ -1,3 +1,19 @@
+/**
+ * Result of an admin bulk action endpoint. Mirrors the backend
+ * `BulkActionResult` record (PascalCase, but JSON-serialized camelCase):
+ * `POST /v1/admin/papers/bulk`, `/v1/admin/mock-bundles/bulk`,
+ * `/v1/admin/speaking/drills/bulk`, `/v1/admin/speaking/role-play-cards/bulk`.
+ * Named with the `Dto` suffix to avoid colliding with the unrelated
+ * `ExpertBulkActionResult` in `lib/types/expert.ts`.
+ */
+export interface BulkActionResultDto {
+  totalRequested: number;
+  succeeded: number;
+  skipped: number;
+  failed: number;
+  errors: string[];
+}
+
 export interface AdminDashboardData {
   generatedAt: string;
   freshness: {

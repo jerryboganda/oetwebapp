@@ -23,6 +23,7 @@
 import { ensureFreshAccessToken } from '@/lib/auth-client';
 import { env } from '@/lib/env';
 import { fetchWithTimeout } from '@/lib/network/fetch-with-timeout';
+import type { BulkActionResultDto } from '@/lib/types/admin';
 
 const API_BASE_URL = env.apiBaseUrl;
 
@@ -322,6 +323,24 @@ export async function adminArchiveRolePlayCard(cardId: string): Promise<RolePlay
   return request<RolePlayCardDetail>(`/v1/admin/speaking/role-play-cards/${encodeURIComponent(cardId)}/archive`, {
     method: 'POST',
     body: '{}',
+  });
+}
+
+export type RolePlayCardBulkAction = 'publish' | 'archive';
+
+/**
+ * Bulk action over speaking role-play cards.
+ * `POST /v1/admin/speaking/role-play-cards/bulk`. Backend record is PascalCase
+ * `(Action, Ids)`; ASP.NET binds the camelCase JSON case-insensitively (matches
+ * the other admin POSTs in this module).
+ */
+export async function bulkAdminRolePlayCards(
+  action: RolePlayCardBulkAction,
+  ids: string[],
+): Promise<BulkActionResultDto> {
+  return request<BulkActionResultDto>('/v1/admin/speaking/role-play-cards/bulk', {
+    method: 'POST',
+    body: JSON.stringify({ action, ids }),
   });
 }
 
