@@ -282,8 +282,20 @@ public static class SpeakingAliasEndpoints
         {
             if (page < 1) page = 1;
             if (pageSize is < 1 or > 100) pageSize = 20;
-            DateOnly? fromDate = from is not null ? DateOnly.Parse(from) : null;
-            DateOnly? toDate = to is not null ? DateOnly.Parse(to) : null;
+            DateOnly? fromDate = null;
+            DateOnly? toDate = null;
+            if (from is not null)
+            {
+                if (!DateOnly.TryParse(from, out var parsedFrom))
+                    return Results.BadRequest(new { error = "Invalid 'from'/'to' date. Use yyyy-MM-dd." });
+                fromDate = parsedFrom;
+            }
+            if (to is not null)
+            {
+                if (!DateOnly.TryParse(to, out var parsedTo))
+                    return Results.BadRequest(new { error = "Invalid 'from'/'to' date. Use yyyy-MM-dd." });
+                toDate = parsedTo;
+            }
 
             var bookings = await svc.GetAllBookingsAsync(
                 tutorProfileId, status, learnerId, fromDate, toDate, page, pageSize, ct);

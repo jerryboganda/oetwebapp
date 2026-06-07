@@ -966,7 +966,16 @@ public sealed class PrivateSpeakingService(
         var config = await GetConfigAsync(ct);
         var now = timeProvider.GetUtcNow();
 
-        var reminderOffsets = JsonSerializer.Deserialize<int[]>(config.ReminderOffsetsMinutesJson) ?? [1440, 60, 15];
+        int[] reminderOffsets;
+        try
+        {
+            reminderOffsets = JsonSerializer.Deserialize<int[]>(config.ReminderOffsetsMinutesJson) ?? [1440, 60, 15];
+        }
+        catch (JsonException ex)
+        {
+            logger.LogWarning(ex, "Malformed ReminderOffsetsMinutesJson '{Json}'; falling back to default offsets [1440, 60, 15].", config.ReminderOffsetsMinutesJson);
+            reminderOffsets = [1440, 60, 15];
+        }
         if (reminderOffsets.Length == 0) return;
         var maxOffset = reminderOffsets.Max();
 
@@ -980,7 +989,16 @@ public sealed class PrivateSpeakingService(
 
         foreach (var booking in upcomingBookings)
         {
-            var sentReminders = JsonSerializer.Deserialize<List<int>>(booking.RemindersSentJson) ?? [];
+            List<int> sentReminders;
+            try
+            {
+                sentReminders = JsonSerializer.Deserialize<List<int>>(booking.RemindersSentJson) ?? [];
+            }
+            catch (JsonException ex)
+            {
+                logger.LogWarning(ex, "Malformed RemindersSentJson '{Json}' on booking {BookingId}; treating as no reminders sent.", booking.RemindersSentJson, booking.Id);
+                sentReminders = [];
+            }
             var minutesUntilSession = (booking.SessionStartUtc - now).TotalMinutes;
             var changed = false;
 
