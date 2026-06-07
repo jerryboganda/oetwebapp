@@ -1586,18 +1586,25 @@ public static partial class SeedData
             CreatedAt = now.AddDays(-2).AddMinutes(35)
         });
 
-        // A pending tutor-review assignment so the seeded submission surfaces in the
-        // writing review queue (GET /v1/tutors/writing/queue), which backs both the
-        // expert writing queue (/expert/queue/assigned) and /tutor/writing/queue. This
-        // lets E2E exercise the real queue → review navigation. The submission-keyed
-        // marking submit (SubmitMarkingReviewAsync) never touches this row, so it stays
-        // queue-visible across review submissions.
+        // A tutor-review assignment claimed by the seeded expert so the seeded
+        // submission surfaces in the writing review queue (GET /v1/tutors/writing/queue,
+        // which lists both "pending" and "claimed" rows) — backing both the expert
+        // writing queue (/expert/queue/assigned) and /tutor/writing/queue — AND so the
+        // expert can load the marking context directly via
+        // /expert/review/writing/{submissionId}. GetContextAsync gates access through
+        // CanAccessSubmissionAsync, which requires an assignment for THIS tutor with
+        // status "claimed"/"submitted"; an unclaimed (empty-tutor, "pending") row would
+        // 403 the direct route load and blank the marking workspace. TutorId must match
+        // the JWT NameIdentifier the API resolves (the expert's auth account id), not the
+        // ExpertUser id. The claim endpoint is idempotent for the current tutor, so the
+        // queue → review navigation spec can still re-claim it; SubmitMarkingReviewAsync
+        // never touches this row, so it stays queue-visible across review submissions.
         db.WritingTutorReviewAssignments.Add(new WritingTutorReviewAssignment
         {
             Id = writingMarkingAssignmentId,
             SubmissionId = writingMarkingSubmissionId,
-            TutorId = string.Empty,
-            Status = "pending",
+            TutorId = ExpertAuthAccountId,
+            Status = "claimed",
             ClaimedAt = now.AddDays(-2).AddMinutes(33),
             DueAt = now.AddDays(-2).AddMinutes(33).AddHours(36)
         });
