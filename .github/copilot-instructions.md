@@ -10,6 +10,7 @@ This file is always loaded. Keep startup lean and defer detail until it is actua
 4. Nearby code and tests
 
 Repository-specific OET rules win over generic framework, skill, plugin, or agent defaults.
+Before product catalogue, checkout, entitlement, dashboard, add-on, Tutor Book, or course expiry work, load `docs/OET_2026_Product_Portfolio_Claude_Code_Codex.md` and preserve its product IDs, pricing, flags, entitlement templates, and acceptance criteria.
 
 ## Lean Context Policy
 

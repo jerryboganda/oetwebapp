@@ -31,6 +31,7 @@ public sealed class PublicCatalogDraftVisibilityTests : IClassFixture<TestWebApp
     public async Task PublicCatalogPricing_OmitsDraftPharmacyPlan_ButKeepsVisiblePlan()
     {
         await ResetPlansAsync();
+        await ResetAddOnsAsync();
         await SeedPlansAsync();
 
         // Anonymous endpoint — no auth headers required.
@@ -47,6 +48,30 @@ public sealed class PublicCatalogDraftVisibilityTests : IClassFixture<TestWebApp
 
         Assert.Contains("conformance-visible-plan", codes);
         Assert.DoesNotContain("full-pharmacy", codes);
+    }
+
+    [Fact]
+    public async Task PublicCatalogPricing_OnlyListsParentEligiblePortfolioAddOns()
+    {
+        await ResetAddOnsAsync();
+        await SeedPublicAddOnsAsync();
+
+        using var client = _factory.CreateClient();
+        var response = await client.GetAsync("/v1/catalog/pricing");
+        var body = await response.Content.ReadAsStringAsync();
+        Assert.True(response.IsSuccessStatusCode, $"status={response.StatusCode} body={body}");
+
+        using var json = JsonDocument.Parse(body);
+        var codes = json.RootElement.GetProperty("addOns")
+            .EnumerateArray()
+            .Select(p => p.GetProperty("code").GetString())
+            .ToList();
+
+        Assert.Contains("conformance-writing-addon", codes);
+        Assert.Contains("conformance-speaking-addon", codes);
+        Assert.Contains("conformance-tutorbook-addon", codes);
+        Assert.DoesNotContain("conformance-ai-package", codes);
+        Assert.DoesNotContain("conformance-legacy-credits", codes);
     }
 
     [Fact]
@@ -131,6 +156,21 @@ public sealed class PublicCatalogDraftVisibilityTests : IClassFixture<TestWebApp
         await db.SaveChangesAsync();
     }
 
+    private async Task SeedPublicAddOnsAsync()
+    {
+        await using var scope = _factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+
+        db.BillingAddOns.AddRange(
+            NewAddOn("conformance-writing-addon", "writing_assessments", "writing_addons", requiresParent: true),
+            NewAddOn("conformance-speaking-addon", "speaking_sessions", "speaking_addons", requiresParent: true),
+            NewAddOn("conformance-tutorbook-addon", "tutor_book", "tutor_book_discount", requiresParent: true),
+            NewAddOn("conformance-ai-package", "ai_package", string.Empty, requiresParent: false),
+            NewAddOn("conformance-legacy-credits", string.Empty, string.Empty, requiresParent: false));
+
+        await db.SaveChangesAsync();
+    }
+
     private async Task ResetPlansAsync()
     {
         await using var scope = _factory.Services.CreateAsyncScope();
@@ -140,6 +180,26 @@ public sealed class PublicCatalogDraftVisibilityTests : IClassFixture<TestWebApp
         if (existing.Count > 0)
         {
             db.BillingPlans.RemoveRange(existing);
+            await db.SaveChangesAsync();
+        }
+    }
+
+    private async Task ResetAddOnsAsync()
+    {
+        await using var scope = _factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        var codes = new[]
+        {
+            "conformance-writing-addon",
+            "conformance-speaking-addon",
+            "conformance-tutorbook-addon",
+            "conformance-ai-package",
+            "conformance-legacy-credits"
+        };
+        var existing = await db.BillingAddOns.Where(p => codes.Contains(p.Code)).ToListAsync();
+        if (existing.Count > 0)
+        {
+            db.BillingAddOns.RemoveRange(existing);
             await db.SaveChangesAsync();
         }
     }
@@ -168,10 +228,28 @@ public sealed class PublicCatalogDraftVisibilityTests : IClassFixture<TestWebApp
         WritingAddonsEnabled = writingAddons,
     };
 
+    private static BillingAddOn NewAddOn(string code, string kind, string flag, bool requiresParent) => new()
+    {
+        Id = $"addon_{code}",
+        Code = code,
+        Name = code,
+        Description = $"{code} description.",
+        Price = 12m,
+        Currency = "GBP",
+        Interval = "one_time",
+        Status = BillingAddOnStatus.Active,
+        AddonKind = kind,
+        EligibilityFlag = flag,
+        RequiresEligibleParent = requiresParent,
+        IsStackable = true,
+        DisplayOrder = 10,
+    };
+
     public void Dispose()
     {
         // Best-effort cleanup so the shared class-fixture DB does not leak the
         // fixed `full-pharmacy` code into any sibling test in this class.
         ResetPlansAsync().GetAwaiter().GetResult();
+        ResetAddOnsAsync().GetAwaiter().GetResult();
     }
 }

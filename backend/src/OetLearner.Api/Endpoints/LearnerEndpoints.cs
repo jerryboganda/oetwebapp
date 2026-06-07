@@ -300,6 +300,7 @@ public static class LearnerEndpoints
             [FromQuery] string? priceId,
             [FromQuery] string? couponCode,
             [FromQuery] string? addOnCodes,
+            [FromQuery] string? parentSubscriptionId,
             LearnerService service,
             CancellationToken ct)
             => Results.Ok(await service.GetBillingQuoteAsync(http.UserId(), new BillingQuoteRequest(
@@ -309,7 +310,8 @@ public static class LearnerEndpoints
                 couponCode,
                 string.IsNullOrWhiteSpace(addOnCodes)
                     ? null
-                    : addOnCodes.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList()), ct)));
+                    : addOnCodes.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList(),
+                parentSubscriptionId), ct)));
         billing.MapGet("/invoices", async (HttpContext http, [FromQuery] string? cursor, [FromQuery] int? limit, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetInvoicesAsync(http.UserId(), cursor, limit, ct)));
         billing.MapGet("/invoices/{invoiceId}/download", async (HttpContext http, string invoiceId, LearnerService service, CancellationToken ct) =>
         {

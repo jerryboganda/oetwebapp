@@ -43,6 +43,7 @@ public static class Oet2026CatalogEndpoints
         // Admin eligibility matrix.
         var admin = v1.MapGroup("/admin/billing");
         admin.MapGet("/eligibility/matrix", AdminEligibilityMatrix).RequireAuthorization("AdminBillingRead");
+        admin.MapGet("/portfolio/export", AdminPortfolioExport).RequireAuthorization("AdminBillingRead");
         // Re-seed catalog button (Wave 3.4).
         admin.MapPost("/catalog/seed-oet-2026", AdminReseedOet2026Catalog).RequireAuthorization("AdminBillingCatalogWrite");
 
@@ -169,7 +170,11 @@ public static class Oet2026CatalogEndpoints
             .ToListAsync(ct);
 
         var addOns = await db.BillingAddOns.AsNoTracking()
-            .Where(a => a.Status == BillingAddOnStatus.Active)
+            .Where(a => a.Status == BillingAddOnStatus.Active
+                && a.RequiresEligibleParent
+                && (a.EligibilityFlag == "writing_addons"
+                    || a.EligibilityFlag == "speaking_addons"
+                    || a.EligibilityFlag == "tutor_book_discount"))
             .OrderBy(a => a.DisplayOrder)
             .ToListAsync(ct);
 
@@ -311,6 +316,160 @@ public static class Oet2026CatalogEndpoints
         "tutor_book_discount" => plan.TutorBookDiscountEnabled,
         _ => false
     };
+
+    private sealed record PortfolioExportResponse(
+        DateTimeOffset GeneratedAt,
+        IReadOnlyList<PortfolioExportPlan> Products,
+        IReadOnlyList<PortfolioExportEnrolment> Enrolments,
+        IReadOnlyList<PortfolioExportAddOnPurchase> AddOnPurchases);
+
+    private sealed record PortfolioExportPlan(
+        string Code,
+        string Name,
+        decimal Price,
+        string Currency,
+        int AccessDurationDays,
+        string ProductCategory,
+        string Profession,
+        bool IsDraft,
+        bool IsVisible,
+        bool WritingAddonsEnabled,
+        bool SpeakingAddonsEnabled,
+        bool TutorBookDiscountEnabled,
+        int BundledWritingAssessments,
+        int BundledSpeakingSessions,
+        int BundledAiCredits,
+        bool BundledTutorBook,
+        bool BundledBasicEnglish,
+        IReadOnlyList<string> DashboardModules);
+
+    private sealed record PortfolioExportEnrolment(
+        string SubscriptionId,
+        string UserId,
+        string? UserEmail,
+        string PlanId,
+        string? PlanCode,
+        string? PlanName,
+        SubscriptionStatus Status,
+        DateTimeOffset StartedAt,
+        DateTimeOffset? ExpiresAt,
+        int WritingAssessmentsRemaining,
+        int SpeakingSessionsRemaining,
+        int AiCreditsRemaining,
+        bool TutorBookUnlocked,
+        bool BasicEnglishUnlocked);
+
+    private sealed record PortfolioExportAddOnPurchase(
+        string SubscriptionItemId,
+        string ParentSubscriptionId,
+        string UserId,
+        string? UserEmail,
+        string AddOnCode,
+        string? AddOnName,
+        int Quantity,
+        string? QuoteId,
+        string? CheckoutSessionId,
+        DateTimeOffset AppliedAt,
+        DateTimeOffset? EndsAt);
+
+    private static async Task<Ok<PortfolioExportResponse>> AdminPortfolioExport(
+        LearnerDbContext db,
+        CancellationToken ct)
+    {
+        var planEntities = await db.BillingPlans.AsNoTracking()
+            .Where(p => p.Status != BillingPlanStatus.Archived)
+            .OrderBy(p => p.DisplayOrder)
+            .ThenBy(p => p.Name)
+            .ToListAsync(ct);
+        var plans = planEntities
+            .Select(p => new PortfolioExportPlan(
+                p.Code,
+                p.Name,
+                p.Price,
+                string.IsNullOrEmpty(p.Currency) ? "GBP" : p.Currency,
+                p.AccessDurationDays,
+                string.IsNullOrEmpty(p.ProductCategory) ? "standalone" : p.ProductCategory,
+                string.IsNullOrEmpty(p.Profession) ? "all" : p.Profession,
+                p.IsDraft,
+                p.IsVisible,
+                p.WritingAddonsEnabled,
+                p.SpeakingAddonsEnabled,
+                p.TutorBookDiscountEnabled,
+                p.BundledWritingAssessments,
+                p.BundledSpeakingSessions,
+                p.BundledAiCredits,
+                p.BundledTutorBook,
+                p.BundledBasicEnglish,
+                DeserializeStringArray(p.DashboardModulesJson)))
+            .ToList();
+
+        var planCodes = planEntities.Select(p => p.Code).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var planIds = planEntities.Select(p => p.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var planLookup = planEntities
+            .SelectMany(plan => new[] { plan.Code, plan.Id }.Select(key => new { key, plan }))
+            .GroupBy(item => item.key, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(group => group.Key, group => group.First().plan, StringComparer.OrdinalIgnoreCase);
+        var enrolmentRows = await (
+                from sub in db.Subscriptions.AsNoTracking()
+                join user in db.Users.AsNoTracking() on sub.UserId equals user.Id into users
+                from user in users.DefaultIfEmpty()
+                where planCodes.Contains(sub.PlanId) || planIds.Contains(sub.PlanId)
+                orderby sub.StartedAt descending
+                select new { Subscription = sub, UserEmail = user == null ? null : user.Email })
+            .Take(5000)
+            .ToListAsync(ct);
+        var enrolments = enrolmentRows
+            .Select(row =>
+            {
+                planLookup.TryGetValue(row.Subscription.PlanId, out var plan);
+                return new PortfolioExportEnrolment(
+                    row.Subscription.Id,
+                    row.Subscription.UserId,
+                    row.UserEmail,
+                    row.Subscription.PlanId,
+                    plan?.Code,
+                    plan?.Name,
+                    row.Subscription.Status,
+                    row.Subscription.StartedAt,
+                    row.Subscription.ExpiresAt,
+                    row.Subscription.WritingAssessmentsRemaining,
+                    row.Subscription.SpeakingSessionsRemaining,
+                    row.Subscription.AiCreditsRemaining,
+                    row.Subscription.TutorBookUnlocked,
+                    row.Subscription.BasicEnglishUnlocked);
+            })
+            .ToList();
+
+        var addOnPurchases = await (
+                from item in db.SubscriptionItems.AsNoTracking()
+                join sub in db.Subscriptions.AsNoTracking() on item.SubscriptionId equals sub.Id
+                join user in db.Users.AsNoTracking() on sub.UserId equals user.Id into users
+                from user in users.DefaultIfEmpty()
+                join addOn in db.BillingAddOns.AsNoTracking() on item.ItemCode equals addOn.Code into addOns
+                from addOn in addOns.DefaultIfEmpty()
+                where item.ItemType == "addon" || item.ItemType == "recurring_addon"
+                orderby item.CreatedAt descending
+                select new PortfolioExportAddOnPurchase(
+                    item.Id,
+                    item.SubscriptionId,
+                    sub.UserId,
+                    user == null ? null : user.Email,
+                    item.ItemCode,
+                    addOn == null ? null : addOn.Name,
+                    item.Quantity,
+                    item.QuoteId,
+                    item.CheckoutSessionId,
+                    item.StartsAt,
+                    item.EndsAt))
+            .Take(5000)
+            .ToListAsync(ct);
+
+        return TypedResults.Ok(new PortfolioExportResponse(
+            DateTimeOffset.UtcNow,
+            plans,
+            enrolments,
+            addOnPurchases));
+    }
 
     private static IReadOnlyList<string> DeserializeStringArray(string json)
     {

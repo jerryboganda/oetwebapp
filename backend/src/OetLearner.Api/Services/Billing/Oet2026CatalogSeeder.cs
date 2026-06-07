@@ -108,7 +108,14 @@ public sealed class Oet2026CatalogSeeder(
             await UpsertAddOnAsync(db, addon, now, result, ct);
             if (options.Value.CreateContentPackages)
             {
-                await UpsertAddOnPackageAsync(db, addon, now, result, ct);
+                if (addon.RequiresEligibleParent)
+                {
+                    await DraftParentRequiredAddOnPackageAsync(db, addon, now, result, ct);
+                }
+                else
+                {
+                    await UpsertAddOnPackageAsync(db, addon, now, result, ct);
+                }
             }
         }
 
@@ -438,6 +445,25 @@ public sealed class Oet2026CatalogSeeder(
 
         if (isNew) result.PackagesCreated++;
         else result.PackagesUpdated++;
+    }
+
+    private static async Task DraftParentRequiredAddOnPackageAsync(
+        LearnerDbContext db, AddOnDto dto, DateTimeOffset now, SeederResult result, CancellationToken ct)
+    {
+        var existing = await db.ContentPackages
+            .FirstOrDefaultAsync(p => p.Code == dto.Code || p.BillingAddOnId == $"addon_{dto.Code}", ct);
+        if (existing is null)
+        {
+            return;
+        }
+
+        existing.Status = ContentStatus.Draft;
+        existing.PackageType = "addon_internal";
+        existing.BillingPlanId = null;
+        existing.BillingAddOnId = $"addon_{dto.Code}";
+        existing.PublishedAt = null;
+        existing.UpdatedAt = now;
+        result.PackagesUpdated++;
     }
 
     private static string MapProductCategoryToPackageType(string? productCategory) => productCategory switch
