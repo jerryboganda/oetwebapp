@@ -324,7 +324,7 @@ public sealed class RecallsService(
                 CardId: x.lv.Id.ToString(),
                 TermId: x.t.Id,
                 Term: x.t.Term,
-                Definition: x.t.Definition,
+                Definition: x.t.Definition ?? string.Empty,
                 Category: x.t.Category,
                 Mastery: x.lv.Mastery,
                 Starred: x.lv.Starred,
