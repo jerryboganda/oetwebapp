@@ -7254,11 +7254,46 @@ public partial class AdminService(
                 }
             }
         }
+
+        // Best-effort restore of a writing-assessment entitlement consumed at submission
+        // (PaymentSource == "entitlement"). The guarded, once-only Cancelled transition above
+        // gives this restore once-only semantics, mirroring the credits refund. We re-resolve a
+        // currently-usable subscription for the learner rather than the exact one consumed (no
+        // back-reference column exists, by design) and grant +1 writing assessment back. If the
+        // learner has no usable subscription anymore (expired/cancelled), the credit is simply
+        // not restorable and we move on — this is not an acceptance criterion.
+        var restoredWritingAssessment = false;
+        if (string.Equals(review.PaymentSource, "entitlement", StringComparison.OrdinalIgnoreCase))
+        {
+            var now = timeProvider.GetUtcNow();
+            var attempt = await db.Attempts.AsNoTracking().FirstOrDefaultAsync(a => a.Id == review.AttemptId, ct);
+            if (attempt is not null)
+            {
+                var subscription = await db.Subscriptions
+                    .Where(s => s.UserId == attempt.UserId
+                        && (s.Status == SubscriptionStatus.Active || s.Status == SubscriptionStatus.Trial)
+                        && (s.ExpiresAt == null || s.ExpiresAt > now))
+                    .OrderBy(s => s.ExpiresAt == null)
+                    .ThenBy(s => s.ExpiresAt)
+                    .FirstOrDefaultAsync(ct);
+                if (subscription is not null)
+                {
+                    subscription.WritingAssessmentsRemaining = checked(subscription.WritingAssessmentsRemaining + 1);
+                    restoredWritingAssessment = true;
+                }
+            }
+        }
+
         await db.SaveChangesAsync(ct);
 
+        var auditDetails = refundedCredits > 0
+            ? $"Cancelled: {request.Reason}. Refunded {refundedCredits} review credit(s)."
+            : restoredWritingAssessment
+                ? $"Cancelled: {request.Reason}. Restored 1 writing-assessment entitlement."
+                : $"Cancelled: {request.Reason}";
         await LogAuditAsync(adminId, adminName, "Cancelled Review", "ReviewRequest", reviewRequestId,
-            refundedCredits > 0 ? $"Cancelled: {request.Reason}. Refunded {refundedCredits} review credit(s)." : $"Cancelled: {request.Reason}", ct);
-        return new { id = reviewRequestId, status = "cancelled", refundedCredits };
+            auditDetails, ct);
+        return new { id = reviewRequestId, status = "cancelled", refundedCredits, restoredWritingAssessment };
     }
 
     public async Task<object> ReopenReviewAsync(string adminId, string adminName,
