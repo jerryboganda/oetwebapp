@@ -86,7 +86,9 @@ jobs:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup-oet-stack
       - name: Install dotnet-ef
-        run: dotnet tool install --global dotnet-ef
+        run: |
+          dotnet tool install --global dotnet-ef
+          echo "$HOME/.dotnet/tools" >> "$GITHUB_PATH"
       - name: Pending model changes?
         run: |
           dotnet restore backend/src/OetLearner.Api/OetLearner.Api.csproj --nologo
@@ -100,7 +102,7 @@ jobs:
           if grep -qi "no changes" /tmp/ef.out || [ "$ef_status" -eq 0 ]; then
             echo "OK: no pending model changes."
           else
-            echo "FAIL: pending model changes detected or EF check failed — create a migration or fix the EF command." >&2
+            echo "FAIL: pending model changes detected or EF check failed - create a migration or fix the EF command." >&2
             exit 1
           fi
 
