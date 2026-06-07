@@ -33,19 +33,22 @@ public class AddonEligibilityServiceTests : IDisposable
             Plan("speaking-crash", writing: false, speaking: true, tutorBook: true, price: 30, draft: false, visible: true),
             Plan("mega-special", writing: true, speaking: true, tutorBook: true, price: 80, draft: false, visible: true),
             Plan("full-condensed-medicine-tbook", writing: true, speaking: false, tutorBook: false, price: 135, draft: false, visible: true),
-            Plan("tutor-book", writing: false, speaking: false, tutorBook: false, price: 45, draft: false, visible: true)
+            // tutor-book is the canonical extensionAllowed:false plan.
+            Plan("tutor-book", writing: false, speaking: false, tutorBook: false, price: 45, draft: false, visible: true, extensionAllowed: false)
         );
 
         // Add-ons
         _db.BillingAddOns.AddRange(
             AddOn("addon-3-letters", flag: "writing_addons", kind: "writing_assessments", price: 30),
             AddOn("speaking-1session", flag: "speaking_addons", kind: "speaking_sessions", price: 18),
-            AddOn("tutor-book-addon", flag: "tutor_book_discount", kind: "tutor_book", price: 32)
+            AddOn("tutor-book-addon", flag: "tutor_book_discount", kind: "tutor_book", price: 32),
+            // Extend Access carries no eligibilityFlag; gated on plan ExtensionAllowed.
+            AddOn("addon-extend-90", flag: "", kind: "access_extension", price: 15)
         );
         _db.SaveChanges();
     }
 
-    private static BillingPlan Plan(string code, bool writing, bool speaking, bool tutorBook, decimal price, bool draft, bool visible) => new()
+    private static BillingPlan Plan(string code, bool writing, bool speaking, bool tutorBook, decimal price, bool draft, bool visible, bool extensionAllowed = true) => new()
     {
         Id = $"plan_{code}",
         Code = code,
@@ -56,6 +59,7 @@ public class AddonEligibilityServiceTests : IDisposable
         WritingAddonsEnabled = writing,
         SpeakingAddonsEnabled = speaking,
         TutorBookDiscountEnabled = tutorBook,
+        ExtensionAllowed = extensionAllowed,
         IsDraft = draft,
         IsVisible = visible,
     };
@@ -197,6 +201,29 @@ public class AddonEligibilityServiceTests : IDisposable
         var result = await service.ResolveAsync("user-multi", "addon-3-letters", default);
         Assert.True(result.Eligible);
         Assert.Equal(2, result.EligibleParents.Count);
+    }
+
+    [Fact]
+    public async Task ExtendableSubscription_AllowsAccessExtensionAddon()
+    {
+        // writing-crash defaults to ExtensionAllowed == true.
+        GiveUserEnrolment("user-extend-ok", "writing-crash");
+        var service = new AddonEligibilityService(_db);
+        var result = await service.ResolveAsync("user-extend-ok", "addon-extend-90", default);
+        Assert.True(result.Eligible);
+        Assert.Single(result.EligibleParents);
+        Assert.Equal("writing-crash", result.EligibleParents[0].PlanCode);
+    }
+
+    [Fact]
+    public async Task NonExtendablePlan_BlocksAccessExtensionAddon()
+    {
+        // tutor-book has ExtensionAllowed == false.
+        GiveUserEnrolment("user-extend-blocked", "tutor-book");
+        var service = new AddonEligibilityService(_db);
+        var result = await service.ResolveAsync("user-extend-blocked", "addon-extend-90", default);
+        Assert.False(result.Eligible);
+        Assert.Equal("no_eligible_parent", result.Reason);
     }
 
     [Fact]

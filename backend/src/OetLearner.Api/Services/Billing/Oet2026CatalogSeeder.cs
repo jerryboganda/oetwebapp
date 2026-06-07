@@ -300,6 +300,7 @@ public sealed class Oet2026CatalogSeeder(
         addon.EligibilityFlag = dto.EligibilityFlag ?? string.Empty;
         addon.LettersGranted = dto.LettersGranted;
         addon.SessionsGranted = dto.SessionsGranted;
+        addon.ExtensionDays = dto.ExtensionDays;
 
         var activeVersion = await db.BillingAddOnVersions
             .FirstOrDefaultAsync(v => v.AddOnId == addon.Id && v.Status == BillingAddOnStatus.Active, ct);
@@ -363,6 +364,7 @@ public sealed class Oet2026CatalogSeeder(
         dst.EligibilityFlag = src.EligibilityFlag;
         dst.LettersGranted = src.LettersGranted;
         dst.SessionsGranted = src.SessionsGranted;
+        dst.ExtensionDays = src.ExtensionDays;
     }
 
     private static async Task UpsertPlanPackageAsync(
@@ -528,6 +530,7 @@ public sealed class Oet2026CatalogSeeder(
         public bool RequiresEligibleParent { get; set; } = true;
         public int LettersGranted { get; set; }
         public int SessionsGranted { get; set; }
+        public int ExtensionDays { get; set; }
         public int GrantCredits { get; set; }
         public int MockEntitlements { get; set; }
         public bool PriorityQueue { get; set; }

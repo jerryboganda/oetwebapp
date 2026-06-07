@@ -46,6 +46,12 @@ x-learner-api-slot: &learner-api-slot
     SMTP__ENABLESSL: ${SMTP__ENABLESSL:-true}
     SMTP__FROMEMAIL: ${SMTP__FROMEMAIL}
     SMTP__FROMNAME: ${SMTP__FROMNAME:-OET Learner}
+    # Google OAuth client used by the 1:1 Speaking Google Calendar connect flow
+    # (and any social Google sign-in). Bound case-insensitively to
+    # ExternalAuth:Google:*. Optional — empty default keeps the app booting when
+    # unset; DB runtime-settings overrides take precedence when present.
+    EXTERNALAUTH__GOOGLE__CLIENTID: ${EXTERNALAUTH__GOOGLE__CLIENTID:-}
+    EXTERNALAUTH__GOOGLE__CLIENTSECRET: ${EXTERNALAUTH__GOOGLE__CLIENTSECRET:-}
     Billing__AllowSandboxFallbacks: ${BILLING__ALLOWSANDBOXFALLBACKS:-false}
     Billing__Stripe__SecretKey: ${BILLING__STRIPE__SECRETKEY}
     Billing__Stripe__SuccessUrl: ${BILLING__STRIPE__SUCCESSURL}

@@ -222,6 +222,120 @@ public sealed class CheckoutEntitlementFulfillmentTests : IClassFixture<FirstPar
     }
 
     [Fact]
+    public async Task AddOnPurchase_AccessExtension_AdvancesExpiryFromLaterOfNowOrCurrentExpiry()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var ctx = new FulfillmentContext(suffix);
+        var now = DateTimeOffset.UtcNow;
+        var currentExpiry = now.AddDays(10); // future expiry => baseline is current expiry
+
+        await using (var scope = _factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+            await db.Database.EnsureCreatedAsync();
+
+            SeedLearnerWithSubscription(db, ctx, now, expiresAt: currentExpiry);
+            SeedAddOn(db, ctx, lettersGranted: 0, sessionsGranted: 0, addonKind: "access_extension", grantCredits: 0, now: now, extensionDays: 90);
+            SeedQuote(db, ctx, addOnItems: new[] { AddOnLineItem(ctx) }, planCode: null, now: now);
+            SeedSubscriptionPaymentTransaction(db, ctx, now);
+            SeedVerifiedCompletedWebhookEvent(db, ctx, now);
+
+            await db.SaveChangesAsync();
+        }
+
+        await DriveCompletionAsync(ctx);
+
+        await using (var scope = _factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+            var subscription = await db.Subscriptions.SingleAsync(s => s.UserId == ctx.UserId);
+
+            Assert.NotNull(subscription.ExpiresAt);
+            // Pushed out 90 days from the later-of(now, currentExpiry) == currentExpiry.
+            Assert.InRange(subscription.ExpiresAt!.Value, currentExpiry.AddDays(89), currentExpiry.AddDays(91));
+            // Extension must not touch other entitlements or AI credits.
+            Assert.Equal(0, subscription.WritingAssessmentsRemaining);
+            Assert.Equal(0, subscription.AiCreditsRemaining);
+        }
+    }
+
+    [Fact]
+    public async Task AddOnPurchase_AccessExtension_Replayed_DoesNotDoubleExtend()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var ctx = new FulfillmentContext(suffix);
+        var now = DateTimeOffset.UtcNow;
+        var currentExpiry = now.AddDays(10);
+
+        var secondEventId = Guid.NewGuid();
+        var secondGatewayEventId = $"evt-{suffix}-replay";
+
+        await using (var scope = _factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+            await db.Database.EnsureCreatedAsync();
+
+            SeedLearnerWithSubscription(db, ctx, now, expiresAt: currentExpiry);
+            SeedAddOn(db, ctx, lettersGranted: 0, sessionsGranted: 0, addonKind: "access_extension", grantCredits: 0, now: now, extensionDays: 90);
+            SeedQuote(db, ctx, addOnItems: new[] { AddOnLineItem(ctx) }, planCode: null, now: now);
+            SeedSubscriptionPaymentTransaction(db, ctx, now);
+            SeedVerifiedCompletedWebhookEvent(db, ctx, now);
+            db.PaymentWebhookEvents.Add(BuildVerifiedCompletedWebhookEvent(ctx, secondEventId, secondGatewayEventId, now));
+
+            await db.SaveChangesAsync();
+        }
+
+        await DriveCompletionAsync(ctx);
+        await DriveCompletionAsync(ctx, eventId: secondEventId);
+
+        await using (var scope = _factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+            var subscription = await db.Subscriptions.SingleAsync(s => s.UserId == ctx.UserId);
+
+            // Extended exactly once (90 days), not 180.
+            Assert.InRange(subscription.ExpiresAt!.Value, currentExpiry.AddDays(89), currentExpiry.AddDays(91));
+        }
+    }
+
+    [Fact]
+    public async Task AddOnPurchase_LetterPack_DoesNotTouchExpiry()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var ctx = new FulfillmentContext(suffix);
+        var now = DateTimeOffset.UtcNow;
+        var currentExpiry = now.AddDays(10);
+
+        await using (var scope = _factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+            await db.Database.EnsureCreatedAsync();
+
+            // A letters add-on with a non-zero ExtensionDays would still be a no-op
+            // for expiry, because the branch is guarded on the access_extension kind.
+            SeedLearnerWithSubscription(db, ctx, now, writingAssessmentsRemaining: 2, expiresAt: currentExpiry);
+            SeedAddOn(db, ctx, lettersGranted: 5, sessionsGranted: 0, addonKind: "writing_assessments", grantCredits: 0, now: now, extensionDays: 0);
+            SeedQuote(db, ctx, addOnItems: new[] { AddOnLineItem(ctx) }, planCode: null, now: now);
+            SeedSubscriptionPaymentTransaction(db, ctx, now);
+            SeedVerifiedCompletedWebhookEvent(db, ctx, now);
+
+            await db.SaveChangesAsync();
+        }
+
+        await DriveCompletionAsync(ctx);
+
+        await using (var scope = _factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+            var subscription = await db.Subscriptions.SingleAsync(s => s.UserId == ctx.UserId);
+
+            Assert.Equal(7, subscription.WritingAssessmentsRemaining);
+            // Expiry untouched by a non-extension add-on.
+            Assert.InRange(subscription.ExpiresAt!.Value, currentExpiry.AddSeconds(-1), currentExpiry.AddSeconds(1));
+        }
+    }
+
+    [Fact]
     public async Task ReplayedCompletion_DoesNotDoubleGrant_AndKeepsAiCreditsExactlyOnce()
     {
         var suffix = Guid.NewGuid().ToString("N")[..8];
@@ -316,7 +430,8 @@ public sealed class CheckoutEntitlementFulfillmentTests : IClassFixture<FirstPar
         LearnerDbContext db,
         FulfillmentContext ctx,
         DateTimeOffset now,
-        int writingAssessmentsRemaining = 0)
+        int writingAssessmentsRemaining = 0,
+        DateTimeOffset? expiresAt = null)
     {
         db.Users.Add(new LearnerUser
         {
@@ -342,6 +457,7 @@ public sealed class CheckoutEntitlementFulfillmentTests : IClassFixture<FirstPar
             WritingAssessmentsRemaining = writingAssessmentsRemaining,
             SpeakingSessionsRemaining = 0,
             AiCreditsRemaining = 0,
+            ExpiresAt = expiresAt,
         });
     }
 
@@ -408,7 +524,8 @@ public sealed class CheckoutEntitlementFulfillmentTests : IClassFixture<FirstPar
         int sessionsGranted,
         string addonKind,
         int grantCredits,
-        DateTimeOffset now)
+        DateTimeOffset now,
+        int extensionDays = 0)
     {
         db.BillingAddOns.Add(new BillingAddOn
         {
@@ -428,6 +545,7 @@ public sealed class CheckoutEntitlementFulfillmentTests : IClassFixture<FirstPar
             AddonKind = addonKind,
             LettersGranted = lettersGranted,
             SessionsGranted = sessionsGranted,
+            ExtensionDays = extensionDays,
             CreatedAt = now,
             UpdatedAt = now,
         });
@@ -449,6 +567,7 @@ public sealed class CheckoutEntitlementFulfillmentTests : IClassFixture<FirstPar
             AddonKind = addonKind,
             LettersGranted = lettersGranted,
             SessionsGranted = sessionsGranted,
+            ExtensionDays = extensionDays,
             CreatedAt = now,
         });
     }

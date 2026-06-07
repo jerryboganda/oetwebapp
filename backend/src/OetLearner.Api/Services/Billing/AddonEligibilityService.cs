@@ -106,11 +106,20 @@ public sealed class AddonEligibilityService(LearnerDbContext db) : IAddonEligibi
                     PlanName = p.Name,
                     p.WritingAddonsEnabled,
                     p.SpeakingAddonsEnabled,
-                    p.TutorBookDiscountEnabled
+                    p.TutorBookDiscountEnabled,
+                    p.ExtensionAllowed
                 })
             .ToListAsync(ct);
 
-        var matches = candidateRows.Where(row => FlagMatches(row.WritingAddonsEnabled, row.SpeakingAddonsEnabled, row.TutorBookDiscountEnabled, flag)).ToList();
+        // Phase 6a — the Extend Access add-on carries no eligibilityFlag; it is
+        // eligible against any active subscription whose plan permits extension
+        // (ExtensionAllowed == true, e.g. tutor-book is false). Guarded on kind so
+        // every existing add-on continues to match purely on its flag.
+        var isAccessExtension = string.Equals(addOn.AddonKind, "access_extension", StringComparison.OrdinalIgnoreCase);
+
+        var matches = candidateRows.Where(row => isAccessExtension
+            ? row.ExtensionAllowed
+            : FlagMatches(row.WritingAddonsEnabled, row.SpeakingAddonsEnabled, row.TutorBookDiscountEnabled, flag)).ToList();
 
         if (matches.Count == 0)
         {

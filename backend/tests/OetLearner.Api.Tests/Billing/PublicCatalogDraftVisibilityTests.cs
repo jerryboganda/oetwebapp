@@ -100,6 +100,72 @@ public sealed class PublicCatalogDraftVisibilityTests : IClassFixture<TestWebApp
         Assert.Equal("conformance-visible-plan", result.RedirectSku);
     }
 
+    [Fact]
+    public async Task PublicCatalogPricing_SpeakingSessionPlan_ExposesBareSpecSlug_AndBareCodeIsTheAddOn()
+    {
+        var planCodes = new[] { "speaking-1session-plan", "conformance-normal-plan" };
+        await using (var seed = _factory.Services.CreateAsyncScope())
+        {
+            var db = seed.ServiceProvider.GetRequiredService<LearnerDbContext>();
+            db.BillingPlans.RemoveRange(await db.BillingPlans.Where(p => planCodes.Contains(p.Code)).ToListAsync());
+            db.BillingAddOns.RemoveRange(await db.BillingAddOns.Where(a => a.Code == "speaking-1session").ToListAsync());
+            await db.SaveChangesAsync();
+
+            // Standalone Speaking-session product keeps the stable `-plan` DB code...
+            db.BillingPlans.Add(NewPlan("speaking-1session-plan", "1 Private Speaking Assessment Session",
+                price: 18m, isDraft: false, isVisible: true, writingAddons: false));
+            // ...a normal plan's publicSlug must equal its code.
+            db.BillingPlans.Add(NewPlan("conformance-normal-plan", "Conformance Normal Plan",
+                price: 60m, isDraft: false, isVisible: true, writingAddons: false));
+            // ...and the bare `speaking-1session` id belongs to the ADD-ON SKU.
+            db.BillingAddOns.Add(new BillingAddOn
+            {
+                Id = "addon_speaking-1session",
+                Code = "speaking-1session",
+                Name = "1 Private Speaking Assessment Session — Add-on",
+                Price = 18m,
+                Currency = "GBP",
+                Interval = "one_time",
+                Status = BillingAddOnStatus.Active,
+                EligibilityFlag = "speaking_addons",
+                AddonKind = "speaking_sessions",
+                SessionsGranted = 1,
+                RequiresEligibleParent = true,
+            });
+            await db.SaveChangesAsync();
+        }
+
+        try
+        {
+            using var client = _factory.CreateClient();
+            var body = await (await client.GetAsync("/v1/catalog/pricing")).Content.ReadAsStringAsync();
+            using var json = JsonDocument.Parse(body);
+
+            var plans = json.RootElement.GetProperty("plans").EnumerateArray().ToList();
+            var planCodeList = plans.Select(p => p.GetProperty("code").GetString()).ToList();
+
+            var speakingPlan = plans.Single(p => p.GetProperty("code").GetString() == "speaking-1session-plan");
+            Assert.Equal("speaking-1session", speakingPlan.GetProperty("publicSlug").GetString());
+
+            var normalPlan = plans.Single(p => p.GetProperty("code").GetString() == "conformance-normal-plan");
+            Assert.Equal("conformance-normal-plan", normalPlan.GetProperty("publicSlug").GetString());
+
+            // The bare `speaking-1session` id is a distinct ADD-ON, never a plan code.
+            var addonCodes = json.RootElement.GetProperty("addOns").EnumerateArray()
+                .Select(a => a.GetProperty("code").GetString()).ToList();
+            Assert.Contains("speaking-1session", addonCodes);
+            Assert.DoesNotContain("speaking-1session", planCodeList);
+        }
+        finally
+        {
+            await using var cleanup = _factory.Services.CreateAsyncScope();
+            var db = cleanup.ServiceProvider.GetRequiredService<LearnerDbContext>();
+            db.BillingPlans.RemoveRange(await db.BillingPlans.Where(p => planCodes.Contains(p.Code)).ToListAsync());
+            db.BillingAddOns.RemoveRange(await db.BillingAddOns.Where(a => a.Code == "speaking-1session").ToListAsync());
+            await db.SaveChangesAsync();
+        }
+    }
+
     private async Task SeedPlansAsync()
     {
         await using var scope = _factory.Services.CreateAsyncScope();

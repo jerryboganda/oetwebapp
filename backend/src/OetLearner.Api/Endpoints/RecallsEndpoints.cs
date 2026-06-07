@@ -19,26 +19,41 @@ public static class RecallsEndpoints
         var v1 = app.MapGroup("/v1").RequireAuthorization("LearnerOnly");
         var recalls = v1.MapGroup("/recalls");
 
-        recalls.MapGet("/today", async (HttpContext http, RecallsService svc, CancellationToken ct) =>
-            Results.Ok(await svc.GetTodayAsync(http.UserId(), ct)));
+        recalls.MapGet("/today", async (HttpContext http, IEffectiveEntitlementResolver entitlements, RecallsService svc, CancellationToken ct) =>
+        {
+            if (await RequireRecallEnrolmentAsync(http, entitlements, ct) is { } gate) return gate;
+            return Results.Ok(await svc.GetTodayAsync(http.UserId(), ct));
+        });
 
         recalls.MapGet("/queue", async (
             HttpContext http,
             [FromQuery] int limit,
+            IEffectiveEntitlementResolver entitlements,
             RecallsService svc, CancellationToken ct) =>
-            Results.Ok(await svc.GetQueueAsync(http.UserId(), limit, ct)));
+        {
+            if (await RequireRecallEnrolmentAsync(http, entitlements, ct) is { } gate) return gate;
+            return Results.Ok(await svc.GetQueueAsync(http.UserId(), limit, ct));
+        });
 
         recalls.MapPost("/star", async (
             HttpContext http,
             RecallsStarRequest request,
+            IEffectiveEntitlementResolver entitlements,
             RecallsService svc, CancellationToken ct) =>
-            Results.Ok(await svc.StarAsync(http.UserId(), request, ct)));
+        {
+            if (await RequireRecallEnrolmentAsync(http, entitlements, ct) is { } gate) return gate;
+            return Results.Ok(await svc.StarAsync(http.UserId(), request, ct));
+        });
 
         recalls.MapPost("/listen-type", async (
             HttpContext http,
             RecallsListenTypeRequest request,
+            IEffectiveEntitlementResolver entitlements,
             RecallsService svc, CancellationToken ct) =>
-            Results.Ok(await svc.ListenAndTypeAsync(http.UserId(), request, ct)));
+        {
+            if (await RequireRecallEnrolmentAsync(http, entitlements, ct) is { } gate) return gate;
+            return Results.Ok(await svc.ListenAndTypeAsync(http.UserId(), request, ct));
+        });
 
         recalls.MapGet("/audio/{termId}", async (
             HttpContext http,
@@ -82,29 +97,47 @@ public static class RecallsEndpoints
             HttpContext http,
             [FromQuery] string? bucket,
             [FromQuery] string? topic,
+            IEffectiveEntitlementResolver entitlements,
             RecallsService svc, CancellationToken ct) =>
-            Results.Ok(await svc.GetLibraryAsync(http.UserId(), bucket, topic, ct)));
+        {
+            if (await RequireRecallEnrolmentAsync(http, entitlements, ct) is { } gate) return gate;
+            return Results.Ok(await svc.GetLibraryAsync(http.UserId(), bucket, topic, ct));
+        });
 
         recalls.MapPost("/explain", async (
             HttpContext http,
             RecallsExplainRequest request,
+            IEffectiveEntitlementResolver entitlements,
             RecallsService svc, CancellationToken ct) =>
-            Results.Ok(await svc.ExplainMistakeAsync(http.UserId(), request, ct)));
+        {
+            if (await RequireRecallEnrolmentAsync(http, entitlements, ct) is { } gate) return gate;
+            return Results.Ok(await svc.ExplainMistakeAsync(http.UserId(), request, ct));
+        });
 
         recalls.MapGet("/quiz", async (
             HttpContext http,
             [FromQuery] string? mode,
             [FromQuery] int limit,
+            IEffectiveEntitlementResolver entitlements,
             RecallsService svc, CancellationToken ct) =>
-            Results.Ok(await svc.GetQuizAsync(http.UserId(), mode ?? "listen_and_type", limit, ct)));
+        {
+            if (await RequireRecallEnrolmentAsync(http, entitlements, ct) is { } gate) return gate;
+            return Results.Ok(await svc.GetQuizAsync(http.UserId(), mode ?? "listen_and_type", limit, ct));
+        });
 
         recalls.MapGet("/report/week", async (
-            HttpContext http, RecallsService svc, CancellationToken ct) =>
-            Results.Ok(await svc.GetWeeklyReportAsync(http.UserId(), ct)));
+            HttpContext http, IEffectiveEntitlementResolver entitlements, RecallsService svc, CancellationToken ct) =>
+        {
+            if (await RequireRecallEnrolmentAsync(http, entitlements, ct) is { } gate) return gate;
+            return Results.Ok(await svc.GetWeeklyReportAsync(http.UserId(), ct));
+        });
 
         recalls.MapGet("/revision-plan", async (
-            HttpContext http, RecallsService svc, CancellationToken ct) =>
-            Results.Ok(await svc.GetRevisionPlanAsync(http.UserId(), ct)));
+            HttpContext http, IEffectiveEntitlementResolver entitlements, RecallsService svc, CancellationToken ct) =>
+        {
+            if (await RequireRecallEnrolmentAsync(http, entitlements, ct) is { } gate) return gate;
+            return Results.Ok(await svc.GetRevisionPlanAsync(http.UserId(), ct));
+        });
 
         // Admin-only: CSV bulk upload of vocabulary terms (spec §8).
         var adminRecalls = app.MapGroup("/v1/admin/recalls")
@@ -180,6 +213,27 @@ public static class RecallsEndpoints
         }).WithAdminWrite("AdminAiConfig");
 
         return app;
+    }
+
+    /// <summary>
+    /// Locks learner-facing Recalls CONTENT behind active enrolment (spec: recalls
+    /// "locked_until_enrolled"). Returns <c>null</c> when access is allowed, otherwise a
+    /// 402 result. Admins bypass the gate. Mirrors the audio endpoint's gate: admin role
+    /// via <see cref="ClaimsPrincipal.IsInRole"/> and user id via the NameIdentifier claim.
+    /// </summary>
+    static async Task<IResult?> RequireRecallEnrolmentAsync(
+        HttpContext http, IEffectiveEntitlementResolver entitlements, CancellationToken ct)
+    {
+        if (http.User.IsInRole("admin")) return null;
+        var snapshot = await entitlements.ResolveAsync(http.UserId(), ct);
+        if (snapshot.HasEligibleSubscription && !snapshot.IsFrozen) return null;
+        return Results.Json(
+            new
+            {
+                code = "enrolment_required",
+                message = "Recalls content is available after enrolment.",
+            },
+            statusCode: StatusCodes.Status402PaymentRequired);
     }
 }
 

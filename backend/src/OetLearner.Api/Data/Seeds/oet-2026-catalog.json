@@ -697,6 +697,22 @@
       "displayOrder": 70
     },
     {
+      "code": "addon-extend-90",
+      "name": "Extend Access — 90 days",
+      "description": "Extends your current course access by 90 days, pushing the expiry of your active eligible subscription out from the later of today or its current expiry.",
+      "price": 15,
+      "originalPrice": null,
+      "addonKind": "access_extension",
+      "eligibilityFlag": "",
+      "requiresEligibleParent": true,
+      "lettersGranted": 0,
+      "sessionsGranted": 0,
+      "grantCredits": 0,
+      "extensionDays": 90,
+      "isStackable": true,
+      "displayOrder": 75
+    },
+    {
       "code": "pkg_quick_check",
       "name": "Quick Check",
       "description": "One-off AI grading package for targeted OET readiness checks. Grants 5 grading credits with 30-day validity.",

@@ -1,10 +1,10 @@
+using MailKit.Net.Smtp;
+using MailKit.Security;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using MimeKit;
 using System.Diagnostics;
-using System.Net;
-using System.Net.Mail;
-using System.Text;
 using OetLearner.Api.Configuration;
 using OetLearner.Api.Services.Settings;
 
@@ -67,79 +67,75 @@ public sealed class SmtpEmailSender(
             throw new InvalidOperationException("SMTP:FromEmail must be configured when SMTP is enabled.");
         }
 
+        var port = emailSettings.SmtpPort ?? 587;
+
         logger.LogInformation(
             "SMTP sending email: To={To} Subject={Subject} Host={Host}:{Port} From={From} SSL={Ssl}",
             message.To, message.Subject, emailSettings.SmtpHost, emailSettings.SmtpPort, emailSettings.SmtpFromAddress, optionsSnapshot.EnableSsl);
 
         var sw = Stopwatch.StartNew();
 
-        using var smtpClient = new SmtpClient(emailSettings.SmtpHost, emailSettings.SmtpPort ?? 587)
-        {
-            EnableSsl = optionsSnapshot.EnableSsl,
-            Timeout = 30_000
-        };
+        // MimeKit owns UTF-8 encoding by default; the BodyBuilder assembles a
+        // multipart/alternative (text + html) with any attachments.
+        using var mimeMessage = new MimeMessage();
+        mimeMessage.From.Add(new MailboxAddress(emailSettings.SmtpFromName ?? string.Empty, emailSettings.SmtpFromAddress));
+        mimeMessage.To.Add(MailboxAddress.Parse(message.To));
+        mimeMessage.Subject = message.Subject ?? string.Empty;
 
-        if (!string.IsNullOrWhiteSpace(emailSettings.SmtpUsername))
-        {
-            smtpClient.Credentials = new NetworkCredential(emailSettings.SmtpUsername, emailSettings.SmtpPassword ?? string.Empty);
-        }
-
-        using var mailMessage = new MailMessage
-        {
-            From = new MailAddress(emailSettings.SmtpFromAddress, emailSettings.SmtpFromName),
-            Subject = message.Subject,
-            SubjectEncoding = Encoding.UTF8,
-            BodyEncoding = Encoding.UTF8
-        };
-        mailMessage.To.Add(new MailAddress(message.To));
-
+        var bodyBuilder = new BodyBuilder { TextBody = message.TextBody };
         if (!string.IsNullOrWhiteSpace(message.HtmlBody))
         {
-            // Multipart: text/plain body + text/html alternate view
-            mailMessage.Body = message.TextBody;
-            mailMessage.IsBodyHtml = false;
-            mailMessage.AlternateViews.Add(
-                AlternateView.CreateAlternateViewFromString(message.HtmlBody, Encoding.UTF8, "text/html"));
-        }
-        else
-        {
-            mailMessage.Body = message.TextBody;
-            mailMessage.IsBodyHtml = false;
+            bodyBuilder.HtmlBody = message.HtmlBody;
         }
 
         if (message.Attachments is { Count: > 0 })
         {
             foreach (var attachment in message.Attachments)
             {
-                // The MemoryStream is owned by the Attachment which is in turn owned by
-                // mailMessage; disposing mailMessage closes both deterministically.
-                var stream = new MemoryStream(attachment.Content, writable: false);
-                var attached = new Attachment(stream, attachment.FileName, attachment.ContentType);
-                mailMessage.Attachments.Add(attached);
+                bodyBuilder.Attachments.Add(
+                    attachment.FileName,
+                    attachment.Content,
+                    ContentType.Parse(attachment.ContentType));
             }
         }
 
+        mimeMessage.Body = bodyBuilder.ToMessageBody();
+
+        // Brevo's relay listens on 587 (STARTTLS). Use implicit TLS only on the
+        // classic SMTPS port 465; otherwise upgrade in-band via STARTTLS. Unlike
+        // System.Net.Mail.SmtpClient, MailKit implements SASL LOGIN/PLAIN in
+        // managed code, so it actually authenticates against Brevo on Linux.
+        var secureSocketOptions = optionsSnapshot.EnableSsl
+            ? (port == 465 ? SecureSocketOptions.SslOnConnect : SecureSocketOptions.StartTls)
+            : SecureSocketOptions.StartTlsWhenAvailable;
+
+        using var smtpClient = new SmtpClient { Timeout = 30_000 };
+
         try
         {
-            await smtpClient.SendMailAsync(mailMessage, cancellationToken);
+            await smtpClient.ConnectAsync(emailSettings.SmtpHost, port, secureSocketOptions, cancellationToken);
+
+            if (!string.IsNullOrWhiteSpace(emailSettings.SmtpUsername))
+            {
+                await smtpClient.AuthenticateAsync(
+                    emailSettings.SmtpUsername,
+                    emailSettings.SmtpPassword ?? string.Empty,
+                    cancellationToken);
+            }
+
+            await smtpClient.SendAsync(mimeMessage, cancellationToken);
+            await smtpClient.DisconnectAsync(quit: true, cancellationToken);
+
             sw.Stop();
             logger.LogInformation(
                 "SMTP email sent successfully: To={To} Subject={Subject} ElapsedMs={ElapsedMs}",
                 message.To, message.Subject, sw.ElapsedMilliseconds);
         }
-        catch (SmtpException ex)
-        {
-            sw.Stop();
-            logger.LogError(ex,
-                "SMTP send failed: To={To} Subject={Subject} StatusCode={StatusCode} ElapsedMs={ElapsedMs}",
-                message.To, message.Subject, ex.StatusCode, sw.ElapsedMilliseconds);
-            throw;
-        }
         catch (Exception ex)
         {
             sw.Stop();
             logger.LogError(ex,
-                "SMTP send error: To={To} Subject={Subject} Error={Error} ElapsedMs={ElapsedMs}",
+                "SMTP send failed: To={To} Subject={Subject} Error={Error} ElapsedMs={ElapsedMs}",
                 message.To, message.Subject, ex.Message, sw.ElapsedMilliseconds);
             throw;
         }

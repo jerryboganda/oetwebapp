@@ -4237,32 +4237,74 @@ public partial class LearnerService(
                 "This attempt already has an active tutor review request.");
         }
 
-        var wallet = await db.Wallets.FirstAsync(x => x.UserId == userId, cancellationToken);
-        if (wallet.CreditBalance < cost)
-        {
-            throw ApiException.Validation(
-                "insufficient_credits",
-                "You do not have enough review credits for this request.",
-                [new ApiFieldError("paymentSource", "insufficient_credits", "Buy more credits or choose a different payment flow.")]);
-        }
-
         var now = DateTimeOffset.UtcNow;
         var reviewId = $"review-{Guid.NewGuid():N}";
-        wallet.CreditBalance -= cost;
-        wallet.LastUpdatedAt = now;
-        db.WalletTransactions.Add(new WalletTransaction
+
+        // Spec ("Decrement writing_assessments_remaining on submission"): a learner with
+        // bundled/add-on writing assessments consumes one (free) instead of paying when
+        // submitting a WRITING letter for expert review. Resolve a tracked, eligible
+        // subscription so the decrement participates in the same SaveChanges + outer
+        // DbUpdateConcurrencyException retry that protects the wallet path from a racing
+        // double-spend. The idempotency cache above already short-circuits a retried
+        // submit before reaching this point, so a retry never double-decrements.
+        var isWritingReview = string.Equals(attempt.SubtestCode, "writing", StringComparison.OrdinalIgnoreCase);
+        var prepaidSubscription = isWritingReview
+            ? await ResolveEligibleWritingSubscriptionAsync(userId, now, cancellationToken)
+            : null;
+
+        string effectivePaymentSource;
+        decimal priceSnapshot;
+        object eligibilitySnapshot;
+
+        if (prepaidSubscription is not null)
         {
-            Id = Guid.NewGuid(),
-            WalletId = wallet.Id,
-            TransactionType = "review_deduction",
-            Amount = -cost,
-            BalanceAfter = wallet.CreditBalance,
-            ReferenceType = "review",
-            ReferenceId = reviewId,
-            Description = $"Tutor review request for {attempt.SubtestCode} attempt {attempt.Id}.",
-            CreatedBy = userId,
-            CreatedAt = now
-        });
+            // Prepaid (entitlement) path: consume one bundled writing assessment and skip
+            // the wallet load, wallet debit, and WalletTransaction entirely. PriceSnapshot
+            // is 0 so downstream credits-only refund/reporting logic (which all gate on
+            // PaymentSource == "credits" AND PriceSnapshot > 0) correctly treats this as a
+            // non-credit, nothing-to-refund request.
+            prepaidSubscription.WritingAssessmentsRemaining = Math.Max(0, prepaidSubscription.WritingAssessmentsRemaining - 1);
+            effectivePaymentSource = "entitlement";
+            priceSnapshot = 0m;
+            eligibilitySnapshot = new
+            {
+                canRequestReview = true,
+                paymentSource = "entitlement",
+                writingAssessmentsRemaining = prepaidSubscription.WritingAssessmentsRemaining,
+                entitlementSubscriptionId = prepaidSubscription.Id
+            };
+        }
+        else
+        {
+            // Wallet (credits) path — unchanged.
+            var wallet = await db.Wallets.FirstAsync(x => x.UserId == userId, cancellationToken);
+            if (wallet.CreditBalance < cost)
+            {
+                throw ApiException.Validation(
+                    "insufficient_credits",
+                    "You do not have enough review credits for this request.",
+                    [new ApiFieldError("paymentSource", "insufficient_credits", "Buy more credits or choose a different payment flow.")]);
+            }
+
+            wallet.CreditBalance -= cost;
+            wallet.LastUpdatedAt = now;
+            db.WalletTransactions.Add(new WalletTransaction
+            {
+                Id = Guid.NewGuid(),
+                WalletId = wallet.Id,
+                TransactionType = "review_deduction",
+                Amount = -cost,
+                BalanceAfter = wallet.CreditBalance,
+                ReferenceType = "review",
+                ReferenceId = reviewId,
+                Description = $"Tutor review request for {attempt.SubtestCode} attempt {attempt.Id}.",
+                CreatedBy = userId,
+                CreatedAt = now
+            });
+            effectivePaymentSource = paymentSource;
+            priceSnapshot = cost;
+            eligibilitySnapshot = new { canRequestReview = true, availableCredits = wallet.CreditBalance };
+        }
 
         db.Entry(user).Property(x => x.AccountStatus).IsModified = true;
 
@@ -4275,16 +4317,18 @@ public partial class LearnerService(
             TurnaroundOption = turnaroundOption,
             FocusAreasJson = JsonSupport.Serialize(request.FocusAreas),
             LearnerNotes = request.LearnerNotes ?? string.Empty,
-            PaymentSource = paymentSource,
-            PriceSnapshot = cost,
+            PaymentSource = effectivePaymentSource,
+            PriceSnapshot = priceSnapshot,
             CreatedAt = now,
-            EligibilitySnapshotJson = JsonSupport.Serialize(new { canRequestReview = true, availableCredits = wallet.CreditBalance })
+            EligibilitySnapshotJson = JsonSupport.Serialize(eligibilitySnapshot)
         };
 
         db.ReviewRequests.Add(review);
 
         await RecordEventAsync(userId, "review_requested", new { reviewRequestId = review.Id, attemptId = review.AttemptId, subtest = review.SubtestCode, turnaroundOption = review.TurnaroundOption }, cancellationToken);
-        LogAudit(userId, "Created", "ReviewRequest", review.Id, $"Tutor review requested for {review.SubtestCode} attempt {review.AttemptId}, cost={cost} credits");
+        LogAudit(userId, "Created", "ReviewRequest", review.Id, prepaidSubscription is not null
+            ? $"Tutor review requested for {review.SubtestCode} attempt {review.AttemptId}, funded by writing-assessment entitlement (subscription {prepaidSubscription.Id})"
+            : $"Tutor review requested for {review.SubtestCode} attempt {review.AttemptId}, cost={cost} credits");
         if (!string.IsNullOrWhiteSpace(request.IdempotencyKey))
         {
             await SaveIdempotentResponseAsync("review-request", request.IdempotencyKey, new { reviewRequestId = review.Id }, cancellationToken);
@@ -4302,7 +4346,9 @@ public partial class LearnerService(
                 ["attemptId"] = review.AttemptId,
                 ["reviewRequestId"] = review.Id,
                 ["subtest"] = review.SubtestCode,
-                ["message"] = $"Your tutor review request is queued. {cost} review credit{(cost == 1 ? string.Empty : "s")} used."
+                ["message"] = prepaidSubscription is not null
+                    ? "Your tutor review request is queued. One bundled writing assessment was used."
+                    : $"Your tutor review request is queued. {cost} review credit{(cost == 1 ? string.Empty : "s")} used."
             },
             cancellationToken);
         await notifications.CreateForAdminsAsync(
@@ -4319,6 +4365,31 @@ public partial class LearnerService(
             cancellationToken);
         return await GetReviewRequestAsync(userId, review.Id, cancellationToken);
     }
+
+    /// <summary>
+    /// Resolves a <b>tracked</b> <see cref="Subscription"/> for the learner that has at least
+    /// one bundled/add-on writing assessment remaining and is currently usable, so a writing
+    /// expert-review submission can consume it instead of charging wallet credits.
+    /// Mirrors <c>PrivateSpeakingService.ResolveEligibleSpeakingSubscriptionAsync</c> but is
+    /// intentionally self-contained (a direct query rather than a dependency on the entitlement
+    /// resolver) to keep this change's footprint minimal. The result is tracked (NOT
+    /// AsNoTracking) because the caller mutates <see cref="Subscription.WritingAssessmentsRemaining"/>.
+    /// Eligibility: status Active or Trial, not expired (<see cref="Subscription.ExpiresAt"/>
+    /// null or in the future), and <see cref="Subscription.WritingAssessmentsRemaining"/> &gt; 0.
+    /// When several rows qualify, the one expiring soonest is consumed first (nulls last).
+    /// </summary>
+    private async Task<Subscription?> ResolveEligibleWritingSubscriptionAsync(
+        string userId,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+        => await db.Subscriptions
+            .Where(subscription => subscription.UserId == userId
+                && subscription.WritingAssessmentsRemaining > 0
+                && (subscription.Status == SubscriptionStatus.Active || subscription.Status == SubscriptionStatus.Trial)
+                && (subscription.ExpiresAt == null || subscription.ExpiresAt > now))
+            .OrderBy(subscription => subscription.ExpiresAt == null)
+            .ThenBy(subscription => subscription.ExpiresAt)
+            .FirstOrDefaultAsync(cancellationToken);
 
     public async Task<object> GetReviewRequestAsync(string userId, string reviewRequestId, CancellationToken cancellationToken)
     {
@@ -9772,9 +9843,16 @@ public partial class LearnerService(
                     ? null
                     : await db.BillingAddOnVersions.AsNoTracking()
                         .FirstOrDefaultAsync(v => v.Id == resolvedAddOnVersionId, ct);
+                // Phase 6a — resolve the add-on kind + extension days from the same
+                // version/live row used for ApplyAddOnEntitlements, so the guarded
+                // access-extension branch below can advance ExpiresAt.
+                string resolvedAddonKind = string.Empty;
+                int resolvedExtensionDays = 0;
                 if (addOnVersion is not null)
                 {
                     SubscriptionBundleInitializer.ApplyAddOnEntitlements(subscription, addOnVersion);
+                    resolvedAddonKind = addOnVersion.AddonKind;
+                    resolvedExtensionDays = addOnVersion.ExtensionDays;
                 }
                 else
                 {
@@ -9782,7 +9860,25 @@ public partial class LearnerService(
                     if (liveAddOnForEntitlements is not null)
                     {
                         SubscriptionBundleInitializer.ApplyAddOnEntitlements(subscription, liveAddOnForEntitlements);
+                        resolvedAddonKind = liveAddOnForEntitlements.AddonKind;
+                        resolvedExtensionDays = liveAddOnForEntitlements.ExtensionDays;
                     }
+                }
+
+                // Phase 6a — Extend Access add-on. Strictly additive and guarded on
+                // the new `access_extension` kind: a no-op for every other add-on /
+                // plan purchase. Sits inside the once-only `existingItem is null`
+                // guard so a replayed completion never double-extends. Pushes the
+                // course expiry out from the later of (now, current expiry).
+                if (string.Equals(resolvedAddonKind, "access_extension", StringComparison.Ordinal)
+                    && resolvedExtensionDays > 0)
+                {
+                    var extensionUnits = Math.Max(1, item.Quantity);
+                    var totalExtensionDays = resolvedExtensionDays * extensionUnits;
+                    var baseline = subscription.ExpiresAt is { } currentExpiry && currentExpiry > now
+                        ? currentExpiry
+                        : now;
+                    subscription.ExpiresAt = baseline.AddDays(totalExtensionDays);
                 }
             }
 
@@ -10268,6 +10364,41 @@ public partial class LearnerService(
             item.EndsAt = DateTimeOffset.UtcNow;
             item.UpdatedAt = DateTimeOffset.UtcNow;
             changed = true;
+
+            // Phase 6a — symmetric reversal of an Extend Access add-on. Guarded on
+            // the `access_extension` kind, so it is a no-op for every other add-on.
+            // Subtracts the granted days from ExpiresAt but never pulls it below
+            // now. The grant flow has no other symmetric entitlement reversal, so
+            // this is the only place the extension is undone.
+            var reverseExtensionDays = 0;
+            if (!string.IsNullOrWhiteSpace(item.AddOnVersionId))
+            {
+                var ver = await db.BillingAddOnVersions.AsNoTracking()
+                    .FirstOrDefaultAsync(v => v.Id == item.AddOnVersionId, ct);
+                if (ver is not null && string.Equals(ver.AddonKind, "access_extension", StringComparison.Ordinal))
+                {
+                    reverseExtensionDays = ver.ExtensionDays;
+                }
+            }
+            if (reverseExtensionDays <= 0)
+            {
+                var liveAddOn = await FindBillingAddOnAsync(item.ItemCode, ct);
+                if (liveAddOn is not null && string.Equals(liveAddOn.AddonKind, "access_extension", StringComparison.Ordinal))
+                {
+                    reverseExtensionDays = liveAddOn.ExtensionDays;
+                }
+            }
+            if (reverseExtensionDays > 0)
+            {
+                var now = DateTimeOffset.UtcNow;
+                var sub = await db.Subscriptions.FirstOrDefaultAsync(s => s.Id == item.SubscriptionId, ct);
+                if (sub is not null && sub.ExpiresAt is { } currentExpiry)
+                {
+                    var totalDays = reverseExtensionDays * Math.Max(1, item.Quantity);
+                    var reduced = currentExpiry.AddDays(-totalDays);
+                    sub.ExpiresAt = reduced < now ? now : reduced;
+                }
+            }
         }
 
         if (string.Equals(transaction.TransactionType, "subscription_payment", StringComparison.OrdinalIgnoreCase))
