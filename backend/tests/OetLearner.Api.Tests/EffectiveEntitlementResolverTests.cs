@@ -231,11 +231,14 @@ public class EffectiveEntitlementResolverTests
     }
 
     [Fact]
-    public async Task ResolveAsync_AddOnTutorBookOnExpiredCourse_DoesNotSurvive()
+    public async Task ResolveAsync_AddOnTutorBookOnExpiredCourse_TutorBookSurvives()
     {
-        // Product rule: an add-on-granted Tutor Book on a COURSE sub (ExpiresAt
-        // set) expires WITH the course. Only the standalone ExpiresAt==null
-        // purchase is permanent, so the cross-sub query must NOT pick this up.
+        // Spec rule #8: the Tutor Book is a Permanent entitlement however it was
+        // acquired — the £32 `tutor-book-addon` (a "Permanent entitlement") flips
+        // TutorBookUnlocked on the parent COURSE sub, which carries the course's
+        // real ExpiresAt. When the course expires the course content locks, but
+        // the Tutor Book must remain (matching the TutorBookEndpoints gate that
+        // serves the PDF on TutorBookUnlocked && Active, with no expiry check).
         await using var db = CreateDb();
         var now = DateTimeOffset.UtcNow;
         db.BillingPlans.Add(new BillingPlan
@@ -254,16 +257,22 @@ public class EffectiveEntitlementResolverTests
             StartedAt = now.AddMonths(-4),
             ChangedAt = now.AddDays(-2),
             ExpiresAt = now.AddDays(-1), // course expired
-            TutorBookUnlocked = true,    // add-on grant, but ExpiresAt is set
+            TutorBookUnlocked = true,    // £32 add-on grant on the course sub
         });
         await db.SaveChangesAsync();
 
         var snapshot = await new EffectiveEntitlementResolver(db).ResolveAsync("learner-addon", default);
 
+        // Course content is locked (expired) ...
         Assert.False(snapshot.HasEligibleSubscription);
-        Assert.Empty(snapshot.EnabledModules);
-        Assert.DoesNotContain("tutorbook.permanent", snapshot.Trace);
         Assert.Contains("subscription.expired", snapshot.Trace);
+        Assert.DoesNotContain("Reading", snapshot.EnabledModules);
+        // ... but the permanent Tutor Book survives.
+        Assert.True(snapshot.TutorBookUnlocked);
+        Assert.Contains("tutorbook.permanent", snapshot.Trace);
+        Assert.Contains("TutorBook", snapshot.EnabledModules);
+        Assert.Contains("AudioScripts", snapshot.EnabledModules);
+        Assert.Contains("Updates", snapshot.EnabledModules);
     }
 
     [Fact]

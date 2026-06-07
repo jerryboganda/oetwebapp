@@ -219,16 +219,18 @@ public sealed class EffectiveEntitlementResolver(
         }
 
         // ── Permanent Tutor Book (resolved ACROSS all subscriptions) ────────
-        // The standalone `tutor-book` plan grants accessDays 9999 => ExpiresAt
-        // == null, which is permanent and survives a separate course's expiry.
-        // This is a NARROW, additive grant: it never elevates the course, only
-        // re-enables the Tutor Book modules the holder paid for outright. The
-        // ExpiresAt==null filter is the product rule — an add-on Tutor Book on
-        // a COURSE sub (ExpiresAt set) expires WITH the course and is excluded.
+        // Per spec rule #8 ("Permanent entitlements, especially Tutor Book,
+        // ignore expiry") the Tutor Book is permanent however it was acquired —
+        // both the standalone `tutor-book` plan AND the £32 `tutor-book-addon`
+        // (listed as a "Permanent entitlement") flip TutorBookUnlocked, the
+        // latter on a parent COURSE sub that carries a real ExpiresAt. So this
+        // grant must survive course expiry regardless of the row's ExpiresAt.
+        // NARROW + additive: it never elevates the course, only re-enables the
+        // Tutor Book modules the holder paid for. This mirrors the direct gate
+        // in TutorBookEndpoints (TutorBookUnlocked && Active/Trial, no expiry).
         var permanentTutorBook = await db.Subscriptions.AsNoTracking().AnyAsync(s =>
             s.UserId == userId
             && (s.Status == SubscriptionStatus.Active || s.Status == SubscriptionStatus.Trial)
-            && s.ExpiresAt == null
             && s.TutorBookUnlocked, ct);
         if (permanentTutorBook)
         {
