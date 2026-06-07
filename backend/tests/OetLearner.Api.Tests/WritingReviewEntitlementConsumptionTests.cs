@@ -185,6 +185,39 @@ public sealed class WritingReviewEntitlementConsumptionTests : IAsyncLifetime
         Assert.False(await verify.WalletTransactions.AnyAsync(t => t.WalletId == wallet.Id));
     }
 
+    [Fact]
+    public async Task AdminReopen_OfCancelledEntitlementReview_ReturnsToQueueNotAwaitingPayment()
+    {
+        await using var db = new LearnerDbContext(_options);
+        await SeedLearnerWithWritingAttemptAsync(db, walletCredits: 5);
+        await SeedSubscriptionAsync(db, writingRemaining: 3, expiresAt: DateTimeOffset.UtcNow.AddDays(30));
+        var learnerService = CreateLearnerService(db);
+
+        await learnerService.CreateReviewRequestAsync(LearnerId, BuildRequest(), CancellationToken.None);
+        var reviewId = await db.ReviewRequests.Where(r => r.AttemptId == WritingAttemptId).Select(r => r.Id).SingleAsync();
+
+        var adminService = CreateAdminService(db);
+        await adminService.CancelReviewAsync(
+            "adm-1", "Admin Tester", reviewId, new AdminReviewCancelRequest("learner requested"), CancellationToken.None);
+
+        var reopenResult = await adminService.ReopenReviewAsync(
+            "adm-1", "Admin Tester", reviewId, new AdminReviewReopenRequest("changed mind"), CancellationToken.None);
+        var reopenElement = JsonSerializer.SerializeToElement(reopenResult);
+
+        // A prepaid entitlement review (PaymentSource "entitlement", PriceSnapshot 0)
+        // must reopen straight to the queue, never AwaitingPayment.
+        Assert.Equal("queued", reopenElement.GetProperty("status").GetString());
+
+        await using var verify = new LearnerDbContext(_options);
+        var review = await verify.ReviewRequests.SingleAsync(r => r.Id == reviewId);
+        Assert.Equal(ReviewRequestState.Queued, review.State);
+
+        // No wallet recharge for a £0 entitlement review.
+        var wallet = await verify.Wallets.SingleAsync(w => w.UserId == LearnerId);
+        Assert.Equal(5, wallet.CreditBalance);
+        Assert.False(await verify.WalletTransactions.AnyAsync(t => t.WalletId == wallet.Id));
+    }
+
     // ── Seeding ─────────────────────────────────────────────────────────
 
     private static ReviewRequestCreateRequest BuildRequest(string? idempotencyKey = null)

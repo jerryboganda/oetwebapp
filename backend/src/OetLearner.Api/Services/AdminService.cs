@@ -7351,7 +7351,11 @@ public partial class AdminService(
             }
         }
 
-        review.State = paymentSource is "credits" or "mock_reserved_credits"
+        // "entitlement" = a bundled writing-assessment review (PriceSnapshot 0, no
+        // wallet charge) — it is prepaid, so it must reopen straight to the queue,
+        // never AwaitingPayment (which would strand a £0 review behind a payment
+        // that never arrives).
+        review.State = paymentSource is "credits" or "mock_reserved_credits" or "entitlement"
             ? ReviewRequestState.Queued
             : ReviewRequestState.AwaitingPayment;
         review.CompletedAt = null;
