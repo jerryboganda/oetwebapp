@@ -91,12 +91,12 @@ export default function RecallsFavouritesPage() {
         ) : items && items.length > 0 ? (
           <>
             <div className="flex justify-end">
-              <Link href="/recalls/cards?mode=starred_only">
-                <Button variant="primary" className="inline-flex items-center gap-2">
+              <Button asChild variant="primary" className="inline-flex items-center gap-2">
+                <Link href="/recalls/cards?mode=starred_only">
                   <Sparkles className="h-4 w-4" />
                   Drill favourites
-                </Button>
-              </Link>
+                </Link>
+              </Button>
             </div>
             <ul className="divide-y divide-border rounded-2xl border border-border bg-surface">
               {items.map((it) => (
@@ -132,9 +132,9 @@ export default function RecallsFavouritesPage() {
               Browse the vocabulary catalog and tap the heart on any word to save it for later.
             </p>
             <div className="mt-4">
-              <Link href="/recalls/words">
-                <Button variant="secondary">Browse words</Button>
-              </Link>
+              <Button asChild variant="secondary">
+                <Link href="/recalls/words">Browse words</Link>
+              </Button>
             </div>
           </div>
         )}
