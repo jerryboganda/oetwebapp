@@ -68,7 +68,9 @@ export default function RecallsFavouritesPage() {
           description="Every word you favourited, in one place. Remove what you've mastered, or drill the whole set."
           icon={Heart}
           highlights={[
-            { icon: Heart, label: 'Favourites', value: `${today?.starred ?? items?.length ?? 0}` },
+            // Prefer the live list length so the count stays in sync after a
+            // removal; fall back to today's snapshot only while items load.
+            { icon: Heart, label: 'Favourites', value: `${items?.length ?? today?.starred ?? 0}` },
           ]}
         />
 
