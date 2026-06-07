@@ -56,6 +56,9 @@ Implement the OET 2026 product portfolio plan on `feat/oet-2026-entitlement-conf
 - Several backend failures were traced to legacy tests using `CreateAuthenticatedClient` after default demo seeding was narrowed. `TestWebApplicationFactory.CreateAuthenticatedClient` now seeds only the requested local auth identity/profile/permission row before password sign-in, without re-enabling full demo seed globally.
 - Focused local `dotnet test backend/tests/OetLearner.Api.Tests/OetLearner.Api.Tests.csproj --no-build --filter "FullyQualifiedName=OetLearner.Api.Tests.ExpertFlowsTests.ExpertDashboard_UsesBearerToken_WhenDevelopmentAuthIsEnabled" --nologo`: passed, 1 test.
 - `git diff --check -- backend/tests/OetLearner.Api.Tests/Infrastructure/TestWebApplicationFactory.cs`: passed.
+- Merged latest `origin/main` after PR #38 became dirty again. The merge kept main's per-host test configuration/no process-global environment mutation fix, while preserving portfolio's `SeededTestWebApplicationFactory` opt-in and authenticated-client minimal identity seed.
+- Post-merge focused local `dotnet test backend/tests/OetLearner.Api.Tests/OetLearner.Api.Tests.csproj --no-build --filter "FullyQualifiedName=OetLearner.Api.Tests.ExpertFlowsTests.ExpertDashboard_UsesBearerToken_WhenDevelopmentAuthIsEnabled" --nologo`: passed, 1 test.
+- Post-merge `git diff --check -- backend/tests/OetLearner.Api.Tests/Infrastructure/TestWebApplicationFactory.cs`: passed.
 
 ## Next-Step Protocol For New Agent Runs
 

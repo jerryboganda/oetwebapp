@@ -38,6 +38,7 @@ public interface IContentPaperService
     Task<int> CountAsync(ContentPaperQuery query, CancellationToken ct);
 
     Task ArchiveAsync(string paperId, string adminId, CancellationToken ct);
+    Task HardDeleteAsync(string paperId, string adminId, CancellationToken ct);
     Task PublishAsync(string paperId, string adminId, CancellationToken ct);
 
     /// <summary>Transitions Published → Draft. Allows an admin to revert a
@@ -153,7 +154,7 @@ public sealed class ContentPaperService(
     private const int BulkErrorCap = 20;
 
     private static readonly string[] BulkActions =
-        ["archive", "publish", "unpublish", "submit-for-review", "approve-publish", "reject"];
+        ["archive", "publish", "unpublish", "submit-for-review", "approve-publish", "reject", "delete"];
     /// <summary>Publish gate — each subtest's minimum required roles. Keep
     /// this in sync with §2 of <c>docs/CONTENT-UPLOAD-PLAN.md</c>.</summary>
     private static readonly Dictionary<string, HashSet<PaperAssetRole>> RequiredRoles = new(StringComparer.OrdinalIgnoreCase)
@@ -391,11 +392,13 @@ public sealed class ContentPaperService(
             }
         }
 
-        // One summary audit row for the whole bulk op.
+        // One summary audit row for the whole bulk op. The affected ids go in
+        // the unbounded `Details` (text) column — never in ResourceId, which is
+        // varchar(64) and overflows once more than one ~32-char id is joined.
         await WriteAuditAsync(
             "ContentPaperBulkAction",
-            string.Join(",", distinctIds.Take(50)),
-            $"action={normalized}; requested={totalRequested}; succeeded={succeeded}; skipped={skipped}; failed={errors.Count}",
+            "bulk",
+            $"action={normalized}; requested={totalRequested}; succeeded={succeeded}; skipped={skipped}; failed={errors.Count}; ids={string.Join(",", distinctIds.Take(50))}",
             adminId, ct);
         await db.SaveChangesAsync(ct);
 
@@ -465,6 +468,9 @@ public sealed class ContentPaperService(
             }
             case "approve-publish":
                 await ApproveAndPublishAsync(id, adminId, writeAudit: false, ct);
+                return BulkItemOutcome.Succeeded;
+            case "delete":
+                await HardDeleteAsync(id, adminId, writeAudit: false, ct);
                 return BulkItemOutcome.Succeeded;
             case "reject":
                 await RejectAsync(id, adminId, reason!, writeAudit: false, ct);
@@ -564,6 +570,60 @@ public sealed class ContentPaperService(
 
     public Task ArchiveAsync(string paperId, string adminId, CancellationToken ct)
         => ArchiveAsync(paperId, adminId, writeAudit: true, ct);
+
+    public Task HardDeleteAsync(string paperId, string adminId, CancellationToken ct)
+        => HardDeleteAsync(paperId, adminId, writeAudit: true, ct);
+
+    /// <summary>
+    /// Permanently removes a paper and its authoring children. Two safety gates
+    /// keep this from destroying live or learner-touched content:
+    ///   1. the paper must already be Archived (forces an explicit archive-first step);
+    ///   2. it must have no learner attempts (deleting those would orphan history).
+    /// Authoring grandchildren (sections/texts/questions/options) are removed by the
+    /// database's ON DELETE CASCADE off the PaperId-keyed parent rows.
+    /// </summary>
+    private async Task HardDeleteAsync(string paperId, string adminId, bool writeAudit, CancellationToken ct)
+    {
+        var paper = await db.ContentPapers
+            .Include(p => p.Assets)
+            .FirstOrDefaultAsync(x => x.Id == paperId, ct)
+            ?? throw new InvalidOperationException("Paper not found.");
+
+        if (paper.Status != ContentStatus.Archived)
+            throw new InvalidOperationException(
+                "Only archived papers can be permanently deleted. Archive the paper first.");
+
+        var hasReadingAttempts = await db.ReadingAttempts.AnyAsync(a => a.PaperId == paperId, ct);
+        var hasListeningAttempts = await db.ListeningAttempts.AnyAsync(a => a.PaperId == paperId, ct);
+        if (hasReadingAttempts || hasListeningAttempts)
+            throw new InvalidOperationException(
+                "Paper has learner attempts and cannot be permanently deleted.");
+
+        // Authoring children keyed directly by PaperId. Grandchildren (reading
+        // sections/texts/questions, listening extracts/options) cascade from these
+        // at the DB level. Load + RemoveRange (rather than ExecuteDelete) so the
+        // InMemory test provider, which has no ExecuteDelete, behaves identically.
+        var readingParts = await db.ReadingParts.Where(x => x.PaperId == paperId).ToListAsync(ct);
+        var readingDrafts = await db.ReadingExtractionDrafts.Where(x => x.PaperId == paperId).ToListAsync(ct);
+        var listeningParts = await db.ListeningParts.Where(x => x.PaperId == paperId).ToListAsync(ct);
+        var listeningQuestions = await db.ListeningQuestions.Where(x => x.PaperId == paperId).ToListAsync(ct);
+        var listeningDrafts = await db.ListeningExtractionDrafts.Where(x => x.PaperId == paperId).ToListAsync(ct);
+        db.ReadingParts.RemoveRange(readingParts);
+        db.ReadingExtractionDrafts.RemoveRange(readingDrafts);
+        db.ListeningParts.RemoveRange(listeningParts);
+        db.ListeningQuestions.RemoveRange(listeningQuestions);
+        db.ListeningExtractionDrafts.RemoveRange(listeningDrafts);
+
+        // The parallel ContentItem runtime row (writing/speaking projection).
+        var content = await db.ContentItems.FirstOrDefaultAsync(x => x.Id == paperId, ct);
+        if (content is not null) db.ContentItems.Remove(content);
+
+        db.ContentPaperAssets.RemoveRange(paper.Assets);
+        db.ContentPapers.Remove(paper);
+
+        if (writeAudit) await WriteAuditAsync("ContentPaperDeleted", paper.Id, paper.Title, adminId, ct);
+        await db.SaveChangesAsync(ct);
+    }
 
     private async Task ArchiveAsync(string paperId, string adminId, bool writeAudit, CancellationToken ct)
     {

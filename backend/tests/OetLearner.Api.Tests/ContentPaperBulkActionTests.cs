@@ -176,6 +176,14 @@ public class ContentPaperBulkActionTests
         Assert.Single(bulkAudits);
         Assert.Equal("admin-9", bulkAudits[0].ActorId);
         Assert.Contains("action=archive", bulkAudits[0].Details);
+        // Regression: the affected ids belong in Details, not ResourceId, which is
+        // varchar(64) in Postgres and overflowed when 2+ ~32-char ids were joined
+        // (the InMemory test provider does not enforce the length, so this guards
+        // the column invariant explicitly). See the bulk "Bulk action failed" 500.
+        Assert.Equal("bulk", bulkAudits[0].ResourceId);
+        Assert.True((bulkAudits[0].ResourceId?.Length ?? 0) <= 64);
+        Assert.Contains(p1.Id, bulkAudits[0].Details);
+        Assert.Contains(p2.Id, bulkAudits[0].Details);
 
         // No per-item archive audit rows leaked from the suppressed path.
         Assert.Empty(await db.AuditEvents.AsNoTracking()
@@ -267,6 +275,59 @@ public class ContentPaperBulkActionTests
         Assert.All(statuses, s => Assert.Equal(ContentStatus.Draft, s));
         Assert.Empty(await verify.AuditEvents.AsNoTracking()
             .Where(a => a.Action == "ContentPaperBulkAction").ToListAsync());
+    }
+
+    [Fact]
+    public async Task Bulk_delete_removes_archived_paper_and_its_authoring_children()
+    {
+        var (db, svc) = BuildInMemory();
+        var paper = await SeedDraftListeningAsync(db, svc, "L1");
+        await svc.ArchiveAsync(paper.Id, "admin-1", default);
+        db.ReadingExtractionDrafts.Add(new ReadingExtractionDraft { Id = "draft-1", PaperId = paper.Id });
+        await db.SaveChangesAsync();
+
+        var result = await svc.BulkAsync("delete", [paper.Id], "admin-9", null, default);
+
+        Assert.Equal(1, result.Succeeded);
+        Assert.False(await db.ContentPapers.AsNoTracking().AnyAsync(p => p.Id == paper.Id));
+        Assert.False(await db.ReadingExtractionDrafts.AsNoTracking().AnyAsync(d => d.PaperId == paper.Id));
+        var audit = await db.AuditEvents.AsNoTracking()
+            .SingleAsync(a => a.Action == "ContentPaperBulkAction");
+        Assert.Contains("action=delete", audit.Details);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Bulk_delete_is_blocked_for_non_archived_papers()
+    {
+        var (db, svc) = BuildInMemory();
+        var paper = await SeedDraftListeningAsync(db, svc, "L1"); // Draft, not Archived
+
+        var result = await svc.BulkAsync("delete", [paper.Id], "admin-9", null, default);
+
+        Assert.Equal(0, result.Succeeded);
+        Assert.Equal(1, result.Failed);
+        Assert.True(await db.ContentPapers.AsNoTracking().AnyAsync(p => p.Id == paper.Id));
+        Assert.Contains(result.Errors, e => e.Contains("archived", StringComparison.OrdinalIgnoreCase));
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Bulk_delete_is_blocked_when_paper_has_learner_attempts()
+    {
+        var (db, svc) = BuildInMemory();
+        var paper = await SeedDraftListeningAsync(db, svc, "L1");
+        await svc.ArchiveAsync(paper.Id, "admin-1", default);
+        db.ListeningAttempts.Add(new ListeningAttempt { Id = "att-1", PaperId = paper.Id, UserId = "user-1" });
+        await db.SaveChangesAsync();
+
+        var result = await svc.BulkAsync("delete", [paper.Id], "admin-9", null, default);
+
+        Assert.Equal(0, result.Succeeded);
+        Assert.Equal(1, result.Failed);
+        Assert.True(await db.ContentPapers.AsNoTracking().AnyAsync(p => p.Id == paper.Id));
+        Assert.Contains(result.Errors, e => e.Contains("learner attempts", StringComparison.OrdinalIgnoreCase));
+        await db.DisposeAsync();
     }
 
     /// <summary>Test interceptor that throws on the Nth SaveChanges once armed,

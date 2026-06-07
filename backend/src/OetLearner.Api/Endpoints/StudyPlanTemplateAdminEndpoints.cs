@@ -451,7 +451,10 @@ public static class StudyPlanTemplateAdminEndpoints
         }
 
         await db.SaveChangesAsync(ct);
-        await RecordAuditAsync(db, adminId, $"study_plan_template.bulk.{request.Action}", string.Join(",", ids), ct);
+        // ResourceId is varchar(64); a joined id list overflows it for 2+ ids,
+        // so it goes in Details and ResourceId carries a short marker instead.
+        await RecordAuditAsync(db, adminId, $"study_plan_template.bulk.{request.Action}", "bulk", ct,
+            details: $"ids={string.Join(",", ids.Take(50))}");
         return TypedResults.Ok(new StudyPlanTemplateBulkResultDto(processed));
     }
 
@@ -640,7 +643,7 @@ public static class StudyPlanTemplateAdminEndpoints
     private static string ResolveAdminId(HttpContext http)
         => http.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "admin-unknown";
 
-    private static async Task RecordAuditAsync(LearnerDbContext db, string adminId, string action, string resourceId, CancellationToken ct)
+    private static async Task RecordAuditAsync(LearnerDbContext db, string adminId, string action, string resourceId, CancellationToken ct, string? details = null)
     {
         db.AuditEvents.Add(new AuditEvent
         {
@@ -650,7 +653,7 @@ public static class StudyPlanTemplateAdminEndpoints
             ResourceType = "study_plan_template",
             ResourceId = resourceId,
             OccurredAt = DateTimeOffset.UtcNow,
-            Details = "{}"
+            Details = details ?? "{}"
         });
         await db.SaveChangesAsync(ct);
     }

@@ -23,7 +23,6 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
     private readonly string _databaseName = $"oet-learner-tests-{Guid.NewGuid():N}";
     private readonly bool _useFirstPartyAuth;
     private readonly bool _seedDemoData;
-    private readonly Dictionary<string, string?> _previousEnvironmentValues = new();
     private readonly Dictionary<string, string?>? _firstPartyConfiguration;
 
     public TestWebApplicationFactory()
@@ -41,24 +40,16 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
         _useFirstPartyAuth = useFirstPartyAuth;
         _seedDemoData = seedDemoData;
 
-        if (!_useFirstPartyAuth)
-        {
-            foreach (var key in new[] { "ASPNETCORE_ENVIRONMENT", "DOTNET_ENVIRONMENT" })
-            {
-                SetEnvironmentOverride(key, "Development");
-            }
-
-            SetEnvironmentOverride("ConnectionStrings__DefaultConnection", $"InMemory:{_databaseName}");
-            SetEnvironmentOverride("Auth__UseDevelopmentAuth", "true");
-            SetEnvironmentOverride("Bootstrap__SeedDemoData", seedDemoData ? "true" : "false");
-            SetEnvironmentOverride("Platform__PublicApiBaseUrl", "http://localhost");
-            SetEnvironmentOverride("Platform__PublicWebBaseUrl", "http://localhost");
-            SetEnvironmentOverride("Platform__FallbackEmailDomain", "example.test");
-            SetEnvironmentOverride("Billing__CheckoutBaseUrl", "https://app.example.test/billing/checkout");
-            SetEnvironmentOverride("Storage__LocalRootPath", _storageRoot);
-            SetEnvironmentOverride("PasswordPolicy__BreachCheckEnabled", "false");
-        }
-
+        // Configuration is supplied PER-HOST below via builder.UseEnvironment(
+        // "Development") and ConfigureAppConfiguration's in-memory collection —
+        // never via process-global environment variables. Mutating Environment
+        // here (with a capture/restore on Dispose) leaked across test classes:
+        // WebApplicationFactory builds its host lazily, so factory lifetimes
+        // overlap, and one factory's Dispose could restore ASPNETCORE_ENVIRONMENT
+        // /Auth settings out from under another still-live factory. That flipped
+        // builder.Environment.IsDevelopment() (-> dev auth off -> 401) and auth
+        // config for OTHER classes sharing the shard process, which is the root
+        // cause of the chronically flaky/red sharded QA Smoke backend run.
         if (!_useFirstPartyAuth)
         {
             return;
@@ -85,12 +76,8 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
             [$"{AuthTokenOptions.SectionName}:OtpLifetime"] = "00:10:00",
             [$"{AuthTokenOptions.SectionName}:AuthenticatorIssuer"] = "OET Learner"
         };
-
-        foreach (var (key, value) in _firstPartyConfiguration)
-        {
-            var environmentVariableName = ToEnvironmentVariableName(key);
-            SetEnvironmentOverride(environmentVariableName, value);
-        }
+        // _firstPartyConfiguration is applied per-host via ConfigureAppConfiguration
+        // (in-memory) in ConfigureWebHost — NOT pushed to process env vars.
     }
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
@@ -158,12 +145,6 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
 
     private static bool IsHostedService(ServiceDescriptor descriptor)
         => descriptor.ServiceType == typeof(IHostedService);
-
-    private void SetEnvironmentOverride(string key, string? value)
-    {
-        _previousEnvironmentValues.TryAdd(key, Environment.GetEnvironmentVariable(key));
-        Environment.SetEnvironmentVariable(key, value);
-    }
 
     public HttpClient CreateAuthenticatedClient(string email, string password, string? expectedRole = null)
     {
@@ -644,11 +625,6 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
             return;
         }
 
-        foreach (var (key, value) in _previousEnvironmentValues)
-        {
-            Environment.SetEnvironmentVariable(key, value);
-        }
-
         try
         {
             if (Directory.Exists(_storageRoot))
@@ -661,9 +637,6 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
             // Best-effort cleanup only for test temp files.
         }
     }
-
-    private static string ToEnvironmentVariableName(string configurationKey)
-        => configurationKey.Replace(":", "__", StringComparison.Ordinal);
 
     private sealed class TestAiModelProvider : IAiModelProvider
     {
