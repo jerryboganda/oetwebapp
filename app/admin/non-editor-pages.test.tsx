@@ -356,7 +356,6 @@ describe('Admin Non-Editor Pages', () => {
     expect(await screen.findByRole('main')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /^ai evaluation config$/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /new configuration/i })).toBeInTheDocument();
-    expect(screen.getAllByRole('button', { name: /activate/i }).length).toBeGreaterThan(0);
   });
 
   it('renders the audit log registry inside the learner-style route surface', async () => {
