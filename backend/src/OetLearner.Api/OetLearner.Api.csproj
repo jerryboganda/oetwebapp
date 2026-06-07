@@ -82,6 +82,16 @@
          to live-class enrollment confirmations and T-24h reminder emails.
          License: MIT. -->
     <PackageReference Include="Ical.Net" Version="4.2.0" />
+    <!-- MailKit — cross-platform SMTP client (and MimeKit message model). Used
+         by SmtpEmailSender to deliver transactional mail via the Brevo SMTP
+         relay. REQUIRED over System.Net.Mail.SmtpClient because the BCL client
+         on .NET/Linux only ships SSPI auth (Negotiate/NTLM) and cannot perform
+         AUTH LOGIN/PLAIN, so it silently skips authentication against Brevo
+         (smtp-relay.brevo.com advertises only CRAM-MD5/PLAIN/LOGIN) and the
+         server rejects MAIL FROM with "5.7.0 Please authenticate first".
+         MailKit implements SASL LOGIN/PLAIN in managed code. Microsoft
+         officially recommends MailKit in place of SmtpClient. License: MIT. -->
+    <PackageReference Include="MailKit" Version="4.*" />
     <!-- Tesseract — managed wrapper around libtesseract (native). Used by
          WritingOcrService to OCR uploaded handwritten letters as the
          first-pass provider before falling back to Google Cloud Vision.
