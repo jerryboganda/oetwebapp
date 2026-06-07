@@ -28,20 +28,20 @@ public static class BillingExpansionEndpoints
         // ── Admin: manual payments ─────────────────────────────────
         var adminMp = v1.MapGroup("/admin/billing/manual-payments");
         adminMp.MapGet("/", ListManualPayments).RequireAuthorization("AdminBillingRead");
-        adminMp.MapPost("/{id}/approve", ApproveManualPayment).RequireAuthorization("AdminBillingRefundWrite");
-        adminMp.MapPost("/{id}/reject", RejectManualPayment).RequireAuthorization("AdminBillingRefundWrite");
+        adminMp.MapPost("/{id}/approve", ApproveManualPayment).WithAdminWrite("AdminBillingRefundWrite");
+        adminMp.MapPost("/{id}/reject", RejectManualPayment).WithAdminWrite("AdminBillingRefundWrite");
 
         // ── Admin: scholarships ────────────────────────────────────
         var adminSc = v1.MapGroup("/admin/billing/scholarships");
         adminSc.MapGet("/", ListScholarships).RequireAuthorization("AdminBillingRead");
-        adminSc.MapPost("/", GrantScholarship).RequireAuthorization("AdminBillingCatalogWrite");
-        adminSc.MapPost("/{id}/revoke", RevokeScholarship).RequireAuthorization("AdminBillingCatalogWrite");
+        adminSc.MapPost("/", GrantScholarship).WithAdminWrite("AdminBillingCatalogWrite");
+        adminSc.MapPost("/{id}/revoke", RevokeScholarship).WithAdminWrite("AdminBillingCatalogWrite");
 
         // ── Admin: affiliates ──────────────────────────────────────
         var adminAf = v1.MapGroup("/admin/billing/affiliates");
         adminAf.MapGet("/", ListAffiliates).RequireAuthorization("AdminBillingRead");
-        adminAf.MapPost("/", CreateAffiliate).RequireAuthorization("AdminBillingCatalogWrite");
-        adminAf.MapPut("/{id}", UpdateAffiliate).RequireAuthorization("AdminBillingCatalogWrite");
+        adminAf.MapPost("/", CreateAffiliate).WithAdminWrite("AdminBillingCatalogWrite");
+        adminAf.MapPut("/{id}", UpdateAffiliate).WithAdminWrite("AdminBillingCatalogWrite");
 
         // ── Admin: dunning + metrics ───────────────────────────────
         var adminDun = v1.MapGroup("/admin/billing/dunning");
@@ -49,7 +49,7 @@ public static class BillingExpansionEndpoints
 
         var adminMetrics = v1.MapGroup("/admin/billing/metrics");
         adminMetrics.MapGet("/", ReadMetrics).RequireAuthorization("AdminBillingRead");
-        adminMetrics.MapPost("/rollup", RollupMetrics).RequireAuthorization("AdminBillingRead");
+        adminMetrics.MapPost("/rollup", RollupMetrics).WithAdminWrite("AdminBillingRead");
 
         return app;
     }

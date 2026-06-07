@@ -26,34 +26,34 @@ public static class AdminCampaignEndpoints
         campaigns.MapPost("/", async (HttpContext http,
             CreateCampaignRequest request, INotificationCampaignService service, CancellationToken ct)
             => Results.Ok(await service.CreateAsync(http.AdminId(), request, ct)))
-            .WithAdminRead("AdminNotifications");
+            .WithAdminWrite("AdminNotifications");
 
         campaigns.MapPut("/{id:guid}", async (Guid id, HttpContext http,
             UpdateCampaignRequest request, INotificationCampaignService service, CancellationToken ct)
             => Results.Ok(await service.UpdateAsync(http.AdminId(), id, request, ct)))
-            .WithAdminRead("AdminNotifications");
+            .WithAdminWrite("AdminNotifications");
 
         campaigns.MapPost("/{id:guid}/approve", async (Guid id, HttpContext http,
             INotificationCampaignService service, CancellationToken ct)
             => Results.Ok(await service.ApproveAsync(http.AdminId(), id, ct)))
-            .WithAdminRead("AdminNotifications");
+            .WithAdminWrite("AdminNotifications");
 
         campaigns.MapPost("/{id:guid}/cancel", async (Guid id, HttpContext http,
             INotificationCampaignService service, CancellationToken ct) =>
         {
             await service.CancelAsync(http.AdminId(), id, ct);
             return Results.NoContent();
-        }).WithAdminRead("AdminNotifications");
+        }).WithAdminWrite("AdminNotifications");
 
         campaigns.MapPost("/{id:guid}/evaluate-segment", async (Guid id,
             INotificationCampaignService service, CancellationToken ct)
             => Results.Ok(new { recipientCount = await service.EvaluateSegmentAsync(id, ct) }))
-            .WithAdminRead("AdminNotifications");
+            .WithAdminWrite("AdminNotifications");
 
         campaigns.MapPost("/{id:guid}/send", async (Guid id,
             INotificationCampaignService service, CancellationToken ct)
             => Results.Ok(await service.SendAsync(id, ct)))
-            .WithAdminRead("AdminNotifications");
+            .WithAdminWrite("AdminNotifications");
 
         return app;
     }

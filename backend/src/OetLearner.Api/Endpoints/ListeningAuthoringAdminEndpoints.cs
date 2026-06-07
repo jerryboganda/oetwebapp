@@ -714,7 +714,7 @@ public static class ListeningAuthoringAdminEndpoints
                 new BulkValidateSummary(results.Count, ready, results.Count - ready));
             return Results.Ok(response);
         })
-        .RequireAuthorization("AdminContentRead")
+        .WithAdminWrite("AdminContentRead")
         .WithName("BulkValidateListeningPapers")
         .WithSummary("Validate multiple papers for publish readiness.");
 

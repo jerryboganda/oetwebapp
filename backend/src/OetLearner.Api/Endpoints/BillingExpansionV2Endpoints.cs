@@ -37,20 +37,20 @@ public static class BillingExpansionV2Endpoints
 
         var admin = v1.MapGroup("/admin/billing");
         admin.MapGet("/bank-accounts", ListBankAccounts).RequireAuthorization("AdminBillingRead");
-        admin.MapPost("/bank-accounts", UpsertBankAccount).RequireAuthorization("AdminBillingCatalogWrite");
-        admin.MapDelete("/bank-accounts/{id}", DeleteBankAccount).RequireAuthorization("AdminBillingCatalogWrite");
+        admin.MapPost("/bank-accounts", UpsertBankAccount).WithAdminWrite("AdminBillingCatalogWrite");
+        admin.MapDelete("/bank-accounts/{id}", DeleteBankAccount).WithAdminWrite("AdminBillingCatalogWrite");
 
         admin.MapGet("/notification-templates", ListNotificationTemplates).RequireAuthorization("AdminBillingRead");
-        admin.MapPost("/notification-templates", UpsertNotificationTemplate).RequireAuthorization("AdminBillingCatalogWrite");
-        admin.MapDelete("/notification-templates/{id}", DeleteNotificationTemplate).RequireAuthorization("AdminBillingCatalogWrite");
+        admin.MapPost("/notification-templates", UpsertNotificationTemplate).WithAdminWrite("AdminBillingCatalogWrite");
+        admin.MapDelete("/notification-templates/{id}", DeleteNotificationTemplate).WithAdminWrite("AdminBillingCatalogWrite");
         admin.MapGet("/notification-dispatch-log", ListDispatchLog).RequireAuthorization("AdminBillingRead");
 
         admin.MapGet("/metrics.csv", ExportMetricsCsv).RequireAuthorization("AdminBillingRead");
 
         admin.MapGet("/cancellation-intents", ListCancellationIntents).RequireAuthorization("AdminBillingRead");
         admin.MapGet("/deflection-rules", ListDeflectionRules).RequireAuthorization("AdminBillingRead");
-        admin.MapPost("/deflection-rules", UpsertDeflectionRule).RequireAuthorization("AdminBillingCatalogWrite");
-        admin.MapDelete("/deflection-rules/{id}", DeleteDeflectionRule).RequireAuthorization("AdminBillingCatalogWrite");
+        admin.MapPost("/deflection-rules", UpsertDeflectionRule).WithAdminWrite("AdminBillingCatalogWrite");
+        admin.MapDelete("/deflection-rules/{id}", DeleteDeflectionRule).WithAdminWrite("AdminBillingCatalogWrite");
 
         return app;
     }

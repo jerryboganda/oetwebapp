@@ -31,8 +31,8 @@ public static class StudyPlanTemplateAdminEndpoints
         admin.MapPut("/{id}", UpdateTemplate).WithAdminWrite("AdminContentWrite");
         admin.MapDelete("/{id}", SoftDeleteTemplate).WithAdminWrite("AdminContentWrite");
         admin.MapPost("/{id}/duplicate", DuplicateTemplate).WithAdminWrite("AdminContentWrite");
-        admin.MapPost("/{id}/validate", ValidateTemplate).WithAdminRead("AdminContentRead");
-        admin.MapPost("/{id}/preview", PreviewTemplate).WithAdminRead("AdminContentRead");
+        admin.MapPost("/{id}/validate", ValidateTemplate).WithAdminRead("AdminContentRead").RequireRateLimiting("PerUserWrite");
+        admin.MapPost("/{id}/preview", PreviewTemplate).WithAdminRead("AdminContentRead").RequireRateLimiting("PerUserWrite");
         admin.MapPost("/bulk", BulkAction).WithAdminWrite("AdminContentWrite");
         admin.MapGet("/{id}/tiers", GetTemplateTiers).WithAdminRead("AdminContentRead");
         admin.MapPut("/{id}/tiers", SetTemplateTiers).WithAdminWrite("AdminContentWrite");

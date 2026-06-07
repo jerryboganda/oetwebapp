@@ -12,8 +12,8 @@ public static class BillingPromoCodeEndpoints
         v1.MapPost("/promo-codes/validate", ValidatePromoCode).AllowAnonymous();
 
         var admin = v1.MapGroup("/admin/billing/promo-codes");
-        admin.MapPost("/", AdminCreatePromoCode).RequireAuthorization("AdminBillingCatalogWrite");
-        admin.MapDelete("/{code}", AdminDeactivatePromoCode).RequireAuthorization("AdminBillingCatalogWrite");
+        admin.MapPost("/", AdminCreatePromoCode).WithAdminWrite("AdminBillingCatalogWrite");
+        admin.MapDelete("/{code}", AdminDeactivatePromoCode).WithAdminWrite("AdminBillingCatalogWrite");
 
         return app;
     }
