@@ -42,6 +42,13 @@ Implement the OET 2026 product portfolio plan on `feat/oet-2026-entitlement-conf
 - Backend shard failures included factories that expected demo auth/user seed rows; the default `TestWebApplicationFactory` now explicitly pins `Bootstrap:SeedDemoData=true`.
 - Expert writing E2E failures were traced to submission-keyed V2 marking routes receiving legacy review request IDs. V2 writing specs now create isolated disposable `WritingSubmission` rows with cloned grades and claimed tutor assignments, then deep-link with the submission ID.
 - `pnpm exec eslint tests/e2e/fixtures/api-auth.ts tests/e2e/expert/detail-smoke.spec.ts tests/e2e/expert/review-completion.spec.ts tests/e2e/expert/review-workflows.spec.ts`: passed.
+- QA Smoke run `27102558113` passed frontend typecheck/lint/unit/build, SBOM/SCA, and most E2E shards, but still failed backend shards and two expert E2E cases.
+- Backend failures were traced to top-level `Program.cs` reading auth/bootstrap configuration before the default test factory's in-memory provider was added. `TestWebApplicationFactory` now mirrors default test settings into environment variables before host construction so development auth and demo seeding are deterministic in CI.
+- `firefox-expert` failed because the disposable writing-submission helper called host `psql` against `localhost:5432`; QA Smoke's compose stack does not publish Postgres. The helper now falls back to `docker exec oet-desktop-postgres psql`, with env overrides for non-default containers.
+- `chromium-expert` failed during smoke stack startup because Docker Hub timed out while pulling `pgvector/pgvector:pg17`. QA Smoke now retries compose startup with cleanup before failing.
+- `pnpm exec eslint tests/e2e/fixtures/api-auth.ts`: passed.
+- `git diff --check -- backend/tests/OetLearner.Api.Tests/Infrastructure/TestWebApplicationFactory.cs tests/e2e/fixtures/api-auth.ts .github/workflows/qa-smoke.yml`: passed.
+- Focused `dotnet test` for `CriticalFlowsTests.BootstrapEndpoint_ReturnsLearnerProfileAndReferences` timed out locally after 3 minutes; backend proof remains delegated to GitHub Actions per the validation constraint.
 
 ## Next-Step Protocol For New Agent Runs
 
@@ -53,5 +60,5 @@ Implement the OET 2026 product portfolio plan on `feat/oet-2026-entitlement-conf
 
 ## Active Risks
 
-- GitHub Actions must validate the latest backend and expert E2E fixes after the next push; do not merge/deploy until QA Smoke and required checks are green.
+- GitHub Actions must validate the latest backend factory, E2E Postgres fallback, and QA Smoke retry fixes after the next push; do not merge/deploy until QA Smoke and required checks are green.
 - Existing branch/workspace has an unrelated untracked `.codex/config.toml`; do not stage it unless explicitly requested.

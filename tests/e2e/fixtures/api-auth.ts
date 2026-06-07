@@ -294,10 +294,24 @@ function runE2ePsql(sql: string) {
   const database = process.env.OET_PSQL_DATABASE ?? process.env.PGDATABASE ?? 'oet_learner_dev';
   const password = process.env.OET_PSQL_PASSWORD ?? process.env.PGPASSWORD ?? 'postgres';
 
+  try {
+    execFileSync(
+      psqlPath,
+      ['-h', host, '-p', port, '-U', user, '-d', database, '-v', 'ON_ERROR_STOP=1', '-c', sql],
+      { env: { ...process.env, PGPASSWORD: password }, stdio: 'pipe' },
+    );
+    return;
+  } catch (error) {
+    if (process.env.OET_PSQL_DISABLE_DOCKER_FALLBACK === '1') {
+      throw error;
+    }
+  }
+
+  const container = process.env.OET_PSQL_CONTAINER ?? 'oet-desktop-postgres';
   execFileSync(
-    psqlPath,
-    ['-h', host, '-p', port, '-U', user, '-d', database, '-v', 'ON_ERROR_STOP=1', '-c', sql],
-    { env: { ...process.env, PGPASSWORD: password }, stdio: 'pipe' },
+    'docker',
+    ['exec', '-i', '-e', `PGPASSWORD=${password}`, container, 'psql', '-U', user, '-d', database, '-v', 'ON_ERROR_STOP=1', '-c', sql],
+    { stdio: 'pipe' },
   );
 }
 

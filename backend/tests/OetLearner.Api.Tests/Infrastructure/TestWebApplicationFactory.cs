@@ -37,12 +37,18 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
         {
             foreach (var key in new[] { "ASPNETCORE_ENVIRONMENT", "DOTNET_ENVIRONMENT" })
             {
-                _previousEnvironmentValues[key] = Environment.GetEnvironmentVariable(key);
-                Environment.SetEnvironmentVariable(key, "Development");
+                SetEnvironmentOverride(key, "Development");
             }
 
-            _previousEnvironmentValues["Billing__CheckoutBaseUrl"] = Environment.GetEnvironmentVariable("Billing__CheckoutBaseUrl");
-            Environment.SetEnvironmentVariable("Billing__CheckoutBaseUrl", "https://app.example.test/billing/checkout");
+            SetEnvironmentOverride("ConnectionStrings__DefaultConnection", $"InMemory:{_databaseName}");
+            SetEnvironmentOverride("Auth__UseDevelopmentAuth", "true");
+            SetEnvironmentOverride("Bootstrap__SeedDemoData", "true");
+            SetEnvironmentOverride("Platform__PublicApiBaseUrl", "http://localhost");
+            SetEnvironmentOverride("Platform__PublicWebBaseUrl", "http://localhost");
+            SetEnvironmentOverride("Platform__FallbackEmailDomain", "example.test");
+            SetEnvironmentOverride("Billing__CheckoutBaseUrl", "https://app.example.test/billing/checkout");
+            SetEnvironmentOverride("Storage__LocalRootPath", _storageRoot);
+            SetEnvironmentOverride("PasswordPolicy__BreachCheckEnabled", "false");
         }
 
         if (!_useFirstPartyAuth)
@@ -75,8 +81,7 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
         foreach (var (key, value) in _firstPartyConfiguration)
         {
             var environmentVariableName = ToEnvironmentVariableName(key);
-            _previousEnvironmentValues[environmentVariableName] = Environment.GetEnvironmentVariable(environmentVariableName);
-            Environment.SetEnvironmentVariable(environmentVariableName, value);
+            SetEnvironmentOverride(environmentVariableName, value);
         }
     }
 
@@ -145,6 +150,12 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
 
     private static bool IsHostedService(ServiceDescriptor descriptor)
         => descriptor.ServiceType == typeof(IHostedService);
+
+    private void SetEnvironmentOverride(string key, string? value)
+    {
+        _previousEnvironmentValues.TryAdd(key, Environment.GetEnvironmentVariable(key));
+        Environment.SetEnvironmentVariable(key, value);
+    }
 
     public HttpClient CreateAuthenticatedClient(string email, string password, string? expectedRole = null)
     {
