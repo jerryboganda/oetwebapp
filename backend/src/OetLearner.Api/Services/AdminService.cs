@@ -11,6 +11,7 @@ using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Endpoints;
 using OetLearner.Api.Services.Billing;
+using OetLearner.Api.Services.Conversation;
 using OetLearner.Api.Services.Entitlements;
 
 namespace OetLearner.Api.Services;
@@ -23,7 +24,8 @@ public partial class AdminService(
     TimeProvider timeProvider,
     NotificationService notifications,
     LearnerService learnerService,
-    OetLearner.Api.Services.Vocabulary.IVocabularyAudioQueue? vocabularyAudioQueue = null)
+    OetLearner.Api.Services.Vocabulary.IVocabularyAudioQueue? vocabularyAudioQueue = null,
+    IConversationOptionsProvider? conversationOptionsProvider = null)
 {
     private const string ActiveUserStatus = "active";
     private const string SuspendedUserStatus = "suspended";

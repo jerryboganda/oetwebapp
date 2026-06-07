@@ -7565,6 +7565,12 @@ export async function backfillAdminVocabularyAudio(batchId?: string) {
   return apiRequest(`/v1/admin/vocabulary/audio/backfill${qs}`, { method: 'POST' });
 }
 
+export async function cancelAdminVocabularyImportAudio(importBatchId: string) {
+  return apiRequest(`/v1/admin/vocabulary/import/batches/${encodeURIComponent(importBatchId)}/audio/cancel`, {
+    method: 'POST',
+  });
+}
+
 export async function resumeAdminVocabularyAudio() {
   return apiRequest(`/v1/admin/vocabulary/audio/resume`, { method: 'POST' });
 }

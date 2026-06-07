@@ -1303,6 +1303,72 @@ public class AdminFlowsTests : IClassFixture<FirstPartyAuthTestWebApplicationFac
     }
 
     [Fact]
+    public async Task AdminVocabularyImport_RecallAudioBackfillRequiresElevenLabsKeyAndCanCancelBatch()
+    {
+        var term = $"recall-audio-{Guid.NewGuid():N}";
+        var batchId = $"recalls-audio-{Guid.NewGuid():N}"[..32];
+        var csv = VocabularyImportCsvHeader
+            + $"{term},\"Audio definition\",\"Audio example sentence.\",medical,medium,medicine,oet,,,,,,,,\"src=unit-test;p=3;row=1\"\n";
+
+        using (var dryRunContent = CsvContent(csv, "recalls-audio.csv"))
+        {
+            var dryRun = await _client.PostAsync($"/v1/admin/vocabulary/import?dryRun=true&recallSetCode=old&importBatchId={Uri.EscapeDataString(batchId)}", dryRunContent);
+            dryRun.EnsureSuccessStatusCode();
+        }
+
+        using (var importContent = CsvContent(csv, "recalls-audio.csv"))
+        {
+            var import = await _client.PostAsync($"/v1/admin/vocabulary/import?dryRun=false&recallSetCode=old&importBatchId={Uri.EscapeDataString(batchId)}", importContent);
+            import.EnsureSuccessStatusCode();
+        }
+
+        var backfill = await _client.PostAsync($"/v1/admin/vocabulary/audio/backfill?batchId={Uri.EscapeDataString(batchId)}", null);
+        Assert.Equal(HttpStatusCode.BadRequest, backfill.StatusCode);
+        using (var errorJson = JsonDocument.Parse(await backfill.Content.ReadAsStringAsync()))
+        {
+            Assert.Equal("elevenlabs_api_key_required", errorJson.RootElement.GetProperty("code").GetString());
+        }
+
+        var audioBatchId = $"recall:{batchId}";
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+            db.AudioRegenerationBatches.Add(new AudioRegenerationBatch
+            {
+                Id = audioBatchId,
+                AudioType = "recalls",
+                Scope = "missing",
+                Status = "running",
+                TotalItems = 1,
+                CompletedItems = 0,
+                FailedItems = 0,
+                VoiceId = "voice-test",
+                ModelVariant = "eleven_multilingual_v2",
+                ProviderName = "elevenlabs",
+                RequestedBy = "unit-test",
+                StartedAt = DateTime.UtcNow,
+            });
+            await db.SaveChangesAsync();
+        }
+
+        var cancel = await _client.PostAsync($"/v1/admin/vocabulary/import/batches/{Uri.EscapeDataString(batchId)}/audio/cancel", null);
+        cancel.EnsureSuccessStatusCode();
+        using (var cancelJson = JsonDocument.Parse(await cancel.Content.ReadAsStringAsync()))
+        {
+            Assert.True(cancelJson.RootElement.GetProperty("cancelled").GetBoolean());
+            Assert.Equal(audioBatchId, cancelJson.RootElement.GetProperty("audioBatchId").GetString());
+        }
+
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+            var batch = await db.AudioRegenerationBatches.FindAsync(audioBatchId);
+            Assert.NotNull(batch);
+            Assert.Equal("cancelled", batch!.Status);
+        }
+    }
+
+    [Fact]
     public async Task AdminVocabularyImport_CommitRequiresMatchingDryRun()
     {
         var term = $"commit-gate-{Guid.NewGuid():N}";

@@ -321,6 +321,7 @@ public sealed class VocabularyAudioWorker(
         }
 
         await db.SaveChangesAsync(ct).ConfigureAwait(false);
+        await UpdateBatchProgressAsync(db, job.BatchId, ct).ConfigureAwait(false);
         logger.LogInformation(
             "Vocab audio job {TermId} stored ({Bytes} bytes, sha {Sha}) via {Provider}",
             job.TermId, audio.LongLength, sha[..8], provider.Name);
@@ -642,6 +643,31 @@ public sealed class VocabularyAudioWorker(
             ResourceId = job.TermId,
             Details = JsonSerializer.Serialize(new { batchId = job.BatchId, reason }),
         });
+        await db.SaveChangesAsync(ct).ConfigureAwait(false);
+    }
+
+    private static async Task UpdateBatchProgressAsync(LearnerDbContext db, string batchId, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(batchId)) return;
+
+        var batch = await db.AudioRegenerationBatches
+            .FirstOrDefaultAsync(b => b.Id == batchId, ct)
+            .ConfigureAwait(false);
+        if (batch is null || batch.Status != "running") return;
+
+        batch.CompletedItems = await db.VocabularyTerms
+            .CountAsync(t => t.AudioBatchId == batch.Id
+                             && t.AudioMediaAssetId != null
+                             && db.MediaAssets.Any(asset => asset.Id == t.AudioMediaAssetId
+                                                            && asset.Status == MediaAssetStatus.Ready), ct)
+            .ConfigureAwait(false);
+
+        if (batch.CompletedItems + batch.FailedItems >= batch.TotalItems)
+        {
+            batch.Status = "completed";
+            batch.CompletedAt = DateTime.UtcNow;
+        }
+
         await db.SaveChangesAsync(ct).ConfigureAwait(false);
     }
 

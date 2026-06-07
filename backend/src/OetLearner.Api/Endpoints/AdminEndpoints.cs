@@ -1145,6 +1145,10 @@ public static class AdminEndpoints
             => Results.Ok(await service.EnqueueVocabularyAudioBackfillAsync(batchId, ct)))
             .RequireRateLimiting("PerUserWrite").WithAdminWrite("AdminContentWrite");
 
+        admin.MapPost("/vocabulary/import/batches/{importBatchId}/audio/cancel", async (string importBatchId, AdminService service, CancellationToken ct)
+            => Results.Ok(await service.CancelVocabularyImportAudioBackfillAsync(importBatchId, ct)))
+            .RequireRateLimiting("PerUserWrite").WithAdminWrite("AdminContentWrite");
+
         admin.MapGet("/vocabulary/import/batches/{importBatchId}", async (string importBatchId, AdminService service, CancellationToken ct)
             => Results.Ok(await service.GetVocabularyImportBatchSummaryAsync(importBatchId, ct)))
             .WithAdminRead("AdminContentRead");

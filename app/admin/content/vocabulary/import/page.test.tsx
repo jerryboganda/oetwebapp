@@ -9,6 +9,9 @@ const api = vi.hoisted(() => ({
   exportAdminVocabularyImportBatchCsv: vi.fn(),
   reconcileAdminVocabularyImportBatch: vi.fn(),
   rollbackAdminVocabularyImportBatch: vi.fn(),
+  backfillAdminVocabularyAudio: vi.fn(),
+  cancelAdminVocabularyImportAudio: vi.fn(),
+  adminListRecallSetTags: vi.fn(),
 }));
 
 vi.mock('@/lib/api', () => ({
@@ -18,6 +21,9 @@ vi.mock('@/lib/api', () => ({
   exportAdminVocabularyImportBatchCsv: api.exportAdminVocabularyImportBatchCsv,
   reconcileAdminVocabularyImportBatch: api.reconcileAdminVocabularyImportBatch,
   rollbackAdminVocabularyImportBatch: api.rollbackAdminVocabularyImportBatch,
+  backfillAdminVocabularyAudio: api.backfillAdminVocabularyAudio,
+  cancelAdminVocabularyImportAudio: api.cancelAdminVocabularyImportAudio,
+  adminListRecallSetTags: api.adminListRecallSetTags,
 }));
 
 vi.mock('@/components/domain/admin-route-surface', () => ({
@@ -66,6 +72,7 @@ async function prepareReconciliation(batchId: string, manifest: File) {
 describe('Admin vocabulary import page', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    api.adminListRecallSetTags.mockResolvedValue([]);
   });
 
   it('reconciles an approved manifest and renders a clean result', async () => {
@@ -203,5 +210,98 @@ describe('Admin vocabulary import page', () => {
     await waitFor(() => {
       expect(api.reconcileAdminVocabularyImportBatch).toHaveBeenCalledWith('recalls-batch-new', manifest);
     });
+  });
+
+  it('renders ElevenLabs queued progress and backfills missing recall audio', async () => {
+    const user = userEvent.setup();
+    api.fetchAdminVocabularyImportBatch.mockResolvedValue({
+      importBatchId: 'recalls-batch-audio',
+      total: 2,
+      draft: 2,
+      active: 0,
+      archived: 0,
+      warnings: [],
+      audioGeneration: {
+        audioBatchId: 'recall:recalls-batch-audio',
+        status: 'running',
+        providerName: 'elevenlabs',
+        total: 2,
+        generated: 0,
+        pending: 2,
+        failed: 0,
+        cancelled: false,
+        queued: 2,
+        recallTotal: 2,
+        canCancel: true,
+      },
+      rows: [
+        { id: 'VOC-1', term: 'dyspnoea', audioMediaAssetId: null, audioUrl: null },
+        { id: 'VOC-2', term: 'oedema', audioMediaAssetId: null, audioUrl: null },
+      ],
+    });
+    api.backfillAdminVocabularyAudio.mockResolvedValue({ enqueued: 2, audioBatchId: 'recall:recalls-batch-audio' });
+
+    render(<AdminVocabularyImportPage />);
+
+    const batchInput = screen.getByLabelText(/import batch id/i);
+    await user.clear(batchInput);
+    await user.type(batchInput, 'recalls-batch-audio');
+    await user.click(screen.getByRole('button', { name: /batch summary/i }));
+
+    expect(await screen.findByText(/0 of 2 generated/i)).toBeInTheDocument();
+    expect(screen.getByText('Queued')).toBeInTheDocument();
+    expect(screen.getAllByText('2').length).toBeGreaterThan(0);
+
+    await user.click(screen.getByRole('button', { name: /backfill missing audio/i }));
+
+    await waitFor(() => {
+      expect(api.backfillAdminVocabularyAudio).toHaveBeenCalledWith('recalls-batch-audio');
+    });
+  });
+
+  it('cancels pending ElevenLabs recall audio generation from the import panel', async () => {
+    const user = userEvent.setup();
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    api.fetchAdminVocabularyImportBatch.mockResolvedValue({
+      importBatchId: 'recalls-batch-cancel',
+      total: 2,
+      draft: 2,
+      active: 0,
+      archived: 0,
+      warnings: [],
+      audioGeneration: {
+        audioBatchId: 'recall:recalls-batch-cancel',
+        status: 'running',
+        providerName: 'elevenlabs',
+        total: 2,
+        generated: 1,
+        pending: 1,
+        failed: 0,
+        cancelled: false,
+        queued: 1,
+        recallTotal: 2,
+        canCancel: true,
+      },
+      rows: [
+        { id: 'VOC-1', term: 'dyspnoea', audioMediaAssetId: 'MA-1', audioUrl: 'recalls/audio/one.mp3' },
+        { id: 'VOC-2', term: 'oedema', audioMediaAssetId: null, audioUrl: null },
+      ],
+    });
+    api.cancelAdminVocabularyImportAudio.mockResolvedValue({ cancelled: true, audioBatchId: 'recall:recalls-batch-cancel' });
+
+    render(<AdminVocabularyImportPage />);
+
+    const batchInput = screen.getByLabelText(/import batch id/i);
+    await user.clear(batchInput);
+    await user.type(batchInput, 'recalls-batch-cancel');
+    await user.click(screen.getByRole('button', { name: /batch summary/i }));
+
+    await user.click(await screen.findByRole('button', { name: /cancel generation/i }));
+
+    await waitFor(() => {
+      expect(api.cancelAdminVocabularyImportAudio).toHaveBeenCalledWith('recalls-batch-cancel');
+    });
+    expect(confirmSpy).toHaveBeenCalled();
+    confirmSpy.mockRestore();
   });
 });

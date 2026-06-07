@@ -16,6 +16,7 @@ import {
   reconcileAdminVocabularyImportBatch,
   rollbackAdminVocabularyImportBatch,
   backfillAdminVocabularyAudio,
+  cancelAdminVocabularyImportAudio,
   adminListRecallSetTags,
   type RecallSetTagDto,
 } from '@/lib/api';
@@ -65,6 +66,19 @@ type BatchSummary = {
   active: number;
   archived: number;
   warnings: string[];
+  audioGeneration?: {
+    audioBatchId: string | null;
+    status: string;
+    providerName: string | null;
+    total: number;
+    generated: number;
+    pending: number;
+    failed: number;
+    cancelled: boolean;
+    queued: number;
+    recallTotal: number;
+    canCancel: boolean;
+  };
   rows?: BatchSummaryRow[];
 };
 
@@ -338,6 +352,29 @@ export default function AdminVocabularyImportPage() {
     }
   }
 
+  async function handleCancelAudioGeneration() {
+    const batchId = committedBatchId ?? importBatchId.trim();
+    if (!batchId) return;
+    const confirmed = window.confirm(`Cancel pending ElevenLabs audio generation for import batch ${batchId}? Already-generated audio will be kept.`);
+    if (!confirmed) return;
+    setBatchActionLoading(true);
+    try {
+      const res = await cancelAdminVocabularyImportAudio(batchId) as { cancelled?: boolean };
+      if (res.cancelled) {
+        stopAudioPolling();
+        setToast({ variant: 'success', message: 'Pending ElevenLabs audio generation was cancelled. Generated audio was kept.' });
+      } else {
+        setToast({ variant: 'warning', message: 'No running audio generation batch was found to cancel.' });
+      }
+      await loadBatchSummary(batchId);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Audio generation cancellation failed.';
+      setToast({ variant: 'error', message: msg });
+    } finally {
+      setBatchActionLoading(false);
+    }
+  }
+
   async function handleRollbackBatch() {
     const batchId = committedBatchId ?? importBatchId.trim();
     if (!batchId) return;
@@ -486,8 +523,21 @@ export default function AdminVocabularyImportPage() {
               const knownRowCount = summaryRows.length;
               const audioReady = knownRowCount > 0 && audioReadyCount >= knownRowCount;
               const showAudioBlock = knownRowCount > 0;
+              const audioGeneration = batchSummary.audioGeneration;
               const percentage = knownRowCount > 0 ? Math.round((audioReadyCount / knownRowCount) * 100) : 0;
-              const remaining = knownRowCount - audioReadyCount;
+              const failed = audioGeneration?.failed ?? 0;
+              const queued = audioGeneration?.queued ?? audioGeneration?.pending ?? 0;
+              const remaining = Math.max(0, (audioGeneration?.total ?? knownRowCount) - audioReadyCount - failed);
+              const canCancelAudio = !!audioGeneration?.canCancel && remaining > 0;
+              const audioStatus = audioGeneration?.cancelled
+                ? 'Cancelled'
+                : audioReady
+                  ? 'Complete'
+                  : audioPolling
+                    ? 'Live tracking'
+                    : audioGeneration?.status === 'running'
+                      ? 'Running'
+                      : 'Paused';
               // Estimate: ~1.5s per term (ElevenLabs TTS + network)
               const etaSeconds = remaining * 1.5;
               const etaMin = Math.floor(etaSeconds / 60);
@@ -509,9 +559,11 @@ export default function AdminVocabularyImportPage() {
                         <div className="flex items-center gap-2">
                           {audioReady
                             ? <Badge variant="success"><CheckCircle2 className="mr-1 h-3 w-3" />Complete</Badge>
-                            : audioPolling
+                            : audioGeneration?.cancelled
+                              ? <Badge variant="danger">Cancelled</Badge>
+                              : audioPolling
                               ? <Badge variant="warning"><RefreshCw className="mr-1 h-3 w-3 animate-spin" />Live tracking</Badge>
-                              : <Badge variant="warning">Paused</Badge>
+                              : <Badge variant="warning">{audioStatus}</Badge>
                           }
                         </div>
                       </div>
@@ -519,7 +571,7 @@ export default function AdminVocabularyImportPage() {
                       {/* Progress bar */}
                       <div className="space-y-1.5">
                         <div className="flex items-center justify-between text-xs text-admin-fg-muted">
-                          <span>{audioReadyCount} of {knownRowCount} generated</span>
+                          <span>{audioReadyCount} of {knownRowCount} generated Â· {queued} queued/pending</span>
                           <span className="font-bold text-sm text-navy">{percentage}%</span>
                         </div>
                         <div className="h-4 w-full rounded-full bg-navy/10 overflow-hidden">
@@ -531,7 +583,7 @@ export default function AdminVocabularyImportPage() {
                       </div>
 
                       {/* Stats row */}
-                      <div className="grid grid-cols-4 gap-3 text-center">
+                      <div className="grid grid-cols-2 gap-3 text-center md:grid-cols-5">
                         <div className="rounded-lg bg-surface p-2">
                           <div className="text-lg font-bold text-navy">{knownRowCount}</div>
                           <div className="text-[10px] text-admin-fg-muted uppercase tracking-wide">Total</div>
@@ -543,6 +595,10 @@ export default function AdminVocabularyImportPage() {
                         <div className="rounded-lg bg-surface p-2">
                           <div className="text-lg font-bold text-amber-600">{remaining}</div>
                           <div className="text-[10px] text-admin-fg-muted uppercase tracking-wide">Remaining</div>
+                        </div>
+                        <div className="rounded-lg bg-surface p-2">
+                          <div className="text-lg font-bold text-blue-600">{queued}</div>
+                          <div className="text-[10px] text-admin-fg-muted uppercase tracking-wide">Queued</div>
                         </div>
                         <div className="rounded-lg bg-surface p-2">
                           <div className="text-lg font-bold text-navy">{remaining > 0 ? `${etaMin}m ${etaSec}s` : '-'}</div>
@@ -564,6 +620,9 @@ export default function AdminVocabularyImportPage() {
                         )}
                         <Button variant="outline" size="sm" disabled={batchActionLoading} onClick={() => void loadBatchSummary()}>
                           <RefreshCw className="mr-1.5 h-3 w-3" /> Refresh now
+                        </Button>
+                        <Button variant="destructive" size="sm" disabled={batchActionLoading || !canCancelAudio} onClick={handleCancelAudioGeneration}>
+                          Cancel generation
                         </Button>
                         {!audioReady && (
                           <Button variant="secondary" size="sm" disabled={batchActionLoading} onClick={handleAudioBackfill}>

@@ -1,73 +1,28 @@
-# PROGRESS - Active Agent Continuity
+﻿# PROGRESS - Active Agent Continuity
 
-Last updated: 2026-06-06
-
-This file is intentionally compact. Historical progress was archived locally at
-`.github/context-archive-20260531/PROGRESS-before-continuity.md` and is also
-available through git history. Do not paste long historical ledgers back here.
+Last updated: 2026-06-07
 
 ## Current Operating Goal
 
-Backend/API security remediation pass for confirmed high-risk findings,
-currently focused on billing refund saga/idempotency hardening.
+Recall vocabulary ElevenLabs audio generation fix is ready for commit/push to main, followed by GitHub Actions deploy and production verification.
 
 ## Current State
 
-- Writing marking-surface endpoints now require expert auth plus an assigned
-  claimed/submitted tutor-review assignment before reading context,
-  pre-assessment, annotations, submission, or moderation data.
-- Speaking review voice notes now require active expert review assignment,
-  same-uploader ready audio media, and a non-terminal review state.
-- Admin notification RBAC now has a canonical `notifications` permission and
-  registered `AdminNotifications` policy.
-- Admin billing analytics now exposes `/v1/admin/billing/analytics` with the
-  frontend contract shape.
-- Admin audio-preview helpers now use shared API-client blob handling.
-- Conversation SignalR now routes through `/api/backend/v1/conversations/hub`.
-- Production-like auto-migrate defaults are false; GHCR deploy path validates
-  `.env.production`; env examples are restored with safe placeholders.
-- Writing evaluation profile-country lookup now uses SQLite-friendly
-  materialize-then-sort behavior, matching the existing learner-goal lookup.
-- Investigation report and issue register:
-  `docs/backend-api-investigation-2026-06-06.md`.
-- RefundService working-tree patch adds resumable idempotent refund finalization:
-  pending refund replays retry the gateway with the same idempotency key,
-  successful full refunds complete local reversals in a serializable transaction,
-  and refund-issued audit events are delayed until provider success.
-
-## Validation Snapshot
-
-- Focused backend tests for the changed auth/contract surfaces: passed, 67 tests.
-- Writing evaluation pipeline focused tests: passed, 4 tests.
-- `pnpm exec tsc --noEmit`: passed.
-- `pnpm run lint`: passed with 0 errors and 364 existing warnings.
-- `pnpm test`: passed, 280 files and 1,866 tests.
-- `pnpm run backend:build`: passed with existing warnings.
-- `pnpm run backend:test`: failed, 14 failed / 758 passed / 772 total, then test host crash warning.
-- Local PostgreSQL TCP check on `127.0.0.1:5432`: succeeded.
+- Recall import audio backfill now includes recall-set rows and forces ElevenLabs.
+- Missing ElevenLabs key returns a clear elevenlabs_api_key_required validation error.
+- Recall import audio batches expose queued/pending progress and can be cancelled without deleting generated audio.
+- Admin vocabulary import UI shows generated, queued, remaining, ETA, status, and Cancel generation controls.
+- Local focused validation passed; next step is commit/push, CI watch, and production verification via CI-built GHCR images.
+- Unrelated pre-existing feature-branch work was preserved in a git stash before moving the recall fix onto main.
 
 ## Next-Step Protocol For New Agent Runs
 
-1. Read `AGENTS.md`, `.github/copilot-instructions.md`, this file, and
-   `.github/agent-state.local.md` if it exists.
-2. Run a scoped `git status --short -- <relevant paths>` instead of dumping the
-   whole tree.
-3. Continue from `## Next Concrete Step` in `.github/agent-state.local.md` when
-   it matches the user's newest request.
-4. If state is stale or conflicts with the newest user request, update the
-   state file and follow the newest user request.
-5. Before ending substantial work, update `.github/agent-state.local.md` with
-   goal, touched files, validation, blockers, and next concrete step.
+1. Read AGENTS.md, .github/copilot-instructions.md, this file, and .github/agent-state.local.md.
+2. Continue from .github/agent-state.local.md when it matches the newest request.
+3. For production deploy, use GitHub Actions + GHCR images; do not build on the VPS.
+4. Before handoff, update .github/agent-state.local.md with validation, blockers, and next concrete step.
 
 ## Active Risks
 
-- Full backend test suite is not green. The next pass should triage the 14
-  failing backend tests listed in the investigation report.
-- `/v1/learner/quick-session` is still a missing backend route; the frontend
-  intentionally falls back to local questions.
-- Local app-level `/health/live` and `/health/ready` were not exercised after
-  this patch set.
-- RefundService post-review validation is not fully complete because local
-  `dotnet build` repeatedly stalled/canceled in `CoreCompile` after the final
-  audit-event patch. See `.github/agent-state.local.md` for exact RED/GREEN
-  evidence and next validation command.
+- Do not drop stash codex-preserve-before-recall-audio-main-push; it contains unrelated feature-branch dirty work preserved before the clean main push.
+- Production verification must check more than homepage 200: containers, restart counts, logs, direct API/web health, migrations, and backup posture.

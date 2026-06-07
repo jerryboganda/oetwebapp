@@ -1037,51 +1037,124 @@ public partial class AdminService
     }
 
     /// <summary>
-    /// Phase 3 — enqueue background TTS jobs for vocabulary terms that
-    /// have neither <see cref="VocabularyTerm.AudioMediaAssetId"/> nor
-    /// <see cref="VocabularyTerm.AudioUrl"/>. When <paramref name="batchId"/>
-    /// is non-empty we restrict to rows whose <c>SourceProvenance</c>
-    /// starts with <c>batch={id};</c>. Otherwise we sweep up to 5000 rows
-    /// platform-wide.
+    /// Enqueue background TTS jobs for vocabulary terms missing stored audio.
+    /// Import-batch backfills include recall-set rows and force those jobs
+    /// through ElevenLabs; platform-wide sweeps keep the older non-recall
+    /// filter to avoid accidentally spending recall TTS quota.
     /// </summary>
     public async Task<object> EnqueueVocabularyAudioBackfillAsync(string? batchId, CancellationToken ct)
     {
         if (vocabularyAudioQueue is null)
             return new { enqueued = 0, skipped = "queue-not-configured" };
 
-        IQueryable<VocabularyTerm> query = db.VocabularyTerms.AsNoTracking()
-            .Where(t => t.AudioMediaAssetId == null
-                && (t.AudioUrl == null || t.AudioUrl == "")
-                && (t.RecallSetCodesJson == null || t.RecallSetCodesJson == "" || t.RecallSetCodesJson == "[]"));
-
         var normalised = string.IsNullOrWhiteSpace(batchId) ? null : batchId.Trim();
+        List<VocabularyTerm> rows;
+        List<VocabularyTerm> batchRows = [];
+
         if (!string.IsNullOrEmpty(normalised))
         {
-            var prefix = $"batch={normalised};";
-            query = query.Where(t => t.SourceProvenance != null && t.SourceProvenance.StartsWith(prefix));
+            normalised = NormalizeExistingImportBatchId(normalised);
+            batchRows = await GetVocabularyImportBatchRowsAsync(normalised, ct);
+            rows = batchRows
+                .Where(t => string.IsNullOrWhiteSpace(t.AudioMediaAssetId)
+                    && string.IsNullOrWhiteSpace(t.AudioUrl))
+                .OrderBy(t => t.Id, StringComparer.Ordinal)
+                .Take(5000)
+                .ToList();
+        }
+        else
+        {
+            rows = await db.VocabularyTerms.AsNoTracking()
+                .Where(t => t.AudioMediaAssetId == null
+                    && (t.AudioUrl == null || t.AudioUrl == "")
+                    && (t.RecallSetCodesJson == null || t.RecallSetCodesJson == "" || t.RecallSetCodesJson == "[]"))
+                .OrderBy(t => t.Id)
+                .Take(5000)
+                .ToListAsync(ct);
         }
 
-        var rows = await query
-            .OrderBy(t => t.Id)
-            .Take(5000)
-            .Select(t => new { t.Id, t.Term })
-            .ToListAsync(ct);
+        var recallRows = rows.Where(IsRecallVocabularyTerm).ToList();
+        if (recallRows.Count > 0)
+        {
+            var options = conversationOptionsProvider is null ? null : await conversationOptionsProvider.GetAsync(ct);
+            if (options is null || string.IsNullOrWhiteSpace(options.ElevenLabsApiKey))
+            {
+                throw ApiException.Validation(
+                    "elevenlabs_api_key_required",
+                    "Save an ElevenLabs API key in Admin Settings before starting recall audio generation.");
+            }
+        }
+
+        AudioRegenerationBatch? recallBatch = null;
+        if (!string.IsNullOrEmpty(normalised) && batchRows.Any(IsRecallVocabularyTerm))
+        {
+            var options = await conversationOptionsProvider!.GetAsync(ct);
+            var recallAudioBatchId = RecallImportAudioBatchId(normalised);
+            recallBatch = await db.AudioRegenerationBatches.FirstOrDefaultAsync(b => b.Id == recallAudioBatchId, ct);
+            if (recallBatch is null)
+            {
+                recallBatch = new AudioRegenerationBatch
+                {
+                    Id = recallAudioBatchId,
+                    AudioType = "recalls",
+                    Scope = "missing",
+                    Status = "running",
+                    TotalItems = batchRows.Count(IsRecallVocabularyTerm),
+                    CompletedItems = CountReadyVocabularyAudio(batchRows.Where(IsRecallVocabularyTerm)),
+                    FailedItems = 0,
+                    VoiceId = string.IsNullOrWhiteSpace(options.ElevenLabsDefaultVoiceId) ? "auq43ws1oslv0tO4BDa7" : options.ElevenLabsDefaultVoiceId,
+                    ModelVariant = string.IsNullOrWhiteSpace(options.ElevenLabsModel) ? "eleven_multilingual_v2" : options.ElevenLabsModel,
+                    ProviderName = "elevenlabs",
+                    RequestedBy = "admin-vocabulary-import",
+                    StartedAt = DateTime.UtcNow,
+                };
+                db.AudioRegenerationBatches.Add(recallBatch);
+            }
+            else
+            {
+                recallBatch.Status = "running";
+                recallBatch.CompletedAt = null;
+                recallBatch.TotalItems = batchRows.Count(IsRecallVocabularyTerm);
+                recallBatch.CompletedItems = CountReadyVocabularyAudio(batchRows.Where(IsRecallVocabularyTerm));
+                recallBatch.VoiceId = string.IsNullOrWhiteSpace(options.ElevenLabsDefaultVoiceId) ? recallBatch.VoiceId : options.ElevenLabsDefaultVoiceId;
+                recallBatch.ModelVariant = string.IsNullOrWhiteSpace(options.ElevenLabsModel) ? recallBatch.ModelVariant : options.ElevenLabsModel;
+                recallBatch.ProviderName = "elevenlabs";
+            }
+            await db.SaveChangesAsync(ct);
+        }
 
         var enqueued = 0;
         foreach (var row in rows)
         {
             if (string.IsNullOrWhiteSpace(row.Term)) continue;
+            var isRecall = IsRecallVocabularyTerm(row);
             await vocabularyAudioQueue.EnqueueAsync(
                 new OetLearner.Api.Services.Vocabulary.VocabularyAudioJob(
                     TermId: row.Id,
                     Text: row.Term,
-                    Voice: null,
+                    Voice: isRecall ? recallBatch?.VoiceId : null,
                     Locale: "en-GB",
-                    BatchId: normalised ?? string.Empty),
+                    BatchId: isRecall ? (recallBatch?.Id ?? normalised ?? string.Empty) : (normalised ?? string.Empty),
+                    ModelVariant: isRecall ? recallBatch?.ModelVariant : null,
+                    ProviderName: isRecall ? "elevenlabs" : null),
                 ct);
             enqueued++;
         }
-        return new { enqueued };
+        return new { enqueued, batchId = normalised, audioBatchId = recallBatch?.Id, providerName = recallBatch?.ProviderName };
+    }
+
+    public async Task<object> CancelVocabularyImportAudioBackfillAsync(string importBatchId, CancellationToken ct)
+    {
+        var batchId = NormalizeExistingImportBatchId(importBatchId);
+        var audioBatchId = RecallImportAudioBatchId(batchId);
+        var batch = await db.AudioRegenerationBatches.FirstOrDefaultAsync(b => b.Id == audioBatchId, ct);
+        if (batch is null || batch.Status != "running")
+            return new { cancelled = false, audioBatchId };
+
+        batch.Status = "cancelled";
+        batch.CompletedAt = DateTime.UtcNow;
+        await db.SaveChangesAsync(ct);
+        return new { cancelled = true, audioBatchId };
     }
 
     /// <summary>
@@ -1183,6 +1256,20 @@ public partial class AdminService
         var active = rows.Count(v => v.Status == "active");
         var draft = rows.Count(v => v.Status == "draft");
         var archived = rows.Count(v => v.Status == "archived");
+        var recallAudioBatchId = RecallImportAudioBatchId(batchId);
+        var recallAudioBatch = await db.AudioRegenerationBatches.AsNoTracking()
+            .FirstOrDefaultAsync(b => b.Id == recallAudioBatchId, ct);
+        var recallRows = rows.Where(IsRecallVocabularyTerm).ToList();
+        var generatedAudio = CountReadyVocabularyAudio(rows);
+        var failedAudio = recallAudioBatch?.FailedItems ?? 0;
+        var pendingAudio = recallAudioBatch is { Status: "running" }
+            ? Math.Max(0, (recallAudioBatch.TotalItems > 0 ? recallAudioBatch.TotalItems : rows.Count) - generatedAudio - failedAudio)
+            : Math.Max(0, rows.Count - generatedAudio - failedAudio);
+        var audioStatus = rows.Count == 0
+            ? "empty"
+            : generatedAudio >= rows.Count
+                ? "completed"
+                : recallAudioBatch?.Status ?? "idle";
         if (active > 0) warnings.Add("Batch contains active rows; rollback will not modify active rows.");
         if (!await VocabularyImportCommitLedgerExistsAsync(batchId, ct)) warnings.Add("No immutable commit ledger was found for this import batch id.");
         if (rows.Count == 0) warnings.Add("No rows found for this import batch id.");
@@ -1195,6 +1282,20 @@ public partial class AdminService
             active,
             archived,
             warnings,
+            audioGeneration = new
+            {
+                audioBatchId = recallAudioBatch?.Id,
+                status = audioStatus,
+                providerName = recallRows.Count > 0 ? "elevenlabs" : recallAudioBatch?.ProviderName,
+                total = rows.Count,
+                generated = generatedAudio,
+                pending = pendingAudio,
+                failed = failedAudio,
+                cancelled = string.Equals(recallAudioBatch?.Status, "cancelled", StringComparison.OrdinalIgnoreCase),
+                queued = pendingAudio,
+                recallTotal = recallRows.Count,
+                canCancel = recallAudioBatch is { Status: "running" } && pendingAudio > 0,
+            },
             rows = rows.Select(v => new
             {
                 v.Id,
@@ -1700,6 +1801,22 @@ public partial class AdminService
             throw ApiException.Validation("INVALID_IMPORT_BATCH_ID", "Import batch id may contain only letters, numbers, dash, underscore, dot, and colon.");
         return normalized;
     }
+
+    private static string RecallImportAudioBatchId(string importBatchId)
+    {
+        var normalized = NormalizeExistingImportBatchId(importBatchId);
+        if (normalized.Length <= 57) return $"recall:{normalized}";
+        var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(normalized))).ToLowerInvariant();
+        return $"recall:{hash[..16]}";
+    }
+
+    private static bool IsRecallVocabularyTerm(VocabularyTerm term)
+        => !string.IsNullOrWhiteSpace(term.RecallSetCodesJson)
+           && term.RecallSetCodesJson.Trim() != "[]";
+
+    private static int CountReadyVocabularyAudio(IEnumerable<VocabularyTerm> rows)
+        => rows.Count(t => !string.IsNullOrWhiteSpace(t.AudioMediaAssetId)
+                           || !string.IsNullOrWhiteSpace(t.AudioUrl));
 
     private static string PreviewDuplicateKey(CsvVocabRow row)
     {
