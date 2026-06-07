@@ -125,6 +125,9 @@ function formatPrice(minorUnits: number, currency: string) {
 
 const UK_TIME_ZONE = 'Europe/London';
 
+// PDF §3.3.4 — the Join button activates 15 minutes before the session start.
+const JOIN_LEAD_MINUTES = 15;
+
 /**
  * Format a UTC instant as a candidate-local + UK time pair (PDF §3.2.5 /
  * edge case #8). e.g. "6:00 PM (your time) · 11:00 AM UK".
@@ -205,6 +208,12 @@ export default function PrivateSpeakingPage() {
   const [ratingSession, setRatingSession] = useState<string | null>(null);
   const [ratingValue, setRatingValue] = useState(5);
   const [ratingFeedback, setRatingFeedback] = useState('');
+  // Live clock so the Join button activates exactly 15 minutes before start (PDF §3.3.4).
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 30_000);
+    return () => clearInterval(id);
+  }, []);
 
   // Initial data load
   useEffect(() => {
@@ -412,6 +421,8 @@ export default function PrivateSpeakingPage() {
 
   function renderBookingCard(booking: Booking, i: number) {
     const outcome = refundOutcome(booking);
+    // Join activates 15 min before start (PDF §3.3.4); `now` ticks so it auto-enables.
+    const joinOpen = new Date(booking.sessionStartUtc).getTime() - now <= JOIN_LEAD_MINUTES * 60_000;
     return (
       <MotionItem key={booking.id} delayIndex={i}
         className="bg-surface rounded-xl border border-border p-4">
@@ -438,9 +449,10 @@ export default function PrivateSpeakingPage() {
 
           <div className="flex items-center gap-2">
             {(booking.status === 'ZoomCreated' || booking.status === 'InProgress') && (
-              <button onClick={() => handleJoin(booking)} disabled={joiningBookingId === booking.id}
+              <button onClick={() => handleJoin(booking)} disabled={!joinOpen || joiningBookingId === booking.id}
+                title={joinOpen ? undefined : `The Join button activates ${JOIN_LEAD_MINUTES} minutes before the session starts.`}
                 className="flex items-center gap-1.5 px-3 py-1.5 bg-info hover:bg-info/90 text-white rounded-lg text-xs font-medium transition-colors disabled:opacity-50">
-                <Video className="w-3.5 h-3.5" /> {joiningBookingId === booking.id ? 'Opening...' : 'Join'}
+                <Video className="w-3.5 h-3.5" /> {joiningBookingId === booking.id ? 'Opening...' : joinOpen ? 'Join' : 'Join soon'}
               </button>
             )}
 
