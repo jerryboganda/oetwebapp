@@ -197,6 +197,51 @@ public sealed class EffectiveEntitlementResolver(
             };
         }
 
+        // ── Expiry lock ─────────────────────────────────────────────────────
+        // A non-null ExpiresAt that has elapsed locks the course: no modules
+        // and no eligible-subscription flag, so every downstream consumer that
+        // gates on HasEligibleSubscription (content/recalls/vocab/AI/mocks/
+        // speaking) fails-low to FREE. Null ExpiresAt == permanent (never
+        // expires). ExpiresAt/ProductCategory/PlanCode stay populated for the
+        // renewal UI. This only ever STRIPS access — fail-low is preserved (a
+        // subscription that already failed-low has empty modules and
+        // HasEligibleSubscription=false, so this is a no-op for it).
+        var now = DateTimeOffset.UtcNow;
+        var isExpired = subscription.ExpiresAt is { } exp && exp <= now;
+        if (isExpired)
+        {
+            trace.Add("subscription.expired");
+            snapshot = snapshot with
+            {
+                HasEligibleSubscription = false,
+                EnabledModules = Array.Empty<string>(),
+            };
+        }
+
+        // ── Permanent Tutor Book (resolved ACROSS all subscriptions) ────────
+        // The standalone `tutor-book` plan grants accessDays 9999 => ExpiresAt
+        // == null, which is permanent and survives a separate course's expiry.
+        // This is a NARROW, additive grant: it never elevates the course, only
+        // re-enables the Tutor Book modules the holder paid for outright. The
+        // ExpiresAt==null filter is the product rule — an add-on Tutor Book on
+        // a COURSE sub (ExpiresAt set) expires WITH the course and is excluded.
+        var permanentTutorBook = await db.Subscriptions.AsNoTracking().AnyAsync(s =>
+            s.UserId == userId
+            && (s.Status == SubscriptionStatus.Active || s.Status == SubscriptionStatus.Trial)
+            && s.ExpiresAt == null
+            && s.TutorBookUnlocked, ct);
+        if (permanentTutorBook)
+        {
+            trace.Add("tutorbook.permanent");
+            snapshot = snapshot with
+            {
+                TutorBookUnlocked = true,
+                EnabledModules = snapshot.EnabledModules
+                    .Union(new[] { "TutorBook", "AudioScripts", "Updates" }, StringComparer.OrdinalIgnoreCase)
+                    .ToArray(),
+            };
+        }
+
         return snapshot;
     }
 
