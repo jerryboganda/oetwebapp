@@ -384,9 +384,27 @@ public sealed class PrivateSpeakingRescheduleTests
             timeProvider: new FixedTimeProvider(Now),
             logger: NullLogger<PrivateSpeakingCalendarService>.Instance);
 
+        // Real NotificationService (collaborators null!) so the inline reschedule-
+        // confirmation notification has a non-null service to call. The seeded learner
+        // has no AuthAccountId and no ExpertUser row exists, so CreateFor{Learner,Expert}Async
+        // early-return before touching the null! collaborators. Mirrors PrivateSpeakingCancellationTests.
+        var notificationService = new NotificationService(
+            db,
+            emailSender: null!,
+            webPushDispatcher: null!,
+            mobilePushDispatcher: null!,
+            hubContext: null!,
+            platformLinks: null!,
+            timeProvider: new FixedTimeProvider(Now),
+            webPushOptions: Options.Create(new WebPushOptions()),
+            runtimeSettingsProvider: TestRuntimeSettingsProvider.FromZoomOptions(new ZoomOptions()),
+            notificationProofOptions: Options.Create(new NotificationProofHarnessOptions()),
+            environment: null!,
+            logger: NullLogger<NotificationService>.Instance);
+
         return new PrivateSpeakingService(
             db,
-            notificationService: null!,
+            notificationService: notificationService,
             zoomService: null!,
             calendarService: calendarService,
             entitlementResolver: null!,
