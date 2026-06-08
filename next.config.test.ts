@@ -40,8 +40,8 @@ describe('nextConfig redirects', () => {
 
     expect(bySource.get('/vocabulary')).toMatchObject({ destination: '/recalls/words', permanent: true });
     expect(bySource.get('/vocabulary/browse')).toMatchObject({ destination: '/recalls/words', permanent: true });
-    expect(bySource.get('/vocabulary/flashcards')).toMatchObject({ destination: '/recalls/cards', permanent: true });
-    expect(bySource.get('/vocabulary/quiz')).toMatchObject({ destination: '/recalls/cards', permanent: true });
-    expect(bySource.get('/review')).toMatchObject({ destination: '/recalls/cards', permanent: true });
+    expect(bySource.get('/vocabulary/flashcards')).toMatchObject({ destination: '/recalls/words', permanent: true });
+    expect(bySource.get('/vocabulary/quiz')).toMatchObject({ destination: '/recalls/words', permanent: true });
+    expect(bySource.get('/review')).toMatchObject({ destination: '/recalls/words', permanent: true });
   });
 });

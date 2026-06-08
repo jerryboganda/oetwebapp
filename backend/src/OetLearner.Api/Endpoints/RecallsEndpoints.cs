@@ -45,16 +45,6 @@ public static class RecallsEndpoints
             return Results.Ok(await svc.StarAsync(http.UserId(), request, ct));
         });
 
-        recalls.MapPost("/listen-type", async (
-            HttpContext http,
-            RecallsListenTypeRequest request,
-            IEffectiveEntitlementResolver entitlements,
-            RecallsService svc, CancellationToken ct) =>
-        {
-            if (await RequireRecallEnrolmentAsync(http, entitlements, ct) is { } gate) return gate;
-            return Results.Ok(await svc.ListenAndTypeAsync(http.UserId(), request, ct));
-        });
-
         recalls.MapGet("/audio/{termId}", async (
             HttpContext http,
             string termId,
@@ -102,27 +92,6 @@ public static class RecallsEndpoints
         {
             if (await RequireRecallEnrolmentAsync(http, entitlements, ct) is { } gate) return gate;
             return Results.Ok(await svc.GetLibraryAsync(http.UserId(), bucket, topic, ct));
-        });
-
-        recalls.MapPost("/explain", async (
-            HttpContext http,
-            RecallsExplainRequest request,
-            IEffectiveEntitlementResolver entitlements,
-            RecallsService svc, CancellationToken ct) =>
-        {
-            if (await RequireRecallEnrolmentAsync(http, entitlements, ct) is { } gate) return gate;
-            return Results.Ok(await svc.ExplainMistakeAsync(http.UserId(), request, ct));
-        });
-
-        recalls.MapGet("/quiz", async (
-            HttpContext http,
-            [FromQuery] string? mode,
-            [FromQuery] int limit,
-            IEffectiveEntitlementResolver entitlements,
-            RecallsService svc, CancellationToken ct) =>
-        {
-            if (await RequireRecallEnrolmentAsync(http, entitlements, ct) is { } gate) return gate;
-            return Results.Ok(await svc.GetQuizAsync(http.UserId(), mode ?? "listen_and_type", limit, ct));
         });
 
         recalls.MapGet("/report/week", async (

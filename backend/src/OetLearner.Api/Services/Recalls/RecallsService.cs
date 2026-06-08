@@ -195,50 +195,6 @@ public sealed class RecallsService(
         return new { changed, starred = request.Starred };
     }
 
-    /// <summary>Type-to-spell server-side classifier. Persists `LastErrorTypeCode`.</summary>
-    public async Task<RecallsListenTypeResponse> ListenAndTypeAsync(
-        string userId, RecallsListenTypeRequest request, CancellationToken ct)
-    {
-        if (string.IsNullOrWhiteSpace(request.TermId))
-            throw ApiException.Validation("TERM_REQUIRED", "TermId is required.");
-        if (request.Typed is null)
-            throw ApiException.Validation("TYPED_REQUIRED", "Typed is required.");
-
-        var term = await db.VocabularyTerms.FirstOrDefaultAsync(t => t.Id == request.TermId, ct)
-            ?? throw ApiException.NotFound("TERM_NOT_FOUND", "Term not found.");
-
-        var similar = ParseStringArray(term.SynonymsJson)
-            .Concat(ParseStringArray(term.RelatedTermsJson))
-            .Where(s => !string.IsNullOrWhiteSpace(s))
-            .ToList();
-
-        var result = SpellingDiff.Classify(
-            canonical: term.Term,
-            typed: request.Typed,
-            americanSpelling: term.AmericanSpelling,
-            similarSounding: similar);
-
-        // Persist the last error code on the user's card if one exists.
-        var card = await db.LearnerVocabularies
-            .FirstOrDefaultAsync(lv => lv.UserId == userId && lv.TermId == term.Id, ct);
-        if (card is not null)
-        {
-            card.LastErrorTypeCode = result.Code;
-            await db.SaveChangesAsync(ct);
-        }
-
-        return new RecallsListenTypeResponse(
-            Code: result.Code,
-            IsCorrect: result.IsCorrect,
-            Distance: result.Distance,
-            Canonical: term.Term,
-            Typed: request.Typed,
-            AmericanSpelling: term.AmericanSpelling,
-            Segments: result.Segments
-                .Select(s => new RecallsDiffSegment(s.Kind, s.Text))
-                .ToList());
-    }
-
     public async Task<RecallsAudioResponse> EnsureAudioAsync(
         string userId, string termId, string speed, CancellationToken ct)
     {
@@ -370,84 +326,6 @@ public sealed class RecallsService(
         return new RecallsLibraryResponse(rows);
     }
 
-    /// <summary>
-    /// AI-grounded mistake explanation. Routes through the AI Gateway with
-    /// <see cref="AiFeatureCodes.RecallsMistakeExplain"/> so quota and audit
-    /// stay consistent with other learner-facing AI calls. The classifier
-    /// runs first; the AI is only invoked when there is a real mistake to
-    /// explain (skips on `correct` and `case_only`).
-    /// </summary>
-    public async Task<RecallsExplainResponse> ExplainMistakeAsync(
-        string userId, RecallsExplainRequest request, CancellationToken ct)
-    {
-        if (string.IsNullOrWhiteSpace(request.TermId))
-            throw ApiException.Validation("TERM_REQUIRED", "TermId is required.");
-        if (string.IsNullOrWhiteSpace(request.Typed))
-            throw ApiException.Validation("TYPED_REQUIRED", "Typed is required.");
-
-        var term = await db.VocabularyTerms.FirstOrDefaultAsync(t => t.Id == request.TermId, ct)
-            ?? throw ApiException.NotFound("TERM_NOT_FOUND", "Term not found.");
-
-        var diff = SpellingDiff.Classify(
-            canonical: term.Term,
-            typed: request.Typed,
-            americanSpelling: term.AmericanSpelling,
-            similarSounding: ParseStringArray(term.SynonymsJson));
-
-        if (diff.Code is "correct" or "case_only")
-        {
-            return new RecallsExplainResponse(
-                Code: diff.Code,
-                ShortReason: diff.Code == "correct" ? "Spot on." : "Correct (case differs).",
-                LongExplanation: null,
-                MnemonicHint: null);
-        }
-
-        var prompt = gateway.BuildGroundedPrompt(new AiGroundingContext
-        {
-            Kind = RuleKind.Vocabulary,
-            Profession = ExamProfession.Medicine,
-            Task = AiTaskMode.GenerateVocabularyGloss,
-        });
-
-        var userMessage =
-            $"A learner attempted to spell the British medical term '{term.Term}' as '{request.Typed}'. " +
-            $"Classifier says: {diff.Code}. " +
-            "In 2-3 sentences, explain the mistake plainly, then give one short mnemonic hint. " +
-            "Do not coach beyond clinical English. Use British spelling.";
-
-        try
-        {
-            var ai = await gateway.CompleteAsync(new AiGatewayRequest
-            {
-                Prompt = prompt,
-                UserInput = userMessage,
-                Model = string.Empty,
-                Temperature = 0.2,
-                FeatureCode = AiFeatureCodes.RecallsMistakeExplain,
-                UserId = userId,
-            }, ct);
-
-            return new RecallsExplainResponse(
-                Code: diff.Code,
-                ShortReason: HumanReason(diff.Code),
-                LongExplanation: ai.Completion?.Trim(),
-                MnemonicHint: null);
-        }
-        catch (PromptNotGroundedException)
-        {
-            throw;
-        }
-        catch
-        {
-            return new RecallsExplainResponse(
-                Code: diff.Code,
-                ShortReason: HumanReason(diff.Code),
-                LongExplanation: null,
-                MnemonicHint: null);
-        }
-    }
-
     private static string HumanReason(string code) => code switch
     {
         "british_variant" => "Use the British spelling.",
@@ -459,117 +337,6 @@ public sealed class RecallsService(
         "homophone" => "Sounds similar — different word.",
         _ => "Spelling does not match the canonical British medical term.",
     };
-
-    /// <summary>
-    /// Quiz session payload. Returns mode-shaped items for the 6 Recalls quiz
-    /// modes (docs/RECALLS-MODULE-PLAN.md §6 / spec §4). Distractors and
-    /// definition options are precomputed server-side so the client never
-    /// reveals the canonical answer in network responses except as needed.
-    /// </summary>
-    public async Task<RecallsQuizSession> GetQuizAsync(
-        string userId, string mode, int limit, CancellationToken ct)
-    {
-        if (limit <= 0) limit = 10;
-        if (limit > 50) limit = 50;
-        var today = DateOnly.FromDateTime(DateTime.UtcNow);
-
-        var q = db.LearnerVocabularies
-            .Where(lv => lv.UserId == userId)
-            .Join(db.VocabularyTerms, lv => lv.TermId, t => t.Id, (lv, t) => new { lv, t });
-
-        switch (mode)
-        {
-            case "starred_only":
-                q = q.Where(x => x.lv.Starred);
-                break;
-            case "high_risk_spelling":
-                // Heuristic: terms with an American variant are high-risk by definition;
-                // additionally flag classic British-spelling minefield categories.
-                q = q.Where(x => x.t.AmericanSpelling != null || x.t.Category == "spelling");
-                break;
-            case "clinical_sentence":
-                q = q.Where(x => x.t.ExampleSentence != null && x.t.ExampleSentence != "");
-                break;
-            default:
-                q = q.Where(x => x.lv.NextReviewDate <= today);
-                break;
-        }
-
-        var rows = await q
-            .OrderByDescending(x => x.lv.Starred)
-            .ThenBy(x => x.lv.NextReviewDate)
-            .Take(limit)
-            .ToListAsync(ct);
-
-        // Precompute a small distractor pool from other terms in the same exam type.
-        var termIds = rows.Select(r => r.t.Id).ToHashSet();
-        var pool = await db.VocabularyTerms
-            .Where(t => !termIds.Contains(t.Id))
-            .OrderBy(t => t.Term)
-            .Take(60)
-            .Select(t => new { t.Term, t.Definition })
-            .ToListAsync(ct);
-
-        var rng = new Random(unchecked(userId.GetHashCode() ^ DateTime.UtcNow.DayOfYear));
-        string[] PickDistractTerms(string canonical, IReadOnlyList<string> similar)
-        {
-            var bag = new List<string>(similar.Where(s => !string.Equals(s, canonical, StringComparison.OrdinalIgnoreCase)));
-            bag.AddRange(pool
-                .Select(p => p.Term)
-                .Where(p => !string.IsNullOrWhiteSpace(p))
-                .Where(p => !bag.Contains(p, StringComparer.OrdinalIgnoreCase))
-                .Where(p => !string.Equals(p, canonical, StringComparison.OrdinalIgnoreCase))
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .OrderBy(_ => rng.Next())
-                .Take(3 - Math.Min(3, bag.Count)));
-            return bag.Take(3).ToArray();
-        }
-
-        string[] PickDistractDefs(string canonicalDef)
-            => pool
-                .Select(p => p.Definition)
-                .Where(p => !string.IsNullOrWhiteSpace(p))
-                .Where(p => !string.Equals(p, canonicalDef, StringComparison.Ordinal))
-                .Select(p => p!)
-                .Distinct(StringComparer.Ordinal)
-                .OrderBy(_ => rng.Next())
-                .Take(3)
-                .ToArray();
-
-        static string BlankSentence(string sentence, string term)
-        {
-            if (string.IsNullOrWhiteSpace(sentence)) return string.Empty;
-            var idx = sentence.IndexOf(term, StringComparison.OrdinalIgnoreCase);
-            if (idx < 0) return sentence; // fallback: caller treats as no-blank
-            var blank = new string('_', Math.Max(6, term.Length));
-            return string.Concat(sentence.AsSpan(0, idx), blank, sentence.AsSpan(idx + term.Length));
-        }
-
-        var items = rows.Select(x =>
-        {
-            var similar = ParseStringArray(x.t.SynonymsJson)
-                .Concat(ParseStringArray(x.t.RelatedTermsJson))
-                .Where(s => !string.IsNullOrWhiteSpace(s))
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .ToList();
-
-            return new RecallsQuizItem(
-                CardId: x.lv.Id.ToString(),
-                TermId: x.t.Id,
-                Term: x.t.Term,
-                Definition: x.t.Definition,
-                ExampleSentence: x.t.ExampleSentence,
-                BlankedSentence: BlankSentence(x.t.ExampleSentence, x.t.Term),
-                Ipa: x.t.IpaPronunciation,
-                AmericanSpelling: x.t.AmericanSpelling,
-                Starred: x.lv.Starred,
-                Mastery: x.lv.Mastery,
-                TermDistractors: PickDistractTerms(x.t.Term, similar),
-                DefinitionDistractors: PickDistractDefs(x.t.Definition));
-        }).ToList();
-
-        return new RecallsQuizSession(mode, items);
-    }
 
     /// <summary>
     /// Weekly candidate report (spec §14). Pure SQL aggregation: practised /
@@ -687,13 +454,13 @@ public sealed class RecallsService(
         if (today.DueToday > 0)
             steps.Add($"Clear today’s {today.DueToday} due card{(today.DueToday == 1 ? "" : "s")} first.");
         if (today.VocabDueToday > 0)
-            steps.Add($"Drill {Math.Min(10, today.VocabDueToday)} listen-and-type cards.");
+            steps.Add($"Review {Math.Min(10, today.VocabDueToday)} due vocabulary words.");
         foreach (var w in weak.Take(2))
             steps.Add($"Focus on {w.Topic} — {w.WeakCount} item(s) below 70% accuracy.");
         if (today.Starred > 0)
-            steps.Add($"Run a Starred-only round for {Math.Min(10, today.Starred)} item(s).");
+            steps.Add($"Revisit {Math.Min(10, today.Starred)} of your favourited word(s).");
         if (steps.Count == 0)
-            steps.Add("Nothing critical due. Star 3 new high-risk-spelling words to seed tomorrow.");
+            steps.Add("Nothing critical due. Favourite 3 new high-risk words to seed tomorrow.");
         return steps;
     }
 
@@ -790,18 +557,6 @@ public sealed class RecallsService(
             throw ApiException.Validation("INVALID_REASON", $"Reason must be one of: {string.Join(',', allowed)}.");
     }
 
-    private static IReadOnlyList<string> ParseStringArray(string? json)
-    {
-        if (string.IsNullOrWhiteSpace(json)) return Array.Empty<string>();
-        try
-        {
-            return System.Text.Json.JsonSerializer.Deserialize<List<string>>(json) ?? new List<string>();
-        }
-        catch
-        {
-            return Array.Empty<string>();
-        }
-    }
 }
 
 // ── DTOs ────────────────────────────────────────────────────────────────
@@ -833,19 +588,6 @@ public record RecallsQueueItem(
 
 public record RecallsStarRequest(string Kind, string Id, bool Starred, string? Reason);
 
-public record RecallsListenTypeRequest(string TermId, string Typed);
-
-public record RecallsListenTypeResponse(
-    string Code,
-    bool IsCorrect,
-    int Distance,
-    string Canonical,
-    string Typed,
-    string? AmericanSpelling,
-    IReadOnlyList<RecallsDiffSegment> Segments);
-
-public record RecallsDiffSegment(string Kind, string Text);
-
 public record RecallsAudioResponse(string StorageKey, string Provider, string ContentType);
 
 public record RecallsLibraryResponse(IReadOnlyList<RecallsLibraryItem> Items);
@@ -863,30 +605,6 @@ public record RecallsLibraryItem(
     int IntervalDays,
     int ReviewCount,
     int CorrectCount);
-
-public record RecallsExplainRequest(string TermId, string Typed);
-
-public record RecallsExplainResponse(
-    string Code,
-    string ShortReason,
-    string? LongExplanation,
-    string? MnemonicHint);
-
-public record RecallsQuizSession(string Mode, IReadOnlyList<RecallsQuizItem> Items);
-
-public record RecallsQuizItem(
-    string CardId,
-    string TermId,
-    string Term,
-    string Definition,
-    string? ExampleSentence,
-    string? BlankedSentence,
-    string? Ipa,
-    string? AmericanSpelling,
-    bool Starred,
-    string Mastery,
-    IReadOnlyList<string> TermDistractors,
-    IReadOnlyList<string> DefinitionDistractors);
 
 public record RecallsBulkUploadRow(
     string Term,

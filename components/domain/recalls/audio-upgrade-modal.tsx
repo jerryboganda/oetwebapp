@@ -55,8 +55,7 @@ export function useRecallsAudioUpgrade() {
           </p>
         </div>
         <p className="text-sm text-muted">
-          Upgrade to unlock listen-to-pronounce, listen-and-type drills, and the
-          full active-recall queue.
+          Upgrade to unlock listen-to-pronounce across the full vocabulary catalog.
         </p>
         <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
           <Button variant="secondary" onClick={() => setOpen(false)}>

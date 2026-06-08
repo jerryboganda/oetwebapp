@@ -99,15 +99,15 @@ beforeEach(() => {
 });
 
 describe('PaperBookletSimulation', () => {
-  it('renders the booklet with the task title and case notes', () => {
+  it('renders the booklet with the task title and task prompt', () => {
     render(<PaperBookletSimulation {...baseProps()} />);
 
     // The authored task title is real content (not translated).
     expect(
       screen.getByRole('heading', { name: /discharge letter — mr brown/i }),
     ).toBeInTheDocument();
-    // Structured case-note content is rendered in the question booklet.
-    expect(screen.getByText(/community-acquired pneumonia/i)).toBeInTheDocument();
+    // The task prompt is rendered in the question booklet.
+    expect(screen.getByText(/write a discharge letter/i)).toBeInTheDocument();
     expect(
       screen.getByRole('region', { name: QUESTION_BOOKLET_LABEL }),
     ).toBeInTheDocument();
@@ -174,11 +174,11 @@ describe('PaperBookletSimulation', () => {
     expect(screen.queryByText(/community-acquired pneumonia/i)).not.toBeInTheDocument();
   });
 
-  it('keeps the printed case notes when no stimulus download path is provided', () => {
+  it('shows the task prompt when no stimulus download path is provided', () => {
     // Explicitly-null download path behaves like the prop being absent.
     render(<PaperBookletSimulation {...baseProps({ stimulus: { downloadPath: null } })} />);
 
-    expect(screen.getByText(/community-acquired pneumonia/i)).toBeInTheDocument();
+    expect(screen.getByText(/write a discharge letter/i)).toBeInTheDocument();
     expect(screen.queryByText('Question paper')).not.toBeInTheDocument();
   });
 });

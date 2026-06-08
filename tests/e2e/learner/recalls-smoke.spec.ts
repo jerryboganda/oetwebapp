@@ -12,35 +12,25 @@ test.describe('Recalls module smoke @learner @smoke', () => {
     await expect(page).toHaveURL(/\/recalls\/words$/);
   });
 
-  test('legacy /review redirects to /recalls/cards', async ({ page }, testInfo) => {
+  test('legacy /review redirects to /recalls/words', async ({ page }, testInfo) => {
     if (!testInfo.project.name.includes('learner')) test.skip();
     await page.goto('/review');
-    await expect(page).toHaveURL(/\/recalls\/cards$/);
+    await expect(page).toHaveURL(/\/recalls\/words$/);
   });
 
-  test('legacy /vocabulary/quiz redirects to /recalls/cards', async ({ page }, testInfo) => {
+  test('legacy /vocabulary/quiz redirects to /recalls/words', async ({ page }, testInfo) => {
     if (!testInfo.project.name.includes('learner')) test.skip();
     await page.goto('/vocabulary/quiz');
-    await expect(page).toHaveURL(/\/recalls\/cards$/);
+    await expect(page).toHaveURL(/\/recalls\/words$/);
   });
 
-  test('Recalls landing renders the four-tab aggregator', async ({ page }, testInfo) => {
+  test('Recalls landing renders the Words and Favourites tabs', async ({ page }, testInfo) => {
     if (!testInfo.project.name.includes('learner')) test.skip();
     await page.goto('/recalls');
     await expect(page).toHaveURL(/\/recalls$/);
     await expect(page.getByRole('heading', { level: 1 })).toContainText(/recalls/i);
-    // The four tabs should all be present on the landing.
+    // The remaining tabs should be present on the landing.
     await expect(page.getByText(/Vocabulary banks/i)).toBeVisible();
-    await expect(page.getByText(/Spaced-repetition review/i)).toBeVisible();
-    await expect(page.getByText(/Listen, recognise, type/i)).toBeVisible();
-    await expect(page.getByText(/Mastery & weak areas/i)).toBeVisible();
-  });
-
-  test('Recalls cards page exposes the quiz mode picker', async ({ page }, testInfo) => {
-    if (!testInfo.project.name.includes('learner')) test.skip();
-    await page.goto('/recalls/cards');
-    await expect(page.getByText(/Listen & type/i)).toBeVisible();
-    await expect(page.getByText(/High-risk spelling/i)).toBeVisible();
-    await expect(page.getByText(/Favourites/i)).toBeVisible();
+    await expect(page.getByText(/Saved words to review later/i)).toBeVisible();
   });
 });

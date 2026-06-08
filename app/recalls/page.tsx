@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { motion } from 'motion/react';
-import { Brain, Layers, BookOpen, HelpCircle, Headphones, Flame, Sparkles, ArrowRight, Heart } from 'lucide-react';
+import { Brain, Layers, BookOpen, Flame, Sparkles, ArrowRight, Heart } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout/learner-dashboard-shell';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain/learner-surface';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -63,33 +63,6 @@ export default function RecallsHomePage() {
       badge: vocab?.dueToday ? `${vocab.dueToday} due` : null,
     },
     {
-      href: '/recalls/cards',
-      eyebrow: 'Cards',
-      title: 'Spaced-repetition review',
-      description: 'Cards seeded from your listening drills, mocks, conversation issues, and writing feedback.',
-      icon: <Brain className="h-6 w-6" />,
-      tile: 'bg-primary/10 text-primary',
-      badge: review?.dueToday ? `${review.dueToday} due` : null,
-    },
-    {
-      href: '/recalls/cards?mode=listen_and_type',
-      eyebrow: 'Quiz',
-      title: 'Listen, recognise, type',
-      description: 'Six quiz modes including listen-and-type and high-risk British spelling.',
-      icon: <HelpCircle className="h-6 w-6" />,
-      tile: 'bg-emerald-50 text-emerald-700',
-      badge: null,
-    },
-    {
-      href: '/recalls/library',
-      eyebrow: 'Library',
-      title: 'Mastery & weak areas',
-      description: 'See what is improving, what is mastered, and which clinical topics need work.',
-      icon: <Headphones className="h-6 w-6" />,
-      tile: 'bg-purple-50 text-purple-700',
-      badge: null,
-    },
-    {
       href: '/recalls/favourites',
       eyebrow: 'Favourites',
       title: 'Saved words to review later',
@@ -122,7 +95,7 @@ export default function RecallsHomePage() {
 
         {loading ? (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            {Array.from({ length: 4 }).map((_, i) => (
+            {Array.from({ length: 2 }).map((_, i) => (
               <Skeleton key={i} className="h-32 rounded-2xl" />
             ))}
           </div>

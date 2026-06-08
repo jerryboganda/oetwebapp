@@ -179,7 +179,7 @@ public class LearnerVocabulary
     public string? StarReason { get; set; }
 
     /// <summary>
-    /// Last classified spelling-error code from `POST /v1/recalls/listen-type`.
+    /// Last classified spelling-error code from the recalls spelling classifier.
     /// One of: correct, case_only, british_variant, missing_letter, extra_letter,
     /// transposition, double_letter, hyphen, homophone, unknown.
     /// </summary>

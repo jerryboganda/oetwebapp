@@ -81,8 +81,7 @@ function PlayingBars() {
 /**
  * /recalls/words — vocabulary-side card list.
  *
- * Surfaces the queued cards (vocab + review) with a star toggle, audio button,
- * and direct link into the runner. The full quiz UX lives at /recalls/cards.
+ * Surfaces the queued cards (vocab + review) with a star toggle and audio button.
  */
 export default function RecallsWordsPage() {
   const [today, setToday] = useState<RecallsTodayResponse | null>(null);

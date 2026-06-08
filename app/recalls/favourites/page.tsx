@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Heart, Sparkles } from 'lucide-react';
+import { Heart } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -28,8 +28,7 @@ const MASTERY_BADGES: Record<string, 'success' | 'info' | 'warning' | 'muted'> =
 /**
  * /recalls/favourites — the learner's "review later" list. Reuses the existing
  * `starred` library bucket (favourites == starred cards) so there is a single
- * source of truth. From here learners can remove a favourite or jump straight
- * into a favourites-only drill (`/recalls/cards?mode=starred_only`).
+ * source of truth. From here learners can view or remove a favourite.
  */
 export default function RecallsFavouritesPage() {
   const [today, setToday] = useState<RecallsTodayResponse | null>(null);
@@ -65,7 +64,7 @@ export default function RecallsFavouritesPage() {
         <LearnerPageHero
           eyebrow="Recalls / Favourites"
           title="Your saved words to review later"
-          description="Every word you favourited, in one place. Remove what you've mastered, or drill the whole set."
+          description="Every word you favourited, in one place. Remove what you've mastered."
           icon={Heart}
           highlights={[
             // Prefer the live list length so the count stays in sync after a
@@ -91,15 +90,6 @@ export default function RecallsFavouritesPage() {
             ))}
           </div>
         ) : items && items.length > 0 ? (
-          <>
-            <div className="flex justify-end">
-              <Button asChild variant="primary" className="inline-flex items-center gap-2">
-                <Link href="/recalls/cards?mode=starred_only">
-                  <Sparkles className="h-4 w-4" />
-                  Drill favourites
-                </Link>
-              </Button>
-            </div>
             <ul className="divide-y divide-border rounded-2xl border border-border bg-surface">
               {items.map((it) => (
                 <li key={it.cardId} className="flex items-center gap-3 p-3">
@@ -123,7 +113,6 @@ export default function RecallsFavouritesPage() {
                 </li>
               ))}
             </ul>
-          </>
         ) : (
           <div className="rounded-2xl border border-dashed border-border p-8 text-center">
             <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-warning/10 text-warning">

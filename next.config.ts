@@ -71,9 +71,9 @@ const nextConfig: NextConfig = {
       // pages remain accessible until their feature parity ships under /recalls.
       { source: '/vocabulary', destination: '/recalls/words', permanent: true },
       { source: '/vocabulary/browse', destination: '/recalls/words', permanent: true },
-      { source: '/vocabulary/flashcards', destination: '/recalls/cards', permanent: true },
-      { source: '/vocabulary/quiz', destination: '/recalls/cards', permanent: true },
-      { source: '/review', destination: '/recalls/cards', permanent: true },
+      { source: '/vocabulary/flashcards', destination: '/recalls/words', permanent: true },
+      { source: '/vocabulary/quiz', destination: '/recalls/words', permanent: true },
+      { source: '/review', destination: '/recalls/words', permanent: true },
     ]);
   },
   async headers() {

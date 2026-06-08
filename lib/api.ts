@@ -6229,26 +6229,6 @@ export interface RecallsQueueItem {
 
 export type RecallsStarReason = 'spelling' | 'pronunciation' | 'meaning' | 'hearing' | 'confused';
 
-export interface RecallsListenTypeResponse {
-  code:
-    | 'correct'
-    | 'case_only'
-    | 'british_variant'
-    | 'missing_letter'
-    | 'extra_letter'
-    | 'transposition'
-    | 'double_letter'
-    | 'hyphen'
-    | 'homophone'
-    | 'unknown';
-  isCorrect: boolean;
-  distance: number;
-  canonical: string;
-  typed: string;
-  americanSpelling: string | null;
-  segments: { kind: 'equal' | 'missing' | 'extra'; text: string }[];
-}
-
 export interface RecallsLibraryItem {
   cardId: string;
   termId: string;
@@ -6276,13 +6256,6 @@ export async function starRecall(kind: 'vocab' | 'term' | 'review', id: string, 
   return apiRequest('/v1/recalls/star', {
     method: 'POST',
     body: JSON.stringify({ kind, id, starred, reason }),
-  });
-}
-
-export async function submitRecallsListenType(termId: string, typed: string) {
-  return apiRequest<RecallsListenTypeResponse>('/v1/recalls/listen-type', {
-    method: 'POST',
-    body: JSON.stringify({ termId, typed }),
   });
 }
 
@@ -6318,53 +6291,6 @@ export async function fetchRecallsLibrary(opts?: { bucket?: 'starred' | 'weak' |
   if (opts?.topic) p.set('topic', opts.topic);
   const qs = p.toString();
   return apiRequest<{ items: RecallsLibraryItem[] }>(`/v1/recalls/library${qs ? `?${qs}` : ''}`);
-}
-
-export interface RecallsExplainResponse {
-  code: string;
-  shortReason: string;
-  longExplanation: string | null;
-  mnemonicHint: string | null;
-}
-
-export async function explainRecallsMistake(termId: string, typed: string) {
-  return apiRequest<RecallsExplainResponse>('/v1/recalls/explain', {
-    method: 'POST',
-    body: JSON.stringify({ termId, typed }),
-  });
-}
-
-export type RecallQuizModeKey =
-  | 'listen_and_type'
-  | 'word_recognition'
-  | 'meaning_check'
-  | 'clinical_sentence'
-  | 'high_risk_spelling'
-  | 'starred_only';
-
-export interface RecallsQuizItem {
-  cardId: string;
-  termId: string;
-  term: string;
-  definition: string;
-  exampleSentence: string | null;
-  blankedSentence: string | null;
-  ipa: string | null;
-  americanSpelling: string | null;
-  starred: boolean;
-  mastery: string;
-  termDistractors: string[];
-  definitionDistractors: string[];
-}
-
-export interface RecallsQuizSession {
-  mode: RecallQuizModeKey;
-  items: RecallsQuizItem[];
-}
-
-export async function fetchRecallsQuiz(mode: RecallQuizModeKey, limit = 10) {
-  const p = new URLSearchParams({ mode, limit: String(limit) });
-  return apiRequest<RecallsQuizSession>(`/v1/recalls/quiz?${p}`);
 }
 
 export interface RecallsBulkUploadRow {

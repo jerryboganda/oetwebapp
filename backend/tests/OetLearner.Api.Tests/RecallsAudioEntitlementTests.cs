@@ -191,27 +191,6 @@ public class RecallsAudioEntitlementTests(TestWebApplicationFactory factory)
     }
 
     [Fact]
-    public async Task Quiz_never_returns_cached_audio_urls()
-    {
-        var learnerId = $"learner-{Guid.NewGuid():N}";
-        await SeedLearnerAsync(learnerId, hasActiveSubscription: true);
-        var termId = await SeedVocabularyCardAsync(learnerId);
-
-        using var client = CreateLearnerClient(learnerId);
-        var response = await client.GetAsync("/v1/recalls/quiz?mode=word_recognition&limit=1");
-        response.EnsureSuccessStatusCode();
-
-        var payload = await response.Content.ReadAsStringAsync();
-        AssertNoCachedAudioLeak(payload);
-        using var json = JsonDocument.Parse(payload);
-        var item = json.RootElement.GetProperty("items").EnumerateArray().Single();
-
-        Assert.Equal(termId, item.GetProperty("termId").GetString());
-        Assert.False(item.TryGetProperty("audioUrl", out _));
-        Assert.False(item.TryGetProperty("audioSentenceUrl", out _));
-    }
-
-    [Fact]
     public async Task Vocabulary_term_payload_redacts_cached_audio_fields()
     {
         var learnerId = $"learner-{Guid.NewGuid():N}";

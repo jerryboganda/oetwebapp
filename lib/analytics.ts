@@ -71,8 +71,6 @@ const TRACKED_EVENTS = [
   'vocabulary_home_viewed',
   'recalls_home_viewed',
   'recalls_words_viewed',
-  'recalls_cards_viewed',
-  'recalls_library_viewed',
   'recalls_favourites_viewed',
   'recalls_term_favourited',
   'recalls_term_unfavourited',

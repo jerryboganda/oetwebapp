@@ -9,7 +9,7 @@ namespace OetLearner.Api.Tests;
 
 /// <summary>
 /// Spec: Recalls "locked_until_enrolled". Learner-facing CONTENT routes
-/// (today/queue/library/quiz/report/revision-plan/etc.) must return 402
+/// (today/queue/library/report/revision-plan/etc.) must return 402
 /// <c>enrolment_required</c> until the learner is enrolled (active, non-frozen
 /// subscription). Mirrors <see cref="RecallsAudioEntitlementTests"/>.
 /// </summary>

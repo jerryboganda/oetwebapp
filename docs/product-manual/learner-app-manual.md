@@ -66,7 +66,7 @@ Learning, language support, and practice:
 - `/pronunciation`, `/pronunciation/[drillId]`, `/pronunciation/discrimination/[drillId]`
 - `/conversation`, `/conversation/[sessionId]`, `/conversation/[sessionId]/results`
 - `/vocabulary`, `/vocabulary/browse`, `/vocabulary/flashcards`, `/vocabulary/quiz`, `/vocabulary/quiz/history`, `/vocabulary/terms/[termId]`
-- `/recalls`, `/recalls/cards`, `/recalls/library`, `/recalls/words`
+- `/recalls`, `/recalls/words`, `/recalls/favourites`
 - `/lessons`, `/lessons/[id]`, `/lessons/discover`, `/lessons/programs`, `/lessons/programs/[programId]`
 - `/strategies`, `/strategies/[id]`
 - `/practice`, `/practice/interleaved`, `/practice/quick-session`
