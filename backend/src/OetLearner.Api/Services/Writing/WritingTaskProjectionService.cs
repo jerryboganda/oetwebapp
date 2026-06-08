@@ -8,10 +8,9 @@ namespace OetLearner.Api.Services.Writing;
 
 /// <summary>
 /// WS-B2 bridge: projects a published writing <see cref="ContentPaper"/> into the
-/// authoritative <see cref="WritingScenario"/> (plus checklist rows + model-answer
-/// exemplar). The upsert is keyed on <see cref="WritingScenario.SourceContentPaperId"/>
-/// and is safe to call repeatedly (idempotent): the scenario is updated in place
-/// and its checklist rows are replaced.
+/// authoritative <see cref="WritingScenario"/>. The upsert is keyed on
+/// <see cref="WritingScenario.SourceContentPaperId"/> and is safe to call
+/// repeatedly (idempotent): the scenario is updated in place.
 /// </summary>
 public interface IWritingTaskProjectionService
 {
@@ -56,9 +55,6 @@ public sealed class WritingTaskProjectionService(LearnerDbContext db, ILogger<Wr
         scenario.TodayDate = ReadString(structure, "todayDate", "taskDate", "date");
         scenario.ExpectedPurpose = ReadString(structure, "expectedPurpose", "purpose");
         scenario.ExpectedAction = ReadString(structure, "expectedAction", "action", "request");
-        scenario.CaseNotesMarkdown = WritingContentStructure.BuildCaseNotesText(structure);
-        scenario.CaseNoteSectionsJson = SerializeCaseNoteSections(structure);
-        scenario.RecipientJson = SerializeRecipient(structure);
         scenario.FixedInstructionsJson = SerializeFixedInstructions(structure);
 
         var (wordMin, wordMax) = ReadWordGuide(structure);
@@ -79,9 +75,6 @@ public sealed class WritingTaskProjectionService(LearnerDbContext db, ILogger<Wr
         scenario.PublishedAt ??= now;
         scenario.UpdatedAt = now;
 
-        await ReplaceChecklistAsync(scenario.Id, structure, now, ct);
-        await UpsertModelAnswerAsync(scenario, structure, paper, ct);
-
         await db.SaveChangesAsync(ct);
 
         logger.LogInformation(
@@ -93,157 +86,7 @@ public sealed class WritingTaskProjectionService(LearnerDbContext db, ILogger<Wr
         return scenario;
     }
 
-    private async Task ReplaceChecklistAsync(Guid scenarioId, IReadOnlyDictionary<string, object?> structure, DateTimeOffset now, CancellationToken ct)
-    {
-        var existing = await db.WritingContentChecklistItems
-            .Where(c => c.ScenarioId == scenarioId)
-            .ToListAsync(ct);
-        db.WritingContentChecklistItems.RemoveRange(existing);
-
-        var ordinal = 0;
-
-        foreach (var entry in ReadObjectList(structure, "keyContentChecklist", "contentChecklist"))
-        {
-            var text = ResolveItemText(entry);
-            if (string.IsNullOrWhiteSpace(text)) continue;
-
-            db.WritingContentChecklistItems.Add(new WritingContentChecklistItem
-            {
-                Id = Guid.NewGuid(),
-                ScenarioId = scenarioId,
-                ItemText = text,
-                Category = ReadString(entry, "category") ?? "content",
-                Importance = NormalizeImportance(ReadString(entry, "importance")),
-                RequiredStatus = NormalizeRequiredStatus(ReadString(entry, "requiredStatus"), fallback: "required"),
-                LinkedCaseNoteSection = ReadString(entry, "linkedCaseNoteSection"),
-                ExpectedRepresentation = ReadString(entry, "expectedRepresentation"),
-                CommonError = ReadString(entry, "commonError"),
-                Ordinal = ordinal++,
-                CreatedAt = now,
-                UpdatedAt = now,
-            });
-        }
-
-        foreach (var entry in ReadObjectList(structure, "irrelevantContentChecklist"))
-        {
-            var text = ResolveItemText(entry);
-            if (string.IsNullOrWhiteSpace(text)) continue;
-
-            db.WritingContentChecklistItems.Add(new WritingContentChecklistItem
-            {
-                Id = Guid.NewGuid(),
-                ScenarioId = scenarioId,
-                ItemText = text,
-                Category = ReadString(entry, "category") ?? "irrelevant",
-                Importance = "low",
-                RequiredStatus = "irrelevant",
-                LinkedCaseNoteSection = ReadString(entry, "linkedCaseNoteSection"),
-                ExpectedRepresentation = ReadString(entry, "expectedRepresentation"),
-                CommonError = ReadString(entry, "commonError"),
-                Ordinal = ordinal++,
-                CreatedAt = now,
-                UpdatedAt = now,
-            });
-        }
-    }
-
-    private async Task UpsertModelAnswerAsync(WritingScenario scenario, IReadOnlyDictionary<string, object?> structure, ContentPaper paper, CancellationToken ct)
-    {
-        var modelAnswerText = WritingContentStructure.BuildModelAnswerText(structure);
-
-        WritingExemplar? exemplar = null;
-        if (scenario.ModelAnswerExemplarId is { } exemplarId)
-        {
-            exemplar = await db.WritingExemplars.FirstOrDefaultAsync(e => e.Id == exemplarId, ct);
-        }
-
-        // No model answer in the structure and none stored yet -> nothing to do.
-        if (exemplar is null && string.IsNullOrWhiteSpace(modelAnswerText))
-        {
-            return;
-        }
-
-        if (exemplar is null)
-        {
-            exemplar = new WritingExemplar
-            {
-                Id = Guid.NewGuid(),
-                ScenarioId = scenario.Id,
-                AuthorId = paper.CreatedByAdminId ?? "system",
-                TargetBand = "A",
-                CreatedAt = DateTimeOffset.UtcNow,
-            };
-            db.WritingExemplars.Add(exemplar);
-            scenario.ModelAnswerExemplarId = exemplar.Id;
-        }
-
-        exemplar.LetterContent = modelAnswerText ?? string.Empty;
-        exemplar.AnnotationsJson = SerializeAnnotations(structure);
-        exemplar.Profession = scenario.Profession;
-        exemplar.LetterType = scenario.LetterType;
-        exemplar.ScenarioId = scenario.Id;
-        exemplar.Status = "published";
-        exemplar.PublishedAt ??= DateTimeOffset.UtcNow;
-    }
-
-    private static string ResolveItemText(IReadOnlyDictionary<string, object?> entry)
-        => ReadString(entry, "itemText", "point", "detail", "text") ?? string.Empty;
-
     // ----- serialization helpers (camelCase, mirrors the authoring service columns) -----
-
-    private static string SerializeAnnotations(IReadOnlyDictionary<string, object?> structure)
-    {
-        var paragraphs = ReadObjectList(structure, "modelAnswerParagraphs", "paragraphs")
-            .Select(p => new
-            {
-                heading = ReadString(p, "heading"),
-                text = ReadString(p, "text") ?? string.Empty,
-            })
-            .Where(p => !string.IsNullOrWhiteSpace(p.text))
-            .ToList();
-
-        // Matches WritingTaskAuthoringService's exemplar annotations shape (paragraphs only;
-        // task versioning lives on the WritingScenario entity).
-        return JsonSerializer.Serialize(new { paragraphs }, JsonOptions);
-    }
-
-    private static string? SerializeCaseNoteSections(IReadOnlyDictionary<string, object?> structure)
-    {
-        var sections = ReadObjectList(structure, "caseNoteSections", "sections")
-            .Select(s => new
-            {
-                heading = ReadString(s, "heading") ?? string.Empty,
-                items = ReadStringList(s, "items"),
-            })
-            .ToList();
-
-        return sections.Count == 0 ? null : JsonSerializer.Serialize(sections, JsonOptions);
-    }
-
-    private static string? SerializeRecipient(IReadOnlyDictionary<string, object?> structure)
-    {
-        if (ReadValue(structure, "recipient") is { } recipientValue
-            && ToDictionary(recipientValue) is { Count: > 0 } recipient)
-        {
-            var projected = new
-            {
-                name = ReadString(recipient, "name") ?? string.Empty,
-                role = ReadString(recipient, "role") ?? string.Empty,
-                organisation = ReadString(recipient, "organisation"),
-                address = ReadString(recipient, "address"),
-            };
-            return JsonSerializer.Serialize(projected, JsonOptions);
-        }
-
-        // Fall back to a flat recipient string if present.
-        var flat = ReadString(structure, "recipient", "recipientName");
-        if (string.IsNullOrWhiteSpace(flat))
-        {
-            return null;
-        }
-
-        return JsonSerializer.Serialize(new { name = flat, role = string.Empty, organisation = (string?)null, address = (string?)null }, JsonOptions);
-    }
 
     private static string SerializeFixedInstructions(IReadOnlyDictionary<string, object?> structure)
     {
@@ -336,33 +179,6 @@ public sealed class WritingTaskProjectionService(LearnerDbContext db, ILogger<Wr
         return new List<string>();
     }
 
-    private static List<Dictionary<string, object?>> ReadObjectList(IReadOnlyDictionary<string, object?> source, params string[] keys)
-    {
-        var value = ReadValue(source, keys);
-        if (value is null)
-        {
-            return new List<Dictionary<string, object?>>();
-        }
-
-        if (value is JsonElement { ValueKind: JsonValueKind.Array } array)
-        {
-            return array.EnumerateArray()
-                .Where(e => e.ValueKind == JsonValueKind.Object)
-                .Select(e => ToDictionary(e))
-                .ToList();
-        }
-
-        if (value is IEnumerable<object?> objects)
-        {
-            return objects
-                .Select(ToDictionary)
-                .Where(d => d.Count > 0)
-                .ToList();
-        }
-
-        return new List<Dictionary<string, object?>>();
-    }
-
     private static Dictionary<string, object?> ToDictionary(object? value)
     {
         switch (value)
@@ -385,19 +201,4 @@ public sealed class WritingTaskProjectionService(LearnerDbContext db, ILogger<Wr
                 return new Dictionary<string, object?>();
         }
     }
-
-    private static string NormalizeImportance(string? value) => (value ?? string.Empty).Trim().ToLowerInvariant() switch
-    {
-        "high" => "high",
-        "low" => "low",
-        _ => "medium",
-    };
-
-    private static string NormalizeRequiredStatus(string? value, string fallback) => (value ?? string.Empty).Trim().ToLowerInvariant() switch
-    {
-        "optional" => "optional",
-        "irrelevant" => "irrelevant",
-        "required" => "required",
-        _ => fallback,
-    };
 }

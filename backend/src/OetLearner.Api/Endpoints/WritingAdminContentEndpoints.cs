@@ -18,7 +18,6 @@ public static class WritingAdminContentEndpoints
             .RequireRateLimiting("PerUser");
 
         MapScenarioRoutes(admin.MapGroup("/scenarios"));
-        MapExemplarRoutes(admin.MapGroup("/exemplars"));
         MapDrillRoutes(admin.MapGroup("/drills"));
         MapCanonRoutes(admin.MapGroup("/canon"));
         MapLessonRoutes(admin.MapGroup("/lessons"));
@@ -129,112 +128,6 @@ public static class WritingAdminContentEndpoints
             return scenario is null ? Results.NotFound() : Results.Ok(scenario);
         })
             .WithAdminWrite("AdminContentPublish");
-    }
-
-    private static void MapExemplarRoutes(RouteGroupBuilder g)
-    {
-        g.MapGet("/", async (
-            [FromQuery] string? profession,
-            [FromQuery] string? letterType,
-            [FromQuery] string? status,
-            [FromQuery] int? page,
-            [FromQuery] int? pageSize,
-            HttpContext http,
-            IWritingExemplarService service,
-            CancellationToken ct)
-            => Results.Ok(await service.AdminListExemplarsAsync(
-                http.WritingV2UserId(),
-                profession,
-                letterType,
-                status,
-                page ?? 1,
-                pageSize ?? 20,
-                ct)))
-            .WithAdminRead("AdminContentRead");
-
-        g.MapPost("/", async (
-            WritingExemplarUpsertRequest request,
-            HttpContext http,
-            IWritingExemplarService service,
-            IWritingContentAuditService audit,
-            CancellationToken ct) =>
-        {
-            var actorId = http.WritingV2UserId();
-            var exemplar = await service.AdminCreateExemplarAsync(actorId, request, ct);
-            await audit.LogAsync(actorId, "WritingExemplar", exemplar.Id.ToString(), "writing.exemplar.created", null, ct);
-            return Results.Ok(exemplar);
-        })
-            .WithAdminWrite("AdminContentWrite");
-
-        g.MapGet("/{id:guid}", async (
-            Guid id,
-            HttpContext http,
-            IWritingExemplarService service,
-            CancellationToken ct) =>
-        {
-            var exemplar = await service.AdminGetExemplarAsync(http.WritingV2UserId(), id, ct);
-            return exemplar is null ? Results.NotFound() : Results.Ok(exemplar);
-        })
-            .WithAdminRead("AdminContentRead");
-
-        g.MapPut("/{id:guid}", async (
-            Guid id,
-            WritingExemplarUpsertRequest request,
-            HttpContext http,
-            IWritingExemplarService service,
-            IWritingContentAuditService audit,
-            CancellationToken ct) =>
-        {
-            var actorId = http.WritingV2UserId();
-            var exemplar = await service.AdminUpdateExemplarAsync(actorId, id, request, ct);
-            if (exemplar is not null)
-                await audit.LogAsync(actorId, "WritingExemplar", id.ToString(), "writing.exemplar.updated", null, ct);
-            return exemplar is null ? Results.NotFound() : Results.Ok(exemplar);
-        })
-            .WithAdminWrite("AdminContentWrite");
-
-        g.MapPost("/{id:guid}/publish", async (
-            Guid id,
-            HttpContext http,
-            IWritingExemplarService service,
-            IWritingContentAuditService audit,
-            CancellationToken ct) =>
-        {
-            var actorId = http.WritingV2UserId();
-            var exemplar = await service.AdminPublishExemplarAsync(actorId, id, ct);
-            if (exemplar is not null)
-                await audit.LogAsync(actorId, "WritingExemplar", id.ToString(), "writing.exemplar.published", null, ct);
-            return exemplar is null ? Results.NotFound() : Results.Ok(exemplar);
-        })
-            .WithAdminWrite("AdminContentPublish");
-
-        g.MapDelete("/{id:guid}", async (
-            Guid id,
-            HttpContext http,
-            IWritingExemplarService service,
-            IWritingContentAuditService audit,
-            CancellationToken ct) =>
-        {
-            var actorId = http.WritingV2UserId();
-            var deleted = await service.AdminDeleteExemplarAsync(actorId, id, ct);
-            if (deleted)
-                await audit.LogAsync(actorId, "WritingExemplar", id.ToString(), "writing.exemplar.deleted", null, ct);
-            return deleted ? Results.NoContent() : Results.NotFound();
-        })
-            .WithAdminWrite("AdminContentWrite");
-
-        g.MapPost("/{id:guid}/test-grade", async (
-            Guid id,
-            HttpContext http,
-            IWritingExemplarService service,
-            CancellationToken ct) =>
-        {
-            var result = await service.AdminTestGradeExemplarAsync(http.WritingV2UserId(), id, ct);
-            return result is null ? Results.NotFound() : Results.Ok(result);
-        })
-            // POST mutation verb: needs the per-user write limiter even though
-            // authorization is read-scoped (it only test-grades, no mutation).
-            .WithAdminRead("AdminContentRead").RequireRateLimiting("PerUserWrite");
     }
 
     private static void MapDrillRoutes(RouteGroupBuilder g)

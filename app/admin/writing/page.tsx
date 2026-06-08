@@ -35,7 +35,7 @@ const AUTHORING_LINKS: AdminHubLink[] = [
   {
     href: '/admin/writing/tasks/new',
     title: 'Create task',
-    description: 'Author a new OET Writing task with case notes, recipient, and checklist.',
+    description: 'Author a new OET Writing task with a prompt, fixed instructions, and optional stimulus PDF.',
     icon: <FilePlus2 className="h-5 w-5" />,
   },
   {

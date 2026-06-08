@@ -62,40 +62,6 @@ export function TaskPreview({ form }: TaskPreviewProps) {
   );
 }
 
-function CaseNotesBlock({ form }: TaskPreviewProps) {
-  const sections = form.caseNoteSections.filter(
-    (s) => s.heading.trim() || s.items.some((i) => i.trim()),
-  );
-  if (sections.length === 0) {
-    return (
-      <p className="text-sm italic text-slate-400">
-        Case notes will appear here once you add sections.
-      </p>
-    );
-  }
-  return (
-    <div className="space-y-4">
-      {sections.map((section) => {
-        const items = section.items.filter((i) => i.trim());
-        return (
-          <div key={section.key}>
-            <h4 className="text-sm font-semibold uppercase tracking-wide text-slate-700">
-              {section.heading || '(untitled)'}
-            </h4>
-            <ul className="mt-1 list-disc space-y-0.5 pl-5 text-sm leading-relaxed text-slate-700">
-              {items.length > 0 ? (
-                items.map((item, i) => <li key={i}>{item}</li>)
-              ) : (
-                <li className="list-none italic text-slate-400">(no notes)</li>
-              )}
-            </ul>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
 function TaskBlock({ form }: TaskPreviewProps) {
   const professionLabel = useMemo(
     () => WRITING_PROFESSION_LABELS[form.profession],
@@ -106,12 +72,6 @@ function TaskBlock({ form }: TaskPreviewProps) {
     [form.letterType],
   );
   const instructions = form.fixedInstructions.filter((l) => l.trim());
-  const recipientLines = [
-    form.recipient.name,
-    form.recipient.role,
-    form.recipient.organisation,
-    form.recipient.address,
-  ].filter((l) => l && l.trim());
 
   return (
     <div className="space-y-3">
@@ -126,15 +86,6 @@ function TaskBlock({ form }: TaskPreviewProps) {
           <span className="font-semibold">Your role: </span>
           {form.writerRole}
         </p>
-      )}
-
-      {recipientLines.length > 0 && (
-        <div className="text-sm text-slate-700">
-          <span className="font-semibold">Write to:</span>
-          <div className="mt-0.5 whitespace-pre-line text-slate-600">
-            {recipientLines.join('\n')}
-          </div>
-        </div>
       )}
 
       <div>
@@ -186,12 +137,6 @@ function PaperPreview({ form }: TaskPreviewProps) {
         </header>
         <section>
           <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-slate-400">
-            Notes
-          </p>
-          <CaseNotesBlock form={form} />
-        </section>
-        <section className="border-t border-slate-200 pt-4">
-          <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-slate-400">
             Task
           </p>
           <TaskBlock form={form} />
@@ -215,12 +160,6 @@ function ComputerPreview({ form }: TaskPreviewProps) {
       <div className="grid gap-px bg-slate-200 md:grid-cols-2">
         <div className="space-y-5 bg-white p-4">
           <section>
-            <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-slate-400">
-              Notes
-            </p>
-            <CaseNotesBlock form={form} />
-          </section>
-          <section className="border-t border-slate-200 pt-4">
             <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-slate-400">
               Task
             </p>

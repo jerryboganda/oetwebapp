@@ -63,28 +63,7 @@ public sealed class WritingExamClosureTests
         WriterRole = "You are the doctor on duty.",
         TodayDate = "1 June 2026",
         TaskPromptMarkdown = "Write a referral letter.",
-        CaseNotesMarkdown = "Patient stable.",
-        Recipient = new WritingRecipientDto
-        {
-            Name = "Dr Jane Smith",
-            Role = "Cardiologist",
-            Organisation = "City Hospital",
-            Address = "1 Care Way",
-        },
-        CaseNoteSections = new List<WritingCaseNoteSectionDto>
-        {
-            new() { Heading = "Presenting", Items = new List<string> { "Chest pain" } },
-        },
         FixedInstructions = new List<string> { "Expand the relevant notes into complete sentences" },
-        ModelAnswerText = "Dear Dr Smith, I am writing to refer Mr Sample Patient. Yours sincerely, Dr Test.",
-        KeyContentChecklist = new List<WritingContentChecklistItemDto>
-        {
-            new() { ItemText = "Patient name and age", Category = "patient_identity", Importance = "high", RequiredStatus = "required" },
-        },
-        IrrelevantContentChecklist = new List<WritingContentChecklistItemDto>
-        {
-            new() { ItemText = "Childhood measles", Category = "history", RequiredStatus = "irrelevant" },
-        },
         SourceProvenance = "Authored in-house for tests.",
         IntegrityAcknowledged = true,
     };
@@ -92,28 +71,26 @@ public sealed class WritingExamClosureTests
     // ── 1. Authoring publish-readiness validation ───────────────────────────
 
     [Fact]
-    public async Task Validate_not_publish_ready_when_recipient_model_answer_and_required_item_missing()
+    public async Task Validate_not_publish_ready_when_source_provenance_and_integrity_missing()
     {
         await using var db = NewDb();
         var svc = new WritingTaskAuthoringService(db, NullLogger<WritingTaskAuthoringService>.Instance);
 
-        // Minimal task: no recipient, no model answer, no checklist items.
+        // Minimal task: no source provenance, integrity not acknowledged.
         var created = await svc.CreateAsync(new WritingTaskUpsertDto
         {
             Title = "Incomplete task",
             Profession = "Medicine",
             LetterType = "routine_referral",
             TaskPromptMarkdown = "Write something.",
-            CaseNotesMarkdown = "Some notes.",
         }, User(), default);
 
         var validation = await svc.ValidateAsync(created.Id, default);
 
         Assert.NotNull(validation);
         Assert.False(validation!.IsPublishReady);
-        Assert.Contains(validation.Issues, i => i.Code == "recipient_required");
-        Assert.Contains(validation.Issues, i => i.Code == "model_answer_required");
-        Assert.Contains(validation.Issues, i => i.Code == "key_content_required");
+        Assert.Contains(validation.Issues, i => i.Code == "source_provenance_required");
+        Assert.Contains(validation.Issues, i => i.Code == "integrity_not_acknowledged");
     }
 
     [Fact]
@@ -149,22 +126,10 @@ public sealed class WritingExamClosureTests
             {
                 TodayDate = "2 February 2026",
                 CandidateRole = "You are a GP.",
-                Sections = new List<WritingImportCaseNoteSection>
-                {
-                    new() { Heading = "Patient details", Items = new List<string> { "Jane Doe, 40" } },
-                    new() { Heading = "Presenting complaint", Items = new List<string> { "Cough for 2 weeks" } },
-                },
             },
             WritingTask = new WritingImportWritingTask
             {
                 Instruction = "Write a referral letter to the respiratory clinic.",
-                Recipient = new WritingImportRecipient
-                {
-                    Name = "Dr Lung",
-                    Role = "Respiratory Consultant",
-                    Organisation = "Chest Hospital",
-                    Address = "9 Air Street",
-                },
                 FixedInstructions = new List<string> { "Use letter format" },
                 WordGuide = new WritingImportWordGuide { Min = 180, Max = 200 },
             },
@@ -172,16 +137,6 @@ public sealed class WritingExamClosureTests
             {
                 ExpectedPurpose = "Refer for respiratory assessment.",
                 ExpectedAction = "Request clinic review.",
-                ModelAnswer = "Dear Dr Lung, I am referring Jane Doe. Yours sincerely.",
-                KeyContentChecklist = new List<WritingImportChecklistItem>
-                {
-                    new() { ItemText = "Patient name and age", Category = "patient_identity", Importance = "high", RequiredStatus = "required" },
-                    new() { ItemText = "Duration of cough", Category = "symptoms", Importance = "medium", RequiredStatus = "required" },
-                },
-                IrrelevantContentChecklist = new List<WritingImportChecklistItem>
-                {
-                    new() { ItemText = "Patient's favourite colour", Category = "social" },
-                },
             },
         };
 
@@ -191,9 +146,7 @@ public sealed class WritingExamClosureTests
         Assert.Equal("draft", imported.Status);
         Assert.Equal("MED-WR-IMP1", imported.InternalCode);
         Assert.Equal("routine_referral", imported.LetterType);
-        Assert.Equal(2, imported.CaseNoteSections.Count);
-        Assert.Equal(2, imported.KeyContentChecklist.Count);
-        Assert.Single(imported.IrrelevantContentChecklist);
+        Assert.Equal("You are a GP.", imported.WriterRole);
 
         var export = await svc.ExportAsync(imported.Id, default);
 
@@ -202,17 +155,14 @@ public sealed class WritingExamClosureTests
         Assert.Equal("MED-WR-IMP1", export.InternalCode);
         Assert.Equal("Medicine", export.Profession);
         Assert.Equal("routine_referral", export.TaskType);
-        Assert.Equal("Dr Lung", export.WritingTask?.Recipient?.Name);
         Assert.Equal("Refer for respiratory assessment.", export.Marking?.ExpectedPurpose);
-        Assert.Equal(2, export.Marking?.KeyContentChecklist?.Count);
-        Assert.Equal("Dear Dr Lung, I am referring Jane Doe. Yours sincerely.", export.Marking?.ModelAnswer);
-        Assert.Equal(2, export.CaseNotes?.Sections?.Count);
+        Assert.Equal("Write a referral letter to the respiratory clinic.", export.WritingTask?.Instruction);
     }
 
-    // ── 3. Clone → new draft, version intact, checklist copied ──────────────
+    // ── 3. Clone → new draft, surviving fields copied ───────────────────────
 
     [Fact]
-    public async Task Clone_creates_new_draft_with_checklist_copied()
+    public async Task Clone_creates_new_draft_copying_task_fields()
     {
         await using var db = NewDb();
         var svc = new WritingTaskAuthoringService(db, NullLogger<WritingTaskAuthoringService>.Instance);
@@ -227,19 +177,8 @@ public sealed class WritingExamClosureTests
         Assert.NotNull(clone);
         Assert.NotEqual(created.Id, clone!.Id);
         Assert.Equal("draft", clone.Status);
-        // Checklist rows copied (1 required key item + 1 irrelevant distractor).
-        Assert.Single(clone.KeyContentChecklist);
-        Assert.Single(clone.IrrelevantContentChecklist);
-        Assert.Equal("Patient name and age", clone.KeyContentChecklist[0].ItemText);
-
-        // The clone has its own checklist rows (distinct ids from the source).
-        var sourceIds = await db.WritingContentChecklistItems
-            .Where(c => c.ScenarioId == created.Id).Select(c => c.Id).ToListAsync();
-        var cloneIds = await db.WritingContentChecklistItems
-            .Where(c => c.ScenarioId == clone.Id).Select(c => c.Id).ToListAsync();
-        Assert.Equal(2, sourceIds.Count);
-        Assert.Equal(2, cloneIds.Count);
-        Assert.Empty(sourceIds.Intersect(cloneIds));
+        Assert.Equal("routine_referral", clone.LetterType);
+        Assert.Equal("Medicine", clone.Profession);
     }
 
     // ── 4. Attempt events: persist known, skip unknown, respect batch cap ───
@@ -274,7 +213,7 @@ public sealed class WritingExamClosureTests
     // ── 5. Heuristic pre-assessment of a weak letter ────────────────────────
 
     [Fact]
-    public async Task Heuristic_flags_short_letter_missing_irrelevant_and_language_issues()
+    public async Task Heuristic_flags_short_letter_and_language_issues()
     {
         var service = NewHeuristic(llmEnabled: false);
         var scenario = new WritingScenario
@@ -287,28 +226,21 @@ public sealed class WritingExamClosureTests
             WordGuideMax = 200,
         };
 
-        var checklist = new List<WritingContentChecklistItem>
-        {
-            new() { Id = Guid.NewGuid(), ItemText = "diabetes management plan", RequiredStatus = "required", Importance = "high" },
-            new() { Id = Guid.NewGuid(), ItemText = "blood pressure reading", RequiredStatus = "required", Importance = "medium" },
-            new() { Id = Guid.NewGuid(), ItemText = "social smoking history", RequiredStatus = "irrelevant", Importance = "low" },
-        };
-
-        // Short body, missing "blood pressure", mentions "smoking" (irrelevant),
-        // a contraction ("can't"), and no "Dear" greeting.
+        // Short body, a contraction ("can't"), and no "Dear" greeting.
         var request = new WritingPreAssessmentRequest(
             Guid.NewGuid(),
-            "The patient has diabetes management plan in place but can't attend; smoking history noted.",
-            scenario,
-            checklist,
-            null);
+            "The patient has a management plan in place but can't attend the clinic.",
+            scenario);
 
         var result = await service.AssessAsync(request, default);
 
         Assert.Equal("heuristic", result.Source);
         Assert.False(result.WithinWordGuide);
-        Assert.Contains("blood pressure reading", result.MissingKeyContent);
-        Assert.NotEmpty(result.DetectedIrrelevantContent);
+        // Content checklists were removed: coverage is treated as complete and no
+        // missing/irrelevant content is surfaced.
+        Assert.Equal(100, result.KeyContentCoveragePercent);
+        Assert.Empty(result.MissingKeyContent);
+        Assert.Empty(result.DetectedIrrelevantContent);
         Assert.NotEmpty(result.LanguageNotes);
 
         // Bands clamped to their criterion maxima (c1 0-3; c2..c6 0-7).
@@ -381,7 +313,7 @@ public sealed class WritingExamClosureTests
     // ── 7. Result-visibility gating of the learner feedback bundle ──────────
 
     [Fact]
-    public async Task Feedback_hides_model_answer_and_annotations_when_flags_false_shows_when_true()
+    public async Task Feedback_hides_annotations_when_flag_false_shows_when_true()
     {
         // ----- shared fixture builder -----
         async Task<(LearnerDbContext Db, IWritingResultFeedbackService Svc, Guid SubmissionId)> BuildAsync(bool show)
@@ -389,33 +321,19 @@ public sealed class WritingExamClosureTests
             var db = NewDb();
             var userId = "learner-1";
             var scenarioId = Guid.NewGuid();
-            var exemplarId = Guid.NewGuid();
             var submissionId = Guid.NewGuid();
             var now = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
 
-            db.WritingExemplars.Add(new WritingExemplar
-            {
-                Id = exemplarId,
-                ScenarioId = scenarioId,
-                LetterType = "routine_referral",
-                Profession = "Medicine",
-                LetterContent = "MODEL ANSWER BODY",
-                Status = "published",
-                AuthorId = "seed",
-                CreatedAt = now,
-            });
             db.WritingScenarios.Add(new WritingScenario
             {
                 Id = scenarioId,
                 Title = "Referral",
                 LetterType = "routine_referral",
                 Profession = "Medicine",
-                CaseNotesMarkdown = "notes",
                 Status = "published",
                 AuthorId = "seed",
                 CreatedAt = now,
                 UpdatedAt = now,
-                ModelAnswerExemplarId = exemplarId,
             });
             db.WritingSubmissions.Add(new WritingSubmission
             {
@@ -443,7 +361,7 @@ public sealed class WritingExamClosureTests
                 FeedbackText = "Expand this.",
                 CreatedAt = now,
             });
-            // Scenario-scoped visibility override controlling the two flags under test.
+            // Scenario-scoped visibility override controlling the flag under test.
             db.WritingResultVisibilityConfigs.Add(new WritingResultVisibilityConfig
             {
                 Id = scenarioId.ToString(),
@@ -463,28 +381,24 @@ public sealed class WritingExamClosureTests
 
             var visibility = new WritingResultVisibilityService(db, new FixedClock(), NullLogger<WritingResultVisibilityService>.Instance);
             var svc = new WritingResultFeedbackService(
-                db, visibility, NewHeuristic(), NullLogger<WritingResultFeedbackService>.Instance);
+                db, visibility, NullLogger<WritingResultFeedbackService>.Instance);
             return (db, svc, submissionId);
         }
 
-        // Flags FALSE → model answer + annotations hidden.
+        // Flag FALSE → annotations hidden.
         var hidden = await BuildAsync(show: false);
         await using (hidden.Db)
         {
             var feedback = await hidden.Svc.GetFeedbackAsync("learner-1", hidden.SubmissionId, default);
-            Assert.Null(feedback.ModelAnswerText);
             Assert.Empty(feedback.Annotations);
-            Assert.False(feedback.Visibility.ShowModelAnswer);
         }
 
-        // Flags TRUE → model answer + annotations shown.
+        // Flag TRUE → annotations shown.
         var shown = await BuildAsync(show: true);
         await using (shown.Db)
         {
             var feedback = await shown.Svc.GetFeedbackAsync("learner-1", shown.SubmissionId, default);
-            Assert.Equal("MODEL ANSWER BODY", feedback.ModelAnswerText);
             Assert.NotEmpty(feedback.Annotations);
-            Assert.True(feedback.Visibility.ShowModelAnswer);
         }
     }
 }

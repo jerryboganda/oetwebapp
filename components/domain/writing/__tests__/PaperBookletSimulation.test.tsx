@@ -53,14 +53,9 @@ const QUESTION_BOOKLET_LABEL = 'writing.paper.questionBookletLabel';
 const content: PaperBookletContent = {
   title: 'Discharge letter — Mr Brown',
   professionLabel: 'Medicine',
-  caseNoteSections: [
-    { heading: 'Admission', items: ['65-year-old male', 'Community-acquired pneumonia'] },
-  ],
-  caseNotesMarkdown: '',
   writerRole: 'You are the charge nurse on the ward.',
   todayDate: '14 March 2026',
   taskPromptMarkdown: 'Using the case notes, write a discharge letter.',
-  recipient: { name: 'Dr Smith', role: 'GP', organisation: 'Parkview Clinic', address: '1 High St' },
   fixedInstructions: ['Use letter format.', 'Do not use note form.'],
   wordGuideMin: 180,
   wordGuideMax: 200,

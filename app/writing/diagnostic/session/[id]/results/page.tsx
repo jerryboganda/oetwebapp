@@ -13,16 +13,11 @@ import { Card, CardContent } from '@/components/ui/card';
 import { LearnerPageHero } from '@/components/domain/learner-surface';
 import { CriteriaRadar } from '@/components/domain/writing/CriteriaRadar';
 import { CanonViolationCard } from '@/components/domain/writing/CanonViolationCard';
-import { ExemplarSideBySide } from '@/components/domain/writing/ExemplarSideBySide';
 import {
-  getClosestExemplar,
   getWritingDiagnosticResults,
-  getWritingSubmission,
   type WritingDiagnosticResultsDto,
 } from '@/lib/writing/api';
 import type {
-  WritingExemplarDto,
-  WritingSubmissionDto,
   WritingCriteriaScoresDto,
   WritingCriterionCode,
 } from '@/lib/writing/types';
@@ -54,23 +49,13 @@ export default function WritingDiagnosticResultsPage() {
   const sessionId = String(params?.id ?? '');
 
   const [data, setData] = useState<WritingDiagnosticResultsDto | null>(null);
-  const [submission, setSubmission] = useState<WritingSubmissionDto | null>(null);
-  const [exemplar, setExemplar] = useState<WritingExemplarDto | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!sessionId) return;
     void getWritingDiagnosticResults(sessionId)
-      .then(async (res) => {
+      .then((res) => {
         setData(res);
-        if (res.submissionId) {
-          const sub = await getWritingSubmission(res.submissionId).catch(() => null);
-          if (sub) setSubmission(sub);
-          if (sub?.scenarioId) {
-            const ex = await getClosestExemplar(sub.scenarioId).catch(() => null);
-            if (ex) setExemplar(ex);
-          }
-        }
       })
       .catch((err) => setError(err instanceof Error ? err.message : t('writing.diagnostic.results.error.load')));
   }, [sessionId, t]);
@@ -173,18 +158,6 @@ export default function WritingDiagnosticResultsPage() {
           </section>
         ) : null}
 
-        {submission && exemplar ? (
-          <section aria-labelledby="exemplar-heading" className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
-            <h2 id="exemplar-heading" className="text-lg font-bold text-navy">{t('writing.diagnostic.results.exemplar.heading')}</h2>
-            <p className="mt-1 text-sm text-muted">{t('writing.diagnostic.results.exemplar.subtitle')}</p>
-            <ExemplarSideBySide
-              candidateLetter={submission.letterContent}
-              exemplarLetter={exemplar.letterContent}
-              exemplarAnnotations={exemplar.annotations}
-              className="mt-3"
-            />
-          </section>
-        ) : null}
 
         {data?.pathwayPreview ? (
           <section aria-labelledby="pathway-heading" className="rounded-2xl border border-border bg-surface p-5 shadow-sm">

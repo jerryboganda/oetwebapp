@@ -22,7 +22,6 @@ public interface IWritingSubmissionService
 public sealed class WritingSubmissionService(
     LearnerDbContext db,
     IWritingSubmissionEvaluationPipeline pipeline,
-    IWritingExemplarService exemplarService,
     ILogger<WritingSubmissionService> logger,
     IWritingAttemptEventService? attemptEvents = null) : IWritingSubmissionService
 {
@@ -104,25 +103,7 @@ public sealed class WritingSubmissionService(
             .Where(r => ruleIds.Contains(r.Id))
             .ToDictionaryAsync(r => r.Id, r => r.RuleText, ct);
 
-        WritingExemplarComparisonResponse? comparison = null;
-        try
-        {
-            var exemplar = await exemplarService.GetClosestToScenarioAsync(userId, s.ScenarioId, ct);
-            if (exemplar is not null)
-            {
-                comparison = new WritingExemplarComparisonResponse(
-                    ExemplarId: exemplar.Id,
-                    ExemplarLetterType: exemplar.LetterType,
-                    SimilarityScore: 0.0,
-                    HighlightedDifferences: Array.Empty<WritingExemplarComparisonHighlightResponse>());
-            }
-        }
-        catch (Exception ex)
-        {
-            logger.LogDebug(ex, "Exemplar comparison lookup failed (non-fatal) for submission {SubmissionId}.", submissionId);
-        }
-
-        return WritingV2ResponseMapper.ToGradeResponse(grade, violations, ruleText, comparison);
+        return WritingV2ResponseMapper.ToGradeResponse(grade, violations, ruleText);
     }
 
     public async Task<WritingSubmissionResponse?> ReviseSubmissionAsync(string userId, Guid originalSubmissionId, WritingReviseRequest request, CancellationToken ct)

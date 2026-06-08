@@ -5,7 +5,6 @@ namespace OetLearner.Api.Data;
 
 public partial class LearnerDbContext
 {
-    public DbSet<WritingContentChecklistItem> WritingContentChecklistItems => Set<WritingContentChecklistItem>();
     public DbSet<WritingAttemptEvent> WritingAttemptEvents => Set<WritingAttemptEvent>();
     public DbSet<WritingFeedbackAnnotation> WritingFeedbackAnnotations => Set<WritingFeedbackAnnotation>();
     public DbSet<WritingModeration> WritingModerations => Set<WritingModeration>();
@@ -17,19 +16,10 @@ public partial class LearnerDbContext
         // closure. EF merges these with the config in OnModelCreatingWritingScenarios.
         modelBuilder.Entity<WritingScenario>(e =>
         {
-            e.Property(x => x.RecipientJson).HasColumnType("jsonb");
-            e.Property(x => x.CaseNoteSectionsJson).HasColumnType("jsonb");
             e.Property(x => x.FixedInstructionsJson).HasColumnType("jsonb").HasDefaultValue("[]");
             e.Property(x => x.RetakePolicyJson).HasColumnType("jsonb");
             e.HasIndex(x => x.InternalCode);
             e.HasIndex(x => x.SourceContentPaperId);
-        });
-
-        modelBuilder.Entity<WritingContentChecklistItem>(e =>
-        {
-            e.HasKey(x => x.Id);
-            e.HasIndex(x => new { x.ScenarioId, x.Ordinal });
-            e.HasIndex(x => new { x.ScenarioId, x.RequiredStatus });
         });
 
         modelBuilder.Entity<WritingAttemptEvent>(e =>

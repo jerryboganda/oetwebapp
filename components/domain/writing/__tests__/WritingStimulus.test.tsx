@@ -50,20 +50,21 @@ const scenarioWithPdf: WritingScenarioDto = {
   subDiscipline: null,
   topics: [],
   difficulty: 3,
-  caseNotesMarkdown: '## Patient\n- John Doe\n',
   caseNotesStructured: [],
   isDiagnostic: false,
   status: 'published',
   createdAt: '2024-01-01T00:00:00Z',
   updatedAt: '2024-01-01T00:00:00Z',
+  taskPromptMarkdown: 'Write a referral letter to Dr Smith.',
+  fixedInstructions: ['Use letter format'],
   stimulusPdfDownloadPath: '/v1/media/pdf-abc/content',
 };
 
-/** Minimal scenario WITHOUT a stimulus PDF (text fallback path). */
+/** Minimal scenario WITHOUT a stimulus PDF (prompt + instructions fallback). */
 const scenarioTextOnly: WritingScenarioDto = {
   ...scenarioWithPdf,
   stimulusPdfDownloadPath: null,
-  caseNotesMarkdown: '## Patient Details\n- Jane Doe\n- DOB: 01/01/1990\n',
+  taskPromptMarkdown: 'Write a discharge summary for Jane Doe.',
 };
 
 describe('WritingStimulus', () => {
@@ -81,14 +82,16 @@ describe('WritingStimulus', () => {
     it('renders the PDF viewer (not the text fallback)', async () => {
       render(<WritingStimulus scenario={scenarioWithPdf} title="Stimulus PDF" />);
 
-      // The PDF viewer toolbar should appear; case-note sections should not.
+      // The PDF viewer toolbar should appear; the prompt fallback should not.
       expect(screen.getByText('Stimulus PDF')).toBeInTheDocument();
-      // The text fallback would show case-note section headings in the DOM.
-      expect(screen.queryByText('Patient Details')).not.toBeInTheDocument();
+      // The fallback would show the task prompt text in the DOM.
+      expect(
+        screen.queryByText('Write a discharge summary for Jane Doe.'),
+      ).not.toBeInTheDocument();
     });
   });
 
-  describe('Text fallback — when stimulusPdfDownloadPath is null', () => {
+  describe('Prompt fallback — when stimulusPdfDownloadPath is null', () => {
     it('does NOT call fetchAuthorizedObjectUrl', async () => {
       const { fetchAuthorizedObjectUrl } = await import('@/lib/api');
 
@@ -100,17 +103,17 @@ describe('WritingStimulus', () => {
       });
     });
 
-    it('renders case-note text from the scenario markdown', () => {
+    it('renders the task prompt and fixed instructions', () => {
       render(<WritingStimulus scenario={scenarioTextOnly} />);
 
-      // CaseNotePdfViewer parses the markdown and renders section headings.
-      expect(screen.getByText('Patient Details')).toBeInTheDocument();
+      expect(screen.getByText('Write a discharge summary for Jane Doe.')).toBeInTheDocument();
+      expect(screen.getByText('Use letter format')).toBeInTheDocument();
     });
   });
 
   describe('Null scenario', () => {
-    it('renders the text fallback with empty content when scenario is null', () => {
-      // Should not crash; CaseNotePdfViewer handles missing content gracefully.
+    it('renders the fallback with empty content when scenario is null', () => {
+      // Should not crash; the fallback handles missing content gracefully.
       expect(() => render(<WritingStimulus scenario={null} />)).not.toThrow();
     });
   });

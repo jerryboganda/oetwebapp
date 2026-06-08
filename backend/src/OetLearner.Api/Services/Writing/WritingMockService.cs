@@ -431,6 +431,6 @@ public sealed class WritingMockService(
             .ToDictionaryAsync(r => r.Id, r => r.RuleText, ct);
         return new WritingMockResultsResponse(
             WritingV2ResponseMapper.ToResponse(session),
-            WritingV2ResponseMapper.ToGradeResponse(grade, violations, ruleText, null));
+            WritingV2ResponseMapper.ToGradeResponse(grade, violations, ruleText));
     }
 }

@@ -13,11 +13,9 @@ import { Card, CardContent } from '@/components/ui/card';
 import { LearnerPageHero } from '@/components/domain/learner-surface';
 import { CriteriaRadar } from '@/components/domain/writing/CriteriaRadar';
 import { CanonViolationCard } from '@/components/domain/writing/CanonViolationCard';
-import { ExemplarSideBySide } from '@/components/domain/writing/ExemplarSideBySide';
 import {
   appealWritingSubmission,
   disputeWritingCanonViolation,
-  getClosestExemplar,
   getWritingSubmission,
   getWritingSubmissionGrade,
   publishToShowcase,
@@ -26,7 +24,6 @@ import {
 import type {
   WritingCriteriaScoresDto,
   WritingCriterionCode,
-  WritingExemplarDto,
   WritingGradeDto,
   WritingSubmissionDto,
 } from '@/lib/writing/types';
@@ -58,7 +55,6 @@ export default function WritingSubmissionResultsPage() {
 
   const [submission, setSubmission] = useState<WritingSubmissionDto | null>(null);
   const [grade, setGrade] = useState<WritingGradeDto | null>(null);
-  const [exemplar, setExemplar] = useState<WritingExemplarDto | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [actionStatus, setActionStatus] = useState<string | null>(null);
 
@@ -68,13 +64,9 @@ export default function WritingSubmissionResultsPage() {
       getWritingSubmission(submissionId),
       getWritingSubmissionGrade(submissionId),
     ])
-      .then(async ([sub, g]) => {
+      .then(([sub, g]) => {
         setSubmission(sub);
         setGrade(g);
-        if (sub.scenarioId) {
-          const ex = await getClosestExemplar(sub.scenarioId).catch(() => null);
-          if (ex) setExemplar(ex);
-        }
       })
       .catch((err) => setError(err instanceof Error ? err.message : t('writing.submissions.results.error.load')));
   }, [submissionId, t]);
@@ -207,18 +199,6 @@ export default function WritingSubmissionResultsPage() {
                 <CanonViolationCard key={v.id} violation={v} onDispute={(rid, vid) => onDisputeViolation(rid, vid)} />
               ))}
             </div>
-          </section>
-        ) : null}
-
-        {submission && exemplar ? (
-          <section aria-labelledby="exemplar-heading" className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
-            <h2 id="exemplar-heading" className="text-lg font-bold text-navy">{t('writing.submissions.results.exemplar.heading')}</h2>
-            <ExemplarSideBySide
-              candidateLetter={submission.letterContent}
-              exemplarLetter={exemplar.letterContent}
-              exemplarAnnotations={exemplar.annotations}
-              className="mt-3"
-            />
           </section>
         ) : null}
 

@@ -1535,10 +1535,6 @@ builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingPracticeSelec
     OetLearner.Api.Services.Writing.WritingPracticeSelectionService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingScenarioService,
     OetLearner.Api.Services.Writing.WritingScenarioService>();
-builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingExemplarService,
-    OetLearner.Api.Services.Writing.WritingExemplarService>();
-builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingExemplarEmbeddingService,
-    OetLearner.Api.Services.Writing.WritingExemplarEmbeddingService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingCanonService,
     OetLearner.Api.Services.Writing.WritingCanonService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingDrillServiceV2,
@@ -1618,7 +1614,6 @@ builder.Services.AddHttpClient("writing-ocr-gcv");
 builder.Services.AddHostedService<OetLearner.Api.Services.Writing.Crons.WritingDailyPlanCron>();
 builder.Services.AddHostedService<OetLearner.Api.Services.Writing.Crons.WritingReadinessCron>();
 builder.Services.AddHostedService<OetLearner.Api.Services.Writing.Crons.WritingBatchGradingCron>();
-builder.Services.AddHostedService<OetLearner.Api.Services.Writing.Crons.WritingExemplarReindexCron>();
 builder.Services.AddHostedService<OetLearner.Api.Services.Writing.Crons.WritingAnalyticsAggregationCron>();
 builder.Services.AddHostedService<OetLearner.Api.Services.Writing.Crons.WritingTutorQueueAlertCron>();
 builder.Services.AddHostedService<OetLearner.Api.Services.Writing.Crons.WritingDraftCleanupCron>();

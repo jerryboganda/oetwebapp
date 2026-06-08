@@ -24,7 +24,6 @@ public sealed record WritingScenarioView(
     string? SubDiscipline,
     IReadOnlyList<string> Topics,
     int Difficulty,
-    string CaseNotesMarkdown,
     IReadOnlyList<WritingScenarioStructuredSentenceDto> CaseNotesStructured,
     bool IsDiagnostic,
     string Status,
@@ -103,10 +102,6 @@ public sealed class WritingScenarioService(LearnerDbContext db, TimeProvider clo
             SubDiscipline = scenario.SubDiscipline,
             TopicsJson = JsonSerializer.Serialize(scenario.Topics ?? Array.Empty<string>(), JsonOptions),
             Difficulty = Math.Clamp(scenario.Difficulty, 1, 5),
-            CaseNotesMarkdown = scenario.CaseNotesMarkdown,
-            CaseNotesStructuredJson = scenario.CaseNotesStructured.Count == 0
-                ? null
-                : JsonSerializer.Serialize(scenario.CaseNotesStructured, JsonOptions),
             IsDiagnostic = scenario.IsDiagnostic,
             Status = "draft",
             AuthorId = userId,
@@ -131,10 +126,6 @@ public sealed class WritingScenarioService(LearnerDbContext db, TimeProvider clo
         entity.SubDiscipline = scenario.SubDiscipline;
         entity.TopicsJson = JsonSerializer.Serialize(scenario.Topics ?? Array.Empty<string>(), JsonOptions);
         entity.Difficulty = Math.Clamp(scenario.Difficulty, 1, 5);
-        entity.CaseNotesMarkdown = scenario.CaseNotesMarkdown;
-        entity.CaseNotesStructuredJson = scenario.CaseNotesStructured.Count == 0
-            ? null
-            : JsonSerializer.Serialize(scenario.CaseNotesStructured, JsonOptions);
         entity.IsDiagnostic = scenario.IsDiagnostic;
         entity.Version += 1;
 
@@ -202,7 +193,6 @@ public sealed class WritingScenarioService(LearnerDbContext db, TimeProvider clo
             row.SubDiscipline,
             topics,
             row.Difficulty,
-            row.CaseNotesMarkdown,
             sentences.Select(s => new WritingScenarioStructuredSentenceDto(s.Ordinal, s.SentenceText, s.RelevanceLabel, s.Notes)).ToList(),
             row.IsDiagnostic,
             row.Status,
@@ -246,7 +236,7 @@ public sealed class WritingScenarioService(LearnerDbContext db, TimeProvider clo
         if (!string.IsNullOrWhiteSpace(search))
         {
             var like = $"%{search}%";
-            query = query.Where(s => EF.Functions.ILike(s.Title, like) || EF.Functions.ILike(s.CaseNotesMarkdown, like));
+            query = query.Where(s => EF.Functions.ILike(s.Title, like));
         }
         var total = await query.CountAsync(ct);
         var rows = await query.OrderBy(s => s.Difficulty).ThenBy(s => s.Title)
@@ -341,7 +331,6 @@ public sealed class WritingScenarioService(LearnerDbContext db, TimeProvider clo
             SubDiscipline: req.SubDiscipline,
             Topics: req.Topics ?? Array.Empty<string>(),
             Difficulty: req.Difficulty,
-            CaseNotesMarkdown: req.CaseNotesMarkdown,
             CaseNotesStructured: (req.CaseNotesStructured ?? Array.Empty<WritingScenarioStructuredSentenceResponse>())
                 .Select(s => new WritingScenarioStructuredSentenceDto(s.Index, s.Text, s.Relevance, null))
                 .ToList(),

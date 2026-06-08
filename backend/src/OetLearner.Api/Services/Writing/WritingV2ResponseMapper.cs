@@ -80,7 +80,6 @@ public static class WritingV2ResponseMapper
             SubDiscipline: view.SubDiscipline,
             Topics: view.Topics,
             Difficulty: view.Difficulty,
-            CaseNotesMarkdown: view.CaseNotesMarkdown,
             CaseNotesStructured: view.CaseNotesStructured.Select(s => new WritingScenarioStructuredSentenceResponse(s.Ordinal, s.SentenceText, s.Relevance)).ToList(),
             IsDiagnostic: view.IsDiagnostic,
             Status: view.Status,
@@ -89,24 +88,6 @@ public static class WritingV2ResponseMapper
             StimulusPdfMediaAssetId: pdfId,
             StimulusPdfDownloadPath: string.IsNullOrWhiteSpace(pdfId) ? null : $"/v1/media/{pdfId}/content");
     }
-
-    public static WritingExemplarResponse ToResponse(WritingExemplarView view)
-        => new(
-            Id: view.Id,
-            ScenarioId: view.ScenarioId,
-            Profession: view.Profession,
-            LetterType: view.LetterType,
-            Difficulty: 3,
-            TargetBand: view.TargetBand,
-            LetterContent: view.LetterContent,
-            Annotations: view.Annotations.Select(a => new WritingExemplarAnnotationResponse(
-                Id: Guid.NewGuid(),
-                CharStart: a.CharStart ?? 0,
-                CharEnd: a.CharEnd ?? 0,
-                RuleId: a.RuleId,
-                Note: a.Note)).ToList(),
-            AuthorNote: null,
-            Status: view.Status);
 
     public static WritingCanonRuleResponseV2 ToResponse(WritingCanonRuleView view)
         => new(
@@ -259,8 +240,7 @@ public static class WritingV2ResponseMapper
     public static WritingGradeResponseV2 ToGradeResponse(
         WritingGrade grade,
         IReadOnlyList<WritingCanonViolation> violations,
-        IReadOnlyDictionary<string, string> ruleText,
-        WritingExemplarComparisonResponse? comparison)
+        IReadOnlyDictionary<string, string> ruleText)
     {
         Dictionary<string, WritingPerCriterionFeedbackResponse> perCriterion = new();
         try
@@ -327,7 +307,6 @@ public static class WritingV2ResponseMapper
             ModelUsed: grade.ModelUsed,
             CanonVersion: grade.CanonVersion,
             CanonViolations: violations.Select(v => ToResponse(v, ruleText.TryGetValue(v.RuleId, out var t) ? t : string.Empty)).ToList(),
-            ExemplarComparison: comparison,
             RevisionInvite: revisionInvite,
             GradedAt: grade.GradedAt);
     }

@@ -16,7 +16,6 @@ const scenario: WritingScenarioDto = {
   subDiscipline: null,
   topics: [],
   difficulty: 3,
-  caseNotesMarkdown: '## Patient\n- John Doe\n',
   caseNotesStructured: [],
   isDiagnostic: false,
   status: 'published',

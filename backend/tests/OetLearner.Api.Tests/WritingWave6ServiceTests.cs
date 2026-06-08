@@ -295,7 +295,6 @@ public class WritingWave6ServiceTests
             LetterType = "LT-RR",
             Profession = "medicine",
             Difficulty = 3,
-            CaseNotesMarkdown = "Patient requires referral.",
             IsDiagnostic = false,
             Status = "published",
             AuthorId = "admin",
