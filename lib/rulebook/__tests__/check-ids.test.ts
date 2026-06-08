@@ -35,6 +35,11 @@ describe('rulebook check-id registry', () => {
 
   it('returns an empty set for kinds that have no deterministic detectors yet', () => {
     expect(supportedCheckIds('grammar').size).toBe(0);
-    expect(supportedCheckIds('listening').size).toBe(0);
+    expect(supportedCheckIds('vocabulary').size).toBe(0);
+  });
+
+  it('registers the listening and reading authoring detector sets', () => {
+    expect(supportedCheckIds('listening').size).toBeGreaterThan(0);
+    expect(supportedCheckIds('reading').size).toBeGreaterThan(0);
   });
 });

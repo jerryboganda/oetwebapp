@@ -14,5 +14,7 @@ export * from './coverage-matrix';
 export * from './writing-rules';
 export * from './writing-coverage';
 export * from './speaking-rules';
+export * from './listening-rules';
+export * from './reading-rules';
 export * from './exam-mode-rules';
 export * from './ai-prompt';

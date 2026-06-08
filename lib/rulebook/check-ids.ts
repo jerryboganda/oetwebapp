@@ -27,6 +27,8 @@
 import type { RuleKind } from './types';
 import { SUPPORTED_WRITING_CHECK_IDS } from './writing-rules';
 import { SUPPORTED_SPEAKING_CHECK_IDS } from './speaking-rules';
+import { SUPPORTED_LISTENING_CHECK_IDS } from './listening-rules';
+import { SUPPORTED_READING_CHECK_IDS } from './reading-rules';
 import { LISTENING_EXAM_MODE_ENFORCERS, READING_EXAM_MODE_ENFORCERS } from './exam-mode-rules';
 
 /** Writing rules with a deterministic detector in `writing-rules.ts`. */
@@ -45,6 +47,12 @@ export const READING_EXAM_MODE_CHECK_IDS: ReadonlySet<string> = new Set(
   Object.keys(READING_EXAM_MODE_ENFORCERS),
 );
 
+/** Listening authoring rules with a deterministic detector in `listening-rules.ts`. */
+export const LISTENING_AUTHORING_CHECK_IDS: ReadonlySet<string> = new Set(SUPPORTED_LISTENING_CHECK_IDS);
+
+/** Reading authoring rules with a deterministic detector in `reading-rules.ts`. */
+export const READING_AUTHORING_CHECK_IDS: ReadonlySet<string> = new Set(SUPPORTED_READING_CHECK_IDS);
+
 const EMPTY: ReadonlySet<string> = new Set<string>();
 
 /**
@@ -57,13 +65,13 @@ export const CHECK_ID_REGISTRY: Readonly<Record<RuleKind, ReadonlySet<string>>> 
   speaking: SPEAKING_CHECK_IDS,
   'listening-exam-mode': LISTENING_EXAM_MODE_CHECK_IDS,
   'reading-exam-mode': READING_EXAM_MODE_CHECK_IDS,
+  listening: LISTENING_AUTHORING_CHECK_IDS,
+  reading: READING_AUTHORING_CHECK_IDS,
   // No deterministic detector set registered yet:
   grammar: EMPTY,
   pronunciation: EMPTY,
   vocabulary: EMPTY,
   conversation: EMPTY,
-  listening: EMPTY,
-  reading: EMPTY,
   remediation: EMPTY,
 }) as Record<RuleKind, ReadonlySet<string>>;
 
