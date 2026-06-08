@@ -43,13 +43,11 @@ describe('generic rule coverage matrix', () => {
     }
   });
 
-  it('surfaces the known dead speaking CBT checkIds (and nothing else) — Phase-2/D7 cleanup', () => {
-    // RULE_59/60/62 reference `speaking_cbt_*` checkIds that have NO backing
-    // detector; the validator must catch them. No OTHER validity issue should
-    // exist in the speaking matrix today. Phase 2 (deviation D7) reclassifies
-    // these to ai-grounded/human-review-only, at which point this list empties.
-    const issues = validateRuleCoverageMatrix('speaking', 'medicine');
-    expect(issues.every((i) => /unsupported checkId speaking_cbt_/.test(i))).toBe(true);
+  it('reports no issues for speaking/medicine after the D7 dead-checkId cleanup', () => {
+    // RULE_59/60/62 previously referenced `speaking_cbt_*` checkIds with no
+    // backing detector. Phase 2 (deviation D7) removed those dead checkIds and
+    // reclassified the rules to human-review-only, so the matrix is now clean.
+    expect(validateRuleCoverageMatrix('speaking', 'medicine')).toEqual([]);
   });
 
   it('classifies a rule with a supported checkId as deterministic', () => {

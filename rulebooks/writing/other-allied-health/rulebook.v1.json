@@ -180,7 +180,8 @@
       "appliesTo": [
         "routine_referral",
         "urgent_referral"
-      ]
+      ],
+      "enforcement": "ai-grounded"
     },
     {
       "id": "R02.1",
@@ -199,7 +200,8 @@
       "appliesTo": "all",
       "params": {
         "readOnlyPhaseMinutes": 5
-      }
+      },
+      "enforcement": "human-review-only"
     },
     {
       "id": "R02.3",
@@ -295,7 +297,8 @@
       "severity": "major",
       "title": "Divorce / living situation - conditional",
       "body": "Divorce, living situation, number of children: include only if directly relevant to the specialty.",
-      "appliesTo": "all"
+      "appliesTo": "all",
+      "enforcement": "ai-grounded"
     },
     {
       "id": "R03.6",
@@ -321,7 +324,8 @@
       "severity": "major",
       "title": "Family history - conditional",
       "body": "Family history: include only if a family member has a related condition.",
-      "appliesTo": "all"
+      "appliesTo": "all",
+      "enforcement": "ai-grounded"
     },
     {
       "id": "R03.8",
@@ -496,7 +500,8 @@
       "severity": "major",
       "title": "Special salutations",
       "body": "Special salutations: No name given -> Dear Doctor. Nurse/OT/Radiographer without name -> Dear Sir/Madam. Admissions Officer -> Dear Admissions Officer. Emergency Registrar -> Dear Emergency Registrar. Assistant Professor -> Dear Assistant Professor. UK surgeon -> 'Mr [Last Name]' acceptable.",
-      "appliesTo": "all"
+      "appliesTo": "all",
+      "enforcement": "ai-grounded"
     },
     {
       "id": "R06.5",
@@ -506,7 +511,8 @@
       "body": "Non-medical professional - no name: Dear Sir/Madam. Name given: Dear Mr/Ms [Last Name].",
       "appliesTo": [
         "non_medical_referral"
-      ]
+      ],
+      "enforcement": "ai-grounded"
     },
     {
       "id": "R06.6",
@@ -595,7 +601,8 @@
       "severity": "major",
       "title": "Intro must contain identity + purpose",
       "body": "Introduction must contain: (a) Unique Identity of the patient, and (b) Purpose / Request.",
-      "appliesTo": "all"
+      "appliesTo": "all",
+      "enforcement": "ai-grounded"
     },
     {
       "id": "R07.3",
@@ -688,7 +695,8 @@
       "severity": "major",
       "title": "Today's visit has its own paragraph",
       "body": "Today's visit must always have its own paragraph. Exception: only one item of information today -> may combine with adjacent visit.",
-      "appliesTo": "all"
+      "appliesTo": "all",
+      "enforcement": "ai-grounded"
     },
     {
       "id": "R08.3",
@@ -773,7 +781,8 @@
       "severity": "major",
       "title": "Duration adjective hyphenation",
       "body": "Duration as adjective (before noun): hyphenate, no plural: 'a 6-month history of acne'. Duration standalone: plural: 'For 6 months, she has had acne.'",
-      "appliesTo": "all"
+      "appliesTo": "all",
+      "enforcement": "ai-grounded"
     },
     {
       "id": "R08.12",
@@ -809,7 +818,8 @@
       "severity": "major",
       "title": "Name vs pronoun pattern",
       "body": "Name vs. Pronoun within paragraphs: Use the patient's name (title + last name for adults; first name for children) at the FIRST mention in each paragraph. For ALL subsequent mentions within the SAME paragraph, use a pronoun. At the start of EVERY new paragraph, use the name again.",
-      "appliesTo": "all"
+      "appliesTo": "all",
+      "enforcement": "ai-grounded"
     },
     {
       "id": "R09.1",
@@ -869,7 +879,8 @@
       "severity": "major",
       "title": "Medication list attachment",
       "body": "Copy of medication list attached -> list medication names only (no doses).",
-      "appliesTo": "all"
+      "appliesTo": "all",
+      "enforcement": "ai-grounded"
     },
     {
       "id": "R09.7",
@@ -921,7 +932,8 @@
       "severity": "major",
       "title": "Present perfect only if symptom persists",
       "body": "Present perfect for a visit: acceptable only if the symptom is still present at time of writing. CANNOT use present perfect for vital signs.",
-      "appliesTo": "all"
+      "appliesTo": "all",
+      "enforcement": "ai-grounded"
     },
     {
       "id": "R10.4",
@@ -929,7 +941,8 @@
       "severity": "major",
       "title": "Ongoing facts = present simple",
       "body": "Medical/social/family history - ongoing facts: present simple. 'She has hypertension.'",
-      "appliesTo": "all"
+      "appliesTo": "all",
+      "enforcement": "ai-grounded"
     },
     {
       "id": "R10.5",
@@ -955,7 +968,8 @@
       "severity": "major",
       "title": "Smoking/drinking tense",
       "body": "Smoking/drinking with duration -> present perfect continuous: 'She has been smoking for 20 years.' Without duration -> present simple: 'She smokes.'",
-      "appliesTo": "all"
+      "appliesTo": "all",
+      "enforcement": "ai-grounded"
     },
     {
       "id": "R10.8",
@@ -997,7 +1011,8 @@
       "severity": "major",
       "title": "Avoid past perfect",
       "body": "Past perfect (had + past participle): AVOID in OET. Alternative: ING form or noun.",
-      "appliesTo": "all"
+      "appliesTo": "all",
+      "enforcement": "ai-grounded"
     },
     {
       "id": "R10.13",
@@ -1005,7 +1020,8 @@
       "severity": "major",
       "title": "Reported speech uses ING or noun",
       "body": "After reported/mentioned/stated/described: use ING or noun. 'She reported having headaches.' NOT '...that she had had headaches.'",
-      "appliesTo": "all"
+      "appliesTo": "all",
+      "enforcement": "ai-grounded"
     },
     {
       "id": "R10.14",
@@ -1371,7 +1387,8 @@
       "body": "Structure: P1 = today's emergency. P2+ = background history. Final paragraph = active medical conditions + current medications.",
       "appliesTo": [
         "urgent_referral"
-      ]
+      ],
+      "enforcement": "ai-grounded"
     },
     {
       "id": "R13.6",
@@ -1381,7 +1398,8 @@
       "body": "Any ongoing medical condition with active medications MUST be mentioned, even if unrelated to the urgent issue.",
       "appliesTo": [
         "urgent_referral"
-      ]
+      ],
+      "enforcement": "ai-grounded"
     },
     {
       "id": "R13.7",
@@ -1391,7 +1409,8 @@
       "body": "Fully resolved conditions with no current medications: do NOT include.",
       "appliesTo": [
         "urgent_referral"
-      ]
+      ],
+      "enforcement": "ai-grounded"
     },
     {
       "id": "R13.8",
@@ -1401,7 +1420,8 @@
       "body": "Penicillin allergy: include only if patient is receiving or needs antibiotics.",
       "appliesTo": [
         "urgent_referral"
-      ]
+      ],
+      "enforcement": "ai-grounded"
     },
     {
       "id": "R13.9",
@@ -1484,7 +1504,8 @@
       "body": "Mention allergy only if it directly influenced treatment.",
       "appliesTo": [
         "discharge"
-      ]
+      ],
+      "enforcement": "ai-grounded"
     },
     {
       "id": "R14.6",
@@ -1551,7 +1572,8 @@
       "body": "Consent: 'Please note that Mr Jones has been fully informed of his diagnosis and management.'",
       "appliesTo": [
         "discharge"
-      ]
+      ],
+      "enforcement": "ai-grounded"
     },
     {
       "id": "R14.12",
@@ -1573,7 +1595,8 @@
       "body": "Past tense throughout (all events occurred during admission).",
       "appliesTo": [
         "discharge"
-      ]
+      ],
+      "enforcement": "ai-grounded"
     },
     {
       "id": "R14.14",
@@ -1615,7 +1638,8 @@
       "body": "Salutation: Dear Sir/Madam (no name). Dear Mr/Ms [Last Name] (name given).",
       "appliesTo": [
         "non_medical_referral"
-      ]
+      ],
+      "enforcement": "ai-grounded"
     },
     {
       "id": "R15.4",
@@ -1625,7 +1649,8 @@
       "body": "Include: condition in plain language, functional impact, specific professional request, relevant social context.",
       "appliesTo": [
         "non_medical_referral"
-      ]
+      ],
+      "enforcement": "ai-grounded"
     },
     {
       "id": "R15.5",
@@ -1664,7 +1689,8 @@
       "body": "Mental health referrals: correlate symptoms across visits; include review date; include consent statement if mentioned; include 'upon his/her request' if patient initiated.",
       "appliesTo": [
         "non_medical_referral"
-      ]
+      ],
+      "enforcement": "ai-grounded"
     },
     {
       "id": "R16.1",
@@ -1680,7 +1706,8 @@
       "severity": "critical",
       "title": "Purpose 0-3 scale only",
       "body": "Purpose is the ONLY criterion scored 0-3. All others are scored 0-7.",
-      "appliesTo": "all"
+      "appliesTo": "all",
+      "enforcement": "ai-grounded"
     },
     {
       "id": "R16.3",
@@ -1688,7 +1715,8 @@
       "severity": "critical",
       "title": "Content + Conciseness dominate pass/fail",
       "body": "Most heavily weighted for pass/fail: Content and Conciseness & Clarity.",
-      "appliesTo": "all"
+      "appliesTo": "all",
+      "enforcement": "ai-grounded"
     },
     {
       "id": "R16.4",
@@ -1696,7 +1724,8 @@
       "severity": "major",
       "title": "Genre and Style significant",
       "body": "Genre and Style has significant impact on the overall result.",
-      "appliesTo": "all"
+      "appliesTo": "all",
+      "enforcement": "ai-grounded"
     },
     {
       "id": "R16.5",
@@ -1704,7 +1733,8 @@
       "severity": "critical",
       "title": "Language does not need to be perfect",
       "body": "Language does not need to be perfect. Most OET failures result from poor content selection, not grammar errors.",
-      "appliesTo": "all"
+      "appliesTo": "all",
+      "enforcement": "ai-grounded"
     },
     {
       "id": "R16.6",

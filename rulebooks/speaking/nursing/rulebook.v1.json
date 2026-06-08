@@ -5,11 +5,31 @@
   "publishedAt": "2026-04-21T00:00:00Z",
   "authoritySource": "Dr. Ahmed Hesham - OET Speaking Nursing Rulebook (AI Training Edition)",
   "sections": [
-    { "id": "01", "title": "OET Speaking Format and Scoring Anchor", "order": 1 },
-    { "id": "02", "title": "Patient-Centred Nursing Communication", "order": 2 },
-    { "id": "03", "title": "Role-Play Structure and Handover Safety", "order": 3 },
-    { "id": "04", "title": "Risk Language, Lifestyle Advice, and Follow-Up", "order": 4 },
-    { "id": "05", "title": "Assessment Architecture & Computer-Based Exam Format", "order": 5 }
+    {
+      "id": "01",
+      "title": "OET Speaking Format and Scoring Anchor",
+      "order": 1
+    },
+    {
+      "id": "02",
+      "title": "Patient-Centred Nursing Communication",
+      "order": 2
+    },
+    {
+      "id": "03",
+      "title": "Role-Play Structure and Handover Safety",
+      "order": 3
+    },
+    {
+      "id": "04",
+      "title": "Risk Language, Lifestyle Advice, and Follow-Up",
+      "order": 4
+    },
+    {
+      "id": "05",
+      "title": "Assessment Architecture & Computer-Based Exam Format",
+      "order": 5
+    }
   ],
   "rules": [
     {
@@ -40,7 +60,8 @@
       "exemplarPhrases": [
         "Hello, my name is Nurse Smith. I will be looking after you today.",
         "Hello, I am handing over Mr Wheeler before the next shift begins."
-      ]
+      ],
+      "enforcement": "ai-grounded"
     },
     {
       "id": "RULE_15",
@@ -67,7 +88,8 @@
       "exemplarPhrases": [
         "Does that make sense so far?",
         "Would you like me to go over any part again?"
-      ]
+      ],
+      "enforcement": "ai-grounded"
     },
     {
       "id": "RULE_20",
@@ -104,7 +126,9 @@
       "body": "Do not turn the role play into a long monologue. Pause, invite response, and adapt to the listener's concerns.",
       "appliesTo": "all",
       "checkId": "speaking_monologue_detector",
-      "params": { "maxConsecutiveCandidateWords": 120 }
+      "params": {
+        "maxConsecutiveCandidateWords": 120
+      }
     },
     {
       "id": "RULE_23",
@@ -114,7 +138,10 @@
       "body": "Handle weight, hygiene, continence, smoking, alcohol, adherence, and mobility limitations with tact. Avoid blunt or judgmental wording.",
       "appliesTo": "all",
       "checkId": "speaking_weight_sensitivity",
-      "forbiddenPatterns": ["\\bwhat is your weight\\b", "\\bhow much do you weigh\\b"],
+      "forbiddenPatterns": [
+        "\\bwhat is your weight\\b",
+        "\\bhow much do you weigh\\b"
+      ],
       "exemplarPhrases": [
         "Would you mind if I ask a few questions about your usual mobility and general health?"
       ]
@@ -136,7 +163,11 @@
       "body": "Do not diagnose hypertension, diabetes, or another long-term condition from a single observation or screening result. Explain the finding and the need for follow-up.",
       "appliesTo": "all",
       "checkId": "speaking_no_overdiagnosis",
-      "forbiddenPatterns": ["\\byou have hypertension\\b", "\\byou are hypertensive\\b", "\\byou have diabetes\\b"]
+      "forbiddenPatterns": [
+        "\\byou have hypertension\\b",
+        "\\byou are hypertensive\\b",
+        "\\byou have diabetes\\b"
+      ]
     },
     {
       "id": "RULE_56",
@@ -144,11 +175,14 @@
       "severity": "major",
       "title": "Nursing handover uses situation, background, assessment, and recommendation",
       "body": "For a nursing handover task, organise the message around the current situation, relevant background, present assessment, risks, and clear recommendations or outstanding tasks.",
-      "appliesTo": ["handover"],
+      "appliesTo": [
+        "handover"
+      ],
       "exemplarPhrases": [
         "The current situation is...",
         "The outstanding tasks for the next shift are..."
-      ]
+      ],
+      "enforcement": "ai-grounded"
     },
     {
       "id": "RULE_57",
@@ -156,15 +190,21 @@
       "severity": "major",
       "title": "Escalate red flags clearly",
       "body": "Mention safety-critical changes such as uncontrolled pain, fever, bleeding, shortness of breath, confusion, falls risk, reduced urine output, or worsening mobility without burying them in minor details.",
-      "appliesTo": ["handover", "post_op", "discharge_advice"]
+      "appliesTo": [
+        "handover",
+        "post_op",
+        "discharge_advice"
+      ],
+      "enforcement": "human-review-only"
     },
     {
       "id": "RULE_70",
       "section": "05",
       "severity": "critical",
-      "title": "9 scoreable criteria \u2014 scored separately",
-      "body": "The OET Speaking recording is scored against NINE criteria, not six. Linguistic criteria (4, each 0\u20136): Intelligibility, Fluency, Appropriateness of Language, Resources of Grammar & Expression. Clinical Communication criteria (5, each 0\u20133 \u2014 descriptors: Adept / Competent / Partially effective / Ineffective): Relationship Building; Understanding & Incorporating the Patient's Perspective; Providing Structure; Information Gathering; Information Giving. Grouping Clinical Communication into a single aggregate score is WRONG \u2014 every feedback item must cite one of the nine criterion codes AND a rule ID.",
-      "appliesTo": "all"
+      "title": "9 scoreable criteria — scored separately",
+      "body": "The OET Speaking recording is scored against NINE criteria, not six. Linguistic criteria (4, each 0–6): Intelligibility, Fluency, Appropriateness of Language, Resources of Grammar & Expression. Clinical Communication criteria (5, each 0–3 — descriptors: Adept / Competent / Partially effective / Ineffective): Relationship Building; Understanding & Incorporating the Patient's Perspective; Providing Structure; Information Gathering; Information Giving. Grouping Clinical Communication into a single aggregate score is WRONG — every feedback item must cite one of the nine criterion codes AND a rule ID.",
+      "appliesTo": "all",
+      "enforcement": "ai-grounded"
     },
     {
       "id": "RULE_71",
@@ -172,7 +212,8 @@
       "severity": "critical",
       "title": "Interlocutor does NOT grade",
       "body": "The interlocutor is an ACTOR: they facilitate the role play, read warm-up questions, and play the patient/carer. The interlocutor NEVER assesses or scores the candidate.",
-      "appliesTo": "all"
+      "appliesTo": "all",
+      "enforcement": "human-review-only"
     },
     {
       "id": "RULE_72",
@@ -180,25 +221,26 @@
       "severity": "critical",
       "title": "OET Assessor grades the recording",
       "body": "A separate OET Assessor listens to the audio recording AFTER the exam and scores it against all 9 criteria. The platform's AI evaluation pipeline must therefore evaluate the recording post-hoc, not live interaction dynamics that are not audible on the recording.",
-      "appliesTo": "all"
+      "appliesTo": "all",
+      "enforcement": "human-review-only"
     },
     {
       "id": "RULE_73",
       "section": "05",
       "severity": "critical",
       "title": "Computer-based Speaking is always at home",
-      "body": "In the computer-based OET, Speaking is always taken at home \u2014 never at a test centre. The device check and mic check flow must enforce or clearly inform the candidate of the full environment requirement list (RULE_74) before the exam can start.",
+      "body": "In the computer-based OET, Speaking is always taken at home — never at a test centre. The device check and mic check flow must enforce or clearly inform the candidate of the full environment requirement list (RULE_74) before the exam can start.",
       "appliesTo": "all",
-      "checkId": "speaking_cbt_at_home"
+      "enforcement": "human-review-only"
     },
     {
       "id": "RULE_74",
       "section": "05",
       "severity": "critical",
       "title": "Computer-based environment requirements",
-      "body": "Location: at home only. Room: indoors, well-lit, solid walls (no glass panels or transparent partitions). Other people: candidate must be completely alone \u2014 if anyone enters the room, the exam is stopped. Monitors: single monitor only. Webcam: wired or built-in webcam that can move; Bluetooth webcam NOT permitted. Microphone & speakers: built-in or USB plug-in only; Bluetooth NOT allowed; NO headsets during Speaking. Power: device plugged directly into power; no docking station; no battery-only. VPN / Virtual machines: fully disabled before the exam starts. Extra screens: all other screens (TV, second monitor) unplugged.",
+      "body": "Location: at home only. Room: indoors, well-lit, solid walls (no glass panels or transparent partitions). Other people: candidate must be completely alone — if anyone enters the room, the exam is stopped. Monitors: single monitor only. Webcam: wired or built-in webcam that can move; Bluetooth webcam NOT permitted. Microphone & speakers: built-in or USB plug-in only; Bluetooth NOT allowed; NO headsets during Speaking. Power: device plugged directly into power; no docking station; no battery-only. VPN / Virtual machines: fully disabled before the exam starts. Extra screens: all other screens (TV, second monitor) unplugged.",
       "appliesTo": "all",
-      "checkId": "speaking_cbt_environment"
+      "enforcement": "human-review-only"
     },
     {
       "id": "RULE_75",
@@ -206,7 +248,8 @@
       "severity": "critical",
       "title": "Paper + pen permitted; on-screen annotation is NOT",
       "body": "Computer-based Speaking: candidates CANNOT highlight or annotate the role-play card on screen. However they ARE permitted ONE blank piece of paper and a pen to take notes during preparation time and during the role play. Paper-based Speaking: candidates may annotate the card with pencil (no separate paper needed).",
-      "appliesTo": "all"
+      "appliesTo": "all",
+      "enforcement": "human-review-only"
     },
     {
       "id": "RULE_76",
@@ -215,35 +258,127 @@
       "title": "Destroy paper at end of computer-based exam",
       "body": "At the end of the computer-based Speaking exam, the candidate MUST tear or cut the blank paper in front of the camera to confirm nothing is removed from the test environment. The preparation screen must explicitly inform the candidate of this before the exam starts.",
       "appliesTo": "all",
-      "checkId": "speaking_cbt_paper_destruction"
+      "enforcement": "human-review-only"
     }
   ],
   "tables": {
-    "cardTypes": ["handover", "post_op", "discharge_advice", "medication_advice", "lifestyle_advice", "first_visit_routine", "follow_up"],
-    "laymanGlossary": [
-      { "medical": "DVT", "plain": "blood clot in the leg", "example": "We are preventing blood clots in the legs." },
-      { "medical": "PRN", "plain": "only when needed", "example": "This pain medicine is available when needed." },
-      { "medical": "BP", "plain": "blood pressure", "example": "We will keep checking your blood pressure." },
-      { "medical": "nil by mouth", "plain": "not eating or drinking for now", "example": "Please do not eat or drink until the doctor confirms it is safe." },
-      { "medical": "mobilise", "plain": "get up and walk safely", "example": "We will help you get up and walk safely." },
-      { "medical": "catheter", "plain": "tube to drain urine", "example": "The tube helps drain urine from your bladder." }
+    "cardTypes": [
+      "handover",
+      "post_op",
+      "discharge_advice",
+      "medication_advice",
+      "lifestyle_advice",
+      "first_visit_routine",
+      "follow_up"
     ],
-    "forbiddenJargonTokens": ["DVT", "PRN", "BP", "nil by mouth", "mobilise", "catheter", "hypertension", "hypoglycaemia", "hyperglycaemia", "ECG", "IV", "IM"]
+    "laymanGlossary": [
+      {
+        "medical": "DVT",
+        "plain": "blood clot in the leg",
+        "example": "We are preventing blood clots in the legs."
+      },
+      {
+        "medical": "PRN",
+        "plain": "only when needed",
+        "example": "This pain medicine is available when needed."
+      },
+      {
+        "medical": "BP",
+        "plain": "blood pressure",
+        "example": "We will keep checking your blood pressure."
+      },
+      {
+        "medical": "nil by mouth",
+        "plain": "not eating or drinking for now",
+        "example": "Please do not eat or drink until the doctor confirms it is safe."
+      },
+      {
+        "medical": "mobilise",
+        "plain": "get up and walk safely",
+        "example": "We will help you get up and walk safely."
+      },
+      {
+        "medical": "catheter",
+        "plain": "tube to drain urine",
+        "example": "The tube helps drain urine from your bladder."
+      }
+    ],
+    "forbiddenJargonTokens": [
+      "DVT",
+      "PRN",
+      "BP",
+      "nil by mouth",
+      "mobilise",
+      "catheter",
+      "hypertension",
+      "hypoglycaemia",
+      "hyperglycaemia",
+      "ECG",
+      "IV",
+      "IM"
+    ]
   },
   "stateMachines": {
     "consultationStages": [
-      { "stage": 1, "name": "greeting", "what": "Greet, identify your nursing role, and set the purpose.", "example": "Hello, I am Nurse Smith." },
-      { "stage": 2, "name": "listening", "what": "Invite concerns and listen without interrupting.", "example": "Tell me what is worrying you most." },
-      { "stage": 3, "name": "empathy", "what": "Acknowledge discomfort or concern.", "example": "I am sorry you have been in pain." },
-      { "stage": 4, "name": "information", "what": "Explain the current situation in plain English.", "example": "Your recovery is progressing, and we are watching your pain and mobility." },
-      { "stage": 5, "name": "safety_plan", "what": "Explain red flags and escalation.", "example": "Please call us straight away if you feel short of breath." },
-      { "stage": 6, "name": "recap", "what": "Summarise the main plan.", "example": "To recap..." },
-      { "stage": 7, "name": "closure", "what": "Close warmly with next contact or outstanding tasks.", "example": "Please press the call bell if you need help." }
+      {
+        "stage": 1,
+        "name": "greeting",
+        "what": "Greet, identify your nursing role, and set the purpose.",
+        "example": "Hello, I am Nurse Smith."
+      },
+      {
+        "stage": 2,
+        "name": "listening",
+        "what": "Invite concerns and listen without interrupting.",
+        "example": "Tell me what is worrying you most."
+      },
+      {
+        "stage": 3,
+        "name": "empathy",
+        "what": "Acknowledge discomfort or concern.",
+        "example": "I am sorry you have been in pain."
+      },
+      {
+        "stage": 4,
+        "name": "information",
+        "what": "Explain the current situation in plain English.",
+        "example": "Your recovery is progressing, and we are watching your pain and mobility."
+      },
+      {
+        "stage": 5,
+        "name": "safety_plan",
+        "what": "Explain red flags and escalation.",
+        "example": "Please call us straight away if you feel short of breath."
+      },
+      {
+        "stage": 6,
+        "name": "recap",
+        "what": "Summarise the main plan.",
+        "example": "To recap..."
+      },
+      {
+        "stage": 7,
+        "name": "closure",
+        "what": "Close warmly with next contact or outstanding tasks.",
+        "example": "Please press the call bell if you need help."
+      }
     ],
     "smokingLadder": [
-      { "step": 1, "name": "cessation", "what": "Recommend stopping smoking completely." },
-      { "step": 2, "name": "support", "what": "Offer cessation support or nicotine replacement if appropriate." },
-      { "step": 3, "name": "reduction", "what": "Discuss reduction only after cessation advice has been given." }
+      {
+        "step": 1,
+        "name": "cessation",
+        "what": "Recommend stopping smoking completely."
+      },
+      {
+        "step": 2,
+        "name": "support",
+        "what": "Offer cessation support or nicotine replacement if appropriate."
+      },
+      {
+        "step": 3,
+        "name": "reduction",
+        "what": "Discuss reduction only after cessation advice has been given."
+      }
     ]
   }
 }
