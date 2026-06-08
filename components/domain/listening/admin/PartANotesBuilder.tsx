@@ -4,8 +4,6 @@ import { useCallback, useId, useRef, useState, type ClipboardEvent } from 'react
 import { Eye, Heading, List, Minus, SquareSplitHorizontal } from 'lucide-react';
 import { Button } from '@/components/admin/ui/button';
 import { PartARenderer } from '@/components/domain/listening/PartARenderer';
-import { sanitizeBodyHtml } from '@/lib/wizard/sanitize-html';
-
 /**
  * Part A notes WYSIWYG builder — WORK-STREAM 6.
  *
@@ -22,8 +20,10 @@ import { sanitizeBodyHtml } from '@/lib/wizard/sanitize-html';
  * a stem still render — we just never author new ones.
  */
 
-/** Canonical gap marker the `PartARenderer` BLANK_PATTERN recognises. */
-export const PART_A_GAP_MARKER = '____';
+// Import and re-export the canonical gap marker and paste sanitizer from the
+// grammar lib so existing imports of these symbols from this path keep working.
+export { PART_A_GAP_MARKER, sanitizePastedStem } from '@/lib/listening-part-a-notes';
+import { PART_A_GAP_MARKER, sanitizePastedStem } from '@/lib/listening-part-a-notes';
 
 export interface PartANotesBuilderProps {
   value: string;
@@ -40,31 +40,6 @@ type Insertable =
   | { kind: 'inline'; text: string }
   | { kind: 'block'; text: string };
 
-/**
- * Strip author-pasted rich content down to safe plain text. The stem is a
- * plain-text-with-gap-markers field (never rendered as raw HTML), so we route
- * the paste through the repo sanitizer first to neutralise scripts / handlers,
- * then drop any surviving tags and decode the handful of entities a paste from
- * a word processor or browser typically carries.
- */
-export function sanitizePastedStem(raw: string): string {
-  const safe = sanitizeBodyHtml(raw);
-  const withoutTags = safe
-    // Treat block-level boundaries as newlines so pasted lists/paragraphs keep
-    // their structure instead of collapsing onto one line.
-    .replace(/<\/(?:p|div|li|h[1-6]|tr|blockquote)>/gi, '\n')
-    .replace(/<br\s*\/?>/gi, '\n')
-    .replace(/<[^>]+>/g, '');
-  const decoded = withoutTags
-    .replace(/&nbsp;/gi, ' ')
-    .replace(/&amp;/gi, '&')
-    .replace(/&lt;/gi, '<')
-    .replace(/&gt;/gi, '>')
-    .replace(/&quot;/gi, '"')
-    .replace(/&#39;/gi, "'");
-  // Collapse runs of 3+ blank lines a sanitized paste can leave behind.
-  return decoded.replace(/\n{3,}/g, '\n\n');
-}
 
 export function PartANotesBuilder({
   value,

@@ -172,6 +172,13 @@ export interface ListeningExtractMetadataDto {
   audioUrl?: string | null;
   /** Per-sub-section countdown (seconds). Null → the player applies a default. */
   timeLimitSeconds?: number | null;
+  /**
+   * Part A note-completion body (markdown-ish grammar defined in
+   * `lib/listening-part-a-notes.ts`). Null / absent for Part B/C extracts or
+   * when the body has not yet been authored. The player and printable booklet
+   * render this via `parseNotesDocument` when present.
+   */
+  notesBody?: string | null;
 }
 
 export interface ListeningSessionDto {
