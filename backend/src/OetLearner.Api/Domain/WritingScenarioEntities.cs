@@ -23,15 +23,10 @@ public class WritingScenario
 
     public int Difficulty { get; set; }
 
-    public string CaseNotesMarkdown { get; set; } = default!;
-
-    public string? CaseNotesStructuredJson { get; set; }
-
     /// <summary>
     /// Optional stimulus PDF (the exam "question paper") shown to learners during the
-    /// forced reading window and the writing view. When null, learner UIs fall back to
-    /// the case-notes text viewer. Independent of <see cref="CaseNotesMarkdown"/>, which
-    /// the grading pipeline still reads. References a <c>MediaAsset.Id</c>.
+    /// forced reading window and the writing view. When null, learner UIs show the
+    /// task prompt and fixed instructions only. References a <c>MediaAsset.Id</c>.
     /// </summary>
     [MaxLength(64)]
     public string? StimulusPdfMediaAssetId { get; set; }
@@ -77,17 +72,11 @@ public class WritingScenario
     [MaxLength(64)]
     public string? TodayDate { get; set; }
 
-    /// <summary>Recipient details JSON: { name, role, organisation, address }.</summary>
-    public string? RecipientJson { get; set; }
-
     /// <summary>Internal-only expected purpose (marking aid, spec §5.1).</summary>
     public string? ExpectedPurpose { get; set; }
 
     /// <summary>Internal-only expected action/request (marking aid, spec §5.1).</summary>
     public string? ExpectedAction { get; set; }
-
-    /// <summary>Authored case-note sections JSON: [{ heading, items[] }] (spec §4.1).</summary>
-    public string? CaseNoteSectionsJson { get; set; }
 
     /// <summary>Fixed instruction lines JSON array shown on the task screen (spec §5.2).</summary>
     public string FixedInstructionsJson { get; set; } = "[]";
@@ -110,9 +99,6 @@ public class WritingScenario
 
     /// <summary>Retake policy JSON: { maxAttempts, cooldownHours }.</summary>
     public string? RetakePolicyJson { get; set; }
-
-    /// <summary>Linked model answer exemplar (spec §6.1). Hidden during attempts.</summary>
-    public Guid? ModelAnswerExemplarId { get; set; }
 
     /// <summary>Source/license provenance for the audit trail (spec §3.2).</summary>
     [MaxLength(512)]

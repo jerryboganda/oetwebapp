@@ -527,6 +527,7 @@ public sealed class WritingAdminAnalyticsService : IWritingAdminAnalyticsService
         AggregateContentVerdictsAsync(IEnumerable<ReviewMeta> reviews, CancellationToken ct)
     {
         // itemId → count, split by missing vs irrelevant.
+        await Task.CompletedTask;
         var missingCounts = new Dictionary<string, int>();
         var irrelevantCounts = new Dictionary<string, int>();
 
@@ -561,20 +562,11 @@ public sealed class WritingAdminAnalyticsService : IWritingAdminAnalyticsService
                     Array.Empty<WritingContentAggregateDto>());
         }
 
-        // Resolve itemId → ItemText. Item ids are checklist-item GUIDs; tolerate
-        // non-GUID keys (skip resolution, fall back to the raw id as text).
-        var allIds = missingCounts.Keys.Concat(irrelevantCounts.Keys).Distinct().ToList();
-        var guidIds = allIds
-            .Select(id => Guid.TryParse(id, out var g) ? (Guid?)g : null)
-            .Where(g => g.HasValue)
-            .Select(g => g!.Value)
-            .ToHashSet();
-
-        var itemTexts = await _db.WritingContentChecklistItems.AsNoTracking()
-            .Where(i => guidIds.Contains(i.Id))
-            .Select(i => new { i.Id, i.ItemText })
-            .ToListAsync(ct);
-        var textByItemId = itemTexts.ToDictionary(i => i.Id.ToString(), i => i.ItemText);
+        // Content checklists were removed from the writing task, so there is no
+        // item-text table to resolve against. Tutor content-checklist verdicts are
+        // no longer captured, so these aggregates are effectively empty; fall back
+        // to the raw verdict id as the display text.
+        var textByItemId = new Dictionary<string, string>();
 
         var missing = missingCounts
             .Select(kv => new WritingContentAggregateDto(

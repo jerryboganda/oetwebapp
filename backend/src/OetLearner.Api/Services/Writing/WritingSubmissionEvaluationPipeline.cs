@@ -53,7 +53,6 @@ public sealed class WritingSubmissionEvaluationPipeline(
     LearnerDbContext db,
     IAiGatewayService aiGateway,
     IWritingCanonEngine canonEngine,
-    IWritingExemplarService exemplarService,
     IWritingMistakeService mistakeService,
     IWritingEventBus events,
     TimeProvider clock,
@@ -167,15 +166,6 @@ public sealed class WritingSubmissionEvaluationPipeline(
         catch (Exception ex)
         {
             logger.LogWarning(ex, "Mistake stat update failed for submission {SubmissionId}", submission.Id);
-        }
-
-        try
-        {
-            await exemplarService.GetClosestToScenarioAsync(submission.UserId, submission.ScenarioId, ct);
-        }
-        catch (Exception ex)
-        {
-            logger.LogDebug(ex, "Exemplar similarity lookup failed (non-fatal) for submission {SubmissionId}.", submission.Id);
         }
 
         await events.PublishAsync(new WritingGradeReady(
@@ -333,11 +323,14 @@ public sealed class WritingSubmissionEvaluationPipeline(
             sb.AppendLine($"Scenario: {scenario.Title}");
             sb.AppendLine($"Profession: {scenario.Profession}");
             sb.AppendLine($"Letter type: {scenario.LetterType}");
-            sb.AppendLine();
-            sb.AppendLine("Case notes:");
-            sb.AppendLine("---");
-            sb.AppendLine(scenario.CaseNotesMarkdown);
-            sb.AppendLine("---");
+            if (!string.IsNullOrWhiteSpace(scenario.TaskPromptMarkdown))
+            {
+                sb.AppendLine();
+                sb.AppendLine("Task prompt:");
+                sb.AppendLine("---");
+                sb.AppendLine(scenario.TaskPromptMarkdown);
+                sb.AppendLine("---");
+            }
         }
         sb.AppendLine();
         sb.AppendLine($"Word count: {submission.WordCount}");

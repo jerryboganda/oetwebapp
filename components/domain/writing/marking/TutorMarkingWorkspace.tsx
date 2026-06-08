@@ -21,11 +21,9 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  BookOpenCheck,
   ClipboardCheck,
   FileText,
   Info,
-  ListChecks,
   Mail,
   NotebookText,
   ShieldCheck,
@@ -45,7 +43,6 @@ import {
   type WritingAnnotationCreatePayload,
 } from '@/lib/writing/exam-api';
 import type {
-  WritingChecklistVerdict,
   WritingCriteriaScoresDto,
   WritingCriterionCode,
   WritingFeedbackAnnotationDto,
@@ -56,7 +53,6 @@ import { WritingStimulusViewer } from '@/components/domain/writing/WritingStimul
 import { AnnotationLayer } from './AnnotationLayer';
 import { RubricPanel } from './RubricPanel';
 import { AiPreAnalysisPanel } from './AiPreAnalysisPanel';
-import { ContentChecklistMarker } from './ContentChecklistMarker';
 import { ModerationPanel } from './ModerationPanel';
 import { FeedbackTemplateMenu } from './FeedbackTemplateMenu';
 import {
@@ -108,7 +104,6 @@ export function TutorMarkingWorkspace({
   const [scoreDraft, setScoreDraft] = useState<ScoreDraft>(EMPTY_SCORE_DRAFT);
   const [comments, setComments] = useState<Record<WritingCriterionCode, string>>(EMPTY_COMMENT_DRAFT);
   const [freeText, setFreeText] = useState('');
-  const [verdicts, setVerdicts] = useState<Record<string, WritingChecklistVerdict>>({});
   const [acceptedAi, setAcceptedAi] = useState(false);
 
   // Moderation (senior) state
@@ -249,7 +244,6 @@ export function TutorMarkingWorkspace({
         freeTextFeedback: freeText.trim() || null,
         perCriterionComments: Object.keys(cleanedComments).length > 0 ? cleanedComments : undefined,
         scoreOverride: Object.keys(scoreOverride).length > 0 ? scoreOverride : undefined,
-        contentChecklistVerdict: Object.keys(verdicts).length > 0 ? verdicts : undefined,
         markerSequence: context.markerSequence,
         acceptedAiPreAssessment: acceptedAi,
       });
@@ -267,7 +261,7 @@ export function TutorMarkingWorkspace({
     } finally {
       setSubmitting(false);
     }
-  }, [context, submissionId, comments, scoreDraft, freeText, verdicts, acceptedAi, onComplete, onCompleteHref]);
+  }, [context, submissionId, comments, scoreDraft, freeText, acceptedAi, onComplete, onCompleteHref]);
 
   // ── Finalize moderation (senior) ────────────────────────────────────────────
   const handleFinalize = useCallback(async () => {
@@ -357,14 +351,6 @@ export function TutorMarkingWorkspace({
             <p className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-muted">
               <Mail className="h-3.5 w-3.5" aria-hidden="true" /> Writing task
             </p>
-            {task.recipient ? (
-              <div className="mt-2 rounded-lg border border-border bg-background-light p-2.5 text-xs text-navy">
-                <p className="font-semibold">{task.recipient.name}</p>
-                {task.recipient.role ? <p>{task.recipient.role}</p> : null}
-                {task.recipient.organisation ? <p>{task.recipient.organisation}</p> : null}
-                {task.recipient.address ? <p className="text-muted">{task.recipient.address}</p> : null}
-              </div>
-            ) : null}
             {task.taskPromptMarkdown ? (
               <p className="mt-2 whitespace-pre-wrap text-sm text-navy">{task.taskPromptMarkdown}</p>
             ) : null}
@@ -388,12 +374,12 @@ export function TutorMarkingWorkspace({
             ) : null}
           </Card>
 
-          {/* Case notes */}
-          <Card padding="md">
-            <p className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-muted">
-              <NotebookText className="h-3.5 w-3.5" aria-hidden="true" /> Case notes
-            </p>
-            {task.stimulusPdfDownloadPath ? (
+          {/* Case notes — real question-paper PDF when available. */}
+          {task.stimulusPdfDownloadPath ? (
+            <Card padding="md">
+              <p className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-muted">
+                <NotebookText className="h-3.5 w-3.5" aria-hidden="true" /> Case notes
+              </p>
               <div className="mt-2 h-[60vh] overflow-hidden rounded-lg border border-border">
                 <WritingStimulusViewer
                   downloadPath={task.stimulusPdfDownloadPath}
@@ -401,36 +387,7 @@ export function TutorMarkingWorkspace({
                   className="h-full"
                 />
               </div>
-            ) : task.caseNoteSections.length > 0 ? (
-              <div className="mt-2 space-y-2">
-                {task.caseNoteSections.map((section, i) => (
-                  <div key={i}>
-                    <p className="text-xs font-bold text-navy">{section.heading}</p>
-                    <ul className="mt-0.5 list-disc space-y-0.5 pl-5 text-sm text-navy">
-                      {section.items.map((item, j) => <li key={j}>{item}</li>)}
-                    </ul>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="mt-2 whitespace-pre-wrap text-sm text-navy">{task.caseNotesMarkdown}</p>
-            )}
-          </Card>
-
-          {/* Tutor-only model answer (collapsible) */}
-          {task.modelAnswerText ? (
-            <details className="rounded-2xl border border-border bg-surface shadow-sm">
-              <summary className="flex cursor-pointer items-center gap-1.5 p-4 text-xs font-bold uppercase tracking-wider text-muted">
-                <BookOpenCheck className="h-3.5 w-3.5" aria-hidden="true" /> Model answer
-                <Badge variant="default" size="sm" className="ml-auto normal-case">Tutor only</Badge>
-              </summary>
-              <div className="px-4 pb-4">
-                <p className="mb-2 text-xs text-muted">Reference only — do not share verbatim with the learner.</p>
-                <p className="whitespace-pre-wrap rounded-lg border border-border bg-background-light p-3 font-serif text-sm leading-relaxed text-navy">
-                  {task.modelAnswerText}
-                </p>
-              </div>
-            </details>
+            </Card>
           ) : null}
         </aside>
 
@@ -498,26 +455,6 @@ export function TutorMarkingWorkspace({
                 </li>
               ))}
             </ul>
-          </Card>
-
-          {/* Content checklist */}
-          <Card padding="md">
-            <h3 className="flex items-center gap-1.5 text-sm font-bold text-navy">
-              <ListChecks className="h-4 w-4 text-primary" aria-hidden="true" /> Content checklist
-            </h3>
-            <p className="mt-1 text-xs text-muted">
-              Mark how each key and irrelevant content point is handled in the response.
-            </p>
-            <div className="mt-3">
-              <ContentChecklistMarker
-                keyItems={task.keyContentChecklist}
-                irrelevantItems={task.irrelevantContentChecklist}
-                verdicts={verdicts}
-                onChange={(id, v) => setVerdicts((cur) => ({ ...cur, [id]: v }))}
-                aiMissing={preAssessment.missingKeyContent}
-                aiIrrelevant={preAssessment.detectedIrrelevantContent}
-              />
-            </div>
           </Card>
 
           {/* Overall feedback */}

@@ -114,7 +114,7 @@ export default function AdminWritingScenariosPage() {
           subDiscipline: r.subDiscipline ?? '',
           topics: r.topics.join(', '),
           difficulty: r.difficulty,
-          caseNotesMarkdown: r.caseNotesMarkdown,
+          caseNotesMarkdown: '',
           isDiagnostic: r.isDiagnostic,
           status: r.status,
         });
@@ -187,7 +187,7 @@ export default function AdminWritingScenariosPage() {
                   <td>{s.difficulty}</td>
                   <td><Badge variant={s.status === 'published' ? 'success' : s.status === 'archived' ? 'muted' : 'warning'} size="sm">{s.status}</Badge></td>
                   <td className="text-right">
-                    <Button size="sm" variant="outline" onClick={() => setEditing({ id: s.id, title: s.title, letterType: s.letterType, profession: s.profession, subDiscipline: s.subDiscipline ?? '', topics: s.topics.join(', '), difficulty: s.difficulty, caseNotesMarkdown: s.caseNotesMarkdown, isDiagnostic: s.isDiagnostic, status: s.status })}>Edit</Button>
+                    <Button size="sm" variant="outline" onClick={() => setEditing({ id: s.id, title: s.title, letterType: s.letterType, profession: s.profession, subDiscipline: s.subDiscipline ?? '', topics: s.topics.join(', '), difficulty: s.difficulty, caseNotesMarkdown: '', isDiagnostic: s.isDiagnostic, status: s.status })}>Edit</Button>
                     <Button size="sm" variant="ghost" onClick={() => void remove(s.id)} loading={busy === `del-${s.id}`} aria-label={`Delete ${s.title}`}><Trash2 className="h-4 w-4" aria-hidden="true" /></Button>
                   </td>
                 </tr>

@@ -74,26 +74,12 @@ public static class WritingMarkingEndpoints
             return Results.NotFound();
         }
 
-        var checklist = await db.WritingContentChecklistItems
-            .AsNoTracking()
-            .Where(c => c.ScenarioId == scenario.Id)
-            .OrderBy(c => c.Ordinal)
-            .ToListAsync(ct);
-
-        // Model-answer exemplar (tutor-only) from the scenario's linked exemplar.
-        var exemplar = scenario.ModelAnswerExemplarId is null
-            ? null
-            : await db.WritingExemplars
-                .AsNoTracking()
-                .FirstOrDefaultAsync(e => e.Id == scenario.ModelAnswerExemplarId.Value, ct);
-        var modelAnswer = string.IsNullOrEmpty(exemplar?.LetterContent) ? null : exemplar!.LetterContent;
-
         var grade = await db.WritingGrades
             .AsNoTracking()
             .FirstOrDefaultAsync(g => g.SubmissionId == id, ct);
 
         var preAssessment = await preAssessmentService.AssessAsync(
-            new WritingPreAssessmentRequest(id, submission.LetterContent, scenario, checklist, modelAnswer),
+            new WritingPreAssessmentRequest(id, submission.LetterContent, scenario),
             ct);
 
         var existingReview = await db.WritingTutorReviews
@@ -116,9 +102,8 @@ public static class WritingMarkingEndpoints
         var dto = new WritingTutorMarkingContextDto(
             MapSubmission(submission),
             // Reuse the admin Task Builder's frontend-aligned WritingTaskDto so the
-            // marking workspace receives the exact shape lib/writing/types.ts defines
-            // (recipient object, caseNoteSections, fixedInstructions, rich checklist).
-            Services.Writing.WritingTaskAuthoringService.MapToDto(scenario, checklist, exemplar),
+            // marking workspace receives the exact shape lib/writing/types.ts defines.
+            Services.Writing.WritingTaskAuthoringService.MapToDto(scenario),
             grade is null ? null : MapGrade(grade),
             MapPreAssessment(preAssessment),
             existingReview is null ? null : MapReview(existingReview),
@@ -164,22 +149,8 @@ public static class WritingMarkingEndpoints
             return Results.NotFound();
         }
 
-        var checklist = await db.WritingContentChecklistItems
-            .AsNoTracking()
-            .Where(c => c.ScenarioId == scenario.Id)
-            .OrderBy(c => c.Ordinal)
-            .ToListAsync(ct);
-
-        var modelAnswer = scenario.ModelAnswerExemplarId is null
-            ? null
-            : await db.WritingExemplars
-                .AsNoTracking()
-                .Where(e => e.Id == scenario.ModelAnswerExemplarId.Value)
-                .Select(e => e.LetterContent)
-                .FirstOrDefaultAsync(ct);
-
         var preAssessment = await preAssessmentService.AssessAsync(
-            new WritingPreAssessmentRequest(id, submission.LetterContent, scenario, checklist, modelAnswer),
+            new WritingPreAssessmentRequest(id, submission.LetterContent, scenario),
             ct);
 
         return Results.Ok(MapPreAssessment(preAssessment));

@@ -95,11 +95,8 @@ function makeTaskDto(overrides: Record<string, unknown> = {}) {
     writerRole: null,
     todayDate: null,
     taskPromptMarkdown: '',
-    recipient: { name: '', role: '', organisation: '', address: '' },
     expectedPurpose: null,
     expectedAction: null,
-    caseNotesMarkdown: '',
-    caseNoteSections: [],
     fixedInstructions: [],
     wordGuideMin: 180,
     wordGuideMax: 200,
@@ -107,10 +104,6 @@ function makeTaskDto(overrides: Record<string, unknown> = {}) {
     writingTimeSeconds: 2400,
     simulationModes: 'both',
     markingMode: 'tutor',
-    modelAnswerText: null,
-    modelAnswerParagraphs: [],
-    keyContentChecklist: [],
-    irrelevantContentChecklist: [],
     sourceProvenance: null,
     createdAt: '2026-05-01T00:00:00Z',
     updatedAt: '2026-05-01T00:00:00Z',
@@ -127,32 +120,23 @@ describe('WritingTaskBuilder (new mode)', () => {
     render(<WritingTaskBuilder mode="new" />);
 
     expect(screen.getByRole('heading', { name: 'Task metadata' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Case notes' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Task prompt' })).toBeInTheDocument();
     expect(
-      screen.getByRole('heading', { name: 'Key content checklist' }),
+      screen.getByRole('heading', { name: 'Word guide & instructions' }),
     ).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Stimulus PDF' })).toBeInTheDocument();
     expect(screen.getByLabelText('Title')).toBeInTheDocument();
   });
 
-  it('adds a case-note section and a key checklist item', async () => {
-    const user = userEvent.setup();
+  it('does not render the removed field groups', () => {
     render(<WritingTaskBuilder mode="new" />);
 
-    // No sections yet — the empty-state copy is shown.
+    expect(screen.queryByRole('heading', { name: 'Recipient' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Case notes' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Model answer' })).not.toBeInTheDocument();
     expect(
-      screen.getByText(/No case-note sections yet/i),
-    ).toBeInTheDocument();
-
-    await user.click(screen.getByRole('button', { name: '+ Add section' }));
-    // The section editor exposes a "Section heading" field once added.
-    expect(await screen.findByLabelText('Section heading')).toBeInTheDocument();
-
-    // Add a key-content checklist point.
-    await user.click(
-      screen.getByRole('button', { name: '+ Add key-content point' }),
-    );
-    // Each key item renders a "Content point" textarea.
-    expect(await screen.findByLabelText('Content point')).toBeInTheDocument();
+      screen.queryByRole('heading', { name: 'Key content checklist' }),
+    ).not.toBeInTheDocument();
   });
 
   it('persists via createWritingTask on Save draft', async () => {

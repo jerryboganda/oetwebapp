@@ -21,11 +21,7 @@ import { WordCounter } from '@/components/domain/writing/WordCounter';
 import { SubmitBar } from '@/components/domain/writing/SubmitBar';
 import { WritingStimulusViewer } from '@/components/domain/writing/WritingStimulusViewer';
 import { recordWritingAttemptEvent } from '@/lib/writing/exam-api';
-import type {
-  WritingAttemptEventType,
-  WritingCaseNoteSectionDto,
-  WritingRecipientDto,
-} from '@/lib/writing/types';
+import type { WritingAttemptEventType } from '@/lib/writing/types';
 
 export type { WritingPhase };
 
@@ -35,24 +31,19 @@ export type { WritingPhase };
 
 /**
  * Booklet content the simulation renders. Built from the richest source the
- * page can resolve: an enriched authored `WritingTaskDto` (preferred — gives
- * structured case-note sections, recipient, fixed instructions, word guide)
- * or a plain `WritingScenarioDto` (markdown-only fallback).
+ * page can resolve: an enriched authored `WritingTaskDto` (preferred) or a
+ * plain `WritingScenarioDto`. The case-notes/question paper itself is supplied
+ * separately as a stimulus PDF (see {@link PaperBookletSimulationProps.stimulus}).
  */
 export interface PaperBookletContent {
   title: string;
   professionLabel: string;
-  /** Structured case-note "pages"; empty when only markdown is available. */
-  caseNoteSections: WritingCaseNoteSectionDto[];
-  /** Raw markdown fallback used when there are no structured sections. */
-  caseNotesMarkdown: string;
   /** Candidate role line ("You are …"); optional. */
   writerRole: string | null;
   /** "Today's date" stamp shown on the booklet cover; optional. */
   todayDate: string | null;
   /** The Writing Task instruction paragraph (prompt). */
   taskPromptMarkdown: string | null;
-  recipient: WritingRecipientDto | null;
   /** Fixed instruction bullet lines printed under the task. */
   fixedInstructions: string[];
   wordGuideMin: number;
@@ -74,9 +65,9 @@ export interface PaperBookletSimulationProps {
   /**
    * Real exam question-paper PDF for the booklet's case-notes page. When
    * `downloadPath` is a non-empty string the booklet shows the authenticated
-   * PDF (via {@link WritingStimulusViewer}) instead of the printed case-notes
-   * text; when absent/falsy the printed case-notes JSX is the fallback. The
-   * separate Writing-Task instructions page is unaffected either way.
+   * PDF (via {@link WritingStimulusViewer}); when absent/falsy no case-notes
+   * page is shown. The separate Writing-Task instructions page is unaffected
+   * either way.
    */
   stimulus?: { downloadPath: string | null };
   /** Lifecycle phase, owned by the page (mirrors the mock session). */
@@ -136,26 +127,6 @@ function BookletPage({
     >
       {children}
     </section>
-  );
-}
-
-function CaseNoteSection({ section }: { section: WritingCaseNoteSectionDto }) {
-  return (
-    <div className="break-inside-avoid">
-      <h3 className="mb-2 border-b border-amber-200 pb-1 font-serif text-sm font-bold uppercase tracking-wide text-amber-950">
-        {section.heading}
-      </h3>
-      <ul className="space-y-1.5">
-        {section.items.map((item, i) => (
-          <li key={i} className="flex gap-2 text-sm leading-relaxed text-stone-800">
-            <span aria-hidden="true" className="select-none pt-0.5 text-amber-700">
-              &bull;
-            </span>
-            <span>{item}</span>
-          </li>
-        ))}
-      </ul>
-    </div>
   );
 }
 
@@ -318,9 +289,8 @@ export function PaperBookletSimulation({
     return t('writing.paper.helper.ready');
   }, [submitted, phase, wordCount, minWords, t]);
 
-  const hasStructuredNotes = (content?.caseNoteSections.length ?? 0) > 0;
-  // Product decision: show the real exam question-paper PDF for the case-notes
-  // page when one is available; the printed case-notes JSX is the fallback.
+  // Show the real exam question-paper PDF for the case-notes page when one is
+  // available; otherwise no case-notes page is rendered.
   const stimulusDownloadPath =
     typeof stimulus?.downloadPath === 'string' && stimulus.downloadPath.length > 0
       ? stimulus.downloadPath
@@ -417,8 +387,8 @@ export function PaperBookletSimulation({
             </div>
           </BookletPage>
 
-          {/* Case notes — real question-paper PDF when available; otherwise the
-              printed structured pages or markdown fallback. */}
+          {/* Case notes — real question-paper PDF when available; otherwise no
+              case-notes page is shown (prompt + instructions only). */}
           {stimulusDownloadPath ? (
             <BookletPage ariaLabel={t('writing.paper.caseNotesLabel')}>
               {/* Fixed-height PDF surface framed inside the booklet page; the
@@ -431,32 +401,7 @@ export function PaperBookletSimulation({
                 />
               </div>
             </BookletPage>
-          ) : hasStructuredNotes ? (
-            <BookletPage ariaLabel={t('writing.paper.caseNotesLabel')}>
-              {content?.writerRole ? (
-                <p className="mb-4 font-serif text-sm font-semibold text-amber-950">
-                  {content.writerRole}
-                </p>
-              ) : null}
-              <h2 className="mb-4 font-serif text-lg font-bold text-amber-950">
-                {t('writing.paper.caseNotesHeading')}
-              </h2>
-              <div className="space-y-5">
-                {content?.caseNoteSections.map((section, i) => (
-                  <CaseNoteSection key={`${section.heading}-${i}`} section={section} />
-                ))}
-              </div>
-            </BookletPage>
-          ) : (
-            <BookletPage ariaLabel={t('writing.paper.caseNotesLabel')}>
-              <h2 className="mb-4 font-serif text-lg font-bold text-amber-950">
-                {t('writing.paper.caseNotesHeading')}
-              </h2>
-              <article className="whitespace-pre-wrap font-serif text-sm leading-relaxed text-stone-800">
-                {content?.caseNotesMarkdown ?? t('writing.paper.loading')}
-              </article>
-            </BookletPage>
-          )}
+          ) : null}
 
           {/* Writing Task — clearly separated section. */}
           <BookletPage ariaLabel={t('writing.paper.writingTaskLabel')}>
@@ -468,24 +413,16 @@ export function PaperBookletSimulation({
               <span aria-hidden="true" className="h-px flex-1 bg-amber-300" />
             </div>
 
+            {content?.writerRole ? (
+              <p className="mb-3 font-serif text-sm font-semibold text-amber-950">
+                {content.writerRole}
+              </p>
+            ) : null}
+
             {content?.taskPromptMarkdown ? (
               <p className="whitespace-pre-wrap font-serif text-sm leading-relaxed text-stone-800">
                 {content.taskPromptMarkdown}
               </p>
-            ) : null}
-
-            {content?.recipient ? (
-              <div className="mt-4 rounded-sm border border-amber-200 bg-amber-50/50 p-4 font-serif text-sm text-stone-800">
-                <p className="text-xs font-bold uppercase tracking-wide text-amber-800">
-                  {t('writing.paper.recipientHeading')}
-                </p>
-                <p className="mt-1 font-semibold">{content.recipient.name}</p>
-                {content.recipient.role ? <p>{content.recipient.role}</p> : null}
-                {content.recipient.organisation ? <p>{content.recipient.organisation}</p> : null}
-                {content.recipient.address ? (
-                  <p className="whitespace-pre-wrap text-stone-600">{content.recipient.address}</p>
-                ) : null}
-              </div>
             ) : null}
 
             {content && content.fixedInstructions.length > 0 ? (

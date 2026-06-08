@@ -15,7 +15,6 @@ public partial class LearnerDbContext
         {
             e.HasKey(x => x.Id);
             e.Property(x => x.TopicsJson).HasColumnType("jsonb").HasDefaultValue("[]");
-            e.Property(x => x.CaseNotesStructuredJson).HasColumnType("jsonb");
             e.HasIndex(x => new { x.Profession, x.LetterType });
             e.HasIndex(x => x.Status);
             e.HasIndex(x => x.IsDiagnostic);

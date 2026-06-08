@@ -1,42 +1,42 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 
 namespace OetLearner.Api.Services.Writing;
 
-// ═════════════════════════════════════════════════════════════════════════════
-// WritingV2ContentSeeder — OET Writing Module V2 launch content.
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// WritingV2ContentSeeder â€” OET Writing Module V2 launch content.
 //
 // Loads the 8 versioned JSON files in Data/Seeds/WritingV2/ on boot and
 // idempotently materialises them into the relational Writing V2 tables.
 //
-//   1. canon-rules.launch-25.json    → WritingCanonRules (25 rules SC-001..025)
-//   2. scenarios.diagnostic.json     → WritingScenarios + WritingScenarioStructuredSentences (12)
-//   3. exemplars.json                → WritingExemplars + WritingExemplarAnnotations (6)
-//   4. lessons.json                  → WritingLessonsV2 (16, 2 per W1-W8)
-//   5. drills.sentence.json          → WritingDrills (30, 3 per drill type × 10)
-//   6. drills.case-notes.json        → WritingCaseNoteDrills + WritingCaseNoteDrillSentences (12)
-//   7. mocks.json                    → mock scenarios first, then WritingMocks (6 + 6)
-//   8. common-mistakes.json          → WritingCommonMistakes (20)
+//   1. canon-rules.launch-25.json    â†’ WritingCanonRules (25 rules SC-001..025)
+//   2. scenarios.diagnostic.json     â†’ WritingScenarios + WritingScenarioStructuredSentences (12)
+//   3. exemplars.json                â†’ WritingExemplars + WritingExemplarAnnotations (6)
+//   4. lessons.json                  â†’ WritingLessonsV2 (16, 2 per W1-W8)
+//   5. drills.sentence.json          â†’ WritingDrills (30, 3 per drill type Ã— 10)
+//   6. drills.case-notes.json        â†’ WritingCaseNoteDrills + WritingCaseNoteDrillSentences (12)
+//   7. mocks.json                    â†’ mock scenarios first, then WritingMocks (6 + 6)
+//   8. common-mistakes.json          â†’ WritingCommonMistakes (20)
 //
-// Seed order: canon → scenarios → exemplars → lessons → drills → case-note
-// drills → mocks (with their scenarios first) → common mistakes.
+// Seed order: canon â†’ scenarios â†’ exemplars â†’ lessons â†’ drills â†’ case-note
+// drills â†’ mocks (with their scenarios first) â†’ common mistakes.
 //
-// Embeddings (text-embedding-3-small) are NOT generated at seed time — they
+// Embeddings (text-embedding-3-small) are NOT generated at seed time â€” they
 // are lazily populated by the WritingExemplarReindexCron tick (WS5).
 //
 // Idempotency contract:
-//   • Per-table existence check via Id — re-runs are no-ops once seeded.
-//   • Deterministic GUIDs in JSON keep ids stable across machines.
-//   • If a partial seed previously ran (e.g., container restart), only the
+//   â€¢ Per-table existence check via Id â€” re-runs are no-ops once seeded.
+//   â€¢ Deterministic GUIDs in JSON keep ids stable across machines.
+//   â€¢ If a partial seed previously ran (e.g., container restart), only the
 //     missing rows are added; existing rows are not mutated.
-//   • Never deletes. Removed rows in JSON do not delete DB rows.
+//   â€¢ Never deletes. Removed rows in JSON do not delete DB rows.
 //
 // Configuration:
-//   Writing:V2Seeder:Enabled — default true. Set false to disable in tests
+//   Writing:V2Seeder:Enabled â€” default true. Set false to disable in tests
 //   that need an empty Writing V2 surface.
-// ═════════════════════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
 public static class WritingV2ContentSeeder
 {
@@ -78,28 +78,17 @@ public static class WritingV2ContentSeeder
         try
         {
             await SeedCanonRulesAsync(db, folder, logger, cancellationToken);
-            // 2026-05-27 audit fix — also materialise the canonical R* rules
+            // 2026-05-27 audit fix â€” also materialise the canonical R* rules
             // from rulebooks/writing/{profession}/rulebook.v1.json. The legacy
             // SC-001..025 rows stay so existing references keep working; new
             // rows track the rulebook of record.
             await BackendRulebookCanonBridge.SeedFromRulebooksAsync(db, logger, cancellationToken);
             await SeedScenariosAsync(db, folder, isMockFile: false, fileName: "scenarios.diagnostic.json", logger, cancellationToken);
-            await SeedExemplarsAsync(db, folder, logger, cancellationToken);
             await SeedLessonsAsync(db, folder, logger, cancellationToken);
             await SeedSentenceDrillsAsync(db, folder, logger, cancellationToken);
             await SeedCaseNoteDrillsAsync(db, folder, logger, cancellationToken);
             await SeedMocksAsync(db, folder, logger, cancellationToken);
             await SeedCommonMistakesAsync(db, folder, logger, cancellationToken);
-
-            // 2026-05-31 — exam-faithful authored demo TASKS (spec §4/§5/§6). These are
-            // fully-structured WritingScenarios (recipient, model answer exemplar, key +
-            // irrelevant content checklists) the admin Task Builder + learner attempt flow
-            // can exercise out of the box. Original content only; idempotent by InternalCode.
-            // Opt-in only (default OFF) — these are placeholder/demo tasks, not real content.
-            if (configuration.GetValue<bool?>(ConfigSeedDemoTasksKey) ?? false)
-            {
-                await SeedDemoWritingTasksAsync(db, logger, cancellationToken);
-            }
 
             logger.LogInformation("WritingV2ContentSeeder: complete.");
         }
@@ -110,9 +99,9 @@ public static class WritingV2ContentSeeder
         }
     }
 
-    // ───────────────────────── 1. Canon rules ──────────────────────────────
+    // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ 1. Canon rules â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     //
-    // DEPRECATED 2026-05-27 — `canon-rules.launch-25.json` (25 SC-* rules)
+    // DEPRECATED 2026-05-27 â€” `canon-rules.launch-25.json` (25 SC-* rules)
     // remains for historical-FK compatibility but the source of truth has
     // moved to the rulebook JSONs at rulebooks/writing/{profession}/
     // rulebook.v1.json, materialised into the same WritingCanonRule table
@@ -182,11 +171,11 @@ public static class WritingV2ContentSeeder
             await db.SaveChangesAsync(ct);
         }
         logger.LogInformation(
-            "WritingV2ContentSeeder: canon rules — added {Added}, existing {Existing}, total in JSON {Total}.",
+            "WritingV2ContentSeeder: canon rules â€” added {Added}, existing {Existing}, total in JSON {Total}.",
             added, existing.Count, payload.Rules.Count);
     }
 
-    // ──────────────────────── 2. Diagnostic scenarios ──────────────────────
+    // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ 2. Diagnostic scenarios â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     private static async Task SeedScenariosAsync(
         LearnerDbContext db, string folder, bool isMockFile,
@@ -236,10 +225,6 @@ public static class WritingV2ContentSeeder
                 SubDiscipline = string.IsNullOrWhiteSpace(sc.SubDiscipline) ? null : Truncate(sc.SubDiscipline!, 64),
                 TopicsJson = SerializeOrEmpty(sc.Topics),
                 Difficulty = sc.Difficulty > 0 ? sc.Difficulty : 3,
-                CaseNotesMarkdown = sc.CaseNotesMarkdown ?? string.Empty,
-                CaseNotesStructuredJson = sc.CaseNotesStructured is null
-                    ? null
-                    : JsonSerializer.Serialize(sc.CaseNotesStructured),
                 EstimatedReadingMinutes = sc.EstimatedReadingMinutes > 0 ? sc.EstimatedReadingMinutes : 5,
                 IsDiagnostic = sc.IsDiagnostic,
                 Status = Truncate(sc.Status ?? "published", 16),
@@ -279,93 +264,11 @@ public static class WritingV2ContentSeeder
             await db.SaveChangesAsync(ct);
         }
         logger.LogInformation(
-            "WritingV2ContentSeeder: scenarios from {File} — added {Scenarios} scenarios + {Sentences} sentences.",
+            "WritingV2ContentSeeder: scenarios from {File} â€” added {Scenarios} scenarios + {Sentences} sentences.",
             fileName, addedScenarios, addedSentences);
     }
 
-    // ─────────────────────────── 3. Exemplars ──────────────────────────────
-
-    private static async Task SeedExemplarsAsync(
-        LearnerDbContext db, string folder, ILogger logger, CancellationToken ct)
-    {
-        var path = Path.Combine(folder, "exemplars.json");
-        if (!File.Exists(path))
-        {
-            logger.LogWarning("WritingV2ContentSeeder: exemplars file missing at {Path}; skipping.", path);
-            return;
-        }
-
-        var payload = await ReadJsonAsync<ExemplarsPayload>(path, ct);
-        if (payload?.Exemplars is null || payload.Exemplars.Count == 0) return;
-
-        var existingIds = await db.Set<WritingExemplar>()
-            .AsNoTracking()
-            .Where(e => payload.Exemplars.Select(p => p.Id).Contains(e.Id))
-            .Select(e => e.Id)
-            .ToListAsync(ct);
-        var existing = new HashSet<Guid>(existingIds);
-
-        var now = DateTimeOffset.UtcNow;
-        var addedExemplars = 0;
-        var addedAnnotations = 0;
-
-        foreach (var ex in payload.Exemplars)
-        {
-            if (ex.Id == Guid.Empty) continue;
-            if (existing.Contains(ex.Id)) continue;
-
-            db.Set<WritingExemplar>().Add(new WritingExemplar
-            {
-                Id = ex.Id,
-                ScenarioId = ex.ScenarioId,
-                LetterType = Truncate(ex.LetterType ?? "LT-RR", 8),
-                Profession = Truncate(ex.Profession ?? "Medicine", 64),
-                LetterContent = ex.LetterContent ?? string.Empty,
-                AnnotationsJson = ex.Annotations is null
-                    ? "[]"
-                    : JsonSerializer.Serialize(ex.Annotations),
-                TargetBand = Truncate(ex.TargetBand ?? "A", 8),
-                Status = Truncate(ex.Status ?? "published", 16),
-                AuthorId = Truncate(ex.AuthorId ?? "system:seed", 64),
-                PublishedAt = (ex.Status?.Equals("published", StringComparison.OrdinalIgnoreCase) ?? false) ? now : null,
-                CreatedAt = now,
-            });
-            addedExemplars++;
-
-            if (ex.Annotations is not null)
-            {
-                var ordinal = 0;
-                foreach (var a in ex.Annotations)
-                {
-                    ordinal++;
-                    if (string.IsNullOrWhiteSpace(a.Note)) continue;
-                    db.Set<WritingExemplarAnnotation>().Add(new WritingExemplarAnnotation
-                    {
-                        Id = DeterministicGuid(ex.Id, "annotation", ordinal),
-                        ExemplarId = ex.Id,
-                        Ordinal = ordinal,
-                        CharStart = a.CharStart,
-                        CharEnd = a.CharEnd,
-                        AnnotationType = string.IsNullOrWhiteSpace(a.RuleId) ? "note" : "rule",
-                        RuleId = string.IsNullOrWhiteSpace(a.RuleId) ? null : Truncate(a.RuleId!, 16),
-                        Note = Truncate(a.Note!, 1000),
-                        CreatedAt = now,
-                    });
-                    addedAnnotations++;
-                }
-            }
-        }
-
-        if (addedExemplars > 0)
-        {
-            await db.SaveChangesAsync(ct);
-        }
-        logger.LogInformation(
-            "WritingV2ContentSeeder: exemplars — added {Exemplars} exemplars + {Annotations} annotations.",
-            addedExemplars, addedAnnotations);
-    }
-
-    // ─────────────────────────── 4. Lessons ────────────────────────────────
+    // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ 4. Lessons â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     private static async Task SeedLessonsAsync(
         LearnerDbContext db, string folder, ILogger logger, CancellationToken ct)
@@ -412,10 +315,10 @@ public static class WritingV2ContentSeeder
         {
             await db.SaveChangesAsync(ct);
         }
-        logger.LogInformation("WritingV2ContentSeeder: lessons — added {Added}.", added);
+        logger.LogInformation("WritingV2ContentSeeder: lessons â€” added {Added}.", added);
     }
 
-    // ─────────────────────── 5. Sentence drills ────────────────────────────
+    // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ 5. Sentence drills â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     private static async Task SeedSentenceDrillsAsync(
         LearnerDbContext db, string folder, ILogger logger, CancellationToken ct)
@@ -464,10 +367,10 @@ public static class WritingV2ContentSeeder
         {
             await db.SaveChangesAsync(ct);
         }
-        logger.LogInformation("WritingV2ContentSeeder: sentence drills — added {Added}.", added);
+        logger.LogInformation("WritingV2ContentSeeder: sentence drills â€” added {Added}.", added);
     }
 
-    // ────────────────────── 6. Case-note drills ────────────────────────────
+    // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ 6. Case-note drills â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     private static async Task SeedCaseNoteDrillsAsync(
         LearnerDbContext db, string folder, ILogger logger, CancellationToken ct)
@@ -531,11 +434,11 @@ public static class WritingV2ContentSeeder
             await db.SaveChangesAsync(ct);
         }
         logger.LogInformation(
-            "WritingV2ContentSeeder: case-note drills — added {Drills} drills + {Sentences} sentences.",
+            "WritingV2ContentSeeder: case-note drills â€” added {Drills} drills + {Sentences} sentences.",
             addedDrills, addedSentences);
     }
 
-    // ─────────────────────────── 7. Mocks ──────────────────────────────────
+    // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ 7. Mocks â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     private static async Task SeedMocksAsync(
         LearnerDbContext db, string folder, ILogger logger, CancellationToken ct)
@@ -579,10 +482,10 @@ public static class WritingV2ContentSeeder
         {
             await db.SaveChangesAsync(ct);
         }
-        logger.LogInformation("WritingV2ContentSeeder: mocks — added {Added}.", added);
+        logger.LogInformation("WritingV2ContentSeeder: mocks â€” added {Added}.", added);
     }
 
-    // ───────────────────── 8. Common mistakes ──────────────────────────────
+    // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ 8. Common mistakes â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     private static async Task SeedCommonMistakesAsync(
         LearnerDbContext db, string folder, ILogger logger, CancellationToken ct)
@@ -625,465 +528,10 @@ public static class WritingV2ContentSeeder
         {
             await db.SaveChangesAsync(ct);
         }
-        logger.LogInformation("WritingV2ContentSeeder: common mistakes — added {Added}.", added);
+        logger.LogInformation("WritingV2ContentSeeder: common mistakes â€” added {Added}.", added);
     }
 
-    // ─────────────────── 9. Exam-faithful authored demo TASKS ──────────────
-    //
-    // Seeds 3 COMPLETE WritingScenarios (the enriched exam-closure task shape:
-    // recipient, model-answer exemplar, key/irrelevant content checklists, fixed
-    // instructions, word guide, simulation modes). Each is idempotent on its
-    // InternalCode — if a scenario with that code already exists, it is skipped.
-    // ORIGINAL content only (no real OET exam material).
-    private static async Task SeedDemoWritingTasksAsync(
-        LearnerDbContext db, ILogger logger, CancellationToken ct)
-    {
-        var specs = BuildDemoTaskSpecs();
-        var codes = specs.Select(s => s.InternalCode).ToList();
-
-        var existingCodes = await db.Set<WritingScenario>()
-            .AsNoTracking()
-            .Where(s => s.InternalCode != null && codes.Contains(s.InternalCode))
-            .Select(s => s.InternalCode!)
-            .ToListAsync(ct);
-        var existing = new HashSet<string>(existingCodes, StringComparer.OrdinalIgnoreCase);
-
-        var now = DateTimeOffset.UtcNow;
-        var addedTasks = 0;
-        var addedExemplars = 0;
-        var addedChecklist = 0;
-
-        foreach (var spec in specs)
-        {
-            if (existing.Contains(spec.InternalCode))
-            {
-                continue; // idempotency guard — already seeded.
-            }
-
-            // Deterministic ids so re-running across machines keeps rows stable.
-            var scenarioId = DeterministicGuid(DemoTaskNamespace, "scenario", spec.InternalCode);
-            var exemplarId = DeterministicGuid(DemoTaskNamespace, "exemplar", spec.InternalCode);
-
-            // Linked ORIGINAL model-answer exemplar (180–200-word letter).
-            db.Set<WritingExemplar>().Add(new WritingExemplar
-            {
-                Id = exemplarId,
-                ScenarioId = scenarioId,
-                LetterType = Truncate(spec.LetterType, 8),
-                Profession = Truncate(spec.Profession, 64),
-                LetterContent = spec.ModelAnswer,
-                AnnotationsJson = "[]",
-                TargetBand = "A",
-                Status = "published",
-                AuthorId = "seed",
-                PublishedAt = now,
-                CreatedAt = now,
-            });
-            addedExemplars++;
-
-            db.Set<WritingScenario>().Add(new WritingScenario
-            {
-                Id = scenarioId,
-                Title = Truncate(spec.Title, 200),
-                LetterType = Truncate(spec.LetterType, 8),
-                Profession = Truncate(spec.Profession, 64),
-                TopicsJson = "[]",
-                Difficulty = spec.Difficulty,
-                CaseNotesMarkdown = FlattenCaseNotes(spec.CaseNoteSections),
-                CaseNoteSectionsJson = JsonSerializer.Serialize(spec.CaseNoteSections, JsonOptions),
-                EstimatedReadingMinutes = 5,
-                IsDiagnostic = false,
-                Status = "published",
-                Version = 1,
-                AuthorId = "seed",
-                ContentOwnerId = "seed",
-                PublishedAt = now,
-                CreatedAt = now,
-                UpdatedAt = now,
-                InternalCode = spec.InternalCode,
-                TaskPromptMarkdown = spec.TaskPrompt,
-                WriterRole = Truncate(spec.WriterRole, 256),
-                TodayDate = Truncate(spec.TodayDate, 64),
-                RecipientJson = JsonSerializer.Serialize(spec.Recipient, JsonOptions),
-                ExpectedPurpose = spec.ExpectedPurpose,
-                ExpectedAction = spec.ExpectedAction,
-                FixedInstructionsJson = JsonSerializer.Serialize(StandardFixedInstructions, JsonOptions),
-                WordGuideMin = 180,
-                WordGuideMax = 200,
-                ReadingTimeSeconds = 300,
-                WritingTimeSeconds = 2400,
-                SimulationModes = "both",
-                MarkingMode = "tutor",
-                ModelAnswerExemplarId = exemplarId,
-                SourceProvenance = "Original demo content authored in-house for the OET Writing module.",
-                IntegrityAcknowledgedById = "seed",
-                IntegrityAcknowledgedAt = now,
-            });
-            addedTasks++;
-
-            var ordinal = 0;
-            foreach (var item in spec.Checklist)
-            {
-                db.Set<WritingContentChecklistItem>().Add(new WritingContentChecklistItem
-                {
-                    Id = DeterministicGuid(scenarioId, "checklist", ordinal),
-                    ScenarioId = scenarioId,
-                    ItemText = Truncate(item.ItemText, 500),
-                    Category = Truncate(item.Category, 64),
-                    Importance = item.Importance,
-                    RequiredStatus = item.RequiredStatus,
-                    LinkedCaseNoteSection = item.LinkedCaseNoteSection is null ? null : Truncate(item.LinkedCaseNoteSection, 200),
-                    ExpectedRepresentation = item.ExpectedRepresentation is null ? null : Truncate(item.ExpectedRepresentation, 1000),
-                    CommonError = item.CommonError is null ? null : Truncate(item.CommonError, 1000),
-                    Ordinal = ordinal,
-                    CreatedAt = now,
-                    UpdatedAt = now,
-                });
-                ordinal++;
-                addedChecklist++;
-            }
-        }
-
-        if (addedTasks > 0)
-        {
-            await db.SaveChangesAsync(ct);
-        }
-        logger.LogInformation(
-            "WritingV2ContentSeeder: demo writing tasks — added {Tasks} tasks + {Exemplars} model answers + {Checklist} checklist items (existing {Existing}).",
-            addedTasks, addedExemplars, addedChecklist, existing.Count);
-    }
-
-    // Stable namespace seed for the demo tasks' deterministic GUIDs.
-    private static readonly Guid DemoTaskNamespace = new("d3a9f17c-2b4e-4c1a-9f6d-8e0c5b2a7e10");
-
-    // The 4 standard OET writing-task instruction lines (spec §5.2).
-    private static readonly string[] StandardFixedInstructions =
-    {
-        "Expand the relevant notes into complete sentences",
-        "Do not use note form",
-        "Use letter format",
-        "The body of the letter should be approximately 180–200 words",
-    };
-
-    private static string FlattenCaseNotes(IReadOnlyList<DemoCaseNoteSection> sections)
-    {
-        var sb = new System.Text.StringBuilder();
-        foreach (var section in sections)
-        {
-            sb.Append("## ").AppendLine(section.Heading);
-            foreach (var item in section.Items)
-            {
-                sb.Append("- ").AppendLine(item);
-            }
-            sb.AppendLine();
-        }
-        return sb.ToString().TrimEnd();
-    }
-
-    private static List<DemoTaskSpec> BuildDemoTaskSpecs() => new()
-    {
-        // ── 1. Medicine — routine referral ──────────────────────────────────
-        new DemoTaskSpec
-        {
-            InternalCode = "MED-WR-S01",
-            Title = "Routine referral: Mr Harold Bennett (hypertension review)",
-            Profession = "Medicine",
-            LetterType = "routine_referral",
-            Difficulty = 3,
-            WriterRole = "You are a general practitioner at Riverside Family Practice.",
-            TodayDate = "14 March 2026",
-            TaskPrompt = "Using the information in the case notes, write a referral letter to the cardiologist requesting assessment and ongoing management of Mr Bennett's poorly controlled hypertension.",
-            ExpectedPurpose = "Refer the patient for specialist cardiology assessment of poorly controlled hypertension despite treatment.",
-            ExpectedAction = "Request specialist review, investigation of secondary causes, and advice on optimising antihypertensive therapy.",
-            Recipient = new DemoRecipient
-            {
-                Name = "Dr Amelia Cross",
-                Role = "Consultant Cardiologist",
-                Organisation = "Riverside General Hospital",
-                Address = "Department of Cardiology, 22 Parkland Avenue, Riverside",
-            },
-            CaseNoteSections = new List<DemoCaseNoteSection>
-            {
-                new("Patient details", new List<string>
-                {
-                    "Harold Bennett, 58 years old, male",
-                    "Retired schoolteacher; lives with wife",
-                    "Non-smoker; alcohol 6 units/week",
-                }),
-                new("Relevant history", new List<string>
-                {
-                    "Hypertension diagnosed 2019",
-                    "Type 2 diabetes (diet-controlled) since 2021",
-                    "Father: myocardial infarction aged 60",
-                    "No known drug allergies",
-                }),
-                new("Presenting complaint", new List<string>
-                {
-                    "3-month history of occasional morning headaches",
-                    "Reports good medication adherence",
-                    "Denies chest pain, breathlessness or palpitations",
-                }),
-                new("Examination/findings", new List<string>
-                {
-                    "BP 168/98 mmHg (repeated 164/96)",
-                    "BMI 29; pulse 78 regular",
-                    "Urinalysis: trace protein",
-                    "Recent bloods: eGFR 74, normal electrolytes",
-                }),
-                new("Management/plan", new List<string>
-                {
-                    "Current: amlodipine 10 mg daily, ramipril 10 mg daily",
-                    "BP remains above target despite dual therapy",
-                    "Referral for specialist assessment and secondary-cause screening",
-                }),
-            },
-            ModelAnswer =
-                "Dear Dr Cross,\n\n" +
-                "Re: Mr Harold Bennett, 58 years old\n\n" +
-                "I am writing to refer Mr Bennett, a 58-year-old retired schoolteacher, for specialist assessment of his poorly controlled hypertension.\n\n" +
-                "Mr Bennett was diagnosed with hypertension in 2019 and also has diet-controlled type 2 diabetes. His father suffered a myocardial infarction at the age of 60. He has presented over the past three months with occasional morning headaches, although he denies chest pain, breathlessness or palpitations and reports good adherence to his medication.\n\n" +
-                "On examination, his blood pressure was 168/98 mmHg, confirmed on repeat measurement. His BMI is 29 and urinalysis revealed trace protein. Recent blood tests showed an eGFR of 74 with normal electrolytes. Despite treatment with amlodipine 10 mg and ramipril 10 mg daily, his blood pressure remains above target.\n\n" +
-                "I would be grateful for your assessment, including screening for secondary causes, and your advice on optimising his treatment.\n\n" +
-                "Yours sincerely,\nDr Riverside",
-            Checklist = new List<DemoChecklistItem>
-            {
-                new("Patient name and age (Mr Bennett, 58)", "patient_identity", "high", "required", "Patient details", "Mr Harold Bennett, a 58-year-old man", "Omitting the patient's age."),
-                new("Purpose: referral for specialist assessment of hypertension", "main_reason", "high", "required", "Management/plan", "I am writing to refer ... for assessment of poorly controlled hypertension", "Failing to state the reason for referral up front."),
-                new("Poorly controlled BP despite dual therapy", "diagnosis", "high", "required", "Examination/findings", "BP 168/98 despite amlodipine and ramipril", "Listing the BP reading without noting it is uncontrolled."),
-                new("Current antihypertensive medication", "medication", "high", "required", "Management/plan", "amlodipine 10 mg and ramipril 10 mg daily", "Omitting current doses."),
-                new("Relevant history (diabetes, family history of MI)", "history", "medium", "required", "Relevant history", "diet-controlled type 2 diabetes; father had an MI at 60", "Leaving out cardiovascular risk factors."),
-                new("Request for specialist review / secondary-cause screening", "follow_up", "medium", "required", "Management/plan", "I would be grateful for your assessment and advice", "Not making a clear request of the specialist."),
-                new("Patient's hobby of gardening", "social", "low", "irrelevant", null, null, "Including pastimes that do not affect management."),
-                new("Wife's recent knee surgery", "social", "low", "irrelevant", null, null, "Adding family members' unrelated medical details."),
-                new("Childhood appendicectomy aged 12", "history", "low", "irrelevant", null, null, "Including remote history irrelevant to the referral."),
-            },
-        },
-
-        // ── 2. Nursing — discharge / update ─────────────────────────────────
-        new DemoTaskSpec
-        {
-            InternalCode = "NUR-WR-S01",
-            Title = "Discharge update: Mrs Edith Palmer (post-operative care)",
-            Profession = "Nursing",
-            LetterType = "update_discharge",
-            Difficulty = 3,
-            WriterRole = "You are the registered nurse coordinating discharge on the surgical ward at Meadowbrook Hospital.",
-            TodayDate = "9 May 2026",
-            TaskPrompt = "Using the information in the case notes, write a letter to the community nurse who will take over Mrs Palmer's care at home following her discharge.",
-            ExpectedPurpose = "Hand over post-operative community nursing care for a patient discharged after hip replacement.",
-            ExpectedAction = "Request wound care, mobility support and monitoring during the patient's recovery at home.",
-            Recipient = new DemoRecipient
-            {
-                Name = "Ms Sarah Donnelly",
-                Role = "Community Nurse",
-                Organisation = "Meadowbrook Community Nursing Service",
-                Address = "8 Elm Court, Meadowbrook",
-            },
-            CaseNoteSections = new List<DemoCaseNoteSection>
-            {
-                new("Patient details", new List<string>
-                {
-                    "Edith Palmer, 74 years old, female",
-                    "Lives alone in a ground-floor flat",
-                    "Daughter visits daily; previously independent",
-                }),
-                new("Relevant history", new List<string>
-                {
-                    "Osteoarthritis; hypertension",
-                    "Left total hip replacement on 2 May 2026",
-                    "Allergic to penicillin (rash)",
-                }),
-                new("Presenting complaint", new List<string>
-                {
-                    "Admitted electively for hip replacement",
-                    "Uncomplicated post-operative recovery",
-                    "Pain well controlled on oral analgesia",
-                }),
-                new("Examination/findings", new List<string>
-                {
-                    "Surgical wound clean and dry; staples in situ",
-                    "Mobilising short distances with a frame",
-                    "Afebrile; observations stable",
-                }),
-                new("Management/plan", new List<string>
-                {
-                    "Remove staples on 16 May 2026 (day 14)",
-                    "Continue paracetamol and prescribed analgesia",
-                    "Daily wound check; encourage prescribed exercises",
-                    "Monitor for signs of infection or DVT",
-                }),
-            },
-            ModelAnswer =
-                "Dear Ms Donnelly,\n\n" +
-                "Re: Mrs Edith Palmer, 74 years old\n\n" +
-                "I am writing to hand over the care of Mrs Palmer, who is being discharged home today following a left total hip replacement performed on 2 May 2026.\n\n" +
-                "Mrs Palmer is a 74-year-old woman who lives alone in a ground-floor flat, with daily support from her daughter. She has a history of osteoarthritis and hypertension, and she is allergic to penicillin. Her post-operative recovery has been uncomplicated and her pain is well controlled on oral analgesia.\n\n" +
-                "On discharge, her surgical wound is clean and dry with staples in situ, and she is mobilising short distances with a frame. She remains afebrile with stable observations.\n\n" +
-                "I would be grateful if you could review her wound daily, remove the staples on 16 May, and encourage her prescribed exercises. Please also monitor her for any signs of wound infection or deep vein thrombosis.\n\n" +
-                "Yours sincerely,\nWard Nurse",
-            Checklist = new List<DemoChecklistItem>
-            {
-                new("Patient name and age (Mrs Palmer, 74)", "patient_identity", "high", "required", "Patient details", "Mrs Edith Palmer, a 74-year-old woman", "Omitting the patient's age."),
-                new("Purpose: handover of post-discharge community care", "main_reason", "high", "required", "Presenting complaint", "I am writing to hand over the care of Mrs Palmer following discharge", "Not stating the handover purpose clearly."),
-                new("Recent hip replacement and uncomplicated recovery", "diagnosis", "high", "required", "Relevant history", "left total hip replacement on 2 May; uncomplicated recovery", "Omitting the date or nature of surgery."),
-                new("Wound care and staple removal on day 14", "follow_up", "high", "required", "Management/plan", "review the wound daily and remove staples on 16 May", "Failing to specify the staple-removal date."),
-                new("Penicillin allergy", "allergy", "high", "required", "Relevant history", "she is allergic to penicillin", "Leaving out a documented drug allergy."),
-                new("Monitoring for infection or DVT", "follow_up", "medium", "required", "Management/plan", "monitor for signs of infection or deep vein thrombosis", "Not requesting post-operative monitoring."),
-                new("Social support (lives alone, daughter visits)", "social", "medium", "optional", "Patient details", "lives alone with daily support from her daughter", "Overlooking the home-support context."),
-                new("Patient's preference for tea over coffee", "social", "low", "irrelevant", null, null, "Including trivial personal preferences."),
-                new("Daughter's holiday plans next month", "social", "low", "irrelevant", null, null, "Adding unrelated family information."),
-            },
-        },
-
-        // ── 3. Pharmacy — urgent referral ───────────────────────────────────
-        new DemoTaskSpec
-        {
-            InternalCode = "PHA-WR-S01",
-            Title = "Urgent referral: Mr Daniel Owusu (suspected adverse drug reaction)",
-            Profession = "Pharmacy",
-            LetterType = "urgent_referral",
-            Difficulty = 4,
-            WriterRole = "You are the community pharmacist at Greenway Pharmacy.",
-            TodayDate = "21 June 2026",
-            TaskPrompt = "Using the information in the case notes, write an urgent letter to the patient's general practitioner regarding a suspected adverse drug reaction that requires same-day review.",
-            ExpectedPurpose = "Alert the GP to a suspected serious adverse drug reaction requiring urgent same-day assessment.",
-            ExpectedAction = "Request urgent review, possible cessation of the implicated medicine, and renal monitoring.",
-            Recipient = new DemoRecipient
-            {
-                Name = "Dr Priya Nair",
-                Role = "General Practitioner",
-                Organisation = "Greenway Medical Centre",
-                Address = "5 Hawthorn Road, Greenway",
-            },
-            CaseNoteSections = new List<DemoCaseNoteSection>
-            {
-                new("Patient details", new List<string>
-                {
-                    "Daniel Owusu, 66 years old, male",
-                    "Collected repeat prescription this morning",
-                    "Accompanied by his son",
-                }),
-                new("Relevant history", new List<string>
-                {
-                    "Type 2 diabetes; hypertension; gout",
-                    "Recently started allopurinol (10 days ago)",
-                    "No previously documented drug allergies",
-                }),
-                new("Presenting complaint", new List<string>
-                {
-                    "2-day history of widespread itchy rash",
-                    "Facial swelling and mild fever today",
-                    "Reports feeling generally unwell",
-                }),
-                new("Examination/findings", new List<string>
-                {
-                    "Widespread maculopapular rash on trunk and arms",
-                    "Mild periorbital swelling; temperature 37.9°C",
-                    "No breathing difficulty or wheeze at present",
-                }),
-                new("Management/plan", new List<string>
-                {
-                    "Suspected adverse reaction to allopurinol",
-                    "Advised to stop allopurinol immediately",
-                    "Urgent same-day GP review recommended",
-                    "Consider renal function check and antihistamine",
-                }),
-            },
-            ModelAnswer =
-                "Dear Dr Nair,\n\n" +
-                "Re: Mr Daniel Owusu, 66 years old — urgent\n\n" +
-                "I am writing to refer Mr Owusu urgently, as I suspect he is experiencing a serious adverse reaction to allopurinol and requires same-day review.\n\n" +
-                "Mr Owusu is a 66-year-old man with type 2 diabetes, hypertension and gout, who started allopurinol ten days ago. He collected his repeat prescription this morning and reported a two-day history of a widespread, itchy rash, with facial swelling and a mild fever developing today. He feels generally unwell.\n\n" +
-                "On examination, he had a widespread maculopapular rash over his trunk and arms, mild periorbital swelling and a temperature of 37.9°C. He has no breathing difficulty at present.\n\n" +
-                "I have advised him to stop the allopurinol immediately. I would be grateful if you could review him urgently today, consider checking his renal function, and arrange appropriate treatment.\n\n" +
-                "Yours sincerely,\nCommunity Pharmacist",
-            Checklist = new List<DemoChecklistItem>
-            {
-                new("Patient name and age (Mr Owusu, 66)", "patient_identity", "high", "required", "Patient details", "Mr Daniel Owusu, a 66-year-old man", "Omitting the patient's age."),
-                new("Urgency clearly conveyed", "urgency", "high", "required", "Management/plan", "refer urgently ... requires same-day review", "Not signalling that the referral is urgent."),
-                new("Suspected adverse reaction to allopurinol", "diagnosis", "high", "required", "Management/plan", "I suspect a serious adverse reaction to allopurinol", "Failing to name the suspected cause."),
-                new("Recently started allopurinol (timeline)", "medication", "high", "required", "Relevant history", "started allopurinol ten days ago", "Leaving out when the medicine was started."),
-                new("Presenting symptoms (rash, facial swelling, fever)", "symptoms", "high", "required", "Presenting complaint", "widespread itchy rash, facial swelling and mild fever", "Describing the reaction vaguely."),
-                new("Action taken / requested (stop drug, renal check)", "follow_up", "medium", "required", "Management/plan", "advised to stop allopurinol; please check renal function", "Not stating the action taken or requested."),
-                new("Patient's recent overseas travel for leisure", "social", "low", "irrelevant", null, null, "Including travel unrelated to the reaction."),
-                new("Son's occupation as an accountant", "social", "low", "irrelevant", null, null, "Adding companions' irrelevant details."),
-                new("Well-controlled gout over the past year", "history", "low", "irrelevant", null, null, "Including stable background detail that does not affect the urgent issue."),
-            },
-        },
-    };
-
-    // ── Demo-task seed value types (internal only) ──────────────────────────
-
-    private sealed class DemoTaskSpec
-    {
-        public string InternalCode { get; init; } = string.Empty;
-        public string Title { get; init; } = string.Empty;
-        public string Profession { get; init; } = string.Empty;
-        public string LetterType { get; init; } = string.Empty;
-        public int Difficulty { get; init; } = 3;
-        public string WriterRole { get; init; } = string.Empty;
-        public string TodayDate { get; init; } = string.Empty;
-        public string TaskPrompt { get; init; } = string.Empty;
-        public string ExpectedPurpose { get; init; } = string.Empty;
-        public string ExpectedAction { get; init; } = string.Empty;
-        public DemoRecipient Recipient { get; init; } = new();
-        public List<DemoCaseNoteSection> CaseNoteSections { get; init; } = new();
-        public string ModelAnswer { get; init; } = string.Empty;
-        public List<DemoChecklistItem> Checklist { get; init; } = new();
-    }
-
-    private sealed class DemoRecipient
-    {
-        [System.Text.Json.Serialization.JsonPropertyName("name")]
-        public string Name { get; init; } = string.Empty;
-        [System.Text.Json.Serialization.JsonPropertyName("role")]
-        public string Role { get; init; } = string.Empty;
-        [System.Text.Json.Serialization.JsonPropertyName("organisation")]
-        public string Organisation { get; init; } = string.Empty;
-        [System.Text.Json.Serialization.JsonPropertyName("address")]
-        public string Address { get; init; } = string.Empty;
-    }
-
-    private sealed class DemoCaseNoteSection
-    {
-        public DemoCaseNoteSection(string heading, List<string> items)
-        {
-            Heading = heading;
-            Items = items;
-        }
-
-        [System.Text.Json.Serialization.JsonPropertyName("heading")]
-        public string Heading { get; init; }
-
-        [System.Text.Json.Serialization.JsonPropertyName("items")]
-        public List<string> Items { get; init; }
-    }
-
-    private sealed class DemoChecklistItem
-    {
-        public DemoChecklistItem(
-            string itemText, string category, string importance, string requiredStatus,
-            string? linkedCaseNoteSection, string? expectedRepresentation, string? commonError)
-        {
-            ItemText = itemText;
-            Category = category;
-            Importance = importance;
-            RequiredStatus = requiredStatus;
-            LinkedCaseNoteSection = linkedCaseNoteSection;
-            ExpectedRepresentation = expectedRepresentation;
-            CommonError = commonError;
-        }
-
-        public string ItemText { get; }
-        public string Category { get; }
-        public string Importance { get; }
-        public string RequiredStatus { get; }
-        public string? LinkedCaseNoteSection { get; }
-        public string? ExpectedRepresentation { get; }
-        public string? CommonError { get; }
-    }
-
-    // ───────────────────────────── helpers ─────────────────────────────────
+    // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     private static string ResolveSeedFolder(IWebHostEnvironment env)
     {
@@ -1140,7 +588,7 @@ public static class WritingV2ContentSeeder
         return new Guid(bytes);
     }
 
-    // ─────────────────── JSON DTOs (internal only) ─────────────────────────
+    // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ JSON DTOs (internal only) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     private sealed class CanonRulesPayload
     {
@@ -1212,44 +660,6 @@ public static class WritingV2ContentSeeder
     {
         public string? Sentence { get; set; }
         public string? Relevance { get; set; }
-    }
-
-    private sealed class ExemplarsPayload
-    {
-        public int SchemaVersion { get; set; } = 1;
-        public int Version { get; set; } = 1;
-        public string? Source { get; set; }
-        public List<ExemplarDto>? Exemplars { get; set; }
-    }
-
-    private sealed class ExemplarDto
-    {
-        public Guid Id { get; set; }
-        [System.Text.Json.Serialization.JsonPropertyName("scenario_id")]
-        public Guid? ScenarioId { get; set; }
-        [System.Text.Json.Serialization.JsonPropertyName("letter_type")]
-        public string? LetterType { get; set; }
-        public string? Profession { get; set; }
-        [System.Text.Json.Serialization.JsonPropertyName("letter_content")]
-        public string? LetterContent { get; set; }
-        public List<ExemplarAnnotationDto>? Annotations { get; set; }
-        [System.Text.Json.Serialization.JsonPropertyName("target_band")]
-        public string? TargetBand { get; set; }
-        public string? Status { get; set; }
-        public int Version { get; set; }
-        [System.Text.Json.Serialization.JsonPropertyName("author_id")]
-        public string? AuthorId { get; set; }
-    }
-
-    private sealed class ExemplarAnnotationDto
-    {
-        [System.Text.Json.Serialization.JsonPropertyName("char_start")]
-        public int? CharStart { get; set; }
-        [System.Text.Json.Serialization.JsonPropertyName("char_end")]
-        public int? CharEnd { get; set; }
-        [System.Text.Json.Serialization.JsonPropertyName("rule_id")]
-        public string? RuleId { get; set; }
-        public string? Note { get; set; }
     }
 
     private sealed class LessonsPayload

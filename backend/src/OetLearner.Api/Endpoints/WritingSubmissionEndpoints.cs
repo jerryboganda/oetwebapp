@@ -85,17 +85,6 @@ public static class WritingSubmissionEndpoints
         })
         .WithName("GetWritingSubmissionAppeal");
 
-        group.MapGet("/{id:guid}/exemplar", async (
-            Guid id,
-            HttpContext http,
-            IWritingExemplarService service,
-            CancellationToken ct) =>
-        {
-            var exemplar = await service.GetClosestExemplarForSubmissionAsync(http.WritingV2UserId(), id, ct);
-            return exemplar is null ? Results.NotFound() : Results.Ok(exemplar);
-        })
-        .WithName("GetWritingSubmissionExemplar");
-
         group.MapPost("/{id:guid}/dispute-violation", async (
             Guid id,
             WritingDisputeViolationRequest request,

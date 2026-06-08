@@ -95,51 +95,6 @@ public sealed class WritingBatchGradingCron(
     }
 }
 
-/// <summary>Sunday 02:30 UTC: re-embed exemplars + scenarios added since the
-/// previous reindex tick. First run also catches anything missing an embedding.</summary>
-public sealed class WritingExemplarReindexCron(
-    IServiceScopeFactory scopeFactory,
-    TimeProvider clock,
-    IOptions<WritingV2Options> options,
-    ILogger<WritingExemplarReindexCron> logger) : WritingCronBase(scopeFactory, clock, options, logger)
-{
-    protected override TimeSpan Interval => TimeSpan.FromHours(1);
-
-    protected override async Task RunOnceAsync(CancellationToken ct)
-    {
-        var now = Clock.GetUtcNow();
-        if (now.DayOfWeek != DayOfWeek.Sunday || now.Hour != 2) return;
-        using var scope = ScopeFactory.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
-        var embeddings = scope.ServiceProvider.GetRequiredService<IWritingExemplarEmbeddingService>();
-
-        // pgvector lazy backfill — promote any rows that still only have
-        // EmbeddingJson into the native vector column before we kick off the
-        // re-embed loop. Cheap when there is nothing to do; idempotent.
-        try { await embeddings.BackfillFromJsonAsync(ct); }
-        catch (Exception ex) { Logger.LogWarning(ex, "pgvector backfill failed; continuing with embed loop."); }
-
-        var exemplarIds = await db.WritingExemplars.AsNoTracking()
-            .Where(e => e.Status == "published")
-            .Select(e => e.Id)
-            .ToListAsync(ct);
-        foreach (var id in exemplarIds)
-        {
-            try { await embeddings.EmbedExemplarAsync("system", id, ct); }
-            catch (Exception ex) { Logger.LogWarning(ex, "Exemplar reindex failed for {Id}", id); }
-        }
-        var scenarioIds = await db.WritingScenarios.AsNoTracking()
-            .Where(s => s.Status == "published")
-            .Select(s => s.Id)
-            .ToListAsync(ct);
-        foreach (var id in scenarioIds)
-        {
-            try { await embeddings.EmbedScenarioAsync("system", id, ct); }
-            catch (Exception ex) { Logger.LogWarning(ex, "Scenario reindex failed for {Id}", id); }
-        }
-    }
-}
-
 /// <summary>Daily 04:00 UTC: pre-compute analytics aggregates per learner.
 /// Stores nothing extra — calls ComputeAsync to warm any caches the analytics
 /// service builds inside the same scope.</summary>
@@ -252,12 +207,11 @@ public sealed class WritingContentAuditCron(
         var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
         var since = Clock.GetUtcNow().AddHours(-1);
         var scenarioCount = await db.WritingScenarios.AsNoTracking().CountAsync(s => s.CreatedAt >= since, ct);
-        var exemplarCount = await db.WritingExemplars.AsNoTracking().CountAsync(e => e.CreatedAt >= since, ct);
         var canonCount = await db.WritingCanonRules.AsNoTracking().CountAsync(r => r.UpdatedAt >= since, ct);
-        if (scenarioCount + exemplarCount + canonCount > 0)
+        if (scenarioCount + canonCount > 0)
         {
-            Logger.LogInformation("Writing content audit tick: scenarios={Scenarios} exemplars={Exemplars} canon={Canon}",
-                scenarioCount, exemplarCount, canonCount);
+            Logger.LogInformation("Writing content audit tick: scenarios={Scenarios} canon={Canon}",
+                scenarioCount, canonCount);
         }
     }
 }

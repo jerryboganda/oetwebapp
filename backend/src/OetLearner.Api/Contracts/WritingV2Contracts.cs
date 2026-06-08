@@ -200,17 +200,6 @@ public sealed record WritingPerCriterionFeedbackResponse(
     string? ExemplarFix,
     IReadOnlyList<string> CitedRuleIds);
 
-public sealed record WritingExemplarComparisonHighlightResponse(
-    string CandidateSnippet,
-    string ExemplarSnippet,
-    string Kind);
-
-public sealed record WritingExemplarComparisonResponse(
-    Guid ExemplarId,
-    string ExemplarLetterType,
-    double SimilarityScore,
-    IReadOnlyList<WritingExemplarComparisonHighlightResponse> HighlightedDifferences);
-
 public sealed record WritingRevisionInviteResponse(bool ShouldOffer, string Reason);
 
 public sealed record WritingGradeResponseV2(
@@ -231,7 +220,6 @@ public sealed record WritingGradeResponseV2(
     string ModelUsed,
     string CanonVersion,
     IReadOnlyList<WritingCanonViolationResponse> CanonViolations,
-    WritingExemplarComparisonResponse? ExemplarComparison,
     WritingRevisionInviteResponse RevisionInvite,
     DateTimeOffset GradedAt);
 
@@ -281,7 +269,6 @@ public sealed record WritingScenarioResponse(
     string? SubDiscipline,
     IReadOnlyList<string> Topics,
     int Difficulty,
-    string CaseNotesMarkdown,
     IReadOnlyList<WritingScenarioStructuredSentenceResponse> CaseNotesStructured,
     bool IsDiagnostic,
     string Status,
@@ -301,7 +288,6 @@ public sealed record WritingScenarioUpsertRequest(
     [property: StringLength(64)] string? SubDiscipline,
     IReadOnlyList<string>? Topics,
     [property: Range(1, 5)] int Difficulty,
-    [property: Required] string CaseNotesMarkdown,
     IReadOnlyList<WritingScenarioStructuredSentenceResponse>? CaseNotesStructured,
     bool? IsDiagnostic,
     [property: StringLength(16)] string? Status);
@@ -312,49 +298,6 @@ public sealed record WritingScenarioGenerateRequest(
     [property: Range(1, 5)] int Difficulty,
     [property: StringLength(500)] string? Topic,
     [property: StringLength(500)] string? Instructions);
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Exemplars
-// ─────────────────────────────────────────────────────────────────────────────
-
-public sealed record WritingExemplarAnnotationResponse(
-    Guid Id,
-    int CharStart,
-    int CharEnd,
-    string? RuleId,
-    string Note);
-
-public sealed record WritingExemplarResponse(
-    Guid Id,
-    Guid? ScenarioId,
-    string Profession,
-    string LetterType,
-    int Difficulty,
-    string TargetBand,
-    string LetterContent,
-    IReadOnlyList<WritingExemplarAnnotationResponse> Annotations,
-    string? AuthorNote,
-    string Status);
-
-public sealed record WritingExemplarListResponse(
-    IReadOnlyList<WritingExemplarResponse> Items,
-    int Total);
-
-public sealed record WritingExemplarUpsertRequest(
-    Guid? ScenarioId,
-    [property: Required, StringLength(32)] string Profession,
-    [property: Required, StringLength(8)] string LetterType,
-    [property: Range(1, 5)] int Difficulty,
-    [property: Required, StringLength(8)] string TargetBand,
-    [property: Required] string LetterContent,
-    IReadOnlyList<WritingExemplarAnnotationResponse>? Annotations,
-    [property: StringLength(1000)] string? AuthorNote,
-    [property: StringLength(16)] string? Status);
-
-public sealed record WritingExemplarTestGradeResponse(
-    Guid ExemplarId,
-    WritingGradeResponseV2 Grade,
-    bool PassesQualityBar);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Drills

@@ -1,6 +1,5 @@
 using System.Security.Claims;
 using System.Text.Json;
-using System.Text.Json.Serialization;
 using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
@@ -10,9 +9,8 @@ namespace OetLearner.Api.Services.Writing;
 
 /// <summary>
 /// WS-B2: Authoring service for the unified writing task (the enriched
-/// <see cref="WritingScenario"/> plus its content checklist items and a linked
-/// model-answer <see cref="WritingExemplar"/>). Provides CRUD, lifecycle,
-/// publish-readiness validation, and JSON import/export (spec §18).
+/// <see cref="WritingScenario"/>). Provides CRUD, lifecycle, publish-readiness
+/// validation, and JSON import/export (spec §18).
 /// </summary>
 public interface IWritingTaskAuthoringService
 {
@@ -93,19 +91,14 @@ public sealed class WritingTaskAuthoringService(LearnerDbContext db, ILogger<Wri
             .Take(pageSize)
             .ToListAsync(ct);
 
-        var items = new List<WritingTaskDto>(scenarios.Count);
-        foreach (var scenario in scenarios)
-        {
-            items.Add(await BuildDtoAsync(scenario, ct));
-        }
-
+        var items = scenarios.Select(MapToDto).ToList();
         return (items, total);
     }
 
     public async Task<WritingTaskDto?> GetAsync(Guid id, CancellationToken ct = default)
     {
         var scenario = await db.WritingScenarios.AsNoTracking().FirstOrDefaultAsync(s => s.Id == id, ct);
-        return scenario is null ? null : await BuildDtoAsync(scenario, ct);
+        return scenario is null ? null : MapToDto(scenario);
     }
 
     public async Task<WritingTaskDto> CreateAsync(WritingTaskUpsertDto request, ClaimsPrincipal user, CancellationToken ct = default)
@@ -126,11 +119,8 @@ public sealed class WritingTaskAuthoringService(LearnerDbContext db, ILogger<Wri
         ApplyUpsert(scenario, request);
         db.WritingScenarios.Add(scenario);
 
-        ReplaceChecklist(scenario.Id, MergeChecklists(request), now);
-        await UpsertModelAnswerAsync(scenario, request.ModelAnswerText, request.ModelAnswerParagraphs, user, ct);
-
         await db.SaveChangesAsync(ct);
-        return await BuildDtoAsync(scenario, ct);
+        return MapToDto(scenario);
     }
 
     public async Task<WritingTaskDto?> UpdateAsync(Guid id, WritingTaskUpsertDto request, ClaimsPrincipal user, CancellationToken ct = default)
@@ -141,55 +131,17 @@ public sealed class WritingTaskAuthoringService(LearnerDbContext db, ILogger<Wri
             return null;
         }
 
-        var now = DateTimeOffset.UtcNow;
         ApplyUpsert(scenario, request);
-        scenario.UpdatedAt = now;
-
-        ReplaceChecklist(scenario.Id, MergeChecklists(request), now);
-        await UpsertModelAnswerAsync(scenario, request.ModelAnswerText, request.ModelAnswerParagraphs, user, ct);
+        scenario.UpdatedAt = DateTimeOffset.UtcNow;
 
         await db.SaveChangesAsync(ct);
-        return await BuildDtoAsync(scenario, ct);
-    }
-
-    /// <summary>Combines the contract's split key/irrelevant checklist arrays into the
-    /// single persisted checklist; RequiredStatus discriminates them on the way out.</summary>
-    private static List<WritingContentChecklistItemDto> MergeChecklists(WritingTaskUpsertDto request)
-    {
-        var merged = new List<WritingContentChecklistItemDto>();
-        if (request.KeyContentChecklist is { } keys)
-        {
-            merged.AddRange(keys.Select(k => k with
-            {
-                RequiredStatus = string.Equals(k.RequiredStatus, "optional", StringComparison.OrdinalIgnoreCase)
-                    ? "optional"
-                    : "required",
-            }));
-        }
-
-        if (request.IrrelevantContentChecklist is { } irrelevant)
-        {
-            merged.AddRange(irrelevant.Select(r => r with { RequiredStatus = "irrelevant" }));
-        }
-
-        return merged;
+        return MapToDto(scenario);
     }
 
     public async Task<WritingTaskValidationResult?> ValidateAsync(Guid id, CancellationToken ct = default)
     {
         var scenario = await db.WritingScenarios.AsNoTracking().FirstOrDefaultAsync(s => s.Id == id, ct);
-        if (scenario is null)
-        {
-            return null;
-        }
-
-        var checklist = await db.WritingContentChecklistItems
-            .AsNoTracking()
-            .Where(c => c.ScenarioId == id)
-            .ToListAsync(ct);
-
-        var exemplar = await LoadExemplarAsync(scenario, ct);
-        return Validate(scenario, checklist, exemplar);
+        return scenario is null ? null : Validate(scenario);
     }
 
     public async Task<(WritingTaskDto? Task, WritingTaskValidationResult? Validation)> PublishAsync(Guid id, CancellationToken ct = default)
@@ -200,12 +152,7 @@ public sealed class WritingTaskAuthoringService(LearnerDbContext db, ILogger<Wri
             return (null, null);
         }
 
-        var checklist = await db.WritingContentChecklistItems
-            .Where(c => c.ScenarioId == id)
-            .ToListAsync(ct);
-        var exemplar = await LoadExemplarAsync(scenario, ct);
-
-        var validation = Validate(scenario, checklist, exemplar);
+        var validation = Validate(scenario);
         if (!validation.IsPublishReady)
         {
             return (null, validation);
@@ -213,13 +160,9 @@ public sealed class WritingTaskAuthoringService(LearnerDbContext db, ILogger<Wri
 
         scenario.Status = "published";
         scenario.UpdatedAt = DateTimeOffset.UtcNow;
-        if (exemplar is not null)
-        {
-            exemplar.Status = "published";
-        }
 
         await db.SaveChangesAsync(ct);
-        return (await BuildDtoAsync(scenario, ct), validation);
+        return (MapToDto(scenario), validation);
     }
 
     public async Task<WritingTaskDto?> ArchiveAsync(Guid id, CancellationToken ct = default)
@@ -233,7 +176,7 @@ public sealed class WritingTaskAuthoringService(LearnerDbContext db, ILogger<Wri
         scenario.Status = "archived";
         scenario.UpdatedAt = DateTimeOffset.UtcNow;
         await db.SaveChangesAsync(ct);
-        return await BuildDtoAsync(scenario, ct);
+        return MapToDto(scenario);
     }
 
     public async Task<WritingTaskDto?> CloneAsync(Guid id, ClaimsPrincipal user, CancellationToken ct = default)
@@ -244,13 +187,6 @@ public sealed class WritingTaskAuthoringService(LearnerDbContext db, ILogger<Wri
             return null;
         }
 
-        var sourceChecklist = await db.WritingContentChecklistItems
-            .AsNoTracking()
-            .Where(c => c.ScenarioId == id)
-            .OrderBy(c => c.Ordinal)
-            .ToListAsync(ct);
-        var sourceExemplar = await LoadExemplarAsync(source, ct);
-
         var now = DateTimeOffset.UtcNow;
         var clone = new WritingScenario
         {
@@ -258,16 +194,14 @@ public sealed class WritingTaskAuthoringService(LearnerDbContext db, ILogger<Wri
             Title = string.IsNullOrWhiteSpace(source.Title) ? source.Title : $"{source.Title} (copy)",
             Profession = source.Profession,
             LetterType = source.LetterType,
-            CaseNotesMarkdown = source.CaseNotesMarkdown,
+            Difficulty = source.Difficulty,
             Status = "draft",
             InternalCode = source.InternalCode,
             TaskPromptMarkdown = source.TaskPromptMarkdown,
             WriterRole = source.WriterRole,
             TodayDate = source.TodayDate,
-            RecipientJson = source.RecipientJson,
             ExpectedPurpose = source.ExpectedPurpose,
             ExpectedAction = source.ExpectedAction,
-            CaseNoteSectionsJson = source.CaseNoteSectionsJson,
             FixedInstructionsJson = source.FixedInstructionsJson,
             WordGuideMin = source.WordGuideMin,
             WordGuideMax = source.WordGuideMax,
@@ -286,32 +220,8 @@ public sealed class WritingTaskAuthoringService(LearnerDbContext db, ILogger<Wri
 
         db.WritingScenarios.Add(clone);
 
-        for (var i = 0; i < sourceChecklist.Count; i++)
-        {
-            var c = sourceChecklist[i];
-            db.WritingContentChecklistItems.Add(new WritingContentChecklistItem
-            {
-                Id = Guid.NewGuid(),
-                ScenarioId = clone.Id,
-                ItemText = c.ItemText,
-                Category = c.Category,
-                Importance = c.Importance,
-                RequiredStatus = c.RequiredStatus,
-                LinkedCaseNoteSection = c.LinkedCaseNoteSection,
-                ExpectedRepresentation = c.ExpectedRepresentation,
-                CommonError = c.CommonError,
-                Ordinal = i,
-                CreatedAt = now,
-                UpdatedAt = now,
-            });
-        }
-
-        // Deep-copy the model answer (scenario-level Version/PreviousVersionId set above).
-        var paragraphs = ReadParagraphs(sourceExemplar);
-        await UpsertModelAnswerAsync(clone, sourceExemplar?.LetterContent, paragraphs, user, ct);
-
         await db.SaveChangesAsync(ct);
-        return await BuildDtoAsync(clone, ct);
+        return MapToDto(clone);
     }
 
     public async Task<WritingTaskDto> ImportAsync(WritingTaskImportJson import, ClaimsPrincipal user, CancellationToken ct = default)
@@ -323,19 +233,7 @@ public sealed class WritingTaskAuthoringService(LearnerDbContext db, ILogger<Wri
     public async Task<WritingTaskImportJson?> ExportAsync(Guid id, CancellationToken ct = default)
     {
         var scenario = await db.WritingScenarios.AsNoTracking().FirstOrDefaultAsync(s => s.Id == id, ct);
-        if (scenario is null)
-        {
-            return null;
-        }
-
-        var checklist = await db.WritingContentChecklistItems
-            .AsNoTracking()
-            .Where(c => c.ScenarioId == id)
-            .OrderBy(c => c.Ordinal)
-            .ToListAsync(ct);
-        var exemplar = await LoadExemplarAsync(scenario, ct);
-
-        return MapToExportJson(scenario, checklist, exemplar);
+        return scenario is null ? null : MapToExportJson(scenario);
     }
 
     // ----- mapping helpers -----
@@ -350,11 +248,8 @@ public sealed class WritingTaskAuthoringService(LearnerDbContext db, ILogger<Wri
         scenario.WriterRole = request.WriterRole;
         scenario.TodayDate = request.TodayDate;
         scenario.TaskPromptMarkdown = request.TaskPromptMarkdown;
-        scenario.CaseNotesMarkdown = request.CaseNotesMarkdown ?? scenario.CaseNotesMarkdown ?? string.Empty;
         scenario.ExpectedPurpose = request.ExpectedPurpose;
         scenario.ExpectedAction = request.ExpectedAction;
-        scenario.CaseNoteSectionsJson = SerializeCaseNoteSections(request.CaseNoteSections);
-        scenario.RecipientJson = SerializeRecipient(request.Recipient);
         scenario.FixedInstructionsJson = SerializeFixedInstructions(request.FixedInstructions);
 
         if (request.WordGuideMin is { } min) scenario.WordGuideMin = min;
@@ -382,110 +277,12 @@ public sealed class WritingTaskAuthoringService(LearnerDbContext db, ILogger<Wri
         }
     }
 
-    private void ReplaceChecklist(Guid scenarioId, List<WritingContentChecklistItemDto>? items, DateTimeOffset now)
-    {
-        var existing = db.WritingContentChecklistItems.Where(c => c.ScenarioId == scenarioId);
-        db.WritingContentChecklistItems.RemoveRange(existing);
-
-        if (items is null || items.Count == 0)
-        {
-            return;
-        }
-
-        for (var i = 0; i < items.Count; i++)
-        {
-            var dto = items[i];
-            if (string.IsNullOrWhiteSpace(dto.ItemText))
-            {
-                continue;
-            }
-
-            db.WritingContentChecklistItems.Add(new WritingContentChecklistItem
-            {
-                Id = Guid.NewGuid(),
-                ScenarioId = scenarioId,
-                ItemText = dto.ItemText.Trim(),
-                Category = dto.Category?.Trim() ?? string.Empty,
-                Importance = NormalizeImportance(dto.Importance),
-                RequiredStatus = NormalizeRequiredStatus(dto.RequiredStatus),
-                LinkedCaseNoteSection = dto.LinkedCaseNoteSection,
-                ExpectedRepresentation = dto.ExpectedRepresentation,
-                CommonError = dto.CommonError,
-                Ordinal = dto.Ordinal != 0 ? dto.Ordinal : i,
-                CreatedAt = now,
-                UpdatedAt = now,
-            });
-        }
-    }
-
-    private async Task UpsertModelAnswerAsync(
-        WritingScenario scenario,
-        string? modelAnswerText,
-        List<WritingModelAnswerParagraphDto>? paragraphs,
-        ClaimsPrincipal user,
-        CancellationToken ct)
-    {
-        var annotations = SerializeAnnotations(paragraphs);
-
-        WritingExemplar? exemplar = null;
-        if (scenario.ModelAnswerExemplarId is { } exemplarId)
-        {
-            exemplar = await db.WritingExemplars.FirstOrDefaultAsync(e => e.Id == exemplarId, ct);
-        }
-
-        if (exemplar is null)
-        {
-            exemplar = new WritingExemplar
-            {
-                Id = Guid.NewGuid(),
-                ScenarioId = scenario.Id,
-                Status = "draft",
-                AuthorId = GetUserId(user) ?? "system",
-                TargetBand = "A",
-                CreatedAt = DateTimeOffset.UtcNow,
-            };
-            db.WritingExemplars.Add(exemplar);
-            scenario.ModelAnswerExemplarId = exemplar.Id;
-        }
-
-        exemplar.LetterContent = modelAnswerText ?? string.Empty;
-        exemplar.AnnotationsJson = annotations;
-        exemplar.Profession = scenario.Profession;
-        exemplar.LetterType = scenario.LetterType;
-        exemplar.ScenarioId = scenario.Id;
-    }
-
-    private async Task<WritingExemplar?> LoadExemplarAsync(WritingScenario scenario, CancellationToken ct)
-    {
-        if (scenario.ModelAnswerExemplarId is not { } exemplarId)
-        {
-            return null;
-        }
-
-        return await db.WritingExemplars.AsNoTracking().FirstOrDefaultAsync(e => e.Id == exemplarId, ct);
-    }
-
-    private async Task<WritingTaskDto> BuildDtoAsync(WritingScenario scenario, CancellationToken ct)
-    {
-        var checklist = await db.WritingContentChecklistItems
-            .AsNoTracking()
-            .Where(c => c.ScenarioId == scenario.Id)
-            .OrderBy(c => c.Ordinal)
-            .ToListAsync(ct);
-        var exemplar = await LoadExemplarAsync(scenario, ct);
-        return MapToDto(scenario, checklist, exemplar);
-    }
-
     /// <summary>
-    /// Maps a scenario + its checklist + linked model-answer exemplar to the
-    /// frontend-aligned <see cref="WritingTaskDto"/>. Public so the tutor/expert
-    /// marking-context endpoint can reuse the exact same shape the admin Task
-    /// Builder serves (lib/writing/types.ts WritingTaskDto).
+    /// Maps a scenario to the frontend-aligned <see cref="WritingTaskDto"/>.
+    /// Public so the tutor/expert marking-context endpoint can reuse the exact
+    /// same shape the admin Task Builder serves (lib/writing/types.ts WritingTaskDto).
     /// </summary>
-    public static WritingTaskDto MapToDto(
-        WritingScenario scenario,
-        List<WritingContentChecklistItem> checklist,
-        WritingExemplar? exemplar)
+    public static WritingTaskDto MapToDto(WritingScenario scenario)
     {
         var pdfId = scenario.StimulusPdfMediaAssetId;
         return new WritingTaskDto
@@ -501,9 +298,6 @@ public sealed class WritingTaskAuthoringService(LearnerDbContext db, ILogger<Wri
             WriterRole = scenario.WriterRole,
             TodayDate = scenario.TodayDate,
             TaskPromptMarkdown = scenario.TaskPromptMarkdown,
-            CaseNotesMarkdown = scenario.CaseNotesMarkdown,
-            CaseNoteSections = DeserializeCaseNoteSections(scenario.CaseNoteSectionsJson),
-            Recipient = DeserializeRecipient(scenario.RecipientJson),
             ExpectedPurpose = scenario.ExpectedPurpose,
             ExpectedAction = scenario.ExpectedAction,
             FixedInstructions = DeserializeFixedInstructions(scenario.FixedInstructionsJson),
@@ -513,16 +307,6 @@ public sealed class WritingTaskAuthoringService(LearnerDbContext db, ILogger<Wri
             WritingTimeSeconds = scenario.WritingTimeSeconds,
             SimulationModes = scenario.SimulationModes,
             MarkingMode = scenario.MarkingMode,
-            ModelAnswerText = string.IsNullOrEmpty(exemplar?.LetterContent) ? null : exemplar!.LetterContent,
-            ModelAnswerParagraphs = ReadParagraphs(exemplar),
-            KeyContentChecklist = checklist
-                .Where(c => !string.Equals(c.RequiredStatus, "irrelevant", StringComparison.OrdinalIgnoreCase))
-                .Select(MapChecklistDto)
-                .ToList(),
-            IrrelevantContentChecklist = checklist
-                .Where(c => string.Equals(c.RequiredStatus, "irrelevant", StringComparison.OrdinalIgnoreCase))
-                .Select(MapChecklistDto)
-                .ToList(),
             SourceProvenance = scenario.SourceProvenance,
             IntegrityAcknowledged = scenario.IntegrityAcknowledgedAt is not null,
             StimulusPdfMediaAssetId = pdfId,
@@ -532,25 +316,9 @@ public sealed class WritingTaskAuthoringService(LearnerDbContext db, ILogger<Wri
         };
     }
 
-    private static WritingContentChecklistItemDto MapChecklistDto(WritingContentChecklistItem c) => new()
-    {
-        Id = c.Id,
-        ItemText = c.ItemText,
-        Category = c.Category,
-        Importance = c.Importance,
-        RequiredStatus = c.RequiredStatus,
-        LinkedCaseNoteSection = c.LinkedCaseNoteSection,
-        ExpectedRepresentation = c.ExpectedRepresentation,
-        CommonError = c.CommonError,
-        Ordinal = c.Ordinal,
-    };
-
     // ----- validation (spec §3/§19.2/§22) -----
 
-    private static WritingTaskValidationResult Validate(
-        WritingScenario scenario,
-        List<WritingContentChecklistItem> checklist,
-        WritingExemplar? exemplar)
+    private static WritingTaskValidationResult Validate(WritingScenario scenario)
     {
         var issues = new List<WritingTaskValidationIssue>();
 
@@ -579,32 +347,9 @@ public sealed class WritingTaskAuthoringService(LearnerDbContext db, ILogger<Wri
             issues.Add(Error("task_prompt_required", "Task prompt (writing instruction) is required."));
         }
 
-        var hasCaseNoteSections = !string.IsNullOrWhiteSpace(scenario.CaseNoteSectionsJson)
-            && DeserializeCaseNoteSections(scenario.CaseNoteSectionsJson).Count > 0;
-        if (!hasCaseNoteSections && string.IsNullOrWhiteSpace(scenario.CaseNotesMarkdown))
-        {
-            issues.Add(Error("case_notes_required", "Case notes are required (at least one section or case-notes markdown)."));
-        }
-
-        var recipient = DeserializeRecipient(scenario.RecipientJson);
-        if (recipient is null || string.IsNullOrWhiteSpace(recipient.Name) || string.IsNullOrWhiteSpace(recipient.Role))
-        {
-            issues.Add(Error("recipient_required", "Recipient name and role are required."));
-        }
-
-        if (string.IsNullOrWhiteSpace(exemplar?.LetterContent))
-        {
-            issues.Add(Error("model_answer_required", "A model answer is required."));
-        }
-
         if (scenario.WordGuideMin <= 0 || scenario.WordGuideMax < scenario.WordGuideMin)
         {
             issues.Add(Error("word_guide_invalid", "Word guide must have min > 0 and max >= min."));
-        }
-
-        if (!checklist.Any(c => string.Equals(c.RequiredStatus, "required", StringComparison.OrdinalIgnoreCase)))
-        {
-            issues.Add(Error("key_content_required", "At least one required key-content checklist item is needed."));
         }
 
         if (string.IsNullOrWhiteSpace(scenario.SourceProvenance))
@@ -635,54 +380,6 @@ public sealed class WritingTaskAuthoringService(LearnerDbContext db, ILogger<Wri
 
     private static WritingTaskUpsertDto MapImportToUpsert(WritingTaskImportJson import)
     {
-        var ordinal = 0;
-        var keyItems = new List<WritingContentChecklistItemDto>();
-        if (import.Marking?.KeyContentChecklist is { } keys)
-        {
-            foreach (var k in keys)
-            {
-                if (string.IsNullOrWhiteSpace(k.ItemText)) continue;
-                keyItems.Add(new WritingContentChecklistItemDto
-                {
-                    ItemText = k.ItemText!.Trim(),
-                    Category = k.Category?.Trim() ?? string.Empty,
-                    Importance = NormalizeImportance(k.Importance),
-                    RequiredStatus = string.Equals(k.RequiredStatus, "optional", StringComparison.OrdinalIgnoreCase) ? "optional" : "required",
-                    LinkedCaseNoteSection = k.LinkedCaseNoteSection,
-                    ExpectedRepresentation = k.ExpectedRepresentation,
-                    CommonError = k.CommonError,
-                    Ordinal = ordinal++,
-                });
-            }
-        }
-
-        var irrelevantItems = new List<WritingContentChecklistItemDto>();
-        if (import.Marking?.IrrelevantContentChecklist is { } irrelevant)
-        {
-            foreach (var r in irrelevant)
-            {
-                if (string.IsNullOrWhiteSpace(r.ItemText)) continue;
-                irrelevantItems.Add(new WritingContentChecklistItemDto
-                {
-                    ItemText = r.ItemText!.Trim(),
-                    Category = r.Category?.Trim() ?? string.Empty,
-                    Importance = "low",
-                    RequiredStatus = "irrelevant",
-                    Ordinal = ordinal++,
-                });
-            }
-        }
-
-        var caseNoteSections = import.CaseNotes?.Sections?
-            .Select(s => new WritingCaseNoteSectionDto
-            {
-                Heading = s.Heading?.Trim() ?? string.Empty,
-                Items = s.Items?.Where(i => !string.IsNullOrWhiteSpace(i)).Select(i => i.Trim()).ToList() ?? new List<string>(),
-            })
-            .ToList();
-
-        var recipient = import.WritingTask?.Recipient;
-
         return new WritingTaskUpsertDto
         {
             InternalCode = import.InternalCode,
@@ -692,14 +389,6 @@ public sealed class WritingTaskAuthoringService(LearnerDbContext db, ILogger<Wri
             WriterRole = import.CaseNotes?.CandidateRole,
             TodayDate = import.CaseNotes?.TodayDate,
             TaskPromptMarkdown = import.WritingTask?.Instruction,
-            CaseNoteSections = caseNoteSections,
-            Recipient = recipient is null ? null : new WritingRecipientDto
-            {
-                Name = recipient.Name ?? string.Empty,
-                Role = recipient.Role ?? string.Empty,
-                Organisation = recipient.Organisation,
-                Address = recipient.Address,
-            },
             ExpectedPurpose = import.Marking?.ExpectedPurpose,
             ExpectedAction = import.Marking?.ExpectedAction,
             FixedInstructions = import.WritingTask?.FixedInstructions?.Where(f => !string.IsNullOrWhiteSpace(f)).ToList(),
@@ -707,9 +396,6 @@ public sealed class WritingTaskAuthoringService(LearnerDbContext db, ILogger<Wri
             WordGuideMax = import.WritingTask?.WordGuide?.Max,
             ReadingTimeSeconds = import.Duration?.ReadingTimeSeconds,
             WritingTimeSeconds = import.Duration?.WritingTimeSeconds,
-            ModelAnswerText = string.IsNullOrWhiteSpace(import.Marking?.ModelAnswer) ? null : import.Marking!.ModelAnswer!.Trim(),
-            KeyContentChecklist = keyItems,
-            IrrelevantContentChecklist = irrelevantItems,
             SourceProvenance = null,
             IntegrityAcknowledged = null,
         };
@@ -732,10 +418,7 @@ public sealed class WritingTaskAuthoringService(LearnerDbContext db, ILogger<Wri
         return $"{profession} — {type}";
     }
 
-    private WritingTaskImportJson MapToExportJson(
-        WritingScenario scenario,
-        List<WritingContentChecklistItem> checklist,
-        WritingExemplar? exemplar)
+    private static WritingTaskImportJson MapToExportJson(WritingScenario scenario)
     {
         return new WritingTaskImportJson
         {
@@ -752,26 +435,10 @@ public sealed class WritingTaskAuthoringService(LearnerDbContext db, ILogger<Wri
             {
                 TodayDate = scenario.TodayDate,
                 CandidateRole = scenario.WriterRole,
-                Sections = DeserializeCaseNoteSections(scenario.CaseNoteSectionsJson)
-                    .Select(s => new WritingImportCaseNoteSection
-                    {
-                        Heading = s.Heading,
-                        Items = s.Items,
-                    })
-                    .ToList(),
             },
             WritingTask = new WritingImportWritingTask
             {
                 Instruction = scenario.TaskPromptMarkdown ?? string.Empty,
-                Recipient = DeserializeRecipient(scenario.RecipientJson) is { } r
-                    ? new WritingImportRecipient
-                    {
-                        Name = r.Name,
-                        Role = r.Role,
-                        Organisation = r.Organisation,
-                        Address = r.Address,
-                    }
-                    : null,
                 FixedInstructions = DeserializeFixedInstructions(scenario.FixedInstructionsJson),
                 WordGuide = new WritingImportWordGuide
                 {
@@ -783,30 +450,6 @@ public sealed class WritingTaskAuthoringService(LearnerDbContext db, ILogger<Wri
             {
                 ExpectedPurpose = scenario.ExpectedPurpose,
                 ExpectedAction = scenario.ExpectedAction,
-                KeyContentChecklist = checklist
-                    .Where(c => !string.Equals(c.RequiredStatus, "irrelevant", StringComparison.OrdinalIgnoreCase))
-                    .Select(c => new WritingImportChecklistItem
-                    {
-                        ItemText = c.ItemText,
-                        Category = c.Category,
-                        Importance = c.Importance,
-                        RequiredStatus = c.RequiredStatus,
-                        LinkedCaseNoteSection = c.LinkedCaseNoteSection,
-                        ExpectedRepresentation = c.ExpectedRepresentation,
-                        CommonError = c.CommonError,
-                    })
-                    .ToList(),
-                IrrelevantContentChecklist = checklist
-                    .Where(c => string.Equals(c.RequiredStatus, "irrelevant", StringComparison.OrdinalIgnoreCase))
-                    .Select(c => new WritingImportChecklistItem
-                    {
-                        ItemText = c.ItemText,
-                        Category = c.Category,
-                        Importance = c.Importance,
-                        RequiredStatus = c.RequiredStatus,
-                    })
-                    .ToList(),
-                ModelAnswer = string.IsNullOrEmpty(exemplar?.LetterContent) ? null : exemplar!.LetterContent,
             },
         };
     }
@@ -849,65 +492,6 @@ public sealed class WritingTaskAuthoringService(LearnerDbContext db, ILogger<Wri
 
     // ----- json (de)serialization for the scenario's stored columns -----
 
-    private static string? SerializeCaseNoteSections(List<WritingCaseNoteSectionDto>? sections)
-    {
-        if (sections is null || sections.Count == 0)
-        {
-            return null;
-        }
-
-        return JsonSerializer.Serialize(sections, JsonOptions);
-    }
-
-    private static List<WritingCaseNoteSectionDto> DeserializeCaseNoteSections(string? json)
-    {
-        if (string.IsNullOrWhiteSpace(json))
-        {
-            return new List<WritingCaseNoteSectionDto>();
-        }
-
-        try
-        {
-            return JsonSerializer.Deserialize<List<WritingCaseNoteSectionDto>>(json, JsonOptions)
-                ?? new List<WritingCaseNoteSectionDto>();
-        }
-        catch (JsonException)
-        {
-            return new List<WritingCaseNoteSectionDto>();
-        }
-    }
-
-    private static string? SerializeRecipient(WritingRecipientDto? recipient)
-    {
-        if (recipient is null
-            || (string.IsNullOrWhiteSpace(recipient.Name)
-                && string.IsNullOrWhiteSpace(recipient.Role)
-                && string.IsNullOrWhiteSpace(recipient.Organisation)
-                && string.IsNullOrWhiteSpace(recipient.Address)))
-        {
-            return null;
-        }
-
-        return JsonSerializer.Serialize(recipient, JsonOptions);
-    }
-
-    private static WritingRecipientDto? DeserializeRecipient(string? json)
-    {
-        if (string.IsNullOrWhiteSpace(json))
-        {
-            return null;
-        }
-
-        try
-        {
-            return JsonSerializer.Deserialize<WritingRecipientDto>(json, JsonOptions);
-        }
-        catch (JsonException)
-        {
-            return null;
-        }
-    }
-
     private static string SerializeFixedInstructions(List<string>? instructions)
     {
         var clean = instructions?
@@ -934,101 +518,14 @@ public sealed class WritingTaskAuthoringService(LearnerDbContext db, ILogger<Wri
         }
     }
 
-    // ----- model-answer annotations (structured paragraphs) -----
-    // Paragraphs are stored under a "paragraphs" key in the exemplar's AnnotationsJson;
-    // task-level versioning lives on the WritingScenario entity (Version/PreviousVersionId).
-
-    private static string SerializeAnnotations(List<WritingModelAnswerParagraphDto>? paragraphs)
-    {
-        var payload = new ExemplarAnnotations
-        {
-            Paragraphs = paragraphs?
-                .Where(p => p is not null && !string.IsNullOrWhiteSpace(p.Text))
-                .Select(p => new WritingModelAnswerParagraphDto { Heading = p.Heading, Text = p.Text.Trim() })
-                .ToList() ?? new List<WritingModelAnswerParagraphDto>(),
-        };
-        return JsonSerializer.Serialize(payload, JsonOptions);
-    }
-
-    private static List<WritingModelAnswerParagraphDto> ReadParagraphs(WritingExemplar? exemplar)
-    {
-        if (exemplar is null || string.IsNullOrWhiteSpace(exemplar.AnnotationsJson))
-        {
-            return new List<WritingModelAnswerParagraphDto>();
-        }
-
-        try
-        {
-            return JsonSerializer.Deserialize<ExemplarAnnotations>(exemplar.AnnotationsJson, JsonOptions)?.Paragraphs
-                ?? new List<WritingModelAnswerParagraphDto>();
-        }
-        catch (JsonException)
-        {
-            return new List<WritingModelAnswerParagraphDto>();
-        }
-    }
-
-    private static string NormalizeImportance(string? value) => (value ?? string.Empty).Trim().ToLowerInvariant() switch
-    {
-        "high" => "high",
-        "low" => "low",
-        _ => "medium",
-    };
-
-    private static string NormalizeRequiredStatus(string? value) => (value ?? string.Empty).Trim().ToLowerInvariant() switch
-    {
-        "optional" => "optional",
-        "irrelevant" => "irrelevant",
-        _ => "required",
-    };
-
     private static string? GetUserId(ClaimsPrincipal user)
     {
         var sub = user.FindFirstValue(ClaimTypes.NameIdentifier) ?? user.FindFirstValue("sub");
         return string.IsNullOrWhiteSpace(sub) ? null : sub;
     }
-
-    private sealed class ExemplarAnnotations
-    {
-        [JsonPropertyName("paragraphs")]
-        public List<WritingModelAnswerParagraphDto> Paragraphs { get; set; } = new();
-    }
 }
 
 // ===== DTOs (mirror lib/writing/types.ts; camelCase via ASP.NET web defaults) =====
-
-public sealed record WritingRecipientDto
-{
-    public string Name { get; init; } = string.Empty;
-    public string Role { get; init; } = string.Empty;
-    public string? Organisation { get; init; }
-    public string? Address { get; init; }
-}
-
-public sealed record WritingCaseNoteSectionDto
-{
-    public string Heading { get; init; } = string.Empty;
-    public List<string> Items { get; init; } = new();
-}
-
-public sealed record WritingContentChecklistItemDto
-{
-    public Guid? Id { get; init; }
-    public string ItemText { get; init; } = string.Empty;
-    public string Category { get; init; } = string.Empty;
-    public string Importance { get; init; } = "medium";
-    public string RequiredStatus { get; init; } = "required";
-    public string? LinkedCaseNoteSection { get; init; }
-    public string? ExpectedRepresentation { get; init; }
-    public string? CommonError { get; init; }
-    public int Ordinal { get; init; }
-}
-
-public sealed record WritingModelAnswerParagraphDto
-{
-    public string? Heading { get; init; }
-    public string Text { get; init; } = string.Empty;
-}
 
 public sealed record WritingTaskDto
 {
@@ -1043,9 +540,6 @@ public sealed record WritingTaskDto
     public string? WriterRole { get; init; }
     public string? TodayDate { get; init; }
     public string? TaskPromptMarkdown { get; init; }
-    public string? CaseNotesMarkdown { get; init; }
-    public List<WritingCaseNoteSectionDto> CaseNoteSections { get; init; } = new();
-    public WritingRecipientDto? Recipient { get; init; }
     public string? ExpectedPurpose { get; init; }
     public string? ExpectedAction { get; init; }
     public List<string> FixedInstructions { get; init; } = new();
@@ -1055,10 +549,6 @@ public sealed record WritingTaskDto
     public int WritingTimeSeconds { get; init; }
     public string SimulationModes { get; init; } = "both";
     public string MarkingMode { get; init; } = "tutor";
-    public string? ModelAnswerText { get; init; }
-    public List<WritingModelAnswerParagraphDto> ModelAnswerParagraphs { get; init; } = new();
-    public List<WritingContentChecklistItemDto> KeyContentChecklist { get; init; } = new();
-    public List<WritingContentChecklistItemDto> IrrelevantContentChecklist { get; init; } = new();
     public string? SourceProvenance { get; init; }
     public bool IntegrityAcknowledged { get; init; }
     public string? StimulusPdfMediaAssetId { get; init; }
@@ -1077,9 +567,6 @@ public sealed record WritingTaskUpsertDto
     public string? WriterRole { get; init; }
     public string? TodayDate { get; init; }
     public string? TaskPromptMarkdown { get; init; }
-    public string? CaseNotesMarkdown { get; init; }
-    public List<WritingCaseNoteSectionDto>? CaseNoteSections { get; init; }
-    public WritingRecipientDto? Recipient { get; init; }
     public string? ExpectedPurpose { get; init; }
     public string? ExpectedAction { get; init; }
     public List<string>? FixedInstructions { get; init; }
@@ -1089,10 +576,6 @@ public sealed record WritingTaskUpsertDto
     public int? WritingTimeSeconds { get; init; }
     public string? SimulationModes { get; init; }
     public string? MarkingMode { get; init; }
-    public string? ModelAnswerText { get; init; }
-    public List<WritingModelAnswerParagraphDto>? ModelAnswerParagraphs { get; init; }
-    public List<WritingContentChecklistItemDto>? KeyContentChecklist { get; init; }
-    public List<WritingContentChecklistItemDto>? IrrelevantContentChecklist { get; init; }
     public string? SourceProvenance { get; init; }
     public bool? IntegrityAcknowledged { get; init; }
     public string? StimulusPdfMediaAssetId { get; init; }
@@ -1132,31 +615,15 @@ public sealed record WritingImportDuration
     public int? WritingTimeSeconds { get; init; }
 }
 
-public sealed record WritingImportRecipient
-{
-    public string? Name { get; init; }
-    public string? Role { get; init; }
-    public string? Organisation { get; init; }
-    public string? Address { get; init; }
-}
-
 public sealed record WritingImportCaseNotes
 {
     public string? TodayDate { get; init; }
     public string? CandidateRole { get; init; }
-    public List<WritingImportCaseNoteSection>? Sections { get; init; }
-}
-
-public sealed record WritingImportCaseNoteSection
-{
-    public string? Heading { get; init; }
-    public List<string>? Items { get; init; }
 }
 
 public sealed record WritingImportWritingTask
 {
     public string Instruction { get; init; } = string.Empty;
-    public WritingImportRecipient? Recipient { get; init; }
     public List<string>? FixedInstructions { get; init; }
     public WritingImportWordGuide? WordGuide { get; init; }
 }
@@ -1171,18 +638,4 @@ public sealed record WritingImportMarking
 {
     public string? ExpectedPurpose { get; init; }
     public string? ExpectedAction { get; init; }
-    public List<WritingImportChecklistItem>? KeyContentChecklist { get; init; }
-    public List<WritingImportChecklistItem>? IrrelevantContentChecklist { get; init; }
-    public string? ModelAnswer { get; init; }
-}
-
-public sealed record WritingImportChecklistItem
-{
-    public string? ItemText { get; init; }
-    public string? Category { get; init; }
-    public string? Importance { get; init; }
-    public string? RequiredStatus { get; init; }
-    public string? LinkedCaseNoteSection { get; init; }
-    public string? ExpectedRepresentation { get; init; }
-    public string? CommonError { get; init; }
 }

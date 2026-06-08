@@ -239,7 +239,6 @@ export const adminRoutePermissionMap: Record<string, string[]> = {
   '/admin/writing/calibration': [AdminPermission.QualityAnalytics],
   '/admin/writing/canon': [AdminPermission.ContentRead, AdminPermission.ContentWrite],
   '/admin/writing/drills': [AdminPermission.ContentRead, AdminPermission.ContentWrite],
-  '/admin/writing/exemplars': [AdminPermission.ContentRead, AdminPermission.ContentWrite],
   '/admin/writing/lessons': [AdminPermission.ContentRead, AdminPermission.ContentWrite],
   '/admin/writing/mistakes': [AdminPermission.ContentRead, AdminPermission.ContentWrite],
   '/admin/writing/options': [AdminPermission.AiConfig],

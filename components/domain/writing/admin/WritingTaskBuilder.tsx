@@ -49,10 +49,6 @@ import {
   WRITING_MARKING_MODE_LABELS,
   type WritingTaskFormState,
 } from './builder-state';
-import { RecipientEditor } from './RecipientEditor';
-import { CaseNotesSectionBuilder } from './CaseNotesSectionBuilder';
-import { ContentChecklistBuilder } from './ContentChecklistBuilder';
-import { ModelAnswerEditor } from './ModelAnswerEditor';
 import { StringLineListEditor } from './StringLineListEditor';
 import { TaskPreview } from './TaskPreview';
 
@@ -740,32 +736,10 @@ export function WritingTaskBuilder({ taskId, mode }: WritingTaskBuilderProps) {
         </div>
       </SettingsSection>
 
-      {/* Recipient */}
-      <SettingsSection
-        title="Recipient"
-        description="Who the candidate addresses the letter to."
-      >
-        <RecipientEditor
-          value={form.recipient}
-          onChange={(recipient) => patch({ recipient })}
-        />
-      </SettingsSection>
-
-      {/* Case notes — centrepiece */}
-      <SettingsSection
-        title="Case notes"
-        description="The structured source material. Add sections and notes; reorder freely."
-      >
-        <CaseNotesSectionBuilder
-          sections={form.caseNoteSections}
-          onChange={(caseNoteSections) => patch({ caseNoteSections })}
-        />
-      </SettingsSection>
-
       {/* Stimulus PDF */}
       <SettingsSection
         title="Stimulus PDF"
-        description="Optional — attach the real OET question-paper PDF. When present, learners see the PDF instead of the plain case-notes text."
+        description="Optional — attach the real OET question-paper PDF. When present, learners see the PDF; otherwise they see the prompt and fixed instructions only."
       >
         <div className="space-y-3">
           {form.stimulusPdfMediaAssetId ? (
@@ -841,7 +815,7 @@ export function WritingTaskBuilder({ taskId, mode }: WritingTaskBuilderProps) {
             /* ── Empty state ── */
             <div className="space-y-2">
               <p className="text-sm text-admin-fg-muted">
-                No stimulus PDF attached — learners will see the case-notes text instead.
+                No stimulus PDF attached — learners will see the prompt and fixed instructions only.
               </p>
               <Button
                 variant="secondary"
@@ -917,50 +891,6 @@ export function WritingTaskBuilder({ taskId, mode }: WritingTaskBuilderProps) {
             />
           </div>
         </div>
-      </SettingsSection>
-
-      {/* Model answer */}
-      <SettingsSection
-        title="Model answer"
-        description="The reference letter and optional paragraph breakdown for graders."
-      >
-        <ModelAnswerEditor
-          modelAnswerText={form.modelAnswerText}
-          onModelAnswerTextChange={(modelAnswerText) => patch({ modelAnswerText })}
-          paragraphs={form.modelAnswerParagraphs}
-          onParagraphsChange={(modelAnswerParagraphs) =>
-            patch({ modelAnswerParagraphs })
-          }
-          wordGuideMin={form.wordGuideMin}
-          wordGuideMax={form.wordGuideMax}
-        />
-      </SettingsSection>
-
-      {/* Key content checklist */}
-      <SettingsSection
-        title="Key content checklist"
-        description="The facts a strong letter must include, with importance and links."
-      >
-        <ContentChecklistBuilder
-          variant="key"
-          items={form.keyContentChecklist}
-          onChange={(keyContentChecklist) => patch({ keyContentChecklist })}
-          sections={form.caseNoteSections}
-        />
-      </SettingsSection>
-
-      {/* Irrelevant content checklist */}
-      <SettingsSection
-        title="Irrelevant content (distractors)"
-        description="Notes a candidate should deliberately leave out of the letter."
-      >
-        <ContentChecklistBuilder
-          variant="irrelevant"
-          items={form.irrelevantContentChecklist}
-          onChange={(irrelevantContentChecklist) =>
-            patch({ irrelevantContentChecklist })
-          }
-        />
       </SettingsSection>
 
       {/* Preview */}

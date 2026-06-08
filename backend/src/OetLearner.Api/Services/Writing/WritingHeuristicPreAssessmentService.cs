@@ -25,9 +25,7 @@ public interface IWritingHeuristicPreAssessmentService
 public sealed record WritingPreAssessmentRequest(
     Guid SubmissionId,
     string LetterText,
-    WritingScenario Scenario,
-    IReadOnlyList<WritingContentChecklistItem> ChecklistItems,
-    string? ModelAnswerText);
+    WritingScenario Scenario);
 
 public sealed record WritingPreAssessmentResult(
     Guid SubmissionId,
@@ -139,7 +137,6 @@ public sealed class WritingHeuristicPreAssessmentService(
         var scenario = request.Scenario;
         var letter = request.LetterText ?? string.Empty;
         var letterTokens = Tokenize(letter);
-        var letterTokenSet = new HashSet<string>(letterTokens, StringComparer.OrdinalIgnoreCase);
 
         // wordCount = body words.
         var wordCount = letterTokens.Count;
@@ -149,36 +146,12 @@ public sealed class WritingHeuristicPreAssessmentService(
         var maxOk = scenario.WordGuideMax <= 0 || wordCount <= scenario.WordGuideMax;
         var withinWordGuide = minOk && maxOk;
 
-        // Key content coverage: a required item is "covered" when at least half of its significant
-        // tokens (from ItemText + ExpectedRepresentation) appear in the letter (>= 50% overlap).
-        var requiredItems = request.ChecklistItems
-            .Where(i => string.Equals(i.RequiredStatus, "required", StringComparison.OrdinalIgnoreCase))
-            .ToList();
-
+        // Content checklists were removed from the writing task, so content-coverage
+        // scoring is disabled: coverage is treated as complete and no missing/irrelevant
+        // content is surfaced. C2 Content then falls back to length/genre signals only.
         var missingKeyContent = new List<string>();
-        var coveredCount = 0;
-        foreach (var item in requiredItems)
-        {
-            if (IsItemCovered(item, letterTokenSet))
-            {
-                coveredCount++;
-            }
-            else
-            {
-                missingKeyContent.Add(item.ItemText);
-            }
-        }
-
-        var keyContentCoveragePercent = requiredItems.Count == 0
-            ? 100
-            : (int)Math.Round(coveredCount * 100.0 / requiredItems.Count, MidpointRounding.AwayFromZero);
-
-        // Detected irrelevant content: an "irrelevant" distractor whose tokens DO appear in the letter.
-        var detectedIrrelevantContent = request.ChecklistItems
-            .Where(i => string.Equals(i.RequiredStatus, "irrelevant", StringComparison.OrdinalIgnoreCase))
-            .Where(i => IsItemCovered(i, letterTokenSet))
-            .Select(i => i.ItemText)
-            .ToList();
+        var keyContentCoveragePercent = 100;
+        var detectedIrrelevantContent = new List<string>();
 
         // Language notes — simple deterministic surface checks.
         var languageNotes = BuildLanguageNotes(letter);
@@ -226,28 +199,6 @@ public sealed class WritingHeuristicPreAssessmentService(
             confidence,
             "heuristic",
             suggested);
-    }
-
-    /// <summary>
-    /// An item counts as covered when at least half of its significant tokens are present in the
-    /// letter token set (case-insensitive). Items with no significant tokens are treated as covered
-    /// so empty/short checklist text never forces a false "missing".
-    /// </summary>
-    private static bool IsItemCovered(WritingContentChecklistItem item, HashSet<string> letterTokens)
-    {
-        var itemTokens = Tokenize($"{item.ItemText} {item.ExpectedRepresentation}")
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToList();
-
-        if (itemTokens.Count == 0)
-        {
-            return true;
-        }
-
-        var hits = itemTokens.Count(t => letterTokens.Contains(t));
-        // Ceiling of half → single-keyword items still require that keyword.
-        var threshold = (itemTokens.Count + 1) / 2;
-        return hits >= threshold;
     }
 
     private static List<string> BuildLanguageNotes(string letter)
@@ -431,17 +382,12 @@ public sealed class WritingHeuristicPreAssessmentService(
 
     private static string BuildUserInput(WritingPreAssessmentRequest request, WritingPreAssessmentResult heuristic)
     {
-        var checklist = string.Join(
-            "\n",
-            request.ChecklistItems.Select(i => $"- [{i.RequiredStatus}] {i.ItemText}"));
-
         return
             "Score this OET letter on six criteria and respond ONLY with compact JSON of the form " +
             "{\"c1\":n,\"c2\":n,\"c3\":n,\"c4\":n,\"c5\":n,\"c6\":n} " +
             "(c1 Purpose 0-3; c2 Content 0-7; c3 Conciseness 0-7; c4 Genre 0-7; c5 Organisation 0-7; c6 Language 0-7).\n\n" +
             $"Task: {request.Scenario.Title}\n" +
-            $"Word guide: {request.Scenario.WordGuideMin}-{request.Scenario.WordGuideMax}\n" +
-            $"Checklist:\n{checklist}\n\n" +
+            $"Word guide: {request.Scenario.WordGuideMin}-{request.Scenario.WordGuideMax}\n\n" +
             $"Heuristic reference: raw {heuristic.EstimatedRawTotal} band {heuristic.EstimatedBandLabel}.\n\n" +
             $"Letter:\n{request.LetterText}";
     }

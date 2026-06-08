@@ -32,7 +32,6 @@ public interface IWritingResultFeedbackService
 public sealed class WritingResultFeedbackService(
     LearnerDbContext db,
     IWritingResultVisibilityService visibility,
-    IWritingHeuristicPreAssessmentService preAssessment,
     ILogger<WritingResultFeedbackService> logger) : IWritingResultFeedbackService
 {
     public async Task<WritingSubmissionFeedbackDto> GetFeedbackAsync(string userId, Guid submissionId, CancellationToken ct)
@@ -119,50 +118,8 @@ public sealed class WritingResultFeedbackService(
             annotations = rows.Select(MapAnnotation).ToList();
         }
 
-        // ── Missing / irrelevant content (from checklist verdict + pre-assessment) ─
-        var missingContent = new List<WritingContentChecklistItemDto>();
-        var irrelevantContent = new List<WritingContentChecklistItemDto>();
-        if (vis.ShowMissingContent || vis.ShowContentChecklist)
-        {
-            var checklist = await db.WritingContentChecklistItems
-                .AsNoTracking()
-                .Where(c => c.ScenarioId == submission.ScenarioId)
-                .OrderBy(c => c.Ordinal)
-                .ToListAsync(ct);
-
-            var (missingIds, irrelevantIds) = await ResolveContentVerdictAsync(submission, checklist, review, ct);
-
-            missingContent = checklist
-                .Where(c => missingIds.Contains(c.Id))
-                .Select(MapChecklistItem)
-                .ToList();
-            irrelevantContent = checklist
-                .Where(c => irrelevantIds.Contains(c.Id))
-                .Select(MapChecklistItem)
-                .ToList();
-        }
-
-        // ── Model answer ─────────────────────────────────────────────────────────
-        string? modelAnswerText = null;
-        if (vis.ShowModelAnswer)
-        {
-            var scenario = await db.WritingScenarios
-                .AsNoTracking()
-                .Where(s => s.Id == submission.ScenarioId)
-                .Select(s => new { s.ModelAnswerExemplarId })
-                .FirstOrDefaultAsync(ct);
-            if (scenario?.ModelAnswerExemplarId is { } exemplarId)
-            {
-                modelAnswerText = await db.WritingExemplars
-                    .AsNoTracking()
-                    .Where(e => e.Id == exemplarId)
-                    .Select(e => e.LetterContent)
-                    .FirstOrDefaultAsync(ct);
-            }
-        }
-
         // ── Next steps (weakest criteria → short prompts) ─────────────────────────
-        var nextSteps = BuildNextSteps(grade, missingContent, irrelevantContent, vis);
+        var nextSteps = BuildNextSteps(grade, vis);
 
         return new WritingSubmissionFeedbackDto(
             MapSubmission(submission),
@@ -171,9 +128,6 @@ public sealed class WritingResultFeedbackService(
             gradeDto,
             reviewDto,
             annotations,
-            missingContent,
-            irrelevantContent,
-            modelAnswerText,
             nextSteps);
     }
 
@@ -240,81 +194,11 @@ public sealed class WritingResultFeedbackService(
             .ThenByDescending(g => g.GradedAt)
             .FirstOrDefaultAsync(ct);
 
-    /// <summary>
-    /// Resolves which checklist item ids are "missing" and which are "irrelevant" for the
-    /// learner view. The tutor's content-checklist verdict (verdict per item id) is
-    /// authoritative when present; otherwise we fall back to the deterministic
-    /// pre-assessment (missing-by-text / detected-irrelevant-by-text).
-    /// </summary>
-    private async Task<(HashSet<Guid> Missing, HashSet<Guid> Irrelevant)> ResolveContentVerdictAsync(
-        WritingSubmission submission,
-        IReadOnlyList<WritingContentChecklistItem> checklist,
-        WritingTutorReview? review,
-        CancellationToken ct)
-    {
-        var missing = new HashSet<Guid>();
-        var irrelevant = new HashSet<Guid>();
-
-        var verdict = review is null ? null : DeserializeStringMap(review.ContentChecklistVerdictJson);
-        if (verdict is { Count: > 0 })
-        {
-            foreach (var item in checklist)
-            {
-                if (!verdict.TryGetValue(item.Id.ToString(), out var v)) continue;
-                switch (v?.Trim().ToLowerInvariant())
-                {
-                    case "missing":
-                    case "inaccurate":
-                        missing.Add(item.Id);
-                        break;
-                    case "irrelevant":
-                        irrelevant.Add(item.Id);
-                        break;
-                }
-            }
-            return (missing, irrelevant);
-        }
-
-        // Fallback: deterministic pre-assessment (text-keyed). Map item text back to ids.
-        var scenario = await db.WritingScenarios
-            .AsNoTracking()
-            .FirstOrDefaultAsync(s => s.Id == submission.ScenarioId, ct);
-        if (scenario is null)
-        {
-            return (missing, irrelevant);
-        }
-
-        var pre = await preAssessment.AssessAsync(
-            new WritingPreAssessmentRequest(submission.Id, submission.LetterContent, scenario, checklist, null),
-            ct);
-
-        var missingText = new HashSet<string>(pre.MissingKeyContent, StringComparer.OrdinalIgnoreCase);
-        var irrelevantText = new HashSet<string>(pre.DetectedIrrelevantContent, StringComparer.OrdinalIgnoreCase);
-        foreach (var item in checklist)
-        {
-            if (missingText.Contains(item.ItemText)) missing.Add(item.Id);
-            if (irrelevantText.Contains(item.ItemText)) irrelevant.Add(item.Id);
-        }
-
-        return (missing, irrelevant);
-    }
-
     private static List<string> BuildNextSteps(
         WritingGrade? grade,
-        IReadOnlyList<WritingContentChecklistItemDto> missingContent,
-        IReadOnlyList<WritingContentChecklistItemDto> irrelevantContent,
         WritingResultVisibilityConfig vis)
     {
         var steps = new List<string>();
-
-        if (vis.ShowMissingContent && missingContent.Count > 0)
-        {
-            steps.Add($"Add the missing key content: {string.Join("; ", missingContent.Take(3).Select(c => c.ItemText))}.");
-        }
-        if (vis.ShowMissingContent && irrelevantContent.Count > 0)
-        {
-            steps.Add($"Remove irrelevant content: {string.Join("; ", irrelevantContent.Take(3).Select(c => c.ItemText))}.");
-        }
 
         if (grade is not null && vis.ShowFullCriteria)
         {
@@ -402,20 +286,6 @@ public sealed class WritingResultFeedbackService(
             a.Suggestion,
             a.FeedbackText,
             a.CreatedAt.ToString("o"));
-
-    private static WritingContentChecklistItemDto MapChecklistItem(WritingContentChecklistItem c)
-        => new()
-        {
-            Id = c.Id,
-            ItemText = c.ItemText,
-            Category = c.Category,
-            Importance = c.Importance,
-            RequiredStatus = c.RequiredStatus,
-            LinkedCaseNoteSection = c.LinkedCaseNoteSection,
-            ExpectedRepresentation = c.ExpectedRepresentation,
-            CommonError = c.CommonError,
-            Ordinal = c.Ordinal,
-        };
 
     private static WritingResultVisibilityDto ToVisibilityDto(WritingResultVisibilityConfig c)
         => new(
@@ -506,9 +376,6 @@ public sealed record WritingSubmissionFeedbackDto(
     WritingGradeDto? Grade,
     WritingTutorReviewDto? TutorReview,
     IReadOnlyList<WritingFeedbackAnnotationDto> Annotations,
-    IReadOnlyList<WritingContentChecklistItemDto> MissingContent,
-    IReadOnlyList<WritingContentChecklistItemDto> IrrelevantContent,
-    string? ModelAnswerText,
     IReadOnlyList<string> NextSteps);
 
 public sealed record WritingRewriteSideDto(

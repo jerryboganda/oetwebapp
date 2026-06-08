@@ -246,7 +246,6 @@ export interface WritingScenarioDto {
   subDiscipline: string | null;
   topics: string[];
   difficulty: 1 | 2 | 3 | 4 | 5;
-  caseNotesMarkdown: string;
   caseNotesStructured: WritingScenarioStructuredSentenceDto[];
   isDiagnostic: boolean;
   status: 'draft' | 'published' | 'archived';
@@ -259,8 +258,6 @@ export interface WritingScenarioDto {
   taskPromptMarkdown?: string | null;
   writerRole?: string | null;
   todayDate?: string | null;
-  recipient?: WritingRecipientDto | null;
-  caseNoteSections?: WritingCaseNoteSectionDto[];
   fixedInstructions?: string[];
   wordGuideMin?: number;
   wordGuideMax?: number;
@@ -273,31 +270,6 @@ export interface WritingScenarioDto {
   stimulusPdfMediaAssetId?: string | null;
   /** Pre-computed content path for the stimulus PDF: /v1/media/{id}/content */
   stimulusPdfDownloadPath?: string | null;
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Exemplars
-// ─────────────────────────────────────────────────────────────────────────────
-
-export interface WritingExemplarAnnotationDto {
-  id: string;
-  charStart: number;
-  charEnd: number;
-  ruleId: string | null;
-  note: string;
-}
-
-export interface WritingExemplarDto {
-  id: string;
-  scenarioId: string | null;
-  profession: WritingProfession;
-  letterType: WritingLetterType;
-  difficulty: 1 | 2 | 3 | 4 | 5;
-  targetBand: string;
-  letterContent: string;
-  annotations: WritingExemplarAnnotationDto[];
-  authorNote: string | null;
-  status: 'draft' | 'published' | 'archived';
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -347,23 +319,11 @@ export interface WritingGradeDto {
   modelUsed: string;
   canonVersion: string;
   canonViolations: WritingCanonViolationDto[];
-  exemplarComparison: WritingExemplarComparisonDto | null;
   revisionInvite: {
     shouldOffer: boolean;
     reason: string;
   };
   gradedAt: string;
-}
-
-export interface WritingExemplarComparisonDto {
-  exemplarId: string;
-  exemplarLetterType: WritingLetterType;
-  similarityScore: number;
-  highlightedDifferences: Array<{
-    candidateSnippet: string;
-    exemplarSnippet: string;
-    kind: 'missing' | 'different' | 'extra';
-  }>;
 }
 
 export interface WritingScoreAppealDto {
@@ -805,40 +765,6 @@ export type WritingAttemptEventType =
   | 'timer_expired'
   | 'attempt_locked';
 
-export interface WritingRecipientDto {
-  name: string;
-  role: string;
-  organisation: string;
-  address: string;
-}
-
-export interface WritingCaseNoteSectionDto {
-  heading: string;
-  items: string[];
-}
-
-export interface WritingModelAnswerParagraphDto {
-  id: string;
-  text: string;
-  rationale: string;
-  criteria: string[];
-  included: string[];
-  excluded: string[];
-  languageNotes: string;
-}
-
-export interface WritingContentChecklistItemDto {
-  id: string;
-  itemText: string;
-  category: string;
-  importance: WritingSeverity;
-  requiredStatus: WritingChecklistRequiredStatus;
-  linkedCaseNoteSection: string | null;
-  expectedRepresentation: string | null;
-  commonError: string | null;
-  ordinal: number;
-}
-
 /** Enriched authored task = the unified, attemptable, markable WritingScenario. */
 export interface WritingTaskDto {
   id: string;
@@ -852,11 +778,8 @@ export interface WritingTaskDto {
   writerRole: string | null;
   todayDate: string | null;
   taskPromptMarkdown: string | null;
-  recipient: WritingRecipientDto | null;
   expectedPurpose: string | null;
   expectedAction: string | null;
-  caseNotesMarkdown: string;
-  caseNoteSections: WritingCaseNoteSectionDto[];
   fixedInstructions: string[];
   wordGuideMin: number;
   wordGuideMax: number;
@@ -864,10 +787,6 @@ export interface WritingTaskDto {
   writingTimeSeconds: number;
   simulationModes: WritingSimulationMode;
   markingMode: WritingMarkingMode;
-  modelAnswerText: string | null;
-  modelAnswerParagraphs: WritingModelAnswerParagraphDto[];
-  keyContentChecklist: WritingContentChecklistItemDto[];
-  irrelevantContentChecklist: WritingContentChecklistItemDto[];
   sourceProvenance: string | null;
   createdAt: string;
   updatedAt: string;
@@ -885,20 +804,13 @@ export interface WritingTaskUpsertDto {
   writerRole?: string | null;
   todayDate?: string | null;
   taskPromptMarkdown: string;
-  recipient: WritingRecipientDto;
   expectedPurpose?: string | null;
   expectedAction?: string | null;
-  caseNotesMarkdown?: string;
-  caseNoteSections: WritingCaseNoteSectionDto[];
   fixedInstructions: string[];
   wordGuideMin: number;
   wordGuideMax: number;
   simulationModes: WritingSimulationMode;
   markingMode: WritingMarkingMode;
-  modelAnswerText: string;
-  modelAnswerParagraphs?: WritingModelAnswerParagraphDto[];
-  keyContentChecklist: WritingContentChecklistItemDto[];
-  irrelevantContentChecklist: WritingContentChecklistItemDto[];
   sourceProvenance: string;
   integrityAcknowledged: boolean;
   stimulusPdfMediaAssetId?: string | null;
@@ -919,20 +831,15 @@ export interface WritingTaskImportJson {
   caseNotes: {
     todayDate?: string;
     candidateRole?: string;
-    sections: Array<{ heading: string; items: string[] }>;
   };
   writingTask: {
     instruction: string;
-    recipient?: Partial<WritingRecipientDto>;
     fixedInstructions?: string[];
     wordGuide?: { min: number; max: number };
   };
   marking?: {
     expectedPurpose?: string;
     expectedAction?: string;
-    keyContentChecklist?: Array<Partial<WritingContentChecklistItemDto>>;
-    irrelevantContentChecklist?: Array<Partial<WritingContentChecklistItemDto>>;
-    modelAnswer?: string;
   };
 }
 
@@ -1033,9 +940,6 @@ export interface WritingSubmissionFeedbackDto {
   grade: WritingGradeDto | null;
   tutorReview: WritingTutorReviewDto | null;
   annotations: WritingFeedbackAnnotationDto[];
-  missingContent: WritingContentChecklistItemDto[];
-  irrelevantContent: WritingContentChecklistItemDto[];
-  modelAnswerText: string | null;
   nextSteps: string[];
 }
 

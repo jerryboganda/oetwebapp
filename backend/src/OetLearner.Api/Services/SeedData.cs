@@ -1398,7 +1398,6 @@ public static partial class SeedData
         // mock-user-001 existence check in EnsureDemoDataAsync, so plain Add(...) is safe.
         var writingMarkingScenarioId = Guid.Parse("22222222-2222-2222-2222-222222222222");
         var writingMarkingSubmissionId = Guid.Parse("11111111-1111-1111-1111-111111111111");
-        var writingMarkingExemplarId = Guid.Parse("33333333-3333-3333-3333-333333333333");
         var writingMarkingGradeId = Guid.Parse("44444444-4444-4444-4444-444444444444");
         var writingMarkingAssignmentId = Guid.Parse("66666666-6666-6666-6666-666666666666");
         const string writingMarkingLetter =
@@ -1413,25 +1412,6 @@ public static partial class SeedData
             "Thank you for your continued care.\n\n" +
             "Yours sincerely,\nThe Charge Nurse";
 
-        db.WritingExemplars.Add(new WritingExemplar
-        {
-            Id = writingMarkingExemplarId,
-            ScenarioId = writingMarkingScenarioId,
-            LetterType = "referral",
-            Profession = "nursing",
-            LetterContent =
-                "Dear Dr Patterson,\n\nRe: Mrs Eleanor Vance, 72\n\nI am referring Mrs Vance for ongoing " +
-                "community care following her admission on 2 June after a fall and a left hemiarthroplasty " +
-                "on 3 June. Her recovery has been uncomplicated and she is mobilising with a frame.\n\n" +
-                "Please review her wound and anticoagulation in one week and arrange community physiotherapy.\n\n" +
-                "Yours sincerely,\nThe Charge Nurse",
-            TargetBand = "A",
-            Status = "published",
-            AuthorId = "admin-seed",
-            PublishedAt = now.AddDays(-30),
-            CreatedAt = now.AddDays(-30)
-        });
-
         db.WritingScenarios.Add(new WritingScenario
         {
             Id = writingMarkingScenarioId,
@@ -1440,10 +1420,6 @@ public static partial class SeedData
             Profession = "nursing",
             TopicsJson = JsonSupport.Serialize(new[] { "discharge", "orthopaedics" }),
             Difficulty = 3,
-            CaseNotesMarkdown =
-                "72-year-old female admitted 2 June after a fall at home. Fractured left neck of femur; " +
-                "hemiarthroplasty performed 3 June. Uncomplicated recovery, mobilising with a frame, wound " +
-                "clean and dry. For discharge to GP with community physiotherapy and a wound/anticoagulation review.",
             IsDiagnostic = false,
             Status = "published",
             Version = 1,
@@ -1456,21 +1432,8 @@ public static partial class SeedData
                 "Dr Patterson, summarising the admission and the follow-up care required after discharge.",
             WriterRole = "You are the charge nurse on the orthopaedic ward at Newtown General Hospital.",
             TodayDate = "10 June 2026",
-            RecipientJson = JsonSupport.Serialize(new
-            {
-                name = "Dr Patterson",
-                role = "General Practitioner",
-                organisation = "Newtown Medical Clinic",
-                address = "14 Station Road, Newtown"
-            }),
             ExpectedPurpose = "Refer the patient to the GP for ongoing care after a hip-fracture admission.",
             ExpectedAction = "Review wound and anticoagulation in one week; arrange community physiotherapy.",
-            CaseNoteSectionsJson = JsonSupport.Serialize(new[]
-            {
-                new { heading = "Admission", items = new[] { "Fall at home on 2 June", "Fractured left neck of femur" } },
-                new { heading = "Treatment", items = new[] { "Hemiarthroplasty on 3 June", "Uncomplicated recovery" } },
-                new { heading = "Discharge plan", items = new[] { "Mobilising with a frame", "Community physiotherapy", "Wound and anticoagulation review in one week" } }
-            }),
             FixedInstructionsJson = JsonSupport.Serialize(new[]
             {
                 "Use the conventions of a formal referral letter.",
@@ -1483,54 +1446,9 @@ public static partial class SeedData
             WritingTimeSeconds = 2400,
             SimulationModes = "both",
             MarkingMode = "tutor",
-            ModelAnswerExemplarId = writingMarkingExemplarId,
             ContentOwnerId = "admin-seed",
             UpdatedAt = now.AddDays(-30)
         });
-
-        db.WritingContentChecklistItems.AddRange(
-            new WritingContentChecklistItem
-            {
-                Id = Guid.Parse("55555555-5555-5555-5555-555555555551"),
-                ScenarioId = writingMarkingScenarioId,
-                ItemText = "State the reason for the referral and the patient's main diagnosis.",
-                Category = "main_reason",
-                Importance = "high",
-                RequiredStatus = "required",
-                LinkedCaseNoteSection = "Admission",
-                ExpectedRepresentation = "Referral for community follow-up after a fractured neck of femur.",
-                Ordinal = 1,
-                CreatedAt = now.AddDays(-30),
-                UpdatedAt = now.AddDays(-30)
-            },
-            new WritingContentChecklistItem
-            {
-                Id = Guid.Parse("55555555-5555-5555-5555-555555555552"),
-                ScenarioId = writingMarkingScenarioId,
-                ItemText = "Request the follow-up actions: wound/anticoagulation review and community physiotherapy.",
-                Category = "follow_up",
-                Importance = "high",
-                RequiredStatus = "required",
-                LinkedCaseNoteSection = "Discharge plan",
-                ExpectedRepresentation = "Asks the GP to review in one week and arrange physiotherapy.",
-                Ordinal = 2,
-                CreatedAt = now.AddDays(-30),
-                UpdatedAt = now.AddDays(-30)
-            },
-            new WritingContentChecklistItem
-            {
-                Id = Guid.Parse("55555555-5555-5555-5555-555555555553"),
-                ScenarioId = writingMarkingScenarioId,
-                ItemText = "The patient's pre-admission gardening hobby.",
-                Category = "social_history",
-                Importance = "low",
-                RequiredStatus = "irrelevant",
-                ExpectedRepresentation = "Not clinically relevant to the receiving GP.",
-                Ordinal = 3,
-                CreatedAt = now.AddDays(-30),
-                UpdatedAt = now.AddDays(-30)
-            }
-        );
 
         db.WritingSubmissions.Add(new WritingSubmission
         {

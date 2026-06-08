@@ -340,15 +340,14 @@ export default function WritingTasksPage() {
                         {task.internalCode && (
                           <span className="font-mono">{task.internalCode}</span>
                         )}
-                        <span>{task.keyContentChecklist?.length ?? 0} key points</span>
                         <span
                           className={
-                            task.modelAnswerText
+                            task.stimulusPdfDownloadPath
                               ? 'text-[var(--admin-success)]'
-                              : 'text-[var(--admin-warning)]'
+                              : 'text-[var(--admin-fg-muted)]'
                           }
                         >
-                          {task.modelAnswerText ? 'Model answer ✓' : 'No model answer'}
+                          {task.stimulusPdfDownloadPath ? 'Stimulus PDF ✓' : 'No stimulus PDF'}
                         </span>
                       </div>
                     </td>

@@ -14,48 +14,6 @@ namespace OetLearner.Api.Domain;
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// <summary>
-/// A single key/irrelevant content checklist item for a WritingScenario
-/// (spec §6.2 / §6.3, table writing_content_checklists). RequiredStatus
-/// discriminates key-content (required/optional) from distractors (irrelevant).
-/// </summary>
-public class WritingContentChecklistItem
-{
-    public Guid Id { get; set; }
-
-    public Guid ScenarioId { get; set; }
-
-    [MaxLength(500)]
-    public string ItemText { get; set; } = default!;
-
-    /// <summary>e.g. patient_identity, main_reason, diagnosis, medication, follow_up.</summary>
-    [MaxLength(64)]
-    public string Category { get; set; } = "content";
-
-    /// <summary>high | medium | low.</summary>
-    [MaxLength(16)]
-    public string Importance { get; set; } = "medium";
-
-    /// <summary>required | optional | irrelevant — irrelevant rows are the distractor checklist.</summary>
-    [MaxLength(16)]
-    public string RequiredStatus { get; set; } = "required";
-
-    [MaxLength(200)]
-    public string? LinkedCaseNoteSection { get; set; }
-
-    [MaxLength(1000)]
-    public string? ExpectedRepresentation { get; set; }
-
-    [MaxLength(1000)]
-    public string? CommonError { get; set; }
-
-    public int Ordinal { get; set; }
-
-    public DateTimeOffset CreatedAt { get; set; }
-
-    public DateTimeOffset UpdatedAt { get; set; }
-}
-
-/// <summary>
 /// Forensic event trail for a Writing attempt (spec §17.7, table
 /// writing_attempt_events). Captures the lifecycle and integrity signals
 /// (paste, focus loss) for both paper and computer simulation modes.

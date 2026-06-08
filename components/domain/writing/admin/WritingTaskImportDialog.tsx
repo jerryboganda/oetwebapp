@@ -119,8 +119,8 @@ export function WritingTaskImportDialog({
           </p>
         ) : (
           <p className="text-xs text-admin-fg-muted">
-            Tip: download the sample to see the full shape (case-note sections,
-            recipient, word guide, and marking checklist).
+            Tip: download the sample to see the full shape (task prompt, fixed
+            instructions, and word guide).
           </p>
         )}
         <div className="flex flex-wrap justify-end gap-2 pt-2">
@@ -154,41 +154,10 @@ const SAMPLE_IMPORT_JSON: WritingTaskImportJson = {
   caseNotes: {
     todayDate: '14 March 2026',
     candidateRole: 'the doctor on the orthopaedic ward',
-    sections: [
-      {
-        heading: 'Patient details',
-        items: [
-          'Mrs Edith Cole, 78 years old, retired teacher',
-          'Lives alone in a first-floor flat (stairs, no lift)',
-        ],
-      },
-      {
-        heading: 'Admission',
-        items: [
-          'Admitted 2 March 2026 after a fall at home',
-          'Right neck-of-femur fracture',
-          'Hemiarthroplasty performed 3 March 2026',
-        ],
-      },
-      {
-        heading: 'Progress',
-        items: [
-          'Mobilising with a frame, supervised',
-          'Wound healing well, sutures removed',
-          'For discharge home with a care package',
-        ],
-      },
-    ],
   },
   writingTask: {
     instruction:
       'Using the information in the case notes, write a discharge letter to the patient’s general practitioner, Dr Helen Marsh.',
-    recipient: {
-      name: 'Dr Helen Marsh',
-      role: 'General Practitioner',
-      organisation: 'Newtown Family Practice',
-      address: '14 Park Road, Newtown',
-    },
     fixedInstructions: [
       'Expand the relevant notes into complete sentences',
       'Do not use note form',
@@ -201,36 +170,5 @@ const SAMPLE_IMPORT_JSON: WritingTaskImportJson = {
     expectedPurpose: 'Hand over ongoing care of the patient to the GP after discharge',
     expectedAction:
       'Review the patient, oversee the care package, and arrange district-nurse wound checks',
-    keyContentChecklist: [
-      {
-        itemText: 'Reason for admission (fall, NOF fracture)',
-        category: 'Admission',
-        importance: 'high',
-        requiredStatus: 'required',
-        linkedCaseNoteSection: 'Admission',
-      },
-      {
-        itemText: 'Surgery performed (hemiarthroplasty)',
-        category: 'Admission',
-        importance: 'high',
-        requiredStatus: 'required',
-        linkedCaseNoteSection: 'Admission',
-      },
-      {
-        itemText: 'Current mobility and discharge plan',
-        category: 'Progress',
-        importance: 'medium',
-        requiredStatus: 'required',
-        linkedCaseNoteSection: 'Progress',
-      },
-    ],
-    irrelevantContentChecklist: [
-      {
-        itemText: 'Patient’s former profession (retired teacher)',
-        commonError: 'Mistaken for clinically relevant background',
-      },
-    ],
-    modelAnswer:
-      'Dear Dr Marsh,\n\nI am writing to inform you of the discharge of Mrs Edith Cole, a 78-year-old patient…',
   },
 };

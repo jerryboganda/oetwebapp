@@ -462,7 +462,7 @@ public sealed class WritingOnboardingService(
             .ToDictionaryAsync(r => r.Id, r => r.RuleText, ct);
 
         var pathwayPreview = await pathwayService.GetPathwayAsync(userId, ct);
-        var gradeResponse = WritingV2ResponseMapper.ToGradeResponse(grade, canon, rules, null);
+        var gradeResponse = WritingV2ResponseMapper.ToGradeResponse(grade, canon, rules);
         return new WritingDiagnosticResultsResponse(sessionId, sub.Id, gradeResponse, pathwayPreview);
     }
 

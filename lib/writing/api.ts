@@ -38,7 +38,6 @@
  *   GET    /v1/writing/submissions/{id}/grade
  *   POST   /v1/writing/submissions/{id}/revise
  *   POST   /v1/writing/submissions/{id}/appeal
- *   GET    /v1/writing/submissions/{id}/exemplar
  *   POST   /v1/writing/submissions/{id}/dispute-violation
  *
  *   ─ Drafts V2 ────────────────────────────────────────────────────────
@@ -50,11 +49,6 @@
  *   GET    /v1/writing/scenarios
  *   GET    /v1/writing/scenarios/{id}
  *   GET    /v1/writing/scenarios/random
- *
- *   ─ Exemplars ───────────────────────────────────────────────────────
- *   GET    /v1/writing/exemplars
- *   GET    /v1/writing/exemplars/{id}
- *   GET    /v1/writing/exemplars/closest-to/{scenarioId}
  *
  *   ─ Drills ──────────────────────────────────────────────────────────
  *   GET    /v1/writing/v2/drills
@@ -127,7 +121,6 @@ import type {
   WritingPathwayV2Dto,
   WritingTodayPlanDto,
   WritingScenarioDto,
-  WritingExemplarDto,
   WritingSubmissionDto,
   WritingGradeDto,
   WritingScoreAppealDto,
@@ -368,11 +361,6 @@ export const getWritingAppealResult = async (submissionId: string): Promise<Writ
   }
 };
 
-export const getWritingSubmissionExemplar = (submissionId: string) =>
-  apiClient.get<WritingExemplarDto>(
-    path('/v1/writing/submissions/{id}/exemplar', { id: submissionId }),
-  );
-
 export const disputeWritingCanonViolation = (submissionId: string, payload: WritingDisputeViolationDto) =>
   apiClient.post<WritingCanonViolationDto>(
     path('/v1/writing/submissions/{id}/dispute-violation', { id: submissionId }),
@@ -426,32 +414,6 @@ export const getWritingScenario = (scenarioId: string) =>
 export const getRandomWritingScenario = (query: { profession?: WritingProfession; letterType?: WritingLetterType } = {}) =>
   apiClient.get<WritingScenarioDto>(
     `/v1/writing/scenarios/random${qs(query as Record<string, string | undefined>)}`,
-  );
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Exemplars
-// ─────────────────────────────────────────────────────────────────────────────
-
-export interface WritingExemplarListQuery {
-  profession?: WritingProfession;
-  letterType?: WritingLetterType;
-  page?: number;
-  pageSize?: number;
-}
-
-export const listWritingExemplars = (query: WritingExemplarListQuery = {}) =>
-  apiClient.get<{ items: WritingExemplarDto[]; total: number }>(
-    `/v1/writing/exemplars${qs(query as Record<string, string | number | undefined>)}`,
-  );
-
-export const getWritingExemplar = (exemplarId: string) =>
-  apiClient.get<WritingExemplarDto>(
-    path('/v1/writing/exemplars/{id}', { id: exemplarId }),
-  );
-
-export const getClosestExemplar = (scenarioId: string) =>
-  apiClient.get<WritingExemplarDto>(
-    path('/v1/writing/exemplars/closest-to/{scenarioId}', { scenarioId }),
   );
 
 // ─────────────────────────────────────────────────────────────────────────────
