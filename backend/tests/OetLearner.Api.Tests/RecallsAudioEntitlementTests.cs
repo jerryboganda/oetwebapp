@@ -21,7 +21,7 @@ public class RecallsAudioEntitlementTests(TestWebApplicationFactory factory)
     public async Task Audio_returns_402_for_learner_without_active_subscription()
     {
         var learnerId = $"learner-{Guid.NewGuid():N}";
-        await SeedLearnerAsync(learnerId, hasActiveSubscription: true);
+        await SeedLearnerAsync(learnerId, hasActiveSubscription: false);
 
         using var client = CreateLearnerClient(learnerId);
         var response = await client.GetAsync("/v1/recalls/audio/term-does-not-need-to-exist");
@@ -298,6 +298,21 @@ public class RecallsAudioEntitlementTests(TestWebApplicationFactory factory)
                 ChangedAt = now,
                 NextRenewalAt = now.AddDays(30),
                 PriceAmount = 49.99m,
+                Currency = "AUD",
+                Interval = "monthly"
+            });
+        }
+        else
+        {
+            db.Subscriptions.Add(new Subscription
+            {
+                Id = $"sub-{Guid.NewGuid():N}",
+                UserId = learnerId,
+                PlanId = "basic-monthly",
+                Status = SubscriptionStatus.Cancelled,
+                StartedAt = now.AddMonths(-2),
+                ChangedAt = now.AddMonths(-1),
+                PriceAmount = 0m,
                 Currency = "AUD",
                 Interval = "monthly"
             });

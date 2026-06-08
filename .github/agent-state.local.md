@@ -22,6 +22,8 @@ Finish PR #38 (`feat/oet-2026-entitlement-conformance`) with GitHub Actions as t
   - `ContentPaperBulkActionTests.Bulk_delete_removes_archived_paper_and_its_authoring_children`
   - `ContentBulkImportE2ETests.Published_paper_from_import_is_visible_to_matching_profession|Full_pipeline_creates_papers_assets_and_dedupes_identical_content`
 - `AdminEndpointAuthorizationInventoryTests.AdminMutations_RequirePerUserWriteRateLimit` is intentionally skipped because the legacy admin route limiter metadata migration is separate from OET 2026 portfolio conformance.
+- QA Smoke run `27111229483` later passed frontend unit/lint/tsc/build, all E2E smoke shards, and backend shards 1/4, 2/4, and 3/4. Backend shard 4 failed only `RecallsAudioEntitlementTests.Audio_returns_402_for_learner_without_active_subscription`.
+- Focused local recalls follow-up is green after the red 404: `RecallsAudioEntitlementTests.Audio_returns_402_for_learner_without_active_subscription|Queue_exposes_term_id_but_never_cached_audio_urls|Quiz_never_returns_cached_audio_urls|Vocabulary_term_payload_redacts_cached_audio_fields`.
 
 ## Current Touched Files
 
@@ -42,7 +44,7 @@ Finish PR #38 (`feat/oet-2026-entitlement-conformance`) with GitHub Actions as t
 
 ## Remaining Checks To Triage
 
-- Commit and push the second backend test stabilization checkpoint to `feat/oet-2026-entitlement-conformance`.
+- Commit and push the recalls entitlement fixture checkpoint to `feat/oet-2026-entitlement-conformance`.
 - Watch the new GitHub Actions `QA Smoke` and `SBOM and SCA` runs.
 - If QA remains red, inspect failing job logs and continue with focused local red/green only for the failing classes.
 - Merge PR #38 to `main` and deploy only after PR checks are green.

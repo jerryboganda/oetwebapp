@@ -80,6 +80,10 @@ Implement the OET 2026 product portfolio plan on `feat/oet-2026-entitlement-conf
   - `ContentPaperBulkActionTests.Bulk_delete_removes_archived_paper_and_its_authoring_children`: green after seeding required `CreatedByAdminId`.
   - `ContentBulkImportE2ETests.Full_pipeline_creates_papers_assets_and_dedupes_identical_content|Published_paper_from_import_is_visible_to_matching_profession`: green after making the test storage preserve staged files on move and comparing dedup against paper attachment media IDs.
   - `AdminEndpointAuthorizationInventoryTests.AdminMutations_RequirePerUserWriteRateLimit`: explicitly skipped with a note that legacy admin route limiter metadata migration is separate from OET 2026 portfolio conformance.
+- CI follow-up from QA Smoke `27111229483`:
+  - Frontend unit/lint/tsc/build, SBOM/SCA, and all E2E smoke shards passed.
+  - Backend shards 1/4, 2/4, and 3/4 passed; shard 4 failed only `RecallsAudioEntitlementTests.Audio_returns_402_for_learner_without_active_subscription`.
+  - Focused local rerun for `RecallsAudioEntitlementTests.Audio_returns_402_for_learner_without_active_subscription|Queue_exposes_term_id_but_never_cached_audio_urls|Quiz_never_returns_cached_audio_urls|Vocabulary_term_payload_redacts_cached_audio_fields`: red on 404 for the unauthorised audio case, then green after seeding a cancelled subscription for non-active learners so the shared debug factory does not auto-create an active subscription.
 
 ## Next-Step Protocol For New Agent Runs
 
