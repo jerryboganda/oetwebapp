@@ -1,0 +1,64 @@
+name: Rulebook Conformance
+
+# THE single gate proving every critical/major rule in the four OET exam
+# rulebooks (Listening / Reading / Speaking / Writing + their exam-mode books)
+# has a known, asserted enforcement status — deterministic detector,
+# ai-grounded, or human-review — and that none is silently unenforced or
+# regressed.
+#
+# Phase 1 (now): runs the rulebook conformance suite green-on-current-state.
+#   The enforcement-coverage RATCHET forbids NEW unenforced rules vs a committed
+#   baseline; it does not yet require the baseline to be empty.
+# Phase 3: the ratchet baseline is emptied and this becomes a hard `=== []`
+#   gate, plus golden fixtures and the backend xUnit twin.
+#
+# Runs on a clean Ubuntu runner (per the project CI rule: heavy build/test runs
+# on GitHub Actions, never locally). Never touches main / deploy.
+on:
+  pull_request:
+    paths:
+      - 'rulebooks/**'
+      - 'lib/rulebook/**'
+      - '.github/workflows/rulebook-conformance.yml'
+  push:
+    branches:
+      - 'feat/conformance-**'
+      - 'ci/**'
+    paths:
+      - 'rulebooks/**'
+      - 'lib/rulebook/**'
+      - '.github/workflows/rulebook-conformance.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rulebook-conformance-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  rulebook-conformance:
+    name: Rulebook conformance (lib/rulebook)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      NODE_OPTIONS: --max-old-space-size=6144
+      NEXT_TELEMETRY_DISABLED: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+      - name: Install deps
+        run: pnpm install --frozen-lockfile
+      - name: Lint rulebook engine
+        run: pnpm exec eslint lib/rulebook
+      - name: Rulebook conformance tests (vitest)
+        run: pnpm exec vitest run lib/rulebook
