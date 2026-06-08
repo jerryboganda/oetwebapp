@@ -25,6 +25,7 @@ import {
   oetGradeFromScaled,
   oetGradeLabel,
   oetRawToScaled,
+  deriveWritingResultFromCriteria,
 } from './scoring';
 
 describe('OET scoring — constants', () => {
@@ -370,5 +371,41 @@ describe('OET scoring — formatters', () => {
 
   it('formatListeningReadingDisplay honours 30/42≡350/500 exactly', () => {
     expect(formatListeningReadingDisplay(30)).toBe('30/42 \u2022 350/500 \u2022 Grade B');
+  });
+});
+
+describe('deriveWritingResultFromCriteria (R16 deterministic)', () => {
+  const perfect = {
+    purpose: 3,
+    content: 7,
+    conciseness_clarity: 7,
+    genre_style: 7,
+    organisation_layout: 7,
+    language: 7,
+  };
+
+  it('maps a perfect criterion set to 38/500, Grade A, passing for a Grade-B country', () => {
+    const r = deriveWritingResultFromCriteria(perfect, 'GB');
+    expect(r.rawTotal).toBe(38);
+    expect(r.scaled).toBe(500);
+    expect(r.grade).toBe('A');
+    expect(isWritingPassFailResult(r.result) && r.result.passed).toBe(true);
+  });
+
+  it('clamps Purpose to 0-3 so it cannot inflate the raw total', () => {
+    const r = deriveWritingResultFromCriteria({
+      purpose: 7,
+      content: 0,
+      conciseness_clarity: 0,
+      genre_style: 0,
+      organisation_layout: 0,
+      language: 0,
+    });
+    expect(r.rawTotal).toBe(3);
+  });
+
+  it('returns a country-required result when country is missing', () => {
+    const r = deriveWritingResultFromCriteria(perfect, null);
+    expect(r.result.passed).toBeNull();
   });
 });

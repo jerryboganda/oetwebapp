@@ -464,6 +464,40 @@ export function isWritingPassFailResult(
   return result.passed !== null;
 }
 
+/** Deterministic Writing result derived from the six criterion scores (R16). */
+export interface WritingDerivedResult {
+  /** Total raw score out of 38 (Purpose clamped 0–3, others 0–7). */
+  rawTotal: number;
+  /** Scaled 0–500 anchored at 38 ≡ 500. */
+  scaled: number;
+  /** Grade letter from the scaled score. */
+  grade: OetGrade;
+  /** Country-aware pass/fail (or CountryRequiredResult if country missing). */
+  result: PassFailResult | CountryRequiredResult;
+}
+
+/**
+ * R16 — derive the canonical Writing result DETERMINISTICALLY from the six
+ * criterion scores (Purpose 0–3 + five 0–7). This is the independent fallback /
+ * verification the grading pipeline uses instead of trusting an AI-reported
+ * aggregate: the same six numbers always map to the same scaled score and
+ * grade. Purpose is clamped to 0–3 by `writingRawTotalFromCriterionScores`, so
+ * a grader mistreating it as 0–7 cannot inflate the result.
+ */
+export function deriveWritingResultFromCriteria(
+  scores: Partial<Record<WritingCriterionCode, number>> | Record<string, number | undefined>,
+  country?: string | null,
+): WritingDerivedResult {
+  const rawTotal = writingRawTotalFromCriterionScores(scores);
+  const scaled = writingRawToScaled(rawTotal);
+  return {
+    rawTotal,
+    scaled,
+    grade: oetGradeFromScaled(scaled),
+    result: gradeWriting(scaled, country ?? null),
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Speaking pass logic (universal)
 // ---------------------------------------------------------------------------
