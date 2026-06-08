@@ -3,6 +3,7 @@ import {
   classifyRuleEnforcement,
   isRuleEnforced,
   summarizeRuleCoverage,
+  buildConformanceReport,
   type RuleEnforcementStatus,
 } from '../coverage';
 import { findUnenforcedRules, discoverRulebooks } from '../registry';
@@ -63,6 +64,17 @@ describe('browser-safe rule enforcement classifier', () => {
     expect(summary.byStatus.deterministic).toBe(1);
     expect(summary.byStatus['forbidden-pattern']).toBe(1);
     expect(summary.unenforcedCriticalMajor).toBe(1); // only C (critical, untagged)
+  });
+
+  it('builds a conformance report for all six OET rulebooks with zero unenforced critical/major rules', () => {
+    const report = buildConformanceReport();
+    expect(report.map((r) => r.kind).sort()).toEqual(
+      ['listening', 'listening-exam-mode', 'reading', 'reading-exam-mode', 'speaking', 'writing'],
+    );
+    for (const r of report) {
+      expect(r.rows.length).toBe(r.summary.total);
+      expect(r.summary.unenforcedCriticalMajor).toBe(0);
+    }
   });
 
   it('is locked to findUnenforcedRules: the gate flags exactly the not-enforced critical/major rules', () => {

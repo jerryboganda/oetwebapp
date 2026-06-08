@@ -184,6 +184,13 @@ export const adminNavGroups: AdminNavGroup[] = [
         requiredPermissions: [AdminPermission.ContentRead],
       },
       {
+        href: '/admin/conformance',
+        label: 'Rulebook Conformance',
+        icon: <Scale className={iconClassName} />,
+        matchPrefix: '/admin/conformance',
+        requiredPermissions: [AdminPermission.ContentRead],
+      },
+      {
         href: '/admin/escalations',
         label: 'Escalations',
         icon: <Scale className={iconClassName} />,
@@ -442,6 +449,7 @@ const adminPageTitleRules: AdminPageTitleRule[] = [
   { prefix: '/admin/calibration', title: 'Calibration' },
   { prefix: '/admin/criteria', title: 'Rubrics & Criteria' },
   { prefix: '/admin/rulebooks', title: 'Rulebooks' },
+  { prefix: '/admin/conformance', title: 'Rulebook Conformance' },
   { prefix: '/admin/escalations', title: 'Escalations' },
   { prefix: '/admin/marketplace-review', title: 'Marketplace Review' },
   { prefix: '/admin/live-classes', title: 'Live Classes' },

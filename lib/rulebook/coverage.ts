@@ -22,7 +22,8 @@
  */
 
 import { isSupportedCheckId } from './check-ids';
-import type { Rule, RuleKind } from './types';
+import { loadRulebook } from './loader';
+import type { ExamProfession, Rule, RuleKind, RuleSeverity } from './types';
 
 export type RuleEnforcementStatus =
   | 'deterministic'
@@ -80,4 +81,61 @@ export function summarizeRuleCoverage(rules: readonly Rule[], kind: RuleKind): C
     if (ruleNeedsEnforcement(rule) && status === 'not-enforced') unenforcedCriticalMajor += 1;
   }
   return { total: rules.length, byStatus, unenforcedCriticalMajor };
+}
+
+// ---------------------------------------------------------------------------
+// Conformance report — data source for the admin /admin/conformance dashboard
+// ---------------------------------------------------------------------------
+
+export interface ConformanceRuleRow {
+  ruleId: string;
+  section: string;
+  title: string;
+  severity: RuleSeverity;
+  status: RuleEnforcementStatus;
+}
+
+export interface ConformanceKindReport {
+  kind: RuleKind;
+  profession: ExamProfession;
+  label: string;
+  summary: CoverageSummary;
+  rows: ConformanceRuleRow[];
+}
+
+/**
+ * The four OET exam rulebooks the conformance program targets, plus the two
+ * candidate-facing exam-mode books. Profession `medicine` is canonical — the
+ * rule set and enforcement classification are identical across professions.
+ */
+export const OET_CONFORMANCE_RULEBOOKS: ReadonlyArray<{
+  kind: RuleKind;
+  profession: ExamProfession;
+  label: string;
+}> = [
+  { kind: 'listening', profession: 'medicine', label: 'Listening (authoring)' },
+  { kind: 'listening-exam-mode', profession: 'medicine', label: 'Listening (exam mode)' },
+  { kind: 'reading', profession: 'medicine', label: 'Reading (authoring)' },
+  { kind: 'reading-exam-mode', profession: 'medicine', label: 'Reading (exam mode)' },
+  { kind: 'writing', profession: 'medicine', label: 'Writing' },
+  { kind: 'speaking', profession: 'medicine', label: 'Speaking' },
+];
+
+/**
+ * Build the per-rulebook conformance report for the admin dashboard. Pure +
+ * browser-safe (static rulebook imports only); the dashboard renders this with
+ * NO publish/validate controls — it is read-only reporting.
+ */
+export function buildConformanceReport(): ConformanceKindReport[] {
+  return OET_CONFORMANCE_RULEBOOKS.map(({ kind, profession, label }) => {
+    const book = loadRulebook(kind, profession);
+    const rows: ConformanceRuleRow[] = book.rules.map((rule) => ({
+      ruleId: rule.id,
+      section: rule.section,
+      title: rule.title,
+      severity: rule.severity,
+      status: classifyRuleEnforcement(rule, kind),
+    }));
+    return { kind, profession, label, summary: summarizeRuleCoverage(book.rules, kind), rows };
+  });
 }
