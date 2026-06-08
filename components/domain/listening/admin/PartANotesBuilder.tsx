@@ -20,9 +20,9 @@ import { PartARenderer } from '@/components/domain/listening/PartARenderer';
  * a stem still render — we just never author new ones.
  */
 
-// Import the canonical gap marker and paste sanitizer from the grammar lib.
-// Re-exported so existing imports of these symbols from this path keep working.
-import { PART_A_GAP_MARKER, sanitizePastedStem } from '@/lib/listening-part-a-notes';
+// Import the canonical gap marker, paste sanitizer, and gap detector from the
+// grammar lib. Re-exported so existing imports from this path keep working.
+import { detectPastedGaps, PART_A_GAP_MARKER, sanitizePastedStem } from '@/lib/listening-part-a-notes';
 export { PART_A_GAP_MARKER, sanitizePastedStem };
 
 export interface PartANotesBuilderProps {
@@ -34,6 +34,12 @@ export interface PartANotesBuilderProps {
   /** Disables the textarea + toolbar (e.g. while saving). */
   disabled?: boolean;
   id?: string;
+  /**
+   * Optional custom preview renderer. When provided, renders
+   * `renderPreview(value)` in place of the default `PartARenderer` preview.
+   * When absent, keeps the original per-question `PartARenderer` behavior.
+   */
+  renderPreview?: (body: string) => React.ReactNode;
 }
 
 type Insertable =
@@ -48,6 +54,7 @@ export function PartANotesBuilder({
   partLabel = 'Part A',
   disabled = false,
   id,
+  renderPreview,
 }: PartANotesBuilderProps) {
   const reactId = useId();
   const editorId = id ?? `part-a-notes-${reactId}`;
@@ -120,9 +127,12 @@ export function PartANotesBuilder({
       const clipboard = event.clipboardData;
       if (!clipboard) return;
       // Prefer HTML so we can sanitize; fall back to plain text.
+      // Use detectPastedGaps so that official OET "(n)____" markers are
+      // automatically converted to the canonical ____ form on paste.
       const html = clipboard.getData('text/html');
       const text = clipboard.getData('text/plain');
-      const cleaned = html ? sanitizePastedStem(html) : sanitizePastedStem(text);
+      const raw = html || text;
+      const { body: cleaned } = detectPastedGaps(raw);
       event.preventDefault();
 
       const el = event.currentTarget;
@@ -239,15 +249,19 @@ export function PartANotesBuilder({
           // inputs can't be typed into or focused during authoring.
           className="pointer-events-none select-none rounded-2xl border border-dashed border-border bg-background p-2"
         >
-          <PartARenderer
-            questionNumber={questionNumber}
-            partLabel={partLabel}
-            prompt={value}
-            value={previewAnswers[questionNumber] ?? ''}
-            onChange={(answer) => setPreviewAnswer(questionNumber, answer)}
-            locked
-            highlightingEnabled={false}
-          />
+          {renderPreview ? (
+            renderPreview(value)
+          ) : (
+            <PartARenderer
+              questionNumber={questionNumber}
+              partLabel={partLabel}
+              prompt={value}
+              value={previewAnswers[questionNumber] ?? ''}
+              onChange={(answer) => setPreviewAnswer(questionNumber, answer)}
+              locked
+              highlightingEnabled={false}
+            />
+          )}
         </div>
       </div>
     </div>
