@@ -1,7 +1,7 @@
 'use client';
 
 import { useRef, useState, type KeyboardEvent } from 'react';
-import { Highlighter, Strikethrough } from 'lucide-react';
+import { Flag, Highlighter, Strikethrough } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import type { ListeningQuestionAnnotation } from '@/hooks/use-listening-annotations';
@@ -40,6 +40,7 @@ export function BCQuestionRenderer({
   const controlled = annotation !== undefined && onAnnotationChange !== undefined;
   const [localStemHighlighted, setLocalStemHighlighted] = useState(false);
   const [localStruckOptions, setLocalStruckOptions] = useState<Set<string>>(() => new Set());
+  const [localFlagged, setLocalFlagged] = useState(false);
 
   const isStemHighlighted = controlled
     ? Boolean(annotation?.stemHighlighted)
@@ -47,6 +48,7 @@ export function BCQuestionRenderer({
   const struckOptions = controlled
     ? new Set(annotation?.struckOptions ?? [])
     : localStruckOptions;
+  const isFlagged = controlled ? Boolean(annotation?.flagged) : localFlagged;
 
   const setIsStemHighlighted = (nextOrFn: boolean | ((current: boolean) => boolean)) => {
     if (controlled) {
@@ -74,6 +76,14 @@ export function BCQuestionRenderer({
         else next.add(option);
         return next;
       });
+    }
+  };
+
+  const setIsFlagged = () => {
+    if (controlled) {
+      onAnnotationChange?.((current) => ({ ...current, flagged: !current.flagged }));
+    } else {
+      setLocalFlagged((prev) => !prev);
     }
   };
   const optionRefs = useRef<Array<HTMLButtonElement | null>>([]);
@@ -125,8 +135,22 @@ export function BCQuestionRenderer({
     <section
       data-testid="bc-question-renderer"
       aria-labelledby={headingId}
-      className="rounded-2xl border border-border bg-surface p-6 shadow-sm scroll-mt-48 sm:p-8"
+      className={`rounded-2xl border p-6 shadow-sm scroll-mt-48 sm:p-8 transition-colors ${
+        isFlagged
+          ? 'border-warning bg-surface ring-2 ring-warning/40'
+          : 'border-border bg-surface'
+      }`}
     >
+      {isFlagged && (
+        <span
+          data-testid="bc-flagged-indicator"
+          aria-hidden="true"
+          className="mb-3 inline-flex items-center gap-1 rounded-full bg-warning/20 px-2 py-0.5 text-[0.7rem] font-semibold uppercase tracking-widest text-warning"
+        >
+          <Flag className="h-3 w-3" />
+          Flagged for review
+        </span>
+      )}
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2">
           <Badge variant="info">Q{questionNumber}</Badge>
@@ -134,18 +158,36 @@ export function BCQuestionRenderer({
             {partLabel}
           </span>
         </div>
-        <Button
-          type="button"
-          variant={isStemHighlighted ? 'secondary' : 'outline'}
-          size="sm"
-          aria-pressed={isStemHighlighted}
-          aria-label={`${isStemHighlighted ? 'Remove highlight from' : 'Highlight'} question ${questionNumber} stem`}
-          onClick={() => !locked && setIsStemHighlighted((current) => !current)}
-          disabled={locked}
-        >
-          <Highlighter className="h-4 w-4" aria-hidden="true" />
-          Stem
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            type="button"
+            variant={isFlagged ? 'secondary' : 'outline'}
+            size="sm"
+            aria-pressed={isFlagged}
+            aria-label={
+              isFlagged
+                ? `Remove review flag from question ${questionNumber}`
+                : `Flag question ${questionNumber} for review`
+            }
+            onClick={() => !locked && setIsFlagged()}
+            disabled={locked}
+          >
+            <Flag className="h-4 w-4" aria-hidden="true" />
+            Flag
+          </Button>
+          <Button
+            type="button"
+            variant={isStemHighlighted ? 'secondary' : 'outline'}
+            size="sm"
+            aria-pressed={isStemHighlighted}
+            aria-label={`${isStemHighlighted ? 'Remove highlight from' : 'Highlight'} question ${questionNumber} stem`}
+            onClick={() => !locked && setIsStemHighlighted((current) => !current)}
+            disabled={locked}
+          >
+            <Highlighter className="h-4 w-4" aria-hidden="true" />
+            Stem
+          </Button>
+        </div>
       </div>
 
       <h3

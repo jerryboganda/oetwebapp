@@ -169,4 +169,35 @@ describe('useAttemptAnnotations', () => {
     expect(saveAnnotations).toHaveBeenCalledTimes(1);
     expect(saveAnnotations.mock.calls[0]![1]).toBeNull();
   });
+
+  // --- Flag-for-Review: isEmpty must account for `flagged` ---
+
+  it('retains a question entry that is ONLY flagged (no highlight/strike)', () => {
+    const { api } = makeApi();
+    const { result } = renderHook(() =>
+      useAttemptAnnotations({ attemptId: 'att-1', api, initialAnnotationsJson: null }),
+    );
+
+    act(() => {
+      result.current.update('q-1', () => ({ flagged: true }));
+    });
+
+    // The question must be retained in byQuestion — the flag is the only non-empty field.
+    expect(result.current.state.byQuestion['q-1']).toBeDefined();
+    expect(result.current.state.byQuestion['q-1']?.flagged).toBe(true);
+  });
+
+  it('removes a question entry when the only annotation was a flag and it is cleared', () => {
+    const { api } = makeApi();
+    const initial = JSON.stringify({ byQuestion: { 'q-1': { flagged: true } } });
+    const { result } = renderHook(() =>
+      useAttemptAnnotations({ attemptId: 'att-1', api, initialAnnotationsJson: initial }),
+    );
+
+    act(() => {
+      result.current.update('q-1', () => ({ flagged: false }));
+    });
+
+    expect(result.current.state.byQuestion['q-1']).toBeUndefined();
+  });
 });
