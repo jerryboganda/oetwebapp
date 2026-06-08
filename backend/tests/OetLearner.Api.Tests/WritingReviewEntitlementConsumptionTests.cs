@@ -33,6 +33,7 @@ public sealed class WritingReviewEntitlementConsumptionTests : IAsyncLifetime
 {
     private const string LearnerId = "learner-entitlement";
     private const string WritingAttemptId = "attempt-writing-1";
+    private const string AdminAuthAccountId = "adm-1";
 
     private readonly SqliteConnection _connection = new("DataSource=:memory:");
     private DbContextOptions<LearnerDbContext> _options = default!;
@@ -233,6 +234,21 @@ public sealed class WritingReviewEntitlementConsumptionTests : IAsyncLifetime
     private static async Task SeedLearnerWithWritingAttemptAsync(LearnerDbContext db, int walletCredits)
     {
         var now = DateTimeOffset.UtcNow;
+        if (!await db.ApplicationUserAccounts.AnyAsync(a => a.Id == AdminAuthAccountId))
+        {
+            db.ApplicationUserAccounts.Add(new ApplicationUserAccount
+            {
+                Id = AdminAuthAccountId,
+                Email = "admin.entitlement@example.test",
+                NormalizedEmail = "ADMIN.ENTITLEMENT@EXAMPLE.TEST",
+                PasswordHash = "test-only",
+                Role = ApplicationUserRoles.Admin,
+                EmailVerifiedAt = now,
+                CreatedAt = now,
+                UpdatedAt = now,
+            });
+        }
+
         db.Users.Add(new LearnerUser
         {
             Id = LearnerId,

@@ -126,9 +126,17 @@ public sealed class ClassNotificationServiceTests
             Assert.Equal(3, distinctDedupe);
 
             // The 24h-leg payload should hint at an .ics filename; the 1h/10min legs should not.
-            var t24h = events.Single(e => e.PayloadJson.Contains("\"leadMinutes\":1440"));
+            static int LeadMinutes(NotificationEvent e)
+            {
+                var value = JsonDocument.Parse(e.PayloadJson).RootElement.GetProperty("leadMinutes");
+                return value.ValueKind == JsonValueKind.String
+                    ? int.Parse(value.GetString()!, System.Globalization.CultureInfo.InvariantCulture)
+                    : value.GetInt32();
+            }
+
+            var t24h = events.Single(e => LeadMinutes(e) == 1440);
             Assert.Contains("\"icsFileName\":", t24h.PayloadJson);
-            foreach (var pushOnlyEvent in events.Where(e => e.PayloadJson.Contains("\"leadMinutes\":60") || e.PayloadJson.Contains("\"leadMinutes\":10")))
+            foreach (var pushOnlyEvent in events.Where(e => LeadMinutes(e) is 60 or 10))
             {
                 Assert.DoesNotContain("\"icsFileName\":", pushOnlyEvent.PayloadJson);
             }

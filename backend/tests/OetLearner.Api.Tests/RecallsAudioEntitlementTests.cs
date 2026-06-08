@@ -172,7 +172,7 @@ public class RecallsAudioEntitlementTests(TestWebApplicationFactory factory)
     public async Task Queue_exposes_term_id_but_never_cached_audio_urls()
     {
         var learnerId = $"learner-{Guid.NewGuid():N}";
-        await SeedLearnerAsync(learnerId, hasActiveSubscription: false);
+        await SeedLearnerAsync(learnerId, hasActiveSubscription: true);
         var termId = await SeedVocabularyCardAsync(learnerId);
 
         using var client = CreateLearnerClient(learnerId);
@@ -194,7 +194,7 @@ public class RecallsAudioEntitlementTests(TestWebApplicationFactory factory)
     public async Task Quiz_never_returns_cached_audio_urls()
     {
         var learnerId = $"learner-{Guid.NewGuid():N}";
-        await SeedLearnerAsync(learnerId, hasActiveSubscription: false);
+        await SeedLearnerAsync(learnerId, hasActiveSubscription: true);
         var termId = await SeedVocabularyCardAsync(learnerId);
 
         using var client = CreateLearnerClient(learnerId);
@@ -298,6 +298,21 @@ public class RecallsAudioEntitlementTests(TestWebApplicationFactory factory)
                 ChangedAt = now,
                 NextRenewalAt = now.AddDays(30),
                 PriceAmount = 49.99m,
+                Currency = "AUD",
+                Interval = "monthly"
+            });
+        }
+        else
+        {
+            db.Subscriptions.Add(new Subscription
+            {
+                Id = $"sub-{Guid.NewGuid():N}",
+                UserId = learnerId,
+                PlanId = "basic-monthly",
+                Status = SubscriptionStatus.Cancelled,
+                StartedAt = now.AddMonths(-2),
+                ChangedAt = now.AddMonths(-1),
+                PriceAmount = 0m,
                 Currency = "AUD",
                 Interval = "monthly"
             });

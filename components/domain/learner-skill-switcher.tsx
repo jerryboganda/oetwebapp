@@ -15,21 +15,38 @@ const learnerSkillModules = [
   { href: '/conversation', label: 'AI Conversation', shortLabel: 'Conversation', icon: MessageSquare, description: 'Interactive scenarios' },
 ] as const;
 
+const moduleAliases: Record<string, readonly string[]> = {
+  Speaking: ['SpeakingSession'],
+};
+
 function isActive(pathname: string | null, href: string) {
   if (!pathname) return false;
   return pathname === href || pathname.startsWith(`${href}/`);
+}
+
+function isModuleAllowed(label: string, enabledModules?: readonly string[]) {
+  if (!enabledModules) return true;
+  const allowed = new Set(enabledModules.map((module) => module.toLowerCase()));
+  if (allowed.size === 0) return false;
+  if (allowed.has(label.toLowerCase())) return true;
+  return (moduleAliases[label] ?? []).some((alias) => allowed.has(alias.toLowerCase()));
 }
 
 export function LearnerSkillSwitcher({
   className,
   compact = false,
   title = 'Switch practice focus',
+  enabledModules,
 }: {
   className?: string;
   compact?: boolean;
   title?: string;
+  enabledModules?: readonly string[];
 }) {
   const pathname = usePathname();
+  const modules = learnerSkillModules.filter((module) => isModuleAllowed(module.label, enabledModules));
+
+  if (modules.length === 0) return null;
 
   return (
     <nav
@@ -40,7 +57,7 @@ export function LearnerSkillSwitcher({
         <p className="text-xs font-bold uppercase tracking-[0.18em] text-muted">{title}</p>
       </div>
       <div className={cn('grid gap-2', compact ? 'grid-cols-2 sm:grid-cols-4 lg:grid-cols-7' : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-4')}>
-        {learnerSkillModules.map((module) => {
+        {modules.map((module) => {
           const active = isActive(pathname, module.href);
           const Icon = module.icon;
           return (

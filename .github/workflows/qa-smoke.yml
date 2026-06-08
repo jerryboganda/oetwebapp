@@ -184,7 +184,16 @@ jobs:
         run: pnpm exec playwright install --with-deps chromium firefox webkit
 
       - name: Build local smoke stack
-        run: docker compose -f docker-compose.desktop.yml up -d --build
+        run: |
+          for attempt in 1 2 3; do
+            if docker compose -f docker-compose.desktop.yml up -d --build; then
+              exit 0
+            fi
+            echo "Smoke stack build failed on attempt ${attempt}; retrying after cleanup."
+            docker compose -f docker-compose.desktop.yml down -v || true
+            sleep $((attempt * 15))
+          done
+          docker compose -f docker-compose.desktop.yml up -d --build
 
       - name: Verify stack readiness
         run: node ./scripts/qa/assert-local-stack.mjs

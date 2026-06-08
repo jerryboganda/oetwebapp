@@ -1,5 +1,6 @@
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
@@ -21,16 +22,24 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
     private readonly string _storageRoot = Path.Combine(Path.GetTempPath(), $"oet-learner-tests-storage-{Guid.NewGuid():N}");
     private readonly string _databaseName = $"oet-learner-tests-{Guid.NewGuid():N}";
     private readonly bool _useFirstPartyAuth;
+    private readonly bool _seedDemoData;
+    private readonly Dictionary<string, string?> _previousEnvironmentValues = new();
     private readonly Dictionary<string, string?>? _firstPartyConfiguration;
 
     public TestWebApplicationFactory()
-        : this(useFirstPartyAuth: false)
+        : this(useFirstPartyAuth: false, seedDemoData: false)
     {
     }
 
     protected TestWebApplicationFactory(bool useFirstPartyAuth)
+        : this(useFirstPartyAuth, seedDemoData: useFirstPartyAuth)
+    {
+    }
+
+    protected TestWebApplicationFactory(bool useFirstPartyAuth, bool seedDemoData)
     {
         _useFirstPartyAuth = useFirstPartyAuth;
+        _seedDemoData = seedDemoData;
 
         // Configuration is supplied PER-HOST below via builder.UseEnvironment(
         // "Development") and ConfigureAppConfiguration's in-memory collection —
@@ -44,6 +53,13 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
         // cause of the chronically flaky/red sharded QA Smoke backend run.
         if (!_useFirstPartyAuth)
         {
+            if (_seedDemoData)
+            {
+                SetEnvironmentOverride(ToEnvironmentVariableName("Auth:UseDevelopmentAuth"), "true");
+                SetEnvironmentOverride(ToEnvironmentVariableName("Bootstrap:AutoMigrate"), "false");
+                SetEnvironmentOverride(ToEnvironmentVariableName("Bootstrap:SeedDemoData"), "true");
+            }
+
             return;
         }
 
@@ -52,7 +68,7 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
             ["ConnectionStrings:DefaultConnection"] = $"InMemory:{_databaseName}",
             ["Auth:UseDevelopmentAuth"] = "false",
             ["Bootstrap:AutoMigrate"] = "false",
-            ["Bootstrap:SeedDemoData"] = "true",
+            ["Bootstrap:SeedDemoData"] = seedDemoData ? "true" : "false",
             ["Platform:PublicApiBaseUrl"] = "http://localhost",
             ["Platform:PublicWebBaseUrl"] = "http://localhost",
             ["Platform:FallbackEmailDomain"] = "example.test",
@@ -68,6 +84,23 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
             [$"{AuthTokenOptions.SectionName}:OtpLifetime"] = "00:10:00",
             [$"{AuthTokenOptions.SectionName}:AuthenticatorIssuer"] = "OET Learner"
         };
+        foreach (var key in new[]
+        {
+            "Auth:UseDevelopmentAuth",
+            "Bootstrap:AutoMigrate",
+            "Bootstrap:SeedDemoData",
+            $"{AuthTokenOptions.SectionName}:Issuer",
+            $"{AuthTokenOptions.SectionName}:Audience",
+            $"{AuthTokenOptions.SectionName}:AccessTokenSigningKey",
+            $"{AuthTokenOptions.SectionName}:RefreshTokenSigningKey",
+            $"{AuthTokenOptions.SectionName}:AccessTokenLifetime",
+            $"{AuthTokenOptions.SectionName}:RefreshTokenLifetime",
+            $"{AuthTokenOptions.SectionName}:OtpLifetime",
+            $"{AuthTokenOptions.SectionName}:AuthenticatorIssuer"
+        })
+        {
+            SetEnvironmentOverride(ToEnvironmentVariableName(key), _firstPartyConfiguration[key]);
+        }
         // _firstPartyConfiguration is applied per-host via ConfigureAppConfiguration
         // (in-memory) in ConfigureWebHost — NOT pushed to process env vars.
     }
@@ -124,6 +157,7 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
             {
                 ["ConnectionStrings:DefaultConnection"] = $"InMemory:{_databaseName}",
                 ["Auth:UseDevelopmentAuth"] = "true",
+                ["Bootstrap:SeedDemoData"] = _seedDemoData ? "true" : "false",
                 ["Platform:PublicApiBaseUrl"] = "http://localhost",
                 ["Platform:PublicWebBaseUrl"] = "http://localhost",
                 ["Platform:FallbackEmailDomain"] = "example.test",
@@ -134,12 +168,37 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
         });
     }
 
+    protected override IHost CreateHost(IHostBuilder builder)
+    {
+        var host = base.CreateHost(builder);
+        RestoreEnvironmentOverrides();
+        return host;
+    }
+
     private static bool IsHostedService(ServiceDescriptor descriptor)
         => descriptor.ServiceType == typeof(IHostedService);
+
+    private void SetEnvironmentOverride(string key, string? value)
+    {
+        _previousEnvironmentValues.TryAdd(key, Environment.GetEnvironmentVariable(key));
+        Environment.SetEnvironmentVariable(key, value);
+    }
+
+    private static string ToEnvironmentVariableName(string configurationKey)
+        => configurationKey.Replace(":", "__", StringComparison.Ordinal);
+
+    private void RestoreEnvironmentOverrides()
+    {
+        foreach (var (key, value) in _previousEnvironmentValues)
+        {
+            Environment.SetEnvironmentVariable(key, value);
+        }
+    }
 
     public HttpClient CreateAuthenticatedClient(string email, string password, string? expectedRole = null)
     {
         var client = CreateClient();
+        EnsureLocalAuthIdentity(email, expectedRole);
         var signInResponse = client.PostAsJsonAsync(
                 "/v1/auth/sign-in",
                 new PasswordSignInRequest(email, password, RememberMe: true))
@@ -191,6 +250,155 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
         }
 
         return client;
+    }
+
+    private void EnsureLocalAuthIdentity(string email, string? expectedRole)
+    {
+        using var scope = Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        var role = ResolveSeedRole(email, expectedRole);
+        var accountId = ResolveSeedAccountId(email, role);
+        var now = DateTimeOffset.UtcNow;
+        var normalizedEmail = email.ToUpperInvariant();
+
+        var account = db.ApplicationUserAccounts.SingleOrDefault(x => x.Id == accountId || x.NormalizedEmail == normalizedEmail);
+        if (account is null)
+        {
+            account = new ApplicationUserAccount
+            {
+                Id = accountId,
+                CreatedAt = now
+            };
+            db.ApplicationUserAccounts.Add(account);
+        }
+
+        account.Email = email;
+        account.NormalizedEmail = normalizedEmail;
+        account.Role = role;
+        account.EmailVerifiedAt ??= now;
+        account.UpdatedAt = now;
+        account.PasswordHash = new PasswordHasher<ApplicationUserAccount>().HashPassword(account, SeedData.LocalSeedPassword);
+
+        if (string.Equals(role, ApplicationUserRoles.Learner, StringComparison.Ordinal))
+        {
+            var learner = db.Users.SingleOrDefault(x => x.AuthAccountId == account.Id || x.Email == email);
+            if (learner is null)
+            {
+                learner = new LearnerUser
+                {
+                    Id = account.Id == SeedData.LearnerAuthAccountId ? "mock-user-001" : $"learner-{Guid.NewGuid():N}",
+                    CreatedAt = now,
+                    LastActiveAt = now
+                };
+                db.Users.Add(learner);
+            }
+
+            learner.AuthAccountId = account.Id;
+            learner.Role = ApplicationUserRoles.Learner;
+            learner.DisplayName = "Test Learner";
+            learner.Email = email;
+            learner.Timezone = "Australia/Sydney";
+            learner.Locale = "en-AU";
+            learner.ActiveProfessionId ??= "nursing";
+            learner.ActiveExamTypeCode = "OET";
+            learner.AccountStatus = "active";
+        }
+        else if (string.Equals(role, ApplicationUserRoles.Expert, StringComparison.Ordinal))
+        {
+            var expert = db.ExpertUsers.SingleOrDefault(x => x.AuthAccountId == account.Id || x.Email == email);
+            if (expert is null)
+            {
+                expert = new ExpertUser
+                {
+                    Id = ResolveSeedExpertId(email),
+                    CreatedAt = now
+                };
+                db.ExpertUsers.Add(expert);
+            }
+
+            expert.AuthAccountId = account.Id;
+            expert.Role = ApplicationUserRoles.Expert;
+            expert.DisplayName = "Test Expert";
+            expert.Email = email;
+            expert.SpecialtiesJson = JsonSupport.Serialize(new[] { "nursing" });
+            expert.Timezone = "Australia/Sydney";
+            expert.IsActive = true;
+        }
+        else if (string.Equals(role, ApplicationUserRoles.Admin, StringComparison.Ordinal)
+            && !db.AdminPermissionGrants.Any(g => g.AdminUserId == account.Id && g.Permission == AdminPermissions.SystemAdmin))
+        {
+            db.AdminPermissionGrants.Add(new AdminPermissionGrant
+            {
+                Id = $"grant_test_{Guid.NewGuid():N}",
+                AdminUserId = account.Id,
+                Permission = AdminPermissions.SystemAdmin,
+                GrantedBy = "test-factory",
+                GrantedAt = now
+            });
+        }
+
+        db.SaveChanges();
+    }
+
+    private static string ResolveSeedRole(string email, string? expectedRole)
+    {
+        if (!string.IsNullOrWhiteSpace(expectedRole))
+        {
+            return expectedRole;
+        }
+
+        if (string.Equals(email, SeedData.AdminEmail, StringComparison.OrdinalIgnoreCase))
+        {
+            return ApplicationUserRoles.Admin;
+        }
+
+        if (string.Equals(email, SeedData.ExpertEmail, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(email, SeedData.ExpertSecondaryEmail, StringComparison.OrdinalIgnoreCase))
+        {
+            return ApplicationUserRoles.Expert;
+        }
+
+        return ApplicationUserRoles.Learner;
+    }
+
+    private static string ResolveSeedAccountId(string email, string role)
+    {
+        if (string.Equals(email, SeedData.LearnerEmail, StringComparison.OrdinalIgnoreCase))
+        {
+            return SeedData.LearnerAuthAccountId;
+        }
+
+        if (string.Equals(email, SeedData.ExpertEmail, StringComparison.OrdinalIgnoreCase))
+        {
+            return SeedData.ExpertAuthAccountId;
+        }
+
+        if (string.Equals(email, SeedData.ExpertSecondaryEmail, StringComparison.OrdinalIgnoreCase))
+        {
+            return SeedData.ExpertSecondaryAuthAccountId;
+        }
+
+        if (string.Equals(email, SeedData.AdminEmail, StringComparison.OrdinalIgnoreCase))
+        {
+            return SeedData.AdminAuthAccountId;
+        }
+
+        return $"auth_test_{role}_{Guid.NewGuid():N}";
+    }
+
+    private static string ResolveSeedExpertId(string email)
+    {
+        if (string.Equals(email, SeedData.ExpertEmail, StringComparison.OrdinalIgnoreCase))
+        {
+            return "expert-001";
+        }
+
+        if (string.Equals(email, SeedData.ExpertSecondaryEmail, StringComparison.OrdinalIgnoreCase))
+        {
+            return "expert-unauthorised";
+        }
+
+        return $"expert-{Guid.NewGuid():N}";
     }
 
     /// <summary>
@@ -466,6 +674,8 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
             return;
         }
 
+        RestoreEnvironmentOverrides();
+
         try
         {
             if (Directory.Exists(_storageRoot))
@@ -541,6 +751,14 @@ public sealed class FirstPartyAuthTestWebApplicationFactory : TestWebApplication
 {
     public FirstPartyAuthTestWebApplicationFactory()
         : base(useFirstPartyAuth: true)
+    {
+    }
+}
+
+public sealed class SeededTestWebApplicationFactory : TestWebApplicationFactory
+{
+    public SeededTestWebApplicationFactory()
+        : base(useFirstPartyAuth: false, seedDemoData: true)
     {
     }
 }

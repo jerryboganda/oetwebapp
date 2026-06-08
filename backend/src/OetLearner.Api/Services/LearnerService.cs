@@ -61,7 +61,8 @@ public partial class LearnerService(
     OetLearner.Api.Services.Readiness.ReadinessComputationService? readinessComputation = null,
     OetLearner.Api.Services.Billing.ICouponVariantApplicator? couponVariantApplicator = null,
     PrivateSpeakingService? privateSpeakingService = null,
-    IFulfillmentService? fulfillmentService = null)
+    IFulfillmentService? fulfillmentService = null,
+    IAddonEligibilityService? addonEligibilityService = null)
 {
     private const string PaymentWebhookParserVersion = "payment-webhook-v1";
     private const int PaymentIdempotencyKeyMaxLength = 38;
@@ -4381,14 +4382,19 @@ public partial class LearnerService(
         string userId,
         DateTimeOffset now,
         CancellationToken cancellationToken)
-        => await db.Subscriptions
+    {
+        var candidates = await db.Subscriptions
             .Where(subscription => subscription.UserId == userId
-                && subscription.WritingAssessmentsRemaining > 0
-                && (subscription.Status == SubscriptionStatus.Active || subscription.Status == SubscriptionStatus.Trial)
-                && (subscription.ExpiresAt == null || subscription.ExpiresAt > now))
+                && subscription.WritingAssessmentsRemaining > 0)
+            .ToListAsync(cancellationToken);
+
+        return candidates
+            .Where(subscription => subscription.Status is SubscriptionStatus.Active or SubscriptionStatus.Trial)
+            .Where(subscription => subscription.ExpiresAt is null || subscription.ExpiresAt > now)
             .OrderBy(subscription => subscription.ExpiresAt == null)
             .ThenBy(subscription => subscription.ExpiresAt)
-            .FirstOrDefaultAsync(cancellationToken);
+            .FirstOrDefault();
+    }
 
     public async Task<object> GetReviewRequestAsync(string userId, string reviewRequestId, CancellationToken cancellationToken)
     {
@@ -7203,10 +7209,16 @@ public partial class LearnerService(
       private async Task<BillingPlan?> FindPurchasableBillingPlanAsync(string planCode, CancellationToken cancellationToken)
       {
           var plan = await FindBillingPlanAsync(planCode, cancellationToken);
-          return plan is not null && plan.Status == BillingPlanStatus.Active && plan.IsVisible
+          return plan is not null && plan.Status == BillingPlanStatus.Active && plan.IsVisible && !plan.IsDraft
               ? plan
               : null;
       }
+
+      private async Task<bool> UserOwnsTutorBookAsync(string userId, CancellationToken cancellationToken)
+          => await db.Subscriptions.AsNoTracking().AnyAsync(s =>
+              s.UserId == userId
+              && (s.Status == SubscriptionStatus.Active || s.Status == SubscriptionStatus.Trial)
+              && s.TutorBookUnlocked, cancellationToken);
 
       private async Task<BillingAddOn?> FindPurchasableBillingAddOnAsync(string addOnCode, CancellationToken cancellationToken)
       {
@@ -7581,6 +7593,59 @@ public partial class LearnerService(
 
         var now = DateTimeOffset.UtcNow;
         var parentSubscriptionId = request.ParentSubscriptionId?.Trim();
+        if (normalizedProductType == "addon_purchase")
+        {
+            if (string.IsNullOrWhiteSpace(request.PriceId))
+            {
+                throw ApiException.Validation(
+                    "target_addon_required",
+                    "A target add-on id is required for add-on purchases.",
+                    [new ApiFieldError("priceId", "required", "Choose the add-on you want to purchase.")]);
+            }
+
+            var preflightAddOn = await FindPurchasableBillingAddOnAsync(request.PriceId, cancellationToken)
+                ?? throw ApiException.Validation(
+                    "unknown_addon",
+                    $"Unknown billing add-on '{request.PriceId}'.",
+                    [new ApiFieldError("priceId", "unknown", "Choose a published add-on.")]);
+
+            if (preflightAddOn.RequiresEligibleParent)
+            {
+                var eligibility = addonEligibilityService ?? new AddonEligibilityService(db);
+                var eligibilityResult = await eligibility.ResolveAsync(userId, preflightAddOn.Code, cancellationToken);
+                if (!eligibilityResult.Eligible)
+                {
+                    throw ApiException.Validation(
+                        eligibilityResult.Reason ?? "addon_ineligible",
+                        "The selected add-on requires an eligible parent enrolment.",
+                        [new ApiFieldError("priceId", "ineligible", "Choose an add-on that works with one of your active enrolments.")]);
+                }
+
+                if (string.IsNullOrWhiteSpace(parentSubscriptionId))
+                {
+                    if (eligibilityResult.EligibleParents.Count == 1)
+                    {
+                        parentSubscriptionId = eligibilityResult.EligibleParents[0].SubscriptionId;
+                    }
+                    else
+                    {
+                        throw ApiException.Validation(
+                            "parent_subscription_required",
+                            "Choose which eligible enrolment this add-on should apply to.",
+                            [new ApiFieldError("parentSubscriptionId", "required", "Choose an eligible parent enrolment.")]);
+                    }
+                }
+                else if (!eligibilityResult.EligibleParents.Any(parent =>
+                    string.Equals(parent.SubscriptionId, parentSubscriptionId, StringComparison.OrdinalIgnoreCase)))
+                {
+                    throw ApiException.Validation(
+                        "parent_subscription_not_eligible",
+                        "The selected parent enrolment is not eligible for this add-on.",
+                        [new ApiFieldError("parentSubscriptionId", "ineligible", "Choose an eligible parent enrolment.")]);
+                }
+            }
+        }
+
         var subscriptionQuery = db.Subscriptions.Where(x => x.UserId == userId);
         var subscription = string.IsNullOrWhiteSpace(parentSubscriptionId)
             ? await subscriptionQuery.FirstOrDefaultAsync(cancellationToken)
@@ -7650,6 +7715,13 @@ public partial class LearnerService(
                     [new ApiFieldError("priceId", "unknown", "Choose a published billing plan.")]);
 
             AdminService.EnsurePlanCanStartNewSubscription(targetPlan);
+            if (targetPlan.BundledTutorBook && await UserOwnsTutorBookAsync(userId, cancellationToken))
+            {
+                throw ApiException.Validation(
+                    "tutor_book_already_owned",
+                    "Your account already has Tutor Book access.",
+                    [new ApiFieldError("priceId", "already_owned", "Choose the course-only option or contact support.")]);
+            }
 
             planCode = targetPlan.Code;
             snapshotPlan = targetPlan;
@@ -9570,7 +9642,15 @@ public partial class LearnerService(
         }
 
         var user = await EnsureUserAsync(transaction.LearnerUserId, ct);
-        var subscription = await db.Subscriptions.FirstAsync(x => x.UserId == transaction.LearnerUserId, ct);
+        var subscription = !string.IsNullOrWhiteSpace(quote.SubscriptionId)
+            ? await db.Subscriptions.FirstOrDefaultAsync(x => x.UserId == transaction.LearnerUserId && x.Id == quote.SubscriptionId, ct)
+            : await db.Subscriptions.FirstOrDefaultAsync(x => x.UserId == transaction.LearnerUserId, ct);
+        if (subscription is null)
+        {
+            throw ApiException.Validation(
+                "billing_quote_parent_missing",
+                "The enrolment selected for this checkout could not be found.");
+        }
         var quoteResponse = DeserializeQuoteResponse(quote);
         var catalogSnapshot = DeserializeQuoteCatalogSnapshot(quote);
         var addOnVersionIds = DeserializeAddOnVersionIds(quote);

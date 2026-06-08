@@ -72,6 +72,7 @@ All media/user files must use persistent storage at `/var/opt/oet-learner/storag
 
 Load the named docs before editing these surfaces.
 
+- Product portfolio: before editing product catalogue, checkout, entitlements, dashboards, add-ons, writing assessments, speaking sessions, Tutor Book access, recalls, or course expiry logic, read `docs/OET_2026_Product_Portfolio_Claude_Code_Codex.md` and preserve its product IDs, pricing, flags, entitlement templates, and acceptance criteria.
 - Scoring: use `lib/scoring.ts` or `OetScoring`; never inline pass thresholds. Anchor: Listening/Reading `30/42 == 350/500`; Writing is country-aware; Speaking is 350. See `docs/SCORING.md`.
 - Rulebooks: use `lib/rulebook` or backend Rulebook services; never read rulebook JSON directly from UI/endpoints. See `docs/RULEBOOKS.md`.
 - AI calls: route through grounded gateway helpers/services; every call records one usage row; never bypass grounding. See `docs/AI-USAGE-POLICY.md`.

@@ -462,7 +462,7 @@
       ]
     },
     {
-      "code": "speaking-1session-plan",
+      "code": "speaking-1session",
       "name": "1 Private Speaking Assessment Session",
       "description": "One-to-one Speaking practice with different cards and detailed feedback. Suitable as a top-up alongside any course.",
       "price": 18,
@@ -487,7 +487,7 @@
       ]
     },
     {
-      "code": "speaking-2sessions-plan",
+      "code": "speaking-2sessions",
       "name": "2 Private Speaking Assessment Sessions",
       "description": "Two one-to-one Speaking assessment sessions.",
       "price": 34,
@@ -652,7 +652,7 @@
       "displayOrder": 40
     },
     {
-      "code": "speaking-1session",
+      "code": "addon-speaking-1session",
       "name": "1 Private Speaking Assessment Session — Add-on",
       "description": "Extra private 1:1 Speaking session added to an eligible parent enrolment.",
       "price": 18,
@@ -667,7 +667,7 @@
       "displayOrder": 50
     },
     {
-      "code": "speaking-2sessions",
+      "code": "addon-speaking-2sessions",
       "name": "2 Private Speaking Assessment Sessions — Add-on",
       "description": "Two extra private 1:1 Speaking sessions added to an eligible parent enrolment.",
       "price": 34,

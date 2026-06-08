@@ -5,6 +5,88 @@ namespace OetLearner.Api.Tests.Billing;
 
 public sealed class Oet2026CatalogManifestTests
 {
+    private static readonly string[] ExpectedPlanCodes =
+    [
+        "full-condensed-medicine",
+        "full-condensed-medicine-tbook",
+        "full-nursing",
+        "full-nursing-assessment",
+        "full-nursing-premium",
+        "full-pharmacy",
+        "basic-english",
+        "crash-course",
+        "crash-3letters",
+        "crash-5letters",
+        "writing-crash",
+        "writing-crash-2",
+        "writing-crash-3",
+        "writing-crash-5",
+        "writing-crash-7",
+        "writing-crash-10",
+        "speaking-crash",
+        "speaking-1session",
+        "speaking-2sessions",
+        "double-special",
+        "mega-special",
+        "tutor-book"
+    ];
+
+    private static readonly string[] ExpectedPortfolioAddOnCodes =
+    [
+        "addon-3-letters",
+        "addon-5-letters",
+        "addon-7-letters",
+        "addon-10-letters",
+        "addon-speaking-1session",
+        "addon-speaking-2sessions",
+        "tutor-book-addon"
+    ];
+
+    private static readonly string[] PortfolioEligibilityFlags =
+    [
+        "writing_addons",
+        "speaking_addons",
+        "tutor_book_discount"
+    ];
+
+    [Fact]
+    public async Task PortfolioPlanCodes_MatchSpecExactlyOnce()
+    {
+        var manifest = await LoadManifestAsync();
+        var codes = manifest.RootElement
+            .GetProperty("plans")
+            .EnumerateArray()
+            .Select(plan => plan.GetProperty("code").GetString())
+            .ToArray();
+
+        Assert.Equal(ExpectedPlanCodes.OrderBy(code => code, StringComparer.Ordinal), codes.OrderBy(code => code, StringComparer.Ordinal));
+        Assert.Equal(codes.Length, codes.Distinct(StringComparer.OrdinalIgnoreCase).Count());
+    }
+
+    [Fact]
+    public async Task PortfolioAddOnCodes_AreParentRequiredOnlyAndMatchSpec()
+    {
+        var manifest = await LoadManifestAsync();
+        var addOns = manifest.RootElement
+            .GetProperty("addOns")
+            .EnumerateArray()
+            .Where(addOn => addOn.TryGetProperty("requiresEligibleParent", out var requiresParent)
+                && requiresParent.GetBoolean()
+                && addOn.TryGetProperty("eligibilityFlag", out var eligibilityFlag)
+                && PortfolioEligibilityFlags.Contains(eligibilityFlag.GetString(), StringComparer.Ordinal))
+            .ToArray();
+        var codes = addOns
+            .Select(addOn => addOn.GetProperty("code").GetString())
+            .ToArray();
+
+        Assert.Equal(ExpectedPortfolioAddOnCodes.OrderBy(code => code, StringComparer.Ordinal), codes.OrderBy(code => code, StringComparer.Ordinal));
+        Assert.All(addOns, addOn =>
+        {
+            var flag = addOn.GetProperty("eligibilityFlag").GetString();
+            Assert.Contains(flag ?? string.Empty, new[] { "writing_addons", "speaking_addons", "tutor_book_discount" });
+        });
+    }
+
     [Fact]
     public async Task ZeroPricePlans_AreNotPubliclyVisible()
     {

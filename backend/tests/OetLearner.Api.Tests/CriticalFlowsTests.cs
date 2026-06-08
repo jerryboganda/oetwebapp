@@ -9,12 +9,12 @@ using OetLearner.Api.Tests.Infrastructure;
 
 namespace OetLearner.Api.Tests;
 
-public class CriticalFlowsTests : IClassFixture<TestWebApplicationFactory>
+public class CriticalFlowsTests : IClassFixture<SeededTestWebApplicationFactory>
 {
-    private readonly TestWebApplicationFactory _factory;
+    private readonly SeededTestWebApplicationFactory _factory;
     private readonly HttpClient _client;
 
-    public CriticalFlowsTests(TestWebApplicationFactory factory)
+    public CriticalFlowsTests(SeededTestWebApplicationFactory factory)
     {
         _factory = factory;
         _client = factory.CreateClient();

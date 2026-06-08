@@ -55,6 +55,21 @@ describe('LearnerSkillSwitcher', () => {
     expect(screen.getByRole('link', { name: /mocks/i })).toHaveAttribute('href', '/mocks');
     expect(screen.getByRole('link', { name: /conversation/i })).toHaveAttribute('href', '/conversation');
   });
+
+  it('filters skill modules to purchased dashboard modules', () => {
+    renderWithRouter(<LearnerSkillSwitcher compact enabledModules={['Reading']} />, { pathname: '/reading' });
+
+    expect(screen.getByRole('link', { name: /reading/i })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /writing/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /speaking/i })).not.toBeInTheDocument();
+  });
+
+  it('maps SpeakingSession entitlement to the speaking navigation item', () => {
+    renderWithRouter(<LearnerSkillSwitcher compact enabledModules={['SpeakingSession']} />, { pathname: '/speaking' });
+
+    expect(screen.getByRole('link', { name: /speaking/i })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /writing/i })).not.toBeInTheDocument();
+  });
 });
 
 describe('LearnerBreadcrumbs', () => {

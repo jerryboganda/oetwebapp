@@ -1,5 +1,6 @@
 import { expect, type APIRequestContext } from '@playwright/test';
 import { execFileSync } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 import { closeSync, mkdirSync, openSync, unlinkSync, writeFileSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import type { SeededRole } from './auth';
@@ -280,15 +281,48 @@ async function resetExpertReviewDraft(
   }
 }
 
-function cancelActiveReviewsViaPsql(attemptId: string, subtest: 'writing' | 'speaking') {
-  const psqlPath = process.env.OET_PSQL_PATH ?? 'C:\\Program Files\\PostgreSQL\\17\\bin\\psql.exe';
-  const sql = `UPDATE "ReviewRequests" SET "State" = 7, "CompletedAt" = NOW() WHERE "AttemptId" = '${attemptId.replace(/'/g, "''")}' AND "SubtestCode" = '${subtest}' AND "State" NOT IN (5, 6, 7);`;
+function resolvePsqlPath() {
+  return process.env.OET_PSQL_PATH
+    ?? (process.platform === 'win32' ? 'C:\\Program Files\\PostgreSQL\\17\\bin\\psql.exe' : 'psql');
+}
+
+function runE2ePsql(sql: string) {
+  const psqlPath = resolvePsqlPath();
+  const host = process.env.OET_PSQL_HOST ?? process.env.PGHOST ?? 'localhost';
+  const port = process.env.OET_PSQL_PORT ?? process.env.PGPORT ?? '5432';
+  const user = process.env.OET_PSQL_USER ?? process.env.PGUSER ?? 'postgres';
+  const database = process.env.OET_PSQL_DATABASE ?? process.env.PGDATABASE ?? 'oet_learner_dev';
+  const password = process.env.OET_PSQL_PASSWORD ?? process.env.PGPASSWORD ?? 'postgres';
+
   try {
     execFileSync(
       psqlPath,
-      ['-h', 'localhost', '-U', 'postgres', '-d', 'oet_learner_dev', '-c', sql],
-      { env: { ...process.env, PGPASSWORD: 'postgres' }, stdio: 'pipe' },
+      ['-h', host, '-p', port, '-U', user, '-d', database, '-v', 'ON_ERROR_STOP=1', '-c', sql],
+      { env: { ...process.env, PGPASSWORD: password }, stdio: 'pipe' },
     );
+    return;
+  } catch (error) {
+    if (process.env.OET_PSQL_DISABLE_DOCKER_FALLBACK === '1') {
+      throw error;
+    }
+  }
+
+  const container = process.env.OET_PSQL_CONTAINER ?? 'oet-desktop-postgres';
+  execFileSync(
+    'docker',
+    ['exec', '-i', '-e', `PGPASSWORD=${password}`, container, 'psql', '-U', user, '-d', database, '-v', 'ON_ERROR_STOP=1', '-c', sql],
+    { stdio: 'pipe' },
+  );
+}
+
+function sqlLiteral(value: string) {
+  return `'${value.replace(/'/g, "''")}'`;
+}
+
+function cancelActiveReviewsViaPsql(attemptId: string, subtest: 'writing' | 'speaking') {
+  const sql = `UPDATE "ReviewRequests" SET "State" = 7, "CompletedAt" = NOW() WHERE "AttemptId" = ${sqlLiteral(attemptId)} AND "SubtestCode" = ${sqlLiteral(subtest)} AND "State" NOT IN (5, 6, 7);`;
+  try {
+    runE2ePsql(sql);
   } catch {
     // Falls back to admin API path; failure here is non-fatal.
   }
@@ -498,6 +532,120 @@ export const SEEDED_WRITING_SUBMISSION_ID = '11111111-1111-1111-1111-11111111111
 /** Returns the fixed demo-seeded reviewable WritingSubmission id (see above). */
 export function getSeededWritingSubmissionId(): string {
   return SEEDED_WRITING_SUBMISSION_ID;
+}
+
+export function createDisposableWritingSubmissionForReview() {
+  const submissionId = randomUUID();
+  const gradeId = randomUUID();
+  const assignmentId = randomUUID();
+  const contentHash = `qa-writing-marking-${submissionId}`;
+
+  runE2ePsql(`
+    INSERT INTO "WritingSubmissions" (
+      "Id",
+      "UserId",
+      "ScenarioId",
+      "Mode",
+      "LetterContent",
+      "LetterContentHash",
+      "WordCount",
+      "TimeSpentSeconds",
+      "StartedAt",
+      "SubmittedAt",
+      "IsRevision",
+      "OriginalSubmissionId",
+      "Status",
+      "GradingTier",
+      "InputSource",
+      "CreatedAt"
+    )
+    SELECT
+      ${sqlLiteral(submissionId)}::uuid,
+      "UserId",
+      "ScenarioId",
+      "Mode",
+      "LetterContent",
+      ${sqlLiteral(contentHash)},
+      "WordCount",
+      "TimeSpentSeconds",
+      NOW() - INTERVAL '33 minutes',
+      NOW(),
+      TRUE,
+      "Id",
+      "Status",
+      "GradingTier",
+      "InputSource",
+      NOW()
+    FROM "WritingSubmissions"
+    WHERE "Id" = ${sqlLiteral(SEEDED_WRITING_SUBMISSION_ID)}::uuid;
+
+    INSERT INTO "WritingGrades" (
+      "Id",
+      "SubmissionId",
+      "C1Purpose",
+      "C2Content",
+      "C3Conciseness",
+      "C4Genre",
+      "C5Organisation",
+      "C6Language",
+      "RawTotal",
+      "EstimatedBand",
+      "BandLabel",
+      "PerCriterionFeedbackJson",
+      "TopThreePrioritiesJson",
+      "ConfidenceFlag",
+      "ModelUsed",
+      "CanonVersion",
+      "AppealedByGradeId",
+      "TutorReviewId",
+      "GradedAt",
+      "CreatedAt"
+    )
+    SELECT
+      ${sqlLiteral(gradeId)}::uuid,
+      ${sqlLiteral(submissionId)}::uuid,
+      "C1Purpose",
+      "C2Content",
+      "C3Conciseness",
+      "C4Genre",
+      "C5Organisation",
+      "C6Language",
+      "RawTotal",
+      "EstimatedBand",
+      "BandLabel",
+      "PerCriterionFeedbackJson",
+      "TopThreePrioritiesJson",
+      "ConfidenceFlag",
+      "ModelUsed",
+      "CanonVersion",
+      NULL,
+      NULL,
+      NOW(),
+      NOW()
+    FROM "WritingGrades"
+    WHERE "SubmissionId" = ${sqlLiteral(SEEDED_WRITING_SUBMISSION_ID)}::uuid;
+
+    INSERT INTO "WritingTutorReviewAssignments" (
+      "Id",
+      "SubmissionId",
+      "TutorId",
+      "ClaimedAt",
+      "DueAt",
+      "Status",
+      "ReleasedAt"
+    )
+    VALUES (
+      ${sqlLiteral(assignmentId)}::uuid,
+      ${sqlLiteral(submissionId)}::uuid,
+      'expert-001',
+      NOW(),
+      NOW() + INTERVAL '24 hours',
+      'claimed',
+      NULL
+    );
+  `);
+
+  return { submissionId };
 }
 
 export async function createDisposableSpeakingReviewRequest(request: APIRequestContext) {

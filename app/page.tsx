@@ -72,6 +72,15 @@ function routeForTask(task: { route?: string; subTest: SubTest }) {
   return task.route ?? `/${task.subTest.toLowerCase()}`;
 }
 
+function taskAllowedByEntitlement(task: { subTest: SubTest }, entitlement: MyEntitlementSnapshot | null) {
+  if (!entitlement) return true;
+  const modules = new Set(entitlement.enabledModules.map((module) => module.toLowerCase()));
+  if (modules.size === 0) return false;
+  const subTest = task.subTest.toLowerCase();
+  if (modules.has(subTest)) return true;
+  return subTest === 'speaking' && modules.has('speakingsession');
+}
+
 export default function Dashboard() {
   const router = useRouter();
   const prefersReducedMotion = useReducedMotion();
@@ -82,8 +91,9 @@ export default function Dashboard() {
   const { home, profile, readiness, tasks, engagement, loadedAt } = data;
   const freeze = home?.freeze?.currentFreeze ?? null;
 
-  const todayTasks = tasks.filter((task) => task.section === 'today');
-  const upcomingTasks = tasks.filter((task) => task.section === 'thisWeek');
+  const entitledTasks = tasks.filter((task) => taskAllowedByEntitlement(task, entitlement));
+  const todayTasks = entitledTasks.filter((task) => task.section === 'today');
+  const upcomingTasks = entitledTasks.filter((task) => task.section === 'thisWeek');
   const completedToday = todayTasks.filter((task) => task.status === 'completed').length;
   const nextAction = todayTasks.find((task) => task.status !== 'completed');
   const asyncStatus = status === 'loading' ? 'loading' : status === 'error' ? 'error' : status === 'partial' ? 'partial' : !profile ? 'empty' : 'success' as const;
@@ -282,7 +292,7 @@ export default function Dashboard() {
           </div>
 
           <div data-tour="learner-dashboard-skills">
-            <LearnerSkillSwitcher compact />
+            <LearnerSkillSwitcher compact enabledModules={entitlement?.enabledModules} />
           </div>
 
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">

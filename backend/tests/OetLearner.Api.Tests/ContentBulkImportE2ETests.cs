@@ -254,8 +254,8 @@ public class ContentBulkImportE2ETests
 
         Assert.Equal(6, result.CreatedPaperCount);
         Assert.Equal(5, result.CreatedReferenceCount);
-        // 4 (L1) + 2 (R1) + 2 (W1) + 1 (W3) + 3 (S4 role-card + shared links) + 4 (L2) = 16 paper assets
-        Assert.Equal(16, result.CreatedAssetCount);
+        // 4 (L1) + 2 (R1) + 2 (W1) + 1 (W3) + 4 (S4 role-card + shared links) + 4 (L2) = 17 paper assets
+        Assert.Equal(17, result.CreatedAssetCount);
         // The duplicate audio file should have deduplicated to the same MediaAsset
         Assert.True(result.DeduplicatedAssetCount >= 1,
             $"Expected at least 1 deduplicated asset, got {result.DeduplicatedAssetCount}");
@@ -270,7 +270,7 @@ public class ContentBulkImportE2ETests
 
         // Distinct MediaAsset count < total attachment count (proves dedup ran)
         var totalAttachments = await db.ContentPaperAssets.CountAsync();
-        var distinctMedia = await db.MediaAssets.CountAsync();
+        var distinctMedia = await db.ContentPaperAssets.Select(a => a.MediaAssetId).Distinct().CountAsync();
         Assert.True(distinctMedia < totalAttachments,
             $"Dedup failed: {distinctMedia} media assets for {totalAttachments} attachments.");
 

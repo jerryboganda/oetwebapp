@@ -7,6 +7,7 @@ const {
   mockFetchDashboardHome,
   mockFetchEngagement,
   mockLearnerGetScoringPolicy,
+  mockFetchMyEntitlementSnapshot,
   mockTrack,
   mockPush,
 } = vi.hoisted(() => ({
@@ -16,6 +17,7 @@ const {
   mockFetchDashboardHome: vi.fn(),
   mockFetchEngagement: vi.fn(),
   mockLearnerGetScoringPolicy: vi.fn(),
+  mockFetchMyEntitlementSnapshot: vi.fn(),
   mockTrack: vi.fn(),
   mockPush: vi.fn(),
 }));
@@ -56,12 +58,7 @@ vi.mock('@/lib/api', () => ({
   // Added 2026-05-27: the Dashboard page now imports `fetchMyEntitlementSnapshot`
   // to render the entitlement banner. Stub it with an empty snapshot so the
   // page renders without throwing in the test environment.
-  fetchMyEntitlementSnapshot: vi.fn().mockResolvedValue({
-    activeBundles: [],
-    expiredBundles: [],
-    pendingBundles: [],
-    bundleStatuses: [],
-  }),
+  fetchMyEntitlementSnapshot: mockFetchMyEntitlementSnapshot,
 }));
 
 import DashboardPage from './page';
@@ -140,6 +137,24 @@ describe('Dashboard page', () => {
       readingPassScaled: 350,
       targetCountry: 'Australia',
     });
+
+    mockFetchMyEntitlementSnapshot.mockResolvedValue({
+      hasEligibleSubscription: true,
+      tier: 'paid',
+      planCode: 'reading-only',
+      productCategory: 'full_course',
+      enabledModules: ['Reading'],
+      writingAddonsEnabled: false,
+      speakingAddonsEnabled: false,
+      tutorBookDiscountEnabled: false,
+      writingAssessmentsRemaining: 0,
+      speakingSessionsRemaining: 0,
+      aiCreditsRemaining: 0,
+      tutorBookUnlocked: false,
+      basicEnglishUnlocked: false,
+      expiresAt: '2026-12-31T00:00:00Z',
+      isFrozen: false,
+    });
   });
 
   it('renders through the shared learner dashboard shell', async () => {
@@ -165,5 +180,65 @@ describe('Dashboard page', () => {
     renderWithRouter(<DashboardPage />, { router: { push: mockPush } });
 
     expect(await screen.findByText('Trend data will appear after more practice.')).toBeInTheDocument();
+  });
+
+  it('hides dashboard tasks outside the purchased module set', async () => {
+    mockFetchStudyPlan.mockResolvedValueOnce([
+      {
+        id: 'task-writing',
+        title: 'Writing: Discharge Summary Practice',
+        duration: '45 mins',
+        subTest: 'Writing',
+        section: 'today',
+        status: 'pending',
+      },
+      {
+        id: 'task-reading',
+        title: 'Reading: Part C Practice',
+        duration: '30 mins',
+        subTest: 'Reading',
+        section: 'today',
+        status: 'pending',
+      },
+    ]);
+
+    renderWithRouter(<DashboardPage />, { router: { push: mockPush } });
+
+    expect((await screen.findAllByText('Reading: Part C Practice')).length).toBeGreaterThan(0);
+    expect(screen.queryByText('Writing: Discharge Summary Practice')).not.toBeInTheDocument();
+  });
+
+  it('keeps speaking tasks visible for speaking-session-only products', async () => {
+    mockFetchMyEntitlementSnapshot.mockResolvedValueOnce({
+      hasEligibleSubscription: true,
+      tier: 'paid',
+      planCode: 'speaking-1session',
+      productCategory: 'speaking_session',
+      enabledModules: ['SpeakingSession', 'Addons'],
+      writingAddonsEnabled: false,
+      speakingAddonsEnabled: true,
+      tutorBookDiscountEnabled: false,
+      writingAssessmentsRemaining: 0,
+      speakingSessionsRemaining: 1,
+      aiCreditsRemaining: 0,
+      tutorBookUnlocked: false,
+      basicEnglishUnlocked: false,
+      expiresAt: '2026-12-31T00:00:00Z',
+      isFrozen: false,
+    });
+    mockFetchStudyPlan.mockResolvedValueOnce([
+      {
+        id: 'task-speaking',
+        title: 'Speaking: Private Session Prep',
+        duration: '30 mins',
+        subTest: 'Speaking',
+        section: 'today',
+        status: 'pending',
+      },
+    ]);
+
+    renderWithRouter(<DashboardPage />, { router: { push: mockPush } });
+
+    expect((await screen.findAllByText('Speaking: Private Session Prep')).length).toBeGreaterThan(0);
   });
 });
