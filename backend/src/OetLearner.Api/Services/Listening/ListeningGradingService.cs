@@ -413,16 +413,10 @@ public sealed class ListeningGradingService
         var na = NormaliseFor(a, normalisation);
         var nb = NormaliseFor(b, normalisation);
 
-        if (string.Equals(normalisation, "fuzzy_levenshtein_1", StringComparison.OrdinalIgnoreCase))
-        {
-            if (!caseSensitive)
-            {
-                na = na.ToUpperInvariant();
-                nb = nb.ToUpperInvariant();
-            }
-            return LevenshteinDistanceAtMostOne(na, nb);
-        }
-
+        // Decision 4 — hard-lock strictness everywhere: NO fuzzy/Levenshtein
+        // ACCEPTANCE in any mode or policy. A stale `fuzzy_levenshtein_1`
+        // normalisation degrades to exact match. (Levenshtein survives only in
+        // ClassifyMiss for analytics labelling, never for grading.)
         return caseSensitive
             ? string.Equals(na, nb, StringComparison.Ordinal)
             : string.Equals(na, nb, StringComparison.OrdinalIgnoreCase);

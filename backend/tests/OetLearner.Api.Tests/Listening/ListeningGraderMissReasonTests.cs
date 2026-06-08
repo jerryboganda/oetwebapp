@@ -100,15 +100,21 @@ public class ListeningGraderMissReasonTests
     }
 
     [Fact]
-    public void StringsMatch_fuzzy_levenshtein_one_accepts_single_typo()
+    public void StringsMatch_rejects_typos_even_under_stale_fuzzy_policy()
     {
-        Assert.True(ListeningGradingService.StringsMatch(
+        // Decision 4 — hard-lock strictness everywhere. A single-edit typo is
+        // REJECTED even when a stale `fuzzy_levenshtein_1` policy is configured;
+        // the normalisation degrades to exact match. (The typo is still labelled
+        // SpellingError by ClassifyMiss for analytics — but never accepted.)
+        Assert.False(ListeningGradingService.StringsMatch(
             "cholestrol", "cholesterol", caseSensitive: false,
             normalisation: "fuzzy_levenshtein_1"));
-        // Two-edit gap is rejected by the strict pass-threshold matcher even
-        // though it would still be classified as SpellingError downstream.
         Assert.False(ListeningGradingService.StringsMatch(
             "cholestrl", "cholesterol", caseSensitive: false,
+            normalisation: "fuzzy_levenshtein_1"));
+        // An exact (case-insensitive, whitespace-collapsed) answer still matches.
+        Assert.True(ListeningGradingService.StringsMatch(
+            " Cholesterol ", "cholesterol", caseSensitive: false,
             normalisation: "fuzzy_levenshtein_1"));
     }
 
@@ -404,7 +410,7 @@ public class ListeningGraderMissReasonTests
     }
 
     [Fact]
-    public async Task GradeAsync_honours_policy_fuzzy_levenshtein_one_normalisation()
+    public async Task GradeAsync_rejects_single_edit_typo_even_under_fuzzy_policy()
     {
         await using var db = NewDb();
         var now = DateTimeOffset.UtcNow;
@@ -487,10 +493,12 @@ public class ListeningGraderMissReasonTests
 
         var result = await new ListeningGradingService(db).GradeAsync("att-fuzz", CancellationToken.None);
 
-        // Under fuzzy_levenshtein_1 the single-edit miss is accepted.
-        Assert.Equal(1, result.RawScore);
+        // Decision 4 — even with a stale fuzzy_levenshtein_1 policy, the single
+        // -edit typo is REJECTED (score 0, not correct). It is still labelled
+        // SpellingError by ClassifyMiss for analytics, but never accepted.
+        Assert.Equal(0, result.RawScore);
         var reloaded = await db.ListeningAnswers.SingleAsync(a => a.Id == "ans-fuzz");
-        Assert.True(reloaded.IsCorrect);
-        Assert.Equal(ListeningMissReason.Match, reloaded.MissReason);
+        Assert.False(reloaded.IsCorrect);
+        Assert.Equal(ListeningMissReason.SpellingError, reloaded.MissReason);
     }
 }

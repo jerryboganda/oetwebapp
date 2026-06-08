@@ -506,17 +506,10 @@ public sealed class ReadingGradingService(
         var na = Normalise(a, normalisation);
         var nb = Normalise(b, normalisation);
 
-        if (string.Equals(normalisation, "fuzzy_levenshtein_1", StringComparison.OrdinalIgnoreCase))
-        {
-            if (!caseSensitive)
-            {
-                na = na.ToUpperInvariant();
-                nb = nb.ToUpperInvariant();
-            }
-
-            return LevenshteinDistanceAtMostOne(na, nb);
-        }
-
+        // Decision 4 — hard-lock strictness everywhere: NO fuzzy/Levenshtein
+        // ACCEPTANCE in any mode/policy. A stale `fuzzy_levenshtein_1`
+        // normalisation degrades to exact match. (Levenshtein survives only in
+        // ClassifyMiss for analytics labelling, never for grading.)
         return caseSensitive
             ? string.Equals(na, nb, StringComparison.Ordinal)
             : string.Equals(na, nb, StringComparison.OrdinalIgnoreCase);
@@ -529,6 +522,23 @@ public sealed class ReadingGradingService(
         "fuzzy_levenshtein_1" => CollapseWhitespace(s.Trim()),
         _ /* trim_collapse_case_insensitive */ => CollapseWhitespace(s.Trim()),
     };
+
+    // R04.2: true when the two normalised answers differ ONLY by a
+    // singular/plural inflection (trailing s/es, or y -> ies). Analytics
+    // labelling only — such an answer is still graded WRONG.
+    private static bool IsNumberFormDifference(string a, string b)
+    {
+        if (string.IsNullOrEmpty(a) || string.IsNullOrEmpty(b)) return false;
+        var x = a.ToUpperInvariant();
+        var y = b.ToUpperInvariant();
+        if (string.Equals(x, y, StringComparison.Ordinal)) return false;
+        foreach (var (s, p) in new[] { (x, y), (y, x) })
+        {
+            if (p == s + "S" || p == s + "ES") return true;
+            if (s.Length > 1 && s.EndsWith("Y", StringComparison.Ordinal) && p == s[..^1] + "IES") return true;
+        }
+        return false;
+    }
 
     private static bool LevenshteinDistanceAtMostOne(string a, string b)
     {
@@ -671,6 +681,14 @@ public sealed class ReadingGradingService(
             var correctRaw = ParseJsonString(q.CorrectAnswerJson) ?? string.Empty;
             nu = CollapseWhitespace(ApplyTextNormalization(userRaw.Trim(), policy));
             nc = CollapseWhitespace(ApplyTextNormalization(correctRaw.Trim(), policy));
+
+            // R04.2 singular/plural — still WRONG, but labelled distinctly for
+            // analytics. Checked before "spelling" so a plural inflection is not
+            // mislabelled as a one-edit typo.
+            if (!string.IsNullOrEmpty(nc) && IsNumberFormDifference(nu, nc))
+            {
+                return "number_form";
+            }
 
             // "spelling": would have been right but for case/spelling — a
             // case-insensitive normalised match or a single-edit typo.
