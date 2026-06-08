@@ -272,7 +272,7 @@ export function ListeningPaperBooklet({
           </div>
         ) : null}
 
-        {page.kind === 'notes' && page.extract?.notesBody ? (
+        {page.kind === 'notes' && page.extract?.notesBody?.trim() ? (
           // Part A with an authored notes body → render as ONE continuous
           // note-completion document (PartANotesDocument) instead of 12 separate cards.
           <PartANotesDocument

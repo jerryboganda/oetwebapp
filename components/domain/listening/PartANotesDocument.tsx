@@ -52,12 +52,13 @@ function GapInput({ gapIndex, questions, answers, onAnswerChange, locked }: GapI
   }
 
   const q = questions[gapIndex];
+  const inputId = `listening-answer-${q.id}`;
   return (
     <>
-      <strong className="mx-0.5 font-semibold text-navy">({q.number})</strong>
+      <label htmlFor={inputId} className="mx-0.5 font-semibold text-navy">({q.number})</label>
       <span style={{ userSelect: 'auto', WebkitUserSelect: 'auto' }}>
         <input
-          id={`listening-answer-${q.id}`}
+          id={inputId}
           type="text"
           value={answers[q.id] ?? ''}
           onChange={(e) => onAnswerChange(q.id, e.target.value)}
@@ -215,7 +216,7 @@ export function PartANotesDocument({
             </p>
             {leftoverQuestions.map((q) => (
               <div key={q.id} className="flex flex-wrap items-center gap-2 leading-10">
-                <strong className="font-semibold text-navy">({q.number})</strong>
+                <label htmlFor={`listening-answer-${q.id}`} className="font-semibold text-navy">({q.number})</label>
                 <span style={{ userSelect: 'auto', WebkitUserSelect: 'auto' }}>
                   <input
                     id={`listening-answer-${q.id}`}

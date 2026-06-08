@@ -230,4 +230,27 @@ describe('PartANotesDocument', () => {
     expect(document.getElementById('listening-answer-q2')).toBeInTheDocument();
     expect(document.getElementById('listening-answer-q3')).toBeInTheDocument();
   });
+
+  // ── Fix 1: a11y — (N) label must be programmatically associated with its input ──
+
+  it('Fix 1 a11y: each gap label <label> has htmlFor equal to the input id (per-gap association)', () => {
+    render(<NotesHarness body={TWELVE_GAP_BODY} questions={Q1_12} />);
+    // Check at least two distinct gaps so we know association is per-gap, not shared
+    for (const q of [Q1_12[0], Q1_12[4]]) {
+      const inputId = `listening-answer-${q.id}`;
+      const label = document.querySelector(`label[for="${inputId}"]`);
+      expect(label, `label[for="${inputId}"] should exist`).not.toBeNull();
+      expect(label!.textContent).toContain(`(${q.number})`);
+    }
+  });
+
+  it('Fix 1 a11y: getByRole textbox resolves each gap by exact accessible name for at least two gaps', () => {
+    render(<NotesHarness body={TWELVE_GAP_BODY} questions={Q1_12} />);
+    // Each textbox must be resolvable by its exact aria-label
+    for (const q of [Q1_12[1], Q1_12[7]]) {
+      expect(
+        screen.getByRole('textbox', { name: `Answer for question ${q.number}` }),
+      ).toBeInTheDocument();
+    }
+  });
 });

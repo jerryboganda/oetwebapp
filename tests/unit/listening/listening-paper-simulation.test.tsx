@@ -171,4 +171,35 @@ describe('ListeningPaperBooklet — Part A notes-document wiring', () => {
     expect(lockTarget).not.toBeNull();
     expect(lockTarget!.dataset.highlightingEnabled).toBe('true');
   });
+
+  // ── Fix 2: robustness — whitespace-only notesBody must fall back to PartARenderer ──
+
+  it('Fix 2 robustness: A1 page with whitespace-only notesBody falls back to PartARenderer (not part-a-notes-document)', () => {
+    const A1_PAGE_WHITESPACE_NOTES: ListeningPaperBookletPage = {
+      id: 'listening-part-a-a1',
+      label: 'Part A — Extract 1 — Consultation',
+      section: 'A1',
+      extract: {
+        partCode: 'A1',
+        displayOrder: 1,
+        kind: 'consultation',
+        title: 'Consultation',
+        accentCode: null,
+        speakers: [],
+        audioStartMs: null,
+        audioEndMs: null,
+        notesBody: '   ', // whitespace-only — should be treated as absent
+      },
+      questionIds: QUESTIONS_A1.map((q) => q.id),
+      kind: 'notes',
+    };
+
+    render(<BookletHarness page={A1_PAGE_WHITESPACE_NOTES} />);
+
+    // Should NOT render the notes-document component
+    expect(screen.queryByTestId('part-a-notes-document')).not.toBeInTheDocument();
+    // Should fall back to per-question PartARenderer cards
+    const cards = screen.getAllByTestId('part-a-clinical-note');
+    expect(cards).toHaveLength(12);
+  });
 });

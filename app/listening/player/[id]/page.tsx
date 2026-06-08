@@ -1620,7 +1620,7 @@ function PlayerContent() {
                               // Part A1 / A2 with an authored notes body → ONE continuous note-completion document.
                               if (section === 'A1' || section === 'A2') {
                                 const extract = extracts.find((e) => e.partCode === section);
-                                if (extract?.notesBody) {
+                                if (extract?.notesBody?.trim()) {
                                   const canEdit = true;
                                   return (
                                     <PartANotesDocument
