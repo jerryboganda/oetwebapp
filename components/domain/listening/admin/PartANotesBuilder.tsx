@@ -20,10 +20,10 @@ import { PartARenderer } from '@/components/domain/listening/PartARenderer';
  * a stem still render — we just never author new ones.
  */
 
-// Import and re-export the canonical gap marker and paste sanitizer from the
-// grammar lib so existing imports of these symbols from this path keep working.
-export { PART_A_GAP_MARKER, sanitizePastedStem } from '@/lib/listening-part-a-notes';
+// Import the canonical gap marker and paste sanitizer from the grammar lib.
+// Re-exported so existing imports of these symbols from this path keep working.
 import { PART_A_GAP_MARKER, sanitizePastedStem } from '@/lib/listening-part-a-notes';
+export { PART_A_GAP_MARKER, sanitizePastedStem };
 
 export interface PartANotesBuilderProps {
   value: string;

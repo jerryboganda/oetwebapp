@@ -11,6 +11,12 @@
  *
  * No React. `parseNotesDocument` and `countGaps` are pure string functions.
  * Only `detectPastedGaps` / `sanitizePastedStem` may call the sanitizer.
+ *
+ * Notes-document grammar: the ONLY gap marker recognised in this module is a
+ * run of 4+ underscores (`____`). `detectPastedGaps` and the authoring toolbar
+ * always emit this canonical form. Legacy `[ ]` / `{{ blank }}` markers belong
+ * only to old per-question stems rendered by `PartARenderer` (a separate
+ * concern — do not change `PartARenderer`).
  */
 
 import { sanitizeBodyHtml } from '@/lib/wizard/sanitize-html';
@@ -21,11 +27,18 @@ import { sanitizeBodyHtml } from '@/lib/wizard/sanitize-html';
 export const PART_A_GAP_MARKER = '____';
 
 /**
- * Pattern that recognises ALL gap notations accepted in a notes body.
- * Matches: runs of 4+ underscores, `[ ]` / `[ blank ]`, and `{{ blank }}`.
- * Used internally by `parseNotesDocument` to split lines into segments.
+ * Shared regex that recognises the notes-document gap notation: a run of 4+
+ * underscores. Used by BOTH `parseNotesDocument` (segment splitting) and
+ * `countGaps` so the two functions always agree on what constitutes a gap.
+ *
+ * The capturing group is required so `String.split(BLANK_PATTERN)` keeps the
+ * matched separator tokens in the result array (allowing `splitLineIntoSegments`
+ * to distinguish gap parts from text parts).
+ *
+ * Note: legacy `[ ]` / `{{ blank }}` are intentionally NOT matched here; those
+ * belong to old per-question stems handled by `PartARenderer`.
  */
-const BLANK_PATTERN = /(____+|\[\s*\]|\{\{\s*blank\s*\}\})/i;
+const BLANK_PATTERN = /(_{4,})/;
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -78,7 +91,11 @@ function splitLineIntoSegments(
 export function parseNotesDocument(body: string | null | undefined): NotesNode[] {
   if (!body) return [];
 
-  const lines = body.split('\n');
+  // Normalize line endings: CRLF (\r\n) and lone CR (\r) → LF (\n).
+  // This prevents a trailing \r from leaking into segment text when the input
+  // comes from Windows clipboard pastes or files with CRLF encoding.
+  const normalized = body.replace(/\r\n?/g, '\n');
+  const lines = normalized.split('\n');
   const nodes: NotesNode[] = [];
   const gapCounter = { value: 0 };
 
@@ -113,7 +130,10 @@ export function parseNotesDocument(body: string | null | undefined): NotesNode[]
       continue;
     }
 
-    // Context line: any other non-empty line.
+    // Context line: any other non-empty line (including a gap-only line like
+    // "____"). A gap-only line is intentionally a `context` node — it produces
+    // a paragraph that holds a single inline gap, which is a valid layout choice
+    // for note-completion documents.
     nodes.push({ kind: 'context', segments: splitLineIntoSegments(line, gapCounter) });
   }
 
@@ -124,9 +144,15 @@ export function parseNotesDocument(body: string | null | undefined): NotesNode[]
  * Count gap markers in a body. Each run of 4+ underscores is ONE gap.
  * `'____ ____'` (separated) = 2; `'________'` (contiguous) = 1.
  * Returns 0 for null / undefined / empty strings.
+ *
+ * Uses the same `BLANK_PATTERN` definition as `parseNotesDocument` /
+ * `splitLineIntoSegments` so the two functions always agree on gap count.
  */
 export function countGaps(body: string | null | undefined): number {
   if (!body) return 0;
+  // Use a global version of BLANK_PATTERN (which uses a capturing group) to
+  // count occurrences. The global flag is applied here to avoid polluting the
+  // shared constant with state.
   const matches = body.match(/_{4,}/g);
   return matches ? matches.length : 0;
 }
@@ -138,19 +164,23 @@ export function countGaps(body: string | null | undefined): number {
  * Steps:
  *   1. Sanitize via `sanitizePastedStem` (neutralise scripts, preserve line
  *      structure).
- *   2. Replace `(n)__...` / `(n) ` patterns → `____` (handles numbered gaps).
- *   3. Normalize remaining runs of 4+ underscores → `____`.
+ *   2. Replace `(n)` ONLY when immediately followed (with optional spaces/tabs)
+ *      by an underscore run → `____`. A bare `(n)` with no following underscores
+ *      is left unchanged so clinical notation like "Stage (3) cancer" is
+ *      preserved and the admin can refine via the toolbar.
+ *   3. Normalize any remaining standalone underscore runs (4+) → `____`.
  *   4. Return cleaned body + `countGaps` result.
  */
 export function detectPastedGaps(raw: string): { body: string; gapCount: number } {
   // Step 1: sanitize.
   let body = sanitizePastedStem(raw);
 
-  // Step 2: parenthesised number optionally followed by underscores/whitespace.
-  // e.g. "(1)__________", "(12) ____", "(7)" → `____`
-  body = body.replace(/\((\d+)\)\s*_*/g, PART_A_GAP_MARKER);
+  // Step 2: (n) + optional spaces/tabs + an underscore run → canonical gap.
+  // A bare "(n)" with NO following underscores is left alone (the admin refines
+  // via toolbar). This prevents word-fusing in text like "Stage (3) cancer".
+  body = body.replace(/\((\d+)\)[ \t]*_+/g, PART_A_GAP_MARKER);
 
-  // Step 3: normalize any remaining runs of 4+ underscores to the canonical marker.
+  // Step 3: any remaining standalone run of 4+ underscores → canonical marker.
   body = body.replace(/_{4,}/g, PART_A_GAP_MARKER);
 
   return { body, gapCount: countGaps(body) };

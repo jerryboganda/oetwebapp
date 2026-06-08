@@ -147,7 +147,53 @@ describe('parseNotesDocument', () => {
   });
 });
 
-// ── 3. detectPastedGaps — realistic OET Extract-1 ────────────────────────────
+// ── Fix 1: CRLF handling in parseNotesDocument ───────────────────────────────
+
+describe('parseNotesDocument — CRLF handling', () => {
+  it('strips trailing \\r from heading text when body uses CRLF line endings', () => {
+    const body = '## Title\r\n- bullet';
+    const nodes = parseNotesDocument(body);
+    const heading = nodes.find((n) => n.kind === 'heading');
+    expect(heading).toBeDefined();
+    if (heading?.kind === 'heading') {
+      const text = heading.segments.find((s) => s.kind === 'text');
+      if (text?.kind === 'text') {
+        expect(text.text).not.toContain('\r');
+        expect(text.text).toBe('Title');
+      }
+    }
+  });
+
+  it('no segment text contains \\r when body uses CRLF line endings throughout', () => {
+    const body = '## Section\r\n- item one\r\n- item two\r\ncontext line';
+    const nodes = parseNotesDocument(body);
+    for (const node of nodes) {
+      if (node.kind !== 'divider') {
+        for (const seg of node.segments) {
+          if (seg.kind === 'text') {
+            expect(seg.text).not.toContain('\r');
+          }
+        }
+      }
+    }
+  });
+
+  it('handles lone \\r (old Mac) line endings', () => {
+    const body = '## Title\r- bullet';
+    const nodes = parseNotesDocument(body);
+    const heading = nodes.find((n) => n.kind === 'heading');
+    expect(heading).toBeDefined();
+    if (heading?.kind === 'heading') {
+      const text = heading.segments.find((s) => s.kind === 'text');
+      if (text?.kind === 'text') {
+        expect(text.text).not.toContain('\r');
+        expect(text.text).toBe('Title');
+      }
+    }
+  });
+});
+
+// ── Shared fixture for detectPastedGaps tests ─────────────────────────────────
 
 const EXTRACT_1_RAW = `Patient    Hayley Dove
 
@@ -169,6 +215,66 @@ Development of new symptoms and treatment
 Current concerns
 - now experiencing stiffness in joints and (11)__________
 - tendency to become excessively (12)__________`;
+
+// ── Fix 2: detectPastedGaps does not fuse words after non-gap (n) ─────────────
+
+describe('detectPastedGaps — standalone (n) preserved', () => {
+  it('leaves "Stage (3) cancer" unchanged — no gap, no word fusion', () => {
+    const { body, gapCount } = detectPastedGaps('Stage (3) cancer');
+    expect(gapCount).toBe(0);
+    expect(body).toContain('Stage (3) cancer');
+    // Ensure no word fusion (space between "(3)" and "cancer" intact)
+    expect(body).not.toMatch(/Stage\s*\(3\)cancer/);
+  });
+
+  it('detects gap when (n) is followed by underscore run', () => {
+    const { body, gapCount } = detectPastedGaps('after (7)__________');
+    expect(gapCount).toBe(1);
+    expect(body).toContain('after ____');
+  });
+
+  it('the existing 12-gap realistic-sample test still passes', () => {
+    const { gapCount, body } = detectPastedGaps(EXTRACT_1_RAW);
+    expect(gapCount).toBe(12);
+    // No surviving (n) notation in the result
+    expect(/\(\d+\)/.test(body)).toBe(false);
+  });
+});
+
+// ── Fix 3: countGaps equals number of gap segments from parseNotesDocument ────
+
+describe('countGaps consistency with parseNotesDocument', () => {
+  it('countGaps equals the number of gap-kind segments for a multi-gap body', () => {
+    const body = '## Section\n- item with ____\n- another ____ and ____\ncontext ____';
+    const gapCount = countGaps(body);
+    const nodes = parseNotesDocument(body);
+    let segmentGapCount = 0;
+    for (const node of nodes) {
+      if (node.kind !== 'divider') {
+        for (const seg of node.segments) {
+          if (seg.kind === 'gap') segmentGapCount++;
+        }
+      }
+    }
+    expect(gapCount).toBe(segmentGapCount);
+  });
+});
+
+// ── Fix 4: gap-only line is intentionally a context node ─────────────────────
+
+describe('parseNotesDocument — gap-only line', () => {
+  it('a line that is only ____ produces one context node with one gap segment', () => {
+    const nodes = parseNotesDocument('____');
+    expect(nodes).toHaveLength(1);
+    expect(nodes[0].kind).toBe('context');
+    if (nodes[0].kind === 'context') {
+      expect(nodes[0].segments).toHaveLength(1);
+      expect(nodes[0].segments[0]).toEqual({ kind: 'gap', gapIndex: 0 });
+    }
+  });
+});
+
+// ── 3. detectPastedGaps — realistic OET Extract-1 ────────────────────────────
 
 describe('detectPastedGaps', () => {
   it('finds 12 gaps in the realistic OET extract', () => {
