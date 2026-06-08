@@ -308,7 +308,7 @@ public class ContentPaperServiceTests
     }
 
     [Fact]
-    public async Task Publish_fails_when_writing_structure_is_not_ready()
+    public async Task Publish_records_warning_when_writing_structure_is_not_ready()
     {
         var (db, svc) = Build();
         var p = await svc.CreateAsync(new ContentPaperCreate(
@@ -317,14 +317,19 @@ public class ContentPaperServiceTests
 
         await AttachRequiredWritingAssetsAsync(db, svc, p.Id);
 
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            svc.PublishAsync(p.Id, "admin-1", default));
-        Assert.Contains("Writing structure", ex.Message);
+        // Decision 2 — publishing is NEVER blocked on conformance grounds; the
+        // structural problem is recorded as a non-blocking warning instead.
+        await svc.PublishAsync(p.Id, "admin-1", default);
+
+        var reload = await db.ContentPapers.FirstAsync(x => x.Id == p.Id);
+        Assert.Equal(ContentStatus.Published, reload.Status);
+        var actions = await db.AuditEvents.Select(a => a.Action).ToListAsync();
+        Assert.Contains("ContentPaperPublishConformanceWarning", actions);
         await db.DisposeAsync();
     }
 
     [Fact]
-    public async Task Publish_fails_when_writing_letter_type_is_not_canonical()
+    public async Task Publish_records_warning_when_writing_letter_type_is_not_canonical()
     {
         var (db, svc) = Build();
         var p = await svc.CreateAsync(new ContentPaperCreate(
@@ -334,9 +339,13 @@ public class ContentPaperServiceTests
         await AttachRequiredWritingAssetsAsync(db, svc, p.Id);
         await FullyAuthorWritingPaperAsync(db, p.Id);
 
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            svc.PublishAsync(p.Id, "admin-1", default));
-        Assert.Contains("canonical Writing letter types", ex.Message);
+        // Decision 2 — a non-canonical letter type is a non-blocking warning.
+        await svc.PublishAsync(p.Id, "admin-1", default);
+
+        var reload = await db.ContentPapers.FirstAsync(x => x.Id == p.Id);
+        Assert.Equal(ContentStatus.Published, reload.Status);
+        var actions = await db.AuditEvents.Select(a => a.Action).ToListAsync();
+        Assert.Contains("ContentPaperPublishConformanceWarning", actions);
         await db.DisposeAsync();
     }
 
@@ -405,7 +414,7 @@ public class ContentPaperServiceTests
     }
 
     [Fact]
-    public async Task Publish_fails_when_reading_structure_is_not_ready()
+    public async Task Publish_records_warning_when_reading_structure_is_not_ready()
     {
         var (db, svc) = Build();
         var paper = await svc.CreateAsync(new ContentPaperCreate(
@@ -413,14 +422,18 @@ public class ContentPaperServiceTests
             DefaultSourceProvenance), "admin-1", default);
         await AttachRequiredReadingAssetsAsync(db, svc, paper.Id);
 
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            svc.PublishAsync(paper.Id, "admin-1", default));
-        Assert.Contains("publish-ready", ex.Message);
+        // Decision 2 — a non-publish-ready reading structure is a non-blocking warning.
+        await svc.PublishAsync(paper.Id, "admin-1", default);
+
+        var reload = await db.ContentPapers.FirstAsync(x => x.Id == paper.Id);
+        Assert.Equal(ContentStatus.Published, reload.Status);
+        var actions = await db.AuditEvents.Select(a => a.Action).ToListAsync();
+        Assert.Contains("ContentPaperPublishConformanceWarning", actions);
         await db.DisposeAsync();
     }
 
     [Fact]
-    public async Task Publish_fails_when_reading_part_pdf_media_is_not_ready_pdf()
+    public async Task Publish_records_warning_when_reading_part_pdf_media_is_not_ready_pdf()
     {
         var (db, svc) = Build();
         var paper = await svc.CreateAsync(new ContentPaperCreate(
@@ -437,9 +450,13 @@ public class ContentPaperServiceTests
         await structure.EnsureCanonicalPartsAsync(paper.Id, default);
         await FullyAuthorReadingPaperAsync(db, structure, paper.Id);
 
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            svc.PublishAsync(paper.Id, "admin-1", default));
-        Assert.Contains("Part B requires exactly one primary QuestionPaper PDF", ex.Message);
+        // Decision 2 — a missing/invalid Part B PDF is a non-blocking warning.
+        await svc.PublishAsync(paper.Id, "admin-1", default);
+
+        var reload = await db.ContentPapers.FirstAsync(x => x.Id == paper.Id);
+        Assert.Equal(ContentStatus.Published, reload.Status);
+        var actions = await db.AuditEvents.Select(a => a.Action).ToListAsync();
+        Assert.Contains("ContentPaperPublishConformanceWarning", actions);
         await db.DisposeAsync();
     }
 
@@ -464,7 +481,7 @@ public class ContentPaperServiceTests
     }
 
     [Fact]
-    public async Task Publish_fails_when_speaking_structure_is_not_ready()
+    public async Task Publish_records_warning_when_speaking_structure_is_not_ready()
     {
         var (db, svc) = Build();
         var paper = await svc.CreateAsync(new ContentPaperCreate(
@@ -472,9 +489,13 @@ public class ContentPaperServiceTests
             "relationshipBuilding", DefaultSourceProvenance), "admin-1", default);
         await AttachRequiredSpeakingAssetsAsync(db, svc, paper.Id);
 
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            svc.PublishAsync(paper.Id, "admin-1", default));
-        Assert.Contains("Speaking structure", ex.Message);
+        // Decision 2 — a non-publish-ready speaking structure is a non-blocking warning.
+        await svc.PublishAsync(paper.Id, "admin-1", default);
+
+        var reload = await db.ContentPapers.FirstAsync(x => x.Id == paper.Id);
+        Assert.Equal(ContentStatus.Published, reload.Status);
+        var actions = await db.AuditEvents.Select(a => a.Action).ToListAsync();
+        Assert.Contains("ContentPaperPublishConformanceWarning", actions);
         await db.DisposeAsync();
     }
 

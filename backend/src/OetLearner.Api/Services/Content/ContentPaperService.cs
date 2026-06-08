@@ -691,43 +691,26 @@ public sealed class ContentPaperService(
 
         EnforceRequiredAssetRoles(paper);
 
+        // Decision 2 — publishing is NEVER blocked on rule-conformance grounds.
+        // Structural problems (e.g. a 4-option Part B, a non-canonical shape)
+        // are recorded as a NON-BLOCKING conformance-warning audit and surfaced
+        // read-only on /admin/conformance; publishing always proceeds.
         if (string.Equals(paper.SubtestCode, "reading", StringComparison.OrdinalIgnoreCase))
         {
             var report = await new ReadingStructureService(db).ValidatePaperAsync(paper.Id, ct);
-            if (!report.IsPublishReady)
-            {
-                var errors = report.Issues
-                    .Where(issue => string.Equals(issue.Severity, "error", StringComparison.OrdinalIgnoreCase))
-                    .Select(issue => issue.Message)
-                    .DefaultIfEmpty("Reading paper is not publish-ready.");
-                throw new InvalidOperationException("Reading paper is not publish-ready: " + string.Join(" ", errors));
-            }
+            await RecordPublishConformanceWarningsAsync(paper, report.Issues.Select(i => $"[{i.Severity}] {i.Message}"), adminId, ct);
         }
 
         if (string.Equals(paper.SubtestCode, "speaking", StringComparison.OrdinalIgnoreCase))
         {
             var report = SpeakingContentStructure.Validate(paper);
-            if (!report.IsPublishReady)
-            {
-                var errors = report.Issues
-                    .Where(issue => string.Equals(issue.Severity, "error", StringComparison.OrdinalIgnoreCase))
-                    .Select(issue => issue.Message)
-                    .DefaultIfEmpty("Speaking structure is not publish-ready.");
-                throw new InvalidOperationException("Speaking structure is not publish-ready: " + string.Join(" ", errors));
-            }
+            await RecordPublishConformanceWarningsAsync(paper, report.Issues.Select(i => $"[{i.Severity}] {i.Message}"), adminId, ct);
         }
 
         if (string.Equals(paper.SubtestCode, "writing", StringComparison.OrdinalIgnoreCase))
         {
             var report = WritingContentStructure.Validate(paper);
-            if (!report.IsPublishReady)
-            {
-                var errors = report.Issues
-                    .Where(issue => string.Equals(issue.Severity, "error", StringComparison.OrdinalIgnoreCase))
-                    .Select(issue => issue.Message)
-                    .DefaultIfEmpty("Writing structure is not publish-ready.");
-                throw new InvalidOperationException("Writing structure is not publish-ready: " + string.Join(" ", errors));
-            }
+            await RecordPublishConformanceWarningsAsync(paper, report.Issues.Select(i => $"[{i.Severity}] {i.Message}"), adminId, ct);
         }
 
         var now = DateTimeOffset.UtcNow;
@@ -916,6 +899,24 @@ public sealed class ContentPaperService(
         var slug = sb.ToString();
         while (slug.Contains("--")) slug = slug.Replace("--", "-");
         return slug.Trim('-');
+    }
+
+    // Decision 2 — record (never block) rule-conformance problems found at
+    // publish time. Issues are written to the unbounded Details column and
+    // surfaced read-only on /admin/conformance; publishing always proceeds.
+    private async Task RecordPublishConformanceWarningsAsync(
+        ContentPaper paper,
+        IEnumerable<string> issues,
+        string adminId,
+        CancellationToken ct)
+    {
+        var messages = issues.Where(m => !string.IsNullOrWhiteSpace(m)).ToList();
+        if (messages.Count == 0) return;
+        await WriteAuditAsync(
+            "ContentPaperPublishConformanceWarning",
+            paper.Id,
+            $"{paper.Title} — {messages.Count} conformance warning(s): {string.Join(" | ", messages.Take(50))}",
+            adminId, ct);
     }
 
     private Task WriteAuditAsync(string action, string resourceId, string? details, string adminId, CancellationToken ct)
