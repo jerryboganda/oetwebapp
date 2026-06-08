@@ -1798,6 +1798,11 @@ public sealed class ListeningLearnerService(
                 }
                 int? timeLimitSeconds = ReadIntField(seg, "timeLimitSeconds") is var t and > 0 ? t : null;
                 var speakers = ParseSpeakers(seg.GetValueOrDefault("speakers"));
+                // Part A note-completion body. Only A1/A2 surface one; ignore any
+                // stray value on a Part B/C JSON extract.
+                var notesBody = partCode.StartsWith("A", StringComparison.OrdinalIgnoreCase)
+                    ? ReadString(seg.GetValueOrDefault("notesBody"))
+                    : null;
                 // JSON-path papers have no TTS extract sha here, so only uploaded
                 // per-part Audio assets resolve; else null.
                 var audioUrl = audioByPart.GetValueOrDefault(partCode.Trim().ToUpperInvariant());
@@ -1811,7 +1816,8 @@ public sealed class ListeningLearnerService(
                     AudioStartMs: audioStartMs,
                     AudioEndMs: audioEndMs,
                     AudioUrl: audioUrl,
-                    TimeLimitSeconds: timeLimitSeconds));
+                    TimeLimitSeconds: timeLimitSeconds,
+                    NotesBody: notesBody));
             }
             return output
                 .OrderBy(e => PartCodeOrder(e.PartCode))
@@ -1968,7 +1974,8 @@ public sealed class ListeningLearnerService(
             AudioStartMs: extract.AudioStartMs,
             AudioEndMs: extract.AudioEndMs,
             AudioUrl: audioUrl,
-            TimeLimitSeconds: timeLimitSeconds);
+            TimeLimitSeconds: timeLimitSeconds,
+            NotesBody: extract.NotesBodyMarkdown);
 
     /// <summary>Resolve the per-sub-section audio URL. Priority: an uploaded
     /// primary <see cref="ContentPaperAsset"/> of role Audio for this part code
@@ -2487,6 +2494,8 @@ public sealed class ListeningLearnerService(
             // null when unauthored (frontend applies a default).
             audioUrl = e.AudioUrl,
             timeLimitSeconds = e.TimeLimitSeconds,
+            // Part A note-completion document; null for Part B/C and unauthored A.
+            notesBody = e.NotesBody,
         }).ToList()
     };
 
@@ -3276,7 +3285,10 @@ public sealed class ListeningLearnerService(
         // /v1/media/{id}/content; else the extract's TTS wav; else null.
         string? AudioUrl = null,
         // Per-sub-section countdown (seconds). Null → frontend applies default.
-        int? TimeLimitSeconds = null);
+        int? TimeLimitSeconds = null,
+        // Part A note-completion document (camelCase `notesBody` on the wire).
+        // Null for Part B/C and for papers without an authored body.
+        string? NotesBody = null);
 
     private sealed record ListeningSpeakerDto(
         string Id,

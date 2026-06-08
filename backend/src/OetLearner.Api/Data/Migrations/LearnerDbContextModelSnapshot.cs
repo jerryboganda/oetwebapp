@@ -10575,6 +10575,9 @@ namespace OetLearner.Api.Data.Migrations
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)");
 
+                    b.Property<string>("NotesBodyMarkdown")
+                        .HasColumnType("text");
+
                     b.Property<bool>("ReplayInLearningOnly")
                         .HasColumnType("boolean");
 

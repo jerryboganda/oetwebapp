@@ -137,7 +137,8 @@ public sealed record ListeningExtractPatch(
     IReadOnlyList<ListeningAuthoredSpeaker>? Speakers = null,
     int? AudioStartMs = null,
     int? AudioEndMs = null,
-    int? TimeLimitSeconds = null);
+    int? TimeLimitSeconds = null,
+    string? NotesBodyMarkdown = null);
 
 /// <summary>Server-side admin DTO for an authored Listening item. Carries the
 /// correct answer + accepted synonyms, so it MUST NOT be returned by any
@@ -185,7 +186,11 @@ public sealed record ListeningAuthoredExtract(
     IReadOnlyList<ListeningAuthoredSpeaker> Speakers,
     int? AudioStartMs,
     int? AudioEndMs,
-    int? TimeLimitSeconds = null);                     // single per-sub-section countdown (seconds)
+    int? TimeLimitSeconds = null,                      // single per-sub-section countdown (seconds)
+    // OET Listening Part A only — the full note-completion document for this
+    // consultation extract (intro line, ## headings, - bullets, ____ gap markers).
+    // Forced null for Part B/C. The wire/JSON key is camelCase `notesBody`.
+    string? NotesBodyMarkdown = null);
 
 public sealed record ListeningAuthoredSpeaker(
     string Id,
@@ -228,7 +233,8 @@ public sealed record ListeningExtractManifest(
     string? SpeakerAttitude,                           // Part C — concerned | optimistic | …
     IReadOnlyList<ListeningTranscriptSegmentManifest>? TranscriptSegments,
     IReadOnlyList<ListeningAuthoredSpeaker>? Speakers,
-    IReadOnlyList<ListeningQuestionManifest> Questions);
+    IReadOnlyList<ListeningQuestionManifest> Questions,
+    string? NotesBody = null);                          // Part A note-completion body (round-trips)
 
 public sealed record ListeningTranscriptSegmentManifest(
     int StartMs,
@@ -649,6 +655,16 @@ public sealed class ListeningAuthoringService(
 
         var speakers = (extract.Speakers ?? []).ToList();
 
+        // Part A carries the note-completion body. Prefer the explicit
+        // extract-level notesBody; when absent/blank, synthesise a body from the
+        // legacy per-question noteTextBeforeGap lead-ins (NormalizeForStorage
+        // forces this null for Part B/C, so passing it through is safe).
+        var notesBody = partCode.StartsWith('A')
+            ? (string.IsNullOrWhiteSpace(extract.NotesBody)
+                ? SynthesizeNotesBodyFromQuestions(extract.Questions)
+                : extract.NotesBody)
+            : null;
+
         return new ListeningAuthoredExtract(
             PartCode: partCode,
             DisplayOrder: positionalIndex,
@@ -658,7 +674,31 @@ public sealed class ListeningAuthoringService(
             Speakers: speakers,
             AudioStartMs: null,
             AudioEndMs: null,
-            TimeLimitSeconds: null);
+            TimeLimitSeconds: null,
+            NotesBodyMarkdown: notesBody);
+    }
+
+    /// <summary>
+    /// Legacy fallback: when a Part A extract has no explicit <c>notesBody</c>
+    /// but its questions carry the older per-question <c>noteTextBeforeGap</c>
+    /// lead-ins, synthesise a note-completion body by joining, in question-number
+    /// order, each lead-in followed by a <c>____</c> gap marker (one line per
+    /// question). Returns null when no lead-in text is present.
+    /// </summary>
+    private static string? SynthesizeNotesBodyFromQuestions(
+        IReadOnlyList<ListeningQuestionManifest>? questions)
+    {
+        if (questions is null || questions.Count == 0) return null;
+        var lines = questions
+            .OrderBy(q => q.Number)
+            .Select(q =>
+            {
+                var lead = (q.NoteTextBeforeGap ?? string.Empty).Trim();
+                return lead.Length == 0 ? "____" : $"{lead} ____";
+            })
+            .ToList();
+        if (lines.All(line => line == "____")) return null;
+        return string.Join("\n", lines);
     }
 
     private static string NormalizeManifestQuestionType(string? raw, bool isMcq)
@@ -752,7 +792,10 @@ public sealed class ListeningAuthoringService(
                         : null,
                     TranscriptSegments: null,
                     Speakers: extract?.Speakers,
-                    Questions: manifestQuestions));
+                    Questions: manifestQuestions,
+                    // Part A note-completion body round-trips back out of the
+                    // authored extract; Part B/C never carry one.
+                    NotesBody: code.StartsWith('A') ? extract?.NotesBodyMarkdown : null));
             }
             return manifestExtracts.Count == 0 ? null : new ListeningPartManifest(manifestExtracts);
         }
@@ -955,7 +998,8 @@ public sealed class ListeningAuthoringService(
             Speakers: speakers,
             AudioStartMs: ReadInt("audioStartMs"),
             AudioEndMs: ReadInt("audioEndMs"),
-            TimeLimitSeconds: ReadInt("timeLimitSeconds"));
+            TimeLimitSeconds: ReadInt("timeLimitSeconds"),
+            NotesBodyMarkdown: Read("notesBody"));
     }
 
     private static ListeningAuthoredExtract NormalizeExtractForStorage(ListeningAuthoredExtract e)
@@ -984,6 +1028,12 @@ public sealed class ListeningAuthoringService(
 
         var timeLimitSeconds = e.TimeLimitSeconds is int t && t > 0 ? t : (int?)null;
 
+        // Part A (A1/A2) is the only sub-section that carries a note-completion
+        // body; Part B/C never do, so force it null there regardless of input.
+        var notesBody = IsPartANotesCode(partCode) && !string.IsNullOrWhiteSpace(e.NotesBodyMarkdown)
+            ? e.NotesBodyMarkdown
+            : null;
+
         return new ListeningAuthoredExtract(
             PartCode: partCode,
             DisplayOrder: displayOrder,
@@ -993,8 +1043,15 @@ public sealed class ListeningAuthoringService(
             Speakers: speakers,
             AudioStartMs: audioStart,
             AudioEndMs: audioEnd,
-            TimeLimitSeconds: timeLimitSeconds);
+            TimeLimitSeconds: timeLimitSeconds,
+            NotesBodyMarkdown: notesBody);
     }
+
+    /// <summary>True for the two Part A consultation sub-sections (A1/A2) — the
+    /// only extracts that carry a note-completion <c>notesBody</c> document.</summary>
+    private static bool IsPartANotesCode(string partCode)
+        => string.Equals(partCode, "A1", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(partCode, "A2", StringComparison.OrdinalIgnoreCase);
 
     private static IReadOnlyList<ListeningAuthoredSpeaker> ParseAuthoredSpeakers(object? raw)
     {
@@ -1501,6 +1558,7 @@ public sealed class ListeningAuthoringService(
             AudioStartMs = p.AudioStartMs ?? existing.AudioStartMs,
             AudioEndMs = p.AudioEndMs ?? existing.AudioEndMs,
             TimeLimitSeconds = p.TimeLimitSeconds ?? existing.TimeLimitSeconds,
+            NotesBodyMarkdown = p.NotesBodyMarkdown ?? existing.NotesBodyMarkdown,
         };
 
     private static void ApplyPatchToRelational(
