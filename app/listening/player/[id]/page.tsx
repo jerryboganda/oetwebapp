@@ -39,6 +39,7 @@ import {
 import { ContentLockedNotice, isContentLockedError, readContentLockedMessage } from '@/components/domain/ContentLockedNotice';
 import { BCQuestionRenderer } from '@/components/domain/listening/BCQuestionRenderer';
 import { PartARenderer } from '@/components/domain/listening/PartARenderer';
+import { PartANotesDocument } from '@/components/domain/listening/PartANotesDocument';
 import { ListeningPaperSimulation } from '@/components/domain/listening/ListeningPaperSimulation';
 import { ZoomControls } from '@/components/domain/listening/ZoomControls';
 import { ListeningIntroCard } from '@/components/domain/listening/player/ListeningIntroCard';
@@ -1615,40 +1616,61 @@ function PlayerContent() {
                                 {LISTENING_SECTION_LABEL[section]}
                               </h2>
                             ) : null}
-                            {questions.map((question) => {
-                              const canEdit = true;
-                              if (question.options.length === 0) {
+                            {(() => {
+                              // Part A1 / A2 with an authored notes body → ONE continuous note-completion document.
+                              if (section === 'A1' || section === 'A2') {
+                                const extract = extracts.find((e) => e.partCode === section);
+                                if (extract?.notesBody) {
+                                  const canEdit = true;
+                                  return (
+                                    <PartANotesDocument
+                                      partLabel={LISTENING_SECTION_LABEL[section]}
+                                      notesBody={extract.notesBody}
+                                      questions={questions.map((q) => ({ id: q.id, number: q.number }))}
+                                      answers={answers}
+                                      onAnswerChange={handleAnswerChange}
+                                      locked={!canEdit}
+                                    />
+                                  );
+                                }
+                              }
+
+                              // Legacy Part A (no notesBody) or Part B/C → per-question renderer.
+                              return questions.map((question) => {
+                                const canEdit = true;
+                                if (question.options.length === 0) {
+                                  return (
+                                    <div id={`listening-question-${question.id}`} key={question.id} className="scroll-mt-48">
+                                      <PartARenderer
+                                        questionNumber={question.number}
+                                        partLabel={LISTENING_SECTION_LABEL[section]}
+                                        prompt={question.text}
+                                        inputId={`listening-answer-${question.id}`}
+                                        value={answers[question.id] ?? ''}
+                                        onChange={(value) => handleAnswerChange(question.id, value)}
+                                        locked={!canEdit}
+                                      />
+                                    </div>
+                                  );
+                                }
+
                                 return (
                                   <div id={`listening-question-${question.id}`} key={question.id} className="scroll-mt-48">
-                                    <PartARenderer
+                                    <BCQuestionRenderer
                                       questionNumber={question.number}
                                       partLabel={LISTENING_SECTION_LABEL[section]}
                                       prompt={question.text}
-                                      inputId={`listening-answer-${question.id}`}
+                                      options={question.options}
                                       value={answers[question.id] ?? ''}
                                       onChange={(value) => handleAnswerChange(question.id, value)}
+                                      annotation={annotations.state.byQuestion[question.id] ?? {}}
+                                      onAnnotationChange={(mutator) => handleAnnotationChange(question.id, mutator)}
                                       locked={!canEdit}
                                     />
                                   </div>
                                 );
-                              }
-
-                              return (
-                                <div id={`listening-question-${question.id}`} key={question.id} className="scroll-mt-48">
-                                  <BCQuestionRenderer
-                                    questionNumber={question.number}
-                                    partLabel={LISTENING_SECTION_LABEL[section]}
-                                    prompt={question.text}
-                                    options={question.options}
-                                    value={answers[question.id] ?? ''}
-                                    onChange={(value) => handleAnswerChange(question.id, value)}
-                                    annotation={annotations.state.byQuestion[question.id] ?? {}}
-                                    onAnnotationChange={(mutator) => handleAnnotationChange(question.id, mutator)}
-                                    locked={!canEdit}
-                                  />
-                                </div>
-                              );
-                            })}
+                              });
+                            })()}
                           </section>
                         ))}
                       </div>
