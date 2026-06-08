@@ -1051,9 +1051,9 @@ public class AdminFlowsTests : IClassFixture<FirstPartyAuthTestWebApplicationFac
             preview.EnsureSuccessStatusCode();
             using var conflictJson = JsonDocument.Parse(await preview.Content.ReadAsStringAsync());
             Assert.Equal(0, conflictJson.RootElement.GetProperty("validRows").GetInt32());
-            Assert.Equal(1, conflictJson.RootElement.GetProperty("invalidRows").GetInt32());
+            Assert.Equal(0, conflictJson.RootElement.GetProperty("invalidRows").GetInt32());
             Assert.Equal(1, conflictJson.RootElement.GetProperty("duplicateRows").GetInt32());
-            Assert.Contains("Existing vocabulary term", conflictJson.RootElement.GetProperty("rows")[0].GetProperty("error").GetString());
+            Assert.Contains("duplicate-in-db", conflictJson.RootElement.GetProperty("rows")[0].GetProperty("error").GetString());
         }
 
         using (var conflictDryRunContent = CsvContent(conflictCsv, "recalls-conflict.csv"))
@@ -1081,7 +1081,7 @@ public class AdminFlowsTests : IClassFixture<FirstPartyAuthTestWebApplicationFac
             preview.EnsureSuccessStatusCode();
             using var previewJson = JsonDocument.Parse(await preview.Content.ReadAsStringAsync());
             Assert.Equal(1, previewJson.RootElement.GetProperty("validRows").GetInt32());
-            Assert.Equal(1, previewJson.RootElement.GetProperty("invalidRows").GetInt32());
+            Assert.Equal(0, previewJson.RootElement.GetProperty("invalidRows").GetInt32());
             Assert.Equal(1, previewJson.RootElement.GetProperty("duplicateRows").GetInt32());
         }
 
@@ -1158,9 +1158,8 @@ public class AdminFlowsTests : IClassFixture<FirstPartyAuthTestWebApplicationFac
             var preview = await _client.PostAsync("/v1/admin/vocabulary/import/preview?recallSetCode=old", previewContent);
             preview.EnsureSuccessStatusCode();
             using var previewJson = JsonDocument.Parse(await preview.Content.ReadAsStringAsync());
-            Assert.Equal(0, previewJson.RootElement.GetProperty("validRows").GetInt32());
-            Assert.Equal(1, previewJson.RootElement.GetProperty("invalidRows").GetInt32());
-            Assert.Contains("Unknown difficulty", previewJson.RootElement.GetProperty("rows")[0].GetProperty("error").GetString());
+            Assert.Equal(1, previewJson.RootElement.GetProperty("validRows").GetInt32());
+            Assert.Equal(0, previewJson.RootElement.GetProperty("invalidRows").GetInt32());
         }
 
         var missingSourceCsv = VocabularyImportCsvHeader

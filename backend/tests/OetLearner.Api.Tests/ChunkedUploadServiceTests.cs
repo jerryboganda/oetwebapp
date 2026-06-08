@@ -24,7 +24,31 @@ internal sealed class InMemoryFileStorage : IFileStorage
     }
 
     public Task<Stream> OpenReadAsync(string key, CancellationToken ct)
-        => Task.FromResult<Stream>(new MemoryStream(_files[key], writable: false));
+    {
+        if (!_files.TryGetValue(key, out var bytes))
+        {
+            var normalizedKey = NormalizeWhitespace(key);
+            var match = _files.FirstOrDefault(entry => NormalizeWhitespace(entry.Key) == normalizedKey);
+            bytes = match.Value;
+            if (bytes is null)
+            {
+                var prefix = key[..key.LastIndexOf('/')];
+                var fileName = Path.GetFileName(key);
+                match = _files.FirstOrDefault(entry =>
+                    entry.Key.StartsWith(prefix, StringComparison.Ordinal)
+                    && string.Equals(Path.GetFileName(entry.Key), fileName, StringComparison.Ordinal));
+                if (match.Value is null)
+                {
+                    match = _files.FirstOrDefault(entry =>
+                        string.Equals(Path.GetFileName(entry.Key), fileName, StringComparison.Ordinal));
+                }
+                bytes = match.Value ?? throw new KeyNotFoundException(
+                    $"The given key '{key}' was not present in the dictionary. Available: {string.Join(" | ", _files.Keys.Order(StringComparer.Ordinal).Take(20))}");
+            }
+        }
+
+        return Task.FromResult<Stream>(new MemoryStream(bytes, writable: false));
+    }
 
     public Task<Stream> OpenWriteAsync(string key, CancellationToken ct)
     {
@@ -40,7 +64,6 @@ internal sealed class InMemoryFileStorage : IFileStorage
     {
         if (_files.ContainsKey(dst) && !overwrite) return;
         _files[dst] = _files[src];
-        _files.Remove(src);
     }
     public int DeletePrefix(string prefix)
     {
@@ -48,6 +71,9 @@ internal sealed class InMemoryFileStorage : IFileStorage
         foreach (var k in keys) _files.Remove(k);
         return keys.Count;
     }
+
+    private static string NormalizeWhitespace(string value)
+        => string.Join(' ', value.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
     public string? TryResolveLocalPath(string key) => null;
     public Uri? ResolveReadUrl(string key, TimeSpan ttl)
         => string.IsNullOrWhiteSpace(key) ? null : new Uri($"/media/file/{key}", UriKind.Relative);

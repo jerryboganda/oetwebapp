@@ -283,7 +283,7 @@ public class ContentPaperBulkActionTests
         var (db, svc) = BuildInMemory();
         var paper = await SeedDraftListeningAsync(db, svc, "L1");
         await svc.ArchiveAsync(paper.Id, "admin-1", default);
-        db.ReadingExtractionDrafts.Add(new ReadingExtractionDraft { Id = "draft-1", PaperId = paper.Id });
+        db.ReadingExtractionDrafts.Add(new ReadingExtractionDraft { Id = "draft-1", PaperId = paper.Id, CreatedByAdminId = "admin-1" });
         await db.SaveChangesAsync();
 
         var result = await svc.BulkAsync("delete", [paper.Id], "admin-9", null, default);

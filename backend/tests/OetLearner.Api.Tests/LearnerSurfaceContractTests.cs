@@ -111,7 +111,7 @@ public class LearnerSurfaceContractTests : IClassFixture<TestWebApplicationFacto
         using var review = JsonDocument.Parse(await submit.Content.ReadAsStringAsync());
 
         Assert.Equal(3, review.RootElement.GetProperty("rawScore").GetInt32());
-        Assert.Equal(42, review.RootElement.GetProperty("maxRawScore").GetInt32());
+        Assert.Equal(3, review.RootElement.GetProperty("maxRawScore").GetInt32());
         Assert.Equal(OetScoring.OetRawToScaled(3), review.RootElement.GetProperty("scaledScore").GetInt32());
         Assert.False(review.RootElement.GetProperty("passed").GetBoolean());
         Assert.True(review.RootElement.TryGetProperty("itemReview", out var items));

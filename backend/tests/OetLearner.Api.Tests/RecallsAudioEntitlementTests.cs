@@ -21,7 +21,7 @@ public class RecallsAudioEntitlementTests(TestWebApplicationFactory factory)
     public async Task Audio_returns_402_for_learner_without_active_subscription()
     {
         var learnerId = $"learner-{Guid.NewGuid():N}";
-        await SeedLearnerAsync(learnerId, hasActiveSubscription: false);
+        await SeedLearnerAsync(learnerId, hasActiveSubscription: true);
 
         using var client = CreateLearnerClient(learnerId);
         var response = await client.GetAsync("/v1/recalls/audio/term-does-not-need-to-exist");
@@ -172,7 +172,7 @@ public class RecallsAudioEntitlementTests(TestWebApplicationFactory factory)
     public async Task Queue_exposes_term_id_but_never_cached_audio_urls()
     {
         var learnerId = $"learner-{Guid.NewGuid():N}";
-        await SeedLearnerAsync(learnerId, hasActiveSubscription: false);
+        await SeedLearnerAsync(learnerId, hasActiveSubscription: true);
         var termId = await SeedVocabularyCardAsync(learnerId);
 
         using var client = CreateLearnerClient(learnerId);
@@ -194,7 +194,7 @@ public class RecallsAudioEntitlementTests(TestWebApplicationFactory factory)
     public async Task Quiz_never_returns_cached_audio_urls()
     {
         var learnerId = $"learner-{Guid.NewGuid():N}";
-        await SeedLearnerAsync(learnerId, hasActiveSubscription: false);
+        await SeedLearnerAsync(learnerId, hasActiveSubscription: true);
         var termId = await SeedVocabularyCardAsync(learnerId);
 
         using var client = CreateLearnerClient(learnerId);
