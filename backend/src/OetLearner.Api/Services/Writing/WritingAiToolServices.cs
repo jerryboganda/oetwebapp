@@ -217,7 +217,7 @@ public sealed class WritingOutlineService(IAiGatewayService aiGateway, OetLearne
         {
             throw ApiException.NotFound("writing_scenario_not_found", "Scenario was not found.");
         }
-        var result = await OutlineAsync(userId, request.ScenarioId, scenario.CaseNotesMarkdown, request.LetterType, ct);
+        var result = await OutlineAsync(userId, request.ScenarioId, scenario.TaskPromptMarkdown ?? string.Empty, request.LetterType, ct);
         var paragraphs = new List<WritingOutlineParagraphResponse>();
         var openingPara = string.IsNullOrWhiteSpace(result.Opening) ? null : new WritingOutlineParagraphResponse(1, "Opening", new[] { result.Opening });
         if (openingPara is not null) paragraphs.Add(openingPara);
@@ -369,7 +369,6 @@ public sealed class WritingScenarioGeneratorService(IAiGatewayService aiGateway,
                 SubDiscipline: null,
                 Topics: topics,
                 Difficulty: request.Difficulty,
-                CaseNotesMarkdown: caseNotes,
                 CaseNotesStructured: sentences,
                 IsDiagnostic: false,
                 Status: "draft");
@@ -383,7 +382,6 @@ public sealed class WritingScenarioGeneratorService(IAiGatewayService aiGateway,
                 SubDiscipline: null,
                 Topics: null,
                 Difficulty: request.Difficulty,
-                CaseNotesMarkdown: draftJson,
                 CaseNotesStructured: null,
                 IsDiagnostic: false,
                 Status: "draft");
