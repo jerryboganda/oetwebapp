@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useId, useState, type KeyboardEvent } from 'react';
+import { useCallback, useEffect, useId, useMemo, useState, type KeyboardEvent } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { ArrowLeft, FileText, Plus, Save, X } from 'lucide-react';
@@ -93,6 +93,14 @@ function SubPartSection({
     setRows(initRows(questions));
   }, [extract, questions]);
 
+  // Reset save status to 'idle' whenever the user makes a change so the status
+  // text correctly shows unsaved changes instead of staying 'saved' forever.
+  // Applied directly in each change handler to avoid a setState-in-effect lint
+  // warning that matches the pre-existing pattern in this file.
+  const markDirty = useCallback(() => {
+    setSaveState((prev) => (prev === 'saved' ? 'idle' : prev));
+  }, []);
+
   const gapCount = countGaps(notesBody);
   const questionCount = questions.length;
   const hasGapMismatch = notesBody.length > 0 && gapCount !== questionCount;
@@ -103,17 +111,19 @@ function SubPartSection({
 
   const updateRow = useCallback(
     (questionId: string, field: 'correctAnswer', value: string) => {
+      markDirty();
       setRows((prev) =>
         prev.map((r) => (r.questionId === questionId ? { ...r, [field]: value } : r)),
       );
     },
-    [],
+    [markDirty],
   );
 
   const addVariant = useCallback(
     (questionId: string) => {
       const draft = (variantDrafts[questionId] ?? '').trim();
       if (!draft) return;
+      markDirty();
       setRows((prev) =>
         prev.map((r) => {
           if (r.questionId !== questionId) return r;
@@ -123,10 +133,11 @@ function SubPartSection({
       );
       setVariantDrafts((prev) => ({ ...prev, [questionId]: '' }));
     },
-    [variantDrafts],
+    [variantDrafts, markDirty],
   );
 
   const removeVariant = useCallback((questionId: string, variant: string) => {
+    markDirty();
     setRows((prev) =>
       prev.map((r) =>
         r.questionId === questionId
@@ -134,7 +145,7 @@ function SubPartSection({
           : r,
       ),
     );
-  }, []);
+  }, [markDirty]);
 
   const onVariantKey = useCallback(
     (questionId: string, event: KeyboardEvent<HTMLInputElement>) => {
@@ -196,7 +207,7 @@ function SubPartSection({
           {/* Notes editor */}
           <PartANotesBuilder
             value={notesBody}
-            onChange={setNotesBody}
+            onChange={(v) => { markDirty(); setNotesBody(v); }}
             partLabel={partLabel}
             disabled={disabled || saveState === 'saving'}
             renderPreview={(body) => (
@@ -351,6 +362,7 @@ function AnswerKeyRow({
         <div className="mt-2 flex items-center gap-2">
           <Input
             placeholder="Add variant…"
+            aria-label={`Add accepted variant for Q${row.questionNumber}`}
             value={variantDraft}
             onChange={(e) => onVariantDraftChange(e.target.value)}
             onKeyDown={onVariantKey}
@@ -405,6 +417,34 @@ export default function AdminListeningPartAPage() {
     void load();
   }, [isAuthenticated, role, load]);
 
+  // Resolve per-sub-part data — memoised so identity is stable across
+  // parent re-renders that don't change the underlying fetched data.  This
+  // prevents the SubPartSection useEffect (which depends on [extract,
+  // questions]) from firing on every render and wiping unsaved edits.
+  // NOTE: hooks must come before any early return.
+  const a1Extract = useMemo(
+    () => extracts.find((e) => String(e.partCode).toUpperCase() === 'A1'),
+    [extracts],
+  );
+  const a2Extract = useMemo(
+    () => extracts.find((e) => String(e.partCode).toUpperCase() === 'A2'),
+    [extracts],
+  );
+  const a1Questions = useMemo(
+    () =>
+      questions
+        .filter((q) => String(q.partCode).toUpperCase() === 'A1')
+        .sort((a, b) => a.number - b.number),
+    [questions],
+  );
+  const a2Questions = useMemo(
+    () =>
+      questions
+        .filter((q) => String(q.partCode).toUpperCase() === 'A2')
+        .sort((a, b) => a.number - b.number),
+    [questions],
+  );
+
   const breadcrumbs = [
     { label: 'Admin', href: '/admin' },
     { label: 'Content', href: '/admin/content' },
@@ -424,16 +464,6 @@ export default function AdminListeningPartAPage() {
       </AdminSettingsLayout>
     );
   }
-
-  // Resolve per-sub-part data
-  const a1Extract = extracts.find((e) => String(e.partCode).toUpperCase() === 'A1');
-  const a2Extract = extracts.find((e) => String(e.partCode).toUpperCase() === 'A2');
-  const a1Questions = questions
-    .filter((q) => String(q.partCode).toUpperCase() === 'A1')
-    .sort((a, b) => a.number - b.number);
-  const a2Questions = questions
-    .filter((q) => String(q.partCode).toUpperCase() === 'A2')
-    .sort((a, b) => a.number - b.number);
 
   return (
     <AdminSettingsLayout
