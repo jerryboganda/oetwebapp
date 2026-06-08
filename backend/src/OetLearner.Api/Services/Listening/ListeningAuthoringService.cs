@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
@@ -138,6 +139,7 @@ public sealed record ListeningExtractPatch(
     int? AudioStartMs = null,
     int? AudioEndMs = null,
     int? TimeLimitSeconds = null,
+    [property: JsonPropertyName("notesBody")]
     string? NotesBodyMarkdown = null);
 
 /// <summary>Server-side admin DTO for an authored Listening item. Carries the
@@ -190,6 +192,7 @@ public sealed record ListeningAuthoredExtract(
     // OET Listening Part A only — the full note-completion document for this
     // consultation extract (intro line, ## headings, - bullets, ____ gap markers).
     // Forced null for Part B/C. The wire/JSON key is camelCase `notesBody`.
+    [property: JsonPropertyName("notesBody")]
     string? NotesBodyMarkdown = null);
 
 public sealed record ListeningAuthoredSpeaker(
