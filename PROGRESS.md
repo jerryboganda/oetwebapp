@@ -65,6 +65,13 @@ Implement the OET 2026 product portfolio plan on `feat/oet-2026-entitlement-conf
 - Focused local `dotnet test backend/tests/OetLearner.Api.Tests/OetLearner.Api.Tests.csproj --filter "FullyQualifiedName=OetLearner.Api.Tests.AdminWalletTierTests.Get_ReturnsAppsettingsFallback_WhenNoDbRows" --nologo`: passed, 1 test.
 - Focused local `dotnet test backend/tests/OetLearner.Api.Tests/OetLearner.Api.Tests.csproj --filter "FullyQualifiedName=OetLearner.Api.Tests.WritingReviewEntitlementConsumptionTests.WritingReview_WithEligibleEntitlement_ConsumesOneAndSkipsWallet" --nologo`: passed, 1 test.
 - `git diff --check -- backend/tests/OetLearner.Api.Tests/Infrastructure/TestWebApplicationFactory.cs backend/src/OetLearner.Api/Services/LearnerService.cs`: passed.
+- QA Smoke run `27108225615` passed frontend typecheck/lint/unit/build, SBOM/SCA, and every E2E shard; backend shards failed.
+- Backend triage/focused green checks:
+  - `WritingReviewEntitlementConsumptionTests.AdminCancel_OfEntitlementReview_RestoresOneEntitlement|AdminReopen_OfCancelledEntitlementReview_ReturnsToQueueNotAwaitingPayment`: red on EF InMemory translation, then green after moving admin cancel subscription eligibility filtering in memory and seeding the admin auth account required by audit FK.
+  - `RuntimeSettingsProviderZoomTests`: red because the test used a fresh InMemory DB name per scope, then green after hoisting a stable database name per test.
+  - `AuthFlowsTests.SeedData_EnsuresUnifiedAuthAccountsForLearnerExpertAndAdmin|CriticalFlowsTests.BootstrapEndpoint_ReturnsLearnerProfileAndReferences|CriticalFlowsTests.WritingSubmission_QueuesAndCompletesEvaluation`: red because seeded factory early-read auth/bootstrap values were not visible to `Program.cs`, then green after scoped startup env mirroring for `SeededTestWebApplicationFactory`.
+  - `VocabularyAudioWorkerTests.Backfill_PicksUpTermsWithoutAudio`: red on short batch id and missing commit ledger, then green after valid batch id/ledger fixture updates.
+- Remaining focused local failures from the previous backend CI set: admin vocabulary import expectations, recalls audio entitlement setup, listening surface score fixture, class reminder dedupe fixture, admin mutation rate-limit inventory, content bulk import staging storage fixture, and content paper bulk delete draft seed.
 
 ## Next-Step Protocol For New Agent Runs
 

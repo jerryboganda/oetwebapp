@@ -53,6 +53,13 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
         // cause of the chronically flaky/red sharded QA Smoke backend run.
         if (!_useFirstPartyAuth)
         {
+            if (_seedDemoData)
+            {
+                SetEnvironmentOverride(ToEnvironmentVariableName("Auth:UseDevelopmentAuth"), "true");
+                SetEnvironmentOverride(ToEnvironmentVariableName("Bootstrap:AutoMigrate"), "false");
+                SetEnvironmentOverride(ToEnvironmentVariableName("Bootstrap:SeedDemoData"), "true");
+            }
+
             return;
         }
 

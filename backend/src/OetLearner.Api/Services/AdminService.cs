@@ -7270,13 +7270,15 @@ public partial class AdminService(
             var attempt = await db.Attempts.AsNoTracking().FirstOrDefaultAsync(a => a.Id == review.AttemptId, ct);
             if (attempt is not null)
             {
-                var subscription = await db.Subscriptions
-                    .Where(s => s.UserId == attempt.UserId
-                        && (s.Status == SubscriptionStatus.Active || s.Status == SubscriptionStatus.Trial)
-                        && (s.ExpiresAt == null || s.ExpiresAt > now))
+                var candidates = await db.Subscriptions
+                    .Where(s => s.UserId == attempt.UserId)
+                    .ToListAsync(ct);
+                var subscription = candidates
+                    .Where(s => s.Status is SubscriptionStatus.Active or SubscriptionStatus.Trial)
+                    .Where(s => s.ExpiresAt is null || s.ExpiresAt > now)
                     .OrderBy(s => s.ExpiresAt == null)
                     .ThenBy(s => s.ExpiresAt)
-                    .FirstOrDefaultAsync(ct);
+                    .FirstOrDefault();
                 if (subscription is not null)
                 {
                     subscription.WritingAssessmentsRemaining = checked(subscription.WritingAssessmentsRemaining + 1);

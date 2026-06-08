@@ -19,7 +19,8 @@ public sealed class RuntimeSettingsProviderZoomTests
     public async Task GetAsync_MergesZoomDatabaseOverridesOverConfiguredDefaults()
     {
         var services = new ServiceCollection();
-        services.AddDbContext<LearnerDbContext>(options => options.UseInMemoryDatabase(Guid.NewGuid().ToString("N")));
+        var databaseName = Guid.NewGuid().ToString("N");
+        services.AddDbContext<LearnerDbContext>(options => options.UseInMemoryDatabase(databaseName));
         services.AddDataProtection();
         await using var serviceProvider = services.BuildServiceProvider();
 
@@ -91,7 +92,8 @@ public sealed class RuntimeSettingsProviderZoomTests
     public async Task GetAsync_FailsClosedWhenStoredZoomSecretCannotDecrypt()
     {
         var services = new ServiceCollection();
-        services.AddDbContext<LearnerDbContext>(options => options.UseInMemoryDatabase(Guid.NewGuid().ToString("N")));
+        var databaseName = Guid.NewGuid().ToString("N");
+        services.AddDbContext<LearnerDbContext>(options => options.UseInMemoryDatabase(databaseName));
         services.AddDataProtection();
         await using var serviceProvider = services.BuildServiceProvider();
 

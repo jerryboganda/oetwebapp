@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Hosting;
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.FileProviders;
@@ -60,22 +61,36 @@ public sealed class VocabularyAudioWorkerTests
             {
                 Id = "VOC-A", Term = "alpha", ExamTypeCode = "oet", Category = "c",
                 Status = "active",
-                SourceProvenance = "batch=B1;source=admin-vocabulary-import",
+                SourceProvenance = "batch=B01;source=admin-vocabulary-import",
             },
             new VocabularyTerm
             {
                 Id = "VOC-B", Term = "beta", ExamTypeCode = "oet", Category = "c",
                 Status = "active",
-                SourceProvenance = "batch=B1;source=admin-vocabulary-import",
+                SourceProvenance = "batch=B01;source=admin-vocabulary-import",
             },
             new VocabularyTerm
             {
                 Id = "VOC-C", Term = "gamma", ExamTypeCode = "oet", Category = "c",
                 Status = "active",
-                SourceProvenance = "batch=B1;source=admin-vocabulary-import",
+                SourceProvenance = "batch=B01;source=admin-vocabulary-import",
                 AudioMediaAssetId = "MA-existing",
                 AudioUrl = "/media/file/existing.mp3",
             });
+        fixture.Db.IdempotencyRecords.Add(new IdempotencyRecord
+        {
+            Id = "vocab-commit:B01",
+            Scope = "admin-vocabulary-import",
+            Key = "B01",
+            ResponseJson = JsonSerializer.Serialize(new
+            {
+                importBatchId = "B01",
+                fileSha256 = "test",
+                termIds = new[] { "VOC-A", "VOC-B", "VOC-C" },
+                committedAt = DateTimeOffset.UtcNow
+            }),
+            CreatedAt = DateTimeOffset.UtcNow,
+        });
         await fixture.Db.SaveChangesAsync();
 
         var admin = new OetLearner.Api.Services.AdminService(
@@ -88,7 +103,7 @@ public sealed class VocabularyAudioWorkerTests
             learnerService: null!,
             vocabularyAudioQueue: fixture.Queue);
 
-        await admin.EnqueueVocabularyAudioBackfillAsync("B1", CancellationToken.None);
+        await admin.EnqueueVocabularyAudioBackfillAsync("B01", CancellationToken.None);
 
         Assert.Equal(2, fixture.Queue.PendingCount);
     }
