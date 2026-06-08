@@ -251,6 +251,14 @@ public class ListeningExtract
     /// Drives "jump to evidence" playback in learning mode.</summary>
     public string TranscriptSegmentsJson { get; set; } = "[]";
 
+    /// <summary>OET Listening Part A only - the full note-completion document for
+    /// this consultation extract: intro/patient line, section headings (<c>## </c>),
+    /// bullets/sub-bullets (<c>- </c> / <c>  - </c>), plain context lines, and inline
+    /// gap markers (<c>____</c>). The Nth gap binds positionally to the Nth Part A
+    /// question (by DisplayOrder). Null for Part B/C extracts. Grammar + parser live
+    /// in <c>lib/listening-part-a-notes.ts</c>. Plain text column, never LINQ-queried.</summary>
+    public string? NotesBodyMarkdown { get; set; }
+
     /// <summary>Listening V2 — comma-separated topic hints surfaced on
     /// admin browse and used by the per-skill analytics breakdown. Example:
     /// <c>"renal,medication-history"</c>. Authoring is optional.</summary>

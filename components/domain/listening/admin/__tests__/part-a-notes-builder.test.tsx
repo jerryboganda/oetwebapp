@@ -7,6 +7,7 @@ import {
   PartANotesBuilder,
   sanitizePastedStem,
 } from '@/components/domain/listening/admin/PartANotesBuilder';
+import { detectPastedGaps } from '@/lib/listening-part-a-notes';
 
 // Mirror of the renderer's BLANK_PATTERN — the marker the builder emits MUST
 // be recognised by this so the learner renderer splits a gap field on it.
@@ -151,5 +152,39 @@ describe('PartANotesBuilder', () => {
     const last = onValue.mock.calls.at(-1)?.[0] as string;
     expect(last).toContain('Dose: 5mg');
     expect(last).not.toMatch(/<script|steal\(\)/i);
+  });
+
+  // ── Deterministic paste-conversion test (Fix 2) ────────────────────────────
+  //
+  // Plain-text paste works reliably in jsdom (unlike HTML paste which can be
+  // flaky). This test fires a plain-text paste event carrying "(1)____ and
+  // (2)____" and asserts that detectPastedGaps ran through the textarea
+  // handler: the resulting onChange value must contain ____ markers and must
+  // NOT contain any literal "(1)" / "(2)" number prefixes.
+
+  it('plain-text paste with (n)____ markers strips the number prefixes and emits ____ gaps', () => {
+    const onValue = vi.fn();
+    render(<Harness onValue={onValue} />);
+    const editor = screen.getByLabelText(/stem \(note-completion\)/i) as HTMLTextAreaElement;
+
+    const pastedText = '(1)____ and (2)____';
+    fireEvent.paste(editor, {
+      clipboardData: {
+        getData: (type: string) => (type === 'text/plain' ? pastedText : ''),
+      },
+    });
+
+    // The paste handler must have called onChange with the cleaned body.
+    expect(onValue).toHaveBeenCalled();
+    const result = onValue.mock.calls.at(-1)?.[0] as string;
+
+    // Confirm detectPastedGaps logic is consistent with the handler output.
+    const { body: expected } = detectPastedGaps(pastedText);
+    expect(result).toBe(expected);
+
+    // ____ markers must be present.
+    expect(result).toMatch(/_{4,}/);
+    // Literal "(1)" / "(2)" number prefixes must be gone.
+    expect(result).not.toMatch(/\(\d+\)\s*_{4}/);
   });
 });

@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
@@ -325,6 +326,35 @@ public sealed class ListeningStructureService(LearnerDbContext db) : IListeningS
             warnings.Add(new("listening_part_a_split", "error",
                 $"Part A requires two consultations with exactly 12 items each; found A1={a1}, A2={a2}."));
         }
+
+        // Part A note-completion gap parity: every gap marker (____) in a
+        // sub-part's note-completion document binds positionally to exactly one
+        // authored question, so the gap count must equal that sub-part's
+        // question count. Only checked for a sub-part that HAS questions (skip an
+        // unauthored A2), and compared to the ACTUAL authored count so it
+        // composes with the listening_part_a_count rule on partial drafts.
+        // A1/A2 each own one consultation extract; locate it via the same
+        // part-id→code mapping the audio-source gate uses.
+        foreach (var (code, questionCount) in new[]
+                 {
+                     (ListeningPartCode.A1, a1),
+                     (ListeningPartCode.A2, a2),
+                 })
+        {
+            if (questionCount <= 0) continue;
+
+            var body = extracts.Values
+                .Where(extract => parts.GetValueOrDefault(extract.ListeningPartId) == code)
+                .Select(extract => extract.NotesBodyMarkdown)
+                .FirstOrDefault();
+            var gaps = CountNotesGaps(body);
+            if (gaps != questionCount)
+            {
+                warnings.Add(new("listening_part_a_gap_count", "error",
+                    $"Part {code} note-completion document has {gaps} gap(s) but {questionCount} question(s); they must match (every blank maps to one answer)."));
+            }
+        }
+
         if (c1 is not 0 and not 6 || c2 is not 0 and not 6)
         {
             warnings.Add(new("listening_part_c_split", "error",
@@ -774,6 +804,32 @@ public sealed class ListeningStructureService(LearnerDbContext db) : IListeningS
             warnings.Add(new("listening_part_a_split", "error",
                 $"Part A requires two consultations with exactly 12 items each; found A1={a1}, A2={a2}."));
         }
+
+        // Part A note-completion gap parity (JSON path) — mirror of the
+        // relational rule. Each authored A1/A2 sub-part's note-completion body
+        // (camelCase "notesBody" on its listeningExtracts object) must have one
+        // gap marker (____) per authored question in that sub-part. Compared to
+        // the ACTUAL per-sub-part question count so it composes with
+        // listening_part_a_count; only checked when the sub-part has questions.
+        foreach (var (code, questionCount) in new[] { ("A1", a1), ("A2", a2) })
+        {
+            if (questionCount <= 0) continue;
+
+            var body = extracts
+                .Where(extract => string.Equals(
+                    (extract.GetValueOrDefault("partCode") ?? extract.GetValueOrDefault("part"))?.ToString()?.Trim(),
+                    code,
+                    StringComparison.OrdinalIgnoreCase))
+                .Select(extract => ReadString(extract, "notesBody"))
+                .FirstOrDefault();
+            var gaps = CountNotesGaps(body);
+            if (gaps != questionCount)
+            {
+                warnings.Add(new("listening_part_a_gap_count", "error",
+                    $"Part {code} note-completion document has {gaps} gap(s) but {questionCount} question(s); they must match (every blank maps to one answer)."));
+            }
+        }
+
         // Part B split: six independent sub-sections (B1..B6), one item each.
         if (bSub.Any(count => count > 0) && bSub.Any(count => count != 1))
         {
@@ -1026,6 +1082,13 @@ public sealed class ListeningStructureService(LearnerDbContext db) : IListeningS
 
     private static bool HasValidTimingWindow(int? startMs, int? endMs)
         => startMs is >= 0 && endMs is > 0 && endMs > startMs;
+
+    /// <summary>Count gap markers in a Part A note-completion body: each run of
+    /// 4+ underscores (<c>____</c>) is one gap. Null/empty → 0. Mirrors the TS
+    /// <c>countGaps</c> in <c>lib/listening-part-a-notes.ts</c> so the publish
+    /// gate and the renderer always agree on what constitutes a gap.</summary>
+    private static int CountNotesGaps(string? body)
+        => string.IsNullOrEmpty(body) ? 0 : Regex.Matches(body, "_{4,}").Count;
 
     private static bool IsValidDifficulty(int? value)
         => value is >= 1 and <= 5;

@@ -120,4 +120,65 @@ describe('BCQuestionRenderer', () => {
     await user.click(screen.getByRole('button', { name: /remove strikethrough from option a/i }));
     await waitFor(() => expect(screen.getByText(OPTIONS[0])).not.toHaveClass('line-through'));
   });
+
+  // --- Flag-for-Review ---
+
+  it('flag button toggles aria-pressed and calls onAnnotationChange with flagged:true (controlled)', async () => {
+    const user = userEvent.setup();
+    const onAnnotationChange = vi.fn();
+    render(
+      <BCQuestionRenderer
+        questionNumber={3}
+        partLabel="Part B"
+        prompt="What is the priority action?"
+        options={OPTIONS}
+        value=""
+        onChange={vi.fn()}
+        annotation={{ flagged: false }}
+        onAnnotationChange={onAnnotationChange}
+      />,
+    );
+
+    const flagBtn = screen.getByRole('button', { name: /flag question 3 for review/i });
+    expect(flagBtn).toHaveAttribute('aria-pressed', 'false');
+
+    await user.click(flagBtn);
+
+    expect(onAnnotationChange).toHaveBeenCalledTimes(1);
+    // Verify the mutator produces {flagged: true} when current is {flagged: false}.
+    const mutator = onAnnotationChange.mock.calls[0]![0] as (
+      current: ListeningQuestionAnnotation,
+    ) => ListeningQuestionAnnotation;
+    expect(mutator({ flagged: false })).toMatchObject({ flagged: true });
+  });
+
+  it('toggling flag twice leaves it unflagged (controlled round-trip)', async () => {
+    const user = userEvent.setup();
+    render(<ControlledBCHarness />);
+
+    const flagBtn = screen.getByRole('button', { name: /flag question 3 for review/i });
+    await user.click(flagBtn);
+    await waitFor(() => expect(screen.getByRole('button', { name: /remove review flag/i })).toHaveAttribute('aria-pressed', 'true'));
+
+    await user.click(screen.getByRole('button', { name: /remove review flag/i }));
+    await waitFor(() => expect(screen.getByRole('button', { name: /flag question 3 for review/i })).toHaveAttribute('aria-pressed', 'false'));
+  });
+
+  it('flagged question card shows visual flagged indicator', async () => {
+    const user = userEvent.setup();
+    render(<ControlledBCHarness />);
+
+    // Before flagging: no flagged indicator.
+    expect(screen.queryByTestId('bc-flagged-indicator')).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /flag question 3 for review/i }));
+    await waitFor(() => expect(screen.getByTestId('bc-flagged-indicator')).toBeInTheDocument());
+  });
+
+  it('flag button is disabled when locked', () => {
+    render(<BCHarness locked />);
+    // The flag button should be disabled when the question is locked.
+    const flagBtn = screen.getByRole('button', { name: /flag question 14 for review/i });
+    expect(flagBtn).toBeDisabled();
+  });
 });

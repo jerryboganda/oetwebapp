@@ -19,6 +19,17 @@ public class ListeningStructureServiceTests
 {
     private static readonly string[] PartBCodes = { "B1", "B2", "B3", "B4", "B5", "B6" };
 
+    /// <summary>Canonical gap marker (run of 4+ underscores) for Part A
+    /// note-completion bodies — mirrors PART_A_GAP_MARKER in
+    /// lib/listening-part-a-notes.ts.</summary>
+    private const string GapMarker = "____";
+
+    /// <summary>Build a Part A note-completion body that contains exactly
+    /// <paramref name="gapCount"/> gap markers (one per line), so the
+    /// listening_part_a_gap_count rule sees the requested gap count.</summary>
+    private static string NotesBodyWithGaps(int gapCount) =>
+        string.Join("\n", Enumerable.Range(0, gapCount).Select(i => $"- note {i + 1}: {GapMarker}"));
+
     private static (LearnerDbContext db, ListeningStructureService svc) Build()
     {
         var options = new DbContextOptionsBuilder<LearnerDbContext>()
@@ -90,10 +101,14 @@ public class ListeningStructureServiceTests
                 transcriptEvidenceEndMs = num * 1000 + 500, difficultyLevel = 3,
                 optionDistractorCategory = new string?[] { null, "too_weak", "opposite_meaning" } });
         // One extract per sub-section, each with a non-overlapping audio window.
+        // A1/A2 carry a note-completion body whose gap count matches that
+        // sub-part's authored question count, so listening_part_a_gap_count passes.
+        var a1Count = partA / 2;
+        var a2Count = partA - a1Count;
         var extracts = new List<object>
         {
-            new { partCode = "A1", displayOrder = 1, kind = "consultation", title = "A1", audioStartMs = 0, audioEndMs = 60_000, difficultyRating = 3 },
-            new { partCode = "A2", displayOrder = 2, kind = "consultation", title = "A2", audioStartMs = 60_000, audioEndMs = 120_000, difficultyRating = 3 },
+            new { partCode = "A1", displayOrder = 1, kind = "consultation", title = "A1", audioStartMs = 0, audioEndMs = 60_000, difficultyRating = 3, notesBody = NotesBodyWithGaps(a1Count) },
+            new { partCode = "A2", displayOrder = 2, kind = "consultation", title = "A2", audioStartMs = 60_000, audioEndMs = 120_000, difficultyRating = 3, notesBody = NotesBodyWithGaps(a2Count) },
         };
         for (var i = 0; i < 6; i++)
             extracts.Add(new { partCode = PartBCodes[i], displayOrder = 3 + i, kind = "workplace", title = PartBCodes[i],
@@ -626,6 +641,12 @@ public class ListeningStructureServiceTests
                 AudioEndMs = endMs,
                 // TTS audio source so the audio-source gate passes.
                 AudioContentSha = new string('a', 64),
+                // Part A consultation extracts carry a 12-gap note-completion
+                // body (one gap per A1/A2 question) so listening_part_a_gap_count
+                // passes; Part B/C extracts have no notes body.
+                NotesBodyMarkdown = part.PartCode is ListeningPartCode.A1 or ListeningPartCode.A2
+                    ? NotesBodyWithGaps(12)
+                    : null,
                 DifficultyRating = 3,
                 CreatedAt = now,
                 UpdatedAt = now,
@@ -800,5 +821,167 @@ public class ListeningStructureServiceTests
 
         Assert.False(report.IsPublishReady);
         Assert.Contains(report.Issues, i => i.Code == "listening_results_calc" && i.Severity == "error");
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // Part A note-completion gap-count publish gate (listening_part_a_gap_count).
+    // For each authored A1/A2 sub-part, the number of ____ gap markers in that
+    // sub-part's note-completion body must equal that sub-part's question count.
+    // Fires from BOTH validation paths; it is a hard publish blocker (NOT in
+    // AdvisoryPublishGateCodes). Tested on the JSON path (notesBody on the
+    // listeningExtracts object) and the relational path (NotesBodyMarkdown on
+    // the consultation ListeningExtract).
+    // ─────────────────────────────────────────────────────────────────────
+
+    /// <summary>Override the camelCase "notesBody" on the A1 or A2 extract of a
+    /// canonical JSON paper, returning the re-serialised ExtractedTextJson. A
+    /// null <paramref name="notesBody"/> removes the key entirely (modelling an
+    /// extract authored without any note-completion body).</summary>
+    private static string JsonPaperWithPartANotes(string subPartCode, string? notesBody)
+    {
+        using var doc = JsonDocument.Parse(BuildQuestionsJson(24, 6, 12));
+        var questions = JsonSerializer.Deserialize<List<Dictionary<string, object?>>>(
+            doc.RootElement.GetProperty("listeningQuestions").GetRawText())!;
+        var extracts = JsonSerializer.Deserialize<List<Dictionary<string, object?>>>(
+            doc.RootElement.GetProperty("listeningExtracts").GetRawText())!;
+        var target = extracts.Single(extract =>
+            string.Equals(extract.GetValueOrDefault("partCode")?.ToString(), subPartCode, StringComparison.OrdinalIgnoreCase));
+        if (notesBody is null) target.Remove("notesBody");
+        else target["notesBody"] = notesBody;
+        return JsonSerializer.Serialize(new { listeningQuestions = questions, listeningExtracts = extracts });
+    }
+
+    [Fact]
+    public async Task Json_PartA_GapsMatchQuestionCount_NoGapCountIssue()
+    {
+        var (db, svc) = Build();
+        // Canonical 24/6/12 paper: A1 and A2 each carry a 12-gap notes body.
+        var paper = await AddPaperAsync(db, BuildQuestionsJson(24, 6, 12));
+
+        var report = await svc.ValidatePaperAsync(paper.Id, default);
+
+        Assert.True(report.IsPublishReady, string.Join("; ", report.Issues.Select(issue => $"{issue.Code}:{issue.Message}")));
+        Assert.DoesNotContain(report.Issues, i => i.Code == "listening_part_a_gap_count");
+    }
+
+    [Fact]
+    public async Task Json_PartA1_FewerGapsThanQuestions_BlocksPublish()
+    {
+        var (db, svc) = Build();
+        // A1 has 12 questions but only 11 ____ gap markers → parity broken.
+        var paper = await AddPaperAsync(db, JsonPaperWithPartANotes("A1", NotesBodyWithGaps(11)));
+
+        var report = await svc.ValidatePaperAsync(paper.Id, default);
+
+        Assert.False(report.IsPublishReady);
+        Assert.Contains(report.Issues, i => i.Code == "listening_part_a_gap_count" && i.Severity == "error");
+    }
+
+    [Fact]
+    public async Task Json_PartA1_EmptyNotesBody_BlocksPublish()
+    {
+        var (db, svc) = Build();
+        // A1 has 12 questions but the notes body is removed entirely (0 gaps).
+        var paper = await AddPaperAsync(db, JsonPaperWithPartANotes("A1", null));
+
+        var report = await svc.ValidatePaperAsync(paper.Id, default);
+
+        Assert.False(report.IsPublishReady);
+        Assert.Contains(report.Issues, i => i.Code == "listening_part_a_gap_count" && i.Severity == "error");
+    }
+
+    [Fact]
+    public async Task Json_PartA2_GapMismatch_FiresIndependentlyOfA1()
+    {
+        var (db, svc) = Build();
+        // A1 keeps its valid 12-gap body; only A2 is broken (13 gaps vs 12 Qs).
+        var paper = await AddPaperAsync(db, JsonPaperWithPartANotes("A2", NotesBodyWithGaps(13)));
+
+        var report = await svc.ValidatePaperAsync(paper.Id, default);
+
+        Assert.False(report.IsPublishReady);
+        Assert.Contains(report.Issues, i =>
+            i.Code == "listening_part_a_gap_count" && i.Severity == "error" && i.Message.Contains("A2"));
+        Assert.DoesNotContain(report.Issues, i =>
+            i.Code == "listening_part_a_gap_count" && i.Message.Contains("A1"));
+    }
+
+    [Fact]
+    public async Task Relational_PartA_GapsMatchQuestionCount_NoGapCountIssue()
+    {
+        var (db, svc) = Build();
+        // Canonical relational paper seeds A1/A2 consultation extracts with a
+        // 12-gap NotesBodyMarkdown matching the 12 questions per sub-part.
+        var seed = await SeedCanonicalRelationalAsync(db);
+        await db.SaveChangesAsync();
+
+        var report = await svc.ValidatePaperAsync(seed.Paper.Id, default);
+
+        Assert.Equal("relational", report.Source);
+        Assert.True(report.IsPublishReady, string.Join("; ", report.Issues.Select(issue => $"{issue.Code}:{issue.Message}")));
+        Assert.DoesNotContain(report.Issues, i => i.Code == "listening_part_a_gap_count");
+    }
+
+    [Fact]
+    public async Task Relational_PartA1_FewerGapsThanQuestions_BlocksPublish()
+    {
+        var (db, svc) = Build();
+        var seed = await SeedCanonicalRelationalAsync(db);
+        // A1 has 12 questions; drop its notes body to 11 gaps → parity broken.
+        seed.Extracts[ListeningPartCode.A1].NotesBodyMarkdown = NotesBodyWithGaps(11);
+        await db.SaveChangesAsync();
+
+        var report = await svc.ValidatePaperAsync(seed.Paper.Id, default);
+
+        Assert.False(report.IsPublishReady);
+        Assert.Contains(report.Issues, i =>
+            i.Code == "listening_part_a_gap_count" && i.Severity == "error" && i.Message.Contains("A1"));
+    }
+
+    [Fact]
+    public async Task Relational_PartA1_NullNotesBody_BlocksPublish()
+    {
+        var (db, svc) = Build();
+        var seed = await SeedCanonicalRelationalAsync(db);
+        // A1 has 12 questions but a null notes body (0 gaps).
+        seed.Extracts[ListeningPartCode.A1].NotesBodyMarkdown = null;
+        await db.SaveChangesAsync();
+
+        var report = await svc.ValidatePaperAsync(seed.Paper.Id, default);
+
+        Assert.False(report.IsPublishReady);
+        Assert.Contains(report.Issues, i => i.Code == "listening_part_a_gap_count" && i.Severity == "error");
+    }
+
+    [Fact]
+    public async Task Relational_PartA2_GapMismatch_FiresIndependentlyOfA1()
+    {
+        var (db, svc) = Build();
+        var seed = await SeedCanonicalRelationalAsync(db);
+        // A1 keeps its valid 12-gap body; only A2 is broken (10 gaps vs 12 Qs).
+        seed.Extracts[ListeningPartCode.A2].NotesBodyMarkdown = NotesBodyWithGaps(10);
+        await db.SaveChangesAsync();
+
+        var report = await svc.ValidatePaperAsync(seed.Paper.Id, default);
+
+        Assert.False(report.IsPublishReady);
+        Assert.Contains(report.Issues, i =>
+            i.Code == "listening_part_a_gap_count" && i.Severity == "error" && i.Message.Contains("A2"));
+        Assert.DoesNotContain(report.Issues, i =>
+            i.Code == "listening_part_a_gap_count" && i.Message.Contains("A1"));
+    }
+
+    [Fact]
+    public async Task GapCount_IsHardPublishBlocker_NotDowngradedToWarning()
+    {
+        var (db, svc) = Build();
+        // Guard: the code must NOT be in AdvisoryPublishGateCodes — a mismatch
+        // stays an "error" and is never downgraded to "warning".
+        var paper = await AddPaperAsync(db, JsonPaperWithPartANotes("A1", NotesBodyWithGaps(11)));
+
+        var report = await svc.ValidatePaperAsync(paper.Id, default);
+
+        Assert.Contains(report.Issues, i => i.Code == "listening_part_a_gap_count" && i.Severity == "error");
+        Assert.DoesNotContain(report.Issues, i => i.Code == "listening_part_a_gap_count" && i.Severity == "warning");
     }
 }

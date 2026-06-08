@@ -147,6 +147,12 @@ export interface ListeningAuthoredExtract {
    * predate the per-sub-section timer; treated as "no timer" when absent.
    */
   timeLimitSeconds?: number | null;
+  /**
+   * Part A note-completion body (markdown-ish grammar defined in
+   * `lib/listening-part-a-notes.ts`). Null / absent for Part B/C extracts or
+   * when not yet authored. Round-trips through the manifest import/export.
+   */
+  notesBody?: string | null;
 }
 
 export interface ListeningAuthoredExtractList {
@@ -277,6 +283,8 @@ export interface ListeningExtractPatchBody {
   audioEndMs?: number | null;
   /** Per-sub-section countdown (seconds). `null` clears it. */
   timeLimitSeconds?: number | null;
+  /** Part A note-completion body. `null` clears it; absent leaves it unchanged. */
+  notesBody?: string | null;
 }
 
 export const patchListeningExtract = (
@@ -826,6 +834,8 @@ export interface ListeningManifestExtract {
   speakerAttitude?: ListeningSpeakerAttitude | null; // Part C
   transcriptSegments?: ListeningManifestTranscriptSegment[] | null;
   speakers?: ListeningAuthoredSpeaker[] | null;
+  /** Part A note-completion body. Carries through manifest import/export. */
+  notesBody?: string | null;
   questions: ListeningManifestQuestion[];
 }
 

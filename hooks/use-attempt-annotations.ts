@@ -16,6 +16,12 @@ export interface AttemptQuestionAnnotation {
   struckOptions?: string[];
   /** True when the question stem itself is highlighted. */
   stemHighlighted?: boolean;
+  /**
+   * True when the learner has flagged this question for review.
+   * Persisted opaquely in the annotations blob alongside highlights/strike —
+   * no backend field or migration needed. Used by Part B/C MCQ renderers.
+   */
+  flagged?: boolean;
 }
 
 export interface AttemptAnnotationsState {
@@ -145,6 +151,7 @@ export function useAttemptAnnotations(options: {
       const next = mutator(current);
       const trimmedByQuestion = { ...prev.byQuestion };
       const isEmpty = !next.stemHighlighted
+        && !next.flagged
         && (!next.highlights || next.highlights.length === 0)
         && (!next.struckOptions || next.struckOptions.length === 0);
       if (isEmpty) delete trimmedByQuestion[questionId];

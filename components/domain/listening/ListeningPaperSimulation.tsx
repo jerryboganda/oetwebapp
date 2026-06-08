@@ -13,6 +13,7 @@ import {
   type ListeningPaperBookletPage,
 } from '@/lib/listening-paper-simulation';
 import { PartARenderer } from '@/components/domain/listening/PartARenderer';
+import { PartANotesDocument } from '@/components/domain/listening/PartANotesDocument';
 
 type PaperTool = 'pencil' | 'highlighter' | 'eraser';
 
@@ -271,21 +272,38 @@ export function ListeningPaperBooklet({
           </div>
         ) : null}
 
-        <div className="space-y-4">
-          {page.questionIds.map((questionId) => {
-            const question = questionById.get(questionId);
-            if (!question) return null;
-            return (
-              <ListeningPaperQuestion
-                key={question.id}
-                question={question}
-                sectionLabel={sectionLabel}
-                value={answers[question.id] ?? ''}
-                onAnswerChange={onAnswerChange}
-              />
-            );
-          })}
-        </div>
+        {page.kind === 'notes' && page.extract?.notesBody?.trim() ? (
+          // Part A with an authored notes body → render as ONE continuous
+          // note-completion document (PartANotesDocument) instead of 12 separate cards.
+          <PartANotesDocument
+            partLabel={sectionLabel}
+            notesBody={page.extract.notesBody}
+            questions={page.questionIds
+              .map((id) => questionById.get(id))
+              .filter((q): q is ListeningSessionQuestionDto => q !== undefined)
+              .map((q) => ({ id: q.id, number: q.number }))}
+            answers={answers}
+            onAnswerChange={onAnswerChange}
+            highlightingEnabled
+          />
+        ) : (
+          // Legacy Part A (no notesBody) or Part B/C → per-question renderer.
+          <div className="space-y-4">
+            {page.questionIds.map((questionId) => {
+              const question = questionById.get(questionId);
+              if (!question) return null;
+              return (
+                <ListeningPaperQuestion
+                  key={question.id}
+                  question={question}
+                  sectionLabel={sectionLabel}
+                  value={answers[question.id] ?? ''}
+                  onAnswerChange={onAnswerChange}
+                />
+              );
+            })}
+          </div>
+        )}
       </article>
     </section>
   );

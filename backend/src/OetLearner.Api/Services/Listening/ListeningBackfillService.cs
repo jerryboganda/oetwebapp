@@ -218,6 +218,11 @@ public sealed class ListeningBackfillService(LearnerDbContext db) : IListeningBa
 
             var extractId = $"le_{Guid.NewGuid():N}";
             extractRowByPart[partCode] = extractId;
+            // Part A note-completion body. Only A1/A2 carry one; force null for
+            // Part B/C even if a hand-authored JSON blob set it.
+            var notesBody = partCode is ListeningPartCode.A1 or ListeningPartCode.A2
+                ? meta?.NotesBody
+                : null;
             db.ListeningExtracts.Add(new ListeningExtract
             {
                 Id = extractId,
@@ -229,6 +234,7 @@ public sealed class ListeningBackfillService(LearnerDbContext db) : IListeningBa
                 SpeakersJson = JsonSerializer.Serialize(meta?.Speakers ?? new List<JsonElement>()),
                 AudioStartMs = meta?.AudioStartMs,
                 AudioEndMs = meta?.AudioEndMs,
+                NotesBodyMarkdown = notesBody,
                 ReplayInLearningOnly = true,
                 TranscriptSegmentsJson = JsonSerializer.Serialize(partSegments),
                 CreatedAt = now,
@@ -461,7 +467,8 @@ public sealed class ListeningBackfillService(LearnerDbContext db) : IListeningBa
                 AudioStartMs: GetInt(item, "audioStartMs"),
                 AudioEndMs: GetInt(item, "audioEndMs"),
                 Speakers: speakers,
-                TimeLimitSeconds: GetInt(item, "timeLimitSeconds")));
+                TimeLimitSeconds: GetInt(item, "timeLimitSeconds"),
+                NotesBody: GetString(item, "notesBody")));
         }
         return output;
     }
@@ -746,7 +753,8 @@ public sealed class ListeningBackfillService(LearnerDbContext db) : IListeningBa
         int? AudioStartMs,
         int? AudioEndMs,
         IReadOnlyList<JsonElement> Speakers,
-        int? TimeLimitSeconds = null);
+        int? TimeLimitSeconds = null,
+        string? NotesBody = null);
 
     private sealed record AuthoredSegment(
         int StartMs,
