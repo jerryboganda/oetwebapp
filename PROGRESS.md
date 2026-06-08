@@ -1,6 +1,6 @@
 # PROGRESS - Active Agent Continuity
 
-Last updated: 2026-06-07
+Last updated: 2026-06-08
 
 ## Current Operating Goal
 
@@ -20,10 +20,13 @@ Implement the OET 2026 product portfolio plan on `feat/oet-2026-entitlement-conf
 - Checkout fulfillment now applies add-on grants to the quote-selected subscription instead of the first subscription for the learner.
 - Learner dashboard tasks are filtered by `enabledModules` from `/v1/me/entitlement-snapshot` once the snapshot loads, so tasks for non-purchased modules are hidden.
 - Learner skill navigation is also filtered by entitlement modules, with `SpeakingSession` mapped to the Speaking tab.
+- Learner dashboard hero now shows a compact subscription summary from `fetchSubscriptionMe()` plus entitlement counters, with no-active-subscription and fetch-failure fallbacks.
 - Admin portfolio export is available at `GET /v1/admin/billing/portfolio/export` for product, enrolment, entitlement counter, Tutor Book, and add-on history inspection.
 
 ## Validation
 
+- `pnpm exec vitest run app/page.test.tsx --reporter=dot`: passed, 5 files / 18 tests. Existing jsdom "navigation to another Document" notices appeared.
+- `pnpm exec tsc --noEmit`: passed after clearing stale `.next/types` and `.next/dev/types` generated validator output.
 - `pnpm exec vitest run app/page.test.tsx --reporter=dot`: passed, 6 files / 13 tests. Existing jsdom "navigation to another Document" notices appeared.
 - `pnpm exec vitest run app/catalog/page.test.tsx app/billing/page.test.tsx components/billing/addon-purchase-modal.test.tsx --reporter=dot`: passed, 8 files / 58 tests. Existing jsdom navigation notices appeared.
 - `pnpm exec vitest run app/page.test.tsx components/domain/__tests__/learner-ux-primitives.test.tsx --reporter=dot`: passed, 12 files / 52 tests. Existing jsdom navigation notices appeared.

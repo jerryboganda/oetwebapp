@@ -8,6 +8,7 @@ const {
   mockFetchEngagement,
   mockLearnerGetScoringPolicy,
   mockFetchMyEntitlementSnapshot,
+  mockFetchSubscriptionMe,
   mockTrack,
   mockPush,
 } = vi.hoisted(() => ({
@@ -18,6 +19,7 @@ const {
   mockFetchEngagement: vi.fn(),
   mockLearnerGetScoringPolicy: vi.fn(),
   mockFetchMyEntitlementSnapshot: vi.fn(),
+  mockFetchSubscriptionMe: vi.fn(),
   mockTrack: vi.fn(),
   mockPush: vi.fn(),
 }));
@@ -59,6 +61,7 @@ vi.mock('@/lib/api', () => ({
   // to render the entitlement banner. Stub it with an empty snapshot so the
   // page renders without throwing in the test environment.
   fetchMyEntitlementSnapshot: mockFetchMyEntitlementSnapshot,
+  fetchSubscriptionMe: mockFetchSubscriptionMe,
 }));
 
 import DashboardPage from './page';
@@ -155,6 +158,22 @@ describe('Dashboard page', () => {
       expiresAt: '2026-12-31T00:00:00Z',
       isFrozen: false,
     });
+
+    mockFetchSubscriptionMe.mockResolvedValue({
+      subscriptionId: 'sub-active',
+      status: 'active',
+      planCode: 'full-nursing',
+      planName: 'Full Nursing OET Course',
+      price: 60,
+      currency: 'GBP',
+      interval: 'month',
+      startedAt: '2026-06-01T00:00:00Z',
+      nextRenewalAt: '2026-07-01T00:00:00Z',
+      cancelledAt: null,
+      pausedUntil: null,
+      cancelAtPeriodEnd: false,
+      trialEndsAt: null,
+    });
   });
 
   it('renders through the shared learner dashboard shell', async () => {
@@ -240,5 +259,76 @@ describe('Dashboard page', () => {
     renderWithRouter(<DashboardPage />, { router: { push: mockPush } });
 
     expect((await screen.findAllByText('Speaking: Private Session Prep')).length).toBeGreaterThan(0);
+  });
+
+  it('shows active subscription details in the dashboard hero', async () => {
+    mockFetchMyEntitlementSnapshot.mockResolvedValueOnce({
+      hasEligibleSubscription: true,
+      tier: 'paid',
+      planCode: 'full-nursing-assessment',
+      productCategory: 'bundle',
+      enabledModules: ['Reading', 'Writing', 'Speaking'],
+      writingAddonsEnabled: true,
+      speakingAddonsEnabled: false,
+      tutorBookDiscountEnabled: true,
+      writingAssessmentsRemaining: 3,
+      speakingSessionsRemaining: 1,
+      aiCreditsRemaining: 5,
+      tutorBookUnlocked: true,
+      basicEnglishUnlocked: false,
+      expiresAt: '2026-12-31T00:00:00Z',
+      isFrozen: false,
+    });
+
+    renderWithRouter(<DashboardPage />, { router: { push: mockPush } });
+
+    expect(await screen.findByText('Full Nursing OET Course')).toBeInTheDocument();
+    expect(screen.getByText('Active')).toBeInTheDocument();
+    expect(screen.getByText((text) => text.includes('60.00') && text.includes('/ month'))).toBeInTheDocument();
+    expect(screen.getByText(/Remaining:/i)).toHaveTextContent('3 writing');
+    expect(screen.getByText(/Remaining:/i)).toHaveTextContent('1 speaking');
+    expect(screen.getByText(/Remaining:/i)).toHaveTextContent('5 AI credits');
+    expect(screen.getByText(/Remaining:/i)).toHaveTextContent('Tutor Book');
+  });
+
+  it('uses entitlement expiry when a subscription renewal date is not available', async () => {
+    mockFetchSubscriptionMe.mockResolvedValueOnce({
+      subscriptionId: 'sub-no-renewal',
+      status: 'active',
+      planCode: 'full-nursing',
+      planName: 'Full Nursing OET Course',
+      price: 60,
+      currency: 'GBP',
+      interval: 'month',
+      startedAt: '2026-06-01T00:00:00Z',
+      nextRenewalAt: null,
+      cancelledAt: null,
+      pausedUntil: null,
+      cancelAtPeriodEnd: false,
+      trialEndsAt: null,
+    });
+
+    renderWithRouter(<DashboardPage />, { router: { push: mockPush } });
+
+    expect(await screen.findByText('Full Nursing OET Course')).toBeInTheDocument();
+    expect(screen.getByText('12/31/2026')).toBeInTheDocument();
+  });
+
+  it('keeps the dashboard usable when there is no active subscription', async () => {
+    mockFetchSubscriptionMe.mockResolvedValueOnce(null);
+
+    renderWithRouter(<DashboardPage />, { router: { push: mockPush } });
+
+    expect((await screen.findAllByText('No active subscription')).length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Browse plans').length).toBeGreaterThan(0);
+  });
+
+  it('keeps the dashboard usable when subscription details fail to load', async () => {
+    mockFetchSubscriptionMe.mockRejectedValueOnce(new Error('network failed'));
+
+    renderWithRouter(<DashboardPage />, { router: { push: mockPush } });
+
+    expect(await screen.findByText('Subscription details unavailable')).toBeInTheDocument();
+    expect(screen.getByText("Keep today's priorities and exam signals in view")).toBeInTheDocument();
   });
 });

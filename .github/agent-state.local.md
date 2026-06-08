@@ -2,6 +2,12 @@
 
 Last updated: 2026-06-08
 
+## Latest Dashboard Subscription Checkpoint
+
+- Implemented compact student subscription summary in the learner dashboard hero (`app/page.tsx`) using `fetchSubscriptionMe()` plus the existing entitlement snapshot.
+- Covered active subscription details, renewal/expiry fallback, remaining entitlement counters, no-active-subscription, and subscription-fetch failure in `app/page.test.tsx`.
+- Validation: `pnpm exec vitest run app/page.test.tsx --reporter=dot` passed; `pnpm exec tsc --noEmit` passed after clearing stale `.next/types` and `.next/dev/types` generated validator output.
+
 ## Goal
 
 Finish PR #38 (`feat/oet-2026-entitlement-conformance`) with GitHub Actions as the broad validation gate, then merge to `main` and deploy through the CI/GHCR production path only after required checks are green.

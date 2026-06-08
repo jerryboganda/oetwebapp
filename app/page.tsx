@@ -10,6 +10,7 @@ import {
   BookOpen,
   Calendar,
   CheckCircle2,
+  CreditCard,
   FilePenLine,
   Flag,
   Flame,
@@ -43,7 +44,15 @@ import { DashboardAddonsWidget } from '@/components/learner/dashboard-addons-wid
 import { ExtendAccessCta } from '@/components/learner/extend-access-cta';
 import { OnboardingChecklist } from '@/components/onboarding/onboarding-checklist';
 import { useDashboardHome } from '@/lib/hooks/use-dashboard-home';
-import { learnerGetScoringPolicy, fetchMyEntitlementSnapshot, type ScoringPolicyLearnerDto, type MyEntitlementSnapshot } from '@/lib/api';
+import {
+  learnerGetScoringPolicy,
+  fetchMyEntitlementSnapshot,
+  fetchSubscriptionMe,
+  type ScoringPolicyLearnerDto,
+  type MyEntitlementSnapshot,
+  type SubscriptionMe,
+} from '@/lib/api';
+import { formatMoney } from '@/lib/money';
 import type { SubTest } from '@/lib/mock-data';
 import type { LearnerSurfaceCardModel } from '@/lib/learner-surface';
 
@@ -81,6 +90,113 @@ function taskAllowedByEntitlement(task: { subTest: SubTest }, entitlement: MyEnt
   return subTest === 'speaking' && modules.has('speakingsession');
 }
 
+function formatDashboardDate(value: string | null | undefined): string {
+  if (!value) return 'Not scheduled';
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? 'Not scheduled' : date.toLocaleDateString(undefined, { timeZone: 'UTC' });
+}
+
+function subscriptionStatusLabel(subscription: SubscriptionMe | null, entitlement: MyEntitlementSnapshot | null) {
+  if (subscription?.pausedUntil || entitlement?.isFrozen) return 'Paused';
+  if (!subscription) return 'No active subscription';
+  if (subscription.status === 'trialing') return 'Trial';
+  if (subscription.status === 'past_due') return 'Past due';
+  if (subscription.status === 'cancelled' || subscription.status === 'canceled') return 'Cancelled';
+  if (subscription.status === 'active') return 'Active';
+  if (subscription.status === 'expired') return 'Expired';
+  return subscription.status ? subscription.status.replace(/_/g, ' ') : 'Active';
+}
+
+function subscriptionStatusClass(subscription: SubscriptionMe | null, entitlement: MyEntitlementSnapshot | null) {
+  const status = subscriptionStatusLabel(subscription, entitlement).toLowerCase();
+  if (status === 'active' || status === 'trial') return 'bg-success/10 text-success';
+  if (status === 'past due') return 'bg-warning/10 text-warning';
+  if (status === 'paused') return 'bg-amber-100 text-amber-800';
+  if (status === 'cancelled' || status === 'expired') return 'bg-danger/10 text-danger';
+  return 'bg-background-light text-muted';
+}
+
+function DashboardSubscriptionSummary({
+  subscription,
+  entitlement,
+  isLoading,
+  hasError,
+  loadedAt,
+}: {
+  subscription: SubscriptionMe | null;
+  entitlement: MyEntitlementSnapshot | null;
+  isLoading: boolean;
+  hasError: boolean;
+  loadedAt: string | null | undefined;
+}) {
+  const renewalOrExpiry = subscription?.nextRenewalAt ?? entitlement?.expiresAt ?? null;
+  const counterItems = [
+    entitlement?.writingAssessmentsRemaining && entitlement.writingAssessmentsRemaining > 0
+      ? `${entitlement.writingAssessmentsRemaining} writing`
+      : null,
+    entitlement?.speakingSessionsRemaining && entitlement.speakingSessionsRemaining > 0
+      ? `${entitlement.speakingSessionsRemaining} speaking`
+      : null,
+    entitlement?.aiCreditsRemaining && entitlement.aiCreditsRemaining > 0
+      ? `${entitlement.aiCreditsRemaining} AI credits`
+      : null,
+    entitlement?.tutorBookUnlocked ? 'Tutor Book' : null,
+  ].filter(Boolean);
+  const statusLabel = subscriptionStatusLabel(subscription, entitlement);
+  const href = subscription ? '/account/billing' : '/catalog';
+
+  return (
+    <div className="space-y-3">
+      {loadedAt ? <LearnerFreshnessIndicator updatedAt={loadedAt} source="loaded" staleAfterMinutes={30} /> : null}
+      <div className="rounded-2xl border border-border bg-background-light p-3 shadow-sm lg:w-80">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[0.16em] text-muted">
+              <CreditCard className="h-3.5 w-3.5" />
+              Subscription
+            </p>
+            <p className="mt-1 truncate text-sm font-bold text-navy">
+              {isLoading ? 'Loading subscription...' : hasError ? 'Subscription details unavailable' : subscription?.planName ?? 'No active subscription'}
+            </p>
+          </div>
+          {!isLoading && !hasError ? (
+            <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${subscriptionStatusClass(subscription, entitlement)}`}>
+              {statusLabel}
+            </span>
+          ) : null}
+        </div>
+
+        {!isLoading && !hasError ? (
+          <dl className="mt-3 grid grid-cols-2 gap-2 text-xs">
+            <div className="rounded-xl bg-surface px-2.5 py-2">
+              <dt className="text-[10px] font-bold uppercase tracking-wide text-muted">
+                {subscription?.nextRenewalAt ? 'Next renewal' : 'Access until'}
+              </dt>
+              <dd className="mt-0.5 font-semibold text-navy">{formatDashboardDate(renewalOrExpiry)}</dd>
+            </div>
+            <div className="rounded-xl bg-surface px-2.5 py-2">
+              <dt className="text-[10px] font-bold uppercase tracking-wide text-muted">Price</dt>
+              <dd className="mt-0.5 font-semibold text-navy">
+                {subscription ? `${formatMoney(subscription.price, { currency: subscription.currency })} / ${subscription.interval}` : 'Browse plans'}
+              </dd>
+            </div>
+          </dl>
+        ) : null}
+
+        {!isLoading && !hasError && counterItems.length > 0 ? (
+          <p className="mt-3 text-xs font-medium text-muted">
+            Remaining: <span className="text-navy">{counterItems.join(' · ')}</span>
+          </p>
+        ) : null}
+
+        <Button asChild variant="outline" size="sm" className="mt-3 w-full">
+          <Link href={href}>{subscription ? 'Open billing' : 'Browse plans'} <ArrowRight className="h-3.5 w-3.5" /></Link>
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 export default function Dashboard() {
   const router = useRouter();
   const prefersReducedMotion = useReducedMotion();
@@ -88,6 +204,9 @@ export default function Dashboard() {
   const [scoringPolicy, setScoringPolicy] = useState<ScoringPolicyLearnerDto | null>(null);
   const [scoringExpanded, setScoringExpanded] = useState(false);
   const [entitlement, setEntitlement] = useState<MyEntitlementSnapshot | null>(null);
+  const [subscription, setSubscription] = useState<SubscriptionMe | null>(null);
+  const [subscriptionLoading, setSubscriptionLoading] = useState(true);
+  const [subscriptionError, setSubscriptionError] = useState(false);
   const { home, profile, readiness, tasks, engagement, loadedAt } = data;
   const freeze = home?.freeze?.currentFreeze ?? null;
 
@@ -120,6 +239,22 @@ export default function Dashboard() {
       })
       .catch(() => {
         if (!cancelled) setEntitlement(null);
+      });
+    fetchSubscriptionMe()
+      .then((nextSubscription) => {
+        if (!cancelled) {
+          setSubscription(nextSubscription);
+          setSubscriptionError(false);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setSubscription(null);
+          setSubscriptionError(true);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setSubscriptionLoading(false);
       });
     return () => { cancelled = true; };
   }, []);
@@ -224,7 +359,15 @@ export default function Dashboard() {
             title="Keep today's priorities and exam signals in view"
               description="Decide your next action, check your readiness, and move forward with confidence."
             highlights={dashboardHeroHighlights}
-            aside={loadedAt ? <LearnerFreshnessIndicator updatedAt={loadedAt} source="loaded" staleAfterMinutes={30} /> : undefined}
+            aside={(
+              <DashboardSubscriptionSummary
+                subscription={subscription}
+                entitlement={entitlement}
+                isLoading={subscriptionLoading}
+                hasError={subscriptionError}
+                loadedAt={loadedAt}
+              />
+            )}
           />
 
           <OnboardingChecklist />
