@@ -1,30 +1,27 @@
-import { loadRulebook } from './loader';
-import { SUPPORTED_WRITING_CHECK_IDS } from './writing-rules';
-import type { ExamProfession, Rule, RuleSeverity } from './types';
+/**
+ * Writing rule coverage matrix.
+ *
+ * As of the conformance-framework refactor this is a THIN WRAPPER over the
+ * kind-agnostic `coverage-matrix.ts`. It exists to (a) preserve the writing
+ * public API and the 172-row baseline lock, and (b) add the writing-only
+ * `requiresCaseNoteMarkers` column.
+ *
+ * NOTE (decision 1 / Phase 2): `MARKER_DEPENDENT_CHECK_IDS` lists detectors
+ * that depend on case-note markers which were removed from the product. Phase 2
+ * prunes those detectors and reclassifies their rules to `ai-grounded`; this
+ * set (and the column) is removed at that point. It is retained here only so
+ * the matrix keeps reporting the dependency until that reclassification lands.
+ */
 
-export type WritingCoverageMode =
-  | 'deterministic-detector'
-  | 'forbidden-pattern-detector'
-  | 'structured-ai-adjudication'
-  | 'human-review-only'
-  | 'display-only'
-  | 'not-implemented';
+import {
+  buildRuleCoverageMatrix,
+  validateRuleCoverageMatrix,
+  type CoverageMode,
+  type RuleCoverageRow,
+} from './coverage-matrix';
+import type { ExamProfession } from './types';
 
-export interface WritingRuleCoverageRow {
-  ruleId: string;
-  severity: RuleSeverity;
-  coverageMode: WritingCoverageMode;
-  enforcementPath: string[];
-  checkId: string | null;
-  structuredAiTask: string | null;
-  requiresCaseNoteMarkers: boolean;
-  waiverReason: string | null;
-  owner: string;
-  lastReviewedAt: string;
-}
-
-const OWNER = 'rulebook-governance';
-const LAST_REVIEWED_AT = '2026-05-10';
+export type WritingCoverageMode = CoverageMode;
 
 const MARKER_DEPENDENT_CHECK_IDS = new Set([
   'content_requires_allergy_for_atopic',
@@ -34,97 +31,22 @@ const MARKER_DEPENDENT_CHECK_IDS = new Set([
   'closure_mentions_consent_if_flagged',
 ]);
 
-const STRUCTURED_AI_TASK = 'WritingGrade/WritingCoachSuggest grounded prompt with ruleId allowlist';
-
-function hasForbiddenPatterns(rule: Rule): boolean {
-  return Array.isArray(rule.forbiddenPatterns) && rule.forbiddenPatterns.length > 0;
+export interface WritingRuleCoverageRow extends RuleCoverageRow {
+  /** True when this rule's detector depends on case-note markers (removed — see Phase 2). */
+  requiresCaseNoteMarkers: boolean;
 }
 
-function coverageModeFor(rule: Rule): WritingCoverageMode {
-  if (rule.checkId) return 'deterministic-detector';
-  if (hasForbiddenPatterns(rule)) return 'forbidden-pattern-detector';
-  return 'structured-ai-adjudication';
+export function buildWritingRuleCoverageMatrix(
+  profession: ExamProfession = 'medicine',
+): WritingRuleCoverageRow[] {
+  return buildRuleCoverageMatrix('writing', profession).map((row) => ({
+    ...row,
+    requiresCaseNoteMarkers: row.checkId ? MARKER_DEPENDENT_CHECK_IDS.has(row.checkId) : false,
+  }));
 }
 
-function enforcementPathFor(rule: Rule, mode: WritingCoverageMode): string[] {
-  const paths: string[] = [];
-  if (rule.checkId) paths.push(`WritingRuleEngine checkId:${rule.checkId}`);
-  if (hasForbiddenPatterns(rule)) paths.push('WritingRuleEngine forbiddenPatterns');
-  if (mode === 'structured-ai-adjudication' || rule.severity === 'critical' || rule.severity === 'major') {
-    paths.push(STRUCTURED_AI_TASK);
-  }
-  return paths;
-}
-
-export function buildWritingRuleCoverageMatrix(profession: ExamProfession = 'medicine'): WritingRuleCoverageRow[] {
-  const book = loadRulebook('writing', profession);
-  return book.rules.map((rule) => {
-    const coverageMode = coverageModeFor(rule);
-    return {
-      ruleId: rule.id,
-      severity: rule.severity,
-      coverageMode,
-      enforcementPath: enforcementPathFor(rule, coverageMode),
-      checkId: rule.checkId ?? null,
-      structuredAiTask: coverageMode === 'structured-ai-adjudication' ? STRUCTURED_AI_TASK : null,
-      requiresCaseNoteMarkers: rule.checkId ? MARKER_DEPENDENT_CHECK_IDS.has(rule.checkId) : false,
-      waiverReason: null,
-      owner: OWNER,
-      lastReviewedAt: LAST_REVIEWED_AT,
-    };
-  });
-}
-
-export function validateWritingRuleCoverageMatrix(profession: ExamProfession = 'medicine'): string[] {
-  const book = loadRulebook('writing', profession);
-  const supported = new Set(SUPPORTED_WRITING_CHECK_IDS);
-  const canonical = new Map(book.rules.map((rule) => [rule.id, rule]));
-  const matrix = buildWritingRuleCoverageMatrix(profession);
-  const issues: string[] = [];
-
-  if (matrix.length !== book.rules.length) {
-    issues.push(`matrix has ${matrix.length} rows, expected ${book.rules.length}`);
-  }
-
-  const seen = new Set<string>();
-  for (const row of matrix) {
-    if (seen.has(row.ruleId)) issues.push(`${row.ruleId}: duplicate coverage row`);
-    seen.add(row.ruleId);
-
-    const rule = canonical.get(row.ruleId);
-    if (!rule) {
-      issues.push(`${row.ruleId}: coverage row has no canonical rule`);
-      continue;
-    }
-
-    if (row.severity !== rule.severity) {
-      issues.push(`${row.ruleId}: severity ${row.severity} does not match canonical ${rule.severity}`);
-    }
-
-    if (row.checkId && !supported.has(row.checkId)) {
-      issues.push(`${row.ruleId}: unsupported checkId ${row.checkId}`);
-    }
-
-    if (row.coverageMode === 'deterministic-detector' && !row.checkId) {
-      issues.push(`${row.ruleId}: deterministic-detector row has no checkId`);
-    }
-
-    if (row.coverageMode === 'forbidden-pattern-detector' && !hasForbiddenPatterns(rule)) {
-      issues.push(`${row.ruleId}: forbidden-pattern-detector row has no forbiddenPatterns`);
-    }
-
-    if (row.severity === 'critical') {
-      const covered = row.coverageMode === 'deterministic-detector'
-        || row.coverageMode === 'forbidden-pattern-detector'
-        || row.coverageMode === 'structured-ai-adjudication'
-        || Boolean(row.waiverReason);
-      if (!covered) issues.push(`${row.ruleId}: critical rule lacks enforcement/adjudication/waiver`);
-    }
-  }
-
-  for (const rule of book.rules) {
-    if (!seen.has(rule.id)) issues.push(`${rule.id}: missing coverage row`);
-  }
-
-  return issues;
+export function validateWritingRuleCoverageMatrix(
+  profession: ExamProfession = 'medicine',
+): string[] {
+  return validateRuleCoverageMatrix('writing', profession);
 }

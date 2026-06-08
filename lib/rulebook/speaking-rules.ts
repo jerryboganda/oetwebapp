@@ -246,6 +246,13 @@ function runForbiddenPatterns(rule: Rule, input: SpeakingAuditInput): LintFindin
   return findings;
 }
 
+/**
+ * The set of speaking rule check-ids that have a backing deterministic detector.
+ * Mirrors `SUPPORTED_WRITING_CHECK_IDS` in writing-rules.ts so the conformance
+ * gate can prove every deterministic speaking rule is actually enforced.
+ */
+export const SUPPORTED_SPEAKING_CHECK_IDS = Object.freeze(Object.keys(DETECTORS).sort());
+
 export function auditSpeakingTranscript(input: SpeakingAuditInput): LintFinding[] {
   const profession = input.profession ?? 'medicine';
   const book = loadRulebook('speaking', profession);

@@ -20,6 +20,7 @@
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
 import type { ExamProfession, Rule, Rulebook, RuleKind } from './types';
+import { isRuleEnforced } from './coverage';
 
 /** Resolve the repo root from this file's location at `lib/rulebook/`. */
 const REPO_ROOT = join(__dirname, '..', '..');
@@ -220,13 +221,17 @@ export function findMissingCoverage(
 }
 
 /**
- * Walk every rule across every discovered rulebook and confirm each rule
- * with severity ∈ {critical, major} either:
- *   - has a `checkId` (deterministic), OR
- *   - declares `enforcement: 'ai-grounded'` or `'human-review-only'`.
+ * Walk every rule across every discovered rulebook and return the
+ * critical/major rules that are NOT genuinely enforced — i.e. lack a BACKED
+ * `checkId`, `forbiddenPatterns`, or an explicit `ai-grounded` /
+ * `human-review-only` marker. An empty array means no critical/major rule is
+ * silently unenforced.
  *
- * Returns the list of rules that violate this contract. An empty array means
- * no critical/major rule is silently unenforced.
+ * The enforcement contract lives once in `coverage.ts` (`isRuleEnforced`), so
+ * this Node-only gate and the browser-safe dashboard classifier can never
+ * diverge (see `coverage.test.ts`). Note this is STRICTER than a bare
+ * `rule.checkId` check: a `checkId` with no backing detector (a dead check)
+ * counts as unenforced, which is exactly the silent gap we want surfaced.
  */
 export function findUnenforcedRules(
   discovered: DiscoveredRulebook[] = discoverRulebooks(),
@@ -234,10 +239,9 @@ export function findUnenforcedRules(
   const result: Array<{ kind: RuleKind; profession: ExamProfession | '_exam-mode'; rule: Rule }> = [];
   for (const d of discovered) {
     for (const rule of d.rulebook.rules) {
-      if (rule.severity !== 'critical' && rule.severity !== 'major') continue;
-      if (rule.checkId) continue;
-      if (rule.enforcement === 'ai-grounded' || rule.enforcement === 'human-review-only') continue;
-      result.push({ kind: d.kind, profession: d.profession, rule });
+      if (!isRuleEnforced(rule, d.kind)) {
+        result.push({ kind: d.kind, profession: d.profession, rule });
+      }
     }
   }
   return result;
