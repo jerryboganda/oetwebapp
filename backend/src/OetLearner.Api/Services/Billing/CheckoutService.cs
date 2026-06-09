@@ -26,7 +26,7 @@ public sealed class CheckoutService : ICheckoutService
     }
 
     public async Task<CheckoutSessionDto> CreateCheckoutSessionAsync(
-        string userId, string email, string cartId, CancellationToken ct = default)
+        string userId, string email, string cartId, string? successUrl = null, string? cancelUrl = null, CancellationToken ct = default)
     {
         var idempotencyKey = $"checkout_{userId}_{cartId}";
 
@@ -86,9 +86,11 @@ public sealed class CheckoutService : ICheckoutService
         // Resolve Stripe customer
         var stripeCustomerId = await _stripe.EnsureCustomerAsync(userId, email, ct);
 
-        var successUrl = _billingOptions.Stripe.SuccessUrl
+        var resolvedSuccessUrl = EnsureStripeSessionPlaceholder(successUrl)
+            ?? EnsureStripeSessionPlaceholder(_billingOptions.Stripe.SuccessUrl)
             ?? $"{_billingOptions.CheckoutBaseUrl}/checkout/success";
-        var cancelUrl = _billingOptions.Stripe.CancelUrl
+        var resolvedCancelUrl = cancelUrl
+            ?? _billingOptions.Stripe.CancelUrl
             ?? $"{_billingOptions.CheckoutBaseUrl}/checkout/cancel";
 
         var request = new CreateCheckoutSessionRequest(
@@ -97,8 +99,8 @@ public sealed class CheckoutService : ICheckoutService
             UserEmail: email,
             LineItems: stripeLineItems,
             Mode: mode,
-            SuccessUrl: successUrl,
-            CancelUrl: cancelUrl,
+            SuccessUrl: resolvedSuccessUrl,
+            CancelUrl: resolvedCancelUrl,
             IdempotencyKey: idempotencyKey,
             Currency: cart.Currency.ToLowerInvariant());
 
@@ -133,17 +135,41 @@ public sealed class CheckoutService : ICheckoutService
     }
 
     public async Task<CheckoutSessionStatusDto?> GetSessionStatusAsync(
-        string userId, Guid sessionId, CancellationToken ct = default)
+        string userId, string sessionId, CancellationToken ct = default)
     {
+        var parsedGuid = Guid.TryParse(sessionId, out var guid);
         // Object-level authorization: scope the lookup to the caller so a learner
         // can only read the status of their OWN checkout session (not any session by guid).
         var session = await _db.CheckoutSessions
             .AsNoTracking()
-            .FirstOrDefaultAsync(s => s.Id == sessionId && s.UserId == userId, ct);
+            .FirstOrDefaultAsync(s => s.UserId == userId
+                && ((parsedGuid && s.Id == guid) || s.StripeSessionId == sessionId), ct);
 
-        return session is null
-            ? null
-            : new CheckoutSessionStatusDto(session.Id, session.Status, session.FulfilledAt);
+        if (session is null) return null;
+
+        var items = session.CartId.HasValue
+            ? await _db.CartItems
+                .Include(item => item.BillingProduct)
+                .Where(item => item.CartId == session.CartId.Value)
+                .AsNoTracking()
+                .Select(item => new CheckoutSessionStatusItemDto(
+                    item.BillingProduct.Code,
+                    item.BillingProduct.Name,
+                    item.Quantity,
+                    item.BillingProduct.Description))
+                .ToListAsync(ct)
+            : [];
+
+        return new CheckoutSessionStatusDto(
+            session.StripeSessionId ?? session.Id.ToString(),
+            session.Id,
+            session.StripeSessionId,
+            session.Status,
+            session.FulfilledAt,
+            session.TotalAmount,
+            session.Currency,
+            items,
+            FailureReasonFor(session.Status));
     }
 
     public async Task ExpireSessionAsync(Guid sessionId, CancellationToken ct = default)
@@ -160,4 +186,21 @@ public sealed class CheckoutService : ICheckoutService
 
         await _db.SaveChangesAsync(ct);
     }
+
+    private static string? EnsureStripeSessionPlaceholder(string? url)
+    {
+        if (string.IsNullOrWhiteSpace(url)) return null;
+        return url.Contains("{CHECKOUT_SESSION_ID}", StringComparison.Ordinal)
+            || url.Contains("{SESSION_ID}", StringComparison.Ordinal)
+            ? url.Replace("{SESSION_ID}", "{CHECKOUT_SESSION_ID}", StringComparison.Ordinal)
+            : Microsoft.AspNetCore.WebUtilities.QueryHelpers.AddQueryString(url, "session_id", "{CHECKOUT_SESSION_ID}");
+    }
+
+    private static string? FailureReasonFor(string status)
+        => status.ToLowerInvariant() switch
+        {
+            "failed" => "Payment did not complete.",
+            "expired" => "Checkout expired before payment was completed.",
+            _ => null
+        };
 }

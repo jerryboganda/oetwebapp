@@ -2,6 +2,16 @@
 
 Last updated: 2026-06-09
 
+## Current Checkpoint - Billing Checkout Return Hardening
+
+- Implemented a quote-backed learner purchase flow with `/checkout/review` before hosted payment and `/billing/payment-return` after hosted checkout.
+- Added learner payment status polling at `GET /v1/billing/payment-status`, keyed by quote id or provider checkout session id, with normalized pending/completed/cancelled/failed/expired states.
+- Extended the quote pipeline to support `plan_purchase`, preserving quote snapshots and entitlement fulfillment via existing webhook completion.
+- Routed course product detail buys, add-on modal purchases, `/ai-packages`, and billing AI package cards into the review/return flow.
+- Fixed legacy generic cart status lookup to accept both local checkout GUIDs and Stripe `cs_...` ids, and fixed checkout session creation to honor caller success/cancel URLs with Stripe session placeholders.
+- Validation: `pnpm exec vitest run app/billing/payment-return/page.test.tsx components/billing/addon-purchase-modal.test.tsx --reporter=dot` passed; `pnpm exec tsc --noEmit` passed; `pnpm run backend:build` passed with existing warnings; focused backend `dotnet test --no-build --filter "FullyQualifiedName~BillingCheckoutSessionGuardTests|FullyQualifiedName~CheckoutSessionStatusOwnershipTests"` passed 7 tests; scoped eslint passed with existing warnings only; `git diff --check` passed.
+- Remaining risk: full hosted-provider/browser E2E was not run locally; existing webhook fulfillment/idempotency tests remain the main entitlement proof, while this checkpoint pins the new review/return/status contracts.
+
 ## Current Checkpoint - AI Packages
 
 - Implemented AI Packages as first-class `ai_package` billing add-ons plus a dedicated append-only package credit ledger.

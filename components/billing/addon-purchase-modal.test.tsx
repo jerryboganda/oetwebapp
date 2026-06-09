@@ -61,7 +61,9 @@ describe('AddonPurchaseModal', () => {
     expect(container.textContent).not.toMatch(/Â|â|�/);
 
     fireEvent.click(screen.getByRole('button', { name: /Continue to checkout/ }));
-    expect(push).toHaveBeenCalledWith('/billing?addOn=speaking-1session&parent=sub_123');
+    expect(push).toHaveBeenCalledWith(
+      '/checkout/review?productType=addon_purchase&priceId=speaking-1session&parentSubscriptionId=sub_123&quantity=1',
+    );
     expect(onClose).toHaveBeenCalledTimes(1);
 
     fireEvent.click(screen.getByRole('button', { name: 'Close' }));

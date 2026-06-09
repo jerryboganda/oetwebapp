@@ -34,6 +34,22 @@ public record BillingQuoteResponse(
     string Summary,
     Dictionary<string, object?> Validation);
 
+public record BillingPaymentStatusResponse(
+    string Status,
+    string? QuoteId,
+    string? CheckoutSessionId,
+    string? ProductType,
+    string? TargetPlanId,
+    IReadOnlyList<string> AddOnCodes,
+    IReadOnlyList<BillingQuoteLineItem> Items,
+    decimal TotalAmount,
+    string Currency,
+    string? InvoiceId,
+    string? SubscriptionId,
+    string? FailureReason,
+    DateTimeOffset? FulfilledAt,
+    DateTimeOffset? ExpiresAt);
+
 public record NativeIapProductMappingUpsertRequest(
     string Platform,
     string StoreProductId,

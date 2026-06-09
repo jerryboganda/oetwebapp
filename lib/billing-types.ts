@@ -133,7 +133,24 @@ export interface BillingData {
   invoices: Invoice[];
 }
 
-export type BillingProductType = 'review_credits' | 'plan_upgrade' | 'plan_downgrade' | 'addon_purchase';
+export type BillingProductType = 'review_credits' | 'plan_purchase' | 'plan_upgrade' | 'plan_downgrade' | 'addon_purchase';
+
+export interface BillingPaymentStatus {
+  status: 'pending' | 'completed' | 'cancelled' | 'failed' | 'expired' | 'timeout_safe' | string;
+  quoteId: string | null;
+  checkoutSessionId: string | null;
+  productType: BillingProductType | string | null;
+  targetPlanId: string | null;
+  addOnCodes: string[];
+  items: BillingQuoteLineItem[];
+  totalAmount: number;
+  currency: string;
+  invoiceId: string | null;
+  subscriptionId: string | null;
+  failureReason: string | null;
+  fulfilledAt: string | null;
+  expiresAt: string | null;
+}
 
 export interface WalletTransactionDto {
   id: string;

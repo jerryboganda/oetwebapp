@@ -1,64 +1,56 @@
-# Agent State - AI Packages
+# Agent State - Billing Checkout Return Hardening
 
 Last updated: 2026-06-09
 
 ## Goal
 
-Implement the AI Packages PDF as a first-class billing, credit, checkout, grading, mock, learner, and admin system using the existing OET billing/webhook/AI-gateway patterns.
+Harden the learner purchase journey across billing quote creation, order review, hosted checkout, payment return polling, legacy cart status lookup, and course/add-on/AI package entry points.
 
 ## Implemented
 
-- Added AI package credit ledger tables/entities: `AiPackageCreditAccount`, `AiPackageCreditTransaction`, and `LearnerExamOutcome`.
-- Added `AiPackageCreditService` for package grants, idempotent Stripe-session fulfillment, top-up expiry max rule, pool priority, objective/mock allowance deduction, refunds, admin corrections, and pass-expiry.
-- Added production migration `20260702090000_AddAiPackageCreditsAndSeedCatalog` to create ledger/outcome tables and seed all 18 GBP AI package add-ons and versions with `AddonKind = ai_package`.
-- Exposed public `GET /v1/billing/ai-packages`, learner `GET /v1/me/ai-package-credits`, and admin AI package credit lookup/adjust/pass-recording endpoints.
-- Wired checkout fulfillment so `ai_package` add-ons grant the new package ledger instead of legacy review credits.
-- Wired Writing/Speaking grading queue creation to deduct AI package credits and pipeline failure paths to refund debited package credits.
-- Wired deterministic Listening/Reading submission to consume finite package allowances while preserving no-package course behavior.
-- Wired full-shape mock attempt creation to consume separate mock allowance without spending flexible/writing/speaking credits.
-- Narrowed package mock debit to package-owned full/final-readiness mocks so legacy diagnostic/LRW mock entitlements keep their existing gate.
-- Added pool-specific legacy bypasses for Writing/Speaking grading and mock debits when a learner has no positive package grant in that pool, preserving pre-package subscription/course behavior while still blocking exhausted package allowances.
-- Added public `/ai-packages` with Full Packages, Separate Packages, Mock Packages, login redirect preservation, Stripe checkout, and learner balance display.
-- Added dashboard `?purchase=success` AI package balance refresh/banner.
-- Added focused backend tests in `AiPackageCreditServiceTests`.
+- Added a quote-backed `/checkout/review` route for plan purchases, add-ons, and AI package orders.
+- Added deterministic `/billing/payment-return` handling with polling states for confirming, completed, failed, cancelled, expired, and timeout-safe processing.
+- Added learner `GET /v1/billing/payment-status` to report normalized quote/payment status by quote id or provider checkout session id.
+- Extended quote checkout to support `plan_purchase` and return to `/billing/payment-return` with quote/session context.
+- Routed product detail course buys, add-on modal purchases, `/ai-packages`, and billing AI package cards into the review flow.
+- Fixed legacy generic cart checkout status lookup to accept either the local checkout GUID or Stripe `cs_...` session id, and removed the route GUID constraint.
+- Fixed legacy generic cart checkout creation to honor frontend `successUrl`/`cancelUrl` and append Stripe `{CHECKOUT_SESSION_ID}` when needed.
+- Added focused backend and frontend tests for payment status, Stripe session status lookup, payment return rendering, and add-on review routing.
 
 ## Validation
 
-- `pnpm run backend:build`: passed. Existing warnings remained, including NU1510 and pre-existing nullability warnings.
+- `pnpm exec vitest run app/billing/payment-return/page.test.tsx components/billing/addon-purchase-modal.test.tsx --reporter=dot`: passed, 3 files / 6 tests.
 - `pnpm exec tsc --noEmit`: passed.
-- `dotnet test backend/tests/OetLearner.Api.Tests/OetLearner.Api.Tests.csproj --filter AiPackageCreditServiceTests --nologo`: passed, 5 tests.
-- `dotnet test backend/tests/OetLearner.Api.Tests/OetLearner.Api.Tests.csproj --filter "FullyQualifiedName~MockV2EndpointTests" --nologo`: passed, 5 tests.
-- `dotnet test backend/tests/OetLearner.Api.Tests/OetLearner.Api.Tests.csproj --filter "FullyQualifiedName~SpeakingMockSetTests" --nologo`: passed, 14 tests.
-- `dotnet test backend/tests/OetLearner.Api.Tests/OetLearner.Api.Tests.csproj --filter "FullyQualifiedName=OetLearner.Api.Tests.ProductionReadinessTests.SpeakingUploadPipeline_StoresBinary_AndStreamsItToExperts" --nologo`: passed, 1 test.
-- `pnpm exec eslint app/ai-packages/page.tsx app/page.tsx lib/api.ts lib/billing-types.ts`: passed with warnings only from the repo's `react-hooks/set-state-in-effect` rule on the new package page effects.
-- `git diff --check`: passed with a line-ending warning for `SpeakingEvaluationPipeline.cs`.
-- Production deploy for commit `1d44ebbcd402f9d235a0ddcc765d8730dd4408ec` succeeded via GitHub Actions/GHCR pull-only rollout; follow-up compatibility fix is being committed and redeployed.
-- Production deploy for commit `cb1087584b2697ebbf346f9ce73c13bcadd494af` succeeded via GitHub Actions/GHCR pull-only rollout.
-- `pnpm exec tsc --noEmit`: passed after removing a stale chromium expert E2E checklist-radio interaction that no longer exists on the current V2 marking surface.
+- `pnpm run backend:build`: passed with existing repo warnings.
+- `dotnet test backend/tests/OetLearner.Api.Tests/OetLearner.Api.Tests.csproj --no-build --filter "FullyQualifiedName~BillingCheckoutSessionGuardTests|FullyQualifiedName~CheckoutSessionStatusOwnershipTests" --nologo`: passed, 7 tests.
+- `pnpm exec eslint app/checkout/review/page.tsx app/billing/payment-return/page.tsx app/ai-packages/page.tsx app/billing/page.tsx app/marketplace/packages/[id]/page.tsx components/billing/addon-purchase-modal.tsx app/billing/payment-return/page.test.tsx components/billing/addon-purchase-modal.test.tsx lib/api.ts lib/billing-types.ts`: passed with 6 existing `react-hooks/set-state-in-effect` warnings in `app/ai-packages/page.tsx` and `app/billing/page.tsx`.
+- `git diff --check`: passed.
 
 ## Touched Files
 
 - `.github/agent-state.local.md`
 - `PROGRESS.md`
+- `app/checkout/review/page.tsx`
+- `app/billing/payment-return/page.tsx`
+- `app/billing/payment-return/page.test.tsx`
+- `app/marketplace/packages/[id]/page.tsx`
 - `app/ai-packages/page.tsx`
-- `app/page.tsx`
-- `backend/src/OetLearner.Api/Data/LearnerDbContext.cs`
-- `backend/src/OetLearner.Api/Data/Migrations/20260702090000_AddAiPackageCreditsAndSeedCatalog.cs`
-- `backend/src/OetLearner.Api/Domain/AiPackageCreditEntities.cs`
-- `backend/src/OetLearner.Api/Endpoints/AiPackageCreditEndpoints.cs`
-- `backend/src/OetLearner.Api/Endpoints/LearnerEndpoints.cs`
-- `backend/src/OetLearner.Api/Program.cs`
-- `backend/src/OetLearner.Api/Services/Billing/AiPackageCreditService.cs`
-- `backend/src/OetLearner.Api/Services/LearnerService.cs`
-- `backend/src/OetLearner.Api/Services/MockService.cs`
-- `backend/src/OetLearner.Api/Services/SpeakingEvaluationPipeline.cs`
-- `backend/src/OetLearner.Api/Services/Writing/WritingEvaluationPipeline.cs`
-- `backend/tests/OetLearner.Api.Tests/AiPackageCreditServiceTests.cs`
+- `app/billing/page.tsx`
+- `components/billing/addon-purchase-modal.tsx`
+- `components/billing/addon-purchase-modal.test.tsx`
 - `lib/api.ts`
 - `lib/billing-types.ts`
-- `tests/e2e/expert/review-completion.spec.ts`
+- `backend/src/OetLearner.Api/Contracts/BillingContracts.cs`
+- `backend/src/OetLearner.Api/Contracts/Requests.cs`
+- `backend/src/OetLearner.Api/Endpoints/BillingCheckoutEndpoints.cs`
+- `backend/src/OetLearner.Api/Endpoints/LearnerEndpoints.cs`
+- `backend/src/OetLearner.Api/Services/Billing/CheckoutService.cs`
+- `backend/src/OetLearner.Api/Services/Billing/ICheckoutService.cs`
+- `backend/src/OetLearner.Api/Services/LearnerService.cs`
+- `backend/tests/OetLearner.Api.Tests/BillingCheckoutSessionGuardTests.cs`
+- `backend/tests/OetLearner.Api.Tests/CheckoutSessionStatusOwnershipTests.cs`
 
-## Known Workspace Notes
+## Known Risks / Next Step
 
-- Pre-existing/unrelated untracked `.worktrees/` remains untouched.
-- Existing unrelated local modifications in `app/page.tsx` were preserved while adding only the purchase-success balance banner.
+- Full hosted Stripe/PayPal webhook E2E was not run locally; the focused tests pin the return/status contracts and existing fulfillment tests cover idempotent entitlement application.
+- Broad lint still has existing warnings in large billing/AI pages; no new warning remains in the new payment-return page.

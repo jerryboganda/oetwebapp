@@ -57,7 +57,26 @@ public class CheckoutSessionStatusOwnershipTests : IClassFixture<TestWebApplicat
         Assert.Equal("pending", json.RootElement.GetProperty("status").GetString());
     }
 
-    private async Task<Guid> SeedCheckoutSessionAsync(string userId)
+    [Fact]
+    public async Task SessionStatus_OwnedByCaller_AllowsStripeSessionIdLookup()
+    {
+        var ownerUserId = $"cs-owner-{Guid.NewGuid():N}";
+        using var ownerClient = await CreateClientForUserAsync(ownerUserId);
+
+        var stripeSessionId = $"cs_test_{Guid.NewGuid():N}";
+        await SeedCheckoutSessionAsync(ownerUserId, stripeSessionId);
+
+        var response = await ownerClient.GetAsync($"/v1/checkout/sessions/{stripeSessionId}/status");
+
+        var body = await response.Content.ReadAsStringAsync();
+        Assert.True(response.IsSuccessStatusCode, body);
+        using var json = JsonDocument.Parse(body);
+        Assert.Equal(stripeSessionId, json.RootElement.GetProperty("sessionId").GetString());
+        Assert.Equal(stripeSessionId, json.RootElement.GetProperty("stripeSessionId").GetString());
+        Assert.Equal("pending", json.RootElement.GetProperty("status").GetString());
+    }
+
+    private async Task<Guid> SeedCheckoutSessionAsync(string userId, string? stripeSessionId = null)
     {
         var sessionId = Guid.NewGuid();
         await using var scope = _factory.Services.CreateAsyncScope();
@@ -67,6 +86,7 @@ public class CheckoutSessionStatusOwnershipTests : IClassFixture<TestWebApplicat
         {
             Id = sessionId,
             UserId = userId,
+            StripeSessionId = stripeSessionId,
             IdempotencyKey = $"idem-{Guid.NewGuid():N}",
             Status = "pending",
             TotalAmount = 20m,

@@ -103,6 +103,10 @@ public record CheckoutSessionCreateRequest(
     string? Gateway = null,
     string? ParentSubscriptionId = null);
 
+public record BillingPaymentStatusRequest(
+    string? QuoteId,
+    string? SessionId);
+
 public record StudyPlanRescheduleRequest(DateOnly? DueDate);
 
 public record StudyPlanSwapRequest(string? ReplacementContentId);

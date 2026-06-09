@@ -9,15 +9,9 @@ import { InlineAlert } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabPanel } from '@/components/ui/tabs';
 import { useAuth } from '@/contexts/auth-context';
-import {
-  createBillingCheckoutSession,
-  fetchAiPackages,
-  fetchBillingQuote,
-  fetchMyAiPackageCredits,
-} from '@/lib/api';
+import { fetchAiPackages, fetchMyAiPackageCredits } from '@/lib/api';
 import type { AiPackage, AiPackageCreditSnapshot, AiPackagesResponse } from '@/lib/billing-types';
 import { formatMoney } from '@/lib/money';
-import { openCheckoutUrl } from '@/lib/mobile/web-checkout';
 
 type PackageTab = 'full' | 'separate' | 'mock';
 type SeparateKey = 'listening' | 'reading' | 'writing' | 'speaking';
@@ -28,12 +22,6 @@ const SEPARATE_SECTIONS: Array<{ key: SeparateKey; label: string; icon: React.Re
   { key: 'writing', label: 'Writing', icon: <ClipboardCheck className="h-4 w-4" /> },
   { key: 'speaking', label: 'Speaking', icon: <Mic2 className="h-4 w-4" /> },
 ];
-
-function idempotencyKey() {
-  return typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
-    ? crypto.randomUUID()
-    : `ai-pkg-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-}
 
 function formatAllowance(value: number | null, label: string) {
   return value === null ? `Unlimited ${label}` : `${value} ${label}`;
@@ -122,24 +110,9 @@ export default function AiPackagesPage() {
     submittingRef.current = true;
     setBusyCode(pkg.code);
     setMessage(null);
-    try {
-      const quote = await fetchBillingQuote({ productType: 'addon_purchase', quantity: 1, priceId: pkg.code });
-      const checkout = await createBillingCheckoutSession({
-        productType: 'addon_purchase',
-        quantity: 1,
-        priceId: pkg.code,
-        quoteId: quote.quoteId,
-        gateway: 'stripe',
-        idempotencyKey: idempotencyKey(),
-      });
-      await openCheckoutUrl(checkout.checkoutUrl);
-      setMessage({ variant: 'success', text: `${pkg.name} checkout opened with a verified quote.` });
-    } catch (error) {
-      setMessage({ variant: 'error', text: error instanceof Error ? error.message : 'Could not start checkout.' });
-    } finally {
-      setBusyCode(null);
-      submittingRef.current = false;
-    }
+    router.push(`/checkout/review?productType=addon_purchase&priceId=${encodeURIComponent(pkg.code)}&quantity=1`);
+    setBusyCode(null);
+    submittingRef.current = false;
   }, [authLoading, isAuthenticated, router]);
 
   useEffect(() => {

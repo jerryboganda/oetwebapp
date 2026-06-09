@@ -13,7 +13,7 @@ public static class BillingCheckoutEndpoints
 
         var checkout = v1.MapGroup("/checkout").RequireAuthorization();
         checkout.MapPost("/sessions", CreateCheckoutSession);
-        checkout.MapGet("/sessions/{sessionId:guid}/status", GetSessionStatus);
+        checkout.MapGet("/sessions/{sessionId}/status", GetSessionStatus);
 
         return app;
     }
@@ -28,7 +28,7 @@ public static class BillingCheckoutEndpoints
         var email = http.User.FindFirstValue(System.Security.Claims.ClaimTypes.Email) ?? string.Empty;
         try
         {
-            var session = await checkoutService.CreateCheckoutSessionAsync(userId, email, request.CartId, ct);
+            var session = await checkoutService.CreateCheckoutSessionAsync(userId, email, request.CartId, request.SuccessUrl, request.CancelUrl, ct);
             return TypedResults.Ok(session);
         }
         catch (InvalidOperationException ex)
@@ -39,7 +39,7 @@ public static class BillingCheckoutEndpoints
 
     private static async Task<Results<Ok<CheckoutSessionStatusDto>, NotFound>> GetSessionStatus(
         HttpContext http,
-        Guid sessionId,
+        string sessionId,
         ICheckoutService checkoutService,
         CancellationToken ct)
     {
@@ -48,5 +48,5 @@ public static class BillingCheckoutEndpoints
         return status is null ? TypedResults.NotFound() : TypedResults.Ok(status);
     }
 
-    private sealed record CreateCheckoutRequest(string CartId);
+    private sealed record CreateCheckoutRequest(string CartId, string? SuccessUrl = null, string? CancelUrl = null);
 }

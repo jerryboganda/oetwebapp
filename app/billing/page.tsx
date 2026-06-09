@@ -21,7 +21,7 @@ import {
   Wallet,
   X,
 } from 'lucide-react';
-import { useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { LearnerDashboardShell } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { InlineAlert } from '@/components/ui/alert';
@@ -143,6 +143,7 @@ function newIdempotencyKey() {
 // ─── Component ───────────────────────────────────────────────────────
 
 export default function BillingPage() {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const paymentStatus = searchParams?.get('payment') ?? null;
   const paymentGateway = searchParams?.get('gateway') ?? null;
@@ -544,7 +545,7 @@ export default function BillingPage() {
           aria-busy={busy}
           aria-disabled={billingMutationsBlocked || undefined}
           title={billingMutationsBlocked ? billingBlockedMessage : undefined}
-          onClick={() => startCheckout('addon_purchase', 1, pkg.code, pkg.name)}
+          onClick={() => router.push(`/checkout/review?productType=addon_purchase&priceId=${encodeURIComponent(pkg.code)}&quantity=1`)}
         >
           <ShoppingCart className="h-4 w-4" />
           {copy('billing.ai.buyNow')}

@@ -3528,6 +3528,90 @@ public partial class LearnerService(
         return await BuildBillingQuoteAsync(userId, request, cancellationToken, persistQuote: true);
     }
 
+    public async Task<BillingPaymentStatusResponse> GetBillingPaymentStatusAsync(
+        string userId,
+        string? quoteId,
+        string? sessionId,
+        CancellationToken cancellationToken)
+    {
+        await EnsureUserAsync(userId, cancellationToken);
+
+        BillingQuote? quote = null;
+        if (!string.IsNullOrWhiteSpace(quoteId))
+        {
+            quote = await db.BillingQuotes.AsNoTracking()
+                .FirstOrDefaultAsync(x => x.Id == quoteId && x.UserId == userId, cancellationToken);
+        }
+
+        if (quote is null && !string.IsNullOrWhiteSpace(sessionId))
+        {
+            quote = await db.BillingQuotes.AsNoTracking()
+                .FirstOrDefaultAsync(x => x.CheckoutSessionId == sessionId && x.UserId == userId, cancellationToken);
+        }
+
+        PaymentTransaction? transaction = null;
+        if (quote is not null)
+        {
+            transaction = await db.PaymentTransactions.AsNoTracking()
+                .Where(x => x.LearnerUserId == userId && (x.QuoteId == quote.Id || x.GatewayTransactionId == quote.CheckoutSessionId))
+                .OrderByDescending(x => x.UpdatedAt)
+                .FirstOrDefaultAsync(cancellationToken);
+        }
+        else if (!string.IsNullOrWhiteSpace(sessionId))
+        {
+            transaction = await db.PaymentTransactions.AsNoTracking()
+                .FirstOrDefaultAsync(x => x.LearnerUserId == userId && x.GatewayTransactionId == sessionId, cancellationToken);
+            if (transaction?.QuoteId is not null)
+            {
+                quote = await db.BillingQuotes.AsNoTracking()
+                    .FirstOrDefaultAsync(x => x.Id == transaction.QuoteId && x.UserId == userId, cancellationToken);
+            }
+        }
+
+        if (quote is null)
+        {
+            throw ApiException.NotFound("billing_payment_not_found", "Payment status was not found for this checkout.");
+        }
+
+        var quoteResponse = DeserializeQuoteResponse(quote);
+        var invoice = await db.Invoices.AsNoTracking()
+            .Where(x => x.UserId == userId && (x.QuoteId == quote.Id || x.CheckoutSessionId == quote.CheckoutSessionId))
+            .OrderByDescending(x => x.IssuedAt)
+            .FirstOrDefaultAsync(cancellationToken);
+        var subscriptionItem = await db.SubscriptionItems.AsNoTracking()
+            .Where(x => x.QuoteId == quote.Id || x.CheckoutSessionId == quote.CheckoutSessionId)
+            .OrderByDescending(x => x.CreatedAt)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        var status = NormalizeBillingPaymentStatus(quote, transaction, DateTimeOffset.UtcNow);
+        var metadata = JsonSupport.Deserialize<Dictionary<string, object?>>(transaction?.MetadataJson ?? "{}", new Dictionary<string, object?>());
+        var productType = ReadString(metadata.GetValueOrDefault("productType"))
+            ?? ReadString(metadata.GetValueOrDefault("product_type"))
+            ?? (quote.PlanCode is not null ? "plan_purchase" : quoteResponse.Items.FirstOrDefault()?.Kind);
+
+        var resolvedSubscriptionId = subscriptionItem?.SubscriptionId ?? quote.SubscriptionId;
+        if (string.IsNullOrWhiteSpace(resolvedSubscriptionId) && !string.IsNullOrWhiteSpace(quote.SubscriptionId))
+        {
+            resolvedSubscriptionId = quote.SubscriptionId;
+        }
+
+        return new BillingPaymentStatusResponse(
+            status,
+            quote.Id,
+            quote.CheckoutSessionId,
+            productType,
+            quote.PlanCode,
+            JsonSupport.Deserialize<List<string>>(quote.AddOnCodesJson, []),
+            quoteResponse.Items,
+            quote.TotalAmount,
+            quote.Currency,
+            invoice?.Id,
+            resolvedSubscriptionId,
+            FailureReasonForBillingPaymentStatus(status),
+            status == "completed" ? transaction?.UpdatedAt ?? invoice?.IssuedAt : null,
+            quote.ExpiresAt);
+    }
+
     public async Task<object> GetBillingExtrasAsync()
     {
         var addOns = await db.BillingAddOns.AsNoTracking()
@@ -3808,7 +3892,7 @@ public partial class LearnerService(
         await EnsureLearnerMutationAllowedAsync(userId, cancellationToken);
 
         var normalizedProductType = (request.ProductType ?? string.Empty).Trim().ToLowerInvariant();
-        if (normalizedProductType is not ("review_credits" or "plan_upgrade" or "plan_downgrade" or "addon_purchase"))
+        if (normalizedProductType is not ("review_credits" or "plan_purchase" or "plan_upgrade" or "plan_downgrade" or "addon_purchase"))
         {
             throw ApiException.Validation(
                 "unsupported_checkout_product",
@@ -3824,7 +3908,7 @@ public partial class LearnerService(
                 [new ApiFieldError("quantity", "invalid", "Choose a checkout quantity greater than zero.")]);
         }
 
-        if (normalizedProductType is "plan_upgrade" or "plan_downgrade" or "addon_purchase"
+        if (normalizedProductType is "plan_purchase" or "plan_upgrade" or "plan_downgrade" or "addon_purchase"
             && string.IsNullOrWhiteSpace(request.PriceId))
         {
             throw ApiException.Validation(
@@ -3977,8 +4061,8 @@ public partial class LearnerService(
                                         ["add_on_version_ids"] = quoteEntity.AddOnVersionIdsJson,
                                         ["coupon_version_id"] = quoteEntity.CouponVersionId ?? string.Empty
                                 },
-                                SuccessUrl: platformLinks.BuildWebUrl($"/billing?payment=success&gateway={Uri.EscapeDataString(gatewayLabel)}"),
-                                    CancelUrl: platformLinks.BuildWebUrl($"/billing?payment=cancelled&gateway={Uri.EscapeDataString(gatewayLabel)}"),
+                                SuccessUrl: platformLinks.BuildWebUrl($"/billing/payment-return?status=success&gateway={Uri.EscapeDataString(gatewayLabel)}&quote={Uri.EscapeDataString(quoteEntity.Id)}&session={{CHECKOUT_SESSION_ID}}"),
+                                    CancelUrl: platformLinks.BuildWebUrl($"/billing/payment-return?status=cancelled&gateway={Uri.EscapeDataString(gatewayLabel)}&quote={Uri.EscapeDataString(quoteEntity.Id)}"),
                                     IdempotencyKey: idempotencyKey),
                         cancellationToken);
                         providerRequestReturned = true;
@@ -4027,13 +4111,13 @@ public partial class LearnerService(
                 LearnerUserId = userId,
                 Gateway = gatewayLabel,
                 GatewayTransactionId = checkoutIntent.GatewayTransactionId,
-                TransactionType = normalizedProductType is "plan_upgrade" or "plan_downgrade"
+                TransactionType = normalizedProductType is "plan_purchase" or "plan_upgrade" or "plan_downgrade"
                     ? "subscription_payment"
                     : "one_time_purchase",
                 Status = "pending",
                 Amount = quoteEntity.TotalAmount,
                 Currency = quoteEntity.Currency,
-                ProductType = normalizedProductType is "plan_upgrade" or "plan_downgrade" ? "plan" : "addon",
+                ProductType = normalizedProductType is "plan_purchase" or "plan_upgrade" or "plan_downgrade" ? "plan" : "addon",
                 ProductId = purchaseTarget ?? quoteEntity.Id,
                 QuoteId = quoteEntity.Id,
                 PlanVersionId = quoteEntity.PlanVersionId,
@@ -7711,7 +7795,7 @@ public partial class LearnerService(
         bool persistQuote)
     {
         var normalizedProductType = (request.ProductType ?? string.Empty).Trim().ToLowerInvariant();
-        if (normalizedProductType is not ("review_credits" or "plan_upgrade" or "plan_downgrade" or "addon_purchase"))
+        if (normalizedProductType is not ("review_credits" or "plan_purchase" or "plan_upgrade" or "plan_downgrade" or "addon_purchase"))
         {
             throw ApiException.Validation(
                 "unsupported_checkout_product",
@@ -7727,7 +7811,7 @@ public partial class LearnerService(
                 [new ApiFieldError("quantity", "invalid", "Choose a checkout quantity greater than zero.")]);
         }
 
-        if (normalizedProductType is "plan_upgrade" or "plan_downgrade" or "addon_purchase"
+        if (normalizedProductType is "plan_purchase" or "plan_upgrade" or "plan_downgrade" or "addon_purchase"
             && string.IsNullOrWhiteSpace(request.PriceId))
         {
             throw ApiException.Validation(
@@ -7843,7 +7927,7 @@ public partial class LearnerService(
         string? planCode = null;
         string summary;
 
-        if (normalizedProductType is "plan_upgrade" or "plan_downgrade")
+        if (normalizedProductType is "plan_purchase" or "plan_upgrade" or "plan_downgrade")
         {
             if (string.IsNullOrWhiteSpace(request.PriceId))
             {
@@ -7870,19 +7954,27 @@ public partial class LearnerService(
 
             planCode = targetPlan.Code;
             snapshotPlan = targetPlan;
-            var referencePlan = currentPlan ?? targetPlan;
-            var delta = targetPlan.Price - referencePlan.Price;
-            subtotal = Math.Round(Math.Abs(delta) / 2m, 2, MidpointRounding.AwayFromZero);
-            summary = normalizedProductType == "plan_upgrade"
-                ? $"Switching to {targetPlan.Name} increases your billing amount by {Math.Abs(delta):0.00} {targetPlan.Currency}."
-                : $"Switching to {targetPlan.Name} lowers your billing amount by {Math.Abs(delta):0.00} {targetPlan.Currency}.";
+            if (normalizedProductType == "plan_purchase")
+            {
+                subtotal = Math.Round(targetPlan.Price * Math.Max(1, request.Quantity), 2, MidpointRounding.AwayFromZero);
+                summary = $"{request.Quantity} x {targetPlan.Name}.";
+            }
+            else
+            {
+                var referencePlan = currentPlan ?? targetPlan;
+                var delta = targetPlan.Price - referencePlan.Price;
+                subtotal = Math.Round(Math.Abs(delta) / 2m, 2, MidpointRounding.AwayFromZero);
+                summary = normalizedProductType == "plan_upgrade"
+                    ? $"Switching to {targetPlan.Name} increases your billing amount by {Math.Abs(delta):0.00} {targetPlan.Currency}."
+                    : $"Switching to {targetPlan.Name} lowers your billing amount by {Math.Abs(delta):0.00} {targetPlan.Currency}.";
+            }
             items.Add(new BillingQuoteLineItem(
                 "plan",
                 targetPlan.Code,
                 targetPlan.Name,
                 subtotal,
                 targetPlan.Currency,
-                1,
+                Math.Max(1, request.Quantity),
                 targetPlan.Description));
         }
         else if (normalizedProductType == "addon_purchase")
@@ -11043,6 +11135,41 @@ public partial class LearnerService(
 
         return await db.BillingQuotes.FirstOrDefaultAsync(x => x.CheckoutSessionId == transaction.GatewayTransactionId, ct);
     }
+
+    private static string NormalizeBillingPaymentStatus(BillingQuote quote, PaymentTransaction? transaction, DateTimeOffset now)
+    {
+        if (quote.Status == BillingQuoteStatus.Completed
+            || string.Equals(transaction?.Status, "completed", StringComparison.OrdinalIgnoreCase))
+        {
+            return "completed";
+        }
+
+        if (string.Equals(transaction?.Status, "failed", StringComparison.OrdinalIgnoreCase))
+        {
+            return "failed";
+        }
+
+        if (quote.Status == BillingQuoteStatus.Cancelled)
+        {
+            return "cancelled";
+        }
+
+        if (quote.Status == BillingQuoteStatus.Expired || quote.ExpiresAt <= now)
+        {
+            return "expired";
+        }
+
+        return "pending";
+    }
+
+    private static string? FailureReasonForBillingPaymentStatus(string status)
+        => status switch
+        {
+            "cancelled" => "Checkout was cancelled before payment completed.",
+            "failed" => "Payment did not complete.",
+            "expired" => "Checkout expired before payment completed.",
+            _ => null
+        };
 
     private static string NormalizeExamFamilyCode(string? value)
         => (value ?? "oet").Trim().ToLowerInvariant() switch

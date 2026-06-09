@@ -74,6 +74,7 @@ import type {
   BillingChangePreview,
   BillingQuote,
   BillingProductType,
+  BillingPaymentStatus,
   Invoice,
   AiPackage,
   AiPackageCreditSnapshot,
@@ -4256,6 +4257,40 @@ export async function createBillingCheckoutSession(input: {
     quoteId: response.quoteId ?? null,
     totalAmount: response.totalAmount != null ? Number(response.totalAmount) : undefined,
     currency: response.currency ?? undefined,
+  };
+}
+
+export async function fetchBillingPaymentStatus(input: {
+  quoteId?: string | null;
+  sessionId?: string | null;
+}): Promise<BillingPaymentStatus> {
+  const params = new URLSearchParams();
+  if (input.quoteId) params.set('quoteId', input.quoteId);
+  if (input.sessionId) params.set('sessionId', input.sessionId);
+  const response = await apiRequest<ApiRecord>(`/v1/billing/payment-status?${params.toString()}`);
+  return {
+    status: String(response.status ?? 'pending'),
+    quoteId: toNullableString(response.quoteId),
+    checkoutSessionId: toNullableString(response.checkoutSessionId),
+    productType: toNullableString(response.productType),
+    targetPlanId: toNullableString(response.targetPlanId),
+    addOnCodes: toStringArray(response.addOnCodes),
+    items: asArray(response.items).map((item: ApiRecord) => ({
+      kind: String(item.kind ?? 'item'),
+      code: String(item.code ?? ''),
+      name: String(item.name ?? item.code ?? ''),
+      amount: Number(item.amount ?? 0),
+      currency: String(item.currency ?? response.currency ?? 'GBP'),
+      quantity: Number(item.quantity ?? 1),
+      description: toNullableString(item.description),
+    })),
+    totalAmount: Number(response.totalAmount ?? 0),
+    currency: String(response.currency ?? 'GBP'),
+    invoiceId: toNullableString(response.invoiceId),
+    subscriptionId: toNullableString(response.subscriptionId),
+    failureReason: toNullableString(response.failureReason),
+    fulfilledAt: toNullableString(response.fulfilledAt),
+    expiresAt: toNullableString(response.expiresAt),
   };
 }
 
@@ -13811,7 +13846,7 @@ export async function createCheckoutSession(payload?: {
   cancelUrl?: string;
   cartId?: string | null;
 }): Promise<CheckoutSessionResponse> {
-  return apiRequest<CheckoutSessionResponse>('/v1/checkout/sessions', {
+  const response = await apiRequest<ApiRecord>('/v1/checkout/sessions', {
     method: 'POST',
     body: JSON.stringify({
       successUrl: payload?.successUrl ?? null,
@@ -13819,6 +13854,10 @@ export async function createCheckoutSession(payload?: {
       cartId: payload?.cartId ?? null,
     }),
   });
+  return {
+    sessionId: String(response.sessionId ?? response.stripeSessionId ?? response.id ?? ''),
+    url: String(response.url ?? ''),
+  };
 }
 
 export interface CheckoutSessionStatusItem {

@@ -314,6 +314,12 @@ public static class LearnerEndpoints
                     ? null
                     : addOnCodes.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList(),
                 parentSubscriptionId), ct)));
+        billing.MapGet("/payment-status", async (HttpContext http,
+            [FromQuery] string? quoteId,
+            [FromQuery] string? sessionId,
+            LearnerService service,
+            CancellationToken ct)
+            => Results.Ok(await service.GetBillingPaymentStatusAsync(http.UserId(), quoteId, sessionId, ct)));
         billing.MapGet("/invoices", async (HttpContext http, [FromQuery] string? cursor, [FromQuery] int? limit, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetInvoicesAsync(http.UserId(), cursor, limit, ct)));
         billing.MapGet("/invoices/{invoiceId}/download", async (HttpContext http, string invoiceId, LearnerService service, CancellationToken ct) =>
         {

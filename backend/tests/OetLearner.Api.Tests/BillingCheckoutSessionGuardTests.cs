@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using OetLearner.Api.Contracts;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Tests.Infrastructure;
@@ -156,6 +157,86 @@ public class BillingCheckoutSessionGuardTests : IClassFixture<TestWebApplication
         var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
         var paymentTransactionCount = await db.PaymentTransactions.CountAsync(x => x.LearnerUserId == userId);
         Assert.Equal(1, paymentTransactionCount);
+    }
+
+    [Fact]
+    public async Task PaymentStatus_AppliedQuote_ReturnsPendingByQuoteOrProviderSession()
+    {
+        var userId = $"chk-status-{Guid.NewGuid():N}";
+        using var client = await CreateClientForUserAsync(userId);
+        var quoteId = $"quote-status-{Guid.NewGuid():N}";
+        var checkoutSessionId = $"cs_test_{Guid.NewGuid():N}";
+        var now = DateTimeOffset.UtcNow;
+
+        await using (var scope = _factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+            var subscription = await db.Subscriptions.FirstAsync(x => x.UserId == userId);
+            var items = new[]
+            {
+                new BillingQuoteLineItem(
+                    "plan",
+                    subscription.PlanId ?? "starter",
+                    "Starter course",
+                    20m,
+                    "AUD",
+                    1,
+                    "Locked course quote")
+            };
+            db.BillingQuotes.Add(new BillingQuote
+            {
+                Id = quoteId,
+                UserId = userId,
+                SubscriptionId = subscription.Id,
+                PlanCode = subscription.PlanId,
+                Currency = "AUD",
+                SubtotalAmount = 20m,
+                DiscountAmount = 0m,
+                TotalAmount = 20m,
+                Status = BillingQuoteStatus.Applied,
+                CreatedAt = now,
+                ExpiresAt = now.AddMinutes(30),
+                CheckoutSessionId = checkoutSessionId,
+                SnapshotJson = JsonSerializer.Serialize(new { summary = "Starter course.", items })
+            });
+            db.PaymentTransactions.Add(new PaymentTransaction
+            {
+                LearnerUserId = userId,
+                Gateway = "stripe",
+                GatewayTransactionId = checkoutSessionId,
+                TransactionType = "subscription_payment",
+                Status = "pending",
+                Amount = 20m,
+                Currency = "AUD",
+                ProductType = "plan",
+                ProductId = subscription.PlanId,
+                QuoteId = quoteId,
+                MetadataJson = JsonSerializer.Serialize(new { productType = "plan_purchase" }),
+                CreatedAt = now,
+                UpdatedAt = now
+            });
+            await db.SaveChangesAsync();
+        }
+
+        var byQuote = await client.GetAsync($"/v1/billing/payment-status?quoteId={Uri.EscapeDataString(quoteId)}");
+        var byQuoteBody = await byQuote.Content.ReadAsStringAsync();
+        Assert.True(byQuote.IsSuccessStatusCode, byQuoteBody);
+        using (var json = JsonDocument.Parse(byQuoteBody))
+        {
+            Assert.Equal("pending", json.RootElement.GetProperty("status").GetString());
+            Assert.Equal(quoteId, json.RootElement.GetProperty("quoteId").GetString());
+            Assert.Equal(checkoutSessionId, json.RootElement.GetProperty("checkoutSessionId").GetString());
+            Assert.Equal("plan_purchase", json.RootElement.GetProperty("productType").GetString());
+            Assert.Equal(20m, json.RootElement.GetProperty("totalAmount").GetDecimal());
+            Assert.Equal("Starter course", json.RootElement.GetProperty("items")[0].GetProperty("name").GetString());
+        }
+
+        var bySession = await client.GetAsync($"/v1/billing/payment-status?sessionId={Uri.EscapeDataString(checkoutSessionId)}");
+        var bySessionBody = await bySession.Content.ReadAsStringAsync();
+        Assert.True(bySession.IsSuccessStatusCode, bySessionBody);
+        using var bySessionJson = JsonDocument.Parse(bySessionBody);
+        Assert.Equal("pending", bySessionJson.RootElement.GetProperty("status").GetString());
+        Assert.Equal(quoteId, bySessionJson.RootElement.GetProperty("quoteId").GetString());
     }
 
     private async Task<HttpClient> CreateClientForUserAsync(string userId)

@@ -14,7 +14,7 @@ export interface AddonPurchaseModalProps {
   addOnLabel?: string | null;
   addOnPriceGbp?: number | null;
   onClose: () => void;
-  /** Optional override for the checkout entry point. Defaults to /billing */
+  /** Optional override for the checkout entry point. Defaults to the quote-backed order review. */
   checkoutPath?: string;
 }
 
@@ -30,7 +30,7 @@ export function AddonPurchaseModal({
   addOnLabel,
   addOnPriceGbp,
   onClose,
-  checkoutPath = '/billing',
+  checkoutPath = '/checkout/review',
 }: AddonPurchaseModalProps) {
   const router = useRouter();
   const [status, setStatus] = useState<Status>('idle');
@@ -174,8 +174,10 @@ export function AddonPurchaseModal({
                 disabled={!selectedParent}
                 onClick={() => {
                   const query = new URLSearchParams({
-                    addOn: addOnCode ?? '',
-                    parent: selectedParent ?? '',
+                    productType: 'addon_purchase',
+                    priceId: addOnCode ?? '',
+                    parentSubscriptionId: selectedParent ?? '',
+                    quantity: '1',
                   });
                   router.push(`${checkoutPath}?${query.toString()}`);
                   onClose();

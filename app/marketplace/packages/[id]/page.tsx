@@ -94,7 +94,7 @@ export default function PackageDetailPage() {
               )}
               <button
                 type="button"
-                onClick={() => router.push(`/register?next=${encodeURIComponent(`/billing?plan=${plan.code}`)}`)}
+                onClick={() => router.push(`/checkout/review?productType=plan_purchase&priceId=${encodeURIComponent(plan.code)}&quantity=1`)}
                 className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-lg bg-[#D4A44F] px-5 py-2.5 text-sm font-bold text-[#0E2841] shadow-sm transition-colors hover:bg-[#bf8e3d]"
               >
                 Buy for £{plan.price.toFixed(0)} <ArrowRight className="h-4 w-4" />
@@ -179,6 +179,7 @@ export default function PackageDetailPage() {
         addOnLabel={modalAddOn?.name ?? null}
         addOnPriceGbp={modalAddOn?.price ?? null}
         onClose={() => setModalAddOn(null)}
+        checkoutPath="/checkout/review"
       />
     </div>
   );
