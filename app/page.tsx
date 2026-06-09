@@ -96,6 +96,17 @@ function formatDashboardDate(value: string | null | undefined): string {
   return Number.isNaN(date.getTime()) ? 'Not scheduled' : date.toLocaleDateString(undefined, { timeZone: 'UTC' });
 }
 
+function calculateDaysLeft(value: string | null | undefined): string {
+  if (!value) return 'Not scheduled';
+  const target = new Date(value);
+  if (Number.isNaN(target.getTime())) return 'Not scheduled';
+  const today = new Date();
+  const todayUtc = Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate());
+  const targetUtc = Date.UTC(target.getUTCFullYear(), target.getUTCMonth(), target.getUTCDate());
+  const days = Math.max(0, Math.ceil((targetUtc - todayUtc) / 86_400_000));
+  return days === 1 ? '1 day left' : `${days} days left`;
+}
+
 function subscriptionStatusLabel(subscription: SubscriptionMe | null, entitlement: MyEntitlementSnapshot | null) {
   if (subscription?.pausedUntil || entitlement?.isFrozen) return 'Paused';
   if (!subscription) return 'No active subscription';
@@ -129,7 +140,8 @@ function DashboardSubscriptionSummary({
   hasError: boolean;
   loadedAt: string | null | undefined;
 }) {
-  const renewalOrExpiry = subscription?.nextRenewalAt ?? entitlement?.expiresAt ?? null;
+  const expiryDate = entitlement?.expiresAt ?? subscription?.nextRenewalAt ?? null;
+  const subscribedDate = subscription?.startedAt ?? null;
   const counterItems = [
     entitlement?.writingAssessmentsRemaining && entitlement.writingAssessmentsRemaining > 0
       ? `${entitlement.writingAssessmentsRemaining} writing`
@@ -143,42 +155,53 @@ function DashboardSubscriptionSummary({
     entitlement?.tutorBookUnlocked ? 'Tutor Book' : null,
   ].filter(Boolean);
   const statusLabel = subscriptionStatusLabel(subscription, entitlement);
-  const href = subscription ? '/account/billing' : '/catalog';
+  const priceLabel = subscription
+    ? `${formatMoney(subscription.price, { currency: subscription.currency })} / ${subscription.interval}`
+    : 'No package selected';
 
   return (
-    <div className="space-y-3">
+    <div className="w-full space-y-3 lg:w-[28rem]">
       {loadedAt ? <LearnerFreshnessIndicator updatedAt={loadedAt} source="loaded" staleAfterMinutes={30} /> : null}
-      <div className="rounded-2xl border border-border bg-background-light p-3 shadow-sm lg:w-80">
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
+      <div className="rounded-2xl border border-border bg-background-light p-4 shadow-sm">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0 space-y-1">
             <p className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[0.16em] text-muted">
               <CreditCard className="h-3.5 w-3.5" />
               Subscription
             </p>
-            <p className="mt-1 truncate text-sm font-bold text-navy">
+            <p className="text-base font-bold leading-snug text-navy">
               {isLoading ? 'Loading subscription...' : hasError ? 'Subscription details unavailable' : subscription?.planName ?? 'No active subscription'}
             </p>
+            {!isLoading && !hasError ? (
+              <p className="text-xs font-medium text-muted">
+                Package code: <span className="text-navy">{subscription?.planCode ?? entitlement?.planCode ?? 'None'}</span>
+              </p>
+            ) : null}
           </div>
           {!isLoading && !hasError ? (
-            <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${subscriptionStatusClass(subscription, entitlement)}`}>
+            <span className={`w-fit shrink-0 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide ${subscriptionStatusClass(subscription, entitlement)}`}>
               {statusLabel}
             </span>
           ) : null}
         </div>
 
         {!isLoading && !hasError ? (
-          <dl className="mt-3 grid grid-cols-2 gap-2 text-xs">
+          <dl className="mt-4 grid grid-cols-2 gap-2 text-xs">
             <div className="rounded-xl bg-surface px-2.5 py-2">
-              <dt className="text-[10px] font-bold uppercase tracking-wide text-muted">
-                {subscription?.nextRenewalAt ? 'Next renewal' : 'Access until'}
-              </dt>
-              <dd className="mt-0.5 font-semibold text-navy">{formatDashboardDate(renewalOrExpiry)}</dd>
+              <dt className="text-[10px] font-bold uppercase tracking-wide text-muted">Subscribed</dt>
+              <dd className="mt-0.5 font-semibold text-navy">{formatDashboardDate(subscribedDate)}</dd>
+            </div>
+            <div className="rounded-xl bg-surface px-2.5 py-2">
+              <dt className="text-[10px] font-bold uppercase tracking-wide text-muted">Expiry date</dt>
+              <dd className="mt-0.5 font-semibold text-navy">{formatDashboardDate(expiryDate)}</dd>
+            </div>
+            <div className="rounded-xl bg-surface px-2.5 py-2">
+              <dt className="text-[10px] font-bold uppercase tracking-wide text-muted">Days left</dt>
+              <dd className="mt-0.5 font-semibold text-navy">{calculateDaysLeft(expiryDate)}</dd>
             </div>
             <div className="rounded-xl bg-surface px-2.5 py-2">
               <dt className="text-[10px] font-bold uppercase tracking-wide text-muted">Price</dt>
-              <dd className="mt-0.5 font-semibold text-navy">
-                {subscription ? `${formatMoney(subscription.price, { currency: subscription.currency })} / ${subscription.interval}` : 'Browse plans'}
-              </dd>
+              <dd className="mt-0.5 font-semibold text-navy">{priceLabel}</dd>
             </div>
           </dl>
         ) : null}
@@ -190,7 +213,7 @@ function DashboardSubscriptionSummary({
         ) : null}
 
         <Button asChild variant="outline" size="sm" className="mt-3 w-full">
-          <Link href={href}>{subscription ? 'Open billing' : 'Browse plans'} <ArrowRight className="h-3.5 w-3.5" /></Link>
+          <Link href="/catalog">See all catalog <ArrowRight className="h-3.5 w-3.5" /></Link>
         </Button>
       </div>
     </div>
@@ -274,6 +297,31 @@ export default function Dashboard() {
       icon: CheckCircle2,
       label: "Today's plan",
       value: todayTasks.length > 0 ? `${completedToday}/${todayTasks.length} done` : 'No tasks scheduled',
+    },
+    {
+      icon: CreditCard,
+      label: 'Package',
+      value: subscriptionLoading
+        ? 'Loading package'
+        : subscriptionError
+          ? 'Unavailable'
+          : subscription?.planName ?? entitlement?.planCode ?? 'No active subscription',
+    },
+    {
+      icon: Timer,
+      label: 'Access left',
+      value: subscriptionLoading
+        ? 'Checking access'
+        : calculateDaysLeft(entitlement?.expiresAt ?? subscription?.nextRenewalAt ?? null),
+    },
+    {
+      icon: Shield,
+      label: 'Subscription',
+      value: subscriptionLoading
+        ? 'Checking status'
+        : subscriptionError
+          ? 'Unavailable'
+          : subscriptionStatusLabel(subscription, entitlement),
     },
   ];
 
