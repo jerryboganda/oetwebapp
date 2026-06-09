@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
 import { CheckCircle2, AlertTriangle, RefreshCw, Save, Sparkles } from 'lucide-react';
 import { AdminRoutePanel } from '@/components/domain/admin-route-surface';
 import { Badge } from '@/components/ui/badge';
@@ -215,7 +216,12 @@ export function ListeningStructureEditor({ paperId }: { paperId: string }) {
       >
         <div className="space-y-6">
           <InlineAlert variant="info">
-            AI proposals now land in the <strong>Extraction</strong> panel above for review before applying. They no longer overwrite this editor in place.
+            This is the canonical 42-item map (authored by hand). To author Part A in the exact
+            exam note-completion format, use the{' '}
+            <Link href={`/admin/content/listening/${paperId}/part-a`} className="font-semibold underline">Part A notes</Link>{' '}
+            editor. To auto-fill Part A from the question-paper + answer-key PDFs, use{' '}
+            <Link href={`/admin/content/listening/${paperId}/extractions`} className="font-semibold underline">AI extraction</Link>{' '}
+            — proposals are reviewed before they replace this structure.
           </InlineAlert>
 
           <CountsBar live={liveCounts} server={counts} />

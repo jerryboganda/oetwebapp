@@ -71,6 +71,30 @@ const ROLE_OPTIONS: { value: PaperAssetRole; label: string; accept: string }[] =
   { value: 'Supplementary', label: 'Supplementary', accept: 'application/pdf,.pdf' },
 ];
 
+/**
+ * Strict Part options for LISTENING PDF assets (Question Paper / Answer Key /
+ * Audio Script / …). The operator must pick the exact section so the learner
+ * player resolves the right per-part PDF. Values map 1:1 to ContentPaperAsset.Part
+ * (uppercased; resolved by `questionPaperByPart` in ListeningLearnerService).
+ * Audio is a single Part A file ("A") — handled separately, no sub-section.
+ */
+const LISTENING_PART_OPTIONS: { value: string; label: string }[] = [
+  { value: '', label: 'Select part…' },
+  { value: 'A', label: 'Part A — whole' },
+  { value: 'A1', label: 'Part A — Extract 1 (A1)' },
+  { value: 'A2', label: 'Part A — Extract 2 (A2)' },
+  { value: 'B', label: 'Part B — whole' },
+  { value: 'B1', label: 'Part B — Q25 (B1)' },
+  { value: 'B2', label: 'Part B — Q26 (B2)' },
+  { value: 'B3', label: 'Part B — Q27 (B3)' },
+  { value: 'B4', label: 'Part B — Q28 (B4)' },
+  { value: 'B5', label: 'Part B — Q29 (B5)' },
+  { value: 'B6', label: 'Part B — Q30 (B6)' },
+  { value: 'C', label: 'Part C — whole' },
+  { value: 'C1', label: 'Part C — C1 (Q31–36)' },
+  { value: 'C2', label: 'Part C — C2 (Q37–42)' },
+];
+
 const WRITING_LETTER_TYPE_OPTIONS = [
   { value: '', label: 'Select letter type' },
   { value: 'routine_referral', label: 'Routine referral' },
@@ -148,13 +172,22 @@ export default function ContentPaperEditorPage({ params }: { params: Promise<{ p
 
   const uploadFile = async (file: File) => {
     if (!canWriteContent) return;
+    // Listening: PDF assets MUST declare their part (A/A1/A2/B…/C1/C2); audio is
+    // a single Part A file (its per-section split is set on the Audio page).
+    const isListening = paper?.subtestCode === 'listening';
+    const isListeningPdf = isListening && uploadRole !== 'Audio';
+    if (isListeningPdf && !uploadPart) {
+      setToast({ variant: 'error', message: 'Choose a Part (e.g. A1, C2) before uploading a Listening PDF.' });
+      return;
+    }
+    const effectivePart = isListening && uploadRole === 'Audio' ? 'A' : (uploadPart || null);
     setUploadProgress(0);
     try {
       const result = await uploadFileChunked(file, uploadRole, (pct) => setUploadProgress(pct));
       await attachPaperAsset(paperId, {
         role: uploadRole,
         mediaAssetId: result.mediaAssetId,
-        part: uploadPart || null,
+        part: effectivePart,
         displayOrder: (paper?.assets?.length ?? 0),
         makePrimary: true,
       });
@@ -320,7 +353,26 @@ export default function ContentPaperEditorPage({ params }: { params: Promise<{ p
                     onChange={(e) => setUploadRole(e.target.value as PaperAssetRole)}
                     options={ROLE_OPTIONS.map((r) => ({ value: r.value, label: r.label }))}
                   />
-                  <Input label="Part (optional)" value={uploadPart} onChange={(e) => setUploadPart(e.target.value)} placeholder='A | B+C | Section1' />
+                  {paper.subtestCode === 'listening' ? (
+                    uploadRole === 'Audio' ? (
+                      <div>
+                        <label className="block text-sm font-medium mb-1">Part</label>
+                        <div className="rounded-admin border border-admin-border bg-admin-bg-subtle px-3 py-2 text-xs text-admin-text-muted">
+                          Part A (single audio). Split per section on the{' '}
+                          <Link href={`/admin/content/listening/${paper.id}/audio`} className="underline">Audio page</Link>.
+                        </div>
+                      </div>
+                    ) : (
+                      <Select
+                        label="Part (required)"
+                        value={uploadPart}
+                        onChange={(e) => setUploadPart(e.target.value)}
+                        options={LISTENING_PART_OPTIONS}
+                      />
+                    )
+                  ) : (
+                    <Input label="Part (optional)" value={uploadPart} onChange={(e) => setUploadPart(e.target.value)} placeholder='A | B+C | Section1' />
+                  )}
                   <div className="md:col-span-2">
                     <label className="block text-sm font-medium mb-1">File</label>
                     <input
@@ -331,9 +383,12 @@ export default function ContentPaperEditorPage({ params }: { params: Promise<{ p
                         const f = e.target.files?.[0];
                         if (f) void uploadFile(f);
                       }}
-                      disabled={uploadProgress !== null}
+                      disabled={uploadProgress !== null || (paper.subtestCode === 'listening' && uploadRole !== 'Audio' && !uploadPart)}
                       className="block w-full text-sm"
                     />
+                    {paper.subtestCode === 'listening' && uploadRole !== 'Audio' && !uploadPart && (
+                      <p className="mt-1 text-xs text-amber-600">Choose a Part above to enable upload.</p>
+                    )}
                     {uploadProgress !== null && (
                       <div className="mt-2 flex items-center gap-2 text-sm text-admin-text-muted">
                         <Loader2 className="w-4 h-4 animate-spin" />
@@ -353,7 +408,31 @@ export default function ContentPaperEditorPage({ params }: { params: Promise<{ p
             )}
 
             {canWriteContent && paper.subtestCode === 'listening' && (
-              <ListeningStructureEditor paperId={paper.id} />
+              <>
+                <Card>
+                  <CardHeader><CardTitle>Listening tools</CardTitle></CardHeader>
+                  <CardContent>
+                    <div className="flex flex-wrap gap-2">
+                      <Button variant="outline" size="sm" asChild>
+                        <Link href={`/admin/content/listening/${paper.id}/part-a`}>Part A notes (exam format)</Link>
+                      </Button>
+                      <Button variant="outline" size="sm" asChild>
+                        <Link href={`/admin/content/listening/${paper.id}/pdfs`}>PDFs (per part)</Link>
+                      </Button>
+                      <Button variant="outline" size="sm" asChild>
+                        <Link href={`/admin/content/listening/${paper.id}/audio`}>Audio</Link>
+                      </Button>
+                      <Button variant="outline" size="sm" asChild>
+                        <Link href={`/admin/content/listening/${paper.id}/extractions`}>AI extraction</Link>
+                      </Button>
+                    </div>
+                    <p className="mt-2 text-xs text-admin-text-muted">
+                      Author the Part A note-completion in the exact exam format, upload per-part PDFs/audio with strict sections, or auto-fill from the question-paper + answer-key PDFs with AI.
+                    </p>
+                  </CardContent>
+                </Card>
+                <ListeningStructureEditor paperId={paper.id} />
+              </>
             )}
 
             {canWriteContent && paper.subtestCode === 'speaking' && (

@@ -12,6 +12,9 @@ server {
     listen 3000;
     server_name _;
 
+    # Allow large admin asset uploads (chunked, 8 MB/part; full audio up to ~150 MB).
+    client_max_body_size 200m;
+
     location / {
         resolver 127.0.0.11 ipv6=off valid=10s;
         set $web_upstream http://web-${ACTIVE_SLOT}:3000;
