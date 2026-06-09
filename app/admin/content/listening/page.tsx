@@ -272,6 +272,12 @@ export default function AdminListeningPapersPage() {
             Questions
           </Link>
           <Link
+            href={`/admin/content/listening/${p.id}/pdfs`}
+            className="inline-flex min-h-9 items-center rounded-admin px-3 py-2 text-sm font-semibold text-admin-fg-strong hover:bg-admin-bg-subtle"
+          >
+            PDFs
+          </Link>
+          <Link
             href={`/admin/content/listening/${p.id}/audio`}
             className="inline-flex min-h-9 items-center rounded-admin px-3 py-2 text-sm font-semibold text-admin-fg-strong hover:bg-admin-bg-subtle"
           >

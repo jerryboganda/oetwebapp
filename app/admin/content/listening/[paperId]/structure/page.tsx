@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { ArrowLeft, BrainCircuit, CheckCircle2, FileText, Headphones, HelpCircle, ListChecks, ListOrdered, XCircle } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, FileText, Files, Headphones, HelpCircle, ListChecks, ListOrdered, XCircle } from 'lucide-react';
 import { AdminSettingsLayout } from '@/components/admin/layout/admin-settings-layout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/admin/ui/card';
 import { KpiTile } from '@/components/admin/ui/kpi-tile';
@@ -153,6 +153,12 @@ export default function AdminListeningStructurePage() {
             </Link>
           </Button>
           <Button variant="outline" size="sm" asChild>
+            <Link href={`/admin/content/listening/${paperId}/pdfs`}>
+              <Files className="h-4 w-4 mr-1.5" />
+              PDFs
+            </Link>
+          </Button>
+          <Button variant="outline" size="sm" asChild>
             <Link href={`/admin/content/listening/${paperId}/audio`}>
               <Headphones className="h-4 w-4 mr-1.5" />
               Audio &amp; timers
@@ -168,12 +174,6 @@ export default function AdminListeningStructurePage() {
             <Link href={`/admin/content/listening/${paperId}/sequence`}>
               <ListOrdered className="h-4 w-4 mr-1.5" />
               Sequence
-            </Link>
-          </Button>
-          <Button variant="outline" size="sm" asChild>
-            <Link href={`/admin/content/listening/${paperId}/extractions`}>
-              <BrainCircuit className="h-4 w-4 mr-1.5" />
-              AI Extractions
             </Link>
           </Button>
         </div>

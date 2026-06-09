@@ -41,6 +41,7 @@ import { BCQuestionRenderer } from '@/components/domain/listening/BCQuestionRend
 import { PartARenderer } from '@/components/domain/listening/PartARenderer';
 import { PartANotesDocument } from '@/components/domain/listening/PartANotesDocument';
 import { ListeningPaperSimulation } from '@/components/domain/listening/ListeningPaperSimulation';
+import { ListeningQuestionPaperViewer } from '@/components/domain/listening/ListeningQuestionPaperViewer';
 import { ZoomControls } from '@/components/domain/listening/ZoomControls';
 import { ListeningIntroCard } from '@/components/domain/listening/player/ListeningIntroCard';
 import { ListeningAudioTransport } from '@/components/domain/listening/player/ListeningAudioTransport';
@@ -832,6 +833,15 @@ function PlayerContent() {
     ? extracts.filter((extract) => extract.partCode === currentSection || (currentSection === 'B' && extract.partCode === 'B'))
     : [];
   const visibleExtracts = allPartsReviewEnabled ? extracts : currentExtracts;
+  // Learner-facing question-paper PDF for the current section. Per-part map is
+  // keyed by uppercased part/section code; resolve exact section code first,
+  // then fall back to the parent part letter (mirrors the Reading PDF viewer).
+  const currentQuestionPaperUrl = (() => {
+    const map = session?.paper.questionPaperUrlByPart;
+    if (!map || !currentSection) return null;
+    const code = String(currentSection).toUpperCase();
+    return map[code] ?? map[code.charAt(0)] ?? null;
+  })();
   const activeExtract = visibleExtracts[0] ?? null;
   const currentExtractWindows = currentExtracts.filter((extract) => (
     extract.audioStartMs != null
@@ -1607,6 +1617,13 @@ function PlayerContent() {
                   ) : (
                     <>
                       <ZoomControls value={questionZoomPercent} onChange={setQuestionZoomPercent} />
+
+                      {currentQuestionPaperUrl ? (
+                        <ListeningQuestionPaperViewer
+                          url={currentQuestionPaperUrl}
+                          partLabel={currentSection}
+                        />
+                      ) : null}
 
                       <div data-testid="listening-question-surface" className="space-y-6" style={{ fontSize: `${questionZoomPercent}%` }}>
                         {visibleQuestionSections.map(({ section, questions }) => (

@@ -11485,11 +11485,7 @@ import type {
   ListeningAuthoredQuestion,
   ListeningAuthoredQuestionList,
   ListeningBackfillAllResponse,
-  ListeningBackfillReport,
-  ListeningExtractionDraft,
-  ListeningExtractionDraftStatus,
   ListeningExtractPatch,
-  ListeningExtractProposalResponse,
   ListeningExtractsResponse,
   ListeningQuestionPatch,
   ListeningValidationReport,
@@ -11553,56 +11549,6 @@ export async function adminListeningPatchExtract(
     `${lap(paperId)}/extracts/${encodeURIComponent(extractCode)}`,
     { method: 'PATCH', body: JSON.stringify(patch) },
   );
-}
-
-// ── AI extraction lifecycle ─────────────────────────────────────────────
-export async function adminListeningProposeExtraction(paperId: string) {
-  return apiRequest<ListeningExtractProposalResponse>(`${lap(paperId)}/extract`, {
-    method: 'POST',
-  });
-}
-
-export async function adminListeningListExtractions(
-  paperId: string,
-  status?: ListeningExtractionDraftStatus,
-) {
-  const qs = status ? `?status=${encodeURIComponent(status)}` : '';
-  return apiRequest<ListeningExtractionDraft[]>(`${lap(paperId)}/extractions${qs}`);
-}
-
-export async function adminListeningGetExtraction(paperId: string, draftId: string) {
-  return apiRequest<ListeningExtractionDraft>(
-    `${lap(paperId)}/extractions/${encodeURIComponent(draftId)}`,
-  );
-}
-
-export async function adminListeningApproveExtraction(
-  paperId: string,
-  draftId: string,
-  reason?: string,
-) {
-  return apiRequest<ListeningExtractionDraft>(
-    `${lap(paperId)}/extractions/${encodeURIComponent(draftId)}/approve`,
-    { method: 'POST', body: JSON.stringify({ reason: reason ?? null }) },
-  );
-}
-
-export async function adminListeningRejectExtraction(
-  paperId: string,
-  draftId: string,
-  reason: string,
-) {
-  return apiRequest<ListeningExtractionDraft>(
-    `${lap(paperId)}/extractions/${encodeURIComponent(draftId)}/reject`,
-    { method: 'POST', body: JSON.stringify({ reason }) },
-  );
-}
-
-// ── Per-paper backfill (JSON → relational, also covers TTS asset rewire) ─
-export async function adminListeningBackfillPaper(paperId: string) {
-  return apiRequest<ListeningBackfillReport>(`${lap(paperId)}/backfill`, {
-    method: 'POST',
-  });
 }
 
 // ── System-wide listening admin endpoints ───────────────────────────────

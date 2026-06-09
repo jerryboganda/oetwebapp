@@ -837,9 +837,6 @@ builder.Services.AddScoped<
 // jobs through whichever provider is registered above).
 builder.Services.AddHostedService<OetLearner.Api.Services.Listening.ListeningTtsJobWorker>();
 builder.Services.AddScoped<OetLearner.Api.Services.Listening.IListeningCurriculumService, OetLearner.Api.Services.Listening.ListeningCurriculumService>();
-builder.Services.AddScoped<OetLearner.Api.Services.Listening.IListeningExtractionAi, OetLearner.Api.Services.Listening.GroundedListeningExtractionAi>();
-builder.Services.AddScoped<OetLearner.Api.Services.Listening.IListeningExtractionService, OetLearner.Api.Services.Listening.ListeningExtractionService>();
-builder.Services.AddScoped<OetLearner.Api.Services.Listening.IListeningExtractionDraftService, OetLearner.Api.Services.Listening.ListeningExtractionDraftService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Listening.IListeningPathwayService, OetLearner.Api.Services.Listening.ListeningPathwayService>();
 // ── Listening V2 — strategy + FSM + version-pinned grading + pathway + classes ──
 builder.Services.AddSingleton<OetLearner.Api.Services.Listening.ListeningModePolicyResolver>();
