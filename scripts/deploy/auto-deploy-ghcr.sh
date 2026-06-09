@@ -88,10 +88,21 @@ healthcheck "oet-api" "wget -qO- http://127.0.0.1:8080/health/ready" "api router
 echo "ACTIVE_SLOT=$target_slot" > .deploy/active-slot.env
 
 # --- public smoke ---
+publiccheck() {
+  local url="$1" label="$2" max="${3:-12}"
+  for i in $(seq 1 "$max"); do
+    if curl -sf -m 15 "$url" >/dev/null; then
+      echo "  OK: $label (attempt $i)"; return 0
+    fi
+    sleep 5
+  done
+  echo "  FAIL: $label after $max attempts" >&2
+  return 1
+}
 echo "--- public verify ---"
 ok=true
-curl -sf -m 15 "$APP_PUBLIC_URL/api/health" >/dev/null && echo "  PUBLIC_WEB_OK" || { echo "  PUBLIC_WEB_FAIL" >&2; ok=false; }
-curl -sf -m 15 "$API_PUBLIC_URL/health/ready" >/dev/null && echo "  PUBLIC_API_OK" || { echo "  PUBLIC_API_FAIL" >&2; ok=false; }
+publiccheck "$APP_PUBLIC_URL/api/health" "public web" || ok=false
+publiccheck "$API_PUBLIC_URL/health/ready" "public api" || ok=false
 if [ "$ok" != true ]; then
   echo "[deploy] public gates failed; rolling routers back to $prev_slot" >&2
   compose "$prev_slot" up -d --no-build --force-recreate web learner-api || true
