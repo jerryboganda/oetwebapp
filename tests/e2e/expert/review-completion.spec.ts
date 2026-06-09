@@ -141,7 +141,7 @@ test.describe('Tutor review completion workflows @expert', () => {
   // V2 has no "rework request" concept. The closest real, distinct capability on
   // the marking surface is the AI pre-analysis confirm/edit/reject affordance:
   // "Use AI suggestion" applies the estimated bands into the editable rubric, then
-  // the marker submits. This drives that path + a content-checklist verdict.
+  // the marker submits. This drives that path on the current V2 marking surface.
   test('writing review applies the AI pre-analysis suggestion and submits', async ({ page, request }, testInfo) => {
     if (testInfo.project.name !== 'chromium-expert') {
       test.skip();
@@ -164,9 +164,6 @@ test.describe('Tutor review completion workflows @expert', () => {
     const aiPanel = page.getByRole('region', { name: /ai pre-analysis/i });
     await aiPanel.getByRole('button', { name: /use ai suggestion/i }).click();
     await expect(aiPanel.getByText(/suggestion applied/i)).toBeVisible();
-
-    // Record a content-checklist verdict on the first key item (real V2 capability).
-    await page.getByRole('radio', { name: 'Included' }).first().click();
 
     await page.getByLabel('Overall feedback').fill('Applied the AI estimate after checking the rubric and key content coverage.');
     await page.getByRole('button', { name: /submit review/i }).click();

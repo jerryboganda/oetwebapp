@@ -33,6 +33,8 @@ Implement the AI Packages PDF as a first-class billing, credit, checkout, gradin
 - `pnpm exec eslint app/ai-packages/page.tsx app/page.tsx lib/api.ts lib/billing-types.ts`: passed with warnings only from the repo's `react-hooks/set-state-in-effect` rule on the new package page effects.
 - `git diff --check`: passed with a line-ending warning for `SpeakingEvaluationPipeline.cs`.
 - Production deploy for commit `1d44ebbcd402f9d235a0ddcc765d8730dd4408ec` succeeded via GitHub Actions/GHCR pull-only rollout; follow-up compatibility fix is being committed and redeployed.
+- Production deploy for commit `cb1087584b2697ebbf346f9ce73c13bcadd494af` succeeded via GitHub Actions/GHCR pull-only rollout.
+- `pnpm exec tsc --noEmit`: passed after removing a stale chromium expert E2E checklist-radio interaction that no longer exists on the current V2 marking surface.
 
 ## Touched Files
 
@@ -54,6 +56,7 @@ Implement the AI Packages PDF as a first-class billing, credit, checkout, gradin
 - `backend/tests/OetLearner.Api.Tests/AiPackageCreditServiceTests.cs`
 - `lib/api.ts`
 - `lib/billing-types.ts`
+- `tests/e2e/expert/review-completion.spec.ts`
 
 ## Known Workspace Notes
 
