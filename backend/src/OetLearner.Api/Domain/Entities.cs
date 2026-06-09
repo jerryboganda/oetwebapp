@@ -750,6 +750,59 @@ public class Subscription
     public int AiCreditsRemaining { get; set; }
     public bool TutorBookUnlocked { get; set; }
     public bool BasicEnglishUnlocked { get; set; }
+
+    // PDF subscription timer/freezing contract. All math is server-side UTC;
+    // the frontend only displays these projected values.
+    public int AccessDurationDays { get; set; } = 180;
+    public int TotalFreezeDaysUsed { get; set; }
+    public int MaxFreezeDaysAllowed { get; set; } = 365;
+    public int? PreservedRemainingDays { get; set; }
+    public DateTimeOffset? PendingFreezeRequestDate { get; set; }
+    public DateTimeOffset? FrozenSince { get; set; }
+}
+
+public class SubscriptionFreeze
+{
+    [Key]
+    [MaxLength(64)]
+    public string Id { get; set; } = default!;
+
+    [MaxLength(64)]
+    public string SubscriptionId { get; set; } = default!;
+
+    [MaxLength(64)]
+    public string UserId { get; set; } = default!;
+
+    [MaxLength(16)]
+    public string RequestedBy { get; set; } = "candidate";
+
+    [MaxLength(16)]
+    public string RequestStatus { get; set; } = "pending";
+
+    public DateTimeOffset FreezeRequestDate { get; set; }
+    public DateTimeOffset? FreezeStartDate { get; set; }
+    public DateTimeOffset? FreezeEndDate { get; set; }
+    public int? PreservedRemainingDaysAtFreeze { get; set; }
+    public int? FreezeDaysUsed { get; set; }
+
+    [MaxLength(16)]
+    public string? FrozenBy { get; set; }
+
+    [MaxLength(512)]
+    public string? FreezeReason { get; set; }
+
+    [MaxLength(1024)]
+    public string? AdminNotes { get; set; }
+
+    [MaxLength(1024)]
+    public string? RejectionReason { get; set; }
+
+    [MaxLength(64)]
+    public string? AdminDecisionById { get; set; }
+
+    public DateTimeOffset? AdminDecisionDate { get; set; }
+    public DateTimeOffset CreatedAt { get; set; }
+    public DateTimeOffset UpdatedAt { get; set; }
 }
 
 public class Wallet

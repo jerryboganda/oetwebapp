@@ -14,24 +14,37 @@ import { apiClient } from '@/lib/api';
 export interface ManualPaymentDto {
   id: string;
   userId: string;
+  candidateFullName: string;
+  candidateEmail: string;
+  candidateWhatsApp: string;
+  courseName: string;
+  courseId: string | null;
+  paymentCategory: 'inside_egypt' | 'international' | string;
   amountAmount: number;
   currency: string;
   method: string;
   reference: string;
   proofUrl: string;
-  status: 'pending' | 'under_review' | 'approved' | 'rejected' | 'cancelled' | string;
+  status: 'pending' | 'needs_review' | 'approved' | 'paid' | 'rejected' | 'cancelled' | string;
   submittedAt: string;
   reviewedAt: string | null;
   adminNotes: string | null;
+  accessGrantedSubscriptionId?: string | null;
 }
 
 export interface ManualPaymentSubmitRequest {
   quoteId?: string | null;
   amountAmount: number;
   currency: string;
-  method: 'bank_transfer' | 'wise' | 'fawry_offline' | 'other' | string;
+  method: string;
   reference: string;
   proofUrl: string;
+  candidateFullName: string;
+  candidateEmail: string;
+  candidateWhatsApp: string;
+  courseName: string;
+  courseId?: string | null;
+  paymentCategory: 'inside_egypt' | 'international' | string;
   /** Base-64 encoded proof file. The backend SHA-256 hashes this for duplicate detection. */
   proofBase64: string;
 }

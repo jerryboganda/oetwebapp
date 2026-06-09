@@ -24,6 +24,7 @@ public partial class LearnerDbContext(DbContextOptions<LearnerDbContext> options
     public DbSet<AccountFreezeRecord> AccountFreezeRecords => Set<AccountFreezeRecord>();
     public DbSet<AccountFreezeEntitlement> AccountFreezeEntitlements => Set<AccountFreezeEntitlement>();
     public DbSet<Subscription> Subscriptions => Set<Subscription>();
+    public DbSet<SubscriptionFreeze> SubscriptionFreezes => Set<SubscriptionFreeze>();
     public DbSet<Wallet> Wallets => Set<Wallet>();
     public DbSet<Invoice> Invoices => Set<Invoice>();
     public DbSet<UploadSession> UploadSessions => Set<UploadSession>();
@@ -476,6 +477,12 @@ public partial class LearnerDbContext(DbContextOptions<LearnerDbContext> options
         modelBuilder.Entity<AccountFreezeRecord>().HasIndex(x => new { x.Status, x.ScheduledStartAt });
         modelBuilder.Entity<AccountFreezeRecord>().HasIndex(x => new { x.Status, x.EndedAt });
         modelBuilder.Entity<AccountFreezeEntitlement>().HasIndex(x => x.UserId).IsUnique();
+        modelBuilder.Entity<SubscriptionFreeze>().HasIndex(x => x.SubscriptionId);
+        modelBuilder.Entity<SubscriptionFreeze>().HasIndex(x => x.UserId);
+        modelBuilder.Entity<SubscriptionFreeze>()
+            .HasIndex(x => x.SubscriptionId)
+            .IsUnique()
+            .HasFilter("\"RequestStatus\" = 'pending'");
         modelBuilder.Entity<StudyPlanItem>().HasIndex(x => new { x.StudyPlanId, x.Section, x.Status });
         modelBuilder.Entity<BackgroundJobItem>().HasIndex(x => new { x.State, x.AvailableAt });
         modelBuilder.Entity<Invoice>().HasIndex(x => new { x.UserId, x.IssuedAt });

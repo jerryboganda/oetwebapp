@@ -1,6 +1,15 @@
 # PROGRESS - Active Agent Continuity
 
-Last updated: 2026-06-08
+Last updated: 2026-06-09
+
+## Current Checkpoint - Payment Options, Subscription Timer, Freezing
+
+- Implemented the three attached PDF demands into the existing billing/subscription system without adding a parallel `course_subscriptions` source of truth.
+- Payment options page now shows the exact required method order and publishes only the extracted InstaPay QR asset at `public/payment/instapay-qr.jpg`.
+- Manual payments now collect candidate identity, WhatsApp, selected course, amount, method, transaction reference, and proof; proof storage goes through `IFileStorage`; admin approval marks paid and grants access.
+- `Subscription` now carries timer/freeze fields, `SubscriptionFreeze` logs requests/actions, learner/admin freeze endpoints are wired, and frozen/expired access denials return structured codes.
+- Validation: `pnpm run backend:build` passed; `pnpm exec tsc --noEmit` passed; scoped touched-file eslint passed with warnings only; `dotnet test backend/tests/OetLearner.Api.Tests/OetLearner.Api.Tests.csproj --filter BillingExpansionServiceTests` passed.
+- Full `pnpm run lint` still exits non-zero due unrelated repo-wide lint findings outside this task; see `.github/agent-state.local.md` for details.
 
 ## Current Operating Goal
 

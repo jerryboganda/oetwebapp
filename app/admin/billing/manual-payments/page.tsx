@@ -37,15 +37,17 @@ import {
 const STATUS_FILTERS = [
   { value: '__all', label: 'All' },
   { value: 'pending', label: 'Pending' },
-  { value: 'under_review', label: 'Under review' },
+  { value: 'needs_review', label: 'Needs review' },
   { value: 'approved', label: 'Approved' },
+  { value: 'paid', label: 'Paid' },
   { value: 'rejected', label: 'Rejected' },
   { value: 'cancelled', label: 'Cancelled' },
 ];
 
 function statusVariant(status: string) {
-  if (status === 'approved') return 'success' as const;
+  if (status === 'approved' || status === 'paid') return 'success' as const;
   if (status === 'rejected') return 'danger' as const;
+  if (status === 'needs_review') return 'warning' as const;
   return 'default' as const;
 }
 
@@ -98,6 +100,27 @@ export default function AdminManualPaymentsPage() {
     },
     { id: 'user', accessorKey: 'userId', header: 'User' },
     {
+      id: 'candidate',
+      header: 'Candidate',
+      cell: ({ row }) => (
+        <div>
+          <p className="font-medium text-admin-fg-strong">{row.original.candidateFullName || '-'}</p>
+          <p className="text-xs text-admin-fg-muted">{row.original.candidateEmail || '-'}</p>
+          <p className="text-xs text-admin-fg-muted">{row.original.candidateWhatsApp || '-'}</p>
+        </div>
+      ),
+    },
+    {
+      id: 'course',
+      header: 'Course',
+      cell: ({ row }) => (
+        <div>
+          <p className="font-medium text-admin-fg-strong">{row.original.courseName || '-'}</p>
+          <p className="text-xs text-admin-fg-muted">{row.original.paymentCategory?.replace('_', ' ') || '-'}</p>
+        </div>
+      ),
+    },
+    {
       id: 'amount',
       header: 'Amount',
       cell: ({ row }) => `${row.original.amountAmount.toFixed(2)} ${row.original.currency}`,
@@ -113,6 +136,11 @@ export default function AdminManualPaymentsPage() {
       cell: ({ row }) => row.original.reference || '-',
     },
     {
+      id: 'proof',
+      header: 'Proof',
+      cell: ({ row }) => row.original.proofUrl ? <span className="font-mono text-xs">{row.original.proofUrl}</span> : '-',
+    },
+    {
       id: 'status',
       header: 'Status',
       cell: ({ row }) => <Badge variant={statusVariant(row.original.status)}>{row.original.status}</Badge>,
@@ -124,7 +152,7 @@ export default function AdminManualPaymentsPage() {
       enableHiding: false,
       cell: ({ row }) => {
         const r = row.original;
-        return r.status === 'pending' || r.status === 'under_review' ? (
+        return r.status === 'pending' || r.status === 'needs_review' ? (
           <div className="flex gap-1">
             <Button
               variant="ghost"
@@ -157,7 +185,7 @@ export default function AdminManualPaymentsPage() {
   return (
     <AdminTableLayout
       title="Manual payments"
-      description="Bank transfer / Wise / Fawry voucher claims awaiting verification."
+      description="Manual payment claims awaiting proof, identity, and course verification."
       breadcrumbs={[
         { label: 'Admin', href: '/admin' },
         { label: 'Billing', href: '/admin/billing' },

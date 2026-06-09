@@ -5900,6 +5900,46 @@ export async function adminSetSubscriptionStatus(subscriptionId: string, payload
   });
 }
 
+export async function adminApproveSubscriptionFreeze(subscriptionId: string, payload: { reason?: string; internalNotes?: string } = {}) {
+  return apiRequest(`/v1/admin/billing/subscriptions/${encodeURIComponent(subscriptionId)}/approve-freeze`, {
+    method: 'POST',
+    body: JSON.stringify({
+      reason: payload.reason ?? null,
+      internalNotes: payload.internalNotes ?? null,
+    }),
+  });
+}
+
+export async function adminRejectSubscriptionFreeze(subscriptionId: string, payload: { reason?: string; internalNotes?: string } = {}) {
+  return apiRequest(`/v1/admin/billing/subscriptions/${encodeURIComponent(subscriptionId)}/reject-freeze`, {
+    method: 'POST',
+    body: JSON.stringify({
+      reason: payload.reason ?? null,
+      internalNotes: payload.internalNotes ?? null,
+    }),
+  });
+}
+
+export async function adminFreezeSubscription(subscriptionId: string, payload: { reason?: string; internalNotes?: string } = {}) {
+  return apiRequest(`/v1/admin/billing/subscriptions/${encodeURIComponent(subscriptionId)}/freeze`, {
+    method: 'POST',
+    body: JSON.stringify({
+      reason: payload.reason ?? null,
+      internalNotes: payload.internalNotes ?? null,
+    }),
+  });
+}
+
+export async function adminResumeSubscription(subscriptionId: string, payload: { reason?: string; internalNotes?: string } = {}) {
+  return apiRequest(`/v1/admin/billing/subscriptions/${encodeURIComponent(subscriptionId)}/resume`, {
+    method: 'POST',
+    body: JSON.stringify({
+      reason: payload.reason ?? null,
+      internalNotes: payload.internalNotes ?? null,
+    }),
+  });
+}
+
 export async function fetchAdminBillingEntitlementDiagnostics() {
   return apiRequest('/v1/admin/billing/entitlement-diagnostics');
 }
@@ -13768,6 +13808,18 @@ export interface SubscriptionMe {
   trialEndsAt: string | null;
   walletBalance?: number;
   walletCurrency?: string;
+  productCategory?: string | null;
+  startDate?: string | null;
+  endDate?: string | null;
+  durationDays?: number;
+  remainingDays?: number;
+  expiringSoon?: boolean;
+  totalFreezeDaysUsed?: number;
+  maxFreezeDays?: number;
+  freezeAllowanceRemaining?: number;
+  preservedRemainingDays?: number | null;
+  pendingFreezeRequestDate?: string | null;
+  frozenSince?: string | null;
 }
 
 export async function fetchSubscriptionMe(): Promise<SubscriptionMe | null> {
@@ -13814,6 +13866,18 @@ export async function pauseSubscriptionSelf(days?: number, reason?: string): Pro
 
 export async function resumeSubscriptionSelf(): Promise<SubscriptionMe> {
   return apiRequest<SubscriptionMe>('/v1/subscriptions/me/resume', { method: 'POST' });
+}
+
+export async function requestSubscriptionFreeze(subscriptionId: string): Promise<SubscriptionMe> {
+  return apiRequest<SubscriptionMe>(`/v1/subscriptions/${encodeURIComponent(subscriptionId)}/request-freeze`, {
+    method: 'POST',
+  });
+}
+
+export async function resumeSubscriptionById(subscriptionId: string): Promise<SubscriptionMe> {
+  return apiRequest<SubscriptionMe>(`/v1/subscriptions/${encodeURIComponent(subscriptionId)}/resume`, {
+    method: 'POST',
+  });
 }
 
 export async function changeSubscriptionPlanSelf(planCode: string, prorate?: boolean): Promise<SubscriptionMe> {

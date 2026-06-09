@@ -911,6 +911,7 @@ builder.Services.AddScoped<OetLearner.Api.Services.Billing.IDunningCampaignServi
 builder.Services.AddScoped<OetLearner.Api.Services.Billing.IDunningService, OetLearner.Api.Services.Billing.DunningCampaignService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Billing.IAbandonedCartRecoveryService, OetLearner.Api.Services.Billing.AbandonedCartRecoveryService>();
 builder.Services.AddHostedService<OetLearner.Api.Services.Billing.DunningWorker>();
+builder.Services.AddHostedService<OetLearner.Api.Services.Billing.SubscriptionExpiryWorker>();
 builder.Services.AddScoped<OetLearner.Api.Services.Billing.IAffiliateService, OetLearner.Api.Services.Billing.AffiliateService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Billing.IBillingNotificationDispatcher, OetLearner.Api.Services.Billing.BillingNotificationDispatcher>();
 builder.Services.AddScoped<OetLearner.Api.Services.Billing.IBillingNotificationChannel, OetLearner.Api.Services.Billing.EmailBillingChannel>();
