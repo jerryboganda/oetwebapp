@@ -76,6 +76,7 @@ import type {
   BillingProductType,
   Invoice,
   AiPackage,
+  AiPackageCreditSnapshot,
   AiPackagesResponse,
 } from './billing-types';
 import type { FreezePolicy } from './types/freeze';
@@ -4286,6 +4287,38 @@ export async function fetchAiPackages(): Promise<AiPackagesResponse> {
       speaking: asArray(separate.speaking).map(mapPackage),
     },
     mock: asArray(data.mock).map(mapPackage),
+  };
+}
+
+export async function fetchMyAiPackageCredits(): Promise<AiPackageCreditSnapshot> {
+  const data = await apiRequest<ApiRecord>('/v1/me/ai-package-credits');
+  return {
+    userId: String(data.userId ?? ''),
+    flexibleCredits: Number(data.flexibleCredits ?? 0),
+    writingOnlyCredits: Number(data.writingOnlyCredits ?? 0),
+    speakingOnlyCredits: Number(data.speakingOnlyCredits ?? 0),
+    listeningTestsRemaining: data.listeningTestsRemaining == null ? null : Number(data.listeningTestsRemaining),
+    readingTestsRemaining: data.readingTestsRemaining == null ? null : Number(data.readingTestsRemaining),
+    mockExamsRemaining: Number(data.mockExamsRemaining ?? 0),
+    expiresAt: toNullableString(data.expiresAt),
+    expiredBecausePassed: Boolean(data.expiredBecausePassed),
+    passedAt: toNullableString(data.passedAt),
+    transactions: asArray(data.transactions).map((item) => ({
+      id: String(item.id ?? ''),
+      packageId: toNullableString(item.packageId),
+      packageType: toNullableString(item.packageType),
+      reason: String(item.reason ?? ''),
+      flexibleCreditsDelta: Number(item.flexibleCreditsDelta ?? 0),
+      writingOnlyCreditsDelta: Number(item.writingOnlyCreditsDelta ?? 0),
+      speakingOnlyCreditsDelta: Number(item.speakingOnlyCreditsDelta ?? 0),
+      listeningTestsDelta: Number(item.listeningTestsDelta ?? 0),
+      readingTestsDelta: Number(item.readingTestsDelta ?? 0),
+      mockExamsDelta: Number(item.mockExamsDelta ?? 0),
+      referenceId: toNullableString(item.referenceId),
+      description: String(item.description ?? ''),
+      expiresAt: toNullableString(item.expiresAt),
+      createdAt: String(item.createdAt ?? ''),
+    })),
   };
 }
 

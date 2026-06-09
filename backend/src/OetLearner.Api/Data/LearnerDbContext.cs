@@ -75,6 +75,9 @@ public partial class LearnerDbContext(DbContextOptions<LearnerDbContext> options
     public DbSet<BillingQuote> BillingQuotes => Set<BillingQuote>();
     public DbSet<BillingEvent> BillingEvents => Set<BillingEvent>();
     public DbSet<NativeIapProductMapping> NativeIapProductMappings => Set<NativeIapProductMapping>();
+    public DbSet<AiPackageCreditAccount> AiPackageCreditAccounts => Set<AiPackageCreditAccount>();
+    public DbSet<AiPackageCreditTransaction> AiPackageCreditTransactions => Set<AiPackageCreditTransaction>();
+    public DbSet<LearnerExamOutcome> LearnerExamOutcomes => Set<LearnerExamOutcome>();
 
     // Multi-exam reference entities
     public DbSet<ExamType> ExamTypes => Set<ExamType>();
@@ -1149,6 +1152,18 @@ public partial class LearnerDbContext(DbContextOptions<LearnerDbContext> options
             .IsUnique()
             .HasDatabaseName("UX_AiCreditLedger_RefundAdjustment_ReferenceId")
             .HasFilter("\"ReferenceId\" IS NOT NULL AND \"Source\" = 3 AND (\"ReferenceId\" LIKE 'addon-refund:%' OR \"ReferenceId\" LIKE 'plan-refund:%')");
+
+        modelBuilder.Entity<AiPackageCreditTransaction>()
+            .HasIndex(x => x.StripeSessionId)
+            .IsUnique()
+            .HasDatabaseName("UX_AiPackageCreditTransactions_StripeSessionId")
+            .HasFilter("\"StripeSessionId\" IS NOT NULL");
+
+        modelBuilder.Entity<AiPackageCreditTransaction>()
+            .HasIndex(x => new { x.ReferenceId, x.Reason })
+            .IsUnique()
+            .HasDatabaseName("UX_AiPackageCreditTransactions_Reference_Reason")
+            .HasFilter("\"ReferenceId\" IS NOT NULL");
 
         // Payment indexes
         modelBuilder.Entity<PaymentTransaction>().HasIndex(x => new { x.LearnerUserId, x.CreatedAt });

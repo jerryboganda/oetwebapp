@@ -2,10 +2,11 @@ using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Contracts;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services.Billing;
 
 namespace OetLearner.Api.Services;
 
-public sealed class MockService(LearnerDbContext db)
+public sealed class MockService(LearnerDbContext db, IAiPackageCreditService? aiPackageCreditService = null)
 {
     private static readonly string[] FullMockOrder = ["listening", "reading", "writing", "speaking"];
     private static readonly HashSet<string> ProductiveSubtests = new(["writing", "speaking"], StringComparer.OrdinalIgnoreCase);
@@ -338,6 +339,17 @@ public sealed class MockService(LearnerDbContext db)
         }
 
         var id = $"mock-attempt-{Guid.NewGuid():N}";
+        if (aiPackageCreditService is not null && MockTypes.IsFullShape(mockType))
+        {
+            var debit = await aiPackageCreditService.DeductMockAsync(userId, id, ct);
+            if (!debit.Debited)
+            {
+                throw ApiException.PaymentRequired(
+                    debit.ErrorCode ?? "no_mock_exams",
+                    debit.ErrorMessage ?? "You have no mock exams remaining. Purchase a package to continue.");
+            }
+        }
+
         var config = new
         {
             mockType,

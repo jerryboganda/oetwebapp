@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services.AiManagement;
+using OetLearner.Api.Services.Billing;
 using OetLearner.Api.Services.Rulebook;
 
 namespace OetLearner.Api.Services.Writing;
@@ -40,7 +41,8 @@ public sealed class WritingEvaluationPipeline(
     IAiGatewayService aiGateway,
     WritingRuleEngine ruleEngine,
     ILogger<WritingEvaluationPipeline> logger,
-    IWritingOptionsProvider? optionsProvider = null) : IWritingEvaluationPipeline
+    IWritingOptionsProvider? optionsProvider = null,
+    IAiPackageCreditService? aiPackageCreditService = null) : IWritingEvaluationPipeline
 {
     private static readonly JsonSerializerOptions ParseOptions = new()
     {
@@ -91,6 +93,7 @@ public sealed class WritingEvaluationPipeline(
                     retryable: false, retryAfterMs: null);
                 attempt.State = AttemptState.Submitted;
                 logger.LogWarning("Writing AI grading kill-switch active; attempt {AttemptId} marked Failed.", attempt.Id);
+                await RefundAiPackageCreditAsync(attempt, evaluation, "kill_switch", cancellationToken);
                 return;
             }
         }
@@ -152,6 +155,7 @@ public sealed class WritingEvaluationPipeline(
                 "Could not assemble the grounded Writing prompt. Please retry.",
                 retryable: true, retryAfterMs: 60_000);
             attempt.State = AttemptState.Submitted;
+            await RefundAiPackageCreditAsync(attempt, evaluation, "prompt_build_error", cancellationToken);
             return;
         }
 
@@ -176,6 +180,7 @@ public sealed class WritingEvaluationPipeline(
                 "We couldn't grade this attempt because the AI grading prompt was not properly grounded. Our team has been notified.",
                 retryable: false, retryAfterMs: null);
             attempt.State = AttemptState.Submitted;
+            await RefundAiPackageCreditAsync(attempt, evaluation, "ai_ungrounded", cancellationToken);
             return;
         }
         catch (AiQuotaDeniedException ex)
@@ -185,6 +190,7 @@ public sealed class WritingEvaluationPipeline(
                 "AI grading is unavailable for this attempt due to quota limits. Please try again later or upgrade your plan.",
                 retryable: false, retryAfterMs: null);
             attempt.State = AttemptState.Submitted;
+            await RefundAiPackageCreditAsync(attempt, evaluation, "ai_quota_denied", cancellationToken);
             return;
         }
         catch (Exception ex)
@@ -194,6 +200,7 @@ public sealed class WritingEvaluationPipeline(
                 "We couldn't reach the AI grading service. Please retry — your free-tier counter has not been consumed.",
                 retryable: true, retryAfterMs: 60_000);
             attempt.State = AttemptState.Submitted;
+            await RefundAiPackageCreditAsync(attempt, evaluation, "ai_provider_error", cancellationToken);
             return;
         }
 
@@ -209,6 +216,7 @@ public sealed class WritingEvaluationPipeline(
                 "AI grading returned an unreadable response. Please retry.",
                 retryable: true, retryAfterMs: 60_000);
             attempt.State = AttemptState.Submitted;
+            await RefundAiPackageCreditAsync(attempt, evaluation, "ai_malformed_response", cancellationToken);
             return;
         }
 
@@ -303,6 +311,18 @@ public sealed class WritingEvaluationPipeline(
 
     private static string TruncateAscii(string value, int max)
         => string.IsNullOrEmpty(value) || value.Length <= max ? value : value[..max];
+
+    private async Task RefundAiPackageCreditAsync(Attempt attempt, Evaluation evaluation, string reasonCode, CancellationToken cancellationToken)
+    {
+        if (aiPackageCreditService is null) return;
+
+        await aiPackageCreditService.RefundAsync(
+            attempt.UserId,
+            evaluation.Id,
+            $"refund:{evaluation.Id}:{reasonCode}",
+            "Writing grading failed before completion. Your AI package credit was refunded.",
+            cancellationToken);
+    }
 
     // -----------------------------------------------------------------
     // Failure helper

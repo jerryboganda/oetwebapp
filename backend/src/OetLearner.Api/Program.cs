@@ -1251,6 +1251,8 @@ builder.Services.AddScoped<OetLearner.Api.Services.Rulebook.IAiModelProvider,
     OetLearner.Api.Services.Rulebook.CopilotAiModelProvider>();
 builder.Services.AddScoped<OetLearner.Api.Services.AiManagement.IAiCreditService,
     OetLearner.Api.Services.AiManagement.AiCreditService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Billing.IAiPackageCreditService,
+    OetLearner.Api.Services.Billing.AiPackageCreditService>();
 builder.Services.AddHostedService<OetLearner.Api.Services.AiManagement.AiCreditRenewalWorker>();
 builder.Services.AddHostedService<OetLearner.Api.Services.AiManagement.AiAccountQuotaResetWorker>();
 
@@ -2025,6 +2027,7 @@ app.MapBillingCartEndpoints();
 app.MapBillingCheckoutEndpoints();
 app.MapBillingSubscriptionEndpoints();
 app.MapBillingPromoCodeEndpoints();
+app.MapAiPackageCreditEndpoints();
 app.MapStripeWebhookEndpoints();
 // Wave B4 — finance/ops admin surface (revenue/MRR/churn/LTV/refunds + product
 // & coupon CRUD + Stripe Tax registrations). Each route requires a specific

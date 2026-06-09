@@ -1,64 +1,55 @@
-# Agent State - Payment Options, Subscription Timer, Freezing
+# Agent State - AI Packages
 
 Last updated: 2026-06-09
 
 ## Goal
 
-Implement the three PDF demands into the existing OET billing/subscription system with the existing `Subscription` model as source of truth and no parallel `course_subscriptions` table.
+Implement the AI Packages PDF as a first-class billing, credit, checkout, grading, mock, learner, and admin system using the existing OET billing/webhook/AI-gateway patterns.
 
 ## Implemented
 
-- Payment options page at `app/billing/manual-payment/page.tsx` now shows the PDF method order:
-  InstaPay QR/link, Vodafone Cash/Fawry, QNB Egypt, Stripe card, PayPal Business, UK Monzo transfer, International Monzo transfer.
-- Only the InstaPay QR was extracted from the payment guide into `public/payment/instapay-qr.jpg`; no Monzo QR/admin-only QR material was published.
-- Manual payment submit now requires candidate full name, email, WhatsApp number, selected course, amount, method, transaction reference, and proof bytes.
-- Manual proof storage uses `IFileStorage` through `ManualPaymentService`, not raw file APIs.
-- Admin manual-payment dashboard now exposes candidate identity, course, payment category, proof key, and supports `pending`, `needs_review`, `approved`, `paid`, `rejected`.
-- Existing `Subscription` entity now carries access timer and per-subscription freeze fields.
-- Added append-only `SubscriptionFreeze` entity/table and partial unique pending-request index per subscription.
-- Added `FreezeRequested` and `Frozen` subscription states, learner request/resume endpoints, admin approve/reject/direct-freeze/resume endpoints, and admin table actions.
-- Subscription access uses `StartedAt`/`ExpiresAt`, returns server-computed timer/freeze fields, and renewal/activation extends from `max(now, current ExpiresAt)`.
-- Added `SubscriptionExpiryWorker` to expire active/trial/freeze-requested subscriptions whose `ExpiresAt` is in the past; frozen subscriptions are skipped.
-- Content entitlement denial now returns `subscription_expired` or `subscription_frozen` where applicable.
+- Added AI package credit ledger tables/entities: `AiPackageCreditAccount`, `AiPackageCreditTransaction`, and `LearnerExamOutcome`.
+- Added `AiPackageCreditService` for package grants, idempotent Stripe-session fulfillment, top-up expiry max rule, pool priority, objective/mock allowance deduction, refunds, admin corrections, and pass-expiry.
+- Added production migration `20260702090000_AddAiPackageCreditsAndSeedCatalog` to create ledger/outcome tables and seed all 18 GBP AI package add-ons and versions with `AddonKind = ai_package`.
+- Exposed public `GET /v1/billing/ai-packages`, learner `GET /v1/me/ai-package-credits`, and admin AI package credit lookup/adjust/pass-recording endpoints.
+- Wired checkout fulfillment so `ai_package` add-ons grant the new package ledger instead of legacy review credits.
+- Wired Writing/Speaking grading queue creation to deduct AI package credits and pipeline failure paths to refund debited package credits.
+- Wired deterministic Listening/Reading submission to consume finite package allowances while preserving no-package course behavior.
+- Wired full-shape mock attempt creation to consume separate mock allowance without spending flexible/writing/speaking credits.
+- Added public `/ai-packages` with Full Packages, Separate Packages, Mock Packages, login redirect preservation, Stripe checkout, and learner balance display.
+- Added dashboard `?purchase=success` AI package balance refresh/banner.
+- Added focused backend tests in `AiPackageCreditServiceTests`.
 
 ## Validation
 
-- `pnpm run backend:build`: passed. Existing warnings remained: NU1510 on `System.Text.Encoding.CodePages` plus pre-existing nullability warnings.
+- `pnpm run backend:build`: passed. Existing warnings remained, including NU1510 and pre-existing nullability warnings.
 - `pnpm exec tsc --noEmit`: passed.
-- `pnpm exec eslint app/billing/manual-payment/page.tsx app/admin/billing/manual-payments/page.tsx app/admin/billing/page.tsx components/billing/SubscriptionCard.tsx lib/api.ts lib/api/billing-expansion.ts lib/types/admin.ts`: passed with warnings only.
-- `dotnet test backend/tests/OetLearner.Api.Tests/OetLearner.Api.Tests.csproj --filter BillingExpansionServiceTests`: passed, 13 tests.
-- Full `pnpm run lint` still exits non-zero because the repo currently has unrelated lint warnings/errors outside this change set; scoped lint for touched frontend files has no errors.
+- `dotnet test backend/tests/OetLearner.Api.Tests/OetLearner.Api.Tests.csproj --filter AiPackageCreditServiceTests --nologo`: passed, 5 tests.
+- `pnpm exec eslint app/ai-packages/page.tsx app/page.tsx lib/api.ts lib/billing-types.ts`: passed with warnings only from the repo's `react-hooks/set-state-in-effect` rule on the new package page effects.
+- `git diff --check`: passed with a line-ending warning for `SpeakingEvaluationPipeline.cs`.
 
 ## Touched Files
 
 - `.github/agent-state.local.md`
-- `app/admin/billing/manual-payments/page.tsx`
-- `app/admin/billing/page.tsx`
-- `app/billing/manual-payment/page.tsx`
+- `PROGRESS.md`
+- `app/ai-packages/page.tsx`
+- `app/page.tsx`
 - `backend/src/OetLearner.Api/Data/LearnerDbContext.cs`
-- `backend/src/OetLearner.Api/Data/Migrations/20260701090000_AddSubscriptionTimerFreezingAndManualPaymentFields.cs`
-- `backend/src/OetLearner.Api/Domain/Entities.cs`
-- `backend/src/OetLearner.Api/Domain/Enums.cs`
-- `backend/src/OetLearner.Api/Domain/ManualPaymentRequest.cs`
-- `backend/src/OetLearner.Api/Endpoints/AdminEndpoints.cs`
-- `backend/src/OetLearner.Api/Endpoints/BillingExpansionEndpoints.cs`
-- `backend/src/OetLearner.Api/Endpoints/BillingSubscriptionEndpoints.cs`
+- `backend/src/OetLearner.Api/Data/Migrations/20260702090000_AddAiPackageCreditsAndSeedCatalog.cs`
+- `backend/src/OetLearner.Api/Domain/AiPackageCreditEntities.cs`
+- `backend/src/OetLearner.Api/Endpoints/AiPackageCreditEndpoints.cs`
+- `backend/src/OetLearner.Api/Endpoints/LearnerEndpoints.cs`
 - `backend/src/OetLearner.Api/Program.cs`
-- `backend/src/OetLearner.Api/Services/AdminService.cs`
-- `backend/src/OetLearner.Api/Services/Billing/ManualPaymentService.cs`
-- `backend/src/OetLearner.Api/Services/Billing/SubscriptionBundleInitializer.cs`
-- `backend/src/OetLearner.Api/Services/Billing/SubscriptionExpiryWorker.cs`
-- `backend/src/OetLearner.Api/Services/Billing/SubscriptionStateMachine.cs`
-- `backend/src/OetLearner.Api/Services/Content/ContentEntitlementService.cs`
-- `backend/src/OetLearner.Api/Services/Entitlements/EffectiveEntitlementResolver.cs`
-- `backend/tests/OetLearner.Api.Tests/BillingExpansionServiceTests.cs`
-- `components/billing/SubscriptionCard.tsx`
+- `backend/src/OetLearner.Api/Services/Billing/AiPackageCreditService.cs`
+- `backend/src/OetLearner.Api/Services/LearnerService.cs`
+- `backend/src/OetLearner.Api/Services/MockService.cs`
+- `backend/src/OetLearner.Api/Services/SpeakingEvaluationPipeline.cs`
+- `backend/src/OetLearner.Api/Services/Writing/WritingEvaluationPipeline.cs`
+- `backend/tests/OetLearner.Api.Tests/AiPackageCreditServiceTests.cs`
 - `lib/api.ts`
-- `lib/api/billing-expansion.ts`
-- `lib/types/admin.ts`
-- `public/payment/instapay-qr.jpg`
+- `lib/billing-types.ts`
 
 ## Known Workspace Notes
 
-- Unrelated dirty files existed before this task: `app/page.tsx`, `app/page.test.tsx`, and `lib/learner-surface.ts`. They were not intentionally modified for this task.
-- Untracked repo-local PDFs and `.worktrees/` also existed before this task and were left alone.
+- Pre-existing/unrelated untracked `.worktrees/` remains untouched.
+- Existing unrelated local modifications in `app/page.tsx` were preserved while adding only the purchase-success balance banner.

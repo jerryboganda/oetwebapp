@@ -2,14 +2,15 @@
 
 Last updated: 2026-06-09
 
-## Current Checkpoint - Payment Options, Subscription Timer, Freezing
+## Current Checkpoint - AI Packages
 
-- Implemented the three attached PDF demands into the existing billing/subscription system without adding a parallel `course_subscriptions` source of truth.
-- Payment options page now shows the exact required method order and publishes only the extracted InstaPay QR asset at `public/payment/instapay-qr.jpg`.
-- Manual payments now collect candidate identity, WhatsApp, selected course, amount, method, transaction reference, and proof; proof storage goes through `IFileStorage`; admin approval marks paid and grants access.
-- `Subscription` now carries timer/freeze fields, `SubscriptionFreeze` logs requests/actions, learner/admin freeze endpoints are wired, and frozen/expired access denials return structured codes.
-- Validation: `pnpm run backend:build` passed; `pnpm exec tsc --noEmit` passed; scoped touched-file eslint passed with warnings only; `dotnet test backend/tests/OetLearner.Api.Tests/OetLearner.Api.Tests.csproj --filter BillingExpansionServiceTests` passed.
-- Full `pnpm run lint` still exits non-zero due unrelated repo-wide lint findings outside this task; see `.github/agent-state.local.md` for details.
+- Implemented AI Packages as first-class `ai_package` billing add-ons plus a dedicated append-only package credit ledger.
+- Added production migration `20260702090000_AddAiPackageCreditsAndSeedCatalog` with all 18 GBP AI package SKUs, package grant JSON, add-on versions, and new ledger/outcome tables.
+- Public `/ai-packages` now loads the grouped package catalogue, supports Full/Separate/Mock tabs, preserves login redirect intent, opens the existing quote -> checkout-session flow, and shows learner package balances.
+- Learner/admin APIs are wired for package catalogue, current balances, transaction audit, manual adjustment, and admin-recorded pass outcomes.
+- Checkout fulfillment grants package pools idempotently by Stripe session; Writing/Speaking queueing deducts package credits; failure paths refund; Listening/Reading use deterministic finite/unlimited allowances; full-shape mocks consume separate mock allowance.
+- Dashboard `?purchase=success` now refreshes AI package balances and shows the success banner.
+- Validation: `pnpm run backend:build` passed; `pnpm exec tsc --noEmit` passed; `dotnet test backend/tests/OetLearner.Api.Tests/OetLearner.Api.Tests.csproj --filter AiPackageCreditServiceTests --nologo` passed 5 tests; scoped eslint for touched frontend/API files passed with warnings only.
 
 ## Current Operating Goal
 

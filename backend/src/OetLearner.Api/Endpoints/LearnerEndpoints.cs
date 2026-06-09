@@ -20,6 +20,7 @@ public static class LearnerEndpoints
         // Public endpoints (no auth required)
         var publicV1 = app.MapGroup("/v1/public");
         publicV1.MapGet("/plans", async (LearnerService service, CancellationToken ct) => Results.Ok(await service.GetBillingPlansAsync(string.Empty, ct)));
+        app.MapGet("/v1/billing/ai-packages", async (LearnerService service) => Results.Ok(await service.GetAiPackagesAsync()));
 
         var v1 = app.MapGroup("/v1").RequireAuthorization("LearnerOnly");
 
@@ -320,7 +321,6 @@ public static class LearnerEndpoints
         });
         billing.MapGet("/review-options", (LearnerService service) => Results.Ok(service.GetReviewOptions()));
         billing.MapGet("/extras", async (LearnerService service) => Results.Ok(await service.GetBillingExtrasAsync()));
-        billing.MapGet("/ai-packages", async (LearnerService service) => Results.Ok(await service.GetAiPackagesAsync()));
         billing.MapPost("/checkout-sessions", async (HttpContext http, CheckoutSessionCreateRequest request, LearnerService service, CancellationToken ct) => Results.Ok(await service.CreateCheckoutSessionAsync(http.UserId(), request, ct)))
             .RequireRateLimiting("PerUserWrite");
         billing.MapPost("/cancel", async (HttpContext http, [FromQuery] bool immediate, LearnerService service, CancellationToken ct) => Results.Ok(await service.CancelOwnSubscriptionAsync(http.UserId(), immediate, ct)))

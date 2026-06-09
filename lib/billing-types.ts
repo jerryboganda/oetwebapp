@@ -181,3 +181,34 @@ export interface AiPackagesResponse {
   };
   mock: AiPackage[];
 }
+
+export interface AiPackageCreditTransaction {
+  id: string;
+  packageId?: string | null;
+  packageType?: string | null;
+  reason: string;
+  flexibleCreditsDelta: number;
+  writingOnlyCreditsDelta: number;
+  speakingOnlyCreditsDelta: number;
+  listeningTestsDelta: number;
+  readingTestsDelta: number;
+  mockExamsDelta: number;
+  referenceId?: string | null;
+  description: string;
+  expiresAt?: string | null;
+  createdAt: string;
+}
+
+export interface AiPackageCreditSnapshot {
+  userId: string;
+  flexibleCredits: number;
+  writingOnlyCredits: number;
+  speakingOnlyCredits: number;
+  listeningTestsRemaining: number | null;
+  readingTestsRemaining: number | null;
+  mockExamsRemaining: number;
+  expiresAt?: string | null;
+  expiredBecausePassed: boolean;
+  passedAt?: string | null;
+  transactions: AiPackageCreditTransaction[];
+}

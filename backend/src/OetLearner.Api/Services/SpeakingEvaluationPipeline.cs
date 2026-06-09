@@ -1,9 +1,10 @@
-using System.Text;
+﻿using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services.Billing;
 using OetLearner.Api.Services.Rulebook;
 
 namespace OetLearner.Api.Services;
@@ -18,7 +19,8 @@ public sealed class SpeakingEvaluationPipeline(
     LearnerDbContext db,
     IAiGatewayService aiGateway,
     SpeakingRuleEngine ruleEngine,
-    ILogger<SpeakingEvaluationPipeline> logger) : ISpeakingEvaluationPipeline
+    ILogger<SpeakingEvaluationPipeline> logger,
+    IAiPackageCreditService? aiPackageCreditService = null) : ISpeakingEvaluationPipeline
 {
     public async Task CompleteTranscriptionAsync(BackgroundJobItem job, CancellationToken cancellationToken)
     {
@@ -97,15 +99,16 @@ public sealed class SpeakingEvaluationPipeline(
         }
         catch (PromptNotGroundedException)
         {
+            await RefundAiPackageCreditAsync(attempt, evaluation, "ai_ungrounded", cancellationToken);
             throw;
         }
         catch (OetLearner.Api.Services.AiManagement.AiQuotaDeniedException quotaEx)
         {
-            // Balance = 0 (spec §9). The gateway throws before debiting, so no
+            // Balance = 0 (spec Â§9). The gateway throws before debiting, so no
             // credit was consumed. Mark the evaluation failed with a clean,
             // non-retryable "no credits" reason instead of a generic provider error.
             logger.LogInformation(
-                "Speaking grading blocked — AI grading credits exhausted for attempt {AttemptId} ({Code}).",
+                "Speaking grading blocked â€” AI grading credits exhausted for attempt {AttemptId} ({Code}).",
                 attempt.Id, quotaEx.ErrorCode);
             evaluation.State = AsyncState.Failed;
             evaluation.StatusReasonCode = "ai_credits_insufficient";
@@ -113,12 +116,13 @@ public sealed class SpeakingEvaluationPipeline(
             evaluation.Retryable = false;
             evaluation.RetryAfterMs = null;
             evaluation.LastTransitionAt = DateTimeOffset.UtcNow;
-            evaluation.LearnerDisclaimer = "Grading was not completed — no AI grading credits remaining.";
+            evaluation.LearnerDisclaimer = "Grading was not completed â€” no AI grading credits remaining.";
+            await RefundAiPackageCreditAsync(attempt, evaluation, "ai_quota_denied", cancellationToken);
             return;
         }
         catch (Exception ex)
         {
-            // Q3 (docs/SPEAKING-MODULE-PLAN.md §6): fail loud on AI provider
+            // Q3 (docs/SPEAKING-MODULE-PLAN.md Â§6): fail loud on AI provider
             // errors instead of silently substituting rule-engine scores.
             // The transcript is preserved on the attempt so the learner can
             // retry. Free-tier counter refund is the AI gateway's
@@ -126,7 +130,7 @@ public sealed class SpeakingEvaluationPipeline(
             logger.LogWarning(ex, "Speaking grounded AI score call failed for attempt {AttemptId}; marking evaluation Failed (Q3 fail-loud).", attempt.Id);
             evaluation.State = AsyncState.Failed;
             evaluation.StatusReasonCode = "ai_provider_error";
-            evaluation.StatusMessage = "We couldn't grade this attempt because the AI grading service was unavailable. Please retry — your free-tier counter has not been consumed.";
+            evaluation.StatusMessage = "We couldn't grade this attempt because the AI grading service was unavailable. Please retry â€” your free-tier counter has not been consumed.";
             evaluation.Retryable = true;
             evaluation.RetryAfterMs = 30_000;
             evaluation.LastTransitionAt = DateTimeOffset.UtcNow;
@@ -142,6 +146,7 @@ public sealed class SpeakingEvaluationPipeline(
                     advisoryOnly = true
                 }
             }));
+            await RefundAiPackageCreditAsync(attempt, evaluation, "ai_provider_error", cancellationToken);
             return;
         }
 
@@ -223,6 +228,18 @@ public sealed class SpeakingEvaluationPipeline(
         evaluation.Retryable = false;
         evaluation.RetryAfterMs = null;
         evaluation.LastTransitionAt = DateTimeOffset.UtcNow;
+    }
+
+    private async Task RefundAiPackageCreditAsync(Attempt attempt, Evaluation evaluation, string reasonCode, CancellationToken cancellationToken)
+    {
+        if (aiPackageCreditService is null) return;
+
+        await aiPackageCreditService.RefundAsync(
+            attempt.UserId,
+            evaluation.Id,
+            $"refund:{evaluation.Id}:{reasonCode}",
+            "Speaking grading failed before completion. Your AI package credit was refunded.",
+            cancellationToken);
     }
 
     private static List<SpeakingTranscriptLine> BuildMockDevelopmentTranscript(Attempt attempt, ContentItem? content)
@@ -676,7 +693,7 @@ public sealed class SpeakingEvaluationPipeline(
     private static string CriterionFromFinding(UnifiedFinding finding)
     {
         var text = $"{finding.RuleId} {finding.Message}".ToLowerInvariant();
-        // Clinical Communication (5 criteria, 0–3) — route first so clinical cues win over generic linguistic keywords.
+        // Clinical Communication (5 criteria, 0â€“3) â€” route first so clinical cues win over generic linguistic keywords.
         if (text.Contains("empathy") || text.Contains("rapport") || text.Contains("greeting") || text.Contains("introduc") || text.Contains("judgemental") || text.Contains("respectful") || text.Contains("attitude"))
             return "relationshipBuilding";
         if (text.Contains("patient's perspective") || text.Contains("patient perspective") || text.Contains("concerns") || text.Contains("expectations") || text.Contains("cue") || text.Contains("ideas"))
@@ -687,7 +704,7 @@ public sealed class SpeakingEvaluationPipeline(
             return "informationGathering";
         if (text.Contains("check") && text.Contains("understanding") || text.Contains("information giving") || text.Contains("pause") || text.Contains("silence") || text.Contains("warning shot") || text.Contains("feedback") || text.Contains("explain"))
             return "informationGiving";
-        // Linguistic (4 criteria, 0–6)
+        // Linguistic (4 criteria, 0â€“6)
         if (text.Contains("jargon") || text.Contains("plain") || text.Contains("grammar") || text.Contains("expression"))
             return "grammar";
         if (text.Contains("sensitive") || text.Contains("tone") || text.Contains("register") || text.Contains("appropriate"))

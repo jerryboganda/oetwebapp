@@ -62,7 +62,8 @@ public partial class LearnerService(
     OetLearner.Api.Services.Billing.ICouponVariantApplicator? couponVariantApplicator = null,
     PrivateSpeakingService? privateSpeakingService = null,
     IFulfillmentService? fulfillmentService = null,
-    IAddonEligibilityService? addonEligibilityService = null)
+    IAddonEligibilityService? addonEligibilityService = null,
+    IAiPackageCreditService? aiPackageCreditService = null)
 {
     private const string PaymentWebhookParserVersion = "payment-webhook-v1";
     private const int PaymentIdempotencyKeyMaxLength = 38;
@@ -2185,9 +2186,21 @@ public partial class LearnerService(
         attempt.LastClientSyncAt = DateTimeOffset.UtcNow;
         await LearnerWorkflowCoordinator.UpdateDiagnosticProgressAsync(db, attempt, AttemptState.Evaluating, cancellationToken);
 
+        var evaluationId = $"we-{Guid.NewGuid():N}";
+        if (aiPackageCreditService is not null)
+        {
+            var debit = await aiPackageCreditService.DeductGradingCreditAsync(userId, "writing", evaluationId, cancellationToken);
+            if (!debit.Debited)
+            {
+                throw ApiException.PaymentRequired(
+                    debit.ErrorCode ?? "no_ai_package_credits",
+                    debit.ErrorMessage ?? "You have no credits remaining. Purchase a package to continue.");
+            }
+        }
+
         var evaluation = new Evaluation
         {
-            Id = $"we-{Guid.NewGuid():N}",
+            Id = evaluationId,
             AttemptId = attempt.Id,
             SubtestCode = "writing",
             State = AsyncState.Queued,
@@ -3109,9 +3122,21 @@ public partial class LearnerService(
         attempt.State = AttemptState.Evaluating;
         attempt.SubmittedAt ??= DateTimeOffset.UtcNow;
         await LearnerWorkflowCoordinator.UpdateDiagnosticProgressAsync(db, attempt, AttemptState.Evaluating, cancellationToken);
+        var evaluationId = $"se-{Guid.NewGuid():N}";
+        if (aiPackageCreditService is not null)
+        {
+            var debit = await aiPackageCreditService.DeductGradingCreditAsync(attempt.UserId, "speaking", evaluationId, cancellationToken);
+            if (!debit.Debited)
+            {
+                throw ApiException.PaymentRequired(
+                    debit.ErrorCode ?? "no_ai_package_credits",
+                    debit.ErrorMessage ?? "You have no credits remaining. Purchase a package to continue.");
+            }
+        }
+
         var evaluation = new Evaluation
         {
-            Id = $"se-{Guid.NewGuid():N}",
+            Id = evaluationId,
             AttemptId = attempt.Id,
             SubtestCode = "speaking",
             State = AsyncState.Queued,
@@ -3589,13 +3614,27 @@ public partial class LearnerService(
 
     private static AiPackageView ToAiPackageView(BillingAddOn x)
     {
-        var (mocks, priorityQueue) = ReadAiPackageExtras(x.GrantEntitlementsJson);
+        var extras = ReadAiPackageExtras(x.GrantEntitlementsJson);
         var group = ResolveAiPackageGroup(x.Code);
-        var features = BuildAiPackageFeatures(group, x.GrantCredits, mocks, x.DurationDays, priorityQueue);
+        var credits = extras.FlexibleCredits ?? x.GrantCredits;
+        var writingCredits = extras.WritingCredits ?? x.LettersGranted;
+        var speakingCredits = extras.SpeakingCredits ?? x.SessionsGranted;
+        if (group == "writing" && writingCredits == 0) writingCredits = credits;
+        if (group == "speaking" && speakingCredits == 0) speakingCredits = credits;
+        var features = BuildAiPackageFeatures(
+            group,
+            credits,
+            writingCredits,
+            speakingCredits,
+            extras.Mocks,
+            x.DurationDays,
+            extras.PriorityQueue,
+            extras.ListeningTests,
+            extras.ReadingTests);
         return new AiPackageView(
             x.Code, x.Name, x.Description ?? string.Empty,
-            x.Price, x.Currency, x.GrantCredits, x.LettersGranted,
-            x.SessionsGranted, mocks, x.DurationDays, priorityQueue, group, features);
+            x.Price, x.Currency, credits, writingCredits,
+            speakingCredits, extras.Mocks, x.DurationDays, extras.PriorityQueue, group, features);
     }
 
     private static string ResolveAiPackageGroup(string code)
@@ -3609,7 +3648,15 @@ public partial class LearnerService(
     }
 
     private static IReadOnlyList<string> BuildAiPackageFeatures(
-        string group, int credits, int mocks, int validityDays, bool priorityQueue)
+        string group,
+        int credits,
+        int writingCredits,
+        int speakingCredits,
+        int mocks,
+        int validityDays,
+        bool priorityQueue,
+        int? listeningTests,
+        int? readingTests)
     {
         var features = new List<string>();
         var validity = validityDays >= 180 ? "6-month validity" : $"{validityDays}-day validity";
@@ -3624,19 +3671,25 @@ public partial class LearnerService(
                 features.Add(validity);
                 break;
             case "writing":
-                features.Add($"{credits} AI-graded Writing letters");
+                features.Add($"{writingCredits} AI-graded Writing letters");
                 features.Add("Instant Claude feedback on every letter");
                 features.Add("Detailed per-criterion feedback");
                 features.Add(validity);
                 break;
             case "speaking":
-                features.Add($"{credits} AI-graded Speaking cards");
+                features.Add($"{speakingCredits} AI-graded Speaking cards");
                 features.Add("Whisper transcription + Claude assessment");
                 features.Add("Rule-cited transcript markers");
                 features.Add(validity);
                 break;
             case "listening":
+                features.Add(listeningTests is null ? "Unlimited Listening practice tests" : $"{listeningTests} Listening practice tests");
+                features.Add("Deterministic answer-key marking");
+                features.Add("Always free to grade - no AI credits used");
+                features.Add(validity);
+                break;
             case "reading":
+                features.Add(readingTests is null ? "Unlimited Reading practice tests" : $"{readingTests} Reading practice tests");
                 features.Add("Deterministic answer-key marking");
                 features.Add("Always free to grade — no credits used");
                 features.Add(validity);
@@ -3652,22 +3705,53 @@ public partial class LearnerService(
         return features;
     }
 
-    private static (int Mocks, bool PriorityQueue) ReadAiPackageExtras(string? grantEntitlementsJson)
+    private static AiPackageExtras ReadAiPackageExtras(string? grantEntitlementsJson)
     {
-        if (string.IsNullOrWhiteSpace(grantEntitlementsJson)) return (0, false);
+        if (string.IsNullOrWhiteSpace(grantEntitlementsJson)) return new(null, null, null, null, null, 0, false);
         try
         {
             using var doc = JsonDocument.Parse(grantEntitlementsJson);
-            if (doc.RootElement.ValueKind != JsonValueKind.Object) return (0, false);
-            var mocks = doc.RootElement.TryGetProperty("mockFull", out var m) && m.TryGetInt32(out var mv) ? Math.Max(0, mv) : 0;
-            var pq = doc.RootElement.TryGetProperty("priority_queue", out var p) && p.ValueKind == JsonValueKind.True;
-            return (mocks, pq);
+            if (doc.RootElement.ValueKind != JsonValueKind.Object) return new(null, null, null, null, null, 0, false);
+            var root = doc.RootElement;
+            var mocks = ReadInt(root, "mock_exams") ?? ReadInt(root, "mockFull") ?? 0;
+            var pq = root.TryGetProperty("priority_queue", out var p) && p.ValueKind == JsonValueKind.True;
+            return new(
+                ReadInt(root, "flexible_credits"),
+                ReadInt(root, "writing_only_credits"),
+                ReadInt(root, "speaking_only_credits"),
+                ReadNullableAllowance(root, "listening_tests"),
+                ReadNullableAllowance(root, "reading_tests"),
+                mocks,
+                pq);
         }
         catch (JsonException)
         {
-            return (0, false);
+            return new(null, null, null, null, null, 0, false);
         }
     }
+
+    private static int? ReadInt(JsonElement root, string name)
+        => root.TryGetProperty(name, out var value)
+           && value.ValueKind == JsonValueKind.Number
+           && value.TryGetInt32(out var parsed)
+            ? Math.Max(0, parsed)
+            : null;
+
+    private static int? ReadNullableAllowance(JsonElement root, string name)
+    {
+        if (!root.TryGetProperty(name, out var value)) return null;
+        if (value.ValueKind == JsonValueKind.Null) return null;
+        return value.TryGetInt32(out var parsed) ? Math.Max(0, parsed) : null;
+    }
+
+    private sealed record AiPackageExtras(
+        int? FlexibleCredits,
+        int? WritingCredits,
+        int? SpeakingCredits,
+        int? ListeningTests,
+        int? ReadingTests,
+        int Mocks,
+        bool PriorityQueue);
 
     private sealed record AiPackageView(
         string Code, string Name, string Description, decimal Price, string Currency,
@@ -5935,6 +6019,17 @@ public partial class LearnerService(
             return new { attemptId = attempt.Id, evaluationId = existing.Id, state = "completed" };
         }
 
+        if (aiPackageCreditService is not null)
+        {
+            var debit = await aiPackageCreditService.DeductObjectivePracticeAsync(userId, subtest, attempt.Id, cancellationToken);
+            if (!debit.Debited)
+            {
+                throw ApiException.PaymentRequired(
+                    debit.ErrorCode ?? $"no_{subtest}_tests",
+                    debit.ErrorMessage ?? $"You have no {ToDisplaySubtest(subtest)} practice tests remaining. Purchase a package to continue.");
+            }
+        }
+
         attempt.State = AttemptState.Completed;
         attempt.SubmittedAt = DateTimeOffset.UtcNow;
         attempt.CompletedAt = DateTimeOffset.UtcNow;
@@ -7191,6 +7286,12 @@ public partial class LearnerService(
         return await db.BillingAddOns.AsNoTracking()
             .FirstOrDefaultAsync(addOn => addOn.Code.ToLower() == normalized
                 || addOn.Id.ToLower() == normalized, cancellationToken);
+    }
+
+    private async Task<bool> IsAiPackageAddOnAsync(string addOnCode, CancellationToken cancellationToken)
+    {
+        var addOn = await FindBillingAddOnAsync(addOnCode, cancellationToken);
+        return string.Equals(addOn?.AddonKind, "ai_package", StringComparison.OrdinalIgnoreCase);
     }
 
       private async Task<BillingCoupon?> FindBillingCouponAsync(string couponCode, CancellationToken cancellationToken)
@@ -9885,9 +9986,26 @@ public partial class LearnerService(
                         : now;
                     subscription.ExpiresAt = baseline.AddDays(totalExtensionDays);
                 }
+
+                if (string.Equals(resolvedAddonKind, "ai_package", StringComparison.Ordinal)
+                    && aiPackageCreditService is not null)
+                {
+                    var liveAddOnForPackage = await FindBillingAddOnAsync(addOn.Code, ct);
+                    if (liveAddOnForPackage is not null)
+                    {
+                        await aiPackageCreditService.GrantPackageAsync(
+                            transaction.LearnerUserId,
+                            liveAddOnForPackage,
+                            Math.Max(1, item.Quantity),
+                            transaction.GatewayTransactionId,
+                            quote.Id,
+                            ct);
+                    }
+                }
             }
 
-            if (addOn.GrantCredits > 0)
+            var isAiPackageAddOn = await IsAiPackageAddOnAsync(addOn.Code, ct);
+            if (addOn.GrantCredits > 0 && !isAiPackageAddOn)
             {
                 var creditAmount = addOn.GrantCredits * Math.Max(1, item.Quantity);
                 if (AddOnGrantsAiCredits(addOn.GrantEntitlementsJson))

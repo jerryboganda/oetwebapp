@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { motion, useReducedMotion } from 'motion/react';
 import { MotionItem } from '@/components/ui/motion-primitives';
 import {
@@ -24,6 +24,7 @@ import {
   Trophy,
 } from 'lucide-react';
 import { Button, Card, CardContent, CardHeader, CardLink, CardTitle, ProgressBar } from '@/components/ui';
+import { InlineAlert } from '@/components/ui/alert';
 import { LearnerDashboardShell } from '@/components/layout';
 import {
   LearnerPageHero,
@@ -46,6 +47,7 @@ import { OnboardingChecklist } from '@/components/onboarding/onboarding-checklis
 import { useDashboardHome } from '@/lib/hooks/use-dashboard-home';
 import {
   learnerGetScoringPolicy,
+  fetchMyAiPackageCredits,
   fetchMyEntitlementSnapshot,
   fetchSubscriptionMe,
   type ScoringPolicyLearnerDto,
@@ -55,6 +57,7 @@ import {
 import { formatMoney } from '@/lib/money';
 import type { SubTest } from '@/lib/mock-data';
 import type { LearnerSurfaceCardModel } from '@/lib/learner-surface';
+import type { AiPackageCreditSnapshot } from '@/lib/billing-types';
 
 const SUBTEST_ICONS: Record<SubTest, React.ElementType> = {
   Writing: FilePenLine,
@@ -222,6 +225,7 @@ function DashboardSubscriptionSummary({
 
 export default function Dashboard() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const prefersReducedMotion = useReducedMotion();
   const { data, error, reload, status } = useDashboardHome();
   const [scoringPolicy, setScoringPolicy] = useState<ScoringPolicyLearnerDto | null>(null);
@@ -230,6 +234,8 @@ export default function Dashboard() {
   const [subscription, setSubscription] = useState<SubscriptionMe | null>(null);
   const [subscriptionLoading, setSubscriptionLoading] = useState(true);
   const [subscriptionError, setSubscriptionError] = useState(false);
+  const [aiPackageCredits, setAiPackageCredits] = useState<AiPackageCreditSnapshot | null>(null);
+  const purchaseSuccess = searchParams?.get('purchase') === 'success';
   const { home, profile, readiness, tasks, engagement, loadedAt } = data;
   const freeze = home?.freeze?.currentFreeze ?? null;
 
@@ -281,6 +287,19 @@ export default function Dashboard() {
       });
     return () => { cancelled = true; };
   }, []);
+
+  useEffect(() => {
+    if (!purchaseSuccess) return;
+    let cancelled = false;
+    fetchMyAiPackageCredits()
+      .then((snapshot) => {
+        if (!cancelled) setAiPackageCredits(snapshot);
+      })
+      .catch(() => {
+        if (!cancelled) setAiPackageCredits(null);
+      });
+    return () => { cancelled = true; };
+  }, [purchaseSuccess]);
 
   const dashboardHeroHighlights = [
     {
@@ -400,6 +419,13 @@ export default function Dashboard() {
           }
         >
         <div className="space-y-6">
+          {purchaseSuccess ? (
+            <InlineAlert variant="success">
+              AI package purchase received. Current balances: {aiPackageCredits
+                ? `${aiPackageCredits.flexibleCredits} flexible, ${aiPackageCredits.writingOnlyCredits} writing, ${aiPackageCredits.speakingOnlyCredits} speaking, ${aiPackageCredits.mockExamsRemaining} mocks.`
+                : 'refreshing your package balance.'}
+            </InlineAlert>
+          ) : null}
           <LearnerPageHero
             eyebrow="Current Focus"
             icon={Sparkles}
