@@ -4,10 +4,11 @@ import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
 import {
   PART_A_GAP_MARKER,
+  PART_A_SCAFFOLD,
   PartANotesBuilder,
   sanitizePastedStem,
 } from '@/components/domain/listening/admin/PartANotesBuilder';
-import { detectPastedGaps } from '@/lib/listening-part-a-notes';
+import { countGaps, detectPastedGaps } from '@/lib/listening-part-a-notes';
 
 // Mirror of the renderer's BLANK_PATTERN — the marker the builder emits MUST
 // be recognised by this so the learner renderer splits a gap field on it.
@@ -125,6 +126,56 @@ describe('PartANotesBuilder', () => {
     await user.click(screen.getByRole('button', { name: /heading/i }));
 
     expect(editor.value).toBe('Patient notes\n## Heading');
+  });
+
+  it('inserts a level-2 sub-bullet on its own line', async () => {
+    const user = userEvent.setup();
+    render(<Harness initial="- top-level point" />);
+
+    const editor = screen.getByLabelText(/stem \(note-completion\)/i) as HTMLTextAreaElement;
+    editor.setSelectionRange(editor.value.length, editor.value.length);
+    await user.click(screen.getByRole('button', { name: /sub-bullet/i }));
+
+    // Two-space indent + dash → grammar level-2 bullet.
+    expect(editor.value).toBe('- top-level point\n  - ');
+  });
+
+  it('drops the full Part A skeleton into an empty editor via the Scaffold button', async () => {
+    const user = userEvent.setup();
+    const onValue = vi.fn();
+    render(<Harness onValue={onValue} />);
+
+    await user.click(screen.getByRole('button', { name: /scaffold/i }));
+
+    const editor = screen.getByLabelText(/stem \(note-completion\)/i) as HTMLTextAreaElement;
+    expect(editor.value).toBe(PART_A_SCAFFOLD);
+    expect(onValue).toHaveBeenLastCalledWith(PART_A_SCAFFOLD);
+    // Demonstrates every construct the grammar understands.
+    expect(editor.value).toMatch(/thirty seconds/i);
+    expect(editor.value).toContain('## ');
+    expect(editor.value).toContain('  - ');
+    expect(editor.value).toContain('____');
+    // The bracket placeholders are literal text, never answer blanks.
+    expect(countGaps(editor.value)).toBe(4);
+  });
+
+  it('live gap-count chip tracks the authored markers', async () => {
+    const user = userEvent.setup();
+    render(<Harness initial="Onset  dose " />);
+
+    const chip = screen.getByTestId('part-a-gap-count');
+    expect(chip).toHaveTextContent('0 gaps');
+
+    const editor = screen.getByLabelText(/stem \(note-completion\)/i) as HTMLTextAreaElement;
+    const gap = screen.getByRole('button', { name: /insert gap/i });
+
+    editor.setSelectionRange(6, 6);
+    await user.click(gap);
+    expect(chip).toHaveTextContent('1 gap');
+
+    editor.setSelectionRange(editor.value.length, editor.value.length);
+    await user.click(gap);
+    expect(chip).toHaveTextContent('2 gaps');
   });
 
   it('sanitizes pasted rich content into safe plain text with structure preserved', () => {

@@ -197,6 +197,10 @@ export interface ListeningSessionDto {
      * player resolves the current section to a URL (exact code → parent part
      * fallback). Empty object when no per-part QuestionPaper assets exist. */
     questionPaperUrlByPart?: Record<string, string>;
+    /** Part A audio model: "single" (one audio plays across both consultations
+     * — A1 and A2 resolve to the same file) or "per_subsection" (independent
+     * A1/A2 audio). Defaults to "per_subsection" when absent. */
+    partAAudioMode?: 'single' | 'per_subsection';
     audioAvailable: boolean;
     audioUnavailableReason: string | null;
     assetReadiness: {

@@ -798,6 +798,11 @@ builder.Services.AddScoped<OetLearner.Api.Services.IContentStalenessService, Oet
 builder.Services.AddScoped<OetLearner.Api.Services.Listening.IListeningAnalyticsService, OetLearner.Api.Services.Listening.ListeningAnalyticsService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Listening.IListeningAuthoringService, OetLearner.Api.Services.Listening.ListeningAuthoringService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Listening.IListeningBackfillService, OetLearner.Api.Services.Listening.ListeningBackfillService>();
+// Listening Part A AI-assisted data entry: Mistral OCR (PDF→Markdown) + Claude
+// (structures into the canonical note-completion manifest). Drafts are staged
+// for human review and approved through ListeningAuthoringService.ImportManifestAsync.
+builder.Services.AddScoped<OetLearner.Api.Services.Listening.IMistralOcrClient, OetLearner.Api.Services.Listening.MistralOcrClient>();
+builder.Services.AddScoped<OetLearner.Api.Services.Listening.IListeningPartAExtractionService, OetLearner.Api.Services.Listening.ListeningPartAExtractionService>();
 // Listening TTS synthesis. The DI seam picks between provider implementations
 // based on appsettings `Listening:TtsProvider`. Supported values:
 //   "stub"  — emits silence, in-process, no creds (default in dev/CI).

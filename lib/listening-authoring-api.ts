@@ -339,6 +339,103 @@ export async function setListeningSubSectionTimer(
   return replaceListeningExtracts(paperId, next);
 }
 
+// ── Part A audio mode (single | per_subsection) ────────────────────────
+//
+// Mirrors GET/PATCH /v1/admin/papers/{paperId}/listening/part-a-audio-mode.
+// "single" makes one uploaded Part-"A" (or A1) audio play across both
+// consultations; "per_subsection" keeps independent A1/A2 audio. Stored on
+// ContentPaper.ExtractedTextJson; resolved by ListeningLearnerService and
+// surfaced to the learner session as `partAAudioMode`.
+
+export type ListeningPartAAudioMode = 'single' | 'per_subsection';
+
+export interface ListeningPartAAudioModeResult {
+  mode: ListeningPartAAudioMode;
+}
+
+export const getPartAAudioMode = (paperId: string) =>
+  api<ListeningPartAAudioModeResult>(`/v1/admin/papers/${paperId}/listening/part-a-audio-mode`);
+
+export const setPartAAudioMode = (paperId: string, mode: ListeningPartAAudioMode) =>
+  api<ListeningPartAAudioModeResult>(`/v1/admin/papers/${paperId}/listening/part-a-audio-mode`, {
+    method: 'PATCH',
+    body: JSON.stringify({ mode }),
+  });
+
+// ── Part A AI-assisted data entry (Mistral OCR + Claude) ────────────────
+//
+// Mirrors POST /extract, GET /extractions[/{id}], POST .../approve|reject.
+// The pipeline OCRs the uploaded QuestionPaper + AnswerKey PDFs and stages a
+// Pending ListeningExtractionDraft; approval imports it via the same validated
+// manifest path as a manual edit. Drafts are never auto-published.
+
+export interface ListeningExtractionRunResult {
+  draftId: string;
+  status: string;
+  gapCountA1: number;
+  gapCountA2: number;
+  answerCountA1: number;
+  answerCountA2: number;
+  warnings: string[];
+  summary: string;
+}
+
+export interface ListeningExtractionDraftSummary {
+  id: string;
+  status: string;
+  proposedAt: string;
+  proposedByUserId: string | null;
+  summary: string;
+  isStub: boolean;
+  stubReason: string | null;
+}
+
+export interface ListeningExtractionAnswerPreview {
+  number: number;
+  correctAnswer: string | null;
+  acceptedAnswers: string[];
+}
+
+export interface ListeningExtractionExtractPreview {
+  partCode: string;
+  extractNumber: number;
+  gapCount: number;
+  notesBody: string | null;
+  answers: ListeningExtractionAnswerPreview[];
+}
+
+export interface ListeningExtractionDraftDetail {
+  id: string;
+  status: string;
+  summary: string;
+  isStub: boolean;
+  stubReason: string | null;
+  extracts: ListeningExtractionExtractPreview[];
+}
+
+export const runListeningExtraction = (paperId: string) =>
+  api<ListeningExtractionRunResult>(`/v1/admin/papers/${paperId}/listening/extract`, { method: 'POST' });
+
+export const listListeningExtractions = (paperId: string) =>
+  api<{ drafts: ListeningExtractionDraftSummary[] }>(`/v1/admin/papers/${paperId}/listening/extractions`);
+
+export const getListeningExtractionDraft = (paperId: string, draftId: string) =>
+  api<ListeningExtractionDraftDetail>(
+    `/v1/admin/papers/${paperId}/listening/extractions/${encodeURIComponent(draftId)}`,
+  );
+
+export const approveListeningExtraction = (paperId: string, draftId: string) =>
+  api<{ draftId: string; structure: ListeningAuthoredQuestionList; report: ListeningValidationReport }>(
+    `/v1/admin/papers/${paperId}/listening/extractions/${encodeURIComponent(draftId)}/approve`,
+    { method: 'POST' },
+  );
+
+export const rejectListeningExtraction = (paperId: string, draftId: string, reason?: string) =>
+  api<{ ok: boolean }>(
+    `/v1/admin/papers/${paperId}/listening/extractions/${encodeURIComponent(draftId)}/reject`,
+    { method: 'POST', body: JSON.stringify({ reason: reason ?? null }) },
+  );
+
 // ── Learner: course pathway snapshot ───────────────────────────────────
 //
 // Mirrors `ListeningPathwaySnapshot` from

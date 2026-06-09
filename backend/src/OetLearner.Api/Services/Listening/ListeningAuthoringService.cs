@@ -80,6 +80,21 @@ public interface IListeningAuthoringService
         CancellationToken ct);
 
     /// <summary>
+    /// Read the Part A audio model for a paper: "single" (one uploaded Part-"A"
+    /// audio plays across both consultations) or "per_subsection" (A1 and A2
+    /// each have their own audio). Defaults to "per_subsection".
+    /// </summary>
+    Task<string> GetPartAAudioModeAsync(string paperId, CancellationToken ct);
+
+    /// <summary>
+    /// Set the Part A audio model. Accepts only "single" / "per_subsection";
+    /// throws <see cref="ApiException"/> (Validation) otherwise. Persists under
+    /// ContentPaper.ExtractedTextJson, bumps RowVersion, writes an audit event,
+    /// and returns the normalised mode.
+    /// </summary>
+    Task<string> SetPartAAudioModeAsync(string paperId, string mode, string adminId, CancellationToken ct);
+
+    /// <summary>
     /// WS5: import a complete Listening test from a spec §19 JSON manifest
     /// (<c>testTitle</c> / <c>partA</c> / <c>partB</c> / <c>partC</c>). Normalises
     /// the manifest into the authored question + extract shapes and writes them
@@ -1510,6 +1525,63 @@ public sealed class ListeningAuthoringService(
             if (tx is not null) await tx.RollbackAsync(ct);
             throw;
         }
+    }
+
+    public async Task<string> GetPartAAudioModeAsync(string paperId, CancellationToken ct)
+    {
+        var paper = await db.ContentPapers.AsNoTracking()
+            .FirstOrDefaultAsync(p => p.Id == paperId, ct)
+            ?? throw ApiException.NotFound("listening_paper_not_found", "Paper not found.");
+        return ListeningLearnerService.ReadPartAAudioMode(paper.ExtractedTextJson);
+    }
+
+    public async Task<string> SetPartAAudioModeAsync(
+        string paperId, string mode, string adminId, CancellationToken ct)
+    {
+        var normalized = (mode ?? string.Empty).Trim().ToLowerInvariant() switch
+        {
+            ListeningLearnerService.PartAAudioModeSingle => ListeningLearnerService.PartAAudioModeSingle,
+            ListeningLearnerService.PartAAudioModePerSubsection => ListeningLearnerService.PartAAudioModePerSubsection,
+            _ => throw ApiException.Validation(
+                "listening_part_a_audio_mode_invalid",
+                "Part A audio mode must be 'single' or 'per_subsection'."),
+        };
+
+        var paper = await db.ContentPapers.FirstOrDefaultAsync(p => p.Id == paperId, ct)
+            ?? throw ApiException.NotFound("listening_paper_not_found", "Paper not found.");
+
+        var before = ListeningLearnerService.ReadPartAAudioMode(paper.ExtractedTextJson);
+
+        var root = ReadRootObject(paper.ExtractedTextJson);
+        root["partAAudioMode"] = JsonSerializer.SerializeToElement(normalized);
+        paper.ExtractedTextJson = JsonSerializer.Serialize(root);
+        paper.UpdatedAt = DateTimeOffset.UtcNow;
+        paper.RowVersion++;
+
+        db.AuditEvents.Add(new AuditEvent
+        {
+            Id = $"audit_{Guid.NewGuid():N}",
+            OccurredAt = paper.UpdatedAt,
+            ActorId = adminId,
+            ActorAuthAccountId = await db.ResolveActorAuthAccountIdAsync(adminId, ct),
+            ActorName = adminId,
+            Action = "listening.part_a_audio_mode.set",
+            ResourceType = "ContentPaper",
+            ResourceId = paperId,
+            Details = TruncateForAudit(JsonSerializer.Serialize(new { paperId, before, after = normalized })),
+        });
+
+        try
+        {
+            await db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            throw ApiException.Conflict("content_paper_concurrent_update",
+                "This paper was modified by another admin. Reload and retry.");
+        }
+
+        return normalized;
     }
 
     private static Dictionary<string, JsonElement> ReadRootObject(string? extractedTextJson)

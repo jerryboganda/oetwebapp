@@ -204,59 +204,63 @@ function SubPartSection({
       </CardHeader>
       <CardContent>
         <div className="space-y-6">
-          {/* Notes editor */}
-          <PartANotesBuilder
-            value={notesBody}
-            onChange={(v) => { markDirty(); setNotesBody(v); }}
-            partLabel={partLabel}
-            disabled={disabled || saveState === 'saving'}
-            renderPreview={(body) => (
-              <PartANotesDocument
-                partLabel={partLabel}
-                notesBody={body}
-                questions={previewQuestions}
-                answers={{}}
-                onAnswerChange={() => {}}
-                locked
-              />
-            )}
-          />
-
-          {/* Gap-count mismatch banner */}
-          {hasGapMismatch && (
-            <InlineAlert variant="warning">
-              {gapCount} gap{gapCount !== 1 ? 's' : ''} detected but {questionCount} answer row{questionCount !== 1 ? 's' : ''} — gaps and questions must match before publishing.
-            </InlineAlert>
-          )}
-
-          {notesBody.length > 0 && !hasGapMismatch && gapCount > 0 && (
-            <p className="text-xs text-admin-fg-muted">
-              {gapCount} gap{gapCount !== 1 ? 's' : ''} detected — matches {questionCount} question{questionCount !== 1 ? 's' : ''}.
-            </p>
-          )}
-
-          {/* Answer-key list */}
-          <div>
-            <p className="text-xs font-black uppercase tracking-widest text-admin-fg-muted mb-3">
-              Answer key
-            </p>
+          <div className="grid gap-6 lg:grid-cols-2 lg:items-start">
+            {/* Left column: note-completion editor + validation */}
             <div className="space-y-4">
-              {rows.map((row, gapIndex) => (
-                <AnswerKeyRow
-                  key={row.questionId}
-                  row={row}
-                  gapIndex={gapIndex}
-                  variantDraft={variantDrafts[row.questionId] ?? ''}
-                  onVariantDraftChange={(v) =>
-                    setVariantDrafts((prev) => ({ ...prev, [row.questionId]: v }))
-                  }
-                  onCorrectAnswerChange={(v) => updateRow(row.questionId, 'correctAnswer', v)}
-                  onAddVariant={() => addVariant(row.questionId)}
-                  onRemoveVariant={(v) => removeVariant(row.questionId, v)}
-                  onVariantKey={(e) => onVariantKey(row.questionId, e)}
-                  disabled={disabled || saveState === 'saving'}
-                />
-              ))}
+              <PartANotesBuilder
+                value={notesBody}
+                onChange={(v) => { markDirty(); setNotesBody(v); }}
+                partLabel={partLabel}
+                disabled={disabled || saveState === 'saving'}
+                renderPreview={(body) => (
+                  <PartANotesDocument
+                    partLabel={partLabel}
+                    notesBody={body}
+                    questions={previewQuestions}
+                    answers={{}}
+                    onAnswerChange={() => {}}
+                    locked
+                  />
+                )}
+              />
+
+              {/* Gap-count mismatch banner */}
+              {hasGapMismatch && (
+                <InlineAlert variant="warning">
+                  {gapCount} gap{gapCount !== 1 ? 's' : ''} detected but {questionCount} answer row{questionCount !== 1 ? 's' : ''} — gaps and questions must match before publishing.
+                </InlineAlert>
+              )}
+
+              {notesBody.length > 0 && !hasGapMismatch && gapCount > 0 && (
+                <p className="text-xs text-admin-fg-muted">
+                  {gapCount} gap{gapCount !== 1 ? 's' : ''} detected — matches {questionCount} question{questionCount !== 1 ? 's' : ''}.
+                </p>
+              )}
+            </div>
+
+            {/* Right column: per-gap answer key, sticky beside the notes on wide screens */}
+            <div className="lg:sticky lg:top-4">
+              <p className="text-xs font-black uppercase tracking-widest text-admin-fg-muted mb-3">
+                Answer key
+              </p>
+              <div className="space-y-4">
+                {rows.map((row, gapIndex) => (
+                  <AnswerKeyRow
+                    key={row.questionId}
+                    row={row}
+                    gapIndex={gapIndex}
+                    variantDraft={variantDrafts[row.questionId] ?? ''}
+                    onVariantDraftChange={(v) =>
+                      setVariantDrafts((prev) => ({ ...prev, [row.questionId]: v }))
+                    }
+                    onCorrectAnswerChange={(v) => updateRow(row.questionId, 'correctAnswer', v)}
+                    onAddVariant={() => addVariant(row.questionId)}
+                    onRemoveVariant={(v) => removeVariant(row.questionId, v)}
+                    onVariantKey={(e) => onVariantKey(row.questionId, e)}
+                    disabled={disabled || saveState === 'saving'}
+                  />
+                ))}
+              </div>
             </div>
           </div>
 

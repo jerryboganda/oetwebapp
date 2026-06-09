@@ -45,6 +45,7 @@ function GapInput({ gapIndex, questions, answers, onAnswerChange, locked }: GapI
           aria-label={`Unbound gap ${gapIndex + 1}`}
           spellCheck={false}
           autoCapitalize="none"
+          autoCorrect="off"
           autoComplete="off"
         />
       </span>
@@ -65,6 +66,7 @@ function GapInput({ gapIndex, questions, answers, onAnswerChange, locked }: GapI
           readOnly={locked}
           spellCheck={false}
           autoCapitalize="none"
+          autoCorrect="off"
           autoComplete="off"
           className={INPUT_CLASS}
           aria-label={`Answer for question ${q.number}`}
@@ -226,6 +228,7 @@ export function PartANotesDocument({
                     readOnly={locked}
                     spellCheck={false}
                     autoCapitalize="none"
+                    autoCorrect="off"
                     autoComplete="off"
                     className={INPUT_CLASS}
                     aria-label={`Answer for question ${q.number}`}

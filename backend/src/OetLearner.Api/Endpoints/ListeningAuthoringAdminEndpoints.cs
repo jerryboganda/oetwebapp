@@ -30,6 +30,12 @@ public static class ListeningAuthoringAdminEndpoints
     /// <summary>WS5: import body — a spec §19 manifest plus the replace toggle.</summary>
     public sealed record ImportManifestBody(bool ReplaceExisting, ListeningStructureManifest Manifest);
 
+    /// <summary>Part A audio mode toggle body: "single" | "per_subsection".</summary>
+    public sealed record SetPartAAudioModeBody(string? Mode);
+
+    /// <summary>Optional reason when rejecting an AI extraction draft.</summary>
+    public sealed record RejectExtractionBody(string? Reason);
+
     public sealed record TranscriptSegmentDto(int StartMs, int EndMs, string SpeakerId, string Text);
     public sealed record ReplaceTranscriptBody(IReadOnlyList<TranscriptSegmentDto> Segments);
 
@@ -208,6 +214,162 @@ public static class ListeningAuthoringAdminEndpoints
             await db.Entry(paper).ReloadAsync(ct);
             SetETag(http, paper);
             return Results.Ok(new { extracts = doc });
+        });
+
+        // ─── Part A audio mode (single | per_subsection) ───────────────────
+        //
+        // GET   /v1/admin/papers/{id}/listening/part-a-audio-mode — read mode.
+        // PATCH /v1/admin/papers/{id}/listening/part-a-audio-mode — set mode.
+        // Stored on ContentPaper.ExtractedTextJson; same AdminContentWrite auth +
+        // publish-gate + If-Match as the extract routes. "single" makes one
+        // Part-"A" audio play across both consultations; "per_subsection" keeps
+        // independent A1/A2 audio.
+        group.MapGet("/part-a-audio-mode", async (
+            string paperId,
+            IListeningAuthoringService svc,
+            CancellationToken ct) =>
+        {
+            try
+            {
+                var mode = await svc.GetPartAAudioModeAsync(paperId, ct);
+                return Results.Ok(new { mode });
+            }
+            catch (ApiException ex)
+            {
+                return Results.Json(new { error = ex.Message, errorCode = ex.ErrorCode }, statusCode: ex.StatusCode);
+            }
+        });
+
+        group.MapPatch("/part-a-audio-mode", async (
+            string paperId,
+            SetPartAAudioModeBody body,
+            IListeningAuthoringService svc,
+            LearnerDbContext db,
+            HttpContext http,
+            CancellationToken ct) =>
+        {
+            var paper = await db.ContentPapers.FirstOrDefaultAsync(p => p.Id == paperId, ct);
+            if (paper is null) return Results.NotFound();
+            var forbidden = EnforcePublishGate(paper, http);
+            if (forbidden is not null) return forbidden;
+            var conflict = CheckIfMatch(http, paper);
+            if (conflict is not null) return conflict;
+            var adminId = http.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "system";
+            try
+            {
+                var mode = await svc.SetPartAAudioModeAsync(paperId, body?.Mode ?? string.Empty, adminId, ct);
+                await db.Entry(paper).ReloadAsync(ct);
+                SetETag(http, paper);
+                return Results.Ok(new { mode });
+            }
+            catch (ApiException ex)
+            {
+                return Results.Json(new { error = ex.Message, errorCode = ex.ErrorCode }, statusCode: ex.StatusCode);
+            }
+        });
+
+        // ─── Part A AI-assisted data entry (Mistral OCR + Claude) ──────────
+        //
+        // POST   .../listening/extract — OCR the uploaded QuestionPaper +
+        //        AnswerKey PDFs and stage a Pending draft (synchronous; ~20-40s).
+        // GET    .../listening/extractions — list Pending drafts.
+        // POST   .../listening/extractions/{draftId}/approve — import the
+        //        proposed manifest via the same validated path as a manual edit.
+        // POST   .../listening/extractions/{draftId}/reject — discard the draft.
+        // Same AdminContentWrite auth as the group; approve is publish-gated.
+        // Drafts are NEVER auto-published.
+        group.MapPost("/extract", async (
+            string paperId,
+            IListeningPartAExtractionService svc,
+            HttpContext http,
+            CancellationToken ct) =>
+        {
+            var adminId = http.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "system";
+            try
+            {
+                var result = await svc.ExtractAsync(paperId, adminId, ct);
+                return Results.Ok(result);
+            }
+            catch (ApiException ex)
+            {
+                return Results.Json(new { error = ex.Message, errorCode = ex.ErrorCode }, statusCode: ex.StatusCode);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Results.Json(new { error = ex.Message, errorCode = "listening_extract_failed" }, statusCode: 502);
+            }
+        });
+
+        group.MapGet("/extractions", async (
+            string paperId,
+            IListeningPartAExtractionService svc,
+            CancellationToken ct) =>
+        {
+            var drafts = await svc.ListPendingAsync(paperId, ct);
+            return Results.Ok(new { drafts });
+        });
+
+        group.MapGet("/extractions/{draftId}", async (
+            string paperId,
+            string draftId,
+            IListeningPartAExtractionService svc,
+            CancellationToken ct) =>
+        {
+            try
+            {
+                var detail = await svc.GetDraftAsync(paperId, draftId, ct);
+                return Results.Ok(detail);
+            }
+            catch (ApiException ex)
+            {
+                return Results.Json(new { error = ex.Message, errorCode = ex.ErrorCode }, statusCode: ex.StatusCode);
+            }
+        });
+
+        group.MapPost("/extractions/{draftId}/approve", async (
+            string paperId,
+            string draftId,
+            IListeningPartAExtractionService svc,
+            LearnerDbContext db,
+            HttpContext http,
+            CancellationToken ct) =>
+        {
+            var paper = await db.ContentPapers.FirstOrDefaultAsync(p => p.Id == paperId, ct);
+            if (paper is null) return Results.NotFound();
+            var forbidden = EnforcePublishGate(paper, http);
+            if (forbidden is not null) return forbidden;
+            var adminId = http.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "system";
+            try
+            {
+                var result = await svc.ApproveAsync(paperId, draftId, adminId, ct);
+                await db.Entry(paper).ReloadAsync(ct);
+                SetETag(http, paper);
+                return Results.Ok(new { draftId = result.DraftId, structure = result.Import.Structure, report = result.Import.Report });
+            }
+            catch (ApiException ex)
+            {
+                return Results.Json(new { error = ex.Message, errorCode = ex.ErrorCode }, statusCode: ex.StatusCode);
+            }
+        });
+
+        group.MapPost("/extractions/{draftId}/reject", async (
+            string paperId,
+            string draftId,
+            RejectExtractionBody? body,
+            IListeningPartAExtractionService svc,
+            HttpContext http,
+            CancellationToken ct) =>
+        {
+            var adminId = http.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "system";
+            try
+            {
+                await svc.RejectAsync(paperId, draftId, adminId, body?.Reason, ct);
+                return Results.Ok(new { ok = true });
+            }
+            catch (ApiException ex)
+            {
+                return Results.Json(new { error = ex.Message, errorCode = ex.ErrorCode }, statusCode: ex.StatusCode);
+            }
         });
 
         // ─── WS5: spec §19 manifest import / export ────────────────────────

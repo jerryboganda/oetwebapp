@@ -34,14 +34,26 @@ import {
 } from '@/lib/content-upload-api';
 import {
   getListeningExtracts,
+  getPartAAudioMode,
   setListeningSubSectionTimer,
+  setPartAAudioMode,
   LISTENING_SUB_SECTION_CODES,
+  type ListeningPartAAudioMode,
   type ListeningSubSectionCode,
 } from '@/lib/listening-authoring-api';
 
 type ToastState = { message: string; variant: 'success' | 'error' };
 
 const AUDIO_ACCEPT = 'audio/mpeg,audio/wav,audio/mp4,audio/ogg,.mp3,.wav,.m4a,.ogg';
+
+/**
+ * Sub-sections shown when Part A is in "single audio" mode: the A1 slot doubles
+ * as the single Part A upload (it plays across both consultations) and A2 is
+ * hidden. Part B/C are unaffected.
+ */
+const PART_A_SINGLE_CODES: readonly ListeningSubSectionCode[] = [
+  'A1', 'B1', 'B2', 'B3', 'B4', 'B5', 'B6', 'C1', 'C2',
+];
 
 function isListeningAudioAsset(asset: ContentPaperAssetDto): boolean {
   if (asset.role !== 'Audio') return false;
@@ -97,17 +109,21 @@ export default function ListeningAudioTimersPage() {
   const [removingAssetId, setRemovingAssetId] = useState<string | null>(null);
   const [savingTimer, setSavingTimer] = useState<ListeningSubSectionCode | null>(null);
   const [toast, setToast] = useState<ToastState | null>(null);
+  const [mode, setMode] = useState<ListeningPartAAudioMode>('per_subsection');
+  const [modeSaving, setModeSaving] = useState(false);
 
   const load = useCallback(async () => {
     if (!paperId) return;
     setLoading(true);
     setError(null);
     try {
-      const [paperData, extractList] = await Promise.all([
+      const [paperData, extractList, modeResult] = await Promise.all([
         getContentPaper(paperId),
         getListeningExtracts(paperId).catch(() => ({ extracts: [] })),
+        getPartAAudioMode(paperId).catch(() => ({ mode: 'per_subsection' as const })),
       ]);
       setPaper(paperData);
+      setMode(modeResult.mode);
       const nextTimers: Record<string, number | null> = {};
       const nextDraft: Record<string, string> = {};
       for (const extract of extractList.extracts) {
@@ -134,17 +150,43 @@ export default function ListeningAudioTimersPage() {
     [paper?.assets],
   );
 
+  // Sub-sections to show: single Part A mode collapses A1+A2 into the A1 slot
+  // (which doubles as the single Part A upload) and hides A2.
+  const activeCodes = useMemo<readonly ListeningSubSectionCode[]>(
+    () => (mode === 'single' ? PART_A_SINGLE_CODES : LISTENING_SUB_SECTION_CODES),
+    [mode],
+  );
+
   const readyCount = useMemo(
-    () => LISTENING_SUB_SECTION_CODES.filter((code) =>
+    () => activeCodes.filter((code) =>
       primaryFor(audioAssets, code) && (timers[code] ?? 0) > 0,
     ).length,
-    [audioAssets, timers],
+    [activeCodes, audioAssets, timers],
   );
 
   const audioCount = useMemo(
-    () => LISTENING_SUB_SECTION_CODES.filter((code) => primaryFor(audioAssets, code)).length,
-    [audioAssets],
+    () => activeCodes.filter((code) => primaryFor(audioAssets, code)).length,
+    [activeCodes, audioAssets],
   );
+
+  async function handleSetMode(next: ListeningPartAAudioMode): Promise<void> {
+    if (next === mode || modeSaving) return;
+    setModeSaving(true);
+    try {
+      const result = await setPartAAudioMode(paperId, next);
+      setMode(result.mode);
+      setToast({
+        message: result.mode === 'single'
+          ? 'Part A now uses a single audio across both consultations.'
+          : 'Part A now uses separate A1 / A2 audio.',
+        variant: 'success',
+      });
+    } catch (err) {
+      setToast({ message: errorMessage(err, 'Failed to update Part A audio mode'), variant: 'error' });
+    } finally {
+      setModeSaving(false);
+    }
+  }
 
   async function handleUpload(code: ListeningSubSectionCode, file: File): Promise<void> {
     if (!looksLikeAudio(file)) {
@@ -272,6 +314,38 @@ export default function ListeningAudioTimersPage() {
       {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
 
       <SettingsSection
+        title="Part A audio mode"
+        description="Choose whether Part A uses one audio across both consultations (single) or separate A1 / A2 files. Single mode plays the A1 upload for both consultations and hides the A2 slot."
+      >
+        <div className="flex flex-wrap items-center gap-2" role="radiogroup" aria-label="Part A audio mode">
+          {([
+            { value: 'single', label: 'Single audio (whole Part A)' },
+            { value: 'per_subsection', label: 'Separate A1 / A2 audio' },
+          ] as const).map((opt) => {
+            const active = mode === opt.value;
+            return (
+              <button
+                key={opt.value}
+                type="button"
+                role="radio"
+                aria-checked={active}
+                disabled={modeSaving || loading}
+                onClick={() => void handleSetMode(opt.value)}
+                className={`rounded-admin border px-4 py-2 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-60 ${
+                  active
+                    ? 'border-[var(--admin-primary)] bg-[var(--admin-primary)] text-white'
+                    : 'border-admin-border bg-admin-bg-surface text-admin-fg-strong hover:border-admin-border-hover'
+                }`}
+              >
+                {opt.label}
+              </button>
+            );
+          })}
+          {modeSaving ? <Loader2 className="h-4 w-4 animate-spin text-admin-fg-muted" aria-hidden="true" /> : null}
+        </div>
+      </SettingsSection>
+
+      <SettingsSection
         title="Sub-section audio + countdown"
         description="Each sub-section is independent: its own uploaded audio file and its own per-sub-section countdown (seconds). A sub-section is ready once both are set."
       >
@@ -290,19 +364,23 @@ export default function ListeningAudioTimersPage() {
         ) : (
           <div className="space-y-4">
             <div className="grid gap-3 md:grid-cols-3">
-              <StatusTile label="Audio uploaded" value={`${audioCount}/10`} tone={audioCount === 10 ? 'success' : 'warning'} />
-              <StatusTile label="Fully ready (audio + timer)" value={`${readyCount}/10`} tone={readyCount === 10 ? 'success' : 'warning'} />
-              <StatusTile label="Sub-sections" value="10" tone="info" />
+              <StatusTile label="Audio uploaded" value={`${audioCount}/${activeCodes.length}`} tone={audioCount === activeCodes.length ? 'success' : 'warning'} />
+              <StatusTile label="Fully ready (audio + timer)" value={`${readyCount}/${activeCodes.length}`} tone={readyCount === activeCodes.length ? 'success' : 'warning'} />
+              <StatusTile label="Sub-sections" value={String(activeCodes.length)} tone="info" />
             </div>
 
             <div className="grid gap-4 lg:grid-cols-2">
-              {LISTENING_SUB_SECTION_CODES.map((code) => {
+              {activeCodes.map((code) => {
                 const codeAssets = audioAssets.filter((a) => (a.part ?? '').toUpperCase() === code);
                 const primaryAsset = primaryFor(audioAssets, code);
+                const label = mode === 'single' && code === 'A1'
+                  ? 'Part A (single audio — plays across A1 + A2)'
+                  : undefined;
                 return (
                   <AudioSlotCard
                     key={code}
                     code={code}
+                    label={label}
                     assets={codeAssets}
                     primaryAsset={primaryAsset}
                     timerValue={timers[code] ?? null}
@@ -354,6 +432,7 @@ function StatusTile({ label, value, tone }: { label: string; value: string; tone
 
 function AudioSlotCard({
   code,
+  label,
   assets,
   primaryAsset,
   timerValue,
@@ -368,6 +447,7 @@ function AudioSlotCard({
   onSaveTimer,
 }: {
   code: ListeningSubSectionCode;
+  label?: string;
   assets: ContentPaperAssetDto[];
   primaryAsset: ContentPaperAssetDto | null;
   timerValue: number | null;
@@ -401,7 +481,7 @@ function AudioSlotCard({
         <div className="min-w-0">
           <CardTitle className="flex items-center gap-2">
             <Headphones className="h-4 w-4 text-admin-fg-muted" />
-            Sub-section {code}
+            {label ?? `Sub-section ${code}`}
           </CardTitle>
           <CardDescription>Audio file + countdown timer</CardDescription>
         </div>

@@ -106,6 +106,46 @@ public class ListeningAuthoringServiceTests
     }
 
     [Fact]
+    public async Task PartAAudioMode_DefaultsToPerSubsection_AndRoundTripsThroughSet()
+    {
+        var (db, svc) = Build();
+        var paper = await SeedPaperAsync(db);
+
+        // Unset → default.
+        Assert.Equal("per_subsection", await svc.GetPartAAudioModeAsync(paper.Id, default));
+
+        var set = await svc.SetPartAAudioModeAsync(paper.Id, "single", adminId: "admin-7", default);
+        Assert.Equal("single", set);
+        Assert.Equal("single", await svc.GetPartAAudioModeAsync(paper.Id, default));
+
+        // Sibling JSON keys must survive the merge.
+        var reloaded = await db.ContentPapers.AsNoTracking().SingleAsync(p => p.Id == paper.Id);
+        Assert.Contains("listeningQuestions", reloaded.ExtractedTextJson);
+        Assert.Contains("listeningExtracts", reloaded.ExtractedTextJson);
+
+        // Audit trail recorded against the paper.
+        var audit = await db.AuditEvents.SingleAsync(a => a.Action == "listening.part_a_audio_mode.set");
+        Assert.Equal("ContentPaper", audit.ResourceType);
+        Assert.Equal(paper.Id, audit.ResourceId);
+        Assert.Equal("admin-7", audit.ActorId);
+
+        // Flip back to per-subsection.
+        Assert.Equal("per_subsection",
+            await svc.SetPartAAudioModeAsync(paper.Id, "per_subsection", adminId: "admin-7", default));
+    }
+
+    [Fact]
+    public async Task SetPartAAudioMode_RejectsUnknownMode()
+    {
+        var (db, svc) = Build();
+        var paper = await SeedPaperAsync(db);
+
+        var ex = await Assert.ThrowsAsync<ApiException>(
+            () => svc.SetPartAAudioModeAsync(paper.Id, "loud", adminId: "admin-7", default));
+        Assert.Equal("listening_part_a_audio_mode_invalid", ex.ErrorCode);
+    }
+
+    [Fact]
     public async Task PatchQuestion_AllowsOutOfScopeDistractorCategory()
     {
         var (db, svc) = Build();
