@@ -339,7 +339,9 @@ public sealed class MockService(LearnerDbContext db, IAiPackageCreditService? ai
         }
 
         var id = $"mock-attempt-{Guid.NewGuid():N}";
-        if (aiPackageCreditService is not null && MockTypes.IsFullShape(mockType))
+        if (aiPackageCreditService is not null
+            && (string.Equals(mockType, MockTypes.Full, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(mockType, MockTypes.FinalReadiness, StringComparison.OrdinalIgnoreCase)))
         {
             var debit = await aiPackageCreditService.DeductMockAsync(userId, id, ct);
             if (!debit.Debited)

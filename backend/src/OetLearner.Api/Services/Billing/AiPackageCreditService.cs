@@ -146,6 +146,11 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
             return new(false, "already_debited", "This grading job has already consumed a credit.", referenceId);
         }
 
+        if (await ShouldBypassGradingDebitForLegacyAccountAsync(account, ct))
+        {
+            return new(true, null, null, referenceId);
+        }
+
         if (account.ExpiredBecausePassed || (account.ExpiresAt is not null && account.ExpiresAt <= DateTimeOffset.UtcNow))
         {
             return new(false, "ai_package_expired", "Your AI package has expired. Purchase a package to continue.", null);
@@ -263,6 +268,11 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
         if (await TransactionExistsAsync(referenceId, AiPackageCreditReason.MockDeduct, ct))
         {
             return new(false, "already_debited", "This mock has already consumed allowance.", referenceId);
+        }
+
+        if (await ShouldBypassMockDebitForLegacyAccountAsync(account, ct))
+        {
+            return new(true, null, null, referenceId);
         }
 
         if (account.ExpiredBecausePassed || (account.ExpiresAt is not null && account.ExpiresAt <= DateTimeOffset.UtcNow))
@@ -507,6 +517,33 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
     private async Task<bool> TransactionExistsAsync(string referenceId, AiPackageCreditReason reason, CancellationToken ct)
         => await db.AiPackageCreditTransactions.AsNoTracking()
             .AnyAsync(row => row.ReferenceId == referenceId && row.Reason == reason, ct);
+
+    private async Task<bool> ShouldBypassGradingDebitForLegacyAccountAsync(AiPackageCreditAccount account, CancellationToken ct)
+    {
+        if (account.FlexibleCredits != 0
+            || account.WritingOnlyCredits != 0
+            || account.SpeakingOnlyCredits != 0)
+        {
+            return false;
+        }
+
+        return !await db.AiPackageCreditTransactions.AsNoTracking()
+            .AnyAsync(row => row.AccountId == account.Id
+                             && (row.FlexibleCreditsDelta > 0
+                                 || row.WritingOnlyCreditsDelta > 0
+                                 || row.SpeakingOnlyCreditsDelta > 0), ct);
+    }
+
+    private async Task<bool> ShouldBypassMockDebitForLegacyAccountAsync(AiPackageCreditAccount account, CancellationToken ct)
+    {
+        if (account.MockExamsRemaining > 0)
+        {
+            return false;
+        }
+
+        return !await db.AiPackageCreditTransactions.AsNoTracking()
+            .AnyAsync(row => row.AccountId == account.Id && row.MockExamsDelta > 0, ct);
+    }
 
     private async Task<AiPackageCreditSnapshot> ProjectSnapshotAsync(string userId, int transactionLimit, CancellationToken ct)
     {

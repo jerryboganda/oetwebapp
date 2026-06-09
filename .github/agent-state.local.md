@@ -16,6 +16,8 @@ Implement the AI Packages PDF as a first-class billing, credit, checkout, gradin
 - Wired Writing/Speaking grading queue creation to deduct AI package credits and pipeline failure paths to refund debited package credits.
 - Wired deterministic Listening/Reading submission to consume finite package allowances while preserving no-package course behavior.
 - Wired full-shape mock attempt creation to consume separate mock allowance without spending flexible/writing/speaking credits.
+- Narrowed package mock debit to package-owned full/final-readiness mocks so legacy diagnostic/LRW mock entitlements keep their existing gate.
+- Added pool-specific legacy bypasses for Writing/Speaking grading and mock debits when a learner has no positive package grant in that pool, preserving pre-package subscription/course behavior while still blocking exhausted package allowances.
 - Added public `/ai-packages` with Full Packages, Separate Packages, Mock Packages, login redirect preservation, Stripe checkout, and learner balance display.
 - Added dashboard `?purchase=success` AI package balance refresh/banner.
 - Added focused backend tests in `AiPackageCreditServiceTests`.
@@ -25,8 +27,12 @@ Implement the AI Packages PDF as a first-class billing, credit, checkout, gradin
 - `pnpm run backend:build`: passed. Existing warnings remained, including NU1510 and pre-existing nullability warnings.
 - `pnpm exec tsc --noEmit`: passed.
 - `dotnet test backend/tests/OetLearner.Api.Tests/OetLearner.Api.Tests.csproj --filter AiPackageCreditServiceTests --nologo`: passed, 5 tests.
+- `dotnet test backend/tests/OetLearner.Api.Tests/OetLearner.Api.Tests.csproj --filter "FullyQualifiedName~MockV2EndpointTests" --nologo`: passed, 5 tests.
+- `dotnet test backend/tests/OetLearner.Api.Tests/OetLearner.Api.Tests.csproj --filter "FullyQualifiedName~SpeakingMockSetTests" --nologo`: passed, 14 tests.
+- `dotnet test backend/tests/OetLearner.Api.Tests/OetLearner.Api.Tests.csproj --filter "FullyQualifiedName=OetLearner.Api.Tests.ProductionReadinessTests.SpeakingUploadPipeline_StoresBinary_AndStreamsItToExperts" --nologo`: passed, 1 test.
 - `pnpm exec eslint app/ai-packages/page.tsx app/page.tsx lib/api.ts lib/billing-types.ts`: passed with warnings only from the repo's `react-hooks/set-state-in-effect` rule on the new package page effects.
 - `git diff --check`: passed with a line-ending warning for `SpeakingEvaluationPipeline.cs`.
+- Production deploy for commit `1d44ebbcd402f9d235a0ddcc765d8730dd4408ec` succeeded via GitHub Actions/GHCR pull-only rollout; follow-up compatibility fix is being committed and redeployed.
 
 ## Touched Files
 
