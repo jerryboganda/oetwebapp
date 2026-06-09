@@ -159,10 +159,10 @@ export function ListeningStructureEditor({ paperId }: { paperId: string }) {
     setReport(null);
   };
 
-  // Phase 8: AI proposals now land in the dedicated `ListeningExtractionPanel`
-  // mounted above this editor. The previous in-place "Propose with AI" button
-  // silently overwrote the in-memory question list, which destroyed unsaved
-  // edits and bypassed reviewer audit. Use the panel to diff + approve.
+  // The Listening question map is authored by hand here. (The former AI
+  // "Propose with AI" extraction flow was removed — it silently overwrote the
+  // in-memory question list, destroying unsaved edits and bypassing reviewer
+  // audit.)
 
   const save = async () => {
     setSaving(true);

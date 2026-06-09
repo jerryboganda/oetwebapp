@@ -1599,6 +1599,19 @@ public sealed class ListeningLearnerService(
                 g => $"/v1/media/{g.OrderBy(a => a.DisplayOrder).First().MediaAsset!.Id}/content",
                 StringComparer.Ordinal);
 
+        // Per-part learner-facing QuestionPaper PDFs (Part A/B/C plus optional
+        // per-section overrides A1/A2, B1..B6, C1/C2), mirroring audioByPart.
+        // Keyed case-insensitively because Part is author-entered free text.
+        var questionPaperByPart = assets
+            .Where(a => a.Role == PaperAssetRole.QuestionPaper
+                && a.MediaAsset is not null
+                && !string.IsNullOrWhiteSpace(a.Part))
+            .GroupBy(a => a.Part!.Trim().ToUpperInvariant(), StringComparer.Ordinal)
+            .ToDictionary(
+                g => g.Key,
+                g => $"/v1/media/{g.OrderBy(a => a.DisplayOrder).First().MediaAsset!.Id}/content",
+                StringComparer.Ordinal);
+
         var relationalQuestions = await db.ListeningQuestions.AsNoTracking()
             .Include(q => q.Part)
             .Include(q => q.Options)
@@ -1684,7 +1697,8 @@ public sealed class ListeningLearnerService(
                 AudioScript: assetByRole.ContainsKey(PaperAssetRole.AudioScript)),
             TranscriptSegments: segments,
             Extracts: extracts,
-            UsesRelationalStructure: usesRelationalStructure);
+            UsesRelationalStructure: usesRelationalStructure,
+            QuestionPaperUrlByPart: questionPaperByPart);
     }
 
     private static ListeningSource BuildLegacySource(ContentItem item)
@@ -2470,6 +2484,7 @@ public sealed class ListeningLearnerService(
         scenarioType = source.ScenarioType,
         audioUrl = source.AudioUrl,
         questionPaperUrl = source.QuestionPaperUrl,
+        questionPaperUrlByPart = source.QuestionPaperUrlByPart ?? new Dictionary<string, string>(),
         audioAvailable = !string.IsNullOrWhiteSpace(source.AudioUrl),
         audioUnavailableReason = string.IsNullOrWhiteSpace(source.AudioUrl)
             ? "Audio is not available for this Listening paper yet."
@@ -3269,7 +3284,13 @@ public sealed class ListeningLearnerService(
         IReadOnlyList<ListeningExtractMetaDto> Extracts,
         // Authored ContentPaper runtime prefers normalized Listening tables;
         // legacy JSON remains a fallback for papers not backfilled yet.
-        bool UsesRelationalStructure);
+        bool UsesRelationalStructure,
+        // Per-part learner-facing QuestionPaper PDF URLs, keyed by uppercased
+        // part/section code (A | B | C and overrides A1/A2 | B1..B6 | C1/C2).
+        // Mirrors the Reading module's per-part question paper. Empty when no
+        // per-part QuestionPaper assets are attached. The player resolves the
+        // current section to a URL (exact section code → parent part fallback).
+        IReadOnlyDictionary<string, string>? QuestionPaperUrlByPart = null);
 
     private sealed record ListeningExtractMetaDto(
         string PartCode,                     // A1 | A2 | B1..B6 | C1 | C2

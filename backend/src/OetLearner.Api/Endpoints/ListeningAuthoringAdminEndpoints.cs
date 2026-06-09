@@ -6,12 +6,6 @@ using OetLearner.Api.Security;
 using OetLearner.Api.Services;
 using OetLearner.Api.Services.Listening;
 
-// `ListeningExtractionDraft` collides between the in-memory AI-result record
-// in `OetLearner.Api.Services.Listening` and the persisted entity in
-// `OetLearner.Api.Domain`. Endpoint code only ever needs the entity here.
-using DraftEntity = OetLearner.Api.Domain.ListeningExtractionDraft;
-using DraftStatus = OetLearner.Api.Domain.ListeningExtractionDraftStatus;
-
 namespace OetLearner.Api.Endpoints;
 
 /// <summary>
@@ -36,9 +30,6 @@ public static class ListeningAuthoringAdminEndpoints
     /// <summary>WS5: import body — a spec §19 manifest plus the replace toggle.</summary>
     public sealed record ImportManifestBody(bool ReplaceExisting, ListeningStructureManifest Manifest);
 
-    public sealed record ApproveDraftBody(string? Reason);
-    public sealed record RejectDraftBody(string? Reason);
-    public sealed record BackfillRequestBody(string? ConfirmationToken);
     public sealed record TranscriptSegmentDto(int StartMs, int EndMs, string SpeakerId, string Text);
     public sealed record ReplaceTranscriptBody(IReadOnlyList<TranscriptSegmentDto> Segments);
 
@@ -153,42 +144,6 @@ public static class ListeningAuthoringAdminEndpoints
             await db.Entry(paper).ReloadAsync(ct);
             SetETag(http, paper);
             return Results.Ok(doc);
-        });
-
-        // Phase 8: AI-assisted structure proposal. Persists the AI gateway
-        // result as a Pending ListeningExtractionDraft and returns the same
-        // payload shape the admin UI already consumes plus draftId/status so
-        // the new approve/reject flow can take over.
-        group.MapPost("/extract", async (
-            string paperId,
-            IListeningExtractionDraftService drafts,
-            LearnerDbContext db,
-            HttpContext http,
-            CancellationToken ct) =>
-        {
-            var paper = await db.ContentPapers.AsNoTracking().FirstOrDefaultAsync(p => p.Id == paperId, ct);
-            if (paper is null) return Results.NotFound();
-            var forbidden = EnforcePublishGate(paper, http);
-            if (forbidden is not null) return forbidden;
-
-            var adminId = http.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "system";
-            var draft = await drafts.ProposeAsync(paperId, adminId, ct);
-            var questions = System.Text.Json.JsonSerializer
-                .Deserialize<List<ListeningAuthoredQuestion>>(
-                    draft.ProposedQuestionsJson,
-                    new System.Text.Json.JsonSerializerOptions
-                    {
-                        PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase,
-                    }) ?? [];
-            return Results.Ok(new
-            {
-                draftId = draft.Id,
-                status = draft.Status.ToString(),
-                summary = draft.Summary,
-                isStub = draft.IsStub,
-                stubReason = draft.StubReason,
-                questions,
-            });
         });
 
         // Phase 5 tail: admin CRUD for paper-level extract metadata
@@ -315,150 +270,6 @@ public static class ListeningAuthoringAdminEndpoints
             {
                 return Results.BadRequest(new { error = ex.Message });
             }
-        });
-
-        // Gap B7 — AI extraction draft lifecycle. Reads gated to
-        // AdminContentRead, mutations stay on the AdminContentWrite group.
-        var readGroup = app.MapGroup("/v1/admin/papers/{paperId}/listening")
-            .RequireAuthorization("AdminContentRead")
-            .RequireRateLimiting("PerUserWrite");
-
-        readGroup.MapGet("/extractions", async (
-            string paperId,
-            string? status,
-            IListeningExtractionDraftService svc,
-            CancellationToken ct) =>
-        {
-            ListeningExtractionDraftStatus? filter = null;
-            if (!string.IsNullOrWhiteSpace(status)
-                && Enum.TryParse<DraftStatus>(status, ignoreCase: true, out var parsed))
-            {
-                filter = parsed;
-            }
-            var drafts = await svc.ListAsync(paperId, filter, ct);
-            return Results.Ok(drafts);
-        });
-
-        readGroup.MapGet("/extractions/{draftId}", async (
-            string paperId,
-            string draftId,
-            IListeningExtractionDraftService svc,
-            CancellationToken ct) =>
-        {
-            var draft = await svc.GetAsync(draftId, ct);
-            if (draft is null || draft.PaperId != paperId) return Results.NotFound();
-            return Results.Ok(draft);
-        });
-
-        group.MapPost("/extractions/{draftId}/approve", async (
-            string paperId,
-            string draftId,
-            ApproveDraftBody? body,
-            IListeningExtractionDraftService svc,
-            LearnerDbContext db,
-            HttpContext http,
-            CancellationToken ct) =>
-        {
-            var existing = await svc.GetAsync(draftId, ct);
-            if (existing is null || existing.PaperId != paperId) return Results.NotFound();
-            var paper = await db.ContentPapers.AsNoTracking().FirstOrDefaultAsync(p => p.Id == paperId, ct);
-            if (paper is null) return Results.NotFound();
-            var forbidden = EnforcePublishGate(paper, http);
-            if (forbidden is not null) return forbidden;
-
-            var adminId = http.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "system";
-            var draft = await svc.ApproveAsync(draftId, adminId, body?.Reason, ct);
-            return Results.Ok(draft);
-        });
-
-        group.MapPost("/extractions/{draftId}/reject", async (
-            string paperId,
-            string draftId,
-            RejectDraftBody body,
-            IListeningExtractionDraftService svc,
-            LearnerDbContext db,
-            HttpContext http,
-            CancellationToken ct) =>
-        {
-            var existing = await svc.GetAsync(draftId, ct);
-            if (existing is null || existing.PaperId != paperId) return Results.NotFound();
-            var paper = await db.ContentPapers.AsNoTracking().FirstOrDefaultAsync(p => p.Id == paperId, ct);
-            if (paper is null) return Results.NotFound();
-            var forbidden = EnforcePublishGate(paper, http);
-            if (forbidden is not null) return forbidden;
-
-            var adminId = http.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "system";
-            var draft = await svc.RejectAsync(draftId, adminId, body?.Reason ?? string.Empty, ct);
-            return Results.Ok(draft);
-        });
-
-        // Phase 2 follow-up: project the JSON-blob authored shape into the
-        // relational ListeningPart / Extract / Question / Option entities.
-        // Idempotent — wipes existing relational rows for the paper before
-        // re-inserting. Authored learner attempts read those relational rows
-        // when present, with JSON fallback for not-yet-backfilled content.
-        //
-        // H3: Backfill is destructive — requires explicit confirmation token.
-        // If paper has existing attempts, only system_admin may proceed.
-        group.MapPost("/backfill", async (
-            string paperId,
-            BackfillRequestBody? body,
-            IListeningBackfillService svc,
-            LearnerDbContext db,
-            HttpContext http,
-            CancellationToken ct) =>
-        {
-            // H3: Require confirmation token to prevent accidental invocation
-            var confirmToken = body?.ConfirmationToken;
-            if (string.IsNullOrWhiteSpace(confirmToken) || confirmToken != "CONFIRM_BACKFILL")
-            {
-                return Results.BadRequest(new
-                {
-                    errorCode = "listening_backfill_requires_confirmation",
-                    message = "Backfill overwrites hand-edited relational data. Pass confirmationToken='CONFIRM_BACKFILL' to proceed.",
-                });
-            }
-
-            var adminId = http.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "system";
-
-            // H2: Published papers require AdminContentPublish
-            var paper = await db.ContentPapers.AsNoTracking().FirstOrDefaultAsync(p => p.Id == paperId, ct);
-            if (paper is null) return Results.NotFound();
-            var forbidden = EnforcePublishGate(paper, http);
-            if (forbidden is not null) return forbidden;
-
-            // H3: If paper has existing attempts, require system_admin
-            var hasAttempts = await db.ListeningAttempts.AsNoTracking()
-                .AnyAsync(a => a.PaperId == paperId, ct);
-            if (hasAttempts)
-            {
-                var perms = http.User.FindFirstValue(AuthTokenService.AdminPermissionsClaimType);
-                if (!AdminPermissionEvaluator.HasAny(perms, AdminPermissions.SystemAdmin))
-                {
-                    return Results.Json(new
-                    {
-                        errorCode = "listening_backfill_requires_system_admin",
-                        message = "Only system_admin can backfill papers that learners have already attempted.",
-                    }, statusCode: 403);
-                }
-            }
-
-            // H3: Audit event for every backfill invocation
-            db.AuditEvents.Add(new AuditEvent
-            {
-                Id = Guid.NewGuid().ToString("N"),
-                OccurredAt = DateTimeOffset.UtcNow,
-                ActorId = adminId,
-                ActorName = adminId,
-                Action = "listening.backfill.executed",
-                ResourceType = "ContentPaper",
-                ResourceId = paperId,
-                Details = $"hasExistingAttempts={hasAttempts}; destructive=true",
-            });
-            await db.SaveChangesAsync(ct);
-
-            var report = await svc.BackfillPaperAsync(paperId, adminId, hasAttempts, ct);
-            return Results.Ok(report);
         });
 
         // ─── Transcript Segment CRUD ───────────────────────────────────────

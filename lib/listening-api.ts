@@ -192,6 +192,11 @@ export interface ListeningSessionDto {
     scenarioType: string;
     audioUrl: string | null;
     questionPaperUrl: string | null;
+    /** Per-part learner-facing QuestionPaper PDF URLs, keyed by uppercased
+     * part/section code (A | B | C and overrides A1/A2 | B1..B6 | C1/C2). The
+     * player resolves the current section to a URL (exact code → parent part
+     * fallback). Empty object when no per-part QuestionPaper assets exist. */
+    questionPaperUrlByPart?: Record<string, string>;
     audioAvailable: boolean;
     audioUnavailableReason: string | null;
     assetReadiness: {
