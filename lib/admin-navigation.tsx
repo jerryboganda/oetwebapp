@@ -297,10 +297,10 @@ export const adminNavGroups: AdminNavGroup[] = [
         requiredPermissions: [AdminPermission.BillingRead],
       },
       {
-        href: '/admin/billing/wallet-tiers',
-        label: 'Wallet Tiers',
+        href: '/admin/billing/pricing',
+        label: 'Pricing',
         icon: <CreditCard className={iconClassName} />,
-        matchPrefix: '/admin/billing/wallet-tiers',
+        matchPrefix: '/admin/billing/pricing',
         requiredPermissions: [AdminPermission.BillingRead],
       },
       {
@@ -474,6 +474,7 @@ const adminPageTitleRules: AdminPageTitleRule[] = [
   { prefix: '/admin/notifications/campaigns', title: 'Notification Campaigns' },
   { prefix: '/admin/notifications', title: 'Notifications' },
   { prefix: '/admin/webhooks', title: 'Webhooks' },
+  { prefix: '/admin/billing/pricing', title: 'Pricing' },
   { prefix: '/admin/billing/wallet-tiers', title: 'Wallet Tiers' },
   { prefix: '/admin/billing', title: 'Billing Ops' },
   { prefix: '/admin/free-tier', title: 'Free Tier' },

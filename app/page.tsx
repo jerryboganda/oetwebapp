@@ -93,12 +93,6 @@ function taskAllowedByEntitlement(task: { subTest: SubTest }, entitlement: MyEnt
   return subTest === 'speaking' && modules.has('speakingsession');
 }
 
-function formatDashboardDate(value: string | null | undefined): string {
-  if (!value) return 'Not scheduled';
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? 'Not scheduled' : date.toLocaleDateString(undefined, { timeZone: 'UTC' });
-}
-
 function calculateDaysLeft(value: string | null | undefined): string {
   if (!value) return 'Not scheduled';
   const target = new Date(value);
@@ -130,22 +124,26 @@ function subscriptionStatusClass(subscription: SubscriptionMe | null, entitlemen
   return 'bg-background-light text-muted';
 }
 
-function DashboardSubscriptionSummary({
+function DashboardSubscriptionStrip({
   subscription,
   entitlement,
   isLoading,
   hasError,
-  loadedAt,
 }: {
   subscription: SubscriptionMe | null;
   entitlement: MyEntitlementSnapshot | null;
   isLoading: boolean;
   hasError: boolean;
-  loadedAt: string | null | undefined;
 }) {
   const expiryDate = entitlement?.expiresAt ?? subscription?.nextRenewalAt ?? null;
-  const subscribedDate = subscription?.startedAt ?? null;
-  const counterItems = [
+  const planName = subscription?.planName ?? 'No active subscription';
+  const statusLabel = subscriptionStatusLabel(subscription, entitlement);
+  const priceLabel = subscription
+    ? `${formatMoney(subscription.price, { currency: subscription.currency })} / ${subscription.interval}`
+    : null;
+  const facts = [
+    !isLoading && !hasError ? calculateDaysLeft(expiryDate) : null,
+    priceLabel,
     entitlement?.writingAssessmentsRemaining && entitlement.writingAssessmentsRemaining > 0
       ? `${entitlement.writingAssessmentsRemaining} writing`
       : null,
@@ -156,69 +154,30 @@ function DashboardSubscriptionSummary({
       ? `${entitlement.aiCreditsRemaining} AI credits`
       : null,
     entitlement?.tutorBookUnlocked ? 'Tutor Book' : null,
-  ].filter(Boolean);
-  const statusLabel = subscriptionStatusLabel(subscription, entitlement);
-  const priceLabel = subscription
-    ? `${formatMoney(subscription.price, { currency: subscription.currency })} / ${subscription.interval}`
-    : 'No package selected';
+  ].filter(Boolean) as string[];
 
   return (
-    <div className="w-full space-y-3 lg:w-[28rem]">
-      {loadedAt ? <LearnerFreshnessIndicator updatedAt={loadedAt} source="loaded" staleAfterMinutes={30} /> : null}
-      <div className="rounded-2xl border border-border bg-background-light p-4 shadow-sm">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div className="min-w-0 space-y-1">
-            <p className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[0.16em] text-muted">
-              <CreditCard className="h-3.5 w-3.5" />
-              Subscription
-            </p>
-            <p className="text-base font-bold leading-snug text-navy">
-              {isLoading ? 'Loading subscription...' : hasError ? 'Subscription details unavailable' : subscription?.planName ?? 'No active subscription'}
-            </p>
-            {!isLoading && !hasError ? (
-              <p className="text-xs font-medium text-muted">
-                Package code: <span className="text-navy">{subscription?.planCode ?? entitlement?.planCode ?? 'None'}</span>
-              </p>
-            ) : null}
-          </div>
-          {!isLoading && !hasError ? (
-            <span className={`w-fit shrink-0 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide ${subscriptionStatusClass(subscription, entitlement)}`}>
-              {statusLabel}
-            </span>
-          ) : null}
-        </div>
-
+    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1.5 text-sm">
+        <CreditCard className="h-4 w-4 shrink-0 text-muted" />
+        <span className="font-bold text-navy">
+          {isLoading ? 'Loading subscription…' : hasError ? 'Subscription details unavailable' : planName}
+        </span>
         {!isLoading && !hasError ? (
-          <dl className="mt-4 grid grid-cols-2 gap-2 text-xs">
-            <div className="rounded-xl bg-surface px-2.5 py-2">
-              <dt className="text-[10px] font-bold uppercase tracking-wide text-muted">Subscribed</dt>
-              <dd className="mt-0.5 font-semibold text-navy">{formatDashboardDate(subscribedDate)}</dd>
-            </div>
-            <div className="rounded-xl bg-surface px-2.5 py-2">
-              <dt className="text-[10px] font-bold uppercase tracking-wide text-muted">Expiry date</dt>
-              <dd className="mt-0.5 font-semibold text-navy">{formatDashboardDate(expiryDate)}</dd>
-            </div>
-            <div className="rounded-xl bg-surface px-2.5 py-2">
-              <dt className="text-[10px] font-bold uppercase tracking-wide text-muted">Days left</dt>
-              <dd className="mt-0.5 font-semibold text-navy">{calculateDaysLeft(expiryDate)}</dd>
-            </div>
-            <div className="rounded-xl bg-surface px-2.5 py-2">
-              <dt className="text-[10px] font-bold uppercase tracking-wide text-muted">Price</dt>
-              <dd className="mt-0.5 font-semibold text-navy">{priceLabel}</dd>
-            </div>
-          </dl>
+          <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${subscriptionStatusClass(subscription, entitlement)}`}>
+            {statusLabel}
+          </span>
         ) : null}
-
-        {!isLoading && !hasError && counterItems.length > 0 ? (
-          <p className="mt-3 text-xs font-medium text-muted">
-            Remaining: <span className="text-navy">{counterItems.join(' · ')}</span>
-          </p>
-        ) : null}
-
-        <Button asChild variant="outline" size="sm" className="mt-3 w-full">
-          <Link href="/catalog">See all catalog <ArrowRight className="h-3.5 w-3.5" /></Link>
-        </Button>
+        {facts.map((fact) => (
+          <span key={fact} className="flex items-center gap-2 text-muted">
+            <span aria-hidden className="text-border">·</span>
+            <span className="font-medium text-navy">{fact}</span>
+          </span>
+        ))}
       </div>
+      <Button asChild variant="outline" size="sm" className="shrink-0">
+        <Link href="/catalog">See all catalog <ArrowRight className="h-3.5 w-3.5" /></Link>
+      </Button>
     </div>
   );
 }
@@ -317,31 +276,6 @@ export default function Dashboard() {
       label: "Today's plan",
       value: todayTasks.length > 0 ? `${completedToday}/${todayTasks.length} done` : 'No tasks scheduled',
     },
-    {
-      icon: CreditCard,
-      label: 'Package',
-      value: subscriptionLoading
-        ? 'Loading package'
-        : subscriptionError
-          ? 'Unavailable'
-          : subscription?.planName ?? entitlement?.planCode ?? 'No active subscription',
-    },
-    {
-      icon: Timer,
-      label: 'Access left',
-      value: subscriptionLoading
-        ? 'Checking access'
-        : calculateDaysLeft(entitlement?.expiresAt ?? subscription?.nextRenewalAt ?? null),
-    },
-    {
-      icon: Shield,
-      label: 'Subscription',
-      value: subscriptionLoading
-        ? 'Checking status'
-        : subscriptionError
-          ? 'Unavailable'
-          : subscriptionStatusLabel(subscription, entitlement),
-    },
   ];
 
   const subTestIconMap: Record<string, typeof Sparkles> = {
@@ -433,13 +367,12 @@ export default function Dashboard() {
             title="Keep today's priorities and exam signals in view"
               description="Decide your next action, check your readiness, and move forward with confidence."
             highlights={dashboardHeroHighlights}
-            aside={(
-              <DashboardSubscriptionSummary
+            footer={(
+              <DashboardSubscriptionStrip
                 subscription={subscription}
                 entitlement={entitlement}
                 isLoading={subscriptionLoading}
                 hasError={subscriptionError}
-                loadedAt={loadedAt}
               />
             )}
           />

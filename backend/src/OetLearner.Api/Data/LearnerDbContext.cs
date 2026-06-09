@@ -69,6 +69,7 @@ public partial class LearnerDbContext(DbContextOptions<LearnerDbContext> options
     public DbSet<TutorBookUpdate> TutorBookUpdates => Set<TutorBookUpdate>();
     public DbSet<TutorBookAudioScript> TutorBookAudioScripts => Set<TutorBookAudioScript>();
     public DbSet<BillingAddOnVersion> BillingAddOnVersions => Set<BillingAddOnVersion>();
+    public DbSet<BillingContentString> BillingContentStrings => Set<BillingContentString>();
     public DbSet<BillingCoupon> BillingCoupons => Set<BillingCoupon>();
     public DbSet<BillingCouponVersion> BillingCouponVersions => Set<BillingCouponVersion>();
     public DbSet<BillingCouponRedemption> BillingCouponRedemptions => Set<BillingCouponRedemption>();

@@ -5492,6 +5492,10 @@ export interface AdminBillingAddOnOet2026Fields {
   eligibilityFlag?: string;
   lettersGranted?: number;
   sessionsGranted?: number;
+  /** AI grading package storefront group: full|listening|reading|writing|speaking|mock. */
+  aiPackageGroup?: string;
+  /** JSON array of admin-authored AI feature bullet strings. */
+  aiFeaturesJson?: string;
 }
 
 export async function createAdminBillingAddOn(payload: {
@@ -5539,6 +5543,8 @@ export async function createAdminBillingAddOn(payload: {
       eligibilityFlag: payload.eligibilityFlag ?? null,
       lettersGranted: payload.lettersGranted ?? null,
       sessionsGranted: payload.sessionsGranted ?? null,
+      aiPackageGroup: payload.aiPackageGroup ?? null,
+      aiFeaturesJson: payload.aiFeaturesJson ?? null,
     }),
   });
 }
@@ -5588,6 +5594,8 @@ export async function updateAdminBillingAddOn(addOnId: string, payload: {
       eligibilityFlag: payload.eligibilityFlag ?? null,
       lettersGranted: payload.lettersGranted ?? null,
       sessionsGranted: payload.sessionsGranted ?? null,
+      aiPackageGroup: payload.aiPackageGroup ?? null,
+      aiFeaturesJson: payload.aiFeaturesJson ?? null,
     }),
   });
 }
@@ -5602,6 +5610,36 @@ export async function deleteAdminBillingPlan(planId: string): Promise<{ id: stri
 
 export async function deleteAdminBillingAddOn(addOnId: string): Promise<{ id: string; code: string; deleted: boolean }> {
   return apiRequest(`/v1/admin/billing/add-ons/${encodeURIComponent(addOnId)}`, { method: 'DELETE' });
+}
+
+// ── Billing page copy (admin-editable learner-page strings) ──────────────
+
+export interface AdminBillingContentEntry {
+  key: string;
+  value: string;
+  section?: string | null;
+  description?: string | null;
+  updatedAt?: string;
+  updatedByAdminName?: string | null;
+}
+
+/** Stored copy overrides only — defaults live in lib/billing-copy-defaults.ts. */
+export async function fetchAdminBillingContent(): Promise<{ entries: AdminBillingContentEntry[] }> {
+  return apiRequest('/v1/admin/billing/content');
+}
+
+export async function replaceAdminBillingContent(
+  entries: Array<{ key: string; value: string; section?: string; description?: string }>,
+): Promise<{ entries: AdminBillingContentEntry[] }> {
+  return apiRequest('/v1/admin/billing/content', {
+    method: 'PUT',
+    body: JSON.stringify({ entries }),
+  });
+}
+
+/** Public learner-page copy overrides as a flat { key: value } map. */
+export async function fetchBillingContent(): Promise<Record<string, string>> {
+  return apiRequest('/v1/billing/content') as Promise<Record<string, string>>;
 }
 
 // ── OET 2026 catalog API ─────────────────────────────────────────────────

@@ -363,7 +363,9 @@ public record AdminBillingAddOnCreateRequest(
     bool? RequiresEligibleParent = null,
     string? EligibilityFlag = null,
     int? LettersGranted = null,
-    int? SessionsGranted = null);
+    int? SessionsGranted = null,
+    string? AiPackageGroup = null,
+    string? AiFeaturesJson = null);
 
 public record AdminBillingAddOnUpdateRequest(
     string Code,
@@ -388,7 +390,20 @@ public record AdminBillingAddOnUpdateRequest(
     bool? RequiresEligibleParent = null,
     string? EligibilityFlag = null,
     int? LettersGranted = null,
-    int? SessionsGranted = null);
+    int? SessionsGranted = null,
+    string? AiPackageGroup = null,
+    string? AiFeaturesJson = null);
+
+/// <summary>A single learner-billing copy override (key → value, with optional section/description for the admin editor).</summary>
+public record AdminBillingContentEntry(
+    string Key,
+    string Value,
+    string? Section = null,
+    string? Description = null);
+
+/// <summary>Atomic upsert of learner-billing copy overrides. Unknown/malformed keys are rejected server-side.</summary>
+public record AdminBillingContentReplaceRequest(
+    IReadOnlyList<AdminBillingContentEntry> Entries);
 
 public record AdminBillingCouponCreateRequest(
     string Code,

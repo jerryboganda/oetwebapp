@@ -21,6 +21,7 @@ public static class LearnerEndpoints
         var publicV1 = app.MapGroup("/v1/public");
         publicV1.MapGet("/plans", async (LearnerService service, CancellationToken ct) => Results.Ok(await service.GetBillingPlansAsync(string.Empty, ct)));
         app.MapGet("/v1/billing/ai-packages", async (LearnerService service) => Results.Ok(await service.GetAiPackagesAsync()));
+        app.MapGet("/v1/billing/content", async (LearnerService service, CancellationToken ct) => Results.Ok(await service.GetBillingContentAsync(ct)));
 
         var v1 = app.MapGroup("/v1").RequireAuthorization("LearnerOnly");
 

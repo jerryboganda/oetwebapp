@@ -3569,6 +3569,20 @@ public partial class LearnerService(
     /// Purchases flow through the same quote → checkout-session → webhook pipeline
     /// as every other add-on (<see cref="CreateCheckoutSessionAsync"/>).
     /// </summary>
+    /// <summary>
+    /// Public learner-billing copy overrides as a flat <c>{ key: value }</c> map. The page
+    /// merges these over its in-code defaults, so an empty map renders every default string.
+    /// </summary>
+    public async Task<object> GetBillingContentAsync(CancellationToken ct)
+    {
+        var rows = await db.BillingContentStrings.AsNoTracking()
+            .Select(x => new { x.Key, x.Value })
+            .ToListAsync(ct);
+        var map = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var row in rows) map[row.Key] = row.Value;
+        return map;
+    }
+
     public async Task<object> GetAiPackagesAsync()
     {
         var addOns = await db.BillingAddOns.AsNoTracking()
@@ -3615,13 +3629,17 @@ public partial class LearnerService(
     private static AiPackageView ToAiPackageView(BillingAddOn x)
     {
         var extras = ReadAiPackageExtras(x.GrantEntitlementsJson);
-        var group = ResolveAiPackageGroup(x.Code);
+        // Prefer the admin-configured group; fall back to code-prefix derivation for legacy seeded rows.
+        var group = string.IsNullOrWhiteSpace(x.AiPackageGroup)
+            ? ResolveAiPackageGroup(x.Code)
+            : x.AiPackageGroup.Trim().ToLowerInvariant();
         var credits = extras.FlexibleCredits ?? x.GrantCredits;
         var writingCredits = extras.WritingCredits ?? x.LettersGranted;
         var speakingCredits = extras.SpeakingCredits ?? x.SessionsGranted;
         if (group == "writing" && writingCredits == 0) writingCredits = credits;
         if (group == "speaking" && speakingCredits == 0) speakingCredits = credits;
-        var features = BuildAiPackageFeatures(
+        // Prefer admin-authored feature bullets; fall back to auto-generated copy when none stored.
+        var features = ReadAiFeatures(x.AiFeaturesJson) ?? BuildAiPackageFeatures(
             group,
             credits,
             writingCredits,
@@ -3703,6 +3721,32 @@ public partial class LearnerService(
                 break;
         }
         return features;
+    }
+
+    /// <summary>
+    /// Parses an admin-authored AI feature bullet list. Returns null (→ auto-generate fallback)
+    /// when the JSON is empty, malformed, or contains no usable strings.
+    /// </summary>
+    private static IReadOnlyList<string>? ReadAiFeatures(string? aiFeaturesJson)
+    {
+        if (string.IsNullOrWhiteSpace(aiFeaturesJson)) return null;
+        try
+        {
+            using var doc = JsonDocument.Parse(aiFeaturesJson);
+            if (doc.RootElement.ValueKind != JsonValueKind.Array) return null;
+            var features = new List<string>();
+            foreach (var item in doc.RootElement.EnumerateArray())
+            {
+                if (item.ValueKind != JsonValueKind.String) continue;
+                var text = item.GetString();
+                if (!string.IsNullOrWhiteSpace(text)) features.Add(text.Trim());
+            }
+            return features.Count > 0 ? features : null;
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
     }
 
     private static AiPackageExtras ReadAiPackageExtras(string? grantEntitlementsJson)

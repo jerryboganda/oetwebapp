@@ -61,6 +61,7 @@ export interface LearnerPageHeroModel {
   accent?: LearnerSurfaceAccent;
   highlights?: LearnerPageHeroHighlight[];
   aside?: ReactNode;
+  footer?: ReactNode;
 }
 
 export interface LearnerPageHeroHighlight {

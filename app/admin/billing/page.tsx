@@ -2584,6 +2584,9 @@ export default function BillingPage() {
         breadcrumbs={[{ label: 'Admin', href: '/admin' }, { label: 'Billing Operations' }]}
         actions={
           <>
+            <Button variant="outline" asChild startIcon={<CreditCard className="h-4 w-4" />}>
+              <Link href="/admin/billing/pricing">Pricing hub →</Link>
+            </Button>
             <Button onClick={() => openPlanEditor()} startIcon={<CreditCard className="h-4 w-4" />} disabled={!canWriteCatalog}>
               Create Plan
             </Button>

@@ -115,6 +115,21 @@ public class BillingAddOn
 
     /// <summary>Days to push <c>Subscription.ExpiresAt</c> out by for an <c>access_extension</c> add-on. Zero for all other kinds.</summary>
     public int ExtensionDays { get; set; }
+
+    // ── AI grading package presentation (admin-configurable) ────────────────────────
+    /// <summary>
+    /// Storefront group for an <c>ai_package</c> add-on: <c>full|listening|reading|writing|speaking|mock</c>.
+    /// Empty falls back to code-prefix derivation. Presentational only — never read at fulfillment.
+    /// </summary>
+    [MaxLength(32)]
+    public string AiPackageGroup { get; set; } = string.Empty;
+
+    /// <summary>
+    /// JSON array of admin-authored feature bullet strings for an <c>ai_package</c> add-on.
+    /// Empty/<c>[]</c> falls back to auto-generated features. Presentational only.
+    /// </summary>
+    [MaxLength(4096)]
+    public string AiFeaturesJson { get; set; } = "[]";
 }
 
 /// <summary>Immutable managed add-on catalog snapshot.</summary>
@@ -194,6 +209,42 @@ public class BillingAddOnVersion
 
     /// <summary>Days to push <c>Subscription.ExpiresAt</c> out by for an <c>access_extension</c> add-on. Zero for all other kinds.</summary>
     public int ExtensionDays { get; set; }
+
+    // ── AI grading package presentation (immutable snapshot) ────────────────────────
+    [MaxLength(32)]
+    public string AiPackageGroup { get; set; } = string.Empty;
+
+    [MaxLength(4096)]
+    public string AiFeaturesJson { get; set; } = "[]";
+}
+
+/// <summary>
+/// Admin-editable presentation string for the learner billing page. Key/value content
+/// store so storefront copy (titles, badges, button labels) can be managed without code.
+/// </summary>
+public class BillingContentString
+{
+    [Key]
+    [MaxLength(128)]
+    public string Key { get; set; } = default!;
+
+    /// <summary>Grouping for the admin editor: <c>page|plans|addons|ai|wallet|badges|buttons</c>.</summary>
+    [MaxLength(64)]
+    public string Section { get; set; } = string.Empty;
+
+    [MaxLength(4000)]
+    public string Value { get; set; } = string.Empty;
+
+    [MaxLength(256)]
+    public string? Description { get; set; }
+
+    public DateTimeOffset UpdatedAt { get; set; }
+
+    [MaxLength(64)]
+    public string? UpdatedByAdminId { get; set; }
+
+    [MaxLength(128)]
+    public string? UpdatedByAdminName { get; set; }
 }
 
 /// <summary>Promo code or discount rule that can be applied at checkout.</summary>

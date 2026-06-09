@@ -331,9 +331,47 @@ public partial class AdminService(
         bool? RequiresEligibleParent,
         string? EligibilityFlag,
         int? LettersGranted,
-        int? SessionsGranted)
+        int? SessionsGranted,
+        string? AiPackageGroup = null,
+        string? AiFeaturesJson = null)
     {
         public static Oet2026AddOnFields Empty { get; } = new(null, null, null, null, null, null);
+    }
+
+    /// <summary>Allowed storefront groups for an <c>ai_package</c> add-on.</summary>
+    private static readonly HashSet<string> AiPackageGroups =
+        new(StringComparer.OrdinalIgnoreCase) { "full", "listening", "reading", "writing", "speaking", "mock" };
+
+    /// <summary>
+    /// Normalizes an admin-supplied AI feature bullet list to a clean JSON string array.
+    /// Returns "[]" for empty/blank, null for unparseable input (caller skips the update).
+    /// Trims each bullet, drops blanks, caps length (256 chars) and count (12 bullets).
+    /// </summary>
+    private static string? NormalizeAiFeaturesJson(string? raw)
+    {
+        if (raw is null) return null;
+        var trimmed = raw.Trim();
+        if (trimmed.Length == 0 || trimmed == "[]") return "[]";
+        try
+        {
+            using var doc = JsonDocument.Parse(trimmed);
+            if (doc.RootElement.ValueKind != JsonValueKind.Array) return null;
+            var bullets = new List<string>();
+            foreach (var item in doc.RootElement.EnumerateArray())
+            {
+                if (item.ValueKind != JsonValueKind.String) continue;
+                var text = item.GetString()?.Trim();
+                if (string.IsNullOrEmpty(text)) continue;
+                if (text.Length > 256) text = text[..256];
+                bullets.Add(text);
+                if (bullets.Count >= 12) break;
+            }
+            return JsonSerializer.Serialize(bullets);
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
     }
 
     private static void ApplyOet2026Fields(BillingPlan plan, Oet2026PlanFields fields)
@@ -364,6 +402,18 @@ public partial class AdminService(
         if (!string.IsNullOrWhiteSpace(fields.EligibilityFlag)) addOn.EligibilityFlag = fields.EligibilityFlag.Trim().ToLowerInvariant();
         if (fields.LettersGranted.HasValue) addOn.LettersGranted = Math.Max(0, fields.LettersGranted.Value);
         if (fields.SessionsGranted.HasValue) addOn.SessionsGranted = Math.Max(0, fields.SessionsGranted.Value);
+        if (fields.AiPackageGroup is not null)
+        {
+            var group = fields.AiPackageGroup.Trim().ToLowerInvariant();
+            // Empty clears the override (→ code-prefix fallback); only accept known groups.
+            if (group.Length == 0) addOn.AiPackageGroup = string.Empty;
+            else if (AiPackageGroups.Contains(group)) addOn.AiPackageGroup = group;
+        }
+        if (fields.AiFeaturesJson is not null)
+        {
+            var normalized = NormalizeAiFeaturesJson(fields.AiFeaturesJson);
+            if (normalized is not null) addOn.AiFeaturesJson = normalized;
+        }
     }
 
     /// <summary>
@@ -565,7 +615,9 @@ public partial class AdminService(
             request.RequiresEligibleParent,
             request.EligibilityFlag,
             request.LettersGranted,
-            request.SessionsGranted));
+            request.SessionsGranted,
+            request.AiPackageGroup,
+            request.AiFeaturesJson));
 
     private static BillingAddOnCatalogInput ToBillingAddOnCatalogInput(AdminBillingAddOnUpdateRequest request) => new(
         request.Code,
@@ -591,7 +643,9 @@ public partial class AdminService(
             request.RequiresEligibleParent,
             request.EligibilityFlag,
             request.LettersGranted,
-            request.SessionsGranted));
+            request.SessionsGranted,
+            request.AiPackageGroup,
+            request.AiFeaturesJson));
 
     private static BillingCouponCatalogInput ToBillingCouponCatalogInput(AdminBillingCouponCreateRequest request) => new(
         request.Code,
@@ -1391,7 +1445,10 @@ public partial class AdminService(
         requiresEligibleParent = addOn.RequiresEligibleParent,
         eligibilityFlag = addOn.EligibilityFlag,
         lettersGranted = addOn.LettersGranted,
-        sessionsGranted = addOn.SessionsGranted
+        sessionsGranted = addOn.SessionsGranted,
+        // AI grading package presentation (admin-configurable)
+        aiPackageGroup = addOn.AiPackageGroup,
+        aiFeatures = JsonSupport.Deserialize<List<string>>(addOn.AiFeaturesJson, [])
     };
 
     private static object MapBillingCoupon(BillingCoupon coupon, BillingCatalogVersionMetadata? versionMetadata = null) => new
@@ -1498,6 +1555,8 @@ public partial class AdminService(
         EligibilityFlag = addOn.EligibilityFlag,
         LettersGranted = addOn.LettersGranted,
         SessionsGranted = addOn.SessionsGranted,
+        AiPackageGroup = addOn.AiPackageGroup,
+        AiFeaturesJson = addOn.AiFeaturesJson,
     };
 
     private static BillingCouponVersion CreateBillingCouponVersion(BillingCoupon coupon, int versionNumber, string? adminId, string? adminName, DateTimeOffset createdAt) => new()
@@ -4349,6 +4408,110 @@ public partial class AdminService(
         return addOns.Select(addOn => MapBillingAddOn(
             addOn,
             versionMetadata.TryGetValue(addOn.Id, out var metadata) ? metadata : EmptyBillingCatalogVersionMetadata));
+    }
+
+    /// <summary>Keys must look like <c>billing.section.name</c> — lowercase-rooted, dotted, alnum + . _ - only.</summary>
+    private static bool IsValidBillingContentKey(string key)
+    {
+        if (string.IsNullOrEmpty(key) || key.Length > 128) return false;
+        if (!key.StartsWith("billing.", StringComparison.Ordinal)) return false;
+        foreach (var c in key)
+        {
+            var ok = c is >= 'a' and <= 'z' or >= 'A' and <= 'Z' or >= '0' and <= '9' or '.' or '_' or '-';
+            if (!ok) return false;
+        }
+        return true;
+    }
+
+    public async Task<object> GetBillingContentAsync(CancellationToken ct)
+    {
+        var rows = await db.BillingContentStrings.AsNoTracking()
+            .OrderBy(x => x.Section).ThenBy(x => x.Key)
+            .ToListAsync(ct);
+        return new
+        {
+            entries = rows.Select(x => new
+            {
+                key = x.Key,
+                section = x.Section,
+                value = x.Value,
+                description = x.Description,
+                updatedAt = x.UpdatedAt,
+                updatedByAdminName = x.UpdatedByAdminName,
+            }).ToList()
+        };
+    }
+
+    /// <summary>
+    /// Atomic upsert of learner-billing copy overrides. Only stores overrides — the canonical
+    /// defaults live in the frontend, so an absent key simply renders its default. Rejects
+    /// malformed keys so junk never lands in the store.
+    /// </summary>
+    public async Task<object> ReplaceBillingContentAsync(string adminId, string adminName, AdminBillingContentReplaceRequest request, CancellationToken ct)
+    {
+        var entries = request.Entries ?? Array.Empty<AdminBillingContentEntry>();
+        var normalized = new List<(string Key, string Value, string Section, string? Description)>();
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var entry in entries)
+        {
+            var key = (entry.Key ?? string.Empty).Trim();
+            if (!IsValidBillingContentKey(key))
+            {
+                throw ApiException.Validation("billing_content_invalid_key", $"Invalid billing content key: '{key}'.");
+            }
+            if (!seen.Add(key)) continue;
+            var value = entry.Value ?? string.Empty;
+            if (value.Length > 4000) value = value[..4000];
+            var section = (entry.Section ?? string.Empty).Trim();
+            if (section.Length > 64) section = section[..64];
+            var description = entry.Description?.Trim();
+            if (description is { Length: > 256 }) description = description[..256];
+            normalized.Add((key, value, section, description));
+        }
+
+        var keys = normalized.Select(n => n.Key).ToList();
+        var existing = await db.BillingContentStrings.Where(x => keys.Contains(x.Key)).ToListAsync(ct);
+        var existingByKey = existing.ToDictionary(x => x.Key, StringComparer.Ordinal);
+        var now = DateTimeOffset.UtcNow;
+        var changed = new List<string>();
+        foreach (var n in normalized)
+        {
+            if (existingByKey.TryGetValue(n.Key, out var row))
+            {
+                if (row.Value != n.Value || row.Section != n.Section || row.Description != n.Description)
+                {
+                    row.Value = n.Value;
+                    row.Section = n.Section;
+                    row.Description = n.Description;
+                    row.UpdatedAt = now;
+                    row.UpdatedByAdminId = adminId;
+                    row.UpdatedByAdminName = adminName;
+                    changed.Add(n.Key);
+                }
+            }
+            else
+            {
+                db.BillingContentStrings.Add(new BillingContentString
+                {
+                    Key = n.Key,
+                    Section = n.Section,
+                    Value = n.Value,
+                    Description = n.Description,
+                    UpdatedAt = now,
+                    UpdatedByAdminId = adminId,
+                    UpdatedByAdminName = adminName,
+                });
+                changed.Add(n.Key);
+            }
+        }
+
+        await db.SaveChangesAsync(ct);
+        if (changed.Count > 0)
+        {
+            await LogAuditAsync(adminId, adminName, "Updated", "BillingContent", "billing-content",
+                $"Updated {changed.Count} billing copy string(s): {string.Join(", ", changed.Take(20))}", ct);
+        }
+        return await GetBillingContentAsync(ct);
     }
 
     public async Task<object> CreateBillingAddOnAsync(string adminId, string adminName, AdminBillingAddOnCreateRequest request, CancellationToken ct)

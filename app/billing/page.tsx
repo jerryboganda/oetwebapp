@@ -38,12 +38,14 @@ import {
   fetchAiPackages,
   fetchBilling,
   fetchBillingChangePreview,
+  fetchBillingContent,
   fetchBillingQuote,
   fetchWalletTopUpTiers,
   fetchWalletTransactions,
   pauseSubscription,
   resumeSubscription,
 } from '@/lib/api';
+import { makeBillingCopy } from '@/lib/billing-copy-defaults';
 import type { WalletTopUpTier } from '@/lib/api';
 import type {
   AiPackage,
@@ -106,12 +108,20 @@ const BILLING_TABS: Array<{ id: BillingTabId; label: string; icon: React.ReactNo
   { id: 'invoices', label: 'Invoices', icon: <Receipt className="h-4 w-4" /> },
 ];
 
-const AI_PACKAGE_SUBTEST_SECTIONS: Array<{ key: 'listening' | 'reading' | 'writing' | 'speaking'; label: string; headerClass: string }> = [
-  { key: 'listening', label: 'Listening', headerClass: 'bg-blue-700' },
-  { key: 'reading', label: 'Reading', headerClass: 'bg-purple-700' },
-  { key: 'writing', label: 'Writing', headerClass: 'bg-amber-600' },
-  { key: 'speaking', label: 'Speaking', headerClass: 'bg-emerald-700' },
+const AI_PACKAGE_SUBTEST_SECTIONS: Array<{ key: 'listening' | 'reading' | 'writing' | 'speaking'; copyKey: string; headerClass: string }> = [
+  { key: 'listening', copyKey: 'billing.ai.section.listening', headerClass: 'bg-blue-700' },
+  { key: 'reading', copyKey: 'billing.ai.section.reading', headerClass: 'bg-purple-700' },
+  { key: 'writing', copyKey: 'billing.ai.section.writing', headerClass: 'bg-amber-600' },
+  { key: 'speaking', copyKey: 'billing.ai.section.speaking', headerClass: 'bg-emerald-700' },
 ];
+
+const TAB_COPY_KEYS: Record<BillingTabId, string> = {
+  overview: 'billing.tab.overview',
+  plans: 'billing.tab.plans',
+  credits: 'billing.tab.credits',
+  'ai-credits': 'billing.tab.aiCredits',
+  invoices: 'billing.tab.invoices',
+};
 
 function aiPackageValidityLabel(validityDays: number): string {
   if (validityDays <= 0) return '';
@@ -164,6 +174,15 @@ export default function BillingPage() {
   const [aiPackages, setAiPackages] = useState<AiPackagesResponse | null>(null);
   const [aiPackagesLoading, setAiPackagesLoading] = useState(true);
   const [aiPackageView, setAiPackageView] = useState<'full' | 'separate'>('full');
+
+  // Admin-editable page copy: DB overrides merged over in-code defaults. Optional —
+  // fails silently to defaults so nothing ever renders blank.
+  const [billingCopy, setBillingCopy] = useState<Record<string, string> | null>(null);
+  const copy = useMemo(() => makeBillingCopy(billingCopy), [billingCopy]);
+  const billingTabs = useMemo(
+    () => BILLING_TABS.map((tab) => ({ ...tab, label: copy(TAB_COPY_KEYS[tab.id]) })),
+    [copy],
+  );
 
   const [freezeState, setFreezeState] = useState<LearnerFreezeStatus | null>(null);
   const [freezeLoadFailed, setFreezeLoadFailed] = useState(false);
@@ -243,6 +262,20 @@ export default function BillingPage() {
       })
       .finally(() => {
         if (!cancelled) setAiPackagesLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchBillingContent()
+      .then((map) => {
+        if (!cancelled) setBillingCopy(map);
+      })
+      .catch(() => {
+        /* copy is optional; fall back to in-code defaults */
       });
     return () => {
       cancelled = true;
@@ -437,7 +470,7 @@ export default function BillingPage() {
 
   if (loading) {
     return (
-      <LearnerDashboardShell pageTitle="Billing & subscriptions" backHref="/">
+      <LearnerDashboardShell pageTitle={copy('billing.page.title')} backHref="/">
         <div className="space-y-6">
           <Skeleton className="h-44 rounded-2xl" />
           <Skeleton className="h-12 rounded-2xl" />
@@ -449,7 +482,7 @@ export default function BillingPage() {
 
   if (!data) {
     return (
-      <LearnerDashboardShell pageTitle="Billing & subscriptions" backHref="/">
+      <LearnerDashboardShell pageTitle={copy('billing.page.title')} backHref="/">
         <InlineAlert variant="error">{error ?? 'Subscription data could not be loaded.'}</InlineAlert>
       </LearnerDashboardShell>
     );
@@ -479,7 +512,7 @@ export default function BillingPage() {
           <h3 className="text-xl font-semibold tracking-tight text-navy">{pkg.name}</h3>
           {pkg.priorityQueue ? (
             <span className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-amber-800 dark:bg-amber-300/20 dark:text-amber-200">
-              Priority
+              {copy('billing.ai.priority')}
             </span>
           ) : null}
         </div>
@@ -514,7 +547,7 @@ export default function BillingPage() {
           onClick={() => startCheckout('addon_purchase', 1, pkg.code, pkg.name)}
         >
           <ShoppingCart className="h-4 w-4" />
-          Buy now
+          {copy('billing.ai.buyNow')}
         </Button>
       </motion.article>
     );
@@ -522,22 +555,22 @@ export default function BillingPage() {
 
   return (
     <LearnerDashboardShell
-      pageTitle="Billing & subscriptions"
-      subtitle="Manage your plan, credits, invoices, and entitlements in one place."
+      pageTitle={copy('billing.page.title')}
+      subtitle={copy('billing.page.subtitle')}
       backHref="/"
     >
       <div className="space-y-6">
         <LearnerPageHero
-          eyebrow="Billing"
+          eyebrow={copy('billing.hero.eyebrow')}
           icon={CreditCard}
           accent="navy"
-          title="Your billing center"
-          description="Review your plan, top up review credits, and download invoices. Everything stays validated server-side before checkout opens."
+          title={copy('billing.hero.title')}
+          description={copy('billing.hero.description')}
           highlights={[
-            { icon: ShieldCheck, label: 'Current plan', value: data.currentPlan },
-            { icon: Wallet, label: 'Credit balance', value: walletLoading ? '-' : `${wallet?.balance ?? 0} credits` },
-            { icon: ShoppingCart, label: 'Active add-ons', value: `${activeAddOns.length}` },
-            { icon: Calendar, label: 'Next renewal', value: formatOptionalDate(data.nextRenewal) },
+            { icon: ShieldCheck, label: copy('billing.hero.highlight.currentPlan'), value: data.currentPlan },
+            { icon: Wallet, label: copy('billing.hero.highlight.creditBalance'), value: walletLoading ? '-' : `${wallet?.balance ?? 0} credits` },
+            { icon: ShoppingCart, label: copy('billing.hero.highlight.activeAddons'), value: `${activeAddOns.length}` },
+            { icon: Calendar, label: copy('billing.hero.highlight.nextRenewal'), value: formatOptionalDate(data.nextRenewal) },
           ]}
         />
 
@@ -574,7 +607,7 @@ export default function BillingPage() {
               <div className="flex items-center gap-3">
                 <CheckCircle2 className="h-5 w-5 text-success" />
                 <div>
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-success/80">Validated quote</p>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-success/80">{copy('billing.quote.validatedLabel')}</p>
                   <p className="mt-0.5 text-sm font-semibold">
                     {quoteLabel ?? 'Checkout'} · {formatCurrency(quote.totalAmount, quote.currency)}
                     {quote.discountAmount > 0 ? (
@@ -599,7 +632,7 @@ export default function BillingPage() {
                 }}
                 className="inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-bold text-success transition-colors hover:bg-success/15"
               >
-                <X className="h-3 w-3" /> Dismiss
+                <X className="h-3 w-3" /> {copy('billing.quote.dismiss')}
               </button>
             </div>
           </div>
@@ -607,7 +640,7 @@ export default function BillingPage() {
 
         {/* Section navigation */}
         <Tabs
-          tabs={BILLING_TABS}
+          tabs={billingTabs}
           activeTab={activeTab}
           onChange={(id) => setActiveTab(id as BillingTabId)}
         />
@@ -618,7 +651,7 @@ export default function BillingPage() {
             <section className="flex h-full flex-col rounded-2xl border border-border bg-surface p-6 shadow-sm">
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div>
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">Current subscription</p>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">{copy('billing.overview.currentSubscription')}</p>
                   <h2 className="mt-2 text-2xl font-semibold tracking-tight text-navy">{data.currentPlan}</h2>
                   <p className="mt-1 text-sm text-muted">
                     {data.price} / {data.interval}
@@ -635,42 +668,42 @@ export default function BillingPage() {
 
               <dl className="mt-6 grid gap-3 sm:grid-cols-3">
                 <div className="rounded-xl border border-border/70 bg-background-light/60 p-4">
-                  <dt className="text-[11px] font-medium uppercase tracking-[0.1em] text-muted/80">Renews</dt>
+                  <dt className="text-[11px] font-medium uppercase tracking-[0.1em] text-muted/80">{copy('billing.overview.renews')}</dt>
                   <dd className="mt-1.5 text-sm font-semibold text-navy">
                     {formatOptionalDate(data.nextRenewal)}
                   </dd>
                 </div>
                 <div className="rounded-xl border border-border/70 bg-background-light/60 p-4">
-                  <dt className="text-[11px] font-medium uppercase tracking-[0.1em] text-muted/80">Tutor reviews</dt>
+                  <dt className="text-[11px] font-medium uppercase tracking-[0.1em] text-muted/80">{copy('billing.overview.tutorReviews')}</dt>
                   <dd className="mt-1.5 text-sm font-semibold text-navy">
-                    {supportedReviewSubtests.length > 0 ? supportedReviewSubtests.join(' + ') : 'Not included'}
+                    {supportedReviewSubtests.length > 0 ? supportedReviewSubtests.join(' + ') : copy('billing.overview.tutorReviewsNotIncluded')}
                   </dd>
                 </div>
                 <div className="rounded-xl border border-border/70 bg-background-light/60 p-4">
-                  <dt className="text-[11px] font-medium uppercase tracking-[0.1em] text-muted/80">Invoice access</dt>
+                  <dt className="text-[11px] font-medium uppercase tracking-[0.1em] text-muted/80">{copy('billing.overview.invoiceAccess')}</dt>
                   <dd className="mt-1.5 text-sm font-semibold text-navy">
-                    {invoiceDownloadsAvailable ? 'Downloads available' : 'Unavailable'}
+                    {invoiceDownloadsAvailable ? copy('billing.overview.invoiceAccessAvailable') : copy('billing.overview.invoiceAccessUnavailable')}
                   </dd>
                 </div>
               </dl>
 
               <div className="mt-auto flex flex-wrap gap-2 pt-6">
                 <Button onClick={() => setActiveTab('plans')}>
-                  Change plan
+                  {copy('billing.overview.changePlan')}
                 </Button>
                 <Button variant="outline" onClick={() => setActiveTab('credits')}>
-                  <Wallet className="h-4 w-4" /> Top up credits
+                  <Wallet className="h-4 w-4" /> {copy('billing.overview.topUpCredits')}
                 </Button>
                 <Button variant="outline" onClick={() => setActiveTab('invoices')}>
-                  <Receipt className="h-4 w-4" /> View invoices
+                  <Receipt className="h-4 w-4" /> {copy('billing.overview.viewInvoices')}
                 </Button>
                 {data.status === 'active' || data.status === 'Active' ? (
                   <Button variant="outline" onClick={handlePause} disabled={pauseLoading}>
-                    {pauseLoading ? 'Pausing…' : 'Pause subscription'}
+                    {pauseLoading ? copy('billing.overview.pausing') : copy('billing.overview.pause')}
                   </Button>
                 ) : data.status === 'paused' || data.status === 'Paused' ? (
                   <Button variant="outline" onClick={handleResume} disabled={pauseLoading}>
-                    {pauseLoading ? 'Resuming…' : 'Resume subscription'}
+                    {pauseLoading ? copy('billing.overview.resuming') : copy('billing.overview.resume')}
                   </Button>
                 ) : null}
               </div>
@@ -679,22 +712,22 @@ export default function BillingPage() {
             <section className="flex h-full flex-col rounded-2xl border border-border bg-surface p-6 shadow-sm">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">Credit wallet</p>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">{copy('billing.overview.creditWallet')}</p>
                   <h3 className="mt-2 text-4xl font-semibold tracking-tight text-navy tabular-nums">
                     {walletLoading ? '-' : (wallet?.balance ?? 0)}
                   </h3>
-                  <p className="mt-1 text-sm text-muted">review credits available</p>
+                  <p className="mt-1 text-sm text-muted">{copy('billing.overview.creditsAvailable')}</p>
                 </div>
                 <div className="rounded-xl bg-success/10 p-2.5 text-success">
                   <Wallet className="h-5 w-5" />
                 </div>
               </div>
               <p className="mt-4 text-sm leading-6 text-muted">
-                Credits unlock tutor review for Writing and Speaking. Reading and Listening stay AI-evaluated.
+                {copy('billing.overview.creditsHelp')}
               </p>
               <div className="mt-auto pt-4">
                 <Button fullWidth onClick={() => setActiveTab('credits')}>
-                  Manage credits
+                  {copy('billing.overview.manageCredits')}
                 </Button>
               </div>
             </section>
@@ -705,19 +738,19 @@ export default function BillingPage() {
             <section className="rounded-2xl border border-border bg-surface p-6 shadow-sm">
               <div className="flex items-center justify-between gap-3">
                 <div>
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">Activity</p>
-                  <h3 className="mt-1 text-base font-semibold text-navy">Recent invoices</h3>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">{copy('billing.overview.activity')}</p>
+                  <h3 className="mt-1 text-base font-semibold text-navy">{copy('billing.overview.recentInvoices')}</h3>
                 </div>
                 <button
                   type="button"
                   onClick={() => setActiveTab('invoices')}
                   className="text-xs font-medium text-primary transition-colors hover:text-primary/80"
                 >
-                  View all →
+                  {copy('billing.overview.viewAll')}
                 </button>
               </div>
               {recentInvoices.length === 0 ? (
-                <p className="mt-4 text-sm text-muted">No invoices yet. They will appear after your first paid checkout.</p>
+                <p className="mt-4 text-sm text-muted">{copy('billing.overview.noInvoices')}</p>
               ) : (
                 <ul className="mt-4 divide-y divide-border/60">
                   {recentInvoices.map((invoice) => (
@@ -751,15 +784,15 @@ export default function BillingPage() {
             <section className="rounded-2xl border border-border bg-surface p-6 shadow-sm">
               <div className="flex items-center justify-between gap-3">
                 <div>
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">Activity</p>
-                  <h3 className="mt-1 text-base font-semibold text-navy">Recent credit activity</h3>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">{copy('billing.overview.activity')}</p>
+                  <h3 className="mt-1 text-base font-semibold text-navy">{copy('billing.overview.recentCreditActivity')}</h3>
                 </div>
                 <button
                   type="button"
                   onClick={() => setActiveTab('credits')}
                   className="text-xs font-medium text-primary transition-colors hover:text-primary/80"
                 >
-                  View all →
+                  {copy('billing.overview.viewAll')}
                 </button>
               </div>
               {walletLoading ? (
@@ -771,7 +804,7 @@ export default function BillingPage() {
               ) : recentTransactions.length === 0 ? (
                 <div className="mt-4 flex flex-col items-center gap-2 py-6 text-center">
                   <Clock className="h-7 w-7 text-muted/40" />
-                  <p className="text-sm text-muted">No credit activity yet.</p>
+                  <p className="text-sm text-muted">{copy('billing.overview.noCreditActivity')}</p>
                 </div>
               ) : (
                 <ul className="mt-4 divide-y divide-border/60">
@@ -814,15 +847,15 @@ export default function BillingPage() {
         {/* ── PLANS ───────────────────────────────────────────────── */}
         <TabPanel id="plans" activeTab={activeTab}>
           <LearnerSurfaceSectionHeader
-            eyebrow="Plans"
-            title="Compare plans and preview a change"
-            description="Plans are managed by the admin team. Upgrades and downgrades show a server-validated proration before checkout."
+            eyebrow={copy('billing.plans.eyebrow')}
+            title={copy('billing.plans.title')}
+            description={copy('billing.plans.description')}
             className="mb-4"
           />
 
           {plans.length === 0 ? (
             <div className="rounded-2xl border border-border bg-surface p-5 text-sm text-muted shadow-sm">
-              No published billing plans are available yet.
+              {copy('billing.plans.empty')}
             </div>
           ) : (
             <div className="grid gap-4 lg:grid-cols-3">
@@ -851,7 +884,7 @@ export default function BillingPage() {
                       {isCurrent ? (
                         <span className="inline-flex items-center gap-1.5 text-xs font-medium text-primary">
                           <span className="h-1.5 w-1.5 rounded-full bg-primary" aria-hidden="true" />
-                          Current
+                          {copy('billing.plans.current')}
                         </span>
                       ) : plan.changeDirection === 'upgrade' ? (
                         <ArrowUpCircle className="h-5 w-5 text-success" />
@@ -868,7 +901,7 @@ export default function BillingPage() {
                         <span className="ml-1 text-sm font-medium text-muted">/ {plan.interval}</span>
                       </p>
                       <p className="mt-1 text-sm text-muted">
-                        {plan.reviewCredits} review credits included
+                        {plan.reviewCredits} {copy('billing.plans.reviewCreditsIncluded')}
                       </p>
                     </div>
 
@@ -876,30 +909,30 @@ export default function BillingPage() {
                       <li className="flex items-start gap-2">
                         <CheckCircle2 className="mt-0.5 h-4 w-4 flex-none text-success" />
                         <span>
-                          Tutor reviews for{' '}
+                          {copy('billing.plans.tutorReviewsFor')}{' '}
                           <strong>
                             {plan.includedSubtests && plan.includedSubtests.length > 0
                               ? plan.includedSubtests.join(' & ')
-                              : 'no subtests'}
+                              : copy('billing.plans.noSubtests')}
                           </strong>
                         </span>
                       </li>
                       {plan.trialDays > 0 ? (
                         <li className="flex items-start gap-2">
                           <CheckCircle2 className="mt-0.5 h-4 w-4 flex-none text-success" />
-                          <span>{plan.trialDays}-day trial</span>
+                          <span>{plan.trialDays}{copy('billing.plans.trialSuffix')}</span>
                         </li>
                       ) : null}
                       {plan.isRenewable ? (
                         <li className="flex items-start gap-2">
                           <CheckCircle2 className="mt-0.5 h-4 w-4 flex-none text-success" />
-                          <span>Auto-renewing</span>
+                          <span>{copy('billing.plans.autoRenewing')}</span>
                         </li>
                       ) : null}
                       {(plan.entitlements ?? {})['invoiceDownloadsAvailable'] === true ? (
                         <li className="flex items-start gap-2">
                           <CheckCircle2 className="mt-0.5 h-4 w-4 flex-none text-success" />
-                          <span>Invoice downloads</span>
+                          <span>{copy('billing.plans.invoiceDownloads')}</span>
                         </li>
                       ) : null}
                     </ul>
@@ -916,14 +949,14 @@ export default function BillingPage() {
                           title={billingMutationsBlocked ? billingBlockedMessage : undefined}
                           onClick={() => loadPreview(plan.id)}
                         >
-                          Preview {plan.changeDirection}
+                          {copy('billing.plans.previewPrefix')} {plan.changeDirection}
                         </Button>
                         {isPreviewing ? (
                           <div className="rounded-xl border border-border bg-background-light p-4 text-sm text-muted">
                             <p className="font-semibold text-navy">{preview.summary}</p>
-                            <p className="mt-2">Prorated: {preview.proratedAmount}</p>
+                            <p className="mt-2">{copy('billing.plans.prorated')} {preview.proratedAmount}</p>
                             <p className="mt-1">
-                              Effective {new Date(preview.effectiveAt).toLocaleDateString()}
+                              {copy('billing.plans.effective')} {new Date(preview.effectiveAt).toLocaleDateString()}
                             </p>
                             <Button
                               className="mt-3"
@@ -942,14 +975,14 @@ export default function BillingPage() {
                                 )
                               }
                             >
-                              Continue to checkout
+                              {copy('billing.plans.continueToCheckout')}
                             </Button>
                           </div>
                         ) : null}
                       </div>
                     ) : (
                       <div className="mt-5 rounded-xl border border-dashed border-border bg-background-light/50 px-4 py-3 text-center text-[11px] font-medium uppercase tracking-[0.1em] text-muted">
-                        Active plan
+                        {copy('billing.plans.activePlan')}
                       </div>
                     )}
                   </motion.article>
@@ -965,14 +998,14 @@ export default function BillingPage() {
             {/* Top-up panel */}
             <section className="rounded-2xl border border-border bg-surface p-6 shadow-sm">
               <LearnerSurfaceSectionHeader
-                eyebrow="Wallet"
-                title="Top up review credits"
-                description="Bonus credits scale with the tier amount. Tiers and bonuses are configurable from the platform."
+                eyebrow={copy('billing.wallet.eyebrow')}
+                title={copy('billing.wallet.title')}
+                description={copy('billing.wallet.description')}
                 className="mb-4"
               />
 
               <div className="mb-5 flex items-center gap-3">
-                <p className="text-[11px] font-medium uppercase tracking-[0.1em] text-muted/80">Pay with</p>
+                <p className="text-[11px] font-medium uppercase tracking-[0.1em] text-muted/80">{copy('billing.wallet.payWith')}</p>
                 <div className="inline-flex rounded-xl border border-border bg-background-light p-1">
                   {(['stripe', 'paypal'] as const).map((gw) => (
                     <button
@@ -985,7 +1018,7 @@ export default function BillingPage() {
                           : 'text-navy hover:bg-surface'
                       }`}
                     >
-                      {gw === 'stripe' ? 'Stripe' : 'PayPal'}
+                      {gw === 'stripe' ? copy('billing.wallet.gateway.stripe') : copy('billing.wallet.gateway.paypal')}
                     </button>
                   ))}
                 </div>
@@ -994,9 +1027,9 @@ export default function BillingPage() {
               <div className="grid grid-cols-2 gap-3">
                 {topUpTiers.length === 0 ? (
                   <div className="col-span-2 rounded-2xl border border-dashed border-border bg-background-light p-5 text-center text-sm text-muted">
-                    Top-up tiers are not configured yet. Please check back shortly or contact support if this persists.
+                    {copy('billing.wallet.tiersEmpty')}
                     <Button className="mt-3" disabled aria-disabled="true" fullWidth>
-                      Top up unavailable
+                      {copy('billing.wallet.topUpUnavailable')}
                     </Button>
                   </div>
                 ) : (
@@ -1019,16 +1052,16 @@ export default function BillingPage() {
                     >
                       {tier.isPopular ? (
                         <span className="absolute -top-2 right-3 rounded-full bg-emerald-700 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-white">
-                          Popular
+                          {copy('billing.wallet.popular')}
                         </span>
                       ) : null}
                       <p className="text-lg font-semibold tracking-tight text-navy">
                         {formatCurrency(tier.amount, walletCurrency)}
                       </p>
                       <p className="text-xs text-muted">
-                        {tier.credits} credits
+                        {tier.credits} {copy('billing.wallet.creditsSuffix')}
                         {tier.bonus > 0 ? (
-                          <span className="ml-1 font-semibold text-emerald-700">+{tier.bonus} bonus</span>
+                          <span className="ml-1 font-semibold text-emerald-700">+{tier.bonus} {copy('billing.wallet.bonusSuffix')}</span>
                         ) : null}
                       </p>
                       {tier.label ? (
@@ -1037,7 +1070,7 @@ export default function BillingPage() {
                         </p>
                       ) : null}
                       {busyKey === `topup:${tier.amount}` ? (
-                        <p className="mt-2 text-xs font-medium text-emerald-700">Processing…</p>
+                        <p className="mt-2 text-xs font-medium text-emerald-700">{copy('billing.wallet.processing')}</p>
                       ) : null}
                     </motion.button>
                   ))
@@ -1046,11 +1079,11 @@ export default function BillingPage() {
 
               <div className="mt-6">
                 <Input
-                  label="Coupon code (optional)"
+                  label={copy('billing.wallet.couponLabel')}
                   value={couponCode}
                   onChange={(event) => setCouponCode(event.target.value.toUpperCase())}
-                  placeholder="WELCOME10"
-                  hint="Applied to the next validated quote (add-ons and plan changes)."
+                  placeholder={copy('billing.wallet.couponPlaceholder')}
+                  hint={copy('billing.wallet.couponHint')}
                 />
               </div>
             </section>
@@ -1058,15 +1091,15 @@ export default function BillingPage() {
             {/* Add-ons panel */}
             <section>
               <LearnerSurfaceSectionHeader
-                eyebrow="Add-ons"
-                title="Subscription extras compatible with your plan"
-                description="Add-ons follow the same quote → checkout flow as plan changes. Tutor reviews only apply to Writing and Speaking."
+                eyebrow={copy('billing.addons.eyebrow')}
+                title={copy('billing.addons.title')}
+                description={copy('billing.addons.description')}
                 className="mb-4"
               />
               {activeAddOns.length > 0 ? (
                 <div className="mb-4 rounded-2xl border border-primary/15 bg-primary/5 p-4">
                   <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-primary">
-                    Active on this account
+                    {copy('billing.addons.activeOnAccount')}
                   </p>
                   <ul className="mt-2 space-y-1">
                     {activeAddOns.map((addOn) => (
@@ -1086,7 +1119,9 @@ export default function BillingPage() {
                   {addOns.map((addOn) => {
                     const checkoutProductType = billingAddOnCheckoutProductType(addOn.productType);
                     const checkoutLabel =
-                      checkoutProductType === 'review_credits' ? 'Purchase credits' : 'Purchase add-on';
+                      checkoutProductType === 'review_credits'
+                        ? copy('billing.addons.purchaseCredits')
+                        : copy('billing.addons.purchaseAddon');
                     return (
                       <article
                         key={addOn.id}
@@ -1101,14 +1136,14 @@ export default function BillingPage() {
                             <p className="mt-2 text-sm text-muted">{addOn.description}</p>
                             <div className="mt-3 flex flex-wrap gap-2 text-[11px] font-medium text-muted">
                               <span className="rounded-full border border-border/60 px-2.5 py-0.5">
-                                {addOn.quantity} credits
+                                {addOn.quantity} {copy('billing.addons.creditsSuffix')}
                               </span>
                               <span className="rounded-full border border-border/60 px-2.5 py-0.5">
                                 {addOn.interval}
                               </span>
                               {addOn.isRecurring ? (
                                 <span className="rounded-full border border-border/60 px-2.5 py-0.5">
-                                  Recurring
+                                  {copy('billing.addons.recurring')}
                                 </span>
                               ) : null}
                             </div>
@@ -1138,7 +1173,7 @@ export default function BillingPage() {
                 </div>
               ) : (
                 <div className="rounded-2xl border border-dashed border-border bg-background-light p-5 text-center text-sm text-muted">
-                  No add-ons are compatible with your current plan.
+                  {copy('billing.addons.empty')}
                 </div>
               )}
             </section>
@@ -1148,15 +1183,15 @@ export default function BillingPage() {
           <section className="mt-6 rounded-2xl border border-border bg-surface p-6 shadow-sm">
             <div className="flex items-center justify-between gap-3">
               <div>
-                <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">Wallet</p>
-                <h3 className="mt-1 text-base font-semibold text-navy">Transaction history</h3>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">{copy('billing.txn.eyebrow')}</p>
+                <h3 className="mt-1 text-base font-semibold text-navy">{copy('billing.txn.title')}</h3>
               </div>
               <button
                 type="button"
                 onClick={() => loadWallet()}
                 className="text-xs font-medium text-primary transition-colors hover:text-primary/80"
               >
-                Refresh
+                {copy('billing.txn.refresh')}
               </button>
             </div>
             {walletLoading ? (
@@ -1169,7 +1204,7 @@ export default function BillingPage() {
               <div className="mt-4 flex flex-col items-center gap-2 py-8 text-center">
                 <Clock className="h-8 w-8 text-muted/40" />
                 <p className="text-sm text-muted">
-                  No transactions yet. Your credit history will appear here.
+                  {copy('billing.txn.empty')}
                 </p>
               </div>
             ) : (
@@ -1204,7 +1239,7 @@ export default function BillingPage() {
                           {tx.amount >= 0 ? '+' : ''}
                           {tx.amount}
                         </p>
-                        <p className="text-[11px] text-muted tabular-nums">bal: {tx.balanceAfter}</p>
+                        <p className="text-[11px] text-muted tabular-nums">{copy('billing.txn.balancePrefix')} {tx.balanceAfter}</p>
                       </div>
                     </li>
                   ))}
@@ -1217,9 +1252,9 @@ export default function BillingPage() {
         {/* ── AI CREDITS ────────────────────────────────────────── */}
         <TabPanel id="ai-credits" activeTab={activeTab}>
           <LearnerSurfaceSectionHeader
-            eyebrow="AI Credits"
-            title="AI grading packages"
-            description="Credits grade your Writing letters and Speaking cards instantly with AI. 1 credit = 1 letter or card. Listening & Reading practice is always free. Credits are deducted when grading starts and automatically refunded if grading fails."
+            eyebrow={copy('billing.ai.eyebrow')}
+            title={copy('billing.ai.title')}
+            description={copy('billing.ai.description')}
             className="mb-4"
           />
 
@@ -1231,15 +1266,15 @@ export default function BillingPage() {
             </div>
           ) : !aiPackages ? (
             <div className="rounded-2xl border border-dashed border-border bg-background-light p-5 text-center text-sm text-muted">
-              AI packages are not available right now. Please check back shortly.
+              {copy('billing.ai.unavailable')}
             </div>
           ) : (
             <>
               <div className="mb-5 inline-flex rounded-xl border border-border bg-background-light p-1">
                 {(
                   [
-                    { id: 'full' as const, label: 'Full Packages' },
-                    { id: 'separate' as const, label: 'Separate Packages' },
+                    { id: 'full' as const, label: copy('billing.ai.toggle.full') },
+                    { id: 'separate' as const, label: copy('billing.ai.toggle.separate') },
                   ]
                 ).map((view) => (
                   <button
@@ -1260,8 +1295,8 @@ export default function BillingPage() {
 
               <p className="mb-5 text-sm text-muted">
                 {aiPackageView === 'full'
-                  ? 'All-in-one packages combine AI grading credits with unlimited Listening & Reading practice.'
-                  : 'Targeted packages focus on a single subtest. Listening & Reading are deterministic and always free to grade.'}
+                  ? copy('billing.ai.fullIntro')
+                  : copy('billing.ai.separateIntro')}
               </p>
 
               {aiPackageView === 'full' ? (
@@ -1269,7 +1304,7 @@ export default function BillingPage() {
                   <div className="grid gap-4 lg:grid-cols-3">{aiPackages.full.map(renderAiPackageCard)}</div>
                 ) : (
                   <div className="rounded-2xl border border-dashed border-border bg-background-light p-5 text-center text-sm text-muted">
-                    No full packages are available yet.
+                    {copy('billing.ai.fullEmpty')}
                   </div>
                 )
               ) : (
@@ -1282,7 +1317,7 @@ export default function BillingPage() {
                         <div
                           className={`mb-3 inline-block rounded-lg px-3 py-1.5 text-sm font-semibold text-white ${section.headerClass}`}
                         >
-                          {section.label} Packages
+                          {copy(section.copyKey)} {copy('billing.ai.sectionSuffix')}
                         </div>
                         <div className="grid gap-4 lg:grid-cols-3">{packages.map(renderAiPackageCard)}</div>
                       </section>
@@ -1294,9 +1329,9 @@ export default function BillingPage() {
               {aiPackages.mock.length > 0 ? (
                 <div className="mt-8">
                   <LearnerSurfaceSectionHeader
-                    eyebrow="Mock exams"
-                    title="Full mock exam packages"
-                    description="Each mock covers all 4 subtests: Writing & Speaking are AI-graded, Listening & Reading are auto-marked. Mock allowances are separate from AI credits."
+                    eyebrow={copy('billing.ai.mock.eyebrow')}
+                    title={copy('billing.ai.mock.title')}
+                    description={copy('billing.ai.mock.description')}
                     className="mb-4"
                   />
                   <div className="grid gap-4 lg:grid-cols-3">{aiPackages.mock.map(renderAiPackageCard)}</div>
@@ -1309,9 +1344,9 @@ export default function BillingPage() {
         {/* ── INVOICES ──────────────────────────────────────────── */}
         <TabPanel id="invoices" activeTab={activeTab}>
           <LearnerSurfaceSectionHeader
-            eyebrow="Invoices"
-            title="Billing history"
-            description="Each paid checkout produces an invoice you can download for your records."
+            eyebrow={copy('billing.invoices.eyebrow')}
+            title={copy('billing.invoices.title')}
+            description={copy('billing.invoices.description')}
             className="mb-4"
           />
           <div className="overflow-hidden rounded-2xl border border-border bg-surface shadow-sm">
@@ -1319,7 +1354,7 @@ export default function BillingPage() {
               <div className="p-10 text-center">
                 <Receipt className="mx-auto h-10 w-10 text-muted/40" />
                 <p className="mt-3 text-sm text-muted">
-                  No invoices yet. They will appear after your first paid checkout.
+                  {copy('billing.invoices.empty')}
                 </p>
               </div>
             ) : (
@@ -1357,7 +1392,7 @@ export default function BillingPage() {
                         onClick={() => handleDownloadInvoice(invoice.id)}
                       >
                         <Download className="h-4 w-4" />
-                        Download
+                        {copy('billing.invoices.download')}
                       </Button>
                     </div>
                   </li>
@@ -1367,7 +1402,7 @@ export default function BillingPage() {
           </div>
           {!invoiceDownloadsAvailable ? (
             <p className="mt-3 text-xs text-muted">
-              Invoice downloads are unavailable on your current plan. Upgrade to enable downloadable invoices.
+              {copy('billing.invoices.unavailableNote')}
             </p>
           ) : null}
         </TabPanel>

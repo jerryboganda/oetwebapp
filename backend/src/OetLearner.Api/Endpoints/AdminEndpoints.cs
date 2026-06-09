@@ -410,6 +410,14 @@ public static class AdminEndpoints
             => Results.Ok(await service.GetBillingAddOnVersionsAsync(addOnId, ct)))
             .WithAdminRead("AdminBillingRead");
 
+        admin.MapGet("/billing/content", async (AdminService service, CancellationToken ct)
+            => Results.Ok(await service.GetBillingContentAsync(ct)))
+            .WithAdminRead("AdminBillingRead");
+
+        admin.MapPut("/billing/content", async (HttpContext http, AdminBillingContentReplaceRequest request, AdminService service, CancellationToken ct)
+            => Results.Ok(await service.ReplaceBillingContentAsync(http.AdminId(), http.AdminName(), request, ct)))
+            .WithAdminWrite("AdminBillingCatalogWrite");
+
         admin.MapGet("/billing/coupons", async (AdminService service, CancellationToken ct, string? status)
             => Results.Ok(await service.GetBillingCouponsAsync(status, ct)))
             .WithAdminRead("AdminBillingRead");

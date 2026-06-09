@@ -182,6 +182,7 @@ export function LearnerPageHero({
   accent = 'primary',
   highlights: rawHighlights,
   aside,
+  footer,
 }: LearnerPageHeroModel) {
   const palette = accentTokens[accent];
   const highlights = sanitizeLearnerPageHeroHighlights(rawHighlights);
@@ -232,6 +233,7 @@ export function LearnerPageHero({
         </div>
         {aside ? <div className="shrink-0 lg:max-w-sm">{aside}</div> : null}
       </div>
+      {footer ? <div className="mt-4 border-t border-border pt-4">{footer}</div> : null}
     </section>
   );
 }
