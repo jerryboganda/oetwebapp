@@ -39,8 +39,24 @@ public static class SubscriptionStateMachine
                 SubscriptionStatus.PastDue,
                 SubscriptionStatus.Suspended, // dispute-pending equivalent
                 SubscriptionStatus.Paused,    // Phase 6 voluntary pause
+                SubscriptionStatus.FreezeRequested,
+                SubscriptionStatus.Frozen,
                 SubscriptionStatus.Cancelled,
                 SubscriptionStatus.Expired,
+            },
+            [SubscriptionStatus.FreezeRequested] = new HashSet<SubscriptionStatus>
+            {
+                SubscriptionStatus.FreezeRequested,
+                SubscriptionStatus.Active,
+                SubscriptionStatus.Frozen,
+                SubscriptionStatus.Cancelled,
+                SubscriptionStatus.Expired,
+            },
+            [SubscriptionStatus.Frozen] = new HashSet<SubscriptionStatus>
+            {
+                SubscriptionStatus.Frozen,
+                SubscriptionStatus.Active,
+                SubscriptionStatus.Cancelled,
             },
             [SubscriptionStatus.Paused] = new HashSet<SubscriptionStatus>
             {

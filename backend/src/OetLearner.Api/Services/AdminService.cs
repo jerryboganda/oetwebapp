@@ -4856,8 +4856,20 @@ public partial class AdminService(
             userName = userNames.TryGetValue(subscription.UserId, out var name) ? name : subscription.UserId,
             planId = subscription.PlanId,
             planName = planNames.TryGetValue(subscription.PlanId, out var planName) ? planName : subscription.PlanId,
-            status = subscription.Status.ToString().ToLowerInvariant(),
+            status = NormalizeSubscriptionStatus(subscription, DateTimeOffset.UtcNow),
             subscription.NextRenewalAt,
+            subscription.ExpiresAt,
+            startDate = subscription.StartedAt == default ? (DateTimeOffset?)null : subscription.StartedAt,
+            endDate = subscription.ExpiresAt,
+            durationDays = Math.Max(1, subscription.AccessDurationDays),
+            remainingDays = CalculateSubscriptionRemainingDays(subscription, DateTimeOffset.UtcNow),
+            expiringSoon = IsSubscriptionExpiringSoon(subscription, DateTimeOffset.UtcNow),
+            subscription.TotalFreezeDaysUsed,
+            maxFreezeDays = subscription.MaxFreezeDaysAllowed,
+            freezeAllowanceRemaining = Math.Max(0, subscription.MaxFreezeDaysAllowed - subscription.TotalFreezeDaysUsed),
+            subscription.PreservedRemainingDays,
+            subscription.PendingFreezeRequestDate,
+            subscription.FrozenSince,
             subscription.StartedAt,
             subscription.ChangedAt,
             price = subscription.PriceAmount,
@@ -5035,7 +5047,9 @@ public partial class AdminService(
 
         var now = DateTimeOffset.UtcNow;
         var previousRenewal = subscription.NextRenewalAt;
+        var previousExpiry = subscription.ExpiresAt;
         var anchor = subscription.NextRenewalAt > now ? subscription.NextRenewalAt : now;
+        var expiryAnchor = subscription.ExpiresAt is { } exp && exp > now ? exp : now;
 
         DateTimeOffset newRenewal;
         if (request.NewRenewalAt.HasValue)
@@ -5058,6 +5072,16 @@ public partial class AdminService(
         }
 
         subscription.NextRenewalAt = newRenewal;
+        if (subscription.Status == SubscriptionStatus.Frozen)
+        {
+            var deltaDays = Math.Max(0, (int)Math.Ceiling((newRenewal - previousRenewal).TotalDays));
+            subscription.PreservedRemainingDays = Math.Max(0, (subscription.PreservedRemainingDays ?? 0) + deltaDays);
+        }
+        else
+        {
+            var deltaDays = Math.Max(0, (int)Math.Ceiling((newRenewal - previousRenewal).TotalDays));
+            subscription.ExpiresAt = request.NewRenewalAt ?? expiryAnchor.AddDays(deltaDays);
+        }
         subscription.ChangedAt = now;
         if (subscription.Status is SubscriptionStatus.Expired or SubscriptionStatus.PastDue && newRenewal > now)
         {
@@ -5101,8 +5125,10 @@ public partial class AdminService(
         // matches the contract documented on AdminSubscriptionCancelRequest.
         if (request.Immediate)
         {
+            CloseOpenSubscriptionFreezeRows(subscription, now, "admin_cancel_subscription");
             ApplyAdminSubscriptionStatus(subscription, SubscriptionStatus.Cancelled, "admin_cancel_subscription", now);
             subscription.NextRenewalAt = now;
+            subscription.ExpiresAt = now;
         }
         subscription.ChangedAt = now;
 
@@ -5165,6 +5191,9 @@ public partial class AdminService(
             var plan = await db.BillingPlans.FirstOrDefaultAsync(p => p.Code == subscription.PlanId || p.Id == subscription.PlanId, ct);
             var months = Math.Max(1, plan?.DurationMonths ?? 1);
             subscription.NextRenewalAt = now.AddMonths(months);
+            var days = Math.Max(1, plan?.AccessDurationDays ?? subscription.AccessDurationDays);
+            subscription.AccessDurationDays = days;
+            subscription.ExpiresAt = now.AddDays(days);
         }
 
         await db.SaveChangesAsync(ct);
@@ -5218,6 +5247,154 @@ public partial class AdminService(
         var planName = await ResolvePlanNameAsync(subscription.PlanId, ct);
         var learnerName = await ResolveUserDisplayNameAsync(subscription.UserId, ct);
         return ProjectSubscription(subscription, planName, learnerName);
+    }
+
+    public Task<object> ApproveSubscriptionFreezeAsync(string adminId, string adminName,
+        string subscriptionId, FreezeActionRequest request, CancellationToken ct)
+        => WithSubscriptionConcurrencyRetryAsync(
+            inner => ApproveSubscriptionFreezeCoreAsync(adminId, adminName, subscriptionId, request, inner),
+            ct);
+
+    private async Task<object> ApproveSubscriptionFreezeCoreAsync(string adminId, string adminName,
+        string subscriptionId, FreezeActionRequest request, CancellationToken ct)
+    {
+        var subscription = await db.Subscriptions.FirstOrDefaultAsync(s => s.Id == subscriptionId, ct)
+            ?? throw ApiException.NotFound("subscription_not_found", "Subscription not found.");
+        var freeze = await db.SubscriptionFreezes
+            .Where(f => f.SubscriptionId == subscriptionId && f.RequestStatus == "pending")
+            .OrderByDescending(f => f.FreezeRequestDate)
+            .FirstOrDefaultAsync(ct)
+            ?? throw ApiException.Conflict("freeze_request_missing", "No pending freeze request exists for this subscription.");
+
+        var now = DateTimeOffset.UtcNow;
+        if (subscription.ExpiresAt is { } expires && expires <= now)
+        {
+            ApplyAdminSubscriptionStatus(subscription, SubscriptionStatus.Expired, "admin_approve_freeze_expired", now);
+            freeze.RequestStatus = "rejected";
+            freeze.RejectionReason = "Subscription expired before approval.";
+            freeze.AdminDecisionById = adminId;
+            freeze.AdminDecisionDate = now;
+            freeze.UpdatedAt = now;
+            await db.SaveChangesAsync(ct);
+            throw ApiException.Validation("subscription_expired", "The subscription expired before the freeze could be approved.");
+        }
+
+        StartSubscriptionFreeze(subscription, freeze, now, adminId, request.Reason ?? request.InternalNotes ?? "Approved by admin.");
+        await db.SaveChangesAsync(ct);
+        await LogAuditAsync(adminId, adminName, "Subscription Freeze Approved", "Subscription", subscriptionId, request.Reason ?? "Approved freeze request.", ct);
+        return await ProjectSubscriptionForAdminAsync(subscription, ct);
+    }
+
+    public Task<object> RejectSubscriptionFreezeAsync(string adminId, string adminName,
+        string subscriptionId, FreezeActionRequest request, CancellationToken ct)
+        => WithSubscriptionConcurrencyRetryAsync(
+            inner => RejectSubscriptionFreezeCoreAsync(adminId, adminName, subscriptionId, request, inner),
+            ct);
+
+    private async Task<object> RejectSubscriptionFreezeCoreAsync(string adminId, string adminName,
+        string subscriptionId, FreezeActionRequest request, CancellationToken ct)
+    {
+        var subscription = await db.Subscriptions.FirstOrDefaultAsync(s => s.Id == subscriptionId, ct)
+            ?? throw ApiException.NotFound("subscription_not_found", "Subscription not found.");
+        var freeze = await db.SubscriptionFreezes
+            .Where(f => f.SubscriptionId == subscriptionId && f.RequestStatus == "pending")
+            .OrderByDescending(f => f.FreezeRequestDate)
+            .FirstOrDefaultAsync(ct)
+            ?? throw ApiException.Conflict("freeze_request_missing", "No pending freeze request exists for this subscription.");
+
+        var now = DateTimeOffset.UtcNow;
+        freeze.RequestStatus = "rejected";
+        freeze.RejectionReason = request.Reason ?? request.InternalNotes ?? "Rejected by admin.";
+        freeze.AdminNotes = request.InternalNotes;
+        freeze.AdminDecisionById = adminId;
+        freeze.AdminDecisionDate = now;
+        freeze.UpdatedAt = now;
+        subscription.PendingFreezeRequestDate = null;
+        ApplyAdminSubscriptionStatus(subscription, SubscriptionStatus.Active, "admin_reject_freeze", now);
+        await db.SaveChangesAsync(ct);
+        await LogAuditAsync(adminId, adminName, "Subscription Freeze Rejected", "Subscription", subscriptionId, freeze.RejectionReason, ct);
+        return await ProjectSubscriptionForAdminAsync(subscription, ct);
+    }
+
+    public Task<object> AdminFreezeSubscriptionAsync(string adminId, string adminName,
+        string subscriptionId, FreezeActionRequest request, CancellationToken ct)
+        => WithSubscriptionConcurrencyRetryAsync(
+            inner => AdminFreezeSubscriptionCoreAsync(adminId, adminName, subscriptionId, request, inner),
+            ct);
+
+    private async Task<object> AdminFreezeSubscriptionCoreAsync(string adminId, string adminName,
+        string subscriptionId, FreezeActionRequest request, CancellationToken ct)
+    {
+        var subscription = await db.Subscriptions.FirstOrDefaultAsync(s => s.Id == subscriptionId, ct)
+            ?? throw ApiException.NotFound("subscription_not_found", "Subscription not found.");
+
+        var now = DateTimeOffset.UtcNow;
+        if (subscription.Status is not (SubscriptionStatus.Active or SubscriptionStatus.Trial or SubscriptionStatus.FreezeRequested))
+        {
+            throw ApiException.Conflict("subscription_freeze_invalid_state", "Only active or freeze-requested subscriptions can be frozen.");
+        }
+        if (CalculateSubscriptionRemainingDays(subscription, now) <= 0)
+        {
+            throw ApiException.Validation("subscription_no_remaining_days", "A subscription with no remaining days cannot be frozen.");
+        }
+        if (subscription.TotalFreezeDaysUsed >= subscription.MaxFreezeDaysAllowed)
+        {
+            throw ApiException.Validation("freeze_allowance_used", "Freeze allowance has already been used.");
+        }
+
+        var freeze = await db.SubscriptionFreezes
+            .Where(f => f.SubscriptionId == subscriptionId && f.RequestStatus == "pending")
+            .OrderByDescending(f => f.FreezeRequestDate)
+            .FirstOrDefaultAsync(ct);
+        if (freeze is null)
+        {
+            freeze = new SubscriptionFreeze
+            {
+                Id = $"subfreeze-{Guid.NewGuid():N}",
+                SubscriptionId = subscription.Id,
+                UserId = subscription.UserId,
+                RequestedBy = "admin",
+                RequestStatus = "approved",
+                FreezeRequestDate = now,
+                CreatedAt = now,
+                UpdatedAt = now,
+            };
+            db.SubscriptionFreezes.Add(freeze);
+        }
+        StartSubscriptionFreeze(subscription, freeze, now, adminId, request.Reason ?? request.InternalNotes ?? "Admin direct freeze.");
+        await db.SaveChangesAsync(ct);
+        await LogAuditAsync(adminId, adminName, "Subscription Frozen", "Subscription", subscriptionId, request.Reason ?? "Admin direct freeze.", ct);
+        return await ProjectSubscriptionForAdminAsync(subscription, ct);
+    }
+
+    public Task<object> AdminResumeSubscriptionAsync(string adminId, string adminName,
+        string subscriptionId, FreezeActionRequest request, CancellationToken ct)
+        => WithSubscriptionConcurrencyRetryAsync(
+            inner => AdminResumeSubscriptionCoreAsync(adminId, adminName, subscriptionId, request, inner),
+            ct);
+
+    private async Task<object> AdminResumeSubscriptionCoreAsync(string adminId, string adminName,
+        string subscriptionId, FreezeActionRequest request, CancellationToken ct)
+    {
+        var subscription = await db.Subscriptions.FirstOrDefaultAsync(s => s.Id == subscriptionId, ct)
+            ?? throw ApiException.NotFound("subscription_not_found", "Subscription not found.");
+        if (subscription.Status != SubscriptionStatus.Frozen)
+        {
+            throw ApiException.Conflict("subscription_resume_invalid_state", "Only frozen subscriptions can be resumed.");
+        }
+
+        var freeze = await db.SubscriptionFreezes
+            .Where(f => f.SubscriptionId == subscriptionId && f.RequestStatus == "approved" && f.FreezeEndDate == null)
+            .OrderByDescending(f => f.FreezeStartDate)
+            .FirstOrDefaultAsync(ct)
+            ?? throw ApiException.Conflict("freeze_record_missing", "Open freeze record was not found.");
+
+        var now = DateTimeOffset.UtcNow;
+        ResumeSubscriptionFreeze(subscription, freeze, now);
+        freeze.AdminNotes = request.InternalNotes;
+        await db.SaveChangesAsync(ct);
+        await LogAuditAsync(adminId, adminName, "Subscription Resumed", "Subscription", subscriptionId, request.Reason ?? "Admin resumed subscription.", ct);
+        return await ProjectSubscriptionForAdminAsync(subscription, ct);
     }
 
     // Inspect-and-correct the OET 2026 entitlement counters / unlock flags directly on a
@@ -5417,6 +5594,114 @@ public partial class AdminService(
         return user?.DisplayName ?? userId;
     }
 
+    private async Task<object> ProjectSubscriptionForAdminAsync(Subscription subscription, CancellationToken ct)
+    {
+        var planName = await ResolvePlanNameAsync(subscription.PlanId, ct);
+        var learnerName = await ResolveUserDisplayNameAsync(subscription.UserId, ct);
+        return ProjectSubscription(subscription, planName, learnerName);
+    }
+
+    private static int CalculateSubscriptionRemainingDays(Subscription subscription, DateTimeOffset now)
+    {
+        if (subscription.Status == SubscriptionStatus.Frozen)
+        {
+            return Math.Max(0, subscription.PreservedRemainingDays ?? 0);
+        }
+
+        if (subscription.ExpiresAt is null)
+        {
+            return Math.Max(1, subscription.AccessDurationDays);
+        }
+
+        return Math.Max(0, (int)Math.Ceiling((subscription.ExpiresAt.Value - now).TotalDays));
+    }
+
+    private static bool IsSubscriptionExpiringSoon(Subscription subscription, DateTimeOffset now)
+    {
+        var status = NormalizeSubscriptionStatus(subscription, now);
+        return status is "active" or "trial" or "freeze_requested"
+            && CalculateSubscriptionRemainingDays(subscription, now) < 14;
+    }
+
+    private static string NormalizeSubscriptionStatus(Subscription subscription, DateTimeOffset now)
+    {
+        if (subscription.Status != SubscriptionStatus.Frozen
+            && subscription.ExpiresAt is { } expires
+            && expires <= now)
+        {
+            return "expired";
+        }
+
+        return subscription.Status switch
+        {
+            SubscriptionStatus.PastDue => "past_due",
+            SubscriptionStatus.FreezeRequested => "freeze_requested",
+            _ => subscription.Status.ToString().ToLowerInvariant(),
+        };
+    }
+
+    private void CloseOpenSubscriptionFreezeRows(Subscription subscription, DateTimeOffset now, string reason)
+    {
+        foreach (var freeze in db.SubscriptionFreezes.Where(f => f.SubscriptionId == subscription.Id && f.FreezeEndDate == null))
+        {
+            freeze.FreezeEndDate = now;
+            freeze.RequestStatus = "completed";
+            freeze.AdminNotes = reason;
+            freeze.UpdatedAt = now;
+        }
+
+        subscription.PendingFreezeRequestDate = null;
+        subscription.FrozenSince = null;
+        subscription.PreservedRemainingDays = null;
+    }
+
+    private static void StartSubscriptionFreeze(Subscription subscription, SubscriptionFreeze freeze, DateTimeOffset now, string adminId, string reason)
+    {
+        var remaining = CalculateSubscriptionRemainingDays(subscription, now);
+        if (remaining <= 0)
+        {
+            throw ApiException.Validation("subscription_no_remaining_days", "A subscription with no remaining days cannot be frozen.");
+        }
+
+        subscription.PreservedRemainingDays = remaining;
+        subscription.PendingFreezeRequestDate = null;
+        subscription.FrozenSince = now;
+        ApplyAdminSubscriptionStatus(subscription, SubscriptionStatus.Frozen, "subscription_freeze", now);
+
+        freeze.RequestStatus = "approved";
+        freeze.FreezeStartDate = now;
+        freeze.PreservedRemainingDaysAtFreeze = remaining;
+        freeze.FrozenBy = "admin";
+        freeze.FreezeReason = reason;
+        freeze.AdminDecisionById = adminId;
+        freeze.AdminDecisionDate = now;
+        freeze.UpdatedAt = now;
+    }
+
+    private static void ResumeSubscriptionFreeze(Subscription subscription, SubscriptionFreeze freeze, DateTimeOffset now)
+    {
+        if (freeze.FreezeStartDate is null)
+        {
+            throw ApiException.Conflict("freeze_start_missing", "Open freeze record has no start date.");
+        }
+
+        var used = Math.Max(1, (int)Math.Ceiling((now - freeze.FreezeStartDate.Value).TotalDays));
+        var allowanceRemaining = Math.Max(0, subscription.MaxFreezeDaysAllowed - subscription.TotalFreezeDaysUsed);
+        used = Math.Min(used, allowanceRemaining);
+        var preserved = Math.Max(0, subscription.PreservedRemainingDays ?? freeze.PreservedRemainingDaysAtFreeze ?? 0);
+
+        freeze.FreezeEndDate = now;
+        freeze.FreezeDaysUsed = used;
+        freeze.UpdatedAt = now;
+
+        subscription.TotalFreezeDaysUsed += used;
+        subscription.ExpiresAt = now.AddDays(preserved);
+        subscription.PreservedRemainingDays = null;
+        subscription.FrozenSince = null;
+        subscription.PendingFreezeRequestDate = null;
+        ApplyAdminSubscriptionStatus(subscription, SubscriptionStatus.Active, "subscription_resume", now);
+    }
+
     private static object ProjectSubscription(Subscription subscription, string? planName, string? userName)
         => new
         {
@@ -5425,8 +5710,20 @@ public partial class AdminService(
             userName = userName ?? subscription.UserId,
             planId = subscription.PlanId,
             planName = planName ?? subscription.PlanId,
-            status = subscription.Status.ToString().ToLowerInvariant(),
+            status = NormalizeSubscriptionStatus(subscription, DateTimeOffset.UtcNow),
             subscription.NextRenewalAt,
+            subscription.ExpiresAt,
+            startDate = subscription.StartedAt == default ? (DateTimeOffset?)null : subscription.StartedAt,
+            endDate = subscription.ExpiresAt,
+            durationDays = Math.Max(1, subscription.AccessDurationDays),
+            remainingDays = CalculateSubscriptionRemainingDays(subscription, DateTimeOffset.UtcNow),
+            expiringSoon = IsSubscriptionExpiringSoon(subscription, DateTimeOffset.UtcNow),
+            subscription.TotalFreezeDaysUsed,
+            maxFreezeDays = subscription.MaxFreezeDaysAllowed,
+            freezeAllowanceRemaining = Math.Max(0, subscription.MaxFreezeDaysAllowed - subscription.TotalFreezeDaysUsed),
+            subscription.PreservedRemainingDays,
+            subscription.PendingFreezeRequestDate,
+            subscription.FrozenSince,
             subscription.StartedAt,
             subscription.ChangedAt,
             price = subscription.PriceAmount,

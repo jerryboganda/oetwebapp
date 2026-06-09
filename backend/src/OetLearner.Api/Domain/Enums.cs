@@ -74,6 +74,10 @@ public enum SubscriptionStatus
     Expired,
     /// <summary>Phase 6 international expansion: voluntary pause (renewal suspended, access frozen or limited per plan rule).</summary>
     Paused,
+    /// <summary>Candidate has requested a subscription freeze; access remains active until admin approval.</summary>
+    FreezeRequested,
+    /// <summary>Course access is frozen and blocked while remaining days are preserved.</summary>
+    Frozen,
 }
 
 public enum FreezeApprovalMode

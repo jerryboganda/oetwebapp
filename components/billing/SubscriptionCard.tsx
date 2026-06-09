@@ -1,13 +1,13 @@
 'use client';
 
 import { useState } from 'react';
-import { Calendar, Loader2, Pause, Play, RefreshCw, XCircle } from 'lucide-react';
+import { Calendar, Loader2, Pause, Play, RefreshCw, Snowflake, Timer, XCircle } from 'lucide-react';
 
 import type { SubscriptionMe, SubscriptionMeListItem } from '@/lib/api';
 import {
   cancelSubscription,
-  pauseSubscriptionSelf,
-  resumeSubscriptionSelf,
+  requestSubscriptionFreeze,
+  resumeSubscriptionById,
 } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -47,7 +47,14 @@ export function SubscriptionCard({ subscription, onChanged }: SubscriptionCardPr
   }
 
   const isPaused = Boolean(subscription.pausedUntil);
+  const isFreezeRequested = subscription.status === 'freeze_requested';
+  const isFrozen = subscription.status === 'frozen';
   const isCancelled = subscription.status === 'cancelled' || subscription.status === 'canceled';
+  const remainingDays = subscription.remainingDays ?? null;
+  const durationDays = subscription.durationDays ?? null;
+  const progress = remainingDays !== null && durationDays
+    ? Math.max(0, Math.min(100, (remainingDays / durationDays) * 100))
+    : null;
 
   return (
     <Card padding="none" className="p-5">
@@ -65,6 +72,27 @@ export function SubscriptionCard({ subscription, onChanged }: SubscriptionCardPr
         </div>
       </div>
 
+      {remainingDays !== null ? (
+        <div className="mt-4 rounded-lg bg-background-light px-3 py-3">
+          <div className="flex items-center justify-between gap-3 text-sm">
+            <span className="inline-flex items-center gap-1 font-medium text-navy">
+              <Timer className="h-4 w-4" /> Access timer
+            </span>
+            <span className={subscription.expiringSoon ? 'font-semibold text-danger' : 'font-semibold text-navy'}>
+              {remainingDays} day{remainingDays === 1 ? '' : 's'} remaining
+            </span>
+          </div>
+          {progress !== null ? (
+            <div className="mt-2 h-2 overflow-hidden rounded-full bg-border">
+              <div className="h-full rounded-full bg-primary" style={{ width: `${progress}%` }} />
+            </div>
+          ) : null}
+          <p className="mt-2 text-xs text-muted">
+            {formatDate(subscription.startDate ?? subscription.startedAt)} to {formatDate(subscription.endDate)}
+          </p>
+        </div>
+      ) : null}
+
       <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
         <Detail icon={<Calendar className="h-4 w-4" />} label="Next renewal">
           {formatDate(subscription.nextRenewalAt)}
@@ -77,6 +105,21 @@ export function SubscriptionCard({ subscription, onChanged }: SubscriptionCardPr
         {isPaused ? (
           <Detail icon={<Pause className="h-4 w-4" />} label="Paused until">
             {formatDate(subscription.pausedUntil)}
+          </Detail>
+        ) : null}
+        {isFreezeRequested ? (
+          <Detail icon={<Snowflake className="h-4 w-4" />} label="Freeze requested">
+            {formatDate(subscription.pendingFreezeRequestDate)}
+          </Detail>
+        ) : null}
+        {isFrozen ? (
+          <Detail icon={<Snowflake className="h-4 w-4" />} label="Frozen since">
+            {formatDate(subscription.frozenSince)}
+          </Detail>
+        ) : null}
+        {subscription.maxFreezeDays ? (
+          <Detail icon={<Snowflake className="h-4 w-4" />} label="Freeze allowance">
+            {(subscription.freezeAllowanceRemaining ?? Math.max(0, subscription.maxFreezeDays - (subscription.totalFreezeDaysUsed ?? 0)))} days left
           </Detail>
         ) : null}
         {subscription.cancelledAt ? (
@@ -94,20 +137,20 @@ export function SubscriptionCard({ subscription, onChanged }: SubscriptionCardPr
 
       <div className="mt-5 flex flex-wrap gap-2">
         <BillingPortalLauncher variant="primary">Manage subscription</BillingPortalLauncher>
-        {!isCancelled && !isPaused ? (
+        {!isCancelled && !isPaused && !isFreezeRequested && !isFrozen ? (
           <Button
             variant="outline"
-            onClick={() => void run('pause', () => pauseSubscriptionSelf())}
+            onClick={() => void run('freeze', () => requestSubscriptionFreeze(subscription.subscriptionId))}
             disabled={busy !== null}
           >
-            {busy === 'pause' ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <Pause className="mr-1 h-4 w-4" />}
-            Pause
+            {busy === 'freeze' ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <Pause className="mr-1 h-4 w-4" />}
+            Request freeze
           </Button>
         ) : null}
-        {!isCancelled && isPaused ? (
+        {!isCancelled && (isPaused || isFrozen) ? (
           <Button
             variant="outline"
-            onClick={() => void run('resume', () => resumeSubscriptionSelf())}
+            onClick={() => void run('resume', () => resumeSubscriptionById(subscription.subscriptionId))}
             disabled={busy !== null}
           >
             {busy === 'resume' ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <Play className="mr-1 h-4 w-4" />}
@@ -169,6 +212,10 @@ function StatusBadge({ status, paused }: { status: string; paused: boolean }) {
   const tone =
     status === 'active' || status === 'trial'
       ? 'bg-success/10 text-success'
+      : status === 'freeze_requested'
+        ? 'bg-warning/10 text-warning'
+        : status === 'frozen'
+          ? 'bg-info/10 text-info'
       : status === 'cancelled' || status === 'canceled' || status === 'expired'
         ? 'bg-danger/10 text-danger'
         : 'bg-background-light text-muted';
@@ -176,7 +223,7 @@ function StatusBadge({ status, paused }: { status: string; paused: boolean }) {
     <span
       className={`mt-1 inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wider ${tone}`}
     >
-      {status}
+      {status.replaceAll('_', ' ')}
     </span>
   );
 }

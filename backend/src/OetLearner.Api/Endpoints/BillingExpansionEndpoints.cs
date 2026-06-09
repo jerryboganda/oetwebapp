@@ -84,7 +84,13 @@ public static class BillingExpansionEndpoints
             request.Currency,
             request.Method,
             request.Reference,
-            request.ProofUrl), proofBytes, ct);
+            request.ProofUrl,
+            request.CandidateFullName,
+            request.CandidateEmail,
+            request.CandidateWhatsApp,
+            request.CourseName,
+            request.CourseId,
+            request.PaymentCategory), proofBytes, ct);
         return TypedResults.Ok(row);
     }
 
@@ -94,9 +100,8 @@ public static class BillingExpansionEndpoints
         var rows = await db.ManualPaymentRequests
             .Where(r => r.UserId == userId)
             .OrderByDescending(r => r.SubmittedAt)
-            .Select(r => new ManualPaymentDto(r.Id, r.UserId, r.AmountAmount, r.Currency, r.Method, r.Reference, r.ProofUrl, r.Status, r.SubmittedAt, r.ReviewedAt, r.AdminNotes))
             .ToListAsync(ct);
-        return TypedResults.Ok(rows);
+        return TypedResults.Ok(rows.Select(ManualPaymentDto.FromEntity).ToList());
     }
 
     private static async Task<Ok<List<ManualPaymentDto>>> ListManualPayments(LearnerDbContext db, [FromQuery] string? status, CancellationToken ct)
@@ -105,10 +110,9 @@ public static class BillingExpansionEndpoints
         if (!string.IsNullOrEmpty(status)) q = q.Where(r => r.Status == status);
         var rows = await q
             .OrderByDescending(r => r.SubmittedAt)
-            .Select(r => new ManualPaymentDto(r.Id, r.UserId, r.AmountAmount, r.Currency, r.Method, r.Reference, r.ProofUrl, r.Status, r.SubmittedAt, r.ReviewedAt, r.AdminNotes))
             .Take(200)
             .ToListAsync(ct);
-        return TypedResults.Ok(rows);
+        return TypedResults.Ok(rows.Select(ManualPaymentDto.FromEntity).ToList());
     }
 
     private static async Task<Results<Ok<ManualPaymentRequest>, BadRequest<string>>> ApproveManualPayment(string id, HttpContext http, ApproveRejectRequest request, IManualPaymentService service, CancellationToken ct)
@@ -267,7 +271,13 @@ public sealed record ManualPaymentSubmitRequestDto(
     string Method,
     string Reference,
     string ProofUrl,
-    string ProofBase64);
+    string ProofBase64,
+    string CandidateFullName,
+    string CandidateEmail,
+    string CandidateWhatsApp,
+    string CourseName,
+    string? CourseId,
+    string PaymentCategory);
 
 public sealed record ManualPaymentDto(
     string Id,
@@ -280,7 +290,35 @@ public sealed record ManualPaymentDto(
     string Status,
     DateTimeOffset SubmittedAt,
     DateTimeOffset? ReviewedAt,
-    string? AdminNotes);
+    string? AdminNotes,
+    string CandidateFullName,
+    string CandidateEmail,
+    string CandidateWhatsApp,
+    string CourseName,
+    string? CourseId,
+    string PaymentCategory,
+    string? AccessGrantedSubscriptionId)
+{
+    public static ManualPaymentDto FromEntity(ManualPaymentRequest r) => new(
+        r.Id,
+        r.UserId,
+        r.AmountAmount,
+        r.Currency,
+        r.Method,
+        r.Reference,
+        r.ProofUrl,
+        r.Status,
+        r.SubmittedAt,
+        r.ReviewedAt,
+        r.AdminNotes,
+        r.CandidateFullName,
+        r.CandidateEmail,
+        r.CandidateWhatsApp,
+        r.CourseName,
+        r.CourseId,
+        r.PaymentCategory,
+        r.AccessGrantedSubscriptionId);
+}
 
 public sealed record ApproveRejectRequest(string? Notes);
 

@@ -36,6 +36,10 @@ import {
   adminCancelSubscription,
   adminReactivateSubscription,
   adminSetSubscriptionStatus,
+  adminApproveSubscriptionFreeze,
+  adminRejectSubscriptionFreeze,
+  adminFreezeSubscription,
+  adminResumeSubscription,
 } from '@/lib/api';
 import { adminAdjustSubscriptionEntitlements } from '@/lib/admin-subscription-entitlements';
 import {
@@ -695,8 +699,8 @@ export default function BillingPage() {
   }
 
   // Subscription lifecycle action modal — single component drives all six manual
-  // admin actions (create, change-plan, extend, cancel, reactivate, set-status).
-  type SubscriptionActionKind = 'create' | 'change-plan' | 'extend' | 'cancel' | 'reactivate' | 'set-status' | 'entitlements';
+  // admin actions (create, change-plan, extend, cancel, freeze, resume, status, entitlements).
+  type SubscriptionActionKind = 'create' | 'change-plan' | 'extend' | 'cancel' | 'reactivate' | 'set-status' | 'entitlements' | 'approve-freeze' | 'reject-freeze' | 'direct-freeze' | 'resume-freeze';
   type SubscriptionActionState =
     | { kind: 'create' }
     | { kind: Exclude<SubscriptionActionKind, 'create'>; subscription: AdminBillingSubscription };
@@ -853,6 +857,43 @@ export default function BillingPage() {
             reason,
           });
           setToast({ variant: 'success', message: 'Status updated.' });
+          break;
+        }
+        case 'approve-freeze': {
+          await adminApproveSubscriptionFreeze(subscriptionAction.subscription.id, {
+            reason,
+            internalNotes: reason,
+          });
+          setToast({ variant: 'success', message: 'Freeze approved.' });
+          break;
+        }
+        case 'reject-freeze': {
+          if (!reason) {
+            setToast({ variant: 'error', message: 'A rejection reason is required.' });
+            setIsSubmittingSubscriptionAction(false);
+            return;
+          }
+          await adminRejectSubscriptionFreeze(subscriptionAction.subscription.id, {
+            reason,
+            internalNotes: reason,
+          });
+          setToast({ variant: 'success', message: 'Freeze rejected.' });
+          break;
+        }
+        case 'direct-freeze': {
+          await adminFreezeSubscription(subscriptionAction.subscription.id, {
+            reason,
+            internalNotes: reason,
+          });
+          setToast({ variant: 'success', message: 'Subscription frozen.' });
+          break;
+        }
+        case 'resume-freeze': {
+          await adminResumeSubscription(subscriptionAction.subscription.id, {
+            reason,
+            internalNotes: reason,
+          });
+          setToast({ variant: 'success', message: 'Subscription resumed.' });
           break;
         }
         case 'entitlements': {
@@ -1336,13 +1377,33 @@ export default function BillingPage() {
     },
     {
       key: 'nextRenewalAt',
-      header: 'Renewal',
-      render: (subscription) => <span className="text-sm text-muted">{subscription.nextRenewalAt ? new Date(subscription.nextRenewalAt).toLocaleString() : 'N/A'}</span>,
+      header: 'Timer',
+      render: (subscription) => (
+        <div className="space-y-1 text-sm text-muted">
+          <p>{subscription.remainingDays == null ? 'N/A' : `${subscription.remainingDays} days left`}</p>
+          <p className="text-xs">{subscription.endDate ? new Date(subscription.endDate).toLocaleDateString() : subscription.nextRenewalAt ? new Date(subscription.nextRenewalAt).toLocaleDateString() : 'No end date'}</p>
+        </div>
+      ),
+    },
+    {
+      key: 'freeze',
+      header: 'Freeze',
+      render: (subscription) => (
+        <div className="space-y-1 text-sm text-muted">
+          <p>{subscription.freezeAllowanceRemaining ?? subscription.maxFreezeDays ?? 365} days available</p>
+          {subscription.pendingFreezeRequestDate ? <p className="text-xs">Requested {new Date(subscription.pendingFreezeRequestDate).toLocaleDateString()}</p> : null}
+          {subscription.frozenSince ? <p className="text-xs">Frozen {new Date(subscription.frozenSince).toLocaleDateString()}</p> : null}
+        </div>
+      ),
     },
     {
       key: 'status',
       header: 'Status',
-      render: (subscription) => <Badge variant={subscription.status === 'active' ? 'success' : subscription.status === 'trial' ? 'info' : 'muted'}>{subscription.status}</Badge>,
+      render: (subscription) => (
+        <Badge variant={subscription.status === 'active' ? 'success' : subscription.status === 'trial' ? 'info' : subscription.status === 'freeze_requested' ? 'warning' : subscription.status === 'frozen' ? 'info' : subscription.status === 'expired' || subscription.status === 'cancelled' ? 'danger' : 'muted'}>
+          {subscription.status}
+        </Badge>
+      ),
     },
     {
       key: 'actions',
@@ -1367,6 +1428,50 @@ export default function BillingPage() {
           >
             Extend
           </Button>
+          {subscription.status === 'freeze_requested' ? (
+            <>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => openSubscriptionAction({ kind: 'approve-freeze', subscription })}
+                disabled={!canWriteSubscriptions}
+                aria-label={`Approve freeze for ${subscription.userName}`}
+              >
+                Approve freeze
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => openSubscriptionAction({ kind: 'reject-freeze', subscription })}
+                disabled={!canWriteSubscriptions}
+                aria-label={`Reject freeze for ${subscription.userName}`}
+              >
+                Reject freeze
+              </Button>
+            </>
+          ) : null}
+          {subscription.status === 'active' || subscription.status === 'trial' ? (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => openSubscriptionAction({ kind: 'direct-freeze', subscription })}
+              disabled={!canWriteSubscriptions}
+              aria-label={`Freeze subscription for ${subscription.userName}`}
+            >
+              Freeze
+            </Button>
+          ) : null}
+          {subscription.status === 'frozen' ? (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => openSubscriptionAction({ kind: 'resume-freeze', subscription })}
+              disabled={!canWriteSubscriptions}
+              aria-label={`Resume subscription for ${subscription.userName}`}
+            >
+              Resume
+            </Button>
+          ) : null}
           {subscription.status === 'cancelled' || subscription.status === 'expired' ? (
             <Button
               variant="outline"
@@ -1775,7 +1880,7 @@ export default function BillingPage() {
           <p className="truncate font-semibold text-admin-fg-strong">{subscription.userName}</p>
           <p className="truncate text-xs uppercase tracking-[0.12em] text-muted">{subscription.userId}</p>
         </div>
-        <Badge variant={subscription.status === 'active' ? 'success' : subscription.status === 'trial' ? 'info' : 'muted'}>
+        <Badge variant={subscription.status === 'active' ? 'success' : subscription.status === 'trial' ? 'info' : subscription.status === 'freeze_requested' ? 'warning' : subscription.status === 'frozen' ? 'info' : 'muted'}>
           {subscription.status}
         </Badge>
       </div>
@@ -1794,8 +1899,12 @@ export default function BillingPage() {
           <p className="mt-1 font-medium text-admin-fg-strong">{subscription.addOnCount.toLocaleString()}</p>
         </div>
         <div className="rounded-2xl bg-admin-bg-subtle px-3 py-2">
-          <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Renewal</p>
-          <p className="mt-1 font-medium text-admin-fg-strong">{subscription.nextRenewalAt ? new Date(subscription.nextRenewalAt).toLocaleString() : 'N/A'}</p>
+          <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Timer</p>
+          <p className="mt-1 font-medium text-admin-fg-strong">{subscription.remainingDays == null ? 'N/A' : `${subscription.remainingDays} days`}</p>
+        </div>
+        <div className="rounded-2xl bg-admin-bg-subtle px-3 py-2">
+          <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Freeze</p>
+          <p className="mt-1 font-medium text-admin-fg-strong">{subscription.freezeAllowanceRemaining ?? subscription.maxFreezeDays ?? 365} days left</p>
         </div>
       </div>
     </div>
@@ -3479,6 +3588,10 @@ export default function BillingPage() {
           subscriptionAction?.kind === 'reactivate' ? `Reactivate: ${subscriptionAction.subscription.userName}` :
           subscriptionAction?.kind === 'set-status' ? `Override status: ${subscriptionAction.subscription.userName}` :
           subscriptionAction?.kind === 'entitlements' ? `Adjust entitlements: ${subscriptionAction.subscription.userName}` :
+          subscriptionAction?.kind === 'approve-freeze' ? `Approve freeze: ${subscriptionAction.subscription.userName}` :
+          subscriptionAction?.kind === 'reject-freeze' ? `Reject freeze: ${subscriptionAction.subscription.userName}` :
+          subscriptionAction?.kind === 'direct-freeze' ? `Freeze subscription: ${subscriptionAction.subscription.userName}` :
+          subscriptionAction?.kind === 'resume-freeze' ? `Resume subscription: ${subscriptionAction.subscription.userName}` :
           'Subscription action'
         }
       >
@@ -3586,6 +3699,30 @@ export default function BillingPage() {
               />
             ) : null}
 
+            {subscriptionAction.kind === 'approve-freeze' ? (
+              <InlineAlert variant="info">
+                Approval snapshots the learner&apos;s remaining days, moves the subscription to frozen, and blocks course access until resume.
+              </InlineAlert>
+            ) : null}
+
+            {subscriptionAction.kind === 'reject-freeze' ? (
+              <InlineAlert variant="warning">
+                Rejection returns the subscription to active access and stores the reason on the freeze request.
+              </InlineAlert>
+            ) : null}
+
+            {subscriptionAction.kind === 'direct-freeze' ? (
+              <InlineAlert variant="warning">
+                Direct freeze immediately snapshots remaining days and blocks access. Use this only after verifying the learner request.
+              </InlineAlert>
+            ) : null}
+
+            {subscriptionAction.kind === 'resume-freeze' ? (
+              <InlineAlert variant="info">
+                Resume restores access from the preserved remaining days and counts the frozen period toward the 365-day cap.
+              </InlineAlert>
+            ) : null}
+
             {subscriptionAction.kind === 'set-status' ? (
               <Select
                 label="Status"
@@ -3597,6 +3734,8 @@ export default function BillingPage() {
                   { value: 'active', label: 'active' },
                   { value: 'past_due', label: 'past_due' },
                   { value: 'suspended', label: 'suspended' },
+                  { value: 'freeze_requested', label: 'freeze_requested' },
+                  { value: 'frozen', label: 'frozen' },
                   { value: 'cancelled', label: 'cancelled' },
                   { value: 'expired', label: 'expired' },
                 ]}

@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services.Billing;
+using OetLearner.Api.Services.Content;
 
 namespace OetLearner.Api.Tests;
 
@@ -15,6 +16,42 @@ public class BillingExpansionServiceTests
             .ConfigureWarnings(w => w.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.InMemoryEventId.TransactionIgnoredWarning))
             .Options;
         return new LearnerDbContext(options);
+    }
+
+    private static ManualPaymentService NewManualPaymentService(LearnerDbContext db)
+        => new(db, new MemoryFileStorage());
+
+    private static ManualPaymentSubmitRequest ManualRequest(string reference)
+        => new(
+            QuoteId: null,
+            AmountAmount: 100m,
+            Currency: "GBP",
+            Method: "uk_monzo_transfer",
+            Reference: reference,
+            ProofUrl: "",
+            CandidateFullName: "Candidate One",
+            CandidateEmail: "candidate@example.com",
+            CandidateWhatsApp: "+447961725989",
+            CourseName: "OET Premium",
+            CourseId: "plan_basic",
+            PaymentCategory: "international");
+
+    private static void AddPlan(LearnerDbContext db)
+    {
+        var now = DateTimeOffset.UtcNow;
+        db.BillingPlans.Add(new BillingPlan
+        {
+            Id = "plan_basic",
+            Code = "plan_basic",
+            Name = "OET Premium",
+            Price = 100m,
+            Currency = "GBP",
+            Interval = "one_time",
+            DurationMonths = 6,
+            AccessDurationDays = 180,
+            CreatedAt = now,
+            UpdatedAt = now,
+        });
     }
 
     private static TaxRule UkVat() => new()
@@ -90,24 +127,24 @@ public class BillingExpansionServiceTests
     public async Task ManualPaymentService_RejectsDuplicateProof()
     {
         await using var db = NewContext(nameof(ManualPaymentService_RejectsDuplicateProof));
-        var svc = new ManualPaymentService(db);
+        var svc = NewManualPaymentService(db);
         var proof = Encoding.UTF8.GetBytes("payment-receipt-content");
 
-        await svc.SubmitAsync("user_a", new ManualPaymentSubmitRequest(null, 100m, "GBP", "bank_transfer", "REF-001", "https://example/proof.png"), proof, CancellationToken.None);
+        await svc.SubmitAsync("user_a", ManualRequest("REF-001"), proof, CancellationToken.None);
 
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            svc.SubmitAsync("user_b", new ManualPaymentSubmitRequest(null, 100m, "GBP", "bank_transfer", "REF-002", "https://example/proof.png"), proof, CancellationToken.None));
+            svc.SubmitAsync("user_b", ManualRequest("REF-002"), proof, CancellationToken.None));
     }
 
     [Fact]
     public async Task ManualPaymentService_AllowsSameUserResubmittingSameProof()
     {
         await using var db = NewContext(nameof(ManualPaymentService_AllowsSameUserResubmittingSameProof));
-        var svc = new ManualPaymentService(db);
+        var svc = NewManualPaymentService(db);
         var proof = Encoding.UTF8.GetBytes("payment-receipt-content");
 
-        await svc.SubmitAsync("user_a", new ManualPaymentSubmitRequest(null, 100m, "GBP", "bank_transfer", "REF-001", "https://example/proof.png"), proof, CancellationToken.None);
-        var second = await svc.SubmitAsync("user_a", new ManualPaymentSubmitRequest(null, 100m, "GBP", "bank_transfer", "REF-002", "https://example/proof.png"), proof, CancellationToken.None);
+        await svc.SubmitAsync("user_a", ManualRequest("REF-001"), proof, CancellationToken.None);
+        var second = await svc.SubmitAsync("user_a", ManualRequest("REF-002"), proof, CancellationToken.None);
 
         Assert.Equal("user_a", second.UserId);
     }
@@ -116,21 +153,26 @@ public class BillingExpansionServiceTests
     public async Task ManualPaymentService_ApproveTransitionsStatus()
     {
         await using var db = NewContext(nameof(ManualPaymentService_ApproveTransitionsStatus));
-        var svc = new ManualPaymentService(db);
-        var submitted = await svc.SubmitAsync("user_a", new ManualPaymentSubmitRequest(null, 100m, "GBP", "bank_transfer", "REF", "https://example/p.png"), Encoding.UTF8.GetBytes("x"), CancellationToken.None);
+        AddPlan(db);
+        await db.SaveChangesAsync();
+        var svc = NewManualPaymentService(db);
+        var submitted = await svc.SubmitAsync("user_a", ManualRequest("REF"), Encoding.UTF8.GetBytes("x"), CancellationToken.None);
 
         var approved = await svc.ApproveAsync(submitted.Id, "admin_1", "Verified", CancellationToken.None);
 
-        Assert.Equal("approved", approved.Status);
+        Assert.Equal("paid", approved.Status);
         Assert.Equal("admin_1", approved.ReviewedByAdminId);
+        Assert.NotNull(approved.AccessGrantedSubscriptionId);
     }
 
     [Fact]
     public async Task ManualPaymentService_RejectsAlreadyResolvedRequest()
     {
         await using var db = NewContext(nameof(ManualPaymentService_RejectsAlreadyResolvedRequest));
-        var svc = new ManualPaymentService(db);
-        var submitted = await svc.SubmitAsync("user_a", new ManualPaymentSubmitRequest(null, 100m, "GBP", "bank_transfer", "REF", "https://example/p.png"), Encoding.UTF8.GetBytes("y"), CancellationToken.None);
+        AddPlan(db);
+        await db.SaveChangesAsync();
+        var svc = NewManualPaymentService(db);
+        var submitted = await svc.SubmitAsync("user_a", ManualRequest("REF"), Encoding.UTF8.GetBytes("y"), CancellationToken.None);
 
         await svc.ApproveAsync(submitted.Id, "admin", null, CancellationToken.None);
 
@@ -220,4 +262,45 @@ public class BillingExpansionServiceTests
         Assert.Equal("reversed", after.Status);
         Assert.NotNull(after.ReversedAt);
     }
+}
+
+internal sealed class MemoryFileStorage : IFileStorage
+{
+    private readonly Dictionary<string, byte[]> _files = new(StringComparer.Ordinal);
+
+    public async Task<long> WriteAsync(string key, Stream source, CancellationToken ct)
+    {
+        await using var buffer = new MemoryStream();
+        await source.CopyToAsync(buffer, ct);
+        _files[key] = buffer.ToArray();
+        return _files[key].LongLength;
+    }
+
+    public Task<Stream> OpenReadAsync(string key, CancellationToken ct)
+        => Task.FromResult<Stream>(new MemoryStream(_files[key], writable: false));
+
+    public Task<Stream> OpenWriteAsync(string key, CancellationToken ct)
+        => Task.FromResult<Stream>(new MemoryStream());
+
+    public bool Exists(string key) => _files.ContainsKey(key);
+    public bool Delete(string key) => _files.Remove(key);
+    public long Length(string key) => _files.TryGetValue(key, out var data) ? data.LongLength : 0;
+
+    public void Move(string sourceKey, string destKey, bool overwrite)
+    {
+        if (!_files.TryGetValue(sourceKey, out var data)) return;
+        if (!overwrite && _files.ContainsKey(destKey)) return;
+        _files[destKey] = data;
+        _files.Remove(sourceKey);
+    }
+
+    public int DeletePrefix(string prefix)
+    {
+        var keys = _files.Keys.Where(key => key.StartsWith(prefix, StringComparison.Ordinal)).ToList();
+        foreach (var key in keys) _files.Remove(key);
+        return keys.Count;
+    }
+
+    public string? TryResolveLocalPath(string key) => null;
+    public Uri? ResolveReadUrl(string key, TimeSpan ttl) => null;
 }

@@ -44,7 +44,25 @@ public class ManualPaymentRequest
     [MaxLength(128)]
     public string Reference { get; set; } = string.Empty;
 
-    /// <summary>pending | under_review | approved | rejected | cancelled.</summary>
+    [MaxLength(128)]
+    public string CandidateFullName { get; set; } = string.Empty;
+
+    [MaxLength(256)]
+    public string CandidateEmail { get; set; } = string.Empty;
+
+    [MaxLength(64)]
+    public string CandidateWhatsApp { get; set; } = string.Empty;
+
+    [MaxLength(128)]
+    public string CourseName { get; set; } = string.Empty;
+
+    [MaxLength(64)]
+    public string? CourseId { get; set; }
+
+    [MaxLength(16)]
+    public string PaymentCategory { get; set; } = "international";
+
+    /// <summary>pending | needs_review | approved | paid | rejected | cancelled.</summary>
     [MaxLength(16)]
     public string Status { get; set; } = "pending";
 

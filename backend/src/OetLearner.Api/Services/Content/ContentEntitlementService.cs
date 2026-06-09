@@ -112,6 +112,21 @@ public sealed class ContentEntitlementService(LearnerDbContext db, IEffectiveEnt
         var entitlement = await entitlementResolver.ResolveAsync(userId, ct);
         if (!entitlement.HasEligibleSubscription)
         {
+            if (entitlement.SubscriptionStatus == SubscriptionStatus.Frozen)
+            {
+                return new ContentEntitlementResult(
+                    Allowed: false, Reason: "subscription_frozen",
+                    CurrentTier: "frozen",
+                    RequiredScope: $"subtest:{paper.SubtestCode}");
+            }
+            if (entitlement.ExpiresAt is { } expires && expires <= DateTimeOffset.UtcNow)
+            {
+                return new ContentEntitlementResult(
+                    Allowed: false, Reason: "subscription_expired",
+                    CurrentTier: "expired",
+                    RequiredScope: $"subtest:{paper.SubtestCode}");
+            }
+
             return new ContentEntitlementResult(
                 Allowed: false, Reason: "no_active_subscription",
                 CurrentTier: "free",
@@ -165,11 +180,20 @@ public sealed class ContentEntitlementService(LearnerDbContext db, IEffectiveEnt
 
         var msg = result.Reason switch
         {
+            "subscription_frozen" =>
+                "Your subscription is frozen. Resume access before attempting this paper.",
+            "subscription_expired" =>
+                "Your subscription has expired. Renew access before attempting this paper.",
             "no_active_subscription" =>
                 "An active subscription is required to attempt this paper. Subscribe to a plan that includes this content.",
             _ =>
                 $"Your current plan does not include this {paper.SubtestCode} paper. Upgrade or add this content pack to continue.",
         };
+
+        if (result.Reason is "subscription_frozen" or "subscription_expired")
+        {
+            throw ApiException.Forbidden(result.Reason, msg);
+        }
 
         throw ApiException.PaymentRequired("content_locked", msg);
     }

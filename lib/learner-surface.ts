@@ -83,7 +83,7 @@ export function sanitizeLearnerPageHeroHighlights(items?: LearnerPageHeroHighlig
       && typeof item.value === 'string'
       && item.value.trim().length > 0
     ))
-    .slice(0, 3);
+    .slice(0, 6);
 }
 
 export function createLearnerMetaLabel(value: string | null | undefined, fallback: string) {

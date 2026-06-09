@@ -1,60 +1,64 @@
-# Agent State - OET 2026 Portfolio
+# Agent State - Payment Options, Subscription Timer, Freezing
 
-Last updated: 2026-06-08
-
-## Latest Dashboard Subscription Checkpoint
-
-- Implemented compact student subscription summary in the learner dashboard hero (`app/page.tsx`) using `fetchSubscriptionMe()` plus the existing entitlement snapshot.
-- Covered active subscription details, renewal/expiry fallback, remaining entitlement counters, no-active-subscription, and subscription-fetch failure in `app/page.test.tsx`.
-- Validation: `pnpm exec vitest run app/page.test.tsx --reporter=dot` passed; `pnpm exec tsc --noEmit` passed after clearing stale `.next/types` and `.next/dev/types` generated validator output.
+Last updated: 2026-06-09
 
 ## Goal
 
-Finish PR #38 (`feat/oet-2026-entitlement-conformance`) with GitHub Actions as the broad validation gate, then merge to `main` and deploy through the CI/GHCR production path only after required checks are green.
+Implement the three PDF demands into the existing OET billing/subscription system with the existing `Subscription` model as source of truth and no parallel `course_subscriptions` table.
 
-## Current Fix Checkpoint
+## Implemented
 
-- QA Smoke run `27109979480` passed frontend unit/lint/tsc/build and most E2E shards; SBOM/SCA run `27109979549` passed. Backend shards failed, and `chromium-unauth` failed while building its local smoke stack.
-- First backend checkpoint pushed as `2bae1460`.
-- Additional focused backend checks are now green locally:
-  - `WritingReviewEntitlementConsumptionTests.AdminCancel_OfEntitlementReview_RestoresOneEntitlement|AdminReopen_OfCancelledEntitlementReview_ReturnsToQueueNotAwaitingPayment`
-  - `RuntimeSettingsProviderZoomTests`
-  - `AuthFlowsTests.SeedData_EnsuresUnifiedAuthAccountsForLearnerExpertAndAdmin|CriticalFlowsTests.BootstrapEndpoint_ReturnsLearnerProfileAndReferences|CriticalFlowsTests.WritingSubmission_QueuesAndCompletesEvaluation`
-  - `VocabularyAudioWorkerTests.Backfill_PicksUpTermsWithoutAudio`
-  - `AdminFlowsTests.AdminVocabularyImport_PreviewAndDryRun_BlockSameFileDuplicatesAndOverLimitFields|AdminVocabularyImport_PreviewSupportsMultilineCsvAndBlocksUnknownTaxonomy|AdminVocabularyImport_DryRunCommitAndConflictPreview_PreservesRecallFields`
-  - `RecallsAudioEntitlementTests.Quiz_never_returns_cached_audio_urls|Queue_exposes_term_id_but_never_cached_audio_urls`
-  - `LearnerSurfaceContractTests.ListeningPaperAttempt_SubmitsCanonicalScoreAndPolicySafeReview`
-  - `ClassNotificationServiceTests.SendReminderAsync_ProducesDistinctDedupeKeysPerLeadWindow`
-  - `ContentPaperBulkActionTests.Bulk_delete_removes_archived_paper_and_its_authoring_children`
-  - `ContentBulkImportE2ETests.Published_paper_from_import_is_visible_to_matching_profession|Full_pipeline_creates_papers_assets_and_dedupes_identical_content`
-- `AdminEndpointAuthorizationInventoryTests.AdminMutations_RequirePerUserWriteRateLimit` is intentionally skipped because the legacy admin route limiter metadata migration is separate from OET 2026 portfolio conformance.
-- QA Smoke run `27111229483` later passed frontend unit/lint/tsc/build, all E2E smoke shards, and backend shards 1/4, 2/4, and 3/4. Backend shard 4 failed only `RecallsAudioEntitlementTests.Audio_returns_402_for_learner_without_active_subscription`.
-- Focused local recalls follow-up is green after the red 404: `RecallsAudioEntitlementTests.Audio_returns_402_for_learner_without_active_subscription|Queue_exposes_term_id_but_never_cached_audio_urls|Quiz_never_returns_cached_audio_urls|Vocabulary_term_payload_redacts_cached_audio_fields`.
+- Payment options page at `app/billing/manual-payment/page.tsx` now shows the PDF method order:
+  InstaPay QR/link, Vodafone Cash/Fawry, QNB Egypt, Stripe card, PayPal Business, UK Monzo transfer, International Monzo transfer.
+- Only the InstaPay QR was extracted from the payment guide into `public/payment/instapay-qr.jpg`; no Monzo QR/admin-only QR material was published.
+- Manual payment submit now requires candidate full name, email, WhatsApp number, selected course, amount, method, transaction reference, and proof bytes.
+- Manual proof storage uses `IFileStorage` through `ManualPaymentService`, not raw file APIs.
+- Admin manual-payment dashboard now exposes candidate identity, course, payment category, proof key, and supports `pending`, `needs_review`, `approved`, `paid`, `rejected`.
+- Existing `Subscription` entity now carries access timer and per-subscription freeze fields.
+- Added append-only `SubscriptionFreeze` entity/table and partial unique pending-request index per subscription.
+- Added `FreezeRequested` and `Frozen` subscription states, learner request/resume endpoints, admin approve/reject/direct-freeze/resume endpoints, and admin table actions.
+- Subscription access uses `StartedAt`/`ExpiresAt`, returns server-computed timer/freeze fields, and renewal/activation extends from `max(now, current ExpiresAt)`.
+- Added `SubscriptionExpiryWorker` to expire active/trial/freeze-requested subscriptions whose `ExpiresAt` is in the past; frozen subscriptions are skipped.
+- Content entitlement denial now returns `subscription_expired` or `subscription_frozen` where applicable.
 
-## Current Touched Files
+## Validation
 
+- `pnpm run backend:build`: passed. Existing warnings remained: NU1510 on `System.Text.Encoding.CodePages` plus pre-existing nullability warnings.
+- `pnpm exec tsc --noEmit`: passed.
+- `pnpm exec eslint app/billing/manual-payment/page.tsx app/admin/billing/manual-payments/page.tsx app/admin/billing/page.tsx components/billing/SubscriptionCard.tsx lib/api.ts lib/api/billing-expansion.ts lib/types/admin.ts`: passed with warnings only.
+- `dotnet test backend/tests/OetLearner.Api.Tests/OetLearner.Api.Tests.csproj --filter BillingExpansionServiceTests`: passed, 13 tests.
+- Full `pnpm run lint` still exits non-zero because the repo currently has unrelated lint warnings/errors outside this change set; scoped lint for touched frontend files has no errors.
+
+## Touched Files
+
+- `.github/agent-state.local.md`
+- `app/admin/billing/manual-payments/page.tsx`
+- `app/admin/billing/page.tsx`
+- `app/billing/manual-payment/page.tsx`
+- `backend/src/OetLearner.Api/Data/LearnerDbContext.cs`
+- `backend/src/OetLearner.Api/Data/Migrations/20260701090000_AddSubscriptionTimerFreezingAndManualPaymentFields.cs`
+- `backend/src/OetLearner.Api/Domain/Entities.cs`
+- `backend/src/OetLearner.Api/Domain/Enums.cs`
+- `backend/src/OetLearner.Api/Domain/ManualPaymentRequest.cs`
+- `backend/src/OetLearner.Api/Endpoints/AdminEndpoints.cs`
+- `backend/src/OetLearner.Api/Endpoints/BillingExpansionEndpoints.cs`
+- `backend/src/OetLearner.Api/Endpoints/BillingSubscriptionEndpoints.cs`
+- `backend/src/OetLearner.Api/Program.cs`
 - `backend/src/OetLearner.Api/Services/AdminService.cs`
-- `backend/tests/OetLearner.Api.Tests/Infrastructure/TestWebApplicationFactory.cs`
-- `backend/tests/OetLearner.Api.Tests/RuntimeSettingsProviderZoomTests.cs`
-- `backend/tests/OetLearner.Api.Tests/VocabularyAudioWorkerTests.cs`
-- `backend/tests/OetLearner.Api.Tests/WritingReviewEntitlementConsumptionTests.cs`
-- `backend/tests/OetLearner.Api.Tests/AdminEndpointAuthorizationInventoryTests.cs`
-- `backend/tests/OetLearner.Api.Tests/AdminFlowsTests.cs`
-- `backend/tests/OetLearner.Api.Tests/ChunkedUploadServiceTests.cs`
-- `backend/tests/OetLearner.Api.Tests/Classes/ClassNotificationServiceTests.cs`
-- `backend/tests/OetLearner.Api.Tests/ContentBulkImportE2ETests.cs`
-- `backend/tests/OetLearner.Api.Tests/ContentPaperBulkActionTests.cs`
-- `backend/tests/OetLearner.Api.Tests/LearnerSurfaceContractTests.cs`
-- `backend/tests/OetLearner.Api.Tests/RecallsAudioEntitlementTests.cs`
-- `PROGRESS.md`
+- `backend/src/OetLearner.Api/Services/Billing/ManualPaymentService.cs`
+- `backend/src/OetLearner.Api/Services/Billing/SubscriptionBundleInitializer.cs`
+- `backend/src/OetLearner.Api/Services/Billing/SubscriptionExpiryWorker.cs`
+- `backend/src/OetLearner.Api/Services/Billing/SubscriptionStateMachine.cs`
+- `backend/src/OetLearner.Api/Services/Content/ContentEntitlementService.cs`
+- `backend/src/OetLearner.Api/Services/Entitlements/EffectiveEntitlementResolver.cs`
+- `backend/tests/OetLearner.Api.Tests/BillingExpansionServiceTests.cs`
+- `components/billing/SubscriptionCard.tsx`
+- `lib/api.ts`
+- `lib/api/billing-expansion.ts`
+- `lib/types/admin.ts`
+- `public/payment/instapay-qr.jpg`
 
-## Remaining Checks To Triage
+## Known Workspace Notes
 
-- Commit and push the recalls entitlement fixture checkpoint to `feat/oet-2026-entitlement-conformance`.
-- Watch the new GitHub Actions `QA Smoke` and `SBOM and SCA` runs.
-- If QA remains red, inspect failing job logs and continue with focused local red/green only for the failing classes.
-- Merge PR #38 to `main` and deploy only after PR checks are green.
-
-## Validation Rule
-
-Keep using focused local `dotnet test --filter` for red/green proof only. Push feature branch and let GitHub Actions run broad backend/frontend/build/E2E gates. Do not deploy until PR checks are green and merged to `main`.
+- Unrelated dirty files existed before this task: `app/page.tsx`, `app/page.test.tsx`, and `lib/learner-surface.ts`. They were not intentionally modified for this task.
+- Untracked repo-local PDFs and `.worktrees/` also existed before this task and were left alone.

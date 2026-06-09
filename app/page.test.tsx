@@ -282,13 +282,22 @@ describe('Dashboard page', () => {
 
     renderWithRouter(<DashboardPage />, { router: { push: mockPush } });
 
-    expect(await screen.findByText('Full Nursing OET Course')).toBeInTheDocument();
-    expect(screen.getByText('Active')).toBeInTheDocument();
+    expect((await screen.findAllByText('Full Nursing OET Course')).length).toBeGreaterThan(1);
+    expect(screen.getAllByText('Active').length).toBeGreaterThan(1);
+    expect(screen.getAllByText('Package').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Access left').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Subscription').length).toBeGreaterThan(0);
+    expect(screen.getByText(/Package code:/i)).toHaveTextContent('full-nursing');
+    expect(screen.getByText('Subscribed')).toBeInTheDocument();
+    expect(screen.getByText('Expiry date')).toBeInTheDocument();
+    expect(screen.getByText('Days left')).toBeInTheDocument();
+    expect(screen.getByText('6/1/2026')).toBeInTheDocument();
     expect(screen.getByText((text) => text.includes('60.00') && text.includes('/ month'))).toBeInTheDocument();
     expect(screen.getByText(/Remaining:/i)).toHaveTextContent('3 writing');
     expect(screen.getByText(/Remaining:/i)).toHaveTextContent('1 speaking');
     expect(screen.getByText(/Remaining:/i)).toHaveTextContent('5 AI credits');
     expect(screen.getByText(/Remaining:/i)).toHaveTextContent('Tutor Book');
+    expect(screen.getByRole('link', { name: /see all catalog/i })).toHaveAttribute('href', '/catalog');
   });
 
   it('uses entitlement expiry when a subscription renewal date is not available', async () => {
@@ -310,8 +319,9 @@ describe('Dashboard page', () => {
 
     renderWithRouter(<DashboardPage />, { router: { push: mockPush } });
 
-    expect(await screen.findByText('Full Nursing OET Course')).toBeInTheDocument();
+    expect((await screen.findAllByText('Full Nursing OET Course')).length).toBeGreaterThan(1);
     expect(screen.getByText('12/31/2026')).toBeInTheDocument();
+    expect(screen.getAllByText(/days left/i).length).toBeGreaterThan(1);
   });
 
   it('keeps the dashboard usable when there is no active subscription', async () => {
@@ -320,7 +330,9 @@ describe('Dashboard page', () => {
     renderWithRouter(<DashboardPage />, { router: { push: mockPush } });
 
     expect((await screen.findAllByText('No active subscription')).length).toBeGreaterThan(0);
-    expect(screen.getAllByText('Browse plans').length).toBeGreaterThan(0);
+    expect(screen.getByText(/Package code:/i)).toHaveTextContent('reading-only');
+    expect(screen.getByText('No package selected')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /see all catalog/i })).toHaveAttribute('href', '/catalog');
   });
 
   it('keeps the dashboard usable when subscription details fail to load', async () => {

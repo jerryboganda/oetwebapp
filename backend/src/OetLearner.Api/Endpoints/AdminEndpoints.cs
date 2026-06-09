@@ -457,6 +457,22 @@ public static class AdminEndpoints
             => Results.Ok(await service.SetSubscriptionStatusAsync(http.AdminId(), http.AdminName(), subscriptionId, request, ct)))
             .WithAdminWrite("AdminBillingSubscriptionWrite");
 
+        admin.MapPost("/billing/subscriptions/{subscriptionId}/approve-freeze", async (string subscriptionId, HttpContext http, FreezeActionRequest request, AdminService service, CancellationToken ct)
+            => Results.Ok(await service.ApproveSubscriptionFreezeAsync(http.AdminId(), http.AdminName(), subscriptionId, request, ct)))
+            .WithAdminWrite("AdminBillingSubscriptionWrite");
+
+        admin.MapPost("/billing/subscriptions/{subscriptionId}/reject-freeze", async (string subscriptionId, HttpContext http, FreezeActionRequest request, AdminService service, CancellationToken ct)
+            => Results.Ok(await service.RejectSubscriptionFreezeAsync(http.AdminId(), http.AdminName(), subscriptionId, request, ct)))
+            .WithAdminWrite("AdminBillingSubscriptionWrite");
+
+        admin.MapPost("/billing/subscriptions/{subscriptionId}/freeze", async (string subscriptionId, HttpContext http, FreezeActionRequest request, AdminService service, CancellationToken ct)
+            => Results.Ok(await service.AdminFreezeSubscriptionAsync(http.AdminId(), http.AdminName(), subscriptionId, request, ct)))
+            .WithAdminWrite("AdminBillingSubscriptionWrite");
+
+        admin.MapPost("/billing/subscriptions/{subscriptionId}/resume", async (string subscriptionId, HttpContext http, FreezeActionRequest request, AdminService service, CancellationToken ct)
+            => Results.Ok(await service.AdminResumeSubscriptionAsync(http.AdminId(), http.AdminName(), subscriptionId, request, ct)))
+            .WithAdminWrite("AdminBillingSubscriptionWrite");
+
         admin.MapPost("/billing/subscriptions/{subscriptionId}/entitlements", async (string subscriptionId, HttpContext http, AdminSubscriptionEntitlementAdjustRequest request, AdminService service, CancellationToken ct)
             => Results.Ok(await service.AdjustSubscriptionEntitlementsAsync(http.AdminId(), http.AdminName(), subscriptionId, request, ct)))
             .WithAdminWrite("AdminBillingSubscriptionWrite");

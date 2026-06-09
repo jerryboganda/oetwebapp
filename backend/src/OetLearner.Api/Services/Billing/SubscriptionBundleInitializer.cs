@@ -28,7 +28,8 @@ public static class SubscriptionBundleInitializer
         subscription.AiCreditsRemaining = plan.BundledAiCredits;
         subscription.TutorBookUnlocked = plan.BundledTutorBook;
         subscription.BasicEnglishUnlocked = plan.BundledBasicEnglish;
-        subscription.ExpiresAt = ResolveExpiry(now, plan.AccessDurationDays);
+        subscription.AccessDurationDays = ResolveAccessDurationDays(plan.AccessDurationDays);
+        subscription.ExpiresAt = ResolveExpiry(subscription, now, plan.AccessDurationDays);
     }
 
     /// <summary>Same as <see cref="ApplyBundle(Subscription, BillingPlan, DateTimeOffset)"/>
@@ -42,7 +43,8 @@ public static class SubscriptionBundleInitializer
         subscription.AiCreditsRemaining = version.BundledAiCredits;
         subscription.TutorBookUnlocked = version.BundledTutorBook;
         subscription.BasicEnglishUnlocked = version.BundledBasicEnglish;
-        subscription.ExpiresAt = ResolveExpiry(now, version.AccessDurationDays);
+        subscription.AccessDurationDays = ResolveAccessDurationDays(version.AccessDurationDays);
+        subscription.ExpiresAt = ResolveExpiry(subscription, now, version.AccessDurationDays);
     }
 
     /// <summary>
@@ -67,7 +69,8 @@ public static class SubscriptionBundleInitializer
         subscription.SpeakingSessionsRemaining = plan.BundledSpeakingSessions;
         subscription.TutorBookUnlocked = plan.BundledTutorBook;
         subscription.BasicEnglishUnlocked = plan.BundledBasicEnglish;
-        subscription.ExpiresAt = ResolveExpiry(now, plan.AccessDurationDays);
+        subscription.AccessDurationDays = ResolveAccessDurationDays(plan.AccessDurationDays);
+        subscription.ExpiresAt = ResolveExpiry(subscription, now, plan.AccessDurationDays);
     }
 
     /// <summary>Immutable-snapshot flavour of
@@ -82,7 +85,8 @@ public static class SubscriptionBundleInitializer
         subscription.SpeakingSessionsRemaining = version.BundledSpeakingSessions;
         subscription.TutorBookUnlocked = version.BundledTutorBook;
         subscription.BasicEnglishUnlocked = version.BundledBasicEnglish;
-        subscription.ExpiresAt = ResolveExpiry(now, version.AccessDurationDays);
+        subscription.AccessDurationDays = ResolveAccessDurationDays(version.AccessDurationDays);
+        subscription.ExpiresAt = ResolveExpiry(subscription, now, version.AccessDurationDays);
     }
 
     /// <summary>
@@ -202,10 +206,14 @@ public static class SubscriptionBundleInitializer
         // tutor_book is intentionally not auto-revoked on refund — leave that to admin action.
     }
 
-    private static DateTimeOffset? ResolveExpiry(DateTimeOffset now, int accessDurationDays)
+    private static int ResolveAccessDurationDays(int accessDurationDays)
+        => accessDurationDays <= 0 || accessDurationDays >= 9999 ? 180 : accessDurationDays;
+
+    private static DateTimeOffset? ResolveExpiry(Subscription subscription, DateTimeOffset now, int accessDurationDays)
     {
         if (accessDurationDays <= 0) return null;
         if (accessDurationDays >= 9999) return null; // permanent entitlement (Tutor Book)
-        return now.AddDays(accessDurationDays);
+        var anchor = subscription.ExpiresAt is { } current && current > now ? current : now;
+        return anchor.AddDays(accessDurationDays);
     }
 }

@@ -83,7 +83,7 @@ public sealed class EffectiveEntitlementResolver(
         // Only Active/Trial confer entitlements. Suspended / PastDue /
         // Pending / Cancelled / Expired all fail-low to FREE. This branch is
         // single-source-of-truth — never elevate downstream.
-        var eligible = subscription.Status is SubscriptionStatus.Active or SubscriptionStatus.Trial;
+        var eligible = subscription.Status is SubscriptionStatus.Active or SubscriptionStatus.Trial or SubscriptionStatus.FreezeRequested;
         var isTrial = subscription.Status == SubscriptionStatus.Trial;
 
         BillingPlan? plan = null;
@@ -207,7 +207,9 @@ public sealed class EffectiveEntitlementResolver(
         // subscription that already failed-low has empty modules and
         // HasEligibleSubscription=false, so this is a no-op for it).
         var now = DateTimeOffset.UtcNow;
-        var isExpired = subscription.ExpiresAt is { } exp && exp <= now;
+        var isExpired = subscription.Status != SubscriptionStatus.Frozen
+            && subscription.ExpiresAt is { } exp
+            && exp <= now;
         if (isExpired)
         {
             trace.Add("subscription.expired");
