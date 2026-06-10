@@ -137,11 +137,11 @@ describe('Settings section page', () => {
     expect(await screen.findByText('Review and update your goals settings.')).toBeInTheDocument();
     /* Helper card badge */
     expect(screen.getAllByText('Target Scores').length).toBeGreaterThan(0);
-    /* Sub-test field tags */
-    expect(screen.getAllByText('Writing').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('Speaking').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('Reading').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('Listening').length).toBeGreaterThan(0);
+    /* Sub-test target score controls */
+    expect(screen.getByLabelText('Writing target score')).toBeInTheDocument();
+    expect(screen.getByLabelText('Speaking target score')).toBeInTheDocument();
+    expect(screen.getByLabelText('Reading target score')).toBeInTheDocument();
+    expect(screen.getByLabelText('Listening target score')).toBeInTheDocument();
     /* Study Pace tag */
     expect(screen.getByText('Study Pace')).toBeInTheDocument();
     /* Mixed states: 5 set (overallGoal, writing:350, speaking:360, listening:380, studyHoursPerWeek:10), 1 not set (reading:'') */
