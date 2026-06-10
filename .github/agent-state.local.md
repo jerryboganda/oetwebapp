@@ -32,6 +32,7 @@ Commit all completed billing/checkout/runtime hardening work to `main`, push it,
 - `dotnet test backend/tests/OetLearner.Api.Tests/OetLearner.Api.Tests.csproj --filter "FullyQualifiedName~AdminDashboard_AndContentList_RemainQueryable_WhenSqliteBacksDesktopRuntime|FullyQualifiedName~ExpertDashboard_RemainsQueryable_WhenSqliteBacksDesktopRuntime|FullyQualifiedName~FeedEndpoint_RemainsQueryable_WhenSqliteBacksDesktopRuntime" --nologo --logger "console;verbosity=minimal"`: passed, 3 tests.
 - `dotnet build backend/src/OetLearner.Api/OetLearner.Api.csproj --nologo`: passed with existing warnings.
 - Latest completed deploy evidence before this handoff: Build & Deploy run `27247997404` passed on `dfd030c5`; QA Smoke run `27247997413` failed backend shards on SQLite migration/startup issues now fixed locally.
+- `pnpm exec vitest run app/admin/non-editor-pages.test.tsx --reporter=dot`: passed, 5 discovered files / 85 tests, after making the webhook event assertion wait for the async table row that the Speaking workflow frontend Vitest hit.
 
 ## Touched Files
 
@@ -58,6 +59,7 @@ Commit all completed billing/checkout/runtime hardening work to `main`, push it,
 - `backend/tests/OetLearner.Api.Tests/CheckoutSessionStatusOwnershipTests.cs`
 - `backend/src/OetLearner.Api/Program.cs`
 - `backend/src/OetLearner.Api/Data/Migrations/20260329204416_ExactAuthSocialPort.cs`
+- `app/admin/non-editor-pages.test.tsx`
 
 ## Known Risks / Next Step
 

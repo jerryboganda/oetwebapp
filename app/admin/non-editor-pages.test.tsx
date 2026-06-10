@@ -1137,7 +1137,7 @@ describe('Admin Non-Editor Pages', () => {
     renderPage(<WebhooksPage />);
 
     expect(await screen.findByRole('heading', { name: /^webhook monitoring$/i })).toBeInTheDocument();
-    expect(screen.getAllByText('PAYMENT.CAPTURE.COMPLETED').length).toBeGreaterThan(0);
+    expect((await screen.findAllByText('PAYMENT.CAPTURE.COMPLETED')).length).toBeGreaterThan(0);
     expect(screen.getAllByText('This webhook was not signature-verified at ingestion.').length).toBeGreaterThan(0);
     const retryButtons = screen.getAllByRole('button', { name: /retry/i });
     expect(retryButtons[0]).toBeEnabled();
@@ -1369,5 +1369,4 @@ describe('Admin Non-Editor Pages', () => {
     expect((await screen.findAllByText(/published revision\./i)).length).toBeGreaterThan(0);
   });
 });
-
 
