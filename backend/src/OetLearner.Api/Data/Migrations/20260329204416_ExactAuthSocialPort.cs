@@ -11,29 +11,63 @@ namespace OetLearner.Api.Data.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.Sql(
-                """
-                ALTER TABLE "ExpertReviewDrafts"
-                ADD COLUMN IF NOT EXISTS "ChecklistItemsJson" text NOT NULL DEFAULT '';
-                """);
+            if (migrationBuilder.ActiveProvider == "Npgsql.EntityFrameworkCore.PostgreSQL")
+            {
+                migrationBuilder.Sql(
+                    """
+                    ALTER TABLE "ExpertReviewDrafts"
+                    ADD COLUMN IF NOT EXISTS "ChecklistItemsJson" text NOT NULL DEFAULT '';
+                    """);
 
-            migrationBuilder.Sql(
-                """
-                ALTER TABLE "ExpertReviewDrafts"
-                ADD COLUMN IF NOT EXISTS "ScratchpadJson" text NOT NULL DEFAULT '';
-                """);
+                migrationBuilder.Sql(
+                    """
+                    ALTER TABLE "ExpertReviewDrafts"
+                    ADD COLUMN IF NOT EXISTS "ScratchpadJson" text NOT NULL DEFAULT '';
+                    """);
 
-            migrationBuilder.Sql(
-                """
-                ALTER TABLE "Criteria"
-                ADD COLUMN IF NOT EXISTS "Status" character varying(16) NOT NULL DEFAULT '';
-                """);
+                migrationBuilder.Sql(
+                    """
+                    ALTER TABLE "Criteria"
+                    ADD COLUMN IF NOT EXISTS "Status" character varying(16) NOT NULL DEFAULT '';
+                    """);
 
-            migrationBuilder.Sql(
-                """
-                ALTER TABLE "ApplicationUserAccounts"
-                ADD COLUMN IF NOT EXISTS "ProtectedAuthenticatorSecret" character varying(1024);
-                """);
+                migrationBuilder.Sql(
+                    """
+                    ALTER TABLE "ApplicationUserAccounts"
+                    ADD COLUMN IF NOT EXISTS "ProtectedAuthenticatorSecret" character varying(1024);
+                    """);
+            }
+            else
+            {
+                migrationBuilder.AddColumn<string>(
+                    name: "ChecklistItemsJson",
+                    table: "ExpertReviewDrafts",
+                    type: "TEXT",
+                    nullable: false,
+                    defaultValue: "");
+
+                migrationBuilder.AddColumn<string>(
+                    name: "ScratchpadJson",
+                    table: "ExpertReviewDrafts",
+                    type: "TEXT",
+                    nullable: false,
+                    defaultValue: "");
+
+                migrationBuilder.AddColumn<string>(
+                    name: "Status",
+                    table: "Criteria",
+                    type: "TEXT",
+                    maxLength: 16,
+                    nullable: false,
+                    defaultValue: "");
+
+                migrationBuilder.AddColumn<string>(
+                    name: "ProtectedAuthenticatorSecret",
+                    table: "ApplicationUserAccounts",
+                    type: "TEXT",
+                    maxLength: 1024,
+                    nullable: true);
+            }
 
             migrationBuilder.CreateTable(
                 name: "ExternalIdentityLinks",

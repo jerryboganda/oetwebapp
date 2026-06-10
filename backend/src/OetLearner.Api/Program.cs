@@ -1678,9 +1678,11 @@ if (args.Contains("--emit-create-script"))
 await using (var migrationScope = app.Services.CreateAsyncScope())
 {
     var db = migrationScope.ServiceProvider.GetRequiredService<LearnerDbContext>();
-    // Relational-only: the in-memory provider used by integration tests builds
-    // its schema from the model (EnsureCreated) and does not support migrations.
-    if (db.Database.IsRelational())
+    // Production PostgreSQL only: the in-memory provider builds its schema from
+    // the model, and SQLite desktop/test runtimes use the compatibility
+    // bootstrapper because the production migration chain contains
+    // PostgreSQL-specific DDL.
+    if (db.Database.IsNpgsql())
     {
         await db.Database.MigrateAsync();
 

@@ -1,6 +1,14 @@
 # PROGRESS - Active Agent Continuity
 
-Last updated: 2026-06-09
+Last updated: 2026-06-10
+
+## Current Checkpoint - Production Deploy Main
+
+- Billing checkout return hardening was committed to `main` and deployed through GitHub Actions/GHCR.
+- A production startup crash on newly added runtime-settings payment/Soketi columns was fixed by applying PostgreSQL migrations before runtime-settings startup guards read those columns.
+- Follow-up QA showed SQLite desktop-runtime backend tests failing because the early startup migration hook ran the full production migration chain against SQLite. The hook is now PostgreSQL-only, and the historical `ExactAuthSocialPort` migration is provider-aware for additive columns.
+- Local validation after the fix: `dotnet test backend/tests/OetLearner.Api.Tests/OetLearner.Api.Tests.csproj --filter "FullyQualifiedName~DisableAntiforgeryUploadEndpointAuthorizationTests"` passed 18 tests; `dotnet test backend/tests/OetLearner.Api.Tests/OetLearner.Api.Tests.csproj --filter "FullyQualifiedName~AdminDashboard_AndContentList_RemainQueryable_WhenSqliteBacksDesktopRuntime|FullyQualifiedName~ExpertDashboard_RemainsQueryable_WhenSqliteBacksDesktopRuntime|FullyQualifiedName~FeedEndpoint_RemainsQueryable_WhenSqliteBacksDesktopRuntime"` passed 3 tests; `dotnet build backend/src/OetLearner.Api/OetLearner.Api.csproj --nologo` passed with existing warnings.
+- Next step: commit/push the startup migration fix, watch GitHub Actions Build & Deploy plus QA Smoke/Speaking/SBOM to completion, then verify production health endpoints.
 
 ## Current Checkpoint - Billing Checkout Return Hardening
 

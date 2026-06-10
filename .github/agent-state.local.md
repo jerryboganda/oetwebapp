@@ -1,10 +1,10 @@
-# Agent State - Billing Checkout Return Hardening
+# Agent State - Production Deploy Main
 
-Last updated: 2026-06-09
+Last updated: 2026-06-10
 
 ## Goal
 
-Harden the learner purchase journey across billing quote creation, order review, hosted checkout, payment return polling, legacy cart status lookup, and course/add-on/AI package entry points.
+Commit all completed billing/checkout/runtime hardening work to `main`, push it, deploy through GitHub Actions/GHCR, and close every deploy/QA issue encountered without running heavy builds on the VPS.
 
 ## Implemented
 
@@ -16,6 +16,9 @@ Harden the learner purchase journey across billing quote creation, order review,
 - Fixed legacy generic cart checkout status lookup to accept either the local checkout GUID or Stripe `cs_...` session id, and removed the route GUID constraint.
 - Fixed legacy generic cart checkout creation to honor frontend `successUrl`/`cancelUrl` and append Stripe `{CHECKOUT_SESSION_ID}` when needed.
 - Added focused backend and frontend tests for payment status, Stripe session status lookup, payment return rendering, and add-on review routing.
+- Fixed production startup ordering so PostgreSQL migrations run before runtime-settings startup guards read newly added payment/Soketi columns.
+- Narrowed the early startup migration/runtime-settings self-heal to PostgreSQL only; SQLite desktop/test runtimes use the existing compatibility bootstrapper because the production migration chain contains PostgreSQL-specific DDL.
+- Made the historical `ExactAuthSocialPort` migration provider-aware so its additive auth/expert columns use PostgreSQL idempotent SQL on Npgsql and portable EF column operations elsewhere.
 
 ## Validation
 
@@ -25,6 +28,10 @@ Harden the learner purchase journey across billing quote creation, order review,
 - `dotnet test backend/tests/OetLearner.Api.Tests/OetLearner.Api.Tests.csproj --no-build --filter "FullyQualifiedName~BillingCheckoutSessionGuardTests|FullyQualifiedName~CheckoutSessionStatusOwnershipTests" --nologo`: passed, 7 tests.
 - `pnpm exec eslint app/checkout/review/page.tsx app/billing/payment-return/page.tsx app/ai-packages/page.tsx app/billing/page.tsx app/marketplace/packages/[id]/page.tsx components/billing/addon-purchase-modal.tsx app/billing/payment-return/page.test.tsx components/billing/addon-purchase-modal.test.tsx lib/api.ts lib/billing-types.ts`: passed with 6 existing `react-hooks/set-state-in-effect` warnings in `app/ai-packages/page.tsx` and `app/billing/page.tsx`.
 - `git diff --check`: passed.
+- `dotnet test backend/tests/OetLearner.Api.Tests/OetLearner.Api.Tests.csproj --filter "FullyQualifiedName~DisableAntiforgeryUploadEndpointAuthorizationTests" --nologo --logger "console;verbosity=minimal"`: passed, 18 tests.
+- `dotnet test backend/tests/OetLearner.Api.Tests/OetLearner.Api.Tests.csproj --filter "FullyQualifiedName~AdminDashboard_AndContentList_RemainQueryable_WhenSqliteBacksDesktopRuntime|FullyQualifiedName~ExpertDashboard_RemainsQueryable_WhenSqliteBacksDesktopRuntime|FullyQualifiedName~FeedEndpoint_RemainsQueryable_WhenSqliteBacksDesktopRuntime" --nologo --logger "console;verbosity=minimal"`: passed, 3 tests.
+- `dotnet build backend/src/OetLearner.Api/OetLearner.Api.csproj --nologo`: passed with existing warnings.
+- Latest completed deploy evidence before this handoff: Build & Deploy run `27247997404` passed on `dfd030c5`; QA Smoke run `27247997413` failed backend shards on SQLite migration/startup issues now fixed locally.
 
 ## Touched Files
 
@@ -49,8 +56,11 @@ Harden the learner purchase journey across billing quote creation, order review,
 - `backend/src/OetLearner.Api/Services/LearnerService.cs`
 - `backend/tests/OetLearner.Api.Tests/BillingCheckoutSessionGuardTests.cs`
 - `backend/tests/OetLearner.Api.Tests/CheckoutSessionStatusOwnershipTests.cs`
+- `backend/src/OetLearner.Api/Program.cs`
+- `backend/src/OetLearner.Api/Data/Migrations/20260329204416_ExactAuthSocialPort.cs`
 
 ## Known Risks / Next Step
 
-- Full hosted Stripe/PayPal webhook E2E was not run locally; the focused tests pin the return/status contracts and existing fulfillment tests cover idempotent entitlement application.
-- Broad lint still has existing warnings in large billing/AI pages; no new warning remains in the new payment-return page.
+- Commit and push the PostgreSQL-only startup migration fix to `main`.
+- Watch the new GitHub Actions Build & Deploy, QA Smoke, Speaking CI, and SBOM/SCA runs to completion.
+- After deploy succeeds, verify production health endpoints and report any residual warnings.
