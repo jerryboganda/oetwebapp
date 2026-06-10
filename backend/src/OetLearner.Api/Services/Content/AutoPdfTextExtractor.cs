@@ -2,16 +2,21 @@ using System.Net.Http.Headers;
 using System.Text.Json;
 using Microsoft.Extensions.Options;
 using OetLearner.Api.Configuration;
+using OetLearner.Api.Domain;
+using OetLearner.Api.Services.Ai;
+using OetLearner.Api.Services.Rulebook;
 
 namespace OetLearner.Api.Services.Content;
 
 /// <summary>
-/// Composite <see cref="IPdfTextExtractor"/> that runs PdfPig first and
-/// (optionally) falls back to Azure Document Intelligence prebuilt-read when
-/// the embedded text is below <see cref="PdfExtractionOptions.MinTextLengthForSuccess"/>.
-/// Azure DocIntel is OCR (not an LLM), so per PRD §5 it intentionally does NOT
-/// route through <c>IAiGatewayService</c>. Plain HttpClient is used to avoid
-/// pulling in the Azure SDK.
+/// Composite <see cref="IPdfTextExtractor"/> that runs PdfPig first and falls
+/// back to OCR when the embedded text is below
+/// <see cref="PdfExtractionOptions.MinTextLengthForSuccess"/>: Azure Document
+/// Intelligence (when explicitly configured) then Mistral OCR (the canonical
+/// OCR provider — covers scanned PDFs wherever a <c>mistral-ocr</c> key is set).
+/// OCR is not an LLM, so per PRD §5 it intentionally does NOT route through
+/// <c>IAiGatewayService</c>; the Mistral tier still records an
+/// <c>AiUsageRecord</c> via <see cref="IOcrService"/> for traceability.
 /// </summary>
 public sealed class AutoPdfTextExtractor : IPdfTextExtractor
 {
@@ -21,17 +26,20 @@ public sealed class AutoPdfTextExtractor : IPdfTextExtractor
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly PdfExtractionOptions _options;
     private readonly PdfPigPdfTextExtractor _pdfPig;
+    private readonly IServiceScopeFactory _scopeFactory;
 
     public AutoPdfTextExtractor(
         ILogger<AutoPdfTextExtractor> logger,
         IHttpClientFactory httpClientFactory,
         IOptions<PdfExtractionOptions> options,
-        PdfPigPdfTextExtractor pdfPig)
+        PdfPigPdfTextExtractor pdfPig,
+        IServiceScopeFactory scopeFactory)
     {
         _logger = logger;
         _httpClientFactory = httpClientFactory;
         _options = options.Value;
         _pdfPig = pdfPig;
+        _scopeFactory = scopeFactory;
     }
 
     public async Task<string> ExtractAsync(Stream pdfStream, CancellationToken ct)
@@ -81,16 +89,58 @@ public sealed class AutoPdfTextExtractor : IPdfTextExtractor
             return pdfPigText;
         }
 
-        // auto: only fall back when PdfPig produced too little AND Azure is configured.
+        // auto: only fall back when PdfPig produced too little text (scanned PDF).
         if ((pdfPigText?.Length ?? 0) >= _options.MinTextLengthForSuccess) return pdfPigText ?? string.Empty;
-        if (!azureConfigured) return pdfPigText ?? string.Empty;
 
-        _logger.LogInformation(
-            "{Event} provider={Provider} sizeBytes={SizeBytes} pdfPigChars={PdfPigChars}",
-            "pdf.ocr.fallback", "azure-docintel", bytes.LongLength, pdfPigText?.Length ?? 0);
+        var best = pdfPigText ?? string.Empty;
 
-        var azureText = await TryAzureAsync(bytes, ct);
-        return !string.IsNullOrWhiteSpace(azureText) ? azureText! : (pdfPigText ?? string.Empty);
+        // Tier 2 — Azure Document Intelligence (only when explicitly configured).
+        if (azureConfigured)
+        {
+            _logger.LogInformation(
+                "{Event} provider={Provider} sizeBytes={SizeBytes} pdfPigChars={PdfPigChars}",
+                "pdf.ocr.fallback", "azure-docintel", bytes.LongLength, pdfPigText?.Length ?? 0);
+            var azureText = await TryAzureAsync(bytes, ct);
+            if (!string.IsNullOrWhiteSpace(azureText) && azureText!.Length > best.Length) best = azureText;
+            if (best.Length >= _options.MinTextLengthForSuccess) return best;
+        }
+
+        // Tier 3 — Mistral OCR (canonical OCR provider). Covers scanned PDFs
+        // wherever the mistral-ocr row is keyed. Fail-soft: returns the best
+        // text gathered so far on any error, never throws from the fallback.
+        var mistralText = await TryMistralOcrAsync(bytes, ct);
+        if (!string.IsNullOrWhiteSpace(mistralText) && mistralText!.Length > best.Length) best = mistralText;
+        return best;
+    }
+
+    private async Task<string?> TryMistralOcrAsync(byte[] bytes, CancellationToken ct)
+    {
+        try
+        {
+            await using var scope = _scopeFactory.CreateAsyncScope();
+            var registry = scope.ServiceProvider.GetRequiredService<IAiProviderRegistry>();
+            // Silent skip when the canonical OCR row has no key — this fallback
+            // must be free when OCR is not configured.
+            var key = await registry.GetPlatformKeyAsync(MistralOcrClient.ProviderCode, ct);
+            if (string.IsNullOrEmpty(key)) return null;
+
+            _logger.LogInformation(
+                "{Event} provider={Provider} sizeBytes={SizeBytes}",
+                "pdf.ocr.fallback", "mistral-ocr", bytes.LongLength);
+
+            var ocr = scope.ServiceProvider.GetRequiredService<IOcrService>();
+            return await ocr.OcrToMarkdownAsync(
+                bytes, "application/pdf", AiFeatureCodes.OcrContentPdfFallback, userId: null, ct);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Mistral OCR fallback failed; returning best prior text.");
+            return null;
+        }
     }
 
     private async Task<string?> TryAzureAsync(byte[] bytes, CancellationToken ct)

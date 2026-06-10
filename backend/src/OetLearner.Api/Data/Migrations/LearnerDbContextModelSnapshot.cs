@@ -18649,6 +18649,107 @@ namespace OetLearner.Api.Data.Migrations
                     b.Property<bool?>("SpeakingV2Enabled")
                         .HasColumnType("boolean");
 
+                    b.Property<string>("CheckoutComApiBaseUrl")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
+
+                    b.Property<string>("CheckoutComSecretKeyEncrypted")
+                        .HasColumnType("text");
+
+                    b.Property<string>("CheckoutComPublicKey")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<string>("CheckoutComProcessingChannelId")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("CheckoutComWebhookSecretEncrypted")
+                        .HasColumnType("text");
+
+                    b.Property<string>("CheckoutComSuccessUrl")
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)");
+
+                    b.Property<string>("CheckoutComCancelUrl")
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)");
+
+                    b.Property<string>("PaymobApiBaseUrl")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
+
+                    b.Property<string>("PaymobApiKeyEncrypted")
+                        .HasColumnType("text");
+
+                    b.Property<string>("PaymobMerchantId")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("PaymobHmacSecretEncrypted")
+                        .HasColumnType("text");
+
+                    b.Property<string>("PaymobIntegrationIdsJson")
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)");
+
+                    b.Property<int?>("PaymobIframeId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("PaymobSuccessUrl")
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)");
+
+                    b.Property<string>("PaymobCancelUrl")
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)");
+
+                    b.Property<string>("PayTabsApiBaseUrl")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
+
+                    b.Property<string>("PayTabsServerKeyEncrypted")
+                        .HasColumnType("text");
+
+                    b.Property<string>("PayTabsProfileId")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("PayTabsWebhookSecretEncrypted")
+                        .HasColumnType("text");
+
+                    b.Property<string>("PayTabsSuccessUrl")
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)");
+
+                    b.Property<string>("PayTabsCancelUrl")
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)");
+
+                    b.Property<string>("SoketiHost")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<int?>("SoketiPort")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("SoketiAppId")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("SoketiAppKey")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<string>("SoketiAppSecretEncrypted")
+                        .HasColumnType("text");
+
+                    b.Property<bool?>("SoketiUseTls")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool?>("SoketiEnabled")
+                        .HasColumnType("boolean");
+
                     b.Property<string>("SpeakingWhisperApiKeyEncrypted")
                         .HasColumnType("text");
 

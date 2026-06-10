@@ -3,6 +3,7 @@ using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using OetLearner.Api.Services.Content;
+using OetLearner.Api.Services.Pronunciation;
 using OetLearner.Api.Services.Settings;
 
 namespace OetLearner.Api.Services.Speaking;
@@ -24,33 +25,78 @@ namespace OetLearner.Api.Services.Speaking;
 /// When the API key is missing the provider falls back to advertising
 /// itself as unconfigured; DI will continue to bind the Mock provider as
 /// before and the pipeline stays usable in tests / local dev.
+///
+/// <para>
+/// Unified STT resolution (one key → all speech-to-text): the canonical
+/// source is the <c>whisper-asr</c> row in Admin → AI Providers, resolved via
+/// the shared <see cref="IPronunciationCredentialResolver"/> (registry-first,
+/// 30s-cached, invalidated on every provider mutation). When that row has no
+/// key the provider falls back to the legacy <c>Speaking:Whisper</c> /
+/// <c>SpeakingWhisper</c> runtime settings so existing deployments are
+/// unaffected. Pronunciation and Conversation ASR already read the same row.
+/// </para>
 /// </summary>
 public sealed class OpenAiWhisperSpeakingProvider : ISpeakingTranscriptionProvider
 {
+    private const string WhisperProviderCode = "whisper-asr";
+    private const string DefaultBaseUrl = "https://api.openai.com/v1";
+    private const string DefaultModel = "whisper-1";
+
     private readonly IHttpClientFactory _http;
     private readonly IFileStorage _storage;
     private readonly IRuntimeSettingsProvider _runtimeSettings;
+    private readonly IPronunciationCredentialResolver _registryCredentials;
+    private readonly OetLearner.Api.Services.Ai.IDirectAiCallRecorder _usageRecorder;
+    private readonly TimeProvider _clock;
     private readonly ILogger<OpenAiWhisperSpeakingProvider> _logger;
 
     public OpenAiWhisperSpeakingProvider(
         IHttpClientFactory http,
         IFileStorage storage,
         IRuntimeSettingsProvider runtimeSettings,
+        IPronunciationCredentialResolver registryCredentials,
+        OetLearner.Api.Services.Ai.IDirectAiCallRecorder usageRecorder,
+        TimeProvider clock,
         ILogger<OpenAiWhisperSpeakingProvider> logger)
     {
         _http = http;
         _storage = storage;
         _runtimeSettings = runtimeSettings;
+        _registryCredentials = registryCredentials;
+        _usageRecorder = usageRecorder;
+        _clock = clock;
         _logger = logger;
     }
 
     public string ProviderCode => "openai-whisper";
 
+    private readonly record struct WhisperCreds(string ApiKey, string BaseUrl, string Model);
+
+    /// <summary>Registry-first / legacy-settings-fallback credential resolution.
+    /// Returns null when neither source has a usable key.</summary>
+    private async Task<WhisperCreds?> ResolveCredentialsAsync(CancellationToken ct)
+    {
+        var registry = await _registryCredentials.ResolveAsync(WhisperProviderCode, ct);
+        if (registry is not null && !string.IsNullOrWhiteSpace(registry.ApiKey))
+        {
+            return new WhisperCreds(
+                registry.ApiKey,
+                string.IsNullOrWhiteSpace(registry.BaseUrl) ? DefaultBaseUrl : registry.BaseUrl!,
+                string.IsNullOrWhiteSpace(registry.DefaultModel) ? DefaultModel : registry.DefaultModel!);
+        }
+
+        var legacy = (await _runtimeSettings.GetAsync(ct)).SpeakingWhisper;
+        if (legacy.IsConfigured)
+            return new WhisperCreds(legacy.ApiKey, legacy.BaseUrl, legacy.Model);
+
+        return null;
+    }
+
     /// <summary>
     /// Synchronous check used at DI bind time + by the pipeline router. Reads
-    /// the cached effective settings; the cache TTL is 30s so admin-panel
-    /// changes propagate quickly. Falls back to false when settings haven't
-    /// finished loading on cold start.
+    /// the cached registry snapshot first, then the cached effective settings;
+    /// both have a 30s TTL so admin-panel changes propagate quickly. Falls back
+    /// to false when neither has finished loading on cold start.
     /// </summary>
     public bool IsConfigured
     {
@@ -58,6 +104,8 @@ public sealed class OpenAiWhisperSpeakingProvider : ISpeakingTranscriptionProvid
         {
             try
             {
+                if (_registryCredentials.IsRegistryConfigured(WhisperProviderCode))
+                    return true;
                 var snapshot = _runtimeSettings.GetAsync().GetAwaiter().GetResult();
                 return snapshot.SpeakingWhisper.IsConfigured;
             }
@@ -76,12 +124,19 @@ public sealed class OpenAiWhisperSpeakingProvider : ISpeakingTranscriptionProvid
         if (string.IsNullOrWhiteSpace(mediaAssetReference))
             throw new ArgumentException("mediaAssetReference is required.", nameof(mediaAssetReference));
 
-        var settings = (await _runtimeSettings.GetAsync(ct)).SpeakingWhisper;
-        if (!settings.IsConfigured)
-            throw new InvalidOperationException("OpenAI Whisper Speaking provider is not configured. Set the API key from Admin → Speaking → Whisper, or via Speaking:Whisper:ApiKey in appsettings.");
+        var creds = await ResolveCredentialsAsync(ct)
+            ?? throw new InvalidOperationException("Whisper speech-to-text is not configured. Paste an API key into the 'whisper-asr' row in Admin → AI Providers (covers all speech-to-text), or set Speaking:Whisper:ApiKey in appsettings.");
 
         using var client = _http.CreateClient("SpeakingWhisperClient");
-        var url = $"{settings.BaseUrl.TrimEnd('/')}/audio/transcriptions";
+        var url = $"{creds.BaseUrl.TrimEnd('/')}/audio/transcriptions";
+
+        var startedAt = _clock.GetUtcNow();
+        var usageContext = new OetLearner.Api.Services.Rulebook.AiUsageContext(
+            UserId: null, AuthAccountId: null, TenantId: null,
+            FeatureCode: Domain.AiFeatureCodes.SttSpeakingTranscribe,
+            RulebookVersion: null, PromptTemplateId: null, SystemPrompt: null, UserPrompt: null,
+            StartedAt: startedAt);
+        int LatencyMs() => (int)(_clock.GetUtcNow() - startedAt).TotalMilliseconds;
 
         HttpClient? audioClient = null;
         Stream? audioStream = null;
@@ -105,13 +160,13 @@ public sealed class OpenAiWhisperSpeakingProvider : ISpeakingTranscriptionProvid
                 mediaType = GuessMediaTypeFromReference(mediaAssetReference);
             }
 
-            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", settings.ApiKey);
+            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", creds.ApiKey);
 
             using var form = new MultipartFormDataContent();
             var audioContent = new StreamContent(audioStream);
             audioContent.Headers.ContentType = new MediaTypeHeaderValue(mediaType);
             form.Add(audioContent, "file", GuessFileName(mediaType));
-            form.Add(new StringContent(settings.Model), "model");
+            form.Add(new StringContent(creds.Model), "model");
             form.Add(new StringContent(language.Length >= 2 ? language[..2] : "en"), "language");
             form.Add(new StringContent("verbose_json"), "response_format");
             form.Add(new StringContent("segment"), "timestamp_granularities[]");
@@ -121,6 +176,10 @@ public sealed class OpenAiWhisperSpeakingProvider : ISpeakingTranscriptionProvid
             if (!response.IsSuccessStatusCode)
             {
                 _logger.LogWarning("Speaking Whisper returned {Status}: {Body}", (int)response.StatusCode, body);
+                await _usageRecorder.RecordFailureAsync(
+                    usageContext, WhisperProviderCode, creds.Model,
+                    Domain.AiCallOutcome.ProviderError, $"http_{(int)response.StatusCode}",
+                    body, LatencyMs(), "stt.speaking", ct);
                 throw new InvalidOperationException($"Speaking Whisper returned status {(int)response.StatusCode}.");
             }
 
@@ -167,6 +226,10 @@ public sealed class OpenAiWhisperSpeakingProvider : ISpeakingTranscriptionProvid
             var meanConfidence = probs.Count > 0 ? probs.Average() : 0.85;
             var segmentsJson = JsonSerializer.Serialize(segments);
 
+            await _usageRecorder.RecordSuccessAsync(
+                usageContext, WhisperProviderCode, creds.Model, usage: null,
+                LatencyMs(), $"stt.words={totalWords}", costEstimateUsd: 0m, ct);
+
             return new SpeakingTranscriptionProviderResult
             {
                 Provider = ProviderCode,
@@ -174,7 +237,7 @@ public sealed class OpenAiWhisperSpeakingProvider : ISpeakingTranscriptionProvid
                 SegmentsJson = segmentsJson,
                 WordCount = totalWords,
                 MeanConfidence = meanConfidence,
-                Model = settings.Model,
+                Model = creds.Model,
             };
         }
         finally

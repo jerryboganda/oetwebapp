@@ -117,14 +117,18 @@ public sealed class AiProviderConnectionTesterTests : IAsyncDisposable
     }
 
     [Theory]
-    [InlineData(AiProviderDialect.ElevenLabsStt, AiProviderCategory.Asr)]
-    [InlineData(AiProviderDialect.ElevenLabsTts, AiProviderCategory.Tts)]
-    public async Task VoiceProviderProbe_ReturnsUnsupportedWithoutChatCompletionNetworkCall(
+    [InlineData(AiProviderDialect.ElevenLabsStt, AiProviderCategory.Asr, "https://api.elevenlabs.io/v1")]
+    [InlineData(AiProviderDialect.ElevenLabsTts, AiProviderCategory.Tts, "https://api.elevenlabs.io/v1")]
+    [InlineData(AiProviderDialect.WhisperAsr, AiProviderCategory.Asr, "https://api.openai.com/v1")]
+    [InlineData(AiProviderDialect.OpenAiCompatible, AiProviderCategory.Ocr, "https://api.mistral.ai")]
+    [InlineData(AiProviderDialect.Anthropic, AiProviderCategory.TextChat, "https://api.anthropic.com/v1")]
+    public async Task VoiceOcrAnthropicProbe_NowMakesNetworkCallAndClassifies(
         AiProviderDialect dialect,
-        AiProviderCategory category)
+        AiProviderCategory category,
+        string baseUrl)
     {
         await using var db = new LearnerDbContext(_options);
-        await SeedProviderAsync(db, "secret-key-1234567890", dialect: dialect, category: category);
+        await SeedProviderAsync(db, "secret-key-1234567890", baseUrl: baseUrl, dialect: dialect, category: category);
         var called = false;
         var tester = NewTester(db, _ =>
         {
@@ -134,11 +138,51 @@ public sealed class AiProviderConnectionTesterTests : IAsyncDisposable
 
         var result = await tester.TestProviderAsync("copilot", default);
 
+        Assert.True(called); // these categories/dialects are now probed
+        Assert.Equal(AiProviderTestStatuses.Ok, result.Status);
+        var persisted = await db.AiProviders.AsNoTracking().FirstAsync(p => p.Code == "copilot");
+        Assert.Equal(AiProviderTestStatuses.Ok, persisted.LastTestStatus);
+    }
+
+    [Fact]
+    public async Task UnsupportedDialect_ReturnsNotAvailableWithoutNetworkCall()
+    {
+        await using var db = new LearnerDbContext(_options);
+        // Phoneme + Mock dialect has no defined probe → "not available".
+        await SeedUnsupportedAsync(db);
+        var called = false;
+        var tester = NewTester(db, _ =>
+        {
+            called = true;
+            return Task.FromResult(BuildResponse(HttpStatusCode.OK));
+        });
+
+        var result = await tester.TestProviderAsync("unsupported", default);
+
         Assert.Equal(AiProviderTestStatuses.Unknown, result.Status);
         Assert.False(called);
         Assert.Contains("not available", result.ErrorMessage);
-        var persisted = await db.AiProviders.AsNoTracking().FirstAsync(p => p.Code == "copilot");
-        Assert.Equal(AiProviderTestStatuses.Unknown, persisted.LastTestStatus);
+    }
+
+    private async Task SeedUnsupportedAsync(LearnerDbContext db)
+    {
+        var protector = _dp.CreateProtector("AiProvider.PlatformKey.v1");
+        db.AiProviders.Add(new AiProvider
+        {
+            Id = Guid.NewGuid().ToString("N"),
+            Code = "unsupported",
+            Name = "Unsupported",
+            Dialect = AiProviderDialect.Mock,
+            Category = AiProviderCategory.Phoneme,
+            BaseUrl = "https://example.com",
+            EncryptedApiKey = protector.Protect("secret-key-1234567890"),
+            ApiKeyHint = string.Empty,
+            DefaultModel = "x",
+            IsActive = true,
+            CreatedAt = _clock.GetUtcNow(),
+            UpdatedAt = _clock.GetUtcNow(),
+        });
+        await db.SaveChangesAsync();
     }
 
     [Fact]

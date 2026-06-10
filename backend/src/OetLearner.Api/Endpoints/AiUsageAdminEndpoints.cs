@@ -548,12 +548,13 @@ public static class AiUsageAdminEndpoints
             IAiProviderConnectionTester tester,
             LearnerDbContext db,
             HttpContext http,
-            CancellationToken ct) =>
+            CancellationToken ct,
+            bool? deep) =>
         {
             var providerRow = await db.AiProviders.AsNoTracking()
                 .FirstOrDefaultAsync(p => p.Code == code, ct);
             if (providerRow is null) return Results.NotFound();
-            var result = await tester.TestProviderAsync(code, ct);
+            var result = await tester.TestProviderAsync(code, ct, deep ?? false);
             // Audit AFTER tester.SaveChanges so the audit row reflects
             // the persisted status. Reload to attach to context for the
             // audit save (tester used its own scope-shared db).

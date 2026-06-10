@@ -124,6 +124,36 @@ Every feature the gateway serves is classified. Defaults:
 | `admin.listening_draft` | ❌ | ❌ | ✅ | Listening 42-item structure drafting from PDFs (grounded), platform only |
 | `admin.reading_draft` | ❌ | ❌ | ✅ | Reading extraction drafting, platform only; human approval required |
 
+**Default routing (locked):** every text-LLM feature code above defaults to
+Anthropic `claude-sonnet-4-6` (provider code `anthropic`) with an OpenAI
+`gpt-4o` fallback, via `AiFeatureRouteDefaults`. Admin per-feature DB routes
+override this; a key-guard in the resolver falls through to the keyed
+top-priority provider when no Anthropic key is configured. Exceptions stay on
+their own providers: `pronunciation.linguistic.score.v1` (Gemini native audio)
+and `class.recording.transcribe.v1` (Whisper STT).
+
+### Direct (non-gateway) AI calls — recorded for traceability
+
+These calls do not flow through the gateway (OCR has no chat route; STT and the
+Listening Part A Claude call are direct) but each writes exactly one
+`AiUsageRecord` via `IDirectAiCallRecorder`, so they surface in
+`/admin/ai-usage` and ai-analytics like any other call. They are NOT in
+`AiFeatureRouteResolver.KnownFeatureCodes` (not gateway-routable):
+
+| Feature code | Provider | Notes |
+|---|---|---|
+| `ocr.listening.parta` | `mistral-ocr` | OCR of Listening Part A question paper + answer key |
+| `ocr.content.pdf_fallback` | `mistral-ocr` | Scanned-PDF fallback in `AutoPdfTextExtractor` (covers all content/question-bank imports) |
+| `ocr.writing.handwriting` | `mistral-ocr` | OCR of a learner's handwritten Writing submission |
+| `listening.parta.extract` | `anthropic` | Claude manifest-structuring (`claude-sonnet-4-6`) with real token counts + cost |
+| `stt.speaking.transcribe` | `whisper-asr` | Speaking attempt transcription |
+| `stt.pronunciation.transcribe` | `whisper-asr` | Pronunciation ASR transcription |
+| `stt.conversation.transcribe` | `whisper-asr` | Conversation ASR transcription |
+
+**Unified Whisper:** all STT resolves the `whisper-asr` AI-provider row first
+(one key covers Speaking, Pronunciation, and Conversation), then legacy
+section settings (`Speaking:Whisper:*` / `Conversation:Whisper:*`), then mock.
+
 Admin can toggle the BYOK column per feature. `AllowByokOnScoringFeatures`
 global switch gates the scoring-critical rows.
 

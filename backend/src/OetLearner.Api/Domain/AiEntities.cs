@@ -316,6 +316,28 @@ public static class AiFeatureCodes
     /// <summary>Haiku-4.5 next-class recommendation after attendance / post-class email.</summary>
     public const string TutorRecommendation = "tutor.recommendation.v1";
 
+    // ── Direct (non-gateway) AI calls — recorded for traceability ──────────
+    // These codes are NOT in AiFeatureRouteResolver.KnownFeatureCodes because
+    // they are not gateway-routable LLM features: OCR/STT have no chat route
+    // and Listening Part A drives Mistral OCR + a forced-tool Claude call
+    // directly. They exist purely so IDirectAiCallRecorder can stamp one
+    // AiUsageRecord per call, surfacing them in /admin/ai-usage + ai-analytics.
+
+    /// <summary>Mistral OCR pass for Listening Part A extraction.</summary>
+    public const string OcrListeningPartA = "ocr.listening.parta";
+    /// <summary>Mistral OCR fallback for scanned/native-text-poor content PDFs.</summary>
+    public const string OcrContentPdfFallback = "ocr.content.pdf_fallback";
+    /// <summary>Mistral OCR pass on a learner's handwritten Writing submission.</summary>
+    public const string OcrWritingHandwriting = "ocr.writing.handwriting";
+    /// <summary>Anthropic Claude manifest-structuring call in Listening Part A.</summary>
+    public const string ListeningPartAExtract = "listening.parta.extract";
+    /// <summary>Whisper speech-to-text for a Speaking attempt transcription.</summary>
+    public const string SttSpeakingTranscribe = "stt.speaking.transcribe";
+    /// <summary>Whisper speech-to-text for Pronunciation ASR scoring.</summary>
+    public const string SttPronunciationTranscribe = "stt.pronunciation.transcribe";
+    /// <summary>Whisper speech-to-text for Conversation ASR turns.</summary>
+    public const string SttConversationTranscribe = "stt.conversation.transcribe";
+
     // Catch-all for calls that pre-date feature classification. Tolerated only
     // during the Slice 1 rollout; future slices will validate against this set.
     public const string Unclassified = "unclassified";

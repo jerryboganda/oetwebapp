@@ -209,6 +209,22 @@ public sealed class AnthropicProvider(
 {
     public string Name => "anthropic";
 
+    /// <summary>
+    /// Normalizes an Anthropic base URL so callers can register it either as
+    /// the bare host (<c>https://api.anthropic.com</c>) or with the version
+    /// segment (<c>https://api.anthropic.com/v1</c>). Strips a trailing
+    /// <c>/v1</c> and any trailing slash; the caller then appends
+    /// <c>v1/messages</c>. Shared with the connection tester so the probe
+    /// predicts runtime behavior exactly.
+    /// </summary>
+    public static string NormalizeBaseUrl(string? baseUrl)
+    {
+        var trimmed = (baseUrl ?? string.Empty).Trim().TrimEnd('/');
+        if (trimmed.EndsWith("/v1", StringComparison.OrdinalIgnoreCase))
+            trimmed = trimmed[..^3].TrimEnd('/');
+        return trimmed;
+    }
+
     public async Task<AiProviderCompletion> CompleteAsync(AiProviderRequest request, CancellationToken ct)
     {
         var baseUrl = request.BaseUrlOverride;
@@ -229,7 +245,9 @@ public sealed class AnthropicProvider(
             throw new InvalidOperationException(unsafeBaseUrlReason);
 
         var client = httpClientFactory.CreateClient("AiRegistryClient");
-        client.BaseAddress = new Uri(baseUrl.TrimEnd('/') + "/");
+        // Normalize so a bare-host BaseUrl (no /v1) still resolves correctly;
+        // we always POST the version-qualified "v1/messages" path below.
+        client.BaseAddress = new Uri(NormalizeBaseUrl(baseUrl) + "/");
         client.DefaultRequestHeaders.Remove("x-api-key");
         client.DefaultRequestHeaders.Add("x-api-key", apiKey);
         client.DefaultRequestHeaders.Remove("anthropic-version");
@@ -264,7 +282,7 @@ public sealed class AnthropicProvider(
         }
 
         using var response = await client.PostAsync(
-            "messages",
+            "v1/messages",
             new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json"),
             ct);
 

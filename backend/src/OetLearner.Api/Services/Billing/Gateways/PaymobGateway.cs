@@ -5,6 +5,7 @@ using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Options;
 using OetLearner.Api.Configuration;
+using OetLearner.Api.Services.Settings;
 
 namespace OetLearner.Api.Services.Billing.Gateways;
 
@@ -12,6 +13,10 @@ namespace OetLearner.Api.Services.Billing.Gateways;
 /// Paymob adapter (Egypt). Cards, Meeza, Fawry (cash voucher), Vodafone/Orange/Etisalat
 /// Cash, Aman. Two-phase flow: auth → order → payment-key → iframe URL.
 /// Webhook HMAC-SHA512.
+///
+/// Reads credentials from <see cref="IRuntimeSettingsProvider"/> (admin-UI DB
+/// overrides with env fallback); webhook verification uses the same effective
+/// HMAC secret as payment creation.
 /// </summary>
 public sealed class PaymobGateway : IPaymentGateway
 {
@@ -19,16 +24,18 @@ public sealed class PaymobGateway : IPaymentGateway
 
     private readonly HttpClient _http;
     private readonly IOptions<BillingOptions> _billing;
+    private readonly IRuntimeSettingsProvider _runtimeSettings;
 
-    public PaymobGateway(HttpClient http, IOptions<BillingOptions> billing)
+    public PaymobGateway(HttpClient http, IOptions<BillingOptions> billing, IRuntimeSettingsProvider runtimeSettings)
     {
         _http = http;
         _billing = billing;
+        _runtimeSettings = runtimeSettings;
     }
 
     public async Task<PaymentIntentResult> CreatePaymentIntentAsync(CreatePaymentIntentRequest request, CancellationToken ct)
     {
-        var opts = _billing.Value.Paymob;
+        var opts = (await _runtimeSettings.GetAsync(ct)).Paymob;
         var billing = _billing.Value;
 
         if (string.IsNullOrWhiteSpace(opts.ApiKey) || string.IsNullOrWhiteSpace(opts.MerchantId))
@@ -115,17 +122,17 @@ public sealed class PaymobGateway : IPaymentGateway
         }
     }
 
-    public Task<WebhookProcessResult> HandleWebhookAsync(string payload, IReadOnlyDictionary<string, string> headers, CancellationToken ct)
+    public async Task<WebhookProcessResult> HandleWebhookAsync(string payload, IReadOnlyDictionary<string, string> headers, CancellationToken ct)
     {
-        var opts = _billing.Value.Paymob;
+        var opts = (await _runtimeSettings.GetAsync(ct)).Paymob;
         if (string.IsNullOrWhiteSpace(opts.HmacSecret))
         {
-            return Task.FromResult(new WebhookProcessResult("paymob_unconfigured", "signature_missing", false, "Paymob HMAC secret not configured"));
+            return new WebhookProcessResult("paymob_unconfigured", "signature_missing", false, "Paymob HMAC secret not configured");
         }
 
         if (!headers.TryGetValue("HMAC", out var signature) && !headers.TryGetValue("X-Paymob-HMAC", out signature))
         {
-            return Task.FromResult(new WebhookProcessResult("paymob_no_sig", "signature_missing", false, "Missing HMAC header"));
+            return new WebhookProcessResult("paymob_no_sig", "signature_missing", false, "Missing HMAC header");
         }
 
         using var doc = JsonDocument.Parse(payload);
@@ -139,7 +146,7 @@ public sealed class PaymobGateway : IPaymentGateway
         var computed = Convert.ToHexString(hmac.ComputeHash(Encoding.UTF8.GetBytes(concatenatedFields))).ToLowerInvariant();
         if (!CryptographicOperations.FixedTimeEquals(Encoding.UTF8.GetBytes(computed), Encoding.UTF8.GetBytes(signature.ToLowerInvariant())))
         {
-            return Task.FromResult(new WebhookProcessResult("paymob_bad_sig", "signature_invalid", false, "Signature mismatch"));
+            return new WebhookProcessResult("paymob_bad_sig", "signature_invalid", false, "Signature mismatch");
         }
 
         var orderId = root.TryGetProperty("obj", out var obj) && obj.TryGetProperty("order", out var order)
@@ -147,7 +154,7 @@ public sealed class PaymobGateway : IPaymentGateway
             : null;
         var success = root.TryGetProperty("obj", out var obj2) && obj2.TryGetProperty("success", out var s) && s.GetBoolean();
 
-        return Task.FromResult(new WebhookProcessResult(
+        return new WebhookProcessResult(
             EventId: orderId ?? Guid.NewGuid().ToString("N"),
             EventType: success ? "payment.succeeded" : "payment.failed",
             Processed: true,
@@ -156,12 +163,12 @@ public sealed class PaymobGateway : IPaymentGateway
             NormalizedStatus: success ? "succeeded" : "failed",
             SafePayloadJson: payload,
             EventCategory: PaymentWebhookCategories.Payment,
-            GatewayObjectId: orderId));
+            GatewayObjectId: orderId);
     }
 
     public async Task<RefundResult> ProcessRefundAsync(string transactionId, decimal amount, string currency, string reason, string idempotencyKey, CancellationToken ct)
     {
-        var opts = _billing.Value.Paymob;
+        var opts = (await _runtimeSettings.GetAsync(ct)).Paymob;
         if (string.IsNullOrWhiteSpace(opts.ApiKey))
         {
             if (_billing.Value.AllowSandboxFallbacks)

@@ -8,6 +8,7 @@ using OetLearner.Api.Contracts;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services;
+using OetLearner.Api.Services.Ai;
 using OetLearner.Api.Services.Content;
 using OetLearner.Api.Services.Rulebook;
 using OetLearner.Api.Services.Writing;
@@ -70,6 +71,8 @@ public class WritingWave6ServiceTests
             storage,
             new FixedClock(),
             Options.Create(new WritingV2Options { OcrEnabled = false }),
+            new StubOcrService(),
+            new StubProviderRegistry(),
             NullLogger<WritingOcrService>.Instance);
         await using var image = new MemoryStream([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 1, 2, 3, 4]);
         var file = new FormFile(image, 0, image.Length, "images", "letter.png");
@@ -379,6 +382,22 @@ public class WritingWave6ServiceTests
                 AppliedRuleIds = request.Prompt.Metadata.AppliedRuleIds,
             });
         }
+    }
+
+    private sealed class StubOcrService : IOcrService
+    {
+        public Task<string> OcrToMarkdownAsync(byte[] documentBytes, string mimeType, string featureCode, string? userId, CancellationToken ct)
+            => throw new InvalidOperationException("OCR not expected in this test (OcrEnabled=false).");
+    }
+
+    private sealed class StubProviderRegistry : IAiProviderRegistry
+    {
+        public Task<AiProvider?> FindByCodeAsync(string code, CancellationToken ct) => Task.FromResult<AiProvider?>(null);
+        public Task<IReadOnlyList<AiProvider>> ListActiveAsync(CancellationToken ct)
+            => Task.FromResult<IReadOnlyList<AiProvider>>(Array.Empty<AiProvider>());
+        public Task<IReadOnlyList<AiProvider>> ListByCategoryAsync(AiProviderCategory category, CancellationToken ct)
+            => Task.FromResult<IReadOnlyList<AiProvider>>(Array.Empty<AiProvider>());
+        public Task<string?> GetPlatformKeyAsync(string providerCode, CancellationToken ct) => Task.FromResult<string?>(null);
     }
 
     private sealed class StubHttpClientFactory : IHttpClientFactory

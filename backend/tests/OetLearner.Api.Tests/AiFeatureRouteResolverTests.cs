@@ -38,12 +38,17 @@ public sealed class AiFeatureRouteResolverTests : IAsyncDisposable
 
     [Theory]
     [InlineData(AiFeatureCodes.ConversationOpening, "anthropic", "claude-sonnet-4-6")]
-    [InlineData(AiFeatureCodes.ConversationReply, "anthropic", "claude-haiku-4-5")]
+    [InlineData(AiFeatureCodes.ConversationReply, "anthropic", "claude-sonnet-4-6")]
     [InlineData(AiFeatureCodes.ConversationEvaluation, "anthropic", "claude-sonnet-4-6")]
+    [InlineData(AiFeatureCodes.WritingGrade, "anthropic", "claude-sonnet-4-6")]
+    [InlineData(AiFeatureCodes.ReadingExplanation, "anthropic", "claude-sonnet-4-6")]
     [InlineData(AiFeatureCodes.PronunciationLinguisticScore, "gemini-pronunciation-audio", "gemini-3.5-flash")]
-    public async Task ResolveAsync_ConversationNoRow_ReturnsStaticDefault(string featureCode, string provider, string model)
+    public async Task ResolveAsync_NoRow_ReturnsStaticDefault_WhenProviderKeyed(string featureCode, string provider, string model)
     {
         await using var db = new LearnerDbContext(_options);
+        // Key-guard: static defaults only resolve when the provider is usable.
+        await SeedProviderAsync(db, "anthropic", keyed: true);
+        await SeedProviderAsync(db, "gemini-pronunciation-audio", keyed: true);
         var resolver = new AiFeatureRouteResolver(db);
 
         var result = await resolver.ResolveAsync(featureCode, default);
@@ -51,6 +56,85 @@ public sealed class AiFeatureRouteResolverTests : IAsyncDisposable
         Assert.NotNull(result);
         Assert.Equal(provider, result!.ProviderCode);
         Assert.Equal(model, result.Model);
+    }
+
+    [Fact]
+    public async Task ResolveAsync_StaticDefault_KeylessPrimary_FallsThroughToNull()
+    {
+        await using var db = new LearnerDbContext(_options);
+        // anthropic row exists but has NO key, and no openai fallback row →
+        // resolver returns null so the gateway falls through to its keyed top
+        // provider (the exact pre-seeder behaviour).
+        await SeedProviderAsync(db, "anthropic", keyed: false);
+        var resolver = new AiFeatureRouteResolver(db);
+
+        var result = await resolver.ResolveAsync(AiFeatureCodes.WritingGrade, default);
+
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public async Task ResolveAsync_StaticDefault_KeylessPrimary_UsesKeyedFallback()
+    {
+        await using var db = new LearnerDbContext(_options);
+        await SeedProviderAsync(db, "anthropic", keyed: false);
+        await SeedProviderAsync(db, "openai", keyed: true);
+        var resolver = new AiFeatureRouteResolver(db);
+
+        var result = await resolver.ResolveAsync(AiFeatureCodes.WritingGrade, default);
+
+        Assert.NotNull(result);
+        Assert.Equal("openai", result!.ProviderCode);
+        Assert.Equal("gpt-4o", result.Model);
+    }
+
+    [Fact]
+    public async Task ResolveAsync_StaticDefault_KeyOnAccountPool_IsUsable()
+    {
+        await using var db = new LearnerDbContext(_options);
+        var providerId = await SeedProviderAsync(db, "anthropic", keyed: false);
+        db.AiProviderAccounts.Add(new AiProviderAccount
+        {
+            Id = Guid.NewGuid().ToString("N"),
+            ProviderId = providerId,
+            Label = "pool-1",
+            EncryptedApiKey = "cipher",
+            ApiKeyHint = "…key",
+            Priority = 0,
+            IsActive = true,
+            PeriodMonthKey = "2026-05",
+            CreatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow,
+        });
+        await db.SaveChangesAsync();
+        var resolver = new AiFeatureRouteResolver(db);
+
+        var result = await resolver.ResolveAsync(AiFeatureCodes.WritingGrade, default);
+
+        Assert.NotNull(result);
+        Assert.Equal("anthropic", result!.ProviderCode);
+    }
+
+    private static async Task<string> SeedProviderAsync(LearnerDbContext db, string code, bool keyed)
+    {
+        var id = Guid.NewGuid().ToString("N");
+        db.AiProviders.Add(new AiProvider
+        {
+            Id = id,
+            Code = code,
+            Name = code,
+            Dialect = AiProviderDialect.OpenAiCompatible,
+            Category = AiProviderCategory.TextChat,
+            BaseUrl = "https://example.com/v1",
+            EncryptedApiKey = keyed ? "cipher" : string.Empty,
+            ApiKeyHint = string.Empty,
+            DefaultModel = "x",
+            IsActive = true,
+            CreatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow,
+        });
+        await db.SaveChangesAsync();
+        return id;
     }
 
     [Fact]

@@ -3,6 +3,9 @@ using System.Text.Json;
 using Microsoft.Extensions.Logging;
 
 using OetLearner.Api.Configuration;
+using OetLearner.Api.Domain;
+using OetLearner.Api.Services.Ai;
+using OetLearner.Api.Services.Rulebook;
 using OetLearner.Api.Services.Settings;
 
 namespace OetLearner.Api.Services.Conversation.Asr;
@@ -11,8 +14,11 @@ public sealed class WhisperConversationAsrProvider(
     IHttpClientFactory httpClientFactory,
     IConversationOptionsProvider optionsProvider,
     IRuntimeSettingsProvider runtimeSettings,
+    IDirectAiCallRecorder usageRecorder,
+    TimeProvider clock,
     ILogger<WhisperConversationAsrProvider> logger) : IConversationAsrProvider
 {
+    private const string WhisperProviderCode = "whisper-asr";
     private ConversationOptions ReadOptions() => optionsProvider.GetAsync().GetAwaiter().GetResult();
 
     public string Name => "whisper";
@@ -47,15 +53,24 @@ public sealed class WhisperConversationAsrProvider(
         if (string.IsNullOrWhiteSpace(apiKey) || string.IsNullOrWhiteSpace(whisperUrl))
             throw new InvalidOperationException("Whisper provider is not configured.");
 
+        var resolvedModel = whisperModel ?? "whisper-1";
         var client = httpClientFactory.CreateClient("ConversationWhisperClient");
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
         var url = $"{whisperUrl.TrimEnd('/')}/audio/transcriptions";
+
+        var sttStartedAt = clock.GetUtcNow();
+        var sttContext = new AiUsageContext(
+            UserId: null, AuthAccountId: null, TenantId: null,
+            FeatureCode: AiFeatureCodes.SttConversationTranscribe,
+            RulebookVersion: null, PromptTemplateId: null, SystemPrompt: null, UserPrompt: null,
+            StartedAt: sttStartedAt);
+        int SttLatencyMs() => (int)(clock.GetUtcNow() - sttStartedAt).TotalMilliseconds;
 
         using var form = new MultipartFormDataContent();
         var audioContent = new StreamContent(request.Audio);
         audioContent.Headers.ContentType = new MediaTypeHeaderValue(request.AudioMimeType);
         form.Add(audioContent, "file", GuessFileName(request.AudioMimeType));
-        form.Add(new StringContent(whisperModel ?? "whisper-1"), "model");
+        form.Add(new StringContent(resolvedModel), "model");
         var locale = request.Locale ?? "en-GB";
         var lang = locale.Length >= 2 ? locale.Substring(0, 2) : "en";
         form.Add(new StringContent(lang), "language");
@@ -66,6 +81,9 @@ public sealed class WhisperConversationAsrProvider(
         if (!response.IsSuccessStatusCode)
         {
             logger.LogWarning("Whisper ASR returned status {Status}", (int)response.StatusCode);
+            await usageRecorder.RecordFailureAsync(
+                sttContext, WhisperProviderCode, resolvedModel, AiCallOutcome.ProviderError,
+                $"http_{(int)response.StatusCode}", body, SttLatencyMs(), "stt.conversation", ct);
             throw new ConversationAsrException("whisper_error", $"Whisper returned {(int)response.StatusCode}");
         }
 
@@ -100,6 +118,11 @@ public sealed class WhisperConversationAsrProvider(
             }
             if (probs.Count > 0) confidence = Math.Clamp(probs.Average(), 0.0, 1.0);
         }
+
+        await usageRecorder.RecordSuccessAsync(
+            sttContext, WhisperProviderCode, resolvedModel, usage: null,
+            SttLatencyMs(), $"stt.chars={text.Length}", costEstimateUsd: 0m, ct);
+
         return new ConversationAsrResult(
             text, confidence, duration.HasValue ? (int)(duration.Value * 1000) : 0,
             lang, Name, $"whisper {text.Length} chars",

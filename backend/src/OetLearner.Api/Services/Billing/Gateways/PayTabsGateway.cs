@@ -6,12 +6,17 @@ using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Options;
 using OetLearner.Api.Configuration;
+using OetLearner.Api.Services.Settings;
 
 namespace OetLearner.Api.Services.Billing.Gateways;
 
 /// <summary>
 /// PayTabs adapter (UAE/Saudi/Oman/Qatar/Kuwait/Bahrain/Egypt/Jordan).
 /// Hosted Payment Page API. Webhook HMAC-SHA256.
+///
+/// Reads credentials from <see cref="IRuntimeSettingsProvider"/> (admin-UI DB
+/// overrides with env fallback); webhook verification uses the same effective
+/// secret as payment creation.
 /// </summary>
 public sealed class PayTabsGateway : IPaymentGateway
 {
@@ -19,16 +24,18 @@ public sealed class PayTabsGateway : IPaymentGateway
 
     private readonly HttpClient _http;
     private readonly IOptions<BillingOptions> _billing;
+    private readonly IRuntimeSettingsProvider _runtimeSettings;
 
-    public PayTabsGateway(HttpClient http, IOptions<BillingOptions> billing)
+    public PayTabsGateway(HttpClient http, IOptions<BillingOptions> billing, IRuntimeSettingsProvider runtimeSettings)
     {
         _http = http;
         _billing = billing;
+        _runtimeSettings = runtimeSettings;
     }
 
     public async Task<PaymentIntentResult> CreatePaymentIntentAsync(CreatePaymentIntentRequest request, CancellationToken ct)
     {
-        var opts = _billing.Value.PayTabs;
+        var opts = (await _runtimeSettings.GetAsync(ct)).PayTabs;
         var billing = _billing.Value;
 
         if (string.IsNullOrWhiteSpace(opts.ServerKey) || string.IsNullOrWhiteSpace(opts.ProfileId))
@@ -78,24 +85,24 @@ public sealed class PayTabsGateway : IPaymentGateway
             CheckoutUrl: GetStringOrThrow(root, "redirect_url"));
     }
 
-    public Task<WebhookProcessResult> HandleWebhookAsync(string payload, IReadOnlyDictionary<string, string> headers, CancellationToken ct)
+    public async Task<WebhookProcessResult> HandleWebhookAsync(string payload, IReadOnlyDictionary<string, string> headers, CancellationToken ct)
     {
-        var opts = _billing.Value.PayTabs;
+        var opts = (await _runtimeSettings.GetAsync(ct)).PayTabs;
         if (string.IsNullOrWhiteSpace(opts.WebhookSecret))
         {
-            return Task.FromResult(new WebhookProcessResult("paytabs_unconfigured", "signature_missing", false, "PayTabs webhook secret not configured"));
+            return new WebhookProcessResult("paytabs_unconfigured", "signature_missing", false, "PayTabs webhook secret not configured");
         }
 
         if (!headers.TryGetValue("Signature", out var signature) || string.IsNullOrEmpty(signature))
         {
-            return Task.FromResult(new WebhookProcessResult("paytabs_no_sig", "signature_missing", false, "Missing Signature header"));
+            return new WebhookProcessResult("paytabs_no_sig", "signature_missing", false, "Missing Signature header");
         }
 
         using var hmac = new HMACSHA256(Encoding.UTF8.GetBytes(opts.WebhookSecret));
         var computed = Convert.ToHexString(hmac.ComputeHash(Encoding.UTF8.GetBytes(payload))).ToLowerInvariant();
         if (!CryptographicOperations.FixedTimeEquals(Encoding.UTF8.GetBytes(computed), Encoding.UTF8.GetBytes(signature.ToLowerInvariant())))
         {
-            return Task.FromResult(new WebhookProcessResult("paytabs_bad_sig", "signature_invalid", false, "Signature mismatch"));
+            return new WebhookProcessResult("paytabs_bad_sig", "signature_invalid", false, "Signature mismatch");
         }
 
         using var doc = JsonDocument.Parse(payload);
@@ -103,7 +110,7 @@ public sealed class PayTabsGateway : IPaymentGateway
         var tranRef = GetStringOrNull(root, "tran_ref");
         var paymentStatus = GetStringOrNull(root, "payment_result.response_status");
 
-        return Task.FromResult(new WebhookProcessResult(
+        return new WebhookProcessResult(
             EventId: tranRef ?? Guid.NewGuid().ToString("N"),
             EventType: paymentStatus ?? "payment.unknown",
             Processed: true,
@@ -112,12 +119,12 @@ public sealed class PayTabsGateway : IPaymentGateway
             NormalizedStatus: paymentStatus switch { "A" => "succeeded", "H" => "pending", "P" => "pending", _ => "failed" },
             SafePayloadJson: payload,
             EventCategory: PaymentWebhookCategories.Payment,
-            GatewayObjectId: tranRef));
+            GatewayObjectId: tranRef);
     }
 
     public async Task<RefundResult> ProcessRefundAsync(string transactionId, decimal amount, string currency, string reason, string idempotencyKey, CancellationToken ct)
     {
-        var opts = _billing.Value.PayTabs;
+        var opts = (await _runtimeSettings.GetAsync(ct)).PayTabs;
         if (string.IsNullOrWhiteSpace(opts.ServerKey))
         {
             if (_billing.Value.AllowSandboxFallbacks)

@@ -153,6 +153,49 @@ export interface SpeakingFeaturesSettings {
   speakingV2Enabled: boolean | null;
 }
 
+export interface CheckoutComSettings {
+  apiBaseUrl: string;
+  secretKey: string;
+  publicKey: string;
+  processingChannelId: string;
+  webhookSecret: string;
+  successUrl: string;
+  cancelUrl: string;
+  isConfigured?: boolean | null;
+}
+
+export interface PaymobSettings {
+  apiBaseUrl: string;
+  apiKey: string;
+  merchantId: string;
+  hmacSecret: string;
+  integrationIdsJson: string;
+  iframeId: number | null;
+  successUrl: string;
+  cancelUrl: string;
+  isConfigured?: boolean | null;
+}
+
+export interface PayTabsSettings {
+  apiBaseUrl: string;
+  serverKey: string;
+  profileId: string;
+  webhookSecret: string;
+  successUrl: string;
+  cancelUrl: string;
+  isConfigured?: boolean | null;
+}
+
+export interface SoketiSettings {
+  host: string;
+  port: number | null;
+  appId: string;
+  appKey: string;
+  appSecret: string;
+  useTls: boolean | null;
+  enabled: boolean | null;
+}
+
 export interface RuntimeSettingsResponse {
   email: EmailSettings;
   billing: BillingSettings;
@@ -168,6 +211,10 @@ export interface RuntimeSettingsResponse {
   speakingStorage: SpeakingStorageSettings;
   speakingCompliance: SpeakingComplianceSettingsData;
   speakingFeatures: SpeakingFeaturesSettings;
+  checkoutCom: CheckoutComSettings;
+  paymob: PaymobSettings;
+  payTabs: PayTabsSettings;
+  soketi: SoketiSettings;
   updatedBy: string | null;
   updatedByUserId?: string | null;
   updatedAt: string | null;
@@ -180,7 +227,7 @@ export interface RuntimeSettingsIntegrationTestResponse {
   testedAt: string;
 }
 
-type SectionId = 'email' | 'billing' | 'sentry' | 'backup' | 'oauth' | 'push' | 'uploadScanner' | 'zoom' | 'speakingWhisper' | 'speakingLiveKit' | 'speakingAi' | 'speakingStorage' | 'speakingCompliance' | 'speakingFeatures';
+type SectionId = 'email' | 'billing' | 'sentry' | 'backup' | 'oauth' | 'push' | 'uploadScanner' | 'zoom' | 'speakingWhisper' | 'speakingLiveKit' | 'speakingAi' | 'speakingStorage' | 'speakingCompliance' | 'speakingFeatures' | 'checkoutCom' | 'paymob' | 'payTabs' | 'soketi';
 
 type ToastState = { variant: 'success' | 'error'; message: string } | null;
 type TestStatusState = Partial<Record<SectionId, RuntimeSettingsIntegrationTestResponse>>;
@@ -322,6 +369,46 @@ const SPEAKING_FEATURES_FIELDS: FieldDef<SpeakingFeaturesSettings>[] = [
   { key: 'speakingV2Enabled', label: 'Enable Speaking V2 Module', type: 'checkbox', hint: 'Feature flag that gates the full Speaking v2 module rollout to learners.' },
 ];
 
+const CHECKOUT_COM_FIELDS: FieldDef<CheckoutComSettings>[] = [
+  { key: 'apiBaseUrl', label: 'API Base URL', type: 'url', hint: 'Default: https://api.checkout.com (use https://api.sandbox.checkout.com for testing).' },
+  { key: 'secretKey', label: 'Secret Key', secret: true, hint: 'Server-side Checkout.com key (starts with sk_).' },
+  { key: 'publicKey', label: 'Public Key', hint: 'Client-safe key (starts with pk_).' },
+  { key: 'processingChannelId', label: 'Processing Channel ID', hint: 'pc_… channel id for hosted payments.' },
+  { key: 'webhookSecret', label: 'Webhook Signing Secret', secret: true, hint: 'Verifies Cko-Signature webhook headers.' },
+  { key: 'successUrl', label: 'Success URL', type: 'url' },
+  { key: 'cancelUrl', label: 'Cancel URL', type: 'url' },
+];
+
+const PAYMOB_FIELDS: FieldDef<PaymobSettings>[] = [
+  { key: 'apiBaseUrl', label: 'API Base URL', type: 'url', hint: 'Default: https://accept.paymob.com.' },
+  { key: 'apiKey', label: 'API Key', secret: true, hint: 'Paymob secret API key used for auth tokens.' },
+  { key: 'merchantId', label: 'Merchant ID' },
+  { key: 'hmacSecret', label: 'HMAC Secret', secret: true, hint: 'Verifies the SHA-512 webhook signature.' },
+  { key: 'integrationIdsJson', label: 'Integration IDs (JSON)', hint: 'Method→id map, e.g. {"card":123,"fawry":456}.' },
+  { key: 'iframeId', label: 'Iframe ID', type: 'number', hint: 'Hosted iframe id for the redirect URL.' },
+  { key: 'successUrl', label: 'Success URL', type: 'url' },
+  { key: 'cancelUrl', label: 'Cancel URL', type: 'url' },
+];
+
+const PAYTABS_FIELDS: FieldDef<PayTabsSettings>[] = [
+  { key: 'apiBaseUrl', label: 'API Base URL', type: 'url', hint: 'Region-specific, e.g. https://secure.paytabs.com or https://secure-egypt.paytabs.com.' },
+  { key: 'serverKey', label: 'Server Key', secret: true, hint: 'Authorization header value for PayTabs API.' },
+  { key: 'profileId', label: 'Profile ID', hint: 'Merchant profile id (identifies account + region).' },
+  { key: 'webhookSecret', label: 'Webhook Secret', secret: true, hint: 'Verifies the HMAC-SHA256 Signature header.' },
+  { key: 'successUrl', label: 'Success URL', type: 'url' },
+  { key: 'cancelUrl', label: 'Cancel URL', type: 'url' },
+];
+
+const SOKETI_FIELDS: FieldDef<SoketiSettings>[] = [
+  { key: 'enabled', label: 'Enable Soketi push', type: 'checkbox', hint: 'Server-side realtime websocket dispatch.' },
+  { key: 'host', label: 'Host', hint: 'Soketi server host (e.g. soketi or 127.0.0.1).' },
+  { key: 'port', label: 'Port', type: 'number', hint: 'Default 6001.' },
+  { key: 'appId', label: 'App ID' },
+  { key: 'appKey', label: 'App Key', hint: 'Note: the browser client reads its key from NEXT_PUBLIC_* env — this affects server-side dispatch only.' },
+  { key: 'appSecret', label: 'App Secret', secret: true, hint: 'HMAC secret for signing Pusher-protocol requests.' },
+  { key: 'useTls', label: 'Use TLS (wss/https)', type: 'checkbox' },
+];
+
 const SECTION_META: { id: SectionId; title: string; description: string }[] = [
   { id: 'email', title: 'Email (Brevo + SMTP)', description: 'Transactional email delivery via Brevo with SMTP fallback.' },
   { id: 'billing', title: 'Billing (Stripe)', description: 'Stripe Checkout, Customer Portal, and webhook signing.' },
@@ -331,12 +418,16 @@ const SECTION_META: { id: SectionId; title: string; description: string }[] = [
   { id: 'push', title: 'Push (Browser + APNs + FCM)', description: 'Browser VAPID and native mobile push notifications via Apple and Firebase.' },
   { id: 'uploadScanner', title: 'Upload Scanner (ClamAV)', description: 'Antivirus scanning for learner/admin uploads.' },
   { id: 'zoom', title: 'Zoom Live Classes', description: 'Server-to-server OAuth, Meeting SDK, and webhook verification.' },
-  { id: 'speakingWhisper', title: 'Speaking: Whisper Transcription', description: 'OpenAI Whisper API for speaking session transcription and RULE_40 tone pipeline.' },
+  { id: 'speakingWhisper', title: 'Speaking: Whisper Transcription', description: 'Legacy fallback. The whisper-asr row in Admin → AI Providers takes precedence when it has an API key — configure Whisper there to cover Speaking, Pronunciation, and Conversation transcription with one key.' },
   { id: 'speakingLiveKit', title: 'Speaking: LiveKit (Live Rooms)', description: 'LiveKit Cloud WebRTC for live tutor rooms and egress recording.' },
   { id: 'speakingAi', title: 'Speaking: AI Providers', description: 'Anthropic (Claude scoring + patient turns) and ElevenLabs (AI patient TTS voice).' },
   { id: 'speakingStorage', title: 'Speaking: Recording Storage (AWS S3)', description: 'AWS S3 bucket for speaking session recording archive.' },
   { id: 'speakingCompliance', title: 'Speaking: Compliance & Retention', description: 'Consent versioning, recording retention windows, and audit log retention.' },
   { id: 'speakingFeatures', title: 'Speaking: Feature Flags', description: 'Controls the Speaking v2 module rollout to learners.' },
+  { id: 'checkoutCom', title: 'Payments: Checkout.com', description: 'Premium MENA + global cards (3DS2, Apple/Google Pay, mada). Keys override env config; webhook verification uses the same key.' },
+  { id: 'paymob', title: 'Payments: Paymob', description: 'Egypt — cards, Meeza, Fawry, wallets. Keys override env config; webhook verification uses the same HMAC secret.' },
+  { id: 'payTabs', title: 'Payments: PayTabs', description: 'Gulf + Egypt — cards, mada, KNET, Apple Pay. Keys override env config; webhook verification uses the same key.' },
+  { id: 'soketi', title: 'Realtime: Soketi', description: 'Server-side websocket push. The browser client key comes from NEXT_PUBLIC_* env — changes here affect server dispatch only.' },
 ];
 
 /* ───────────────────────── Helpers ───────────────────────── */
@@ -456,6 +547,45 @@ function emptyResponse(): RuntimeSettingsResponse {
     speakingFeatures: {
       speakingV2Enabled: null,
     },
+    checkoutCom: {
+      apiBaseUrl: '',
+      secretKey: '',
+      publicKey: '',
+      processingChannelId: '',
+      webhookSecret: '',
+      successUrl: '',
+      cancelUrl: '',
+      isConfigured: false,
+    },
+    paymob: {
+      apiBaseUrl: '',
+      apiKey: '',
+      merchantId: '',
+      hmacSecret: '',
+      integrationIdsJson: '',
+      iframeId: null,
+      successUrl: '',
+      cancelUrl: '',
+      isConfigured: false,
+    },
+    payTabs: {
+      apiBaseUrl: '',
+      serverKey: '',
+      profileId: '',
+      webhookSecret: '',
+      successUrl: '',
+      cancelUrl: '',
+      isConfigured: false,
+    },
+    soketi: {
+      host: '',
+      port: null,
+      appId: '',
+      appKey: '',
+      appSecret: '',
+      useTls: null,
+      enabled: null,
+    },
     updatedBy: null,
     updatedByUserId: null,
     updatedAt: null,
@@ -481,6 +611,10 @@ function normalizeResponse(data: Partial<RuntimeSettingsResponse>): RuntimeSetti
     speakingStorage: { ...empty.speakingStorage, ...data.speakingStorage },
     speakingCompliance: { ...empty.speakingCompliance, ...data.speakingCompliance },
     speakingFeatures: { ...empty.speakingFeatures, ...data.speakingFeatures },
+    checkoutCom: { ...empty.checkoutCom, ...data.checkoutCom },
+    paymob: { ...empty.paymob, ...data.paymob },
+    payTabs: { ...empty.payTabs, ...data.payTabs },
+    soketi: { ...empty.soketi, ...data.soketi },
   });
 }
 
@@ -536,6 +670,25 @@ function sanitizeSecretFields(data: RuntimeSettingsResponse): RuntimeSettingsRes
     speakingStorage: {
       ...data.speakingStorage,
       awsSecretAccessKey: maskUnexpectedSecret(data.speakingStorage.awsSecretAccessKey),
+    },
+    checkoutCom: {
+      ...data.checkoutCom,
+      secretKey: maskUnexpectedSecret(data.checkoutCom.secretKey),
+      webhookSecret: maskUnexpectedSecret(data.checkoutCom.webhookSecret),
+    },
+    paymob: {
+      ...data.paymob,
+      apiKey: maskUnexpectedSecret(data.paymob.apiKey),
+      hmacSecret: maskUnexpectedSecret(data.paymob.hmacSecret),
+    },
+    payTabs: {
+      ...data.payTabs,
+      serverKey: maskUnexpectedSecret(data.payTabs.serverKey),
+      webhookSecret: maskUnexpectedSecret(data.payTabs.webhookSecret),
+    },
+    soketi: {
+      ...data.soketi,
+      appSecret: maskUnexpectedSecret(data.soketi.appSecret),
     },
   };
 }
@@ -837,6 +990,10 @@ export function RuntimeSettingsClient() {
     speakingStorage: false,
     speakingCompliance: false,
     speakingFeatures: false,
+    checkoutCom: false,
+    paymob: false,
+    payTabs: false,
+    soketi: false,
   });
 
   const load = useCallback(async () => {
@@ -1343,6 +1500,138 @@ export function RuntimeSettingsClient() {
                     onChange={(next) => updateField('speakingFeatures', field.key, Boolean(next) as never)}
                   />
                 ))}
+
+              {section.id === 'checkoutCom' &&
+                CHECKOUT_COM_FIELDS.map((field) =>
+                  field.secret ? (
+                    <SecretField
+                      key={field.key}
+                      label={field.label}
+                      hint={field.hint}
+                      serverValue={String(server.checkoutCom[field.key] ?? '')}
+                      draftValue={String(draft.checkoutCom[field.key] ?? '')}
+                      onChange={(next) => updateField('checkoutCom', field.key, next as never)}
+                    />
+                  ) : (
+                    <PlainField
+                      key={field.key}
+                      label={field.label}
+                      hint={field.hint}
+                      type={field.type}
+                      value={draft.checkoutCom[field.key] as string | number | boolean | null}
+                      onChange={(next) =>
+                        updateField(
+                          'checkoutCom',
+                          field.key,
+                          (field.type === 'number'
+                            ? parseNullableNumberInput(String(next))
+                            : field.type === 'checkbox'
+                              ? Boolean(next)
+                              : String(next)) as never,
+                        )
+                      }
+                    />
+                  ),
+                )}
+
+              {section.id === 'paymob' &&
+                PAYMOB_FIELDS.map((field) =>
+                  field.secret ? (
+                    <SecretField
+                      key={field.key}
+                      label={field.label}
+                      hint={field.hint}
+                      serverValue={String(server.paymob[field.key] ?? '')}
+                      draftValue={String(draft.paymob[field.key] ?? '')}
+                      onChange={(next) => updateField('paymob', field.key, next as never)}
+                    />
+                  ) : (
+                    <PlainField
+                      key={field.key}
+                      label={field.label}
+                      hint={field.hint}
+                      type={field.type}
+                      value={draft.paymob[field.key] as string | number | boolean | null}
+                      onChange={(next) =>
+                        updateField(
+                          'paymob',
+                          field.key,
+                          (field.type === 'number'
+                            ? parseNullableNumberInput(String(next))
+                            : field.type === 'checkbox'
+                              ? Boolean(next)
+                              : String(next)) as never,
+                        )
+                      }
+                    />
+                  ),
+                )}
+
+              {section.id === 'payTabs' &&
+                PAYTABS_FIELDS.map((field) =>
+                  field.secret ? (
+                    <SecretField
+                      key={field.key}
+                      label={field.label}
+                      hint={field.hint}
+                      serverValue={String(server.payTabs[field.key] ?? '')}
+                      draftValue={String(draft.payTabs[field.key] ?? '')}
+                      onChange={(next) => updateField('payTabs', field.key, next as never)}
+                    />
+                  ) : (
+                    <PlainField
+                      key={field.key}
+                      label={field.label}
+                      hint={field.hint}
+                      type={field.type}
+                      value={draft.payTabs[field.key] as string | number | boolean | null}
+                      onChange={(next) =>
+                        updateField(
+                          'payTabs',
+                          field.key,
+                          (field.type === 'number'
+                            ? parseNullableNumberInput(String(next))
+                            : field.type === 'checkbox'
+                              ? Boolean(next)
+                              : String(next)) as never,
+                        )
+                      }
+                    />
+                  ),
+                )}
+
+              {section.id === 'soketi' &&
+                SOKETI_FIELDS.map((field) =>
+                  field.secret ? (
+                    <SecretField
+                      key={field.key}
+                      label={field.label}
+                      hint={field.hint}
+                      serverValue={String(server.soketi[field.key] ?? '')}
+                      draftValue={String(draft.soketi[field.key] ?? '')}
+                      onChange={(next) => updateField('soketi', field.key, next as never)}
+                    />
+                  ) : (
+                    <PlainField
+                      key={field.key}
+                      label={field.label}
+                      hint={field.hint}
+                      type={field.type}
+                      value={draft.soketi[field.key] as string | number | boolean | null}
+                      onChange={(next) =>
+                        updateField(
+                          'soketi',
+                          field.key,
+                          (field.type === 'number'
+                            ? parseNullableNumberInput(String(next))
+                            : field.type === 'checkbox'
+                              ? Boolean(next)
+                              : String(next)) as never,
+                        )
+                      }
+                    />
+                  ),
+                )}
             </Section>
           ))}
 

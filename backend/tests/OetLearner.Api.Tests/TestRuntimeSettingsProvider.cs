@@ -24,6 +24,10 @@ internal sealed class TestRuntimeSettingsProvider(EffectiveSettings settings, Ru
             SpeakingStorage: SpeakingSettingsTestDefaults.Storage(),
             SpeakingCompliance: SpeakingSettingsTestDefaults.Compliance(),
             SpeakingFeatures: SpeakingSettingsTestDefaults.Features(),
+            CheckoutCom: DefaultCheckoutCom(),
+            Paymob: DefaultPaymob(),
+            PayTabs: DefaultPayTabs(),
+            Soketi: DefaultSoketi(),
             UpdatedByUserId: null,
             UpdatedByUserName: null,
             UpdatedAt: null));
@@ -56,6 +60,10 @@ internal sealed class TestRuntimeSettingsProvider(EffectiveSettings settings, Ru
             SpeakingStorage: SpeakingSettingsTestDefaults.Storage(),
             SpeakingCompliance: SpeakingSettingsTestDefaults.Compliance(),
             SpeakingFeatures: SpeakingSettingsTestDefaults.Features(),
+            CheckoutCom: DefaultCheckoutCom(),
+            Paymob: DefaultPaymob(),
+            PayTabs: DefaultPayTabs(),
+            Soketi: DefaultSoketi(),
             UpdatedByUserId: null,
             UpdatedByUserName: null,
             UpdatedAt: null));
@@ -90,6 +98,10 @@ internal sealed class TestRuntimeSettingsProvider(EffectiveSettings settings, Ru
             SpeakingStorage: SpeakingSettingsTestDefaults.Storage(),
             SpeakingCompliance: SpeakingSettingsTestDefaults.Compliance(),
             SpeakingFeatures: SpeakingSettingsTestDefaults.Features(),
+            CheckoutCom: DefaultCheckoutCom(),
+            Paymob: DefaultPaymob(),
+            PayTabs: DefaultPayTabs(),
+            Soketi: DefaultSoketi(),
             UpdatedByUserId: null,
             UpdatedByUserName: null,
             UpdatedAt: null));
@@ -123,6 +135,18 @@ internal sealed class TestRuntimeSettingsProvider(EffectiveSettings settings, Ru
     private static LiveClassSettings DefaultLiveClassSettings()
         => new(AiRecordingProcessingEnabled: false);
 
+    public static CheckoutComSettings DefaultCheckoutCom()
+        => new("https://api.checkout.com", null, null, null, null, null, null);
+
+    public static PaymobSettings DefaultPaymob()
+        => new("https://accept.paymob.com", null, null, null, new Dictionary<string, int>(), 0, null, null);
+
+    public static PayTabsSettings DefaultPayTabs()
+        => new("https://secure.paytabs.com", null, null, null, null, null);
+
+    public static SoketiSettings DefaultSoketi()
+        => new("localhost", 6001, "oet-app", "oet-key", null, false, true);
+
     /// <summary>Convenience builder for Wave A2 tests that need the AI
     /// recording-processing flag in a specific state.</summary>
     public static TestRuntimeSettingsProvider WithLiveClassAi(bool enabled)
@@ -143,6 +167,10 @@ internal sealed class TestRuntimeSettingsProvider(EffectiveSettings settings, Ru
             SpeakingStorage: SpeakingSettingsTestDefaults.Storage(),
             SpeakingCompliance: SpeakingSettingsTestDefaults.Compliance(),
             SpeakingFeatures: SpeakingSettingsTestDefaults.Features(),
+            CheckoutCom: DefaultCheckoutCom(),
+            Paymob: DefaultPaymob(),
+            PayTabs: DefaultPayTabs(),
+            Soketi: DefaultSoketi(),
             UpdatedByUserId: null,
             UpdatedByUserName: null,
             UpdatedAt: null));

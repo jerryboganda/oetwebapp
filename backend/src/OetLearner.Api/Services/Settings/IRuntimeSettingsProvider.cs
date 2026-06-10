@@ -60,6 +60,10 @@ public sealed record EffectiveSettings(
     SpeakingStorageSettings SpeakingStorage,
     SpeakingComplianceSettings SpeakingCompliance,
     SpeakingFeatureSettings SpeakingFeatures,
+    CheckoutComSettings CheckoutCom,
+    PaymobSettings Paymob,
+    PayTabsSettings PayTabs,
+    SoketiSettings Soketi,
     string? UpdatedByUserId,
     string? UpdatedByUserName,
     DateTimeOffset? UpdatedAt);
@@ -228,3 +232,53 @@ public sealed record SpeakingComplianceSettings(
 /// </summary>
 public sealed record SpeakingFeatureSettings(
     bool SpeakingV2Enabled);
+
+/// <summary>Checkout.com payment gateway settings (DB-over-env merged).
+/// Secrets decrypted; <see cref="IsConfigured"/> gates live calls.</summary>
+public sealed record CheckoutComSettings(
+    string ApiBaseUrl,
+    string? SecretKey,
+    string? PublicKey,
+    string? ProcessingChannelId,
+    string? WebhookSecret,
+    string? SuccessUrl,
+    string? CancelUrl)
+{
+    public bool IsConfigured => !string.IsNullOrWhiteSpace(SecretKey);
+}
+
+/// <summary>Paymob payment gateway settings (DB-over-env merged).</summary>
+public sealed record PaymobSettings(
+    string ApiBaseUrl,
+    string? ApiKey,
+    string? MerchantId,
+    string? HmacSecret,
+    IReadOnlyDictionary<string, int> IntegrationIds,
+    int IframeId,
+    string? SuccessUrl,
+    string? CancelUrl)
+{
+    public bool IsConfigured => !string.IsNullOrWhiteSpace(ApiKey) && !string.IsNullOrWhiteSpace(MerchantId);
+}
+
+/// <summary>PayTabs payment gateway settings (DB-over-env merged).</summary>
+public sealed record PayTabsSettings(
+    string ApiBaseUrl,
+    string? ServerKey,
+    string? ProfileId,
+    string? WebhookSecret,
+    string? SuccessUrl,
+    string? CancelUrl)
+{
+    public bool IsConfigured => !string.IsNullOrWhiteSpace(ServerKey) && !string.IsNullOrWhiteSpace(ProfileId);
+}
+
+/// <summary>Soketi realtime websocket push settings (DB-over-env merged).</summary>
+public sealed record SoketiSettings(
+    string Host,
+    int Port,
+    string AppId,
+    string AppKey,
+    string? AppSecret,
+    bool UseTls,
+    bool Enabled);

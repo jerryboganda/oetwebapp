@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using OetLearner.Api.Configuration;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services.Ai;
 using OetLearner.Api.Services.AiManagement;
 using OetLearner.Api.Services.Rulebook;
 using OetLearner.Api.Services.Settings;
@@ -29,8 +30,11 @@ public sealed class WhisperPronunciationAsrProvider(
     IAiGatewayService aiGateway,
     IPronunciationCredentialResolver credentialResolver,
     IRuntimeSettingsProvider runtimeSettings,
+    IDirectAiCallRecorder usageRecorder,
+    TimeProvider clock,
     ILogger<WhisperPronunciationAsrProvider> logger) : IPronunciationAsrProvider
 {
+    private const string WhisperProviderCode = "whisper-asr";
     private readonly PronunciationOptions _options = options.Value;
 
     public string Name => "whisper";
@@ -69,6 +73,14 @@ public sealed class WhisperPronunciationAsrProvider(
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
         var url = $"{baseUrl.TrimEnd('/')}/audio/transcriptions";
 
+        var sttStartedAt = clock.GetUtcNow();
+        var sttContext = new AiUsageContext(
+            UserId: request.UserId, AuthAccountId: null, TenantId: null,
+            FeatureCode: AiFeatureCodes.SttPronunciationTranscribe,
+            RulebookVersion: null, PromptTemplateId: null, SystemPrompt: null, UserPrompt: null,
+            StartedAt: sttStartedAt);
+        int SttLatencyMs() => (int)(clock.GetUtcNow() - sttStartedAt).TotalMilliseconds;
+
         using var form = new MultipartFormDataContent();
         var audioContent = new StreamContent(request.Audio);
         audioContent.Headers.ContentType = new MediaTypeHeaderValue(request.AudioMimeType);
@@ -83,6 +95,9 @@ public sealed class WhisperPronunciationAsrProvider(
         if (!response.IsSuccessStatusCode)
         {
             logger.LogWarning("Whisper ASR returned {Status}: {Body}", (int)response.StatusCode, body);
+            await usageRecorder.RecordFailureAsync(
+                sttContext, WhisperProviderCode, model, AiCallOutcome.ProviderError,
+                $"http_{(int)response.StatusCode}", body, SttLatencyMs(), "stt.pronunciation", ct);
             throw new PronunciationAsrException(
                 "whisper_error",
                 $"Whisper returned {(int)response.StatusCode}");
@@ -103,6 +118,10 @@ public sealed class WhisperPronunciationAsrProvider(
             }
         }
         double? duration = root.TryGetProperty("duration", out var d) && d.ValueKind == JsonValueKind.Number ? d.GetDouble() : null;
+
+        await usageRecorder.RecordSuccessAsync(
+            sttContext, WhisperProviderCode, model, usage: null,
+            SttLatencyMs(), $"stt.words={heardWords.Count}", costEstimateUsd: 0m, ct);
 
         // ── Step 2: deterministic word-alignment scoring ─────────────────────
         var refWords = MockPronunciationAsrProvider.TokenizeWords(request.ReferenceText);

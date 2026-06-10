@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services;
+using OetLearner.Api.Services.Ai;
 using OetLearner.Api.Services.Content;
 using OetLearner.Api.Services.Rulebook;
 
@@ -94,15 +95,19 @@ public interface IListeningPartAExtractionService
 public sealed class ListeningPartAExtractionService(
     LearnerDbContext db,
     IFileStorage storage,
-    IMistralOcrClient ocr,
+    IOcrService ocr,
     IListeningAuthoringService authoring,
     IAiProviderRegistry registry,
     IHttpClientFactory httpClientFactory,
+    IDirectAiCallRecorder usageRecorder,
+    TimeProvider clock,
     ILogger<ListeningPartAExtractionService> logger) : IListeningPartAExtractionService
 {
     public const string AnthropicProviderCode = "anthropic";
     private const string DefaultAnthropicBaseUrl = "https://api.anthropic.com";
-    private const string DefaultModel = "claude-opus-4-8";
+    // Claude Sonnet 4.6 is the app-wide contextual-understanding model; the
+    // registered `anthropic` row's DefaultModel overrides this when set.
+    private const string DefaultModel = "claude-sonnet-4-6";
     private const string ToolName = "emit_part_a_manifest";
 
     private static readonly JsonSerializerOptions CamelJson = new()
@@ -141,10 +146,12 @@ public sealed class ListeningPartAExtractionService(
         var questionBytes = await ReadAssetBytesAsync(questionPaper, ct);
         var answerBytes = await ReadAssetBytesAsync(answerKey, ct);
 
-        var questionMarkdown = await ocr.OcrToMarkdownAsync(questionBytes, questionPaper.MediaAsset!.MimeType, ct);
-        var answerMarkdown = await ocr.OcrToMarkdownAsync(answerBytes, answerKey.MediaAsset!.MimeType, ct);
+        var questionMarkdown = await ocr.OcrToMarkdownAsync(
+            questionBytes, questionPaper.MediaAsset!.MimeType, AiFeatureCodes.OcrListeningPartA, adminId, ct);
+        var answerMarkdown = await ocr.OcrToMarkdownAsync(
+            answerBytes, answerKey.MediaAsset!.MimeType, AiFeatureCodes.OcrListeningPartA, adminId, ct);
 
-        var manifestJson = await CallClaudeManifestAsync(questionMarkdown, answerMarkdown, ct);
+        var manifestJson = await CallClaudeManifestAsync(questionMarkdown, answerMarkdown, adminId, ct);
 
         ListeningStructureManifest? manifest;
         try
@@ -336,7 +343,7 @@ public sealed class ListeningPartAExtractionService(
 
     // ── Claude call (forced tool, no temperature for Opus 4.7/4.8) ──────────────
 
-    private async Task<string> CallClaudeManifestAsync(string questionMarkdown, string answerMarkdown, CancellationToken ct)
+    private async Task<string> CallClaudeManifestAsync(string questionMarkdown, string answerMarkdown, string adminId, CancellationToken ct)
     {
         var row = await registry.FindByCodeAsync(AnthropicProviderCode, ct)
             ?? throw new InvalidOperationException(
@@ -353,6 +360,19 @@ public sealed class ListeningPartAExtractionService(
         var userText =
             "QUESTION PAPER (OCR Markdown):\n\n" + questionMarkdown +
             "\n\n=====\n\nANSWER KEY (OCR Markdown):\n\n" + answerMarkdown;
+
+        var startedAt = clock.GetUtcNow();
+        var usageContext = new AiUsageContext(
+            UserId: adminId,
+            AuthAccountId: null,
+            TenantId: null,
+            FeatureCode: AiFeatureCodes.ListeningPartAExtract,
+            RulebookVersion: null,
+            PromptTemplateId: ToolName,
+            SystemPrompt: SystemPrompt,
+            UserPrompt: userText,
+            StartedAt: startedAt);
+        int LatencyMs() => (int)(clock.GetUtcNow() - startedAt).TotalMilliseconds;
 
         var payload = new Dictionary<string, object?>
         {
@@ -391,16 +411,37 @@ public sealed class ListeningPartAExtractionService(
         client.DefaultRequestHeaders.Remove("anthropic-version");
         client.DefaultRequestHeaders.Add("anthropic-version", "2023-06-01");
 
-        using var response = await client.PostAsync(
-            "v1/messages",
-            new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json"),
-            ct);
-        var body = await response.Content.ReadAsStringAsync(ct);
+        HttpResponseMessage response;
+        string body;
+        try
+        {
+            response = await client.PostAsync(
+                "v1/messages",
+                new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json"),
+                ct);
+            body = await response.Content.ReadAsStringAsync(ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            await usageRecorder.RecordFailureAsync(
+                usageContext, AnthropicProviderCode, model, AiCallOutcome.ProviderError,
+                "anthropic_network", ex.Message, LatencyMs(), "listening.parta.extract", ct);
+            throw;
+        }
+
         if (!response.IsSuccessStatusCode)
+        {
+            response.Dispose();
+            await usageRecorder.RecordFailureAsync(
+                usageContext, AnthropicProviderCode, model, AiCallOutcome.ProviderError,
+                $"http_{(int)response.StatusCode}", Truncate(body, 500), LatencyMs(), "listening.parta.extract", ct);
             throw new InvalidOperationException(
                 $"Claude extraction failed: HTTP {(int)response.StatusCode} {response.ReasonPhrase}. {Truncate(body, 500)}");
+        }
+        response.Dispose();
 
         using var doc = JsonDocument.Parse(body);
+        var usage = ParseAnthropicUsage(doc.RootElement);
         if (doc.RootElement.TryGetProperty("content", out var content) && content.ValueKind == JsonValueKind.Array)
         {
             foreach (var block in content.EnumerateArray())
@@ -409,11 +450,34 @@ public sealed class ListeningPartAExtractionService(
                     && string.Equals(t.GetString(), "tool_use", StringComparison.Ordinal)
                     && block.TryGetProperty("input", out var input))
                 {
+                    var cost = usage is null
+                        ? 0m
+                        : row.PricePer1kPromptTokens * usage.PromptTokens / 1000m
+                          + row.PricePer1kCompletionTokens * usage.CompletionTokens / 1000m;
+                    await usageRecorder.RecordSuccessAsync(
+                        usageContext, AnthropicProviderCode, model, usage,
+                        LatencyMs(), "listening.parta.extract", cost, ct);
                     return input.GetRawText();
                 }
             }
         }
+
+        await usageRecorder.RecordFailureAsync(
+            usageContext, AnthropicProviderCode, model, AiCallOutcome.ProviderError,
+            "no_tool_use", "Claude did not return a tool_use manifest block.", LatencyMs(), "listening.parta.extract", ct);
         throw new InvalidOperationException("Claude did not return a tool_use manifest block.");
+    }
+
+    /// <summary>Parse the Anthropic <c>usage</c> block (input_tokens /
+    /// output_tokens) into the gateway's <see cref="AiUsage"/> shape. Returns
+    /// null when absent so the recorder persists zero tokens.</summary>
+    private static AiUsage? ParseAnthropicUsage(JsonElement root)
+    {
+        if (!root.TryGetProperty("usage", out var u) || u.ValueKind != JsonValueKind.Object)
+            return null;
+        var input = u.TryGetProperty("input_tokens", out var it) && it.ValueKind == JsonValueKind.Number ? it.GetInt32() : 0;
+        var output = u.TryGetProperty("output_tokens", out var ot) && ot.ValueKind == JsonValueKind.Number ? ot.GetInt32() : 0;
+        return new AiUsage { PromptTokens = input, CompletionTokens = output };
     }
 
     // ── Asset helpers ──────────────────────────────────────────────────────────

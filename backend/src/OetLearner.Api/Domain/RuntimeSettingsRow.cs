@@ -166,6 +166,43 @@ public class RuntimeSettingsRow
     // ── Speaking Feature Flag ──────────────────────────────────────
     public bool? SpeakingV2Enabled { get; set; }
 
+    // ── Checkout.com (premium MENA + global cards) ─────────────────
+    [MaxLength(512)] public string? CheckoutComApiBaseUrl { get; set; }
+    public string? CheckoutComSecretKeyEncrypted { get; set; }
+    [MaxLength(256)] public string? CheckoutComPublicKey { get; set; }
+    [MaxLength(128)] public string? CheckoutComProcessingChannelId { get; set; }
+    public string? CheckoutComWebhookSecretEncrypted { get; set; }
+    [MaxLength(1024)] public string? CheckoutComSuccessUrl { get; set; }
+    [MaxLength(1024)] public string? CheckoutComCancelUrl { get; set; }
+
+    // ── Paymob (Egypt) ─────────────────────────────────────────────
+    [MaxLength(512)] public string? PaymobApiBaseUrl { get; set; }
+    public string? PaymobApiKeyEncrypted { get; set; }
+    [MaxLength(128)] public string? PaymobMerchantId { get; set; }
+    public string? PaymobHmacSecretEncrypted { get; set; }
+    /// <summary>JSON map of method name → integration id (e.g. {"card":123}).</summary>
+    [MaxLength(1024)] public string? PaymobIntegrationIdsJson { get; set; }
+    public int? PaymobIframeId { get; set; }
+    [MaxLength(1024)] public string? PaymobSuccessUrl { get; set; }
+    [MaxLength(1024)] public string? PaymobCancelUrl { get; set; }
+
+    // ── PayTabs (Gulf/Egypt) ───────────────────────────────────────
+    [MaxLength(512)] public string? PayTabsApiBaseUrl { get; set; }
+    public string? PayTabsServerKeyEncrypted { get; set; }
+    [MaxLength(128)] public string? PayTabsProfileId { get; set; }
+    public string? PayTabsWebhookSecretEncrypted { get; set; }
+    [MaxLength(1024)] public string? PayTabsSuccessUrl { get; set; }
+    [MaxLength(1024)] public string? PayTabsCancelUrl { get; set; }
+
+    // ── Soketi (realtime websocket push) ───────────────────────────
+    [MaxLength(256)] public string? SoketiHost { get; set; }
+    public int? SoketiPort { get; set; }
+    [MaxLength(128)] public string? SoketiAppId { get; set; }
+    [MaxLength(256)] public string? SoketiAppKey { get; set; }
+    public string? SoketiAppSecretEncrypted { get; set; }
+    public bool? SoketiUseTls { get; set; }
+    public bool? SoketiEnabled { get; set; }
+
     // ── Audit ──────────────────────────────────────────────────────
     [MaxLength(64)]
     public string? UpdatedByUserId { get; set; }

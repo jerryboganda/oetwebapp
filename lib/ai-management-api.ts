@@ -365,13 +365,21 @@ export const deactivateAiProvider = (id: string) =>
   aiApi<void>(`/v1/admin/ai/providers/${id}`, { method: 'DELETE' });
 
 /**
- * Phase 4: admin-initiated connectivity probe. Sends a 1-token chat
- * completion to the provider and returns the classifier outcome plus a
- * latency reading. Persisted server-side as `lastTestedAt` /
- * `lastTestStatus` / `lastTestError` on the provider row.
+ * Admin-initiated connectivity probe. Sends the cheapest credential-
+ * validating request for the provider's category/dialect (chat completion,
+ * Anthropic /v1/messages, OCR/ASR model list, Azure token, etc.) and returns
+ * the classifier outcome plus a latency reading. Persisted server-side as
+ * `lastTestedAt` / `lastTestStatus` / `lastTestError` on the provider row.
+ *
+ * @param deep When true (Mistral OCR only), runs a functional probe that
+ *   sends a tiny embedded PDF through the real `/v1/ocr` endpoint instead of
+ *   the cheap auth-only model-list read. Costs ~1 OCR page.
  */
-export const testAiProvider = (code: string) =>
-  aiApi<AiProviderTestResult>(`/v1/admin/ai/providers/${code}/test`, { method: 'POST' });
+export const testAiProvider = (code: string, deep = false) =>
+  aiApi<AiProviderTestResult>(
+    `/v1/admin/ai/providers/${code}/test${deep ? '?deep=true' : ''}`,
+    { method: 'POST' },
+  );
 
 /**
  * Calls the provider's OpenAI-compatible `GET /models` endpoint via the

@@ -801,7 +801,11 @@ builder.Services.AddScoped<OetLearner.Api.Services.Listening.IListeningBackfillS
 // Listening Part A AI-assisted data entry: Mistral OCR (PDF→Markdown) + Claude
 // (structures into the canonical note-completion manifest). Drafts are staged
 // for human review and approved through ListeningAuthoringService.ImportManifestAsync.
-builder.Services.AddScoped<OetLearner.Api.Services.Listening.IMistralOcrClient, OetLearner.Api.Services.Listening.MistralOcrClient>();
+builder.Services.AddScoped<OetLearner.Api.Services.Ai.IMistralOcrClient, OetLearner.Api.Services.Ai.MistralOcrClient>();
+builder.Services.AddScoped<OetLearner.Api.Services.Ai.IOcrService, OetLearner.Api.Services.Ai.OcrService>();
+// Singleton-safe usage recorder for direct (non-gateway) AI calls — OCR, STT,
+// and the Listening Part A Claude call. Scopes internally per record.
+builder.Services.AddSingleton<OetLearner.Api.Services.Ai.IDirectAiCallRecorder, OetLearner.Api.Services.Ai.DirectAiCallRecorder>();
 builder.Services.AddScoped<OetLearner.Api.Services.Listening.IListeningPartAExtractionService, OetLearner.Api.Services.Listening.ListeningPartAExtractionService>();
 // Listening TTS synthesis. The DI seam picks between provider implementations
 // based on appsettings `Listening:TtsProvider`. Supported values:
@@ -1498,6 +1502,10 @@ builder.Services.AddScoped<OetLearner.Api.Services.AiAssistant.IAiAssistantGatew
 // Strictly additive: never overwrites existing rows; selectors still
 // read credentials from existing options sources.
 builder.Services.AddHostedService<OetLearner.Api.Services.Voice.AiVoiceProviderSeeder>();
+// Registered AFTER the voice seeder so an env-derived whisper-asr row (if any)
+// wins creation; this seeder only backfills missing canonical rows keyless so
+// admins can paste a key in /admin/ai-providers and the integration just works.
+builder.Services.AddHostedService<OetLearner.Api.Services.Ai.CoreAiProviderSeeder>();
 builder.Services.AddHostedService<OetLearner.Api.Services.AiAssistant.AiAssistantFeatureRouteSeeder>();
 builder.Services.AddScoped<OetLearner.Api.Services.Grammar.IGrammarDraftService,
     OetLearner.Api.Services.Grammar.GrammarDraftService>();

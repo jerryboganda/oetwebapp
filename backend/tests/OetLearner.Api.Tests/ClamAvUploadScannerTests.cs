@@ -76,6 +76,10 @@ public sealed class ClamAvUploadScannerTests
             SpeakingStorage: SpeakingSettingsTestDefaults.Storage(),
             SpeakingCompliance: SpeakingSettingsTestDefaults.Compliance(),
             SpeakingFeatures: SpeakingSettingsTestDefaults.Features(),
+            CheckoutCom: TestRuntimeSettingsProvider.DefaultCheckoutCom(),
+            Paymob: TestRuntimeSettingsProvider.DefaultPaymob(),
+            PayTabs: TestRuntimeSettingsProvider.DefaultPayTabs(),
+            Soketi: TestRuntimeSettingsProvider.DefaultSoketi(),
             UpdatedByUserId: null,
             UpdatedByUserName: null,
             UpdatedAt: null));

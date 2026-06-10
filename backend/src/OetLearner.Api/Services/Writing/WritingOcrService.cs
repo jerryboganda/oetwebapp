@@ -5,7 +5,9 @@ using Microsoft.Extensions.Options;
 using OetLearner.Api.Contracts;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services.Ai;
 using OetLearner.Api.Services.Content;
+using OetLearner.Api.Services.Rulebook;
 using OetLearner.Api.Services.Writing.Configuration;
 
 namespace OetLearner.Api.Services.Writing;
@@ -54,6 +56,8 @@ public sealed class WritingOcrService(
     IFileStorage storage,
     TimeProvider clock,
     IOptions<WritingV2Options> options,
+    IOcrService ocrService,
+    IAiProviderRegistry providerRegistry,
     ILogger<WritingOcrService> logger) : IWritingOcrService
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
@@ -112,6 +116,17 @@ public sealed class WritingOcrService(
         var images = DeserializeStringList(job.ImageUrlsJson);
         try
         {
+            // Preferred OCR — Mistral OCR (canonical provider) when the
+            // mistral-ocr row is keyed. Falls through to the Tesseract → GCV
+            // chain when not configured or when it yields no text.
+            var mistralText = await RunMistralOcrAsync(userId, images, ct);
+            if (!string.IsNullOrWhiteSpace(mistralText))
+            {
+                Complete(job, "mistral-ocr", mistralText!, 0.99);
+                await db.SaveChangesAsync(ct);
+                return ToView(job);
+            }
+
             var tesseractResult = await RunTesseractAsync(images, ct);
             if (tesseractResult.ConfidenceScore >= 0.95)
             {
@@ -151,6 +166,59 @@ public sealed class WritingOcrService(
         job.ConfidenceScore = confidence;
         job.Status = "completed";
         job.CompletedAt = clock.GetUtcNow();
+    }
+
+    /// <summary>OCR each handwritten-essay image via Mistral OCR (canonical
+    /// provider) and concatenate the Markdown. Returns null when the
+    /// <c>mistral-ocr</c> row has no key (so the caller falls through to the
+    /// Tesseract → GCV chain) or when nothing could be extracted. Fail-soft —
+    /// any error logs and returns null. Each page is recorded as an
+    /// <c>AiUsageRecord</c> via <see cref="IOcrService"/>.</summary>
+    private async Task<string?> RunMistralOcrAsync(string userId, IReadOnlyList<string> imageUrls, CancellationToken ct)
+    {
+        if (imageUrls.Count == 0) return null;
+        try
+        {
+            var key = await providerRegistry.GetPlatformKeyAsync(MistralOcrClient.ProviderCode, ct);
+            if (string.IsNullOrEmpty(key)) return null;
+
+            var sb = new System.Text.StringBuilder();
+            foreach (var url in imageUrls)
+            {
+                ct.ThrowIfCancellationRequested();
+                var bytes = await TryLoadImageBytesAsync(url, ct);
+                if (bytes is null || bytes.Length == 0) continue;
+                var markdown = await ocrService.OcrToMarkdownAsync(
+                    bytes, GuessImageMime(url), AiFeatureCodes.OcrWritingHandwriting, userId, ct);
+                sb.AppendLine(markdown);
+                sb.AppendLine();
+            }
+            var text = sb.ToString().Trim();
+            return string.IsNullOrWhiteSpace(text) ? null : text;
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Mistral OCR (writing handwriting) failed; falling through to Tesseract/GCV.");
+            return null;
+        }
+    }
+
+    private static string GuessImageMime(string url)
+    {
+        var path = url.Split('?', 2)[0].ToLowerInvariant();
+        return Path.GetExtension(path) switch
+        {
+            ".png" => "image/png",
+            ".webp" => "image/webp",
+            ".gif" => "image/gif",
+            ".tif" or ".tiff" => "image/tiff",
+            ".pdf" => "application/pdf",
+            _ => "image/jpeg",
+        };
     }
 
     private async Task<OcrResult> RunTesseractAsync(IReadOnlyList<string> imageUrls, CancellationToken ct)

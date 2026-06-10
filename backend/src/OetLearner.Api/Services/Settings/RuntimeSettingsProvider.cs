@@ -1,4 +1,5 @@
 using System.Data.Common;
+using System.Text.Json;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
@@ -31,6 +32,7 @@ public sealed class RuntimeSettingsProvider : IRuntimeSettingsProvider
     private readonly IOptions<UploadScannerOptions> _uploadScanner;
     private readonly IOptions<WebPushOptions> _webPush;
     private readonly IOptions<ZoomOptions> _zoom;
+    private readonly IOptions<SoketiOptions> _soketi;
     private readonly IOptionsMonitor<SmtpOptions> _smtp;
     private readonly IConfiguration _config;
     private readonly IHostEnvironment _environment;
@@ -45,6 +47,7 @@ public sealed class RuntimeSettingsProvider : IRuntimeSettingsProvider
         IOptions<UploadScannerOptions> uploadScanner,
         IOptions<WebPushOptions> webPush,
         IOptions<ZoomOptions> zoom,
+        IOptions<SoketiOptions> soketi,
         IOptionsMonitor<SmtpOptions> smtp,
         IConfiguration config,
         IHostEnvironment environment)
@@ -58,6 +61,7 @@ public sealed class RuntimeSettingsProvider : IRuntimeSettingsProvider
         _uploadScanner = uploadScanner;
         _webPush = webPush;
         _zoom = zoom;
+        _soketi = soketi;
         _smtp = smtp;
         _config = config;
         _environment = environment;
@@ -226,6 +230,10 @@ public sealed class RuntimeSettingsProvider : IRuntimeSettingsProvider
         var speakingStorage = ResolveSpeakingStorage(r);
         var speakingCompliance = ResolveSpeakingCompliance(r);
         var speakingFeatures = ResolveSpeakingFeatures(r);
+        var checkoutCom = ResolveCheckoutCom(r, billing.CheckoutCom);
+        var paymob = ResolvePaymob(r, billing.Paymob);
+        var payTabs = ResolvePayTabs(r, billing.PayTabs);
+        var soketi = ResolveSoketi(r, _soketi.Value);
 
         return new EffectiveSettings(
             Email: email,
@@ -244,10 +252,67 @@ public sealed class RuntimeSettingsProvider : IRuntimeSettingsProvider
             SpeakingStorage: speakingStorage,
             SpeakingCompliance: speakingCompliance,
             SpeakingFeatures: speakingFeatures,
+            CheckoutCom: checkoutCom,
+            Paymob: paymob,
+            PayTabs: payTabs,
+            Soketi: soketi,
             UpdatedByUserId: r.UpdatedByUserId,
             UpdatedByUserName: r.UpdatedByUserName,
             UpdatedAt: r.UpdatedAt == default ? null : r.UpdatedAt);
     }
+
+    // ── Payment gateways + Soketi (DB-over-env, null DB field → env value) ──
+    private CheckoutComSettings ResolveCheckoutCom(RuntimeSettingsRow r, CheckoutComOptions env)
+        => new(
+            ApiBaseUrl: Coalesce(r.CheckoutComApiBaseUrl, env.ApiBaseUrl, "https://api.checkout.com")!,
+            SecretKey: Unprotect(r.CheckoutComSecretKeyEncrypted) ?? NullIfEmpty(env.SecretKey),
+            PublicKey: Coalesce(r.CheckoutComPublicKey, env.PublicKey),
+            ProcessingChannelId: Coalesce(r.CheckoutComProcessingChannelId, env.ProcessingChannelId),
+            WebhookSecret: Unprotect(r.CheckoutComWebhookSecretEncrypted) ?? NullIfEmpty(env.WebhookSecret),
+            SuccessUrl: Coalesce(r.CheckoutComSuccessUrl, env.SuccessUrl),
+            CancelUrl: Coalesce(r.CheckoutComCancelUrl, env.CancelUrl));
+
+    private PaymobSettings ResolvePaymob(RuntimeSettingsRow r, PaymobOptions env)
+    {
+        IReadOnlyDictionary<string, int> integrationIds = env.IntegrationIds;
+        if (!string.IsNullOrWhiteSpace(r.PaymobIntegrationIdsJson))
+        {
+            try
+            {
+                var parsed = JsonSerializer.Deserialize<Dictionary<string, int>>(r.PaymobIntegrationIdsJson!);
+                if (parsed is { Count: > 0 }) integrationIds = parsed;
+            }
+            catch (JsonException) { /* keep env defaults on malformed JSON */ }
+        }
+        return new PaymobSettings(
+            ApiBaseUrl: Coalesce(r.PaymobApiBaseUrl, env.ApiBaseUrl, "https://accept.paymob.com")!,
+            ApiKey: Unprotect(r.PaymobApiKeyEncrypted) ?? NullIfEmpty(env.ApiKey),
+            MerchantId: Coalesce(r.PaymobMerchantId, env.MerchantId),
+            HmacSecret: Unprotect(r.PaymobHmacSecretEncrypted) ?? NullIfEmpty(env.HmacSecret),
+            IntegrationIds: integrationIds,
+            IframeId: r.PaymobIframeId ?? env.IframeId,
+            SuccessUrl: Coalesce(r.PaymobSuccessUrl, env.SuccessUrl),
+            CancelUrl: Coalesce(r.PaymobCancelUrl, env.CancelUrl));
+    }
+
+    private PayTabsSettings ResolvePayTabs(RuntimeSettingsRow r, PayTabsOptions env)
+        => new(
+            ApiBaseUrl: Coalesce(r.PayTabsApiBaseUrl, env.ApiBaseUrl, "https://secure.paytabs.com")!,
+            ServerKey: Unprotect(r.PayTabsServerKeyEncrypted) ?? NullIfEmpty(env.ServerKey),
+            ProfileId: Coalesce(r.PayTabsProfileId, env.ProfileId),
+            WebhookSecret: Unprotect(r.PayTabsWebhookSecretEncrypted) ?? NullIfEmpty(env.WebhookSecret),
+            SuccessUrl: Coalesce(r.PayTabsSuccessUrl, env.SuccessUrl),
+            CancelUrl: Coalesce(r.PayTabsCancelUrl, env.CancelUrl));
+
+    private SoketiSettings ResolveSoketi(RuntimeSettingsRow r, SoketiOptions env)
+        => new(
+            Host: Coalesce(r.SoketiHost, env.Host, "localhost")!,
+            Port: r.SoketiPort ?? (env.Port <= 0 ? 6001 : env.Port),
+            AppId: Coalesce(r.SoketiAppId, env.AppId, "oet-app")!,
+            AppKey: Coalesce(r.SoketiAppKey, env.AppKey, "oet-key")!,
+            AppSecret: Unprotect(r.SoketiAppSecretEncrypted) ?? NullIfEmpty(env.AppSecret),
+            UseTls: r.SoketiUseTls ?? env.UseTls,
+            Enabled: r.SoketiEnabled ?? env.Enabled);
 
     private static LiveClassSettings ResolveLiveClassSettings(RuntimeSettingsRow r)
         => new(AiRecordingProcessingEnabled: r.LiveClassesAiRecordingProcessingEnabled ?? false);

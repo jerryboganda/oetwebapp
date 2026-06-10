@@ -6,12 +6,18 @@ using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Options;
 using OetLearner.Api.Configuration;
+using OetLearner.Api.Services.Settings;
 
 namespace OetLearner.Api.Services.Billing.Gateways;
 
 /// <summary>
 /// Checkout.com adapter (premium MENA + global cards). 3DS2, Apple/Google Pay, mada.
 /// Webhook signature: HMAC-SHA256 over raw body using webhook secret.
+///
+/// Reads its credentials from <see cref="IRuntimeSettingsProvider"/> (admin-UI
+/// DB overrides with env-var fallback) so keys rotate without a redeploy.
+/// Webhook verification reads the SAME effective source as payment creation, so
+/// an admin key rotation can never desync the signature check.
 /// </summary>
 public sealed class CheckoutComGateway : IPaymentGateway
 {
@@ -19,16 +25,18 @@ public sealed class CheckoutComGateway : IPaymentGateway
 
     private readonly HttpClient _http;
     private readonly IOptions<BillingOptions> _billing;
+    private readonly IRuntimeSettingsProvider _runtimeSettings;
 
-    public CheckoutComGateway(HttpClient http, IOptions<BillingOptions> billing)
+    public CheckoutComGateway(HttpClient http, IOptions<BillingOptions> billing, IRuntimeSettingsProvider runtimeSettings)
     {
         _http = http;
         _billing = billing;
+        _runtimeSettings = runtimeSettings;
     }
 
     public async Task<PaymentIntentResult> CreatePaymentIntentAsync(CreatePaymentIntentRequest request, CancellationToken ct)
     {
-        var opts = _billing.Value.CheckoutCom;
+        var opts = (await _runtimeSettings.GetAsync(ct)).CheckoutCom;
         var billing = _billing.Value;
 
         if (string.IsNullOrWhiteSpace(opts.SecretKey))
@@ -85,24 +93,24 @@ public sealed class CheckoutComGateway : IPaymentGateway
                 ?? throw new InvalidOperationException("Checkout.com response missing redirect href."));
     }
 
-    public Task<WebhookProcessResult> HandleWebhookAsync(string payload, IReadOnlyDictionary<string, string> headers, CancellationToken ct)
+    public async Task<WebhookProcessResult> HandleWebhookAsync(string payload, IReadOnlyDictionary<string, string> headers, CancellationToken ct)
     {
-        var opts = _billing.Value.CheckoutCom;
+        var opts = (await _runtimeSettings.GetAsync(ct)).CheckoutCom;
         if (string.IsNullOrWhiteSpace(opts.WebhookSecret))
         {
-            return Task.FromResult(new WebhookProcessResult("cko_unconfigured", "signature_missing", false, "Checkout.com webhook secret not configured"));
+            return new WebhookProcessResult("cko_unconfigured", "signature_missing", false, "Checkout.com webhook secret not configured");
         }
 
         if (!headers.TryGetValue("Cko-Signature", out var signature) || string.IsNullOrEmpty(signature))
         {
-            return Task.FromResult(new WebhookProcessResult("cko_no_sig", "signature_missing", false, "Missing Cko-Signature header"));
+            return new WebhookProcessResult("cko_no_sig", "signature_missing", false, "Missing Cko-Signature header");
         }
 
         using var hmac = new HMACSHA256(Encoding.UTF8.GetBytes(opts.WebhookSecret));
         var computed = Convert.ToHexString(hmac.ComputeHash(Encoding.UTF8.GetBytes(payload))).ToLowerInvariant();
         if (!CryptographicOperations.FixedTimeEquals(Encoding.UTF8.GetBytes(computed), Encoding.UTF8.GetBytes(signature.ToLowerInvariant())))
         {
-            return Task.FromResult(new WebhookProcessResult("cko_bad_sig", "signature_invalid", false, "Signature mismatch"));
+            return new WebhookProcessResult("cko_bad_sig", "signature_invalid", false, "Signature mismatch");
         }
 
         using var doc = JsonDocument.Parse(payload);
@@ -113,7 +121,7 @@ public sealed class CheckoutComGateway : IPaymentGateway
         var paymentId = data.ValueKind == JsonValueKind.Object && data.TryGetProperty("id", out var pid) ? pid.GetString() : null;
         var approved = data.ValueKind == JsonValueKind.Object && data.TryGetProperty("approved", out var ap) && ap.ValueKind == JsonValueKind.True;
 
-        return Task.FromResult(new WebhookProcessResult(
+        return new WebhookProcessResult(
             EventId: eventId ?? Guid.NewGuid().ToString("N"),
             EventType: eventType ?? "payment.unknown",
             Processed: true,
@@ -122,12 +130,12 @@ public sealed class CheckoutComGateway : IPaymentGateway
             NormalizedStatus: approved ? "succeeded" : (eventType?.Contains("refunded", StringComparison.OrdinalIgnoreCase) == true ? "refunded" : "failed"),
             SafePayloadJson: payload,
             EventCategory: eventType?.Contains("refund", StringComparison.OrdinalIgnoreCase) == true ? PaymentWebhookCategories.Refund : PaymentWebhookCategories.Payment,
-            GatewayObjectId: paymentId));
+            GatewayObjectId: paymentId);
     }
 
     public async Task<RefundResult> ProcessRefundAsync(string transactionId, decimal amount, string currency, string reason, string idempotencyKey, CancellationToken ct)
     {
-        var opts = _billing.Value.CheckoutCom;
+        var opts = (await _runtimeSettings.GetAsync(ct)).CheckoutCom;
         if (string.IsNullOrWhiteSpace(opts.SecretKey))
         {
             if (_billing.Value.AllowSandboxFallbacks)

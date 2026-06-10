@@ -95,11 +95,11 @@ public static class AiFeatureRouteDefaults
         new SpeakingAiRouteDefault(
             FeatureCode: SpeakingAiFeatureCodes.SpeakingPatientTurnV1,
             PrimaryProviderCode: "anthropic",
-            PrimaryModel: "claude-haiku-4-5",
+            PrimaryModel: "claude-sonnet-4-6",
             FallbackProviderCode: "openai",
-            FallbackModel: "gpt-4o-mini",
+            FallbackModel: "gpt-4o",
             PromptCachingEnabled: true,
-            Description: "AI patient per-turn LLM (cheap, low-latency)."),
+            Description: "AI patient per-turn LLM (Claude Sonnet 4.6 — contextual understanding)."),
         new SpeakingAiRouteDefault(
             FeatureCode: SpeakingAiFeatureCodes.CardDraftV1,
             PrimaryProviderCode: "anthropic",
@@ -119,11 +119,11 @@ public static class AiFeatureRouteDefaults
         new SpeakingAiRouteDefault(
             FeatureCode: AiFeatureCodes.ConversationReply,
             PrimaryProviderCode: "anthropic",
-            PrimaryModel: "claude-haiku-4-5",
+            PrimaryModel: "claude-sonnet-4-6",
             FallbackProviderCode: "openai",
-            FallbackModel: "gpt-4o-mini",
+            FallbackModel: "gpt-4o",
             PromptCachingEnabled: true,
-            Description: "Conversation live reply turn (cheap, low-latency)."),
+            Description: "Conversation live reply turn (Claude Sonnet 4.6 — contextual understanding)."),
         new SpeakingAiRouteDefault(
             FeatureCode: AiFeatureCodes.ConversationEvaluation,
             PrimaryProviderCode: "anthropic",
@@ -169,20 +169,69 @@ public static class AiFeatureRouteDefaults
         new SpeakingAiRouteDefault(
             FeatureCode: AiFeatureCodes.ClassAssistantQna,
             PrimaryProviderCode: "anthropic",
-            PrimaryModel: "claude-haiku-4-5",
+            PrimaryModel: "claude-sonnet-4-6",
             FallbackProviderCode: "openai",
-            FallbackModel: "gpt-4o-mini",
+            FallbackModel: "gpt-4o",
             PromptCachingEnabled: true,
-            Description: "'Ask AI about this class' transcript RAG Q&A."),
+            Description: "'Ask AI about this class' transcript RAG Q&A (Claude Sonnet 4.6)."),
         new SpeakingAiRouteDefault(
             FeatureCode: AiFeatureCodes.TutorRecommendation,
             PrimaryProviderCode: "anthropic",
-            PrimaryModel: "claude-haiku-4-5",
+            PrimaryModel: "claude-sonnet-4-6",
             FallbackProviderCode: "openai",
-            FallbackModel: "gpt-4o-mini",
+            FallbackModel: "gpt-4o",
             PromptCachingEnabled: true,
-            Description: "Post-attendance next-class recommendation."),
+            Description: "Post-attendance next-class recommendation (Claude Sonnet 4.6)."),
+
+        // ── Universal Claude Sonnet 4.6 contextual-understanding defaults ────
+        // Every remaining text-LLM feature defaults to anthropic/claude-sonnet-4-6
+        // (locked product decision). Admins still override per feature via the
+        // DB-backed AiFeatureRoutes (which win over these static defaults), and
+        // the resolver's key-guard falls through to the keyed top provider when
+        // no Anthropic key is configured — so non-Anthropic deployments are
+        // untouched. Exclusions kept on their own providers: pronunciation
+        // linguistic scoring (Gemini native audio), class-recording transcribe
+        // (Whisper STT), and writing-exemplar embeddings.
+        SonnetDefault(AiFeatureCodes.WritingGrade, "Writing submission grading."),
+        SonnetDefault(AiFeatureCodes.WritingSampleScore, "Writing sample/exemplar scoring."),
+        SonnetDefault(AiFeatureCodes.WritingCoachSuggest, "Writing coach live suggestions."),
+        SonnetDefault(AiFeatureCodes.WritingCoachExplain, "Writing coach explanations."),
+        SonnetDefault(AiFeatureCodes.WritingCoachV1, "Writing module V2 coach."),
+        SonnetDefault(AiFeatureCodes.WritingRewriteV1, "Writing rewrite assistant."),
+        SonnetDefault(AiFeatureCodes.WritingScenarioGenerateV1, "Writing scenario generation."),
+        SonnetDefault(AiFeatureCodes.WritingAppealV1, "Writing appeal second opinion."),
+        SonnetDefault(AiFeatureCodes.WritingCanonDetectV1, "Writing canon detection."),
+        SonnetDefault(AiFeatureCodes.WritingDrillGradeV1, "Writing drill grading."),
+        SonnetDefault(AiFeatureCodes.WritingOutlineV1, "Writing outline generation."),
+        SonnetDefault(AiFeatureCodes.WritingParaphraseV1, "Writing paraphrase tool."),
+        SonnetDefault(AiFeatureCodes.WritingAskV1, "Writing ask/clarify tool."),
+        SonnetDefault(AiFeatureCodes.SpeakingGrade, "Speaking role-play grading."),
+        SonnetDefault(AiFeatureCodes.MockFullGrade, "Full mock grading."),
+        SonnetDefault(AiFeatureCodes.MockRemediationDraft, "Mock remediation plan draft."),
+        SonnetDefault(AiFeatureCodes.PronunciationTip, "Pronunciation tip generation."),
+        SonnetDefault(AiFeatureCodes.PronunciationScore, "Pronunciation scoring (text)."),
+        SonnetDefault(AiFeatureCodes.PronunciationFeedback, "Pronunciation corrective feedback."),
+        SonnetDefault(AiFeatureCodes.ReadingExplanation, "Reading question explanations."),
+        SonnetDefault(AiFeatureCodes.ReadingVocabularyCard, "Reading vocabulary cards."),
+        SonnetDefault(AiFeatureCodes.SummarisePassage, "Passage summarisation."),
+        SonnetDefault(AiFeatureCodes.VocabularyGloss, "On-demand vocabulary glossing."),
+        SonnetDefault(AiFeatureCodes.RecallsMistakeExplain, "Recalls mistake explanation."),
+        SonnetDefault(AiFeatureCodes.RecallsRevisionPlan, "Recalls revision plan."),
+        SonnetDefault(AiFeatureCodes.AdminContentGeneration, "Admin content generation draft."),
+        SonnetDefault(AiFeatureCodes.AdminGrammarDraft, "Admin grammar rule draft."),
+        SonnetDefault(AiFeatureCodes.AdminPronunciationDraft, "Admin pronunciation rule draft."),
+        SonnetDefault(AiFeatureCodes.AdminVocabularyDraft, "Admin vocabulary term draft."),
+        SonnetDefault(AiFeatureCodes.AdminConversationDraft, "Admin conversation scenario draft."),
+        SonnetDefault(AiFeatureCodes.AdminListeningDraft, "Admin listening question draft."),
+        SonnetDefault(AiFeatureCodes.AdminReadingDraft, "Admin reading passage draft."),
+        SonnetDefault(AiFeatureCodes.AdminWritingDraft, "Admin writing task draft."),
     };
+
+    /// <summary>Builds a default route entry pinned to the universal
+    /// contextual-understanding model (Anthropic Claude Sonnet 4.6) with an
+    /// OpenAI gpt-4o fallback and prompt caching on.</summary>
+    private static SpeakingAiRouteDefault SonnetDefault(string featureCode, string description) =>
+        new(featureCode, "anthropic", "claude-sonnet-4-6", "openai", "gpt-4o", true, description);
 }
 
 public static class SpeakingAiRouteDefaults
@@ -252,6 +301,19 @@ public sealed class AiFeatureRouteResolver(LearnerDbContext db) : IAiFeatureRout
         AiFeatureCodes.ClassRecordingTranslate,
         AiFeatureCodes.ClassAssistantQna,
         AiFeatureCodes.TutorRecommendation,
+        // Reading explanations / vocabulary cards — route to Claude Sonnet 4.6.
+        AiFeatureCodes.ReadingExplanation,
+        AiFeatureCodes.ReadingVocabularyCard,
+        // Writing module V2 coaching tools (text LLM; embeddings excluded).
+        AiFeatureCodes.WritingCoachV1,
+        AiFeatureCodes.WritingRewriteV1,
+        AiFeatureCodes.WritingScenarioGenerateV1,
+        AiFeatureCodes.WritingAppealV1,
+        AiFeatureCodes.WritingCanonDetectV1,
+        AiFeatureCodes.WritingDrillGradeV1,
+        AiFeatureCodes.WritingOutlineV1,
+        AiFeatureCodes.WritingParaphraseV1,
+        AiFeatureCodes.WritingAskV1,
     };
 
     /// <summary>Subset of <see cref="KnownFeatureCodes"/> the bulk-route
@@ -282,18 +344,52 @@ public sealed class AiFeatureRouteResolver(LearnerDbContext db) : IAiFeatureRout
         }
 
         // Static fallback: if no DB row exists, return the known route default
-        // default so the gateway has a route even before the seeder has run
-        // (CI tests, fresh DBs, etc.). Other feature codes keep the existing
-        // null behaviour — the gateway falls through to the global default
-        // provider.
+        // so the gateway has a route even before the seeder has run (CI tests,
+        // fresh DBs, etc.). Other feature codes keep the existing null
+        // behaviour — the gateway falls through to the global default provider.
+        //
+        // KEY-GUARD: a static default is only honoured when its provider is
+        // actually usable (row exists, active, and carries a key — directly or
+        // via the failover account pool). Otherwise we try the entry's declared
+        // fallback provider, and finally return null so the gateway falls
+        // through to its highest-priority keyed provider. This is what keeps a
+        // keyless seeded `anthropic` row (added by CoreAiProviderSeeder) from
+        // breaking live grading on deployments that have not configured an
+        // Anthropic key — the exact pre-seeder behaviour is preserved there.
         var staticDefault = AiFeatureRouteDefaults.Defaults
             .FirstOrDefault(d => string.Equals(d.FeatureCode, canonicalFeatureCode, StringComparison.OrdinalIgnoreCase));
         if (staticDefault is not null)
         {
-            return new AiFeatureRouteResolution(staticDefault.PrimaryProviderCode, staticDefault.PrimaryModel);
+            if (await IsProviderUsableAsync(staticDefault.PrimaryProviderCode, ct))
+                return new AiFeatureRouteResolution(staticDefault.PrimaryProviderCode, staticDefault.PrimaryModel);
+
+            if (!string.IsNullOrWhiteSpace(staticDefault.FallbackProviderCode)
+                && await IsProviderUsableAsync(staticDefault.FallbackProviderCode!, ct))
+                return new AiFeatureRouteResolution(staticDefault.FallbackProviderCode!, staticDefault.FallbackModel);
+
+            return null;
         }
 
         return null;
+    }
+
+    /// <summary>True when the provider code resolves to an active row that
+    /// carries a usable key — either directly on the row or on an active row in
+    /// its multi-account failover pool. Used by the static-default key-guard so
+    /// a keyless seeded row never short-circuits the gateway's keyed-provider
+    /// fallthrough.</summary>
+    private async Task<bool> IsProviderUsableAsync(string providerCode, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(providerCode)) return false;
+        var provider = await db.AiProviders.AsNoTracking()
+            .FirstOrDefaultAsync(p => p.Code == providerCode && p.IsActive, ct);
+        if (provider is null) return false;
+        if (!string.IsNullOrEmpty(provider.EncryptedApiKey)) return true;
+        return await db.AiProviderAccounts.AsNoTracking()
+            .AnyAsync(a => a.ProviderId == provider.Id
+                           && a.IsActive
+                           && a.EncryptedApiKey != null
+                           && a.EncryptedApiKey != "", ct);
     }
 
     public bool IsKnownFeatureCode(string featureCode) =>

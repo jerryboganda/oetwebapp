@@ -8,6 +8,8 @@ using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services;
 using OetLearner.Api.Services.Content;
+using OetLearner.Api.Services.Pronunciation;
+using OetLearner.Api.Services.Rulebook;
 using OetLearner.Api.Services.Settings;
 
 namespace OetLearner.Api.Endpoints;
@@ -89,6 +91,10 @@ public static class AdminRuntimeSettingsEndpoints
                     ApplySpeakingStorage(row, request.SpeakingStorage, provider, changedKeys);
                     ApplySpeakingCompliance(row, request.SpeakingCompliance, changedKeys);
                     ApplySpeakingFeatures(row, request.SpeakingFeatures, changedKeys);
+                    ApplyCheckoutCom(row, request.CheckoutCom, provider, changedKeys);
+                    ApplyPaymob(row, request.Paymob, provider, changedKeys);
+                    ApplyPayTabs(row, request.PayTabs, provider, changedKeys);
+                    ApplySoketi(row, request.Soketi, provider, changedKeys);
                 }
                 catch (RuntimeSettingsValidationException ex)
                 {
@@ -128,6 +134,8 @@ public static class AdminRuntimeSettingsEndpoints
                 IRuntimeSettingsProvider provider,
                 IWebHostEnvironment env,
                 IOptions<UploadScannerOptions> scannerOptions,
+                IPronunciationCredentialResolver whisperRegistry,
+                IHttpClientFactory httpClientFactory,
                 TimeProvider clock,
                 CancellationToken ct) =>
             {
@@ -136,7 +144,7 @@ public static class AdminRuntimeSettingsEndpoints
                     return Results.BadRequest(new { message = $"Unknown integration section '{sectionId}'." });
 
                 var testedAt = clock.GetUtcNow();
-                var result = await TestSectionAsync(normalized, provider, env, scannerOptions.Value, testedAt, ct);
+                var result = await TestSectionAsync(normalized, provider, env, scannerOptions.Value, whisperRegistry, httpClientFactory, testedAt, ct);
                 db.AuditEvents.Add(new AuditEvent
                 {
                     Id = Guid.NewGuid().ToString("N"),
@@ -312,6 +320,51 @@ public static class AdminRuntimeSettingsEndpoints
             speakingFeatures = new
             {
                 speakingV2Enabled = settings.SpeakingFeatures.SpeakingV2Enabled,
+            },
+            checkoutCom = new
+            {
+                apiBaseUrl = settings.CheckoutCom.ApiBaseUrl,
+                secretKey = MaskPlainSecret(settings.CheckoutCom.SecretKey),
+                publicKey = settings.CheckoutCom.PublicKey,
+                processingChannelId = settings.CheckoutCom.ProcessingChannelId,
+                webhookSecret = MaskPlainSecret(settings.CheckoutCom.WebhookSecret),
+                successUrl = settings.CheckoutCom.SuccessUrl,
+                cancelUrl = settings.CheckoutCom.CancelUrl,
+                isConfigured = settings.CheckoutCom.IsConfigured,
+            },
+            paymob = new
+            {
+                apiBaseUrl = settings.Paymob.ApiBaseUrl,
+                apiKey = MaskPlainSecret(settings.Paymob.ApiKey),
+                merchantId = settings.Paymob.MerchantId,
+                hmacSecret = MaskPlainSecret(settings.Paymob.HmacSecret),
+                integrationIdsJson = settings.Paymob.IntegrationIds.Count > 0
+                    ? JsonSupport.Serialize(settings.Paymob.IntegrationIds)
+                    : null,
+                iframeId = settings.Paymob.IframeId,
+                successUrl = settings.Paymob.SuccessUrl,
+                cancelUrl = settings.Paymob.CancelUrl,
+                isConfigured = settings.Paymob.IsConfigured,
+            },
+            payTabs = new
+            {
+                apiBaseUrl = settings.PayTabs.ApiBaseUrl,
+                serverKey = MaskPlainSecret(settings.PayTabs.ServerKey),
+                profileId = settings.PayTabs.ProfileId,
+                webhookSecret = MaskPlainSecret(settings.PayTabs.WebhookSecret),
+                successUrl = settings.PayTabs.SuccessUrl,
+                cancelUrl = settings.PayTabs.CancelUrl,
+                isConfigured = settings.PayTabs.IsConfigured,
+            },
+            soketi = new
+            {
+                host = settings.Soketi.Host,
+                port = settings.Soketi.Port,
+                appId = settings.Soketi.AppId,
+                appKey = settings.Soketi.AppKey,
+                appSecret = MaskPlainSecret(settings.Soketi.AppSecret),
+                useTls = settings.Soketi.UseTls,
+                enabled = settings.Soketi.Enabled,
             },
             updatedBy = settings.UpdatedByUserName,
             updatedByUserId = settings.UpdatedByUserId,
@@ -719,6 +772,58 @@ public static class AdminRuntimeSettingsEndpoints
         if (TrySetNullableBool(d.SpeakingV2Enabled, v => row.SpeakingV2Enabled = v, "speakingFeatures.speakingV2Enabled", changed)) { }
     }
 
+    private static void ApplyCheckoutCom(RuntimeSettingsRow row, RuntimeSettingsCheckoutComUpdate? d,
+        IRuntimeSettingsProvider p, List<string> changed)
+    {
+        if (d is null) return;
+        if (TrySetPlain(d.ApiBaseUrl, v => row.CheckoutComApiBaseUrl = v, "checkoutCom.apiBaseUrl", changed)) { }
+        if (TrySetSecret(d.SecretKey, p, v => row.CheckoutComSecretKeyEncrypted = v, "checkoutCom.secretKey", changed)) { }
+        if (TrySetPlain(d.PublicKey, v => row.CheckoutComPublicKey = v, "checkoutCom.publicKey", changed)) { }
+        if (TrySetPlain(d.ProcessingChannelId, v => row.CheckoutComProcessingChannelId = v, "checkoutCom.processingChannelId", changed)) { }
+        if (TrySetSecret(d.WebhookSecret, p, v => row.CheckoutComWebhookSecretEncrypted = v, "checkoutCom.webhookSecret", changed)) { }
+        if (TrySetPlain(d.SuccessUrl, v => row.CheckoutComSuccessUrl = v, "checkoutCom.successUrl", changed)) { }
+        if (TrySetPlain(d.CancelUrl, v => row.CheckoutComCancelUrl = v, "checkoutCom.cancelUrl", changed)) { }
+    }
+
+    private static void ApplyPaymob(RuntimeSettingsRow row, RuntimeSettingsPaymobUpdate? d,
+        IRuntimeSettingsProvider p, List<string> changed)
+    {
+        if (d is null) return;
+        if (TrySetPlain(d.ApiBaseUrl, v => row.PaymobApiBaseUrl = v, "paymob.apiBaseUrl", changed)) { }
+        if (TrySetSecret(d.ApiKey, p, v => row.PaymobApiKeyEncrypted = v, "paymob.apiKey", changed)) { }
+        if (TrySetPlain(d.MerchantId, v => row.PaymobMerchantId = v, "paymob.merchantId", changed)) { }
+        if (TrySetSecret(d.HmacSecret, p, v => row.PaymobHmacSecretEncrypted = v, "paymob.hmacSecret", changed)) { }
+        if (TrySetPlain(d.IntegrationIdsJson, v => row.PaymobIntegrationIdsJson = v, "paymob.integrationIdsJson", changed)) { }
+        if (TrySetNullableInt(d.IframeId, v => row.PaymobIframeId = v, "paymob.iframeId", changed, min: 0, max: int.MaxValue)) { }
+        if (TrySetPlain(d.SuccessUrl, v => row.PaymobSuccessUrl = v, "paymob.successUrl", changed)) { }
+        if (TrySetPlain(d.CancelUrl, v => row.PaymobCancelUrl = v, "paymob.cancelUrl", changed)) { }
+    }
+
+    private static void ApplyPayTabs(RuntimeSettingsRow row, RuntimeSettingsPayTabsUpdate? d,
+        IRuntimeSettingsProvider p, List<string> changed)
+    {
+        if (d is null) return;
+        if (TrySetPlain(d.ApiBaseUrl, v => row.PayTabsApiBaseUrl = v, "payTabs.apiBaseUrl", changed)) { }
+        if (TrySetSecret(d.ServerKey, p, v => row.PayTabsServerKeyEncrypted = v, "payTabs.serverKey", changed)) { }
+        if (TrySetPlain(d.ProfileId, v => row.PayTabsProfileId = v, "payTabs.profileId", changed)) { }
+        if (TrySetSecret(d.WebhookSecret, p, v => row.PayTabsWebhookSecretEncrypted = v, "payTabs.webhookSecret", changed)) { }
+        if (TrySetPlain(d.SuccessUrl, v => row.PayTabsSuccessUrl = v, "payTabs.successUrl", changed)) { }
+        if (TrySetPlain(d.CancelUrl, v => row.PayTabsCancelUrl = v, "payTabs.cancelUrl", changed)) { }
+    }
+
+    private static void ApplySoketi(RuntimeSettingsRow row, RuntimeSettingsSoketiUpdate? d,
+        IRuntimeSettingsProvider p, List<string> changed)
+    {
+        if (d is null) return;
+        if (TrySetPlain(d.Host, v => row.SoketiHost = v, "soketi.host", changed)) { }
+        if (TrySetNullableInt(d.Port, v => row.SoketiPort = v, "soketi.port", changed, min: 1, max: 65535)) { }
+        if (TrySetPlain(d.AppId, v => row.SoketiAppId = v, "soketi.appId", changed)) { }
+        if (TrySetPlain(d.AppKey, v => row.SoketiAppKey = v, "soketi.appKey", changed)) { }
+        if (TrySetSecret(d.AppSecret, p, v => row.SoketiAppSecretEncrypted = v, "soketi.appSecret", changed)) { }
+        if (TrySetNullableBool(d.UseTls, v => row.SoketiUseTls = v, "soketi.useTls", changed)) { }
+        if (TrySetNullableBool(d.Enabled, v => row.SoketiEnabled = v, "soketi.enabled", changed)) { }
+    }
+
     private static void ApplyZoom(RuntimeSettingsRow row, RuntimeSettingsZoomUpdate? d,
         IRuntimeSettingsProvider p, IWebHostEnvironment env, List<string> changed)
     {
@@ -894,7 +999,7 @@ public static class AdminRuntimeSettingsEndpoints
     private static string? NormalizeSectionId(string? sectionId)
     {
         var normalized = sectionId?.Trim().ToLowerInvariant();
-        return normalized is "email" or "billing" or "sentry" or "backup" or "oauth" or "push" or "uploadscanner" or "zoom" or "stripe" or "speakinglivekit" or "speakingai" or "speakingstorage" or "speakingcompliance" or "speakingfeatures" or "speakingwhisper"
+        return normalized is "email" or "billing" or "sentry" or "backup" or "oauth" or "push" or "uploadscanner" or "zoom" or "stripe" or "speakinglivekit" or "speakingai" or "speakingstorage" or "speakingcompliance" or "speakingfeatures" or "speakingwhisper" or "checkoutcom" or "paymob" or "paytabs" or "soketi"
             ? normalized
             : normalized == "upload-scanner" ? "uploadscanner" : null;
     }
@@ -904,6 +1009,8 @@ public static class AdminRuntimeSettingsEndpoints
         IRuntimeSettingsProvider provider,
         IWebHostEnvironment env,
         UploadScannerOptions scannerOptions,
+        IPronunciationCredentialResolver whisperRegistry,
+        IHttpClientFactory httpClientFactory,
         DateTimeOffset testedAt,
         CancellationToken ct)
     {
@@ -940,9 +1047,11 @@ public static class AdminRuntimeSettingsEndpoints
             "stripe" => HasAll(settings.Stripe.SecretKey, settings.Stripe.PublishableKey, settings.Stripe.WebhookSecret)
                 ? Ok(sectionId, "Stripe Tax/Portal/Radar runtime settings appear configured. No live API calls were made.", testedAt)
                 : Failed(sectionId, "Configure Stripe secret key, publishable key, and webhook secret before enabling Tax/Radar.", testedAt),
-            "speakingwhisper" => settings.SpeakingWhisper.IsConfigured
-                ? Ok(sectionId, "Speaking Whisper API key is configured. No transcription was performed.", testedAt)
-                : Failed(sectionId, "Configure a Whisper API key for speaking transcription.", testedAt),
+            "speakingwhisper" => whisperRegistry.IsRegistryConfigured("whisper-asr")
+                ? Ok(sectionId, "Whisper is active via the whisper-asr row in Admin → AI Providers (covers Speaking, Pronunciation, and Conversation). This legacy field is unused while that row has a key.", testedAt)
+                : settings.SpeakingWhisper.IsConfigured
+                    ? Ok(sectionId, "Whisper is active via this legacy field. No transcription was performed. Tip: move the key to the whisper-asr row in AI Providers to cover all speech-to-text with one key.", testedAt)
+                    : Failed(sectionId, "Configure Whisper in the whisper-asr row (Admin → AI Providers) to cover all speech-to-text, or set a key here.", testedAt),
             "speakinglivekit" => settings.SpeakingLiveKit.IsEnabled
                 ? Ok(sectionId, "LiveKit is configured and enabled. No room was created.", testedAt)
                 : Failed(sectionId, "Configure LiveKit provider, API key, and API secret to enable live tutor rooms.", testedAt),
@@ -954,9 +1063,123 @@ public static class AdminRuntimeSettingsEndpoints
                 : Failed(sectionId, "Configure AWS access key, secret, and bucket for speaking recording storage.", testedAt),
             "speakingcompliance" => Ok(sectionId, "Speaking compliance settings are configured via defaults or admin overrides.", testedAt),
             "speakingfeatures" => Ok(sectionId, $"Speaking V2 feature flag is {(settings.SpeakingFeatures.SpeakingV2Enabled ? "enabled" : "disabled")}.", testedAt),
+            "checkoutcom" => await TestCheckoutComAsync(settings.CheckoutCom, httpClientFactory, sectionId, testedAt, ct),
+            "paymob" => await TestPaymobAsync(settings.Paymob, httpClientFactory, sectionId, testedAt, ct),
+            "paytabs" => await TestPayTabsAsync(settings.PayTabs, httpClientFactory, sectionId, testedAt, ct),
+            "soketi" => await TestSoketiAsync(settings.Soketi, httpClientFactory, sectionId, testedAt, ct),
             _ => Failed(sectionId, "Unknown integration section.", testedAt),
         };
     }
+
+    // ── Live, non-destructive payment/Soketi probes (no money moves) ───────
+    private static async Task<RuntimeSettingsIntegrationTestResponse> TestCheckoutComAsync(
+        CheckoutComSettings s, IHttpClientFactory httpClientFactory, string sectionId, DateTimeOffset testedAt, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(s.SecretKey))
+            return Failed(sectionId, "Configure the Checkout.com secret key.", testedAt);
+        var unsafeReason = AiProviderConnectionTester.GetUnsafeBaseUrlReason(s.ApiBaseUrl);
+        if (unsafeReason is not null) return Failed(sectionId, unsafeReason, testedAt);
+        return await ProbeAsync(httpClientFactory, sectionId, testedAt, s.SecretKey, ct, () =>
+        {
+            // Read-only list endpoint — validates the secret without moving money.
+            var req = new HttpRequestMessage(HttpMethod.Get, new Uri(new Uri(EnsureSlash(s.ApiBaseUrl)), "workflows"));
+            req.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", s.SecretKey);
+            return req;
+        });
+    }
+
+    private static async Task<RuntimeSettingsIntegrationTestResponse> TestPaymobAsync(
+        PaymobSettings s, IHttpClientFactory httpClientFactory, string sectionId, DateTimeOffset testedAt, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(s.ApiKey))
+            return Failed(sectionId, "Configure the Paymob API key.", testedAt);
+        var unsafeReason = AiProviderConnectionTester.GetUnsafeBaseUrlReason(s.ApiBaseUrl);
+        if (unsafeReason is not null) return Failed(sectionId, unsafeReason, testedAt);
+        return await ProbeAsync(httpClientFactory, sectionId, testedAt, s.ApiKey, ct, () =>
+        {
+            // Token issuance only — no order/payment is created.
+            var req = new HttpRequestMessage(HttpMethod.Post, new Uri(new Uri(EnsureSlash(s.ApiBaseUrl)), "api/auth/tokens"));
+            req.Content = System.Net.Http.Json.JsonContent.Create(new { api_key = s.ApiKey });
+            return req;
+        });
+    }
+
+    private static async Task<RuntimeSettingsIntegrationTestResponse> TestPayTabsAsync(
+        PayTabsSettings s, IHttpClientFactory httpClientFactory, string sectionId, DateTimeOffset testedAt, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(s.ServerKey) || string.IsNullOrWhiteSpace(s.ProfileId))
+            return Failed(sectionId, "Configure the PayTabs server key and profile id.", testedAt);
+        var unsafeReason = AiProviderConnectionTester.GetUnsafeBaseUrlReason(s.ApiBaseUrl);
+        if (unsafeReason is not null) return Failed(sectionId, unsafeReason, testedAt);
+        // Querying a nonexistent transaction is read-only: a valid key yields a
+        // "not found"-style 2xx/4xx with a body, a bad key yields 401/403.
+        return await ProbeAsync(httpClientFactory, sectionId, testedAt, s.ServerKey, ct, () =>
+        {
+            var req = new HttpRequestMessage(HttpMethod.Post, new Uri(new Uri(EnsureSlash(s.ApiBaseUrl)), "payment/query"));
+            req.Headers.TryAddWithoutValidation("Authorization", s.ServerKey);
+            req.Content = System.Net.Http.Json.JsonContent.Create(new { profile_id = s.ProfileId, tran_ref = "TEST-0" });
+            return req;
+        });
+    }
+
+    private static async Task<RuntimeSettingsIntegrationTestResponse> TestSoketiAsync(
+        SoketiSettings s, IHttpClientFactory httpClientFactory, string sectionId, DateTimeOffset testedAt, CancellationToken ct)
+    {
+        if (!s.Enabled) return Ok(sectionId, "Soketi is disabled. Enable it to dispatch realtime push.", testedAt);
+        if (string.IsNullOrWhiteSpace(s.AppSecret))
+            return Failed(sectionId, "Configure the Soketi app secret.", testedAt);
+        try
+        {
+            using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            timeoutCts.CancelAfter(TimeSpan.FromSeconds(10));
+            var path = $"/apps/{s.AppId}/channels";
+            var timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString();
+            var query = SoketiPusherSigner.BuildSignedQueryString("GET", path, timestamp, s.AppKey, s.AppSecret!, string.Empty);
+            var scheme = s.UseTls ? "https" : "http";
+            var url = $"{scheme}://{s.Host}:{s.Port}{path}?{query}";
+            var client = httpClientFactory.CreateClient("Soketi");
+            using var resp = await client.GetAsync(url, timeoutCts.Token);
+            return (int)resp.StatusCode is >= 200 and < 300
+                ? Ok(sectionId, "Soketi accepted the signed request.", testedAt)
+                : Failed(sectionId, $"Soketi returned HTTP {(int)resp.StatusCode}.", testedAt);
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or OperationCanceledException)
+        {
+            return Failed(sectionId, "Soketi endpoint is unreachable.", testedAt);
+        }
+    }
+
+    /// <summary>Send a probe request with a 10s timeout and classify the result
+    /// (2xx = ok; 401/403 = auth; else failed). Error text is secret-redacted.</summary>
+    private static async Task<RuntimeSettingsIntegrationTestResponse> ProbeAsync(
+        IHttpClientFactory httpClientFactory, string sectionId, DateTimeOffset testedAt,
+        string secretToRedact, CancellationToken ct, Func<HttpRequestMessage> buildRequest)
+    {
+        try
+        {
+            using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            timeoutCts.CancelAfter(TimeSpan.FromSeconds(10));
+            var client = httpClientFactory.CreateClient("RuntimeSettingsTest");
+            using var req = buildRequest();
+            using var resp = await client.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, timeoutCts.Token);
+            if ((int)resp.StatusCode is >= 200 and < 300)
+                return Ok(sectionId, "Credentials accepted. No money was moved.", testedAt);
+            if (resp.StatusCode is System.Net.HttpStatusCode.Unauthorized or System.Net.HttpStatusCode.Forbidden)
+                return Failed(sectionId, $"Authentication rejected (HTTP {(int)resp.StatusCode}). Check the key.", testedAt);
+            // A 4xx that is not auth (e.g. "transaction not found") still proves
+            // the credential was accepted by the gateway.
+            if ((int)resp.StatusCode is >= 400 and < 500)
+                return Ok(sectionId, $"Gateway reachable; credential accepted (HTTP {(int)resp.StatusCode}).", testedAt);
+            return Failed(sectionId, $"Gateway returned HTTP {(int)resp.StatusCode}.", testedAt);
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or OperationCanceledException)
+        {
+            var msg = AiProviderConnectionTester.RedactSecrets(ex.Message, secretToRedact) ?? "Endpoint unreachable.";
+            return Failed(sectionId, msg.Length > 200 ? msg[..200] : msg, testedAt);
+        }
+    }
+
+    private static string EnsureSlash(string url) => url.EndsWith('/') ? url : url + "/";
 
     private static async Task<RuntimeSettingsIntegrationTestResponse> TestUploadScannerAsync(
         UploadScannerSettings settings,
@@ -1032,6 +1255,59 @@ public sealed class RuntimeSettingsUpdateRequest
     public RuntimeSettingsSpeakingStorageUpdate? SpeakingStorage { get; set; }
     public RuntimeSettingsSpeakingComplianceUpdate? SpeakingCompliance { get; set; }
     public RuntimeSettingsSpeakingFeaturesUpdate? SpeakingFeatures { get; set; }
+    public RuntimeSettingsCheckoutComUpdate? CheckoutCom { get; set; }
+    public RuntimeSettingsPaymobUpdate? Paymob { get; set; }
+    public RuntimeSettingsPayTabsUpdate? PayTabs { get; set; }
+    public RuntimeSettingsSoketiUpdate? Soketi { get; set; }
+}
+
+/// <summary>Checkout.com payment gateway overrides.</summary>
+public sealed class RuntimeSettingsCheckoutComUpdate
+{
+    public string? ApiBaseUrl { get; set; }
+    public string? SecretKey { get; set; }
+    public string? PublicKey { get; set; }
+    public string? ProcessingChannelId { get; set; }
+    public string? WebhookSecret { get; set; }
+    public string? SuccessUrl { get; set; }
+    public string? CancelUrl { get; set; }
+}
+
+/// <summary>Paymob payment gateway overrides.</summary>
+public sealed class RuntimeSettingsPaymobUpdate
+{
+    public string? ApiBaseUrl { get; set; }
+    public string? ApiKey { get; set; }
+    public string? MerchantId { get; set; }
+    public string? HmacSecret { get; set; }
+    /// <summary>JSON map of method → integration id, e.g. {"card":123}.</summary>
+    public string? IntegrationIdsJson { get; set; }
+    public int? IframeId { get; set; }
+    public string? SuccessUrl { get; set; }
+    public string? CancelUrl { get; set; }
+}
+
+/// <summary>PayTabs payment gateway overrides.</summary>
+public sealed class RuntimeSettingsPayTabsUpdate
+{
+    public string? ApiBaseUrl { get; set; }
+    public string? ServerKey { get; set; }
+    public string? ProfileId { get; set; }
+    public string? WebhookSecret { get; set; }
+    public string? SuccessUrl { get; set; }
+    public string? CancelUrl { get; set; }
+}
+
+/// <summary>Soketi realtime websocket push overrides.</summary>
+public sealed class RuntimeSettingsSoketiUpdate
+{
+    public string? Host { get; set; }
+    public int? Port { get; set; }
+    public string? AppId { get; set; }
+    public string? AppKey { get; set; }
+    public string? AppSecret { get; set; }
+    public bool? UseTls { get; set; }
+    public bool? Enabled { get; set; }
 }
 
 /// <summary>2026-05-28 audit fix — Speaking Whisper transcription overrides.</summary>

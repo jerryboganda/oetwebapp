@@ -68,14 +68,53 @@ const PRESETS: Record<string, Partial<AiProviderRow & { apiKey?: string }>> = {
     code: 'anthropic',
     name: 'Anthropic',
     dialect: 'Anthropic',
-    baseUrl: 'https://api.anthropic.com',
-    defaultModel: 'claude-3-5-sonnet-20241022',
+    // BaseUrl includes /v1 — the runtime AnthropicProvider and the connection
+    // tester both normalize, but seeding /v1 keeps the row canonical.
+    baseUrl: 'https://api.anthropic.com/v1',
+    // Default contextual-understanding model across the app (admin can still
+    // override per feature in /admin/ai-providers → Feature routes).
+    defaultModel: 'claude-sonnet-4-6',
     pricePer1kPromptTokens: 0.003,
     pricePer1kCompletionTokens: 0.015,
     retryCount: 2,
     circuitBreakerThreshold: 5,
     circuitBreakerWindowSeconds: 30,
     failoverPriority: 20,
+    isActive: true,
+  },
+  'mistral-ocr': {
+    code: 'mistral-ocr',
+    name: 'Mistral OCR',
+    dialect: 'OpenAiCompatible',
+    category: 'Ocr',
+    // Canonical OCR provider — used everywhere OCR is needed (Listening Part A
+    // extraction + scanned-PDF fallback for all content/question-bank imports).
+    baseUrl: 'https://api.mistral.ai',
+    defaultModel: 'mistral-ocr-latest',
+    pricePer1kPromptTokens: 0,
+    pricePer1kCompletionTokens: 0,
+    retryCount: 2,
+    circuitBreakerThreshold: 5,
+    circuitBreakerWindowSeconds: 30,
+    failoverPriority: 25,
+    isActive: true,
+  },
+  'whisper-asr': {
+    code: 'whisper-asr',
+    name: 'Whisper (Speech-to-Text)',
+    dialect: 'WhisperAsr',
+    category: 'Asr',
+    // Canonical STT provider — one key here covers Speaking, Pronunciation,
+    // and Conversation transcription. Default OpenAI Whisper endpoint; any
+    // OpenAI-compatible transcription host (Groq, Together…) works too.
+    baseUrl: 'https://api.openai.com/v1',
+    defaultModel: 'whisper-1',
+    pricePer1kPromptTokens: 0,
+    pricePer1kCompletionTokens: 0,
+    retryCount: 2,
+    circuitBreakerThreshold: 5,
+    circuitBreakerWindowSeconds: 30,
+    failoverPriority: 27,
     isActive: true,
   },
   google: {
@@ -290,13 +329,13 @@ export default function AiProvidersPage() {
     catch (e) { setToast({ variant: 'error', message: `Failed: ${(e as Error).message}` }); }
   };
 
-  const runTest = async (code: string) => {
+  const runTest = async (code: string, deep = false) => {
     setTestingCode(code);
     try {
-      const result = await testAiProvider(code);
+      const result = await testAiProvider(code, deep);
       setToast({
         variant: result.status === 'ok' ? 'success' : 'error',
-        message: `Test ${code}: ${result.status}${result.errorMessage ? ', ' + result.errorMessage : ''} (${result.latencyMs} ms)`,
+        message: `Test ${code}${deep ? ' (deep)' : ''}: ${result.status}${result.errorMessage ? ', ' + result.errorMessage : ''} (${result.latencyMs} ms)`,
       });
       await load();
     } catch (e) {
@@ -393,6 +432,17 @@ export default function AiProvidersPage() {
           <Button variant="ghost" size="sm" disabled={testingCode === p.code} onClick={() => void runTest(p.code)}>
             {testingCode === p.code ? 'Testing…' : 'Test'}
           </Button>
+          {(p.category === 'Ocr' || p.category === 'PdfExtraction') && (
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={testingCode === p.code}
+              title="Runs a real OCR pass on a tiny embedded PDF (costs ~1 page)"
+              onClick={() => void runTest(p.code, true)}
+            >
+              Deep test
+            </Button>
+          )}
           {p.isActive && <Button variant="ghost" size="sm" onClick={() => void deactivate(p.id)}>Deactivate</Button>}
         </div>
       ),
