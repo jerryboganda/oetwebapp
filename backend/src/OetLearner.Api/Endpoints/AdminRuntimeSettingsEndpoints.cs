@@ -1282,7 +1282,7 @@ public sealed class RuntimeSettingsPaymobUpdate
     public string? HmacSecret { get; set; }
     /// <summary>JSON map of method → integration id, e.g. {"card":123}.</summary>
     public string? IntegrationIdsJson { get; set; }
-    public int? IframeId { get; set; }
+    public JsonElement? IframeId { get; set; }
     public string? SuccessUrl { get; set; }
     public string? CancelUrl { get; set; }
 }
@@ -1302,12 +1302,12 @@ public sealed class RuntimeSettingsPayTabsUpdate
 public sealed class RuntimeSettingsSoketiUpdate
 {
     public string? Host { get; set; }
-    public int? Port { get; set; }
+    public JsonElement? Port { get; set; }
     public string? AppId { get; set; }
     public string? AppKey { get; set; }
     public string? AppSecret { get; set; }
-    public bool? UseTls { get; set; }
-    public bool? Enabled { get; set; }
+    public JsonElement? UseTls { get; set; }
+    public JsonElement? Enabled { get; set; }
 }
 
 /// <summary>2026-05-28 audit fix — Speaking Whisper transcription overrides.</summary>
