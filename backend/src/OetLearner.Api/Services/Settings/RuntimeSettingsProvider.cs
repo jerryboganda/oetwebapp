@@ -104,7 +104,23 @@ public sealed class RuntimeSettingsProvider : IRuntimeSettingsProvider
         {
             return null;
         }
+        catch (DbException ex) when (IsMissingRuntimeSettingsColumn(ex))
+        {
+            // A newly added override column is not present on this slot yet
+            // (migration lag during a rolling deploy). Degrade gracefully to
+            // env/appsettings defaults for ALL settings rather than failing
+            // startup — the column is backfilled once its migration applies,
+            // and every secret/override already falls back to its env value.
+            return null;
+        }
     }
+
+    /// <summary>PostgreSQL <c>undefined_column</c> (42703) — a RuntimeSettings
+    /// override column the code expects is not in the table yet.</summary>
+    private static bool IsMissingRuntimeSettingsColumn(DbException ex)
+        => ex.Message.Contains("42703", StringComparison.Ordinal)
+           || (ex.Message.Contains("column", StringComparison.OrdinalIgnoreCase)
+               && ex.Message.Contains("does not exist", StringComparison.OrdinalIgnoreCase));
 
     private static bool IsMissingRuntimeSettingsTable(DbException ex)
         => ex.Message.Contains("RuntimeSettings", StringComparison.OrdinalIgnoreCase)
