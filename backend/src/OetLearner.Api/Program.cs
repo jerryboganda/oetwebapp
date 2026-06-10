@@ -1672,6 +1672,15 @@ if (args.Contains("--emit-create-script"))
     return;
 }
 
+// Runtime settings are read by production startup guards below. Apply pending
+// migrations first so a newly deployed image can safely read columns added by
+// the same release before the full bootstrap/seeding phase runs later.
+await using (var migrationScope = app.Services.CreateAsyncScope())
+{
+    var db = migrationScope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+    await db.Database.MigrateAsync();
+}
+
 // ── Production safety gate: forbid NoOpUploadScanner when running in production. ──
 // Rationale: the NoOp scanner accepts every byte; if production accidentally
 // boots with it (misconfiguration, missing env var, container swap), learner
