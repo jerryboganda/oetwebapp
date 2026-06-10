@@ -1679,6 +1679,21 @@ await using (var migrationScope = app.Services.CreateAsyncScope())
 {
     var db = migrationScope.ServiceProvider.GetRequiredService<LearnerDbContext>();
     await db.Database.MigrateAsync();
+
+    // Idempotent schema self-heal for the RuntimeSettings override columns that
+    // the singleton settings provider reads during this very startup. These are
+    // all nullable additive columns; running the guarded DDL is a no-op once the
+    // column exists. This guarantees a freshly deployed image can read the row
+    // even if its migration has not been recorded yet on this database, closing
+    // the gap that would otherwise crash startup with "column does not exist".
+    try
+    {
+        await db.Database.ExecuteSqlRawAsync(OetLearner.Api.Services.Settings.RuntimeSettingsSchemaSelfHeal.Sql);
+    }
+    catch (Exception ex)
+    {
+        app.Logger.LogWarning(ex, "RuntimeSettings schema self-heal skipped (non-fatal).");
+    }
 }
 
 // ── Production safety gate: forbid NoOpUploadScanner when running in production. ──
