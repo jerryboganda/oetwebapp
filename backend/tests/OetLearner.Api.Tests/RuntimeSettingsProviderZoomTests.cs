@@ -68,6 +68,7 @@ public sealed class RuntimeSettingsProviderZoomTests
                 WebhookRetryToleranceSeconds = 60,
                 AllowSandboxFallback = true,
             }),
+            Options.Create(new SoketiOptions()),
             new StaticOptionsMonitor<SmtpOptions>(new SmtpOptions()),
             new ConfigurationBuilder().Build(),
             new TestHostEnvironment("Development"));
@@ -119,6 +120,7 @@ public sealed class RuntimeSettingsProviderZoomTests
             Options.Create(new UploadScannerOptions()),
             Options.Create(new WebPushOptions()),
             Options.Create(new ZoomOptions { ClientSecret = "env-client-secret" }),
+            Options.Create(new SoketiOptions()),
             new StaticOptionsMonitor<SmtpOptions>(new SmtpOptions()),
             new ConfigurationBuilder().Build(),
             new TestHostEnvironment("Development"));

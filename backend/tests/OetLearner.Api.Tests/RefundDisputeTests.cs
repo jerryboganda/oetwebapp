@@ -28,9 +28,9 @@ public class RefundDisputeTests
         var gateways = new PaymentGatewayService(
             new StripeGateway(new HttpClient(), billingOpts, TestRuntimeSettingsProvider.FromBillingOptions(billingOptions)),
             new PayPalGateway(new HttpClient(), billingOpts),
-            new OetLearner.Api.Services.Billing.Gateways.PayTabsGateway(new HttpClient(), billingOpts),
-            new OetLearner.Api.Services.Billing.Gateways.PaymobGateway(new HttpClient(), billingOpts),
-            new OetLearner.Api.Services.Billing.Gateways.CheckoutComGateway(new HttpClient(), billingOpts));
+            new OetLearner.Api.Services.Billing.Gateways.PayTabsGateway(new HttpClient(), billingOpts, TestRuntimeSettingsProvider.FromBillingOptions(billingOptions)),
+            new OetLearner.Api.Services.Billing.Gateways.PaymobGateway(new HttpClient(), billingOpts, TestRuntimeSettingsProvider.FromBillingOptions(billingOptions)),
+            new OetLearner.Api.Services.Billing.Gateways.CheckoutComGateway(new HttpClient(), billingOpts, TestRuntimeSettingsProvider.FromBillingOptions(billingOptions)));
         return (db, new RefundService(db, gatewayProvider ?? gateways), new DisputeService(db));
     }
 
