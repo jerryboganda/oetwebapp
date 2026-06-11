@@ -28,7 +28,9 @@ import {
   adminGetRolePlayCard,
   adminPatchRolePlayCard,
   adminPublishRolePlayCard,
+  adminListSpeakingCardTypes,
   type RolePlayCardDetail,
+  type SpeakingCardTypeDetail,
 } from '@/lib/api/speaking-role-play-cards';
 
 type ToastState = { variant: 'success' | 'error'; message: string } | null;
@@ -49,6 +51,13 @@ export default function EditSpeakingRolePlayCardPage() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState<ToastState>(null);
+  const [cardTypes, setCardTypes] = useState<SpeakingCardTypeDetail[]>([]);
+
+  useEffect(() => {
+    adminListSpeakingCardTypes(true)
+      .then(setCardTypes)
+      .catch(() => setCardTypes([]));
+  }, []);
 
   const reload = useCallback(async () => {
     if (!cardId) return;
@@ -230,6 +239,7 @@ export default function EditSpeakingRolePlayCardPage() {
                 initial={card}
                 submitting={busy}
                 onSubmit={handleSubmit}
+                cardTypes={cardTypes}
               />
             </CardContent>
           </Card>

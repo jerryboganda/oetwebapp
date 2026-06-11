@@ -45,6 +45,19 @@ public static class WritingSubmissionEndpoints
         })
         .WithName("GetWritingSubmissionGrade");
 
+        // Tutor's overall voice note for this submission (mock + normal). Returns Ok(null)
+        // when owned but no submitted note exists yet; 404 when the submission isn't owned.
+        group.MapGet("/{id:guid}/voice-note", async (
+            Guid id,
+            HttpContext http,
+            WritingMarkingVoiceNoteService service,
+            CancellationToken ct) =>
+        {
+            var note = await service.GetForLearnerAsync(http.WritingV2UserId(), id, ct);
+            return Results.Ok(note);
+        })
+        .WithName("GetWritingSubmissionVoiceNote");
+
         group.MapPost("/{id:guid}/revise", async (
             Guid id,
             WritingReviseRequest request,

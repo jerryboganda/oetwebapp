@@ -201,3 +201,6 @@ _cols.sql
 _create_users.sql
 __pycache__/
 *.pyc
+
+# Linked git worktrees (separate checkouts — never commit)
+.worktrees/

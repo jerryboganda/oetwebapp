@@ -149,14 +149,20 @@ public static class LearnerEndpoints
             Results.Ok(await service.StartSpeakingMockSetAsync(http.UserId(), mockSetId, body?.Mode ?? "exam", ct)));
         speaking.MapGet("/mock-sessions/{sessionId}", async (HttpContext http, string sessionId, LearnerService service, CancellationToken ct) =>
             Results.Ok(await service.GetSpeakingMockSessionAsync(http.UserId(), sessionId, ct)));
-        // P5 - two-role-play mock orchestrator bridge transitions. The
-        // bridge is the short interlocutor handoff between role-play 1 and
-        // role-play 2: start marks the moment the orchestrator UI shows
-        // the handoff screen, finish advances the lifecycle into Prep2.
-        speaking.MapPost("/mock-sessions/{sessionId}/bridge/start", async (HttpContext http, string sessionId, LearnerService service, CancellationToken ct) =>
-            Results.Ok(await service.StartBridgeAsync(http.UserId(), sessionId, ct)));
-        speaking.MapPost("/mock-sessions/{sessionId}/bridge/finish", async (HttpContext http, string sessionId, LearnerService service, CancellationToken ct) =>
-            Results.Ok(await service.FinishBridgeAsync(http.UserId(), sessionId, ct)));
+        // DEPRECATED (2026-06-11 Speaking rebuild): the two-role-play mock
+        // "bridge" handoff is gone. The new two-card exam (Intro → Card A →
+        // Card B, /v1/speaking/exams) has NO bridge — Card A auto-closes after
+        // 8 minutes and Card B auto-reveals. These endpoints return 410 Gone;
+        // the underlying LearnerService.*BridgeAsync methods are retained only
+        // for reading legacy mock sessions. The student-facing path is the new
+        // exam flow (see SpeakingExamEndpoints).
+        static IResult BridgeGone() => Results.Json(new
+        {
+            errorCode = "speaking_bridge_removed",
+            message = "The mock bridge step has been removed. Speaking exams now run as two auto-advancing cards (Card A → Card B). Start a Speaking exam instead.",
+        }, statusCode: StatusCodes.Status410Gone);
+        speaking.MapPost("/mock-sessions/{sessionId}/bridge/start", (string sessionId) => BridgeGone());
+        speaking.MapPost("/mock-sessions/{sessionId}/bridge/finish", (string sessionId) => BridgeGone());
         // P5 - explicit aggregate trigger for the results page. Returns the
         // combined Speaking band + per-criterion averages; idempotent.
         speaking.MapPost("/mock-sessions/{sessionId}/aggregate", async (HttpContext http, string sessionId, LearnerService service, CancellationToken ct) =>

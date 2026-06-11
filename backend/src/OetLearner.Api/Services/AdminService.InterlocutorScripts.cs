@@ -102,6 +102,13 @@ public partial class AdminService
             ? null
             : req.ProfessionRoleNotes.Trim();
         script.LayLanguageTriggersJson = layLanguageJson;
+        // Speaking module rebuild (2026-06-11) — printed roleplayer card face.
+        script.PatientBackground = req.PatientBackground?.Trim() ?? string.Empty;
+        script.PatientTask1 = string.IsNullOrWhiteSpace(req.PatientTask1) ? null : req.PatientTask1.Trim();
+        script.PatientTask2 = string.IsNullOrWhiteSpace(req.PatientTask2) ? null : req.PatientTask2.Trim();
+        script.PatientTask3 = string.IsNullOrWhiteSpace(req.PatientTask3) ? null : req.PatientTask3.Trim();
+        script.PatientTask4 = string.IsNullOrWhiteSpace(req.PatientTask4) ? null : req.PatientTask4.Trim();
+        script.PatientTask5 = string.IsNullOrWhiteSpace(req.PatientTask5) ? null : req.PatientTask5.Trim();
         script.UpdatedAt = now;
 
         // Touch the parent card so list views resort by latest activity.

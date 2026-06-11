@@ -14,7 +14,7 @@
  * pair up.
  */
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, ArrowRight } from 'lucide-react';
 
@@ -29,8 +29,10 @@ import { InterlocutorScriptEditor } from '@/components/domain/speaking/Interlocu
 import {
   adminCreateRolePlayCard,
   adminUpsertInterlocutorScript,
+  adminListSpeakingCardTypes,
   type RolePlayCardDetail,
   type UpsertInterlocutorScriptInput,
+  type SpeakingCardTypeDetail,
 } from '@/lib/api/speaking-role-play-cards';
 
 type ToastState = { variant: 'success' | 'error'; message: string } | null;
@@ -49,6 +51,13 @@ export default function NewSpeakingRolePlayCardPage() {
   const [savedCard, setSavedCard] = useState<RolePlayCardDetail | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [toast, setToast] = useState<ToastState>(null);
+  const [cardTypes, setCardTypes] = useState<SpeakingCardTypeDetail[]>([]);
+
+  useEffect(() => {
+    adminListSpeakingCardTypes(true)
+      .then(setCardTypes)
+      .catch(() => setCardTypes([]));
+  }, []);
 
   async function handleCardSubmit(value: RolePlayCardEditorValue) {
     setSubmitting(true);
@@ -108,6 +117,7 @@ export default function NewSpeakingRolePlayCardPage() {
               mode="create"
               submitting={submitting}
               onSubmit={handleCardSubmit}
+              cardTypes={cardTypes}
             />
           </CardContent>
         </Card>

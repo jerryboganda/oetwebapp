@@ -55,6 +55,7 @@ import { RubricPanel } from './RubricPanel';
 import { AiPreAnalysisPanel } from './AiPreAnalysisPanel';
 import { ModerationPanel } from './ModerationPanel';
 import { FeedbackTemplateMenu } from './FeedbackTemplateMenu';
+import { OverallVoiceNote } from './OverallVoiceNote';
 import {
   CRITERION_CODES,
   CRITERION_FEEDBACK_TEMPLATES,
@@ -235,14 +236,19 @@ export function TutorMarkingWorkspace({
     setSubmitting(true);
     setToast(null);
     try {
+      // Normal writing: the tutor's qualitative feedback is the voice note only —
+      // never persist written text or per-criterion comments. Mocks keep both.
+      const isMockSubmit = context.submission.mode === 'mock';
       const cleanedComments: Partial<Record<WritingCriterionCode, string>> = {};
-      for (const c of CRITERION_CODES) {
-        if (comments[c].trim()) cleanedComments[c] = comments[c].trim();
+      if (isMockSubmit) {
+        for (const c of CRITERION_CODES) {
+          if (comments[c].trim()) cleanedComments[c] = comments[c].trim();
+        }
       }
       const scoreOverride = draftToScoreOverride(scoreDraft);
       const result = await submitWritingTutorReview(submissionId, {
-        freeTextFeedback: freeText.trim() || null,
-        perCriterionComments: Object.keys(cleanedComments).length > 0 ? cleanedComments : undefined,
+        freeTextFeedback: isMockSubmit ? (freeText.trim() || null) : null,
+        perCriterionComments: isMockSubmit && Object.keys(cleanedComments).length > 0 ? cleanedComments : undefined,
         scoreOverride: Object.keys(scoreOverride).length > 0 ? scoreOverride : undefined,
         markerSequence: context.markerSequence,
         acceptedAiPreAssessment: acceptedAi,
@@ -298,6 +304,11 @@ export function TutorMarkingWorkspace({
   }
 
   const { task, submission, preAssessment } = context;
+  // Writing feedback rule: mocks get the full WRITTEN toolkit (annotations,
+  // per-criterion comments, overall text) + a voice note, and ZERO AI. Normal
+  // writing keeps AI + the rubric score, but the tutor's qualitative feedback is
+  // a voice note only — written text channels are hidden.
+  const isMock = submission.mode === 'mock';
   const liveScores = draftToScoreOverride(scoreDraft);
   const radarScores: WritingCriteriaScoresDto = {
     c1: liveScores.c1 ?? suggestionSource?.c1 ?? 0,
@@ -403,22 +414,32 @@ export function TutorMarkingWorkspace({
                 {submission.wordCount} words · {submission.mode}
               </span>
             </div>
-            <AnnotationLayer
-              responseText={submission.letterContent}
-              annotations={annotations}
-              onCreate={handleCreateAnnotation}
-              onDelete={handleDeleteAnnotation}
-              busy={annotationBusy}
-            />
+            {isMock ? (
+              <AnnotationLayer
+                responseText={submission.letterContent}
+                annotations={annotations}
+                onCreate={handleCreateAnnotation}
+                onDelete={handleDeleteAnnotation}
+                busy={annotationBusy}
+              />
+            ) : (
+              // Normal writing: tutor reads the response to score it, but written
+              // span annotations are not a feedback channel here (voice note only).
+              <p className="whitespace-pre-wrap text-sm leading-relaxed text-foreground">
+                {submission.letterContent}
+              </p>
+            )}
           </Card>
 
-          {/* AI pre-analysis */}
-          <AiPreAnalysisPanel
-            preAssessment={preAssessment}
-            accepted={acceptedAi}
-            onApply={applyAiSuggestion}
-            onReject={rejectAiSuggestion}
-          />
+          {/* AI pre-analysis — hidden for mocks (zero AI on mock marking). */}
+          {!isMock ? (
+            <AiPreAnalysisPanel
+              preAssessment={preAssessment}
+              accepted={acceptedAi}
+              onApply={applyAiSuggestion}
+              onReject={rejectAiSuggestion}
+            />
+          ) : null}
 
           {/* Rubric + radar */}
           <Card padding="md">
@@ -431,7 +452,8 @@ export function TutorMarkingWorkspace({
             </div>
           </Card>
 
-          {/* Per-criterion comments */}
+          {/* Per-criterion comments — mock only (written feedback channel). */}
+          {isMock ? (
           <Card padding="md">
             <h3 className="text-sm font-bold text-navy">Per-criterion feedback</h3>
             <ul className="mt-2 space-y-2">
@@ -456,8 +478,10 @@ export function TutorMarkingWorkspace({
               ))}
             </ul>
           </Card>
+          ) : null}
 
-          {/* Overall feedback */}
+          {/* Overall feedback — mock only (written feedback channel). */}
+          {isMock ? (
           <Card padding="md">
             <label htmlFor="overall-feedback" className="text-sm font-bold text-navy">Overall feedback</label>
             <p className="text-xs text-muted">Summarise strengths and the top priorities for the learner.</p>
@@ -471,6 +495,10 @@ export function TutorMarkingWorkspace({
             />
             <p className="mt-1 text-right text-xs text-muted">{freeText.length} characters</p>
           </Card>
+          ) : null}
+
+          {/* Voice note — the tutor's spoken feedback, in BOTH mock and normal. */}
+          <OverallVoiceNote submissionId={submissionId} existingVoiceNote={context.voiceNote} />
 
           {/* Double-marking / moderation */}
           <ModerationPanel

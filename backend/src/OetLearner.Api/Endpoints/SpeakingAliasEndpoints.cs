@@ -188,7 +188,7 @@ public static class SpeakingAliasEndpoints
                 http.UserId(), req.TutorProfileId,
                 req.SessionStartUtc, req.DurationMinutes,
                 req.LearnerTimezone, req.LearnerNotes,
-                req.ProfessionTrack, req.IdempotencyKey, ct);
+                req.ProfessionTrack, req.IdempotencyKey, req.SessionFormat, ct);
 
             if (!result.Success)
                 return Results.BadRequest(new { error = result.Error });
@@ -424,7 +424,9 @@ public record CreateSpeakingBookingRequest(
     string LearnerTimezone,
     string? ProfessionTrack,
     string? LearnerNotes,
-    string IdempotencyKey);
+    string IdempotencyKey,
+    // Speaking module rebuild (2026-06-11): "practice" (default) or "exam".
+    string? SessionFormat = null);
 
 public record RescheduleSpeakingRequest(
     DateTimeOffset SessionStartUtc,

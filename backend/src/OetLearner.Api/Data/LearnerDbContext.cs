@@ -1305,6 +1305,9 @@ public partial class LearnerDbContext(DbContextOptions<LearnerDbContext> options
         // Speaking Sessions / Recordings / Transcripts (partial; see LearnerDbContext.SpeakingSessions.cs).
         OnModelCreatingSpeakingSessions(modelBuilder);
 
+        // Speaking Card Types + two-card Exam orchestrator (partial; see LearnerDbContext.SpeakingExam.cs).
+        OnModelCreatingSpeakingExam(modelBuilder);
+
         // Speaking AI + Tutor Assessments + Timestamped Comments (partial; see LearnerDbContext.SpeakingAssessments.cs).
         OnModelCreatingSpeakingAssessments(modelBuilder);
 
@@ -1393,6 +1396,11 @@ public partial class LearnerDbContext(DbContextOptions<LearnerDbContext> options
     /// Defined in <see cref="LearnerDbContext"/>.SpeakingSessions.cs (partial).
     /// </summary>
     partial void OnModelCreatingSpeakingSessions(ModelBuilder modelBuilder);
+
+    /// <summary>
+    /// Defined in <see cref="LearnerDbContext"/>.SpeakingExam.cs (partial).
+    /// </summary>
+    partial void OnModelCreatingSpeakingExam(ModelBuilder modelBuilder);
 
     /// <summary>
     /// Defined in <see cref="LearnerDbContext"/>.SpeakingAssessments.cs (partial).

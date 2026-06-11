@@ -26,6 +26,7 @@ import {
   type CreateRolePlayCardInput,
   type RolePlayCardDetail,
   type RolePlayCardDifficulty,
+  type SpeakingCardTypeDetail,
 } from '@/lib/api/speaking-role-play-cards';
 
 export type RolePlayCardEditorMode = 'create' | 'edit';
@@ -43,6 +44,8 @@ export interface RolePlayCardEditorProps {
   onSubmit: (value: RolePlayCardEditorValue) => Promise<void> | void;
   /** Optional secondary action shown alongside the submit button. */
   secondaryAction?: React.ReactNode;
+  /** Hidden card types for the classification select (2026-06-11 rebuild). */
+  cardTypes?: SpeakingCardTypeDetail[];
 }
 
 function fillTasks(tasks: string[] | undefined): [string, string, string, string, string] {
@@ -66,8 +69,13 @@ export function RolePlayCardEditor({
   submitting,
   onSubmit,
   secondaryAction,
+  cardTypes,
 }: RolePlayCardEditorProps) {
   const [profession, setProfession] = useState(initial?.professionId ?? 'nursing');
+  const [cardTypeId, setCardTypeId] = useState<string>(initial?.cardTypeId ?? '');
+  const [displayCardNumber, setDisplayCardNumber] = useState<string>(
+    initial?.displayCardNumber != null ? String(initial.displayCardNumber) : '',
+  );
   const [scenarioTitle, setScenarioTitle] = useState(initial?.scenarioTitle ?? '');
   const [setting, setSetting] = useState(initial?.setting ?? '');
   const [candidateRole, setCandidateRole] = useState(initial?.candidateRole ?? '');
@@ -143,6 +151,10 @@ export function RolePlayCardEditor({
       criteriaFocus,
       disclaimer: disclaimer.trim() || DEFAULT_DISCLAIMER,
       isLiveTutorEligible,
+      // Hidden card type — "" clears (sent as empty string so the backend
+      // distinguishes "clear" from "leave unchanged" on PATCH).
+      cardTypeId: cardTypeId,
+      displayCardNumber: displayCardNumber.trim() === '' ? null : Number(displayCardNumber),
     };
     await onSubmit(payload);
   };
@@ -184,6 +196,29 @@ export function RolePlayCardEditor({
             placeholder='e.g. "Post-operative pain management"'
             maxLength={96}
             required
+          />
+        </div>
+        {/* Hidden card type + printed card number (2026-06-11 rebuild). Never
+            shown to students — aids human + AI marking only. */}
+        <div className="grid gap-4 md:grid-cols-2">
+          <Select
+            label="Card type (hidden from students)"
+            value={cardTypeId}
+            onChange={(e) => setCardTypeId(e.target.value)}
+            options={[
+              { value: '', label: '— None —' },
+              ...(cardTypes ?? [])
+                .filter((t) => t.isActive || t.id === cardTypeId)
+                .map((t) => ({ value: t.id, label: t.isActive ? t.name : `${t.name} (inactive)` })),
+            ]}
+          />
+          <Input
+            label="Printed card number (optional)"
+            type="number"
+            min={1}
+            value={displayCardNumber}
+            onChange={(e) => setDisplayCardNumber(e.target.value)}
+            placeholder='e.g. "2" → "CANDIDATE CARD NO. 2"'
           />
         </div>
       </section>

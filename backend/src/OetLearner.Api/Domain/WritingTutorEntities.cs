@@ -63,6 +63,34 @@ public class WritingTutorReviewAssignment
     public DateTimeOffset? ReleasedAt { get; set; }
 }
 
+/// <summary>
+/// One overall tutor voice note per writing submission (mock + normal). Keyed by
+/// submission (System A) — distinct from the ReviewRequest-keyed <see cref="ReviewVoiceNote"/>
+/// used by the older expert-console flow. The audio itself lives in MediaAssets; this row
+/// links a submission to that asset. One note per submission (upsert replaces the prior row).
+/// </summary>
+public class WritingReviewVoiceNote
+{
+    public Guid Id { get; set; }
+
+    public Guid SubmissionId { get; set; }
+
+    [MaxLength(64)]
+    public string TutorId { get; set; } = default!;
+
+    [MaxLength(64)]
+    public string MediaAssetId { get; set; } = default!;
+
+    public int? DurationSeconds { get; set; }
+
+    [MaxLength(32)]
+    public string Status { get; set; } = "ready";
+
+    public DateTimeOffset CreatedAt { get; set; }
+
+    public DateTimeOffset UpdatedAt { get; set; }
+}
+
 public class WritingTutorCalibration
 {
     public Guid Id { get; set; }

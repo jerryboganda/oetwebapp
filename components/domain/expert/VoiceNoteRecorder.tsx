@@ -27,6 +27,11 @@ import {
 
 export type VoiceNoteSubtest = 'speaking' | 'writing';
 
+export type VoiceNoteUploader = (
+  id: string,
+  body: { audio: Blob; criterionCode: string; durationMs: number },
+) => Promise<ReviewCriterionVoiceNoteResult>;
+
 export interface VoiceNoteRecorderProps {
   reviewRequestId: string;
   criterionCode: string;
@@ -34,6 +39,12 @@ export interface VoiceNoteRecorderProps {
   maxSeconds?: number;
   /** Which review surface this is mounted on. Defaults to 'speaking'. */
   subtest?: VoiceNoteSubtest;
+  /**
+   * Custom uploader. When provided, overrides the default subtest-based upload
+   * (used by the writing marking workspace to post a submission-keyed overall
+   * note instead of the ReviewRequest-keyed criterion note).
+   */
+  uploader?: VoiceNoteUploader;
   /** Called once the recorder has uploaded the voice note. */
   onUploaded?: (voiceNoteId: string, durationMs: number) => void;
   /** Existing playback URL — render a play button + "Replace existing note". */
@@ -76,6 +87,7 @@ export function VoiceNoteRecorder({
   criterionCode,
   maxSeconds = 60,
   subtest = 'speaking',
+  uploader,
   onUploaded,
   existingVoiceNoteUrl,
   className = '',
@@ -213,7 +225,7 @@ export function VoiceNoteRecorder({
     setState('uploading');
     setErrorMessage(null);
     try {
-      const upload = subtest === 'writing' ? uploadWritingReviewCriterionVoiceNote : uploadSpeakingReviewCriterionVoiceNote;
+      const upload = uploader ?? (subtest === 'writing' ? uploadWritingReviewCriterionVoiceNote : uploadSpeakingReviewCriterionVoiceNote);
       const result: ReviewCriterionVoiceNoteResult = await upload(reviewRequestId, {
         audio: blobRef.current,
         criterionCode,
@@ -225,7 +237,7 @@ export function VoiceNoteRecorder({
       setErrorMessage(err instanceof Error ? err.message : 'Upload failed. Please try again.');
       setState('error');
     }
-  }, [criterionCode, onUploaded, reviewRequestId, subtest]);
+  }, [criterionCode, onUploaded, reviewRequestId, subtest, uploader]);
 
   const timerLabel = useMemo(() => `${formatTimer(elapsedSeconds)} / ${formatTimer(maxSeconds)}`, [elapsedSeconds, maxSeconds]);
 

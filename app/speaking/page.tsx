@@ -206,6 +206,25 @@ export default function SpeakingHome() {
 
         {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
 
+        {/* Two-card Speaking exam (2026-06-11 rebuild): Intro → Card A → Card B. */}
+        <MotionSection>
+          <LearnerSurfaceCard card={{
+            kind: 'task',
+            sourceType: 'backend_task',
+            accent: 'indigo',
+            eyebrow: 'Speaking Exam',
+            eyebrowIcon: Mic,
+            title: 'Take a full two-card Speaking exam',
+            description: 'A short unscored intro, then Card A and Card B — 3 minutes to prepare and 5 minutes to speak on each. The AI plays the patient and marks your result (2 AI credits), or book a tutor as the patient.',
+            metaItems: [
+              { icon: Mic, label: 'Card A + Card B' },
+              { icon: Star, label: '2 AI credits' },
+            ],
+            primaryAction: { label: 'Start Speaking Exam', href: '/speaking/exam' },
+            secondaryAction: { label: 'Book a Tutor', href: '/speaking', variant: 'secondary' },
+          }} />
+        </MotionSection>
+
         {/* Resume in-progress speaking attempt — backend surfaces pastAttempts[].state='in_progress'. */}
         {resumeAttempt ? (
           <MotionSection>

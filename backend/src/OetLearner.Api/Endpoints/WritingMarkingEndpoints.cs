@@ -32,6 +32,8 @@ public static class WritingMarkingEndpoints
         group.MapGet("/{id:guid}/annotations", ListAnnotationsAsync);
         group.MapPost("/{id:guid}/annotations", CreateAnnotationAsync);
         group.MapDelete("/{id:guid}/annotations/{annotationId:guid}", DeleteAnnotationAsync);
+        group.MapGet("/{id:guid}/voice-note", GetVoiceNoteAsync);
+        group.MapPost("/{id:guid}/voice-note", UpsertVoiceNoteAsync);
         group.MapPost("/{id:guid}", SubmitReviewAsync);
         group.MapGet("/{id:guid}/moderation", GetModerationAsync);
         group.MapPost("/{id:guid}/moderation/finalize", FinalizeModerationAsync);
@@ -45,6 +47,7 @@ public static class WritingMarkingEndpoints
         ClaimsPrincipal user,
         LearnerDbContext db,
         IWritingHeuristicPreAssessmentService preAssessmentService,
+        WritingMarkingVoiceNoteService voiceNotes,
         Guid id,
         CancellationToken ct)
     {
@@ -78,9 +81,16 @@ public static class WritingMarkingEndpoints
             .AsNoTracking()
             .FirstOrDefaultAsync(g => g.SubmissionId == id, ct);
 
-        var preAssessment = await preAssessmentService.AssessAsync(
-            new WritingPreAssessmentRequest(id, submission.LetterContent, scenario),
-            ct);
+        // Zero-AI guarantee for mocks: never compute or surface an AI pre-assessment.
+        // Mock Writing is human-marked; the AI heuristic panel must not leak into the
+        // tutor's marking surface (see memory: no-ai-mock-speaking-writing).
+        var preAssessmentDto = IsMock(submission)
+            ? NeutralPreAssessment(id, submission.WordCount)
+            : MapPreAssessment(await preAssessmentService.AssessAsync(
+                new WritingPreAssessmentRequest(id, submission.LetterContent, scenario),
+                ct));
+
+        var voiceNote = await voiceNotes.GetForSubmissionAsync(id, ct);
 
         var existingReview = await db.WritingTutorReviews
             .AsNoTracking()
@@ -105,11 +115,12 @@ public static class WritingMarkingEndpoints
             // marking workspace receives the exact shape lib/writing/types.ts defines.
             Services.Writing.WritingTaskAuthoringService.MapToDto(scenario),
             grade is null ? null : MapGrade(grade),
-            MapPreAssessment(preAssessment),
+            preAssessmentDto,
             existingReview is null ? null : MapReview(existingReview),
             annotations.Select(MapAnnotation).ToList(),
             moderation is null ? null : MapModeration(moderation),
-            markerSequence);
+            markerSequence,
+            voiceNote);
 
         return Results.Ok(dto);
     }
@@ -139,6 +150,13 @@ public static class WritingMarkingEndpoints
         if (!await CanAccessSubmissionAsync(db, id, tutorId, ct))
         {
             return Results.Forbid();
+        }
+
+        // Zero-AI guarantee for mocks — return a neutral pre-assessment without ever
+        // invoking the heuristic AI scorer.
+        if (IsMock(submission))
+        {
+            return Results.Ok(NeutralPreAssessment(id, submission.WordCount));
         }
 
         var scenario = await db.WritingScenarios
@@ -248,6 +266,65 @@ public static class WritingMarkingEndpoints
 
         var deleted = await annotations.DeleteAsync(id, annotationId, tutorId, ct);
         return deleted ? Results.NoContent() : Results.NotFound();
+    }
+
+    // ---- Voice note (one overall note per submission, System A) -------------------------------
+
+    private static async Task<IResult> GetVoiceNoteAsync(
+        ClaimsPrincipal user,
+        LearnerDbContext db,
+        WritingMarkingVoiceNoteService voiceNotes,
+        Guid id,
+        CancellationToken ct)
+    {
+        var tutorId = ResolveTutorId(user);
+        if (string.IsNullOrWhiteSpace(tutorId))
+        {
+            return Results.Unauthorized();
+        }
+
+        if (!await CanAccessSubmissionAsync(db, id, tutorId, ct))
+        {
+            return Results.Forbid();
+        }
+
+        var dto = await voiceNotes.GetForSubmissionAsync(id, ct);
+        return Results.Ok(dto);
+    }
+
+    private static async Task<IResult> UpsertVoiceNoteAsync(
+        ClaimsPrincipal user,
+        LearnerDbContext db,
+        WritingMarkingVoiceNoteService voiceNotes,
+        Guid id,
+        [FromBody] UpsertVoiceNoteRequest body,
+        CancellationToken ct)
+    {
+        var tutorId = ResolveTutorId(user);
+        if (string.IsNullOrWhiteSpace(tutorId))
+        {
+            return Results.Unauthorized();
+        }
+
+        if (body is null || string.IsNullOrWhiteSpace(body.MediaAssetId))
+        {
+            return Results.BadRequest(new { error = "mediaAssetId is required." });
+        }
+
+        var submissionExists = await db.WritingSubmissions
+            .AsNoTracking()
+            .AnyAsync(s => s.Id == id, ct);
+        if (!submissionExists)
+        {
+            return Results.NotFound();
+        }
+        if (!await CanAccessSubmissionAsync(db, id, tutorId, ct))
+        {
+            return Results.Forbid();
+        }
+
+        var dto = await voiceNotes.UpsertAsync(id, tutorId, body.MediaAssetId, body.DurationSeconds, ct);
+        return Results.Ok(dto);
     }
 
     // ---- Submit review ------------------------------------------------------------------------
@@ -444,6 +521,28 @@ public static class WritingMarkingEndpoints
             g.EstimatedBand.ToString(),
             g.BandLabel,
             DeserializeStringMap(g.PerCriterionFeedbackJson));
+
+    private static bool IsMock(WritingSubmission s)
+        => string.Equals(s.Mode, "mock", StringComparison.OrdinalIgnoreCase);
+
+    // Neutral, AI-free pre-assessment for mock submissions. Keeps SuggestedCriterionFeedback
+    // a non-null empty map (the frontend AiPreAnalysisPanel does Object.keys on it) but carries
+    // zero AI signal — confidence "n/a", source "suppressed_mock".
+    private static WritingPreAssessmentDto NeutralPreAssessment(Guid submissionId, int wordCount)
+        => new(
+            submissionId.ToString(),
+            wordCount,
+            false,
+            0,
+            new List<string>(),
+            new List<string>(),
+            new List<string>(),
+            new WritingCriteriaScoresDto(0, 0, 0, 0, 0, 0),
+            0,
+            string.Empty,
+            "n/a",
+            "suppressed_mock",
+            new Dictionary<string, string>());
 
     private static WritingPreAssessmentDto MapPreAssessment(WritingPreAssessmentResult r)
         => new(
@@ -643,6 +742,12 @@ public static class WritingMarkingEndpoints
         public WritingCriteriaScoresDto? FinalScore { get; set; }
         public string? FinalDecisionNote { get; set; }
     }
+
+    public sealed class UpsertVoiceNoteRequest
+    {
+        public string MediaAssetId { get; set; } = string.Empty;
+        public int DurationSeconds { get; set; }
+    }
 }
 
 // ---- Response DTOs (mirror lib/writing/types.ts, camelCase JSON) -------------------------------
@@ -666,7 +771,8 @@ public sealed record WritingTutorMarkingContextDto(
     WritingTutorReviewDto? ExistingReview,
     IReadOnlyList<WritingFeedbackAnnotationDto> Annotations,
     WritingModerationDto? Moderation,
-    string MarkerSequence);
+    string MarkerSequence,
+    Services.Writing.WritingMarkingVoiceNoteDto? VoiceNote);
 
 // Full submission shape the marking workspace consumes (lib/writing/types.ts
 // WritingSubmissionDto). Distinct from the leaner WritingSubmissionSummaryDto

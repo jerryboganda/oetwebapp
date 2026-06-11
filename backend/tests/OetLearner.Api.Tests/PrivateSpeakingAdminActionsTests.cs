@@ -318,7 +318,7 @@ public sealed class PrivateSpeakingAdminActionsTests
         var result = await service.CreateBookingAndCheckoutAsync(
             "learner-1", "tutor-profile-1", MondaySlotUtc, 30, "UTC",
             learnerNotes: null, professionTrack: "Medicine",
-            idempotencyKey: NewKey(), ct: CancellationToken.None);
+            idempotencyKey: NewKey(), sessionFormat: null, ct: CancellationToken.None);
 
         Assert.True(result.Success, result.Error);
 

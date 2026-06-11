@@ -15,6 +15,7 @@ import { analytics } from '@/lib/analytics';
 import type { WritingResult } from '@/lib/mock-data';
 import ProfessionRemediationCallout from '@/components/domain/profession-remediation-callout';
 import { WritingDualAssessmentSection } from '@/components/domain/writing/WritingDualAssessmentSection';
+import { TutorVoiceNotePlayer } from '@/components/domain/writing/TutorVoiceNotePlayer';
 
 function WritingResultContent() {
   const searchParams = useSearchParams();
@@ -212,6 +213,12 @@ function WritingResultContent() {
 
         <MotionSection delayIndex={4.5}>
           <WritingDualAssessmentSection evaluationId={resultId} />
+        </MotionSection>
+
+        {/* Tutor's spoken feedback (normal writing). Renders only when the id is a
+            writing submission with a submitted note (e.g. the expert-request flow). */}
+        <MotionSection delayIndex={4.75}>
+          <TutorVoiceNotePlayer submissionId={resultId} />
         </MotionSection>
 
         <ProfessionRemediationCallout />

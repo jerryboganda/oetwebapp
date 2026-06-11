@@ -8294,6 +8294,31 @@ namespace OetLearner.Api.Data.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)");
 
+                    b.Property<string>("PatientBackground")
+                        .IsRequired()
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)");
+
+                    b.Property<string>("PatientTask1")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("PatientTask2")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("PatientTask3")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("PatientTask4")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("PatientTask5")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
                     b.Property<string>("ProfessionRoleNotes")
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)");
@@ -15134,6 +15159,10 @@ namespace OetLearner.Api.Data.Migrations
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)");
 
+                    b.Property<string>("ExamSessionId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
                     b.Property<string>("GoogleCalendarEventId")
                         .HasMaxLength(256)
                         .HasColumnType("character varying(256)");
@@ -15219,6 +15248,11 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.Property<DateTimeOffset?>("ReservationExpiresAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("SessionFormat")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
 
                     b.Property<DateTimeOffset>("SessionStartUtc")
                         .HasColumnType("timestamp with time zone");
@@ -18182,6 +18216,10 @@ namespace OetLearner.Api.Data.Migrations
                         .HasMaxLength(256)
                         .HasColumnType("character varying(256)");
 
+                    b.Property<string>("CardTypeId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
                     b.Property<string>("ClinicalTopic")
                         .IsRequired()
                         .HasMaxLength(256)
@@ -18217,6 +18255,9 @@ namespace OetLearner.Api.Data.Migrations
                         .IsRequired()
                         .HasMaxLength(400)
                         .HasColumnType("character varying(400)");
+
+                    b.Property<int?>("DisplayCardNumber")
+                        .HasColumnType("integer");
 
                     b.Property<string>("InterlocutorRole")
                         .IsRequired()
@@ -18290,6 +18331,8 @@ namespace OetLearner.Api.Data.Migrations
                         .HasColumnType("timestamp with time zone");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("CardTypeId");
 
                     b.HasIndex("ContentItemId")
                         .IsUnique();
@@ -18506,6 +18549,32 @@ namespace OetLearner.Api.Data.Migrations
                     b.Property<int?>("BrevoPasswordResetTemplateId")
                         .HasColumnType("integer");
 
+                    b.Property<string>("CheckoutComApiBaseUrl")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
+
+                    b.Property<string>("CheckoutComCancelUrl")
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)");
+
+                    b.Property<string>("CheckoutComProcessingChannelId")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("CheckoutComPublicKey")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<string>("CheckoutComSecretKeyEncrypted")
+                        .HasColumnType("text");
+
+                    b.Property<string>("CheckoutComSuccessUrl")
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)");
+
+                    b.Property<string>("CheckoutComWebhookSecretEncrypted")
+                        .HasColumnType("text");
+
                     b.Property<string>("FacebookAppId")
                         .HasMaxLength(256)
                         .HasColumnType("character varying(256)");
@@ -18548,6 +18617,57 @@ namespace OetLearner.Api.Data.Migrations
                     b.Property<string>("PayPalWebhookIdEncrypted")
                         .HasColumnType("text");
 
+                    b.Property<string>("PayTabsApiBaseUrl")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
+
+                    b.Property<string>("PayTabsCancelUrl")
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)");
+
+                    b.Property<string>("PayTabsProfileId")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("PayTabsServerKeyEncrypted")
+                        .HasColumnType("text");
+
+                    b.Property<string>("PayTabsSuccessUrl")
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)");
+
+                    b.Property<string>("PayTabsWebhookSecretEncrypted")
+                        .HasColumnType("text");
+
+                    b.Property<string>("PaymobApiBaseUrl")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
+
+                    b.Property<string>("PaymobApiKeyEncrypted")
+                        .HasColumnType("text");
+
+                    b.Property<string>("PaymobCancelUrl")
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)");
+
+                    b.Property<string>("PaymobHmacSecretEncrypted")
+                        .HasColumnType("text");
+
+                    b.Property<int?>("PaymobIframeId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("PaymobIntegrationIdsJson")
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)");
+
+                    b.Property<string>("PaymobMerchantId")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("PaymobSuccessUrl")
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)");
+
                     b.Property<string>("SentryDsn")
                         .HasMaxLength(512)
                         .HasColumnType("character varying(512)");
@@ -18580,6 +18700,30 @@ namespace OetLearner.Api.Data.Migrations
                     b.Property<string>("SmtpUsername")
                         .HasMaxLength(256)
                         .HasColumnType("character varying(256)");
+
+                    b.Property<string>("SoketiAppId")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("SoketiAppKey")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<string>("SoketiAppSecretEncrypted")
+                        .HasColumnType("text");
+
+                    b.Property<bool?>("SoketiEnabled")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("SoketiHost")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<int?>("SoketiPort")
+                        .HasColumnType("integer");
+
+                    b.Property<bool?>("SoketiUseTls")
+                        .HasColumnType("boolean");
 
                     b.Property<string>("SpeakingAnthropicApiKeyEncrypted")
                         .HasColumnType("text");
@@ -18647,107 +18791,6 @@ namespace OetLearner.Api.Data.Migrations
                         .HasColumnType("character varying(512)");
 
                     b.Property<bool?>("SpeakingV2Enabled")
-                        .HasColumnType("boolean");
-
-                    b.Property<string>("CheckoutComApiBaseUrl")
-                        .HasMaxLength(512)
-                        .HasColumnType("character varying(512)");
-
-                    b.Property<string>("CheckoutComSecretKeyEncrypted")
-                        .HasColumnType("text");
-
-                    b.Property<string>("CheckoutComPublicKey")
-                        .HasMaxLength(256)
-                        .HasColumnType("character varying(256)");
-
-                    b.Property<string>("CheckoutComProcessingChannelId")
-                        .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
-
-                    b.Property<string>("CheckoutComWebhookSecretEncrypted")
-                        .HasColumnType("text");
-
-                    b.Property<string>("CheckoutComSuccessUrl")
-                        .HasMaxLength(1024)
-                        .HasColumnType("character varying(1024)");
-
-                    b.Property<string>("CheckoutComCancelUrl")
-                        .HasMaxLength(1024)
-                        .HasColumnType("character varying(1024)");
-
-                    b.Property<string>("PaymobApiBaseUrl")
-                        .HasMaxLength(512)
-                        .HasColumnType("character varying(512)");
-
-                    b.Property<string>("PaymobApiKeyEncrypted")
-                        .HasColumnType("text");
-
-                    b.Property<string>("PaymobMerchantId")
-                        .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
-
-                    b.Property<string>("PaymobHmacSecretEncrypted")
-                        .HasColumnType("text");
-
-                    b.Property<string>("PaymobIntegrationIdsJson")
-                        .HasMaxLength(1024)
-                        .HasColumnType("character varying(1024)");
-
-                    b.Property<int?>("PaymobIframeId")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("PaymobSuccessUrl")
-                        .HasMaxLength(1024)
-                        .HasColumnType("character varying(1024)");
-
-                    b.Property<string>("PaymobCancelUrl")
-                        .HasMaxLength(1024)
-                        .HasColumnType("character varying(1024)");
-
-                    b.Property<string>("PayTabsApiBaseUrl")
-                        .HasMaxLength(512)
-                        .HasColumnType("character varying(512)");
-
-                    b.Property<string>("PayTabsServerKeyEncrypted")
-                        .HasColumnType("text");
-
-                    b.Property<string>("PayTabsProfileId")
-                        .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
-
-                    b.Property<string>("PayTabsWebhookSecretEncrypted")
-                        .HasColumnType("text");
-
-                    b.Property<string>("PayTabsSuccessUrl")
-                        .HasMaxLength(1024)
-                        .HasColumnType("character varying(1024)");
-
-                    b.Property<string>("PayTabsCancelUrl")
-                        .HasMaxLength(1024)
-                        .HasColumnType("character varying(1024)");
-
-                    b.Property<string>("SoketiHost")
-                        .HasMaxLength(256)
-                        .HasColumnType("character varying(256)");
-
-                    b.Property<int?>("SoketiPort")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("SoketiAppId")
-                        .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
-
-                    b.Property<string>("SoketiAppKey")
-                        .HasMaxLength(256)
-                        .HasColumnType("character varying(256)");
-
-                    b.Property<string>("SoketiAppSecretEncrypted")
-                        .HasColumnType("text");
-
-                    b.Property<bool?>("SoketiUseTls")
-                        .HasColumnType("boolean");
-
-                    b.Property<bool?>("SoketiEnabled")
                         .HasColumnType("boolean");
 
                     b.Property<string>("SpeakingWhisperApiKeyEncrypted")
@@ -19489,6 +19532,41 @@ namespace OetLearner.Api.Data.Migrations
                     b.ToTable("SpeakingCardBatchRequests");
                 });
 
+            modelBuilder.Entity("OetLearner.Api.Domain.SpeakingCardType", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("IsActive", "SortOrder");
+
+                    b.ToTable("SpeakingCardTypes");
+                });
+
             modelBuilder.Entity("OetLearner.Api.Domain.SpeakingComplianceConsent", b =>
                 {
                     b.Property<string>("Id")
@@ -19616,6 +19694,115 @@ namespace OetLearner.Api.Data.Migrations
                     b.HasIndex("DrillKind");
 
                     b.ToTable("SpeakingDrillItems");
+                });
+
+            modelBuilder.Entity("OetLearner.Api.Domain.SpeakingExamSession", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTimeOffset?>("ActiveAStartedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset?>("ActiveBStartedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("BookingId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTimeOffset?>("CardAEndedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CardAId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTimeOffset?>("CardBEndedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CardBId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<double?>("CombinedScaledSnapshot")
+                        .HasColumnType("double precision");
+
+                    b.Property<DateTimeOffset?>("CompletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CreditARefId")
+                        .HasMaxLength(96)
+                        .HasColumnType("character varying(96)");
+
+                    b.Property<string>("CreditBRefId")
+                        .HasMaxLength(96)
+                        .HasColumnType("character varying(96)");
+
+                    b.Property<DateTimeOffset?>("IntroEndedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset?>("IntroStartedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("MockSetId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<int>("Mode")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset?>("PrepAStartedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset?>("PrepBStartedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ProfessionId")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("ReadinessBandSnapshot")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("RulebookVersion")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("SessionAId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("SessionBId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<int>("State")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BookingId");
+
+                    b.HasIndex("UserId", "State");
+
+                    b.ToTable("SpeakingExamSessions");
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.SpeakingFeedbackComment", b =>
@@ -20194,6 +20381,14 @@ namespace OetLearner.Api.Data.Migrations
                     b.Property<DateTimeOffset?>("EndedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<string>("ExamSessionId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("ExamSlot")
+                        .HasMaxLength(2)
+                        .HasColumnType("character varying(2)");
+
                     b.Property<string>("InterlocutorActorId")
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)");
@@ -20281,6 +20476,8 @@ namespace OetLearner.Api.Data.Migrations
                         .HasColumnType("timestamp with time zone");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("ExamSessionId");
 
                     b.HasIndex("MockSessionId");
 
@@ -24603,6 +24800,47 @@ namespace OetLearner.Api.Data.Migrations
                     b.ToTable("WritingResultVisibilityConfigs");
                 });
 
+            modelBuilder.Entity("OetLearner.Api.Domain.WritingReviewVoiceNote", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("DurationSeconds")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("MediaAssetId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<Guid>("SubmissionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("TutorId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SubmissionId")
+                        .IsUnique();
+
+                    b.ToTable("WritingReviewVoiceNotes");
+                });
+
             modelBuilder.Entity("OetLearner.Api.Domain.WritingRuleViolation", b =>
                 {
                     b.Property<string>("Id")
@@ -26031,11 +26269,18 @@ namespace OetLearner.Api.Data.Migrations
 
             modelBuilder.Entity("OetLearner.Api.Domain.RolePlayCard", b =>
                 {
+                    b.HasOne("OetLearner.Api.Domain.SpeakingCardType", "CardType")
+                        .WithMany()
+                        .HasForeignKey("CardTypeId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("OetLearner.Api.Domain.ContentItem", "ContentItem")
                         .WithMany()
                         .HasForeignKey("ContentItemId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.Navigation("CardType");
 
                     b.Navigation("ContentItem");
                 });

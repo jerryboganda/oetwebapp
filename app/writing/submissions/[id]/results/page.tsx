@@ -16,16 +16,19 @@ import { CanonViolationCard } from '@/components/domain/writing/CanonViolationCa
 import {
   appealWritingSubmission,
   disputeWritingCanonViolation,
+  getTutorReview,
   getWritingSubmission,
   getWritingSubmissionGrade,
   publishToShowcase,
   requestTutorReview,
 } from '@/lib/writing/api';
+import { TutorVoiceNotePlayer } from '@/components/domain/writing/TutorVoiceNotePlayer';
 import type {
   WritingCriteriaScoresDto,
   WritingCriterionCode,
   WritingGradeDto,
   WritingSubmissionDto,
+  WritingTutorReviewDto,
 } from '@/lib/writing/types';
 
 const CRITERION_NAMES: Record<WritingCriterionCode, string> = {
@@ -55,6 +58,7 @@ export default function WritingSubmissionResultsPage() {
 
   const [submission, setSubmission] = useState<WritingSubmissionDto | null>(null);
   const [grade, setGrade] = useState<WritingGradeDto | null>(null);
+  const [tutorReview, setTutorReview] = useState<WritingTutorReviewDto | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [actionStatus, setActionStatus] = useState<string | null>(null);
 
@@ -63,10 +67,14 @@ export default function WritingSubmissionResultsPage() {
     void Promise.all([
       getWritingSubmission(submissionId),
       getWritingSubmissionGrade(submissionId),
+      // Tutor's written review (overall + per-criterion) — only rendered for mocks,
+      // where it IS the tutor's written feedback channel.
+      getTutorReview(submissionId).catch(() => null),
     ])
-      .then(([sub, g]) => {
+      .then(([sub, g, review]) => {
         setSubmission(sub);
         setGrade(g);
+        setTutorReview(review);
       })
       .catch((err) => setError(err instanceof Error ? err.message : t('writing.submissions.results.error.load')));
   }, [submissionId, t]);
@@ -125,6 +133,9 @@ export default function WritingSubmissionResultsPage() {
   const scores = grade ? gradeToScores(grade) : null;
   const isA = grade?.bandLabel?.startsWith('A');
   const offerRevision = grade?.revisionInvite?.shouldOffer ?? false;
+  // Mock writing is human-marked with zero AI: show the tutor's WRITTEN feedback and
+  // voice note, and suppress every AI-flavoured section. Normal writing keeps AI feedback.
+  const isMock = submission?.mode === 'mock';
 
   return (
     <LearnerDashboardShell pageTitle={t('writing.submissions.results.pageTitle')}>
@@ -137,7 +148,8 @@ export default function WritingSubmissionResultsPage() {
           description={t('writing.submissions.results.description')}
           highlights={grade ? [
             { icon: Award, label: t('writing.submissions.results.highlights.raw'), value: `${grade.rawTotal}/38` },
-            { icon: Sparkles, label: t('writing.submissions.results.highlights.confidence'), value: grade.confidenceFlag },
+            // Confidence is an AI signal — hide it on mocks (human-marked, zero AI).
+            ...(isMock ? [] : [{ icon: Sparkles, label: t('writing.submissions.results.highlights.confidence'), value: grade.confidenceFlag }]),
             { icon: FileText, label: t('writing.submissions.results.highlights.mode'), value: submission?.mode ?? '-' },
           ] : []}
         />
@@ -154,29 +166,56 @@ export default function WritingSubmissionResultsPage() {
             <details className="rounded-xl border border-border bg-background p-4" open>
               <summary className="cursor-pointer text-sm font-bold text-navy">{t('writing.submissions.results.criteria.perCriterion')}</summary>
               <ul className="mt-3 space-y-3">
-                {(Object.entries(grade!.perCriterion) as Array<[WritingCriterionCode, NonNullable<typeof grade>['perCriterion'][WritingCriterionCode]]>).map(([code, feedback]) => (
-                  <li key={code} className="rounded-lg border border-border bg-surface p-3">
-                    <div className="flex items-center justify-between gap-2">
-                      {/* Criterion names are OET-authored English content. */}
-                      <h3 className="text-sm font-bold text-navy" dir="ltr">{CRITERION_NAMES[code]}</h3>
-                      <Badge variant="info" size="sm">{feedback.score}</Badge>
-                    </div>
-                    {/* AI feedback is English content per spec. */}
-                    <p className="mt-1 text-xs text-muted leading-snug" dir="ltr">{feedback.feedback}</p>
-                    {feedback.exemplarFix ? (
-                      <p className="mt-1 rounded bg-emerald-50 p-2 text-xs text-emerald-800">
-                        <span className="font-bold">{t('writing.submissions.results.criteria.exemplarFix')}</span>{' '}
-                        <span dir="ltr">{feedback.exemplarFix}</span>
-                      </p>
-                    ) : null}
-                  </li>
-                ))}
+                {isMock
+                  // Mock: iterate the fixed criteria so the tutor's human scores + written
+                  // comments always render, regardless of the AI feedback map. Zero AI.
+                  ? (Object.keys(CRITERION_NAMES) as WritingCriterionCode[]).map((code) => (
+                      <li key={code} className="rounded-lg border border-border bg-surface p-3">
+                        <div className="flex items-center justify-between gap-2">
+                          <h3 className="text-sm font-bold text-navy" dir="ltr">{CRITERION_NAMES[code]}</h3>
+                          <Badge variant="info" size="sm">{scores![code]}</Badge>
+                        </div>
+                        {tutorReview?.perCriterionComments?.[code] ? (
+                          <p className="mt-1 text-xs text-muted leading-snug" dir="ltr">{tutorReview.perCriterionComments[code]}</p>
+                        ) : null}
+                      </li>
+                    ))
+                  : (Object.entries(grade!.perCriterion) as Array<[WritingCriterionCode, NonNullable<typeof grade>['perCriterion'][WritingCriterionCode]]>).map(([code, feedback]) => (
+                      <li key={code} className="rounded-lg border border-border bg-surface p-3">
+                        <div className="flex items-center justify-between gap-2">
+                          {/* Criterion names are OET-authored English content. */}
+                          <h3 className="text-sm font-bold text-navy" dir="ltr">{CRITERION_NAMES[code]}</h3>
+                          <Badge variant="info" size="sm">{feedback.score}</Badge>
+                        </div>
+                        {/* AI feedback is English content per spec. */}
+                        <p className="mt-1 text-xs text-muted leading-snug" dir="ltr">{feedback.feedback}</p>
+                        {feedback.exemplarFix ? (
+                          <p className="mt-1 rounded bg-emerald-50 p-2 text-xs text-emerald-800">
+                            <span className="font-bold">{t('writing.submissions.results.criteria.exemplarFix')}</span>{' '}
+                            <span dir="ltr">{feedback.exemplarFix}</span>
+                          </p>
+                        ) : null}
+                      </li>
+                    ))}
               </ul>
             </details>
           </section>
         ) : null}
 
-        {grade?.topThreePriorities?.length ? (
+        {/* Tutor written feedback — mock only (human-marked written channel). */}
+        {isMock && tutorReview?.freeTextFeedback ? (
+          <section aria-labelledby="tutor-feedback-heading" className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
+            <h2 id="tutor-feedback-heading" className="flex items-center gap-1.5 text-lg font-bold text-navy">
+              <UserRoundCheck className="h-5 w-5 text-primary" aria-hidden="true" /> Tutor feedback
+            </h2>
+            <p className="mt-2 whitespace-pre-line text-sm text-navy" dir="ltr">{tutorReview.freeTextFeedback}</p>
+          </section>
+        ) : null}
+
+        {/* Tutor voice note — mock + normal, when the tutor recorded one. */}
+        <TutorVoiceNotePlayer submissionId={submissionId} />
+
+        {!isMock && grade?.topThreePriorities?.length ? (
           <section aria-labelledby="priorities-heading" className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
             <h2 id="priorities-heading" className="text-lg font-bold text-navy">{t('writing.submissions.results.priorities.heading')}</h2>
             <ol className="mt-3 grid gap-2 md:grid-cols-3">

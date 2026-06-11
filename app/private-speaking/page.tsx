@@ -25,6 +25,7 @@ import {
   ratePrivateSpeakingSession,
 } from '@/lib/api';
 import { safeZoomUrl } from '@/lib/zoom-url';
+import { createSpeakingExamFromBooking } from '@/lib/api/speaking-exams';
 import { analytics } from '@/lib/analytics';
 
 type Config = {
@@ -61,6 +62,9 @@ type Booking = {
   refundIssued?: boolean | null;
   refundAmountMinorUnits?: number | null;
   penaltyAmountMinorUnits?: number | null;
+  // Speaking module rebuild (2026-06-11): exam-format bookings + linked exam.
+  sessionFormat?: string | null;
+  examSessionId?: string | null;
   createdAt: string;
 };
 
@@ -197,6 +201,9 @@ export default function PrivateSpeakingPage() {
   const [rescheduleTarget, setRescheduleTarget] = useState<Booking | null>(null);
   const [bookingNotes, setBookingNotes] = useState('');
   const [professionTrack, setProfessionTrack] = useState<ProfessionTrack>('Medicine');
+  // Speaking module rebuild (2026-06-11): book a free practice session or a
+  // structured two-card exam (tutor plays the patient; tutor marks it).
+  const [bookingFormat, setBookingFormat] = useState<'practice' | 'exam'>('practice');
   const [bookingInProgress, setBookingInProgress] = useState(false);
   // Policy-confirmation modals (PDF §12). Hold the booking pending confirmation.
   const [cancelConfirm, setCancelConfirm] = useState<Booking | null>(null);
@@ -265,6 +272,7 @@ export default function PrivateSpeakingPage() {
         learnerTimezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
         learnerNotes: bookingNotes || undefined,
         professionTrack,
+        sessionFormat: bookingFormat,
         idempotencyKey: crypto.randomUUID(),
       });
 
@@ -343,6 +351,18 @@ export default function PrivateSpeakingPage() {
       setError('Could not cancel booking.');
     } finally {
       setCancelInProgress(false);
+    }
+  }
+
+  // Speaking module rebuild (2026-06-11): start (or resume) the two-card exam
+  // for an exam-format booking. The tutor plays the patient on the same call.
+  async function handleStartExam(booking: Booking) {
+    setError(null);
+    try {
+      const exam = await createSpeakingExamFromBooking(booking.id);
+      window.location.href = `/speaking/exam/${exam.examId}`;
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Could not start the exam.');
     }
   }
 
@@ -453,6 +473,15 @@ export default function PrivateSpeakingPage() {
                 title={joinOpen ? undefined : `The Join button activates ${JOIN_LEAD_MINUTES} minutes before the session starts.`}
                 className="flex items-center gap-1.5 px-3 py-1.5 bg-info hover:bg-info/90 text-white rounded-lg text-xs font-medium transition-colors disabled:opacity-50">
                 <Video className="w-3.5 h-3.5" /> {joiningBookingId === booking.id ? 'Opening...' : joinOpen ? 'Join' : 'Join soon'}
+              </button>
+            )}
+
+            {/* Exam-format bookings: open the two-card exam runner (tutor is the patient). */}
+            {booking.sessionFormat === 'exam' && (booking.status === 'ZoomCreated' || booking.status === 'InProgress') && (
+              <button onClick={() => handleStartExam(booking)} disabled={!joinOpen}
+                title={joinOpen ? undefined : `The exam opens ${JOIN_LEAD_MINUTES} minutes before the session starts.`}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-primary hover:bg-primary/90 text-white rounded-lg text-xs font-medium transition-colors disabled:opacity-50">
+                <Mic className="w-3.5 h-3.5" /> Start exam
               </button>
             )}
 
@@ -724,6 +753,32 @@ export default function PrivateSpeakingPage() {
                       <option key={track} value={track}>{track}</option>
                     ))}
                   </select>
+                </div>
+              )}
+              {!rescheduleTarget && (
+                <div className="mb-3">
+                  <label className="mb-1 block text-xs font-medium text-navy">Session format</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {(['practice', 'exam'] as const).map(fmt => (
+                      <button
+                        key={fmt}
+                        type="button"
+                        onClick={() => setBookingFormat(fmt)}
+                        className={`rounded-lg border px-3 py-2 text-xs font-medium transition-colors ${
+                          bookingFormat === fmt
+                            ? 'border-primary bg-primary/10 text-primary'
+                            : 'border-border bg-surface text-muted hover:text-navy'
+                        }`}
+                      >
+                        {fmt === 'practice' ? 'Practice' : 'Full exam (Card A + B)'}
+                      </button>
+                    ))}
+                  </div>
+                  {bookingFormat === 'exam' && (
+                    <p className="mt-1 text-[11px] text-muted">
+                      A structured two-card exam. Your tutor plays the patient and marks your result.
+                    </p>
+                  )}
                 </div>
               )}
               <textarea

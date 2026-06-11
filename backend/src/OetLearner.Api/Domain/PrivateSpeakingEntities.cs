@@ -255,6 +255,18 @@ public class PrivateSpeakingBooking
     /// <summary>Session duration in minutes.</summary>
     public int DurationMinutes { get; set; } = 30;
 
+    /// <summary>Speaking module rebuild (2026-06-11). What the booked tutor
+    /// session is for: "practice" (single role-play coaching) or "exam"
+    /// (full two-card Intro→A→B exam, human-marked). Defaults to practice so
+    /// existing bookings are unaffected.</summary>
+    [MaxLength(16)]
+    public string SessionFormat { get; set; } = "practice";
+
+    /// <summary>FK to the `SpeakingExamSession` created when a live-tutor exam
+    /// booking starts. Null for practice bookings.</summary>
+    [MaxLength(64)]
+    public string? ExamSessionId { get; set; }
+
     /// <summary>Tutor timezone at time of booking (for display).</summary>
     [MaxLength(64)]
     public string TutorTimezone { get; set; } = "UTC";

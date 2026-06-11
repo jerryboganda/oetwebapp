@@ -215,18 +215,18 @@ public class AiGatewayRoutingTests
         Assert.Null(mockProvider.LastRequest);
     }
 
-    // ── No AI for mock Speaking/Writing — gateway backstop ───────────────────
-    // The gateway must hard-refuse every banned Speaking/Writing assessment code
-    // when the call's AssessmentContext is Mock, BEFORE any provider is contacted.
+    // ── No AI for mock WRITING — gateway backstop (2026-06-11 rebuild) ───────
+    // The gateway must hard-refuse every banned WRITING assessment code when the
+    // call's AssessmentContext is Mock, BEFORE any provider is contacted.
+    // SPEAKING codes are deliberately NOT banned any more — mock/exam Speaking is
+    // AI-marked in AI mode (see SpeakingCodesAllowedInMockContext below).
 
     public static IEnumerable<object[]> BannedMockAssessmentCodes() => new[]
     {
         new object[] { AiFeatureCodes.WritingGrade },
         new object[] { AiFeatureCodes.WritingSampleScore },
-        new object[] { AiFeatureCodes.SpeakingGrade },
         new object[] { AiFeatureCodes.MockFullGrade },
         new object[] { AiFeatureCodes.ConversationEvaluation },
-        new object[] { SpeakingAiFeatureCodes.SpeakingScoreV2 },
     };
 
     [Theory]
@@ -246,6 +246,33 @@ public class AiGatewayRoutingTests
 
         // The model provider must NEVER have been contacted.
         Assert.Null(mockProvider.LastRequest);
+    }
+
+    // SPEAKING grading codes must SUCCEED in Mock context now (owner decision
+    // 2026-06-11): AI marks the Speaking exam in AI mode. Live-tutor sessions are
+    // human-marked, but that branch lives in the pipeline, not the gateway.
+    public static IEnumerable<object[]> SpeakingGradingCodesAllowedInMock() => new[]
+    {
+        new object[] { AiFeatureCodes.SpeakingGrade },
+        new object[] { SpeakingAiFeatureCodes.SpeakingScoreV2 },
+    };
+
+    [Theory]
+    [MemberData(nameof(SpeakingGradingCodesAllowedInMock))]
+    public async Task CompleteAsync_AllowsSpeakingGradingCode_InMockContext(string featureCode)
+    {
+        var mockProvider = new CapturingProvider("mock");
+        var gateway = new AiGatewayService(_loader, new IAiModelProvider[] { mockProvider });
+
+        var result = await gateway.CompleteAsync(new AiGatewayRequest
+        {
+            Prompt = BuildWritingPrompt(gateway),
+            FeatureCode = featureCode,
+            AssessmentContext = AiAssessmentContext.Mock,
+        });
+
+        Assert.Equal("completion from mock", result.Completion);
+        Assert.NotNull(mockProvider.LastRequest);
     }
 
     [Fact]

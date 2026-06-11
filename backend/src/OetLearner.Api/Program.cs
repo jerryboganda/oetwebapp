@@ -735,6 +735,8 @@ builder.Services.AddScoped<OetLearner.Api.Services.Speaking.ISpeakingResultVisib
 builder.Services.AddScoped<OetLearner.Api.Services.Speaking.SpeakingComplianceService>();
 // Phase 2 (B.3) — AI-side speaking assessment scorer.
 builder.Services.AddScoped<OetLearner.Api.Services.Speaking.SpeakingAiAssessmentService>();
+// Speaking module rebuild (2026-06-11) — two-card exam orchestrator.
+builder.Services.AddScoped<OetLearner.Api.Services.Speaking.SpeakingExamService>();
 // Phase 6 (P6) — LiveKit gateway. When LiveKit is configured (api key
 // present) the cloud adapter mints real JWTs and hits the LiveKit REST
 // surface; otherwise we fall back to the stub used by dev + tests.
@@ -873,6 +875,8 @@ builder.Services.AddScoped<OetLearner.Api.Services.Speaking.ISpeakingContentImpo
 builder.Services.AddScoped<ISpeakingEvaluationPipeline, SpeakingEvaluationPipeline>();
 builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingEvaluationPipeline, OetLearner.Api.Services.Writing.WritingEvaluationPipeline>();
 builder.Services.AddHostedService<OetLearner.Api.Services.Speaking.SpeakingAudioRetentionWorker>();
+// Speaking module rebuild (2026-06-11) — server-authoritative exam auto-advance.
+builder.Services.AddHostedService<OetLearner.Api.Services.Speaking.SpeakingExamAutoAdvanceWorker>();
 builder.Services.AddScoped<ExpertService>();
 builder.Services.AddScoped<ExpertOnboardingService>();
 builder.Services.AddScoped<ExpertMessagingService>();
@@ -1582,6 +1586,7 @@ builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingAttemptEventS
     OetLearner.Api.Services.Writing.WritingAttemptEventService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingTutorReviewService,
     OetLearner.Api.Services.Writing.WritingTutorReviewService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Writing.WritingMarkingVoiceNoteService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingAppealService,
     OetLearner.Api.Services.Writing.WritingAppealService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingAnalyticsServiceV2,
@@ -2187,6 +2192,7 @@ app.MapLearnerSpeakingRolePlayCardEndpoints();
 app.MapSpeakingComplianceEndpoints();
 // Phase 2 — typed Speaking session lifecycle (prep → active → finished).
 app.MapSpeakingSessionEndpoints();
+app.MapSpeakingExamEndpoints();
 // WS6 — Speaking result-visibility (learner read + admin upsert, §10).
 app.MapSpeakingResultVisibilityEndpoints();
 // Phase 3 — live-tutor rooms + LiveKit webhook ingestion.

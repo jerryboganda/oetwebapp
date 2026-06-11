@@ -94,17 +94,21 @@ Scoring rules:
             ?? throw ApiException.NotFound("speaking_session_not_found",
                 "That Speaking session does not exist.");
 
-        // ── No AI for mock Speaking ────────────────────────────────────────
-        // Mock Speaking is graded by a human examiner — never by AI. The
-        // finished session is already visible in the tutor review queue
-        // (TutorReviewQueueService.ListQueueAsync lists finished, unscored
-        // sessions); the tutor's SpeakingTutorAssessment becomes the mock band.
-        // Do NOT call the AI gateway or write a SpeakingAiAssessment row.
-        if (!string.IsNullOrWhiteSpace(session.MockSessionId)
-            || !string.IsNullOrWhiteSpace(session.MockSetId))
+        // ── No AI for LIVE-TUTOR Speaking (2026-06-11 rebuild) ─────────────
+        // When the candidate books a human tutor as the patient (Mode =
+        // LiveTutor), the tutor marks the exam — never the AI. The finished
+        // session is visible in the tutor review queue
+        // (TutorReviewQueueService.ListQueueAsync); the tutor's
+        // SpeakingTutorAssessment becomes the released band. Do NOT call the AI
+        // gateway or write a SpeakingAiAssessment row.
+        //
+        // AI-mode sessions (AiSelfPractice / AiExam) fall through and ARE
+        // AI-scored. For AiExam the assessment is OFFICIAL (IsAdvisory=false);
+        // for practice it is advisory (IsAdvisory=true).
+        if (session.Mode == SpeakingSessionMode.LiveTutor)
         {
             logger.LogInformation(
-                "Speaking session {SessionId} is a mock — AI assessment skipped; routed to human examiner marking.",
+                "Speaking session {SessionId} is live-tutor — AI assessment skipped; routed to human examiner marking.",
                 sessionId);
             return new SpeakingAiAssessmentProjection(
                 AssessmentId: string.Empty,
@@ -127,6 +131,15 @@ Scoring rules:
 
         var script = await db.InterlocutorScripts.AsNoTracking()
             .FirstOrDefaultAsync(s => s.RolePlayCardId == card.Id, ct);
+
+        // Hidden card type — fed to the scorer as marking guidance, never to
+        // the learner. Null when the card is untyped.
+        SpeakingCardType? cardTypeRow = null;
+        if (!string.IsNullOrWhiteSpace(card.CardTypeId))
+        {
+            cardTypeRow = await db.SpeakingCardTypes.AsNoTracking()
+                .FirstOrDefaultAsync(t => t.Id == card.CardTypeId, ct);
+        }
 
         var transcript = await db.SpeakingTranscripts.AsNoTracking()
             .Where(t => t.SpeakingSessionId == sessionId && t.IsLatest)
@@ -157,7 +170,7 @@ Scoring rules:
             throw;
         }
 
-        var userInput = BuildUserInput(card, script, transcript);
+        var userInput = BuildUserInput(card, script, transcript, cardTypeRow);
 
         // ── Invoke gateway (mirror SpeakingEvaluationPipeline pattern) ──
         AiGatewayResult aiResult;
@@ -173,9 +186,12 @@ Scoring rules:
                 FeatureCode = AiFeatureCodes.SpeakingGrade,
                 UserId = session.UserId,
                 PromptTemplateId = PromptTemplateId,
-                // Arms the gateway backstop. Mock sessions branch out above and
-                // never reach here; this keeps the refusal armed if that ever changes.
-                AssessmentContext = !string.IsNullOrWhiteSpace(session.MockSessionId)
+                // Tag the assessment context for the audit trail. Exam-linked
+                // sessions (ExamSessionId set) or legacy mock sessions use Mock;
+                // standalone practice uses Practice. Speaking scoring is permitted
+                // in both contexts now — only Writing is banned in Mock.
+                AssessmentContext = !string.IsNullOrWhiteSpace(session.ExamSessionId)
+                    || !string.IsNullOrWhiteSpace(session.MockSessionId)
                     || !string.IsNullOrWhiteSpace(session.MockSetId)
                     ? AiAssessmentContext.Mock
                     : AiAssessmentContext.Practice,
@@ -277,7 +293,8 @@ Scoring rules:
             ConfidenceBand = NormaliseConfidenceBand(parsed.ConfidenceBand),
             GeneratedAt = now,
             RulebookFindingsJson = "[]",
-            IsAdvisory = true,
+            // OFFICIAL when this is an AI exam card; advisory for practice.
+            IsAdvisory = session.Mode != SpeakingSessionMode.AiExam,
         };
 
         db.SpeakingAiAssessments.Add(row);
@@ -394,11 +411,23 @@ Scoring rules:
     private static string BuildUserInput(
         RolePlayCard card,
         InterlocutorScript? script,
-        SpeakingTranscript transcript)
+        SpeakingTranscript transcript,
+        SpeakingCardType? cardType)
     {
         var sb = new StringBuilder();
         sb.AppendLine(PROMPT_TEMPLATE_V2);
         sb.AppendLine();
+        // Hidden card type — marking guidance only. NEVER shown to the learner.
+        if (cardType is not null)
+        {
+            sb.AppendLine("---- CARD TYPE (hidden marking guidance) ----");
+            sb.AppendLine(JsonSerializer.Serialize(new
+            {
+                name = cardType.Name,
+                description = cardType.Description,
+            }));
+            sb.AppendLine();
+        }
         sb.AppendLine("---- ROLE PLAY CARD (candidate-facing) ----");
         sb.AppendLine(JsonSerializer.Serialize(new
         {
@@ -423,6 +452,13 @@ Scoring rules:
             ? "{}"
             : JsonSerializer.Serialize(new
             {
+                patientBackground = script.PatientBackground,
+                patientTasks = new[]
+                    {
+                        script.PatientTask1, script.PatientTask2, script.PatientTask3,
+                        script.PatientTask4, script.PatientTask5,
+                    }
+                    .Where(t => !string.IsNullOrWhiteSpace(t)).Select(t => t!.Trim()).ToArray(),
                 openingResponse = script.OpeningResponse,
                 prompts = new[] { script.Prompt1, script.Prompt2, script.Prompt3 }
                     .Where(p => !string.IsNullOrWhiteSpace(p)).Select(p => p!.Trim()).ToArray(),

@@ -24,6 +24,13 @@ public static class ExpertEndpoints
         expert.MapGet("/dashboard", async (HttpContext http, ExpertService service, CancellationToken ct)
             => Results.Ok(await service.GetDashboardAsync(http.ExpertId(), ct)));
 
+        // Speaking module rebuild (2026-06-11): tutor-only view of a live-tutor
+        // exam — both roleplayer (patient) cards + current phase, so the human
+        // can role-play and follow the timed two-card structure.
+        expert.MapGet("/speaking/exams/{examId}", async (
+            string examId, OetLearner.Api.Services.Speaking.SpeakingExamService exams, CancellationToken ct)
+            => Results.Ok(await exams.GetExamForTutorAsync(examId, ct)));
+
         // Onboarding wizard (welcome → profile → qualifications → schedule → rates → review)
         expert.MapGet("/onboarding/status", async (HttpContext http, ExpertOnboardingService onboarding, CancellationToken ct)
             => Results.Ok(await onboarding.GetStatusAsync(http.ExpertId(), ct)));

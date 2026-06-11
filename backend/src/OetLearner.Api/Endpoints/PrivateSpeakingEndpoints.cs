@@ -91,7 +91,7 @@ public static class PrivateSpeakingEndpoints
                 req.SessionStartUtc, req.DurationMinutes,
                 req.LearnerTimezone, req.LearnerNotes,
                 req.ProfessionTrack,
-                req.IdempotencyKey, ct);
+                req.IdempotencyKey, req.SessionFormat, ct);
 
             if (!result.Success)
                 return Results.BadRequest(new { error = result.Error });
@@ -926,6 +926,9 @@ public static class PrivateSpeakingEndpoints
         b.RescheduledFromBookingId,
         b.RescheduledToBookingId,
         b.GoogleCalendarSyncStatus,
+        // Speaking module rebuild (2026-06-11): exam-format bookings + their exam id.
+        b.SessionFormat,
+        b.ExamSessionId,
         b.CreatedAt
     };
 
@@ -1056,7 +1059,9 @@ public record CreatePrivateSpeakingBookingRequest(
     string LearnerTimezone,
     string? LearnerNotes,
     string IdempotencyKey,
-    string? ProfessionTrack = null);
+    string? ProfessionTrack = null,
+    // Speaking module rebuild (2026-06-11): "practice" (default) or "exam".
+    string? SessionFormat = null);
 
 public record CancelBookingRequest(string? Reason);
 

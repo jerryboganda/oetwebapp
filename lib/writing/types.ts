@@ -884,6 +884,18 @@ export interface WritingPreAssessmentDto {
   suggestedCriterionFeedback: Partial<Record<WritingCriterionCode, string>>;
 }
 
+/** One overall tutor voice note attached to a writing submission (mock + normal). */
+export interface WritingMarkingVoiceNoteDto {
+  id: string;
+  submissionId: string;
+  mediaAssetId: string;
+  /** Relative `/v1/media/{id}/content` path; fetch via fetchAuthorizedObjectUrl for playback. */
+  url: string;
+  durationSeconds: number | null;
+  status: string;
+  createdAt: string;
+}
+
 /** Everything a tutor needs on the marking screen (spec §14.2). */
 export interface WritingTutorMarkingContextDto {
   submission: WritingSubmissionDto;
@@ -894,6 +906,8 @@ export interface WritingTutorMarkingContextDto {
   annotations: WritingFeedbackAnnotationDto[];
   moderation: WritingModerationDto | null;
   markerSequence: WritingMarkerSequence;
+  /** The tutor's overall voice note, if one has been recorded. */
+  voiceNote: WritingMarkingVoiceNoteDto | null;
 }
 
 export interface WritingTutorReviewSubmitDto {

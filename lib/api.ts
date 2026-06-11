@@ -4786,6 +4786,71 @@ export function uploadWritingReviewCriterionVoiceNote(
   return uploadReviewCriterionVoiceNote('writing', reviewRequestId, body);
 }
 
+// ── Writing V2 marking voice note (System A, submission-keyed) ─────────────────
+// One overall tutor voice note per writing submission (mock + normal). Distinct
+// from uploadWritingReviewCriterionVoiceNote, which posts per-criterion notes to
+// the older ReviewRequest-keyed expert flow. The signature matches the
+// VoiceNoteRecorder `uploader` prop (criterionCode is accepted but ignored — the
+// note is always the overall one).
+export interface WritingMarkingVoiceNote {
+  id: string;
+  submissionId: string;
+  mediaAssetId: string;
+  url: string;
+  durationSeconds: number | null;
+  status: string;
+  createdAt: string;
+}
+
+export async function uploadWritingMarkingVoiceNote(
+  submissionId: string,
+  body: { audio: Blob; criterionCode?: string; durationMs: number },
+): Promise<ReviewCriterionVoiceNoteResult> {
+  if (!submissionId) {
+    throw new ApiError(400, 'submission_required', 'Submission id is required.', false);
+  }
+  if (!body.audio || body.audio.size === 0) {
+    throw new ApiError(400, 'audio_required', 'A non-empty audio blob is required.', false);
+  }
+
+  const inferredType = body.audio.type || 'audio/webm';
+  const fileExt = inferredType.includes('webm')
+    ? 'webm'
+    : inferredType.includes('mp4') || inferredType.includes('m4a')
+      ? 'm4a'
+      : inferredType.includes('wav')
+        ? 'wav'
+        : inferredType.includes('ogg')
+          ? 'ogg'
+          : 'webm';
+  const fileName = `voice-note-writing-overall-${Date.now()}.${fileExt}`;
+  const file = body.audio instanceof File ? body.audio : new File([body.audio], fileName, { type: inferredType });
+
+  const uploaded = await uploadMedia(file);
+  const durationSeconds = Math.max(0, Math.round(body.durationMs / 1000));
+  const response = await apiRequest<WritingMarkingVoiceNote>(
+    `/v1/writing/tutor/reviews/${encodeURIComponent(submissionId)}/voice-note`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ mediaAssetId: uploaded.id, durationSeconds }),
+    },
+  );
+  return {
+    voiceNoteId: response?.id ?? uploaded.id,
+    url: response?.url ?? uploaded.url,
+    mediaAssetId: uploaded.id,
+  };
+}
+
+export async function getWritingSubmissionVoiceNote(
+  submissionId: string,
+): Promise<WritingMarkingVoiceNote | null> {
+  return apiRequest<WritingMarkingVoiceNote | null>(
+    `/v1/writing/submissions/${encodeURIComponent(submissionId)}/voice-note`,
+    { method: 'GET' },
+  );
+}
+
 interface LearnerReviewResultCriterion {
   code: string;
   name: string;
@@ -10471,6 +10536,8 @@ export async function createPrivateSpeakingBooking(payload: {
   /** Candidate profession track (Medicine, Nursing, Pharmacy, Dentistry, Other). */
   professionTrack?: string | null;
   idempotencyKey: string;
+  /** Speaking module rebuild (2026-06-11): "practice" (default) or "exam". */
+  sessionFormat?: string | null;
 }): Promise<PrivateSpeakingBookingResult> {
   return apiRequest<PrivateSpeakingBookingResult>('/v1/private-speaking/bookings', {
     method: 'POST',

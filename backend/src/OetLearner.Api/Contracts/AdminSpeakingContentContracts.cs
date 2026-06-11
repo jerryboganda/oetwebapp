@@ -38,7 +38,10 @@ public record AdminRolePlayCardCreateRequest(
     string? Difficulty,
     string[]? CriteriaFocus,
     string? Disclaimer,
-    bool? IsLiveTutorEligible);
+    bool? IsLiveTutorEligible,
+    // Speaking module rebuild (2026-06-11). Hidden card type + printed card no.
+    string? CardTypeId = null,
+    int? DisplayCardNumber = null);
 
 /// <summary>Bulk lifecycle action over a set of role-play cards. <c>Action</c>
 /// is one of <c>publish</c> | <c>archive</c> (duplicate stays a per-row action
@@ -74,7 +77,11 @@ public record AdminRolePlayCardUpdateRequest(
     string? Difficulty = null,
     string[]? CriteriaFocus = null,
     string? Disclaimer = null,
-    bool? IsLiveTutorEligible = null);
+    bool? IsLiveTutorEligible = null,
+    // Speaking module rebuild (2026-06-11). Hidden card type + printed card no.
+    // Sentinel "" on CardTypeId clears the type; null leaves it unchanged.
+    string? CardTypeId = null,
+    int? DisplayCardNumber = null);
 
 // ── Interlocutor script request ──────────────────────────────────────────
 
@@ -94,7 +101,15 @@ public record AdminInterlocutorScriptUpsertRequest(
     string? ClosingCue = null,
     string? EmotionalState = null,
     string? ProfessionRoleNotes = null,
-    string[]? LayLanguageTriggers = null);
+    string[]? LayLanguageTriggers = null,
+    // Speaking module rebuild (2026-06-11). The printed ROLEPLAYER (patient)
+    // card face — never shown to students.
+    string? PatientBackground = null,
+    string? PatientTask1 = null,
+    string? PatientTask2 = null,
+    string? PatientTask3 = null,
+    string? PatientTask4 = null,
+    string? PatientTask5 = null);
 
 // ── Response shapes ──────────────────────────────────────────────────────
 
@@ -114,7 +129,10 @@ public record AdminRolePlayCardSummary(
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt,
     DateTimeOffset? PublishedAt,
-    DateTimeOffset? ArchivedAt);
+    DateTimeOffset? ArchivedAt,
+    // Speaking module rebuild (2026-06-11). Hidden card type (admin/tutor only).
+    string? CardTypeId = null,
+    string? CardTypeName = null);
 
 /// <summary>Full admin projection of a role-play card. The
 /// <see cref="InterlocutorScript"/> property surfaces the hidden card
@@ -147,7 +165,12 @@ public record AdminRolePlayCardDetail(
     DateTimeOffset UpdatedAt,
     DateTimeOffset? PublishedAt,
     DateTimeOffset? ArchivedAt,
-    AdminInterlocutorScriptDetail? InterlocutorScript);
+    AdminInterlocutorScriptDetail? InterlocutorScript,
+    // Speaking module rebuild (2026-06-11). Hidden card type metadata (admin/
+    // tutor only) + printed card number.
+    string? CardTypeId = null,
+    string? CardTypeName = null,
+    int? DisplayCardNumber = null);
 
 /// <summary>Admin projection of the hidden interlocutor card. Holds every
 /// field that drives the AI patient persona and the tutor cue panel.</summary>
@@ -165,6 +188,29 @@ public record AdminInterlocutorScriptDetail(
     string? ProfessionRoleNotes,
     string[] LayLanguageTriggers,
     string? CreatedByUserId,
+    DateTimeOffset CreatedAt,
+    DateTimeOffset UpdatedAt,
+    // Speaking module rebuild (2026-06-11). The printed roleplayer card face.
+    string PatientBackground = "",
+    string?[]? PatientTasks = null);
+
+// ── Card types (2026-06-11 rebuild) — fully admin-configurable taxonomy ─────
+
+/// <summary>Create/update a hidden speaking card type. Students never see it.</summary>
+public record AdminSpeakingCardTypeUpsertRequest(
+    string Name,
+    string? Description = null,
+    int? SortOrder = null,
+    bool? IsActive = null);
+
+/// <summary>Admin projection of a card type.</summary>
+public record AdminSpeakingCardTypeDetail(
+    string Id,
+    string Name,
+    string Description,
+    int SortOrder,
+    bool IsActive,
+    int CardCount,
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt);
 

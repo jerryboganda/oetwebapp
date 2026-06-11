@@ -467,7 +467,7 @@ public sealed class PrivateSpeakingService(
         DateTimeOffset sessionStartUtc, int durationMinutes,
         string learnerTimezone, string? learnerNotes,
         string? professionTrack,
-        string idempotencyKey, CancellationToken ct)
+        string idempotencyKey, string? sessionFormat, CancellationToken ct)
     {
         var config = await GetConfigAsync(ct);
         if (!config.IsEnabled)
@@ -594,6 +594,9 @@ public sealed class PrivateSpeakingService(
             IdempotencyKey = scopedIdempotencyKey,
             LearnerNotes = learnerNotes,
             ProfessionTrack = NormalizeProfessionTrack(professionTrack),
+            SessionFormat = string.Equals(sessionFormat?.Trim(), "exam", StringComparison.OrdinalIgnoreCase)
+                ? "exam"
+                : "practice",
             CreatedAt = now,
             UpdatedAt = now
         };

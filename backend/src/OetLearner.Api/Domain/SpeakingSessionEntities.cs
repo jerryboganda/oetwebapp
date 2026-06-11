@@ -60,6 +60,7 @@ public enum SpeakingRecordingSource
 [Index(nameof(UserId), nameof(State))]
 [Index(nameof(RolePlayCardId), nameof(State))]
 [Index(nameof(MockSessionId))]
+[Index(nameof(ExamSessionId))]
 public class SpeakingSession
 {
     [Key]
@@ -81,6 +82,17 @@ public class SpeakingSession
 
     [MaxLength(64)]
     public string? MockSessionId { get; set; }
+
+    /// <summary>Speaking module rebuild (2026-06-11). Reverse link to the
+    /// `SpeakingExamSession` orchestrator when this session is one card of a
+    /// two-card exam. Null for standalone practice sessions.</summary>
+    [MaxLength(64)]
+    public string? ExamSessionId { get; set; }
+
+    /// <summary>Which exam card this session is: "a" or "b". Null for
+    /// non-exam sessions.</summary>
+    [MaxLength(2)]
+    public string? ExamSlot { get; set; }
 
     public SpeakingSessionMode Mode { get; set; } = SpeakingSessionMode.AiSelfPractice;
 

@@ -55,10 +55,14 @@ public sealed class TutorReviewQueueService(
         // ones (the predicate uses an indexed column).
         await ReleaseExpiredClaimsAsync(ct);
 
+        // 2026-06-11 rebuild: AI-exam sessions are scored by AI (the AI score is
+        // OFFICIAL), so they must NOT surface for human marking. Live-tutor and
+        // (optionally human-reviewed) practice sessions keep flowing.
         var query = from session in db.SpeakingSessions.AsNoTracking()
                     join card in db.RolePlayCards.AsNoTracking()
                         on session.RolePlayCardId equals card.Id
                     where session.State == SpeakingSessionState.Finished
+                        && session.Mode != SpeakingSessionMode.AiExam
                     select new { session, card };
 
         if (!string.IsNullOrWhiteSpace(professionId))

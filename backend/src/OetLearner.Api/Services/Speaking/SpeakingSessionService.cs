@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Contracts;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services.Billing;
 
 namespace OetLearner.Api.Services.Speaking;
 
@@ -20,7 +21,9 @@ namespace OetLearner.Api.Services.Speaking;
 /// so there is one source of truth for the candidate-card schema. The
 /// projection NEVER touches <see cref="InterlocutorScript"/>.
 /// </summary>
-public sealed class SpeakingSessionService(LearnerDbContext db)
+public sealed class SpeakingSessionService(
+    LearnerDbContext db,
+    IAiPackageCreditService? aiPackageCreditService = null)
 {
     private const string DefaultConsentVersion = "recording.v1";
 
@@ -169,6 +172,26 @@ public sealed class SpeakingSessionService(LearnerDbContext db)
         }
 
         var now = DateTimeOffset.UtcNow;
+
+        // Speaking module rebuild (2026-06-11): AI self-practice charges exactly
+        // ONE speaking package credit per card, taken here at CARD REVEAL (prep
+        // start, right after warm-up). Idempotent on the session reference, so a
+        // retried finish-warmup never double-charges. Live-tutor practice is
+        // pay-per-session (no credit) and AI-exam cards are charged by
+        // SpeakingExamService, so only AiSelfPractice debits here.
+        if (session.Mode == SpeakingSessionMode.AiSelfPractice && aiPackageCreditService is not null)
+        {
+            var debit = await aiPackageCreditService.DeductGradingCreditAsync(
+                userId, "speaking", $"practice:{session.Id}", ct);
+            if (!debit.Debited
+                && !string.Equals(debit.ErrorCode, "already_debited", StringComparison.Ordinal))
+            {
+                throw ApiException.PaymentRequired(
+                    debit.ErrorCode ?? "no_ai_package_credits",
+                    debit.ErrorMessage ?? "You have no credits remaining. Purchase a package to continue.");
+            }
+        }
+
         session.WarmupEndedAt = now;
         session.State = SpeakingSessionState.Prep;
         session.PrepStartedAt = now;
@@ -560,6 +583,10 @@ public sealed class SpeakingSessionService(LearnerDbContext db)
             difficulty = card.Difficulty,
             criteriaFocus,
             disclaimer = card.Disclaimer,
+            // Speaking module rebuild (2026-06-11). Safe candidate-card fields.
+            // NOTE: CardTypeId is deliberately omitted — it is hidden from
+            // students. DisplayCardNumber is the number printed on the card face.
+            displayCardNumber = card.DisplayCardNumber,
         };
     }
 }

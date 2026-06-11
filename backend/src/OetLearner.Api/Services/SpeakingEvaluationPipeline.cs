@@ -55,13 +55,16 @@ public sealed class SpeakingEvaluationPipeline(
             transcript = JsonSupport.Deserialize<List<SpeakingTranscriptLine>>(attempt.TranscriptJson, []);
         }
 
-        // ── No AI for mock Speaking ────────────────────────────────────────
-        // Mock Speaking is graded by a human examiner — never by AI. Transcription
-        // (and the AI patient interlocutor during the live session) are kept; only
-        // AI SCORING is removed. Park the evaluation as "awaiting human review";
-        // the finished session is already in the tutor marking queue, and the
-        // tutor's SpeakingTutorAssessment becomes the released band.
-        if (string.Equals(attempt.Context, "mock", StringComparison.OrdinalIgnoreCase))
+        // ── No AI for LIVE-TUTOR Speaking (2026-06-11 rebuild) ─────────────
+        // Speaking is AI-marked in AI mode (practice and exam). Only when the
+        // candidate booked a human tutor as the patient (the linked
+        // SpeakingSession is LiveTutor mode) does a human examiner mark it.
+        // In that case park the evaluation as "awaiting human review"; the
+        // finished session is in the tutor marking queue and the tutor's
+        // SpeakingTutorAssessment becomes the released band.
+        var linkedSession = await db.SpeakingSessions.AsNoTracking()
+            .FirstOrDefaultAsync(s => s.AttemptId == attempt.Id, cancellationToken);
+        if (linkedSession is not null && linkedSession.Mode == SpeakingSessionMode.LiveTutor)
         {
             attempt.TranscriptJson = JsonSupport.Serialize(transcript);
             attempt.State = AttemptState.Submitted;
@@ -73,9 +76,9 @@ public sealed class SpeakingEvaluationPipeline(
             evaluation.Retryable = false;
             evaluation.RetryAfterMs = null;
             evaluation.LastTransitionAt = DateTimeOffset.UtcNow;
-            evaluation.LearnerDisclaimer = "Your mock Speaking result is released after an examiner marks it.";
+            evaluation.LearnerDisclaimer = "Your Speaking result is released after your tutor marks it.";
             logger.LogInformation(
-                "Speaking attempt {AttemptId} is a mock — AI scoring skipped; routed to human examiner marking.",
+                "Speaking attempt {AttemptId} is live-tutor — AI scoring skipped; routed to human examiner marking.",
                 attempt.Id);
             return;
         }

@@ -164,6 +164,9 @@ export interface RolePlayCardSummary {
   createdAt: string;
   updatedAt: string;
   publishedAt: string | null;
+  // Speaking module rebuild (2026-06-11) — hidden card type (admin only).
+  cardTypeId?: string | null;
+  cardTypeName?: string | null;
 }
 
 export interface RolePlayCardDetail {
@@ -195,6 +198,10 @@ export interface RolePlayCardDetail {
   updatedAt: string;
   publishedAt: string | null;
   archivedAt: string | null;
+  // Speaking module rebuild (2026-06-11) — hidden card type + printed number.
+  cardTypeId?: string | null;
+  cardTypeName?: string | null;
+  displayCardNumber?: number | null;
 }
 
 export interface RolePlayCardLearnerDetail {
@@ -232,6 +239,9 @@ export interface InterlocutorScriptDetail {
   professionRoleNotes: string | null;
   layLanguageTriggers: string[];
   updatedAt: string;
+  // Speaking module rebuild (2026-06-11) — printed roleplayer card face.
+  patientBackground?: string;
+  patientTasks?: (string | null)[];
 }
 
 export interface CreateRolePlayCardInput {
@@ -258,6 +268,9 @@ export interface CreateRolePlayCardInput {
   criteriaFocus: string[];
   disclaimer?: string;
   isLiveTutorEligible?: boolean;
+  // Speaking module rebuild (2026-06-11) — hidden card type + printed number.
+  cardTypeId?: string | null;
+  displayCardNumber?: number | null;
 }
 
 export type PatchRolePlayCardInput = Partial<CreateRolePlayCardInput>;
@@ -273,6 +286,67 @@ export interface UpsertInterlocutorScriptInput {
   emotionalState?: string;
   professionRoleNotes?: string | null;
   layLanguageTriggers?: string[];
+  // Speaking module rebuild (2026-06-11) — printed roleplayer card face.
+  patientBackground?: string;
+  patientTask1?: string | null;
+  patientTask2?: string | null;
+  patientTask3?: string | null;
+  patientTask4?: string | null;
+  patientTask5?: string | null;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Card types (2026-06-11 rebuild) — fully configurable admin taxonomy
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface SpeakingCardTypeDetail {
+  id: string;
+  name: string;
+  description: string;
+  sortOrder: number;
+  isActive: boolean;
+  cardCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SpeakingCardTypeUpsertInput {
+  name: string;
+  description?: string | null;
+  sortOrder?: number | null;
+  isActive?: boolean | null;
+}
+
+export async function adminListSpeakingCardTypes(includeInactive = true): Promise<SpeakingCardTypeDetail[]> {
+  return request<SpeakingCardTypeDetail[]>(
+    `/v1/admin/speaking/card-types?includeInactive=${includeInactive ? 'true' : 'false'}`,
+  );
+}
+
+export async function adminCreateSpeakingCardType(input: SpeakingCardTypeUpsertInput): Promise<SpeakingCardTypeDetail> {
+  return request<SpeakingCardTypeDetail>('/v1/admin/speaking/card-types', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+}
+
+export async function adminUpdateSpeakingCardType(
+  id: string,
+  input: SpeakingCardTypeUpsertInput,
+): Promise<SpeakingCardTypeDetail> {
+  return request<SpeakingCardTypeDetail>(`/v1/admin/speaking/card-types/${encodeURIComponent(id)}`, {
+    method: 'PUT',
+    body: JSON.stringify(input),
+  });
+}
+
+export async function adminDeleteSpeakingCardType(
+  id: string,
+): Promise<{ id: string; action: string; softDeleted: boolean }> {
+  return request<{ id: string; action: string; softDeleted: boolean }>(
+    `/v1/admin/speaking/card-types/${encodeURIComponent(id)}`,
+    { method: 'DELETE' },
+  );
 }
 
 export interface ListRolePlayCardsFilters {

@@ -3123,16 +3123,11 @@ public partial class LearnerService(
         attempt.SubmittedAt ??= DateTimeOffset.UtcNow;
         await LearnerWorkflowCoordinator.UpdateDiagnosticProgressAsync(db, attempt, AttemptState.Evaluating, cancellationToken);
         var evaluationId = $"se-{Guid.NewGuid():N}";
-        if (aiPackageCreditService is not null)
-        {
-            var debit = await aiPackageCreditService.DeductGradingCreditAsync(attempt.UserId, "speaking", evaluationId, cancellationToken);
-            if (!debit.Debited)
-            {
-                throw ApiException.PaymentRequired(
-                    debit.ErrorCode ?? "no_ai_package_credits",
-                    debit.ErrorMessage ?? "You have no credits remaining. Purchase a package to continue.");
-            }
-        }
+        // Speaking credits (2026-06-11 rebuild): the single speaking charge is
+        // taken once per card at CARD REVEAL (prep start) — see
+        // SpeakingSessionService.FinishWarmupAsync (practice) and
+        // SpeakingExamService (exam). We deliberately do NOT debit again here at
+        // grading time; doing so would double-charge the learner.
 
         var evaluation = new Evaluation
         {

@@ -37,6 +37,7 @@ public sealed class MediaAssetAccessService(
         {
             if (await CanAssignedExpertAccessWritingPaperAssetAsync(userId, media.Id, ct)
                 || await CanAssignedExpertAccessReviewVoiceNoteAsync(userId, media.Id, ct)
+                || await CanAssignedTutorAccessWritingMarkingVoiceNoteAsync(userId, media.Id, ct)
                 || await IsPublishedWritingStimulusPdfAsync(media.Id, ct))
             {
                 return true;
@@ -51,6 +52,11 @@ public sealed class MediaAssetAccessService(
         }
 
         if (await CanLearnerAccessReviewVoiceNoteAsync(userId, media.Id, ct))
+        {
+            return true;
+        }
+
+        if (await CanLearnerAccessWritingMarkingVoiceNoteAsync(userId, media.Id, ct))
         {
             return true;
         }
@@ -230,6 +236,28 @@ public sealed class MediaAssetAccessService(
             .Join(db.ReviewRequests.AsNoTracking().Where(review => review.State == ReviewRequestState.Completed), note => note.ReviewRequestId, review => review.Id, (note, review) => review)
             .Join(db.Attempts.AsNoTracking(), review => review.AttemptId, attempt => attempt.Id, (review, attempt) => attempt)
             .AnyAsync(attempt => attempt.UserId == learnerId, ct);
+
+    // Writing V2 (System A) marking voice note: the owning learner may play it once the
+    // tutor review for their submission has been submitted.
+    private Task<bool> CanLearnerAccessWritingMarkingVoiceNoteAsync(string learnerId, string mediaAssetId, CancellationToken ct)
+        => db.WritingReviewVoiceNotes
+            .AsNoTracking()
+            .Where(note => note.MediaAssetId == mediaAssetId && note.Status == "ready")
+            .Join(db.WritingSubmissions.AsNoTracking(), note => note.SubmissionId, submission => submission.Id, (note, submission) => submission)
+            .Where(submission => submission.UserId == learnerId)
+            .Join(db.WritingTutorReviews.AsNoTracking().Where(review => review.Status == "submitted"), submission => submission.Id, review => review.SubmissionId, (submission, review) => submission)
+            .AnyAsync(ct);
+
+    // Writing V2 (System A) marking voice note: a tutor with an active assignment for the
+    // submission may play it (covers second/senior markers; the uploader already matches
+    // media.UploadedBy above).
+    private Task<bool> CanAssignedTutorAccessWritingMarkingVoiceNoteAsync(string tutorId, string mediaAssetId, CancellationToken ct)
+        => db.WritingReviewVoiceNotes
+            .AsNoTracking()
+            .Where(note => note.MediaAssetId == mediaAssetId)
+            .Join(db.WritingTutorReviewAssignments.AsNoTracking(), note => note.SubmissionId, assignment => assignment.SubmissionId, (note, assignment) => assignment)
+            .AnyAsync(assignment => assignment.TutorId == tutorId
+                && (assignment.Status == "claimed" || assignment.Status == "submitted"), ct);
 
     /// <summary>
     /// Returns true when the media asset is referenced by at least one <em>published</em>

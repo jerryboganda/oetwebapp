@@ -123,6 +123,21 @@ public class RolePlayCard
     [MaxLength(16)]
     public string Difficulty { get; set; } = "core";
 
+    /// <summary>Speaking module rebuild (2026-06-11). HIDDEN card type
+    /// (`SpeakingCardType`). Nullable so existing cards stay untyped until an
+    /// admin backfills. MISSION CRITICAL: never serialized to students — it is
+    /// surfaced only on admin/tutor paths and to the AI scorer.</summary>
+    [MaxLength(64)]
+    public string? CardTypeId { get; set; }
+
+    public SpeakingCardType? CardType { get; set; }
+
+    /// <summary>Speaking module rebuild (2026-06-11). The card number printed
+    /// on the official OET card faces ("CANDIDATE CARD NO. {n}" /
+    /// "ROLEPLAYER CARD NO. {n}"). Nullable; falls back to the slot position
+    /// when unset.</summary>
+    public int? DisplayCardNumber { get; set; }
+
     /// <summary>JSON array of criterion codes this card stresses (e.g.
     /// `["informationGiving","patientPerspective"]`). Same codes as
     /// `OetScoring.SpeakingCriterionScores`.</summary>
@@ -165,6 +180,30 @@ public class InterlocutorScript
     public string RolePlayCardId { get; set; } = default!;
 
     public RolePlayCard? RolePlayCard { get; set; }
+
+    // ─────────────────────────────────────────────────────────────────
+    // Speaking module rebuild (2026-06-11) — the printed ROLEPLAYER (patient)
+    // card face. These mirror the official OET roleplayer card: a SETTING
+    // (reused from the candidate card), a PATIENT background paragraph, and up
+    // to five TASK bullets. They live here on `InterlocutorScript` so they
+    // inherit the existing learner-leakage protection for free (no learner
+    // endpoint Includes this entity). The legacy behavioural fields below
+    // (OpeningResponse / Prompt1-3 / HiddenInformation / ResistanceLevel /
+    // ClosingCue) remain as AI-behaviour extras; the AI persona prompt grounds
+    // primarily on PatientBackground + PatientTask*, falling back to the legacy
+    // fields when these are blank so old cards keep working.
+    // ─────────────────────────────────────────────────────────────────
+
+    /// <summary>The PATIENT background paragraph printed on the roleplayer
+    /// card (what the tutor/AI patient knows about themselves).</summary>
+    [MaxLength(4000)]
+    public string PatientBackground { get; set; } = string.Empty;
+
+    [MaxLength(500)] public string? PatientTask1 { get; set; }
+    [MaxLength(500)] public string? PatientTask2 { get; set; }
+    [MaxLength(500)] public string? PatientTask3 { get; set; }
+    [MaxLength(500)] public string? PatientTask4 { get; set; }
+    [MaxLength(500)] public string? PatientTask5 { get; set; }
 
     /// <summary>Opening line the interlocutor uses to start the
     /// role-play (e.g. "I'm worried these tablets are too strong"). Seeds

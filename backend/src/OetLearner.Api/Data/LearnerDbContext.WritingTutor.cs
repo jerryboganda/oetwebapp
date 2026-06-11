@@ -8,6 +8,7 @@ public partial class LearnerDbContext
     public DbSet<WritingTutorReview> WritingTutorReviews => Set<WritingTutorReview>();
     public DbSet<WritingTutorReviewAssignment> WritingTutorReviewAssignments => Set<WritingTutorReviewAssignment>();
     public DbSet<WritingTutorCalibration> WritingTutorCalibrations => Set<WritingTutorCalibration>();
+    public DbSet<WritingReviewVoiceNote> WritingReviewVoiceNotes => Set<WritingReviewVoiceNote>();
 
     partial void OnModelCreatingWritingTutor(ModelBuilder modelBuilder)
     {
@@ -32,6 +33,13 @@ public partial class LearnerDbContext
         {
             e.HasKey(x => x.Id);
             e.HasIndex(x => x.TutorId).IsUnique();
+        });
+
+        modelBuilder.Entity<WritingReviewVoiceNote>(e =>
+        {
+            e.HasKey(x => x.Id);
+            // One overall note per submission — unique so the upsert path is enforced at the DB.
+            e.HasIndex(x => x.SubmissionId).IsUnique();
         });
     }
 }

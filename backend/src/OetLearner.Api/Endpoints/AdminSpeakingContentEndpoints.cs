@@ -200,6 +200,34 @@ public static class AdminSpeakingContentEndpoints
                 AdminId(http), AdminName(http), id, request, ct)))
             .WithAdminWrite("AdminContentWrite");
 
+        // ── Hidden card types (2026-06-11 rebuild) — fully configurable CRUD ──
+        var cardTypes = app.MapGroup("/v1/admin/speaking/card-types")
+            .RequireAuthorization("AdminContentRead")
+            .RequireRateLimiting("PerUser")
+            .WithTags("Admin Speaking Card Types");
+
+        cardTypes.MapGet("", async (
+            AdminService service, CancellationToken ct, [FromQuery] bool? includeInactive) =>
+            Results.Ok(await service.ListSpeakingCardTypesAsync(includeInactive ?? true, ct)));
+
+        cardTypes.MapGet("/{id}", async (string id, AdminService service, CancellationToken ct) =>
+            Results.Ok(await service.GetSpeakingCardTypeAsync(id, ct)));
+
+        cardTypes.MapPost("", async (
+            AdminSpeakingCardTypeUpsertRequest request, AdminService service, HttpContext http, CancellationToken ct) =>
+            Results.Ok(await service.CreateSpeakingCardTypeAsync(AdminId(http), AdminName(http), request, ct)))
+            .WithAdminWrite("AdminContentWrite");
+
+        cardTypes.MapPut("/{id}", async (
+            string id, AdminSpeakingCardTypeUpsertRequest request, AdminService service, HttpContext http, CancellationToken ct) =>
+            Results.Ok(await service.UpdateSpeakingCardTypeAsync(AdminId(http), AdminName(http), id, request, ct)))
+            .WithAdminWrite("AdminContentWrite");
+
+        cardTypes.MapDelete("/{id}", async (
+            string id, AdminService service, HttpContext http, CancellationToken ct) =>
+            Results.Ok(await service.DeleteSpeakingCardTypeAsync(AdminId(http), AdminName(http), id, ct)))
+            .WithAdminWrite("AdminContentWrite");
+
         return app;
     }
 

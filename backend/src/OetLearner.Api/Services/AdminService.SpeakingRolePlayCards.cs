@@ -63,6 +63,15 @@ public partial class AdminService
             .ToListAsync(ct);
         var hasScript = new HashSet<string>(scriptCardIds, StringComparer.Ordinal);
 
+        // Resolve hidden card-type names for the admin list (admin-only).
+        var typeIds = rows.Where(r => !string.IsNullOrWhiteSpace(r.CardTypeId))
+            .Select(r => r.CardTypeId!).Distinct().ToArray();
+        var typeNames = typeIds.Length == 0
+            ? new Dictionary<string, string>()
+            : await db.SpeakingCardTypes.AsNoTracking()
+                .Where(t => typeIds.Contains(t.Id))
+                .ToDictionaryAsync(t => t.Id, t => t.Name, ct);
+
         return new
         {
             rolePlayCards = rows
@@ -81,7 +90,9 @@ public partial class AdminService
                     CreatedAt: r.CreatedAt,
                     UpdatedAt: r.UpdatedAt,
                     PublishedAt: r.PublishedAt,
-                    ArchivedAt: r.ArchivedAt))
+                    ArchivedAt: r.ArchivedAt,
+                    CardTypeId: r.CardTypeId,
+                    CardTypeName: r.CardTypeId is not null && typeNames.TryGetValue(r.CardTypeId, out var tn) ? tn : null))
                 .ToArray(),
         };
     }
@@ -99,7 +110,14 @@ public partial class AdminService
         var script = await db.InterlocutorScripts.AsNoTracking()
             .FirstOrDefaultAsync(x => x.RolePlayCardId == cardId, ct);
 
-        return ProjectCardDetail(card, script);
+        var cardTypeName = string.IsNullOrWhiteSpace(card.CardTypeId)
+            ? null
+            : await db.SpeakingCardTypes.AsNoTracking()
+                .Where(t => t.Id == card.CardTypeId)
+                .Select(t => t.Name)
+                .FirstOrDefaultAsync(ct);
+
+        return ProjectCardDetail(card, script, cardTypeName);
     }
 
     public async Task<AdminRolePlayCardDetail> CreateSpeakingRolePlayCardAsync(
@@ -174,6 +192,8 @@ public partial class AdminService
                 : req.Disclaimer.Trim(),
             Status = ContentStatus.Draft,
             IsLiveTutorEligible = req.IsLiveTutorEligible ?? false,
+            CardTypeId = string.IsNullOrWhiteSpace(req.CardTypeId) ? null : req.CardTypeId.Trim(),
+            DisplayCardNumber = req.DisplayCardNumber,
             CreatedByUserId = adminId,
             CreatedAt = now,
             UpdatedAt = now,
@@ -255,6 +275,13 @@ public partial class AdminService
         if (req.Disclaimer is not null && !string.IsNullOrWhiteSpace(req.Disclaimer))
             card.Disclaimer = req.Disclaimer.Trim();
         if (req.IsLiveTutorEligible.HasValue) card.IsLiveTutorEligible = req.IsLiveTutorEligible.Value;
+        // CardTypeId: "" clears the type; a non-blank value sets it; null leaves
+        // it unchanged.
+        if (req.CardTypeId is not null)
+        {
+            card.CardTypeId = string.IsNullOrWhiteSpace(req.CardTypeId) ? null : req.CardTypeId.Trim();
+        }
+        if (req.DisplayCardNumber.HasValue) card.DisplayCardNumber = req.DisplayCardNumber.Value;
 
         card.UpdatedAt = DateTimeOffset.UtcNow;
 
@@ -437,6 +464,8 @@ public partial class AdminService
             Disclaimer = source.Disclaimer,
             Status = ContentStatus.Draft,
             IsLiveTutorEligible = source.IsLiveTutorEligible,
+            CardTypeId = source.CardTypeId,
+            DisplayCardNumber = source.DisplayCardNumber,
             CreatedByUserId = adminId,
             CreatedAt = now,
             UpdatedAt = now,
@@ -459,6 +488,12 @@ public partial class AdminService
                 EmotionalState = sourceScript.EmotionalState,
                 ProfessionRoleNotes = sourceScript.ProfessionRoleNotes,
                 LayLanguageTriggersJson = sourceScript.LayLanguageTriggersJson,
+                PatientBackground = sourceScript.PatientBackground,
+                PatientTask1 = sourceScript.PatientTask1,
+                PatientTask2 = sourceScript.PatientTask2,
+                PatientTask3 = sourceScript.PatientTask3,
+                PatientTask4 = sourceScript.PatientTask4,
+                PatientTask5 = sourceScript.PatientTask5,
                 CreatedByUserId = adminId,
                 CreatedAt = now,
                 UpdatedAt = now,
@@ -758,7 +793,8 @@ public partial class AdminService
 
     internal static AdminRolePlayCardDetail ProjectCardDetail(
         RolePlayCard card,
-        InterlocutorScript? interlocutorScript)
+        InterlocutorScript? interlocutorScript,
+        string? cardTypeName = null)
     {
         var tasks = new[] { card.Task1, card.Task2, card.Task3, card.Task4, card.Task5 };
         return new AdminRolePlayCardDetail(
@@ -791,7 +827,10 @@ public partial class AdminService
             ArchivedAt: card.ArchivedAt,
             InterlocutorScript: interlocutorScript is null
                 ? null
-                : ProjectInterlocutorScript(interlocutorScript));
+                : ProjectInterlocutorScript(interlocutorScript),
+            CardTypeId: card.CardTypeId,
+            CardTypeName: cardTypeName,
+            DisplayCardNumber: card.DisplayCardNumber);
     }
 
     internal static AdminInterlocutorScriptDetail ProjectInterlocutorScript(InterlocutorScript script)
@@ -810,7 +849,13 @@ public partial class AdminService
             LayLanguageTriggers: DeserializeStringArray(script.LayLanguageTriggersJson),
             CreatedByUserId: script.CreatedByUserId,
             CreatedAt: script.CreatedAt,
-            UpdatedAt: script.UpdatedAt);
+            UpdatedAt: script.UpdatedAt,
+            PatientBackground: script.PatientBackground,
+            PatientTasks: new[]
+            {
+                script.PatientTask1, script.PatientTask2, script.PatientTask3,
+                script.PatientTask4, script.PatientTask5,
+            });
 
     internal static string[] DeserializeStringArray(string? json)
     {

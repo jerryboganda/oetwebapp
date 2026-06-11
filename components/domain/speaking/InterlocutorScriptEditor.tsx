@@ -59,6 +59,14 @@ export function InterlocutorScriptEditor({
   const [professionRoleNotes, setProfessionRoleNotes] = useState(value?.professionRoleNotes ?? '');
   const [layLanguageTriggers, setLayLanguageTriggers] = useState<string[]>(value?.layLanguageTriggers ?? []);
   const [chipDraft, setChipDraft] = useState('');
+  // Printed ROLEPLAYER (patient) card face (2026-06-11 rebuild).
+  const patientTasksInit = value?.patientTasks ?? [];
+  const [patientBackground, setPatientBackground] = useState(value?.patientBackground ?? '');
+  const [patientTask1, setPatientTask1] = useState(patientTasksInit[0] ?? '');
+  const [patientTask2, setPatientTask2] = useState(patientTasksInit[1] ?? '');
+  const [patientTask3, setPatientTask3] = useState(patientTasksInit[2] ?? '');
+  const [patientTask4, setPatientTask4] = useState(patientTasksInit[3] ?? '');
+  const [patientTask5, setPatientTask5] = useState(patientTasksInit[4] ?? '');
 
   const validationHints = useMemo(() => {
     const hints: string[] = [];
@@ -111,6 +119,12 @@ export function InterlocutorScriptEditor({
       emotionalState: emotionalState.trim(),
       professionRoleNotes: professionRoleNotes.trim() || null,
       layLanguageTriggers,
+      patientBackground: patientBackground.trim(),
+      patientTask1: patientTask1.trim() || null,
+      patientTask2: patientTask2.trim() || null,
+      patientTask3: patientTask3.trim() || null,
+      patientTask4: patientTask4.trim() || null,
+      patientTask5: patientTask5.trim() || null,
     };
     await onSubmit(cardId, payload);
   };
@@ -170,6 +184,59 @@ export function InterlocutorScriptEditor({
             onChange={(e) => setPrompt3(e.target.value)}
             placeholder='e.g. "Ask whether non-opioid pain relief is possible."'
             rows={2}
+            maxLength={500}
+          />
+        </div>
+      </section>
+
+      {/* Section 1b: printed roleplayer (patient) card face (2026-06-11) */}
+      <section className="space-y-4">
+        <h3 className="text-sm font-bold uppercase tracking-[0.16em] text-muted">
+          Roleplayer card face (printed for the tutor / AI)
+        </h3>
+        <p className="text-xs text-muted">
+          The PATIENT background + tasks printed on the official roleplayer card. The tutor reads
+          this (or the AI is grounded on it). Never shown to the candidate.
+        </p>
+        <Textarea
+          label="Patient background"
+          value={patientBackground}
+          onChange={(e) => setPatientBackground(e.target.value)}
+          placeholder="e.g. You are an 18-year-old basketball player. You had a knee injury two days ago…"
+          rows={4}
+          maxLength={4000}
+          hint={`${patientBackground.length}/4000`}
+        />
+        <div className="grid gap-3">
+          <Input
+            label="Patient task 1"
+            value={patientTask1}
+            onChange={(e) => setPatientTask1(e.target.value)}
+            placeholder='e.g. "Explain your current symptoms."'
+            maxLength={500}
+          />
+          <Input
+            label="Patient task 2"
+            value={patientTask2}
+            onChange={(e) => setPatientTask2(e.target.value)}
+            maxLength={500}
+          />
+          <Input
+            label="Patient task 3"
+            value={patientTask3}
+            onChange={(e) => setPatientTask3(e.target.value)}
+            maxLength={500}
+          />
+          <Input
+            label="Patient task 4"
+            value={patientTask4}
+            onChange={(e) => setPatientTask4(e.target.value)}
+            maxLength={500}
+          />
+          <Input
+            label="Patient task 5"
+            value={patientTask5}
+            onChange={(e) => setPatientTask5(e.target.value)}
             maxLength={500}
           />
         </div>
