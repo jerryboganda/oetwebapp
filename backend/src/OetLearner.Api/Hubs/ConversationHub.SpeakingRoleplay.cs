@@ -576,9 +576,13 @@ public partial class ConversationHub
                     var assessment = await assessor.RunAssessmentAsync(speakingSessionId, cts.Token);
                     if (hubContext is not null)
                     {
+                        // Mock Speaking is human-marked: RunAssessmentAsync returns an
+                        // empty AssessmentId (no AI row) and the session is routed to
+                        // the tutor queue. Signal "AwaitingReview" instead of a score.
+                        var awaitingReview = string.IsNullOrEmpty(assessment.AssessmentId);
                         await hubContext.Clients.Group(groupName).SendAsync(
-                            "AssessmentReady",
-                            new { assessmentId = assessment.AssessmentId, sessionId = speakingSessionId },
+                            awaitingReview ? "AwaitingReview" : "AssessmentReady",
+                            new { assessmentId = assessment.AssessmentId, sessionId = speakingSessionId, awaitingReview },
                             cts.Token);
                     }
                 }

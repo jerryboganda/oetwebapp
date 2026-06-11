@@ -24,6 +24,25 @@ public enum AiKeySource
 }
 
 /// <summary>
+/// The assessment context a gateway call is made in. Used to enforce the
+/// product rule: <b>in mock exams, Speaking and Writing must never be scored,
+/// graded, or given feedback by AI</b> — they are marked by a human examiner.
+/// <para>
+/// - <c>None</c>: not an assessment call, or context not supplied (default).<br/>
+/// - <c>Practice</c>: formative practice/coaching — AI assessment is allowed.<br/>
+/// - <c>Mock</c>: an OET mock-exam section — the gateway hard-refuses any
+///   Speaking/Writing scoring feature code (belt-and-suspenders backstop to the
+///   pipeline-level branches). See <c>docs/AI-USAGE-POLICY.md</c>.
+/// </para>
+/// </summary>
+public enum AiAssessmentContext
+{
+    None = 0,
+    Practice = 1,
+    Mock = 2,
+}
+
+/// <summary>
 /// Final disposition of an AI call. Every call produces exactly one
 /// <see cref="AiUsageRecord"/> regardless of outcome.
 /// </summary>

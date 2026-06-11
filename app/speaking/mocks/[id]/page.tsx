@@ -361,13 +361,13 @@ export default function SpeakingMockSetOrchestratorPage({ params }: Props) {
 
         {stage === 'awaiting-results' && (
           <section className="rounded-2xl border border-info/30 bg-info/5 p-5">
-            <h2 className="text-lg font-black">Scoring in progress</h2>
+            <h2 className="text-lg font-black">Awaiting examiner marking</h2>
             <p className="mt-1 text-sm text-muted">
-              Both role-plays have been submitted. Results will appear here as soon as scoring finishes.
+              Both role-plays have been recorded. Mock Speaking is marked by a human examiner — never by AI — so your combined readiness band is released once an examiner reviews both role-plays. This page refreshes automatically; you can safely leave and come back.
             </p>
             <div className="mt-4 flex flex-wrap gap-2">
               <Button variant="outline" onClick={() => void refreshSession(session.mockSessionId)}>
-                Refresh results
+                Refresh status
               </Button>
               <Button variant="ghost" asChild>
 <Link href="/speaking/mocks">All mock sets</Link>

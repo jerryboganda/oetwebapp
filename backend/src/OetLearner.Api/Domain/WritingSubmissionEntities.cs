@@ -2,6 +2,26 @@ using System.ComponentModel.DataAnnotations;
 
 namespace OetLearner.Api.Domain;
 
+/// <summary>
+/// Canonical <see cref="WritingSubmission.Status"/> values. The column is
+/// <c>[MaxLength(16)]</c>, so every value here MUST be ≤ 16 chars.
+/// </summary>
+public static class WritingSubmissionStatuses
+{
+    public const string Queued = "queued";
+    public const string Preflight = "preflight";
+    public const string Grading = "grading";
+    public const string Graded = "graded";
+    public const string Failed = "failed";
+
+    /// <summary>
+    /// A MOCK submission that is awaiting human examiner marking. Mock Speaking
+    /// &amp; Writing are never AI-graded — this status is set instead of running
+    /// the AI rubric. 15 chars (fits the [MaxLength(16)] column).
+    /// </summary>
+    public const string AwaitingReview = "awaiting_review";
+}
+
 public class WritingSubmission
 {
     public Guid Id { get; set; }

@@ -145,18 +145,15 @@ public class WritingWave5ServiceTests
     }
 
     [Fact]
-    public async Task GetMockResultsAsync_ReturnsGradeWhenPipelineReusesExistingGrade()
+    public async Task SubmitMockAsync_RoutesToHumanReview_WithoutAiGrade()
     {
+        // Rule: mock Writing is graded by a HUMAN examiner — NEVER by AI.
+        // SubmitMockAsync must not produce a WritingGrade; it parks the submission
+        // as "awaiting_review" and routes it to the tutor marking queue.
         var db = BuildDb();
         var clock = new FixedClock();
         var mockId = await SeedPublishedMockAsync(db, clock);
-        var scenarioId = await db.WritingMocks.AsNoTracking().Where(m => m.Id == mockId).Select(m => m.ScenarioId).SingleAsync();
-        var priorSubmission = Submission(Guid.NewGuid(), UserId, scenarioId, clock.GetUtcNow().AddMinutes(-10));
-        var reusedGradeId = Guid.NewGuid();
-        db.WritingSubmissions.Add(priorSubmission);
-        db.WritingGrades.Add(Grade(reusedGradeId, priorSubmission.Id, 31, clock.GetUtcNow().AddMinutes(-5)));
-        await db.SaveChangesAsync();
-        var pipeline = new StubSubmissionPipeline(db, reusedGradeId);
+        var pipeline = new StubSubmissionPipeline(db);
         var service = BuildMockService(db, clock, pipeline);
         var started = await service.StartMockAsync(UserId, new WritingMockStartRequest(mockId), CancellationToken.None);
         await MoveSessionToWritingWindowAsync(db, started.Id, clock);
@@ -167,7 +164,10 @@ public class WritingWave5ServiceTests
         var results = await service.GetMockResultsAsync(UserId, started.Id, CancellationToken.None);
 
         Assert.NotNull(results);
-        Assert.Equal(31, results.Grade.RawTotal);
+        Assert.Equal("awaiting_review", results!.Status);
+        Assert.Null(results.Grade);
+        Assert.False(await db.WritingGrades.AnyAsync());                 // no AI grade row
+        Assert.True(await db.WritingTutorReviewAssignments.AnyAsync());  // routed to a human examiner
 
         await db.DisposeAsync();
     }
@@ -208,7 +208,20 @@ public class WritingWave5ServiceTests
     }
 
     private static WritingMockService BuildMockService(LearnerDbContext db, TimeProvider clock, StubSubmissionPipeline pipeline)
-        => new(db, clock, new NoopWritingEventBus(), pipeline, NullLogger<WritingMockService>.Instance);
+        => new(
+            db,
+            clock,
+            new NoopWritingEventBus(),
+            pipeline,
+            // Real tutor-review service — its EnsureMockReviewAssignmentAsync only
+            // needs db/clock/logger, so moderation is unused here.
+            new WritingTutorReviewService(
+                db,
+                clock,
+                Microsoft.Extensions.Options.Options.Create(new OetLearner.Api.Services.Writing.Configuration.WritingV2Options()),
+                moderation: null!,
+                NullLogger<WritingTutorReviewService>.Instance),
+            NullLogger<WritingMockService>.Instance);
 
     private static async Task MoveSessionToWritingWindowAsync(LearnerDbContext db, Guid sessionId, TimeProvider clock)
     {

@@ -496,6 +496,8 @@
   "writing.mocks.results.back": "العودة إلى الاختبارات التجريبية",
   "writing.mocks.results.openSubmission": "افتح الإرسال كاملاً",
   "writing.mocks.results.statusGrading": "ما زال تصحيح الاختبار التجريبي قيد الإنجاز. ستُحدَّث هذه الصفحة تلقائياً.",
+  "writing.mocks.results.awaiting.title": "بانتظار تصحيح المُقيّم",
+  "writing.mocks.results.awaiting.body": "تم إرسال خطاب الكتابة التجريبي إلى مُقيّم بشري. لا يُستخدم الذكاء الاصطناعي أبداً في تصحيح الكتابة التجريبية — ستظهر درجتك وملاحظاتك هنا بمجرد أن يُصحّحها المُقيّم. تُحدَّث هذه الصفحة تلقائياً.",
   "writing.mocks.results.error.load": "تعذّر تحميل نتائج الاختبار التجريبي.",
   "writing.stats.pageTitle": "إحصاءات الكتابة",
   "writing.stats.title": "تتبّع كل أبعاد تقدّمك في الكتابة",

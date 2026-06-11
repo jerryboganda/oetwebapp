@@ -55,6 +55,31 @@ public sealed class SpeakingEvaluationPipeline(
             transcript = JsonSupport.Deserialize<List<SpeakingTranscriptLine>>(attempt.TranscriptJson, []);
         }
 
+        // ── No AI for mock Speaking ────────────────────────────────────────
+        // Mock Speaking is graded by a human examiner — never by AI. Transcription
+        // (and the AI patient interlocutor during the live session) are kept; only
+        // AI SCORING is removed. Park the evaluation as "awaiting human review";
+        // the finished session is already in the tutor marking queue, and the
+        // tutor's SpeakingTutorAssessment becomes the released band.
+        if (string.Equals(attempt.Context, "mock", StringComparison.OrdinalIgnoreCase))
+        {
+            attempt.TranscriptJson = JsonSupport.Serialize(transcript);
+            attempt.State = AttemptState.Submitted;
+            evaluation.State = AsyncState.Queued;
+            evaluation.StatusReasonCode = "awaiting_human_review";
+            evaluation.StatusMessage = "Awaiting examiner marking.";
+            evaluation.ScoreRange = "Pending review";
+            evaluation.GradeRange = null;
+            evaluation.Retryable = false;
+            evaluation.RetryAfterMs = null;
+            evaluation.LastTransitionAt = DateTimeOffset.UtcNow;
+            evaluation.LearnerDisclaimer = "Your mock Speaking result is released after an examiner marks it.";
+            logger.LogInformation(
+                "Speaking attempt {AttemptId} is a mock — AI scoring skipped; routed to human examiner marking.",
+                attempt.Id);
+            return;
+        }
+
         var profession = ParseProfession(content.ProfessionId);
         var cardType = NormalizeCardType(content.ScenarioType, content.DetailJson);
         var turns = transcript
@@ -92,6 +117,11 @@ public sealed class SpeakingEvaluationPipeline(
                 FeatureCode = AiFeatureCodes.SpeakingGrade,
                 UserId = attempt.UserId,
                 PromptTemplateId = "speaking.score.v1",
+                // Arms the gateway backstop. Mock attempts branch out above and
+                // never reach here; this keeps the refusal armed if that changes.
+                AssessmentContext = string.Equals(attempt.Context, "mock", StringComparison.OrdinalIgnoreCase)
+                    ? AiAssessmentContext.Mock
+                    : AiAssessmentContext.Practice,
             }, cancellationToken);
 
             (aiEstimatedScore, aiFindings, aiCriterionScores) = ParseGatewayScore(aiResult.Completion, prompt.Metadata.AppliedRuleIds);

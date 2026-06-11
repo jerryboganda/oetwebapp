@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
-import { Award, TrendingUp } from 'lucide-react';
+import { Award, Clock, TrendingUp } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout/learner-dashboard-shell';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -39,6 +39,7 @@ export default function WritingMockResultsPage() {
   const sessionId = String(params?.id ?? '');
   const [session, setSession] = useState<WritingMockSessionDto | null>(null);
   const [grade, setGrade] = useState<WritingGradeDto | null>(null);
+  const [status, setStatus] = useState<string>('graded');
   const [bandHistory, setBandHistory] = useState<WritingBandHistoryPointDto[]>([]);
   const [error, setError] = useState<string | null>(null);
 
@@ -55,8 +56,14 @@ export default function WritingMockResultsPage() {
           if (cancelled) return;
           setSession(r.session);
           setGrade(r.grade);
+          const nextStatus = r.status ?? (r.grade ? 'graded' : 'awaiting_review');
+          setStatus(nextStatus);
           if (b) setBandHistory(b.history);
           setError(null);
+          // Mock Writing is human-marked: keep polling until the examiner's band lands.
+          if (!r.grade && nextStatus === 'awaiting_review' && attempts < 120) {
+            timer = setTimeout(load, 5000);
+          }
         })
         .catch((err) => {
           if (cancelled) return;
@@ -101,6 +108,20 @@ export default function WritingMockResultsPage() {
         />
 
         {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
+
+        {!grade && status === 'awaiting_review' ? (
+          <Card padding="md">
+            <CardContent>
+              <div className="flex items-start gap-3">
+                <Clock className="mt-0.5 h-5 w-5 shrink-0 text-amber-500" aria-hidden />
+                <div>
+                  <h2 className="text-base font-bold text-navy">{t('writing.mocks.results.awaiting.title')}</h2>
+                  <p className="mt-1 text-sm text-muted">{t('writing.mocks.results.awaiting.body')}</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        ) : null}
 
         {scores ? (
           <section className="grid gap-4 rounded-2xl border border-border bg-surface p-5 shadow-sm lg:grid-cols-2">

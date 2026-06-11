@@ -470,7 +470,12 @@ public sealed record WritingMockSubmitRequest(
 
 public sealed record WritingMockResultsResponse(
     WritingMockSessionResponse Session,
-    WritingGradeResponseV2 Grade);
+    // Null while a mock submission is awaiting human examiner marking — mock
+    // Writing is never AI-graded. Populated once a tutor submits the mark.
+    WritingGradeResponseV2? Grade,
+    // "graded" once a result exists; "awaiting_review" while a human examiner
+    // has not yet marked the mock submission.
+    string Status = "graded");
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Coach (Haiku 4.5 hints)

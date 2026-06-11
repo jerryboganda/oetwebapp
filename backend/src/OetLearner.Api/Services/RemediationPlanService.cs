@@ -67,6 +67,11 @@ public sealed class RemediationPlanService
     /// + rulebook directory + prompt-builder branch.
     /// </para>
     /// </summary>
+    // ZERO-AI-IN-MOCKS INVARIANT: even if this is ever flipped on, the AI
+    // personalisation here is a non-scoring study-plan intro only. It MUST NEVER
+    // assess, grade, score, or generate feedback about a learner's mock Speaking
+    // or Writing performance — those are graded exclusively by a human examiner.
+    // The user prompt already states "No scoring"; keep it that way.
     private const bool EnableAiPersonalisation = false;
 
     private readonly LearnerDbContext _db;

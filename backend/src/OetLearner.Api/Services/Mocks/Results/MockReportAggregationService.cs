@@ -270,8 +270,16 @@ public sealed class MockReportAggregationService(
             };
         }).ToList();
 
+        // Speaking & Writing are human-marked (never AI). While any productive
+        // section is still awaiting an examiner, withhold the OVERALL band instead
+        // of surfacing a misleading partial mean of only the auto-scored Reading/
+        // Listening sections. R&L-only mocks are unaffected and release instantly.
+        var hasProductiveSection = subTests.Any(x => x.id is "writing" or "speaking");
+        var productivePending = subTests.Any(x => (x.id is "writing" or "speaking") && !x.scaledScore.HasValue);
         var availableScores = subTests.Where(x => x.scaledScore.HasValue).Select(x => x.scaledScore!.Value).ToList();
-        var overall = availableScores.Count == 0 ? (int?)null : (int)Math.Round(availableScores.Average(), MidpointRounding.AwayFromZero);
+        var overall = (productivePending || availableScores.Count == 0)
+            ? (int?)null
+            : (int)Math.Round(availableScores.Average(), MidpointRounding.AwayFromZero);
         var weakest = subTests.Where(x => x.scaledScore.HasValue).OrderBy(x => x.scaledScore).FirstOrDefault();
         var previousReports = await db.MockReports.AsNoTracking()
             .Join(db.MockAttempts.AsNoTracking().Where(x => x.UserId == mockAttempt.UserId && x.Id != mockAttempt.Id),
@@ -331,7 +339,11 @@ public sealed class MockReportAggregationService(
             targetCountry = ReadString(config, "targetCountry"),
             deliveryMode = ReadString(config, "deliveryMode") ?? mockAttempt.DeliveryMode,
             strictness = ReadString(config, "strictness") ?? mockAttempt.Strictness,
-            releasePolicy = ReadString(config, "releasePolicy"),
+            // S/W-bearing mocks release only after a human examiner marks the
+            // productive sections; R&L-only mocks keep their configured policy.
+            releasePolicy = hasProductiveSection
+                ? MockReleasePolicies.AfterTeacherMarking
+                : ReadString(config, "releasePolicy"),
             overallScore = overall?.ToString() ?? "Pending",
             overallGrade = overall is null ? null : OetScoring.OetGradeLetterFromScaled(overall.Value),
             summary = BuildMockReportSummary(overall, subTests.Count(x => x.state is "queued" or "in_review")),
@@ -550,16 +562,19 @@ public sealed class MockReportAggregationService(
         var speaking2 = speakingSessions.FirstOrDefault(x => x.AttemptId == session.Attempt2Id);
 
         var speakingIds = speakingSessions.Select(x => x.Id).ToList();
+        // No AI for mock Speaking: the mock band is the HUMAN examiner's final
+        // SpeakingTutorAssessment, never an AI assessment. Prefer the moderated
+        // marker, then the primary marker, then any final row per session. Until a
+        // tutor finalises a half, that half stays unscored → the session is pending.
         var assessments = speakingIds.Count == 0
-            ? new List<SpeakingAiAssessment>()
-            : await db.SpeakingAiAssessments.AsNoTracking()
-                .Where(x => speakingIds.Contains(x.SpeakingSessionId))
-                .OrderByDescending(x => x.GeneratedAt)
+            ? new List<SpeakingTutorAssessment>()
+            : await db.SpeakingTutorAssessments.AsNoTracking()
+                .Where(x => x.IsFinal && speakingIds.Contains(x.SpeakingSessionId))
+                .OrderByDescending(x => x.SubmittedAt ?? x.UpdatedAt)
                 .ToListAsync(ct);
 
-        // Pick the latest AI assessment per speaking session.
-        var ai1 = speaking1 is null ? null : assessments.FirstOrDefault(x => x.SpeakingSessionId == speaking1.Id);
-        var ai2 = speaking2 is null ? null : assessments.FirstOrDefault(x => x.SpeakingSessionId == speaking2.Id);
+        var ai1 = PickCanonicalTutorAssessment(assessments, speaking1?.Id);
+        var ai2 = PickCanonicalTutorAssessment(assessments, speaking2?.Id);
 
         // Build the per-criterion average only when both halves are present.
         SpeakingMockAggregateCriterion[] perCriterion;
@@ -653,15 +668,25 @@ public sealed class MockReportAggregationService(
 
         static int RoundHalfUp(double v) => (int)Math.Round(v, MidpointRounding.AwayFromZero);
 
-        static SpeakingMockAggregateHalf BuildHalf(string attemptId, SpeakingSession? sess, SpeakingAiAssessment? ai)
+        static SpeakingTutorAssessment? PickCanonicalTutorAssessment(
+            List<SpeakingTutorAssessment> all, string? speakingSessionId)
+        {
+            if (string.IsNullOrEmpty(speakingSessionId)) return null;
+            var forSession = all.Where(a => a.SpeakingSessionId == speakingSessionId).ToList();
+            return forSession.FirstOrDefault(a => a.MarkerRole == "moderated")
+                ?? forSession.FirstOrDefault(a => a.MarkerRole == "primary")
+                ?? forSession.FirstOrDefault();
+        }
+
+        static SpeakingMockAggregateHalf BuildHalf(string attemptId, SpeakingSession? sess, SpeakingTutorAssessment? ai)
             => new(
                 AttemptId: attemptId,
                 SpeakingSessionId: sess?.Id,
                 AssessmentId: ai?.Id,
                 EstimatedScaledScore: ai?.EstimatedScaledScore,
                 ReadinessBand: ai?.ReadinessBand,
-                OverallSummary: ai?.OverallSummary,
-                GeneratedAt: ai?.GeneratedAt);
+                OverallSummary: ai?.OverallFeedbackMarkdown,
+                GeneratedAt: ai?.SubmittedAt);
     }
 
     private static string SpeakingBandLabel(string code) => code switch

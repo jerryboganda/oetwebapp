@@ -215,6 +215,76 @@ public class AiGatewayRoutingTests
         Assert.Null(mockProvider.LastRequest);
     }
 
+    // ── No AI for mock Speaking/Writing — gateway backstop ───────────────────
+    // The gateway must hard-refuse every banned Speaking/Writing assessment code
+    // when the call's AssessmentContext is Mock, BEFORE any provider is contacted.
+
+    public static IEnumerable<object[]> BannedMockAssessmentCodes() => new[]
+    {
+        new object[] { AiFeatureCodes.WritingGrade },
+        new object[] { AiFeatureCodes.WritingSampleScore },
+        new object[] { AiFeatureCodes.SpeakingGrade },
+        new object[] { AiFeatureCodes.MockFullGrade },
+        new object[] { AiFeatureCodes.ConversationEvaluation },
+        new object[] { SpeakingAiFeatureCodes.SpeakingScoreV2 },
+    };
+
+    [Theory]
+    [MemberData(nameof(BannedMockAssessmentCodes))]
+    public async Task CompleteAsync_RefusesBannedAssessmentCode_InMockContext(string featureCode)
+    {
+        var mockProvider = new CapturingProvider("mock");
+        var gateway = new AiGatewayService(_loader, new IAiModelProvider[] { mockProvider });
+
+        await Assert.ThrowsAsync<MockAssessmentForbiddenException>(async () =>
+            await gateway.CompleteAsync(new AiGatewayRequest
+            {
+                Prompt = BuildWritingPrompt(gateway),
+                FeatureCode = featureCode,
+                AssessmentContext = AiAssessmentContext.Mock,
+            }));
+
+        // The model provider must NEVER have been contacted.
+        Assert.Null(mockProvider.LastRequest);
+    }
+
+    [Fact]
+    public async Task CompleteAsync_AllowsBannedCode_InPracticeContext()
+    {
+        // Practice tools (Writing Coach grading, Speaking self-practice, etc.) keep
+        // working — the ban is scoped to mock context only, never to the code itself.
+        var mockProvider = new CapturingProvider("mock");
+        var gateway = new AiGatewayService(_loader, new IAiModelProvider[] { mockProvider });
+
+        var result = await gateway.CompleteAsync(new AiGatewayRequest
+        {
+            Prompt = BuildWritingPrompt(gateway),
+            FeatureCode = AiFeatureCodes.WritingGrade,
+            AssessmentContext = AiAssessmentContext.Practice,
+        });
+
+        Assert.Equal("completion from mock", result.Completion);
+        Assert.NotNull(mockProvider.LastRequest);
+    }
+
+    [Fact]
+    public async Task CompleteAsync_AllowsBannedCode_WhenAssessmentContextUnset()
+    {
+        // Default (None) context must not block — only an explicit Mock context does.
+        var mockProvider = new CapturingProvider("mock");
+        var gateway = new AiGatewayService(_loader, new IAiModelProvider[] { mockProvider });
+
+        var result = await gateway.CompleteAsync(new AiGatewayRequest
+        {
+            Prompt = BuildWritingPrompt(gateway),
+            FeatureCode = AiFeatureCodes.WritingGrade,
+            // AssessmentContext omitted → AiAssessmentContext.None
+        });
+
+        Assert.Equal("completion from mock", result.Completion);
+        Assert.NotNull(mockProvider.LastRequest);
+    }
+
     private static AiGroundedPrompt BuildWritingPrompt(IAiGatewayService gateway)
         => gateway.BuildGroundedPrompt(new AiGroundingContext
         {

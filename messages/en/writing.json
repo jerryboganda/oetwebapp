@@ -496,6 +496,8 @@
   "writing.mocks.results.back": "Back to mocks",
   "writing.mocks.results.openSubmission": "Open full submission",
   "writing.mocks.results.statusGrading": "Mock grading is still finishing. This page will refresh automatically.",
+  "writing.mocks.results.awaiting.title": "Awaiting examiner marking",
+  "writing.mocks.results.awaiting.body": "Your mock Writing letter has been sent to a human examiner. Mock Writing is never graded by AI — your band and feedback will appear here once an examiner marks it. This page refreshes automatically.",
   "writing.mocks.results.error.load": "Could not load mock results.",
   "writing.stats.pageTitle": "Writing Stats",
   "writing.stats.title": "Track every dimension of your writing progress",

@@ -59,6 +59,27 @@ public sealed class AiGatewayService(
 {
     private readonly RulebookPromptBuilder _promptBuilder = new(loader);
 
+    /// <summary>
+    /// Speaking/Writing scoring feature codes that are FORBIDDEN when the call's
+    /// <see cref="AiGatewayRequest.AssessmentContext"/> is
+    /// <see cref="AiAssessmentContext.Mock"/>. Mock Speaking &amp; Writing are
+    /// graded by a human examiner — never by AI. These codes remain valid for
+    /// <see cref="AiAssessmentContext.Practice"/> (the ban is context-scoped,
+    /// not code-scoped), so practice coaching/grading is unaffected.
+    /// Pronunciation/Reading/Listening codes are intentionally NOT listed —
+    /// pronunciation is a practice sub-skill, and R&amp;L grading is deterministic.
+    /// </summary>
+    private static readonly HashSet<string> BannedMockAssessmentFeatureCodes =
+        new(StringComparer.OrdinalIgnoreCase)
+        {
+            AiFeatureCodes.WritingGrade,
+            AiFeatureCodes.WritingSampleScore,
+            AiFeatureCodes.SpeakingGrade,
+            AiFeatureCodes.MockFullGrade,
+            AiFeatureCodes.ConversationEvaluation,
+            SpeakingAiFeatureCodes.SpeakingScoreV2,
+        };
+
     public AiGroundedPrompt BuildGroundedPrompt(AiGroundingContext context)
         => _promptBuilder.Build(context);
 
@@ -69,6 +90,23 @@ public sealed class AiGatewayService(
         var featureCode = string.IsNullOrWhiteSpace(request.FeatureCode)
             ? AiFeatureCodes.Unclassified
             : request.FeatureCode!;
+
+        // ── Mock invariant: physically refuse AI Speaking/Writing assessment ──
+        // Product rule: in mock exams, Speaking & Writing are graded by a human
+        // examiner — never by AI. The mock pipelines branch away from AI before
+        // ever calling the gateway; this is the belt-and-suspenders backstop so
+        // any future caller that forgets fails loud (and is audited) instead of
+        // silently grading. The refusal happens before provider selection or any
+        // credit debit, so no credits are consumed.
+        if (request.AssessmentContext == AiAssessmentContext.Mock
+            && BannedMockAssessmentFeatureCodes.Contains(featureCode))
+        {
+            await RecordRefusalAsync(request, featureCode, stopwatch, startedAt,
+                errorCode: "mock_assessment_forbidden",
+                errorMessage: "AI assessment is forbidden for Speaking/Writing in a mock context.",
+                ct);
+            throw new MockAssessmentForbiddenException(featureCode);
+        }
 
         // ── Grounding invariant: physically refuse ungrounded prompts ────────
         // The throw still happens (contract preserved), but we also record
@@ -1576,6 +1614,15 @@ public sealed class AiGatewayRequest
 
     /// <summary>Optional prompt-template identifier for A/B analysis.</summary>
     public string? PromptTemplateId { get; init; }
+
+    /// <summary>
+    /// The assessment context this call is made in. When set to
+    /// <see cref="AiAssessmentContext.Mock"/>, the gateway hard-refuses any
+    /// banned Speaking/Writing scoring feature code (see
+    /// <see cref="AiAssessmentContext"/>). Defaults to
+    /// <see cref="AiAssessmentContext.None"/> — in-memory only, never persisted.
+    /// </summary>
+    public AiAssessmentContext AssessmentContext { get; init; } = AiAssessmentContext.None;
 }
 
 public sealed class AiGatewayResult
@@ -1594,6 +1641,20 @@ public sealed class AiUsage
 }
 
 public sealed class PromptNotGroundedException(string message) : InvalidOperationException(message);
+
+/// <summary>
+/// Thrown when an AI Speaking/Writing assessment is requested inside a mock-exam
+/// context. Product rule: mock Speaking &amp; Writing are graded by a human
+/// examiner — never by AI. This is the gateway backstop; the mock pipelines also
+/// branch away from AI before ever reaching the gateway. See
+/// <see cref="AiAssessmentContext"/> and <c>docs/AI-USAGE-POLICY.md</c>.
+/// </summary>
+public sealed class MockAssessmentForbiddenException(string featureCode)
+    : InvalidOperationException(
+        $"AI assessment is forbidden for Speaking/Writing in a mock context (feature '{featureCode}'). Mock Speaking & Writing are marked by a human examiner.")
+{
+    public string FeatureCode { get; } = featureCode;
+}
 
 // ---------------------------------------------------------------------------
 // Provider contract — implement per model vendor

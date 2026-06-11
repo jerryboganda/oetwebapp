@@ -445,21 +445,19 @@ public partial class LearnerService
         SpeakingMockSet mockSet,
         CancellationToken cancellationToken)
     {
-        var (attempt1Summary, eval1) = await BuildMockAttemptSummaryAsync(session.Attempt1Id, cancellationToken);
-        var (attempt2Summary, eval2) = await BuildMockAttemptSummaryAsync(session.Attempt2Id, cancellationToken);
+        var (attempt1Summary, graded1, s1) = await BuildMockAttemptSummaryAsync(session.Attempt1Id, cancellationToken);
+        var (attempt2Summary, graded2, s2) = await BuildMockAttemptSummaryAsync(session.Attempt2Id, cancellationToken);
 
-        var bothFinished = eval1 is { State: AsyncState.Completed } && eval2 is { State: AsyncState.Completed };
+        // Both halves are "finished" only once a human examiner has finalised the
+        // tutor assessment for each role-play — mock Speaking is never AI-scored.
+        var bothFinished = graded1 && graded2;
         int? combinedScaled = null;
         string combinedBandCode = ScoringService.ReadinessBandCode("oet", 0);
 
         if (bothFinished)
         {
             var attempt1 = await db.Attempts.FirstAsync(x => x.Id == session.Attempt1Id, cancellationToken);
-            var attempt2 = await db.Attempts.FirstAsync(x => x.Id == session.Attempt2Id, cancellationToken);
             var family1 = NormalizeExamFamilyCode(attempt1.ExamFamilyCode);
-            var family2 = NormalizeExamFamilyCode(attempt2.ExamFamilyCode);
-            var s1 = ReadSpeakingBandFromAnalysis(attempt1.AnalysisJson, family1).estimatedScaledScore;
-            var s2 = ReadSpeakingBandFromAnalysis(attempt2.AnalysisJson, family2).estimatedScaledScore;
             if (s1.HasValue && s2.HasValue)
             {
                 combinedScaled = (int)Math.Round((s1.Value + s2.Value) / 2.0, MidpointRounding.AwayFromZero);
@@ -468,7 +466,7 @@ public partial class LearnerService
 
             // Persist a snapshot the first time both halves complete so the
             // historical mock session card stays stable even if an expert
-            // later moderates one of the underlying evaluations.
+            // later moderates one of the underlying assessments.
             if (session.State != SpeakingMockSessionState.Completed)
             {
                 session.State = SpeakingMockSessionState.Completed;
@@ -513,7 +511,7 @@ public partial class LearnerService
         };
     }
 
-    private async Task<(object summary, Evaluation? evaluation)> BuildMockAttemptSummaryAsync(
+    private async Task<(object summary, bool graded, int? scaled)> BuildMockAttemptSummaryAsync(
         string attemptId,
         CancellationToken cancellationToken)
     {
@@ -524,8 +522,26 @@ public partial class LearnerService
             .OrderByDescending(x => x.LastTransitionAt)
             .FirstOrDefaultAsync(cancellationToken);
 
-        var examFamilyCode = NormalizeExamFamilyCode(attempt.ExamFamilyCode);
-        var (scaled, bandCode, _) = ReadSpeakingBandFromAnalysis(attempt.AnalysisJson, examFamilyCode);
+        // Mock Speaking is graded by a HUMAN examiner — never by AI. The displayed
+        // score/band comes from the final SpeakingTutorAssessment (prefer moderated
+        // > primary). The AI band in attempt.AnalysisJson is intentionally absent.
+        var speakingSession = await db.SpeakingSessions.AsNoTracking()
+            .FirstOrDefaultAsync(s => s.AttemptId == attemptId, cancellationToken);
+        SpeakingTutorAssessment? tutor = null;
+        if (speakingSession is not null)
+        {
+            var finals = await db.SpeakingTutorAssessments.AsNoTracking()
+                .Where(t => t.IsFinal && t.SpeakingSessionId == speakingSession.Id)
+                .ToListAsync(cancellationToken);
+            tutor = finals.FirstOrDefault(t => t.MarkerRole == "moderated")
+                ?? finals.FirstOrDefault(t => t.MarkerRole == "primary")
+                ?? finals.FirstOrDefault();
+        }
+
+        var graded = tutor is not null;
+        int? scaled = tutor?.EstimatedScaledScore;
+        var bandCode = tutor?.ReadinessBand
+            ?? OetScoring.SpeakingReadinessBandCode(OetScoring.SpeakingReadinessBand.NotReady);
 
         return (new
         {
@@ -535,11 +551,13 @@ public partial class LearnerService
             scenarioType = content.ScenarioType,
             state = attempt.State.ToString().ToLowerInvariant(),
             evaluationId = evaluation?.Id,
-            evaluationState = evaluation?.State.ToString().ToLowerInvariant(),
+            // "completed" once a human examiner finalises the mark; otherwise the
+            // underlying evaluation state (queued = awaiting examiner marking).
+            evaluationState = graded ? "completed" : evaluation?.State.ToString().ToLowerInvariant(),
             estimatedScaledScore = scaled,
             readinessBand = bandCode,
             readinessBandLabel = BuildSpeakingReadinessBandLabel(bandCode),
-        }, evaluation);
+        }, graded, scaled);
     }
 
     private static string[] SplitCsv(string? csv) =>

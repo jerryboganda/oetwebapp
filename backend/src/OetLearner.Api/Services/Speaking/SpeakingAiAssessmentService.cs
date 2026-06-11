@@ -94,6 +94,32 @@ Scoring rules:
             ?? throw ApiException.NotFound("speaking_session_not_found",
                 "That Speaking session does not exist.");
 
+        // ── No AI for mock Speaking ────────────────────────────────────────
+        // Mock Speaking is graded by a human examiner — never by AI. The
+        // finished session is already visible in the tutor review queue
+        // (TutorReviewQueueService.ListQueueAsync lists finished, unscored
+        // sessions); the tutor's SpeakingTutorAssessment becomes the mock band.
+        // Do NOT call the AI gateway or write a SpeakingAiAssessment row.
+        if (!string.IsNullOrWhiteSpace(session.MockSessionId)
+            || !string.IsNullOrWhiteSpace(session.MockSetId))
+        {
+            logger.LogInformation(
+                "Speaking session {SessionId} is a mock — AI assessment skipped; routed to human examiner marking.",
+                sessionId);
+            return new SpeakingAiAssessmentProjection(
+                AssessmentId: string.Empty,
+                Provider: "human_examiner",
+                ModelId: string.Empty,
+                PromptTemplateId: string.Empty,
+                CriterionScores: new Dictionary<string, CriterionScore>(),
+                EstimatedScaledScore: 0,
+                ReadinessBand: "awaiting_human_review",
+                OverallSummary: "Mock Speaking is marked by a human examiner. Your result is released after marking.",
+                ConfidenceBand: "pending",
+                GeneratedAt: DateTimeOffset.UtcNow,
+                IsAdvisory: false);
+        }
+
         var card = await db.RolePlayCards.AsNoTracking()
             .FirstOrDefaultAsync(c => c.Id == session.RolePlayCardId, ct)
             ?? throw ApiException.NotFound("role_play_card_not_found",
@@ -147,6 +173,12 @@ Scoring rules:
                 FeatureCode = AiFeatureCodes.SpeakingGrade,
                 UserId = session.UserId,
                 PromptTemplateId = PromptTemplateId,
+                // Arms the gateway backstop. Mock sessions branch out above and
+                // never reach here; this keeps the refusal armed if that ever changes.
+                AssessmentContext = !string.IsNullOrWhiteSpace(session.MockSessionId)
+                    || !string.IsNullOrWhiteSpace(session.MockSetId)
+                    ? AiAssessmentContext.Mock
+                    : AiAssessmentContext.Practice,
             }, ct);
         }
         catch (PromptNotGroundedException)

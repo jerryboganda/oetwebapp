@@ -506,7 +506,10 @@ export const submitWritingMock = (sessionId: string, payload: { letterContent: s
   );
 
 export const getWritingMockResults = (sessionId: string) =>
-  apiClient.get<{ session: WritingMockSessionDto; grade: WritingGradeDto }>(
+  // `grade` is null while a mock submission is awaiting human examiner marking
+  // (mock Writing is never AI-graded). `status` is "awaiting_review" until a
+  // tutor submits the mark, then "graded".
+  apiClient.get<{ session: WritingMockSessionDto; grade: WritingGradeDto | null; status: string }>(
     path('/v1/writing/mocks/sessions/{id}/results', { id: sessionId }),
   );
 

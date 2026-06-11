@@ -75,6 +75,14 @@ public interface IWritingTutorReviewService
     Task<WritingTutorReviewView?> GetReviewForSubmissionAsync(string userId, Guid submissionId, CancellationToken ct);
     Task<WritingTutorReviewView> RequestReviewAsync(string userId, Guid submissionId, CancellationToken ct);
 
+    /// <summary>
+    /// Idempotently create a tutor-review assignment for a MOCK submission. Unlike
+    /// <see cref="RequestReviewAsync"/>, this does NOT honour the queue-paused gate:
+    /// mock Speaking &amp; Writing are graded by a human examiner by policy, so the
+    /// assignment must always be created (the learner has already finished the mock).
+    /// </summary>
+    Task EnsureMockReviewAssignmentAsync(string userId, Guid submissionId, CancellationToken ct);
+
     // ── V2 endpoint contract adapters ────────────────────────────────────────
     Task<WritingTutorReviewResponse?> RequestTutorReviewAsync(string userId, Guid submissionId, string? priority, CancellationToken ct);
     Task<WritingTutorReviewResponse?> GetTutorReviewAsync(string userId, Guid submissionId, CancellationToken ct);
@@ -336,7 +344,48 @@ public sealed class WritingTutorReviewService(
             .OrderByDescending(g => g.AppealedByGradeId != null || g.TutorReviewId != null)
             .ThenByDescending(g => g.GradedAt)
             .FirstOrDefaultAsync(ct);
-        if (current is null) return;
+        if (current is null)
+        {
+            // No prior grade exists — this is a MOCK Writing submission that was
+            // deliberately NOT AI-graded (mock S/W are marked by a human examiner).
+            // Materialise the tutor's marks as a human-authored grade from scratch.
+            // Feedback-only marks (no scores) leave the submission awaiting a band.
+            if (scoreOverride is null || scoreOverride.Count == 0) return;
+
+            var humanScores = new[]
+            {
+                scoreOverride.GetValueOrDefault("c1Purpose", 0),
+                scoreOverride.GetValueOrDefault("c2Content", 0),
+                scoreOverride.GetValueOrDefault("c3Conciseness", 0),
+                scoreOverride.GetValueOrDefault("c4Genre", 0),
+                scoreOverride.GetValueOrDefault("c5Organisation", 0),
+                scoreOverride.GetValueOrDefault("c6Language", 0),
+            };
+            var humanRawTotal = humanScores.Sum();
+            db.WritingGrades.Add(new WritingGrade
+            {
+                Id = Guid.NewGuid(),
+                SubmissionId = review.SubmissionId,
+                C1Purpose = (short)humanScores[0],
+                C2Content = (short)humanScores[1],
+                C3Conciseness = (short)humanScores[2],
+                C4Genre = (short)humanScores[3],
+                C5Organisation = (short)humanScores[4],
+                C6Language = (short)humanScores[5],
+                RawTotal = (short)humanRawTotal,
+                EstimatedBand = humanRawTotal,
+                BandLabel = RawBandLabel(humanRawTotal),
+                PerCriterionFeedbackJson = review.PerCriterionCommentsJson ?? "{}",
+                TopThreePrioritiesJson = "[]",
+                ConfidenceFlag = "tutor_reviewed",
+                ModelUsed = "human_tutor",
+                CanonVersion = "human",
+                TutorReviewId = review.Id,
+                GradedAt = now,
+                CreatedAt = now,
+            });
+            return;
+        }
 
         if (scoreOverride is null || scoreOverride.Count == 0)
         {
@@ -459,6 +508,30 @@ public sealed class WritingTutorReviewService(
             await db.SaveChangesAsync(ct);
         }
         return new WritingTutorReviewView(Guid.Empty, submission.Id, string.Empty, assignment.Status, null, null, null, null);
+    }
+
+    public async Task EnsureMockReviewAssignmentAsync(string userId, Guid submissionId, CancellationToken ct)
+    {
+        var submission = await db.WritingSubmissions.AsNoTracking()
+            .FirstOrDefaultAsync(s => s.Id == submissionId && s.UserId == userId, ct)
+            ?? throw ApiException.NotFound("writing_submission_not_found", "Submission was not found.");
+        var existing = await db.WritingTutorReviewAssignments
+            .FirstOrDefaultAsync(a => a.SubmissionId == submission.Id, ct);
+        if (existing is not null) return; // idempotent — one assignment per submission
+
+        var now = clock.GetUtcNow();
+        db.WritingTutorReviewAssignments.Add(new WritingTutorReviewAssignment
+        {
+            Id = Guid.NewGuid(),
+            SubmissionId = submission.Id,
+            TutorId = string.Empty,
+            ClaimedAt = now,
+            DueAt = now.AddHours(24),
+            Status = "pending",
+        });
+        await db.SaveChangesAsync(ct);
+        logger.LogInformation(
+            "Mock writing submission {SubmissionId} routed to human examiner marking (no AI grade).", submission.Id);
     }
 
     private static WritingTutorReviewView ToView(WritingTutorReview review)
