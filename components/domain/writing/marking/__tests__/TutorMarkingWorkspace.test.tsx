@@ -216,7 +216,11 @@ describe('TutorMarkingWorkspace', () => {
   });
 
   it('invokes createWritingAnnotation when an annotation is added', async () => {
-    getTutorMarkingContext.mockResolvedValue(makeContext());
+    // Span annotations are a MOCK-marking feature (normal writing uses voice
+    // notes instead), so the AnnotationLayer only renders when mode === 'mock'.
+    const ctx = makeContext();
+    ctx.submission.mode = 'mock';
+    getTutorMarkingContext.mockResolvedValue(ctx);
     createWritingAnnotation.mockResolvedValue({
       id: 'ann-1',
       submissionId: 'sub-1',
