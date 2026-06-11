@@ -76,6 +76,13 @@ vi.mock('@/components/domain/writing/CriteriaRadar', () => ({
 // ── Mocks required by WritingStimulusViewer (rendered when stimulusPdfDownloadPath is set) ──
 vi.mock('@/lib/api', () => ({
   fetchAuthorizedObjectUrl: vi.fn().mockResolvedValue('blob:fake-url'),
+  // The marking workspace renders <OverallVoiceNote> -> <VoiceNoteRecorder>,
+  // which import the voice-note upload API from '@/lib/api'. Mock every export
+  // the rendered subtree pulls in so the component mounts cleanly.
+  uploadWritingMarkingVoiceNote: vi.fn().mockResolvedValue(null),
+  uploadSpeakingReviewCriterionVoiceNote: vi.fn().mockResolvedValue(null),
+  uploadWritingReviewCriterionVoiceNote: vi.fn().mockResolvedValue(null),
+  getWritingSubmissionVoiceNote: vi.fn().mockResolvedValue(null),
 }));
 
 vi.mock('pdfjs-dist/legacy/build/pdf.mjs', () => {
