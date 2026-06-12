@@ -17,6 +17,7 @@ import {
   fetchAdminConversationTemplates,
   publishAdminConversationTemplate,
   archiveAdminConversationTemplate,
+  forceDeleteAdminConversationTemplate,
 } from '@/lib/api';
 
 type TemplateRow = {
@@ -85,6 +86,17 @@ export default function AdminConversationTemplatesPage() {
       await load();
     } catch {
       setToast({ variant: 'error', message: 'Archive failed.' });
+    }
+  }
+
+  async function handleForceDelete(id: string) {
+    if (!confirm('Permanently delete this archived template AND all learner conversation sessions for it? This cannot be undone.')) return;
+    try {
+      await forceDeleteAdminConversationTemplate(id);
+      setToast({ variant: 'success', message: 'Template permanently deleted.' });
+      await load();
+    } catch (e) {
+      setToast({ variant: 'error', message: (e as Error).message || 'Delete failed.' });
     }
   }
 
@@ -207,6 +219,11 @@ export default function AdminConversationTemplatesPage() {
                   {row.status !== 'archived' && (
                     <Button variant="secondary" size="sm" onClick={() => handleArchive(row.id)} startIcon={<Archive className="h-4 w-4" />}>
                       Archive
+                    </Button>
+                  )}
+                  {row.status === 'archived' && (
+                    <Button variant="secondary" size="sm" className="text-red-600" onClick={() => handleForceDelete(row.id)}>
+                      Force delete
                     </Button>
                   )}
                 </div>

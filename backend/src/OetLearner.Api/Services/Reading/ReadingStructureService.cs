@@ -515,6 +515,14 @@ public sealed class ReadingStructureService : IReadingStructureService
             .Include(q => q.Part)
             .FirstOrDefaultAsync(q => q.Id == questionId && q.Part != null && q.Part.PaperId == paperId, ct);
         if (row is null) return false;
+        // ReadingAnswer has a RESTRICT FK to ReadingQuestion, so without purging the
+        // learner answers first the delete fails with a raw FK violation once anyone
+        // has answered. ReadingAnswerRevision references the question via a plain
+        // column (no FK) — purge it too so it does not dangle.
+        db.ReadingAnswers.RemoveRange(
+            await db.ReadingAnswers.Where(a => a.ReadingQuestionId == questionId).ToListAsync(ct));
+        db.ReadingAnswerRevisions.RemoveRange(
+            await db.ReadingAnswerRevisions.Where(a => a.ReadingQuestionId == questionId).ToListAsync(ct));
         db.ReadingQuestions.Remove(row);
         await WriteAuditAsync("ReadingQuestionRemoved", questionId, row.Stem, adminId, ct);
         await db.SaveChangesAsync(ct);

@@ -194,6 +194,19 @@ public static class SpeakingSharedResourcesEndpoints
         })
         .WithAdminWrite("AdminContentWrite");
 
+        // Permanent purge — removes the row outright (no dependents reference it;
+        // the MediaAsset it points at is left intact). system_admin only.
+        admin.MapPost("/{id}/force-delete", async (string id, LearnerDbContext db, HttpContext http, CancellationToken ct) =>
+        {
+            var row = await db.SpeakingSharedResources.FirstOrDefaultAsync(x => x.Id == id, ct);
+            if (row is null) return Results.NotFound();
+            db.SpeakingSharedResources.Remove(row);
+            AddAuditEvent(db, http, "SpeakingSharedResourceForceDeleted", "SpeakingSharedResource", row.Id, row.Title);
+            await db.SaveChangesAsync(ct);
+            return Results.NoContent();
+        })
+        .WithAdminWrite("AdminSystemAdmin");
+
         // ── Learner ────────────────────────────────────────────────────────
         var learner = app.MapGroup("/v1/speaking/shared-resources")
             .RequireAuthorization()

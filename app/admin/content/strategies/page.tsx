@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { BookOpenText, FilePlus2, Search, ShieldCheck } from 'lucide-react';
 import {
   adminArchiveStrategyGuide,
+  adminForceDeleteStrategyGuide,
   adminListStrategyGuides,
   adminPublishStrategyGuide,
 } from '@/lib/api';
@@ -88,6 +89,17 @@ export default function AdminStrategiesPage() {
     }
   }
 
+  async function forceDeleteGuide(guideId: string) {
+    if (!window.confirm('Permanently delete this archived strategy guide AND all learner progress for it? This cannot be undone.')) return;
+    try {
+      await adminForceDeleteStrategyGuide(guideId);
+      setToast({ variant: 'success', message: 'Strategy guide permanently deleted.' });
+      await loadGuides();
+    } catch (error) {
+      setToast({ variant: 'error', message: (error as Error).message || 'Delete failed.' });
+    }
+  }
+
   const columns: Column<StrategyGuideAdminItem>[] = [
     {
       key: 'title',
@@ -138,6 +150,9 @@ export default function AdminStrategiesPage() {
           ) : null}
           {guide.status !== 'archived' ? (
             <Button variant="outline" size="sm" onClick={() => void archiveGuide(guide.id)}>Archive</Button>
+          ) : null}
+          {guide.status === 'archived' ? (
+            <Button variant="outline" size="sm" className="text-red-600 border-red-300 hover:bg-red-50" onClick={() => void forceDeleteGuide(guide.id)}>Force delete</Button>
           ) : null}
         </div>
       ),

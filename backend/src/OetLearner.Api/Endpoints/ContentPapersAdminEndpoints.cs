@@ -221,10 +221,11 @@ public static class ContentPapersAdminEndpoints
         {
             var action = (req.Action ?? string.Empty).Trim().ToLowerInvariant();
 
-            // delete (permanent) requires system_admin — the most destructive action;
+            // delete / force-delete (permanent) require system_admin — the most
+            // destructive actions (force-delete also purges learner attempts);
             // publish/unpublish/approve-publish/reject require content:publish;
             // archive/submit-for-review require content:write.
-            var requiresSystemAdmin = action is "delete";
+            var requiresSystemAdmin = action is "delete" or "force-delete";
             var requiresPublish = action is "publish" or "unpublish" or "approve-publish" or "reject";
             var requiresWrite = action is "archive" or "submit-for-review";
             if (!requiresSystemAdmin && !requiresPublish && !requiresWrite)

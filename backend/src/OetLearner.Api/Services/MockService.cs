@@ -1722,6 +1722,63 @@ public sealed class MockService(LearnerDbContext db, IAiPackageCreditService? ai
         return new { id = bundle.Id, status = bundle.Status.ToString().ToLowerInvariant() };
     }
 
+    /// <summary>
+    /// True-purge cascade for a mock bundle (the "force-delete" bulk action).
+    /// Removes the bundle, its sections, and ALL learner data tied to it — attempts,
+    /// section attempts, review reservations, content reviews, proctoring events,
+    /// bookings + their live-room transitions, and analytics snapshots — and nulls
+    /// the dangling MockAttemptId on credit-ledger rows (accounting history is kept).
+    /// Loads + RemoveRange (no ExecuteDelete) for InMemory parity; does NOT
+    /// SaveChanges/audit — the bulk caller owns the single transaction, SaveChanges
+    /// and the one summary audit row. The bundle must already be Archived.
+    /// </summary>
+    private async Task ForceDeleteBundleCascadeAsync(string id, CancellationToken ct)
+    {
+        var bundle = await GetBundleEntityAsync(id, track: true, ct);
+        if (bundle.Status != ContentStatus.Archived)
+            throw ApiException.Validation(
+                "mock_bundle_force_delete_not_archived",
+                "Only archived mock bundles can be permanently deleted. Archive it first.");
+
+        var attemptIds = await db.MockAttempts
+            .Where(a => a.MockBundleId == id).Select(a => a.Id).ToListAsync(ct);
+        var sectionIds = await db.MockBundleSections
+            .Where(s => s.MockBundleId == id).Select(s => s.Id).ToListAsync(ct);
+        var bookingIds = await db.MockBookings
+            .Where(b => b.MockBundleId == id
+                     || (b.MockAttemptId != null && attemptIds.Contains(b.MockAttemptId)))
+            .Select(b => b.Id).ToListAsync(ct);
+
+        db.MockLiveRoomTransitions.RemoveRange(
+            await db.MockLiveRoomTransitions.Where(t => bookingIds.Contains(t.BookingId)).ToListAsync(ct));
+        db.MockProctoringEvents.RemoveRange(
+            await db.MockProctoringEvents.Where(e => attemptIds.Contains(e.MockAttemptId)).ToListAsync(ct));
+        db.MockReviewReservations.RemoveRange(
+            await db.MockReviewReservations.Where(r => attemptIds.Contains(r.MockAttemptId)).ToListAsync(ct));
+        db.MockContentReviews.RemoveRange(
+            await db.MockContentReviews.Where(r => r.MockBundleId == id
+                || (r.MockAttemptId != null && attemptIds.Contains(r.MockAttemptId))).ToListAsync(ct));
+        db.MockSectionAttempts.RemoveRange(
+            await db.MockSectionAttempts.Where(sa => attemptIds.Contains(sa.MockAttemptId)
+                || sectionIds.Contains(sa.MockBundleSectionId)).ToListAsync(ct));
+        db.MockBookings.RemoveRange(
+            await db.MockBookings.Where(b => bookingIds.Contains(b.Id)).ToListAsync(ct));
+        db.MockItemAnalysisSnapshots.RemoveRange(
+            await db.MockItemAnalysisSnapshots.Where(s => s.MockBundleId == id).ToListAsync(ct));
+
+        // Credit ledger: a plain nullable reference, not the bundle's own data —
+        // keep the accounting row, null the dangling attempt pointer.
+        var ledger = await db.MockEntitlementLedgers
+            .Where(l => l.MockAttemptId != null && attemptIds.Contains(l.MockAttemptId)).ToListAsync(ct);
+        foreach (var l in ledger) l.MockAttemptId = null;
+
+        db.MockAttempts.RemoveRange(
+            await db.MockAttempts.Where(a => a.MockBundleId == id).ToListAsync(ct));
+        db.MockBundleSections.RemoveRange(
+            await db.MockBundleSections.Where(s => s.MockBundleId == id).ToListAsync(ct));
+        db.MockBundles.Remove(bundle);
+    }
+
     public async Task<object> AddSectionAsync(string id, AdminMockBundleSectionRequest request, string adminId, CancellationToken ct)
     {
         var bundle = await GetBundleEntityAsync(id, track: true, ct);
@@ -1829,11 +1886,11 @@ public sealed class MockService(LearnerDbContext db, IAiPackageCreditService? ai
     public async Task<object> BulkAsync(string action, string[] ids, string adminId, CancellationToken ct)
     {
         var normalizedAction = (action ?? string.Empty).Trim().ToLowerInvariant();
-        if (normalizedAction is not ("publish" or "archive" or "delete"))
+        if (normalizedAction is not ("publish" or "archive" or "delete" or "force-delete"))
         {
             throw ApiException.Validation(
                 "mock_bundle_bulk_action_invalid",
-                "Action must be one of: publish, archive, delete.");
+                "Action must be one of: publish, archive, delete, force-delete.");
         }
 
         // Action-specific permission gate. The route only guarantees
@@ -1851,6 +1908,18 @@ public sealed class MockService(LearnerDbContext db, IAiPackageCreditService? ai
                 throw ApiException.Forbidden(
                     "insufficient_permission",
                     "Bulk publishing mock bundles requires the content:publish permission.");
+            }
+        }
+        else if (normalizedAction == "force-delete")
+        {
+            // Most destructive action — permanently purges the bundle plus all
+            // learner attempt/booking/proctoring data tied to it. system_admin only.
+            var perms = await GetEffectiveAdminPermissionsAsync(adminId, ct);
+            if (!perms.Contains(AdminPermissions.SystemAdmin))
+            {
+                throw ApiException.Forbidden(
+                    "insufficient_permission",
+                    "Force-deleting mock bundles requires the system_admin permission.");
             }
         }
 
@@ -1992,9 +2061,17 @@ public sealed class MockService(LearnerDbContext db, IAiPackageCreditService? ai
             return true;
         }
 
+        if (action == "force-delete")
+        {
+            // Permanent true-purge. Cascade runs without its own SaveChanges so it
+            // joins the caller's single bulk transaction + summary audit row.
+            await ForceDeleteBundleCascadeAsync(id, ct);
+            return true;
+        }
+
         // archive | delete — both perform a soft-archive, matching the per-item
-        // DELETE endpoint (which maps to ArchiveBundleAsync). There is no hard
-        // delete for mock bundles.
+        // DELETE endpoint (which maps to ArchiveBundleAsync). "delete" stays a
+        // soft-archive; "force-delete" (above) is the permanent purge.
         var target = await GetBundleEntityAsync(id, track: true, ct);
         if (target.Status == ContentStatus.Archived) return false;
 

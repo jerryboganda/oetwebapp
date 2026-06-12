@@ -328,6 +328,36 @@ public sealed class StrategyGuideService(LearnerDbContext db)
         return ToAdminDto(guide);
     }
 
+    /// <summary>
+    /// Permanently deletes an archived strategy guide and purges all learner
+    /// progress rows for it. Archive-first gated; irreversible. Returns null when
+    /// the guide does not exist (so the endpoint can 404).
+    /// </summary>
+    public async Task<bool?> ForceDeleteGuideAsync(
+        string adminId,
+        string adminName,
+        string guideId,
+        CancellationToken ct)
+    {
+        var guide = await db.StrategyGuides.FirstOrDefaultAsync(item => item.Id == guideId, ct);
+        if (guide is null)
+        {
+            return null;
+        }
+        if (guide.Status != "archived")
+        {
+            throw ApiException.Validation("strategy_force_delete_not_archived",
+                "Only archived strategy guides can be permanently deleted. Archive it first.");
+        }
+
+        db.LearnerStrategyProgress.RemoveRange(
+            await db.LearnerStrategyProgress.Where(p => p.StrategyGuideId == guideId).ToListAsync(ct));
+        db.StrategyGuides.Remove(guide);
+        AddAudit(adminId, adminName, "ForceDeleted", guide.Id, $"Force-deleted strategy guide + learner progress: {guide.Title}");
+        await db.SaveChangesAsync(ct);
+        return true;
+    }
+
     private IQueryable<StrategyGuide> QueryActiveGuides(
         string? examTypeCode,
         string? subtestCode,

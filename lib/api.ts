@@ -8710,6 +8710,17 @@ export async function adminArchiveGrammarLessonV2(lessonId: string) {
   return response;
 }
 
+/** Permanently deletes an archived grammar lesson + all learner progress. system_admin only. */
+export async function adminForceDeleteGrammarLessonV2(lessonId: string) {
+  const response = await apiRequest(`/v1/admin/grammar/lessons/${encodeURIComponent(lessonId)}/force-delete`, { method: 'POST' });
+  const cache = getGrammarLessonCache();
+  if (cache[lessonId]) {
+    delete cache[lessonId];
+    saveGrammarLessonCache(cache);
+  }
+  return response;
+}
+
 export async function adminEvaluateGrammarPublishGate(lessonId: string) {
   const lesson = await adminGetGrammarLessonV2(lessonId);
   const errors: string[] = [];
@@ -9035,6 +9046,13 @@ export async function adminArchiveStrategyGuide(guideId: string) {
   });
 }
 
+/** Permanently deletes an archived strategy guide + all learner progress. system_admin only. */
+export async function adminForceDeleteStrategyGuide(guideId: string) {
+  return apiRequest(`/v1/admin/strategies/${encodeURIComponent(guideId)}/force-delete`, {
+    method: 'POST',
+  });
+}
+
 // ── Pronunciation ─────────────────────────────────────────────────────────────
 // All pronunciation endpoints are protected by the backend's LearnerOnly policy
 // and the `pronunciation_analysis` feature flag. The recording+scoring flow:
@@ -9246,6 +9264,13 @@ export async function archiveAdminPronunciationDrill(drillId: string) {
   });
 }
 
+/** Permanently deletes an archived pronunciation drill + all learner attempts/assessments. system_admin only. */
+export async function forceDeleteAdminPronunciationDrill(drillId: string) {
+  return apiRequest(`/v1/admin/pronunciation/drills/${encodeURIComponent(drillId)}/force-delete`, {
+    method: 'POST',
+  });
+}
+
 export async function adminPronunciationAiDraft(body: {
   phoneme?: string;
   focus?: string;
@@ -9454,6 +9479,13 @@ export async function publishAdminConversationTemplate(templateId: string) {
 
 export async function archiveAdminConversationTemplate(templateId: string) {
   return apiRequest(`/v1/admin/conversation/templates/${encodeURIComponent(templateId)}/archive`, {
+    method: 'POST',
+  });
+}
+
+/** Permanently deletes an archived conversation template + all learner sessions. system_admin only. */
+export async function forceDeleteAdminConversationTemplate(templateId: string) {
+  return apiRequest(`/v1/admin/conversation/templates/${encodeURIComponent(templateId)}/force-delete`, {
     method: 'POST',
   });
 }
@@ -9952,7 +9984,7 @@ export async function archiveAdminMockBundle(bundleId: string) {
   });
 }
 
-export type MockBundleBulkAction = 'publish' | 'archive' | 'delete';
+export type MockBundleBulkAction = 'publish' | 'archive' | 'delete' | 'force-delete';
 
 /**
  * Bulk action over mock bundles. `POST /v1/admin/mock-bundles/bulk`.

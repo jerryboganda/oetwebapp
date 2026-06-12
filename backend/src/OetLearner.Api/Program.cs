@@ -896,6 +896,7 @@ builder.Services.AddScoped<ContentSearchService>();
 builder.Services.AddScoped<MediaNormalizationService>();
 builder.Services.AddScoped<VideoLessonService>();
 builder.Services.AddScoped<StrategyGuideService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Admin.UserHardDeleteService>();
 builder.Services.AddScoped<NotificationService>();
 builder.Services.AddScoped<INotificationCampaignService, NotificationCampaignService>();
 builder.Services.AddScoped<NotificationRuleEngine>();

@@ -395,11 +395,28 @@ export default function AdminMockBundlesPage() {
       },
       run: (ids) => bulkAdminMockBundles('archive', ids),
     });
+    actions.push({
+      key: 'force-delete',
+      label: 'Force delete',
+      icon: <ShieldAlert className="h-4 w-4" />,
+      variant: 'danger',
+      // Archived-only. Permanently purges the bundle AND every learner's attempts,
+      // bookings, proctoring events and results tied to it. Requires system_admin.
+      isEligible: (row) => row.status === 'archived',
+      confirm: {
+        title: (n) => `Force-delete ${n} ${n === 1 ? 'bundle' : 'bundles'} and all learner data?`,
+        description: (n) =>
+          `${n} ${n === 1 ? 'bundle' : 'bundles'} will be permanently removed along with every learner attempt, booking, proctoring record and result tied to ${n === 1 ? 'it' : 'them'}. This destroys learner history and cannot be undone.`,
+        confirmLabel: 'Force delete',
+        destructive: true,
+      },
+      run: (ids) => bulkAdminMockBundles('force-delete', ids),
+    });
     return actions;
   }, [canManageBundles, canPublishBundles]);
 
   function handleBulkResult(action: ManagedBulkAction<MockBundleRow>, result: BulkResult) {
-    const verb = action.key === 'publish' ? 'Published' : 'Archived';
+    const verb = action.key === 'publish' ? 'Published' : action.key === 'force-delete' ? 'Deleted' : 'Archived';
     const noun = result.succeeded === 1 ? 'bundle' : 'bundles';
     setToast({
       variant: 'success',

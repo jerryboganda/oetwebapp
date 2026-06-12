@@ -154,7 +154,7 @@ public sealed class ContentPaperService(
     private const int BulkErrorCap = 20;
 
     private static readonly string[] BulkActions =
-        ["archive", "publish", "unpublish", "submit-for-review", "approve-publish", "reject", "delete"];
+        ["archive", "publish", "unpublish", "submit-for-review", "approve-publish", "reject", "delete", "force-delete"];
     /// <summary>Publish gate — each subtest's minimum required roles. Keep
     /// this in sync with §2 of <c>docs/CONTENT-UPLOAD-PLAN.md</c>.</summary>
     private static readonly Dictionary<string, HashSet<PaperAssetRole>> RequiredRoles = new(StringComparer.OrdinalIgnoreCase)
@@ -470,7 +470,10 @@ public sealed class ContentPaperService(
                 await ApproveAndPublishAsync(id, adminId, writeAudit: false, ct);
                 return BulkItemOutcome.Succeeded;
             case "delete":
-                await HardDeleteAsync(id, adminId, writeAudit: false, ct);
+                await HardDeleteAsync(id, adminId, force: false, writeAudit: false, ct);
+                return BulkItemOutcome.Succeeded;
+            case "force-delete":
+                await HardDeleteAsync(id, adminId, force: true, writeAudit: false, ct);
                 return BulkItemOutcome.Succeeded;
             case "reject":
                 await RejectAsync(id, adminId, reason!, writeAudit: false, ct);
@@ -572,17 +575,22 @@ public sealed class ContentPaperService(
         => ArchiveAsync(paperId, adminId, writeAudit: true, ct);
 
     public Task HardDeleteAsync(string paperId, string adminId, CancellationToken ct)
-        => HardDeleteAsync(paperId, adminId, writeAudit: true, ct);
+        => HardDeleteAsync(paperId, adminId, force: false, writeAudit: true, ct);
 
     /// <summary>
     /// Permanently removes a paper and its authoring children. Two safety gates
     /// keep this from destroying live or learner-touched content:
-    ///   1. the paper must already be Archived (forces an explicit archive-first step);
-    ///   2. it must have no learner attempts (deleting those would orphan history).
+    ///   1. the paper must always already be Archived (forces an explicit archive-first step);
+    ///   2. unless <paramref name="force"/> is set, it must have no learner attempts
+    ///      (deleting those would orphan history).
+    /// When <paramref name="force"/> is set the attempt gate is replaced by an
+    /// explicit cascade: the paper's learner attempts and every child row keyed to
+    /// them are removed first (see <see cref="PurgeLearnerAttemptsAsync"/>). The
+    /// archive gate is never bypassed.
     /// Authoring grandchildren (sections/texts/questions/options) are removed by the
     /// database's ON DELETE CASCADE off the PaperId-keyed parent rows.
     /// </summary>
-    private async Task HardDeleteAsync(string paperId, string adminId, bool writeAudit, CancellationToken ct)
+    private async Task HardDeleteAsync(string paperId, string adminId, bool force, bool writeAudit, CancellationToken ct)
     {
         var paper = await db.ContentPapers
             .Include(p => p.Assets)
@@ -596,8 +604,53 @@ public sealed class ContentPaperService(
         var hasReadingAttempts = await db.ReadingAttempts.AnyAsync(a => a.PaperId == paperId, ct);
         var hasListeningAttempts = await db.ListeningAttempts.AnyAsync(a => a.PaperId == paperId, ct);
         if (hasReadingAttempts || hasListeningAttempts)
-            throw new InvalidOperationException(
-                "Paper has learner attempts and cannot be permanently deleted.");
+        {
+            if (!force)
+                throw new InvalidOperationException(
+                    "Paper has learner attempts and cannot be permanently deleted.");
+            await PurgeLearnerAttemptsAsync(paperId, hasReadingAttempts, hasListeningAttempts, ct);
+            // Flush the attempt/answer deletes BEFORE removing the paper structure
+            // below. ReadingAnswer has a RESTRICT FK to ReadingQuestion, and the
+            // questions are dropped via the ReadingParts ON DELETE CASCADE. EF
+            // happens to order the answer deletes first today (they are marked
+            // Deleted earlier), but that ordering isn't contractual for otherwise-
+            // independent entities — flushing here makes it deterministic so a
+            // future EF reorder can't make Postgres reject the question cascade.
+            // Still inside the bulk transaction, so atomicity is preserved.
+            await db.SaveChangesAsync(ct);
+        }
+
+        // A ContentPaper used inside a mock bundle is protected by the
+        // MockBundleSection.ContentPaperId RESTRICT FK — without this branch the
+        // delete (even the old plain delete) would hit a raw FK violation -> 500.
+        // Without force it is a hard block with a clear reason; with force we unwind
+        // the bundle wiring AND the learner mock-section attempts that reference
+        // those sections (themselves a RESTRICT FK), after nulling the optional
+        // MockProctoringEvent link so that delete is not blocked either.
+        var mockSectionIds = await db.MockBundleSections
+            .Where(s => s.ContentPaperId == paperId).Select(s => s.Id).ToListAsync(ct);
+        if (mockSectionIds.Count > 0)
+        {
+            if (!force)
+                throw new InvalidOperationException(
+                    $"Paper is used in {mockSectionIds.Count} mock bundle section(s); remove it from those mock bundles first.");
+
+            var sectionAttempts = await db.MockSectionAttempts
+                .Where(a => mockSectionIds.Contains(a.MockBundleSectionId)).ToListAsync(ct);
+            if (sectionAttempts.Count > 0)
+            {
+                var sectionAttemptIds = sectionAttempts.Select(a => a.Id).ToList();
+                var proctoring = await db.MockProctoringEvents
+                    .Where(e => e.MockSectionAttemptId != null
+                             && sectionAttemptIds.Contains(e.MockSectionAttemptId))
+                    .ToListAsync(ct);
+                foreach (var e in proctoring) e.MockSectionAttemptId = null;
+                db.MockSectionAttempts.RemoveRange(sectionAttempts);
+            }
+            db.MockBundleSections.RemoveRange(
+                await db.MockBundleSections.Where(s => s.ContentPaperId == paperId).ToListAsync(ct));
+            await db.SaveChangesAsync(ct);
+        }
 
         // Authoring children keyed directly by PaperId. Grandchildren (reading
         // sections/texts/questions, listening extracts/options) cascade from these
@@ -623,6 +676,52 @@ public sealed class ContentPaperService(
 
         if (writeAudit) await WriteAuditAsync("ContentPaperDeleted", paper.Id, paper.Title, adminId, ct);
         await db.SaveChangesAsync(ct);
+    }
+
+    /// <summary>
+    /// Force-purge path for <see cref="HardDeleteAsync"/>: removes every learner
+    /// attempt for the paper plus all rows keyed to those attempts. The attempt
+    /// tables carry only a <c>PaperId</c> column (no FK to ContentPaper), so a paper
+    /// delete neither cascades to nor is blocked by them — they must be removed
+    /// explicitly or they orphan. Children are loaded + RemoveRange'd (not
+    /// ExecuteDelete) so the InMemory test provider behaves identically to Postgres;
+    /// EF deletes the cascade-configured dependents (answers/notes/feedback) before
+    /// the attempts, so the DB-level ON DELETE CASCADE never double-deletes. The
+    /// caller flushes (SaveChanges) immediately after this returns, before deleting
+    /// the paper structure, so these rows never collide with the parts cascade.
+    /// </summary>
+    private async Task PurgeLearnerAttemptsAsync(
+        string paperId, bool hasReadingAttempts, bool hasListeningAttempts, CancellationToken ct)
+    {
+        if (hasReadingAttempts)
+        {
+            var readingAttemptIds = await db.ReadingAttempts
+                .Where(a => a.PaperId == paperId).Select(a => a.Id).ToListAsync(ct);
+
+            db.ReadingAnswers.RemoveRange(
+                await db.ReadingAnswers.Where(x => readingAttemptIds.Contains(x.ReadingAttemptId)).ToListAsync(ct));
+            db.ReadingAnswerRevisions.RemoveRange(
+                await db.ReadingAnswerRevisions.Where(x => readingAttemptIds.Contains(x.ReadingAttemptId)).ToListAsync(ct));
+            db.ReadingAttemptFeedbacks.RemoveRange(
+                await db.ReadingAttemptFeedbacks.Where(x => readingAttemptIds.Contains(x.ReadingAttemptId)).ToListAsync(ct));
+            db.ReadingAttempts.RemoveRange(
+                await db.ReadingAttempts.Where(a => a.PaperId == paperId).ToListAsync(ct));
+        }
+
+        if (hasListeningAttempts)
+        {
+            var listeningAttemptIds = await db.ListeningAttempts
+                .Where(a => a.PaperId == paperId).Select(a => a.Id).ToListAsync(ct);
+
+            db.ListeningAnswers.RemoveRange(
+                await db.ListeningAnswers.Where(x => listeningAttemptIds.Contains(x.ListeningAttemptId)).ToListAsync(ct));
+            db.ListeningAttemptNotes.RemoveRange(
+                await db.ListeningAttemptNotes.Where(x => listeningAttemptIds.Contains(x.ListeningAttemptId)).ToListAsync(ct));
+            db.ListeningExpertFeedbacks.RemoveRange(
+                await db.ListeningExpertFeedbacks.Where(x => listeningAttemptIds.Contains(x.AttemptId)).ToListAsync(ct));
+            db.ListeningAttempts.RemoveRange(
+                await db.ListeningAttempts.Where(a => a.PaperId == paperId).ToListAsync(ct));
+        }
     }
 
     private async Task ArchiveAsync(string paperId, string adminId, bool writeAudit, CancellationToken ct)

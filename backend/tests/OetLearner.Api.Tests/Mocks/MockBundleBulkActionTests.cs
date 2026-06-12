@@ -286,6 +286,64 @@ public class MockBundleBulkActionTests
         Assert.Equal("mock_bundle_bulk_empty", ex.ErrorCode);
     }
 
+    // ── force-delete (true purge of bundle + all learner data) ──────────
+
+    [Fact]
+    public async Task Bulk_ForceDelete_PurgesArchivedBundleAndAllLearnerData()
+    {
+        await using var db = NewDb();
+        SeedBundle(db, "b1", ContentStatus.Archived, publishable: true); // archived + section-b1 + paper-b1
+        db.MockAttempts.Add(new MockAttempt { Id = "att-1", UserId = "u1", MockBundleId = "b1" });
+        db.MockSectionAttempts.Add(new MockSectionAttempt { Id = "sa-1", MockAttemptId = "att-1", MockBundleSectionId = "section-b1", SubtestCode = "reading", ContentPaperId = "paper-b1", LaunchRoute = "/r" });
+        db.MockReviewReservations.Add(new MockReviewReservation { Id = "rr-1", UserId = "u1", MockAttemptId = "att-1", WalletId = "w1" });
+        db.MockProctoringEvents.Add(new MockProctoringEvent { Id = "pe-1", MockAttemptId = "att-1", Kind = "focus_lost" });
+        db.MockBookings.Add(new MockBooking { Id = "bk-1", UserId = "u1", MockBundleId = "b1", MockAttemptId = "att-1" });
+        await db.SaveChangesAsync();
+
+        var result = await new MockService(db).BulkAsync("force-delete", ["b1"], AdminId, CancellationToken.None);
+
+        Assert.Equal(1, GetInt(result, "succeeded"));
+        Assert.Equal(0, GetInt(result, "failed"));
+        Assert.False(await db.MockBundles.AnyAsync(b => b.Id == "b1"));
+        Assert.False(await db.MockBundleSections.AnyAsync(s => s.MockBundleId == "b1"));
+        Assert.False(await db.MockAttempts.AnyAsync(a => a.Id == "att-1"));
+        Assert.False(await db.MockSectionAttempts.AnyAsync(a => a.Id == "sa-1"));
+        Assert.False(await db.MockReviewReservations.AnyAsync(r => r.Id == "rr-1"));
+        Assert.False(await db.MockProctoringEvents.AnyAsync(e => e.Id == "pe-1"));
+        Assert.False(await db.MockBookings.AnyAsync(b => b.Id == "bk-1"));
+        Assert.Equal(1, await AuditCountAsync(db));
+    }
+
+    [Fact]
+    public async Task Bulk_ForceDelete_NotArchived_RecordedAsFailure()
+    {
+        await using var db = NewDb();
+        SeedBundle(db, "b1", ContentStatus.Draft, publishable: false);
+        await db.SaveChangesAsync();
+
+        var result = await new MockService(db).BulkAsync("force-delete", ["b1"], AdminId, CancellationToken.None);
+
+        Assert.Equal(0, GetInt(result, "succeeded"));
+        Assert.Equal(1, GetInt(result, "failed"));
+        Assert.True(await db.MockBundles.AnyAsync(b => b.Id == "b1"));
+        Assert.Contains("archived", GetErrors(result)[0], StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task Bulk_ForceDelete_WithoutSystemAdmin_Throws403()
+    {
+        await using var db = NewDb();
+        SeedBundle(db, "b1", ContentStatus.Archived, publishable: false);
+        // Explicit content:write grant only disables the treat-as-system-admin fallback.
+        await GrantPermissionAsync(db, "admin-writer", AdminPermissions.ContentWrite);
+
+        var ex = await Assert.ThrowsAsync<ApiException>(() =>
+            new MockService(db).BulkAsync("force-delete", ["b1"], "admin-writer", CancellationToken.None));
+
+        Assert.Equal(403, ex.StatusCode);
+        Assert.True(await db.MockBundles.AnyAsync(b => b.Id == "b1"));
+    }
+
     // ── result-shape helpers (anonymous wire-compatible object) ─────────
 
     private static int GetInt(object result, string field) =>

@@ -173,6 +173,85 @@ public sealed class StrategyGuideServiceTests
         Assert.Equal("strategy-valid", audit.ResourceId);
     }
 
+    [Fact]
+    public async Task ForceDeleteGuide_purges_archived_guide_and_learner_progress()
+    {
+        await using var harness = Build();
+        var db = harness.Db;
+        var service = harness.Service;
+        db.StrategyGuides.Add(new StrategyGuide
+        {
+            Id = "strategy-archived",
+            ExamTypeCode = "OET",
+            Title = "Archived Guide",
+            Summary = "s",
+            Category = "writing",
+            ReadingTimeMinutes = 3,
+            SortOrder = 1,
+            Status = "archived",
+            ContentHtml = "<p>x</p>",
+            ContentJson = "{}",
+            SourceProvenance = "x",
+            CreatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow,
+            ArchivedAt = DateTimeOffset.UtcNow,
+        });
+        db.LearnerStrategyProgress.Add(new LearnerStrategyProgress
+        {
+            Id = Guid.NewGuid(),
+            UserId = UserId,
+            StrategyGuideId = "strategy-archived",
+            ReadPercent = 50,
+            StartedAt = DateTimeOffset.UtcNow,
+            LastReadAt = DateTimeOffset.UtcNow,
+        });
+        await db.SaveChangesAsync();
+
+        var deleted = await service.ForceDeleteGuideAsync("admin-1", "Admin User", "strategy-archived", default);
+
+        Assert.True(deleted);
+        Assert.False(await db.StrategyGuides.AnyAsync(g => g.Id == "strategy-archived"));
+        Assert.False(await db.LearnerStrategyProgress.AnyAsync(p => p.StrategyGuideId == "strategy-archived"));
+        Assert.Contains(db.AuditEvents, a => a.Action == "ForceDeleted" && a.ResourceId == "strategy-archived");
+    }
+
+    [Fact]
+    public async Task ForceDeleteGuide_rejects_non_archived_guide()
+    {
+        await using var harness = Build();
+        var db = harness.Db;
+        var service = harness.Service;
+        db.StrategyGuides.Add(new StrategyGuide
+        {
+            Id = "strategy-active",
+            ExamTypeCode = "OET",
+            Title = "Active Guide",
+            Summary = "s",
+            Category = "writing",
+            ReadingTimeMinutes = 3,
+            SortOrder = 1,
+            Status = "active",
+            ContentHtml = "<p>x</p>",
+            ContentJson = "{}",
+            SourceProvenance = "x",
+            CreatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow,
+        });
+        await db.SaveChangesAsync();
+
+        await Assert.ThrowsAsync<ApiException>(() =>
+            service.ForceDeleteGuideAsync("admin-1", "Admin User", "strategy-active", default));
+        Assert.True(await db.StrategyGuides.AnyAsync(g => g.Id == "strategy-active"));
+    }
+
+    [Fact]
+    public async Task ForceDeleteGuide_returns_null_when_missing()
+    {
+        await using var harness = Build();
+        var deleted = await harness.Service.ForceDeleteGuideAsync("admin-1", "Admin User", "nope", default);
+        Assert.Null(deleted);
+    }
+
     private static TestHarness Build() => new();
 
     private sealed class TestHarness : IAsyncDisposable

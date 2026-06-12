@@ -330,6 +330,177 @@ public class ContentPaperBulkActionTests
         await db.DisposeAsync();
     }
 
+    [Fact]
+    public async Task Bulk_force_delete_purges_archived_paper_with_listening_attempts_and_children()
+    {
+        var (db, svc) = BuildInMemory();
+        var paper = await SeedDraftListeningAsync(db, svc, "L1");
+        await svc.ArchiveAsync(paper.Id, "admin-1", default);
+
+        db.ListeningAttempts.Add(new ListeningAttempt { Id = "att-1", PaperId = paper.Id, UserId = "user-1" });
+        db.ListeningAnswers.Add(new ListeningAnswer { Id = "ans-1", ListeningAttemptId = "att-1", ListeningQuestionId = "q-1" });
+        db.ListeningAttemptNotes.Add(new ListeningAttemptNote { Id = "note-1", ListeningAttemptId = "att-1", ListeningExtractId = "ex-1", Text = "note" });
+        db.ListeningExpertFeedbacks.Add(new ListeningExpertFeedback { Id = "fb-1", AttemptId = "att-1" });
+        await db.SaveChangesAsync();
+
+        var result = await svc.BulkAsync("force-delete", [paper.Id], "admin-9", null, default);
+
+        Assert.Equal(1, result.Succeeded);
+        Assert.Equal(0, result.Failed);
+        Assert.False(await db.ContentPapers.AsNoTracking().AnyAsync(p => p.Id == paper.Id));
+        Assert.False(await db.ListeningAttempts.AsNoTracking().AnyAsync(a => a.PaperId == paper.Id));
+        Assert.False(await db.ListeningAnswers.AsNoTracking().AnyAsync(x => x.ListeningAttemptId == "att-1"));
+        Assert.False(await db.ListeningAttemptNotes.AsNoTracking().AnyAsync(x => x.ListeningAttemptId == "att-1"));
+        Assert.False(await db.ListeningExpertFeedbacks.AsNoTracking().AnyAsync(x => x.AttemptId == "att-1"));
+
+        var audit = await db.AuditEvents.AsNoTracking()
+            .SingleAsync(a => a.Action == "ContentPaperBulkAction");
+        Assert.Contains("action=force-delete", audit.Details);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Bulk_force_delete_purges_archived_paper_with_reading_attempts_and_children()
+    {
+        var (db, svc) = BuildInMemory();
+        var paper = await svc.CreateAsync(new ContentPaperCreate(
+            "reading", "R1", null, null, true, null, 60, null, null, 0, null, Prov),
+            "admin-1", default);
+        await svc.ArchiveAsync(paper.Id, "admin-1", default);
+
+        db.ReadingAttempts.Add(new ReadingAttempt { Id = "ratt-1", PaperId = paper.Id, UserId = "user-1" });
+        db.ReadingAnswers.Add(new ReadingAnswer { Id = "rans-1", ReadingAttemptId = "ratt-1", ReadingQuestionId = "q-1" });
+        db.ReadingAttemptFeedbacks.Add(new ReadingAttemptFeedback { Id = "rfb-1", ReadingAttemptId = "ratt-1", AuthorUserId = "expert-1" });
+        db.ReadingAnswerRevisions.Add(new ReadingAnswerRevision { Id = "rrev-1", ReadingAttemptId = "ratt-1", ReadingQuestionId = "q-1" });
+        await db.SaveChangesAsync();
+
+        var result = await svc.BulkAsync("force-delete", [paper.Id], "admin-9", null, default);
+
+        Assert.Equal(1, result.Succeeded);
+        Assert.Equal(0, result.Failed);
+        Assert.False(await db.ContentPapers.AsNoTracking().AnyAsync(p => p.Id == paper.Id));
+        Assert.False(await db.ReadingAttempts.AsNoTracking().AnyAsync(a => a.PaperId == paper.Id));
+        Assert.False(await db.ReadingAnswers.AsNoTracking().AnyAsync(x => x.ReadingAttemptId == "ratt-1"));
+        Assert.False(await db.ReadingAttemptFeedbacks.AsNoTracking().AnyAsync(x => x.ReadingAttemptId == "ratt-1"));
+        Assert.False(await db.ReadingAnswerRevisions.AsNoTracking().AnyAsync(x => x.ReadingAttemptId == "ratt-1"));
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Bulk_force_delete_purges_reading_attempts_on_relational_db_respecting_fk_order()
+    {
+        // Relational (SQLite) so real FK constraints are enforced — the InMemory
+        // provider ignores them. ReadingAnswer has a RESTRICT FK to ReadingQuestion,
+        // and the question is dropped via the ReadingParts cascade, so the answer
+        // must be deleted first. This is the exact ordering the force path guards.
+        using var connection = new SqliteConnection("Filename=:memory:");
+        connection.Open();
+        var options = new DbContextOptionsBuilder<LearnerDbContext>()
+            .UseSqlite(connection)
+            .Options;
+        using (var seed = new LearnerDbContext(options))
+        {
+            seed.Database.EnsureCreated();
+        }
+
+        await using var ctx = new LearnerDbContext(options);
+        var svc = new ContentPaperService(ctx);
+        var paper = await svc.CreateAsync(new ContentPaperCreate(
+            "reading", "R1", null, null, true, null, 60, null, null, 0, null, Prov),
+            "admin-1", default);
+        await svc.ArchiveAsync(paper.Id, "admin-1", default);
+
+        ctx.ReadingParts.Add(new ReadingPart { Id = "part-1", PaperId = paper.Id });
+        ctx.ReadingQuestions.Add(new ReadingQuestion { Id = "q-1", ReadingPartId = "part-1", Stem = "stem" });
+        ctx.ReadingAttempts.Add(new ReadingAttempt { Id = "ratt-1", PaperId = paper.Id, UserId = "user-1" });
+        ctx.ReadingAnswers.Add(new ReadingAnswer { Id = "ans-1", ReadingAttemptId = "ratt-1", ReadingQuestionId = "q-1" });
+        await ctx.SaveChangesAsync();
+
+        var result = await svc.BulkAsync("force-delete", [paper.Id], "admin-9", null, default);
+
+        Assert.Equal(1, result.Succeeded);
+        Assert.Equal(0, result.Failed);
+
+        using var verify = new LearnerDbContext(
+            new DbContextOptionsBuilder<LearnerDbContext>().UseSqlite(connection).Options);
+        Assert.False(await verify.ContentPapers.AsNoTracking().AnyAsync(p => p.Id == paper.Id));
+        Assert.False(await verify.ReadingAttempts.AsNoTracking().AnyAsync(a => a.PaperId == paper.Id));
+        Assert.False(await verify.ReadingAnswers.AsNoTracking().AnyAsync(x => x.ReadingAttemptId == "ratt-1"));
+        Assert.False(await verify.ReadingParts.AsNoTracking().AnyAsync(x => x.PaperId == paper.Id));
+        Assert.False(await verify.ReadingQuestions.AsNoTracking().AnyAsync(x => x.ReadingPartId == "part-1"));
+    }
+
+    [Fact]
+    public async Task Bulk_force_delete_purges_paper_used_in_a_mock_bundle_and_its_section_attempts()
+    {
+        var (db, svc) = BuildInMemory();
+        var paper = await svc.CreateAsync(new ContentPaperCreate(
+            "reading", "R1", null, null, true, null, 60, null, null, 0, null, Prov),
+            "admin-1", default);
+        await svc.ArchiveAsync(paper.Id, "admin-1", default);
+
+        db.MockBundles.Add(new MockBundle { Id = "mb-1", Title = "Full Mock", Slug = "full-mock" });
+        db.MockBundleSections.Add(new MockBundleSection { Id = "mbs-1", MockBundleId = "mb-1", SubtestCode = "reading", ContentPaperId = paper.Id });
+        db.MockAttempts.Add(new MockAttempt { Id = "matt-1", UserId = "user-1" });
+        db.MockSectionAttempts.Add(new MockSectionAttempt { Id = "msa-1", MockAttemptId = "matt-1", MockBundleSectionId = "mbs-1", SubtestCode = "reading", ContentPaperId = paper.Id, LaunchRoute = "/r" });
+        db.MockProctoringEvents.Add(new MockProctoringEvent { Id = "pe-1", MockAttemptId = "matt-1", MockSectionAttemptId = "msa-1", Kind = "focus_lost" });
+        await db.SaveChangesAsync();
+
+        var result = await svc.BulkAsync("force-delete", [paper.Id], "admin-9", null, default);
+
+        Assert.Equal(1, result.Succeeded);
+        Assert.Equal(0, result.Failed);
+        Assert.False(await db.ContentPapers.AsNoTracking().AnyAsync(p => p.Id == paper.Id));
+        Assert.False(await db.MockBundleSections.AsNoTracking().AnyAsync(s => s.ContentPaperId == paper.Id));
+        Assert.False(await db.MockSectionAttempts.AsNoTracking().AnyAsync(a => a.MockBundleSectionId == "mbs-1"));
+        // The proctoring event survives (it belongs to the still-existing MockAttempt)
+        // but its link to the purged section attempt is cleared.
+        Assert.Null((await db.MockProctoringEvents.AsNoTracking().SingleAsync(e => e.Id == "pe-1")).MockSectionAttemptId);
+        // The mock bundle itself is NOT deleted — only its section pointing at the paper.
+        Assert.True(await db.MockBundles.AsNoTracking().AnyAsync(b => b.Id == "mb-1"));
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Bulk_plain_delete_is_blocked_with_clear_reason_when_paper_used_in_a_mock_bundle()
+    {
+        var (db, svc) = BuildInMemory();
+        var paper = await svc.CreateAsync(new ContentPaperCreate(
+            "reading", "R1", null, null, true, null, 60, null, null, 0, null, Prov),
+            "admin-1", default);
+        await svc.ArchiveAsync(paper.Id, "admin-1", default);
+
+        db.MockBundles.Add(new MockBundle { Id = "mb-1", Title = "Full Mock", Slug = "full-mock" });
+        db.MockBundleSections.Add(new MockBundleSection { Id = "mbs-1", MockBundleId = "mb-1", SubtestCode = "reading", ContentPaperId = paper.Id });
+        await db.SaveChangesAsync();
+
+        var result = await svc.BulkAsync("delete", [paper.Id], "admin-9", null, default);
+
+        Assert.Equal(0, result.Succeeded);
+        Assert.Equal(1, result.Failed);
+        Assert.True(await db.ContentPapers.AsNoTracking().AnyAsync(p => p.Id == paper.Id));
+        Assert.Contains(result.Errors, e => e.Contains("mock bundle", StringComparison.OrdinalIgnoreCase));
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Bulk_force_delete_still_requires_archived_status()
+    {
+        var (db, svc) = BuildInMemory();
+        var paper = await SeedDraftListeningAsync(db, svc, "L1"); // Draft, not Archived
+        db.ListeningAttempts.Add(new ListeningAttempt { Id = "att-1", PaperId = paper.Id, UserId = "user-1" });
+        await db.SaveChangesAsync();
+
+        var result = await svc.BulkAsync("force-delete", [paper.Id], "admin-9", null, default);
+
+        Assert.Equal(0, result.Succeeded);
+        Assert.Equal(1, result.Failed);
+        Assert.True(await db.ContentPapers.AsNoTracking().AnyAsync(p => p.Id == paper.Id));
+        Assert.True(await db.ListeningAttempts.AsNoTracking().AnyAsync(a => a.PaperId == paper.Id));
+        Assert.Contains(result.Errors, e => e.Contains("archived", StringComparison.OrdinalIgnoreCase));
+        await db.DisposeAsync();
+    }
+
     /// <summary>Test interceptor that throws on the Nth SaveChanges once armed,
     /// simulating a fatal datastore error mid-batch.</summary>
     private sealed class ThrowOnNthSaveInterceptor(int throwOnCall) : SaveChangesInterceptor

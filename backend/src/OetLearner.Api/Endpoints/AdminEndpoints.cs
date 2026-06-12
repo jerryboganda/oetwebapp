@@ -126,6 +126,10 @@ public static class AdminEndpoints
             => Results.Ok(await service.ArchiveTaxonomyNodeAsync(http.AdminId(), http.AdminName(), professionId, ct)))
             .WithAdminWrite("AdminContentWrite");
 
+        admin.MapPost("/taxonomy/{professionId}/force-delete", async (string professionId, HttpContext http, AdminService service, CancellationToken ct)
+            => Results.Ok(await service.ForceDeleteTaxonomyNodeAsync(http.AdminId(), http.AdminName(), professionId, ct)))
+            .WithAdminWrite("AdminSystemAdmin");
+
         admin.MapGet("/taxonomy/{professionId}/impact", async (string professionId, AdminService service, CancellationToken ct)
             => Results.Ok(await service.GetTaxonomyImpactSummaryAsync(professionId, ct)))
             .WithAdminRead("AdminContentRead");
@@ -281,6 +285,29 @@ public static class AdminEndpoints
         admin.MapPost("/users/{userId}/restore", async (string userId, HttpContext http, AdminUserLifecycleRequest request, AdminService service, CancellationToken ct)
             => Results.Ok(await service.RestoreUserAsync(http.AdminId(), http.AdminName(), userId, request, ct)))
             .WithAdminWrite("AdminUsersWrite");
+
+        // Irreversible: purges the user + EVERY row referencing them across the whole
+        // schema (incl. financial + audit records). system_admin only.
+        admin.MapPost("/users/{userId}/hard-delete", async (
+            string userId, HttpContext http,
+            OetLearner.Api.Services.Admin.UserHardDeleteService purge, LearnerDbContext db, CancellationToken ct) =>
+        {
+            var report = await purge.PurgeAsync(userId, ct);
+            db.AuditEvents.Add(new AuditEvent
+            {
+                Id = Guid.NewGuid().ToString("N"),
+                OccurredAt = DateTimeOffset.UtcNow,
+                ActorId = http.AdminId(),
+                ActorName = http.AdminName(),
+                Action = "UserHardDeleted",
+                ResourceType = "User",
+                ResourceId = userId,
+                Details = $"Purged {report.Values.Sum()} rows across {report.Count} tables.",
+            });
+            await db.SaveChangesAsync(ct);
+            return Results.Ok(new { userId, purgedRows = report.Values.Sum(), tables = report.Count, detail = report });
+        })
+        .WithAdminWrite("AdminSystemAdmin");
 
         admin.MapPost("/users/{userId}/credits", async (string userId, HttpContext http, AdminUserCreditsRequest request, AdminService service, CancellationToken ct)
             => Results.Ok(await service.AdjustUserCreditsAsync(http.AdminId(), http.AdminName(), userId, request, ct)))
@@ -916,6 +943,10 @@ public static class AdminEndpoints
             => Results.Ok(await service.ArchiveGrammarLessonAsync(http.AdminId(), http.AdminName(), lessonId, ct)))
             .WithAdminWrite("AdminContentWrite");
 
+        admin.MapPost("/grammar/lessons/{lessonId}/force-delete", async (string lessonId, HttpContext http, AdminService service, CancellationToken ct)
+            => Results.Ok(await service.ForceDeleteGrammarLessonAsync(http.AdminId(), http.AdminName(), lessonId, ct)))
+            .WithAdminWrite("AdminSystemAdmin");
+
         // ── Grammar Publish Gate + AI Draft (Grounded) ────────────────
 
         admin.MapGet("/grammar/lessons/{lessonId}/publish-gate",
@@ -1241,6 +1272,10 @@ public static class AdminEndpoints
         admin.MapPost("/conversation/templates/{templateId}/archive", async (string templateId, HttpContext http, AdminService service, CancellationToken ct)
             => Results.Ok(await service.ArchiveConversationTemplateAsync(http.AdminId(), http.AdminName(), templateId, ct)))
             .WithAdminWrite("AdminContentWrite");
+
+        admin.MapPost("/conversation/templates/{templateId}/force-delete", async (string templateId, HttpContext http, AdminService service, CancellationToken ct)
+            => Results.Ok(await service.ForceDeleteConversationTemplateAsync(http.AdminId(), http.AdminName(), templateId, ct)))
+            .WithAdminWrite("AdminSystemAdmin");
 
         admin.MapPost("/conversation/templates/{templateId}/publish", async (string templateId, HttpContext http, AdminService service, CancellationToken ct)
             => Results.Ok(await service.PublishConversationTemplateAsync(http.AdminId(), http.AdminName(), templateId, ct)))
@@ -1792,6 +1827,10 @@ public static class AdminEndpoints
             => Results.Ok(await service.ArchivePronunciationDrillAsync(http.AdminId(), http.AdminName(), drillId, ct)))
             .WithAdminWrite("AdminContentWrite");
 
+        admin.MapPost("/pronunciation/drills/{drillId}/force-delete", async (string drillId, HttpContext http, AdminService service, CancellationToken ct)
+            => Results.Ok(await service.ForceDeletePronunciationDrillAsync(http.AdminId(), http.AdminName(), drillId, ct)))
+            .WithAdminWrite("AdminSystemAdmin");
+
         // AI-assisted draft of a pronunciation drill. Routes through the
         // grounded gateway (Kind=Pronunciation, Task=GeneratePronunciationDrill,
         // FeatureCode=admin.pronunciation_draft). Platform-only by policy.
@@ -2096,6 +2135,15 @@ public static class AdminEndpoints
         .WithName("AdminArchiveStrategyGuide")
         .WithSummary("Archives a strategy guide and writes an audit event.")
         .WithAdminWrite("AdminContentPublish");
+
+        admin.MapPost("/strategies/{guideId}/force-delete", async (string guideId, HttpContext http, StrategyGuideService service, CancellationToken ct) =>
+        {
+            var deleted = await service.ForceDeleteGuideAsync(http.AdminId(), http.AdminName(), guideId, ct);
+            return deleted is null ? Results.NotFound(new { error = "NOT_FOUND" }) : Results.Ok(new { id = guideId, deleted = true });
+        })
+        .WithName("AdminForceDeleteStrategyGuide")
+        .WithSummary("Permanently deletes an archived strategy guide and its learner progress.")
+        .WithAdminWrite("AdminSystemAdmin");
 
         // ── Speaking mock sets (Wave 3 of docs/SPEAKING-MODULE-PLAN.md) ──
         // Curatorial pairing of two speaking role-plays. Permissions reuse

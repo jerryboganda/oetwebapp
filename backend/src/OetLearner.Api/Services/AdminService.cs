@@ -2221,6 +2221,26 @@ public partial class AdminService(
         return new { id = professionId, status = "archived" };
     }
 
+    /// <summary>
+    /// Permanently deletes an archived profession/taxonomy node. No FK dependents
+    /// reference it (profession references elsewhere are denormalised string tags),
+    /// so this is a plain row delete. Archive-first gated; irreversible.
+    /// </summary>
+    public async Task<object> ForceDeleteTaxonomyNodeAsync(string adminId, string adminName,
+        string professionId, CancellationToken ct)
+    {
+        var p = await db.Professions.FirstOrDefaultAsync(x => x.Id == professionId, ct)
+                ?? throw ApiException.NotFound("profession_not_found", "Profession not found.");
+        if (p.Status != "archived")
+            throw ApiException.Validation("taxonomy_force_delete_not_archived",
+                "Only archived professions can be permanently deleted. Archive it first.");
+
+        db.Professions.Remove(p);
+        await db.SaveChangesAsync(ct);
+        await LogAuditAsync(adminId, adminName, "ForceDeleted", "Taxonomy", professionId, $"Force-deleted profession: {p.Label}", ct);
+        return new { id = professionId, deleted = true };
+    }
+
     // ════════════════════════════════════════════
     //  Criteria / Rubric Mapping
     // ════════════════════════════════════════════

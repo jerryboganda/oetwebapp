@@ -6,6 +6,7 @@ import { Plus, Sparkles, Archive, Mic, Search } from 'lucide-react';
 import {
   fetchAdminPronunciationDrills,
   archiveAdminPronunciationDrill,
+  forceDeleteAdminPronunciationDrill,
 } from '@/lib/api';
 import { AdminTableLayout } from '@/components/admin/layout/admin-table-layout';
 import { Card } from '@/components/admin/ui/card';
@@ -83,6 +84,17 @@ export default function AdminPronunciationDashboard() {
       await load();
     } catch (err) {
       setToast({ variant: 'error', message: err instanceof Error ? err.message : 'Failed to archive' });
+    }
+  }, [load]);
+
+  const handleForceDelete = useCallback(async (drillId: string) => {
+    if (!confirm('Permanently delete this archived drill AND all learner attempts/assessments for it? This cannot be undone.')) return;
+    try {
+      await forceDeleteAdminPronunciationDrill(drillId);
+      setToast({ variant: 'success', message: 'Drill permanently deleted' });
+      await load();
+    } catch (err) {
+      setToast({ variant: 'error', message: err instanceof Error ? err.message : 'Failed to delete' });
     }
   }, [load]);
 
@@ -247,6 +259,17 @@ export default function AdminPronunciationDashboard() {
                               aria-label={`Archive ${r.label}`}
                             >
                               <Archive className="h-3.5 w-3.5" />
+                            </Button>
+                          )}
+                          {r.status === 'archived' && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="text-red-600"
+                              onClick={() => handleForceDelete(r.id)}
+                              aria-label={`Force delete ${r.label}`}
+                            >
+                              Force delete
                             </Button>
                           )}
                         </div>

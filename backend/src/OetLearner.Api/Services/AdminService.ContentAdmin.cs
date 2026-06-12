@@ -133,6 +133,29 @@ public partial class AdminService
         return new { id = lessonId, status = "archived" };
     }
 
+    /// <summary>
+    /// Permanently deletes an archived grammar lesson and purges all learner
+    /// progress rows for it. Archive-first gated; irreversible.
+    /// </summary>
+    public async Task<object> ForceDeleteGrammarLessonAsync(
+        string adminId, string adminName, string lessonId, CancellationToken ct)
+    {
+        var entity = await db.GrammarLessons.FirstOrDefaultAsync(x => x.Id == lessonId, ct)
+            ?? throw ApiException.NotFound("GRAMMAR_NOT_FOUND", $"Grammar lesson '{lessonId}' not found.");
+        if (entity.Status != "archived")
+            throw ApiException.Validation("grammar_force_delete_not_archived",
+                "Only archived grammar lessons can be permanently deleted. Archive it first.");
+
+        db.LearnerGrammarProgress.RemoveRange(
+            await db.LearnerGrammarProgress.Where(p => p.LessonId == lessonId).ToListAsync(ct));
+        db.GrammarLessons.Remove(entity);
+        await db.SaveChangesAsync(ct);
+        await LogAuditAsync(adminId, adminName, "ForceDeleted", "GrammarLesson", lessonId,
+            $"Force-deleted grammar lesson + learner progress: {entity.Title}", ct);
+
+        return new { id = lessonId, deleted = true };
+    }
+
     // ════════════════════════════════════════════
     //  Vocabulary Items
     // ════════════════════════════════════════════
@@ -2598,6 +2621,29 @@ public partial class AdminService
         return new { id = templateId, status = "archived" };
     }
 
+    /// <summary>
+    /// Permanently deletes an archived conversation template and purges all learner
+    /// conversation sessions for it. Archive-first gated; irreversible.
+    /// </summary>
+    public async Task<object> ForceDeleteConversationTemplateAsync(
+        string adminId, string adminName, string templateId, CancellationToken ct)
+    {
+        var entity = await db.ConversationTemplates.FirstOrDefaultAsync(x => x.Id == templateId, ct)
+            ?? throw ApiException.NotFound("CONVERSATION_TEMPLATE_NOT_FOUND", $"Conversation template '{templateId}' not found.");
+        if (entity.Status != "archived")
+            throw ApiException.Validation("conversation_force_delete_not_archived",
+                "Only archived conversation templates can be permanently deleted. Archive it first.");
+
+        db.ConversationSessions.RemoveRange(
+            await db.ConversationSessions.Where(s => s.TemplateId == templateId).ToListAsync(ct));
+        db.ConversationTemplates.Remove(entity);
+        await db.SaveChangesAsync(ct);
+        await LogAuditAsync(adminId, adminName, "ForceDeleted", "ConversationTemplate", templateId,
+            $"Force-deleted conversation template + learner sessions: {entity.Title}", ct);
+
+        return new { id = templateId, deleted = true };
+    }
+
     // ════════════════════════════════════════════
     //  Pronunciation Drills
     // ════════════════════════════════════════════
@@ -2762,6 +2808,31 @@ public partial class AdminService
         await LogAuditAsync(adminId, adminName, "Archived", "PronunciationDrill", drillId, $"Archived pronunciation drill: {entity.Label}", ct);
 
         return new { id = drillId, status = "archived" };
+    }
+
+    /// <summary>
+    /// Permanently deletes an archived pronunciation drill and purges all learner
+    /// attempts and assessments for it. Archive-first gated; irreversible.
+    /// </summary>
+    public async Task<object> ForceDeletePronunciationDrillAsync(
+        string adminId, string adminName, string drillId, CancellationToken ct)
+    {
+        var entity = await db.PronunciationDrills.FirstOrDefaultAsync(x => x.Id == drillId, ct)
+            ?? throw ApiException.NotFound("DRILL_NOT_FOUND", $"Pronunciation drill '{drillId}' not found.");
+        if (entity.Status != "archived")
+            throw ApiException.Validation("pronunciation_force_delete_not_archived",
+                "Only archived pronunciation drills can be permanently deleted. Archive it first.");
+
+        db.PronunciationAttempts.RemoveRange(
+            await db.PronunciationAttempts.Where(a => a.DrillId == drillId).ToListAsync(ct));
+        db.PronunciationAssessments.RemoveRange(
+            await db.PronunciationAssessments.Where(a => a.DrillId == drillId).ToListAsync(ct));
+        db.PronunciationDrills.Remove(entity);
+        await db.SaveChangesAsync(ct);
+        await LogAuditAsync(adminId, adminName, "ForceDeleted", "PronunciationDrill", drillId,
+            $"Force-deleted pronunciation drill + learner attempts/assessments: {entity.Label}", ct);
+
+        return new { id = drillId, deleted = true };
     }
 
     // ════════════════════════════════════════════

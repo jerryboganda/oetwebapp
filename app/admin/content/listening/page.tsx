@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { Headphones, Plus, Archive as ArchiveIcon, CheckCircle2, XCircle, Settings, Trash2 } from 'lucide-react';
+import { Headphones, Plus, Archive as ArchiveIcon, CheckCircle2, XCircle, Settings, Trash2, AlertTriangle } from 'lucide-react';
 import { AdminTableLayout } from '@/components/admin/layout/admin-table-layout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/admin/ui/card';
 import { KpiTile } from '@/components/admin/ui/kpi-tile';
@@ -159,12 +159,32 @@ export default function AdminListeningPapersPage() {
         },
         run: (ids) => bulkContentPapers('delete', ids),
       },
+      {
+        key: 'force-delete',
+        label: 'Force delete',
+        icon: <AlertTriangle className="h-4 w-4" />,
+        variant: 'danger',
+        // Same gate as Delete (archived only), but this path ALSO purges every
+        // learner attempt, answer, and result tied to the paper — the escape hatch
+        // for archived papers that plain Delete refuses because they have attempts.
+        isEligible: (p) => p.status === 'Archived',
+        confirm: {
+          title: (n) => `Force-delete ${n} listening paper${n === 1 ? '' : 's'} and all learner data?`,
+          description: () =>
+            'The papers are permanently removed along with every learner attempt, answer, and result tied to them. This destroys learner history and cannot be undone.',
+          confirmLabel: 'Force delete',
+          destructive: true,
+        },
+        run: (ids) => bulkContentPapers('force-delete', ids),
+      },
     ];
   }, [canWriteContent]);
 
   const handleBulkResult = useCallback(
     (action: ManagedBulkAction<ContentPaperDto>, result: BulkResult) => {
-      const verb = action.key === 'archive' ? 'Archived' : action.key === 'delete' ? 'Deleted' : 'Published';
+      const verb = action.key === 'archive'
+        ? 'Archived'
+        : (action.key === 'delete' || action.key === 'force-delete') ? 'Deleted' : 'Published';
       const failed = result.failed ?? 0;
       const skipped = result.skipped ?? 0;
       const parts = [`${verb} ${result.succeeded} of ${result.totalRequested}`];

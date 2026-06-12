@@ -8,6 +8,7 @@ import {
   adminListGrammarTopics,
   adminListGrammarLessonsV2,
   adminArchiveGrammarLessonV2,
+  adminForceDeleteGrammarLessonV2,
   adminPublishGrammarLessonV2,
   adminUnpublishGrammarLessonV2,
 } from '@/lib/api';
@@ -109,6 +110,18 @@ export default function AdminGrammarDashboard() {
       await reload();
     } catch (e) {
       setToast({ variant: 'error', message: (e as Error).message || 'Archive failed.' });
+    }
+  }
+
+  async function forceDelete(id: string) {
+    if (!canWriteContent) return;
+    if (!confirm('Permanently delete this archived lesson AND all learner progress for it? This cannot be undone.')) return;
+    try {
+      await adminForceDeleteGrammarLessonV2(id);
+      setToast({ variant: 'success', message: 'Lesson permanently deleted.' });
+      await reload();
+    } catch (e) {
+      setToast({ variant: 'error', message: (e as Error).message || 'Delete failed.' });
     }
   }
 
@@ -274,6 +287,7 @@ export default function AdminGrammarDashboard() {
                                 )
                               ) : null}
                               {canWriteContent ? <Button variant="outline" size="sm" onClick={() => archive(l.id)}>Archive</Button> : null}
+                              {canWriteContent && l.publishState === 'archived' ? <Button variant="outline" size="sm" className="text-red-600 border-red-300 hover:bg-red-50" onClick={() => forceDelete(l.id)}>Force delete</Button> : null}
                             </div>
                           </td>
                         ) : null}
