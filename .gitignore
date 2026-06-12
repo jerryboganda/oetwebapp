@@ -201,3 +201,10 @@ _cols.sql
 _create_users.sql
 __pycache__/
 *.pyc
+
+# Tauri desktop shell
+src-tauri/target/
+src-tauri/binaries/
+src-tauri/*.log
+src-tauri/cdp-*.mjs
+

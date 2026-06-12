@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-speaking-audio-start"
+description = "Enables the speaking_audio_start command without any pre-configured scope."
+commands.allow = ["speaking_audio_start"]
+
+[[permission]]
+identifier = "deny-speaking-audio-start"
+description = "Denies the speaking_audio_start command without any pre-configured scope."
+commands.deny = ["speaking_audio_start"]

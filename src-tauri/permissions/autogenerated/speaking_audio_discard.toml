@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-speaking-audio-discard"
+description = "Enables the speaking_audio_discard command without any pre-configured scope."
+commands.allow = ["speaking_audio_discard"]
+
+[[permission]]
+identifier = "deny-speaking-audio-discard"
+description = "Denies the speaking_audio_discard command without any pre-configured scope."
+commands.deny = ["speaking_audio_discard"]
