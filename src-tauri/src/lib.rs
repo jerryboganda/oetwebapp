@@ -135,6 +135,7 @@ pub fn run() {
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(RuntimeState::default())
         .manage(commands::SpeakingAudioState::default())
         .invoke_handler(tauri::generate_handler![
@@ -197,6 +198,78 @@ pub fn run() {
             }
 
             setup_tray(&handle)?;
+
+            // Auto-update check (production updater config lives in
+            // tauri.conf.json; OET_UPDATER_URL overrides for testing).
+            {
+                use tauri_plugin_updater::UpdaterExt;
+                let handle = handle.clone();
+                tauri::async_runtime::spawn(async move {
+                    let builder = match std::env::var("OET_UPDATER_URL") {
+                        Ok(url) => match url.parse() {
+                            Ok(parsed) => match handle.updater_builder().endpoints(vec![parsed]) {
+                                Ok(b) => b,
+                                Err(e) => return eprintln!("[oet-desktop] updater endpoints error: {e}"),
+                            },
+                            Err(e) => return eprintln!("[oet-desktop] updater url parse error: {e}"),
+                        },
+                        Err(_) => handle.updater_builder(),
+                    };
+                    let updater = match builder.build() {
+                        Ok(u) => u,
+                        Err(e) => return eprintln!("[oet-desktop] updater build error: {e}"),
+                    };
+                    // OET_UPDATER_TEST=1 downloads + verifies the minisign
+                    // signature but stops before the NSIS install (so the
+                    // round-trip can be proven without mutating the system).
+                    let test_mode = std::env::var("OET_UPDATER_TEST").as_deref() == Ok("1");
+                    match updater.check().await {
+                        Ok(Some(update)) => {
+                            eprintln!(
+                                "[oet-desktop] update available: {} -> {}",
+                                update.current_version, update.version
+                            );
+                            if test_mode {
+                                let downloaded = std::sync::atomic::AtomicUsize::new(0);
+                                match update
+                                    .download(
+                                        |chunk, total| {
+                                            let prev = downloaded.fetch_add(chunk, std::sync::atomic::Ordering::Relaxed);
+                                            // Log roughly every 10 MB to avoid per-chunk spam.
+                                            if prev / 10_485_760 != (prev + chunk) / 10_485_760 {
+                                                eprintln!("[oet-desktop] update download: {}/{total:?}", prev + chunk);
+                                            }
+                                        },
+                                        || eprintln!("[oet-desktop] UPDATER-TEST: download+verify finished (signature valid)"),
+                                    )
+                                    .await
+                                {
+                                    Ok(bytes) => eprintln!(
+                                        "[oet-desktop] UPDATER-TEST: PASS — downloaded+verified {} bytes (install skipped)",
+                                        bytes.len()
+                                    ),
+                                    Err(e) => eprintln!("[oet-desktop] UPDATER-TEST: FAIL download/verify error: {e}"),
+                                }
+                            } else {
+                                match update
+                                    .download_and_install(
+                                        |received, total| {
+                                            eprintln!("[oet-desktop] update download: {received}/{total:?}")
+                                        },
+                                        || eprintln!("[oet-desktop] update download finished"),
+                                    )
+                                    .await
+                                {
+                                    Ok(()) => eprintln!("[oet-desktop] update installed; restart to apply"),
+                                    Err(e) => eprintln!("[oet-desktop] update install error: {e}"),
+                                }
+                            }
+                        }
+                        Ok(None) => eprintln!("[oet-desktop] updater: no update available"),
+                        Err(e) => eprintln!("[oet-desktop] updater check error: {e}"),
+                    }
+                });
+            }
 
             let is_packaged = !tauri::is_dev();
             std::thread::spawn(move || {

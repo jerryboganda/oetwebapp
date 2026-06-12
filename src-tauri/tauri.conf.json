@@ -18,10 +18,15 @@
       "desktop": {
         "schemes": ["oet-prep"]
       }
+    },
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEVGMTZFQjRFOERCNTQ5MDgKUldRSVNiV05UdXNXN3pnZklzQndLazZ0U3BpdEI3ekFHd0VMbFI4YVlRZENSSWVQc3Mwam9lbnQK",
+      "endpoints": ["http://127.0.0.1:8765/latest.json"]
     }
   },
   "bundle": {
     "active": true,
+    "createUpdaterArtifacts": true,
     "targets": ["nsis", "dmg"],
     "icon": [
       "icons/icon.ico",

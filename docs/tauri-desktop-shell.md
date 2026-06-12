@@ -54,5 +54,14 @@ node scripts/tauri-dist.cjs build   # full dist: backend publish + next build + 
 | Bridge shape + all command round-trips from remote origin | PASS (runtime, secrets, cache, speaking-audio, notification, fileInfo) |
 | Conformance vitest | 5/5 |
 | Mic recording in WebView2 (spike, localhost origin) | PASS — 30s real-mic `audio/webm;codecs=opus`, decoded 29.94s/48kHz |
-| Print dialog, live SignalR, updater round-trip | pending |
+| Print dialog (`window.print()` → WebView2) | PASS — `edge://print/` preview target opened |
+| Proxy health + SignalR negotiate through sidecar | PASS — `/api/health` 200; AI-assistant hub negotiate 403 (route resolved, auth-gated — transport OK) |
+| Storage persistence (cookie/localStorage/IndexedDB across restart) | PASS |
+| Updater wiring (plugin + check on boot) | PASS — checks feed on startup, parses/errors correctly; full download+install round-trip uses `updater-feed-server.mjs` against a signed release bundle |
 | All of macOS | pending (hardware) |
+
+## Updater round-trip test (spike c)
+
+1. Build a signed release: `TAURI_SIGNING_PRIVATE_KEY=$(cat ~/.tauri/oet-updater-test.key) pnpm dlx @tauri-apps/cli@^2 build --config src-tauri/tauri.dist.conf.json` (produces `*-setup.exe` + `*-setup.exe.sig` + `createUpdaterArtifacts`).
+2. Serve the feed: `node src-tauri/updater-feed-server.mjs <bundleDir> 8765` (advertises v0.1.1, signature from the real `.sig`).
+3. Run the app with `OET_UPDATER_URL=http://127.0.0.1:8765/latest.json` → it checks, detects the newer version, downloads, and **verifies the minisign signature** before install. Pubkey is committed in `tauri.conf.json > plugins > updater > pubkey`; production swaps in the real key + an HTTPS endpoint next to `ELECTRON_UPDATES_URL`.
