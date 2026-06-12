@@ -1982,9 +1982,20 @@ app.MapGet("/health/ready", async (LearnerDbContext db, IOptions<StorageOptions>
 
         if (dbOk && !db.Database.IsInMemory())
         {
-            var pendingMigrations = (await db.Database.GetPendingMigrationsAsync(ct)).Take(1).ToArray();
-            checks["migrations"] = pendingMigrations.Length == 0 ? "ok" : "pending";
-            if (pendingMigrations.Length > 0) healthy = false;
+            if (db.Database.IsSqlite())
+            {
+                // SQLite schemas are created via EnsureCreatedAsync (see
+                // DatabaseBootstrapper), which never writes __EFMigrationsHistory,
+                // so GetPendingMigrationsAsync would report every migration as
+                // pending forever and wedge the bundled desktop backend at 503.
+                checks["migrations"] = "ok";
+            }
+            else
+            {
+                var pendingMigrations = (await db.Database.GetPendingMigrationsAsync(ct)).Take(1).ToArray();
+                checks["migrations"] = pendingMigrations.Length == 0 ? "ok" : "pending";
+                if (pendingMigrations.Length > 0) healthy = false;
+            }
         }
 
         // Stuck jobs detection (processing for > 10 minutes)

@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Domain.Billing;
 using OetLearner.Api.Services;
@@ -1370,7 +1371,40 @@ public partial class LearnerDbContext(DbContextOptions<LearnerDbContext> options
         // Materials library — nestable folders, files, and per-folder audience
         // assignment. Partial class in LearnerDbContext.Materials.cs.
         OnModelCreatingMaterials(modelBuilder);
+
+        // ── SQLite desktop-backend support ──────────────────────────────────
+        // The SQLite EF provider cannot translate DateTimeOffset comparisons or
+        // ordering, so every background-worker sweep with a timestamp predicate
+        // crashed with "could not be translated" when the API runs against the
+        // bundled desktop database (Electron/Tauri shells). Persisting
+        // DateTimeOffset as UTC ticks (INTEGER) makes all comparisons
+        // translatable. Point-in-time semantics and DateTimeOffset equality are
+        // preserved; only the original offset is normalised to UTC on read,
+        // which matches how the app produces timestamps (UtcNow throughout).
+        // NOTE: this changes the on-disk column type for SQLite, so it applies
+        // to FRESH desktop databases only — which is the contract anyway: the
+        // desktop shells never carry old SQLite files across schema generations
+        // (see the Tauri migrate_from_electron notes).
+        if (Database.IsSqlite())
+        {
+            foreach (var entityType in modelBuilder.Model.GetEntityTypes())
+            {
+                foreach (var property in entityType.GetProperties())
+                {
+                    if (property.ClrType == typeof(DateTimeOffset)
+                        || property.ClrType == typeof(DateTimeOffset?))
+                    {
+                        property.SetValueConverter(SqliteUtcTicksConverter);
+                    }
+                }
+            }
+        }
     }
+
+    // SQLite: DateTimeOffset persisted as UTC ticks so comparisons translate.
+    // EF composes the nullability wrapper automatically for DateTimeOffset?.
+    private static readonly ValueConverter<DateTimeOffset, long> SqliteUtcTicksConverter =
+        new(v => v.UtcTicks, v => new DateTimeOffset(v, TimeSpan.Zero));
 
     /// <summary>
     /// Defined in <see cref="LearnerDbContext"/>.ScoringPolicy.cs (partial).

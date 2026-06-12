@@ -103,15 +103,33 @@ public sealed class SpeakingAudioRetentionWorker(
 
         // We retain audio while the attempt is still active. Sweep on
         // SubmittedAt when present, otherwise StartedAt. Only speaking.
-        var due = await db.Attempts
-            .Where(a => a.SubtestCode == "speaking"
-                && a.AudioObjectKey != null
-                && (a.SubmittedAt != null
-                    ? a.SubmittedAt < cutoff
-                    : a.StartedAt < cutoff))
-            .OrderBy(a => a.SubmittedAt ?? a.StartedAt)
-            .Take(BatchSize)
-            .ToListAsync(ct);
+        List<Attempt> due;
+        try
+        {
+            due = await db.Attempts
+                .Where(a => a.SubtestCode == "speaking"
+                    && a.AudioObjectKey != null
+                    && ((a.SubmittedAt != null && a.SubmittedAt < cutoff)
+                        || (a.SubmittedAt == null && a.StartedAt < cutoff)))
+                .OrderBy(a => a.SubmittedAt ?? a.StartedAt)
+                .Take(BatchSize)
+                .ToListAsync(ct);
+        }
+        catch (InvalidOperationException) when (db.Database.IsSqlite())
+        {
+            // The SQLite provider (bundled desktop backend) cannot translate
+            // DateTimeOffset comparisons/ordering — same limitation handled by
+            // the /health/ready stuck-jobs probe. Narrow on the translatable
+            // predicates server-side, apply the cutoff and ordering in memory.
+            var candidates = await db.Attempts
+                .Where(a => a.SubtestCode == "speaking" && a.AudioObjectKey != null)
+                .ToListAsync(ct);
+            due = candidates
+                .Where(a => (a.SubmittedAt ?? a.StartedAt) < cutoff)
+                .OrderBy(a => a.SubmittedAt ?? a.StartedAt)
+                .Take(BatchSize)
+                .ToList();
+        }
 
         if (due.Count == 0)
         {
@@ -191,13 +209,29 @@ public sealed class SpeakingAudioRetentionWorker(
         // explicitly carry a RetentionExpiresAt — sessions that have
         // never been wired through the new lifecycle still rely on the
         // legacy Attempt.AudioObjectKey sweep above.
-        var due = await db.SpeakingRecordings
-            .Where(r => r.RetentionExpiresAt != null
-                && r.RetentionExpiresAt <= now
-                && !r.IsArchived)
-            .OrderBy(r => r.RetentionExpiresAt)
-            .Take(BatchSize)
-            .ToListAsync(ct);
+        List<SpeakingRecording> due;
+        try
+        {
+            due = await db.SpeakingRecordings
+                .Where(r => r.RetentionExpiresAt != null
+                    && r.RetentionExpiresAt <= now
+                    && !r.IsArchived)
+                .OrderBy(r => r.RetentionExpiresAt)
+                .Take(BatchSize)
+                .ToListAsync(ct);
+        }
+        catch (InvalidOperationException) when (db.Database.IsSqlite())
+        {
+            // SQLite provider limitation — see SweepLegacyAttemptsAsync.
+            var candidates = await db.SpeakingRecordings
+                .Where(r => r.RetentionExpiresAt != null && !r.IsArchived)
+                .ToListAsync(ct);
+            due = candidates
+                .Where(r => r.RetentionExpiresAt <= now)
+                .OrderBy(r => r.RetentionExpiresAt)
+                .Take(BatchSize)
+                .ToList();
+        }
 
         if (due.Count == 0)
         {
