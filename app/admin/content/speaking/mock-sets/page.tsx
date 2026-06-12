@@ -24,6 +24,7 @@ import {
   updateAdminSpeakingMockSet,
   publishAdminSpeakingMockSet,
   archiveAdminSpeakingMockSet,
+  forceDeleteAdminSpeakingMockSet,
   type AdminSpeakingMockSetRow,
 } from '@/lib/api';
 import { BulkActionBar } from '@/components/ui/bulk-action-bar';
@@ -134,6 +135,17 @@ export default function AdminSpeakingMockSetsPage() {
       setReloadNonce((n) => n + 1);
     } catch (err: unknown) {
       setToast({ variant: 'error', message: err instanceof Error ? err.message : 'Failed to publish mock set.' });
+    }
+  };
+
+  const handleForceDelete = async (mockSetId: string) => {
+    if (!confirm('Permanently delete this archived mock set AND all learner mock sessions for it? This cannot be undone.')) return;
+    try {
+      await forceDeleteAdminSpeakingMockSet(mockSetId);
+      setToast({ variant: 'success', message: 'Mock set permanently deleted.' });
+      setReloadNonce((n) => n + 1);
+    } catch (e) {
+      setToast({ variant: 'error', message: (e as Error).message || 'Delete failed.' });
     }
   };
 
@@ -264,6 +276,11 @@ export default function AdminSpeakingMockSetsPage() {
           {row.status !== 'archived' && (
             <Button size="sm" variant="outline" onClick={() => handleArchive(row.mockSetId)}>
               <Archive className="h-3.5 w-3.5" /> Archive
+            </Button>
+          )}
+          {row.status === 'archived' && (
+            <Button size="sm" variant="outline" className="text-red-600" onClick={() => handleForceDelete(row.mockSetId)}>
+              Force delete
             </Button>
           )}
         </div>

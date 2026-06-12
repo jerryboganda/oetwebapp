@@ -337,6 +337,14 @@ export async function deleteAdminDrill(drillId: string): Promise<AdminDrillDetai
   );
 }
 
+/** Permanently deletes an archived drill + all learner attempts + its ContentItem. system_admin only. */
+export async function forceDeleteAdminDrill(drillId: string): Promise<{ id: string; deleted: boolean }> {
+  return apiClient.post<{ id: string; deleted: boolean }>(
+    `/v1/admin/speaking/drills/${encodeURIComponent(drillId)}/force-delete`,
+    {},
+  );
+}
+
 export type DrillBulkAction = 'publish' | 'archive' | 'delete';
 
 /**

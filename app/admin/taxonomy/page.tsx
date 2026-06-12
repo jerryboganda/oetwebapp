@@ -17,7 +17,7 @@ import { Input, Select, Textarea } from '@/components/ui/form-controls';
 import { Modal } from '@/components/ui/modal';
 import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
 import { getAdminTaxonomyData, getAdminTaxonomyImpactData } from '@/lib/admin';
-import { archiveAdminTaxonomy, createAdminTaxonomy, updateAdminTaxonomy } from '@/lib/api';
+import { archiveAdminTaxonomy, forceDeleteAdminTaxonomy, createAdminTaxonomy, updateAdminTaxonomy } from '@/lib/api';
 import type { AdminTaxonomyImpact, AdminTaxonomyNode } from '@/lib/types/admin';
 import { BulkActionBar } from '@/components/ui/bulk-action-bar';
 
@@ -98,6 +98,11 @@ export default function AdminTaxonomyPage() {
               Archive
             </Button>
           ) : null}
+          {row.status === 'archived' ? (
+            <Button variant="outline" size="sm" onClick={() => void forceDeleteNode(row)} className="text-red-600 border-red-300 hover:bg-red-50">
+              Force delete
+            </Button>
+          ) : null}
         </div>
       ),
     },
@@ -140,6 +145,18 @@ export default function AdminTaxonomyPage() {
     } catch (error) {
       console.error(error);
       setToast({ variant: 'error', message: `Unable to archive ${node.label}.` });
+    }
+  }
+
+  async function forceDeleteNode(node: AdminTaxonomyNode) {
+    if (!confirm(`Permanently delete the archived profession "${node.label}"? This cannot be undone.`)) return;
+    try {
+      await forceDeleteAdminTaxonomy(node.id);
+      setToast({ variant: 'success', message: `${node.label} permanently deleted.` });
+      setReloadNonce((current) => current + 1);
+    } catch (error) {
+      console.error(error);
+      setToast({ variant: 'error', message: (error as Error).message || `Unable to delete ${node.label}.` });
     }
   }
 

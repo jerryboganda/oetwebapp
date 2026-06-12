@@ -18,6 +18,7 @@ import {
   adminActivateResultTemplate,
   adminDeactivateResultTemplate,
   adminDeleteResultTemplate,
+  adminForceDeleteResultTemplate,
   fetchAuthorizedObjectUrl,
   type ResultTemplateDto,
 } from '@/lib/api';
@@ -139,7 +140,7 @@ export default function AdminResultTemplatesPage() {
     if (!confirm(`Permanently delete "${row.title}"? This cannot be undone.`)) return;
     setBusyId(row.id);
     try {
-      await adminDeleteResultTemplate(row.id);
+      await adminForceDeleteResultTemplate(row.id);
       setToast({ variant: 'success', message: `Deleted "${row.title}".` });
       await reload();
     } catch (e) {

@@ -13,6 +13,8 @@ import {
   activateAdminSignupProfession,
   archiveAdminSignupExamType,
   archiveAdminSignupProfession,
+  forceDeleteAdminSignupExamType,
+  forceDeleteAdminSignupProfession,
   createAdminSignupExamType,
   createAdminSignupProfession,
   fetchAdminSignupCatalog,
@@ -132,6 +134,11 @@ export default function AdminSignupCatalogPage() {
           <Button variant="outline" size="sm" onClick={() => void toggleExamType(row)}>
             {row.isActive ? 'Archive' : 'Activate'}
           </Button>
+          {!row.isActive ? (
+            <Button variant="outline" size="sm" className="text-red-600 border-red-300 hover:bg-red-50" onClick={() => void forceDeleteExamType(row)}>
+              Force delete
+            </Button>
+          ) : null}
         </div>
       ),
     },
@@ -177,6 +184,11 @@ export default function AdminSignupCatalogPage() {
           <Button variant="outline" size="sm" onClick={() => void toggleProfession(row)}>
             {row.isActive ? 'Archive' : 'Activate'}
           </Button>
+          {!row.isActive ? (
+            <Button variant="outline" size="sm" className="text-red-600 border-red-300 hover:bg-red-50" onClick={() => void forceDeleteProfession(row)}>
+              Force delete
+            </Button>
+          ) : null}
         </div>
       ),
     },
@@ -246,6 +258,28 @@ export default function AdminSignupCatalogPage() {
     await (row.isActive ? archiveAdminSignupProfession(row.id) : activateAdminSignupProfession(row.id));
     setToast({ variant: 'success', message: `${row.label} ${row.isActive ? 'archived' : 'activated'}.` });
     setReloadNonce((current) => current + 1);
+  }
+
+  async function forceDeleteExamType(row: AdminSignupExamTypeCatalogItem) {
+    if (!confirm(`Permanently delete the archived exam type "${row.label}"? This cannot be undone.`)) return;
+    try {
+      await forceDeleteAdminSignupExamType(row.id);
+      setToast({ variant: 'success', message: `${row.label} permanently deleted.` });
+      setReloadNonce((current) => current + 1);
+    } catch (e) {
+      setToast({ variant: 'error', message: (e as Error).message || 'Delete failed.' });
+    }
+  }
+
+  async function forceDeleteProfession(row: AdminSignupProfessionCatalogItem) {
+    if (!confirm(`Permanently delete the archived profession "${row.label}"? This cannot be undone.`)) return;
+    try {
+      await forceDeleteAdminSignupProfession(row.id);
+      setToast({ variant: 'success', message: `${row.label} permanently deleted.` });
+      setReloadNonce((current) => current + 1);
+    } catch (e) {
+      setToast({ variant: 'error', message: (e as Error).message || 'Delete failed.' });
+    }
   }
 
   if (!isAuthenticated || role !== 'admin') return null;

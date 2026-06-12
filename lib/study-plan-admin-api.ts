@@ -139,6 +139,11 @@ export async function softDeleteStudyPlanTemplate(id: string): Promise<void> {
   await apiClient.delete(`/v1/admin/study-plan-templates/${id}`);
 }
 
+/** Permanently deletes a template + its tiers, detaching (nulling) learner study plans. system_admin only. */
+export async function forceDeleteStudyPlanTemplate(id: string): Promise<void> {
+  await apiClient.post(`/v1/admin/study-plan-templates/${id}/force-delete`, {});
+}
+
 export async function duplicateStudyPlanTemplate(id: string): Promise<StudyPlanTemplateDetail> {
   return apiClient.post<StudyPlanTemplateDetail>(
     `/v1/admin/study-plan-templates/${id}/duplicate`,

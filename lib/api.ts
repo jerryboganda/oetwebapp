@@ -5127,6 +5127,11 @@ export async function archiveAdminTaxonomy(professionId: string) {
   return apiRequest(`/v1/admin/taxonomy/${encodeURIComponent(professionId)}/archive`, { method: 'POST' });
 }
 
+/** Permanently deletes an archived profession/taxonomy node. system_admin only. */
+export async function forceDeleteAdminTaxonomy(professionId: string) {
+  return apiRequest(`/v1/admin/taxonomy/${encodeURIComponent(professionId)}/force-delete`, { method: 'POST' });
+}
+
 export interface AdminSignupExamTypePayload {
   id: string;
   code: string;
@@ -5162,6 +5167,11 @@ export async function archiveAdminSignupExamType(id: string) {
   return apiRequest(`/v1/admin/signup-catalog/exam-types/${encodeURIComponent(id)}/archive`, { method: 'POST' });
 }
 
+/** Permanently deletes a signup exam-type catalog row. system_admin only. */
+export async function forceDeleteAdminSignupExamType(id: string) {
+  return apiRequest(`/v1/admin/signup-catalog/exam-types/${encodeURIComponent(id)}/force-delete`, { method: 'POST' });
+}
+
 export async function activateAdminSignupExamType(id: string) {
   return apiRequest(`/v1/admin/signup-catalog/exam-types/${encodeURIComponent(id)}/activate`, { method: 'POST' });
 }
@@ -5176,6 +5186,11 @@ export async function updateAdminSignupProfession(id: string, payload: AdminSign
 
 export async function archiveAdminSignupProfession(id: string) {
   return apiRequest(`/v1/admin/signup-catalog/professions/${encodeURIComponent(id)}/archive`, { method: 'POST' });
+}
+
+/** Permanently deletes a signup profession catalog row. system_admin only. */
+export async function forceDeleteAdminSignupProfession(id: string) {
+  return apiRequest(`/v1/admin/signup-catalog/professions/${encodeURIComponent(id)}/force-delete`, { method: 'POST' });
 }
 
 export async function activateAdminSignupProfession(id: string) {
@@ -7158,6 +7173,11 @@ export async function publishAdminSpeakingMockSet(mockSetId: string): Promise<Ad
     method: 'POST',
   });
   return mapAdminMockSetRow(json);
+}
+
+/** Permanently deletes an archived speaking mock set + all learner mock sessions. system_admin only. */
+export async function forceDeleteAdminSpeakingMockSet(mockSetId: string): Promise<void> {
+  await apiRequest(`/v1/admin/speaking/mock-sets/${encodeURIComponent(mockSetId)}/force-delete`, { method: 'POST' });
 }
 
 export async function archiveAdminSpeakingMockSet(mockSetId: string): Promise<AdminSpeakingMockSetRow> {
@@ -12717,6 +12737,13 @@ export async function adminDeleteResultTemplate(id: string): Promise<void> {
   }, { acceptedStatuses: [204] });
 }
 
+/** Permanently removes a result-template row (the MediaAsset it points at is kept). system_admin only. */
+export async function adminForceDeleteResultTemplate(id: string): Promise<void> {
+  await apiRequest<void>(`/v1/admin/result-templates/${encodeURIComponent(id)}/force-delete`, {
+    method: 'POST',
+  }, { acceptedStatuses: [204] });
+}
+
 export async function learnerGetActiveResultTemplate(): Promise<LearnerResultTemplateDto | null> {
   try {
     return await apiRequest<LearnerResultTemplateDto>('/v1/result-templates/active');
@@ -12805,6 +12832,13 @@ export async function adminArchiveSpeakingSharedResource(id: string): Promise<{ 
 export async function adminDeleteSpeakingSharedResource(id: string): Promise<void> {
   await apiRequest<void>(`/v1/admin/speaking/shared-resources/${encodeURIComponent(id)}`, {
     method: 'DELETE',
+  }, { acceptedStatuses: [204] });
+}
+
+/** Permanently removes a speaking shared resource row (MediaAsset left intact). system_admin only. */
+export async function adminForceDeleteSpeakingSharedResource(id: string): Promise<void> {
+  await apiRequest<void>(`/v1/admin/speaking/shared-resources/${encodeURIComponent(id)}/force-delete`, {
+    method: 'POST',
   }, { acceptedStatuses: [204] });
 }
 

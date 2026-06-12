@@ -11,6 +11,7 @@ import {
   getStudyPlanTemplate,
   updateStudyPlanTemplate,
   softDeleteStudyPlanTemplate,
+  forceDeleteStudyPlanTemplate,
   duplicateStudyPlanTemplate,
   validateStudyPlanTemplate,
   previewStudyPlanTemplate,
@@ -166,6 +167,16 @@ export default function StudyPlanTemplateEditorPage() {
     }
   };
 
+  const onForceDelete = async () => {
+    if (!confirm(`Permanently delete "${template?.name}" and its tiers? Learner study plans built from it are detached (kept). This cannot be undone.`)) return;
+    try {
+      await forceDeleteStudyPlanTemplate(id);
+      router.push('/admin/study-plan-templates');
+    } catch (e: any) {
+      setError(e?.userMessage ?? e?.message ?? 'Delete failed.');
+    }
+  };
+
   // ── Week / Day / Slot mutations ──
   const addWeek = () => {
     setBody((b) => ({
@@ -287,6 +298,7 @@ export default function StudyPlanTemplateEditorPage() {
           </Button>
           <Button variant="outline" size="sm" onClick={onDuplicate}>Duplicate</Button>
           <Button variant="destructive" size="sm" onClick={onSoftDelete}>Soft-delete</Button>
+          <Button variant="destructive" size="sm" className="border-2 border-red-700" onClick={onForceDelete}>Force delete</Button>
           <Button onClick={saveAll} disabled={saving} loading={saving}>Save</Button>
         </div>
       )}

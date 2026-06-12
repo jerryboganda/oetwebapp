@@ -19,6 +19,7 @@ import {
   adminPublishSpeakingSharedResource,
   adminArchiveSpeakingSharedResource,
   adminDeleteSpeakingSharedResource,
+  adminForceDeleteSpeakingSharedResource,
   type SpeakingSharedResourceDto,
   type SpeakingSharedResourceKind,
 } from '@/lib/api';
@@ -142,6 +143,20 @@ export default function AdminSpeakingSharedResourcesPage() {
     }
   }
 
+  async function handleForceDelete(row: SpeakingSharedResourceDto) {
+    if (!confirm(`Permanently delete "${row.title}"? This removes it for good and cannot be undone.`)) return;
+    setBusyId(row.id);
+    try {
+      await adminForceDeleteSpeakingSharedResource(row.id);
+      setToast({ variant: 'success', message: `Permanently deleted "${row.title}".` });
+      await reload();
+    } catch (e) {
+      setToast({ variant: 'error', message: (e as Error).message });
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   const filtersNode = (
     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
       <Select
@@ -220,6 +235,9 @@ export default function AdminSpeakingSharedResourcesPage() {
                       <Button size="sm" variant="outline" onClick={() => void handleArchive(row)} disabled={busyId === row.id}>Archive</Button>
                     ) : null}
                     <Button size="sm" variant="ghost" onClick={() => void handleDelete(row)} disabled={busyId === row.id}>Delete</Button>
+                    {row.status === 'Archived' ? (
+                      <Button size="sm" variant="ghost" className="text-red-600" onClick={() => void handleForceDelete(row)} disabled={busyId === row.id}>Force delete</Button>
+                    ) : null}
                   </div>
                 </div>
               </CardContent>

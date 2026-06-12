@@ -19,6 +19,7 @@ import { Select } from '@/components/ui/form-controls';
 import {
   archiveAdminDrill,
   deleteAdminDrill,
+  forceDeleteAdminDrill,
   getAdminDrill,
   publishAdminDrill,
   SPEAKING_DRILL_KINDS,
@@ -135,6 +136,19 @@ export default function AdminSpeakingDrillEditPage() {
     }
   }
 
+  async function forceDelete() {
+    if (!detail) return;
+    if (typeof window !== 'undefined' && !window.confirm('Permanently delete this archived drill AND all learner attempts for it? This cannot be undone.')) return;
+    setSaving(true);
+    try {
+      await forceDeleteAdminDrill(detail.drillId);
+      router.push('/admin/content/speaking/drills');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Delete failed.');
+      setSaving(false);
+    }
+  }
+
   const breadcrumbs = [...BREADCRUMBS_BASE, { label: detail?.title ?? 'Drill detail' }];
 
   return (
@@ -151,6 +165,11 @@ export default function AdminSpeakingDrillEditPage() {
             <Button variant="outline" size="sm" onClick={destroy} disabled={saving}>
               Delete
             </Button>
+            {detail.status === 'archived' ? (
+              <Button variant="outline" size="sm" className="text-red-600" onClick={forceDelete} disabled={saving}>
+                Force delete
+              </Button>
+            ) : null}
             <Button variant="outline" size="sm" onClick={archive} disabled={saving || detail.status === 'archived'}>
               Archive
             </Button>
