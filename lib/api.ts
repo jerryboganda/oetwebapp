@@ -5334,6 +5334,14 @@ export async function restoreAdminUser(userId: string, payload?: { reason?: stri
   return apiRequest(`/v1/admin/users/${encodeURIComponent(userId)}/restore`, { method: 'POST', body: JSON.stringify(payload ?? {}) });
 }
 
+/**
+ * IRREVERSIBLE: permanently purges the user and every row referencing them across
+ * the whole schema — including invoices, payments and audit records. system_admin only.
+ */
+export async function hardDeleteAdminUser(userId: string): Promise<{ userId: string; purgedRows: number; tables: number }> {
+  return apiRequest(`/v1/admin/users/${encodeURIComponent(userId)}/hard-delete`, { method: 'POST' });
+}
+
 export async function adjustAdminUserCredits(userId: string, payload: { amount: number; reason?: string }) {
   return apiRequest(`/v1/admin/users/${encodeURIComponent(userId)}/credits`, { method: 'POST', body: JSON.stringify(payload) });
 }

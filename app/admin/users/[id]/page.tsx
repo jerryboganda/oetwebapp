@@ -31,6 +31,7 @@ import { Modal } from '@/components/ui/modal';
 import {
   adjustAdminUserCredits,
   deleteAdminUser,
+  hardDeleteAdminUser,
   fetchAdminPermissions,
   fetchAdminSignupCatalog,
   resendAdminUserInvite,
@@ -430,6 +431,26 @@ export default function UserDetailPage() {
     }
   }
 
+  async function handleHardDelete() {
+    if (!user) return;
+    if (!window.confirm('PERMANENTLY DELETE this user and EVERYTHING tied to them — attempts, results, AND invoices/payments/audit records — across the entire system? This is irreversible.')) return;
+    const typed = window.prompt('This cannot be undone. Type the user\'s email to confirm permanent purge:');
+    if (typed == null || typed.trim().toLowerCase() !== (user.email ?? '').trim().toLowerCase()) {
+      setToast({ variant: 'error', message: 'Confirmation did not match — purge cancelled.' });
+      return;
+    }
+    setIsMutating(true);
+    try {
+      const res = await hardDeleteAdminUser(user.id);
+      setToast({ variant: 'success', message: `Permanently purged user (${res.purgedRows} rows across ${res.tables} tables).` });
+    } catch (error) {
+      console.error(error);
+      setToast({ variant: 'error', message: (error as Error).message || 'Unable to permanently purge this account.' });
+    } finally {
+      setIsMutating(false);
+    }
+  }
+
   async function handleAdjustCredits() {
     if (!user) return;
     setIsMutating(true);
@@ -738,6 +759,9 @@ export default function UserDetailPage() {
                 />
                 {user.availableActions.canDelete ? (
                   <Button variant="destructive" onClick={() => openLifecycleModal('delete')} loading={isMutating}>Delete</Button>
+                ) : null}
+                {user.availableActions.canDelete ? (
+                  <Button variant="destructive" className="border-2 border-red-700" onClick={handleHardDelete} loading={isMutating} title="Irreversibly purge this user and ALL their data, including invoices/payments/audit. system_admin only.">Permanently purge</Button>
                 ) : null}
                 {user.availableActions.canRestore ? (
                   <Button onClick={() => openLifecycleModal('restore')} loading={isMutating}>Restore</Button>
