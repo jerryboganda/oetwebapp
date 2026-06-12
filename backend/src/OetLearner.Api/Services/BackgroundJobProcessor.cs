@@ -17,7 +17,23 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
     private DateTimeOffset _lastPrivateSpeakingNoShowSweepAt = DateTimeOffset.MinValue;
     private DateTimeOffset _lastPrivateSpeakingReminderAt = DateTimeOffset.MinValue;
     private DateTimeOffset _lastPrivateSpeakingReservationExpiryAt = DateTimeOffset.MinValue;
+    private DateTimeOffset _lastStuckJobRecoveryAt = DateTimeOffset.MinValue;
     private static readonly TimeSpan ReconciliationInterval = TimeSpan.FromHours(1);
+    /// <summary>How often to scan for jobs orphaned in Processing (e.g. by a
+    /// container restart mid-job). Runs on the first tick after startup too,
+    /// because a restart is exactly when orphans appear.</summary>
+    private static readonly TimeSpan StuckJobRecoveryInterval = TimeSpan.FromMinutes(5);
+    /// <summary>A job legitimately stays in Processing only for the duration of
+    /// one handler execution (seconds to a few minutes). Past this it is
+    /// presumed dead. Kept well above the 10-minute /health/ready warning so
+    /// blue/green overlap (the old container may still be finishing a job)
+    /// never races the recovery sweep.</summary>
+    private static readonly TimeSpan StuckJobStaleThreshold = TimeSpan.FromMinutes(30);
+    /// <summary>Stuck jobs older than this are failed without spending retries
+    /// or notifying learners: re-running a days-old evaluation or reminder is
+    /// more confusing than helpful, and bulk-recovering an old backlog must
+    /// not blast stale notifications at real users.</summary>
+    private static readonly TimeSpan StuckJobRetryMaxAge = TimeSpan.FromHours(24);
     private static readonly TimeSpan ExpertAutoAssignInterval = TimeSpan.FromSeconds(30);
     private static readonly TimeSpan ExpertSlaCheckInterval = TimeSpan.FromSeconds(60);
     private static readonly TimeSpan ReadinessRolloverInterval = TimeSpan.FromHours(24);
@@ -143,6 +159,12 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
             }
 
             await db.SaveChangesAsync(cancellationToken);
+        }
+
+        if (now - _lastStuckJobRecoveryAt >= StuckJobRecoveryInterval)
+        {
+            _lastStuckJobRecoveryAt = now;
+            await RecoverStuckJobsAsync(scope.ServiceProvider, db, cancellationToken);
         }
 
         await ReconcileFreezeLifecycleAsync(scope.ServiceProvider, db, cancellationToken);
@@ -1600,6 +1622,103 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
                 ["message"] = "Your readiness snapshot was recalculated after your mock report finished generating."
             },
             cancellationToken);
+    }
+
+    /// <summary>
+    /// Recovers jobs orphaned in <see cref="AsyncState.Processing"/> — typically
+    /// by a container restart (blue/green deploy) that killed the worker mid-job.
+    /// Without this they hang forever: learners keep polling a result that will
+    /// never arrive and /health/ready reports a growing stuck_jobs warning.
+    /// Policy mirrors an in-process failure: recent orphans spend a retry and
+    /// re-queue with backoff; orphans older than <see cref="StuckJobRetryMaxAge"/>
+    /// fail terminally without learner notifications (a days-late evaluation
+    /// result or reminder is more confusing than helpful).
+    /// </summary>
+    internal async Task RecoverStuckJobsAsync(IServiceProvider services, LearnerDbContext db, CancellationToken cancellationToken)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var staleBefore = now - StuckJobStaleThreshold;
+
+        List<BackgroundJobItem> stuckJobs;
+        try
+        {
+            stuckJobs = await db.BackgroundJobs
+                .Where(x => x.State == AsyncState.Processing && x.LastTransitionAt < staleBefore)
+                .OrderBy(x => x.LastTransitionAt)
+                .Take(200)
+                .ToListAsync(cancellationToken);
+        }
+        catch (InvalidOperationException) when (db.Database.IsSqlite())
+        {
+            // SQLite cannot translate the DateTimeOffset comparison; narrow on
+            // the state predicate and filter in memory (same workaround as the
+            // /health/ready stuck-jobs check and SubscriptionExpiryWorker).
+            var candidates = await db.BackgroundJobs
+                .Where(x => x.State == AsyncState.Processing)
+                .ToListAsync(cancellationToken);
+            stuckJobs = candidates
+                .Where(x => x.LastTransitionAt < staleBefore)
+                .OrderBy(x => x.LastTransitionAt)
+                .Take(200)
+                .ToList();
+        }
+
+        if (stuckJobs.Count == 0)
+        {
+            return;
+        }
+
+        const int maxRetries = 3;
+        var requeued = 0;
+        var failed = 0;
+        foreach (var job in stuckJobs)
+        {
+            var stuckFor = now - job.LastTransitionAt;
+            logger.LogWarning(
+                "Job {JobId} of type {JobType} was orphaned in Processing for {StuckMinutes:F0} minutes; recovering (attempt {Attempt})",
+                job.Id, job.Type, stuckFor.TotalMinutes, job.RetryCount + 1);
+
+            await DiscardPendingJobSideEffectsAsync(db, job.Id, cancellationToken);
+            var tooOldToRetry = stuckFor > StuckJobRetryMaxAge;
+            job.LastTransitionAt = now;
+
+            if (!tooOldToRetry && job.Retryable && job.RetryCount + 1 < maxRetries)
+            {
+                job.RetryCount += 1;
+                var delayMs = (int)Math.Pow(2, job.RetryCount) * 5000;
+                job.State = AsyncState.Queued;
+                job.AvailableAt = now.AddMilliseconds(delayMs);
+                job.StatusReasonCode = "stale_processing_requeued";
+                job.StatusMessage = $"Processing was interrupted (app restart); retry {job.RetryCount}/{maxRetries}.";
+                job.RetryAfterMs = delayMs;
+                requeued += 1;
+                continue;
+            }
+
+            job.State = AsyncState.Failed;
+            job.RetryAfterMs = 0;
+            var failure = new InvalidOperationException("Background job processing was interrupted and never completed.");
+            if (tooOldToRetry)
+            {
+                job.StatusReasonCode = "stale_processing_expired";
+                job.StatusMessage = $"Processing was interrupted and the job sat unrecovered for {stuckFor.TotalHours:F0} hours; failed without retry.";
+                await MarkResourceFailedAfterFinalRetryAsync(db, job, failure, cancellationToken);
+            }
+            else
+            {
+                job.RetryCount += 1;
+                job.StatusReasonCode = "stale_processing";
+                job.StatusMessage = $"Processing was interrupted (app restart) and retries are exhausted ({job.RetryCount}/{maxRetries}).";
+                await MarkResourceFailedAfterFinalRetryAsync(db, job, failure, cancellationToken);
+                await EmitFailureNotificationsAsync(services, db, job, failure, cancellationToken);
+            }
+            failed += 1;
+        }
+
+        await db.SaveChangesAsync(cancellationToken);
+        logger.LogInformation(
+            "Stuck-job recovery: re-queued {Requeued} and failed {Failed} of {Total} orphaned Processing jobs.",
+            requeued, failed, stuckJobs.Count);
     }
 
     private static async Task EmitFailureNotificationsAsync(IServiceProvider services, LearnerDbContext db, BackgroundJobItem job, Exception ex, CancellationToken cancellationToken)
