@@ -20,6 +20,7 @@ export default defineConfig({
       'tests/e2e/**',
       'tests/a11y/**',
       '.kilo/**',
+      '.claude/**',
       'OET Web App Login only screens take from here/**',
       'copilot-worktrees/**',
     ],

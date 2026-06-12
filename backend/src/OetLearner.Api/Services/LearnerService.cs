@@ -4034,7 +4034,10 @@ public partial class LearnerService(
         }
 
         var purchaseTarget = quoteResponse.Items.FirstOrDefault()?.Code ?? quoteEntity.PlanCode ?? request.PriceId;
-        var checkoutIntent = await paymentGateways.GetGateway(gatewayLabel).CreatePaymentIntentAsync(
+        PaymentIntentResult checkoutIntent;
+        try
+        {
+            checkoutIntent = await paymentGateways.GetGateway(gatewayLabel).CreatePaymentIntentAsync(
             new CreatePaymentIntentRequest(
                 UserId: userId,
                 Amount: quoteEntity.TotalAmount,
@@ -4060,6 +4063,14 @@ public partial class LearnerService(
                                     CancelUrl: platformLinks.BuildWebUrl($"/billing/payment-return?status=cancelled&gateway={Uri.EscapeDataString(gatewayLabel)}&quote={Uri.EscapeDataString(quoteEntity.Id)}"),
                                     IdempotencyKey: idempotencyKey),
                         cancellationToken);
+        }
+        catch (InvalidOperationException ex) when (ex.Message.Contains("not fully configured", StringComparison.OrdinalIgnoreCase))
+        {
+            throw ApiException.Validation(
+                "gateway_unavailable",
+                "This payment method is temporarily unavailable. Please pay by card instead.",
+                [new ApiFieldError("gateway", "unavailable", "Choose a different payment method.")]);
+        }
                         providerRequestReturned = true;
 
         quoteEntity.CheckoutSessionId = checkoutIntent.GatewayTransactionId;

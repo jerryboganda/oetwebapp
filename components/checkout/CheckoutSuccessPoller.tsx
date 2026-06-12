@@ -11,7 +11,7 @@ import { CheckoutSessionSummary } from './CheckoutSessionSummary';
 
 /**
  * Stripe-checkout success poller — re-queries the backend every second
- * for up to `pollDurationMs` (default 30s). Branches on fulfilled,
+ * for up to `pollDurationMs` (default 120s). Branches on fulfilled,
  * failed, or pending-timeout.
  */
 
@@ -34,7 +34,7 @@ type ViewState =
 export function CheckoutSuccessPoller({
   sessionId,
   pollIntervalMs = 1000,
-  pollDurationMs = 30_000,
+  pollDurationMs = 120_000,
   postPurchaseHref = '/dashboard',
 }: CheckoutSuccessPollerProps) {
   const [state, setState] = useState<ViewState>(() =>
@@ -187,7 +187,7 @@ export function CheckoutSuccessPoller({
             </div>
           </div>
           <p className="inline-flex items-center gap-2 text-xs text-muted">
-            <Clock className="h-3.5 w-3.5" aria-hidden="true" /> Polling every second for up to 30 seconds...
+            <Clock className="h-3.5 w-3.5" aria-hidden="true" /> Checking automatically — you can keep this tab open.
           </p>
         </div>
       );

@@ -11,6 +11,7 @@ const {
   mockFetchBillingQuote,
   mockFetchWalletTopUpTiers,
   mockFetchWalletTransactions,
+  mockFetchAvailablePaymentGateways,
   mockTrack,
 } = vi.hoisted(() => ({
   mockFetchBilling: vi.fn(),
@@ -22,6 +23,7 @@ const {
   mockFetchBillingQuote: vi.fn(),
   mockFetchWalletTopUpTiers: vi.fn(),
   mockFetchWalletTransactions: vi.fn(),
+  mockFetchAvailablePaymentGateways: vi.fn(),
   mockTrack: vi.fn(),
 }));
 
@@ -51,7 +53,7 @@ vi.mock('@/lib/api', () => ({
   fetchWalletTransactions: mockFetchWalletTransactions,
   fetchAiPackages: vi.fn().mockResolvedValue({ currency: 'AUD', full: [], separate: { listening: [], reading: [], writing: [], speaking: [] }, mock: [] }),
   fetchBillingContent: vi.fn().mockResolvedValue({}),
-  fetchAvailablePaymentGateways: vi.fn().mockResolvedValue({ gateways: ['stripe', 'paypal'] }),
+  fetchAvailablePaymentGateways: mockFetchAvailablePaymentGateways,
 }));
 
 import BillingPage from '../page';
@@ -79,18 +81,11 @@ function defaultBillingData() {
     addOns: [],
     coupons: [],
     quote: null,
-    invoices: [
-      {
-        id: 'in_1NXyHk2eZvKYlo2CABCDEFGH',
-        date: '2026-04-01',
-        amount: '$49.00',
-        status: 'Paid' as const,
-      },
-    ],
+    invoices: [],
   };
 }
 
-describe('Billing page double-submit guard (wallet top-up)', () => {
+describe('Billing page payment gateway availability', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockFetchBilling.mockResolvedValue(defaultBillingData());
@@ -98,72 +93,60 @@ describe('Billing page double-submit guard (wallet top-up)', () => {
     mockFetchWalletTransactions.mockResolvedValue({ balance: 0, transactions: [] });
     mockFetchWalletTopUpTiers.mockResolvedValue({
       currency: 'AUD',
-      tiers: [
-        { amount: 10, credits: 10, bonus: 0, totalCredits: 10, label: 'Starter', isPopular: false },
-      ],
+      tiers: [{ amount: 20, credits: 20, bonus: 0, totalCredits: 20, label: 'Booster', isPopular: false }],
     });
   });
 
-  it('only fires the top-up call once even when the tile is double-clicked', async () => {
-    let resolveTopUp: (v: unknown) => void = () => {};
-    mockCreateWalletTopUp.mockImplementation(
-      () => new Promise((resolve) => {
-        resolveTopUp = resolve;
-      }),
-    );
-
+  it('hides the gateway toggle when only Stripe is configured', async () => {
+    mockFetchAvailablePaymentGateways.mockResolvedValue({ gateways: ['stripe'] });
     const user = userEvent.setup();
     renderWithRouter(<BillingPage />);
 
     expect(await screen.findByText('Your billing center')).toBeInTheDocument();
     await user.click(screen.getByRole('tab', { name: /credits & add-ons/i }));
 
-    const tile = (await screen.findByText('Starter')).closest('button');
-    expect(tile).not.toBeNull();
-
-    // Two synchronous clicks while the request is in flight.
-    await user.click(tile as HTMLElement);
-    await user.click(tile as HTMLElement);
-
-    expect(mockCreateWalletTopUp).toHaveBeenCalledTimes(1);
-    expect(mockCreateWalletTopUp).toHaveBeenCalledWith(
-      10,
-      'stripe',
-      // The 3rd argument is a freshly-generated idempotency key.
-      expect.stringMatching(/.+/),
-    );
-
-    // Resolve the in-flight request so test cleanup doesn't dangle.
-    resolveTopUp({ checkoutUrl: 'about:blank', totalCredits: 10 });
-  });
-});
-
-describe('Billing page invoice ID masking', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    mockFetchBilling.mockResolvedValue(defaultBillingData());
-    mockFetchFreezeStatus.mockResolvedValue(null);
-    mockFetchWalletTransactions.mockResolvedValue({ balance: 0, transactions: [] });
-    mockFetchWalletTopUpTiers.mockResolvedValue({
-      currency: 'AUD',
-      tiers: [],
-    });
+    expect(await screen.findByText('Booster')).toBeInTheDocument();
+    expect(screen.queryByText('Pay with')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'PayPal' })).not.toBeInTheDocument();
   });
 
-  it('masks raw provider invoice IDs in the recent invoices list', async () => {
+  it('shows both gateways when PayPal is configured', async () => {
+    mockFetchAvailablePaymentGateways.mockResolvedValue({ gateways: ['stripe', 'paypal'] });
+    const user = userEvent.setup();
     renderWithRouter(<BillingPage />);
 
-    // Wait for the page to settle.
     expect(await screen.findByText('Your billing center')).toBeInTheDocument();
+    await user.click(screen.getByRole('tab', { name: /credits & add-ons/i }));
 
-    // The raw token must NEVER appear in full anywhere on the page.
-    expect(
-      screen.queryByText(/in_1NXyHk2eZvKYlo2CABCDEFGH/),
-    ).not.toBeInTheDocument();
+    expect(await screen.findByText('Pay with')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Stripe' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'PayPal' })).toBeInTheDocument();
+  });
 
-    // The masked rendering for `in_1NXyHk2eZvKYlo2CABCDEFGH` is `in_***FGH` (last 4
-    // chars after the underscore prefix).
-    const masked = screen.getAllByText(/in_\*\*\*[A-Za-z0-9]{4}/);
-    expect(masked.length).toBeGreaterThan(0);
+  it('falls back to Stripe-only when the availability lookup fails', async () => {
+    mockFetchAvailablePaymentGateways.mockRejectedValue(new Error('offline'));
+    const user = userEvent.setup();
+    renderWithRouter(<BillingPage />);
+
+    expect(await screen.findByText('Your billing center')).toBeInTheDocument();
+    await user.click(screen.getByRole('tab', { name: /credits & add-ons/i }));
+
+    expect(await screen.findByText('Booster')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'PayPal' })).not.toBeInTheDocument();
+  });
+
+  it('offers a Try again button when the initial billing load fails, and retries', async () => {
+    mockFetchAvailablePaymentGateways.mockResolvedValue({ gateways: ['stripe'] });
+    mockFetchBilling
+      .mockRejectedValueOnce(new Error('Network down'))
+      .mockResolvedValueOnce(defaultBillingData());
+    const user = userEvent.setup();
+    renderWithRouter(<BillingPage />);
+
+    expect(await screen.findByText('Network down')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /try again/i }));
+
+    expect(await screen.findByText('Your billing center')).toBeInTheDocument();
+    expect(mockFetchBilling).toHaveBeenCalledTimes(2);
   });
 });

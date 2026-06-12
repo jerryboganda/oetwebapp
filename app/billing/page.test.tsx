@@ -53,6 +53,7 @@ vi.mock('@/lib/api', () => ({
   fetchWalletTransactions: mockFetchWalletTransactions,
   fetchAiPackages: vi.fn().mockResolvedValue({ currency: 'AUD', full: [], separate: { listening: [], reading: [], writing: [], speaking: [] }, mock: [] }),
   fetchBillingContent: vi.fn().mockResolvedValue({}),
+  fetchAvailablePaymentGateways: vi.fn().mockResolvedValue({ gateways: ['stripe', 'paypal'] }),
 }));
 
 import BillingPage from './page';

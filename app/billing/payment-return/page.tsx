@@ -21,33 +21,47 @@ export default function BillingPaymentReturnPage() {
   );
 }
 
+// Hosted-portal webhooks normally land within seconds, but slow gateways can
+// take a minute or more. Poll generously so a learner is not told "still
+// processing" while their payment is actually fine.
+const POLL_WINDOW_MS = 120_000;
+const POLL_FAST_INTERVAL_MS = 1000;
+const POLL_SLOW_INTERVAL_MS = 2500;
+const POLL_BACKOFF_AFTER_MS = 15_000;
+
 function BillingPaymentReturnContent() {
   const searchParams = useSearchParams();
   const quoteId = searchParams?.get('quote') ?? searchParams?.get('quoteId') ?? null;
   const sessionId = searchParams?.get('session') ?? searchParams?.get('session_id') ?? null;
   const initialStatus = searchParams?.get('status') ?? null;
   const missingReference = !quoteId && !sessionId;
+  const cancelledByLearner = initialStatus === 'cancelled';
   const [phase, setPhase] = useState<Phase>(() => {
-    if (initialStatus === 'cancelled') return 'cancelled';
+    if (cancelledByLearner) return 'cancelled';
     return missingReference ? 'failed' : 'polling';
   });
   const [status, setStatus] = useState<BillingPaymentStatus | null>(null);
+  const [pollAttempt, setPollAttempt] = useState(0);
   const [error, setError] = useState<string | null>(() =>
-    missingReference && initialStatus !== 'cancelled'
+    missingReference && !cancelledByLearner
       ? 'Missing checkout reference. Please open Billing to confirm your purchase status.'
       : null);
 
   useEffect(() => {
-    if (missingReference) {
+    // A learner-cancelled checkout stays on the cancelled screen — the
+    // backend may still report the session as pending until it expires.
+    if (missingReference || cancelledByLearner) {
       return;
     }
 
     let cancelled = false;
     const started = Date.now();
+    setPhase('polling');
     const poll = async () => {
       try {
         const result = await fetchBillingPaymentStatus({ quoteId, sessionId });
         if (cancelled) return;
+        setError(null);
         setStatus(result);
         if (result.status === 'completed') {
           setPhase('completed');
@@ -65,23 +79,32 @@ function BillingPaymentReturnContent() {
         if (!cancelled) setError(err instanceof Error ? err.message : 'Could not confirm payment yet.');
       }
 
-      if (Date.now() - started > 30_000) {
-        if (!cancelled) setPhase('timeout');
+      if (cancelled) return;
+      if (Date.now() - started > POLL_WINDOW_MS) {
+        setPhase('timeout');
         return;
       }
-      window.setTimeout(() => void poll(), 1000);
+      const interval = Date.now() - started > POLL_BACKOFF_AFTER_MS ? POLL_SLOW_INTERVAL_MS : POLL_FAST_INTERVAL_MS;
+      window.setTimeout(() => void poll(), interval);
     };
 
     void poll();
     return () => {
       cancelled = true;
     };
-  }, [missingReference, quoteId, sessionId]);
+  }, [cancelledByLearner, missingReference, pollAttempt, quoteId, sessionId]);
 
-  return <PaymentReturnShell phase={phase} status={status} error={error} />;
+  return (
+    <PaymentReturnShell
+      phase={phase}
+      status={status}
+      error={error}
+      onCheckAgain={() => setPollAttempt((attempt) => attempt + 1)}
+    />
+  );
 }
 
-function PaymentReturnShell({ phase, status, error }: { phase: Phase; status?: BillingPaymentStatus | null; error?: string | null }) {
+function PaymentReturnShell({ phase, status, error, onCheckAgain }: { phase: Phase; status?: BillingPaymentStatus | null; error?: string | null; onCheckAgain?: () => void }) {
   const destination = useMemo(() => {
     if (status?.productType === 'addon_purchase' && status.addOnCodes.some((code) => code.startsWith('pkg_'))) return '/billing?tab=ai-credits';
     if (status?.productType === 'addon_purchase') return '/billing?tab=credits';
@@ -152,9 +175,9 @@ function PaymentReturnShell({ phase, status, error }: { phase: Phase; status?: B
                 <Loader2 className="h-4 w-4 animate-spin" /> Waiting for confirmation
               </Button>
             ) : null}
-            {phase === 'timeout' ? (
-              <Button asChild>
-                <Link href="/billing"><RefreshCw className="h-4 w-4" /> Check billing</Link>
+            {phase === 'timeout' && onCheckAgain ? (
+              <Button onClick={onCheckAgain}>
+                <RefreshCw className="h-4 w-4" /> Check again
               </Button>
             ) : null}
             {phase === 'failed' || phase === 'expired' || phase === 'cancelled' ? (
@@ -184,6 +207,6 @@ function messageFor(phase: Phase, status?: BillingPaymentStatus | null) {
   if (phase === 'cancelled') return status?.failureReason ?? 'No charge was made. You can safely retry when ready.';
   if (phase === 'expired') return status?.failureReason ?? 'The checkout window expired before payment was completed.';
   if (phase === 'failed') return status?.failureReason ?? 'The payment portal did not complete this order.';
-  if (phase === 'timeout') return 'The payment provider may still be processing this order. Billing will update automatically when the webhook arrives.';
-  return 'We are waiting for the payment webhook before unlocking your purchase.';
+  if (phase === 'timeout') return 'Your payment may still be processing — your purchase activates automatically once it is confirmed. Use "Check again", or look at Billing or your email in a few minutes. You will not be charged twice for this order.';
+  return 'We are confirming your payment with the provider. This usually takes a few seconds.';
 }

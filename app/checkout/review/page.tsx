@@ -20,6 +20,12 @@ function newIdempotencyKey() {
     : `checkout-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
+function formatCountdown(totalSeconds: number) {
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${String(seconds).padStart(2, '0')}`;
+}
+
 function normalizeProductType(value: string | null): BillingProductType {
   if (value === 'addon_purchase' || value === 'review_credits' || value === 'plan_upgrade' || value === 'plan_downgrade') {
     return value;
@@ -51,7 +57,10 @@ function CheckoutReviewContent() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [quoteSecondsLeft, setQuoteSecondsLeft] = useState<number | null>(null);
+  const [quoteRefreshed, setQuoteRefreshed] = useState(false);
   const quoteStartedRef = useRef(false);
+  const quoteRefreshingRef = useRef(false);
 
   const nextHref = useMemo(() => {
     const query = searchParams?.toString();
@@ -94,6 +103,35 @@ function CheckoutReviewContent() {
     void loadQuote();
   }, [authLoading, isAuthenticated, loadQuote, nextHref, router]);
 
+  // Quotes are valid for a limited window. Surface the remaining time and
+  // refresh automatically at expiry so the learner never hits the backend's
+  // billing_quote_expired error mid-checkout.
+  useEffect(() => {
+    if (!quote?.expiresAt) {
+      setQuoteSecondsLeft(null);
+      return;
+    }
+    const expiry = new Date(quote.expiresAt).getTime();
+    if (Number.isNaN(expiry)) {
+      setQuoteSecondsLeft(null);
+      return;
+    }
+    const tick = () => {
+      const remaining = Math.max(0, Math.ceil((expiry - Date.now()) / 1000));
+      setQuoteSecondsLeft(remaining);
+      if (remaining <= 0 && !quoteRefreshingRef.current && !busy) {
+        quoteRefreshingRef.current = true;
+        setQuoteRefreshed(true);
+        void loadQuote().finally(() => {
+          quoteRefreshingRef.current = false;
+        });
+      }
+    };
+    tick();
+    const timer = window.setInterval(tick, 1000);
+    return () => window.clearInterval(timer);
+  }, [busy, loadQuote, quote?.expiresAt]);
+
   const startCheckout = async () => {
     if (!quote || busy) return;
     setBusy(true);
@@ -109,7 +147,22 @@ function CheckoutReviewContent() {
         gateway,
         idempotencyKey: newIdempotencyKey(),
       });
-      await openCheckoutUrl(checkout.checkoutUrl);
+      const opened = await openCheckoutUrl(checkout.checkoutUrl);
+      if (opened === 'noop') {
+        setError('Could not open the secure payment window. Please try again.');
+        setBusy(false);
+        return;
+      }
+      if (opened === 'window-open' || opened === 'capacitor-browser') {
+        // Payment continues in another window. Turn this tab into the
+        // payment-status poller so the learner gets confirmation here even
+        // if the hosted portal's redirect never lands.
+        const params = new URLSearchParams();
+        params.set('quote', checkout.quoteId ?? quote.quoteId);
+        params.set('session', checkout.checkoutSessionId);
+        router.replace(`/billing/payment-return?${params.toString()}`);
+      }
+      // 'window-assign' navigates this tab to the portal itself — leave busy on.
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not open secure checkout.');
       setBusy(false);
@@ -141,6 +194,9 @@ function CheckoutReviewContent() {
       <section className="mx-auto grid max-w-4xl gap-6 px-4 py-8 sm:px-6 lg:grid-cols-[1.4fr_0.8fr]">
         <div className="space-y-4">
           {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
+          {quoteRefreshed && !error ? (
+            <InlineAlert variant="info">Your quote was refreshed with current pricing.</InlineAlert>
+          ) : null}
           {!quote ? (
             <InlineAlert variant="warning">This order could not be prepared. Return to the catalogue and try again.</InlineAlert>
           ) : (
@@ -171,6 +227,13 @@ function CheckoutReviewContent() {
             <Row label="Discount" value={quote ? `-${formatMoney(quote.discountAmount, { currency: quote.currency })}` : '-'} />
             <Row strong label="Amount due" value={quote ? formatMoney(quote.totalAmount, { currency: quote.currency }) : '-'} />
           </div>
+          {quote && quoteSecondsLeft !== null ? (
+            <p className="mt-3 text-xs text-muted">
+              {quoteSecondsLeft > 0
+                ? `Quoted price valid for ${formatCountdown(quoteSecondsLeft)} — it refreshes automatically.`
+                : 'Refreshing your quote with current pricing…'}
+            </p>
+          ) : null}
           <label className="mt-5 block text-sm font-medium">
             Coupon code
             <input
@@ -180,7 +243,16 @@ function CheckoutReviewContent() {
               placeholder="Optional"
             />
           </label>
-          <Button className="mt-3" variant="outline" fullWidth disabled={busy} onClick={() => loadQuote(couponCode)}>
+          <Button
+            className="mt-3"
+            variant="outline"
+            fullWidth
+            disabled={busy}
+            onClick={() => {
+              setQuoteRefreshed(false);
+              void loadQuote(couponCode);
+            }}
+          >
             Apply coupon
           </Button>
           <Button className="mt-3" fullWidth loading={busy} disabled={!quote} onClick={startCheckout}>

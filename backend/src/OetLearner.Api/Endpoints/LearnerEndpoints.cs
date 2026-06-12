@@ -1,6 +1,8 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
+using OetLearner.Api.Configuration;
 using OetLearner.Api.Contracts;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
@@ -9,6 +11,7 @@ using OetLearner.Api.Services.Content;
 using OetLearner.Api.Services.Listening;
 using OetLearner.Api.Services.Reading;
 using OetLearner.Api.Services.Readiness;
+using OetLearner.Api.Services.Settings;
 using System.Text.Json;
 
 namespace OetLearner.Api.Endpoints;
@@ -349,6 +352,28 @@ public static class LearnerEndpoints
         billing.MapPost("/wallet/top-up", async (HttpContext http, WalletTopUpRequest request, LearnerService service, CancellationToken ct) => Results.Ok(await service.CreateWalletTopUpAsync(http.UserId(), request, ct)))
             .RequireRateLimiting("PerUserWrite");
         billing.MapGet("/wallet/top-up-tiers", (LearnerService service) => Results.Ok(service.GetWalletTopUpTiers()));
+
+        // Configured payment gateways. Lets the frontend offer only the gateways
+        // that can actually create a checkout session in this environment, so a
+        // learner never picks an option that would fail with a server error.
+        billing.MapGet("/payment-gateways", async (
+            IRuntimeSettingsProvider runtimeSettings,
+            IOptions<BillingOptions> billingOptions,
+            CancellationToken ct) =>
+        {
+            var settings = (await runtimeSettings.GetAsync(ct)).Billing;
+            var sandbox = billingOptions.Value.AllowSandboxFallbacks;
+            var gateways = new List<string>();
+            if (sandbox || !string.IsNullOrWhiteSpace(settings.StripeSecretKey))
+            {
+                gateways.Add("stripe");
+            }
+            if (sandbox || (!string.IsNullOrWhiteSpace(settings.PayPalClientId) && !string.IsNullOrWhiteSpace(settings.PayPalClientSecret)))
+            {
+                gateways.Add("paypal");
+            }
+            return Results.Ok(new { gateways });
+        });
 
         // Payment webhook endpoints (no auth required)
         var webhooks = app.MapGroup("/v1/payment/webhooks");

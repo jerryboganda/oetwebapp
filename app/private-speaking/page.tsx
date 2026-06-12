@@ -607,7 +607,7 @@ export default function PrivateSpeakingPage() {
               You have no speaking sessions left. Buy more to book a 1-on-1 session with a tutor.
             </p>
             <Link
-              href="/cart"
+              href="/billing?tab=credits"
               className="inline-flex w-fit shrink-0 items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-primary/90 dark:bg-violet-700 dark:hover:bg-violet-600"
             >
               <ShoppingBag className="h-3.5 w-3.5" aria-hidden /> Buy speaking sessions

@@ -36,6 +36,7 @@ import {
   createWalletTopUp,
   downloadInvoice,
   fetchAiPackages,
+  fetchAvailablePaymentGateways,
   fetchBilling,
   fetchBillingChangePreview,
   fetchBillingContent,
@@ -187,6 +188,9 @@ export default function BillingPage() {
 
   const [freezeState, setFreezeState] = useState<LearnerFreezeStatus | null>(null);
   const [freezeLoadFailed, setFreezeLoadFailed] = useState(false);
+  // Gateways the backend can actually create checkout sessions for. Defaults to
+  // card-only so an unconfigured PayPal account is never offered to the learner.
+  const [availableGateways, setAvailableGateways] = useState<string[]>(['stripe']);
   const [selectedGateway, setSelectedGateway] = useState<'stripe' | 'paypal'>('stripe');
   const [pauseLoading, setPauseLoading] = useState(false);
 
@@ -221,10 +225,11 @@ export default function BillingPage() {
     }
   }, []);
 
-  useEffect(() => {
-    analytics.track('content_view', { page: 'subscriptions' });
-    Promise.allSettled([fetchBilling(), fetchFreezeStatus(), fetchWalletTopUpTiers()])
-      .then(([billingResult, freezeResult, tiersResult]) => {
+  const loadBilling = useCallback(() => {
+    setLoading(true);
+    setError(null);
+    Promise.allSettled([fetchBilling(), fetchFreezeStatus(), fetchWalletTopUpTiers(), fetchAvailablePaymentGateways()])
+      .then(([billingResult, freezeResult, tiersResult, gatewaysResult]) => {
         if (billingResult.status === 'rejected') {
           throw billingResult.reason;
         }
@@ -245,11 +250,26 @@ export default function BillingPage() {
           setTopUpTiers(tiersResult.value.tiers);
           setWalletCurrency(tiersResult.value.currency || 'AUD');
         }
+
+        if (gatewaysResult.status === 'fulfilled' && Array.isArray(gatewaysResult.value?.gateways) && gatewaysResult.value.gateways.length > 0) {
+          const gateways = gatewaysResult.value.gateways;
+          setAvailableGateways(gateways);
+          if (!gateways.includes('paypal')) {
+            setSelectedGateway('stripe');
+          } else if (!gateways.includes('stripe')) {
+            setSelectedGateway('paypal');
+          }
+        }
       })
       .catch((err) => setError(err instanceof Error ? err.message : 'Could not load billing data.'))
       .finally(() => setLoading(false));
     loadWallet();
   }, [loadWallet]);
+
+  useEffect(() => {
+    analytics.track('content_view', { page: 'subscriptions' });
+    loadBilling();
+  }, [loadBilling]);
 
   useEffect(() => {
     let cancelled = false;
@@ -283,15 +303,25 @@ export default function BillingPage() {
     };
   }, []);
 
+  const isAddOnEligible = useCallback(
+    (addOn: { appliesToAllPlans: boolean; compatiblePlanCodes: string[] }) => {
+      if (addOn.appliesToAllPlans) return true;
+      const currentPlanCode = data?.currentPlanCode ?? '';
+      if (!currentPlanCode) return false;
+      return addOn.compatiblePlanCodes.includes(currentPlanCode);
+    },
+    [data?.currentPlanCode],
+  );
+
+  // Split rather than hide: plan-locked add-ons stay visible with a
+  // "requires plan" explanation so learners understand why they can't buy.
   const visibleAddOns = useMemo(
-    () =>
-      (data?.addOns ?? []).filter((addOn) => {
-        if (addOn.appliesToAllPlans) return true;
-        const currentPlanCode = data?.currentPlanCode ?? '';
-        if (!currentPlanCode) return false;
-        return addOn.compatiblePlanCodes.includes(currentPlanCode);
-      }),
-    [data?.addOns, data?.currentPlanCode],
+    () => (data?.addOns ?? []).filter((addOn) => isAddOnEligible(addOn)),
+    [data?.addOns, isAddOnEligible],
+  );
+  const lockedAddOns = useMemo(
+    () => (data?.addOns ?? []).filter((addOn) => !isAddOnEligible(addOn)),
+    [data?.addOns, isAddOnEligible],
   );
 
   const startCheckout = useCallback(async (
@@ -381,6 +411,13 @@ export default function BillingPage() {
       return;
     }
 
+    if (!isAddOnEligible(requestedAddOn)) {
+      autoCheckoutStartedRef.current = true;
+      setActiveTab('credits');
+      setError(`${requestedAddOn.name} is not available on your current plan. Upgrade your plan to unlock it.`);
+      return;
+    }
+
     autoCheckoutStartedRef.current = true;
     setActiveTab('credits');
     void startCheckout(
@@ -390,7 +427,7 @@ export default function BillingPage() {
       requestedAddOn.name,
       requestedParentSubscriptionId,
     );
-  }, [data, loading, requestedAddOnCode, requestedParentSubscriptionId, startCheckout]);
+  }, [data, isAddOnEligible, loading, requestedAddOnCode, requestedParentSubscriptionId, startCheckout]);
 
   const handleDownloadInvoice = async (invoiceId: string) => {
     if (submittingRef.current) return;
@@ -485,6 +522,9 @@ export default function BillingPage() {
     return (
       <LearnerDashboardShell pageTitle={copy('billing.page.title')} backHref="/">
         <InlineAlert variant="error">{error ?? 'Subscription data could not be loaded.'}</InlineAlert>
+        <Button className="mt-4" onClick={loadBilling}>
+          Try again
+        </Button>
       </LearnerDashboardShell>
     );
   }
@@ -1005,25 +1045,27 @@ export default function BillingPage() {
                 className="mb-4"
               />
 
-              <div className="mb-5 flex items-center gap-3">
-                <p className="text-[11px] font-medium uppercase tracking-[0.1em] text-muted/80">{copy('billing.wallet.payWith')}</p>
-                <div className="inline-flex rounded-xl border border-border bg-background-light p-1">
-                  {(['stripe', 'paypal'] as const).map((gw) => (
-                    <button
-                      key={gw}
-                      type="button"
-                      onClick={() => setSelectedGateway(gw)}
-                      className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-[color,background-color,box-shadow] duration-200 ${
-                        selectedGateway === gw
-                          ? 'bg-emerald-700 text-white shadow-sm'
-                          : 'text-navy hover:bg-surface'
-                      }`}
-                    >
-                      {gw === 'stripe' ? copy('billing.wallet.gateway.stripe') : copy('billing.wallet.gateway.paypal')}
-                    </button>
-                  ))}
+              {availableGateways.length > 1 ? (
+                <div className="mb-5 flex items-center gap-3">
+                  <p className="text-[11px] font-medium uppercase tracking-[0.1em] text-muted/80">{copy('billing.wallet.payWith')}</p>
+                  <div className="inline-flex rounded-xl border border-border bg-background-light p-1">
+                    {(['stripe', 'paypal'] as const).filter((gw) => availableGateways.includes(gw)).map((gw) => (
+                      <button
+                        key={gw}
+                        type="button"
+                        onClick={() => setSelectedGateway(gw)}
+                        className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-[color,background-color,box-shadow] duration-200 ${
+                          selectedGateway === gw
+                            ? 'bg-emerald-700 text-white shadow-sm'
+                            : 'text-navy hover:bg-surface'
+                        }`}
+                      >
+                        {gw === 'stripe' ? copy('billing.wallet.gateway.stripe') : copy('billing.wallet.gateway.paypal')}
+                      </button>
+                    ))}
+                  </div>
                 </div>
-              </div>
+              ) : null}
 
               <div className="grid grid-cols-2 gap-3">
                 {topUpTiers.length === 0 ? (
@@ -1177,6 +1219,46 @@ export default function BillingPage() {
                   {copy('billing.addons.empty')}
                 </div>
               )}
+
+              {lockedAddOns.length > 0 ? (
+                <div className="mt-4 space-y-3">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">
+                    Available on other plans
+                  </p>
+                  {lockedAddOns.map((addOn) => {
+                    const requiredPlans = addOn.compatiblePlanCodes
+                      .map((code) => plans.find((plan) => plan.code === code)?.name ?? code)
+                      .join(' or ');
+                    return (
+                      <article
+                        key={addOn.id}
+                        className="rounded-2xl border border-dashed border-border bg-background-light p-5 opacity-80"
+                      >
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div>
+                            <h3 className="text-base font-semibold tracking-tight text-navy">{addOn.name}</h3>
+                            <p className="mt-2 text-sm text-muted">{addOn.description}</p>
+                            <span className="mt-3 inline-flex items-center rounded-full border border-warning/40 bg-warning/10 px-2.5 py-0.5 text-[11px] font-medium text-navy">
+                              {requiredPlans ? `Requires the ${requiredPlans} plan` : 'Requires a different plan'}
+                            </span>
+                          </div>
+                          <div className="rounded-xl bg-surface px-3 py-2 text-sm font-semibold tabular-nums text-navy">
+                            {addOn.price}
+                          </div>
+                        </div>
+                        <Button
+                          className="mt-4"
+                          fullWidth
+                          variant="outline"
+                          onClick={() => setActiveTab('plans')}
+                        >
+                          View plans
+                        </Button>
+                      </article>
+                    );
+                  })}
+                </div>
+              ) : null}
             </section>
           </div>
 

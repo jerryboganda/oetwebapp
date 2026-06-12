@@ -1453,6 +1453,14 @@ export async function fetchWalletTopUpTiers(): Promise<WalletTopUpTiersResponse>
   return apiRequest<WalletTopUpTiersResponse>('/v1/billing/wallet/top-up-tiers');
 }
 
+export interface AvailablePaymentGatewaysResponse {
+  gateways: string[];
+}
+
+export async function fetchAvailablePaymentGateways(): Promise<AvailablePaymentGatewaysResponse> {
+  return apiRequest<AvailablePaymentGatewaysResponse>('/v1/billing/payment-gateways');
+}
+
 export interface ExamFamiliesResponse {
   examFamilies?: { code: string; label?: string }[];
 }

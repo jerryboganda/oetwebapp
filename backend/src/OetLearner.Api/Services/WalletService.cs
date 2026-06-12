@@ -414,22 +414,33 @@ public class WalletService(
         var totalCredits = tier.Credits + tier.Bonus;
 
         var paymentGateway = paymentGateways.GetGateway(gateway);
-        var intent = await paymentGateway.CreatePaymentIntentAsync(new CreatePaymentIntentRequest(
-            UserId: userId,
-            Amount: amountDollars,
-            Currency: currency,
-            ProductType: "wallet_top_up",
-            ProductId: wallet.Id,
-            Description: $"Wallet top-up: {totalCredits} credits ({tier.Credits} + {tier.Bonus} bonus)",
-            Metadata: new Dictionary<string, string>
-            {
-                ["wallet_id"] = wallet.Id,
-                ["credits"] = tier.Credits.ToString(),
-                ["bonus"] = tier.Bonus.ToString()
-            },
-            SuccessUrl: platformLinks.BuildWebUrl($"/billing?payment=success&gateway={Uri.EscapeDataString(gateway)}"),
-            CancelUrl: platformLinks.BuildWebUrl($"/billing?payment=cancelled&gateway={Uri.EscapeDataString(gateway)}"),
-            IdempotencyKey: idempotencyKey), ct);
+        PaymentIntentResult intent;
+        try
+        {
+            intent = await paymentGateway.CreatePaymentIntentAsync(new CreatePaymentIntentRequest(
+                UserId: userId,
+                Amount: amountDollars,
+                Currency: currency,
+                ProductType: "wallet_top_up",
+                ProductId: wallet.Id,
+                Description: $"Wallet top-up: {totalCredits} credits ({tier.Credits} + {tier.Bonus} bonus)",
+                Metadata: new Dictionary<string, string>
+                {
+                    ["wallet_id"] = wallet.Id,
+                    ["credits"] = tier.Credits.ToString(),
+                    ["bonus"] = tier.Bonus.ToString()
+                },
+                SuccessUrl: platformLinks.BuildWebUrl($"/billing?payment=success&gateway={Uri.EscapeDataString(gateway)}"),
+                CancelUrl: platformLinks.BuildWebUrl($"/billing?payment=cancelled&gateway={Uri.EscapeDataString(gateway)}"),
+                IdempotencyKey: idempotencyKey), ct);
+        }
+        catch (InvalidOperationException ex) when (ex.Message.Contains("not fully configured", StringComparison.OrdinalIgnoreCase))
+        {
+            throw ApiException.Validation(
+                "gateway_unavailable",
+                "This payment method is temporarily unavailable. Please pay by card instead.",
+                [new ApiFieldError("gateway", "unavailable", "Choose a different payment method.")]);
+        }
 
         var now = DateTimeOffset.UtcNow;
 
