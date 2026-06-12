@@ -204,3 +204,11 @@ __pycache__/
 
 # Linked git worktrees (separate checkouts — never commit)
 .worktrees/
+
+# Tauri desktop shell
+src-tauri/target/
+src-tauri/binaries/
+src-tauri/*.log
+src-tauri/cdp-*.mjs
+src-tauri/cdp-realtime-result.json
+src-tauri/*-result.json
