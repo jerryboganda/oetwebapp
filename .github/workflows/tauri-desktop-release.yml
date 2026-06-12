@@ -1,0 +1,192 @@
+name: Tauri Desktop Release
+
+# Builds the Tauri 2 desktop shell (src-tauri/) for Windows (NSIS) and macOS (dmg).
+# Parallel to desktop-release.yml (Electron), which stays authoritative until the
+# Phase 6 cutover — see docs/tauri-desktop-shell.md.
+#
+# Triggers:
+#  - Manual: workflow_dispatch with version + allow_unsigned inputs.
+#  - Tag push: v*.*.*-tauri-desktop (e.g. v1.2.0-tauri-desktop) builds and uploads
+#    artifacts. Publishing updater feeds / GitHub Releases stays a manual step.
+#
+# Required repository secrets:
+#  - TAURI_SIGNING_PRIVATE_KEY           — minisign private key for updater artifacts
+#                                          (generate: pnpm dlx @tauri-apps/cli signer generate;
+#                                          the matching pubkey lives in src-tauri/tauri.conf.json)
+#  - TAURI_SIGNING_PRIVATE_KEY_PASSWORD  — its password ('' if none)
+#  Windows Authenticode (optional until wired into NSIS signCommand): the same
+#  AZURE_* / WIN_CSC_* groups documented in desktop-release.yml.
+#  macOS signing/notarisation (optional): APPLE_CERTIFICATE, APPLE_CERTIFICATE_PASSWORD,
+#  APPLE_SIGNING_IDENTITY, APPLE_ID, APPLE_PASSWORD, APPLE_TEAM_ID (tauri-cli reads these).
+#
+# NOTE: a green macOS build here does NOT discharge the migration plan's macOS
+# gate — WKWebView microphone capture needs a one-time manual run on real
+# hardware (no audio input or interactive permission prompts on CI runners).
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Semantic version to stamp into src-tauri/tauri.conf.json (e.g. 1.2.0)'
+        required: true
+        type: string
+      allow_unsigned:
+        description: 'Allow build without updater signing key (artifacts cannot be served to the auto-updater)'
+        required: false
+        type: boolean
+        default: false
+  push:
+    tags:
+      - 'v*.*.*-tauri-desktop'
+
+concurrency:
+  group: tauri-desktop-release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: '22'
+  DOTNET_VERSION: '10.0.x'
+  NEXT_TELEMETRY_DISABLED: '1'
+
+jobs:
+  conformance:
+    name: Bridge conformance gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: desktopBridge contract conformance (types/desktop.d.ts parity)
+        run: pnpm vitest run src-tauri/__tests__/desktop-bridge-conformance.test.ts
+
+  build:
+    name: ${{ matrix.platform.name }}
+    needs: conformance
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          - name: Windows x64 (NSIS)
+            os: windows-latest
+            bundle-glob: src-tauri/target/release/bundle/nsis/*
+          - name: macOS arm64 (dmg)
+            os: macos-latest
+            bundle-glob: src-tauri/target/release/bundle/dmg/*.dmg
+    runs-on: ${{ matrix.platform.os }}
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Resolve version
+        id: version
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            tag="${{ github.ref_name }}"
+            v="${tag#v}"; v="${v%-tauri-desktop}"
+          else
+            v="${{ inputs.version }}"
+          fi
+          if ! echo "$v" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.\-]+)?$'; then
+            echo "Resolved version '$v' is not valid semver." >&2; exit 1
+          fi
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+          echo "Resolved tauri desktop version: $v"
+
+      - name: Stamp tauri.conf.json version
+        shell: bash
+        run: |
+          node -e "
+            const fs = require('fs');
+            const p = 'src-tauri/tauri.conf.json';
+            const conf = JSON.parse(fs.readFileSync(p, 'utf8'));
+            conf.version = '${{ steps.version.outputs.version }}';
+            fs.writeFileSync(p, JSON.stringify(conf, null, 2) + '\n');
+          "
+
+      - name: Validate updater signing configuration
+        if: inputs.allow_unsigned != true
+        shell: bash
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        run: |
+          if [ -z "$TAURI_SIGNING_PRIVATE_KEY" ]; then
+            echo "TAURI_SIGNING_PRIVATE_KEY secret is not configured. The auto-updater" >&2
+            echo "refuses unsigned artifacts. Re-run with allow_unsigned=true for throwaway builds." >&2
+            exit 1
+          fi
+          echo "Updater signing key detected."
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build + bundle (backend publish, next build, stage node, tauri build)
+        shell: bash
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          # Runtime config baked into the Next.js build (mirrors desktop-release.yml).
+          NEXT_PUBLIC_API_BASE_URL: ${{ vars.DESKTOP_API_BASE_URL || 'https://api.oetwithdrhesham.co.uk' }}
+          APP_URL: ${{ vars.DESKTOP_APP_URL || 'https://app.oetwithdrhesham.co.uk' }}
+          # macOS signing/notarisation — no-ops when unset.
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: node scripts/tauri-dist.cjs build
+
+      - name: Generate checksums
+        shell: bash
+        run: |
+          shopt -s nullglob globstar
+          files=(src-tauri/target/release/bundle/**/*.exe src-tauri/target/release/bundle/**/*.dmg src-tauri/target/release/bundle/**/*.sig)
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "No bundle artifacts found for checksum generation." >&2; exit 1
+          fi
+          mkdir -p dist/tauri-desktop
+          for f in "${files[@]}"; do
+            cp "$f" dist/tauri-desktop/
+          done
+          cd dist/tauri-desktop
+          if command -v sha256sum >/dev/null; then
+            sha256sum * > SHA256SUMS.txt
+          else
+            shasum -a 256 * > SHA256SUMS.txt
+          fi
+          cat SHA256SUMS.txt
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: tauri-desktop-${{ runner.os }}-${{ steps.version.outputs.version }}
+          path: dist/tauri-desktop/
+          if-no-files-found: error
+          retention-days: 90
