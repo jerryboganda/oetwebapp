@@ -30,6 +30,7 @@ public static class StudyPlanTemplateAdminEndpoints
         admin.MapPost("/", CreateTemplate).WithAdminWrite("AdminContentWrite");
         admin.MapPut("/{id}", UpdateTemplate).WithAdminWrite("AdminContentWrite");
         admin.MapDelete("/{id}", SoftDeleteTemplate).WithAdminWrite("AdminContentWrite");
+        admin.MapPost("/{id}/force-delete", ForceDeleteTemplate).WithAdminWrite("AdminSystemAdmin");
         admin.MapPost("/{id}/duplicate", DuplicateTemplate).WithAdminWrite("AdminContentWrite");
         admin.MapPost("/{id}/validate", ValidateTemplate).WithAdminRead("AdminContentRead").RequireRateLimiting("PerUserWrite");
         admin.MapPost("/{id}/preview", PreviewTemplate).WithAdminRead("AdminContentRead").RequireRateLimiting("PerUserWrite");
@@ -268,6 +269,29 @@ public static class StudyPlanTemplateAdminEndpoints
 
         var adminId = ResolveAdminId(http);
         await RecordAuditAsync(db, adminId, "study_plan_template.soft_delete", template.Id, ct);
+        return TypedResults.NoContent();
+    }
+
+    // Permanent purge: removes the template + its tiers, and detaches (nulls) any
+    // learner study plans built from it so their progress survives. system_admin.
+    private static async Task<Results<NoContent, NotFound>> ForceDeleteTemplate(
+        string id,
+        HttpContext http,
+        LearnerDbContext db,
+        CancellationToken ct)
+    {
+        var template = await db.StudyPlanTemplates.FirstOrDefaultAsync(t => t.Id == id, ct);
+        if (template is null) return TypedResults.NotFound();
+
+        db.StudyPlanTemplateTiers.RemoveRange(
+            await db.StudyPlanTemplateTiers.Where(t => t.TemplateId == id).ToListAsync(ct));
+        var plans = await db.StudyPlans.Where(p => p.TemplateId == id).ToListAsync(ct);
+        foreach (var p in plans) p.TemplateId = null;
+        db.StudyPlanTemplates.Remove(template);
+        await db.SaveChangesAsync(ct);
+
+        var adminId = ResolveAdminId(http);
+        await RecordAuditAsync(db, adminId, "study_plan_template.force_delete", template.Id, ct);
         return TypedResults.NoContent();
     }
 

@@ -259,6 +259,29 @@ public partial class AdminService
         return await ProjectMockSetDetailAsync(entity, ct);
     }
 
+    /// <summary>Permanently deletes an archived speaking mock set and purges all
+    /// learner mock sessions for it. Archive-first gated; irreversible. system_admin.</summary>
+    public async Task<object> ForceDeleteSpeakingMockSetAsync(
+        string adminId, string adminName, string mockSetId, CancellationToken ct)
+    {
+        var entity = await db.SpeakingMockSets.FirstOrDefaultAsync(x => x.Id == mockSetId, ct)
+            ?? throw ApiException.NotFound("speaking_mock_set_not_found", "That speaking mock set does not exist.");
+        if (entity.Status != SpeakingMockSetStatus.Archived)
+            throw ApiException.Validation("speaking_mock_set_force_delete_not_archived",
+                "Only archived speaking mock sets can be permanently deleted. Archive it first.");
+
+        await using var tx = await BeginTransactionIfNeededAsync(ct);
+        db.SpeakingMockSessions.RemoveRange(
+            await db.SpeakingMockSessions.Where(s => s.MockSetId == mockSetId).ToListAsync(ct));
+        db.SpeakingMockSets.Remove(entity);
+        await db.SaveChangesAsync(ct);
+        await LogAuditAsync(adminId, adminName, "ForceDeleted", "SpeakingMockSet", mockSetId,
+            $"Force-deleted mock set + learner sessions: {entity.Title}", ct);
+        await CommitIfOwnedAsync(tx, ct);
+
+        return new { id = mockSetId, deleted = true };
+    }
+
     private static void ValidateMockSetReferences(string title, string rolePlay1Id, string rolePlay2Id)
     {
         if (string.IsNullOrWhiteSpace(title))

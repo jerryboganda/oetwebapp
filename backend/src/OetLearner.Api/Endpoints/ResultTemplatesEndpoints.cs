@@ -41,6 +41,18 @@ public static class ResultTemplatesEndpoints
             return row is null ? Results.NotFound() : Results.Ok(Project(row));
         });
 
+        // Permanent delete — removes the template row outright. No rows reference it
+        // (it points AT a MediaAsset, which is left intact). system_admin only.
+        admin.MapPost("/{id}/force-delete", async (string id, LearnerDbContext db, CancellationToken ct) =>
+        {
+            var row = await db.ResultTemplateAssets.FirstOrDefaultAsync(x => x.Id == id, ct);
+            if (row is null) return Results.NotFound();
+            db.ResultTemplateAssets.Remove(row);
+            await db.SaveChangesAsync(ct);
+            return Results.NoContent();
+        })
+        .WithAdminWrite("AdminSystemAdmin");
+
         admin.MapPost("", async (
             HttpContext http,
             LearnerDbContext db,

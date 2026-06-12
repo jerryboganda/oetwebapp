@@ -171,6 +171,30 @@ public partial class AdminService
         return new { item.Id, item.IsActive };
     }
 
+    /// <summary>Permanently deletes a signup exam-type catalog row. No FK dependents
+    /// (references are JSON id lists); irreversible. system_admin only.</summary>
+    public async Task<object> ForceDeleteSignupExamTypeAsync(string adminId, string adminName, string id, CancellationToken ct)
+    {
+        var item = await db.SignupExamTypeCatalog.FirstOrDefaultAsync(row => row.Id == id, ct)
+            ?? throw ApiException.NotFound("signup_exam_type_not_found", "Signup exam type not found.");
+        db.SignupExamTypeCatalog.Remove(item);
+        await db.SaveChangesAsync(ct);
+        await LogAuditAsync(adminId, adminName, "ForceDeleted", "SignupExamType", item.Id, $"Force-deleted signup exam type: {item.Label}", ct);
+        return new { id, deleted = true };
+    }
+
+    /// <summary>Permanently deletes a signup profession catalog row. No FK dependents
+    /// (references are JSON id lists); irreversible. system_admin only.</summary>
+    public async Task<object> ForceDeleteSignupProfessionAsync(string adminId, string adminName, string id, CancellationToken ct)
+    {
+        var item = await db.SignupProfessionCatalog.FirstOrDefaultAsync(row => row.Id == id, ct)
+            ?? throw ApiException.NotFound("signup_profession_not_found", "Signup profession not found.");
+        db.SignupProfessionCatalog.Remove(item);
+        await db.SaveChangesAsync(ct);
+        await LogAuditAsync(adminId, adminName, "ForceDeleted", "SignupProfession", item.Id, $"Force-deleted signup profession: {item.Label}", ct);
+        return new { id, deleted = true };
+    }
+
     /// <summary>
     /// Mirrors a SignupProfessionCatalog row into the legacy <c>Professions</c>
     /// taxonomy table (<see cref="ProfessionReference"/>) so the signup catalog

@@ -158,6 +158,15 @@ public static class SpeakingDrillEndpoints
                 AdminId(http), AdminName(http), id, ct)))
             .WithAdminWrite("AdminContentWrite");
 
+        admin.MapPost("/{id}/force-delete", async (
+            string id,
+            AdminService service,
+            HttpContext http,
+            CancellationToken ct) =>
+            Results.Ok(await service.ForceDeleteSpeakingDrillAsync(
+                AdminId(http), AdminName(http), id, ct)))
+            .WithAdminWrite("AdminSystemAdmin");
+
         // ── Bulk action (publish | archive | delete) ────────────────────────
         //
         // T3: one atomic endpoint over a set of drills. The route enforces the

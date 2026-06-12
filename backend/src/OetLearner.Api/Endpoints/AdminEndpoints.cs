@@ -156,6 +156,10 @@ public static class AdminEndpoints
             => Results.Ok(await service.SetSignupExamTypeStatusAsync(http.AdminId(), http.AdminName(), id, true, ct)))
             .WithAdminWrite("AdminContentWrite");
 
+        admin.MapPost("/signup-catalog/exam-types/{id}/force-delete", async (string id, HttpContext http, AdminService service, CancellationToken ct)
+            => Results.Ok(await service.ForceDeleteSignupExamTypeAsync(http.AdminId(), http.AdminName(), id, ct)))
+            .WithAdminWrite("AdminSystemAdmin");
+
         admin.MapPost("/signup-catalog/professions", async (HttpContext http, AdminSignupProfessionCatalogRequest request, AdminService service, CancellationToken ct)
             => Results.Ok(await service.CreateSignupProfessionAsync(http.AdminId(), http.AdminName(), request, ct)))
             .WithAdminWrite("AdminContentWrite");
@@ -167,6 +171,10 @@ public static class AdminEndpoints
         admin.MapPost("/signup-catalog/professions/{id}/archive", async (string id, HttpContext http, AdminService service, CancellationToken ct)
             => Results.Ok(await service.SetSignupProfessionStatusAsync(http.AdminId(), http.AdminName(), id, false, ct)))
             .WithAdminWrite("AdminContentWrite");
+
+        admin.MapPost("/signup-catalog/professions/{id}/force-delete", async (string id, HttpContext http, AdminService service, CancellationToken ct)
+            => Results.Ok(await service.ForceDeleteSignupProfessionAsync(http.AdminId(), http.AdminName(), id, ct)))
+            .WithAdminWrite("AdminSystemAdmin");
 
         admin.MapPost("/signup-catalog/professions/{id}/activate", async (string id, HttpContext http, AdminService service, CancellationToken ct)
             => Results.Ok(await service.SetSignupProfessionStatusAsync(http.AdminId(), http.AdminName(), id, true, ct)))
@@ -2174,6 +2182,10 @@ public static class AdminEndpoints
         admin.MapPost("/speaking/mock-sets/{mockSetId}/archive", async (string mockSetId, HttpContext http, AdminService service, CancellationToken ct)
             => Results.Ok(await service.ArchiveSpeakingMockSetAsync(http.AdminId(), http.AdminName(), mockSetId, ct)))
             .WithAdminWrite("AdminContentPublish");
+
+        admin.MapPost("/speaking/mock-sets/{mockSetId}/force-delete", async (string mockSetId, HttpContext http, AdminService service, CancellationToken ct)
+            => Results.Ok(await service.ForceDeleteSpeakingMockSetAsync(http.AdminId(), http.AdminName(), mockSetId, ct)))
+            .WithAdminWrite("AdminSystemAdmin");
 
         // ── Speaking calibration (Wave 4 of docs/SPEAKING-MODULE-PLAN.md) ──
         // Admin curates gold-marked recordings; tutors then submit their

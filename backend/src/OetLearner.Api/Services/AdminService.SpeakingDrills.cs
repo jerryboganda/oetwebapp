@@ -286,6 +286,31 @@ public partial class AdminService
         return await ArchiveSpeakingDrillAsync(adminId, adminName, drillId, ct);
     }
 
+    /// <summary>Permanently deletes an archived speaking drill: purges learner
+    /// attempts, then the drill item, then its ContentItem projection (the drill
+    /// holds a RESTRICT FK to ContentItem so it must go first). EF orders the
+    /// dependents-first deletes within the single SaveChanges. system_admin only.</summary>
+    public async Task<object> ForceDeleteSpeakingDrillAsync(
+        string adminId, string adminName, string drillId, CancellationToken ct)
+    {
+        var (drill, content) = await LoadDrillWithContentAsync(drillId, ct);
+        if (content.Status != ContentStatus.Archived)
+            throw ApiException.Validation("speaking_drill_force_delete_not_archived",
+                "Only archived speaking drills can be permanently deleted. Archive it first.");
+
+        await using var tx = await BeginTransactionIfNeededAsync(ct);
+        db.SpeakingDrillAttempts.RemoveRange(
+            await db.SpeakingDrillAttempts.Where(a => a.DrillItemId == drillId).ToListAsync(ct));
+        db.SpeakingDrillItems.Remove(drill);
+        db.ContentItems.Remove(content);
+        await db.SaveChangesAsync(ct);
+        await LogAuditAsync(adminId, adminName, "ForceDeleted", "SpeakingDrill", drillId,
+            $"Force-deleted drill + learner attempts: {content.Title}", ct);
+        await CommitIfOwnedAsync(tx, ct);
+
+        return new { id = drillId, deleted = true };
+    }
+
     // ── Bulk (publish | archive | delete) ───────────────────────────────────
     //
     // T3: a single atomic bulk endpoint. The whole batch runs inside ONE
