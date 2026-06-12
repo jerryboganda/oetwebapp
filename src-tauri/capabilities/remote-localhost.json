@@ -1,0 +1,33 @@
+{
+  "identifier": "remote-localhost",
+  "description": "Grant IPC to the Next.js standalone renderer served on loopback. Remote origins enforce the command ACL strictly, so every desktopBridge app command is allowed explicitly.",
+  "remote": {
+    "urls": [
+      "http://localhost",
+      "http://localhost:*",
+      "http://127.0.0.1",
+      "http://127.0.0.1:*"
+    ]
+  },
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "allow-runtime-info",
+    "allow-open-external",
+    "allow-secret-get",
+    "allow-secret-set",
+    "allow-secret-delete",
+    "allow-secret-status",
+    "allow-offline-cache-store",
+    "allow-offline-cache-get",
+    "allow-offline-cache-delete",
+    "allow-offline-cache-list",
+    "allow-offline-cache-clear",
+    "allow-show-notification",
+    "allow-get-dropped-file-info",
+    "allow-speaking-audio-start",
+    "allow-speaking-audio-stop",
+    "allow-speaking-audio-get-blob",
+    "allow-speaking-audio-discard"
+  ]
+}

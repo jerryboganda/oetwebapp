@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-speaking-audio-stop"
+description = "Enables the speaking_audio_stop command without any pre-configured scope."
+commands.allow = ["speaking_audio_stop"]
+
+[[permission]]
+identifier = "deny-speaking-audio-stop"
+description = "Denies the speaking_audio_stop command without any pre-configured scope."
+commands.deny = ["speaking_audio_stop"]
