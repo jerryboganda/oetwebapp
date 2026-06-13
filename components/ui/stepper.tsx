@@ -18,9 +18,15 @@ interface StepperProps {
   currentStep: number; // 0-indexed
   className?: string;
   orientation?: 'horizontal' | 'vertical';
+  /**
+   * When provided, each step's indicator + label becomes a button that calls
+   * back with the clicked step index. Additive and optional — existing
+   * read-only usages (e.g. the mock-bundle wizard) render unchanged.
+   */
+  onStepClick?: (index: number, step: Step) => void;
 }
 
-export function Stepper({ steps, currentStep, className, orientation = 'horizontal' }: StepperProps) {
+export function Stepper({ steps, currentStep, className, orientation = 'horizontal', onStepClick }: StepperProps) {
   const isVertical = orientation === 'vertical';
   const reducedMotion = prefersReducedMotion(useReducedMotion());
   const springTransition = reducedMotion
@@ -34,6 +40,54 @@ export function Stepper({ steps, currentStep, className, orientation = 'horizont
         const isCurrent = idx === currentStep;
         const isUpcoming = idx > currentStep;
 
+        const indicatorGroup = (
+          <>
+            <motion.div
+              layout
+              transition={springTransition}
+              className={cn(
+                'w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold shrink-0',
+                isComplete && 'bg-primary text-white dark:bg-violet-700',
+                isCurrent && 'bg-primary/10 text-primary border-2 border-primary',
+                isUpcoming && 'bg-background-light text-muted border border-border',
+              )}
+              aria-current={isCurrent ? 'step' : undefined}
+            >
+              <AnimatePresence mode="wait" initial={false}>
+                {isComplete ? (
+                  <motion.span
+                    key="check"
+                    initial={{ opacity: 0, scale: 0.5 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.5 }}
+                    transition={springTransition}
+                  >
+                    <Check className="w-4 h-4" />
+                  </motion.span>
+                ) : (
+                  <motion.span
+                    key={`step-${idx}`}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: motionTokens.duration.fast }}
+                  >
+                    {step.icon || idx + 1}
+                  </motion.span>
+                )}
+              </AnimatePresence>
+            </motion.div>
+            <div className={cn(!isVertical && 'hidden sm:block')}>
+              <p className={cn('text-xs font-semibold', isCurrent ? 'text-primary' : isComplete ? 'text-navy' : 'text-muted')}>
+                {step.label}
+              </p>
+              {step.description && isVertical && (
+                <p className="text-xs text-muted mt-0.5">{step.description}</p>
+              )}
+            </div>
+          </>
+        );
+
         return (
           <div
             key={step.id}
@@ -42,52 +96,18 @@ export function Stepper({ steps, currentStep, className, orientation = 'horizont
               !isVertical && idx < steps.length - 1 && 'flex-1',
             )}
           >
-            {/* Step indicator */}
-            <div className="flex items-center gap-2">
-              <motion.div
-                layout
-                transition={springTransition}
-                className={cn(
-                  'w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold shrink-0',
-                  isComplete && 'bg-primary text-white dark:bg-violet-700',
-                  isCurrent && 'bg-primary/10 text-primary border-2 border-primary',
-                  isUpcoming && 'bg-background-light text-muted border border-border',
-                )}
-                aria-current={isCurrent ? 'step' : undefined}
+            {onStepClick ? (
+              <button
+                type="button"
+                onClick={() => onStepClick(idx, step)}
+                aria-label={`Go to step ${idx + 1}: ${step.label}`}
+                className="flex items-center gap-2 rounded-xl text-left transition-opacity hover:opacity-80 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
               >
-                <AnimatePresence mode="wait" initial={false}>
-                  {isComplete ? (
-                    <motion.span
-                      key="check"
-                      initial={{ opacity: 0, scale: 0.5 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      exit={{ opacity: 0, scale: 0.5 }}
-                      transition={springTransition}
-                    >
-                      <Check className="w-4 h-4" />
-                    </motion.span>
-                  ) : (
-                    <motion.span
-                      key={`step-${idx}`}
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      exit={{ opacity: 0 }}
-                      transition={{ duration: motionTokens.duration.fast }}
-                    >
-                      {step.icon || idx + 1}
-                    </motion.span>
-                  )}
-                </AnimatePresence>
-              </motion.div>
-              <div className={cn(!isVertical && 'hidden sm:block')}>
-                <p className={cn('text-xs font-semibold', isCurrent ? 'text-primary' : isComplete ? 'text-navy' : 'text-muted')}>
-                  {step.label}
-                </p>
-                {step.description && isVertical && (
-                  <p className="text-xs text-muted mt-0.5">{step.description}</p>
-                )}
-              </div>
-            </div>
+                {indicatorGroup}
+              </button>
+            ) : (
+              <div className="flex items-center gap-2">{indicatorGroup}</div>
+            )}
             {/* Connector line */}
             {!isVertical && idx < steps.length - 1 && (
               <div className="flex-1 h-0.5 rounded bg-border overflow-hidden">

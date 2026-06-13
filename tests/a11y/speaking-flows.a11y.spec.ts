@@ -8,14 +8,14 @@ test.describe('Speaking expert + admin surfaces — a11y', () => {
     await runAxe(page);
   });
 
-  test('admin speaking cards list', async ({ page }) => {
-    await page.goto('/admin/content/speaking/role-play-cards');
+  test('admin speaking authoring hub', async ({ page }) => {
+    await page.goto('/admin/speaking');
     await page.waitForLoadState('networkidle');
     await runAxe(page);
   });
 
-  test('admin speaking mock-sets', async ({ page }) => {
-    await page.goto('/admin/content/speaking/mock-sets');
+  test('admin speaking new mock set', async ({ page }) => {
+    await page.goto('/admin/speaking/mock-sets/new');
     await page.waitForLoadState('networkidle');
     await runAxe(page);
   });
