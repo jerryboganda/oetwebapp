@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using OetLearner.Api.Contracts;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services.Content;
@@ -40,6 +41,16 @@ public interface IWritingTaskAuthoringService
     Task<WritingTaskDto> ImportAsync(WritingTaskImportJson import, ClaimsPrincipal user, CancellationToken ct = default);
 
     Task<WritingTaskImportJson?> ExportAsync(Guid id, CancellationToken ct = default);
+
+    /// <summary>
+    /// Applies a bulk workflow action (<c>publish</c> | <c>archive</c> |
+    /// <c>delete</c> | <c>force-delete</c>) to many tasks at once. Mirrors
+    /// <c>ContentPaperService.BulkAsync</c> so the admin UI gets a uniform
+    /// count-style result. <c>delete</c> skips a task that has learner data;
+    /// <c>force-delete</c> purges submissions, grades, appeals, annotations,
+    /// moderation and attempt events first (spec parity with Reading/Listening).
+    /// </summary>
+    Task<BulkActionResult> BulkAsync(string action, IReadOnlyList<string> ids, CancellationToken ct = default);
 }
 
 public sealed class WritingTaskAuthoringService(LearnerDbContext db, ILogger<WritingTaskAuthoringService> logger)
@@ -234,6 +245,156 @@ public sealed class WritingTaskAuthoringService(LearnerDbContext db, ILogger<Wri
     {
         var scenario = await db.WritingScenarios.AsNoTracking().FirstOrDefaultAsync(s => s.Id == id, ct);
         return scenario is null ? null : MapToExportJson(scenario);
+    }
+
+    // ----- bulk workflow actions (parity with ContentPaperService.BulkAsync) -----
+
+    private static readonly string[] SupportedBulkActions = ["publish", "archive", "delete", "force-delete"];
+    private const int BulkErrorCap = 100;
+
+    private enum BulkItemOutcome { Succeeded, Skipped }
+
+    public async Task<BulkActionResult> BulkAsync(string action, IReadOnlyList<string> ids, CancellationToken ct = default)
+    {
+        var normalized = (action ?? string.Empty).Trim().ToLowerInvariant();
+        if (Array.IndexOf(SupportedBulkActions, normalized) < 0)
+        {
+            throw new ArgumentException($"Unknown bulk action '{action}'.", nameof(action));
+        }
+
+        var totalRequested = ids?.Count ?? 0;
+        var distinct = (ids ?? Array.Empty<string>())
+            .Where(s => !string.IsNullOrWhiteSpace(s))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        var succeeded = 0;
+        var skipped = 0;
+        var errors = new List<string>();
+
+        // Single transaction across all per-item mutations so a mid-batch fatal
+        // error rolls the whole batch back. InMemory (tests) has no transactions.
+        var supportsTransactions = !string.Equals(
+            db.Database.ProviderName,
+            "Microsoft.EntityFrameworkCore.InMemory",
+            StringComparison.Ordinal);
+        await using var tx = supportsTransactions ? await db.Database.BeginTransactionAsync(ct) : null;
+
+        foreach (var raw in distinct)
+        {
+            if (!Guid.TryParse(raw, out var id))
+            {
+                skipped++;
+                continue;
+            }
+
+            try
+            {
+                var outcome = await ApplyBulkOneAsync(normalized, id, ct);
+                if (outcome == BulkItemOutcome.Succeeded) succeeded++;
+                else skipped++;
+            }
+            catch (InvalidOperationException ex)
+            {
+                // Validation / gate failure for this id — record and continue.
+                if (errors.Count < BulkErrorCap) errors.Add($"{raw}: {ex.Message}");
+                else if (errors.Count == BulkErrorCap) errors.Add($"… and more (cap {BulkErrorCap} reached).");
+            }
+        }
+
+        if (tx is not null) await tx.CommitAsync(ct);
+
+        return new BulkActionResult(totalRequested, succeeded, skipped, errors.Count, errors.ToArray());
+    }
+
+    private async Task<BulkItemOutcome> ApplyBulkOneAsync(string action, Guid id, CancellationToken ct)
+    {
+        switch (action)
+        {
+            case "publish":
+            {
+                var (task, _) = await PublishAsync(id, ct);
+                // null => not found OR not publish-ready: a no-op for this id.
+                return task is null ? BulkItemOutcome.Skipped : BulkItemOutcome.Succeeded;
+            }
+            case "archive":
+            {
+                var scenario = await db.WritingScenarios.FirstOrDefaultAsync(s => s.Id == id, ct);
+                if (scenario is null) return BulkItemOutcome.Skipped;
+                if (scenario.Status == "archived") return BulkItemOutcome.Skipped;
+                scenario.Status = "archived";
+                scenario.UpdatedAt = DateTimeOffset.UtcNow;
+                await db.SaveChangesAsync(ct);
+                return BulkItemOutcome.Succeeded;
+            }
+            case "delete":
+                return await HardDeleteAsync(id, force: false, ct);
+            case "force-delete":
+                return await HardDeleteAsync(id, force: true, ct);
+            default:
+                throw new ArgumentException($"Unknown bulk action '{action}'.", nameof(action));
+        }
+    }
+
+    /// <summary>
+    /// Permanently removes a writing task (<see cref="WritingScenario"/>) and its
+    /// authoring children. Per the gating decision there is NO archive-first
+    /// requirement. Plain delete (<paramref name="force"/> = false) refuses a task
+    /// that has learner submissions or attempt events; force-delete first purges
+    /// that learner data. Uses load + RemoveRange (not ExecuteDelete) so the
+    /// InMemory test provider can exercise the cascade. There are no DB-level FK
+    /// constraints between these tables, so delete order is not load-bearing.
+    /// </summary>
+    private async Task<BulkItemOutcome> HardDeleteAsync(Guid id, bool force, CancellationToken ct)
+    {
+        var scenario = await db.WritingScenarios.FirstOrDefaultAsync(s => s.Id == id, ct);
+        if (scenario is null) return BulkItemOutcome.Skipped;
+
+        var submissionIds = await db.WritingSubmissions
+            .Where(s => s.ScenarioId == id)
+            .Select(s => s.Id)
+            .ToListAsync(ct);
+
+        var hasAttemptEvents = await db.WritingAttemptEvents.AnyAsync(e => e.ScenarioId == id, ct);
+        var hasLearnerData = submissionIds.Count > 0 || hasAttemptEvents;
+
+        if (hasLearnerData && !force)
+        {
+            throw new InvalidOperationException(
+                "Task has learner submissions or attempts; use force-delete to purge them.");
+        }
+
+        if (force && submissionIds.Count > 0)
+        {
+            db.WritingFeedbackAnnotations.RemoveRange(
+                await db.WritingFeedbackAnnotations.Where(a => submissionIds.Contains(a.SubmissionId)).ToListAsync(ct));
+            db.WritingModerations.RemoveRange(
+                await db.WritingModerations.Where(m => submissionIds.Contains(m.SubmissionId)).ToListAsync(ct));
+            db.WritingScoreAppeals.RemoveRange(
+                await db.WritingScoreAppeals.Where(a => submissionIds.Contains(a.SubmissionId)).ToListAsync(ct));
+            db.WritingGrades.RemoveRange(
+                await db.WritingGrades.Where(g => submissionIds.Contains(g.SubmissionId)).ToListAsync(ct));
+            db.WritingSubmissions.RemoveRange(
+                await db.WritingSubmissions.Where(s => s.ScenarioId == id).ToListAsync(ct));
+        }
+
+        if (force)
+        {
+            db.WritingAttemptEvents.RemoveRange(
+                await db.WritingAttemptEvents.Where(e => e.ScenarioId == id).ToListAsync(ct));
+        }
+
+        // Scenario-owned authoring children + any per-scenario visibility override.
+        db.WritingScenarioStructuredSentences.RemoveRange(
+            await db.WritingScenarioStructuredSentences.Where(x => x.ScenarioId == id).ToListAsync(ct));
+        db.WritingScenarioEmbeddings.RemoveRange(
+            await db.WritingScenarioEmbeddings.Where(x => x.ScenarioId == id).ToListAsync(ct));
+        db.WritingResultVisibilityConfigs.RemoveRange(
+            await db.WritingResultVisibilityConfigs.Where(x => x.ScenarioId == id).ToListAsync(ct));
+
+        db.WritingScenarios.Remove(scenario);
+        await db.SaveChangesAsync(ct);
+        return BulkItemOutcome.Succeeded;
     }
 
     // ----- mapping helpers -----

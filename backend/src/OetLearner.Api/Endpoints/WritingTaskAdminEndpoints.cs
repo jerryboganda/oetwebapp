@@ -1,5 +1,7 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Mvc;
+using OetLearner.Api.Security;
+using OetLearner.Api.Services;
 using OetLearner.Api.Services.Writing;
 
 namespace OetLearner.Api.Endpoints;
@@ -33,6 +35,12 @@ public static class WritingTaskAdminEndpoints
         group.MapPost("/import", ImportTask).WithAdminWrite("AdminContentWrite");
 
         group.MapPost("/{id:guid}/publish", PublishTask).WithAdminWrite("AdminContentPublish");
+
+        // Bulk workflow actions (parity with POST /v1/admin/papers/bulk). Permission
+        // is split per action inside the handler because a single route can't carry
+        // two RequireAuthorization policies: delete/force-delete need system_admin,
+        // publish needs content:publish, archive needs content:write.
+        group.MapPost("/bulk", BulkTasks);
 
         return app;
     }
@@ -152,4 +160,51 @@ public static class WritingTaskAdminEndpoints
             ? Results.NotFound(new { error = "Writing task not found" })
             : Results.Ok(export);
     }
+
+    private static async Task<IResult> BulkTasks(
+        IWritingTaskAuthoringService service,
+        HttpContext http,
+        [FromBody] WritingTaskBulkRequest request,
+        CancellationToken ct)
+    {
+        var action = (request.Action ?? string.Empty).Trim().ToLowerInvariant();
+
+        // Per-action permission gating mirrors ContentPapersAdminEndpoints: the
+        // permanent-purge actions require system_admin; publish needs content:publish;
+        // archive needs content:write.
+        var requiresSystemAdmin = action is "delete" or "force-delete";
+        var requiresPublish = action is "publish";
+        var requiresWrite = action is "archive";
+        if (!requiresSystemAdmin && !requiresPublish && !requiresWrite)
+        {
+            return Results.BadRequest(new { error = $"Unknown bulk action '{request.Action}'." });
+        }
+
+        var perms = http.User.FindFirstValue(AuthTokenService.AdminPermissionsClaimType);
+        var allowed = requiresSystemAdmin
+            ? AdminPermissionEvaluator.HasAny(perms, "system_admin")
+            : requiresPublish
+                ? AdminPermissionEvaluator.HasAny(perms, "content:publish", "system_admin")
+                : AdminPermissionEvaluator.HasAny(perms, "content:write", "system_admin");
+        if (!allowed)
+        {
+            return Results.StatusCode(StatusCodes.Status403Forbidden);
+        }
+
+        try
+        {
+            var result = await service.BulkAsync(action, request.Ids ?? Array.Empty<string>(), ct);
+            return Results.Ok(result);
+        }
+        catch (ArgumentException ex)
+        {
+            return Results.BadRequest(new { error = ex.Message });
+        }
+    }
 }
+
+/// <summary>
+/// Request body for <c>POST /v1/admin/writing/tasks/bulk</c>. <c>Action</c> must be
+/// one of: publish, archive, delete, force-delete.
+/// </summary>
+public sealed record WritingTaskBulkRequest(string Action, string[] Ids, string? Reason = null);

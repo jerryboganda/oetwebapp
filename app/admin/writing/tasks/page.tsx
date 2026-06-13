@@ -15,6 +15,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { CheckCircle2, Archive as ArchiveIcon, Trash2, AlertTriangle } from 'lucide-react';
 
 import {
   AdminSettingsLayout,
@@ -24,6 +25,12 @@ import { Button } from '@/components/admin/ui/button';
 import { Badge } from '@/components/admin/ui/badge';
 import { Input, Select } from '@/components/ui/form-controls';
 import { Toast } from '@/components/ui/alert';
+import { type Column } from '@/components/ui/data-table';
+import {
+  AdminManagedTable,
+  type ManagedBulkAction,
+  type BulkResult,
+} from '@/components/admin/managed-table/admin-managed-table';
 import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
 import { useCurrentUser } from '@/lib/hooks/use-current-user';
 import { hasPermission, AdminPermission } from '@/lib/admin-permissions';
@@ -33,6 +40,7 @@ import {
   publishWritingTask,
   archiveWritingTask,
   exportWritingTask,
+  bulkWritingTasks,
   type WritingTaskListQuery,
 } from '@/lib/writing/exam-api';
 import {
@@ -88,6 +96,8 @@ export default function WritingTasksPage() {
   const [letterTypeFilter, setLetterTypeFilter] = useState<WritingLetterType | 'all'>('all');
   const [statusTab, setStatusTab] = useState<StatusTab>('all');
   const [importOpen, setImportOpen] = useState(false);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -100,6 +110,7 @@ export default function WritingTasksPage() {
       if (search.trim()) query.search = search.trim();
       const res = await listWritingTasks(query);
       setTasks(res.items);
+      setPage(1);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load tasks');
     } finally {
@@ -198,6 +209,222 @@ export default function WritingTasksPage() {
       setRowBusyId(null);
     }
   }, []);
+
+  const bulkActions = useMemo<ManagedBulkAction<WritingTaskDto>[]>(() => {
+    if (!canWrite) return [];
+    return [
+      {
+        key: 'publish',
+        label: 'Publish selected',
+        icon: <CheckCircle2 className="h-4 w-4" />,
+        variant: 'primary',
+        isEligible: (t) => t.status !== 'published',
+        run: (ids) => bulkWritingTasks('publish', ids),
+      },
+      {
+        key: 'archive',
+        label: 'Archive selected',
+        icon: <ArchiveIcon className="h-4 w-4" />,
+        variant: 'danger',
+        isEligible: (t) => t.status !== 'archived',
+        confirm: {
+          title: (n) => `Archive ${n} writing task${n === 1 ? '' : 's'}?`,
+          description: () => 'Learners will no longer see them.',
+          confirmLabel: 'Archive',
+          destructive: true,
+        },
+        run: (ids) => bulkWritingTasks('archive', ids),
+      },
+      {
+        key: 'delete',
+        label: 'Delete selected',
+        icon: <Trash2 className="h-4 w-4" />,
+        variant: 'danger',
+        // No status gate (per decision) — permanent delete is allowed on any
+        // status. The backend skips any task that has learner submissions.
+        confirm: {
+          title: (n) => `Permanently delete ${n} writing task${n === 1 ? '' : 's'}?`,
+          description: () =>
+            'The tasks and all their authoring content are permanently removed. This cannot be undone. Tasks with learner submissions are skipped.',
+          confirmLabel: 'Delete permanently',
+          destructive: true,
+        },
+        run: (ids) => bulkWritingTasks('delete', ids),
+      },
+      {
+        key: 'force-delete',
+        label: 'Force delete',
+        icon: <AlertTriangle className="h-4 w-4" />,
+        variant: 'danger',
+        // Like Delete but ALSO purges every learner submission, grade, appeal,
+        // annotation, moderation record, and attempt event tied to the task.
+        confirm: {
+          title: (n) => `Force-delete ${n} writing task${n === 1 ? '' : 's'} and all learner data?`,
+          description: () =>
+            'The tasks are permanently removed along with every learner submission, grade, appeal, annotation, and attempt event tied to them. This destroys learner history and cannot be undone.',
+          confirmLabel: 'Force delete',
+          destructive: true,
+        },
+        run: (ids) => bulkWritingTasks('force-delete', ids),
+      },
+    ];
+  }, [canWrite]);
+
+  const handleBulkResult = useCallback(
+    (action: ManagedBulkAction<WritingTaskDto>, result: BulkResult) => {
+      const verb =
+        action.key === 'archive'
+          ? 'Archived'
+          : action.key === 'delete' || action.key === 'force-delete'
+            ? 'Deleted'
+            : 'Published';
+      const failed = result.failed ?? 0;
+      const skipped = result.skipped ?? 0;
+      const parts = [`${verb} ${result.succeeded} of ${result.totalRequested}`];
+      if (skipped > 0) parts.push(`${skipped} skipped`);
+      if (failed > 0) parts.push(`${failed} failed`);
+      setToast({
+        variant: failed > 0 ? 'error' : 'success',
+        message: `${parts.join(', ')}.`,
+      });
+      void load();
+    },
+    [load],
+  );
+
+  const handleBulkError = useCallback(
+    (_action: ManagedBulkAction<WritingTaskDto>, error: unknown) => {
+      setToast({
+        message: error instanceof Error ? error.message : 'Bulk action failed',
+        variant: 'error',
+      });
+    },
+    [],
+  );
+
+  const pagedTasks = useMemo(
+    () => tasks.slice((page - 1) * pageSize, page * pageSize),
+    [tasks, page, pageSize],
+  );
+
+  const columns = useMemo<Column<WritingTaskDto>[]>(
+    () => [
+      {
+        key: 'task',
+        header: 'Task',
+        render: (task) => (
+          <div>
+            <button
+              type="button"
+              onClick={() => router.push(`/admin/writing/tasks/${task.id}/edit`)}
+              className="text-left font-medium text-admin-fg-strong outline-none transition-colors duration-150 hover:text-[var(--admin-primary)] focus-visible:text-[var(--admin-primary)] focus-visible:underline motion-reduce:transition-none"
+            >
+              {task.title || 'Untitled task'}
+            </button>
+            <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-admin-fg-muted">
+              {task.internalCode && <span className="font-mono">{task.internalCode}</span>}
+              <span
+                className={
+                  task.stimulusPdfDownloadPath
+                    ? 'text-[var(--admin-success)]'
+                    : 'text-[var(--admin-fg-muted)]'
+                }
+              >
+                {task.stimulusPdfDownloadPath ? 'Stimulus PDF ✓' : 'No stimulus PDF'}
+              </span>
+            </div>
+          </div>
+        ),
+      },
+      {
+        key: 'profession',
+        header: 'Profession',
+        render: (task) => WRITING_PROFESSION_LABELS[task.profession],
+      },
+      {
+        key: 'type',
+        header: 'Type',
+        render: (task) => WRITING_LETTER_TYPE_LABELS[task.letterType],
+      },
+      {
+        key: 'difficulty',
+        header: 'Diff.',
+        render: (task) => <span className="tabular-nums">{task.difficulty}</span>,
+      },
+      {
+        key: 'mode',
+        header: 'Mode',
+        render: (task) => WRITING_SIMULATION_MODE_LABELS[task.simulationModes],
+      },
+      {
+        key: 'status',
+        header: 'Status',
+        render: (task) => <StatusBadge status={task.status} />,
+      },
+      {
+        key: 'updated',
+        header: 'Updated',
+        render: (task) => (
+          <span className="text-xs text-admin-fg-muted">{formatDate(task.updatedAt)}</span>
+        ),
+      },
+      {
+        key: 'actions',
+        header: 'Actions',
+        render: (task) => (
+          <div className="flex flex-wrap items-center justify-end gap-1.5">
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => router.push(`/admin/writing/tasks/${task.id}/edit`)}
+            >
+              Edit
+            </Button>
+            {canWrite && (
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => handleClone(task.id)}
+                loading={rowBusyId === task.id}
+                disabled={rowBusyId === task.id}
+              >
+                Clone
+              </Button>
+            )}
+            {canPublish && task.status !== 'published' && (
+              <Button
+                size="sm"
+                onClick={() => handlePublish(task.id)}
+                loading={rowBusyId === task.id}
+                disabled={rowBusyId === task.id}
+              >
+                Publish
+              </Button>
+            )}
+            {canWrite && task.status !== 'archived' && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => handleArchive(task.id)}
+                disabled={rowBusyId === task.id}
+              >
+                Archive
+              </Button>
+            )}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => handleExport(task)}
+              disabled={rowBusyId === task.id}
+            >
+              Export
+            </Button>
+          </div>
+        ),
+      },
+    ],
+    [canWrite, canPublish, rowBusyId, router, handleClone, handlePublish, handleArchive, handleExport],
+  );
 
   const headerActions = canWrite ? (
     <>
@@ -309,123 +536,24 @@ export default function WritingTasksPage() {
             )}
           </div>
         ) : (
-          <div className="-mx-4 overflow-x-auto sm:-mx-5">
-            <table className="min-w-full text-sm">
-              <thead>
-                <tr className="border-b border-admin-border text-left text-xs font-medium uppercase tracking-wide text-admin-fg-muted">
-                  <th className="px-4 py-2.5 sm:px-5">Task</th>
-                  <th className="px-3 py-2.5">Profession</th>
-                  <th className="px-3 py-2.5">Type</th>
-                  <th className="px-3 py-2.5">Diff.</th>
-                  <th className="px-3 py-2.5">Mode</th>
-                  <th className="px-3 py-2.5">Status</th>
-                  <th className="px-3 py-2.5">Updated</th>
-                  <th className="px-4 py-2.5 text-right sm:px-5">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-admin-border">
-                {tasks.map((task) => (
-                  <tr key={task.id} className="align-top">
-                    <td className="px-4 py-3 sm:px-5">
-                      <button
-                        type="button"
-                        onClick={() =>
-                          router.push(`/admin/writing/tasks/${task.id}/edit`)
-                        }
-                        className="text-left font-medium text-admin-fg-strong outline-none transition-colors duration-150 hover:text-[var(--admin-primary)] focus-visible:text-[var(--admin-primary)] focus-visible:underline motion-reduce:transition-none"
-                      >
-                        {task.title || 'Untitled task'}
-                      </button>
-                      <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-admin-fg-muted">
-                        {task.internalCode && (
-                          <span className="font-mono">{task.internalCode}</span>
-                        )}
-                        <span
-                          className={
-                            task.stimulusPdfDownloadPath
-                              ? 'text-[var(--admin-success)]'
-                              : 'text-[var(--admin-fg-muted)]'
-                          }
-                        >
-                          {task.stimulusPdfDownloadPath ? 'Stimulus PDF ✓' : 'No stimulus PDF'}
-                        </span>
-                      </div>
-                    </td>
-                    <td className="px-3 py-3 text-admin-fg-default">
-                      {WRITING_PROFESSION_LABELS[task.profession]}
-                    </td>
-                    <td className="px-3 py-3 text-admin-fg-default">
-                      {WRITING_LETTER_TYPE_LABELS[task.letterType]}
-                    </td>
-                    <td className="px-3 py-3 tabular-nums text-admin-fg-default">
-                      {task.difficulty}
-                    </td>
-                    <td className="px-3 py-3 text-admin-fg-default">
-                      {WRITING_SIMULATION_MODE_LABELS[task.simulationModes]}
-                    </td>
-                    <td className="px-3 py-3">
-                      <StatusBadge status={task.status} />
-                    </td>
-                    <td className="px-3 py-3 text-xs text-admin-fg-muted">
-                      {formatDate(task.updatedAt)}
-                    </td>
-                    <td className="px-4 py-3 sm:px-5">
-                      <div className="flex flex-wrap items-center justify-end gap-1.5">
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          onClick={() =>
-                            router.push(`/admin/writing/tasks/${task.id}/edit`)
-                          }
-                        >
-                          Edit
-                        </Button>
-                        {canWrite && (
-                          <Button
-                            variant="secondary"
-                            size="sm"
-                            onClick={() => handleClone(task.id)}
-                            loading={rowBusyId === task.id}
-                            disabled={rowBusyId === task.id}
-                          >
-                            Clone
-                          </Button>
-                        )}
-                        {canPublish && task.status !== 'published' && (
-                          <Button
-                            size="sm"
-                            onClick={() => handlePublish(task.id)}
-                            loading={rowBusyId === task.id}
-                            disabled={rowBusyId === task.id}
-                          >
-                            Publish
-                          </Button>
-                        )}
-                        {canWrite && task.status !== 'archived' && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleArchive(task.id)}
-                            disabled={rowBusyId === task.id}
-                          >
-                            Archive
-                          </Button>
-                        )}
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleExport(task)}
-                          disabled={rowBusyId === task.id}
-                        >
-                          Export
-                        </Button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <AdminManagedTable
+            columns={columns}
+            data={pagedTasks}
+            keyExtractor={(t) => t.id}
+            total={tasks.length}
+            page={page}
+            pageSize={pageSize}
+            onPageChange={setPage}
+            onPageSizeChange={(s) => {
+              setPageSize(s);
+              setPage(1);
+            }}
+            itemLabel="task"
+            itemLabelPlural="tasks"
+            bulkActions={bulkActions}
+            onResult={handleBulkResult}
+            onError={handleBulkError}
+          />
         )}
       </SettingsSection>
 

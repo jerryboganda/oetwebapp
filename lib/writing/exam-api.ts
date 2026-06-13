@@ -11,6 +11,7 @@
  */
 
 import { apiClient } from '../api';
+import type { BulkActionResultDto } from '../types/admin';
 import type {
   WritingTaskDto,
   WritingTaskUpsertDto,
@@ -92,6 +93,25 @@ export const importWritingTask = (payload: WritingTaskImportJson) =>
 
 export const exportWritingTask = (taskId: string) =>
   apiClient.get<WritingTaskImportJson>(p('/v1/admin/writing/tasks/{id}/export', { id: taskId }));
+
+/**
+ * Bulk workflow actions over many tasks at once (parity with Reading/Listening's
+ * `bulkContentPapers`). `delete` skips a task that has learner submissions;
+ * `force-delete` purges that learner data first. delete/force-delete require
+ * system_admin server-side; publish needs content:publish; archive content:write.
+ */
+export type WritingTaskBulkAction = 'publish' | 'archive' | 'delete' | 'force-delete';
+
+export const bulkWritingTasks = (
+  action: WritingTaskBulkAction,
+  ids: string[],
+  reason?: string,
+) =>
+  apiClient.post<BulkActionResultDto>('/v1/admin/writing/tasks/bulk', {
+    action,
+    ids,
+    ...(reason !== undefined ? { reason } : {}),
+  });
 
 // ── Attempt events (spec §17.7) ───────────────────────────────────────────────
 
