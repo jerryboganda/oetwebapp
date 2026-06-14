@@ -151,6 +151,51 @@ public class PaymentGatewaySecurityTests
         Assert.Equal("refund-idem-456", handler.PayPalRequestId);
     }
 
+    [Fact]
+    public async Task PayPalCapture_PostsToCaptureEndpoint_WithRequestIdAndParsesCapture()
+    {
+        var options = new BillingOptions
+        {
+            AllowSandboxFallbacks = false,
+            PayPal = new PayPalBillingOptions { UseSandbox = true }
+        };
+        var handler = new CapturingPayPalCaptureHandler();
+        var runtime = TestRuntimeSettingsProvider.FromBillingSettings(new BillingSettings(
+            StripeSecretKey: null,
+            StripePublishableKey: null,
+            StripeWebhookSecret: null,
+            StripeSuccessUrl: null,
+            StripeCancelUrl: null,
+            PayPalClientId: "runtime-client",
+            PayPalClientSecret: "runtime-secret",
+            PayPalWebhookId: "runtime-webhook",
+            PayPalSuccessUrl: null,
+            PayPalCancelUrl: null));
+        IPaymentGateway gateway = new PayPalGateway(new HttpClient(handler), Options.Create(options), runtime);
+
+        var result = await gateway.CaptureOrderAsync("ORDER-1", "capture-ORDER-1", default);
+
+        Assert.Equal("CAP-1", result.CaptureId);
+        Assert.Equal("completed", result.Status);
+        Assert.Equal(10.00m, result.AmountCaptured);
+        Assert.Equal("GBP", result.Currency);
+        Assert.Equal("capture-ORDER-1", handler.PayPalRequestId);
+        Assert.Contains("/v2/checkout/orders/ORDER-1/capture", handler.CaptureRequestPath);
+    }
+
+    [Fact]
+    public async Task StripeCapture_IsNotSupported()
+    {
+        var options = new BillingOptions { AllowSandboxFallbacks = true, Stripe = new StripeBillingOptions() };
+        IPaymentGateway gateway = new StripeGateway(
+            new HttpClient(),
+            Options.Create(options),
+            TestRuntimeSettingsProvider.FromBillingOptions(options),
+            NullLogger<StripeGateway>.Instance);
+
+        await Assert.ThrowsAsync<NotSupportedException>(() => gateway.CaptureOrderAsync("cs_test", "k", default));
+    }
+
     private sealed class CapturingPayPalHandler : HttpMessageHandler
     {
         public string? TokenRequestUri { get; private set; }
@@ -196,6 +241,32 @@ public class PaymentGatewaySecurityTests
                     ? values.SingleOrDefault()
                     : null;
                 return Task.FromResult(JsonResponse("""{"id":"re_1","status":"succeeded"}"""));
+            }
+
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound));
+        }
+    }
+
+    private sealed class CapturingPayPalCaptureHandler : HttpMessageHandler
+    {
+        public string? PayPalRequestId { get; private set; }
+        public string? CaptureRequestPath { get; private set; }
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            if (request.RequestUri?.AbsolutePath.EndsWith("/v1/oauth2/token", StringComparison.Ordinal) == true)
+            {
+                return Task.FromResult(JsonResponse("""{"access_token":"token-1"}"""));
+            }
+
+            if (request.RequestUri?.AbsolutePath.EndsWith("/capture", StringComparison.Ordinal) == true)
+            {
+                CaptureRequestPath = request.RequestUri.AbsolutePath;
+                PayPalRequestId = request.Headers.TryGetValues("PayPal-Request-Id", out var values)
+                    ? values.SingleOrDefault()
+                    : null;
+                return Task.FromResult(JsonResponse(
+                    """{"id":"ORDER-1","status":"COMPLETED","purchase_units":[{"payments":{"captures":[{"id":"CAP-1","status":"COMPLETED","amount":{"currency_code":"GBP","value":"10.00"}}]}}]}"""));
             }
 
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound));

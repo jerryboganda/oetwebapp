@@ -700,7 +700,7 @@ public sealed class PayPalGateway(
             amount = new
             {
                 value = amount.ToString("0.00", CultureInfo.InvariantCulture),
-                currency_code = string.IsNullOrWhiteSpace(currency) ? "AUD" : currency.ToUpperInvariant()
+                currency_code = string.IsNullOrWhiteSpace(currency) ? "GBP" : currency.ToUpperInvariant()
             },
             note_to_payer = string.IsNullOrWhiteSpace(reason) ? null : reason
         }), Encoding.UTF8, "application/json");

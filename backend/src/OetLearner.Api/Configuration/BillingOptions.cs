@@ -19,10 +19,10 @@ public sealed class BillingOptions
 
     /// <summary>
     /// Currency used when neither the target row nor a region-pricing override
-    /// supplies one. Defaults to AUD for back-compat with existing AUD-only catalogs.
-    /// Override via <c>Billing__DefaultCurrency</c>.
+    /// supplies one. Defaults to GBP (the platform's billing currency). Override
+    /// via <c>Billing__DefaultCurrency</c>.
     /// </summary>
-    public string DefaultCurrency { get; set; } = "AUD";
+    public string DefaultCurrency { get; set; } = "GBP";
 
     /// <summary>
     /// Region used when the buyer's country cannot be detected. Defaults to ROW.
