@@ -1,9 +1,8 @@
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Options;
-using OetLearner.Api.Configuration;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services.Settings;
 
 namespace OetLearner.Api.Services.Expert;
 
@@ -75,12 +74,12 @@ public sealed class ExpertAutoAssignmentService(
     TimeProvider clock,
     IExpertAssignmentNotifier notifier,
     ILogger<ExpertAutoAssignmentService> logger,
-    IOptions<ExpertAutoAssignmentOptions> options)
+    IRuntimeSettingsProvider runtimeSettings)
     : IExpertAutoAssignmentService
 {
     public async Task<int> ProcessPendingAssignmentsAsync(CancellationToken ct)
     {
-        var opts = options.Value;
+        var opts = (await runtimeSettings.GetAsync(ct)).ExpertAutoAssignment;
         if (!opts.Enabled) return 0;
 
         var now = clock.GetUtcNow();
@@ -194,7 +193,7 @@ public sealed class ExpertAutoAssignmentService(
 
     public async Task<int> ProcessSlaEscalationsAsync(CancellationToken ct)
     {
-        var opts = options.Value;
+        var opts = (await runtimeSettings.GetAsync(ct)).ExpertAutoAssignment;
         if (!opts.Enabled) return 0;
 
         var now = clock.GetUtcNow();
