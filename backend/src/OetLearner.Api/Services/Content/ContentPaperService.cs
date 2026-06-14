@@ -794,22 +794,33 @@ public sealed class ContentPaperService(
         // Structural problems (e.g. a 4-option Part B, a non-canonical shape)
         // are recorded as a NON-BLOCKING conformance-warning audit and surfaced
         // read-only on /admin/conformance; publishing always proceeds.
-        if (string.Equals(paper.SubtestCode, "reading", StringComparison.OrdinalIgnoreCase))
+        //
+        // The conformance pass is purely advisory, so a failure to *compute* it
+        // (e.g. a transient query error while validating a freshly-authored
+        // paper) must also never block publishing. Wrap it defensively: if the
+        // check can't run, publish proceeds and the conformance dashboard simply
+        // lacks fresh warnings for this revision.
+        try
         {
-            var report = await new ReadingStructureService(db).ValidatePaperAsync(paper.Id, ct);
-            await RecordPublishConformanceWarningsAsync(paper, report.Issues.Select(i => $"[{i.Severity}] {i.Message}"), adminId, ct);
+            if (string.Equals(paper.SubtestCode, "reading", StringComparison.OrdinalIgnoreCase))
+            {
+                var report = await new ReadingStructureService(db).ValidatePaperAsync(paper.Id, ct);
+                await RecordPublishConformanceWarningsAsync(paper, report.Issues.Select(i => $"[{i.Severity}] {i.Message}"), adminId, ct);
+            }
+            else if (string.Equals(paper.SubtestCode, "speaking", StringComparison.OrdinalIgnoreCase))
+            {
+                var report = SpeakingContentStructure.Validate(paper);
+                await RecordPublishConformanceWarningsAsync(paper, report.Issues.Select(i => $"[{i.Severity}] {i.Message}"), adminId, ct);
+            }
+            else if (string.Equals(paper.SubtestCode, "writing", StringComparison.OrdinalIgnoreCase))
+            {
+                var report = WritingContentStructure.Validate(paper);
+                await RecordPublishConformanceWarningsAsync(paper, report.Issues.Select(i => $"[{i.Severity}] {i.Message}"), adminId, ct);
+            }
         }
-
-        if (string.Equals(paper.SubtestCode, "speaking", StringComparison.OrdinalIgnoreCase))
+        catch (Exception)
         {
-            var report = SpeakingContentStructure.Validate(paper);
-            await RecordPublishConformanceWarningsAsync(paper, report.Issues.Select(i => $"[{i.Severity}] {i.Message}"), adminId, ct);
-        }
-
-        if (string.Equals(paper.SubtestCode, "writing", StringComparison.OrdinalIgnoreCase))
-        {
-            var report = WritingContentStructure.Validate(paper);
-            await RecordPublishConformanceWarningsAsync(paper, report.Issues.Select(i => $"[{i.Severity}] {i.Message}"), adminId, ct);
+            // Advisory only — never block the publish on a conformance-check failure.
         }
 
         var now = DateTimeOffset.UtcNow;

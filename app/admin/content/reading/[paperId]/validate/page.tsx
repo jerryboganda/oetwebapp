@@ -94,9 +94,14 @@ export default function ReadingValidatePublishPage() {
         setPublishState('published');
         setPaperStatus('Published');
         setToast({ message: 'Paper published successfully!', variant: 'success' });
-      } catch {
+      } catch (err) {
         setPublishState('error');
-        setToast({ message: 'Failed to publish paper. Please try again.', variant: 'error' });
+        setToast({
+          message: err instanceof Error && err.message
+            ? `Publish failed: ${err.message}`
+            : 'Failed to publish paper. Please try again.',
+          variant: 'error',
+        });
       }
     }
   };

@@ -1,4 +1,5 @@
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 
 const { mockValidate, mockStructure, mockGetPaper, mockPublish, mockUnpublish } = vi.hoisted(() => ({
   mockValidate: vi.fn(),
@@ -96,5 +97,19 @@ describe('Reading Validate & Publish page', () => {
     render(<ReadingValidatePublishPage />);
 
     expect(await screen.findByRole('button', { name: /publish paper/i })).toBeEnabled();
+  });
+
+  it('surfaces the real backend reason when a publish attempt fails', async () => {
+    const user = userEvent.setup();
+    mockValidate.mockResolvedValue({ isPublishReady: true, issues: [], counts: { partACount: 20, partBCount: 6, partCCount: 16, totalPoints: 42 } });
+    mockStructure.mockResolvedValue(fullStructure());
+    mockPublish.mockRejectedValue(new Error('SourceProvenance is required before publishing.'));
+
+    render(<ReadingValidatePublishPage />);
+
+    await user.click(await screen.findByRole('button', { name: /publish paper/i }));
+    await user.click(screen.getByRole('button', { name: /click again to confirm/i }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/sourceprovenance is required/i);
   });
 });

@@ -122,7 +122,10 @@ public static class ContentPapersAdminEndpoints
             try { await svc.PublishAsync(id, adminId, ct); }
             catch (InvalidOperationException ex)
             {
-                return Results.BadRequest(new { error = ex.Message });
+                // Return `message` (in addition to `error`) so the client api
+                // helper surfaces the real reason (e.g. "SourceProvenance is
+                // required …") instead of a generic failure toast.
+                return Results.BadRequest(new { error = ex.Message, message = ex.Message });
             }
             return Results.NoContent();
         })
