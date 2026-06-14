@@ -45,6 +45,14 @@ function collectStaticWritingKeys() {
 }
 
 describe('writing i18n messages', () => {
+  it('keeps message bundles statically imported for standalone builds', () => {
+    const i18nSource = fs.readFileSync(path.join(repoRoot, 'i18n.ts'), 'utf8');
+
+    expect(i18nSource).not.toMatch(/import\(\s*`\.\/messages\//);
+    expect(i18nSource).toContain("import enWritingMessages from './messages/en/writing.json'");
+    expect(i18nSource).toContain("import arWritingMessages from './messages/ar/writing.json'");
+  });
+
   it('loads the writing hub copy for every supported locale', async () => {
     const { loadAllMessages } = await import('@/i18n');
     const requiredHubKeys = [

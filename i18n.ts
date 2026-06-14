@@ -11,15 +11,25 @@
  */
 import { cookies, headers } from 'next/headers';
 import { getRequestConfig } from 'next-intl/server';
+import arWritingMessages from './messages/ar/writing.json';
+import enWritingMessages from './messages/en/writing.json';
 
 export const SUPPORTED_LOCALES = ['en', 'ar'] as const;
 export type SupportedLocale = (typeof SUPPORTED_LOCALES)[number];
 export const DEFAULT_LOCALE: SupportedLocale = 'en';
 
-/** Modules with translation bundles under `messages/{locale}/<module>.json`. */
-const MESSAGE_MODULES = ['writing'] as const;
-
 const LOCALE_COOKIE = 'lang';
+const MESSAGE_MODULES = ['writing'] as const;
+type MessageModule = (typeof MESSAGE_MODULES)[number];
+
+const MESSAGE_BUNDLES = {
+  en: {
+    writing: enWritingMessages,
+  },
+  ar: {
+    writing: arWritingMessages,
+  },
+} satisfies Record<SupportedLocale, Record<MessageModule, Record<string, string>>>;
 
 function isSupportedLocale(value: string | null | undefined): value is SupportedLocale {
   return !!value && (SUPPORTED_LOCALES as readonly string[]).includes(value);
@@ -56,32 +66,17 @@ export async function resolveLocale(): Promise<SupportedLocale> {
   return DEFAULT_LOCALE;
 }
 
-async function importMessagesForModule(
-  locale: SupportedLocale,
-  moduleName: string,
-): Promise<Record<string, string>> {
-  try {
-    const mod = (await import(`./messages/${locale}/${moduleName}.json`)) as { default: Record<string, string> };
-    return mod.default;
-  } catch {
-    return {};
-  }
-}
-
-async function loadMessagesForModule(
-  locale: SupportedLocale,
-  moduleName: string,
-): Promise<Record<string, string>> {
-  const baseline = await importMessagesForModule(DEFAULT_LOCALE, moduleName);
-  if (locale === DEFAULT_LOCALE) return baseline;
-
-  const localized = await importMessagesForModule(locale, moduleName);
-  return { ...baseline, ...localized };
-}
-
 export async function loadAllMessages(locale: SupportedLocale): Promise<Record<string, string>> {
-  const buckets = await Promise.all(MESSAGE_MODULES.map((mod) => loadMessagesForModule(locale, mod)));
-  return Object.assign({}, ...buckets) as Record<string, string>;
+  const baseline = MESSAGE_BUNDLES[DEFAULT_LOCALE];
+  const localized = MESSAGE_BUNDLES[locale];
+
+  return MESSAGE_MODULES.reduce<Record<string, string>>((messages, moduleName) => {
+    return {
+      ...messages,
+      ...baseline[moduleName],
+      ...(localized[moduleName] ?? {}),
+    };
+  }, {});
 }
 
 export default getRequestConfig(async () => {
