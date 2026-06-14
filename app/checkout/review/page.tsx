@@ -67,6 +67,20 @@ function CheckoutReviewContent() {
     return `/checkout/review${query ? `?${query}` : ''}`;
   }, [searchParams]);
 
+  // Pre-filled link to the manual / offline payment page (bank transfer,
+  // InstaPay, Vodafone Cash, PayPal). Carries the quote so admin approval can
+  // reliably resolve the same plan and activate access.
+  const manualPaymentHref = useMemo(() => {
+    const params = new URLSearchParams();
+    if (quote?.quoteId) params.set('quoteId', quote.quoteId);
+    const courseLabel = quote?.items?.[0]?.name ?? '';
+    if (courseLabel) params.set('course', courseLabel);
+    if (quote?.totalAmount != null) params.set('amount', String(quote.totalAmount));
+    if (quote?.currency) params.set('currency', quote.currency);
+    const qs = params.toString();
+    return `/billing/manual-payment${qs ? `?${qs}` : ''}`;
+  }, [quote]);
+
   const loadQuote = useCallback(async (couponOverride = couponCode) => {
     if (!priceId) {
       setError('Choose a product before checkout.');
@@ -259,6 +273,15 @@ function CheckoutReviewContent() {
             <CreditCard className="h-4 w-4" /> Continue to secure payment
           </Button>
           <p className="mt-3 text-xs leading-5 text-muted">Payment opens in the hosted portal. Your account unlocks after webhook confirmation.</p>
+
+          <div className="mt-4 border-t border-border pt-4">
+            <Link href={manualPaymentHref} className="text-sm font-medium text-primary hover:underline">
+              Other ways to pay (bank transfer, InstaPay, Vodafone Cash, PayPal)
+            </Link>
+            <p className="mt-1 text-xs leading-5 text-muted">
+              Pay manually and upload your proof — our team activates access after verifying it.
+            </p>
+          </div>
         </aside>
       </section>
     </main>

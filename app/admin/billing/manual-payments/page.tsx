@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import type { ColumnDef } from '@tanstack/react-table';
-import { Check, RefreshCw, X } from 'lucide-react';
+import { AlertTriangle, Check, Clock, Eye, RefreshCw, X } from 'lucide-react';
 
 import { AdminTableLayout } from '@/components/admin/layout/admin-table-layout';
 import { Badge } from '@/components/admin/ui/badge';
@@ -31,6 +31,8 @@ import {
   listAdminManualPayments,
   approveManualPayment,
   rejectManualPayment,
+  setManualPaymentStatus,
+  getManualPaymentProofBlob,
   type ManualPaymentDto,
 } from '@/lib/api';
 
@@ -51,6 +53,13 @@ function statusVariant(status: string) {
   return 'default' as const;
 }
 
+interface ProofView {
+  rowId: string;
+  candidate: string;
+  url: string;
+  type: string;
+}
+
 export default function AdminManualPaymentsPage() {
   const [statusFilter, setStatusFilter] = useState('pending');
   const [rows, setRows] = useState<ManualPaymentDto[]>([]);
@@ -58,6 +67,8 @@ export default function AdminManualPaymentsPage() {
   const [error, setError] = useState<string | null>(null);
   const [decisionFor, setDecisionFor] = useState<{ row: ManualPaymentDto; intent: 'approve' | 'reject' } | null>(null);
   const [notes, setNotes] = useState('');
+  const [proofLoadingId, setProofLoadingId] = useState<string | null>(null);
+  const [proofView, setProofView] = useState<ProofView | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -73,6 +84,13 @@ export default function AdminManualPaymentsPage() {
   }, [statusFilter]);
 
   useEffect(() => { void load(); }, [load]);
+
+  // Revoke the object URL when the proof dialog unmounts.
+  useEffect(() => {
+    return () => {
+      if (proofView) URL.revokeObjectURL(proofView.url);
+    };
+  }, [proofView]);
 
   async function handleDecide() {
     if (!decisionFor) return;
@@ -90,6 +108,36 @@ export default function AdminManualPaymentsPage() {
     } catch (err: any) {
       toast.error(err?.userMessage ?? err?.message ?? 'Action failed.');
     }
+  }
+
+  async function handleSetStatus(row: ManualPaymentDto, status: 'pending' | 'needs_review') {
+    try {
+      await setManualPaymentStatus(row.id, status);
+      toast.success(status === 'needs_review' ? 'Flagged as needs review.' : 'Moved back to pending.');
+      await load();
+    } catch (err: any) {
+      toast.error(err?.userMessage ?? err?.message ?? 'Action failed.');
+    }
+  }
+
+  async function handleViewProof(row: ManualPaymentDto) {
+    setProofLoadingId(row.id);
+    try {
+      const blob = await getManualPaymentProofBlob(row.id);
+      const url = URL.createObjectURL(blob);
+      setProofView({ rowId: row.id, candidate: row.candidateFullName || row.userId, url, type: blob.type });
+    } catch (err: any) {
+      toast.error(err?.userMessage ?? err?.message ?? 'Could not load proof.');
+    } finally {
+      setProofLoadingId(null);
+    }
+  }
+
+  function closeProof() {
+    setProofView((current) => {
+      if (current) URL.revokeObjectURL(current.url);
+      return null;
+    });
   }
 
   const columns: ColumnDef<ManualPaymentDto>[] = [
@@ -128,7 +176,7 @@ export default function AdminManualPaymentsPage() {
     {
       id: 'method',
       header: 'Method',
-      cell: ({ row }) => row.original.method.replace('_', ' '),
+      cell: ({ row }) => row.original.method.replace(/_/g, ' '),
     },
     {
       id: 'reference',
@@ -138,7 +186,20 @@ export default function AdminManualPaymentsPage() {
     {
       id: 'proof',
       header: 'Proof',
-      cell: ({ row }) => row.original.proofUrl ? <span className="font-mono text-xs">{row.original.proofUrl}</span> : '-',
+      cell: ({ row }) =>
+        row.original.proofUrl ? (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => void handleViewProof(row.original)}
+            disabled={proofLoadingId === row.original.id}
+            startIcon={<Eye className="h-4 w-4" />}
+          >
+            {proofLoadingId === row.original.id ? 'Loading…' : 'View'}
+          </Button>
+        ) : (
+          '-'
+        ),
     },
     {
       id: 'status',
@@ -152,7 +213,8 @@ export default function AdminManualPaymentsPage() {
       enableHiding: false,
       cell: ({ row }) => {
         const r = row.original;
-        return r.status === 'pending' || r.status === 'needs_review' ? (
+        if (r.status !== 'pending' && r.status !== 'needs_review') return null;
+        return (
           <div className="flex gap-1">
             <Button
               variant="ghost"
@@ -162,6 +224,7 @@ export default function AdminManualPaymentsPage() {
                 setNotes('');
               }}
               aria-label="Approve"
+              title="Approve & activate access"
             >
               <Check className="h-4 w-4 text-[var(--admin-success)]" />
             </Button>
@@ -173,11 +236,33 @@ export default function AdminManualPaymentsPage() {
                 setNotes('');
               }}
               aria-label="Reject"
+              title="Reject"
             >
               <X className="h-4 w-4 text-[var(--admin-danger)]" />
             </Button>
+            {r.status === 'pending' ? (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => void handleSetStatus(r, 'needs_review')}
+                aria-label="Needs review"
+                title="Flag as needs review"
+              >
+                <AlertTriangle className="h-4 w-4 text-[var(--admin-warning)]" />
+              </Button>
+            ) : (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => void handleSetStatus(r, 'pending')}
+                aria-label="Mark pending"
+                title="Move back to pending"
+              >
+                <Clock className="h-4 w-4 text-admin-fg-muted" />
+              </Button>
+            )}
           </div>
-        ) : null;
+        );
       },
     },
   ];
@@ -252,6 +337,37 @@ export default function AdminManualPaymentsPage() {
               onClick={handleDecide}
             >
               {decisionFor?.intent === 'approve' ? 'Approve' : 'Reject'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={proofView !== null} onOpenChange={(open) => !open && closeProof()}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Payment proof</DialogTitle>
+            <DialogDescription>{proofView?.candidate}</DialogDescription>
+          </DialogHeader>
+          {proofView ? (
+            proofView.type === 'application/pdf' ? (
+              <div className="space-y-2">
+                <iframe title="Payment proof" src={proofView.url} className="h-[60vh] w-full rounded-md border border-admin-border" />
+                <a href={proofView.url} target="_blank" rel="noreferrer" className="text-sm font-medium text-admin-accent hover:underline">
+                  Open in new tab
+                </a>
+              </div>
+            ) : proofView.type.startsWith('image/') ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={proofView.url} alt="Payment proof" className="max-h-[60vh] w-full rounded-md border border-admin-border object-contain" />
+            ) : (
+              <a href={proofView.url} download className="text-sm font-medium text-admin-accent hover:underline">
+                Download proof file
+              </a>
+            )
+          ) : null}
+          <DialogFooter>
+            <Button variant="ghost" onClick={closeProof}>
+              Close
             </Button>
           </DialogFooter>
         </DialogContent>

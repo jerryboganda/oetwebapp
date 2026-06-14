@@ -738,6 +738,9 @@ export default function BillingPage() {
                 <Button variant="outline" onClick={() => setActiveTab('invoices')}>
                   <Receipt className="h-4 w-4" /> {copy('billing.overview.viewInvoices')}
                 </Button>
+                <Button variant="outline" onClick={() => router.push('/billing/manual-payment')}>
+                  <CreditCard className="h-4 w-4" /> Other ways to pay
+                </Button>
                 {data.status === 'active' || data.status === 'Active' ? (
                   <Button variant="outline" onClick={handlePause} disabled={pauseLoading}>
                     {pauseLoading ? copy('billing.overview.pausing') : copy('billing.overview.pause')}
@@ -1227,7 +1230,7 @@ export default function BillingPage() {
                   </p>
                   {lockedAddOns.map((addOn) => {
                     const requiredPlans = addOn.compatiblePlanCodes
-                      .map((code) => plans.find((plan) => plan.code === code)?.name ?? code)
+                      .map((code) => plans.find((plan) => plan.code === code)?.label ?? code)
                       .join(' or ');
                     return (
                       <article

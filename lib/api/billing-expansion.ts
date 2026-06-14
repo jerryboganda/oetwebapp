@@ -7,7 +7,7 @@
  *  - dunning campaigns (admin, read-only)
  *  - metrics (admin)
  */
-import { apiClient } from '@/lib/api';
+import { apiClient, fetchAuthorizedBlob } from '@/lib/api';
 
 // ── Manual payments ───────────────────────────────────────────────
 
@@ -68,6 +68,93 @@ export function approveManualPayment(id: string, notes?: string): Promise<Manual
 
 export function rejectManualPayment(id: string, notes?: string): Promise<ManualPaymentDto> {
   return apiClient.post<ManualPaymentDto>(`/v1/admin/billing/manual-payments/${encodeURIComponent(id)}/reject`, { notes });
+}
+
+/**
+ * Move a manual payment between the two non-terminal states
+ * (`pending` ↔ `needs_review`). Approve/reject handle the terminal outcomes.
+ */
+export function setManualPaymentStatus(id: string, status: 'pending' | 'needs_review', notes?: string): Promise<ManualPaymentDto> {
+  return apiClient.post<ManualPaymentDto>(`/v1/admin/billing/manual-payments/${encodeURIComponent(id)}/status`, { status, notes });
+}
+
+/**
+ * Fetch the uploaded proof file as a Blob for the admin verification dashboard.
+ * The caller inspects `blob.type` to render an inline image or embedded PDF, and
+ * owns createObjectURL/revoke. Authorized via the admin session.
+ */
+export function getManualPaymentProofBlob(id: string): Promise<Blob> {
+  return fetchAuthorizedBlob(`/v1/admin/billing/manual-payments/${encodeURIComponent(id)}/proof`);
+}
+
+// ── Payment methods (admin-configurable) ─────────────────────────
+
+export interface PaymentMethodConfigDto {
+  id: string;
+  key: string;
+  label: string;
+  category: 'inside_egypt' | 'international' | string;
+  detail: string;
+  meta: string | null;
+  instructions: string;
+  note: string | null;
+  referenceRule: boolean;
+  showQr: boolean;
+  /** True when an admin has uploaded a QR image (fetch it via {@link fetchPaymentMethodQrBlob}). */
+  hasQrImage: boolean;
+  iconName: string | null;
+  isActive: boolean;
+  displayOrder: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PaymentMethodConfigUpsertRequest {
+  key: string;
+  label: string;
+  category: string;
+  detail: string;
+  meta?: string | null;
+  instructions: string;
+  note?: string | null;
+  referenceRule: boolean;
+  showQr: boolean;
+  iconName?: string | null;
+  isActive: boolean;
+  displayOrder: number;
+}
+
+/** Active payment methods shown to learners on the manual-payment page, ordered by displayOrder. */
+export function listPublicPaymentMethods(): Promise<PaymentMethodConfigDto[]> {
+  return apiClient.get<PaymentMethodConfigDto[]>('/v1/billing/payment-methods');
+}
+
+/**
+ * Fetch a payment-method QR image as a Blob (the endpoint requires auth, so the
+ * caller builds an object URL rather than putting a token in an <img src>).
+ */
+export function fetchPaymentMethodQrBlob(key: string): Promise<Blob> {
+  return fetchAuthorizedBlob(`/v1/billing/payment-methods/${encodeURIComponent(key)}/qr`);
+}
+
+export function listAdminPaymentMethods(): Promise<PaymentMethodConfigDto[]> {
+  return apiClient.get<PaymentMethodConfigDto[]>('/v1/admin/billing/payment-methods');
+}
+
+export function upsertPaymentMethod(payload: PaymentMethodConfigUpsertRequest): Promise<PaymentMethodConfigDto> {
+  return apiClient.post<PaymentMethodConfigDto>('/v1/admin/billing/payment-methods', payload);
+}
+
+export function deletePaymentMethod(id: string): Promise<void> {
+  return apiClient.delete(`/v1/admin/billing/payment-methods/${encodeURIComponent(id)}`);
+}
+
+/** Upload a QR image (base64, no data: prefix) for a method. Returns the updated config. */
+export function uploadPaymentMethodQr(key: string, imageBase64: string): Promise<PaymentMethodConfigDto> {
+  return apiClient.post<PaymentMethodConfigDto>(
+    `/v1/admin/billing/payment-methods/${encodeURIComponent(key)}/qr`,
+    { imageBase64 },
+  );
 }
 
 // ── Scholarships ──────────────────────────────────────────────────

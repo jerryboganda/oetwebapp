@@ -922,6 +922,30 @@ export async function fetchAuthorizedObjectUrl(pathOrUrl: string): Promise<strin
   return URL.createObjectURL(blob);
 }
 
+/**
+ * Authorized blob fetch that returns the raw Blob (caller owns
+ * createObjectURL/revoke). Use when the content type matters — e.g. the admin
+ * proof viewer branches between an inline image and an embedded PDF.
+ */
+export async function fetchAuthorizedBlob(pathOrUrl: string): Promise<Blob> {
+  const response = await fetchWithTimeout(resolveBrowserApiResourceUrl(pathOrUrl) ?? resolveApiUrl(pathOrUrl), {
+    headers: await getHeaders(pathOrUrl, undefined, { json: false }),
+  });
+
+  if (!response.ok) {
+    let message = `Request failed: ${response.status}`;
+    try {
+      const error = await response.json();
+      message = error.message ?? error.title ?? message;
+    } catch (err) {
+      console.error('[API] fetchAuthorizedBlob: failed to parse error response:', err);
+    }
+    throw new Error(message);
+  }
+
+  return response.blob();
+}
+
 function cacheGet(key: string): string | null {
   if (!isBrowser()) return null;
   return window.localStorage.getItem(key);

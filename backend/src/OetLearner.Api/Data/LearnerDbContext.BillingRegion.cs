@@ -15,6 +15,7 @@ public partial class LearnerDbContext
     // ── Phase 4 ──
     public DbSet<ManualPaymentRequest> ManualPaymentRequests => Set<ManualPaymentRequest>();
     public DbSet<BankAccountConfig> BankAccountConfigs => Set<BankAccountConfig>();
+    public DbSet<PaymentMethodConfig> PaymentMethodConfigs => Set<PaymentMethodConfig>();
 
     // ── Phase 5 ──
     public DbSet<DunningCampaign> DunningCampaigns => Set<DunningCampaign>();

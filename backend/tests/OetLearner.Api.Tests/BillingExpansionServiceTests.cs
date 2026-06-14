@@ -1,5 +1,6 @@
 using System.Text;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services.Billing;
@@ -21,6 +22,13 @@ public class BillingExpansionServiceTests
     private static ManualPaymentService NewManualPaymentService(LearnerDbContext db)
         => new(db, new MemoryFileStorage());
 
+    /// <summary>A valid PNG byte sequence (8-byte signature + salt) so the proof
+    /// magic-byte validation passes. Same salt → same bytes → same SHA-256 (for
+    /// duplicate-detection tests); a different salt yields a different hash.</summary>
+    private static byte[] ValidProof(string salt = "seed")
+        => new byte[] { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A }
+            .Concat(Encoding.UTF8.GetBytes(salt)).ToArray();
+
     private static ManualPaymentSubmitRequest ManualRequest(string reference)
         => new(
             QuoteId: null,
@@ -36,7 +44,7 @@ public class BillingExpansionServiceTests
             CourseId: "plan_basic",
             PaymentCategory: "international");
 
-    private static void AddPlan(LearnerDbContext db)
+    private static void AddPlan(LearnerDbContext db, int bundledAiCredits = 0)
     {
         var now = DateTimeOffset.UtcNow;
         db.BillingPlans.Add(new BillingPlan
@@ -49,9 +57,38 @@ public class BillingExpansionServiceTests
             Interval = "one_time",
             DurationMonths = 6,
             AccessDurationDays = 180,
+            BundledAiCredits = bundledAiCredits,
             CreatedAt = now,
             UpdatedAt = now,
         });
+    }
+
+    private static void SeedManualPaymentTemplates(LearnerDbContext db)
+    {
+        var now = DateTimeOffset.UtcNow;
+        foreach (var code in new[] { "manual_payment_received", "manual_payment_approved", "manual_payment_rejected" })
+        {
+            db.BillingNotificationTemplates.Add(new BillingNotificationTemplate
+            {
+                Id = code,
+                Code = code,
+                Channel = "email",
+                LocaleTag = "en",
+                Subject = code,
+                BodyTemplate = "Hello {{fullName}} — {{courseName}} {{amount}} {{reason}}",
+                IsActive = true,
+                CreatedAt = now,
+                UpdatedAt = now,
+            });
+        }
+    }
+
+    private static (ManualPaymentService svc, CapturingBillingChannel channel) NewServiceWithNotifier(LearnerDbContext db)
+    {
+        var channel = new CapturingBillingChannel();
+        var dispatcher = new BillingNotificationDispatcher(db, new IBillingNotificationChannel[] { channel }, NullLogger<BillingNotificationDispatcher>.Instance);
+        var svc = new ManualPaymentService(db, new MemoryFileStorage(), dispatcher, NullLogger<ManualPaymentService>.Instance);
+        return (svc, channel);
     }
 
     private static TaxRule UkVat() => new()
@@ -128,7 +165,7 @@ public class BillingExpansionServiceTests
     {
         await using var db = NewContext(nameof(ManualPaymentService_RejectsDuplicateProof));
         var svc = NewManualPaymentService(db);
-        var proof = Encoding.UTF8.GetBytes("payment-receipt-content");
+        var proof = ValidProof("same-receipt");
 
         await svc.SubmitAsync("user_a", ManualRequest("REF-001"), proof, CancellationToken.None);
 
@@ -141,7 +178,7 @@ public class BillingExpansionServiceTests
     {
         await using var db = NewContext(nameof(ManualPaymentService_AllowsSameUserResubmittingSameProof));
         var svc = NewManualPaymentService(db);
-        var proof = Encoding.UTF8.GetBytes("payment-receipt-content");
+        var proof = ValidProof("same-receipt");
 
         await svc.SubmitAsync("user_a", ManualRequest("REF-001"), proof, CancellationToken.None);
         var second = await svc.SubmitAsync("user_a", ManualRequest("REF-002"), proof, CancellationToken.None);
@@ -156,7 +193,7 @@ public class BillingExpansionServiceTests
         AddPlan(db);
         await db.SaveChangesAsync();
         var svc = NewManualPaymentService(db);
-        var submitted = await svc.SubmitAsync("user_a", ManualRequest("REF"), Encoding.UTF8.GetBytes("x"), CancellationToken.None);
+        var submitted = await svc.SubmitAsync("user_a", ManualRequest("REF"), ValidProof("approve"), CancellationToken.None);
 
         var approved = await svc.ApproveAsync(submitted.Id, "admin_1", "Verified", CancellationToken.None);
 
@@ -172,12 +209,212 @@ public class BillingExpansionServiceTests
         AddPlan(db);
         await db.SaveChangesAsync();
         var svc = NewManualPaymentService(db);
-        var submitted = await svc.SubmitAsync("user_a", ManualRequest("REF"), Encoding.UTF8.GetBytes("y"), CancellationToken.None);
+        var submitted = await svc.SubmitAsync("user_a", ManualRequest("REF"), ValidProof("reject"), CancellationToken.None);
 
         await svc.ApproveAsync(submitted.Id, "admin", null, CancellationToken.None);
 
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
             svc.RejectAsync(submitted.Id, "admin", "late rejection", CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task ManualPaymentService_RejectsNonImageProof()
+    {
+        await using var db = NewContext(nameof(ManualPaymentService_RejectsNonImageProof));
+        var svc = NewManualPaymentService(db);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            svc.SubmitAsync("user_a", ManualRequest("REF"), Encoding.UTF8.GetBytes("not-an-image-or-pdf"), CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task ManualPaymentService_SetStatus_PendingNeedsReviewRoundTrip()
+    {
+        await using var db = NewContext(nameof(ManualPaymentService_SetStatus_PendingNeedsReviewRoundTrip));
+        var svc = NewManualPaymentService(db);
+        var submitted = await svc.SubmitAsync("user_a", ManualRequest("REF"), ValidProof(), CancellationToken.None);
+
+        var flagged = await svc.SetStatusAsync(submitted.Id, "admin", "needs_review", "verify id", CancellationToken.None);
+        Assert.Equal("needs_review", flagged.Status);
+        Assert.Null(flagged.ReviewedAt); // not a terminal review outcome
+
+        var back = await svc.SetStatusAsync(submitted.Id, "admin", "pending", null, CancellationToken.None);
+        Assert.Equal("pending", back.Status);
+    }
+
+    [Fact]
+    public async Task ManualPaymentService_SetStatus_RejectsInvalidTargetAndTerminal()
+    {
+        await using var db = NewContext(nameof(ManualPaymentService_SetStatus_RejectsInvalidTargetAndTerminal));
+        AddPlan(db);
+        await db.SaveChangesAsync();
+        var svc = NewManualPaymentService(db);
+        var submitted = await svc.SubmitAsync("user_a", ManualRequest("REF"), ValidProof(), CancellationToken.None);
+
+        // 'paid' is not a settable target here — only pending/needs_review.
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            svc.SetStatusAsync(submitted.Id, "admin", "paid", null, CancellationToken.None));
+
+        // Once approved (terminal), it cannot be re-opened.
+        await svc.ApproveAsync(submitted.Id, "admin", null, CancellationToken.None);
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            svc.SetStatusAsync(submitted.Id, "admin", "needs_review", null, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task ManualPaymentService_Approve_GrantsBundledAiCredits()
+    {
+        await using var db = NewContext(nameof(ManualPaymentService_Approve_GrantsBundledAiCredits));
+        AddPlan(db, bundledAiCredits: 5);
+        await db.SaveChangesAsync();
+        var svc = NewManualPaymentService(db);
+        var submitted = await svc.SubmitAsync("user_a", ManualRequest("REF"), ValidProof(), CancellationToken.None);
+
+        var approved = await svc.ApproveAsync(submitted.Id, "admin", null, CancellationToken.None);
+
+        var ledger = await db.AiCreditLedger.Where(e => e.UserId == "user_a").ToListAsync();
+        Assert.Single(ledger);
+        Assert.Equal(5, ledger[0].TokensDelta);
+        Assert.Equal(AiCreditSource.Purchase, ledger[0].Source);
+        Assert.Equal($"manual:{submitted.Id}:plan_basic", ledger[0].ReferenceId);
+
+        var sub = await db.Subscriptions.FirstAsync(s => s.Id == approved.AccessGrantedSubscriptionId);
+        Assert.Equal(5, sub.AiCreditsRemaining);
+    }
+
+    [Fact]
+    public async Task ManualPaymentService_DispatchesNotifications()
+    {
+        await using var db = NewContext(nameof(ManualPaymentService_DispatchesNotifications));
+        AddPlan(db);
+        SeedManualPaymentTemplates(db);
+        await db.SaveChangesAsync();
+        var (svc, channel) = NewServiceWithNotifier(db);
+
+        var submitted = await svc.SubmitAsync("user_a", ManualRequest("REF"), ValidProof("a"), CancellationToken.None);
+        await svc.ApproveAsync(submitted.Id, "admin", null, CancellationToken.None);
+
+        var rejected = await svc.SubmitAsync("user_b", ManualRequest("REF2"), ValidProof("b"), CancellationToken.None);
+        await svc.RejectAsync(rejected.Id, "admin", "blurry screenshot", CancellationToken.None);
+
+        var logs = await db.BillingNotificationDispatchLogs.ToListAsync();
+        Assert.Contains(logs, l => l.EventCode == "manual_payment_received" && l.EventId == submitted.Id);
+        Assert.Contains(logs, l => l.EventCode == "manual_payment_approved" && l.EventId == submitted.Id);
+        Assert.Contains(logs, l => l.EventCode == "manual_payment_rejected" && l.EventId == rejected.Id);
+
+        // The rejection reason flows through to the rendered email body.
+        Assert.Contains(channel.Sent, m => m.body.Contains("blurry screenshot"));
+    }
+
+    [Fact]
+    public async Task ManualPaymentService_NotificationFailureDoesNotBlockSubmit()
+    {
+        await using var db = NewContext(nameof(ManualPaymentService_NotificationFailureDoesNotBlockSubmit));
+        // Dispatcher throws — the payment must still persist (best-effort guard).
+        var svc = new ManualPaymentService(db, new MemoryFileStorage(), new ThrowingDispatcher(), NullLogger<ManualPaymentService>.Instance);
+
+        var submitted = await svc.SubmitAsync("user_a", ManualRequest("REF"), ValidProof(), CancellationToken.None);
+
+        Assert.Equal("pending", submitted.Status);
+        Assert.NotNull(await db.ManualPaymentRequests.FindAsync(submitted.Id));
+    }
+
+    [Theory]
+    [InlineData(new byte[] { 0xFF, 0xD8, 0xFF, 0xE0 }, "image/jpeg")]
+    [InlineData(new byte[] { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A }, "image/png")]
+    [InlineData(new byte[] { 0x47, 0x49, 0x46, 0x38, 0x39, 0x61 }, "image/gif")]
+    [InlineData(new byte[] { 0x52, 0x49, 0x46, 0x46, 0x00, 0x00, 0x00, 0x00, 0x57, 0x45, 0x42, 0x50 }, "image/webp")]
+    [InlineData(new byte[] { 0x25, 0x50, 0x44, 0x46, 0x2D }, "application/pdf")]
+    [InlineData(new byte[] { 0x00, 0x01, 0x02, 0x03 }, "application/octet-stream")]
+    public void ManualPaymentProof_SniffContentType(byte[] header, string expected)
+    {
+        Assert.Equal(expected, ManualPaymentProof.SniffContentType(header));
+    }
+
+    private static PaymentMethodConfig PmConfig(string key, bool active = true)
+    {
+        var now = DateTimeOffset.UtcNow;
+        return new PaymentMethodConfig
+        {
+            Id = Guid.NewGuid().ToString("N"),
+            Key = key,
+            Label = key,
+            Category = "international",
+            Detail = "detail",
+            Instructions = "do the thing",
+            IsActive = active,
+            DisplayOrder = 1,
+            CreatedAt = now,
+            UpdatedAt = now,
+        };
+    }
+
+    [Fact]
+    public async Task ManualPaymentService_RejectsUnknownMethod()
+    {
+        await using var db = NewContext(nameof(ManualPaymentService_RejectsUnknownMethod));
+        db.PaymentMethodConfigs.Add(PmConfig("instapay_qr_link"));
+        await db.SaveChangesAsync();
+        var svc = NewManualPaymentService(db);
+
+        var request = ManualRequest("REF") with { Method = "unknown_gateway" };
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            svc.SubmitAsync("user_a", request, ValidProof("unknown"), CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task ManualPaymentService_AcceptsKnownActiveMethod()
+    {
+        await using var db = NewContext(nameof(ManualPaymentService_AcceptsKnownActiveMethod));
+        db.PaymentMethodConfigs.Add(PmConfig("uk_monzo_transfer"));
+        await db.SaveChangesAsync();
+        var svc = NewManualPaymentService(db);
+
+        var row = await svc.SubmitAsync("user_a", ManualRequest("REF"), ValidProof("known"), CancellationToken.None);
+        Assert.Equal("uk_monzo_transfer", row.Method);
+    }
+
+    [Fact]
+    public async Task ManualPaymentService_RejectsInactiveMethodWhenOthersActive()
+    {
+        await using var db = NewContext(nameof(ManualPaymentService_RejectsInactiveMethodWhenOthersActive));
+        db.PaymentMethodConfigs.Add(PmConfig("instapay_qr_link"));            // active
+        db.PaymentMethodConfigs.Add(PmConfig("uk_monzo_transfer", active: false)); // disabled
+        await db.SaveChangesAsync();
+        var svc = NewManualPaymentService(db);
+
+        // ManualRequest uses uk_monzo_transfer, which is present but inactive.
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            svc.SubmitAsync("user_a", ManualRequest("REF"), ValidProof("inactive"), CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task ManualPaymentService_FallsBackToKnownKeysWhenTableEmpty()
+    {
+        await using var db = NewContext(nameof(ManualPaymentService_FallsBackToKnownKeysWhenTableEmpty));
+        var svc = NewManualPaymentService(db);
+
+        // Empty config table → fallback allowlist accepts the seeded key…
+        var row = await svc.SubmitAsync("user_a", ManualRequest("REF"), ValidProof("fb-ok"), CancellationToken.None);
+        Assert.Equal("uk_monzo_transfer", row.Method);
+
+        // …but still rejects a method outside the fallback list.
+        var bogus = ManualRequest("REF2") with { Method = "bogus_method" };
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            svc.SubmitAsync("user_a", bogus, ValidProof("fb-bad"), CancellationToken.None));
+    }
+
+    [Fact]
+    public void PaymentMethodConfigDto_FromEntity_MapsHasQrImageAndStripsKey()
+    {
+        var withQr = PmConfig("instapay_qr_link");
+        withQr.QrImageKey = "billing/payment-methods/qr/instapay_qr_link-abc.bin";
+        var dtoWith = OetLearner.Api.Endpoints.PaymentMethodConfigDto.FromEntity(withQr);
+        Assert.True(dtoWith.HasQrImage);
+
+        var withoutQr = PmConfig("qnb_egypt");
+        var dtoWithout = OetLearner.Api.Endpoints.PaymentMethodConfigDto.FromEntity(withoutQr);
+        Assert.False(dtoWithout.HasQrImage);
     }
 
     [Fact]
@@ -303,4 +540,25 @@ internal sealed class MemoryFileStorage : IFileStorage
 
     public string? TryResolveLocalPath(string key) => null;
     public Uri? ResolveReadUrl(string key, TimeSpan ttl) => null;
+}
+
+/// <summary>Records every dispatched message so tests can assert on rendered content.</summary>
+internal sealed class CapturingBillingChannel : IBillingNotificationChannel
+{
+    public string Channel => "email";
+    public List<(string userId, string subject, string body)> Sent { get; } = new();
+
+    public Task SendAsync(string userId, string subject, string body, CancellationToken ct)
+    {
+        Sent.Add((userId, subject, body));
+        return Task.CompletedTask;
+    }
+}
+
+/// <summary>Dispatcher that always throws — proves the service's best-effort
+/// notification guard never rolls back the persisted payment.</summary>
+internal sealed class ThrowingDispatcher : IBillingNotificationDispatcher
+{
+    public Task DispatchAsync(BillingNotificationEvent evt, CancellationToken ct)
+        => throw new InvalidOperationException("notification backend unavailable");
 }

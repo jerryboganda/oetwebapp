@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services.Billing;
+using OetLearner.Api.Services.Content;
 
 namespace OetLearner.Api.Endpoints;
 
@@ -28,8 +29,10 @@ public static class BillingExpansionEndpoints
         // ── Admin: manual payments ─────────────────────────────────
         var adminMp = v1.MapGroup("/admin/billing/manual-payments");
         adminMp.MapGet("/", ListManualPayments).RequireAuthorization("AdminBillingRead");
+        adminMp.MapGet("/{id}/proof", GetManualPaymentProof).RequireAuthorization("AdminBillingRead");
         adminMp.MapPost("/{id}/approve", ApproveManualPayment).WithAdminWrite("AdminBillingRefundWrite");
         adminMp.MapPost("/{id}/reject", RejectManualPayment).WithAdminWrite("AdminBillingRefundWrite");
+        adminMp.MapPost("/{id}/status", SetManualPaymentStatus).WithAdminWrite("AdminBillingRefundWrite");
 
         // ── Admin: scholarships ────────────────────────────────────
         var adminSc = v1.MapGroup("/admin/billing/scholarships");
@@ -78,20 +81,27 @@ public static class BillingExpansionEndpoints
         }
 
         var userId = http.UserId();
-        var row = await service.SubmitAsync(userId, new ManualPaymentSubmitRequest(
-            request.QuoteId,
-            request.AmountAmount,
-            request.Currency,
-            request.Method,
-            request.Reference,
-            request.ProofUrl,
-            request.CandidateFullName,
-            request.CandidateEmail,
-            request.CandidateWhatsApp,
-            request.CourseName,
-            request.CourseId,
-            request.PaymentCategory), proofBytes, ct);
-        return TypedResults.Ok(row);
+        try
+        {
+            var row = await service.SubmitAsync(userId, new ManualPaymentSubmitRequest(
+                request.QuoteId,
+                request.AmountAmount,
+                request.Currency,
+                request.Method,
+                request.Reference,
+                request.ProofUrl,
+                request.CandidateFullName,
+                request.CandidateEmail,
+                request.CandidateWhatsApp,
+                request.CourseName,
+                request.CourseId,
+                request.PaymentCategory), proofBytes, ct);
+            return TypedResults.Ok(row);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return TypedResults.BadRequest(ex.Message);
+        }
     }
 
     private static async Task<Ok<List<ManualPaymentDto>>> ListOwnManualPayments(HttpContext http, LearnerDbContext db, CancellationToken ct)
@@ -137,6 +147,59 @@ public static class BillingExpansionEndpoints
         {
             return TypedResults.BadRequest(ex.Message);
         }
+    }
+
+    private static async Task<Results<Ok<ManualPaymentRequest>, BadRequest<string>>> SetManualPaymentStatus(string id, HttpContext http, ManualPaymentStatusRequest request, IManualPaymentService service, CancellationToken ct)
+    {
+        try
+        {
+            return TypedResults.Ok(await service.SetStatusAsync(id, http.UserId(), request.Status, request.Notes, ct));
+        }
+        catch (InvalidOperationException ex)
+        {
+            return TypedResults.BadRequest(ex.Message);
+        }
+    }
+
+    /// <summary>
+    /// Stream a manual-payment proof file inline for the admin verification
+    /// dashboard. Proofs are stored as opaque blobs with no recorded MIME, so the
+    /// content type is detected from magic bytes. Authorised by
+    /// <c>AdminBillingRead</c>.
+    /// </summary>
+    private static async Task<IResult> GetManualPaymentProof(string id, HttpContext http, LearnerDbContext db, IFileStorage storage, CancellationToken ct)
+    {
+        var proofKey = await db.ManualPaymentRequests
+            .Where(r => r.Id == id)
+            .Select(r => r.ProofUrl)
+            .FirstOrDefaultAsync(ct);
+        if (proofKey is null)
+        {
+            return Results.NotFound();
+        }
+        if (string.IsNullOrWhiteSpace(proofKey) || !storage.Exists(proofKey))
+        {
+            return Results.NotFound();
+        }
+
+        byte[] bytes;
+        await using (var source = await storage.OpenReadAsync(proofKey, ct))
+        await using (var buffer = new MemoryStream())
+        {
+            await source.CopyToAsync(buffer, ct);
+            bytes = buffer.ToArray();
+        }
+
+        var contentType = ManualPaymentProof.SniffContentType(bytes);
+        // Proofs contain candidate PII — keep them out of shared/proxy caches.
+        http.Response.Headers.CacheControl = "private, no-store";
+        http.Response.Headers.Vary = "Authorization";
+        // Serve user-uploaded bytes with the sniffed type only — never let the
+        // browser MIME-sniff a disguised payload (submit already restricts to
+        // image/pdf magic bytes; this is defense-in-depth).
+        http.Response.Headers["X-Content-Type-Options"] = "nosniff";
+        // No download filename → inline display in the admin viewer.
+        return Results.File(bytes, contentType);
     }
 
     // ── Scholarships ───────────────────────────────────────────────
@@ -321,6 +384,8 @@ public sealed record ManualPaymentDto(
 }
 
 public sealed record ApproveRejectRequest(string? Notes);
+
+public sealed record ManualPaymentStatusRequest(string Status, string? Notes);
 
 public sealed record ScholarshipGrantRequest(
     string UserId,

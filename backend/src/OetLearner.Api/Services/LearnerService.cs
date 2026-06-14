@@ -1601,13 +1601,20 @@ public partial class LearnerService(
         IQueryable<Attempt> query;
         if (CursorPagination.TryDecode(cursor, out var decoded))
         {
+            // SQLite persists DateTimeOffset as UTC ticks (INTEGER) via
+            // SqliteUtcTicksConverter. Raw SQL bypasses that converter, so the
+            // cursor timestamp must be bound as ticks too — otherwise it binds as
+            // TEXT and, under SQLite type affinity, every INTEGER column value
+            // sorts below any TEXT parameter, making the predicate always true and
+            // returning the first page forever.
+            var cursorTicks = decoded.Timestamp.UtcTicks;
             query = db.Attempts.FromSqlInterpolated($@"
                 SELECT *
                 FROM ""Attempts""
                 WHERE ""UserId"" = {userId}
                   AND (
-                    COALESCE(""SubmittedAt"", ""StartedAt"") < {decoded.Timestamp}
-                    OR (COALESCE(""SubmittedAt"", ""StartedAt"") = {decoded.Timestamp} AND ""Id"" < {decoded.Id})
+                    COALESCE(""SubmittedAt"", ""StartedAt"") < {cursorTicks}
+                    OR (COALESCE(""SubmittedAt"", ""StartedAt"") = {cursorTicks} AND ""Id"" < {decoded.Id})
                   )
                 ORDER BY COALESCE(""SubmittedAt"", ""StartedAt"") DESC, ""Id"" DESC
                 LIMIT {pageSize + 1}");
