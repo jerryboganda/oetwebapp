@@ -335,6 +335,21 @@ export default function BillingPage() {
       setError(billingBlockedMessage);
       return;
     }
+    // PayPal Expanded checkout runs embedded on the review page; route there with the
+    // selected product so the buyer pays in-page (PayPal/Venmo/Pay Later or card) without
+    // a hosted-portal redirect. Stripe keeps the existing inline hosted flow below.
+    if (selectedGateway === 'paypal') {
+      const params = new URLSearchParams();
+      params.set('productType', productType);
+      if (priceId) params.set('priceId', priceId);
+      params.set('quantity', String(quantity));
+      params.set('gateway', 'paypal');
+      if (parentSubscriptionId) params.set('parentSubscriptionId', parentSubscriptionId);
+      const paypalCoupon = couponCode.trim();
+      if (paypalCoupon) params.set('couponCode', paypalCoupon);
+      router.push(`/checkout/review?${params.toString()}`);
+      return;
+    }
     if (submittingRef.current) return;
     submittingRef.current = true;
     const coupon = couponCode.trim() || null;
