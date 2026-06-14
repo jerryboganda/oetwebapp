@@ -211,4 +211,89 @@ describe('ReadingAnswerSheetBuilder', () => {
       correctAnswerJson: '"B"',
     }));
   });
+
+  it('saves an authored rationale as explanationMarkdown', async () => {
+    const user = userEvent.setup();
+    render(
+      <ReadingAnswerSheetBuilder
+        paperId="paper-1"
+        partCode="B"
+        activePart={partBC('B', [section('B3', 3)])}
+        activeSection={section('B3', 3)}
+        onSaved={noop}
+        onNotify={noop}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: /generate/i }));
+    await user.selectOptions(screen.getByRole('combobox'), 'A');
+    await user.type(screen.getByLabelText(/rationale for question 3/i), 'Text A states the diagnosis.');
+    await user.click(screen.getByRole('button', { name: /save all/i }));
+
+    expect(mockUpsertReadingQuestion).toHaveBeenNthCalledWith(1, 'paper-1', expect.objectContaining({
+      explanationMarkdown: 'Text A states the diagnosis.',
+    }));
+  });
+
+  it('sends explanationMarkdown null when no rationale is entered', async () => {
+    const user = userEvent.setup();
+    render(
+      <ReadingAnswerSheetBuilder
+        paperId="paper-1"
+        partCode="B"
+        activePart={partBC('B', [section('B3', 3)])}
+        activeSection={section('B3', 3)}
+        onSaved={noop}
+        onNotify={noop}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: /generate/i }));
+    await user.selectOptions(screen.getByRole('combobox'), 'A');
+    await user.click(screen.getByRole('button', { name: /save all/i }));
+
+    expect(mockUpsertReadingQuestion).toHaveBeenNthCalledWith(1, 'paper-1', expect.objectContaining({
+      explanationMarkdown: null,
+    }));
+  });
+
+  it('seeds an existing rationale and preserves it on save', async () => {
+    const user = userEvent.setup();
+    const existing: ReadingQuestionAdminDto = {
+      id: 'q-b3-existing',
+      readingPartId: 'part-b',
+      readingSectionId: 'sec-b3',
+      readingTextId: null,
+      displayOrder: 3,
+      points: 1,
+      questionType: 'MultipleChoice3',
+      stem: 'See PDF',
+      optionsJson: '["Option A","Option B","Option C"]',
+      correctAnswerJson: '"B"',
+      acceptedSynonymsJson: null,
+      caseSensitive: false,
+      explanationMarkdown: 'Existing reason for option B.',
+      skillTag: null,
+    };
+    render(
+      <ReadingAnswerSheetBuilder
+        paperId="paper-1"
+        partCode="B"
+        activePart={partBC('B', [section('B3', 3, [existing])])}
+        activeSection={section('B3', 3, [existing])}
+        onSaved={noop}
+        onNotify={noop}
+      />,
+    );
+
+    // Rationale pre-fills from the existing question.
+    expect(screen.getByLabelText(/rationale for question 3/i)).toHaveValue('Existing reason for option B.');
+
+    await user.click(screen.getByRole('button', { name: /save all/i }));
+
+    expect(mockUpsertReadingQuestion).toHaveBeenNthCalledWith(1, 'paper-1', expect.objectContaining({
+      id: 'q-b3-existing',
+      explanationMarkdown: 'Existing reason for option B.',
+    }));
+  });
 });

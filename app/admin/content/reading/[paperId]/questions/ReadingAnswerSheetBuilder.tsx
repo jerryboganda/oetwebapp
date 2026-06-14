@@ -6,7 +6,7 @@ import { Save, Sparkles, Pencil } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/admin/ui/card';
 import { Button } from '@/components/admin/ui/button';
 import { Badge } from '@/components/admin/ui/badge';
-import { Input, Select } from '@/components/ui/form-controls';
+import { Input, Select, Textarea } from '@/components/ui/form-controls';
 import { InlineAlert } from '@/components/ui/alert';
 import {
   upsertReadingQuestion,
@@ -41,6 +41,9 @@ interface BuilderRow {
   kind: BuilderRowKind;
   options: string[];
   correctAnswer: string;
+  /** Optional admin rationale, saved as explanationMarkdown; shown to the
+   * learner on the results page (policy-gated, post-submit). */
+  rationale: string;
 }
 
 interface SlotTemplate {
@@ -113,7 +116,7 @@ function templateSlots(partCode: ReadingPartCode, activeSection: ReadingSectionA
   }));
 }
 
-function parseExisting(question: ReadingQuestionAdminDto): { options: string[]; correctAnswer: string } {
+function parseExisting(question: ReadingQuestionAdminDto): { options: string[]; correctAnswer: string; rationale: string } {
   let options: string[] = [];
   try {
     const parsed = JSON.parse(question.optionsJson);
@@ -126,7 +129,7 @@ function parseExisting(question: ReadingQuestionAdminDto): { options: string[]; 
     correctAnswer = typeof parsed === 'string' ? parsed : '';
   } catch { /* keep empty */ }
 
-  return { options, correctAnswer };
+  return { options, correctAnswer, rationale: question.explanationMarkdown ?? '' };
 }
 
 function buildRows(
@@ -147,6 +150,7 @@ function buildRows(
       kind: slot.kind,
       options: seeded && seeded.options.length > 0 ? seeded.options : slot.options,
       correctAnswer: seeded?.correctAnswer ?? '',
+      rationale: seeded?.rationale ?? '',
     };
   });
 }
@@ -206,8 +210,8 @@ export function ReadingAnswerSheetBuilder({
     setShown(true);
   }, [partCode, activeSection, scopeQuestions]);
 
-  const updateRow = useCallback((index: number, correctAnswer: string) => {
-    setRows((prev) => prev.map((row, i) => (i === index ? { ...row, correctAnswer } : row)));
+  const patchRow = useCallback((index: number, patch: Partial<BuilderRow>) => {
+    setRows((prev) => prev.map((row, i) => (i === index ? { ...row, ...patch } : row)));
   }, []);
 
   async function handleSaveAll() {
@@ -233,7 +237,7 @@ export function ReadingAnswerSheetBuilder({
           optionsJson: JSON.stringify(row.options),
           correctAnswerJson: JSON.stringify(row.correctAnswer),
           acceptedSynonymsJson: null,
-          explanationMarkdown: null,
+          explanationMarkdown: row.rationale.trim() || null,
           evidenceSentence: null,
           skillTag: null,
           difficulty: null,
@@ -295,38 +299,47 @@ export function ReadingAnswerSheetBuilder({
               return (
                 <div
                   key={row.internalDisplayOrder}
-                  className="flex items-center gap-3 rounded-lg border border-admin-border bg-admin-bg-subtle px-3 py-2"
+                  className="space-y-2 rounded-lg border border-admin-border bg-admin-bg-subtle px-3 py-2"
                 >
-                  <span className="w-10 shrink-0 text-xs font-mono font-semibold text-admin-fg-muted">Q{row.publicNumber}</span>
-                  <Badge variant="muted" size="sm" className="shrink-0">{TYPE_LABEL[row.questionType] ?? row.questionType}</Badge>
-                  <div className="flex-1 min-w-0">
-                    {row.kind === 'shortText' ? (
-                      <Input
-                        aria-label={`Correct answer for question ${row.publicNumber}`}
-                        value={row.correctAnswer}
-                        onChange={(e) => updateRow(index, e.target.value)}
-                        placeholder="Correct answer"
-                      />
-                    ) : (
-                      <Select
-                        aria-label={`Correct answer for question ${row.publicNumber}`}
-                        placeholder="Select answer"
-                        options={letterOptions}
-                        value={row.correctAnswer}
-                        onChange={(e) => updateRow(index, e.target.value)}
-                      />
-                    )}
+                  <div className="flex items-center gap-3">
+                    <span className="w-10 shrink-0 text-xs font-mono font-semibold text-admin-fg-muted">Q{row.publicNumber}</span>
+                    <Badge variant="muted" size="sm" className="shrink-0">{TYPE_LABEL[row.questionType] ?? row.questionType}</Badge>
+                    <div className="flex-1 min-w-0">
+                      {row.kind === 'shortText' ? (
+                        <Input
+                          aria-label={`Correct answer for question ${row.publicNumber}`}
+                          value={row.correctAnswer}
+                          onChange={(e) => patchRow(index, { correctAnswer: e.target.value })}
+                          placeholder="Correct answer"
+                        />
+                      ) : (
+                        <Select
+                          aria-label={`Correct answer for question ${row.publicNumber}`}
+                          placeholder="Select answer"
+                          options={letterOptions}
+                          value={row.correctAnswer}
+                          onChange={(e) => patchRow(index, { correctAnswer: e.target.value })}
+                        />
+                      )}
+                    </div>
+                    {existing && onEditDetails ? (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => onEditDetails(existing)}
+                        startIcon={<Pencil className="h-3.5 w-3.5" />}
+                      >
+                        Edit details
+                      </Button>
+                    ) : null}
                   </div>
-                  {existing && onEditDetails ? (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => onEditDetails(existing)}
-                      startIcon={<Pencil className="h-3.5 w-3.5" />}
-                    >
-                      Edit details
-                    </Button>
-                  ) : null}
+                  <Textarea
+                    aria-label={`Rationale for question ${row.publicNumber} (optional)`}
+                    value={row.rationale}
+                    onChange={(e) => patchRow(index, { rationale: e.target.value })}
+                    rows={2}
+                    placeholder="Why this answer is correct — shown to the learner on the results page (optional)"
+                  />
                 </div>
               );
             })}
