@@ -39,8 +39,13 @@ public static class WritingTaskAdminEndpoints
         // Bulk workflow actions (parity with POST /v1/admin/papers/bulk). Permission
         // is split per action inside the handler because a single route can't carry
         // two RequireAuthorization policies: delete/force-delete need system_admin,
-        // publish needs content:publish, archive needs content:write.
-        group.MapPost("/bulk", BulkTasks);
+        // publish needs content:publish, archive needs content:write. A granular
+        // AdminContentRead baseline (mirroring the papers group) gates entry above
+        // the bare AdminOnly group policy; the handler still enforces the stricter
+        // per-action permission. PerUserWrite applies the mutation rate-limit bucket.
+        group.MapPost("/bulk", BulkTasks)
+            .RequireAuthorization("AdminContentRead")
+            .RequireRateLimiting("PerUserWrite");
 
         return app;
     }
