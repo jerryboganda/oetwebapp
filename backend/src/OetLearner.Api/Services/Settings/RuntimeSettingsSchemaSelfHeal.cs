@@ -51,5 +51,30 @@ ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""SoketiAppKey"" charac
 ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""SoketiAppSecretEncrypted"" text;
 ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""SoketiUseTls"" boolean;
 ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""SoketiEnabled"" boolean;
+
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""DataRetentionAnalyticsEventsDays"" integer;
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""DataRetentionAuditEventsDays"" integer;
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""DataRetentionPaymentWebhookEventsDays"" integer;
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""DataRetentionPaymentWebhookPiiNullOutAgeDays"" integer;
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""DataRetentionNotificationDeliveryAttemptsDays"" integer;
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""DataRetentionSweepIntervalHours"" integer;
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""DataRetentionBatchSize"" integer;
+
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""ExpertAutoAssignmentEnabled"" boolean;
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""ExpertAutoAssignmentPollingIntervalSeconds"" integer;
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""ExpertAutoAssignmentSlaEscalationIntervalSeconds"" integer;
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""ExpertAutoAssignmentSlaHoursStandard"" integer;
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""ExpertAutoAssignmentSlaHoursExpress"" integer;
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""ExpertAutoAssignmentMaxActiveAssignmentsPerExpert"" integer;
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""ExpertAutoAssignmentLookbackHoursForLoad"" integer;
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""ExpertAutoAssignmentBatchSize"" integer;
+
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""PasswordPolicyMinimumLength"" integer;
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""PasswordPolicyRequireMixedCase"" boolean;
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""PasswordPolicyRequireDigit"" boolean;
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""PasswordPolicyRequireSymbol"" boolean;
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""PasswordPolicyBreachCheckEnabled"" boolean;
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""PasswordPolicyBreachApiBaseUrl"" character varying(512);
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""PasswordPolicyBreachApiTimeoutSeconds"" integer;
 ";
 }

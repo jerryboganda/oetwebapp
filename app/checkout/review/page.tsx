@@ -8,8 +8,9 @@ import { ArrowLeft, CreditCard, ShieldCheck, ShoppingBag } from 'lucide-react';
 import { InlineAlert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
+import { PayPalExpandedCheckout } from '@/components/billing/paypal-expanded-checkout';
 import { useAuth } from '@/contexts/auth-context';
-import { createBillingCheckoutSession, fetchBillingQuote } from '@/lib/api';
+import { createBillingCheckoutSession, fetchBillingQuote, type PaymentCaptureResult } from '@/lib/api';
 import type { BillingProductType, BillingQuote } from '@/lib/billing-types';
 import { formatMoney } from '@/lib/money';
 import { openCheckoutUrl } from '@/lib/mobile/web-checkout';
@@ -59,6 +60,9 @@ function CheckoutReviewContent() {
   const [error, setError] = useState<string | null>(null);
   const [quoteSecondsLeft, setQuoteSecondsLeft] = useState<number | null>(null);
   const [quoteRefreshed, setQuoteRefreshed] = useState(false);
+  // When PayPal Expanded checkout is selected but the embedded config is unavailable
+  // (no public client id), fall back to the hosted-portal redirect button.
+  const [paypalUnavailable, setPaypalUnavailable] = useState(false);
   const quoteStartedRef = useRef(false);
   const quoteRefreshingRef = useRef(false);
 
@@ -183,6 +187,32 @@ function CheckoutReviewContent() {
     }
   };
 
+  // Creates a PayPal order server-side and returns its id for the embedded SDK.
+  const createPaypalOrder = useCallback(async (): Promise<string> => {
+    if (!quote) throw new Error('Your order is not ready yet.');
+    const checkout = await createBillingCheckoutSession({
+      productType,
+      quantity,
+      priceId,
+      couponCode: couponCode.trim() || null,
+      parentSubscriptionId,
+      quoteId: quote.quoteId,
+      gateway: 'paypal',
+      idempotencyKey: newIdempotencyKey(),
+    });
+    return checkout.checkoutSessionId;
+  }, [quote, productType, quantity, priceId, couponCode, parentSubscriptionId]);
+
+  const handlePaypalCaptured = useCallback(
+    (result: PaymentCaptureResult) => {
+      const target = result.redirectTo && result.redirectTo.startsWith('/')
+        ? result.redirectTo
+        : '/dashboard?purchase=success';
+      router.replace(target);
+    },
+    [router],
+  );
+
   if (authLoading || loading) return <CheckoutReviewSkeleton />;
 
   return (
@@ -269,10 +299,26 @@ function CheckoutReviewContent() {
           >
             Apply coupon
           </Button>
-          <Button className="mt-3" fullWidth loading={busy} disabled={!quote} onClick={startCheckout}>
-            <CreditCard className="h-4 w-4" /> Continue to secure payment
-          </Button>
-          <p className="mt-3 text-xs leading-5 text-muted">Payment opens in the hosted portal. Your account unlocks after webhook confirmation.</p>
+          {gateway === 'paypal' && !paypalUnavailable ? (
+            <div className="mt-3">
+              <PayPalExpandedCheckout
+                createOrder={createPaypalOrder}
+                onCaptured={handlePaypalCaptured}
+                onError={(msg) => setError(msg)}
+                onUnavailable={() => setPaypalUnavailable(true)}
+                amountLabel={quote ? formatMoney(quote.totalAmount, { currency: quote.currency }) : ''}
+                disabled={!quote}
+              />
+              <p className="mt-3 text-xs leading-5 text-muted">Pay securely without leaving this page. Your account unlocks the moment your payment is confirmed.</p>
+            </div>
+          ) : (
+            <>
+              <Button className="mt-3" fullWidth loading={busy} disabled={!quote} onClick={startCheckout}>
+                <CreditCard className="h-4 w-4" /> Continue to secure payment
+              </Button>
+              <p className="mt-3 text-xs leading-5 text-muted">Payment opens in the hosted portal. Your account unlocks after webhook confirmation.</p>
+            </>
+          )}
 
           <div className="mt-4 border-t border-border pt-4">
             <Link href={manualPaymentHref} className="text-sm font-medium text-primary hover:underline">

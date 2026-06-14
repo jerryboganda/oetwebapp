@@ -95,6 +95,9 @@ public static class AdminRuntimeSettingsEndpoints
                     ApplyPaymob(row, request.Paymob, provider, changedKeys);
                     ApplyPayTabs(row, request.PayTabs, provider, changedKeys);
                     ApplySoketi(row, request.Soketi, provider, changedKeys);
+                    ApplyDataRetention(row, request.DataRetention, changedKeys);
+                    ApplyExpertAutoAssignment(row, request.ExpertAutoAssignment, changedKeys);
+                    ApplyPasswordPolicy(row, request.PasswordPolicy, changedKeys);
                 }
                 catch (RuntimeSettingsValidationException ex)
                 {
@@ -367,6 +370,37 @@ public static class AdminRuntimeSettingsEndpoints
                 appSecret = MaskPlainSecret(settings.Soketi.AppSecret),
                 useTls = settings.Soketi.UseTls,
                 enabled = settings.Soketi.Enabled,
+            },
+            dataRetention = new
+            {
+                analyticsEventsDays = (int)Math.Round(settings.DataRetention.AnalyticsEvents.TotalDays),
+                auditEventsDays = (int)Math.Round(settings.DataRetention.AuditEvents.TotalDays),
+                paymentWebhookEventsDays = (int)Math.Round(settings.DataRetention.PaymentWebhookEvents.TotalDays),
+                paymentWebhookPiiNullOutAgeDays = (int)Math.Round(settings.DataRetention.PaymentWebhookPiiNullOutAge.TotalDays),
+                notificationDeliveryAttemptsDays = (int)Math.Round(settings.DataRetention.NotificationDeliveryAttempts.TotalDays),
+                sweepIntervalHours = (int)Math.Round(settings.DataRetention.SweepInterval.TotalHours),
+                batchSize = settings.DataRetention.BatchSize,
+            },
+            expertAutoAssignment = new
+            {
+                enabled = settings.ExpertAutoAssignment.Enabled,
+                pollingIntervalSeconds = settings.ExpertAutoAssignment.PollingIntervalSeconds,
+                slaEscalationIntervalSeconds = settings.ExpertAutoAssignment.SlaEscalationIntervalSeconds,
+                slaHoursStandard = settings.ExpertAutoAssignment.SlaHoursStandard,
+                slaHoursExpress = settings.ExpertAutoAssignment.SlaHoursExpress,
+                maxActiveAssignmentsPerExpert = settings.ExpertAutoAssignment.MaxActiveAssignmentsPerExpert,
+                lookbackHoursForLoad = settings.ExpertAutoAssignment.LookbackHoursForLoad,
+                batchSize = settings.ExpertAutoAssignment.BatchSize,
+            },
+            passwordPolicy = new
+            {
+                minimumLength = settings.PasswordPolicy.MinimumLength,
+                requireMixedCase = settings.PasswordPolicy.RequireMixedCase,
+                requireDigit = settings.PasswordPolicy.RequireDigit,
+                requireSymbol = settings.PasswordPolicy.RequireSymbol,
+                breachCheckEnabled = settings.PasswordPolicy.BreachCheckEnabled,
+                breachApiBaseUrl = settings.PasswordPolicy.BreachApiBaseUrl,
+                breachApiTimeoutSeconds = (int)Math.Round(settings.PasswordPolicy.BreachApiTimeout.TotalSeconds),
             },
             updatedBy = settings.UpdatedByUserName,
             updatedByUserId = settings.UpdatedByUserId,
@@ -834,6 +868,52 @@ public static class AdminRuntimeSettingsEndpoints
         if (TrySetNullableBool(d.Enabled, v => row.SoketiEnabled = v, "soketi.enabled", changed)) { }
     }
 
+    private static void ApplyDataRetention(RuntimeSettingsRow row, RuntimeSettingsDataRetentionUpdate? d, List<string> changed)
+    {
+        if (d is null) return;
+        if (TrySetNullableInt(d.AnalyticsEventsDays, v => row.DataRetentionAnalyticsEventsDays = v, "dataRetention.analyticsEventsDays", changed, min: 0, max: 36500)) { }
+        if (TrySetNullableInt(d.AuditEventsDays, v => row.DataRetentionAuditEventsDays = v, "dataRetention.auditEventsDays", changed, min: 0, max: 36500)) { }
+        if (TrySetNullableInt(d.PaymentWebhookEventsDays, v => row.DataRetentionPaymentWebhookEventsDays = v, "dataRetention.paymentWebhookEventsDays", changed, min: 0, max: 36500)) { }
+        if (TrySetNullableInt(d.PaymentWebhookPiiNullOutAgeDays, v => row.DataRetentionPaymentWebhookPiiNullOutAgeDays = v, "dataRetention.paymentWebhookPiiNullOutAgeDays", changed, min: 0, max: 36500)) { }
+        if (TrySetNullableInt(d.NotificationDeliveryAttemptsDays, v => row.DataRetentionNotificationDeliveryAttemptsDays = v, "dataRetention.notificationDeliveryAttemptsDays", changed, min: 0, max: 36500)) { }
+        if (TrySetNullableInt(d.SweepIntervalHours, v => row.DataRetentionSweepIntervalHours = v, "dataRetention.sweepIntervalHours", changed, min: 1, max: 8760)) { }
+        if (TrySetNullableInt(d.BatchSize, v => row.DataRetentionBatchSize = v, "dataRetention.batchSize", changed, min: 1, max: 1_000_000)) { }
+    }
+
+    private static void ApplyExpertAutoAssignment(RuntimeSettingsRow row, RuntimeSettingsExpertAutoAssignmentUpdate? d, List<string> changed)
+    {
+        if (d is null) return;
+        if (TrySetNullableBool(d.Enabled, v => row.ExpertAutoAssignmentEnabled = v, "expertAutoAssignment.enabled", changed)) { }
+        if (TrySetNullableInt(d.PollingIntervalSeconds, v => row.ExpertAutoAssignmentPollingIntervalSeconds = v, "expertAutoAssignment.pollingIntervalSeconds", changed, min: 1, max: 86400)) { }
+        if (TrySetNullableInt(d.SlaEscalationIntervalSeconds, v => row.ExpertAutoAssignmentSlaEscalationIntervalSeconds = v, "expertAutoAssignment.slaEscalationIntervalSeconds", changed, min: 1, max: 86400)) { }
+        if (TrySetNullableInt(d.SlaHoursStandard, v => row.ExpertAutoAssignmentSlaHoursStandard = v, "expertAutoAssignment.slaHoursStandard", changed, min: 1, max: 8760)) { }
+        if (TrySetNullableInt(d.SlaHoursExpress, v => row.ExpertAutoAssignmentSlaHoursExpress = v, "expertAutoAssignment.slaHoursExpress", changed, min: 1, max: 8760)) { }
+        if (TrySetNullableInt(d.MaxActiveAssignmentsPerExpert, v => row.ExpertAutoAssignmentMaxActiveAssignmentsPerExpert = v, "expertAutoAssignment.maxActiveAssignmentsPerExpert", changed, min: 1, max: 10000)) { }
+        if (TrySetNullableInt(d.LookbackHoursForLoad, v => row.ExpertAutoAssignmentLookbackHoursForLoad = v, "expertAutoAssignment.lookbackHoursForLoad", changed, min: 1, max: 8760)) { }
+        if (TrySetNullableInt(d.BatchSize, v => row.ExpertAutoAssignmentBatchSize = v, "expertAutoAssignment.batchSize", changed, min: 1, max: 100000)) { }
+    }
+
+    private static void ApplyPasswordPolicy(RuntimeSettingsRow row, RuntimeSettingsPasswordPolicyUpdate? d, List<string> changed)
+    {
+        if (d is null) return;
+        if (TrySetNullableInt(d.MinimumLength, v => row.PasswordPolicyMinimumLength = v, "passwordPolicy.minimumLength", changed, min: 1, max: 1024)) { }
+        if (TrySetNullableBool(d.RequireMixedCase, v => row.PasswordPolicyRequireMixedCase = v, "passwordPolicy.requireMixedCase", changed)) { }
+        if (TrySetNullableBool(d.RequireDigit, v => row.PasswordPolicyRequireDigit = v, "passwordPolicy.requireDigit", changed)) { }
+        if (TrySetNullableBool(d.RequireSymbol, v => row.PasswordPolicyRequireSymbol = v, "passwordPolicy.requireSymbol", changed)) { }
+        if (TrySetNullableBool(d.BreachCheckEnabled, v => row.PasswordPolicyBreachCheckEnabled = v, "passwordPolicy.breachCheckEnabled", changed)) { }
+        if (d.BreachApiBaseUrl is not null && d.BreachApiBaseUrl != SecretMask)
+        {
+            var trimmed = d.BreachApiBaseUrl.Trim();
+            if (trimmed.Length > 0 && (!Uri.TryCreate(trimmed, UriKind.Absolute, out var uri)
+                || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps)))
+            {
+                throw new RuntimeSettingsValidationException("passwordPolicy.breachApiBaseUrl must be an http(s):// URL.");
+            }
+        }
+        if (TrySetPlain(d.BreachApiBaseUrl, v => row.PasswordPolicyBreachApiBaseUrl = v, "passwordPolicy.breachApiBaseUrl", changed)) { }
+        if (TrySetNullableInt(d.BreachApiTimeoutSeconds, v => row.PasswordPolicyBreachApiTimeoutSeconds = v, "passwordPolicy.breachApiTimeoutSeconds", changed, min: 1, max: 60)) { }
+    }
+
     private static void ApplyZoom(RuntimeSettingsRow row, RuntimeSettingsZoomUpdate? d,
         IRuntimeSettingsProvider p, IWebHostEnvironment env, List<string> changed)
     {
@@ -1009,7 +1089,7 @@ public static class AdminRuntimeSettingsEndpoints
     private static string? NormalizeSectionId(string? sectionId)
     {
         var normalized = sectionId?.Trim().ToLowerInvariant();
-        return normalized is "email" or "billing" or "sentry" or "backup" or "oauth" or "push" or "uploadscanner" or "zoom" or "stripe" or "speakinglivekit" or "speakingai" or "speakingstorage" or "speakingcompliance" or "speakingfeatures" or "speakingwhisper" or "checkoutcom" or "paymob" or "paytabs" or "soketi"
+        return normalized is "email" or "billing" or "sentry" or "backup" or "oauth" or "push" or "uploadscanner" or "zoom" or "stripe" or "speakinglivekit" or "speakingai" or "speakingstorage" or "speakingcompliance" or "speakingfeatures" or "speakingwhisper" or "checkoutcom" or "paymob" or "paytabs" or "soketi" or "dataretention" or "expertautoassignment" or "passwordpolicy"
             ? normalized
             : normalized == "upload-scanner" ? "uploadscanner" : null;
     }
@@ -1077,6 +1157,13 @@ public static class AdminRuntimeSettingsEndpoints
             "paymob" => await TestPaymobAsync(settings.Paymob, httpClientFactory, sectionId, testedAt, ct),
             "paytabs" => await TestPayTabsAsync(settings.PayTabs, httpClientFactory, sectionId, testedAt, ct),
             "soketi" => await TestSoketiAsync(settings.Soketi, httpClientFactory, sectionId, testedAt, ct),
+            "dataretention" => Ok(sectionId, $"Retention windows resolved (audit {settings.DataRetention.AuditEvents.TotalDays:0}d, webhooks {settings.DataRetention.PaymentWebhookEvents.TotalDays:0}d). Sweep every {settings.DataRetention.SweepInterval.TotalHours:0}h, batch {settings.DataRetention.BatchSize}.", testedAt),
+            "expertautoassignment" => settings.ExpertAutoAssignment.Enabled
+                ? Ok(sectionId, $"Auto-assignment enabled. SLA {settings.ExpertAutoAssignment.SlaHoursStandard}h standard / {settings.ExpertAutoAssignment.SlaHoursExpress}h express; max {settings.ExpertAutoAssignment.MaxActiveAssignmentsPerExpert} per expert.", testedAt)
+                : Ok(sectionId, "Auto-assignment is disabled. Writing reviews stay in the manual queue.", testedAt),
+            "passwordpolicy" => Uri.TryCreate(settings.PasswordPolicy.BreachApiBaseUrl, UriKind.Absolute, out var hibpUri) && hibpUri.Scheme == Uri.UriSchemeHttps
+                ? Ok(sectionId, $"Policy: min {settings.PasswordPolicy.MinimumLength} chars; breach check {(settings.PasswordPolicy.BreachCheckEnabled ? "on" : "off")}. Breach API URL is valid https.", testedAt)
+                : Failed(sectionId, "Breach API base URL must be a valid https:// URL.", testedAt),
             _ => Failed(sectionId, "Unknown integration section.", testedAt),
         };
     }
@@ -1269,6 +1356,46 @@ public sealed class RuntimeSettingsUpdateRequest
     public RuntimeSettingsPaymobUpdate? Paymob { get; set; }
     public RuntimeSettingsPayTabsUpdate? PayTabs { get; set; }
     public RuntimeSettingsSoketiUpdate? Soketi { get; set; }
+    public RuntimeSettingsDataRetentionUpdate? DataRetention { get; set; }
+    public RuntimeSettingsExpertAutoAssignmentUpdate? ExpertAutoAssignment { get; set; }
+    public RuntimeSettingsPasswordPolicyUpdate? PasswordPolicy { get; set; }
+}
+
+/// <summary>Data-retention sweeper windows (days / hours / batch size).</summary>
+public sealed class RuntimeSettingsDataRetentionUpdate
+{
+    public JsonElement? AnalyticsEventsDays { get; set; }
+    public JsonElement? AuditEventsDays { get; set; }
+    public JsonElement? PaymentWebhookEventsDays { get; set; }
+    public JsonElement? PaymentWebhookPiiNullOutAgeDays { get; set; }
+    public JsonElement? NotificationDeliveryAttemptsDays { get; set; }
+    public JsonElement? SweepIntervalHours { get; set; }
+    public JsonElement? BatchSize { get; set; }
+}
+
+/// <summary>Expert auto-assignment loop tunables.</summary>
+public sealed class RuntimeSettingsExpertAutoAssignmentUpdate
+{
+    public JsonElement? Enabled { get; set; }
+    public JsonElement? PollingIntervalSeconds { get; set; }
+    public JsonElement? SlaEscalationIntervalSeconds { get; set; }
+    public JsonElement? SlaHoursStandard { get; set; }
+    public JsonElement? SlaHoursExpress { get; set; }
+    public JsonElement? MaxActiveAssignmentsPerExpert { get; set; }
+    public JsonElement? LookbackHoursForLoad { get; set; }
+    public JsonElement? BatchSize { get; set; }
+}
+
+/// <summary>Password-policy enforcement (complexity + HIBP breach check).</summary>
+public sealed class RuntimeSettingsPasswordPolicyUpdate
+{
+    public JsonElement? MinimumLength { get; set; }
+    public JsonElement? RequireMixedCase { get; set; }
+    public JsonElement? RequireDigit { get; set; }
+    public JsonElement? RequireSymbol { get; set; }
+    public JsonElement? BreachCheckEnabled { get; set; }
+    public string? BreachApiBaseUrl { get; set; }
+    public JsonElement? BreachApiTimeoutSeconds { get; set; }
 }
 
 /// <summary>Checkout.com payment gateway overrides.</summary>

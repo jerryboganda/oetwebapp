@@ -80,6 +80,9 @@ public sealed class ClamAvUploadScannerTests
             Paymob: TestRuntimeSettingsProvider.DefaultPaymob(),
             PayTabs: TestRuntimeSettingsProvider.DefaultPayTabs(),
             Soketi: TestRuntimeSettingsProvider.DefaultSoketi(),
+            DataRetention: TestRuntimeSettingsProvider.DefaultDataRetention(),
+            ExpertAutoAssignment: TestRuntimeSettingsProvider.DefaultExpertAutoAssignment(),
+            PasswordPolicy: TestRuntimeSettingsProvider.DefaultPasswordPolicy(),
             UpdatedByUserId: null,
             UpdatedByUserName: null,
             UpdatedAt: null));
