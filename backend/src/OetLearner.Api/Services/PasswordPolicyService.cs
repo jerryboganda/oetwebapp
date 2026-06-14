@@ -2,8 +2,7 @@ using System.Net.Http;
 using System.Security.Cryptography;
 using System.Text;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
-using OetLearner.Api.Configuration;
+using OetLearner.Api.Services.Settings;
 
 namespace OetLearner.Api.Services;
 
@@ -35,12 +34,10 @@ namespace OetLearner.Api.Services;
 /// </summary>
 public sealed class PasswordPolicyService(
     IHttpClientFactory httpClientFactory,
-    IOptions<PasswordPolicyOptions> options,
+    IRuntimeSettingsProvider runtimeSettings,
     ILogger<PasswordPolicyService> logger)
 {
     public const string HibpHttpClientName = "HaveIBeenPwned";
-
-    private readonly PasswordPolicyOptions _options = options.Value;
 
     /// <summary>
     /// Validate a candidate password. Throws <see cref="ApiException"/> with a
@@ -63,11 +60,12 @@ public sealed class PasswordPolicyService(
             throw ApiException.Validation("password_required", "Password is required.");
         }
 
-        ValidateComplexity(password, email);
+        var policy = (await runtimeSettings.GetAsync(cancellationToken)).PasswordPolicy;
+        ValidateComplexity(password, email, policy);
 
-        if (_options.BreachCheckEnabled)
+        if (policy.BreachCheckEnabled)
         {
-            var pwned = await IsPasswordBreachedAsync(password, cancellationToken);
+            var pwned = await IsPasswordBreachedAsync(password, policy, cancellationToken);
             if (pwned)
             {
                 throw ApiException.Validation(
@@ -77,19 +75,19 @@ public sealed class PasswordPolicyService(
         }
     }
 
-    private void ValidateComplexity(string password, string? email)
+    private static void ValidateComplexity(string password, string? email, PasswordPolicySettings policy)
     {
-        if (password.Length < _options.MinimumLength)
+        if (password.Length < policy.MinimumLength)
         {
             throw ApiException.Validation(
                 "password_too_short",
-                $"Password must be at least {_options.MinimumLength} characters long.");
+                $"Password must be at least {policy.MinimumLength} characters long.");
         }
 
         // Keep the constraints meaningful but not so strict that users migrate to
         // pattern-based passwords ("Password1!"). Length matters more than class
         // count, per NIST 800-63B — we already enforce 10+ above.
-        if (_options.RequireMixedCase)
+        if (policy.RequireMixedCase)
         {
             var hasUpper = false;
             var hasLower = false;
@@ -107,14 +105,14 @@ public sealed class PasswordPolicyService(
             }
         }
 
-        if (_options.RequireDigit && !password.Any(char.IsDigit))
+        if (policy.RequireDigit && !password.Any(char.IsDigit))
         {
             throw ApiException.Validation(
                 "password_missing_digit",
                 "Password must include at least one digit.");
         }
 
-        if (_options.RequireSymbol && password.All(char.IsLetterOrDigit))
+        if (policy.RequireSymbol && password.All(char.IsLetterOrDigit))
         {
             throw ApiException.Validation(
                 "password_missing_symbol",
@@ -149,7 +147,7 @@ public sealed class PasswordPolicyService(
     /// ours appears. Returns <c>false</c> on any network/parse error — we do
     /// <b>not</b> want an HIBP outage to become a sign-up outage.
     /// </summary>
-    private async Task<bool> IsPasswordBreachedAsync(string password, CancellationToken cancellationToken)
+    private async Task<bool> IsPasswordBreachedAsync(string password, PasswordPolicySettings policy, CancellationToken cancellationToken)
     {
         string hashHex;
         try
@@ -180,10 +178,16 @@ public sealed class PasswordPolicyService(
         try
         {
             using var client = httpClientFactory.CreateClient(HibpHttpClientName);
+            // Build an absolute URI from the (admin-configurable) breach API base
+            // so a DB override of the endpoint takes effect without re-creating
+            // the named HttpClient (whose BaseAddress is fixed at startup).
+            var requestUri = BuildRangeUri(policy.BreachApiBaseUrl, prefix);
+            using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            if (policy.BreachApiTimeout > TimeSpan.Zero) timeoutCts.CancelAfter(policy.BreachApiTimeout);
             using var response = await client.GetAsync(
-                $"range/{prefix}",
+                requestUri,
                 HttpCompletionOption.ResponseContentRead,
-                cancellationToken);
+                timeoutCts.Token);
 
             if (!response.IsSuccessStatusCode)
             {
@@ -208,10 +212,24 @@ public sealed class PasswordPolicyService(
             }
             return false;
         }
-        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or OperationCanceledException)
         {
             logger.LogWarning(ex, "HIBP range request failed; fail-open (allowing password).");
             return false;
         }
+    }
+
+    /// <summary>
+    /// Resolve the absolute HIBP range URL from the configured base. Falls back
+    /// to a relative path (against the named client's BaseAddress) if the base
+    /// is not a valid absolute URI.
+    /// </summary>
+    private static Uri BuildRangeUri(string baseUrl, string prefix)
+    {
+        var normalized = baseUrl.EndsWith('/') ? baseUrl : baseUrl + "/";
+        return Uri.TryCreate(normalized, UriKind.Absolute, out var baseUri)
+               && Uri.TryCreate(baseUri, $"range/{prefix}", out var abs)
+            ? abs
+            : new Uri($"range/{prefix}", UriKind.Relative);
     }
 }

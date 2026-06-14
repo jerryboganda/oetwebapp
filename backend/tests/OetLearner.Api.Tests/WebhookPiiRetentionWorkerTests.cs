@@ -33,7 +33,7 @@ public class WebhookPiiRetentionWorkerTests
     }
 
     private static WebhookPiiRetentionWorker BuildWorker(IServiceScopeFactory scopeFactory, DataRetentionOptions opts)
-        => new(scopeFactory, Options.Create(opts), NullLogger<WebhookPiiRetentionWorker>.Instance);
+        => new(scopeFactory, TestRuntimeSettingsProvider.FromDataRetentionOptions(opts), NullLogger<WebhookPiiRetentionWorker>.Instance);
 
     [Fact]
     public async Task RunOnceAsync_NullsPayload_OnRowsOlderThanCutoff()

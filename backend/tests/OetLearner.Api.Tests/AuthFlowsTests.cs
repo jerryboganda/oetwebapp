@@ -1522,7 +1522,7 @@ public class AuthFlowsTests
             passwordHasher,
             new PasswordPolicyService(
                 new StubHttpClientFactory(),
-                Options.Create(new PasswordPolicyOptions { BreachCheckEnabled = false }),
+                TestRuntimeSettingsProvider.FromPasswordPolicyOptions(new PasswordPolicyOptions { BreachCheckEnabled = false }),
                 NullLogger<PasswordPolicyService>.Instance),
             tokenService,
             emailOtpService,

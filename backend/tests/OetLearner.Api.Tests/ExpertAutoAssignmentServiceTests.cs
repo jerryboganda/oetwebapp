@@ -26,9 +26,9 @@ public class ExpertAutoAssignmentServiceTests
             .Options;
         var db = new LearnerDbContext(options);
         var clock = new FixedClock(new DateTimeOffset(2026, 5, 22, 12, 0, 0, TimeSpan.Zero));
-        var opts = Options.Create(optionsOverride ?? new ExpertAutoAssignmentOptions());
+        var runtimeSettings = TestRuntimeSettingsProvider.FromExpertAutoAssignmentOptions(optionsOverride ?? new ExpertAutoAssignmentOptions());
         var notifier = new NoopNotifier();
-        var svc = new ExpertAutoAssignmentService(db, clock, notifier, NullLogger<ExpertAutoAssignmentService>.Instance, opts);
+        var svc = new ExpertAutoAssignmentService(db, clock, notifier, NullLogger<ExpertAutoAssignmentService>.Instance, runtimeSettings);
         return (db, svc, clock, notifier);
     }
 

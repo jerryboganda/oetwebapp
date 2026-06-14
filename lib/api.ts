@@ -1485,6 +1485,41 @@ export async function fetchAvailablePaymentGateways(): Promise<AvailablePaymentG
   return apiRequest<AvailablePaymentGatewaysResponse>('/v1/billing/payment-gateways');
 }
 
+// ── PayPal Expanded (embedded) checkout ──────────────────────────────────────
+export interface PayPalClientConfig {
+  /** False when no client id is configured — the embedded UI is unavailable and the
+   *  caller should fall back to the redirect flow. */
+  enabled: boolean;
+  /** Public PayPal client id for the browser SDK (never the secret). */
+  clientId: string | null;
+  currency: string;
+  intent: string;
+  components: string;
+  environment: 'sandbox' | 'live' | string;
+  /** Whether embedded Advanced Card Fields may render; when false, show buttons only. */
+  advancedCardsEnabled: boolean;
+}
+
+export async function fetchPayPalClientConfig(): Promise<PayPalClientConfig> {
+  return apiRequest<PayPalClientConfig>('/v1/billing/paypal/client-config');
+}
+
+export interface PaymentCaptureResult {
+  status: 'completed' | 'failed' | 'pending' | string;
+  orderId: string;
+  captureId: string | null;
+  redirectTo: string | null;
+  failureReason: string | null;
+}
+
+/** Captures an approved PayPal order for the quote/wallet billing flow (onApprove). */
+export async function captureBillingCheckout(orderId: string): Promise<PaymentCaptureResult> {
+  return apiRequest<PaymentCaptureResult>(
+    `/v1/billing/checkout-sessions/${encodeURIComponent(orderId)}/capture`,
+    { method: 'POST' },
+  );
+}
+
 export interface ExamFamiliesResponse {
   examFamilies?: { code: string; label?: string }[];
 }
