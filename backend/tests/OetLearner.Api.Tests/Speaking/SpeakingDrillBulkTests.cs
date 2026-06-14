@@ -47,7 +47,8 @@ public sealed class SpeakingDrillBulkTests : IAsyncLifetime
         var stripe = new OetLearner.Api.Services.StripeGateway(
             new HttpClient(),
             billingOptions,
-            TestRuntimeSettingsProvider.FromBillingOptions(billingOptions.Value));
+            TestRuntimeSettingsProvider.FromBillingOptions(billingOptions.Value),
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<OetLearner.Api.Services.StripeGateway>.Instance);
         var paypal = new OetLearner.Api.Services.PayPalGateway(new HttpClient(), billingOptions);
         var paymentGateways = new OetLearner.Api.Services.PaymentGatewayService(
             stripe,

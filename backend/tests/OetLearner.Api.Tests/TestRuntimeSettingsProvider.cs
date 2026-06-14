@@ -6,10 +6,17 @@ namespace OetLearner.Api.Tests;
 
 internal sealed class TestRuntimeSettingsProvider(EffectiveSettings settings, RuntimeSettingsRow? raw = null) : IRuntimeSettingsProvider
 {
-    public static TestRuntimeSettingsProvider FromBillingSettings(BillingSettings billing)
-        => new(new EffectiveSettings(
+    /// <summary>
+    /// A fully-populated <see cref="EffectiveSettings"/> with every sub-record at
+    /// its default. Tests override only what they care about via the record
+    /// <c>with</c> expression, e.g. <c>Base() with { Zoom = ... }</c>. Adding a
+    /// new sub-record to <see cref="EffectiveSettings"/> only requires a new line
+    /// here — existing call-sites are unaffected.
+    /// </summary>
+    public static EffectiveSettings Base()
+        => new(
             Email: new EmailSettings(null, null, null, null, null, null, null, null, null),
-            Billing: billing,
+            Billing: new BillingSettings(null, null, null, null, null, null, null, null, null, null),
             Sentry: new SentrySettings(null, null, null),
             Backup: new BackupSettings(null, null, null, null, null),
             OAuth: new OAuthSettings(null, null, null, null, null, null, null, null),
@@ -28,14 +35,20 @@ internal sealed class TestRuntimeSettingsProvider(EffectiveSettings settings, Ru
             Paymob: DefaultPaymob(),
             PayTabs: DefaultPayTabs(),
             Soketi: DefaultSoketi(),
+            DataRetention: DefaultDataRetention(),
+            ExpertAutoAssignment: DefaultExpertAutoAssignment(),
+            PasswordPolicy: DefaultPasswordPolicy(),
             UpdatedByUserId: null,
             UpdatedByUserName: null,
-            UpdatedAt: null));
+            UpdatedAt: null);
+
+    public static TestRuntimeSettingsProvider FromBillingSettings(BillingSettings billing)
+        => new(Base() with { Billing = billing });
 
     public static TestRuntimeSettingsProvider FromBillingOptions(BillingOptions options)
-        => new(new EffectiveSettings(
-            Email: new EmailSettings(null, null, null, null, null, null, null, null, null),
-            Billing: new BillingSettings(
+        => new(Base() with
+        {
+            Billing = new BillingSettings(
                 options.Stripe.SecretKey,
                 options.Stripe.PublishableKey,
                 options.Stripe.WebhookSecret,
@@ -46,38 +59,12 @@ internal sealed class TestRuntimeSettingsProvider(EffectiveSettings settings, Ru
                 options.PayPal.WebhookId,
                 options.PayPal.SuccessUrl,
                 options.PayPal.CancelUrl),
-            Sentry: new SentrySettings(null, null, null),
-            Backup: new BackupSettings(null, null, null, null, null),
-            OAuth: new OAuthSettings(null, null, null, null, null, null, null, null),
-            Push: new PushSettings(null, null, null, null, null, null),
-            UploadScanner: new UploadScannerSettings("noop", "127.0.0.1", 3310, 30, true),
-            Zoom: DefaultZoomSettings(),
-            Stripe: DefaultStripeSettings(),
-            LiveClasses: DefaultLiveClassSettings(),
-            SpeakingWhisper: SpeakingSettingsTestDefaults.Whisper(),
-            SpeakingLiveKit: SpeakingSettingsTestDefaults.LiveKit(),
-            SpeakingAi: SpeakingSettingsTestDefaults.Ai(),
-            SpeakingStorage: SpeakingSettingsTestDefaults.Storage(),
-            SpeakingCompliance: SpeakingSettingsTestDefaults.Compliance(),
-            SpeakingFeatures: SpeakingSettingsTestDefaults.Features(),
-            CheckoutCom: DefaultCheckoutCom(),
-            Paymob: DefaultPaymob(),
-            PayTabs: DefaultPayTabs(),
-            Soketi: DefaultSoketi(),
-            UpdatedByUserId: null,
-            UpdatedByUserName: null,
-            UpdatedAt: null));
+        });
 
     public static TestRuntimeSettingsProvider FromZoomOptions(ZoomOptions options)
-        => new(new EffectiveSettings(
-            Email: new EmailSettings(null, null, null, null, null, null, null, null, null),
-            Billing: new BillingSettings(null, null, null, null, null, null, null, null, null, null),
-            Sentry: new SentrySettings(null, null, null),
-            Backup: new BackupSettings(null, null, null, null, null),
-            OAuth: new OAuthSettings(null, null, null, null, null, null, null, null),
-            Push: new PushSettings(null, null, null, null, null, null),
-            UploadScanner: new UploadScannerSettings("noop", "127.0.0.1", 3310, 30, true),
-            Zoom: new ZoomSettings(
+        => new(Base() with
+        {
+            Zoom = new ZoomSettings(
                 options.Enabled,
                 options.AccountId,
                 options.ClientId,
@@ -90,21 +77,24 @@ internal sealed class TestRuntimeSettingsProvider(EffectiveSettings settings, Ru
                 options.WebhookSecretToken,
                 Math.Clamp(options.WebhookRetryToleranceSeconds <= 0 ? 300 : options.WebhookRetryToleranceSeconds, 60, 3600),
                 options.AllowSandboxFallback),
-            Stripe: DefaultStripeSettings(),
-            LiveClasses: DefaultLiveClassSettings(),
-            SpeakingWhisper: SpeakingSettingsTestDefaults.Whisper(),
-            SpeakingLiveKit: SpeakingSettingsTestDefaults.LiveKit(),
-            SpeakingAi: SpeakingSettingsTestDefaults.Ai(),
-            SpeakingStorage: SpeakingSettingsTestDefaults.Storage(),
-            SpeakingCompliance: SpeakingSettingsTestDefaults.Compliance(),
-            SpeakingFeatures: SpeakingSettingsTestDefaults.Features(),
-            CheckoutCom: DefaultCheckoutCom(),
-            Paymob: DefaultPaymob(),
-            PayTabs: DefaultPayTabs(),
-            Soketi: DefaultSoketi(),
-            UpdatedByUserId: null,
-            UpdatedByUserName: null,
-            UpdatedAt: null));
+        });
+
+    /// <summary>Convenience builder for Wave A2 tests that need the AI
+    /// recording-processing flag in a specific state.</summary>
+    public static TestRuntimeSettingsProvider WithLiveClassAi(bool enabled)
+        => new(Base() with { LiveClasses = new LiveClassSettings(AiRecordingProcessingEnabled: enabled) });
+
+    // ── Wave 1 (DataRetention / ExpertAutoAssignment / PasswordPolicy) ──
+    // Translate the env Options the existing logic tests already build into the
+    // merged settings shape, so those tests keep their call sites unchanged.
+    public static TestRuntimeSettingsProvider FromDataRetentionOptions(DataRetentionOptions o)
+        => new(Base() with { DataRetention = MapDataRetention(o) });
+
+    public static TestRuntimeSettingsProvider FromExpertAutoAssignmentOptions(ExpertAutoAssignmentOptions o)
+        => new(Base() with { ExpertAutoAssignment = MapExpertAutoAssignment(o) });
+
+    public static TestRuntimeSettingsProvider FromPasswordPolicyOptions(PasswordPolicyOptions o)
+        => new(Base() with { PasswordPolicy = MapPasswordPolicy(o) });
 
     private static ZoomSettings DefaultZoomSettings()
         => new(
@@ -147,33 +137,45 @@ internal sealed class TestRuntimeSettingsProvider(EffectiveSettings settings, Ru
     public static SoketiSettings DefaultSoketi()
         => new("localhost", 6001, "oet-app", "oet-key", null, false, true);
 
-    /// <summary>Convenience builder for Wave A2 tests that need the AI
-    /// recording-processing flag in a specific state.</summary>
-    public static TestRuntimeSettingsProvider WithLiveClassAi(bool enabled)
-        => new(new EffectiveSettings(
-            Email: new EmailSettings(null, null, null, null, null, null, null, null, null),
-            Billing: new BillingSettings(null, null, null, null, null, null, null, null, null, null),
-            Sentry: new SentrySettings(null, null, null),
-            Backup: new BackupSettings(null, null, null, null, null),
-            OAuth: new OAuthSettings(null, null, null, null, null, null, null, null),
-            Push: new PushSettings(null, null, null, null, null, null),
-            UploadScanner: new UploadScannerSettings("noop", "127.0.0.1", 3310, 30, true),
-            Zoom: DefaultZoomSettings(),
-            Stripe: DefaultStripeSettings(),
-            LiveClasses: new LiveClassSettings(AiRecordingProcessingEnabled: enabled),
-            SpeakingWhisper: SpeakingSettingsTestDefaults.Whisper(),
-            SpeakingLiveKit: SpeakingSettingsTestDefaults.LiveKit(),
-            SpeakingAi: SpeakingSettingsTestDefaults.Ai(),
-            SpeakingStorage: SpeakingSettingsTestDefaults.Storage(),
-            SpeakingCompliance: SpeakingSettingsTestDefaults.Compliance(),
-            SpeakingFeatures: SpeakingSettingsTestDefaults.Features(),
-            CheckoutCom: DefaultCheckoutCom(),
-            Paymob: DefaultPaymob(),
-            PayTabs: DefaultPayTabs(),
-            Soketi: DefaultSoketi(),
-            UpdatedByUserId: null,
-            UpdatedByUserName: null,
-            UpdatedAt: null));
+    public static DataRetentionSettings DefaultDataRetention()
+        => MapDataRetention(new DataRetentionOptions());
+
+    public static ExpertAutoAssignmentSettings DefaultExpertAutoAssignment()
+        => MapExpertAutoAssignment(new ExpertAutoAssignmentOptions());
+
+    public static PasswordPolicySettings DefaultPasswordPolicy()
+        => MapPasswordPolicy(new PasswordPolicyOptions());
+
+    private static DataRetentionSettings MapDataRetention(DataRetentionOptions o)
+        => new(
+            o.AnalyticsEvents,
+            o.AuditEvents,
+            o.PaymentWebhookEvents,
+            o.PaymentWebhookPiiNullOutAge,
+            o.NotificationDeliveryAttempts,
+            o.SweepInterval,
+            o.BatchSize);
+
+    private static ExpertAutoAssignmentSettings MapExpertAutoAssignment(ExpertAutoAssignmentOptions o)
+        => new(
+            o.Enabled,
+            o.PollingIntervalSeconds,
+            o.SlaEscalationIntervalSeconds,
+            o.SlaHoursStandard,
+            o.SlaHoursExpress,
+            o.MaxActiveAssignmentsPerExpert,
+            o.LookbackHoursForLoad,
+            o.BatchSize);
+
+    private static PasswordPolicySettings MapPasswordPolicy(PasswordPolicyOptions o)
+        => new(
+            o.MinimumLength,
+            o.RequireMixedCase,
+            o.RequireDigit,
+            o.RequireSymbol,
+            o.BreachCheckEnabled,
+            o.BreachApiBaseUrl,
+            o.BreachApiTimeout);
 
     public Task<EffectiveSettings> GetAsync(CancellationToken ct = default) => Task.FromResult(settings);
 

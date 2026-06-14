@@ -69,6 +69,9 @@ public sealed class RuntimeSettingsProviderZoomTests
                 AllowSandboxFallback = true,
             }),
             Options.Create(new SoketiOptions()),
+            Options.Create(new DataRetentionOptions()),
+            Options.Create(new ExpertAutoAssignmentOptions()),
+            Options.Create(new PasswordPolicyOptions()),
             new StaticOptionsMonitor<SmtpOptions>(new SmtpOptions()),
             new ConfigurationBuilder().Build(),
             new TestHostEnvironment("Development"));
@@ -121,6 +124,9 @@ public sealed class RuntimeSettingsProviderZoomTests
             Options.Create(new WebPushOptions()),
             Options.Create(new ZoomOptions { ClientSecret = "env-client-secret" }),
             Options.Create(new SoketiOptions()),
+            Options.Create(new DataRetentionOptions()),
+            Options.Create(new ExpertAutoAssignmentOptions()),
+            Options.Create(new PasswordPolicyOptions()),
             new StaticOptionsMonitor<SmtpOptions>(new SmtpOptions()),
             new ConfigurationBuilder().Build(),
             new TestHostEnvironment("Development"));

@@ -201,6 +201,7 @@ public static class AdminRuntimeSettingsEndpoints
                 paypalWebhookId = MaskPlainSecret(settings.Billing.PayPalWebhookId),
                 paypalSuccessUrl = settings.Billing.PayPalSuccessUrl,
                 paypalCancelUrl = settings.Billing.PayPalCancelUrl,
+                paypalAdvancedCardsEnabled = settings.Billing.PayPalAdvancedCardsEnabled,
             },
             sentry = new
             {
@@ -400,6 +401,7 @@ public static class AdminRuntimeSettingsEndpoints
                 paypalWebhookId = MaskSecret(r.PayPalWebhookIdEncrypted),
                 paypalSuccessUrl = r.PayPalSuccessUrl,
                 paypalCancelUrl = r.PayPalCancelUrl,
+                paypalAdvancedCardsEnabled = r.PayPalAdvancedCardsEnabled,
             },
             sentry = new
             {

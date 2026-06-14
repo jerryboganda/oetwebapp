@@ -339,6 +339,11 @@ public static class LearnerEndpoints
         billing.MapGet("/extras", async (LearnerService service) => Results.Ok(await service.GetBillingExtrasAsync()));
         billing.MapPost("/checkout-sessions", async (HttpContext http, CheckoutSessionCreateRequest request, LearnerService service, CancellationToken ct) => Results.Ok(await service.CreateCheckoutSessionAsync(http.UserId(), request, ct)))
             .RequireRateLimiting("PerUserWrite");
+        // PayPal Expanded checkout: the browser SDK's onApprove posts the approved order id
+        // here to capture + fulfil synchronously (the webhook is a backstop). Owner-scoped,
+        // idempotent. Serves plan/add-on checkouts AND wallet top-ups (same PaymentTransaction).
+        billing.MapPost("/checkout-sessions/{orderId}/capture", async (HttpContext http, string orderId, LearnerService service, CancellationToken ct) => Results.Ok(await service.FulfillCapturedOrderAsync("paypal", http.UserId(), orderId, ct)))
+            .RequireRateLimiting("PerUserWrite");
         billing.MapPost("/cancel", async (HttpContext http, [FromQuery] bool immediate, LearnerService service, CancellationToken ct) => Results.Ok(await service.CancelOwnSubscriptionAsync(http.UserId(), immediate, ct)))
             .RequireRateLimiting("PerUserWrite");
         billing.MapPost("/reactivate", async (HttpContext http, LearnerService service, CancellationToken ct) => Results.Ok(await service.ReactivateOwnSubscriptionAsync(http.UserId(), ct)))
@@ -373,6 +378,32 @@ public static class LearnerEndpoints
                 gateways.Add("paypal");
             }
             return Results.Ok(new { gateways });
+        });
+
+        // PayPal Expanded (embedded) checkout config for the browser SDK. Exposes ONLY the
+        // public client id (never the secret), the transaction currency, the SDK components,
+        // the environment, and whether embedded Advanced Card Fields may render. When no
+        // client id is configured the embedded UI is disabled and the client falls back to
+        // the redirect flow.
+        billing.MapGet("/paypal/client-config", async (
+            IRuntimeSettingsProvider runtimeSettings,
+            IOptions<BillingOptions> billingOptions,
+            CancellationToken ct) =>
+        {
+            var settings = (await runtimeSettings.GetAsync(ct)).Billing;
+            var options = billingOptions.Value;
+            var clientId = settings.PayPalClientId;
+            var enabled = !string.IsNullOrWhiteSpace(clientId);
+            return Results.Ok(new
+            {
+                enabled,
+                clientId = enabled ? clientId : null,
+                currency = string.IsNullOrWhiteSpace(options.DefaultCurrency) ? "GBP" : options.DefaultCurrency,
+                intent = "capture",
+                components = "buttons,card-fields",
+                environment = options.PayPal.UseSandbox ? "sandbox" : "live",
+                advancedCardsEnabled = enabled && settings.PayPalAdvancedCardsEnabled,
+            });
         });
 
         // Payment webhook endpoints (no auth required)

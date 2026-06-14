@@ -1,7 +1,6 @@
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Options;
-using OetLearner.Api.Configuration;
 using OetLearner.Api.Data;
+using OetLearner.Api.Services.Settings;
 
 namespace OetLearner.Api.Services.Billing;
 
@@ -9,9 +8,10 @@ namespace OetLearner.Api.Services.Billing;
 /// Billing-hardening I-9 (May 2026 closure addendum).
 ///
 /// Explicit named retention worker that nulls the <c>PayloadJson</c> column on
-/// <c>PaymentWebhookEvents</c> once a row is older than
-/// <see cref="DataRetentionOptions.PaymentWebhookPiiNullOutAge"/> (default
-/// 90 days). The event metadata (id, status, gateway, gateway-event-id,
+/// <c>PaymentWebhookEvents</c> once a row is older than the
+/// <c>PaymentWebhookPiiNullOutAge</c> window (default 90 days), resolved from
+/// <see cref="IRuntimeSettingsProvider"/> so the window is admin-configurable.
+/// The event metadata (id, status, gateway, gateway-event-id,
 /// gateway-transaction-id, normalized status, timestamps) is **retained**
 /// for forensic chain-of-custody (refund disputes, regulator requests,
 /// "did we ever receive this event" lookups); only the payload body — even
@@ -27,30 +27,26 @@ namespace OetLearner.Api.Services.Billing;
 ///   • 180+ days:     Entire row deleted.
 ///
 /// Idempotent: once <c>PayloadJson == "{}"</c>, the worker leaves the row
-/// alone. Sweeps in batches of 5 000 rows per tick (configurable via
-/// <see cref="DataRetentionOptions.BatchSize"/>) to keep delete-batch
+/// alone. Sweeps in batches (default 5 000 rows per tick) to keep delete-batch
 /// latency bounded.
 /// </summary>
 public sealed class WebhookPiiRetentionWorker(
     IServiceScopeFactory scopeFactory,
-    IOptions<DataRetentionOptions> options,
+    IRuntimeSettingsProvider runtimeSettings,
     ILogger<WebhookPiiRetentionWorker> logger) : BackgroundService
 {
-    private readonly DataRetentionOptions _options = options.Value;
-
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         try { await Task.Delay(TimeSpan.FromMinutes(3), stoppingToken); }
         catch (TaskCanceledException) { return; }
 
-        var interval = _options.SweepInterval > TimeSpan.Zero
-            ? _options.SweepInterval
-            : TimeSpan.FromHours(24);
-
         while (!stoppingToken.IsCancellationRequested)
         {
+            var interval = TimeSpan.FromHours(24);
             try
             {
+                var settings = (await runtimeSettings.GetAsync(stoppingToken)).DataRetention;
+                interval = settings.SweepInterval > TimeSpan.Zero ? settings.SweepInterval : TimeSpan.FromHours(24);
                 var nulled = await RunOnceAsync(stoppingToken);
                 if (nulled > 0)
                 {
@@ -79,16 +75,18 @@ public sealed class WebhookPiiRetentionWorker(
     /// </summary>
     public async Task<int> RunOnceAsync(CancellationToken ct)
     {
+        var settings = (await runtimeSettings.GetAsync(ct)).DataRetention;
+
         await using var scope = scopeFactory.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
 
-        if (_options.PaymentWebhookPiiNullOutAge <= TimeSpan.Zero)
+        if (settings.PaymentWebhookPiiNullOutAge <= TimeSpan.Zero)
         {
             return 0;
         }
 
-        var cutoff = DateTimeOffset.UtcNow - _options.PaymentWebhookPiiNullOutAge;
-        var batch = Math.Max(1, _options.BatchSize);
+        var cutoff = DateTimeOffset.UtcNow - settings.PaymentWebhookPiiNullOutAge;
+        var batch = Math.Max(1, settings.BatchSize);
 
         // EF InMemory does not support ExecuteUpdateAsync; fall back to
         // tracked SaveChanges for the test path. Same set-membership
