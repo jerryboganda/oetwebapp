@@ -1,4 +1,5 @@
 using System.Net;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using OetLearner.Api.Configuration;
 using OetLearner.Api.Services;
@@ -19,7 +20,7 @@ public class PaymentGatewaySecurityTests
                 WebhookSecret = null
             }
         };
-        var gateway = new StripeGateway(new HttpClient(), Options.Create(options), TestRuntimeSettingsProvider.FromBillingOptions(options));
+        var gateway = new StripeGateway(new HttpClient(), Options.Create(options), TestRuntimeSettingsProvider.FromBillingOptions(options), NullLogger<StripeGateway>.Instance);
 
         var result = await gateway.HandleWebhookAsync("{}", new Dictionary<string, string>(), default);
 
@@ -36,7 +37,7 @@ public class PaymentGatewaySecurityTests
             AllowSandboxFallbacks = false,
             Stripe = new StripeBillingOptions()
         };
-        var gateway = new StripeGateway(new HttpClient(), Options.Create(options), TestRuntimeSettingsProvider.FromBillingOptions(options));
+        var gateway = new StripeGateway(new HttpClient(), Options.Create(options), TestRuntimeSettingsProvider.FromBillingOptions(options), NullLogger<StripeGateway>.Instance);
 
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
             gateway.CreatePaymentIntentAsync(new CreatePaymentIntentRequest(
@@ -114,7 +115,7 @@ public class PaymentGatewaySecurityTests
             PayPalWebhookId: null,
             PayPalSuccessUrl: null,
             PayPalCancelUrl: null));
-        IPaymentGateway gateway = new StripeGateway(new HttpClient(handler), Options.Create(options), runtime);
+        IPaymentGateway gateway = new StripeGateway(new HttpClient(handler), Options.Create(options), runtime, NullLogger<StripeGateway>.Instance);
 
         var result = await gateway.ProcessRefundAsync("pi_123", 10m, "AUD", "requested_by_customer", "refund-idem-123", default);
 

@@ -638,6 +638,12 @@ public class PaymentTransaction
     [MaxLength(64)]
     public string? CouponVersionId { get; set; }
 
+    // PayPal Expanded (embedded) checkout: the capture id returned by a synchronous
+    // server-side capture (POST /v2/checkout/orders/{id}/capture). Null for redirect /
+    // hosted flows that settle via webhook only.
+    [MaxLength(256)]
+    public string? CaptureId { get; set; }
+
     public string? MetadataJson { get; set; }
 
     public DateTimeOffset CreatedAt { get; set; }

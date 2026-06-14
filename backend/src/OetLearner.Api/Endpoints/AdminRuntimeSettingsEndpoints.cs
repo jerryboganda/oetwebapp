@@ -195,6 +195,7 @@ public static class AdminRuntimeSettingsEndpoints
                 stripeWebhookSecret = MaskPlainSecret(settings.Billing.StripeWebhookSecret),
                 stripeSuccessUrl = settings.Billing.StripeSuccessUrl,
                 stripeCancelUrl = settings.Billing.StripeCancelUrl,
+                publicAppBaseUrl = settings.Billing.PublicAppBaseUrl,
                 paypalClientId = settings.Billing.PayPalClientId,
                 paypalClientSecret = MaskPlainSecret(settings.Billing.PayPalClientSecret),
                 paypalWebhookId = MaskPlainSecret(settings.Billing.PayPalWebhookId),
@@ -393,6 +394,7 @@ public static class AdminRuntimeSettingsEndpoints
                 stripeWebhookSecret = MaskSecret(r.StripeWebhookSecretEncrypted),
                 stripeSuccessUrl = r.StripeSuccessUrl,
                 stripeCancelUrl = r.StripeCancelUrl,
+                publicAppBaseUrl = r.BillingPublicAppBaseUrl,
                 paypalClientId = r.PayPalClientId,
                 paypalClientSecret = MaskSecret(r.PayPalClientSecretEncrypted),
                 paypalWebhookId = MaskSecret(r.PayPalWebhookIdEncrypted),
@@ -556,11 +558,17 @@ public static class AdminRuntimeSettingsEndpoints
         if (TrySetSecret(d.StripeWebhookSecret, p, v => row.StripeWebhookSecretEncrypted = v, "billing.stripeWebhookSecret", changed)) { }
         if (TrySetPlain(d.StripeSuccessUrl, v => row.StripeSuccessUrl = v, "billing.stripeSuccessUrl", changed)) { }
         if (TrySetPlain(d.StripeCancelUrl, v => row.StripeCancelUrl = v, "billing.stripeCancelUrl", changed)) { }
+        if (TrySetPlain(d.PublicAppBaseUrl, v => row.BillingPublicAppBaseUrl = v, "billing.publicAppBaseUrl", changed)) { }
         if (TrySetPlain(d.PayPalClientId, v => row.PayPalClientId = v, "billing.paypalClientId", changed)) { }
         if (TrySetSecret(d.PayPalClientSecret, p, v => row.PayPalClientSecretEncrypted = v, "billing.paypalClientSecret", changed)) { }
         if (TrySetSecret(d.PayPalWebhookId, p, v => row.PayPalWebhookIdEncrypted = v, "billing.paypalWebhookId", changed)) { }
         if (TrySetPlain(d.PayPalSuccessUrl, v => row.PayPalSuccessUrl = v, "billing.paypalSuccessUrl", changed)) { }
         if (TrySetPlain(d.PayPalCancelUrl, v => row.PayPalCancelUrl = v, "billing.paypalCancelUrl", changed)) { }
+        if (d.PayPalAdvancedCardsEnabled.HasValue)
+        {
+            row.PayPalAdvancedCardsEnabled = d.PayPalAdvancedCardsEnabled;
+            changed.Add("billing.paypalAdvancedCardsEnabled");
+        }
     }
 
     private static void ApplySentry(RuntimeSettingsRow row, RuntimeSettingsSentryUpdate? d, List<string> changed)
@@ -1339,11 +1347,13 @@ public sealed class RuntimeSettingsBillingUpdate
     public string? StripeWebhookSecret { get; set; }
     public string? StripeSuccessUrl { get; set; }
     public string? StripeCancelUrl { get; set; }
+    public string? PublicAppBaseUrl { get; set; }
     public string? PayPalClientId { get; set; }
     public string? PayPalClientSecret { get; set; }
     public string? PayPalWebhookId { get; set; }
     public string? PayPalSuccessUrl { get; set; }
     public string? PayPalCancelUrl { get; set; }
+    public bool? PayPalAdvancedCardsEnabled { get; set; }
 }
 
 public sealed class RuntimeSettingsSentryUpdate

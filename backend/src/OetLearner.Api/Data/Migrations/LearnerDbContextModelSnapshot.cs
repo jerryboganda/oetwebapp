@@ -2341,81 +2341,6 @@ namespace OetLearner.Api.Data.Migrations
                     b.ToTable("BankAccountConfigs");
                 });
 
-            modelBuilder.Entity("OetLearner.Api.Domain.PaymentMethodConfig", b =>
-                {
-                    b.Property<string>("Id")
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
-
-                    b.Property<string>("Category")
-                        .IsRequired()
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)");
-
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("Detail")
-                        .IsRequired()
-                        .HasMaxLength(256)
-                        .HasColumnType("character varying(256)");
-
-                    b.Property<int>("DisplayOrder")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("IconName")
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
-
-                    b.Property<string>("Instructions")
-                        .IsRequired()
-                        .HasMaxLength(2048)
-                        .HasColumnType("character varying(2048)");
-
-                    b.Property<bool>("IsActive")
-                        .HasColumnType("boolean");
-
-                    b.Property<string>("Key")
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
-
-                    b.Property<string>("Label")
-                        .IsRequired()
-                        .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
-
-                    b.Property<string>("Meta")
-                        .HasMaxLength(256)
-                        .HasColumnType("character varying(256)");
-
-                    b.Property<string>("Note")
-                        .HasMaxLength(256)
-                        .HasColumnType("character varying(256)");
-
-                    b.Property<string>("QrImageKey")
-                        .HasMaxLength(512)
-                        .HasColumnType("character varying(512)");
-
-                    b.Property<bool>("ReferenceRule")
-                        .HasColumnType("boolean");
-
-                    b.Property<bool>("ShowQr")
-                        .HasColumnType("boolean");
-
-                    b.Property<DateTimeOffset>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("Key")
-                        .IsUnique();
-
-                    b.HasIndex("Category", "IsActive", "DisplayOrder");
-
-                    b.ToTable("PaymentMethodConfigs");
-                });
-
             modelBuilder.Entity("OetLearner.Api.Domain.Billing.AppliedPromoCode", b =>
                 {
                     b.Property<Guid>("Id")
@@ -14530,6 +14455,81 @@ namespace OetLearner.Api.Data.Migrations
                     b.ToTable("PaymentDisputes");
                 });
 
+            modelBuilder.Entity("OetLearner.Api.Domain.PaymentMethodConfig", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("Category")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Detail")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<int>("DisplayOrder")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("IconName")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("Instructions")
+                        .IsRequired()
+                        .HasMaxLength(2048)
+                        .HasColumnType("character varying(2048)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Key")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("Label")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("Meta")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<string>("QrImageKey")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
+
+                    b.Property<bool>("ReferenceRule")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("ShowQr")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Key")
+                        .IsUnique();
+
+                    b.HasIndex("Category", "IsActive", "DisplayOrder");
+
+                    b.ToTable("PaymentMethodConfigs");
+                });
+
             modelBuilder.Entity("OetLearner.Api.Domain.PaymentMethodUpdateLink", b =>
                 {
                     b.Property<string>("Id")
@@ -18612,6 +18612,10 @@ namespace OetLearner.Api.Data.Migrations
                         .HasColumnType("text");
 
                     b.Property<string>("BackupS3Url")
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)");
+
+                    b.Property<string>("BillingPublicAppBaseUrl")
                         .HasMaxLength(1024)
                         .HasColumnType("character varying(1024)");
 

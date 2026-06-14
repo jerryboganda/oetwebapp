@@ -97,4 +97,10 @@ public sealed class PayPalBillingOptions
     public string? WebhookId { get; set; }
     public string? SuccessUrl { get; set; }
     public string? CancelUrl { get; set; }
+
+    /// <summary>
+    /// Env/default fallback for whether Expanded checkout may render embedded Advanced Card
+    /// Fields. The admin runtime setting (<c>PayPalAdvancedCardsEnabled</c>) overrides this.
+    /// </summary>
+    public bool AdvancedCardsEnabled { get; set; } = true;
 }

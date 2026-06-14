@@ -1,0 +1,268 @@
+===== rulebook PAGE 1 =====
+OET Reading Rulebook  ·  AI Training Edition  ·  The Tutor Book  ·  Page 1
+OET READING
+COMPREHENSIVE RULEBOOK
+Exam Structure · Timing · Navigation · Marking Rules · AI Training Edition
+PURPOSE OF THIS DOCUMENT
+This rulebook defines the structure, sequence, timing, permitted actions, and marking rules of the OET Reading sub-test. It
+is intended for AI platform training only — not for candidates. Rule codes: R04.3 = Section 4, Rule 3. CRITICAL rules (red)
+= facts that directly affect scoring or validity.
+THE TUTOR BOOK · OET Preparation by Dr. Ahmed Hesham · @DrAhmedHesham
+
+
+===== rulebook PAGE 2 =====
+OET Reading Rulebook  ·  AI Training Edition  ·  The Tutor Book  ·  Page 2
+01
+EXAM OVERVIEW & SEQUENCE
+R01.1
+Reading is the second sub-test in the OET exam. The sequence is: Listening → Reading → Writing → Speaking.
+R01.2
+Total questions: 42. Three parts: Part A (20 questions / 20 marks), Part B (6 questions / 6 marks), Part C (16
+questions / 16 marks).
+R01.3
+Part A is a standalone section with its own 15-minute time block. Part B and Part C are delivered together in a
+shared 45-minute block.
+R01.4
+Total Reading exam duration: 60 minutes (15 min Part A + 45 min Parts B and C).
+R01.5
+Part C is divided into C1 (8 questions) and C2 (8 questions).
+R01.6
+Reading applies the same format and content for ALL OET professions.
+02
+SCORING & PASS REQUIREMENTS
+R02.1
+30 correct answers out of 42 = Grade B = 350 points = minimum passing score for doctors (GMC, ECFMG) and
+nurses (NMC).
+R02.2
+Scoring scale: Grade A = 450+, Grade B = 350–449, Grade C+ = 300–349, Grade C = 250–299, Grade D =
+below 250.
+R02.3
+Each correct answer = 1 mark. No negative marking for wrong answers.
+R02.4
+CRITICAL — No combining (clipping) of scores across exam sittings for Medicine pathways (GMC, ECFMG,
+Canada). All four sub-tests must be passed in one sitting.
+R02.5
+Some nursing pathways (NMC) permit combining sub-test scores across sittings. This does not apply to
+Medicine.
+03
+PART A — STRUCTURE & QUESTION TYPES
+R03.1
+Part A contains 4 texts: Text A, Text B, Text C, Text D. All 4 texts relate to a single clinical or healthcare topic.
+R03.2
+Part A has three question types across 20 questions: · Q1–7: Matching — candidate writes the letter (A/B/C/D) of
+the text containing the stated information. · Q8–14: Short answer — candidate writes a word, short phrase, or
+number taken directly from the text. · Q15–20: Sentence completion — candidate writes the single missing word
+or number to complete the sentence.
+R03.3
+Text C almost always contains a table, graph, or chart. Recent exams have also placed tables in Texts A, B, or D.
+R03.4
+Part A is a note-completion and short-answer section. Answers must be sourced directly from the text — they are
+not opinion-based.
+R03.5
+Part A timing: 15 minutes. In the paper-based exam, the text booklet and answer sheet are separate. In the
+computer-based exam, text appears on the left panel and questions on the right panel.
+R03.6
+CRITICAL — After 15 minutes: in the paper-based exam the invigilator collects Part A papers. In the
+computer-based exam the text panel locks automatically. No further access to Part A is possible.
+04
+PART A — MARKING & ACCURACY RULES
+R04.1
+CRITICAL — Spelling error in a Part A answer: any incorrect letter in a word = the entire word is marked wrong.
+The answer is expected to be copied directly from the text.
+R04.2
+CRITICAL — Singular/plural error: writing the wrong number form (singular instead of plural, or vice versa) =
+answer marked wrong.
+
+
+===== rulebook PAGE 3 =====
+OET Reading Rulebook  ·  AI Training Edition  ·  The Tutor Book  ·  Page 3
+R04.3
+CRITICAL — Incorrect form of the answer: writing a range when the question asks for a maximum, or writing a
+dose per kg when the question asks for a total dose, = wrong answer.
+R04.4
+Numbers must be written exactly as they appear in the text — correct units, decimal notation, and formatting are
+required.
+R04.5
+CRITICAL — Reading Part A has stricter spelling rules than Listening Part A. In Reading, any spelling error
+results in the answer being marked wrong with no exceptions.
+R04.6
+CRITICAL — Answers for Q8–14 and Q15–20 must come word-for-word from the text. Paraphrasing or
+synonyms are not accepted.
+05
+PART A — TIMING RULES
+R05.1
+CRITICAL — Part A has a strict 15-minute time limit. When time expires, writing stops (paper-based) or the
+screen locks (computer-based).
+R05.2
+In the computer-based exam: when the 15-minute timer reaches zero, the Part A text panel locks and the
+candidate proceeds automatically to the optional break screen before Part B and C.
+R05.3
+CRITICAL — In the paper-based exam: the invigilator announces "Pencils down" at 15 minutes and collects the
+Part A answer sheets and text booklets. No further writing is permitted.
+R05.4
+Part A answer sheet is separate from the Part B and C question booklet in the paper-based exam. Collecting Part
+A papers does not affect access to Parts B and C.
+06
+PART B — STRUCTURE & TIMING
+R06.1
+Part B consists of 6 questions. Each question has its own short, independent text.
+R06.2
+Part B texts are short passages. Each text and its corresponding question appear on the same page.
+R06.3
+Each Part B question has 3 answer choices (A, B, C). Exactly one is correct.
+R06.4
+Part B carries 6 marks (1 mark per question).
+R06.5
+Part B and Part C share the same 45-minute time block and are contained in the same booklet.
+07
+PART C — STRUCTURE & TIMING
+R07.1
+Part C consists of 2 long texts: C1 and C2. Each carries 8 questions. Total: 16 questions / 16 marks.
+R07.2
+Each Part C text is approximately 7–8 paragraphs long.
+R07.3
+CRITICAL — Each Part C question has 4 answer choices (A, B, C, D). Exactly one is correct.
+R07.4
+CRITICAL — Part B has 3 choices; Part C has 4 choices. This distinction is important for the AI to recognise
+correctly.
+R07.5
+C1 and C2 are on completely different topics with no connection to each other.
+R07.6
+Part C questions follow paragraph order within each text. Question 1 of C1 corresponds to the first paragraph;
+question 8 to the last. Questions do not reverse direction.
+R07.7
+If a paragraph contains an underlined word or sentence, approximately 2 questions from that paragraph are
+expected.
+R07.8
+Approximately 4–5 questions per Part C text are based on the writer's point of view or implied meaning, rather
+than explicitly stated facts. Two answer choices may both appear plausible; the task is to identify the more correct
+one.
+
+
+===== rulebook PAGE 4 =====
+OET Reading Rulebook  ·  AI Training Edition  ·  The Tutor Book  ·  Page 4
+R07.9
+The remaining 11–12 questions per Part C text have answers directly and explicitly stated in the text.
+R07.10
+Part C and Part B share the same 45-minute block. Time allocation within this block is not enforced by the exam
+— it is entirely the candidate's responsibility.
+08
+PARTS B & C — MARKING & INTERACTION RULES
+R08.1
+Each question in Parts B and C = 1 mark. There is no negative marking.
+R08.2
+Only one answer choice can be selected per question. Selecting more than one is not permitted.
+R08.3
+CRITICAL — An unanswered question = 0 marks. The system does not auto-fill blank answers.
+R08.4
+In the computer-based exam: left-clicking an answer choice selects it (highlighted in selection colour).
+Right-clicking applies a strikethrough (elimination) without selecting.
+R08.5
+CRITICAL — Strikethrough / elimination in the computer-based exam does NOT count as a selected answer.
+The candidate must still left-click a final answer.
+R08.6
+In the paper-based exam: candidates fill in the answer circle (A, B, C, or D) on the answer sheet. Partial fills or
+ambiguous marks may be rejected.
+09
+NAVIGATION RULES — COMPUTER-BASED EXAM
+R09.1
+CRITICAL — No break between the Listening and Reading sub-tests in the computer-based exam. Reading
+begins automatically after Listening ends.
+R09.2
+Between Part A and Parts B+C in the computer-based exam: a 10-minute optional break is offered. The
+candidate may press "Resume Test" to skip it and proceed immediately.
+R09.3
+CRITICAL — After the 15-minute Part A period: the Part A text panel locks permanently. No access to Part A
+content or answers is possible after this point.
+R09.4
+Within the 45-minute Parts B+C block: the candidate moves through questions sequentially. Navigation rules vary
+by delivery mode (see below).
+R09.5
+In the computer-based exam, the candidate moves forward through questions by pressing Next. Confirmation is
+required at certain section boundaries.
+R09.6
+CRITICAL — At the end of the 45-minute Parts B+C block in the computer-based exam: the screen locks and the
+Reading sub-test ends. No further answers can be submitted.
+10
+DISPLAY & INTERACTION — COMPUTER-BASED EXAM
+R10.1
+Part A display: the text appears on the LEFT panel of the screen. The questions and answer boxes appear on the
+RIGHT panel — a split-screen layout.
+R10.2
+Parts B and C display: each short Part B text appears on the same screen as its question. Each Part C long text
+appears alongside the corresponding questions on the same screen.
+R10.3
+The timer is always visible on screen throughout the computer-based exam.
+R10.4
+Part A — Highlighting: available and functional. Candidates may highlight text in the passage during Part A.
+R10.5
+CRITICAL — Part A — Copy-paste: not always available. It is unreliable and varies by exam centre. It cannot be
+depended upon.
+R10.6
+Parts B and C — Highlighting the text passage: permitted.
+R10.7
+Parts B and C — Highlighting the question stem: permitted.
+
+
+===== rulebook PAGE 5 =====
+OET Reading Rulebook  ·  AI Training Edition  ·  The Tutor Book  ·  Page 5
+R10.8
+CRITICAL — Parts B and C — Highlighting the answer choices (A/B/C/D): NOT permitted.
+R10.9
+Parts B and C — Eliminating an answer choice: right-click applies a strikethrough to a choice without selecting it.
+R10.10
+CRITICAL — Zoom: + and − buttons within the exam application control zoom. The browser keyboard shortcut
+Ctrl+ is blocked in the exam environment.
+R10.11
+In the computer-based exam, candidates cannot write paragraph numbers in the margins or make physical
+annotations.
+11
+TECHNICAL REQUIREMENTS — COMPUTER-BASED EXAM
+R11.1
+CRITICAL — Minimum screen resolution: 1920 × 1080. Below this, the split-screen layout fails — text and
+questions overlap or are cut off.
+R11.2
+CRITICAL — Display scale (Windows): 100% or maximum 125%. Scale above 125% causes interface panels to
+overlap and clip.
+R11.3
+CRITICAL — At-home candidates: must configure screen resolution and display scale before exam day. Failure
+has caused exam cancellations.
+R11.4
+The exam runs inside a dedicated application (ProProctor), not a regular browser.
+R11.5
+CRITICAL — Internet connection: must be stable throughout the exam. An unstable connection can interrupt the
+exam session.
+R11.6
+All VPNs and virtual machines must be disabled before launching the exam application.
+R11.7
+At test centres: split screen and display settings are pre-configured. No candidate action is required. This applies
+to at-home candidates only.
+12
+NAVIGATION RULES — PAPER-BASED EXAM
+R12.1
+In the paper-based exam, there is a natural 10-minute transition between Listening and Reading while papers are
+collected and new papers are distributed.
+R12.2
+Part A: two separate documents are distributed — the text booklet (Texts A, B, C, D) and the answer sheet.
+R12.3
+CRITICAL — After 15 minutes: the invigilator collects both the Part A text booklet and answer sheet. Access to
+Part A is permanently over.
+R12.4
+Parts B and C are delivered in a single combined booklet. The text and the question appear together in the same
+document.
+R12.5
+In the paper-based exam, the candidate can view and write in any question across Parts B and C at any time
+within the 45-minute block. There are no section locks.
+R12.6
+In the paper-based exam, candidates may write paragraph numbers in the margins and annotate the question
+paper freely with a pencil.
+R12.7
+Highlighting and underlining in the paper-based exam: permitted in all parts using a pencil.
+R12.8
+Timer in the paper-based exam: displayed on a wall projector or clock visible to all candidates. The invigilator
+announces time warnings.
+R12.9
+Part C paper-based format: the long text and the answer choices may be on different pages within the booklet,
+requiring the candidate to flip between them. This is a key structural difference from the computer-based exam
+where both are on the same screen.
+OET Reading Comprehensive Rulebook · AI Training Edition · The Tutor Book · Dr. Ahmed Hesham · @DrAhmedHesham

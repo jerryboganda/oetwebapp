@@ -7,6 +7,7 @@ using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Domain.Billing;
 using OetLearner.Api.Services.Billing;
+using OetLearner.Api.Services.Settings;
 using Microsoft.Extensions.Options;
 
 namespace OetLearner.Api.Endpoints;
@@ -642,11 +643,14 @@ public static class AdminBillingEndpoints
 
     private static async Task<Results<Ok<TaxRegistrationListResponse>, ProblemHttpResult>> ListTaxRegistrations(
         [FromQuery] string? status,
-        IOptions<BillingOptions> billingOptions,
+        IRuntimeSettingsProvider runtimeSettings,
         ILogger<TaxRegistrationsLogTag> logger,
         CancellationToken ct)
     {
-        var key = billingOptions.Value.Stripe.SecretKey;
+        // Resolve the Stripe key from runtime settings (admin/DB override → env fallback)
+        // so the admin tax surface works without an env var, consistent with the rest of
+        // the Stripe integration.
+        var key = (await runtimeSettings.GetAsync(ct)).Billing.StripeSecretKey;
         if (string.IsNullOrWhiteSpace(key))
         {
             return TypedResults.Ok(new TaxRegistrationListResponse(new List<TaxRegistrationDto>(), "stripe_not_configured"));

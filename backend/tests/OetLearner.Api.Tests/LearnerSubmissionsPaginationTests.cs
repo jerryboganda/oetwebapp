@@ -3,6 +3,7 @@ using System.Text.Json;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using OetLearner.Api.Configuration;
 using OetLearner.Api.Data;
@@ -204,7 +205,7 @@ public sealed class LearnerSubmissionsPaginationTests : IAsyncLifetime
 
     private static PaymentGatewayService CreatePaymentGatewayService(IOptions<BillingOptions> billingOptions)
     {
-        var stripe = new StripeGateway(new HttpClient(), billingOptions, TestRuntimeSettingsProvider.FromBillingOptions(billingOptions.Value));
+        var stripe = new StripeGateway(new HttpClient(), billingOptions, TestRuntimeSettingsProvider.FromBillingOptions(billingOptions.Value), NullLogger<StripeGateway>.Instance);
         var paypal = new PayPalGateway(new HttpClient(), billingOptions);
         return new PaymentGatewayService(
             stripe,

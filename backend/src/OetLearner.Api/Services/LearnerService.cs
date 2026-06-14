@@ -42,6 +42,18 @@ public sealed record PaymentWebhookRetryResult(
     string? GatewayTransactionId,
     string? NormalizedStatus);
 
+/// <summary>
+/// Outcome of a synchronous, server-side order capture (PayPal Expanded checkout).
+/// <see cref="Status"/> is one of "completed" | "failed" | "pending". <see cref="RedirectTo"/>
+/// is a best-effort post-purchase destination; the client may override it.
+/// </summary>
+public sealed record PaymentCaptureResult(
+    string Status,
+    string OrderId,
+    string? CaptureId,
+    string? RedirectTo,
+    string? FailureReason);
+
 public partial class LearnerService(
     LearnerDbContext db,
     IFileStorage fileStorage,
@@ -4077,6 +4089,17 @@ public partial class LearnerService(
                 "gateway_unavailable",
                 "This payment method is temporarily unavailable. Please pay by card instead.",
                 [new ApiFieldError("gateway", "unavailable", "Choose a different payment method.")]);
+        }
+        catch (PaymentGatewayApiException)
+        {
+            // The payment provider's API rejected the request (e.g. invalid key, declined
+            // params). Surface a clean, retryable 503 instead of an opaque 500. The real
+            // provider detail is already logged inside the gateway and is never shown to
+            // learners.
+            throw ApiException.ServiceUnavailable(
+                "payment_gateway_error",
+                "We couldn't start your payment right now. Please try again in a moment or choose another payment method.",
+                retryable: true);
         }
                         providerRequestReturned = true;
 
@@ -9588,6 +9611,152 @@ public partial class LearnerService(
             await db.SaveChangesAsync(ct);
             return MapWebhookRetryResult(webhookEvent);
         }
+    }
+
+    /// <summary>
+    /// Synchronous fulfilment entry for PayPal Expanded (embedded) checkout. The browser
+    /// SDK approves an order and posts its id here; we capture server-side and run the SAME
+    /// idempotent grant logic the webhook uses, so the capture and a later
+    /// PAYMENT.CAPTURE.COMPLETED webhook converge without double-granting. Owner-scoped:
+    /// the caller must own the underlying payment transaction or speaking booking. Cart
+    /// checkouts capture through the cart service, not here.
+    /// </summary>
+    internal async Task<PaymentCaptureResult> FulfillCapturedOrderAsync(
+        string gateway,
+        string userId,
+        string orderId,
+        CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(orderId))
+        {
+            throw ApiException.Validation("order_required", "An order id is required to complete the payment.");
+        }
+
+        var transaction = await db.PaymentTransactions.FirstOrDefaultAsync(
+            x => x.LearnerUserId == userId
+                && (x.GatewayTransactionId == orderId || (x.MetadataJson != null && x.MetadataJson.Contains(orderId))),
+            ct);
+
+        var speakingBooking = transaction is null
+            ? await db.PrivateSpeakingBookings.FirstOrDefaultAsync(
+                b => b.StripeCheckoutSessionId == orderId && b.LearnerUserId == userId, ct)
+            : null;
+
+        if (transaction is null && speakingBooking is null)
+        {
+            // Unknown order, or it belongs to another learner — same opaque 404 either way
+            // so a guessed order id can never be confirmed against someone else's purchase.
+            throw ApiException.NotFound("order_not_found", "We couldn't find that payment to complete.");
+        }
+
+        // Idempotent short-circuit: capture or the webhook already fulfilled this order.
+        if (transaction is not null && string.Equals(transaction.Status, "completed", StringComparison.OrdinalIgnoreCase))
+        {
+            return new PaymentCaptureResult("completed", orderId, transaction.CaptureId, ComputeCaptureRedirect(transaction), null);
+        }
+        if (speakingBooking is not null && speakingBooking.PaymentStatus == PrivateSpeakingPaymentStatus.Succeeded)
+        {
+            return new PaymentCaptureResult("completed", orderId, speakingBooking.StripePaymentIntentId, "/speaking/private", null);
+        }
+
+        // Capture against the gateway OUTSIDE any DB transaction (never hold a db lock across
+        // a network round-trip). PayPal-Request-Id keyed on the order id makes this idempotent,
+        // so a retried onApprove or a webhook racing the capture cannot double-charge.
+        CaptureResult capture;
+        try
+        {
+            capture = await paymentGateways.GetGateway(gateway).CaptureOrderAsync(orderId, $"capture-{orderId}", ct);
+        }
+        catch (InvalidOperationException ex) when (ex.Message.Contains("not configured", StringComparison.OrdinalIgnoreCase))
+        {
+            throw ApiException.Validation(
+                "gateway_unavailable",
+                "This payment method is temporarily unavailable. Please pay by card instead.",
+                [new ApiFieldError("gateway", "unavailable", "Choose a different payment method.")]);
+        }
+        catch (PaymentGatewayApiException)
+        {
+            throw ApiException.ServiceUnavailable(
+                "payment_gateway_error",
+                "We couldn't complete your payment right now. Please try again in a moment or choose another payment method.",
+                retryable: true);
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        if (!string.Equals(capture.Status, "completed", StringComparison.OrdinalIgnoreCase))
+        {
+            // Declined / not-yet-settled capture. Mark the txn failed so the learner can retry,
+            // and surface a clean, retryable error to the embedded UI.
+            if (transaction is not null)
+            {
+                transaction.Status = "failed";
+                transaction.UpdatedAt = now;
+                await MarkCheckoutFailedAsync(transaction, ct);
+                await db.SaveChangesAsync(ct);
+            }
+
+            return new PaymentCaptureResult("failed", orderId, capture.CaptureId, null, "payment_not_completed");
+        }
+
+        // Capture succeeded — run the idempotent grant inside a transaction.
+        await using var tx = await BeginTransactionIfNeededAsync(ct);
+        try
+        {
+            if (speakingBooking is not null)
+            {
+                var confirmed = await privateSpeakingService!.ConfirmBookingPaymentAsync(orderId, capture.CaptureId, ct);
+                if (!confirmed)
+                {
+                    throw new InvalidOperationException($"No private-speaking booking found for order {orderId}.");
+                }
+
+                await CommitIfOwnedAsync(tx, ct);
+                return new PaymentCaptureResult("completed", orderId, capture.CaptureId, "/speaking/private", null);
+            }
+
+            transaction!.Status = "completed";
+            transaction.CaptureId = capture.CaptureId;
+            transaction.UpdatedAt = now;
+
+            if (string.Equals(transaction.TransactionType, "wallet_top_up", StringComparison.OrdinalIgnoreCase))
+            {
+                await ApplyWalletTopUpCompletionAsync(transaction, ct);
+            }
+            else
+            {
+                await ApplyCheckoutCompletionAsync(transaction, ct);
+            }
+
+            await db.SaveChangesAsync(ct);
+            await CommitIfOwnedAsync(tx, ct);
+            return new PaymentCaptureResult("completed", orderId, capture.CaptureId, ComputeCaptureRedirect(transaction), null);
+        }
+        catch
+        {
+            if (tx is not null)
+            {
+                await tx.RollbackAsync(ct);
+            }
+            throw;
+        }
+    }
+
+    /// <summary>Best-effort post-purchase destination mirroring the payment-return routing.</summary>
+    private static string ComputeCaptureRedirect(PaymentTransaction transaction)
+    {
+        if (string.Equals(transaction.TransactionType, "wallet_top_up", StringComparison.OrdinalIgnoreCase))
+        {
+            return "/billing?tab=credits";
+        }
+
+        if (string.Equals(transaction.ProductType, "addon", StringComparison.OrdinalIgnoreCase))
+        {
+            // pkg_* add-ons are AI-credit bundles; route to that tab.
+            var isAiPackage = transaction.MetadataJson?.Contains("pkg_", StringComparison.OrdinalIgnoreCase) ?? false;
+            return isAiPackage ? "/billing?tab=ai-credits" : "/billing?tab=credits";
+        }
+
+        return "/dashboard?purchase=success";
     }
 
     private async Task<bool> ApplyPrivateSpeakingWebhookIfMatchedAsync(

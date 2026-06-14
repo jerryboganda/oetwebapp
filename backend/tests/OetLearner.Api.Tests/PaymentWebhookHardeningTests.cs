@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using OetLearner.Api.Configuration;
 using OetLearner.Api.Services;
@@ -24,7 +25,7 @@ public class PaymentWebhookHardeningTests
             WebhookMaxAgeSeconds = maxAge,
             Stripe = new StripeBillingOptions { WebhookSecret = Secret }
         };
-        return new StripeGateway(new HttpClient(), Options.Create(options), TestRuntimeSettingsProvider.FromBillingOptions(options));
+        return new StripeGateway(new HttpClient(), Options.Create(options), TestRuntimeSettingsProvider.FromBillingOptions(options), NullLogger<StripeGateway>.Instance);
     }
 
     private static (string payload, Dictionary<string, string> headers) SignStripe(

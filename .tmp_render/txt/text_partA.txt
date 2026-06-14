@@ -1,0 +1,109 @@
+===== text_partA PAGE 1 =====
+Diarrhea and Dehydration in Children: Texts
+Text A
+Definition and Classification of Diarrhea in Children
+Diarrhea is defined as the passage of three or more loose or watery stools within a 24-hour period. In children, 
+it is one of the leading causes of morbidity and mortality worldwide, particularly in low- and middle-income 
+countries, where inadequate access to healthcare and clean water amplifies its impact. The World Health 
+Organization estimates that diarrheal disease contributes to nearly half a million deaths in children under five 
+years of age annually.
+Diarrhea in children is classified according to its duration. Acute diarrhea lasts fewer than 14 days and is the 
+most commonly encountered form in clinical practice. Persistent diarrhea is defined as an episode lasting 14 
+days or more but fewer than 30 days and carries an increased risk of nutritional deterioration. Chronic diarrhea 
+refers to episodes extending beyond 30 days and often indicates an underlying gastrointestinal condition 
+requiring further investigation.
+Infectious causes predominate in paediatric populations and include viral pathogens such as rotavirus, 
+norovirus,  and  adenovirus;  bacterial  organisms  including  Salmonella,  Campylobacter,  Shigella,  and 
+enterotoxigenic Escherichia coli; and parasitic infections such as Giardia lamblia. Rotavirus remains the most 
+common viral cause globally and accounts for a significant proportion of hospitalisations in young children.
+Dehydration is the most serious complication of diarrhea and is classified as mild, moderate, or severe based 
+on  clinical  signs.  Mild  dehydration  presents  with  thirst  and  minimal  clinical  findings,  while  moderate 
+dehydration is characterised by sunken eyes, dry mucous membranes, and reduced skin turgor. Severe 
+dehydration involves altered consciousness and signs of circulatory compromise.
+Continued fluid and nutritional loss without adequate replacement may lead to hypovolemic shock and, if 
+untreated, death. Electrolyte disturbances including hyponatraemia and metabolic acidosis may further 
+complicate the clinical course.
+Text B
+Risk Factors and Prevention Strategies
+Several patient-related and environmental factors increase a child's susceptibility to diarrheal illness and the 
+risk of severe dehydration.
+Age is a key determinant, with children under two years of age being at greatest risk due to immature immune 
+function and dependence on caregivers for hygiene practices. Malnutrition impairs intestinal mucosal integrity 
+and immune defences, increasing both the frequency and severity of diarrheal episodes. Zinc deficiency in 
+particular compromises mucosal repair mechanisms and cellular immune responses.
+Environmental risk factors include inadequate access to clean water, poor sanitation, and unhygienic food 
+preparation practices. Lack of breastfeeding in infancy removes a key source of passive immunity, particularly 
+secretory immunoglobulin A, and increases the child's exposure to contaminated feeds and utensils.
+Preventive  strategies  aim  to  reduce  pathogen  exposure  and  strengthen  host  resistance.  Exclusive 
+breastfeeding for the first six months of life is strongly recommended and significantly reduces diarrheal 
+morbidity. Rotavirus vaccination has demonstrated effectiveness in reducing the incidence of severe rotavirus 
+diarrhea in children and is now incorporated into national immunisation programmes in many countries. 
+Promotion of hand hygiene with soap and water and provision of safe water are fundamental public health 
+measures.
+Oral rehydration solution (ORS) administration at the onset of diarrhea prevents progression to significant 
+dehydration. Zinc supplementation given alongside ORS has been shown to reduce the duration and severity 
+of acute diarrheal episodes and is recommended by the World Health Organization for all children presenting 
+with acute diarrhea.
+OET with Dr. Ahmed Hesham
+
+
+===== text_partA PAGE 2 =====
+Text C
+Clinical Assessment of Dehydration in Children
+Clinical Feature
+Possible Indication
+Recommended Action
+Sunken eyes and dry mucous 
+membranes
+Moderate dehydration
+Initiate oral rehydration therapy
+Reduced skin turgor on pinching
+Moderate to severe 
+dehydration
+Assess fluid deficit and increase fluid intake
+Altered consciousness or 
+lethargy
+Severe dehydration
+Commence intravenous fluid resuscitation
+Bloody diarrhea with fever
+Bacterial (invasive) 
+infection
+Obtain stool culture and initiate appropriate antibiotics
+Vomiting preventing adequate 
+oral rehydration
+Risk of aspiration and 
+worsening dehydration
+Consider nasogastric rehydration or intravenous fluids
+Persistent diarrhea exceeding 14 
+days
+Risk of malnutrition and 
+micronutrient deficiency
+Conduct nutritional assessment and refer to specialist
+Prompt clinical assessment and targeted management are essential to prevent progression to hypovolemic 
+shock, multi-organ failure, or death. All findings should be interpreted alongside the child's overall clinical 
+presentation and nutritional status.
+Text D
+Step-by-Step Management of Diarrhea and Dehydration
+Step 1: Initial clinical assessment
+All children presenting with diarrhea should undergo a thorough history and physical examination, including 
+assessment of stool frequency, consistency, presence of blood or mucus, vomiting, fever, and recent feeding 
+history. Vital signs, body weight, and a detailed evaluation of hydration status should be documented at 
+presentation.
+Step 2: Classification of dehydration
+Clinicians should evaluate skin turgor, mucous membrane moisture, eye appearance, level of consciousness, 
+and capillary refill time to determine whether dehydration is absent, mild to moderate, or severe. In infants, 
+fontanelle tension and the presence of tears provide additional diagnostic information.
+Step 3: Rehydration plan
+Children with no dehydration receive increased fluids at home using ORS (Plan A). Moderate dehydration 
+requires supervised ORS of 75 ml per kilogram over four hours in a healthcare facility (Plan B). Severe 
+dehydration requires prompt intravenous fluid resuscitation with Ringer's lactate or normal saline at 100 ml 
+per kilogram (Plan C), with continuous monitoring.
+Step 4: Nutritional support
+Feeding should not be withheld during diarrhea, as continued feeding maintains intestinal integrity, supports 
+recovery, and prevents malnutrition. Age-appropriate foods should be resumed as soon as the child can 
+tolerate oral intake, and zinc supplementation is recommended for a minimum of ten days.
+Step 5: Monitoring and discharge planning
+Children should be monitored for resolution of dehydration, reduction in stool frequency, and return of normal 
+feeding. Caregivers should be educated on recognising warning signs and when to seek further medical 
+attention before the child is discharged.
+OET with Dr. Ahmed Hesham

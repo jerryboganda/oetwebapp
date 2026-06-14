@@ -64,6 +64,9 @@ public sealed record EffectiveSettings(
     PaymobSettings Paymob,
     PayTabsSettings PayTabs,
     SoketiSettings Soketi,
+    DataRetentionSettings DataRetention,
+    ExpertAutoAssignmentSettings ExpertAutoAssignment,
+    PasswordPolicySettings PasswordPolicy,
     string? UpdatedByUserId,
     string? UpdatedByUserName,
     DateTimeOffset? UpdatedAt);
@@ -89,7 +92,9 @@ public sealed record BillingSettings(
     string? PayPalClientSecret,
     string? PayPalWebhookId,
     string? PayPalSuccessUrl,
-    string? PayPalCancelUrl);
+    string? PayPalCancelUrl,
+    bool PayPalAdvancedCardsEnabled = true,
+    string? PublicAppBaseUrl = null);
 
 public sealed record SentrySettings(
     string? Dsn,
@@ -282,3 +287,38 @@ public sealed record SoketiSettings(
     string? AppSecret,
     bool UseTls,
     bool Enabled);
+
+/// <summary>
+/// Data-retention sweeper windows (DB-over-env merged). Windows are exposed as
+/// <see cref="TimeSpan"/> so the worker logic is unchanged; a value of
+/// <see cref="TimeSpan.Zero"/> disables the sweep for that table.
+/// </summary>
+public sealed record DataRetentionSettings(
+    TimeSpan AnalyticsEvents,
+    TimeSpan AuditEvents,
+    TimeSpan PaymentWebhookEvents,
+    TimeSpan PaymentWebhookPiiNullOutAge,
+    TimeSpan NotificationDeliveryAttempts,
+    TimeSpan SweepInterval,
+    int BatchSize);
+
+/// <summary>Expert auto-assignment loop tunables (DB-over-env merged).</summary>
+public sealed record ExpertAutoAssignmentSettings(
+    bool Enabled,
+    int PollingIntervalSeconds,
+    int SlaEscalationIntervalSeconds,
+    int SlaHoursStandard,
+    int SlaHoursExpress,
+    int MaxActiveAssignmentsPerExpert,
+    int LookbackHoursForLoad,
+    int BatchSize);
+
+/// <summary>Password-policy enforcement settings (DB-over-env merged).</summary>
+public sealed record PasswordPolicySettings(
+    int MinimumLength,
+    bool RequireMixedCase,
+    bool RequireDigit,
+    bool RequireSymbol,
+    bool BreachCheckEnabled,
+    string BreachApiBaseUrl,
+    TimeSpan BreachApiTimeout);

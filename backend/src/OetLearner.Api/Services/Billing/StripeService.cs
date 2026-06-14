@@ -1,7 +1,9 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using OetLearner.Api.Configuration;
 using OetLearner.Api.Data;
+using OetLearner.Api.Services.Settings;
 using Stripe;
 using Stripe.Checkout;
 
@@ -22,8 +24,31 @@ public sealed class StripeService : IStripeService
         _scopeFactory = scopeFactory;
         _logger = logger;
 
+        // Bootstrap the Stripe.NET global from env/appsettings so any code path that runs
+        // before the first runtime-settings resolve still has a key. Runtime (DB) overrides
+        // are applied per-call by ResolveStripeKeyAsync below.
         if (!string.IsNullOrWhiteSpace(_opts.SecretKey))
             StripeConfiguration.ApiKey = _opts.SecretKey;
+    }
+
+    /// <summary>
+    /// Resolves the effective Stripe secret key from runtime settings (admin/DB override →
+    /// env/appsettings fallback, already coalesced by <see cref="IRuntimeSettingsProvider"/>,
+    /// 30s-cached) and pushes it onto the Stripe.NET global so the service calls in the
+    /// invoking method use it. This makes Stripe fully admin-configurable: a key entered in
+    /// the admin panel takes effect without a redeploy, with env vars as an optional fallback.
+    /// Returns the resolved key (null/empty when Stripe is not configured at all).
+    /// </summary>
+    private async Task<string?> ResolveStripeKeyAsync(CancellationToken ct)
+    {
+        using var scope = _scopeFactory.CreateScope();
+        var runtimeSettings = scope.ServiceProvider.GetRequiredService<IRuntimeSettingsProvider>();
+        var key = (await runtimeSettings.GetAsync(ct)).Billing.StripeSecretKey;
+        if (!string.IsNullOrWhiteSpace(key))
+        {
+            StripeConfiguration.ApiKey = key;
+        }
+        return key;
     }
 
     public async Task<string> EnsureCustomerAsync(string userId, string email, CancellationToken ct = default)
@@ -40,7 +65,8 @@ public sealed class StripeService : IStripeService
         if (!string.IsNullOrWhiteSpace(user.StripeCustomerId))
             return user.StripeCustomerId;
 
-        if (string.IsNullOrWhiteSpace(_opts.SecretKey))
+        var apiKey = await ResolveStripeKeyAsync(ct);
+        if (string.IsNullOrWhiteSpace(apiKey))
         {
             _logger.LogWarning("Stripe SecretKey not configured — returning sandbox customer ID.");
             return $"cus_sandbox_{userId}";
@@ -63,7 +89,8 @@ public sealed class StripeService : IStripeService
     public async Task<(string SessionId, string Url)> CreateCheckoutSessionAsync(
         CreateCheckoutSessionRequest request, CancellationToken ct = default)
     {
-        if (string.IsNullOrWhiteSpace(_opts.SecretKey))
+        var apiKey = await ResolveStripeKeyAsync(ct);
+        if (string.IsNullOrWhiteSpace(apiKey))
         {
             _logger.LogWarning("Stripe SecretKey not configured — returning sandbox checkout session.");
             return ($"cs_sandbox_{Guid.NewGuid():N}", $"{request.SuccessUrl}?session_id=sandbox");
@@ -109,7 +136,8 @@ public sealed class StripeService : IStripeService
         string successUrl, string cancelUrl, string? idempotencyKey,
         IReadOnlyDictionary<string, string>? metadata = null, CancellationToken ct = default)
     {
-        if (string.IsNullOrWhiteSpace(_opts.SecretKey))
+        var apiKey = await ResolveStripeKeyAsync(ct);
+        if (string.IsNullOrWhiteSpace(apiKey))
         {
             _logger.LogWarning("Stripe SecretKey not configured — returning sandbox ad-hoc checkout session.");
             return ($"cs_sandbox_{Guid.NewGuid():N}", $"{successUrl}?session_id=sandbox");
@@ -163,6 +191,7 @@ public sealed class StripeService : IStripeService
 
     public async Task<Session> RetrieveCheckoutSessionAsync(string sessionId, CancellationToken ct = default)
     {
+        await ResolveStripeKeyAsync(ct);
         var service = new SessionService();
         return await service.GetAsync(sessionId, cancellationToken: ct);
     }
@@ -170,7 +199,8 @@ public sealed class StripeService : IStripeService
     public async Task<string> CreatePortalSessionAsync(
         string stripeCustomerId, string returnUrl, CancellationToken ct = default)
     {
-        if (string.IsNullOrWhiteSpace(_opts.SecretKey))
+        var apiKey = await ResolveStripeKeyAsync(ct);
+        if (string.IsNullOrWhiteSpace(apiKey))
             return returnUrl;
 
         var service = new Stripe.BillingPortal.SessionService();
@@ -186,6 +216,7 @@ public sealed class StripeService : IStripeService
     public async Task<string> CreateRefundAsync(
         string paymentIntentId, long? amountCents, string? reason, CancellationToken ct = default)
     {
+        await ResolveStripeKeyAsync(ct);
         // Use fully-qualified name to avoid collision with the local OetLearner RefundService.
         var service = new Stripe.RefundService();
         var refund = await service.CreateAsync(new RefundCreateOptions
@@ -202,6 +233,7 @@ public sealed class StripeService : IStripeService
 
     public async Task<Stripe.Subscription> RetrieveSubscriptionAsync(string subscriptionId, CancellationToken ct = default)
     {
+        await ResolveStripeKeyAsync(ct);
         var service = new Stripe.SubscriptionService();
         return await service.GetAsync(subscriptionId, cancellationToken: ct);
     }
@@ -209,6 +241,7 @@ public sealed class StripeService : IStripeService
     public async Task CancelSubscriptionAsync(
         string subscriptionId, bool cancelAtPeriodEnd = true, CancellationToken ct = default)
     {
+        await ResolveStripeKeyAsync(ct);
         var service = new Stripe.SubscriptionService();
         if (cancelAtPeriodEnd)
         {
@@ -228,6 +261,7 @@ public sealed class StripeService : IStripeService
     public async Task UpdateSubscriptionAsync(
         string subscriptionId, string newPriceId, bool prorate, CancellationToken ct = default)
     {
+        await ResolveStripeKeyAsync(ct);
         var service = new Stripe.SubscriptionService();
         var sub = await service.GetAsync(subscriptionId, cancellationToken: ct);
         var itemId = sub.Items.Data.FirstOrDefault()?.Id
@@ -246,6 +280,7 @@ public sealed class StripeService : IStripeService
     public async Task PauseSubscriptionAsync(
         string subscriptionId, DateTimeOffset? resumeAt, CancellationToken ct = default)
     {
+        await ResolveStripeKeyAsync(ct);
         var service = new Stripe.SubscriptionService();
         var options = new SubscriptionPauseCollectionOptions { Behavior = "void" };
         if (resumeAt.HasValue)
@@ -261,6 +296,7 @@ public sealed class StripeService : IStripeService
     public async Task ApplyCouponToSubscriptionAsync(
         string subscriptionId, string? couponId, CancellationToken ct = default)
     {
+        await ResolveStripeKeyAsync(ct);
         var service = new Stripe.SubscriptionService();
         await service.UpdateAsync(subscriptionId, new SubscriptionUpdateOptions
         {
@@ -271,7 +307,8 @@ public sealed class StripeService : IStripeService
     public async Task<string?> GetInvoiceSubscriptionIdAsync(
         string invoiceId, CancellationToken ct = default)
     {
-        if (string.IsNullOrWhiteSpace(_opts.SecretKey))
+        var apiKey = await ResolveStripeKeyAsync(ct);
+        if (string.IsNullOrWhiteSpace(apiKey))
         {
             return null;
         }
@@ -295,6 +332,7 @@ public sealed class StripeService : IStripeService
         // Clearing pause_collection requires sending an explicit empty-string to the Stripe API.
         // PauseCollection is AnyOf<string, SubscriptionPauseCollectionOptions> in Stripe.net v47,
         // so assigning "" serialises as the empty-string sentinel that Stripe uses for removal.
+        await ResolveStripeKeyAsync(ct);
         var service = new Stripe.SubscriptionService();
         AnyOf<string, SubscriptionPauseCollectionOptions> clearPause = "";
         await service.UpdateAsync(subscriptionId, new SubscriptionUpdateOptions
@@ -306,7 +344,8 @@ public sealed class StripeService : IStripeService
     public async Task<IEnumerable<Invoice>> ListInvoicesAsync(
         string stripeCustomerId, int limit = 24, CancellationToken ct = default)
     {
-        if (string.IsNullOrWhiteSpace(_opts.SecretKey))
+        var apiKey = await ResolveStripeKeyAsync(ct);
+        if (string.IsNullOrWhiteSpace(apiKey))
             return [];
 
         var service = new InvoiceService();
@@ -320,7 +359,8 @@ public sealed class StripeService : IStripeService
 
     public async Task<PayInvoiceResult> PayInvoiceAsync(string stripeInvoiceId, CancellationToken ct = default)
     {
-        if (string.IsNullOrWhiteSpace(_opts.SecretKey))
+        var apiKey = await ResolveStripeKeyAsync(ct);
+        if (string.IsNullOrWhiteSpace(apiKey))
         {
             _logger.LogWarning("Stripe SecretKey not configured — sandbox PayInvoiceAsync returns success.");
             return new PayInvoiceResult(Succeeded: true, Status: "paid", FailureCode: null, FailureReason: null);
@@ -349,6 +389,7 @@ public sealed class StripeService : IStripeService
 
     public async Task<string> CreateCouponAsync(CreateStripeCouponRequest request, CancellationToken ct = default)
     {
+        await ResolveStripeKeyAsync(ct);
         var service = new CouponService();
         var coupon = await service.CreateAsync(new CouponCreateOptions
         {
@@ -365,6 +406,7 @@ public sealed class StripeService : IStripeService
     public async Task<string> CreatePromotionCodeAsync(
         string couponId, string code, CancellationToken ct = default)
     {
+        await ResolveStripeKeyAsync(ct);
         var service = new PromotionCodeService();
         var promo = await service.CreateAsync(new PromotionCodeCreateOptions
         {

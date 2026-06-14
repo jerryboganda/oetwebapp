@@ -18,6 +18,8 @@ namespace OetLearner.Api.Services.Settings;
 public static class RuntimeSettingsSchemaSelfHeal
 {
     public const string Sql = @"
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""BillingPublicAppBaseUrl"" character varying(1024);
+
 ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""CheckoutComApiBaseUrl"" character varying(512);
 ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""CheckoutComSecretKeyEncrypted"" text;
 ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""CheckoutComPublicKey"" character varying(256);

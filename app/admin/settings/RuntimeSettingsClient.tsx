@@ -36,6 +36,7 @@ export interface BillingSettings {
   stripeWebhookSecret: string;
   stripeSuccessUrl: string;
   stripeCancelUrl: string;
+  publicAppBaseUrl: string;
   paypalClientId: string;
   paypalClientSecret: string;
   paypalWebhookId: string;
@@ -261,6 +262,7 @@ const BILLING_FIELDS: FieldDef<BillingSettings>[] = [
   { key: 'stripeWebhookSecret', label: 'Stripe Webhook Signing Secret', secret: true, hint: 'Used to verify Stripe webhook signatures (starts with whsec_).' },
   { key: 'stripeSuccessUrl', label: 'Checkout Success URL', type: 'url' },
   { key: 'stripeCancelUrl', label: 'Checkout Cancel URL', type: 'url' },
+  { key: 'publicAppBaseUrl', label: 'Public App Base URL', type: 'url', hint: 'e.g. https://app.oetwithdrhesham.co.uk — builds absolute checkout return URLs without an env var. Leave blank to use the server APP_URL.' },
   { key: 'paypalClientId', label: 'PayPal Client ID', hint: 'REST app client id for PayPal checkout and refunds.' },
   { key: 'paypalClientSecret', label: 'PayPal Client Secret', secret: true },
   { key: 'paypalWebhookId', label: 'PayPal Webhook ID', secret: true, hint: 'Used to verify PayPal webhook signatures.' },
@@ -451,6 +453,7 @@ function emptyResponse(): RuntimeSettingsResponse {
       stripeWebhookSecret: '',
       stripeSuccessUrl: '',
       stripeCancelUrl: '',
+      publicAppBaseUrl: '',
       paypalClientId: '',
       paypalClientSecret: '',
       paypalWebhookId: '',

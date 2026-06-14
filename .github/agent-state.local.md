@@ -1,40 +1,33 @@
-# Agent State - Writing I18n Raw-Key Hardening
+# Agent State - Writing I18n Standalone Bundle Fix
 
 Last updated: 2026-06-14
 
 ## Goal
 
-Prevent the Writing module from rendering raw `writing.*` translation keys in production and make QA fail if that regression returns.
+Prevent the Writing module from rendering raw `writing.*` keys or `Writing copy unavailable` in the Next standalone production bundle.
 
 ## Implemented
 
-- Hardened `i18n.ts` so translated modules load English as the baseline and overlay the requested locale, giving Arabic a readable English fallback for missing strings instead of raw keys.
-- Hardened `AppProviders` so missing `writing.*` messages no longer fall back to the raw key; they emit a console error and render `Writing copy unavailable`.
-- Added `tests/unit/i18n-writing-messages.test.ts` to verify loaded English/Arabic Writing hub copy and statically cover `app/writing/**` plus `components/domain/writing/**` static `t('writing...')` keys.
-- Removed raw `writing.*` fallback acceptance from learner smoke and Writing V2 E2E/a11y smoke specs.
-- Added a `/writing` learner-smoke assertion that page body text must not contain raw `writing.*` keys.
+- Replaced runtime dynamic JSON imports in `i18n.ts` with static imports for `messages/en/writing.json` and `messages/ar/writing.json`.
+- Kept English as the baseline bundle and overlays Arabic messages on top so missing Arabic copy falls back to readable English.
+- Kept the Writing provider fallback guard in place, but production should no longer hit it because Writing messages are now bundled into the server artifact.
+- Extended `tests/unit/i18n-writing-messages.test.ts` with a standalone-build regression assertion that rejects dynamic `import(\`./messages/...json\`)` loading.
 
 ## Validation
 
-- `pnpm exec vitest run tests/unit/i18n-writing-messages.test.ts --reporter=dot`: passed, 2 tests.
+- `pnpm exec vitest run tests/unit/i18n-writing-messages.test.ts --reporter=dot`: passed, 3 tests.
 - `pnpm exec tsc --noEmit`: passed.
-- `pnpm exec eslint app/providers.tsx i18n.ts tests/unit/i18n-writing-messages.test.ts tests/e2e/learner/learner-smoke.spec.ts tests/e2e/writing-v2/a11y.spec.ts tests/e2e/writing-v2/mocks.spec.ts tests/e2e/writing-v2/stats.spec.ts tests/e2e/writing-v2/diagnostic.spec.ts tests/e2e/writing-v2/canon-library.spec.ts`: passed.
-- `git diff --check`: passed.
-- Scoped mojibake scan over changed files with `rg -n "â|ð|�|Ã|Â" <changed files>`: passed with no matches.
+- `pnpm exec eslint i18n.ts app/providers.tsx tests/unit/i18n-writing-messages.test.ts`: passed.
+- `pnpm run build`: passed.
+- Standalone artifact check: `.next/standalone/messages/en/writing.json` contains `writing.hub.hero.title` with `Practise OET Writing your way`.
+- Production deploy: GitHub Actions `Build & Deploy (web + API)` run `27509057100` passed for commit `bdfd09d77`.
+- Production health: `https://app.oetwithdrhesham.co.uk/api/health` returned HTTP 200 with `{"status":"ok","service":"oet-web"}`.
 
 ## Not Run / Blocked
 
-- Focused Playwright writing-route smokes were not run because the local frontend/API stack was not reachable.
-- `scripts/OET-Local-Launch.ps1 -SkipBrowser` timed out after 3 minutes; afterward `http://localhost:3000` and `http://localhost:5198/health` were still unreachable, while PostgreSQL alone was listening on `localhost:5432`.
-- `pnpm run check:encoding` was attempted and failed on pre-existing `.codex/skills/...` mojibake noise, not on changed files; changed files passed the scoped scan above.
+- Authenticated production `/writing` DOM verification could not be completed from Codex because Chrome is not exposing a local CDP endpoint and unauthenticated curl correctly redirects `/writing` to `/sign-in?next=%2Fwriting`.
+- Full `pnpm run check:encoding` was not rerun in this follow-up; this change touched only TypeScript source/test files, not translation JSON content.
 
 ## Next Step
 
-Start a healthy local stack or run the writing Playwright smoke shards in CI, then verify:
-
-- learner `/writing`
-- `tests/e2e/writing-v2/mocks.spec.ts`
-- `tests/e2e/writing-v2/diagnostic.spec.ts`
-- `tests/e2e/writing-v2/stats.spec.ts`
-- `tests/e2e/writing-v2/canon-library.spec.ts`
-- `tests/e2e/writing-v2/a11y.spec.ts`
+Open production in an authenticated browser and verify `/writing` renders `Practise OET Writing your way` and does not contain `writing.hub.` or `Writing copy unavailable`.

@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using OetLearner.Api.Configuration;
 using OetLearner.Api.Data;
@@ -26,7 +27,7 @@ public class RefundDisputeTests
         var billingOptions = new BillingOptions { AllowSandboxFallbacks = true };
         var billingOpts = Options.Create(billingOptions);
         var gateways = new PaymentGatewayService(
-            new StripeGateway(new HttpClient(), billingOpts, TestRuntimeSettingsProvider.FromBillingOptions(billingOptions)),
+            new StripeGateway(new HttpClient(), billingOpts, TestRuntimeSettingsProvider.FromBillingOptions(billingOptions), NullLogger<StripeGateway>.Instance),
             new PayPalGateway(new HttpClient(), billingOpts),
             new OetLearner.Api.Services.Billing.Gateways.PayTabsGateway(new HttpClient(), billingOpts, TestRuntimeSettingsProvider.FromBillingOptions(billingOptions)),
             new OetLearner.Api.Services.Billing.Gateways.PaymobGateway(new HttpClient(), billingOpts, TestRuntimeSettingsProvider.FromBillingOptions(billingOptions)),

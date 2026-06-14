@@ -56,6 +56,7 @@ function makeResponse(overrides: Partial<RuntimeSettingsResponse> = {}): Runtime
       stripeWebhookSecret: '',
       stripeSuccessUrl: 'https://example.com/success',
       stripeCancelUrl: 'https://example.com/cancel',
+      publicAppBaseUrl: 'https://example.com',
       paypalClientId: 'paypal-client',
       paypalClientSecret: '********',
       paypalWebhookId: '********',

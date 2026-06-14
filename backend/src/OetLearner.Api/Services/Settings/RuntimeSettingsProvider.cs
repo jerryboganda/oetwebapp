@@ -33,6 +33,9 @@ public sealed class RuntimeSettingsProvider : IRuntimeSettingsProvider
     private readonly IOptions<WebPushOptions> _webPush;
     private readonly IOptions<ZoomOptions> _zoom;
     private readonly IOptions<SoketiOptions> _soketi;
+    private readonly IOptions<DataRetentionOptions> _dataRetention;
+    private readonly IOptions<ExpertAutoAssignmentOptions> _expertAutoAssignment;
+    private readonly IOptions<PasswordPolicyOptions> _passwordPolicy;
     private readonly IOptionsMonitor<SmtpOptions> _smtp;
     private readonly IConfiguration _config;
     private readonly IHostEnvironment _environment;
@@ -48,6 +51,9 @@ public sealed class RuntimeSettingsProvider : IRuntimeSettingsProvider
         IOptions<WebPushOptions> webPush,
         IOptions<ZoomOptions> zoom,
         IOptions<SoketiOptions> soketi,
+        IOptions<DataRetentionOptions> dataRetention,
+        IOptions<ExpertAutoAssignmentOptions> expertAutoAssignment,
+        IOptions<PasswordPolicyOptions> passwordPolicy,
         IOptionsMonitor<SmtpOptions> smtp,
         IConfiguration config,
         IHostEnvironment environment)
@@ -62,6 +68,9 @@ public sealed class RuntimeSettingsProvider : IRuntimeSettingsProvider
         _webPush = webPush;
         _zoom = zoom;
         _soketi = soketi;
+        _dataRetention = dataRetention;
+        _expertAutoAssignment = expertAutoAssignment;
+        _passwordPolicy = passwordPolicy;
         _smtp = smtp;
         _config = config;
         _environment = environment;
@@ -159,7 +168,9 @@ public sealed class RuntimeSettingsProvider : IRuntimeSettingsProvider
             PayPalClientSecret: Unprotect(r.PayPalClientSecretEncrypted) ?? NullIfEmpty(paypal.ClientSecret),
             PayPalWebhookId: Unprotect(r.PayPalWebhookIdEncrypted) ?? NullIfEmpty(paypal.WebhookId),
             PayPalSuccessUrl: Coalesce(r.PayPalSuccessUrl, paypal.SuccessUrl),
-            PayPalCancelUrl: Coalesce(r.PayPalCancelUrl, paypal.CancelUrl));
+            PayPalCancelUrl: Coalesce(r.PayPalCancelUrl, paypal.CancelUrl),
+            PayPalAdvancedCardsEnabled: r.PayPalAdvancedCardsEnabled ?? paypal.AdvancedCardsEnabled,
+            PublicAppBaseUrl: NullIfEmpty(r.BillingPublicAppBaseUrl));
 
         // Sentry is wired from raw configuration (Sentry:Dsn) rather than an
         // IOptions binding, so fall back to IConfiguration for env defaults.
@@ -250,6 +261,9 @@ public sealed class RuntimeSettingsProvider : IRuntimeSettingsProvider
         var paymob = ResolvePaymob(r, billing.Paymob);
         var payTabs = ResolvePayTabs(r, billing.PayTabs);
         var soketi = ResolveSoketi(r, _soketi.Value);
+        var dataRetention = ResolveDataRetention(r, _dataRetention.Value);
+        var expertAutoAssignment = ResolveExpertAutoAssignment(r, _expertAutoAssignment.Value);
+        var passwordPolicy = ResolvePasswordPolicy(r, _passwordPolicy.Value);
 
         return new EffectiveSettings(
             Email: email,
@@ -272,6 +286,9 @@ public sealed class RuntimeSettingsProvider : IRuntimeSettingsProvider
             Paymob: paymob,
             PayTabs: payTabs,
             Soketi: soketi,
+            DataRetention: dataRetention,
+            ExpertAutoAssignment: expertAutoAssignment,
+            PasswordPolicy: passwordPolicy,
             UpdatedByUserId: r.UpdatedByUserId,
             UpdatedByUserName: r.UpdatedByUserName,
             UpdatedAt: r.UpdatedAt == default ? null : r.UpdatedAt);
@@ -329,6 +346,55 @@ public sealed class RuntimeSettingsProvider : IRuntimeSettingsProvider
             AppSecret: Unprotect(r.SoketiAppSecretEncrypted) ?? NullIfEmpty(env.AppSecret),
             UseTls: r.SoketiUseTls ?? env.UseTls,
             Enabled: r.SoketiEnabled ?? env.Enabled);
+
+    // ── Data retention / Expert auto-assign / Password policy ──────
+    // (DB-over-env: null DB field → env/appsettings default)
+    private static DataRetentionSettings ResolveDataRetention(RuntimeSettingsRow r, DataRetentionOptions env)
+        => new(
+            AnalyticsEvents: DaysOrDefault(r.DataRetentionAnalyticsEventsDays, env.AnalyticsEvents),
+            AuditEvents: DaysOrDefault(r.DataRetentionAuditEventsDays, env.AuditEvents),
+            PaymentWebhookEvents: DaysOrDefault(r.DataRetentionPaymentWebhookEventsDays, env.PaymentWebhookEvents),
+            PaymentWebhookPiiNullOutAge: DaysOrDefault(r.DataRetentionPaymentWebhookPiiNullOutAgeDays, env.PaymentWebhookPiiNullOutAge),
+            NotificationDeliveryAttempts: DaysOrDefault(r.DataRetentionNotificationDeliveryAttemptsDays, env.NotificationDeliveryAttempts),
+            SweepInterval: HoursOrDefault(r.DataRetentionSweepIntervalHours, env.SweepInterval),
+            BatchSize: r.DataRetentionBatchSize is > 0 ? r.DataRetentionBatchSize.Value : (env.BatchSize <= 0 ? 5000 : env.BatchSize));
+
+    private static ExpertAutoAssignmentSettings ResolveExpertAutoAssignment(RuntimeSettingsRow r, ExpertAutoAssignmentOptions env)
+        => new(
+            Enabled: r.ExpertAutoAssignmentEnabled ?? env.Enabled,
+            PollingIntervalSeconds: PositiveOrDefault(r.ExpertAutoAssignmentPollingIntervalSeconds, env.PollingIntervalSeconds, 30),
+            SlaEscalationIntervalSeconds: PositiveOrDefault(r.ExpertAutoAssignmentSlaEscalationIntervalSeconds, env.SlaEscalationIntervalSeconds, 60),
+            SlaHoursStandard: PositiveOrDefault(r.ExpertAutoAssignmentSlaHoursStandard, env.SlaHoursStandard, 48),
+            SlaHoursExpress: PositiveOrDefault(r.ExpertAutoAssignmentSlaHoursExpress, env.SlaHoursExpress, 12),
+            MaxActiveAssignmentsPerExpert: PositiveOrDefault(r.ExpertAutoAssignmentMaxActiveAssignmentsPerExpert, env.MaxActiveAssignmentsPerExpert, 8),
+            LookbackHoursForLoad: PositiveOrDefault(r.ExpertAutoAssignmentLookbackHoursForLoad, env.LookbackHoursForLoad, 24),
+            BatchSize: PositiveOrDefault(r.ExpertAutoAssignmentBatchSize, env.BatchSize, 50));
+
+    private PasswordPolicySettings ResolvePasswordPolicy(RuntimeSettingsRow r, PasswordPolicyOptions env)
+    {
+        var baseUrl = Coalesce(r.PasswordPolicyBreachApiBaseUrl, env.BreachApiBaseUrl, "https://api.pwnedpasswords.com/")!;
+        if (!baseUrl.EndsWith('/')) baseUrl += "/";
+        var timeoutSeconds = r.PasswordPolicyBreachApiTimeoutSeconds is > 0
+            ? r.PasswordPolicyBreachApiTimeoutSeconds.Value
+            : (env.BreachApiTimeout > TimeSpan.Zero ? (int)Math.Ceiling(env.BreachApiTimeout.TotalSeconds) : 3);
+        return new PasswordPolicySettings(
+            MinimumLength: r.PasswordPolicyMinimumLength is > 0 ? r.PasswordPolicyMinimumLength.Value : (env.MinimumLength > 0 ? env.MinimumLength : 10),
+            RequireMixedCase: r.PasswordPolicyRequireMixedCase ?? env.RequireMixedCase,
+            RequireDigit: r.PasswordPolicyRequireDigit ?? env.RequireDigit,
+            RequireSymbol: r.PasswordPolicyRequireSymbol ?? env.RequireSymbol,
+            BreachCheckEnabled: r.PasswordPolicyBreachCheckEnabled ?? env.BreachCheckEnabled,
+            BreachApiBaseUrl: baseUrl,
+            BreachApiTimeout: TimeSpan.FromSeconds(Math.Clamp(timeoutSeconds, 1, 60)));
+    }
+
+    private static TimeSpan DaysOrDefault(int? days, TimeSpan fallback)
+        => days.HasValue ? TimeSpan.FromDays(Math.Max(0, days.Value)) : fallback;
+
+    private static TimeSpan HoursOrDefault(int? hours, TimeSpan fallback)
+        => hours.HasValue ? TimeSpan.FromHours(Math.Max(0, hours.Value)) : fallback;
+
+    private static int PositiveOrDefault(int? dbValue, int envValue, int hardDefault)
+        => dbValue is > 0 ? dbValue.Value : (envValue > 0 ? envValue : hardDefault);
 
     private static LiveClassSettings ResolveLiveClassSettings(RuntimeSettingsRow r)
         => new(AiRecordingProcessingEnabled: r.LiveClassesAiRecordingProcessingEnabled ?? false);

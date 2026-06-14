@@ -1,0 +1,67 @@
+===== ans_partA PAGE 1 =====
+Answer Key with Rationale
+Diarrhea and Dehydration in Children – Part A
+Questions 1–7
+Question 1.   Answer: A
+Rationale: Text A classifies diarrhea as acute (fewer than 14 days), persistent (14 days or more but fewer 
+than 30 days), and chronic (beyond 30 days).
+Question 2.   Answer: D
+Rationale: Text D presents a five-step protocol covering initial assessment, dehydration classification, 
+rehydration plan, nutritional support, and discharge planning.
+Question 3.   Answer: C
+Rationale: Text C table: "Altered consciousness or lethargy" is a sign of severe dehydration; 
+recommended action is "Commence intravenous fluid resuscitation".
+Question 4.   Answer: B
+Rationale: Text B: "Rotavirus vaccination has demonstrated effectiveness in reducing the incidence of 
+severe rotavirus diarrhea in children."
+Question 5.   Answer: D
+Rationale: Text D, Step 4: "Feeding should not be withheld during diarrhea."
+Question 6.   Answer: B
+Rationale: Text B identifies "poor sanitation" and "Lack of breastfeeding in infancy removes a key source 
+of passive immunity" as environmental risk factors.
+Question 7.   Answer: A
+Rationale: Text A: "Dehydration is the most serious complication of diarrhea and is classified as mild, 
+moderate, or severe based on clinical signs." This phrasing is specific to Text A.
+Questions 8–14
+Question 8.   Answer: three (3)
+Rationale: "Diarrhea is defined as the passage of three or more loose or watery stools within a 24-hour 
+period." (Text A, paragraph 1)
+Question 9.   Answer: rotavirus
+Rationale: "Rotavirus remains the most common viral cause globally." (Text A, paragraph 3)
+Question 10.   Answer: two (2)
+Rationale: "children under two years of age being at greatest risk" (Text B, paragraph 2)
+Question 11.   Answer: duration and severity
+Rationale: "Zinc supplementation given alongside ORS has been shown to reduce the duration and 
+severity of acute diarrheal episodes." (Text B, paragraph 5)
+Question 12.   Answer: persistent
+Rationale: "Persistent diarrhea is defined as an episode lasting 14 days or more but fewer than 30 days." 
+(Text A, paragraph 2)
+Question 13.   Answer: intravenous
+Rationale: "Severe dehydration requires prompt intravenous fluid resuscitation (Plan C)." (Text D, Step 3)
+Question 14.   Answer: intestinal integrity
+Rationale: "Continued feeding maintains intestinal integrity, supports recovery, and prevents malnutrition." 
+(Text D, Step 4)
+OET with Dr. Ahmed Hesham
+
+
+===== ans_partA PAGE 2 =====
+Questions 15–20
+Question 15.   Answer: sunken eyes
+Rationale: Text C table: "Sunken eyes and dry mucous membranes" listed as clinical feature indicating 
+moderate dehydration.
+Question 16.   Answer: oral rehydration solution (ORS)
+Rationale: Text B: "Oral rehydration solution (ORS) administration at the onset of diarrhea prevents 
+progression to significant dehydration."
+Question 17.   Answer: hypovolemic shock
+Rationale: Text A: "Continued fluid and nutritional loss without adequate replacement may lead to 
+hypovolemic shock." Also referenced in Text C note.
+Question 18.   Answer: exclusive breastfeeding
+Rationale: Text B: "Exclusive breastfeeding for the first six months of life is strongly recommended and 
+significantly reduces diarrheal morbidity."
+Question 19.   Answer: nutritional assessment
+Rationale: Text C table: "Persistent diarrhea exceeding 14 days | Risk of malnutrition and micronutrient 
+deficiency | Conduct nutritional assessment and refer to specialist."
+Question 20.   Answer: warning signs / when to seek further medical attention
+Rationale: Text D, Step 5: "Caregivers should be educated on recognising warning signs and when to 
+seek further medical attention."
+OET with Dr. Ahmed Hesham

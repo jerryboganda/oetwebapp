@@ -44,6 +44,13 @@ public class RuntimeSettingsRow
     public string? StripeWebhookSecretEncrypted { get; set; }
     [MaxLength(1024)] public string? StripeSuccessUrl { get; set; }
     [MaxLength(1024)] public string? StripeCancelUrl { get; set; }
+    /// <summary>
+    /// Public app/web base URL (e.g. https://app.oetwithdrhesham.co.uk) used to build
+    /// absolute checkout success/cancel return URLs without depending on the
+    /// <c>Platform:PublicWebBaseUrl</c> environment variable. Falls back to that env var
+    /// when null. Lets admins drive Stripe checkout entirely from the settings UI.
+    /// </summary>
+    [MaxLength(1024)] public string? BillingPublicAppBaseUrl { get; set; }
 
     // ── Stripe Tax / Customer Portal / Radar (Wave A5) ─────────────
     public bool? StripeTaxAutomaticEnabled { get; set; }
@@ -58,6 +65,13 @@ public class RuntimeSettingsRow
     public string? PayPalWebhookIdEncrypted { get; set; }
     [MaxLength(1024)] public string? PayPalSuccessUrl { get; set; }
     [MaxLength(1024)] public string? PayPalCancelUrl { get; set; }
+    /// <summary>
+    /// Whether PayPal Expanded checkout may render embedded Advanced Card Fields (type the
+    /// card directly on our page). Null = use the env/default (true). Admins flip this off
+    /// instantly — without a deploy — if the live account loses Advanced Cards eligibility;
+    /// the embedded UI then degrades to PayPal/Venmo/Pay Later buttons only.
+    /// </summary>
+    public bool? PayPalAdvancedCardsEnabled { get; set; }
 
     // ── Sentry ─────────────────────────────────────────────────────
     [MaxLength(512)] public string? SentryDsn { get; set; }
@@ -202,6 +216,37 @@ public class RuntimeSettingsRow
     public string? SoketiAppSecretEncrypted { get; set; }
     public bool? SoketiUseTls { get; set; }
     public bool? SoketiEnabled { get; set; }
+
+    // ── Data retention sweeper (high-volume event tables) ──────────
+    // Retention windows are stored as whole days; the sweep cadence as whole
+    // hours. null on any field falls back to the env/appsettings default in
+    // DataRetentionOptions. A retention of 0 disables the sweep for that table.
+    public int? DataRetentionAnalyticsEventsDays { get; set; }
+    public int? DataRetentionAuditEventsDays { get; set; }
+    public int? DataRetentionPaymentWebhookEventsDays { get; set; }
+    public int? DataRetentionPaymentWebhookPiiNullOutAgeDays { get; set; }
+    public int? DataRetentionNotificationDeliveryAttemptsDays { get; set; }
+    public int? DataRetentionSweepIntervalHours { get; set; }
+    public int? DataRetentionBatchSize { get; set; }
+
+    // ── Expert auto-assignment loop (Writing review queue) ─────────
+    public bool? ExpertAutoAssignmentEnabled { get; set; }
+    public int? ExpertAutoAssignmentPollingIntervalSeconds { get; set; }
+    public int? ExpertAutoAssignmentSlaEscalationIntervalSeconds { get; set; }
+    public int? ExpertAutoAssignmentSlaHoursStandard { get; set; }
+    public int? ExpertAutoAssignmentSlaHoursExpress { get; set; }
+    public int? ExpertAutoAssignmentMaxActiveAssignmentsPerExpert { get; set; }
+    public int? ExpertAutoAssignmentLookbackHoursForLoad { get; set; }
+    public int? ExpertAutoAssignmentBatchSize { get; set; }
+
+    // ── Password policy (complexity + HIBP breach check) ───────────
+    public int? PasswordPolicyMinimumLength { get; set; }
+    public bool? PasswordPolicyRequireMixedCase { get; set; }
+    public bool? PasswordPolicyRequireDigit { get; set; }
+    public bool? PasswordPolicyRequireSymbol { get; set; }
+    public bool? PasswordPolicyBreachCheckEnabled { get; set; }
+    [MaxLength(512)] public string? PasswordPolicyBreachApiBaseUrl { get; set; }
+    public int? PasswordPolicyBreachApiTimeoutSeconds { get; set; }
 
     // ── Audit ──────────────────────────────────────────────────────
     [MaxLength(64)]

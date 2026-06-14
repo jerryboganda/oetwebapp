@@ -3,6 +3,7 @@ using System.Net.Http.Headers;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using OetLearner.Api.Configuration;
 using OetLearner.Api.Services.Settings;
@@ -19,6 +20,15 @@ public interface IPaymentGateway
     Task<PaymentIntentResult> CreatePaymentIntentAsync(CreatePaymentIntentRequest request, CancellationToken ct);
     Task<WebhookProcessResult> HandleWebhookAsync(string payload, IReadOnlyDictionary<string, string> headers, CancellationToken ct);
     Task<RefundResult> ProcessRefundAsync(string transactionId, decimal amount, string currency, string reason, string idempotencyKey, CancellationToken ct);
+
+    /// <summary>
+    /// Synchronously captures a previously-created order, server-side. Used by PayPal
+    /// Expanded (embedded) checkout where the browser SDK approves an order and we must
+    /// capture + fulfil in the same request rather than waiting on a webhook. Redirect /
+    /// hosted gateways that fulfil purely via webhook do not support this and throw.
+    /// </summary>
+    Task<CaptureResult> CaptureOrderAsync(string orderId, string idempotencyKey, CancellationToken ct)
+        => throw new NotSupportedException($"Gateway '{GatewayName}' does not support server-side order capture.");
 }
 
 public record CreatePaymentIntentRequest(
@@ -65,14 +75,55 @@ public record RefundResult(
     decimal AmountRefunded);
 
 /// <summary>
+/// Result of a synchronous server-side order capture (PayPal Expanded checkout).
+/// <see cref="Status"/> is normalised to lowercase ("completed" on success).
+/// </summary>
+public record CaptureResult(
+    string CaptureId,
+    string Status,
+    decimal AmountCaptured,
+    string Currency);
+
+/// <summary>
+/// Raised when a payment gateway's HTTP API rejects a request (non-2xx response).
+/// Carries the upstream status code plus the gateway's machine-readable error code/type
+/// so callers can translate it into a clean, actionable API error instead of letting a
+/// raw <see cref="HttpRequestException"/> bubble up as an opaque 500. The
+/// <see cref="Exception.Message"/> is safe to log but MUST NOT be surfaced verbatim to
+/// end users (it may contain provider internals).
+/// </summary>
+public sealed class PaymentGatewayApiException : Exception
+{
+    public PaymentGatewayApiException(
+        string gateway,
+        int upstreamStatusCode,
+        string message,
+        string? upstreamErrorCode = null,
+        string? upstreamErrorType = null)
+        : base(message)
+    {
+        Gateway = gateway;
+        UpstreamStatusCode = upstreamStatusCode;
+        UpstreamErrorCode = upstreamErrorCode;
+        UpstreamErrorType = upstreamErrorType;
+    }
+
+    public string Gateway { get; }
+    public int UpstreamStatusCode { get; }
+    public string? UpstreamErrorCode { get; }
+    public string? UpstreamErrorType { get; }
+}
+
+/// <summary>
 /// Stripe payment gateway adapter. Uses the hosted checkout session API when credentials are configured
 /// and falls back to a sandbox-style response for local development.
 /// </summary>
-public sealed class StripeGateway(HttpClient httpClient, IOptions<BillingOptions> billingOptions, IRuntimeSettingsProvider runtimeSettings) : IPaymentGateway
+public sealed class StripeGateway(HttpClient httpClient, IOptions<BillingOptions> billingOptions, IRuntimeSettingsProvider runtimeSettings, ILogger<StripeGateway> logger) : IPaymentGateway
 {
     private readonly HttpClient _httpClient = httpClient;
     private readonly IOptions<BillingOptions> _billingOptions = billingOptions;
     private readonly IRuntimeSettingsProvider _runtimeSettings = runtimeSettings;
+    private readonly ILogger<StripeGateway> _logger = logger;
 
     public string GatewayName => "stripe";
 
@@ -81,8 +132,10 @@ public sealed class StripeGateway(HttpClient httpClient, IOptions<BillingOptions
         var billingOptionsSnapshot = _billingOptions.Value;
         var stripeOptions = billingOptionsSnapshot.Stripe;
         var runtimeBilling = (await _runtimeSettings.GetAsync(ct)).Billing;
-        var successUrl = request.SuccessUrl ?? runtimeBilling.StripeSuccessUrl;
-        var cancelUrl = request.CancelUrl ?? runtimeBilling.StripeCancelUrl;
+        // Promote relative return URLs (when Platform:PublicWebBaseUrl is unset) to absolute
+        // using the admin-configured public app base URL, so checkout works with no env vars.
+        var successUrl = AbsolutizeReturnUrl(request.SuccessUrl ?? runtimeBilling.StripeSuccessUrl, runtimeBilling.PublicAppBaseUrl);
+        var cancelUrl = AbsolutizeReturnUrl(request.CancelUrl ?? runtimeBilling.StripeCancelUrl, runtimeBilling.PublicAppBaseUrl);
         if (string.IsNullOrWhiteSpace(runtimeBilling.StripeSecretKey)
             || string.IsNullOrWhiteSpace(successUrl)
             || string.IsNullOrWhiteSpace(cancelUrl))
@@ -93,6 +146,22 @@ public sealed class StripeGateway(HttpClient httpClient, IOptions<BillingOptions
             }
 
             throw new InvalidOperationException("Stripe billing is not fully configured and sandbox fallbacks are disabled.");
+        }
+
+        // Stripe rejects relative success_url/cancel_url with an HTTP 400. That would
+        // otherwise surface as an opaque 500. Treat non-absolute URLs (e.g. when no
+        // public app/web base URL is configured) as a configuration problem so the
+        // caller maps it to a clean gateway_unavailable response.
+        if (!Uri.TryCreate(successUrl, UriKind.Absolute, out _) || !Uri.TryCreate(cancelUrl, UriKind.Absolute, out _))
+        {
+            if (billingOptionsSnapshot.AllowSandboxFallbacks)
+            {
+                return BuildSandboxCheckout(request);
+            }
+
+            throw new InvalidOperationException(
+                "Stripe billing is not fully configured: success_url and cancel_url must be absolute URLs. "
+                + "Set the billing public app base URL (admin Settings) or Platform:PublicWebBaseUrl.");
         }
 
         using var message = new HttpRequestMessage(
@@ -131,7 +200,7 @@ public sealed class StripeGateway(HttpClient httpClient, IOptions<BillingOptions
         message.Content = new FormUrlEncodedContent(form);
 
         using var response = await _httpClient.SendAsync(message, ct);
-        response.EnsureSuccessStatusCode();
+        await EnsureStripeSuccessAsync(response, "checkout session creation", ct);
 
         await using var stream = await response.Content.ReadAsStreamAsync(ct);
         using var document = await JsonDocument.ParseAsync(stream, cancellationToken: ct);
@@ -167,7 +236,7 @@ public sealed class StripeGateway(HttpClient httpClient, IOptions<BillingOptions
                 new Uri(new Uri(EnsureTrailingSlash(stripeOptions.ApiBaseUrl)), $"v1/checkout/sessions/{Uri.EscapeDataString(transactionId)}"));
             sessionRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", runtimeBilling.StripeSecretKey);
             using var sessionResponse = await _httpClient.SendAsync(sessionRequest, ct);
-            sessionResponse.EnsureSuccessStatusCode();
+            await EnsureStripeSuccessAsync(sessionResponse, "refund session lookup", ct);
             await using var sessionStream = await sessionResponse.Content.ReadAsStreamAsync(ct);
             using var sessionDocument = await JsonDocument.ParseAsync(sessionStream, cancellationToken: ct);
             refundableId = GetString(sessionDocument.RootElement, "payment_intent")
@@ -196,7 +265,7 @@ public sealed class StripeGateway(HttpClient httpClient, IOptions<BillingOptions
 
         message.Content = new FormUrlEncodedContent(form);
         using var response = await _httpClient.SendAsync(message, ct);
-        response.EnsureSuccessStatusCode();
+        await EnsureStripeSuccessAsync(response, "refund", ct);
         await using var stream = await response.Content.ReadAsStreamAsync(ct);
         using var document = await JsonDocument.ParseAsync(stream, cancellationToken: ct);
         var root = document.RootElement;
@@ -292,6 +361,30 @@ public sealed class StripeGateway(HttpClient httpClient, IOptions<BillingOptions
             GatewayObjectId: GetString(dataObject, "id"));
     }
 
+    /// <summary>
+    /// If <paramref name="url"/> is a relative path (e.g. the caller built it without a
+    /// configured <c>Platform:PublicWebBaseUrl</c>) and an absolute
+    /// <paramref name="appBaseUrl"/> is available, combine them into an absolute URL.
+    /// Already-absolute or null URLs are returned unchanged. The literal Stripe
+    /// <c>{CHECKOUT_SESSION_ID}</c> template token is preserved (Uri.ToString does not
+    /// percent-encode braces in the query).
+    /// </summary>
+    private static string? AbsolutizeReturnUrl(string? url, string? appBaseUrl)
+    {
+        if (string.IsNullOrWhiteSpace(url) || Uri.TryCreate(url, UriKind.Absolute, out _))
+        {
+            return url;
+        }
+
+        if (string.IsNullOrWhiteSpace(appBaseUrl)
+            || !Uri.TryCreate(EnsureTrailingSlash(appBaseUrl), UriKind.Absolute, out var baseUri))
+        {
+            return url;
+        }
+
+        return new Uri(baseUri, url.TrimStart('/')).ToString();
+    }
+
     private PaymentIntentResult BuildSandboxCheckout(CreatePaymentIntentRequest request)
     {
         var sessionId = $"cs_local_{Guid.NewGuid():N}";
@@ -300,6 +393,60 @@ public sealed class StripeGateway(HttpClient httpClient, IOptions<BillingOptions
             ClientSecret: sessionId,
             Status: "sandbox_pending",
             CheckoutUrl: $"https://checkout.stripe.com/pay/{sessionId}");
+    }
+
+    /// <summary>
+    /// Replacement for <c>HttpResponseMessage.EnsureSuccessStatusCode()</c> that, on a
+    /// non-2xx Stripe response, reads and parses Stripe's <c>{ "error": { ... } }</c>
+    /// envelope, logs the detail server-side, and throws a <see cref="PaymentGatewayApiException"/>
+    /// carrying the upstream status/code/type. This keeps Stripe's real failure reason out
+    /// of the generic 500 path while never leaking it verbatim to the learner.
+    /// </summary>
+    private async Task EnsureStripeSuccessAsync(HttpResponseMessage response, string operation, CancellationToken ct)
+    {
+        if (response.IsSuccessStatusCode)
+        {
+            return;
+        }
+
+        var status = (int)response.StatusCode;
+        string? stripeMessage = null;
+        string? stripeCode = null;
+        string? stripeType = null;
+        try
+        {
+            var body = await response.Content.ReadAsStringAsync(ct);
+            if (!string.IsNullOrWhiteSpace(body))
+            {
+                using var document = JsonDocument.Parse(body);
+                if (document.RootElement.TryGetProperty("error", out var error) && error.ValueKind == JsonValueKind.Object)
+                {
+                    stripeMessage = GetString(error, "message");
+                    stripeCode = GetString(error, "code");
+                    stripeType = GetString(error, "type");
+                }
+            }
+        }
+        catch (JsonException)
+        {
+            // Non-JSON error body (e.g. an HTML proxy/gateway page). Fall back to the status line.
+        }
+
+        var detail = string.IsNullOrWhiteSpace(stripeMessage) ? (response.ReasonPhrase ?? "Unknown Stripe error") : stripeMessage;
+        _logger.LogWarning(
+            "Stripe {Operation} failed: HTTP {Status} type={Type} code={Code} message={Message}",
+            operation,
+            status,
+            stripeType,
+            stripeCode,
+            detail);
+
+        throw new PaymentGatewayApiException(
+            gateway: GatewayName,
+            upstreamStatusCode: status,
+            message: $"Stripe {operation} failed (HTTP {status}): {detail}",
+            upstreamErrorCode: stripeCode,
+            upstreamErrorType: stripeType);
     }
 
     private bool VerifyStripeWebhook(string payload, IReadOnlyDictionary<string, string> headers, string? secret, out string? error)
@@ -454,6 +601,62 @@ public sealed class PayPalGateway(
             CheckoutUrl: checkoutUrl);
     }
 
+    public async Task<CaptureResult> CaptureOrderAsync(string orderId, string idempotencyKey, CancellationToken ct)
+    {
+        var options = await GetEffectivePayPalOptionsAsync(ct);
+        if (string.IsNullOrWhiteSpace(options.ClientId) || string.IsNullOrWhiteSpace(options.ClientSecret))
+        {
+            if (_billing.AllowSandboxFallbacks)
+            {
+                // No live creds + sandbox fallbacks on: the order id is a synthesised
+                // sandbox token, so mirror it with a synthesised completed capture.
+                return new CaptureResult($"CAPTURE-{Guid.NewGuid():N}", "completed", 0m, "GBP");
+            }
+
+            throw new InvalidOperationException("PayPal capture is not configured and sandbox fallbacks are disabled.");
+        }
+
+        var accessToken = await GetAccessTokenAsync(options, ct);
+
+        using var message = new HttpRequestMessage(
+            HttpMethod.Post,
+            new Uri(new Uri(EnsureTrailingSlash(GetPayPalApiBaseUrl(options))), $"v2/checkout/orders/{Uri.EscapeDataString(orderId)}/capture"));
+        message.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+        message.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+        if (!string.IsNullOrWhiteSpace(idempotencyKey))
+        {
+            // Idempotent capture: a retried onApprove (or a webhook racing the capture)
+            // re-uses the same request id so PayPal returns the original capture instead
+            // of charging twice.
+            message.Headers.TryAddWithoutValidation("PayPal-Request-Id", idempotencyKey);
+        }
+        // PayPal's capture endpoint requires a JSON content-type even with an empty body.
+        message.Content = new StringContent("{}", Encoding.UTF8, "application/json");
+
+        using var response = await _httpClient.SendAsync(message, ct);
+        response.EnsureSuccessStatusCode();
+
+        await using var stream = await response.Content.ReadAsStreamAsync(ct);
+        using var document = await JsonDocument.ParseAsync(stream, cancellationToken: ct);
+        var root = document.RootElement;
+
+        var orderStatus = GetString(root, "status") ?? "COMPLETED";
+        var capture = FindFirstCapture(root);
+        var captureId = capture is { } c ? GetString(c, "id") : null;
+        var captureStatus = capture is { } c2 ? GetString(c2, "status") : null;
+        var (amountValue, currencyCode) = ReadCaptureAmount(capture);
+
+        var normalized = string.Equals(captureStatus ?? orderStatus, "COMPLETED", StringComparison.OrdinalIgnoreCase)
+            ? "completed"
+            : (captureStatus ?? orderStatus).ToLowerInvariant();
+
+        return new CaptureResult(
+            CaptureId: captureId ?? orderId,
+            Status: normalized,
+            AmountCaptured: amountValue,
+            Currency: currencyCode ?? "GBP");
+    }
+
     async Task<RefundResult> IPaymentGateway.ProcessRefundAsync(string transactionId, decimal amount, string currency, string reason, string idempotencyKey, CancellationToken ct)
     {
         var options = await GetEffectivePayPalOptionsAsync(ct);
@@ -514,6 +717,10 @@ public sealed class PayPalGateway(
     }
 
     private static string? FindFirstCaptureId(JsonElement order)
+        => FindFirstCapture(order) is { } capture ? GetString(capture, "id") : null;
+
+    /// <summary>Returns the first capture object inside a PayPal order's purchase_units, or null.</summary>
+    private static JsonElement? FindFirstCapture(JsonElement order)
     {
         if (!order.TryGetProperty("purchase_units", out var units) || units.ValueKind != JsonValueKind.Array)
         {
@@ -528,16 +735,31 @@ public sealed class PayPalGateway(
             {
                 foreach (var capture in captures.EnumerateArray())
                 {
-                    var id = GetString(capture, "id");
-                    if (!string.IsNullOrWhiteSpace(id))
+                    if (!string.IsNullOrWhiteSpace(GetString(capture, "id")))
                     {
-                        return id;
+                        return capture;
                     }
                 }
             }
         }
 
         return null;
+    }
+
+    /// <summary>Reads the (value, currency_code) from a PayPal capture object's amount.</summary>
+    private static (decimal Amount, string? Currency) ReadCaptureAmount(JsonElement? capture)
+    {
+        if (capture is not { } element
+            || !element.TryGetProperty("amount", out var amount)
+            || amount.ValueKind != JsonValueKind.Object)
+        {
+            return (0m, null);
+        }
+
+        var currency = GetString(amount, "currency_code");
+        return decimal.TryParse(GetString(amount, "value"), NumberStyles.Number, CultureInfo.InvariantCulture, out var parsed)
+            ? (parsed, currency)
+            : (0m, currency);
     }
 
     public async Task<WebhookProcessResult> HandleWebhookAsync(string payload, IReadOnlyDictionary<string, string> headers, CancellationToken ct)
