@@ -39,23 +39,28 @@ export default function ReadingValidatePublishPage() {
   const fetchData = async () => {
     if (!paperId) return;
     setLoading(true);
-    try {
-      const [validationResult, structureResult, paperResult] = await Promise.all([
-        validateReadingPaper(paperId),
-        getReadingStructureAdmin(paperId),
-        getContentPaper(paperId),
-      ]);
-      setReport(validationResult);
-      setStructure(structureResult);
-      setPaperStatus(paperResult.status ?? '');
-      if (paperResult.status?.toLowerCase() === 'published') {
+    // Load the three sources independently: a failure of one (e.g. the validation
+    // check being briefly rate-limited after a bulk save) must never blank the
+    // counts or block publishing. Validation is advisory, not a hard gate.
+    const [validationResult, structureResult, paperResult] = await Promise.allSettled([
+      validateReadingPaper(paperId),
+      getReadingStructureAdmin(paperId),
+      getContentPaper(paperId),
+    ]);
+    if (structureResult.status === 'fulfilled') setStructure(structureResult.value);
+    if (validationResult.status === 'fulfilled') setReport(validationResult.value);
+    if (paperResult.status === 'fulfilled') {
+      setPaperStatus(paperResult.value.status ?? '');
+      if (paperResult.value.status?.toLowerCase() === 'published') {
         setPublishState('published');
       }
-    } catch {
-      setToast({ message: 'Failed to load validation data.', variant: 'error' });
-    } finally {
-      setLoading(false);
     }
+    if (structureResult.status === 'rejected') {
+      setToast({ message: 'Could not load the paper structure — please retry in a moment.', variant: 'error' });
+    } else if (validationResult.status === 'rejected') {
+      setToast({ message: 'Validation check is temporarily unavailable — counts are shown from your saved data and you can still publish.', variant: 'error' });
+    }
+    setLoading(false);
   };
 
   useEffect(() => {
@@ -204,20 +209,28 @@ export default function ReadingValidatePublishPage() {
                   <CardTitle>Validation status</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  {report?.isPublishReady ? (
+                  {report === null ? (
+                    <div className="flex items-center gap-3">
+                      <AlertTriangle className="h-8 w-8 text-[var(--admin-warning)]" />
+                      <Badge variant="warning" size="lg">Validation unavailable — advisory only</Badge>
+                    </div>
+                  ) : report.isPublishReady ? (
                     <div className="flex items-center gap-3">
                       <CheckCircle2 className="h-8 w-8 text-[var(--admin-success)]" />
-                      <Badge variant="success" size="lg">Ready to Publish</Badge>
+                      <Badge variant="success" size="lg">All checks passed</Badge>
                     </div>
                   ) : (
                     <div className="flex items-center gap-3">
-                      <XCircle className="h-8 w-8 text-[var(--admin-danger)]" />
-                      <Badge variant="danger" size="lg">
-                        Not Ready: {report?.issues.length ?? 0} issue
-                        {(report?.issues.length ?? 0) !== 1 ? 's' : ''}
+                      <AlertTriangle className="h-8 w-8 text-[var(--admin-warning)]" />
+                      <Badge variant="warning" size="lg">
+                        {report.issues.length} advisory issue
+                        {report.issues.length !== 1 ? 's' : ''} — review recommended
                       </Badge>
                     </div>
                   )}
+                  <p className="mt-2 text-xs text-admin-fg-muted">
+                    Validation is an advisory checklist for authors — it never blocks publishing.
+                  </p>
                 </CardContent>
               </Card>
 
@@ -306,7 +319,7 @@ export default function ReadingValidatePublishPage() {
                           variant="primary"
                           size="md"
                           onClick={handlePublishClick}
-                          disabled={!report?.isPublishReady || publishState === 'publishing'}
+                          disabled={publishState === 'publishing'}
                           startIcon={<Rocket className="h-4 w-4" />}
                         >
                           {publishState === 'confirming'

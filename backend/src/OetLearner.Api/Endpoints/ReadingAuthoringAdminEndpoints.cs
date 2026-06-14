@@ -20,7 +20,14 @@ public static class ReadingAuthoringAdminEndpoints
     {
         var group = app.MapGroup("/v1/admin/papers/{paperId}/reading")
             .RequireAuthorization("AdminContentWrite")
-            .RequireRateLimiting("PerUserWrite");
+            // Use the per-user READ budget (100/min), not the tight write budget
+            // (30/min). This group mixes reads (GET /structure, /validate,
+            // /preview-structure) with writes, and the answer-sheet builder saves a
+            // whole part in a burst of upserts. Under PerUserWrite, that burst
+            // exhausted the 30/min window so the validate/structure GETs that follow
+            // a bulk save were rejected with 429 ("Failed to load validation data").
+            // The surface is already gated to admins by AdminContentWrite.
+            .RequireRateLimiting("PerUser");
 
         // Full structure (admin view — includes correct answers)
         group.MapGet("/structure", async (
