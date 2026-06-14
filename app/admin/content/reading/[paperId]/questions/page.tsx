@@ -16,6 +16,7 @@ import { ReadingWizardSteps } from '@/components/domain/admin/reading/ReadingWiz
 import { ReadingPartTabs } from '@/components/domain/admin/reading/ReadingPartTabs';
 import {
   getReadingStructureAdmin,
+  getReadingStructureAdminPreview,
   upsertReadingQuestion,
   removeReadingQuestion,
   reorderReadingQuestions,
@@ -27,6 +28,8 @@ import {
   type ReadingTextDto,
   type ReadingReviewState,
 } from '@/lib/reading-authoring-api';
+import { ReadingPdfViewer, type ReadingPdfAsset } from '@/components/domain/reading-pdf-viewer';
+import { ReadingAnswerSheetBuilder } from './ReadingAnswerSheetBuilder';
 import { AcceptedVariantManager } from './AcceptedVariantManager';
 import { LabeledBoxesManager, type LabeledBox, serializeLabeledBoxes, parseLabeledBoxes } from './LabeledBoxesManager';
 import { ReadingReviewPanel } from './ReadingReviewPanel';
@@ -177,6 +180,7 @@ export default function ReadingQuestionsEditorPage() {
   const paperId = params?.paperId ?? '';
 
   const [parts, setParts] = useState<ReadingPartAdminDto[]>([]);
+  const [previewAssets, setPreviewAssets] = useState<ReadingPdfAsset[]>([]);
   const [activeTab, setActiveTab] = useState<ReadingPartCode>('A');
   const [activeSectionId, setActiveSectionId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -197,6 +201,10 @@ export default function ReadingQuestionsEditorPage() {
   const activeSections: ReadingSectionAdminDto[] = activePart?.sections ?? [];
   const activeSection = activeSections.find((s) => s.id === activeSectionId) ?? activeSections[0] ?? null;
 
+  // PDF slot key for the left-hand viewer: Part A -> 'A'; B/C -> the selected
+  // section code (B1-B6 / C1-C2), which the viewer falls back to parent B/C for.
+  const pdfSlotKey = activeTab === 'A' ? 'A' : (activeSection?.sectionCode ?? activeTab);
+
   const fetchData = useCallback(async () => {
     if (!paperId) return;
     setLoading(true);
@@ -208,6 +216,16 @@ export default function ReadingQuestionsEditorPage() {
       setError(err instanceof Error ? err.message : 'Failed to load structure');
     } finally {
       setLoading(false);
+    }
+
+    // PDF assets for the left-hand viewer come from the learner-safe preview
+    // projection. A preview failure must not break the editable structure, so
+    // it is fetched separately and swallowed.
+    try {
+      const preview = await getReadingStructureAdminPreview(paperId);
+      setPreviewAssets(preview.paper.questionPaperAssets ?? []);
+    } catch {
+      setPreviewAssets([]);
     }
   }, [paperId]);
 
@@ -877,6 +895,29 @@ export default function ReadingQuestionsEditorPage() {
                       </button>
                     );
                   })}
+                </div>
+              )}
+
+              {activePart && (
+                <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.05fr)_minmax(420px,0.95fr)]">
+                  <div className="xl:sticky xl:top-4 xl:self-start">
+                    <ReadingPdfViewer
+                      paperId={paperId}
+                      partCode={pdfSlotKey}
+                      assets={previewAssets}
+                      annotations={[]}
+                      readOnly
+                    />
+                  </div>
+                  <ReadingAnswerSheetBuilder
+                    paperId={paperId}
+                    partCode={activeTab}
+                    activePart={activePart}
+                    activeSection={activeTab === 'A' ? null : activeSection}
+                    onSaved={fetchData}
+                    onNotify={(variant, message) => setToast({ variant, message })}
+                    onEditDetails={startEdit}
+                  />
                 </div>
               )}
 

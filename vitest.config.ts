@@ -23,6 +23,10 @@ export default defineConfig({
       '.claude/**',
       'OET Web App Login only screens take from here/**',
       'copilot-worktrees/**',
+      // Nested git worktrees ship their own node_modules (duplicate React →
+      // invalid-hook-call); never collect their test copies in the main run.
+      '.claude/worktrees/**',
+      '.worktrees/**',
     ],
   },
   resolve: {

@@ -15,6 +15,7 @@ import {
   getReadingStructureAdminPreview,
   type ReadingLearnerStructureDto,
 } from '@/lib/reading-authoring-api';
+import { readingPublicDisplayNumber } from '@/lib/reading-display-number';
 
 const OPTION_LABELS = ['A', 'B', 'C', 'D', 'E', 'F'];
 
@@ -314,7 +315,7 @@ export default function ReadingPreviewAsStudentPage() {
                         >
                           <div className="flex items-start gap-2">
                             <span className="text-xs font-mono text-admin-fg-muted">
-                              Q{q.displayOrder}
+                              Q{readingPublicDisplayNumber(part.partCode, q.displayOrder)}
                             </span>
                             <p className="flex-1 text-sm text-admin-fg-strong">{q.stem}</p>
                             <Badge variant="muted" size="sm">{q.points}pt</Badge>
@@ -371,7 +372,7 @@ function PreviewAnswerSheet({ part, activeSection }: { part: ReadingLearnerStruc
         return (
           <label key={question.id} className="rounded-admin-lg border border-admin-border bg-admin-bg-surface p-3 text-sm">
             <span className="mb-2 block text-xs font-semibold text-admin-fg-muted">
-              Part {part.partCode}{selectedSection ? ` ${selectedSection.label}` : ''} - Q{question.displayOrder}
+              Part {part.partCode}{selectedSection ? ` ${selectedSection.label}` : ''} - Q{readingPublicDisplayNumber(part.partCode, question.displayOrder)}
             </span>
             {options.length > 0 ? (
               <select className="w-full rounded-admin-md border border-admin-border bg-admin-bg-surface px-2 py-2 text-sm text-admin-fg-default">

@@ -117,4 +117,58 @@ describe('Admin Reading preview', () => {
     expect(screen.queryByText('SECRET-OPTION')).not.toBeInTheDocument();
     expect(screen.queryByText('SECRET-VARIANT')).not.toBeInTheDocument();
   });
+
+  it('renders generic MCQ option labels (Option A, Option B …) in the answer sheet', async () => {
+    const user = userEvent.setup();
+    mockGetReadingStructureAdminPreview.mockResolvedValue({
+      paper: {
+        id: 'paper-1',
+        title: 'Reading Sample Paper',
+        slug: 'reading-sample-paper',
+        subtestCode: 'reading',
+        questionPaperAssets: [
+          { id: 'asset-b', part: 'B', title: 'Part B PDF', downloadPath: '/v1/media/asset-b/content' },
+        ],
+      },
+      parts: [
+        {
+          id: 'part-b',
+          partCode: 'B',
+          timeLimitMinutes: 45,
+          maxRawScore: 6,
+          instructions: null,
+          texts: [],
+          questions: [
+            // Authored via the answer-sheet builder: stem "See PDF", generic option strings.
+            { id: 'q-b-1', partCode: 'B', displayOrder: 1, stem: 'See PDF', questionType: 'MultipleChoice3', points: 1, options: ['Option A', 'Option B', 'Option C'], mediaAssetId: null, readingTextId: null },
+          ],
+        },
+      ],
+    });
+
+    render(<AdminReadingPreviewPage />);
+
+    await screen.findByRole('heading', { name: 'Reading Sample Paper' });
+    const consolePanel = screen.getByRole('region', { name: 'Timed preview console' });
+    await user.click(within(consolePanel).getByRole('button', { name: /^part b$/i }));
+
+    // Section B1 (display order 1) is active by default; its answer-sheet select
+    // exposes the generic labels prefixed with the option letter.
+    expect(within(consolePanel).getByRole('option', { name: 'A. Option A' })).toBeInTheDocument();
+    expect(within(consolePanel).getByRole('option', { name: 'C. Option C' })).toBeInTheDocument();
+  });
+
+  it('shows official OET public numbering: Part C answer sheet starts at Q7', async () => {
+    const user = userEvent.setup();
+    render(<AdminReadingPreviewPage />);
+
+    await screen.findByRole('heading', { name: 'Reading Sample Paper' });
+    const consolePanel = screen.getByRole('region', { name: 'Timed preview console' });
+
+    await user.click(within(consolePanel).getByRole('button', { name: /^part c$/i }));
+
+    // Part C section C1 (internal display orders 1..8) renders public Q7..Q14.
+    expect(within(consolePanel).getByText('Part C C1 - Q7')).toBeInTheDocument();
+    expect(within(consolePanel).queryByText('Part C C1 - Q1')).not.toBeInTheDocument();
+  });
 });

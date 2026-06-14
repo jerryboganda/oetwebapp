@@ -32,6 +32,7 @@ import {
 } from '@/lib/reading-authoring-api';
 import { ContentLockedNotice, isContentLockedError, readContentLockedMessage } from '@/components/domain/ContentLockedNotice';
 import { ReadingPdfViewer } from '@/components/domain/reading-pdf-viewer';
+import { readingPublicDisplayNumber } from '@/lib/reading-display-number';
 import { completeMockSection } from '@/lib/api';
 import { readErrorMessage } from '@/lib/read-error-message';
 import { deriveDeliveryMode, deliveryModeToReadingPresentation } from '@/lib/mocks/delivery-mode';
@@ -1480,6 +1481,7 @@ function PartBody({
             {locked ? <Badge variant="warning">Inputs locked</Badge> : null}
           </div>
           <QuestionNavigator
+            partCode={part.partCode}
             questions={part.questions}
             answers={answers}
             flagged={flagged}
@@ -1490,6 +1492,7 @@ function PartBody({
 
         {activeQuestion ? (
           <QuestionInput
+            partCode={part.partCode}
             question={activeQuestion}
             texts={part.texts}
             valueJson={answers[activeQuestion.id] ?? ''}
@@ -1507,12 +1510,14 @@ function PartBody({
 }
 
 function QuestionNavigator({
+  partCode,
   questions,
   answers,
   flagged,
   activeQuestionId,
   onSelect,
 }: {
+  partCode: ReadingPartCode;
   questions: ReadingQuestionLearnerDto[];
   answers: Record<string, string>;
   flagged: Set<string>;
@@ -1556,6 +1561,7 @@ function QuestionNavigator({
         const answered = isAnsweredJson(answers[question.id]);
         const isActive = question.id === activeQuestionId;
         const isFlagged = flagged.has(question.id);
+        const publicNumber = readingPublicDisplayNumber(partCode, question.displayOrder);
         return (
           <button
             key={question.id}
@@ -1563,7 +1569,7 @@ function QuestionNavigator({
             onClick={() => onSelect(question.id)}
             tabIndex={isActive ? 0 : -1}
             aria-current={isActive ? 'true' : undefined}
-            aria-label={`Question ${question.displayOrder}${answered ? ', answered' : ', unanswered'}${isFlagged ? ', flagged' : ''}`}
+            aria-label={`Question ${publicNumber}${answered ? ', answered' : ', unanswered'}${isFlagged ? ', flagged' : ''}`}
             className={cn(
               'relative min-h-11 rounded-lg border text-sm font-bold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary',
               isActive ? 'border-primary bg-primary text-white dark:bg-violet-700' : 'border-border bg-background-light text-navy hover:border-primary/40',
@@ -1571,7 +1577,7 @@ function QuestionNavigator({
               isFlagged && !isActive && 'border-warning/30 bg-warning/10 text-warning',
             )}
           >
-            {question.displayOrder}
+            {publicNumber}
             {isFlagged ? <Flag className="absolute right-1 top-1 h-3 w-3 fill-current" aria-hidden="true" /> : null}
           </button>
         );
@@ -1581,6 +1587,7 @@ function QuestionNavigator({
 }
 
 function QuestionInput({
+  partCode,
   question,
   texts,
   valueJson,
@@ -1591,6 +1598,7 @@ function QuestionInput({
   onToggleEliminated,
   onChange,
 }: {
+  partCode: ReadingPartCode;
   question: ReadingQuestionLearnerDto;
   texts: ReadingLearnerStructureDto['parts'][number]['texts'];
   valueJson: string;
@@ -1607,7 +1615,7 @@ function QuestionInput({
     <div className="space-y-5">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-xs font-black uppercase tracking-[0.16em] text-muted">Question {question.displayOrder}</p>
+          <p className="text-xs font-black uppercase tracking-[0.16em] text-muted">Question {readingPublicDisplayNumber(partCode, question.displayOrder)}</p>
           <h3 className="mt-2 text-base font-semibold leading-7 text-navy selection:bg-warning/30" data-reading-highlight-scope="stem">{question.stem}</h3>
         </div>
         <Button variant="ghost" size="sm" onClick={onToggleFlag} aria-pressed={flagged}>

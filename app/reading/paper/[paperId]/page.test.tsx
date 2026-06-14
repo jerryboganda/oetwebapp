@@ -269,6 +269,27 @@ describe('Reading paper player page', () => {
     expect(JSON.parse(lastCall[1] as string).byQuestion['q-a-1'].struckOptions).toEqual(['A']);
   });
 
+  it('renders Part C question numbers using official OET public numbering (Q7+)', async () => {
+    // Resume a practice-mode attempt so Parts B/C are immediately accessible
+    // (no Part A timer lock / transition screen in practice mode).
+    mockSearchParams.current = new URLSearchParams('attemptId=attempt-1');
+    mockGetReadingAttempt.mockResolvedValueOnce(buildAttempt({ mode: 'Drill' }));
+    mockGetReadingStructureLearner.mockResolvedValueOnce(buildStructure({ partCSectionLocal: true }));
+
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    await renderPlayer();
+
+    await user.click(await screen.findByRole('tab', { name: /^part c/i }));
+
+    // Part C C1 internal display order 1 must render as public Q7 (B 1..6, C 7..22).
+    expect(await screen.findByRole('button', { name: /question 7, unanswered/i })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /question 1, unanswered/i })).not.toBeInTheDocument();
+
+    // Generic MCQ option labels render verbatim ("A. Option A", "D. Option D").
+    expect(screen.getByText('Option A')).toBeInTheDocument();
+    expect(screen.getByText('Option D')).toBeInTheDocument();
+  });
+
   it('hydrates persisted rule-out marks when resuming an attempt', async () => {
     mockSearchParams.current = new URLSearchParams('attemptId=attempt-1');
     mockGetReadingStructureLearner.mockResolvedValueOnce(buildStructure({ partAMcq: true }));
@@ -286,12 +307,12 @@ describe('Reading paper player page', () => {
   });
 });
 
-function buildAttempt(overrides?: { status?: string; annotationsJson?: string | null }) {
+function buildAttempt(overrides?: { status?: string; annotationsJson?: string | null; mode?: 'Exam' | 'Learning' | 'Drill' | 'MiniTest' | 'ErrorBank' }) {
   return {
     id: 'attempt-1',
     paperId: 'paper-1',
     status: overrides?.status ?? 'InProgress',
-    mode: 'Exam',
+    mode: overrides?.mode ?? 'Exam',
     scopeQuestionIds: null,
     startedAt,
     deadlineAt: partBCDeadlineAt,
@@ -329,7 +350,7 @@ function resolvedParams<T>(value: T): Promise<T> {
   return promise;
 }
 
-function buildStructure(opts?: { allowPaperReadingMode?: boolean; partAMatching?: boolean; partAMcq?: boolean }): ReadingLearnerStructureDto {
+function buildStructure(opts?: { allowPaperReadingMode?: boolean; partAMatching?: boolean; partAMcq?: boolean; partCSectionLocal?: boolean }): ReadingLearnerStructureDto {
   const partATexts = opts?.partAMatching
     ? [
       { id: 'text-a-2', displayOrder: 2, title: 'Medication extract', source: 'Clinic', bodyHtml: '<p>Use aspirin carefully.</p>', wordCount: 4, topicTag: null },
@@ -399,7 +420,10 @@ function buildStructure(opts?: { allowPaperReadingMode?: boolean; partAMatching?
           { id: 'text-c-1', displayOrder: 1, title: 'Text C', source: 'Journal', bodyHtml: '<p>Journal extract.</p>', wordCount: 2, topicTag: null },
         ],
         questions: [
-          { id: 'q-c-1', readingTextId: 'text-c-1', readingSectionId: null, displayOrder: 27, points: 1, questionType: 'MultipleChoice4', stem: 'What can be inferred?', options: ['A', 'B', 'C', 'D'] },
+          // Section-local internal display order (C1 = 1..8) when authored via the
+          // answer-sheet builder; the legacy single-stream number (27) otherwise.
+          // The builder stores generic option strings ("Option A" …) verbatim.
+          { id: 'q-c-1', readingTextId: 'text-c-1', readingSectionId: null, displayOrder: opts?.partCSectionLocal ? 1 : 27, points: 1, questionType: 'MultipleChoice4', stem: 'What can be inferred?', options: opts?.partCSectionLocal ? ['Option A', 'Option B', 'Option C', 'Option D'] : ['A', 'B', 'C', 'D'] },
         ],
       },
     ],
