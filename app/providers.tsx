@@ -13,6 +13,17 @@ import { TooltipProvider } from '@/components/admin/ui/tooltip';
 import { TourProvider } from '@/components/onboarding/tour-provider';
 import { LearnerPasteGuard } from '@/components/system/LearnerPasteGuard';
 
+function isWritingMessageKey(key: string) {
+  return key === 'writing' || key.startsWith('writing.');
+}
+
+function getMessageFallback({ key }: { key: string }) {
+  if (!isWritingMessageKey(key)) return key;
+
+  console.error(new Error(`Missing required writing translation: ${key}`));
+  return 'Writing copy unavailable';
+}
+
 function useServiceWorkerRegistration() {
   useEffect(() => {
     if (typeof window === 'undefined' || !('serviceWorker' in navigator)) return;
@@ -48,9 +59,9 @@ export function AppProviders({
       // we don't want missing keys to throw a runtime error inside legacy
       // pages while the rollout is partial.
       onError={() => {
-        /* swallow MISSING_MESSAGE during partial rollout */
+        /* Non-writing pages still use key fallbacks during the partial rollout. */
       }}
-      getMessageFallback={({ key }) => key}
+      getMessageFallback={getMessageFallback}
     >
       <ThemeProvider nonce={nonce}>
         {/*

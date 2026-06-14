@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 
 /**
- * Writing V2 — stats dashboard smoke.
+ * Writing V2 - stats dashboard smoke.
  * Tags: @writing-v2 @smoke
  *
  * The stats page mounts the BandHistory chart unconditionally and
@@ -25,35 +25,31 @@ test.describe('Writing V2 stats dashboard @writing-v2 @smoke', () => {
 
     await page.goto('/writing/stats', { waitUntil: 'domcontentloaded' });
 
-    // Accept either translated heading OR raw next-intl key (page uses
-    // `t('writing.stats.title')`).
     await expect(
       page.getByRole('heading', {
-        name: /(track every dimension of your writing progress|writing\.stats\.title)/i,
+        name: /track every dimension of your writing progress/i,
       }),
     ).toBeVisible({ timeout: 30_000 });
 
-    // BandHistory section header is always rendered, even with no data
-    // (the chart underneath shows an empty state). Accept raw key fallback.
+    // BandHistory section header is always rendered, even with no data.
     await expect(
       page.getByRole('heading', {
-        name: /(raw score over time|writing\.stats\.bands\.title)/i,
+        name: /raw score over time/i,
       }),
     ).toBeVisible({ timeout: 30_000 });
 
     // At least ONE conditional widget should render eventually. We poll the
-    // set of candidate headings and pass if any appears within 30s — this
+    // set of candidate headings and pass if any appears within 30s; this
     // absorbs empty-state variability per learner while still catching a
-    // catastrophic render failure (no widget at all). Each candidate also
-    // accepts the underlying next-intl key as a fallback.
+    // catastrophic render failure.
     const candidateHeadings = [
-      /(criteria — current vs target|writing\.stats\.criteria\.heading)/i,
-      /(letter type performance|writing\.stats\.letterTypes\.heading)/i,
-      /(canon violations — top hits|writing\.stats\.canonViolations)/i,
-      /(time management|writing\.stats\.timeManagement)/i,
-      /(sub-skill mastery|writing\.stats\.subSkill)/i,
-      /(activity heatmap|writing\.stats\.heatmap)/i,
-      /(readiness|writing\.stats\.readiness)/i,
+      /criteria . current vs target/i,
+      /letter type performance/i,
+      /canon violations . top hits/i,
+      /time management/i,
+      /sub-skill mastery/i,
+      /activity heatmap/i,
+      /readiness/i,
     ];
 
     await expect

@@ -25,26 +25,19 @@ test.describe('Writing V2 mocks @writing-v2 @smoke', () => {
 
     await page.goto('/writing/mocks', { waitUntil: 'domcontentloaded' });
 
-    // Accept either translated heading or raw next-intl key (page uses
-    // `t('writing.mocks.catalogue.title')`).
     await expect(
       page.getByRole('heading', {
-        name: /(mocks under strict exam conditions|writing\.mocks\.catalogue\.title)/i,
+        name: /mocks under strict exam conditions/i,
       }),
     ).toBeVisible({ timeout: 30_000 });
 
     // The card CTA label is computed from the (default) Computer + Strict mode
     // selection, so the button reads "Start strict mock" (it becomes "Start
-    // practice" / "Open paper mode" for the other modes). Match all variants,
-    // plus the raw next-intl key in case translations fall back to keys.
+    // practice" / "Open paper mode" for the other modes). Match all variants.
     const startButtons = page.getByRole('button', {
-      name: /(start strict mock|start practice|open paper mode|take this mock|writing\.mocks\.catalogue\.cta)/i,
+      name: /(start strict mock|start practice|open paper mode|take this mock)/i,
     });
-    // The empty-state copy is `writing.mocks.catalogue.list.empty`
-    // ("No mocks available yet."). Accept the translated string or the raw key.
-    const emptyState = page.getByText(
-      /(no mocks available yet|writing\.mocks\.catalogue\.list\.empty)/i,
-    );
+    const emptyState = page.getByText(/no mocks available yet/i);
 
     // The catalogue hydrates asynchronously. Wait until it has settled into one
     // of its two terminal states — at least one mock CTA, OR the empty-state
@@ -88,10 +81,9 @@ test.describe('Writing V2 mocks @writing-v2 @smoke', () => {
       timeout: 30_000,
     });
 
-    // Case notes panel rendered. Accept raw next-intl key fallback.
     await expect(
       page.getByRole('region', {
-        name: /(case notes|writing\.mocks\.session\.caseNotesLabel|writing\.diagnostic\.session\.caseNotesLabel)/i,
+        name: /case notes/i,
       }),
     ).toBeVisible({ timeout: 30_000 });
 
@@ -99,7 +91,7 @@ test.describe('Writing V2 mocks @writing-v2 @smoke', () => {
     // writing-editor section). It is locked during the reading phase.
     await expect(
       page.getByRole('region', {
-        name: /(writing editor|writing\.mocks\.session\.editorLabel|writing\.diagnostic\.session\.editorLabel)/i,
+        name: /writing editor/i,
       }),
     ).toBeVisible({ timeout: 30_000 });
   });

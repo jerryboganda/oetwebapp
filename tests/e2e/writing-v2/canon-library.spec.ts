@@ -24,13 +24,9 @@ test.describe('Writing V2 canon library @writing-v2 @smoke', () => {
     }
 
     await page.goto('/writing/canon', { waitUntil: 'domcontentloaded' });
-    // Accept either the translated hero heading OR the raw i18n key in case
-    // the next-intl message bundle hasn't been baked into the running
-    // standalone build (see Dockerfile + next.config.ts
-    // outputFileTracingIncludes fix in the same wave).
     await expect(
       page.getByRole('heading', {
-        name: /(dr ahmed's writing rules in one place|writing\.canon\.library\.hero\.title)/i,
+        name: /dr ahmed's writing rules in one place/i,
       }),
     ).toBeVisible({ timeout: 30_000 });
 
@@ -80,11 +76,9 @@ test.describe('Writing V2 canon library @writing-v2 @smoke', () => {
     }
 
     // If the detail page loaded, confirm the rule metadata heading + the
-    // Correct / Incorrect example blocks render. Accept either the
-    // translated heading or the raw next-intl key in case the page is
-    // partially internationalised.
+    // Correct / Incorrect example blocks render.
     const detailHeading = page.getByRole('heading', {
-      name: /(rule metadata|writing\.canon\.detail\.metadata)/i,
+      name: /rule metadata/i,
     });
     if (!(await detailHeading.isVisible({ timeout: 10_000 }).catch(() => false))) {
       test.info().annotations.push({

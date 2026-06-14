@@ -2,47 +2,42 @@ import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
 
 /**
- * Writing V2 — WCAG 2.2 AA scans for the high-traffic learner surfaces.
+ * Writing V2 - WCAG 2.2 AA scans for the high-traffic learner surfaces.
  * Tags: @writing-v2 @a11y
  *
  * Acceptance bar: zero `critical` and zero `serious` impact violations.
- * `minor` / `moderate` violations are logged (attached to the test) for
- * follow-up but do not fail the test — same posture as
- * tests/e2e/shared/accessibility.spec.ts.
+ * `minor` / `moderate` violations are logged for follow-up but do not fail
+ * the test, matching tests/e2e/shared/accessibility.spec.ts.
  *
  * Scope: chromium-learner only. The pages are public to authenticated
  * learners; running on the chromium shard is sufficient signal.
  */
 
-// Each entry accepts either the translated heading OR the raw next-intl
-// translation key as a fallback — covers deployments where the message
-// bundle hasn't been baked into the standalone container yet (see
-// next.config.ts outputFileTracingIncludes fix).
 const PAGES: Array<{ path: string; label: string; headingPattern: RegExp }> = [
   {
     path: '/writing/welcome',
     label: 'writing welcome',
-    headingPattern: /(welcome — let'?s set up your writing pathway|writing\.welcome\.hero\.title)/i,
+    headingPattern: /welcome . let'?s set up your writing pathway/i,
   },
   {
     path: '/writing/diagnostic',
     label: 'writing diagnostic briefing',
-    headingPattern: /(a 50-minute baseline of your six writing criteria|writing\.diagnostic\.briefing\.hero\.title)/i,
+    headingPattern: /a 50-minute baseline of your six writing criteria/i,
   },
   {
     path: '/writing/canon',
     label: 'writing canon library',
-    headingPattern: /(dr ahmed's writing rules in one place|writing\.canon\.library\.hero\.title)/i,
+    headingPattern: /dr ahmed's writing rules in one place/i,
   },
   {
     path: '/writing/skill-tree',
     label: 'writing skill tree',
-    headingPattern: /(w1-w8 — the eight skills every oet letter rests on|writing\.skillTree\.title)/i,
+    headingPattern: /w1-w8 . the eight skills every oet letter rests on/i,
   },
   {
     path: '/writing/stats',
     label: 'writing stats dashboard',
-    headingPattern: /(track every dimension of your writing progress|writing\.stats\.title)/i,
+    headingPattern: /track every dimension of your writing progress/i,
   },
 ];
 
@@ -61,7 +56,7 @@ async function scanPage(page: Page, label: string, testInfo: import('@playwright
   );
 
   // Build a readable summary for failure output. Each violation has an id,
-  // impact, help text, and one or more nodes — surface them all so the fix
+  // impact, help text, and one or more nodes; surface them all so the fix
   // path is obvious from CI logs alone.
   if (blocking.length > 0) {
     const summary = blocking
@@ -70,7 +65,7 @@ async function scanPage(page: Page, label: string, testInfo: import('@playwright
           .slice(0, 3)
           .map((n) => `    - ${n.target.join(' ')}: ${n.failureSummary?.split('\n').join(' | ') ?? ''}`)
           .join('\n');
-        return `  [${v.impact}] ${v.id} — ${v.help}\n${nodes}`;
+        return `  [${v.impact}] ${v.id} - ${v.help}\n${nodes}`;
       })
       .join('\n\n');
     expect(

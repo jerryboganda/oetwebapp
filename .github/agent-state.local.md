@@ -1,68 +1,40 @@
-# Agent State - Production Deploy Main
+# Agent State - Writing I18n Raw-Key Hardening
 
-Last updated: 2026-06-10
+Last updated: 2026-06-14
 
 ## Goal
 
-Commit all completed billing/checkout/runtime hardening work to `main`, push it, deploy through GitHub Actions/GHCR, and close every deploy/QA issue encountered without running heavy builds on the VPS.
+Prevent the Writing module from rendering raw `writing.*` translation keys in production and make QA fail if that regression returns.
 
 ## Implemented
 
-- Added a quote-backed `/checkout/review` route for plan purchases, add-ons, and AI package orders.
-- Added deterministic `/billing/payment-return` handling with polling states for confirming, completed, failed, cancelled, expired, and timeout-safe processing.
-- Added learner `GET /v1/billing/payment-status` to report normalized quote/payment status by quote id or provider checkout session id.
-- Extended quote checkout to support `plan_purchase` and return to `/billing/payment-return` with quote/session context.
-- Routed product detail course buys, add-on modal purchases, `/ai-packages`, and billing AI package cards into the review flow.
-- Fixed legacy generic cart checkout status lookup to accept either the local checkout GUID or Stripe `cs_...` session id, and removed the route GUID constraint.
-- Fixed legacy generic cart checkout creation to honor frontend `successUrl`/`cancelUrl` and append Stripe `{CHECKOUT_SESSION_ID}` when needed.
-- Added focused backend and frontend tests for payment status, Stripe session status lookup, payment return rendering, and add-on review routing.
-- Fixed production startup ordering so PostgreSQL migrations run before runtime-settings startup guards read newly added payment/Soketi columns.
-- Narrowed the early startup migration/runtime-settings self-heal to PostgreSQL only; SQLite desktop/test runtimes use the existing compatibility bootstrapper because the production migration chain contains PostgreSQL-specific DDL.
-- Made the historical `ExactAuthSocialPort` migration provider-aware so its additive auth/expert columns use PostgreSQL idempotent SQL on Npgsql and portable EF column operations elsewhere.
+- Hardened `i18n.ts` so translated modules load English as the baseline and overlay the requested locale, giving Arabic a readable English fallback for missing strings instead of raw keys.
+- Hardened `AppProviders` so missing `writing.*` messages no longer fall back to the raw key; they emit a console error and render `Writing copy unavailable`.
+- Added `tests/unit/i18n-writing-messages.test.ts` to verify loaded English/Arabic Writing hub copy and statically cover `app/writing/**` plus `components/domain/writing/**` static `t('writing...')` keys.
+- Removed raw `writing.*` fallback acceptance from learner smoke and Writing V2 E2E/a11y smoke specs.
+- Added a `/writing` learner-smoke assertion that page body text must not contain raw `writing.*` keys.
 
 ## Validation
 
-- `pnpm exec vitest run app/billing/payment-return/page.test.tsx components/billing/addon-purchase-modal.test.tsx --reporter=dot`: passed, 3 files / 6 tests.
+- `pnpm exec vitest run tests/unit/i18n-writing-messages.test.ts --reporter=dot`: passed, 2 tests.
 - `pnpm exec tsc --noEmit`: passed.
-- `pnpm run backend:build`: passed with existing repo warnings.
-- `dotnet test backend/tests/OetLearner.Api.Tests/OetLearner.Api.Tests.csproj --no-build --filter "FullyQualifiedName~BillingCheckoutSessionGuardTests|FullyQualifiedName~CheckoutSessionStatusOwnershipTests" --nologo`: passed, 7 tests.
-- `pnpm exec eslint app/checkout/review/page.tsx app/billing/payment-return/page.tsx app/ai-packages/page.tsx app/billing/page.tsx app/marketplace/packages/[id]/page.tsx components/billing/addon-purchase-modal.tsx app/billing/payment-return/page.test.tsx components/billing/addon-purchase-modal.test.tsx lib/api.ts lib/billing-types.ts`: passed with 6 existing `react-hooks/set-state-in-effect` warnings in `app/ai-packages/page.tsx` and `app/billing/page.tsx`.
+- `pnpm exec eslint app/providers.tsx i18n.ts tests/unit/i18n-writing-messages.test.ts tests/e2e/learner/learner-smoke.spec.ts tests/e2e/writing-v2/a11y.spec.ts tests/e2e/writing-v2/mocks.spec.ts tests/e2e/writing-v2/stats.spec.ts tests/e2e/writing-v2/diagnostic.spec.ts tests/e2e/writing-v2/canon-library.spec.ts`: passed.
 - `git diff --check`: passed.
-- `dotnet test backend/tests/OetLearner.Api.Tests/OetLearner.Api.Tests.csproj --filter "FullyQualifiedName~DisableAntiforgeryUploadEndpointAuthorizationTests" --nologo --logger "console;verbosity=minimal"`: passed, 18 tests.
-- `dotnet test backend/tests/OetLearner.Api.Tests/OetLearner.Api.Tests.csproj --filter "FullyQualifiedName~AdminDashboard_AndContentList_RemainQueryable_WhenSqliteBacksDesktopRuntime|FullyQualifiedName~ExpertDashboard_RemainsQueryable_WhenSqliteBacksDesktopRuntime|FullyQualifiedName~FeedEndpoint_RemainsQueryable_WhenSqliteBacksDesktopRuntime" --nologo --logger "console;verbosity=minimal"`: passed, 3 tests.
-- `dotnet build backend/src/OetLearner.Api/OetLearner.Api.csproj --nologo`: passed with existing warnings.
-- Latest completed deploy evidence before this handoff: Build & Deploy run `27247997404` passed on `dfd030c5`; QA Smoke run `27247997413` failed backend shards on SQLite migration/startup issues now fixed locally.
-- `pnpm exec vitest run app/admin/non-editor-pages.test.tsx --reporter=dot`: passed, 5 discovered files / 85 tests, after making the webhook event assertion wait for the async table row that the Speaking workflow frontend Vitest hit.
+- Scoped mojibake scan over changed files with `rg -n "â|ð|�|Ã|Â" <changed files>`: passed with no matches.
 
-## Touched Files
+## Not Run / Blocked
 
-- `.github/agent-state.local.md`
-- `PROGRESS.md`
-- `app/checkout/review/page.tsx`
-- `app/billing/payment-return/page.tsx`
-- `app/billing/payment-return/page.test.tsx`
-- `app/marketplace/packages/[id]/page.tsx`
-- `app/ai-packages/page.tsx`
-- `app/billing/page.tsx`
-- `components/billing/addon-purchase-modal.tsx`
-- `components/billing/addon-purchase-modal.test.tsx`
-- `lib/api.ts`
-- `lib/billing-types.ts`
-- `backend/src/OetLearner.Api/Contracts/BillingContracts.cs`
-- `backend/src/OetLearner.Api/Contracts/Requests.cs`
-- `backend/src/OetLearner.Api/Endpoints/BillingCheckoutEndpoints.cs`
-- `backend/src/OetLearner.Api/Endpoints/LearnerEndpoints.cs`
-- `backend/src/OetLearner.Api/Services/Billing/CheckoutService.cs`
-- `backend/src/OetLearner.Api/Services/Billing/ICheckoutService.cs`
-- `backend/src/OetLearner.Api/Services/LearnerService.cs`
-- `backend/tests/OetLearner.Api.Tests/BillingCheckoutSessionGuardTests.cs`
-- `backend/tests/OetLearner.Api.Tests/CheckoutSessionStatusOwnershipTests.cs`
-- `backend/src/OetLearner.Api/Program.cs`
-- `backend/src/OetLearner.Api/Data/Migrations/20260329204416_ExactAuthSocialPort.cs`
-- `app/admin/non-editor-pages.test.tsx`
+- Focused Playwright writing-route smokes were not run because the local frontend/API stack was not reachable.
+- `scripts/OET-Local-Launch.ps1 -SkipBrowser` timed out after 3 minutes; afterward `http://localhost:3000` and `http://localhost:5198/health` were still unreachable, while PostgreSQL alone was listening on `localhost:5432`.
+- `pnpm run check:encoding` was attempted and failed on pre-existing `.codex/skills/...` mojibake noise, not on changed files; changed files passed the scoped scan above.
 
-## Known Risks / Next Step
+## Next Step
 
-- Commit and push the PostgreSQL-only startup migration fix to `main`.
-- Watch the new GitHub Actions Build & Deploy, QA Smoke, Speaking CI, and SBOM/SCA runs to completion.
-- After deploy succeeds, verify production health endpoints and report any residual warnings.
+Start a healthy local stack or run the writing Playwright smoke shards in CI, then verify:
+
+- learner `/writing`
+- `tests/e2e/writing-v2/mocks.spec.ts`
+- `tests/e2e/writing-v2/diagnostic.spec.ts`
+- `tests/e2e/writing-v2/stats.spec.ts`
+- `tests/e2e/writing-v2/canon-library.spec.ts`
+- `tests/e2e/writing-v2/a11y.spec.ts`

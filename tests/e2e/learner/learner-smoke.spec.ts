@@ -37,10 +37,7 @@ const learnerRoutes = [
   },
   {
     path: '/writing',
-    // The /writing hub was rebuilt to the V2 landing; its hero copy is now
-    // "Practise OET Writing your way" (accept the raw next-intl key too, as the
-    // writing namespace can render keys verbatim under load like other writing routes).
-    heading: /(practise oet writing your way|writing\.hub\.hero\.title)/i,
+    heading: /practise oet writing your way/i,
   },
   {
     path: '/speaking',
@@ -131,6 +128,11 @@ async function expectRouteHeading(page: Page, path: string, routeHeading: Locato
 
   await expect(routeHeading).toBeVisible({ timeout: 1_000 });
   return recovered;
+}
+
+async function expectNoRawWritingKeys(page: Page) {
+  const bodyText = await page.locator('body').textContent({ timeout: 5_000 });
+  expect(bodyText ?? '').not.toMatch(/\bwriting\.[a-zA-Z0-9_.-]+/);
 }
 
 function hasRecoverableNextDevPageError(diagnostics: ReturnType<typeof observePage>) {
@@ -237,6 +239,10 @@ test.describe('Learner workspace smoke @learner @smoke', () => {
 
       if (route.path === '/submissions') {
         await expect(page.getByText(/\d{4}-\d{2}-\d{2}T\d{2}:/)).toHaveCount(0);
+      }
+
+      if (route.path === '/writing') {
+        await expectNoRawWritingKeys(page);
       }
 
       expectNoSevereClientIssues(diagnostics, {

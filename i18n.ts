@@ -56,7 +56,7 @@ export async function resolveLocale(): Promise<SupportedLocale> {
   return DEFAULT_LOCALE;
 }
 
-async function loadMessagesForModule(
+async function importMessagesForModule(
   locale: SupportedLocale,
   moduleName: string,
 ): Promise<Record<string, string>> {
@@ -64,14 +64,19 @@ async function loadMessagesForModule(
     const mod = (await import(`./messages/${locale}/${moduleName}.json`)) as { default: Record<string, string> };
     return mod.default;
   } catch {
-    if (locale === DEFAULT_LOCALE) return {};
-    try {
-      const fallback = (await import(`./messages/${DEFAULT_LOCALE}/${moduleName}.json`)) as { default: Record<string, string> };
-      return fallback.default;
-    } catch {
-      return {};
-    }
+    return {};
   }
+}
+
+async function loadMessagesForModule(
+  locale: SupportedLocale,
+  moduleName: string,
+): Promise<Record<string, string>> {
+  const baseline = await importMessagesForModule(DEFAULT_LOCALE, moduleName);
+  if (locale === DEFAULT_LOCALE) return baseline;
+
+  const localized = await importMessagesForModule(locale, moduleName);
+  return { ...baseline, ...localized };
 }
 
 export async function loadAllMessages(locale: SupportedLocale): Promise<Record<string, string>> {
