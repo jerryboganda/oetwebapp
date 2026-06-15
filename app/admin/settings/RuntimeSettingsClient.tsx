@@ -197,6 +197,37 @@ export interface SoketiSettings {
   enabled: boolean | null;
 }
 
+export interface DataRetentionSettings {
+  analyticsEventsDays: number | null;
+  auditEventsDays: number | null;
+  paymentWebhookEventsDays: number | null;
+  paymentWebhookPiiNullOutAgeDays: number | null;
+  notificationDeliveryAttemptsDays: number | null;
+  sweepIntervalHours: number | null;
+  batchSize: number | null;
+}
+
+export interface ExpertAutoAssignmentSettings {
+  enabled: boolean | null;
+  pollingIntervalSeconds: number | null;
+  slaEscalationIntervalSeconds: number | null;
+  slaHoursStandard: number | null;
+  slaHoursExpress: number | null;
+  maxActiveAssignmentsPerExpert: number | null;
+  lookbackHoursForLoad: number | null;
+  batchSize: number | null;
+}
+
+export interface PasswordPolicySettings {
+  minimumLength: number | null;
+  requireMixedCase: boolean | null;
+  requireDigit: boolean | null;
+  requireSymbol: boolean | null;
+  breachCheckEnabled: boolean | null;
+  breachApiBaseUrl: string;
+  breachApiTimeoutSeconds: number | null;
+}
+
 export interface RuntimeSettingsResponse {
   email: EmailSettings;
   billing: BillingSettings;
@@ -216,6 +247,9 @@ export interface RuntimeSettingsResponse {
   paymob: PaymobSettings;
   payTabs: PayTabsSettings;
   soketi: SoketiSettings;
+  dataRetention: DataRetentionSettings;
+  expertAutoAssignment: ExpertAutoAssignmentSettings;
+  passwordPolicy: PasswordPolicySettings;
   updatedBy: string | null;
   updatedByUserId?: string | null;
   updatedAt: string | null;
@@ -228,7 +262,7 @@ export interface RuntimeSettingsIntegrationTestResponse {
   testedAt: string;
 }
 
-type SectionId = 'email' | 'billing' | 'sentry' | 'backup' | 'oauth' | 'push' | 'uploadScanner' | 'zoom' | 'speakingWhisper' | 'speakingLiveKit' | 'speakingAi' | 'speakingStorage' | 'speakingCompliance' | 'speakingFeatures' | 'checkoutCom' | 'paymob' | 'payTabs' | 'soketi';
+type SectionId = 'email' | 'billing' | 'sentry' | 'backup' | 'oauth' | 'push' | 'uploadScanner' | 'zoom' | 'speakingWhisper' | 'speakingLiveKit' | 'speakingAi' | 'speakingStorage' | 'speakingCompliance' | 'speakingFeatures' | 'checkoutCom' | 'paymob' | 'payTabs' | 'soketi' | 'dataRetention' | 'expertAutoAssignment' | 'passwordPolicy';
 
 type ToastState = { variant: 'success' | 'error'; message: string } | null;
 type TestStatusState = Partial<Record<SectionId, RuntimeSettingsIntegrationTestResponse>>;
@@ -411,6 +445,37 @@ const SOKETI_FIELDS: FieldDef<SoketiSettings>[] = [
   { key: 'useTls', label: 'Use TLS (wss/https)', type: 'checkbox' },
 ];
 
+const DATA_RETENTION_FIELDS: FieldDef<DataRetentionSettings>[] = [
+  { key: 'auditEventsDays', label: 'Audit Events Retention (days)', type: 'number', hint: 'How long admin/billing audit rows are kept. 0 disables the sweep (default 730).' },
+  { key: 'analyticsEventsDays', label: 'Analytics Events Retention (days)', type: 'number', hint: 'High-volume product analytics retention. 0 disables (default 365).' },
+  { key: 'paymentWebhookEventsDays', label: 'Payment Webhook Retention (days)', type: 'number', hint: 'How long processed gateway webhook rows are kept (default 180).' },
+  { key: 'paymentWebhookPiiNullOutAgeDays', label: 'Webhook Payload PII Null-out (days)', type: 'number', hint: 'Age after which webhook payload bodies are nulled while metadata is kept (default 90).' },
+  { key: 'notificationDeliveryAttemptsDays', label: 'Notification Attempts Retention (days)', type: 'number', hint: 'How long delivery-attempt rows are kept (default 90).' },
+  { key: 'sweepIntervalHours', label: 'Sweep Interval (hours)', type: 'number', hint: 'How often the retention sweeper runs (default 24).' },
+  { key: 'batchSize', label: 'Batch Size (rows per table per sweep)', type: 'number', hint: 'Caps rows deleted per table per sweep to avoid long locks (default 5000).' },
+];
+
+const EXPERT_AUTO_ASSIGNMENT_FIELDS: FieldDef<ExpertAutoAssignmentSettings>[] = [
+  { key: 'enabled', label: 'Enable auto-assignment', type: 'checkbox', hint: 'Auto-assign Writing review requests to the lowest-loaded eligible expert.' },
+  { key: 'slaHoursStandard', label: 'Standard SLA (hours)', type: 'number', hint: 'Turnaround target for standard reviews (default 48).' },
+  { key: 'slaHoursExpress', label: 'Express SLA (hours)', type: 'number', hint: 'Turnaround target for express reviews (default 12).' },
+  { key: 'maxActiveAssignmentsPerExpert', label: 'Max Active Assignments / Expert', type: 'number', hint: 'Load cap per expert before they stop receiving new work (default 8).' },
+  { key: 'lookbackHoursForLoad', label: 'Load Lookback (hours)', type: 'number', hint: 'Window used to tally recent completions when balancing load (default 24).' },
+  { key: 'batchSize', label: 'Batch Size (per poll)', type: 'number', hint: 'Max pending requests processed per poll cycle (default 50).' },
+  { key: 'pollingIntervalSeconds', label: 'Polling Interval (seconds)', type: 'number', hint: 'Cadence of the assignment poll (default 30).' },
+  { key: 'slaEscalationIntervalSeconds', label: 'SLA Escalation Interval (seconds)', type: 'number', hint: 'Cadence of the SLA escalation poll (default 60).' },
+];
+
+const PASSWORD_POLICY_FIELDS: FieldDef<PasswordPolicySettings>[] = [
+  { key: 'minimumLength', label: 'Minimum Length', type: 'number', hint: 'Minimum password length (NIST recommends 8+, default 10).' },
+  { key: 'requireMixedCase', label: 'Require mixed case', type: 'checkbox', hint: 'Require both uppercase and lowercase letters.' },
+  { key: 'requireDigit', label: 'Require a digit', type: 'checkbox' },
+  { key: 'requireSymbol', label: 'Require a symbol', type: 'checkbox' },
+  { key: 'breachCheckEnabled', label: 'Enable HIBP breach check', type: 'checkbox', hint: 'k-anonymity check against HaveIBeenPwned. The password never leaves the server. Disable for air-gapped deployments.' },
+  { key: 'breachApiBaseUrl', label: 'Breach API Base URL', type: 'url', hint: 'HIBP range API base. Override only for a self-hosted mirror (default https://api.pwnedpasswords.com/).' },
+  { key: 'breachApiTimeoutSeconds', label: 'Breach API Timeout (seconds)', type: 'number', hint: 'Fail-open timeout for the breach check (1–60, default 3).' },
+];
+
 const SECTION_META: { id: SectionId; title: string; description: string }[] = [
   { id: 'email', title: 'Email (Brevo + SMTP)', description: 'Transactional email delivery via Brevo with SMTP fallback.' },
   { id: 'billing', title: 'Billing (Stripe)', description: 'Stripe Checkout, Customer Portal, and webhook signing.' },
@@ -430,6 +495,9 @@ const SECTION_META: { id: SectionId; title: string; description: string }[] = [
   { id: 'paymob', title: 'Payments: Paymob', description: 'Egypt — cards, Meeza, Fawry, wallets. Keys override env config; webhook verification uses the same HMAC secret.' },
   { id: 'payTabs', title: 'Payments: PayTabs', description: 'Gulf + Egypt — cards, mada, KNET, Apple Pay. Keys override env config; webhook verification uses the same key.' },
   { id: 'soketi', title: 'Realtime: Soketi', description: 'Server-side websocket push. The browser client key comes from NEXT_PUBLIC_* env — changes here affect server dispatch only.' },
+  { id: 'dataRetention', title: 'Data Retention', description: 'Retention windows for high-volume event tables (analytics, audit, payment webhooks, notification attempts) and the sweeper cadence.' },
+  { id: 'expertAutoAssignment', title: 'Expert Auto-Assignment', description: 'Writing-review auto-assignment loop: enablement, SLA windows, per-expert load cap, and batch sizes.' },
+  { id: 'passwordPolicy', title: 'Password Policy', description: 'Complexity requirements and the HaveIBeenPwned breach check for new/changed passwords.' },
 ];
 
 /* ───────────────────────── Helpers ───────────────────────── */
@@ -589,6 +657,34 @@ function emptyResponse(): RuntimeSettingsResponse {
       useTls: null,
       enabled: null,
     },
+    dataRetention: {
+      analyticsEventsDays: null,
+      auditEventsDays: null,
+      paymentWebhookEventsDays: null,
+      paymentWebhookPiiNullOutAgeDays: null,
+      notificationDeliveryAttemptsDays: null,
+      sweepIntervalHours: null,
+      batchSize: null,
+    },
+    expertAutoAssignment: {
+      enabled: null,
+      pollingIntervalSeconds: null,
+      slaEscalationIntervalSeconds: null,
+      slaHoursStandard: null,
+      slaHoursExpress: null,
+      maxActiveAssignmentsPerExpert: null,
+      lookbackHoursForLoad: null,
+      batchSize: null,
+    },
+    passwordPolicy: {
+      minimumLength: null,
+      requireMixedCase: null,
+      requireDigit: null,
+      requireSymbol: null,
+      breachCheckEnabled: null,
+      breachApiBaseUrl: '',
+      breachApiTimeoutSeconds: null,
+    },
     updatedBy: null,
     updatedByUserId: null,
     updatedAt: null,
@@ -618,6 +714,9 @@ function normalizeResponse(data: Partial<RuntimeSettingsResponse>): RuntimeSetti
     paymob: { ...empty.paymob, ...data.paymob },
     payTabs: { ...empty.payTabs, ...data.payTabs },
     soketi: { ...empty.soketi, ...data.soketi },
+    dataRetention: { ...empty.dataRetention, ...data.dataRetention },
+    expertAutoAssignment: { ...empty.expertAutoAssignment, ...data.expertAutoAssignment },
+    passwordPolicy: { ...empty.passwordPolicy, ...data.passwordPolicy },
   });
 }
 
@@ -997,6 +1096,9 @@ export function RuntimeSettingsClient() {
     paymob: false,
     payTabs: false,
     soketi: false,
+    dataRetention: false,
+    expertAutoAssignment: false,
+    passwordPolicy: false,
   });
 
   const load = useCallback(async () => {
@@ -1635,6 +1737,72 @@ export function RuntimeSettingsClient() {
                     />
                   ),
                 )}
+
+              {section.id === 'dataRetention' &&
+                DATA_RETENTION_FIELDS.map((field) => (
+                  <PlainField
+                    key={field.key}
+                    label={field.label}
+                    hint={field.hint}
+                    type={field.type}
+                    value={draft.dataRetention[field.key] as string | number | boolean | null}
+                    onChange={(next) =>
+                      updateField(
+                        'dataRetention',
+                        field.key,
+                        (field.type === 'number'
+                          ? parseNullableNumberInput(String(next))
+                          : field.type === 'checkbox'
+                            ? Boolean(next)
+                            : String(next)) as never,
+                      )
+                    }
+                  />
+                ))}
+
+              {section.id === 'expertAutoAssignment' &&
+                EXPERT_AUTO_ASSIGNMENT_FIELDS.map((field) => (
+                  <PlainField
+                    key={field.key}
+                    label={field.label}
+                    hint={field.hint}
+                    type={field.type}
+                    value={draft.expertAutoAssignment[field.key] as string | number | boolean | null}
+                    onChange={(next) =>
+                      updateField(
+                        'expertAutoAssignment',
+                        field.key,
+                        (field.type === 'number'
+                          ? parseNullableNumberInput(String(next))
+                          : field.type === 'checkbox'
+                            ? Boolean(next)
+                            : String(next)) as never,
+                      )
+                    }
+                  />
+                ))}
+
+              {section.id === 'passwordPolicy' &&
+                PASSWORD_POLICY_FIELDS.map((field) => (
+                  <PlainField
+                    key={field.key}
+                    label={field.label}
+                    hint={field.hint}
+                    type={field.type}
+                    value={draft.passwordPolicy[field.key] as string | number | boolean | null}
+                    onChange={(next) =>
+                      updateField(
+                        'passwordPolicy',
+                        field.key,
+                        (field.type === 'number'
+                          ? parseNullableNumberInput(String(next))
+                          : field.type === 'checkbox'
+                            ? Boolean(next)
+                            : String(next)) as never,
+                      )
+                    }
+                  />
+                ))}
             </Section>
           ))}
 

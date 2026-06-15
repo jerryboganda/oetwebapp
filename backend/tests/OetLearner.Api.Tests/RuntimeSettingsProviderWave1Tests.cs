@@ -24,7 +24,8 @@ public sealed class RuntimeSettingsProviderWave1Tests
     public async Task GetAsync_MergesWave1DatabaseOverridesOverConfiguredDefaults()
     {
         var services = new ServiceCollection();
-        services.AddDbContext<LearnerDbContext>(o => o.UseInMemoryDatabase(Guid.NewGuid().ToString("N")));
+        var databaseName = Guid.NewGuid().ToString("N");
+        services.AddDbContext<LearnerDbContext>(o => o.UseInMemoryDatabase(databaseName));
         services.AddDataProtection();
         await using var sp = services.BuildServiceProvider();
 
@@ -75,7 +76,8 @@ public sealed class RuntimeSettingsProviderWave1Tests
     public async Task GetAsync_FallsBackToConfiguredDefaultsWhenNoOverrides()
     {
         var services = new ServiceCollection();
-        services.AddDbContext<LearnerDbContext>(o => o.UseInMemoryDatabase(Guid.NewGuid().ToString("N")));
+        var databaseName = Guid.NewGuid().ToString("N");
+        services.AddDbContext<LearnerDbContext>(o => o.UseInMemoryDatabase(databaseName));
         services.AddDataProtection();
         await using var sp = services.BuildServiceProvider();
 
