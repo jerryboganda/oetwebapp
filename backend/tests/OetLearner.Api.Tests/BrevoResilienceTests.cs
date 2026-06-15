@@ -119,7 +119,8 @@ public class BrevoResilienceTests
                 SmtpUsername: null,
                 SmtpPassword: null,
                 SmtpFromAddress: "noreply@example.test",
-                SmtpFromName: "OET Test"),
+                SmtpFromName: "OET Test",
+                BrevoEnabled: true),
             Billing: new BillingSettings(null, null, null, null, null, null, null, null, null, null),
             Sentry: new SentrySettings(null, null, null),
             Backup: new BackupSettings(null, null, null, null, null),
@@ -166,6 +167,7 @@ public class BrevoResilienceTests
             AiGateway: TestRuntimeSettingsProvider.DefaultAiGateway(),
             Writing: TestRuntimeSettingsProvider.DefaultWriting(),
             Platform: TestRuntimeSettingsProvider.DefaultPlatform(),
+            Messaging: TestRuntimeSettingsProvider.DefaultMessaging(),
             UpdatedByUserId: null,
             UpdatedByUserName: null,
             UpdatedAt: null);

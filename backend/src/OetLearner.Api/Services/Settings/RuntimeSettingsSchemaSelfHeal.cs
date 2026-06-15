@@ -20,6 +20,18 @@ public static class RuntimeSettingsSchemaSelfHeal
     public const string Sql = @"
 ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""BillingPublicAppBaseUrl"" character varying(1024);
 
+-- Email partial-coverage gap (Wave 3)
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""BrevoWelcomeTemplateId"" integer;
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""BrevoPasswordChangedTemplateId"" integer;
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""BrevoMfaEnabledTemplateId"" integer;
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""BrevoAdminInviteTemplateId"" integer;
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""BrevoSecurityAlertTemplateId"" integer;
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""BrevoReviewCompletedTemplateId"" integer;
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""BrevoWebhookSecretEncrypted"" text;
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""BrevoEnabled"" boolean;
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""SmtpEnabled"" boolean;
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""SmtpEnableSsl"" boolean;
+
 ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""CheckoutComApiBaseUrl"" character varying(512);
 ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""CheckoutComSecretKeyEncrypted"" text;
 ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""CheckoutComPublicKey"" character varying(256);
@@ -120,5 +132,18 @@ ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""WritingGradeIdempoten
 ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""PublicApiBaseUrl"" character varying(1024);
 ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""PublicWebBaseUrl"" character varying(1024);
 ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""FallbackEmailDomain"" character varying(256);
+
+-- Messaging (Twilio SMS / WhatsApp Business Cloud — Wave 3)
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""TwilioEnabled"" boolean;
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""TwilioApiBaseUrl"" character varying(512);
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""TwilioAccountSid"" character varying(256);
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""TwilioAuthTokenEncrypted"" text;
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""TwilioFromNumber"" character varying(32);
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""TwilioMessagingServiceSid"" character varying(256);
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""WhatsAppEnabled"" boolean;
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""WhatsAppApiBaseUrl"" character varying(512);
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""WhatsAppAccessTokenEncrypted"" text;
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""WhatsAppPhoneNumberId"" character varying(256);
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""WhatsAppFallbackTemplateName"" character varying(256);
 ";
 }

@@ -1,9 +1,8 @@
 using System.Net.Http.Headers;
 using System.Text;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Options;
-using OetLearner.Api.Configuration;
 using OetLearner.Api.Data;
+using OetLearner.Api.Services.Settings;
 
 namespace OetLearner.Api.Services.Billing;
 
@@ -18,21 +17,21 @@ public sealed class TwilioSmsChannel : IBillingNotificationChannel
 
     private readonly HttpClient _http;
     private readonly LearnerDbContext _db;
-    private readonly IOptions<TwilioOptions> _options;
+    private readonly IRuntimeSettingsProvider _runtimeSettings;
     private readonly ILogger<TwilioSmsChannel> _logger;
 
-    public TwilioSmsChannel(HttpClient http, LearnerDbContext db, IOptions<TwilioOptions> options, ILogger<TwilioSmsChannel> logger)
+    public TwilioSmsChannel(HttpClient http, LearnerDbContext db, IRuntimeSettingsProvider runtimeSettings, ILogger<TwilioSmsChannel> logger)
     {
         _http = http;
         _db = db;
-        _options = options;
+        _runtimeSettings = runtimeSettings;
         _logger = logger;
     }
 
     public async Task SendAsync(string userId, string subject, string body, CancellationToken ct)
     {
-        var opts = _options.Value;
-        if (!opts.Enabled || string.IsNullOrWhiteSpace(opts.AccountSid) || string.IsNullOrWhiteSpace(opts.AuthToken))
+        var opts = (await _runtimeSettings.GetAsync(ct)).Messaging;
+        if (!opts.IsTwilioConfigured)
         {
             _logger.LogDebug("Twilio disabled — skipping SMS to {UserId}", userId);
             return;
@@ -45,19 +44,19 @@ public sealed class TwilioSmsChannel : IBillingNotificationChannel
             return;
         }
 
-        var url = $"{opts.ApiBaseUrl.TrimEnd('/')}/2010-04-01/Accounts/{opts.AccountSid}/Messages.json";
+        var url = $"{opts.TwilioApiBaseUrl.TrimEnd('/')}/2010-04-01/Accounts/{opts.TwilioAccountSid}/Messages.json";
         var form = new List<KeyValuePair<string, string>>
         {
             new("To", phone),
             new("Body", TruncateForSms(body)),
         };
-        if (!string.IsNullOrWhiteSpace(opts.MessagingServiceSid))
+        if (!string.IsNullOrWhiteSpace(opts.TwilioMessagingServiceSid))
         {
-            form.Add(new("MessagingServiceSid", opts.MessagingServiceSid));
+            form.Add(new("MessagingServiceSid", opts.TwilioMessagingServiceSid));
         }
-        else if (!string.IsNullOrWhiteSpace(opts.FromNumber))
+        else if (!string.IsNullOrWhiteSpace(opts.TwilioFromNumber))
         {
-            form.Add(new("From", opts.FromNumber));
+            form.Add(new("From", opts.TwilioFromNumber));
         }
         else
         {
@@ -68,7 +67,7 @@ public sealed class TwilioSmsChannel : IBillingNotificationChannel
         using var req = new HttpRequestMessage(HttpMethod.Post, url);
         req.Headers.Authorization = new AuthenticationHeaderValue(
             "Basic",
-            Convert.ToBase64String(Encoding.UTF8.GetBytes($"{opts.AccountSid}:{opts.AuthToken}")));
+            Convert.ToBase64String(Encoding.UTF8.GetBytes($"{opts.TwilioAccountSid}:{opts.TwilioAuthToken}")));
         req.Content = new FormUrlEncodedContent(form);
 
         using var resp = await _http.SendAsync(req, ct);

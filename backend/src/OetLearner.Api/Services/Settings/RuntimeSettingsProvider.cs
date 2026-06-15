@@ -44,6 +44,8 @@ public sealed class RuntimeSettingsProvider : IRuntimeSettingsProvider
     private readonly IOptions<AiToolOptions> _aiTool;
     private readonly IOptions<WritingV2Options> _writing;
     private readonly IOptions<PlatformOptions> _platform;
+    private readonly IOptions<TwilioOptions> _twilio;
+    private readonly IOptions<WhatsAppOptions> _whatsApp;
     private readonly IOptionsMonitor<SmtpOptions> _smtp;
     private readonly IConfiguration _config;
     private readonly IHostEnvironment _environment;
@@ -67,6 +69,8 @@ public sealed class RuntimeSettingsProvider : IRuntimeSettingsProvider
         IOptions<AiToolOptions> aiTool,
         IOptions<WritingV2Options> writing,
         IOptions<PlatformOptions> platform,
+        IOptions<TwilioOptions> twilio,
+        IOptions<WhatsAppOptions> whatsApp,
         IOptionsMonitor<SmtpOptions> smtp,
         IConfiguration config,
         IHostEnvironment environment)
@@ -89,6 +93,8 @@ public sealed class RuntimeSettingsProvider : IRuntimeSettingsProvider
         _aiTool = aiTool;
         _writing = writing;
         _platform = platform;
+        _twilio = twilio;
+        _whatsApp = whatsApp;
         _smtp = smtp;
         _config = config;
         _environment = environment;
@@ -174,7 +180,18 @@ public sealed class RuntimeSettingsProvider : IRuntimeSettingsProvider
             SmtpUsername: Coalesce(r.SmtpUsername, smtp.Username),
             SmtpPassword: Unprotect(r.SmtpPasswordEncrypted) ?? NullIfEmpty(smtp.Password),
             SmtpFromAddress: Coalesce(r.SmtpFromAddress, brevo.FromEmail, smtp.FromEmail),
-            SmtpFromName: Coalesce(r.SmtpFromName, brevo.FromName, smtp.FromName));
+            SmtpFromName: Coalesce(r.SmtpFromName, brevo.FromName, smtp.FromName),
+            // ── Email partial-coverage gap (Wave 3) — DB-over-env ──────
+            BrevoWelcomeTemplateId: r.BrevoWelcomeTemplateId ?? brevo.WelcomeTemplateId,
+            BrevoPasswordChangedTemplateId: r.BrevoPasswordChangedTemplateId ?? brevo.PasswordChangedTemplateId,
+            BrevoMfaEnabledTemplateId: r.BrevoMfaEnabledTemplateId ?? brevo.MfaEnabledTemplateId,
+            BrevoAdminInviteTemplateId: r.BrevoAdminInviteTemplateId ?? brevo.AdminInviteTemplateId,
+            BrevoSecurityAlertTemplateId: r.BrevoSecurityAlertTemplateId ?? brevo.SecurityAlertTemplateId,
+            BrevoReviewCompletedTemplateId: r.BrevoReviewCompletedTemplateId ?? brevo.ReviewCompletedTemplateId,
+            BrevoWebhookSecret: Unprotect(r.BrevoWebhookSecretEncrypted) ?? NullIfEmpty(brevo.WebhookSecret),
+            BrevoEnabled: r.BrevoEnabled ?? brevo.Enabled,
+            SmtpEnabled: r.SmtpEnabled ?? smtp.Enabled,
+            SmtpEnableSsl: r.SmtpEnableSsl ?? smtp.EnableSsl);
 
         var bill = new BillingSettings(
             StripeSecretKey: Unprotect(r.StripeSecretKeyEncrypted) ?? NullIfEmpty(stripeOptions.SecretKey),
@@ -286,6 +303,7 @@ public sealed class RuntimeSettingsProvider : IRuntimeSettingsProvider
         var aiGateway = ResolveAiGateway(r, _aiProvider.Value, _aiTool.Value);
         var writing = ResolveWriting(r, _writing.Value);
         var platform = ResolvePlatform(r, _platform.Value);
+        var messaging = ResolveMessaging(r, _twilio.Value, _whatsApp.Value);
 
         return new EffectiveSettings(
             Email: email,
@@ -315,6 +333,7 @@ public sealed class RuntimeSettingsProvider : IRuntimeSettingsProvider
             AiGateway: aiGateway,
             Writing: writing,
             Platform: platform,
+            Messaging: messaging,
             UpdatedByUserId: r.UpdatedByUserId,
             UpdatedByUserName: r.UpdatedByUserName,
             UpdatedAt: r.UpdatedAt == default ? null : r.UpdatedAt);
@@ -499,6 +518,38 @@ public sealed class RuntimeSettingsProvider : IRuntimeSettingsProvider
             PublicApiBaseUrl: Coalesce(r.PublicApiBaseUrl, env.PublicApiBaseUrl),
             PublicWebBaseUrl: Coalesce(r.PublicWebBaseUrl, env.PublicWebBaseUrl),
             FallbackEmailDomain: Coalesce(r.FallbackEmailDomain, env.FallbackEmailDomain, "example.invalid")!);
+
+    // ── Messaging (Twilio SMS / WhatsApp — Wave 3) ─────────────────
+    // (DB-over-env: null DB field → env default; secrets decrypted here.)
+    private MessagingSettings ResolveMessaging(RuntimeSettingsRow r, TwilioOptions twilio, WhatsAppOptions whatsApp)
+    {
+        var twilioEnabled = r.TwilioEnabled ?? twilio.Enabled;
+        var twilioAccountSid = Coalesce(r.TwilioAccountSid, twilio.AccountSid);
+        var twilioAuthToken = Unprotect(r.TwilioAuthTokenEncrypted) ?? NullIfEmpty(twilio.AuthToken);
+
+        var whatsAppEnabled = r.WhatsAppEnabled ?? whatsApp.Enabled;
+        var whatsAppAccessToken = Unprotect(r.WhatsAppAccessTokenEncrypted) ?? NullIfEmpty(whatsApp.AccessToken);
+        var whatsAppPhoneNumberId = Coalesce(r.WhatsAppPhoneNumberId, whatsApp.PhoneNumberId);
+
+        return new MessagingSettings(
+            TwilioEnabled: twilioEnabled,
+            TwilioApiBaseUrl: Coalesce(r.TwilioApiBaseUrl, twilio.ApiBaseUrl, "https://api.twilio.com")!,
+            TwilioAccountSid: twilioAccountSid,
+            TwilioAuthToken: twilioAuthToken,
+            TwilioFromNumber: Coalesce(r.TwilioFromNumber, twilio.FromNumber),
+            TwilioMessagingServiceSid: Coalesce(r.TwilioMessagingServiceSid, twilio.MessagingServiceSid),
+            WhatsAppEnabled: whatsAppEnabled,
+            WhatsAppApiBaseUrl: Coalesce(r.WhatsAppApiBaseUrl, whatsApp.ApiBaseUrl, "https://graph.facebook.com/v20.0")!,
+            WhatsAppAccessToken: whatsAppAccessToken,
+            WhatsAppPhoneNumberId: whatsAppPhoneNumberId,
+            WhatsAppFallbackTemplateName: Coalesce(r.WhatsAppFallbackTemplateName, whatsApp.FallbackTemplateName),
+            IsTwilioConfigured: twilioEnabled
+                && !string.IsNullOrWhiteSpace(twilioAccountSid)
+                && !string.IsNullOrWhiteSpace(twilioAuthToken),
+            IsWhatsAppConfigured: whatsAppEnabled
+                && !string.IsNullOrWhiteSpace(whatsAppAccessToken)
+                && !string.IsNullOrWhiteSpace(whatsAppPhoneNumberId));
+    }
 
     private static string? JoinHosts(string[]? hosts)
         => hosts is { Length: > 0 } ? string.Join(",", hosts) : null;

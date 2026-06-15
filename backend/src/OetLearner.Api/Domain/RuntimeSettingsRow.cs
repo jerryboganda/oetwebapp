@@ -39,6 +39,22 @@ public class RuntimeSettingsRow
     [MaxLength(256)] public string? SmtpFromAddress { get; set; }
     [MaxLength(256)] public string? SmtpFromName { get; set; }
 
+    // ── Email partial-coverage gap (Wave 3) ────────────────────────
+    // Extends the existing Email/Brevo + SMTP coverage with the remaining
+    // template IDs, the Brevo webhook secret, and the Brevo/SMTP master flags.
+    // Brevo:BaseUrl / FromEmail / FromName + the core SMTP host/port/etc stay as
+    // the existing columns above and are intentionally not duplicated.
+    public int? BrevoWelcomeTemplateId { get; set; }
+    public int? BrevoPasswordChangedTemplateId { get; set; }
+    public int? BrevoMfaEnabledTemplateId { get; set; }
+    public int? BrevoAdminInviteTemplateId { get; set; }
+    public int? BrevoSecurityAlertTemplateId { get; set; }
+    public int? BrevoReviewCompletedTemplateId { get; set; }
+    public string? BrevoWebhookSecretEncrypted { get; set; }
+    public bool? BrevoEnabled { get; set; }
+    public bool? SmtpEnabled { get; set; }
+    public bool? SmtpEnableSsl { get; set; }
+
     // ── Billing / Stripe ───────────────────────────────────────────
     public string? StripeSecretKeyEncrypted { get; set; }
     [MaxLength(256)] public string? StripePublishableKey { get; set; }
@@ -303,6 +319,21 @@ public class RuntimeSettingsRow
     [MaxLength(1024)] public string? PublicApiBaseUrl { get; set; }
     [MaxLength(1024)] public string? PublicWebBaseUrl { get; set; }
     [MaxLength(256)] public string? FallbackEmailDomain { get; set; }
+
+    // ── Messaging (Twilio SMS / WhatsApp Business Cloud — Wave 3) ───
+    // Billing notification channels. AuthToken / AccessToken are SECRETS
+    // (encrypted at rest). AccountSid is a public identifier (not encrypted).
+    public bool? TwilioEnabled { get; set; }
+    [MaxLength(512)] public string? TwilioApiBaseUrl { get; set; }
+    [MaxLength(256)] public string? TwilioAccountSid { get; set; }
+    public string? TwilioAuthTokenEncrypted { get; set; }
+    [MaxLength(32)] public string? TwilioFromNumber { get; set; }
+    [MaxLength(256)] public string? TwilioMessagingServiceSid { get; set; }
+    public bool? WhatsAppEnabled { get; set; }
+    [MaxLength(512)] public string? WhatsAppApiBaseUrl { get; set; }
+    public string? WhatsAppAccessTokenEncrypted { get; set; }
+    [MaxLength(256)] public string? WhatsAppPhoneNumberId { get; set; }
+    [MaxLength(256)] public string? WhatsAppFallbackTemplateName { get; set; }
 
     // ── Audit ──────────────────────────────────────────────────────
     [MaxLength(64)]

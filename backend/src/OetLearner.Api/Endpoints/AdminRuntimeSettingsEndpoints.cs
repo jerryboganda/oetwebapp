@@ -102,6 +102,7 @@ public static class AdminRuntimeSettingsEndpoints
                     ApplyAiGateway(row, request.AiGateway, changedKeys);
                     ApplyWriting(row, request.Writing, provider, changedKeys);
                     ApplyPlatform(row, request.Platform, changedKeys);
+                    ApplyMessaging(row, request.Messaging, provider, changedKeys);
                 }
                 catch (RuntimeSettingsValidationException ex)
                 {
@@ -194,6 +195,17 @@ public static class AdminRuntimeSettingsEndpoints
                 smtpPassword = MaskPlainSecret(settings.Email.SmtpPassword),
                 smtpFromAddress = settings.Email.SmtpFromAddress,
                 smtpFromName = settings.Email.SmtpFromName,
+                // ── Email partial-coverage gap (Wave 3) ──
+                brevoWelcomeTemplateId = settings.Email.BrevoWelcomeTemplateId,
+                brevoPasswordChangedTemplateId = settings.Email.BrevoPasswordChangedTemplateId,
+                brevoMfaEnabledTemplateId = settings.Email.BrevoMfaEnabledTemplateId,
+                brevoAdminInviteTemplateId = settings.Email.BrevoAdminInviteTemplateId,
+                brevoSecurityAlertTemplateId = settings.Email.BrevoSecurityAlertTemplateId,
+                brevoReviewCompletedTemplateId = settings.Email.BrevoReviewCompletedTemplateId,
+                brevoWebhookSecret = MaskPlainSecret(settings.Email.BrevoWebhookSecret),
+                brevoEnabled = settings.Email.BrevoEnabled,
+                smtpEnabled = settings.Email.SmtpEnabled,
+                smtpEnableSsl = settings.Email.SmtpEnableSsl,
             },
             billing = new
             {
@@ -458,6 +470,22 @@ public static class AdminRuntimeSettingsEndpoints
                 publicWebBaseUrl = settings.Platform.PublicWebBaseUrl,
                 fallbackEmailDomain = settings.Platform.FallbackEmailDomain,
             },
+            messaging = new
+            {
+                twilioEnabled = settings.Messaging.TwilioEnabled,
+                twilioApiBaseUrl = settings.Messaging.TwilioApiBaseUrl,
+                twilioAccountSid = settings.Messaging.TwilioAccountSid,
+                twilioAuthToken = MaskPlainSecret(settings.Messaging.TwilioAuthToken),
+                twilioFromNumber = settings.Messaging.TwilioFromNumber,
+                twilioMessagingServiceSid = settings.Messaging.TwilioMessagingServiceSid,
+                whatsAppEnabled = settings.Messaging.WhatsAppEnabled,
+                whatsAppApiBaseUrl = settings.Messaging.WhatsAppApiBaseUrl,
+                whatsAppAccessToken = MaskPlainSecret(settings.Messaging.WhatsAppAccessToken),
+                whatsAppPhoneNumberId = settings.Messaging.WhatsAppPhoneNumberId,
+                whatsAppFallbackTemplateName = settings.Messaging.WhatsAppFallbackTemplateName,
+                isTwilioConfigured = settings.Messaging.IsTwilioConfigured,
+                isWhatsAppConfigured = settings.Messaging.IsWhatsAppConfigured,
+            },
             updatedBy = settings.UpdatedByUserName,
             updatedByUserId = settings.UpdatedByUserId,
             updatedAt = settings.UpdatedAt,
@@ -639,6 +667,17 @@ public static class AdminRuntimeSettingsEndpoints
         if (TrySetSecret(d.SmtpPassword, p, v => row.SmtpPasswordEncrypted = v, "email.smtpPassword", changed)) { }
         if (TrySetPlain(d.SmtpFromAddress, v => row.SmtpFromAddress = v, "email.smtpFromAddress", changed)) { }
         if (TrySetPlain(d.SmtpFromName, v => row.SmtpFromName = v, "email.smtpFromName", changed)) { }
+        // ── Email partial-coverage gap (Wave 3) ──
+        if (TrySetNullableInt(d.BrevoWelcomeTemplateId, v => row.BrevoWelcomeTemplateId = v, "email.brevoWelcomeTemplateId", changed)) { }
+        if (TrySetNullableInt(d.BrevoPasswordChangedTemplateId, v => row.BrevoPasswordChangedTemplateId = v, "email.brevoPasswordChangedTemplateId", changed)) { }
+        if (TrySetNullableInt(d.BrevoMfaEnabledTemplateId, v => row.BrevoMfaEnabledTemplateId = v, "email.brevoMfaEnabledTemplateId", changed)) { }
+        if (TrySetNullableInt(d.BrevoAdminInviteTemplateId, v => row.BrevoAdminInviteTemplateId = v, "email.brevoAdminInviteTemplateId", changed)) { }
+        if (TrySetNullableInt(d.BrevoSecurityAlertTemplateId, v => row.BrevoSecurityAlertTemplateId = v, "email.brevoSecurityAlertTemplateId", changed)) { }
+        if (TrySetNullableInt(d.BrevoReviewCompletedTemplateId, v => row.BrevoReviewCompletedTemplateId = v, "email.brevoReviewCompletedTemplateId", changed)) { }
+        if (TrySetSecret(d.BrevoWebhookSecret, p, v => row.BrevoWebhookSecretEncrypted = v, "email.brevoWebhookSecret", changed)) { }
+        if (TrySetNullableBool(d.BrevoEnabled, v => row.BrevoEnabled = v, "email.brevoEnabled", changed)) { }
+        if (TrySetNullableBool(d.SmtpEnabled, v => row.SmtpEnabled = v, "email.smtpEnabled", changed)) { }
+        if (TrySetNullableBool(d.SmtpEnableSsl, v => row.SmtpEnableSsl = v, "email.smtpEnableSsl", changed)) { }
     }
 
     private static void ApplyBilling(RuntimeSettingsRow row, RuntimeSettingsBillingUpdate? d,
@@ -1035,6 +1074,25 @@ public static class AdminRuntimeSettingsEndpoints
         if (TrySetPlain(d.FallbackEmailDomain, v => row.FallbackEmailDomain = v, "platform.fallbackEmailDomain", changed)) { }
     }
 
+    private static void ApplyMessaging(RuntimeSettingsRow row, RuntimeSettingsMessagingUpdate? d,
+        IRuntimeSettingsProvider p, List<string> changed)
+    {
+        if (d is null) return;
+        ValidatePlatformUrl(d.TwilioApiBaseUrl, "messaging.twilioApiBaseUrl");
+        ValidatePlatformUrl(d.WhatsAppApiBaseUrl, "messaging.whatsAppApiBaseUrl");
+        if (TrySetNullableBool(d.TwilioEnabled, v => row.TwilioEnabled = v, "messaging.twilioEnabled", changed)) { }
+        if (TrySetPlain(d.TwilioApiBaseUrl, v => row.TwilioApiBaseUrl = v, "messaging.twilioApiBaseUrl", changed)) { }
+        if (TrySetPlain(d.TwilioAccountSid, v => row.TwilioAccountSid = v, "messaging.twilioAccountSid", changed)) { }
+        if (TrySetSecret(d.TwilioAuthToken, p, v => row.TwilioAuthTokenEncrypted = v, "messaging.twilioAuthToken", changed)) { }
+        if (TrySetPlain(d.TwilioFromNumber, v => row.TwilioFromNumber = v, "messaging.twilioFromNumber", changed)) { }
+        if (TrySetPlain(d.TwilioMessagingServiceSid, v => row.TwilioMessagingServiceSid = v, "messaging.twilioMessagingServiceSid", changed)) { }
+        if (TrySetNullableBool(d.WhatsAppEnabled, v => row.WhatsAppEnabled = v, "messaging.whatsAppEnabled", changed)) { }
+        if (TrySetPlain(d.WhatsAppApiBaseUrl, v => row.WhatsAppApiBaseUrl = v, "messaging.whatsAppApiBaseUrl", changed)) { }
+        if (TrySetSecret(d.WhatsAppAccessToken, p, v => row.WhatsAppAccessTokenEncrypted = v, "messaging.whatsAppAccessToken", changed)) { }
+        if (TrySetPlain(d.WhatsAppPhoneNumberId, v => row.WhatsAppPhoneNumberId = v, "messaging.whatsAppPhoneNumberId", changed)) { }
+        if (TrySetPlain(d.WhatsAppFallbackTemplateName, v => row.WhatsAppFallbackTemplateName = v, "messaging.whatsAppFallbackTemplateName", changed)) { }
+    }
+
     private static void ValidatePlatformUrl(string? value, string key)
     {
         if (value is null || value == SecretMask) return;
@@ -1256,7 +1314,7 @@ public static class AdminRuntimeSettingsEndpoints
     private static string? NormalizeSectionId(string? sectionId)
     {
         var normalized = sectionId?.Trim().ToLowerInvariant();
-        return normalized is "email" or "billing" or "sentry" or "backup" or "oauth" or "push" or "uploadscanner" or "zoom" or "stripe" or "speakinglivekit" or "speakingai" or "speakingstorage" or "speakingcompliance" or "speakingfeatures" or "speakingwhisper" or "checkoutcom" or "paymob" or "paytabs" or "soketi" or "dataretention" or "expertautoassignment" or "passwordpolicy" or "aiassistant" or "aigateway" or "writing" or "platform"
+        return normalized is "email" or "billing" or "sentry" or "backup" or "oauth" or "push" or "uploadscanner" or "zoom" or "stripe" or "speakinglivekit" or "speakingai" or "speakingstorage" or "speakingcompliance" or "speakingfeatures" or "speakingwhisper" or "checkoutcom" or "paymob" or "paytabs" or "soketi" or "dataretention" or "expertautoassignment" or "passwordpolicy" or "aiassistant" or "aigateway" or "writing" or "platform" or "messaging"
             ? normalized
             : normalized == "upload-scanner" ? "uploadscanner" : null;
     }
@@ -1343,6 +1401,14 @@ public static class AdminRuntimeSettingsEndpoints
                 : Uri.TryCreate(settings.Platform.PublicApiBaseUrl, UriKind.Absolute, out _) && Uri.TryCreate(settings.Platform.PublicWebBaseUrl, UriKind.Absolute, out _)
                     ? Ok(sectionId, $"Public host URLs are valid. Fallback email domain: {settings.Platform.FallbackEmailDomain}.", testedAt)
                     : Failed(sectionId, "Public API/Web base URLs must be valid absolute URLs.", testedAt),
+            // Non-destructive config-presence probe — no live SMS/WhatsApp is sent.
+            "messaging" => (!settings.Messaging.TwilioEnabled && !settings.Messaging.WhatsAppEnabled)
+                ? Ok(sectionId, "Messaging channels are disabled. No SMS/WhatsApp notifications will be sent.", testedAt)
+                : (settings.Messaging.TwilioEnabled && !settings.Messaging.IsTwilioConfigured)
+                    ? Failed(sectionId, "Twilio is enabled but not fully configured. Set Account SID and Auth Token.", testedAt)
+                    : (settings.Messaging.WhatsAppEnabled && !settings.Messaging.IsWhatsAppConfigured)
+                        ? Failed(sectionId, "WhatsApp is enabled but not fully configured. Set Access Token and Phone Number ID.", testedAt)
+                        : Ok(sectionId, $"Messaging configured: Twilio SMS {(settings.Messaging.IsTwilioConfigured ? "ready" : "off")}, WhatsApp {(settings.Messaging.IsWhatsAppConfigured ? "ready" : "off")}. No message was sent.", testedAt),
             _ => Failed(sectionId, "Unknown integration section.", testedAt),
         };
     }
@@ -1542,6 +1608,7 @@ public sealed class RuntimeSettingsUpdateRequest
     public RuntimeSettingsAiGatewayUpdate? AiGateway { get; set; }
     public RuntimeSettingsWritingUpdate? Writing { get; set; }
     public RuntimeSettingsPlatformUpdate? Platform { get; set; }
+    public RuntimeSettingsMessagingUpdate? Messaging { get; set; }
 }
 
 /// <summary>AI Assistant orchestration tunables (Wave 2).</summary>
@@ -1603,6 +1670,24 @@ public sealed class RuntimeSettingsPlatformUpdate
     public string? PublicApiBaseUrl { get; set; }
     public string? PublicWebBaseUrl { get; set; }
     public string? FallbackEmailDomain { get; set; }
+}
+
+/// <summary>Messaging (Twilio SMS / WhatsApp Business Cloud) channels (Wave 3).
+/// AuthToken / AccessToken are secrets ("********" leaves unchanged; "" clears);
+/// AccountSid is a public identifier.</summary>
+public sealed class RuntimeSettingsMessagingUpdate
+{
+    public JsonElement? TwilioEnabled { get; set; }
+    public string? TwilioApiBaseUrl { get; set; }
+    public string? TwilioAccountSid { get; set; }
+    public string? TwilioAuthToken { get; set; }
+    public string? TwilioFromNumber { get; set; }
+    public string? TwilioMessagingServiceSid { get; set; }
+    public JsonElement? WhatsAppEnabled { get; set; }
+    public string? WhatsAppApiBaseUrl { get; set; }
+    public string? WhatsAppAccessToken { get; set; }
+    public string? WhatsAppPhoneNumberId { get; set; }
+    public string? WhatsAppFallbackTemplateName { get; set; }
 }
 
 /// <summary>Data-retention sweeper windows (days / hours / batch size).</summary>
@@ -1711,6 +1796,18 @@ public sealed class RuntimeSettingsEmailUpdate
     public string? SmtpPassword { get; set; }
     public string? SmtpFromAddress { get; set; }
     public string? SmtpFromName { get; set; }
+    // ── Email partial-coverage gap (Wave 3) ──
+    public JsonElement? BrevoWelcomeTemplateId { get; set; }
+    public JsonElement? BrevoPasswordChangedTemplateId { get; set; }
+    public JsonElement? BrevoMfaEnabledTemplateId { get; set; }
+    public JsonElement? BrevoAdminInviteTemplateId { get; set; }
+    public JsonElement? BrevoSecurityAlertTemplateId { get; set; }
+    public JsonElement? BrevoReviewCompletedTemplateId { get; set; }
+    /// <summary>Brevo webhook HMAC secret (plaintext on input; stored encrypted). "********" leaves unchanged; "" clears.</summary>
+    public string? BrevoWebhookSecret { get; set; }
+    public JsonElement? BrevoEnabled { get; set; }
+    public JsonElement? SmtpEnabled { get; set; }
+    public JsonElement? SmtpEnableSsl { get; set; }
 }
 
 public sealed class RuntimeSettingsBillingUpdate

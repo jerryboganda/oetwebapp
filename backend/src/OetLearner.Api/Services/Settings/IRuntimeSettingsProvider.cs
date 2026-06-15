@@ -71,6 +71,7 @@ public sealed record EffectiveSettings(
     AiGatewaySettings AiGateway,
     WritingSettings Writing,
     PlatformSettings Platform,
+    MessagingSettings Messaging,
     string? UpdatedByUserId,
     string? UpdatedByUserName,
     DateTimeOffset? UpdatedAt);
@@ -84,7 +85,20 @@ public sealed record EmailSettings(
     string? SmtpUsername,
     string? SmtpPassword,
     string? SmtpFromAddress,
-    string? SmtpFromName);
+    string? SmtpFromName,
+    // ── Email partial-coverage gap (Wave 3) ────────────────────────
+    // Optional positional params with defaults so existing 9-arg call-sites
+    // keep compiling. Brevo:WebhookSecret is decrypted by the provider.
+    int? BrevoWelcomeTemplateId = null,
+    int? BrevoPasswordChangedTemplateId = null,
+    int? BrevoMfaEnabledTemplateId = null,
+    int? BrevoAdminInviteTemplateId = null,
+    int? BrevoSecurityAlertTemplateId = null,
+    int? BrevoReviewCompletedTemplateId = null,
+    string? BrevoWebhookSecret = null,
+    bool BrevoEnabled = false,
+    bool SmtpEnabled = false,
+    bool SmtpEnableSsl = true);
 
 public sealed record BillingSettings(
     string? StripeSecretKey,
@@ -395,3 +409,26 @@ public sealed record PlatformSettings(
     string? PublicApiBaseUrl,
     string? PublicWebBaseUrl,
     string FallbackEmailDomain);
+
+/// <summary>
+/// Messaging billing-notification channels (DB-over-env merged): Twilio SMS and
+/// Meta WhatsApp Business Cloud. <see cref="TwilioAuthToken"/> and
+/// <see cref="WhatsAppAccessToken"/> are secrets decrypted by the provider;
+/// <see cref="TwilioAccountSid"/> is a public identifier (not encrypted).
+/// <see cref="IsTwilioConfigured"/> / <see cref="IsWhatsAppConfigured"/> gate
+/// live sends in the channel consumers.
+/// </summary>
+public sealed record MessagingSettings(
+    bool TwilioEnabled,
+    string TwilioApiBaseUrl,
+    string? TwilioAccountSid,
+    string? TwilioAuthToken,
+    string? TwilioFromNumber,
+    string? TwilioMessagingServiceSid,
+    bool WhatsAppEnabled,
+    string WhatsAppApiBaseUrl,
+    string? WhatsAppAccessToken,
+    string? WhatsAppPhoneNumberId,
+    string? WhatsAppFallbackTemplateName,
+    bool IsTwilioConfigured,
+    bool IsWhatsAppConfigured);

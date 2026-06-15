@@ -18,7 +18,19 @@ internal sealed class TestRuntimeSettingsProvider(EffectiveSettings settings, Ru
     /// </summary>
     public static EffectiveSettings Base()
         => new(
-            Email: new EmailSettings(null, null, null, null, null, null, null, null, null),
+            Email: new EmailSettings(
+                null, null, null, null, null, null, null, null, null,
+                // Wave 3 email-gap fields (defaults: flags off, SSL on).
+                BrevoWelcomeTemplateId: null,
+                BrevoPasswordChangedTemplateId: null,
+                BrevoMfaEnabledTemplateId: null,
+                BrevoAdminInviteTemplateId: null,
+                BrevoSecurityAlertTemplateId: null,
+                BrevoReviewCompletedTemplateId: null,
+                BrevoWebhookSecret: null,
+                BrevoEnabled: false,
+                SmtpEnabled: false,
+                SmtpEnableSsl: true),
             Billing: new BillingSettings(null, null, null, null, null, null, null, null, null, null),
             Sentry: new SentrySettings(null, null, null),
             Backup: new BackupSettings(null, null, null, null, null),
@@ -45,6 +57,7 @@ internal sealed class TestRuntimeSettingsProvider(EffectiveSettings settings, Ru
             AiGateway: DefaultAiGateway(),
             Writing: DefaultWriting(),
             Platform: DefaultPlatform(),
+            Messaging: DefaultMessaging(),
             UpdatedByUserId: null,
             UpdatedByUserName: null,
             UpdatedAt: null);
@@ -115,6 +128,10 @@ internal sealed class TestRuntimeSettingsProvider(EffectiveSettings settings, Ru
 
     public static TestRuntimeSettingsProvider FromPlatformOptions(PlatformOptions o)
         => new(Base() with { Platform = MapPlatform(o) });
+
+    // ── Wave 3 (Messaging) ─────────────────────────────────────────
+    public static TestRuntimeSettingsProvider FromMessagingOptions(TwilioOptions twilio, WhatsAppOptions whatsApp)
+        => new(Base() with { Messaging = MapMessaging(twilio, whatsApp) });
 
     private static ZoomSettings DefaultZoomSettings()
         => new(
@@ -270,6 +287,30 @@ internal sealed class TestRuntimeSettingsProvider(EffectiveSettings settings, Ru
             o.PublicApiBaseUrl,
             o.PublicWebBaseUrl,
             string.IsNullOrWhiteSpace(o.FallbackEmailDomain) ? "example.invalid" : o.FallbackEmailDomain);
+
+    // ── Wave 3 default factory + Option mapper (Messaging) ──────────
+    public static MessagingSettings DefaultMessaging()
+        => MapMessaging(new TwilioOptions(), new WhatsAppOptions());
+
+    private static MessagingSettings MapMessaging(TwilioOptions twilio, WhatsAppOptions whatsApp)
+        => new(
+            TwilioEnabled: twilio.Enabled,
+            TwilioApiBaseUrl: string.IsNullOrWhiteSpace(twilio.ApiBaseUrl) ? "https://api.twilio.com" : twilio.ApiBaseUrl,
+            TwilioAccountSid: twilio.AccountSid,
+            TwilioAuthToken: twilio.AuthToken,
+            TwilioFromNumber: twilio.FromNumber,
+            TwilioMessagingServiceSid: twilio.MessagingServiceSid,
+            WhatsAppEnabled: whatsApp.Enabled,
+            WhatsAppApiBaseUrl: string.IsNullOrWhiteSpace(whatsApp.ApiBaseUrl) ? "https://graph.facebook.com/v20.0" : whatsApp.ApiBaseUrl,
+            WhatsAppAccessToken: whatsApp.AccessToken,
+            WhatsAppPhoneNumberId: whatsApp.PhoneNumberId,
+            WhatsAppFallbackTemplateName: whatsApp.FallbackTemplateName,
+            IsTwilioConfigured: twilio.Enabled
+                && !string.IsNullOrWhiteSpace(twilio.AccountSid)
+                && !string.IsNullOrWhiteSpace(twilio.AuthToken),
+            IsWhatsAppConfigured: whatsApp.Enabled
+                && !string.IsNullOrWhiteSpace(whatsApp.AccessToken)
+                && !string.IsNullOrWhiteSpace(whatsApp.PhoneNumberId));
 
     public Task<EffectiveSettings> GetAsync(CancellationToken ct = default) => Task.FromResult(settings);
 

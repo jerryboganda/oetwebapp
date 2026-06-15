@@ -1,9 +1,8 @@
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Options;
-using OetLearner.Api.Configuration;
 using OetLearner.Api.Data;
+using OetLearner.Api.Services.Settings;
 
 namespace OetLearner.Api.Services.Billing;
 
@@ -20,21 +19,21 @@ public sealed class WhatsAppChannel : IBillingNotificationChannel
 
     private readonly HttpClient _http;
     private readonly LearnerDbContext _db;
-    private readonly IOptions<WhatsAppOptions> _options;
+    private readonly IRuntimeSettingsProvider _runtimeSettings;
     private readonly ILogger<WhatsAppChannel> _logger;
 
-    public WhatsAppChannel(HttpClient http, LearnerDbContext db, IOptions<WhatsAppOptions> options, ILogger<WhatsAppChannel> logger)
+    public WhatsAppChannel(HttpClient http, LearnerDbContext db, IRuntimeSettingsProvider runtimeSettings, ILogger<WhatsAppChannel> logger)
     {
         _http = http;
         _db = db;
-        _options = options;
+        _runtimeSettings = runtimeSettings;
         _logger = logger;
     }
 
     public async Task SendAsync(string userId, string subject, string body, CancellationToken ct)
     {
-        var opts = _options.Value;
-        if (!opts.Enabled || string.IsNullOrWhiteSpace(opts.AccessToken) || string.IsNullOrWhiteSpace(opts.PhoneNumberId))
+        var opts = (await _runtimeSettings.GetAsync(ct)).Messaging;
+        if (!opts.IsWhatsAppConfigured)
         {
             _logger.LogDebug("WhatsApp disabled — skipping to {UserId}", userId);
             return;
@@ -54,7 +53,7 @@ public sealed class WhatsAppChannel : IBillingNotificationChannel
         var to = new string(phone.Where(char.IsDigit).ToArray());
 
         object payload;
-        if (string.IsNullOrWhiteSpace(opts.FallbackTemplateName))
+        if (string.IsNullOrWhiteSpace(opts.WhatsAppFallbackTemplateName))
         {
             payload = new
             {
@@ -73,7 +72,7 @@ public sealed class WhatsAppChannel : IBillingNotificationChannel
                 type = "template",
                 template = new
                 {
-                    name = opts.FallbackTemplateName,
+                    name = opts.WhatsAppFallbackTemplateName,
                     language = new { code = "en" },
                     components = new[]
                     {
@@ -87,9 +86,9 @@ public sealed class WhatsAppChannel : IBillingNotificationChannel
             };
         }
 
-        var url = $"{opts.ApiBaseUrl.TrimEnd('/')}/{opts.PhoneNumberId}/messages";
+        var url = $"{opts.WhatsAppApiBaseUrl.TrimEnd('/')}/{opts.WhatsAppPhoneNumberId}/messages";
         using var req = new HttpRequestMessage(HttpMethod.Post, url);
-        req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", opts.AccessToken);
+        req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", opts.WhatsAppAccessToken);
         req.Content = JsonContent.Create(payload);
 
         using var resp = await _http.SendAsync(req, ct);

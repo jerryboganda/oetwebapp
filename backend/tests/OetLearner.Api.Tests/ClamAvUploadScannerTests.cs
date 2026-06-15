@@ -87,6 +87,7 @@ public sealed class ClamAvUploadScannerTests
             AiGateway: TestRuntimeSettingsProvider.DefaultAiGateway(),
             Writing: TestRuntimeSettingsProvider.DefaultWriting(),
             Platform: TestRuntimeSettingsProvider.DefaultPlatform(),
+            Messaging: TestRuntimeSettingsProvider.DefaultMessaging(),
             UpdatedByUserId: null,
             UpdatedByUserName: null,
             UpdatedAt: null));

@@ -39,8 +39,8 @@ public sealed class SmtpEmailSender(
 
     public async Task SendAsync(EmailMessage message, CancellationToken cancellationToken = default)
     {
-        var optionsSnapshot = _options.Value;
-        if (!optionsSnapshot.Enabled)
+        var emailSettings = (await runtimeSettings.GetAsync(cancellationToken)).Email;
+        if (!emailSettings.SmtpEnabled)
         {
             if (environment.IsDevelopment())
             {
@@ -54,8 +54,6 @@ public sealed class SmtpEmailSender(
 
             throw new InvalidOperationException("SMTP is disabled and the application is not running in Development.");
         }
-
-        var emailSettings = (await runtimeSettings.GetAsync(cancellationToken)).Email;
 
         if (string.IsNullOrWhiteSpace(emailSettings.SmtpHost))
         {
@@ -71,7 +69,7 @@ public sealed class SmtpEmailSender(
 
         logger.LogInformation(
             "SMTP sending email: To={To} Subject={Subject} Host={Host}:{Port} From={From} SSL={Ssl}",
-            message.To, message.Subject, emailSettings.SmtpHost, emailSettings.SmtpPort, emailSettings.SmtpFromAddress, optionsSnapshot.EnableSsl);
+            message.To, message.Subject, emailSettings.SmtpHost, emailSettings.SmtpPort, emailSettings.SmtpFromAddress, emailSettings.SmtpEnableSsl);
 
         var sw = Stopwatch.StartNew();
 
@@ -105,7 +103,7 @@ public sealed class SmtpEmailSender(
         // classic SMTPS port 465; otherwise upgrade in-band via STARTTLS. Unlike
         // System.Net.Mail.SmtpClient, MailKit implements SASL LOGIN/PLAIN in
         // managed code, so it actually authenticates against Brevo on Linux.
-        var secureSocketOptions = optionsSnapshot.EnableSsl
+        var secureSocketOptions = emailSettings.SmtpEnableSsl
             ? (port == 465 ? SecureSocketOptions.SslOnConnect : SecureSocketOptions.StartTls)
             : SecureSocketOptions.StartTlsWhenAvailable;
 

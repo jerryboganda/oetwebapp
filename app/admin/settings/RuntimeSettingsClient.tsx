@@ -28,6 +28,17 @@ export interface EmailSettings {
   smtpPassword: string;
   smtpFromAddress: string;
   smtpFromName: string;
+  // ── Email partial-coverage gap (Wave 3) ──
+  brevoWelcomeTemplateId: number | null;
+  brevoPasswordChangedTemplateId: number | null;
+  brevoMfaEnabledTemplateId: number | null;
+  brevoAdminInviteTemplateId: number | null;
+  brevoSecurityAlertTemplateId: number | null;
+  brevoReviewCompletedTemplateId: number | null;
+  brevoWebhookSecret: string;
+  brevoEnabled: boolean | null;
+  smtpEnabled: boolean | null;
+  smtpEnableSsl: boolean | null;
 }
 
 export interface BillingSettings {
@@ -280,6 +291,20 @@ export interface PlatformSettings {
   fallbackEmailDomain: string;
 }
 
+export interface MessagingSettings {
+  twilioEnabled: boolean | null;
+  twilioApiBaseUrl: string;
+  twilioAccountSid: string;
+  twilioAuthToken: string;
+  twilioFromNumber: string;
+  twilioMessagingServiceSid: string;
+  whatsAppEnabled: boolean | null;
+  whatsAppApiBaseUrl: string;
+  whatsAppAccessToken: string;
+  whatsAppPhoneNumberId: string;
+  whatsAppFallbackTemplateName: string;
+}
+
 export interface RuntimeSettingsResponse {
   email: EmailSettings;
   billing: BillingSettings;
@@ -306,6 +331,7 @@ export interface RuntimeSettingsResponse {
   aiGateway: AiGatewaySettings;
   writing: WritingSettings;
   platform: PlatformSettings;
+  messaging: MessagingSettings;
   updatedBy: string | null;
   updatedByUserId?: string | null;
   updatedAt: string | null;
@@ -318,7 +344,7 @@ export interface RuntimeSettingsIntegrationTestResponse {
   testedAt: string;
 }
 
-type SectionId = 'email' | 'billing' | 'sentry' | 'backup' | 'oauth' | 'push' | 'uploadScanner' | 'zoom' | 'speakingWhisper' | 'speakingLiveKit' | 'speakingAi' | 'speakingStorage' | 'speakingCompliance' | 'speakingFeatures' | 'checkoutCom' | 'paymob' | 'payTabs' | 'soketi' | 'dataRetention' | 'expertAutoAssignment' | 'passwordPolicy' | 'aiAssistant' | 'aiGateway' | 'writing' | 'platform';
+type SectionId = 'email' | 'billing' | 'sentry' | 'backup' | 'oauth' | 'push' | 'uploadScanner' | 'zoom' | 'speakingWhisper' | 'speakingLiveKit' | 'speakingAi' | 'speakingStorage' | 'speakingCompliance' | 'speakingFeatures' | 'checkoutCom' | 'paymob' | 'payTabs' | 'soketi' | 'dataRetention' | 'expertAutoAssignment' | 'passwordPolicy' | 'aiAssistant' | 'aiGateway' | 'writing' | 'platform' | 'messaging';
 
 type ToastState = { variant: 'success' | 'error'; message: string } | null;
 type TestStatusState = Partial<Record<SectionId, RuntimeSettingsIntegrationTestResponse>>;
@@ -344,6 +370,17 @@ const EMAIL_FIELDS: FieldDef<EmailSettings>[] = [
   { key: 'smtpPassword', label: 'SMTP Password', secret: true },
   { key: 'smtpFromAddress', label: 'From Address', hint: 'Address used in the From header of outgoing email.' },
   { key: 'smtpFromName', label: 'From Name' },
+  // ── Email partial-coverage gap (Wave 3) ──
+  { key: 'brevoEnabled', label: 'Brevo Enabled', type: 'checkbox', hint: 'Master toggle for the Brevo email service.' },
+  { key: 'smtpEnabled', label: 'SMTP Enabled', type: 'checkbox', hint: 'Master toggle for the SMTP email service.' },
+  { key: 'smtpEnableSsl', label: 'SMTP Enable SSL', type: 'checkbox', hint: 'Enable TLS/SSL for SMTP connections (recommended).' },
+  { key: 'brevoWelcomeTemplateId', label: 'Brevo Welcome Template ID', type: 'number', hint: 'Template ID for new user welcome emails.' },
+  { key: 'brevoPasswordChangedTemplateId', label: 'Brevo Password Changed Template ID', type: 'number', hint: 'Template ID for password-changed confirmation.' },
+  { key: 'brevoMfaEnabledTemplateId', label: 'Brevo MFA Enabled Template ID', type: 'number', hint: 'Template ID for MFA activation confirmation.' },
+  { key: 'brevoAdminInviteTemplateId', label: 'Brevo Admin Invite Template ID', type: 'number', hint: 'Template ID for admin invitation emails.' },
+  { key: 'brevoSecurityAlertTemplateId', label: 'Brevo Security Alert Template ID', type: 'number', hint: 'Template ID for security alerts.' },
+  { key: 'brevoReviewCompletedTemplateId', label: 'Brevo Review Completed Template ID', type: 'number', hint: 'Template ID for review-completion notifications.' },
+  { key: 'brevoWebhookSecret', label: 'Brevo Webhook Secret', secret: true, hint: 'HMAC secret for validating Brevo webhook signatures (reserved for future use).' },
 ];
 
 const BILLING_FIELDS: FieldDef<BillingSettings>[] = [
@@ -584,6 +621,20 @@ const PLATFORM_FIELDS: FieldDef<PlatformSettings>[] = [
   { key: 'fallbackEmailDomain', label: 'Fallback Email Domain', type: 'text', hint: 'Domain for synthesized learner emails when no external provider email exists (default: example.invalid). Omit the @ symbol.' },
 ];
 
+const MESSAGING_FIELDS: FieldDef<MessagingSettings>[] = [
+  { key: 'twilioEnabled', label: 'Twilio SMS Enabled', type: 'checkbox', hint: 'Enable Twilio SMS billing notifications. Requires Account SID and Auth Token.' },
+  { key: 'twilioApiBaseUrl', label: 'Twilio API Base URL', type: 'url', hint: 'Defaults to https://api.twilio.com. Only change if using a custom endpoint.' },
+  { key: 'twilioAccountSid', label: 'Twilio Account SID', type: 'text', hint: 'Public account identifier. Find it in the Twilio Console.' },
+  { key: 'twilioAuthToken', label: 'Twilio Auth Token', secret: true, hint: 'API authentication token. Stored encrypted. Treat as a secret.' },
+  { key: 'twilioFromNumber', label: 'Twilio From Number', type: 'text', hint: 'E.164 phone number (e.g. +1234567890). Leave empty if using a Messaging Service SID.' },
+  { key: 'twilioMessagingServiceSid', label: 'Twilio Messaging Service SID', type: 'text', hint: 'Optional. When set, takes precedence over From Number. Useful for multi-number pools.' },
+  { key: 'whatsAppEnabled', label: 'WhatsApp Business Cloud Enabled', type: 'checkbox', hint: 'Enable Meta WhatsApp Business API for billing notifications. Requires Access Token and Phone Number ID.' },
+  { key: 'whatsAppApiBaseUrl', label: 'WhatsApp API Base URL', type: 'url', hint: 'Defaults to https://graph.facebook.com/v20.0. Only change for a different Meta Graph API version.' },
+  { key: 'whatsAppAccessToken', label: 'WhatsApp Access Token', secret: true, hint: 'Meta Business Account access token. Stored encrypted. Treat as a secret.' },
+  { key: 'whatsAppPhoneNumberId', label: 'WhatsApp Phone Number ID', type: 'text', hint: 'ID of the WhatsApp Business phone number assigned by Meta.' },
+  { key: 'whatsAppFallbackTemplateName', label: 'WhatsApp Fallback Template Name', type: 'text', hint: 'Pre-approved template name for messages outside the 24-hour service window. Leave empty to disable template fallback.' },
+];
+
 const SECTION_META: { id: SectionId; title: string; description: string }[] = [
   { id: 'email', title: 'Email (Brevo + SMTP)', description: 'Transactional email delivery via Brevo with SMTP fallback.' },
   { id: 'billing', title: 'Billing (Stripe)', description: 'Stripe Checkout, Customer Portal, and webhook signing.' },
@@ -610,6 +661,7 @@ const SECTION_META: { id: SectionId; title: string; description: string }[] = [
   { id: 'aiGateway', title: 'AI Gateway & Tooling', description: 'Grounded gateway defaults (provider, model, temperature, max tokens) and AI tool knobs (tool-call cap, grant cache, external-network allowlist/budget). API key managed in AI Providers.' },
   { id: 'writing', title: 'Writing Module', description: 'Writing V2 feature flags and tunables: cron kill switch, coach hint limits/cost cap, OCR pipeline + GCV key, appeals, tutor-review queue gates, plan regen, and grade idempotency.' },
   { id: 'platform', title: 'Platform', description: 'Public-facing API/Web base URLs (external auth callbacks, CSRF origin validation) and the fallback email domain for synthesized learner emails.' },
+  { id: 'messaging', title: 'Messaging (SMS / WhatsApp)', description: 'Billing-notification channels: Twilio SMS and Meta WhatsApp Business Cloud. Auth Token and Access Token are stored encrypted.' },
 ];
 
 /* ───────────────────────── Helpers ───────────────────────── */
@@ -626,6 +678,16 @@ function emptyResponse(): RuntimeSettingsResponse {
       smtpPassword: '',
       smtpFromAddress: '',
       smtpFromName: '',
+      brevoWelcomeTemplateId: null,
+      brevoPasswordChangedTemplateId: null,
+      brevoMfaEnabledTemplateId: null,
+      brevoAdminInviteTemplateId: null,
+      brevoSecurityAlertTemplateId: null,
+      brevoReviewCompletedTemplateId: null,
+      brevoWebhookSecret: '',
+      brevoEnabled: null,
+      smtpEnabled: null,
+      smtpEnableSsl: null,
     },
     billing: {
       stripeSecretKey: '',
@@ -845,6 +907,19 @@ function emptyResponse(): RuntimeSettingsResponse {
       publicWebBaseUrl: '',
       fallbackEmailDomain: '',
     },
+    messaging: {
+      twilioEnabled: null,
+      twilioApiBaseUrl: '',
+      twilioAccountSid: '',
+      twilioAuthToken: '',
+      twilioFromNumber: '',
+      twilioMessagingServiceSid: '',
+      whatsAppEnabled: null,
+      whatsAppApiBaseUrl: '',
+      whatsAppAccessToken: '',
+      whatsAppPhoneNumberId: '',
+      whatsAppFallbackTemplateName: '',
+    },
     updatedBy: null,
     updatedByUserId: null,
     updatedAt: null,
@@ -881,6 +956,7 @@ function normalizeResponse(data: Partial<RuntimeSettingsResponse>): RuntimeSetti
     aiGateway: { ...empty.aiGateway, ...data.aiGateway },
     writing: { ...empty.writing, ...data.writing },
     platform: { ...empty.platform, ...data.platform },
+    messaging: { ...empty.messaging, ...data.messaging },
   });
 }
 
@@ -891,6 +967,7 @@ function sanitizeSecretFields(data: RuntimeSettingsResponse): RuntimeSettingsRes
       ...data.email,
       brevoApiKey: maskUnexpectedSecret(data.email.brevoApiKey),
       smtpPassword: maskUnexpectedSecret(data.email.smtpPassword),
+      brevoWebhookSecret: maskUnexpectedSecret(data.email.brevoWebhookSecret),
     },
     billing: {
       ...data.billing,
@@ -959,6 +1036,11 @@ function sanitizeSecretFields(data: RuntimeSettingsResponse): RuntimeSettingsRes
     writing: {
       ...data.writing,
       gcvApiKey: maskUnexpectedSecret(data.writing.gcvApiKey),
+    },
+    messaging: {
+      ...data.messaging,
+      twilioAuthToken: maskUnexpectedSecret(data.messaging.twilioAuthToken),
+      whatsAppAccessToken: maskUnexpectedSecret(data.messaging.whatsAppAccessToken),
     },
   };
 }
@@ -1271,6 +1353,7 @@ export function RuntimeSettingsClient() {
     aiGateway: false,
     writing: false,
     platform: false,
+    messaging: false,
   });
 
   const load = useCallback(async () => {
@@ -2074,6 +2157,39 @@ export function RuntimeSettingsClient() {
                     }
                   />
                 ))}
+
+              {section.id === 'messaging' &&
+                MESSAGING_FIELDS.map((field) =>
+                  field.secret ? (
+                    <SecretField
+                      key={field.key}
+                      label={field.label}
+                      hint={field.hint}
+                      serverValue={String(server.messaging[field.key] ?? '')}
+                      draftValue={String(draft.messaging[field.key] ?? '')}
+                      onChange={(next) => updateField('messaging', field.key, next as never)}
+                    />
+                  ) : (
+                    <PlainField
+                      key={field.key}
+                      label={field.label}
+                      hint={field.hint}
+                      type={field.type}
+                      value={draft.messaging[field.key] as string | number | boolean | null}
+                      onChange={(next) =>
+                        updateField(
+                          'messaging',
+                          field.key,
+                          (field.type === 'number'
+                            ? parseNullableNumberInput(String(next))
+                            : field.type === 'checkbox'
+                              ? Boolean(next)
+                              : String(next)) as never,
+                        )
+                      }
+                    />
+                  ),
+                )}
             </Section>
           ))}
 

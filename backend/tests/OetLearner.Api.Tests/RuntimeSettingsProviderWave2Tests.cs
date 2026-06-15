@@ -199,6 +199,8 @@ public sealed class RuntimeSettingsProviderWave2Tests
             Options.Create(aiTool),
             Options.Create(writing),
             Options.Create(platform),
+            Options.Create(new TwilioOptions()),
+            Options.Create(new WhatsAppOptions()),
             new StaticOptionsMonitor<SmtpOptions>(new SmtpOptions()),
             new ConfigurationBuilder().Build(),
             new TestHostEnvironment("Development"));
