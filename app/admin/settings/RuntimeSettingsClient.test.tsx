@@ -62,6 +62,7 @@ function makeResponse(overrides: Partial<RuntimeSettingsResponse> = {}): Runtime
       paypalWebhookId: '********',
       paypalSuccessUrl: 'https://example.com/paypal/success',
       paypalCancelUrl: 'https://example.com/paypal/cancel',
+      paypalAdvancedCardsEnabled: true,
     },
     sentry: { dsn: 'https://abc@sentry.io/1', environment: 'production', sampleRate: 0.1 },
     backup: {

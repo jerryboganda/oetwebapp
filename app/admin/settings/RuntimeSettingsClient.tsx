@@ -42,6 +42,7 @@ export interface BillingSettings {
   paypalWebhookId: string;
   paypalSuccessUrl: string;
   paypalCancelUrl: string;
+  paypalAdvancedCardsEnabled: boolean | null;
 }
 
 export interface SentrySettings {
@@ -228,7 +229,12 @@ export interface RuntimeSettingsIntegrationTestResponse {
   testedAt: string;
 }
 
-type SectionId = 'email' | 'billing' | 'sentry' | 'backup' | 'oauth' | 'push' | 'uploadScanner' | 'zoom' | 'speakingWhisper' | 'speakingLiveKit' | 'speakingAi' | 'speakingStorage' | 'speakingCompliance' | 'speakingFeatures' | 'checkoutCom' | 'paymob' | 'payTabs' | 'soketi';
+type SectionId = 'email' | 'billing' | 'paypal' | 'sentry' | 'backup' | 'oauth' | 'push' | 'uploadScanner' | 'zoom' | 'speakingWhisper' | 'speakingLiveKit' | 'speakingAi' | 'speakingStorage' | 'speakingCompliance' | 'speakingFeatures' | 'checkoutCom' | 'paymob' | 'payTabs' | 'soketi';
+
+// The object-valued payload keys (every UI section maps to one of these; the "paypal"
+// UI section writes into "billing"). Excludes the scalar audit fields so updateField can
+// safely spread the prior section object.
+type DataSectionId = Exclude<keyof RuntimeSettingsResponse, 'updatedBy' | 'updatedByUserId' | 'updatedAt'>;
 
 type ToastState = { variant: 'success' | 'error'; message: string } | null;
 type TestStatusState = Partial<Record<SectionId, RuntimeSettingsIntegrationTestResponse>>;
@@ -263,10 +269,14 @@ const BILLING_FIELDS: FieldDef<BillingSettings>[] = [
   { key: 'stripeSuccessUrl', label: 'Checkout Success URL', type: 'url' },
   { key: 'stripeCancelUrl', label: 'Checkout Cancel URL', type: 'url' },
   { key: 'publicAppBaseUrl', label: 'Public App Base URL', type: 'url', hint: 'e.g. https://app.oetwithdrhesham.co.uk — builds absolute checkout return URLs without an env var. Leave blank to use the server APP_URL.' },
-  { key: 'paypalClientId', label: 'PayPal Client ID', hint: 'REST app client id for PayPal checkout and refunds.' },
-  { key: 'paypalClientSecret', label: 'PayPal Client Secret', secret: true },
-  { key: 'paypalWebhookId', label: 'PayPal Webhook ID', secret: true, hint: 'Used to verify PayPal webhook signatures.' },
-  { key: 'paypalSuccessUrl', label: 'PayPal Success URL', type: 'url' },
+];
+
+const PAYPAL_FIELDS: FieldDef<BillingSettings>[] = [
+  { key: 'paypalClientId', label: 'PayPal Client ID', hint: 'REST app client id (Apps & Credentials). Public — also used by the embedded Expanded checkout SDK in the browser.' },
+  { key: 'paypalClientSecret', label: 'PayPal Client Secret', secret: true, hint: 'REST app secret. Server-side only — never sent to the browser.' },
+  { key: 'paypalWebhookId', label: 'PayPal Webhook ID', secret: true, hint: 'Webhook id used to verify PayPal webhook signatures (Dashboard → Webhooks → your webhook).' },
+  { key: 'paypalAdvancedCardsEnabled', label: 'Enable embedded card fields (Advanced Cards)', type: 'checkbox', hint: 'When on, the embedded checkout shows on-page card fields (requires PayPal "Advanced Credit and Debit Card Payments" eligibility). Turn off to show PayPal/Venmo/Pay Later buttons only. Default: on.' },
+  { key: 'paypalSuccessUrl', label: 'PayPal Success URL', type: 'url', hint: 'Return URL for the redirect fallback flow (e.g. https://app.oetwithdrhesham.co.uk/billing/payment-return).' },
   { key: 'paypalCancelUrl', label: 'PayPal Cancel URL', type: 'url' },
 ];
 
@@ -414,6 +424,7 @@ const SOKETI_FIELDS: FieldDef<SoketiSettings>[] = [
 const SECTION_META: { id: SectionId; title: string; description: string }[] = [
   { id: 'email', title: 'Email (Brevo + SMTP)', description: 'Transactional email delivery via Brevo with SMTP fallback.' },
   { id: 'billing', title: 'Billing (Stripe)', description: 'Stripe Checkout, Customer Portal, and webhook signing.' },
+  { id: 'paypal', title: 'Payments: PayPal', description: 'PayPal Expanded (embedded) checkout + redirect fallback. Client ID is public (used by the browser SDK); Secret and Webhook ID stay server-side. Enable embedded card fields if your account has Advanced Cards eligibility.' },
   { id: 'sentry', title: 'Sentry', description: 'Error reporting and performance monitoring.' },
   { id: 'backup', title: 'Backup S3', description: 'Off-site database and media backup destination.' },
   { id: 'oauth', title: 'OAuth (Google + Apple + Facebook)', description: 'Social sign-in providers.' },
@@ -459,6 +470,7 @@ function emptyResponse(): RuntimeSettingsResponse {
       paypalWebhookId: '',
       paypalSuccessUrl: '',
       paypalCancelUrl: '',
+      paypalAdvancedCardsEnabled: null,
     },
     sentry: { dsn: '', environment: '', sampleRate: null },
     backup: {
@@ -981,6 +993,7 @@ export function RuntimeSettingsClient() {
   const [openSections, setOpenSections] = useState<Record<SectionId, boolean>>({
     email: true,
     billing: false,
+    paypal: false,
     sentry: false,
     backup: false,
     oauth: false,
@@ -1024,7 +1037,9 @@ export function RuntimeSettingsClient() {
   }, []);
 
   const updateField = useCallback(
-    <S extends SectionId, K extends keyof RuntimeSettingsResponse[S] & string>(
+    // Indexes the data payload, so the section param is a key of RuntimeSettingsResponse
+    // (NOT a UI SectionId — the "paypal" UI section writes into the "billing" payload).
+    <S extends DataSectionId, K extends keyof RuntimeSettingsResponse[S] & string>(
       section: S,
       key: K,
       value: RuntimeSettingsResponse[S][K],
@@ -1205,6 +1220,31 @@ export function RuntimeSettingsClient() {
                       type={field.type}
                       value={draft.billing[field.key] as string}
                       onChange={(next) => updateField('billing', field.key, next as never)}
+                    />
+                  ),
+                )}
+
+              {section.id === 'paypal' &&
+                PAYPAL_FIELDS.map((field) =>
+                  field.secret ? (
+                    <SecretField
+                      key={field.key}
+                      label={field.label}
+                      hint={field.hint}
+                      serverValue={String(server.billing[field.key] ?? '')}
+                      draftValue={String(draft.billing[field.key] ?? '')}
+                      onChange={(next) => updateField('billing', field.key, next as never)}
+                    />
+                  ) : (
+                    <PlainField
+                      key={field.key}
+                      label={field.label}
+                      hint={field.hint}
+                      type={field.type}
+                      value={draft.billing[field.key] as string | boolean | null}
+                      onChange={(next) =>
+                        updateField('billing', field.key, (field.type === 'checkbox' ? Boolean(next) : next) as never)
+                      }
                     />
                   ),
                 )}
