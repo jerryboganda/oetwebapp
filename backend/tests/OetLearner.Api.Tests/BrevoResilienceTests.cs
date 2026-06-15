@@ -168,6 +168,11 @@ public class BrevoResilienceTests
             Writing: TestRuntimeSettingsProvider.DefaultWriting(),
             Platform: TestRuntimeSettingsProvider.DefaultPlatform(),
             Messaging: TestRuntimeSettingsProvider.DefaultMessaging(),
+            Fx: TestRuntimeSettingsProvider.DefaultFx(),
+            Storage: TestRuntimeSettingsProvider.DefaultStorage(),
+            PdfExtraction: TestRuntimeSettingsProvider.DefaultPdfExtraction(),
+            Pronunciation: TestRuntimeSettingsProvider.DefaultPronunciation(),
+            AuthTokens: TestRuntimeSettingsProvider.DefaultAuthTokens(),
             UpdatedByUserId: null,
             UpdatedByUserName: null,
             UpdatedAt: null);

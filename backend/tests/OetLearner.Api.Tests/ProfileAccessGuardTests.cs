@@ -100,7 +100,8 @@ public class ProfileAccessGuardTests
         var entitlement = new OetLearner.Api.Services.Pronunciation.PronunciationEntitlementService(
             db,
             pronOpts,
-            new OetLearner.Api.Services.Entitlements.EffectiveEntitlementResolver(db));
+            new OetLearner.Api.Services.Entitlements.EffectiveEntitlementResolver(db),
+            TestRuntimeSettingsProvider.FromPronunciationOptions(pronOpts.Value));
         return new PronunciationService(db, selector, nullFeedback, scheduler, entitlement, fileStorage, pronOpts,
             NullLogger<PronunciationService>.Instance);
     }

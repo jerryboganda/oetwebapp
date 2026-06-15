@@ -335,6 +335,96 @@ public class RuntimeSettingsRow
     [MaxLength(256)] public string? WhatsAppPhoneNumberId { get; set; }
     [MaxLength(256)] public string? WhatsAppFallbackTemplateName { get; set; }
 
+    // ── FX / Currency (Wave 4) ─────────────────────────────────────
+    // FxOptions (Fx:*). ApiKey is the only secret. BaseCurrency/ApiBaseUrl/
+    // DynamicPricingEnabled are plain.
+    [MaxLength(3)] public string? FxBaseCurrency { get; set; }
+    public string? FxApiKeyEncrypted { get; set; }
+    [MaxLength(512)] public string? FxApiBaseUrl { get; set; }
+    public bool? FxDynamicPricingEnabled { get; set; }
+
+    // ── Billing Core (non-gateway — Wave 4) ────────────────────────
+    // Extends the existing Stripe/PayPal/Checkout/Paymob/PayTabs gateway fields
+    // above with the core billing knobs. Billing:AllowSandboxFallbacks stays
+    // env-only (prod guard) and is intentionally NOT a column.
+    [MaxLength(1024)] public string? BillingCheckoutBaseUrl { get; set; }
+    public int? BillingWebhookMaxAgeSeconds { get; set; }
+    public int? BillingWebhookMaxAttempts { get; set; }
+    [MaxLength(10)] public string? BillingDefaultCurrency { get; set; }
+    [MaxLength(64)] public string? BillingDefaultRegion { get; set; }
+    [MaxLength(10)] public string? WalletCurrency { get; set; }
+    /// <summary>JSON array of wallet tier objects [{Amount,Credits,Bonus,Label,IsPopular}, ...].</summary>
+    public string? WalletTopUpTiersJson { get; set; }
+    public bool? PayPalUseSandbox { get; set; }
+    [MaxLength(512)] public string? PayPalApiBaseUrl { get; set; }
+
+    // ── Storage (S3 / object store — Wave 4) ───────────────────────
+    // StorageOptions (Storage:*) + ContentUpload limits. AccessKeyId and
+    // SecretAccessKey are SECRETS. Filesystem paths (LocalRootPath/*Subpath)
+    // stay env-only (security boundary) and are intentionally NOT columns.
+    [MaxLength(32)] public string? StorageProvider { get; set; }
+    [MaxLength(256)] public string? StorageBucketName { get; set; }
+    [MaxLength(512)] public string? StorageEndpointUrl { get; set; }
+    public string? StorageAccessKeyIdEncrypted { get; set; }
+    public string? StorageSecretAccessKeyEncrypted { get; set; }
+    [MaxLength(64)] public string? StorageAwsRegion { get; set; }
+    public int? StorageSignedReadTtlSeconds { get; set; }
+    public long? StorageContentUploadMaxAudioBytes { get; set; }
+    public long? StorageContentUploadMaxPdfBytes { get; set; }
+    public long? StorageContentUploadMaxImageBytes { get; set; }
+    public long? StorageContentUploadMaxZipBytes { get; set; }
+    public int? StorageContentUploadMaxZipEntries { get; set; }
+    public long? StorageContentUploadMaxZipEntryBytes { get; set; }
+    public long? StorageContentUploadMaxZipUncompressedBytes { get; set; }
+    public double? StorageContentUploadMaxZipCompressionRatio { get; set; }
+    public long? StorageContentUploadChunkSizeBytes { get; set; }
+    public int? StorageContentUploadStagingTtlHours { get; set; }
+
+    // ── PDF Extraction & Pronunciation (Wave 4) ────────────────────
+    // PdfExtractionOptions (PdfExtraction:*) — Azure key is the only secret.
+    // PronunciationOptions (Pronunciation:*) — NON-credential knobs only;
+    // the Azure/Whisper/Gemini API keys are registry-backed (AiProviderRegistry
+    // via IPronunciationCredentialResolver) and are intentionally NOT columns.
+    [MaxLength(32)] public string? PdfExtractionProvider { get; set; }
+    [MaxLength(512)] public string? PdfExtractionAzureEndpoint { get; set; }
+    public string? PdfExtractionAzureApiKeyEncrypted { get; set; }
+    public int? PdfExtractionMinTextLengthForSuccess { get; set; }
+    [MaxLength(32)] public string? PronunciationProvider { get; set; }
+    [MaxLength(64)] public string? PronunciationAzureSpeechRegion { get; set; }
+    [MaxLength(16)] public string? PronunciationAzureLocale { get; set; }
+    [MaxLength(512)] public string? PronunciationWhisperBaseUrl { get; set; }
+    [MaxLength(64)] public string? PronunciationWhisperModel { get; set; }
+    [MaxLength(512)] public string? PronunciationGeminiBaseUrl { get; set; }
+    [MaxLength(64)] public string? PronunciationGeminiModel { get; set; }
+    public long? PronunciationMaxAudioBytes { get; set; }
+    public int? PronunciationAudioRetentionDays { get; set; }
+    public int? PronunciationFreeTierWeeklyAttemptLimit { get; set; }
+    public int? PronunciationFreeTierWindowDays { get; set; }
+
+    // ── Auth — External providers (LinkedIn) + per-provider toggles (Wave 4) ─
+    // Extends the existing OAuth group. LinkedIn ClientId + ClientSecret are
+    // SECRETS (encrypted). Google/Facebook ClientId/Secret already exist above;
+    // these are just the genuine LinkedIn gap + per-provider Enabled toggles.
+    // Signing keys / Issuer / Audience / Authority stay env-only (trust anchors).
+    public string? LinkedInClientIdEncrypted { get; set; }
+    public string? LinkedInClientSecretEncrypted { get; set; }
+    public bool? LinkedInEnabled { get; set; }
+    public bool? GoogleAuthEnabled { get; set; }
+    public bool? FacebookAuthEnabled { get; set; }
+
+    // ── Auth tokens (safe AuthTokenOptions subset — Wave 4) ────────
+    // Lifetimes stored as whole seconds; AuthenticatorIssuer is the label shown
+    // in authenticator apps. Signing keys / Issuer / Audience stay env-only.
+    public int? AuthTokenAccessTokenLifetimeSeconds { get; set; }
+    public int? AuthTokenRefreshTokenLifetimeSeconds { get; set; }
+    public int? AuthTokenOtpLifetimeSeconds { get; set; }
+    [MaxLength(512)] public string? AuthTokenAuthenticatorIssuer { get; set; }
+
+    // ── Web push enablement (Wave 4) ───────────────────────────────
+    // Extends the existing Push group. VAPID keys are already in Push above; this
+    // is just the WebPush:Enabled master toggle.
+    public bool? WebPushEnabled { get; set; }
+
     // ── Audit ──────────────────────────────────────────────────────
     [MaxLength(64)]
     public string? UpdatedByUserId { get; set; }

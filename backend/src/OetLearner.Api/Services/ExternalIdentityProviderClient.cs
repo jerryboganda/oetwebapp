@@ -198,28 +198,54 @@ public sealed class ExternalIdentityProviderClient(
         var configuration = _options.GetProvider(provider);
         if (_runtimeSettings is not null
             && (provider.Equals(ExternalAuthProviders.Google, StringComparison.OrdinalIgnoreCase)
-                || provider.Equals(ExternalAuthProviders.Facebook, StringComparison.OrdinalIgnoreCase)))
+                || provider.Equals(ExternalAuthProviders.Facebook, StringComparison.OrdinalIgnoreCase)
+                || provider.Equals(ExternalAuthProviders.LinkedIn, StringComparison.OrdinalIgnoreCase)))
         {
+            // A DB override is "present" when the credentials for that provider
+            // have been stored. LinkedIn's ClientId is encrypted at rest (Wave 4),
+            // so we probe the *Encrypted column the same way as the secrets.
             var raw = await _runtimeSettings.GetRawAsync(ct);
-            var hasRuntimeOverride = provider.Equals(ExternalAuthProviders.Google, StringComparison.OrdinalIgnoreCase)
-                ? !string.IsNullOrWhiteSpace(raw.GoogleClientId) && !string.IsNullOrWhiteSpace(raw.GoogleClientSecretEncrypted)
-                : !string.IsNullOrWhiteSpace(raw.FacebookAppId) && !string.IsNullOrWhiteSpace(raw.FacebookAppSecretEncrypted);
-            if (configuration.Enabled || hasRuntimeOverride)
+            var hasRuntimeOverride = provider switch
             {
-                var effective = (await _runtimeSettings.GetAsync(ct)).OAuth;
-                configuration = provider.Equals(ExternalAuthProviders.Google, StringComparison.OrdinalIgnoreCase)
-                    ? new ExternalAuthProviderOptions
+                _ when provider.Equals(ExternalAuthProviders.Google, StringComparison.OrdinalIgnoreCase)
+                    => !string.IsNullOrWhiteSpace(raw.GoogleClientId) && !string.IsNullOrWhiteSpace(raw.GoogleClientSecretEncrypted),
+                _ when provider.Equals(ExternalAuthProviders.Facebook, StringComparison.OrdinalIgnoreCase)
+                    => !string.IsNullOrWhiteSpace(raw.FacebookAppId) && !string.IsNullOrWhiteSpace(raw.FacebookAppSecretEncrypted),
+                _ => !string.IsNullOrWhiteSpace(raw.LinkedInClientIdEncrypted) && !string.IsNullOrWhiteSpace(raw.LinkedInClientSecretEncrypted),
+            };
+            // The per-provider Enabled toggle may itself come from the DB (Wave 4).
+            var effective = (await _runtimeSettings.GetAsync(ct)).OAuth;
+            var dbEnabled = provider switch
+            {
+                _ when provider.Equals(ExternalAuthProviders.Google, StringComparison.OrdinalIgnoreCase) => effective.GoogleAuthEnabled,
+                _ when provider.Equals(ExternalAuthProviders.Facebook, StringComparison.OrdinalIgnoreCase) => effective.FacebookAuthEnabled,
+                _ => effective.LinkedInEnabled,
+            };
+            if (configuration.Enabled || dbEnabled || hasRuntimeOverride)
+            {
+                configuration = provider switch
+                {
+                    _ when provider.Equals(ExternalAuthProviders.Google, StringComparison.OrdinalIgnoreCase)
+                        => new ExternalAuthProviderOptions
+                        {
+                            Enabled = true,
+                            ClientId = effective.GoogleClientId,
+                            ClientSecret = effective.GoogleClientSecret,
+                        },
+                    _ when provider.Equals(ExternalAuthProviders.Facebook, StringComparison.OrdinalIgnoreCase)
+                        => new ExternalAuthProviderOptions
+                        {
+                            Enabled = true,
+                            ClientId = effective.FacebookAppId,
+                            ClientSecret = effective.FacebookAppSecret,
+                        },
+                    _ => new ExternalAuthProviderOptions
                     {
                         Enabled = true,
-                        ClientId = effective.GoogleClientId,
-                        ClientSecret = effective.GoogleClientSecret,
-                    }
-                    : new ExternalAuthProviderOptions
-                    {
-                        Enabled = true,
-                        ClientId = effective.FacebookAppId,
-                        ClientSecret = effective.FacebookAppSecret,
-                    };
+                        ClientId = effective.LinkedInClientId,
+                        ClientSecret = effective.LinkedInClientSecret,
+                    },
+                };
             }
         }
 

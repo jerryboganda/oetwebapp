@@ -46,6 +46,11 @@ public sealed class RuntimeSettingsProvider : IRuntimeSettingsProvider
     private readonly IOptions<PlatformOptions> _platform;
     private readonly IOptions<TwilioOptions> _twilio;
     private readonly IOptions<WhatsAppOptions> _whatsApp;
+    private readonly IOptions<FxOptions> _fx;
+    private readonly IOptions<StorageOptions> _storage;
+    private readonly IOptions<PdfExtractionOptions> _pdfExtraction;
+    private readonly IOptions<PronunciationOptions> _pronunciation;
+    private readonly IOptions<AuthTokenOptions> _authTokens;
     private readonly IOptionsMonitor<SmtpOptions> _smtp;
     private readonly IConfiguration _config;
     private readonly IHostEnvironment _environment;
@@ -71,6 +76,11 @@ public sealed class RuntimeSettingsProvider : IRuntimeSettingsProvider
         IOptions<PlatformOptions> platform,
         IOptions<TwilioOptions> twilio,
         IOptions<WhatsAppOptions> whatsApp,
+        IOptions<FxOptions> fx,
+        IOptions<StorageOptions> storage,
+        IOptions<PdfExtractionOptions> pdfExtraction,
+        IOptions<PronunciationOptions> pronunciation,
+        IOptions<AuthTokenOptions> authTokens,
         IOptionsMonitor<SmtpOptions> smtp,
         IConfiguration config,
         IHostEnvironment environment)
@@ -95,6 +105,11 @@ public sealed class RuntimeSettingsProvider : IRuntimeSettingsProvider
         _platform = platform;
         _twilio = twilio;
         _whatsApp = whatsApp;
+        _fx = fx;
+        _storage = storage;
+        _pdfExtraction = pdfExtraction;
+        _pronunciation = pronunciation;
+        _authTokens = authTokens;
         _smtp = smtp;
         _config = config;
         _environment = environment;
@@ -205,7 +220,17 @@ public sealed class RuntimeSettingsProvider : IRuntimeSettingsProvider
             PayPalSuccessUrl: Coalesce(r.PayPalSuccessUrl, paypal.SuccessUrl),
             PayPalCancelUrl: Coalesce(r.PayPalCancelUrl, paypal.CancelUrl),
             PayPalAdvancedCardsEnabled: r.PayPalAdvancedCardsEnabled ?? paypal.AdvancedCardsEnabled,
-            PublicAppBaseUrl: NullIfEmpty(r.BillingPublicAppBaseUrl));
+            PublicAppBaseUrl: NullIfEmpty(r.BillingPublicAppBaseUrl),
+            // ── Billing Core (non-gateway — Wave 4): DB-over-env ──────
+            CheckoutBaseUrl: Coalesce(r.BillingCheckoutBaseUrl, billing.CheckoutBaseUrl),
+            WebhookMaxAgeSeconds: Math.Max(1, r.BillingWebhookMaxAgeSeconds ?? billing.WebhookMaxAgeSeconds),
+            WebhookMaxAttempts: r.BillingWebhookMaxAttempts ?? billing.WebhookMaxAttempts,
+            DefaultCurrency: UpperOrDefault(r.BillingDefaultCurrency, billing.DefaultCurrency, "GBP"),
+            DefaultRegion: UpperOrDefault(r.BillingDefaultRegion, billing.DefaultRegion, "ROW"),
+            WalletCurrency: UpperOrDefault(r.WalletCurrency, billing.Wallet.Currency, "AUD"),
+            WalletTopUpTiers: ResolveWalletTiers(r.WalletTopUpTiersJson, billing.Wallet.TopUpTiers),
+            PayPalUseSandbox: r.PayPalUseSandbox ?? paypal.UseSandbox,
+            PayPalApiBaseUrl: Coalesce(r.PayPalApiBaseUrl, paypal.ApiBaseUrl, "https://api-m.paypal.com")!);
 
         // Sentry is wired from raw configuration (Sentry:Dsn) rather than an
         // IOptions binding, so fall back to IConfiguration for env defaults.
@@ -226,6 +251,7 @@ public sealed class RuntimeSettingsProvider : IRuntimeSettingsProvider
 
         var google = oauth.Google;
         var facebook = oauth.Facebook;
+        var linkedIn = oauth.LinkedIn;
         var webPush = _webPush.Value;
         var oa = new OAuthSettings(
             GoogleClientId: Coalesce(r.GoogleClientId, google.ClientId),
@@ -235,7 +261,14 @@ public sealed class RuntimeSettingsProvider : IRuntimeSettingsProvider
             AppleKeyId: r.AppleKeyId,
             ApplePrivateKey: Unprotect(r.ApplePrivateKeyEncrypted),
             FacebookAppId: Coalesce(r.FacebookAppId, facebook.ClientId),
-            FacebookAppSecret: Unprotect(r.FacebookAppSecretEncrypted) ?? NullIfEmpty(facebook.ClientSecret));
+            FacebookAppSecret: Unprotect(r.FacebookAppSecretEncrypted) ?? NullIfEmpty(facebook.ClientSecret),
+            // ── Auth external providers (Wave 4): DB-over-env ─────────
+            // LinkedIn ClientId/Secret are encrypted at rest (decrypted here).
+            LinkedInClientId: Unprotect(r.LinkedInClientIdEncrypted) ?? NullIfEmpty(linkedIn.ClientId),
+            LinkedInClientSecret: Unprotect(r.LinkedInClientSecretEncrypted) ?? NullIfEmpty(linkedIn.ClientSecret),
+            LinkedInEnabled: r.LinkedInEnabled ?? linkedIn.Enabled,
+            GoogleAuthEnabled: r.GoogleAuthEnabled ?? google.Enabled,
+            FacebookAuthEnabled: r.FacebookAuthEnabled ?? facebook.Enabled);
 
         var push = new PushSettings(
             ApnsKeyId: r.ApnsKeyId,
@@ -246,7 +279,9 @@ public sealed class RuntimeSettingsProvider : IRuntimeSettingsProvider
             FcmProjectId: r.FcmProjectId,
             VapidSubject: Coalesce(r.VapidSubject, webPush.Subject),
             VapidPublicKey: Coalesce(r.VapidPublicKey, webPush.PublicKey),
-            VapidPrivateKey: Unprotect(r.VapidPrivateKeyEncrypted) ?? NullIfEmpty(webPush.PrivateKey));
+            VapidPrivateKey: Unprotect(r.VapidPrivateKeyEncrypted) ?? NullIfEmpty(webPush.PrivateKey),
+            // ── Web push enablement (Wave 4): DB-over-env ─────────────
+            WebPushEnabled: r.WebPushEnabled ?? webPush.Enabled);
 
         var uploadScanner = new UploadScannerSettings(
             Provider: Coalesce(r.UploadScannerProvider, scanner.Provider) ?? "noop",
@@ -304,6 +339,11 @@ public sealed class RuntimeSettingsProvider : IRuntimeSettingsProvider
         var writing = ResolveWriting(r, _writing.Value);
         var platform = ResolvePlatform(r, _platform.Value);
         var messaging = ResolveMessaging(r, _twilio.Value, _whatsApp.Value);
+        var fx = ResolveFx(r, _fx.Value);
+        var storage = ResolveStorage(r, _storage.Value);
+        var pdfExtraction = ResolvePdfExtraction(r, _pdfExtraction.Value);
+        var pronunciation = ResolvePronunciation(r, _pronunciation.Value);
+        var authTokens = ResolveAuthTokens(r, _authTokens.Value);
 
         return new EffectiveSettings(
             Email: email,
@@ -334,6 +374,11 @@ public sealed class RuntimeSettingsProvider : IRuntimeSettingsProvider
             Writing: writing,
             Platform: platform,
             Messaging: messaging,
+            Fx: fx,
+            Storage: storage,
+            PdfExtraction: pdfExtraction,
+            Pronunciation: pronunciation,
+            AuthTokens: authTokens,
             UpdatedByUserId: r.UpdatedByUserId,
             UpdatedByUserName: r.UpdatedByUserName,
             UpdatedAt: r.UpdatedAt == default ? null : r.UpdatedAt);
@@ -550,6 +595,93 @@ public sealed class RuntimeSettingsProvider : IRuntimeSettingsProvider
                 && !string.IsNullOrWhiteSpace(whatsAppAccessToken)
                 && !string.IsNullOrWhiteSpace(whatsAppPhoneNumberId));
     }
+
+    // ── FX / Storage / PdfExtraction / Pronunciation / AuthTokens (Wave 4) ──
+    // (DB-over-env: null DB field → env default; secrets decrypted here.)
+    private FxSettings ResolveFx(RuntimeSettingsRow r, FxOptions env)
+        => new(
+            BaseCurrency: (Coalesce(r.FxBaseCurrency, env.BaseCurrency) ?? "USD").ToUpperInvariant(),
+            ApiKey: Unprotect(r.FxApiKeyEncrypted) ?? NullIfEmpty(env.ApiKey),
+            ApiBaseUrl: Coalesce(r.FxApiBaseUrl, env.ApiBaseUrl),
+            DynamicPricingEnabled: r.FxDynamicPricingEnabled ?? env.DynamicPricingEnabled);
+
+    private StorageSettings ResolveStorage(RuntimeSettingsRow r, StorageOptions env)
+    {
+        var cu = env.ContentUpload;
+        return new StorageSettings(
+            Provider: Coalesce(r.StorageProvider, env.Provider, "local")!,
+            BucketName: Coalesce(r.StorageBucketName, env.BucketName),
+            EndpointUrl: Coalesce(r.StorageEndpointUrl, env.EndpointUrl),
+            AccessKeyId: Unprotect(r.StorageAccessKeyIdEncrypted) ?? NullIfEmpty(env.AccessKeyId),
+            SecretAccessKey: Unprotect(r.StorageSecretAccessKeyEncrypted) ?? NullIfEmpty(env.SecretAccessKey),
+            AwsRegion: Coalesce(r.StorageAwsRegion, env.AwsRegion, "us-east-1")!,
+            SignedReadTtlSeconds: PositiveOrDefault(r.StorageSignedReadTtlSeconds, env.SignedReadTtlSeconds, 3600),
+            MaxAudioBytes: PositiveLongOrDefault(r.StorageContentUploadMaxAudioBytes, cu.MaxAudioBytes, 150L * 1024 * 1024),
+            MaxPdfBytes: PositiveLongOrDefault(r.StorageContentUploadMaxPdfBytes, cu.MaxPdfBytes, 25L * 1024 * 1024),
+            MaxImageBytes: PositiveLongOrDefault(r.StorageContentUploadMaxImageBytes, cu.MaxImageBytes, 5L * 1024 * 1024),
+            MaxZipBytes: PositiveLongOrDefault(r.StorageContentUploadMaxZipBytes, cu.MaxZipBytes, 500L * 1024 * 1024),
+            MaxZipEntries: PositiveOrDefault(r.StorageContentUploadMaxZipEntries, cu.MaxZipEntries, 5000),
+            MaxZipEntryBytes: PositiveLongOrDefault(r.StorageContentUploadMaxZipEntryBytes, cu.MaxZipEntryBytes, 150L * 1024 * 1024),
+            MaxZipUncompressedBytes: PositiveLongOrDefault(r.StorageContentUploadMaxZipUncompressedBytes, cu.MaxZipUncompressedBytes, 2L * 1024 * 1024 * 1024),
+            MaxZipCompressionRatio: r.StorageContentUploadMaxZipCompressionRatio is > 0
+                ? r.StorageContentUploadMaxZipCompressionRatio.Value
+                : (cu.MaxZipCompressionRatio > 0 ? cu.MaxZipCompressionRatio : 100.0),
+            ChunkSizeBytes: PositiveLongOrDefault(r.StorageContentUploadChunkSizeBytes, cu.ChunkSizeBytes, 8L * 1024 * 1024),
+            StagingTtlHours: PositiveOrDefault(r.StorageContentUploadStagingTtlHours, cu.StagingTtlHours, 24));
+    }
+
+    private PdfExtractionSettings ResolvePdfExtraction(RuntimeSettingsRow r, PdfExtractionOptions env)
+        => new(
+            Provider: Coalesce(r.PdfExtractionProvider, env.Provider, "auto")!,
+            AzureEndpoint: Coalesce(r.PdfExtractionAzureEndpoint, env.AzureEndpoint) ?? string.Empty,
+            AzureApiKey: Unprotect(r.PdfExtractionAzureApiKeyEncrypted) ?? NullIfEmpty(env.AzureApiKey),
+            MinTextLengthForSuccess: Math.Max(1, r.PdfExtractionMinTextLengthForSuccess ?? (env.MinTextLengthForSuccess > 0 ? env.MinTextLengthForSuccess : 50)));
+
+    private static PronunciationSettings ResolvePronunciation(RuntimeSettingsRow r, PronunciationOptions env)
+        => new(
+            Provider: Coalesce(r.PronunciationProvider, env.Provider, "auto")!,
+            AzureSpeechRegion: Coalesce(r.PronunciationAzureSpeechRegion, env.AzureSpeechRegion) ?? string.Empty,
+            AzureLocale: Coalesce(r.PronunciationAzureLocale, env.AzureLocale, "en-GB")!,
+            WhisperBaseUrl: Coalesce(r.PronunciationWhisperBaseUrl, env.WhisperBaseUrl) ?? string.Empty,
+            WhisperModel: Coalesce(r.PronunciationWhisperModel, env.WhisperModel, "whisper-1")!,
+            GeminiBaseUrl: Coalesce(r.PronunciationGeminiBaseUrl, env.GeminiBaseUrl, "https://generativelanguage.googleapis.com/v1beta")!,
+            GeminiModel: Coalesce(r.PronunciationGeminiModel, env.GeminiModel, "gemini-3.5-flash")!,
+            MaxAudioBytes: PositiveLongOrDefault(r.PronunciationMaxAudioBytes, env.MaxAudioBytes, 15L * 1024 * 1024),
+            AudioRetentionDays: PositiveOrDefault(r.PronunciationAudioRetentionDays, env.AudioRetentionDays, 45),
+            // FreeTierWeeklyAttemptLimit allows -1 (disabled), so don't clamp to positive.
+            FreeTierWeeklyAttemptLimit: r.PronunciationFreeTierWeeklyAttemptLimit ?? env.FreeTierWeeklyAttemptLimit,
+            FreeTierWindowDays: PositiveOrDefault(r.PronunciationFreeTierWindowDays, env.FreeTierWindowDays, 7));
+
+    private static AuthTokenSettings ResolveAuthTokens(RuntimeSettingsRow r, AuthTokenOptions env)
+        => new(
+            AccessTokenLifetime: TimeSpanSecondsOrDefault(r.AuthTokenAccessTokenLifetimeSeconds, env.AccessTokenLifetime),
+            RefreshTokenLifetime: TimeSpanSecondsOrDefault(r.AuthTokenRefreshTokenLifetimeSeconds, env.RefreshTokenLifetime),
+            OtpLifetime: TimeSpanSecondsOrDefault(r.AuthTokenOtpLifetimeSeconds, env.OtpLifetime),
+            AuthenticatorIssuer: Coalesce(r.AuthTokenAuthenticatorIssuer, env.AuthenticatorIssuer));
+
+    /// <summary>Parse the wallet-tier JSON override; fall back to env tiers on
+    /// null/empty/malformed/invalid input (Amount &gt; 0, Credits/Bonus &gt;= 0).</summary>
+    private static IReadOnlyList<WalletTopUpTierOption> ResolveWalletTiers(string? json, List<WalletTopUpTierOption> envTiers)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return envTiers;
+        try
+        {
+            var parsed = JsonSerializer.Deserialize<List<WalletTopUpTierOption>>(json!);
+            if (parsed is { Count: > 0 }
+                && parsed.All(t => t.Amount > 0 && t.Credits >= 0 && t.Bonus >= 0))
+            {
+                return parsed;
+            }
+        }
+        catch (JsonException) { /* keep env defaults on malformed JSON */ }
+        return envTiers;
+    }
+
+    private static TimeSpan TimeSpanSecondsOrDefault(int? seconds, TimeSpan fallback)
+        => seconds is > 0 ? TimeSpan.FromSeconds(seconds.Value) : fallback;
+
+    private static string UpperOrDefault(string? dbValue, string? envValue, string hardDefault)
+        => (Coalesce(dbValue, envValue, hardDefault) ?? hardDefault).ToUpperInvariant();
 
     private static string? JoinHosts(string[]? hosts)
         => hosts is { Length: > 0 } ? string.Join(",", hosts) : null;

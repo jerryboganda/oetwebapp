@@ -145,5 +145,74 @@ ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""WhatsAppApiBaseUrl"" 
 ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""WhatsAppAccessTokenEncrypted"" text;
 ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""WhatsAppPhoneNumberId"" character varying(256);
 ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""WhatsAppFallbackTemplateName"" character varying(256);
+
+-- FX / Currency (Wave 4)
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""FxBaseCurrency"" character varying(3);
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""FxApiKeyEncrypted"" text;
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""FxApiBaseUrl"" character varying(512);
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""FxDynamicPricingEnabled"" boolean;
+
+-- Billing Core (non-gateway — Wave 4)
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""BillingCheckoutBaseUrl"" character varying(1024);
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""BillingWebhookMaxAgeSeconds"" integer;
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""BillingWebhookMaxAttempts"" integer;
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""BillingDefaultCurrency"" character varying(10);
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""BillingDefaultRegion"" character varying(64);
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""WalletCurrency"" character varying(10);
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""WalletTopUpTiersJson"" text;
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""PayPalUseSandbox"" boolean;
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""PayPalApiBaseUrl"" character varying(512);
+
+-- Storage (S3 / object store — Wave 4)
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""StorageProvider"" character varying(32);
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""StorageBucketName"" character varying(256);
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""StorageEndpointUrl"" character varying(512);
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""StorageAccessKeyIdEncrypted"" text;
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""StorageSecretAccessKeyEncrypted"" text;
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""StorageAwsRegion"" character varying(64);
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""StorageSignedReadTtlSeconds"" integer;
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""StorageContentUploadMaxAudioBytes"" bigint;
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""StorageContentUploadMaxPdfBytes"" bigint;
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""StorageContentUploadMaxImageBytes"" bigint;
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""StorageContentUploadMaxZipBytes"" bigint;
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""StorageContentUploadMaxZipEntries"" integer;
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""StorageContentUploadMaxZipEntryBytes"" bigint;
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""StorageContentUploadMaxZipUncompressedBytes"" bigint;
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""StorageContentUploadMaxZipCompressionRatio"" double precision;
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""StorageContentUploadChunkSizeBytes"" bigint;
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""StorageContentUploadStagingTtlHours"" integer;
+
+-- PDF Extraction & Pronunciation (Wave 4)
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""PdfExtractionProvider"" character varying(32);
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""PdfExtractionAzureEndpoint"" character varying(512);
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""PdfExtractionAzureApiKeyEncrypted"" text;
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""PdfExtractionMinTextLengthForSuccess"" integer;
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""PronunciationProvider"" character varying(32);
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""PronunciationAzureSpeechRegion"" character varying(64);
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""PronunciationAzureLocale"" character varying(16);
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""PronunciationWhisperBaseUrl"" character varying(512);
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""PronunciationWhisperModel"" character varying(64);
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""PronunciationGeminiBaseUrl"" character varying(512);
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""PronunciationGeminiModel"" character varying(64);
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""PronunciationMaxAudioBytes"" bigint;
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""PronunciationAudioRetentionDays"" integer;
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""PronunciationFreeTierWeeklyAttemptLimit"" integer;
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""PronunciationFreeTierWindowDays"" integer;
+
+-- Auth — External providers (LinkedIn) + per-provider toggles (Wave 4)
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""LinkedInClientIdEncrypted"" text;
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""LinkedInClientSecretEncrypted"" text;
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""LinkedInEnabled"" boolean;
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""GoogleAuthEnabled"" boolean;
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""FacebookAuthEnabled"" boolean;
+
+-- Auth tokens (safe AuthTokenOptions subset — Wave 4)
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""AuthTokenAccessTokenLifetimeSeconds"" integer;
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""AuthTokenRefreshTokenLifetimeSeconds"" integer;
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""AuthTokenOtpLifetimeSeconds"" integer;
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""AuthTokenAuthenticatorIssuer"" character varying(512);
+
+-- Web push enablement (Wave 4)
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""WebPushEnabled"" boolean;
 ";
 }

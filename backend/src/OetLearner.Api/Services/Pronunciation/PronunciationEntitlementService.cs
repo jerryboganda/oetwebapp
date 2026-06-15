@@ -4,6 +4,7 @@ using OetLearner.Api.Configuration;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services.Entitlements;
+using OetLearner.Api.Services.Settings;
 
 namespace OetLearner.Api.Services.Pronunciation;
 
@@ -35,11 +36,18 @@ public sealed record PronunciationEntitlement(
 public sealed class PronunciationEntitlementService(
     LearnerDbContext db,
     IOptions<PronunciationOptions> options,
-    IEffectiveEntitlementResolver entitlementResolver) : IPronunciationEntitlementService
+    IEffectiveEntitlementResolver entitlementResolver,
+    IRuntimeSettingsProvider runtimeSettings) : IPronunciationEntitlementService
 {
     public async Task<PronunciationEntitlement> CheckAsync(string? userId, CancellationToken ct)
     {
-        var opts = options.Value;
+        // Wave 4: free-tier knobs are DB-overridable (null DB → env default).
+        var pron = (await runtimeSettings.GetAsync(ct)).Pronunciation;
+        var opts = new PronunciationOptions
+        {
+            FreeTierWeeklyAttemptLimit = pron.FreeTierWeeklyAttemptLimit,
+            FreeTierWindowDays = pron.FreeTierWindowDays,
+        };
         var windowDays = opts.FreeTierWindowDays <= 0 ? 7 : opts.FreeTierWindowDays;
 
         if (string.IsNullOrWhiteSpace(userId))

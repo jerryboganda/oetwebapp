@@ -82,6 +82,11 @@ public sealed class RuntimeSettingsProviderZoomTests
             Options.Create(new PlatformOptions()),
             Options.Create(new TwilioOptions()),
             Options.Create(new WhatsAppOptions()),
+            Options.Create(new FxOptions()),
+            Options.Create(new StorageOptions()),
+            Options.Create(new PdfExtractionOptions()),
+            Options.Create(new PronunciationOptions()),
+            Options.Create(new AuthTokenOptions()),
             new StaticOptionsMonitor<SmtpOptions>(new SmtpOptions()),
             new ConfigurationBuilder().Build(),
             new TestHostEnvironment("Development"));
@@ -144,6 +149,11 @@ public sealed class RuntimeSettingsProviderZoomTests
             Options.Create(new PlatformOptions()),
             Options.Create(new TwilioOptions()),
             Options.Create(new WhatsAppOptions()),
+            Options.Create(new FxOptions()),
+            Options.Create(new StorageOptions()),
+            Options.Create(new PdfExtractionOptions()),
+            Options.Create(new PronunciationOptions()),
+            Options.Create(new AuthTokenOptions()),
             new StaticOptionsMonitor<SmtpOptions>(new SmtpOptions()),
             new ConfigurationBuilder().Build(),
             new TestHostEnvironment("Development"));

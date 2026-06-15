@@ -1,3 +1,4 @@
+using OetLearner.Api.Configuration;
 using OetLearner.Api.Domain;
 
 namespace OetLearner.Api.Services.Settings;
@@ -72,6 +73,11 @@ public sealed record EffectiveSettings(
     WritingSettings Writing,
     PlatformSettings Platform,
     MessagingSettings Messaging,
+    FxSettings Fx,
+    StorageSettings Storage,
+    PdfExtractionSettings PdfExtraction,
+    PronunciationSettings Pronunciation,
+    AuthTokenSettings AuthTokens,
     string? UpdatedByUserId,
     string? UpdatedByUserName,
     DateTimeOffset? UpdatedAt);
@@ -112,7 +118,19 @@ public sealed record BillingSettings(
     string? PayPalSuccessUrl,
     string? PayPalCancelUrl,
     bool PayPalAdvancedCardsEnabled = true,
-    string? PublicAppBaseUrl = null);
+    string? PublicAppBaseUrl = null,
+    // ── Billing Core (non-gateway — Wave 4) ────────────────────────
+    // Optional positional params with defaults so existing call-sites keep
+    // compiling. These are the core (non-gateway) billing knobs.
+    string? CheckoutBaseUrl = null,
+    int WebhookMaxAgeSeconds = 300,
+    int WebhookMaxAttempts = 5,
+    string DefaultCurrency = "GBP",
+    string DefaultRegion = "ROW",
+    string WalletCurrency = "AUD",
+    IReadOnlyList<WalletTopUpTierOption>? WalletTopUpTiers = null,
+    bool PayPalUseSandbox = true,
+    string PayPalApiBaseUrl = "https://api-m.paypal.com");
 
 public sealed record SentrySettings(
     string? Dsn,
@@ -134,7 +152,16 @@ public sealed record OAuthSettings(
     string? AppleKeyId,
     string? ApplePrivateKey,
     string? FacebookAppId,
-    string? FacebookAppSecret);
+    string? FacebookAppSecret,
+    // ── Auth external providers (Wave 4) ───────────────────────────
+    // LinkedIn is the genuine OAuth gap (ClientId + ClientSecret are secrets,
+    // decrypted by the provider). Per-provider Enabled toggles default to env.
+    // Optional positional params with defaults so existing call-sites compile.
+    string? LinkedInClientId = null,
+    string? LinkedInClientSecret = null,
+    bool LinkedInEnabled = false,
+    bool GoogleAuthEnabled = false,
+    bool FacebookAuthEnabled = false);
 
 public sealed record PushSettings(
     string? ApnsKeyId,
@@ -145,7 +172,10 @@ public sealed record PushSettings(
     string? FcmProjectId,
     string? VapidSubject = null,
     string? VapidPublicKey = null,
-    string? VapidPrivateKey = null);
+    string? VapidPrivateKey = null,
+    // ── Web push enablement (Wave 4) ───────────────────────────────
+    // WebPush:Enabled master toggle. VAPID keys already live on this record.
+    bool WebPushEnabled = false);
 
 public sealed record UploadScannerSettings(
     string Provider,
@@ -432,3 +462,88 @@ public sealed record MessagingSettings(
     string? WhatsAppFallbackTemplateName,
     bool IsTwilioConfigured,
     bool IsWhatsAppConfigured);
+
+/// <summary>
+/// FX / currency provider settings (DB-over-env merged). <see cref="ApiKey"/>
+/// is the only secret (decrypted by the provider). When the API key/URL are
+/// absent, <c>FxRateService</c> uses offline seed rates.
+/// </summary>
+public sealed record FxSettings(
+    string BaseCurrency,
+    string? ApiKey,
+    string? ApiBaseUrl,
+    bool DynamicPricingEnabled);
+
+/// <summary>
+/// Storage (S3 / object store) settings (DB-over-env merged). <see cref="AccessKeyId"/>
+/// and <see cref="SecretAccessKey"/> are secrets (decrypted by the provider).
+/// Filesystem paths (LocalRootPath / *Subpath) stay env-only and are excluded.
+/// <see cref="IsConfigured"/> gates S3 mode. Provider is NOT runtime-switchable
+/// (singleton IFileStorage); only credentials/bucket/endpoint/region are.
+/// </summary>
+public sealed record StorageSettings(
+    string Provider,
+    string? BucketName,
+    string? EndpointUrl,
+    string? AccessKeyId,
+    string? SecretAccessKey,
+    string AwsRegion,
+    int SignedReadTtlSeconds,
+    long MaxAudioBytes,
+    long MaxPdfBytes,
+    long MaxImageBytes,
+    long MaxZipBytes,
+    int MaxZipEntries,
+    long MaxZipEntryBytes,
+    long MaxZipUncompressedBytes,
+    double MaxZipCompressionRatio,
+    long ChunkSizeBytes,
+    int StagingTtlHours)
+{
+    public bool IsConfigured => Provider.Equals("s3", StringComparison.OrdinalIgnoreCase)
+        && !string.IsNullOrWhiteSpace(AccessKeyId)
+        && !string.IsNullOrWhiteSpace(SecretAccessKey)
+        && !string.IsNullOrWhiteSpace(BucketName);
+}
+
+/// <summary>
+/// PDF text-extraction settings (DB-over-env merged). <see cref="AzureApiKey"/>
+/// is the only secret (decrypted by the provider; env-fallback when DB is null).
+/// </summary>
+public sealed record PdfExtractionSettings(
+    string Provider,
+    string AzureEndpoint,
+    string? AzureApiKey,
+    int MinTextLengthForSuccess);
+
+/// <summary>
+/// Pronunciation NON-credential settings (DB-over-env merged): provider
+/// selector, region/locale, Whisper/Gemini base-urls + models, audio limits,
+/// retention, and free-tier gating. The Azure/Whisper/Gemini API KEYS are NOT
+/// here — they are registry-backed via <c>IPronunciationCredentialResolver</c>
+/// (AiProviderRegistry rows azure-phoneme / whisper-asr / gemini-pronunciation-audio).
+/// </summary>
+public sealed record PronunciationSettings(
+    string Provider,
+    string AzureSpeechRegion,
+    string AzureLocale,
+    string WhisperBaseUrl,
+    string WhisperModel,
+    string GeminiBaseUrl,
+    string GeminiModel,
+    long MaxAudioBytes,
+    int AudioRetentionDays,
+    int FreeTierWeeklyAttemptLimit,
+    int FreeTierWindowDays);
+
+/// <summary>
+/// Safe AuthTokenOptions subset (DB-over-env merged): access/refresh/OTP
+/// lifetimes (as <see cref="TimeSpan"/>) and the authenticator issuer label.
+/// Signing keys, Issuer, and Audience stay env-only (trust anchors / bootstrap)
+/// and are intentionally excluded.
+/// </summary>
+public sealed record AuthTokenSettings(
+    TimeSpan AccessTokenLifetime,
+    TimeSpan RefreshTokenLifetime,
+    TimeSpan OtpLifetime,
+    string? AuthenticatorIssuer);

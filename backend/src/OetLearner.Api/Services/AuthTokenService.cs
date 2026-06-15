@@ -6,6 +6,7 @@ using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using OetLearner.Api.Configuration;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services.Settings;
 
 namespace OetLearner.Api.Services;
 
@@ -33,7 +34,10 @@ public sealed record IssuedAuthSession(
     string RefreshTokenHash,
     DateTimeOffset RefreshTokenExpiresAt);
 
-public sealed class AuthTokenService(IOptions<AuthTokenOptions> authTokenOptions, TimeProvider timeProvider)
+public sealed class AuthTokenService(
+    IOptions<AuthTokenOptions> authTokenOptions,
+    TimeProvider timeProvider,
+    IRuntimeSettingsProvider? runtimeSettings = null)
 {
     public const string AuthAccountIdClaimType = "auth_account_id";
     public const string IsEmailVerifiedClaimType = "email_verified";
@@ -46,12 +50,18 @@ public sealed class AuthTokenService(IOptions<AuthTokenOptions> authTokenOptions
     public const string SessionIdClaimType = "sid";
 
     private readonly AuthTokenOptions _options = authTokenOptions.Value;
+    private readonly IRuntimeSettingsProvider? _runtimeSettings = runtimeSettings;
 
     public IssuedAuthSession IssueSession(AuthenticatedSessionSubject subject, Guid? sessionId = null)
     {
         var now = timeProvider.GetUtcNow();
-        var accessTokenExpiresAt = now.Add(_options.AccessTokenLifetime);
-        var refreshTokenExpiresAt = now.Add(_options.RefreshTokenLifetime);
+        // Token lifetimes are DB-overridable (Wave 4). The merged effective view
+        // is cached for 30s in the provider, so the sync resolve here is cheap;
+        // signing keys / issuer / audience stay env-only (trust anchors). Falls
+        // back to the IOptions env lifetimes when no provider/override is set.
+        var (accessLifetime, refreshLifetime) = ResolveTokenLifetimes();
+        var accessTokenExpiresAt = now.Add(accessLifetime);
+        var refreshTokenExpiresAt = now.Add(refreshLifetime);
         var refreshToken = Convert.ToHexString(RandomNumberGenerator.GetBytes(32));
 
         var signingKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_options.AccessTokenSigningKey!));
@@ -123,5 +133,19 @@ public sealed class AuthTokenService(IOptions<AuthTokenOptions> authTokenOptions
     {
         var bytes = Encoding.UTF8.GetBytes(refreshToken);
         return Convert.ToHexString(SHA256.HashData(bytes));
+    }
+
+    private (TimeSpan Access, TimeSpan Refresh) ResolveTokenLifetimes()
+    {
+        if (_runtimeSettings is null)
+            return (_options.AccessTokenLifetime, _options.RefreshTokenLifetime);
+
+        // Accepted sync-on-hot-path pattern (see Wave 2 Platform consumers): the
+        // provider's effective view is memory-cached for 30s, so this does not hit
+        // the DB on every login. The resolver already coalesces null DB → env.
+        var effective = _runtimeSettings.GetAsync(CancellationToken.None).GetAwaiter().GetResult().AuthTokens;
+        var access = effective.AccessTokenLifetime > TimeSpan.Zero ? effective.AccessTokenLifetime : _options.AccessTokenLifetime;
+        var refresh = effective.RefreshTokenLifetime > TimeSpan.Zero ? effective.RefreshTokenLifetime : _options.RefreshTokenLifetime;
+        return (access, refresh);
     }
 }

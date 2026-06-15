@@ -21,10 +21,13 @@ public static class NotificationEndpoints
         {
             var options = webPushOptions.Value;
             var publicKey = options.PublicKey;
+            // Wave 4: WebPush:Enabled is DB-overridable via the Push section.
+            var enabled = options.Enabled;
             try
             {
                 var pushSettings = (await runtimeSettingsProvider.GetAsync(ct)).Push;
                 publicKey = Coalesce(pushSettings.VapidPublicKey, options.PublicKey);
+                enabled = pushSettings.WebPushEnabled;
             }
             catch (DbException ex)
             {
@@ -34,7 +37,7 @@ public static class NotificationEndpoints
 
             return Results.Ok(new
             {
-                enabled = options.Enabled && !string.IsNullOrWhiteSpace(publicKey),
+                enabled = enabled && !string.IsNullOrWhiteSpace(publicKey),
                 publicKey = publicKey ?? string.Empty
             });
         });

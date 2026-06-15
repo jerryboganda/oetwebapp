@@ -37,10 +37,12 @@ public class CompactEntitlementGateTests
         });
         await db.SaveChangesAsync();
 
+        var pronOptions = new PronunciationOptions { FreeTierWeeklyAttemptLimit = 2, FreeTierWindowDays = 7 };
         var service = new PronunciationEntitlementService(
             db,
-            Options.Create(new PronunciationOptions { FreeTierWeeklyAttemptLimit = 2, FreeTierWindowDays = 7 }),
-            new EffectiveEntitlementResolver(db));
+            Options.Create(pronOptions),
+            new EffectiveEntitlementResolver(db),
+            TestRuntimeSettingsProvider.FromPronunciationOptions(pronOptions));
 
         var result = await service.CheckAsync("learner-pron", default);
 
@@ -66,10 +68,12 @@ public class CompactEntitlementGateTests
         });
         await db.SaveChangesAsync();
 
+        var pronOptions = new PronunciationOptions { FreeTierWeeklyAttemptLimit = 1, FreeTierWindowDays = 7 };
         var service = new PronunciationEntitlementService(
             db,
-            Options.Create(new PronunciationOptions { FreeTierWeeklyAttemptLimit = 1, FreeTierWindowDays = 7 }),
-            new EffectiveEntitlementResolver(db));
+            Options.Create(pronOptions),
+            new EffectiveEntitlementResolver(db),
+            TestRuntimeSettingsProvider.FromPronunciationOptions(pronOptions));
 
         var result = await service.CheckAsync("learner-pron-paid", default);
 

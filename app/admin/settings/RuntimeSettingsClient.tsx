@@ -78,6 +78,12 @@ export interface OAuthSettings {
   applePrivateKey: string;
   facebookAppId: string;
   facebookAppSecret: string;
+  // ── Auth external providers (Wave 4) — LinkedIn + per-provider toggles ──
+  linkedInClientId: string;
+  linkedInClientSecret: string;
+  linkedInEnabled: boolean | null;
+  googleAuthEnabled: boolean | null;
+  facebookAuthEnabled: boolean | null;
 }
 
 export interface PushSettings {
@@ -305,6 +311,78 @@ export interface MessagingSettings {
   whatsAppFallbackTemplateName: string;
 }
 
+export interface FxSettings {
+  baseCurrency: string;
+  apiKey: string;
+  apiBaseUrl: string;
+  dynamicPricingEnabled: boolean | null;
+}
+
+export interface BillingCoreSettings {
+  checkoutBaseUrl: string;
+  webhookMaxAgeSeconds: number | null;
+  webhookMaxAttempts: number | null;
+  defaultCurrency: string;
+  defaultRegion: string;
+  walletCurrency: string;
+  walletTopUpTiersJson: string;
+  paypalUseSandbox: boolean | null;
+  paypalApiBaseUrl: string;
+}
+
+export interface StorageSettings {
+  provider: string;
+  bucketName: string;
+  endpointUrl: string;
+  accessKeyId: string;
+  secretAccessKey: string;
+  awsRegion: string;
+  signedReadTtlSeconds: number | null;
+  maxAudioBytes: number | null;
+  maxPdfBytes: number | null;
+  maxImageBytes: number | null;
+  maxZipBytes: number | null;
+  maxZipEntries: number | null;
+  maxZipEntryBytes: number | null;
+  maxZipUncompressedBytes: number | null;
+  maxZipCompressionRatio: number | null;
+  chunkSizeBytes: number | null;
+  stagingTtlHours: number | null;
+  isConfigured?: boolean | null;
+}
+
+export interface PdfExtractionSettings {
+  provider: string;
+  azureEndpoint: string;
+  azureApiKey: string;
+  minTextLengthForSuccess: number | null;
+}
+
+export interface PronunciationSettings {
+  provider: string;
+  azureSpeechRegion: string;
+  azureLocale: string;
+  whisperBaseUrl: string;
+  whisperModel: string;
+  geminiBaseUrl: string;
+  geminiModel: string;
+  maxAudioBytes: number | null;
+  audioRetentionDays: number | null;
+  freeTierWeeklyAttemptLimit: number | null;
+  freeTierWindowDays: number | null;
+}
+
+export interface AuthTokensSettings {
+  accessTokenLifetimeSeconds: number | null;
+  refreshTokenLifetimeSeconds: number | null;
+  otpLifetimeSeconds: number | null;
+  authenticatorIssuer: string;
+}
+
+export interface WebPushSettings {
+  enabled: boolean | null;
+}
+
 export interface RuntimeSettingsResponse {
   email: EmailSettings;
   billing: BillingSettings;
@@ -332,6 +410,14 @@ export interface RuntimeSettingsResponse {
   writing: WritingSettings;
   platform: PlatformSettings;
   messaging: MessagingSettings;
+  // ── Wave 4 ──
+  fx: FxSettings;
+  billingCore: BillingCoreSettings;
+  storage: StorageSettings;
+  pdfExtraction: PdfExtractionSettings;
+  pronunciation: PronunciationSettings;
+  authTokens: AuthTokensSettings;
+  webPush: WebPushSettings;
   updatedBy: string | null;
   updatedByUserId?: string | null;
   updatedAt: string | null;
@@ -344,7 +430,7 @@ export interface RuntimeSettingsIntegrationTestResponse {
   testedAt: string;
 }
 
-type SectionId = 'email' | 'billing' | 'sentry' | 'backup' | 'oauth' | 'push' | 'uploadScanner' | 'zoom' | 'speakingWhisper' | 'speakingLiveKit' | 'speakingAi' | 'speakingStorage' | 'speakingCompliance' | 'speakingFeatures' | 'checkoutCom' | 'paymob' | 'payTabs' | 'soketi' | 'dataRetention' | 'expertAutoAssignment' | 'passwordPolicy' | 'aiAssistant' | 'aiGateway' | 'writing' | 'platform' | 'messaging';
+type SectionId = 'email' | 'billing' | 'sentry' | 'backup' | 'oauth' | 'push' | 'uploadScanner' | 'zoom' | 'speakingWhisper' | 'speakingLiveKit' | 'speakingAi' | 'speakingStorage' | 'speakingCompliance' | 'speakingFeatures' | 'checkoutCom' | 'paymob' | 'payTabs' | 'soketi' | 'dataRetention' | 'expertAutoAssignment' | 'passwordPolicy' | 'aiAssistant' | 'aiGateway' | 'writing' | 'platform' | 'messaging' | 'fx' | 'billingCore' | 'storage' | 'pdfExtraction' | 'pronunciation' | 'authTokens' | 'webPush';
 
 type ToastState = { variant: 'success' | 'error'; message: string } | null;
 type TestStatusState = Partial<Record<SectionId, RuntimeSettingsIntegrationTestResponse>>;
@@ -414,12 +500,18 @@ const BACKUP_FIELDS: FieldDef<BackupSettings>[] = [
 const OAUTH_FIELDS: FieldDef<OAuthSettings>[] = [
   { key: 'googleClientId', label: 'Google Client ID' },
   { key: 'googleClientSecret', label: 'Google Client Secret', secret: true },
+  { key: 'googleAuthEnabled', label: 'Enable Google Sign-In', type: 'checkbox', hint: 'Allow learners/tutors to sign in via Google OAuth.' },
   { key: 'appleClientId', label: 'Apple Client ID', hint: 'The service identifier (e.g. com.example.web).' },
   { key: 'appleTeamId', label: 'Apple Team ID' },
   { key: 'appleKeyId', label: 'Apple Key ID' },
   { key: 'applePrivateKey', label: 'Apple Private Key (.p8 contents)', secret: true },
   { key: 'facebookAppId', label: 'Facebook App ID' },
   { key: 'facebookAppSecret', label: 'Facebook App Secret', secret: true },
+  { key: 'facebookAuthEnabled', label: 'Enable Facebook Sign-In', type: 'checkbox', hint: 'Allow learners/tutors to sign in via Facebook OAuth.' },
+  // ── Auth external providers (Wave 4) — LinkedIn (the genuine gap) ──
+  { key: 'linkedInClientId', label: 'LinkedIn Client ID', secret: true, hint: 'OAuth app client id from your LinkedIn developer console. Stored encrypted.' },
+  { key: 'linkedInClientSecret', label: 'LinkedIn Client Secret', secret: true, hint: 'Stored encrypted at rest.' },
+  { key: 'linkedInEnabled', label: 'Enable LinkedIn Sign-In', type: 'checkbox', hint: 'Allow learners/tutors to sign in via LinkedIn OAuth.' },
 ];
 
 const PUSH_FIELDS: FieldDef<PushSettings>[] = [
@@ -635,6 +727,77 @@ const MESSAGING_FIELDS: FieldDef<MessagingSettings>[] = [
   { key: 'whatsAppFallbackTemplateName', label: 'WhatsApp Fallback Template Name', type: 'text', hint: 'Pre-approved template name for messages outside the 24-hour service window. Leave empty to disable template fallback.' },
 ];
 
+const FX_FIELDS: FieldDef<FxSettings>[] = [
+  { key: 'baseCurrency', label: 'Base Currency', type: 'text', hint: 'ISO 4217 code (e.g. USD, GBP, EUR). Reference currency for all FX pairs. Default USD.' },
+  { key: 'apiKey', label: 'FX Provider API Key', secret: true, hint: 'openexchangerates.org app_id or compatible. Empty → offline seed rates. Stored encrypted.' },
+  { key: 'apiBaseUrl', label: 'FX Provider Base URL', type: 'url', hint: 'e.g. https://openexchangerates.org/api. Ignored when no API key is set.' },
+  { key: 'dynamicPricingEnabled', label: 'Enable Dynamic Pricing', type: 'checkbox', hint: 'When on, checkout amounts are FX-converted to the buyer display currency.' },
+];
+
+const BILLING_CORE_FIELDS: FieldDef<BillingCoreSettings>[] = [
+  { key: 'checkoutBaseUrl', label: 'Checkout Base URL', type: 'url', hint: 'Base URL used to build hosted-checkout return links. Leave blank to use the env value.' },
+  { key: 'webhookMaxAgeSeconds', label: 'Webhook Max Age (seconds)', type: 'number', hint: 'Max tolerated webhook timestamp age before rejection as replay. Default 300. Range 1–3600.' },
+  { key: 'webhookMaxAttempts', label: 'Webhook Max Attempts', type: 'number', hint: 'Max local processing retries before dead-letter. Default 5.' },
+  { key: 'defaultCurrency', label: 'Default Currency', type: 'text', hint: 'ISO 4217 fallback when region pricing supplies none. Default GBP.' },
+  { key: 'defaultRegion', label: 'Default Region', type: 'text', hint: 'Fallback region (e.g. UK, GULF, EGYPT, PAKISTAN, ROW) when country is undetected. Default ROW.' },
+  { key: 'walletCurrency', label: 'Wallet Currency', type: 'text', hint: 'ISO 4217 currency for wallet top-ups. Default AUD.' },
+  { key: 'walletTopUpTiersJson', label: 'Wallet Top-Up Tiers (JSON)', type: 'text', hint: 'JSON array: [{"Amount":10,"Credits":3,"Bonus":0,"Label":"Starter","IsPopular":false}, ...]. Blank uses appsettings defaults.' },
+  { key: 'paypalUseSandbox', label: 'Use PayPal Sandbox', type: 'checkbox', hint: 'When on, PayPal uses the sandbox API (testing only). Default on.' },
+  { key: 'paypalApiBaseUrl', label: 'PayPal API Base URL', type: 'url', hint: 'e.g. https://api-m.paypal.com (prod) or https://api-m.sandbox.paypal.com. Blank uses env default.' },
+];
+
+const STORAGE_FIELDS: FieldDef<StorageSettings>[] = [
+  { key: 'provider', label: 'Storage Provider', type: 'text', hint: '"local" or "s3". Switching provider requires a restart; only S3 credentials/bucket/endpoint/region are hot-switchable.' },
+  { key: 'bucketName', label: 'S3 Bucket Name', type: 'text', hint: 'Required when Provider="s3" (e.g. oet-media).' },
+  { key: 'endpointUrl', label: 'S3 Endpoint URL', type: 'url', hint: 'For DigitalOcean Spaces / Cloudflare R2. Omit for AWS S3.' },
+  { key: 'accessKeyId', label: 'S3 Access Key ID', secret: true, hint: 'Required when Provider="s3". Stored encrypted; masked in UI.' },
+  { key: 'secretAccessKey', label: 'S3 Secret Access Key', secret: true, hint: 'Required when Provider="s3". Stored encrypted; masked in UI.' },
+  { key: 'awsRegion', label: 'AWS Region', type: 'text', hint: 'AWS region code (e.g. us-east-1, eu-west-2). Default us-east-1.' },
+  { key: 'signedReadTtlSeconds', label: 'Signed Read URL TTL (seconds)', type: 'number', hint: 'TTL for presigned GET URLs. Default 3600 (1 hour).' },
+  { key: 'maxAudioBytes', label: 'Max Audio Upload Size (bytes)', type: 'number', hint: 'Max bytes for audio assets / Listening MP3. Default 150 MB.' },
+  { key: 'maxPdfBytes', label: 'Max PDF Upload Size (bytes)', type: 'number', hint: 'Max bytes for PDF assets. Default 25 MB.' },
+  { key: 'maxImageBytes', label: 'Max Image Upload Size (bytes)', type: 'number', hint: 'Max bytes for image assets / thumbnails. Default 5 MB.' },
+  { key: 'maxZipBytes', label: 'Max ZIP Import Size (bytes, compressed)', type: 'number', hint: 'Max compressed bytes for ZIP bulk imports. Default 500 MB.' },
+  { key: 'maxZipEntries', label: 'Max ZIP Entries', type: 'number', hint: 'Max files inside one ZIP bulk import. Default 5000.' },
+  { key: 'maxZipEntryBytes', label: 'Max ZIP Entry Size (bytes, uncompressed)', type: 'number', hint: 'Max uncompressed bytes for one ZIP entry. Default 150 MB.' },
+  { key: 'maxZipUncompressedBytes', label: 'Max ZIP Total Uncompressed (bytes)', type: 'number', hint: 'Max total uncompressed bytes across a ZIP import. Default 2 GB.' },
+  { key: 'maxZipCompressionRatio', label: 'Max ZIP Compression Ratio', type: 'number', hint: 'Max uncompressed/compressed ratio (zip-bomb guard). Default 100.' },
+  { key: 'chunkSizeBytes', label: 'Chunk Upload Size (bytes)', type: 'number', hint: 'Per-chunk size for chunked uploads. Default 8 MB.' },
+  { key: 'stagingTtlHours', label: 'Staging Upload TTL (hours)', type: 'number', hint: 'Hours before incomplete staging uploads are cleaned up. Default 24.' },
+];
+
+const PDF_EXTRACTION_FIELDS: FieldDef<PdfExtractionSettings>[] = [
+  { key: 'provider', label: 'PDF Extraction Provider', type: 'text', hint: 'noop | pdfpig | azure | auto (default: auto = pdfpig with azure fallback).' },
+  { key: 'azureEndpoint', label: 'Azure Document Intelligence Endpoint', type: 'url', hint: 'e.g. https://{name}.cognitiveservices.azure.com/. Empty disables OCR.' },
+  { key: 'azureApiKey', label: 'Azure Document Intelligence API Key', secret: true, hint: 'Stored encrypted; masked in UI.' },
+  { key: 'minTextLengthForSuccess', label: 'Min Text Length for Success (chars)', type: 'number', hint: 'Below this, retry with Azure OCR if configured. Default 50.' },
+];
+
+const PRONUNCIATION_FIELDS: FieldDef<PronunciationSettings>[] = [
+  { key: 'provider', label: 'Pronunciation ASR Provider', type: 'text', hint: 'azure | gemini | whisper | mock | auto (default: auto = azure→gemini→whisper). API keys live in Admin → AI Providers.' },
+  { key: 'azureSpeechRegion', label: 'Azure Speech Service Region', type: 'text', hint: 'e.g. uksouth, westeurope.' },
+  { key: 'azureLocale', label: 'Azure Locale (ASR)', type: 'text', hint: 'e.g. en-GB, en-US. Default en-GB.' },
+  { key: 'whisperBaseUrl', label: 'Whisper Base URL', type: 'url', hint: 'OpenAI: https://api.openai.com/v1 or Groq: https://api.groq.com/openai/v1.' },
+  { key: 'whisperModel', label: 'Whisper Model', type: 'text', hint: 'e.g. whisper-1, whisper-large-v3. Default whisper-1.' },
+  { key: 'geminiBaseUrl', label: 'Gemini Base URL', type: 'url', hint: 'e.g. https://generativelanguage.googleapis.com/v1beta.' },
+  { key: 'geminiModel', label: 'Gemini Model', type: 'text', hint: 'e.g. gemini-3.5-flash. Default gemini-3.5-flash.' },
+  { key: 'maxAudioBytes', label: 'Max Audio Upload Size (bytes)', type: 'number', hint: 'Default 15 MB (15728640 bytes).' },
+  { key: 'audioRetentionDays', label: 'Audio Retention (days)', type: 'number', hint: 'Days to keep learner audio before cleanup. Default 45.' },
+  { key: 'freeTierWeeklyAttemptLimit', label: 'Free-Tier Weekly Attempt Limit', type: 'number', hint: 'Attempts per rolling window, -1 to disable. Default 20.' },
+  { key: 'freeTierWindowDays', label: 'Free-Tier Window (days)', type: 'number', hint: 'Rolling window for the weekly limit. Default 7.' },
+];
+
+const AUTH_TOKENS_FIELDS: FieldDef<AuthTokensSettings>[] = [
+  { key: 'accessTokenLifetimeSeconds', label: 'Access Token Lifetime (seconds)', type: 'number', hint: 'How long access tokens remain valid (e.g. 3600 = 1 hour). Blank uses env default.' },
+  { key: 'refreshTokenLifetimeSeconds', label: 'Refresh Token Lifetime (seconds)', type: 'number', hint: 'How long refresh tokens remain valid (e.g. 2592000 = 30 days). Blank uses env default.' },
+  { key: 'otpLifetimeSeconds', label: 'OTP / MFA Lifetime (seconds)', type: 'number', hint: 'Validity window for one-time passwords (e.g. 300 = 5 min). Blank uses env default.' },
+  { key: 'authenticatorIssuer', label: 'Authenticator Issuer', type: 'text', hint: 'Issuer name shown in authenticator apps (e.g. OET Dr. Hesham). Blank uses env default.' },
+];
+
+const WEB_PUSH_FIELDS: FieldDef<WebPushSettings>[] = [
+  { key: 'enabled', label: 'Enable Browser Web Push', type: 'checkbox', hint: 'Allow learners to receive browser push notifications (requires VAPID keys in the Push section).' },
+];
+
 const SECTION_META: { id: SectionId; title: string; description: string }[] = [
   { id: 'email', title: 'Email (Brevo + SMTP)', description: 'Transactional email delivery via Brevo with SMTP fallback.' },
   { id: 'billing', title: 'Billing (Stripe)', description: 'Stripe Checkout, Customer Portal, and webhook signing.' },
@@ -662,6 +825,13 @@ const SECTION_META: { id: SectionId; title: string; description: string }[] = [
   { id: 'writing', title: 'Writing Module', description: 'Writing V2 feature flags and tunables: cron kill switch, coach hint limits/cost cap, OCR pipeline + GCV key, appeals, tutor-review queue gates, plan regen, and grade idempotency.' },
   { id: 'platform', title: 'Platform', description: 'Public-facing API/Web base URLs (external auth callbacks, CSRF origin validation) and the fallback email domain for synthesized learner emails.' },
   { id: 'messaging', title: 'Messaging (SMS / WhatsApp)', description: 'Billing-notification channels: Twilio SMS and Meta WhatsApp Business Cloud. Auth Token and Access Token are stored encrypted.' },
+  { id: 'fx', title: 'FX / Currency', description: 'Currency conversion provider for dynamic pricing. The API key is stored encrypted; empty key falls back to offline seed rates.' },
+  { id: 'billingCore', title: 'Billing Core (non-gateway)', description: 'Core billing knobs: default currency/region, wallet currency + top-up tiers, webhook replay window/attempts, and PayPal sandbox/base URL. Gateway credentials live in the Billing/Stripe/Checkout.com/Paymob/PayTabs sections.' },
+  { id: 'storage', title: 'Storage (S3 / Object Store)', description: 'S3-compatible object storage (AWS S3, DigitalOcean Spaces, Cloudflare R2) and content-upload limits. Access keys are stored encrypted. Filesystem paths stay env-only; provider switch needs a restart.' },
+  { id: 'pdfExtraction', title: 'PDF Extraction', description: 'PDF text-extraction provider and Azure Document Intelligence OCR fallback. The Azure key is stored encrypted.' },
+  { id: 'pronunciation', title: 'Pronunciation', description: 'Pronunciation ASR provider selection, region/locale, Whisper/Gemini base-urls + models, audio limits, retention, and free-tier gating. API keys live in Admin → AI Providers.' },
+  { id: 'authTokens', title: 'Auth Tokens', description: 'Access/refresh/OTP token lifetimes and the authenticator issuer label. Signing keys, issuer, and audience stay env-only (trust anchors).' },
+  { id: 'webPush', title: 'Web Push', description: 'Browser web-push master toggle. VAPID keys are configured in the Push section.' },
 ];
 
 /* ───────────────────────── Helpers ───────────────────────── */
@@ -719,6 +889,11 @@ function emptyResponse(): RuntimeSettingsResponse {
       applePrivateKey: '',
       facebookAppId: '',
       facebookAppSecret: '',
+      linkedInClientId: '',
+      linkedInClientSecret: '',
+      linkedInEnabled: null,
+      googleAuthEnabled: null,
+      facebookAuthEnabled: null,
     },
     push: {
       apnsKeyId: '',
@@ -920,6 +1095,70 @@ function emptyResponse(): RuntimeSettingsResponse {
       whatsAppPhoneNumberId: '',
       whatsAppFallbackTemplateName: '',
     },
+    fx: {
+      baseCurrency: '',
+      apiKey: '',
+      apiBaseUrl: '',
+      dynamicPricingEnabled: null,
+    },
+    billingCore: {
+      checkoutBaseUrl: '',
+      webhookMaxAgeSeconds: null,
+      webhookMaxAttempts: null,
+      defaultCurrency: '',
+      defaultRegion: '',
+      walletCurrency: '',
+      walletTopUpTiersJson: '',
+      paypalUseSandbox: null,
+      paypalApiBaseUrl: '',
+    },
+    storage: {
+      provider: '',
+      bucketName: '',
+      endpointUrl: '',
+      accessKeyId: '',
+      secretAccessKey: '',
+      awsRegion: '',
+      signedReadTtlSeconds: null,
+      maxAudioBytes: null,
+      maxPdfBytes: null,
+      maxImageBytes: null,
+      maxZipBytes: null,
+      maxZipEntries: null,
+      maxZipEntryBytes: null,
+      maxZipUncompressedBytes: null,
+      maxZipCompressionRatio: null,
+      chunkSizeBytes: null,
+      stagingTtlHours: null,
+    },
+    pdfExtraction: {
+      provider: '',
+      azureEndpoint: '',
+      azureApiKey: '',
+      minTextLengthForSuccess: null,
+    },
+    pronunciation: {
+      provider: '',
+      azureSpeechRegion: '',
+      azureLocale: '',
+      whisperBaseUrl: '',
+      whisperModel: '',
+      geminiBaseUrl: '',
+      geminiModel: '',
+      maxAudioBytes: null,
+      audioRetentionDays: null,
+      freeTierWeeklyAttemptLimit: null,
+      freeTierWindowDays: null,
+    },
+    authTokens: {
+      accessTokenLifetimeSeconds: null,
+      refreshTokenLifetimeSeconds: null,
+      otpLifetimeSeconds: null,
+      authenticatorIssuer: '',
+    },
+    webPush: {
+      enabled: null,
+    },
     updatedBy: null,
     updatedByUserId: null,
     updatedAt: null,
@@ -957,6 +1196,13 @@ function normalizeResponse(data: Partial<RuntimeSettingsResponse>): RuntimeSetti
     writing: { ...empty.writing, ...data.writing },
     platform: { ...empty.platform, ...data.platform },
     messaging: { ...empty.messaging, ...data.messaging },
+    fx: { ...empty.fx, ...data.fx },
+    billingCore: { ...empty.billingCore, ...data.billingCore },
+    storage: { ...empty.storage, ...data.storage },
+    pdfExtraction: { ...empty.pdfExtraction, ...data.pdfExtraction },
+    pronunciation: { ...empty.pronunciation, ...data.pronunciation },
+    authTokens: { ...empty.authTokens, ...data.authTokens },
+    webPush: { ...empty.webPush, ...data.webPush },
   });
 }
 
@@ -986,6 +1232,8 @@ function sanitizeSecretFields(data: RuntimeSettingsResponse): RuntimeSettingsRes
       googleClientSecret: maskUnexpectedSecret(data.oauth.googleClientSecret),
       applePrivateKey: maskUnexpectedSecret(data.oauth.applePrivateKey),
       facebookAppSecret: maskUnexpectedSecret(data.oauth.facebookAppSecret),
+      linkedInClientId: maskUnexpectedSecret(data.oauth.linkedInClientId),
+      linkedInClientSecret: maskUnexpectedSecret(data.oauth.linkedInClientSecret),
     },
     push: {
       ...data.push,
@@ -1041,6 +1289,19 @@ function sanitizeSecretFields(data: RuntimeSettingsResponse): RuntimeSettingsRes
       ...data.messaging,
       twilioAuthToken: maskUnexpectedSecret(data.messaging.twilioAuthToken),
       whatsAppAccessToken: maskUnexpectedSecret(data.messaging.whatsAppAccessToken),
+    },
+    fx: {
+      ...data.fx,
+      apiKey: maskUnexpectedSecret(data.fx.apiKey),
+    },
+    storage: {
+      ...data.storage,
+      accessKeyId: maskUnexpectedSecret(data.storage.accessKeyId),
+      secretAccessKey: maskUnexpectedSecret(data.storage.secretAccessKey),
+    },
+    pdfExtraction: {
+      ...data.pdfExtraction,
+      azureApiKey: maskUnexpectedSecret(data.pdfExtraction.azureApiKey),
     },
   };
 }
@@ -1354,6 +1615,13 @@ export function RuntimeSettingsClient() {
     writing: false,
     platform: false,
     messaging: false,
+    fx: false,
+    billingCore: false,
+    storage: false,
+    pdfExtraction: false,
+    pronunciation: false,
+    authTokens: false,
+    webPush: false,
   });
 
   const load = useCallback(async () => {
@@ -2190,6 +2458,193 @@ export function RuntimeSettingsClient() {
                     />
                   ),
                 )}
+
+              {section.id === 'fx' &&
+                FX_FIELDS.map((field) =>
+                  field.secret ? (
+                    <SecretField
+                      key={field.key}
+                      label={field.label}
+                      hint={field.hint}
+                      serverValue={String(server.fx[field.key] ?? '')}
+                      draftValue={String(draft.fx[field.key] ?? '')}
+                      onChange={(next) => updateField('fx', field.key, next as never)}
+                    />
+                  ) : (
+                    <PlainField
+                      key={field.key}
+                      label={field.label}
+                      hint={field.hint}
+                      type={field.type}
+                      value={draft.fx[field.key] as string | number | boolean | null}
+                      onChange={(next) =>
+                        updateField(
+                          'fx',
+                          field.key,
+                          (field.type === 'number'
+                            ? parseNullableNumberInput(String(next))
+                            : field.type === 'checkbox'
+                              ? Boolean(next)
+                              : String(next)) as never,
+                        )
+                      }
+                    />
+                  ),
+                )}
+
+              {section.id === 'billingCore' &&
+                BILLING_CORE_FIELDS.map((field) => (
+                  <PlainField
+                    key={field.key}
+                    label={field.label}
+                    hint={field.hint}
+                    type={field.type}
+                    value={draft.billingCore[field.key] as string | number | boolean | null}
+                    onChange={(next) =>
+                      updateField(
+                        'billingCore',
+                        field.key,
+                        (field.type === 'number'
+                          ? parseNullableNumberInput(String(next))
+                          : field.type === 'checkbox'
+                            ? Boolean(next)
+                            : String(next)) as never,
+                      )
+                    }
+                  />
+                ))}
+
+              {section.id === 'storage' &&
+                STORAGE_FIELDS.map((field) =>
+                  field.secret ? (
+                    <SecretField
+                      key={field.key}
+                      label={field.label}
+                      hint={field.hint}
+                      serverValue={String(server.storage[field.key] ?? '')}
+                      draftValue={String(draft.storage[field.key] ?? '')}
+                      onChange={(next) => updateField('storage', field.key, next as never)}
+                    />
+                  ) : (
+                    <PlainField
+                      key={field.key}
+                      label={field.label}
+                      hint={field.hint}
+                      type={field.type}
+                      value={draft.storage[field.key] as string | number | boolean | null}
+                      onChange={(next) =>
+                        updateField(
+                          'storage',
+                          field.key,
+                          (field.type === 'number'
+                            ? parseNullableNumberInput(String(next))
+                            : field.type === 'checkbox'
+                              ? Boolean(next)
+                              : String(next)) as never,
+                        )
+                      }
+                    />
+                  ),
+                )}
+
+              {section.id === 'pdfExtraction' &&
+                PDF_EXTRACTION_FIELDS.map((field) =>
+                  field.secret ? (
+                    <SecretField
+                      key={field.key}
+                      label={field.label}
+                      hint={field.hint}
+                      serverValue={String(server.pdfExtraction[field.key] ?? '')}
+                      draftValue={String(draft.pdfExtraction[field.key] ?? '')}
+                      onChange={(next) => updateField('pdfExtraction', field.key, next as never)}
+                    />
+                  ) : (
+                    <PlainField
+                      key={field.key}
+                      label={field.label}
+                      hint={field.hint}
+                      type={field.type}
+                      value={draft.pdfExtraction[field.key] as string | number | boolean | null}
+                      onChange={(next) =>
+                        updateField(
+                          'pdfExtraction',
+                          field.key,
+                          (field.type === 'number'
+                            ? parseNullableNumberInput(String(next))
+                            : field.type === 'checkbox'
+                              ? Boolean(next)
+                              : String(next)) as never,
+                        )
+                      }
+                    />
+                  ),
+                )}
+
+              {section.id === 'pronunciation' &&
+                PRONUNCIATION_FIELDS.map((field) => (
+                  <PlainField
+                    key={field.key}
+                    label={field.label}
+                    hint={field.hint}
+                    type={field.type}
+                    value={draft.pronunciation[field.key] as string | number | boolean | null}
+                    onChange={(next) =>
+                      updateField(
+                        'pronunciation',
+                        field.key,
+                        (field.type === 'number'
+                          ? parseNullableNumberInput(String(next))
+                          : field.type === 'checkbox'
+                            ? Boolean(next)
+                            : String(next)) as never,
+                      )
+                    }
+                  />
+                ))}
+
+              {section.id === 'authTokens' &&
+                AUTH_TOKENS_FIELDS.map((field) => (
+                  <PlainField
+                    key={field.key}
+                    label={field.label}
+                    hint={field.hint}
+                    type={field.type}
+                    value={draft.authTokens[field.key] as string | number | boolean | null}
+                    onChange={(next) =>
+                      updateField(
+                        'authTokens',
+                        field.key,
+                        (field.type === 'number'
+                          ? parseNullableNumberInput(String(next))
+                          : field.type === 'checkbox'
+                            ? Boolean(next)
+                            : String(next)) as never,
+                      )
+                    }
+                  />
+                ))}
+
+              {section.id === 'webPush' &&
+                WEB_PUSH_FIELDS.map((field) => (
+                  <PlainField
+                    key={field.key}
+                    label={field.label}
+                    hint={field.hint}
+                    type={field.type}
+                    value={draft.webPush[field.key] as string | number | boolean | null}
+                    onChange={(next) =>
+                      updateField(
+                        'webPush',
+                        field.key,
+                        (field.type === 'number'
+                          ? parseNullableNumberInput(String(next))
+                          : field.type === 'checkbox'
+                            ? Boolean(next)
+                            : String(next)) as never,
+                      )
+                    }
+                  />
+                ))}
             </Section>
           ))}
 

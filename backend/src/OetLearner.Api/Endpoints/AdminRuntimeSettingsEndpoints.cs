@@ -103,6 +103,13 @@ public static class AdminRuntimeSettingsEndpoints
                     ApplyWriting(row, request.Writing, provider, changedKeys);
                     ApplyPlatform(row, request.Platform, changedKeys);
                     ApplyMessaging(row, request.Messaging, provider, changedKeys);
+                    ApplyFx(row, request.Fx, provider, changedKeys);
+                    ApplyBillingCore(row, request.BillingCore, changedKeys);
+                    ApplyStorage(row, request.Storage, provider, changedKeys);
+                    ApplyPdfExtraction(row, request.PdfExtraction, provider, changedKeys);
+                    ApplyPronunciation(row, request.Pronunciation, changedKeys);
+                    ApplyAuthTokens(row, request.AuthTokens, changedKeys);
+                    ApplyWebPush(row, request.WebPush, changedKeys);
                 }
                 catch (RuntimeSettingsValidationException ex)
                 {
@@ -246,6 +253,12 @@ public static class AdminRuntimeSettingsEndpoints
                 applePrivateKey = MaskPlainSecret(settings.OAuth.ApplePrivateKey),
                 facebookAppId = settings.OAuth.FacebookAppId,
                 facebookAppSecret = MaskPlainSecret(settings.OAuth.FacebookAppSecret),
+                // ── Auth external providers (Wave 4) — LinkedIn + toggles ──
+                linkedInClientId = MaskPlainSecret(settings.OAuth.LinkedInClientId),
+                linkedInClientSecret = MaskPlainSecret(settings.OAuth.LinkedInClientSecret),
+                linkedInEnabled = settings.OAuth.LinkedInEnabled,
+                googleAuthEnabled = settings.OAuth.GoogleAuthEnabled,
+                facebookAuthEnabled = settings.OAuth.FacebookAuthEnabled,
             },
             push = new
             {
@@ -258,6 +271,8 @@ public static class AdminRuntimeSettingsEndpoints
                 vapidSubject = settings.Push.VapidSubject,
                 vapidPublicKey = settings.Push.VapidPublicKey,
                 vapidPrivateKey = MaskPlainSecret(settings.Push.VapidPrivateKey),
+                // ── Web push enablement (Wave 4) ──
+                webPushEnabled = settings.Push.WebPushEnabled,
             },
             uploadScanner = new
             {
@@ -485,6 +500,82 @@ public static class AdminRuntimeSettingsEndpoints
                 whatsAppFallbackTemplateName = settings.Messaging.WhatsAppFallbackTemplateName,
                 isTwilioConfigured = settings.Messaging.IsTwilioConfigured,
                 isWhatsAppConfigured = settings.Messaging.IsWhatsAppConfigured,
+            },
+            fx = new
+            {
+                baseCurrency = settings.Fx.BaseCurrency,
+                apiKey = MaskPlainSecret(settings.Fx.ApiKey),
+                apiBaseUrl = settings.Fx.ApiBaseUrl,
+                dynamicPricingEnabled = settings.Fx.DynamicPricingEnabled,
+            },
+            billingCore = new
+            {
+                checkoutBaseUrl = settings.Billing.CheckoutBaseUrl,
+                webhookMaxAgeSeconds = settings.Billing.WebhookMaxAgeSeconds,
+                webhookMaxAttempts = settings.Billing.WebhookMaxAttempts,
+                defaultCurrency = settings.Billing.DefaultCurrency,
+                defaultRegion = settings.Billing.DefaultRegion,
+                walletCurrency = settings.Billing.WalletCurrency,
+                walletTopUpTiersJson = settings.Billing.WalletTopUpTiers is { Count: > 0 }
+                    ? JsonSupport.Serialize(settings.Billing.WalletTopUpTiers)
+                    : null,
+                paypalUseSandbox = settings.Billing.PayPalUseSandbox,
+                paypalApiBaseUrl = settings.Billing.PayPalApiBaseUrl,
+            },
+            storage = new
+            {
+                provider = settings.Storage.Provider,
+                bucketName = settings.Storage.BucketName,
+                endpointUrl = settings.Storage.EndpointUrl,
+                accessKeyId = MaskPlainSecret(settings.Storage.AccessKeyId),
+                secretAccessKey = MaskPlainSecret(settings.Storage.SecretAccessKey),
+                awsRegion = settings.Storage.AwsRegion,
+                signedReadTtlSeconds = settings.Storage.SignedReadTtlSeconds,
+                maxAudioBytes = settings.Storage.MaxAudioBytes,
+                maxPdfBytes = settings.Storage.MaxPdfBytes,
+                maxImageBytes = settings.Storage.MaxImageBytes,
+                maxZipBytes = settings.Storage.MaxZipBytes,
+                maxZipEntries = settings.Storage.MaxZipEntries,
+                maxZipEntryBytes = settings.Storage.MaxZipEntryBytes,
+                maxZipUncompressedBytes = settings.Storage.MaxZipUncompressedBytes,
+                maxZipCompressionRatio = settings.Storage.MaxZipCompressionRatio,
+                chunkSizeBytes = settings.Storage.ChunkSizeBytes,
+                stagingTtlHours = settings.Storage.StagingTtlHours,
+                isConfigured = settings.Storage.IsConfigured,
+            },
+            pdfExtraction = new
+            {
+                provider = settings.PdfExtraction.Provider,
+                azureEndpoint = settings.PdfExtraction.AzureEndpoint,
+                azureApiKey = MaskPlainSecret(settings.PdfExtraction.AzureApiKey),
+                minTextLengthForSuccess = settings.PdfExtraction.MinTextLengthForSuccess,
+            },
+            pronunciation = new
+            {
+                provider = settings.Pronunciation.Provider,
+                azureSpeechRegion = settings.Pronunciation.AzureSpeechRegion,
+                azureLocale = settings.Pronunciation.AzureLocale,
+                whisperBaseUrl = settings.Pronunciation.WhisperBaseUrl,
+                whisperModel = settings.Pronunciation.WhisperModel,
+                geminiBaseUrl = settings.Pronunciation.GeminiBaseUrl,
+                geminiModel = settings.Pronunciation.GeminiModel,
+                maxAudioBytes = settings.Pronunciation.MaxAudioBytes,
+                audioRetentionDays = settings.Pronunciation.AudioRetentionDays,
+                freeTierWeeklyAttemptLimit = settings.Pronunciation.FreeTierWeeklyAttemptLimit,
+                freeTierWindowDays = settings.Pronunciation.FreeTierWindowDays,
+            },
+            authTokens = new
+            {
+                accessTokenLifetimeSeconds = (int)Math.Round(settings.AuthTokens.AccessTokenLifetime.TotalSeconds),
+                refreshTokenLifetimeSeconds = (int)Math.Round(settings.AuthTokens.RefreshTokenLifetime.TotalSeconds),
+                otpLifetimeSeconds = (int)Math.Round(settings.AuthTokens.OtpLifetime.TotalSeconds),
+                authenticatorIssuer = settings.AuthTokens.AuthenticatorIssuer,
+            },
+            // Web push enablement is also surfaced under push (above) for display;
+            // this dedicated group is the canonical PUT target (request.WebPush).
+            webPush = new
+            {
+                enabled = settings.Push.WebPushEnabled,
             },
             updatedBy = settings.UpdatedByUserName,
             updatedByUserId = settings.UpdatedByUserId,
@@ -733,6 +824,14 @@ public static class AdminRuntimeSettingsEndpoints
         if (TrySetSecret(d.ApplePrivateKey, p, v => row.ApplePrivateKeyEncrypted = v, "oauth.applePrivateKey", changed)) { }
         if (TrySetPlain(d.FacebookAppId, v => row.FacebookAppId = v, "oauth.facebookAppId", changed)) { }
         if (TrySetSecret(d.FacebookAppSecret, p, v => row.FacebookAppSecretEncrypted = v, "oauth.facebookAppSecret", changed)) { }
+        // ── Auth external providers (Wave 4) — LinkedIn (the genuine gap) +
+        // per-provider Enabled toggles. LinkedIn ClientId + ClientSecret are
+        // both secrets (encrypted at rest).
+        if (TrySetSecret(d.LinkedInClientId, p, v => row.LinkedInClientIdEncrypted = v, "oauth.linkedInClientId", changed)) { }
+        if (TrySetSecret(d.LinkedInClientSecret, p, v => row.LinkedInClientSecretEncrypted = v, "oauth.linkedInClientSecret", changed)) { }
+        if (TrySetNullableBool(d.LinkedInEnabled, v => row.LinkedInEnabled = v, "oauth.linkedInEnabled", changed)) { }
+        if (TrySetNullableBool(d.GoogleAuthEnabled, v => row.GoogleAuthEnabled = v, "oauth.googleAuthEnabled", changed)) { }
+        if (TrySetNullableBool(d.FacebookAuthEnabled, v => row.FacebookAuthEnabled = v, "oauth.facebookAuthEnabled", changed)) { }
     }
 
     private static void ApplyPush(RuntimeSettingsRow row, RuntimeSettingsPushUpdate? d,
@@ -1093,6 +1192,114 @@ public static class AdminRuntimeSettingsEndpoints
         if (TrySetPlain(d.WhatsAppFallbackTemplateName, v => row.WhatsAppFallbackTemplateName = v, "messaging.whatsAppFallbackTemplateName", changed)) { }
     }
 
+    // ── Wave 4 appliers (FX / Billing core / Storage / PDF / Pronunciation /
+    //    Auth tokens / Web push) ────────────────────────────────────
+    private static void ApplyFx(RuntimeSettingsRow row, RuntimeSettingsFxUpdate? d,
+        IRuntimeSettingsProvider p, List<string> changed)
+    {
+        if (d is null) return;
+        if (TrySetPlain(d.BaseCurrency, v => row.FxBaseCurrency = v, "fx.baseCurrency", changed)) { }
+        if (TrySetSecret(d.ApiKey, p, v => row.FxApiKeyEncrypted = v, "fx.apiKey", changed)) { }
+        if (TrySetPlain(d.ApiBaseUrl, v => row.FxApiBaseUrl = v, "fx.apiBaseUrl", changed)) { }
+        if (TrySetNullableBool(d.DynamicPricingEnabled, v => row.FxDynamicPricingEnabled = v, "fx.dynamicPricingEnabled", changed)) { }
+    }
+
+    private static void ApplyBillingCore(RuntimeSettingsRow row, RuntimeSettingsBillingCoreUpdate? d, List<string> changed)
+    {
+        if (d is null) return;
+        if (TrySetPlain(d.CheckoutBaseUrl, v => row.BillingCheckoutBaseUrl = v, "billingCore.checkoutBaseUrl", changed)) { }
+        if (TrySetNullableInt(d.WebhookMaxAgeSeconds, v => row.BillingWebhookMaxAgeSeconds = v, "billingCore.webhookMaxAgeSeconds", changed, min: 1, max: 3600)) { }
+        if (TrySetNullableInt(d.WebhookMaxAttempts, v => row.BillingWebhookMaxAttempts = v, "billingCore.webhookMaxAttempts", changed, min: 1, max: 1000)) { }
+        if (TrySetPlain(d.DefaultCurrency, v => row.BillingDefaultCurrency = v, "billingCore.defaultCurrency", changed)) { }
+        if (TrySetPlain(d.DefaultRegion, v => row.BillingDefaultRegion = v, "billingCore.defaultRegion", changed)) { }
+        if (TrySetPlain(d.WalletCurrency, v => row.WalletCurrency = v, "billingCore.walletCurrency", changed)) { }
+        if (d.WalletTopUpTiersJson is not null && d.WalletTopUpTiersJson != SecretMask)
+        {
+            var trimmed = d.WalletTopUpTiersJson.Trim();
+            if (trimmed.Length > 0)
+            {
+                try
+                {
+                    var parsed = JsonSerializer.Deserialize<List<WalletTopUpTierOption>>(trimmed);
+                    if (parsed is null || parsed.Count == 0 || parsed.Any(t => t.Amount <= 0 || t.Credits < 0 || t.Bonus < 0))
+                        throw new RuntimeSettingsValidationException("billingCore.walletTopUpTiersJson must be a JSON array of {Amount>0,Credits>=0,Bonus>=0} tiers.");
+                }
+                catch (JsonException ex)
+                {
+                    throw new RuntimeSettingsValidationException("billingCore.walletTopUpTiersJson must be valid JSON.", ex);
+                }
+            }
+        }
+        if (TrySetPlain(d.WalletTopUpTiersJson, v => row.WalletTopUpTiersJson = v, "billingCore.walletTopUpTiersJson", changed)) { }
+        if (TrySetNullableBool(d.PayPalUseSandbox, v => row.PayPalUseSandbox = v, "billingCore.paypalUseSandbox", changed)) { }
+        if (TrySetPlain(d.PayPalApiBaseUrl, v => row.PayPalApiBaseUrl = v, "billingCore.paypalApiBaseUrl", changed)) { }
+    }
+
+    private static void ApplyStorage(RuntimeSettingsRow row, RuntimeSettingsStorageUpdate? d,
+        IRuntimeSettingsProvider p, List<string> changed)
+    {
+        if (d is null) return;
+        if (TrySetPlain(d.Provider, v => row.StorageProvider = v, "storage.provider", changed)) { }
+        if (TrySetPlain(d.BucketName, v => row.StorageBucketName = v, "storage.bucketName", changed)) { }
+        if (TrySetPlain(d.EndpointUrl, v => row.StorageEndpointUrl = v, "storage.endpointUrl", changed)) { }
+        if (TrySetSecret(d.AccessKeyId, p, v => row.StorageAccessKeyIdEncrypted = v, "storage.accessKeyId", changed)) { }
+        if (TrySetSecret(d.SecretAccessKey, p, v => row.StorageSecretAccessKeyEncrypted = v, "storage.secretAccessKey", changed)) { }
+        if (TrySetPlain(d.AwsRegion, v => row.StorageAwsRegion = v, "storage.awsRegion", changed)) { }
+        if (TrySetNullableInt(d.SignedReadTtlSeconds, v => row.StorageSignedReadTtlSeconds = v, "storage.signedReadTtlSeconds", changed, min: 1, max: 604800)) { }
+        if (TrySetNullableLong(d.MaxAudioBytes, v => row.StorageContentUploadMaxAudioBytes = v, "storage.maxAudioBytes", changed, min: 1, max: 10L * 1024 * 1024 * 1024)) { }
+        if (TrySetNullableLong(d.MaxPdfBytes, v => row.StorageContentUploadMaxPdfBytes = v, "storage.maxPdfBytes", changed, min: 1, max: 10L * 1024 * 1024 * 1024)) { }
+        if (TrySetNullableLong(d.MaxImageBytes, v => row.StorageContentUploadMaxImageBytes = v, "storage.maxImageBytes", changed, min: 1, max: 10L * 1024 * 1024 * 1024)) { }
+        if (TrySetNullableLong(d.MaxZipBytes, v => row.StorageContentUploadMaxZipBytes = v, "storage.maxZipBytes", changed, min: 1, max: 50L * 1024 * 1024 * 1024)) { }
+        if (TrySetNullableInt(d.MaxZipEntries, v => row.StorageContentUploadMaxZipEntries = v, "storage.maxZipEntries", changed, min: 1, max: 10_000_000)) { }
+        if (TrySetNullableLong(d.MaxZipEntryBytes, v => row.StorageContentUploadMaxZipEntryBytes = v, "storage.maxZipEntryBytes", changed, min: 1, max: 50L * 1024 * 1024 * 1024)) { }
+        if (TrySetNullableLong(d.MaxZipUncompressedBytes, v => row.StorageContentUploadMaxZipUncompressedBytes = v, "storage.maxZipUncompressedBytes", changed, min: 1, max: 100L * 1024 * 1024 * 1024)) { }
+        if (TrySetNullableDouble(d.MaxZipCompressionRatio, v => row.StorageContentUploadMaxZipCompressionRatio = v, "storage.maxZipCompressionRatio", changed, min: 1, max: 100000)) { }
+        if (TrySetNullableLong(d.ChunkSizeBytes, v => row.StorageContentUploadChunkSizeBytes = v, "storage.chunkSizeBytes", changed, min: 1, max: 1L * 1024 * 1024 * 1024)) { }
+        if (TrySetNullableInt(d.StagingTtlHours, v => row.StorageContentUploadStagingTtlHours = v, "storage.stagingTtlHours", changed, min: 1, max: 8760)) { }
+    }
+
+    private static void ApplyPdfExtraction(RuntimeSettingsRow row, RuntimeSettingsPdfExtractionUpdate? d,
+        IRuntimeSettingsProvider p, List<string> changed)
+    {
+        if (d is null) return;
+        if (TrySetPlain(d.Provider, v => row.PdfExtractionProvider = v, "pdfExtraction.provider", changed)) { }
+        if (TrySetPlain(d.AzureEndpoint, v => row.PdfExtractionAzureEndpoint = v, "pdfExtraction.azureEndpoint", changed)) { }
+        if (TrySetSecret(d.AzureApiKey, p, v => row.PdfExtractionAzureApiKeyEncrypted = v, "pdfExtraction.azureApiKey", changed)) { }
+        if (TrySetNullableInt(d.MinTextLengthForSuccess, v => row.PdfExtractionMinTextLengthForSuccess = v, "pdfExtraction.minTextLengthForSuccess", changed, min: 1, max: 1_000_000)) { }
+    }
+
+    private static void ApplyPronunciation(RuntimeSettingsRow row, RuntimeSettingsPronunciationUpdate? d, List<string> changed)
+    {
+        if (d is null) return;
+        if (TrySetPlain(d.Provider, v => row.PronunciationProvider = v, "pronunciation.provider", changed)) { }
+        if (TrySetPlain(d.AzureSpeechRegion, v => row.PronunciationAzureSpeechRegion = v, "pronunciation.azureSpeechRegion", changed)) { }
+        if (TrySetPlain(d.AzureLocale, v => row.PronunciationAzureLocale = v, "pronunciation.azureLocale", changed)) { }
+        if (TrySetPlain(d.WhisperBaseUrl, v => row.PronunciationWhisperBaseUrl = v, "pronunciation.whisperBaseUrl", changed)) { }
+        if (TrySetPlain(d.WhisperModel, v => row.PronunciationWhisperModel = v, "pronunciation.whisperModel", changed)) { }
+        if (TrySetPlain(d.GeminiBaseUrl, v => row.PronunciationGeminiBaseUrl = v, "pronunciation.geminiBaseUrl", changed)) { }
+        if (TrySetPlain(d.GeminiModel, v => row.PronunciationGeminiModel = v, "pronunciation.geminiModel", changed)) { }
+        if (TrySetNullableLong(d.MaxAudioBytes, v => row.PronunciationMaxAudioBytes = v, "pronunciation.maxAudioBytes", changed, min: 1, max: 1L * 1024 * 1024 * 1024)) { }
+        if (TrySetNullableInt(d.AudioRetentionDays, v => row.PronunciationAudioRetentionDays = v, "pronunciation.audioRetentionDays", changed, min: 1, max: 36500)) { }
+        // -1 disables throttling, so allow -1 as the lower bound.
+        if (TrySetNullableInt(d.FreeTierWeeklyAttemptLimit, v => row.PronunciationFreeTierWeeklyAttemptLimit = v, "pronunciation.freeTierWeeklyAttemptLimit", changed, min: -1, max: 1_000_000)) { }
+        if (TrySetNullableInt(d.FreeTierWindowDays, v => row.PronunciationFreeTierWindowDays = v, "pronunciation.freeTierWindowDays", changed, min: 1, max: 365)) { }
+    }
+
+    private static void ApplyAuthTokens(RuntimeSettingsRow row, RuntimeSettingsAuthTokensUpdate? d, List<string> changed)
+    {
+        if (d is null) return;
+        if (TrySetNullableInt(d.AccessTokenLifetimeSeconds, v => row.AuthTokenAccessTokenLifetimeSeconds = v, "authTokens.accessTokenLifetimeSeconds", changed, min: 1, max: 86400)) { }
+        if (TrySetNullableInt(d.RefreshTokenLifetimeSeconds, v => row.AuthTokenRefreshTokenLifetimeSeconds = v, "authTokens.refreshTokenLifetimeSeconds", changed, min: 1, max: 31536000)) { }
+        if (TrySetNullableInt(d.OtpLifetimeSeconds, v => row.AuthTokenOtpLifetimeSeconds = v, "authTokens.otpLifetimeSeconds", changed, min: 1, max: 86400)) { }
+        if (TrySetPlain(d.AuthenticatorIssuer, v => row.AuthTokenAuthenticatorIssuer = v, "authTokens.authenticatorIssuer", changed)) { }
+    }
+
+    private static void ApplyWebPush(RuntimeSettingsRow row, RuntimeSettingsWebPushUpdate? d, List<string> changed)
+    {
+        if (d is null) return;
+        if (TrySetNullableBool(d.Enabled, v => row.WebPushEnabled = v, "webPush.enabled", changed)) { }
+    }
+
     private static void ValidatePlatformUrl(string? value, string key)
     {
         if (value is null || value == SecretMask) return;
@@ -1314,7 +1521,7 @@ public static class AdminRuntimeSettingsEndpoints
     private static string? NormalizeSectionId(string? sectionId)
     {
         var normalized = sectionId?.Trim().ToLowerInvariant();
-        return normalized is "email" or "billing" or "sentry" or "backup" or "oauth" or "push" or "uploadscanner" or "zoom" or "stripe" or "speakinglivekit" or "speakingai" or "speakingstorage" or "speakingcompliance" or "speakingfeatures" or "speakingwhisper" or "checkoutcom" or "paymob" or "paytabs" or "soketi" or "dataretention" or "expertautoassignment" or "passwordpolicy" or "aiassistant" or "aigateway" or "writing" or "platform" or "messaging"
+        return normalized is "email" or "billing" or "sentry" or "backup" or "oauth" or "push" or "uploadscanner" or "zoom" or "stripe" or "speakinglivekit" or "speakingai" or "speakingstorage" or "speakingcompliance" or "speakingfeatures" or "speakingwhisper" or "checkoutcom" or "paymob" or "paytabs" or "soketi" or "dataretention" or "expertautoassignment" or "passwordpolicy" or "aiassistant" or "aigateway" or "writing" or "platform" or "messaging" or "fx" or "billingcore" or "storage" or "pdfextraction" or "pronunciation" or "authtokens" or "webpush"
             ? normalized
             : normalized == "upload-scanner" ? "uploadscanner" : null;
     }
@@ -1409,6 +1616,30 @@ public static class AdminRuntimeSettingsEndpoints
                     : (settings.Messaging.WhatsAppEnabled && !settings.Messaging.IsWhatsAppConfigured)
                         ? Failed(sectionId, "WhatsApp is enabled but not fully configured. Set Access Token and Phone Number ID.", testedAt)
                         : Ok(sectionId, $"Messaging configured: Twilio SMS {(settings.Messaging.IsTwilioConfigured ? "ready" : "off")}, WhatsApp {(settings.Messaging.IsWhatsAppConfigured ? "ready" : "off")}. No message was sent.", testedAt),
+            "fx" => string.IsNullOrWhiteSpace(settings.Fx.ApiKey) || string.IsNullOrWhiteSpace(settings.Fx.ApiBaseUrl)
+                ? Ok(sectionId, $"No FX provider configured — offline seed rates are used (base {settings.Fx.BaseCurrency}). Dynamic pricing {(settings.Fx.DynamicPricingEnabled ? "on" : "off")}.", testedAt)
+                : Uri.TryCreate(settings.Fx.ApiBaseUrl, UriKind.Absolute, out _)
+                    ? Ok(sectionId, $"FX provider key + base URL configured (base {settings.Fx.BaseCurrency}). No live rate fetch was performed.", testedAt)
+                    : Failed(sectionId, "FX provider base URL must be a valid absolute URL.", testedAt),
+            "billingcore" => Ok(sectionId, $"Billing core: default {settings.Billing.DefaultCurrency}/{settings.Billing.DefaultRegion}, wallet {settings.Billing.WalletCurrency} ({settings.Billing.WalletTopUpTiers.Count} tiers); webhook max-age {settings.Billing.WebhookMaxAgeSeconds}s, max {settings.Billing.WebhookMaxAttempts} attempts; PayPal {(settings.Billing.PayPalUseSandbox ? "sandbox" : "production")}.", testedAt),
+            "storage" => settings.Storage.Provider.Equals("s3", StringComparison.OrdinalIgnoreCase)
+                ? (settings.Storage.IsConfigured
+                    ? Ok(sectionId, $"S3 storage configured (bucket {settings.Storage.BucketName}, region {settings.Storage.AwsRegion}). No object was read or written.", testedAt)
+                    : Failed(sectionId, "Storage provider is 's3' but bucket, access key, or secret key is missing.", testedAt))
+                : Ok(sectionId, "Storage provider is 'local'. S3 credentials are not required.", testedAt),
+            "pdfextraction" => settings.PdfExtraction.Provider.Equals("azure", StringComparison.OrdinalIgnoreCase)
+                    || settings.PdfExtraction.Provider.Equals("auto", StringComparison.OrdinalIgnoreCase)
+                ? (string.IsNullOrWhiteSpace(settings.PdfExtraction.AzureEndpoint) || string.IsNullOrWhiteSpace(settings.PdfExtraction.AzureApiKey)
+                    ? Ok(sectionId, $"PDF extraction provider '{settings.PdfExtraction.Provider}' — Azure OCR not configured; PdfPig-only extraction will be used.", testedAt)
+                    : Ok(sectionId, $"PDF extraction provider '{settings.PdfExtraction.Provider}' with Azure OCR configured. No document was processed.", testedAt))
+                : Ok(sectionId, $"PDF extraction provider is '{settings.PdfExtraction.Provider}'.", testedAt),
+            "pronunciation" => Ok(sectionId, $"Pronunciation provider '{settings.Pronunciation.Provider}' (locale {settings.Pronunciation.AzureLocale}). API keys are managed in Admin → AI Providers. Free tier: {settings.Pronunciation.FreeTierWeeklyAttemptLimit} attempts / {settings.Pronunciation.FreeTierWindowDays}d.", testedAt),
+            "authtokens" => Ok(sectionId, $"Access token {settings.AuthTokens.AccessTokenLifetime.TotalMinutes:0}m, refresh {settings.AuthTokens.RefreshTokenLifetime.TotalDays:0.##}d, OTP {settings.AuthTokens.OtpLifetime.TotalMinutes:0}m. Issuer: {settings.AuthTokens.AuthenticatorIssuer ?? "(env default)"}.", testedAt),
+            "webpush" => settings.Push.WebPushEnabled
+                ? (HasAll(settings.Push.VapidSubject, settings.Push.VapidPublicKey, settings.Push.VapidPrivateKey)
+                    ? Ok(sectionId, "Web push is enabled and VAPID keys are configured (Push section).", testedAt)
+                    : Failed(sectionId, "Web push is enabled but VAPID keys are missing. Configure them in the Push section.", testedAt))
+                : Ok(sectionId, "Web push is disabled. Enable it (with VAPID keys) to allow browser notifications.", testedAt),
             _ => Failed(sectionId, "Unknown integration section.", testedAt),
         };
     }
@@ -1609,6 +1840,14 @@ public sealed class RuntimeSettingsUpdateRequest
     public RuntimeSettingsWritingUpdate? Writing { get; set; }
     public RuntimeSettingsPlatformUpdate? Platform { get; set; }
     public RuntimeSettingsMessagingUpdate? Messaging { get; set; }
+    // ── Wave 4 ─────────────────────────────────────────────────────
+    public RuntimeSettingsFxUpdate? Fx { get; set; }
+    public RuntimeSettingsBillingCoreUpdate? BillingCore { get; set; }
+    public RuntimeSettingsStorageUpdate? Storage { get; set; }
+    public RuntimeSettingsPdfExtractionUpdate? PdfExtraction { get; set; }
+    public RuntimeSettingsPronunciationUpdate? Pronunciation { get; set; }
+    public RuntimeSettingsAuthTokensUpdate? AuthTokens { get; set; }
+    public RuntimeSettingsWebPushUpdate? WebPush { get; set; }
 }
 
 /// <summary>AI Assistant orchestration tunables (Wave 2).</summary>
@@ -1852,6 +2091,13 @@ public sealed class RuntimeSettingsOAuthUpdate
     public string? ApplePrivateKey { get; set; }
     public string? FacebookAppId { get; set; }
     public string? FacebookAppSecret { get; set; }
+    // ── Auth external providers (Wave 4) — LinkedIn (secret id + secret) +
+    // per-provider Enabled toggles. "********" leaves a secret unchanged; "" clears.
+    public string? LinkedInClientId { get; set; }
+    public string? LinkedInClientSecret { get; set; }
+    public JsonElement? LinkedInEnabled { get; set; }
+    public JsonElement? GoogleAuthEnabled { get; set; }
+    public JsonElement? FacebookAuthEnabled { get; set; }
 }
 
 public sealed class RuntimeSettingsPushUpdate
@@ -1952,6 +2198,99 @@ public sealed class RuntimeSettingsSpeakingComplianceUpdate
 public sealed class RuntimeSettingsSpeakingFeaturesUpdate
 {
     public JsonElement? SpeakingV2Enabled { get; set; }
+}
+
+// ── Wave 4 wire contracts ─────────────────────────────────────────
+
+/// <summary>FX / currency provider overrides (Wave 4). ApiKey is a secret
+/// ("********" leaves unchanged; "" clears).</summary>
+public sealed class RuntimeSettingsFxUpdate
+{
+    public string? BaseCurrency { get; set; }
+    public string? ApiKey { get; set; }
+    public string? ApiBaseUrl { get; set; }
+    public JsonElement? DynamicPricingEnabled { get; set; }
+}
+
+/// <summary>Billing core (non-gateway) overrides (Wave 4). Gateway credentials
+/// live in the Billing/Stripe/CheckoutCom/Paymob/PayTabs sections.</summary>
+public sealed class RuntimeSettingsBillingCoreUpdate
+{
+    public string? CheckoutBaseUrl { get; set; }
+    public JsonElement? WebhookMaxAgeSeconds { get; set; }
+    public JsonElement? WebhookMaxAttempts { get; set; }
+    public string? DefaultCurrency { get; set; }
+    public string? DefaultRegion { get; set; }
+    public string? WalletCurrency { get; set; }
+    /// <summary>JSON array of wallet tier objects. Leave blank to use appsettings defaults.</summary>
+    public string? WalletTopUpTiersJson { get; set; }
+    public JsonElement? PayPalUseSandbox { get; set; }
+    public string? PayPalApiBaseUrl { get; set; }
+}
+
+/// <summary>Storage (S3 / object store) overrides (Wave 4). AccessKeyId +
+/// SecretAccessKey are secrets. Filesystem paths stay env-only (excluded).</summary>
+public sealed class RuntimeSettingsStorageUpdate
+{
+    public string? Provider { get; set; }
+    public string? BucketName { get; set; }
+    public string? EndpointUrl { get; set; }
+    public string? AccessKeyId { get; set; }
+    public string? SecretAccessKey { get; set; }
+    public string? AwsRegion { get; set; }
+    public JsonElement? SignedReadTtlSeconds { get; set; }
+    public JsonElement? MaxAudioBytes { get; set; }
+    public JsonElement? MaxPdfBytes { get; set; }
+    public JsonElement? MaxImageBytes { get; set; }
+    public JsonElement? MaxZipBytes { get; set; }
+    public JsonElement? MaxZipEntries { get; set; }
+    public JsonElement? MaxZipEntryBytes { get; set; }
+    public JsonElement? MaxZipUncompressedBytes { get; set; }
+    public JsonElement? MaxZipCompressionRatio { get; set; }
+    public JsonElement? ChunkSizeBytes { get; set; }
+    public JsonElement? StagingTtlHours { get; set; }
+}
+
+/// <summary>PDF text-extraction overrides (Wave 4). AzureApiKey is a secret.</summary>
+public sealed class RuntimeSettingsPdfExtractionUpdate
+{
+    public string? Provider { get; set; }
+    public string? AzureEndpoint { get; set; }
+    public string? AzureApiKey { get; set; }
+    public JsonElement? MinTextLengthForSuccess { get; set; }
+}
+
+/// <summary>Pronunciation NON-credential overrides (Wave 4). The Azure/Whisper/
+/// Gemini API keys are registry-backed (Admin → AI Providers), not here.</summary>
+public sealed class RuntimeSettingsPronunciationUpdate
+{
+    public string? Provider { get; set; }
+    public string? AzureSpeechRegion { get; set; }
+    public string? AzureLocale { get; set; }
+    public string? WhisperBaseUrl { get; set; }
+    public string? WhisperModel { get; set; }
+    public string? GeminiBaseUrl { get; set; }
+    public string? GeminiModel { get; set; }
+    public JsonElement? MaxAudioBytes { get; set; }
+    public JsonElement? AudioRetentionDays { get; set; }
+    public JsonElement? FreeTierWeeklyAttemptLimit { get; set; }
+    public JsonElement? FreeTierWindowDays { get; set; }
+}
+
+/// <summary>Safe auth-token lifetime overrides (Wave 4). Signing keys / Issuer /
+/// Audience stay env-only (trust anchors) and are excluded.</summary>
+public sealed class RuntimeSettingsAuthTokensUpdate
+{
+    public JsonElement? AccessTokenLifetimeSeconds { get; set; }
+    public JsonElement? RefreshTokenLifetimeSeconds { get; set; }
+    public JsonElement? OtpLifetimeSeconds { get; set; }
+    public string? AuthenticatorIssuer { get; set; }
+}
+
+/// <summary>Web push enablement (Wave 4). VAPID keys live in the Push section.</summary>
+public sealed class RuntimeSettingsWebPushUpdate
+{
+    public JsonElement? Enabled { get; set; }
 }
 
 public sealed record RuntimeSettingsIntegrationTestResponse(

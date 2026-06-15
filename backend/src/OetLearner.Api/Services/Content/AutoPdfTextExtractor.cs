@@ -5,6 +5,7 @@ using OetLearner.Api.Configuration;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services.Ai;
 using OetLearner.Api.Services.Rulebook;
+using OetLearner.Api.Services.Settings;
 
 namespace OetLearner.Api.Services.Content;
 
@@ -24,27 +25,31 @@ public sealed class AutoPdfTextExtractor : IPdfTextExtractor
 
     private readonly ILogger<AutoPdfTextExtractor> _logger;
     private readonly IHttpClientFactory _httpClientFactory;
-    private readonly PdfExtractionOptions _options;
+    private readonly IRuntimeSettingsProvider _runtimeSettings;
     private readonly PdfPigPdfTextExtractor _pdfPig;
     private readonly IServiceScopeFactory _scopeFactory;
 
     public AutoPdfTextExtractor(
         ILogger<AutoPdfTextExtractor> logger,
         IHttpClientFactory httpClientFactory,
-        IOptions<PdfExtractionOptions> options,
+        IRuntimeSettingsProvider runtimeSettings,
         PdfPigPdfTextExtractor pdfPig,
         IServiceScopeFactory scopeFactory)
     {
         _logger = logger;
         _httpClientFactory = httpClientFactory;
-        _options = options.Value;
+        _runtimeSettings = runtimeSettings;
         _pdfPig = pdfPig;
         _scopeFactory = scopeFactory;
     }
 
     public async Task<string> ExtractAsync(Stream pdfStream, CancellationToken ct)
     {
-        if (string.Equals(_options.Provider, "noop", StringComparison.OrdinalIgnoreCase))
+        // Wave 4: PDF extraction provider/endpoint/key/min-length are DB-overridable
+        // (null DB → env default). The Azure key is decrypted by the provider.
+        var options = (await _runtimeSettings.GetAsync(ct)).PdfExtraction;
+
+        if (string.Equals(options.Provider, "noop", StringComparison.OrdinalIgnoreCase))
         {
             return string.Empty;
         }
@@ -55,8 +60,8 @@ public sealed class AutoPdfTextExtractor : IPdfTextExtractor
         var bytes = ms.ToArray();
 
         var azureConfigured =
-            !string.IsNullOrWhiteSpace(_options.AzureEndpoint) &&
-            !string.IsNullOrWhiteSpace(_options.AzureApiKey);
+            !string.IsNullOrWhiteSpace(options.AzureEndpoint) &&
+            !string.IsNullOrWhiteSpace(options.AzureApiKey);
         var looksLikePdf = bytes.Length >= 5
             && bytes[0] == 0x25
             && bytes[1] == 0x50
@@ -64,33 +69,33 @@ public sealed class AutoPdfTextExtractor : IPdfTextExtractor
             && bytes[3] == 0x46
             && bytes[4] == 0x2D;
 
-        if (string.Equals(_options.Provider, "azure", StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(options.Provider, "azure", StringComparison.OrdinalIgnoreCase))
         {
             if (!azureConfigured)
             {
                 _logger.LogWarning("PdfExtraction Provider=azure but Azure DocIntel not configured; returning empty.");
                 return string.Empty;
             }
-            return await TryAzureAsync(bytes, ct) ?? string.Empty;
+            return await TryAzureAsync(options, bytes, ct) ?? string.Empty;
         }
 
         if (!looksLikePdf)
         {
             if (!azureConfigured) return string.Empty;
-            return await TryAzureAsync(bytes, ct) ?? string.Empty;
+            return await TryAzureAsync(options, bytes, ct) ?? string.Empty;
         }
 
         // PdfPig path (covers "pdfpig" and "auto").
         using var pdfPigStream = new MemoryStream(bytes, writable: false);
         var pdfPigText = await _pdfPig.ExtractAsync(pdfPigStream, ct);
 
-        if (string.Equals(_options.Provider, "pdfpig", StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(options.Provider, "pdfpig", StringComparison.OrdinalIgnoreCase))
         {
             return pdfPigText;
         }
 
         // auto: only fall back when PdfPig produced too little text (scanned PDF).
-        if ((pdfPigText?.Length ?? 0) >= _options.MinTextLengthForSuccess) return pdfPigText ?? string.Empty;
+        if ((pdfPigText?.Length ?? 0) >= options.MinTextLengthForSuccess) return pdfPigText ?? string.Empty;
 
         var best = pdfPigText ?? string.Empty;
 
@@ -100,9 +105,9 @@ public sealed class AutoPdfTextExtractor : IPdfTextExtractor
             _logger.LogInformation(
                 "{Event} provider={Provider} sizeBytes={SizeBytes} pdfPigChars={PdfPigChars}",
                 "pdf.ocr.fallback", "azure-docintel", bytes.LongLength, pdfPigText?.Length ?? 0);
-            var azureText = await TryAzureAsync(bytes, ct);
+            var azureText = await TryAzureAsync(options, bytes, ct);
             if (!string.IsNullOrWhiteSpace(azureText) && azureText!.Length > best.Length) best = azureText;
-            if (best.Length >= _options.MinTextLengthForSuccess) return best;
+            if (best.Length >= options.MinTextLengthForSuccess) return best;
         }
 
         // Tier 3 — Mistral OCR (canonical OCR provider). Covers scanned PDFs
@@ -143,19 +148,19 @@ public sealed class AutoPdfTextExtractor : IPdfTextExtractor
         }
     }
 
-    private async Task<string?> TryAzureAsync(byte[] bytes, CancellationToken ct)
+    private async Task<string?> TryAzureAsync(PdfExtractionSettings options, byte[] bytes, CancellationToken ct)
     {
         try
         {
             var client = _httpClientFactory.CreateClient(AzureClientName);
-            var endpoint = _options.AzureEndpoint.TrimEnd('/');
+            var endpoint = options.AzureEndpoint.TrimEnd('/');
             var analyzeUri = $"{endpoint}/formrecognizer/documentModels/prebuilt-read:analyze?api-version=2023-07-31";
 
             using var content = new ByteArrayContent(bytes);
             content.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
 
             using var req = new HttpRequestMessage(HttpMethod.Post, analyzeUri) { Content = content };
-            req.Headers.Add("Ocp-Apim-Subscription-Key", _options.AzureApiKey);
+            req.Headers.Add("Ocp-Apim-Subscription-Key", options.AzureApiKey);
 
             using var resp = await client.SendAsync(req, ct);
             if (!resp.IsSuccessStatusCode)
@@ -177,7 +182,7 @@ public sealed class AutoPdfTextExtractor : IPdfTextExtractor
             {
                 await Task.Delay(TimeSpan.FromSeconds(2), ct);
                 using var pollReq = new HttpRequestMessage(HttpMethod.Get, opLocation);
-                pollReq.Headers.Add("Ocp-Apim-Subscription-Key", _options.AzureApiKey);
+                pollReq.Headers.Add("Ocp-Apim-Subscription-Key", options.AzureApiKey);
                 using var pollResp = await client.SendAsync(pollReq, ct);
                 if (!pollResp.IsSuccessStatusCode)
                 {

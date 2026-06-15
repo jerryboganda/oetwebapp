@@ -223,6 +223,11 @@ public sealed class RuntimeSettingsProviderWave3Tests
             Options.Create(new PlatformOptions()),
             Options.Create(twilio),
             Options.Create(whatsApp),
+            Options.Create(new FxOptions()),
+            Options.Create(new StorageOptions()),
+            Options.Create(new PdfExtractionOptions()),
+            Options.Create(new PronunciationOptions()),
+            Options.Create(new AuthTokenOptions()),
             new StaticOptionsMonitor<SmtpOptions>(smtp),
             new ConfigurationBuilder().Build(),
             new TestHostEnvironment("Development"));

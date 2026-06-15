@@ -5,6 +5,7 @@ using Microsoft.Extensions.Options;
 using OetLearner.Api.Configuration;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services.Settings;
 
 namespace OetLearner.Api.Services.Billing;
 
@@ -25,17 +26,19 @@ public sealed class FxRateService : IFxRateService
     private readonly LearnerDbContext _db;
     private readonly HttpClient _http;
     private readonly IOptions<FxOptions> _options;
+    private readonly IRuntimeSettingsProvider _runtimeSettings;
     private readonly ILogger<FxRateService> _logger;
 
     // Currencies we care about for the launch regions + global fallback.
     private static readonly string[] SupportedCurrencies =
         new[] { "USD", "GBP", "EUR", "AED", "SAR", "OMR", "QAR", "KWD", "BHD", "EGP", "PKR", "AUD", "INR", "CAD", "JPY", "CHF", "SGD" };
 
-    public FxRateService(LearnerDbContext db, HttpClient http, IOptions<FxOptions> options, ILogger<FxRateService> logger)
+    public FxRateService(LearnerDbContext db, HttpClient http, IOptions<FxOptions> options, IRuntimeSettingsProvider runtimeSettings, ILogger<FxRateService> logger)
     {
         _db = db;
         _http = http;
         _options = options;
+        _runtimeSettings = runtimeSettings;
         _logger = logger;
     }
 
@@ -77,7 +80,15 @@ public sealed class FxRateService : IFxRateService
 
     public async Task<int> RefreshRatesAsync(CancellationToken ct)
     {
-        var opts = _options.Value;
+        // Wave 4: FX base currency / API key / base URL are DB-overridable.
+        var fx = (await _runtimeSettings.GetAsync(ct)).Fx;
+        var opts = new FxOptions
+        {
+            BaseCurrency = string.IsNullOrWhiteSpace(fx.BaseCurrency) ? _options.Value.BaseCurrency : fx.BaseCurrency,
+            ApiKey = fx.ApiKey,
+            ApiBaseUrl = fx.ApiBaseUrl,
+            DynamicPricingEnabled = fx.DynamicPricingEnabled,
+        };
         var baseCurrency = opts.BaseCurrency.ToUpperInvariant();
         var now = DateTimeOffset.UtcNow;
         Dictionary<string, decimal> latest;

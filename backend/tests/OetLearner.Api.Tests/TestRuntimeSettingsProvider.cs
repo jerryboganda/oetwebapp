@@ -58,6 +58,11 @@ internal sealed class TestRuntimeSettingsProvider(EffectiveSettings settings, Ru
             Writing: DefaultWriting(),
             Platform: DefaultPlatform(),
             Messaging: DefaultMessaging(),
+            Fx: DefaultFx(),
+            Storage: DefaultStorage(),
+            PdfExtraction: DefaultPdfExtraction(),
+            Pronunciation: DefaultPronunciation(),
+            AuthTokens: DefaultAuthTokens(),
             UpdatedByUserId: null,
             UpdatedByUserName: null,
             UpdatedAt: null);
@@ -78,7 +83,19 @@ internal sealed class TestRuntimeSettingsProvider(EffectiveSettings settings, Ru
                 options.PayPal.ClientSecret,
                 options.PayPal.WebhookId,
                 options.PayPal.SuccessUrl,
-                options.PayPal.CancelUrl),
+                options.PayPal.CancelUrl,
+                PayPalAdvancedCardsEnabled: options.PayPal.AdvancedCardsEnabled,
+                PublicAppBaseUrl: null,
+                // ── Billing Core (non-gateway — Wave 4) ──
+                CheckoutBaseUrl: options.CheckoutBaseUrl,
+                WebhookMaxAgeSeconds: Math.Max(1, options.WebhookMaxAgeSeconds),
+                WebhookMaxAttempts: options.WebhookMaxAttempts,
+                DefaultCurrency: (string.IsNullOrWhiteSpace(options.DefaultCurrency) ? "GBP" : options.DefaultCurrency).ToUpperInvariant(),
+                DefaultRegion: (string.IsNullOrWhiteSpace(options.DefaultRegion) ? "ROW" : options.DefaultRegion).ToUpperInvariant(),
+                WalletCurrency: (string.IsNullOrWhiteSpace(options.Wallet.Currency) ? "AUD" : options.Wallet.Currency).ToUpperInvariant(),
+                WalletTopUpTiers: options.Wallet.TopUpTiers,
+                PayPalUseSandbox: options.PayPal.UseSandbox,
+                PayPalApiBaseUrl: string.IsNullOrWhiteSpace(options.PayPal.ApiBaseUrl) ? "https://api-m.paypal.com" : options.PayPal.ApiBaseUrl),
         });
 
     public static TestRuntimeSettingsProvider FromZoomOptions(ZoomOptions options)
@@ -132,6 +149,22 @@ internal sealed class TestRuntimeSettingsProvider(EffectiveSettings settings, Ru
     // ── Wave 3 (Messaging) ─────────────────────────────────────────
     public static TestRuntimeSettingsProvider FromMessagingOptions(TwilioOptions twilio, WhatsAppOptions whatsApp)
         => new(Base() with { Messaging = MapMessaging(twilio, whatsApp) });
+
+    // ── Wave 4 (Fx / Storage / PdfExtraction / Pronunciation / AuthTokens) ──
+    public static TestRuntimeSettingsProvider FromFxOptions(FxOptions o)
+        => new(Base() with { Fx = MapFx(o) });
+
+    public static TestRuntimeSettingsProvider FromStorageOptions(StorageOptions o)
+        => new(Base() with { Storage = MapStorage(o) });
+
+    public static TestRuntimeSettingsProvider FromPdfExtractionOptions(PdfExtractionOptions o)
+        => new(Base() with { PdfExtraction = MapPdfExtraction(o) });
+
+    public static TestRuntimeSettingsProvider FromPronunciationOptions(PronunciationOptions o)
+        => new(Base() with { Pronunciation = MapPronunciation(o) });
+
+    public static TestRuntimeSettingsProvider FromAuthTokenOptions(AuthTokenOptions o)
+        => new(Base() with { AuthTokens = MapAuthTokens(o) });
 
     private static ZoomSettings DefaultZoomSettings()
         => new(
@@ -311,6 +344,71 @@ internal sealed class TestRuntimeSettingsProvider(EffectiveSettings settings, Ru
             IsWhatsAppConfigured: whatsApp.Enabled
                 && !string.IsNullOrWhiteSpace(whatsApp.AccessToken)
                 && !string.IsNullOrWhiteSpace(whatsApp.PhoneNumberId));
+
+    // ── Wave 4 default factories + Option mappers ──────────────────
+    public static FxSettings DefaultFx() => MapFx(new FxOptions());
+    public static StorageSettings DefaultStorage() => MapStorage(new StorageOptions());
+    public static PdfExtractionSettings DefaultPdfExtraction() => MapPdfExtraction(new PdfExtractionOptions());
+    public static PronunciationSettings DefaultPronunciation() => MapPronunciation(new PronunciationOptions());
+    public static AuthTokenSettings DefaultAuthTokens() => MapAuthTokens(new AuthTokenOptions());
+
+    private static FxSettings MapFx(FxOptions o)
+        => new(
+            BaseCurrency: (string.IsNullOrWhiteSpace(o.BaseCurrency) ? "USD" : o.BaseCurrency).ToUpperInvariant(),
+            ApiKey: string.IsNullOrWhiteSpace(o.ApiKey) ? null : o.ApiKey,
+            ApiBaseUrl: string.IsNullOrWhiteSpace(o.ApiBaseUrl) ? null : o.ApiBaseUrl,
+            DynamicPricingEnabled: o.DynamicPricingEnabled);
+
+    private static StorageSettings MapStorage(StorageOptions o)
+    {
+        var cu = o.ContentUpload;
+        return new StorageSettings(
+            Provider: string.IsNullOrWhiteSpace(o.Provider) ? "local" : o.Provider,
+            BucketName: string.IsNullOrWhiteSpace(o.BucketName) ? null : o.BucketName,
+            EndpointUrl: string.IsNullOrWhiteSpace(o.EndpointUrl) ? null : o.EndpointUrl,
+            AccessKeyId: string.IsNullOrWhiteSpace(o.AccessKeyId) ? null : o.AccessKeyId,
+            SecretAccessKey: string.IsNullOrWhiteSpace(o.SecretAccessKey) ? null : o.SecretAccessKey,
+            AwsRegion: string.IsNullOrWhiteSpace(o.AwsRegion) ? "us-east-1" : o.AwsRegion,
+            SignedReadTtlSeconds: o.SignedReadTtlSeconds > 0 ? o.SignedReadTtlSeconds : 3600,
+            MaxAudioBytes: cu.MaxAudioBytes > 0 ? cu.MaxAudioBytes : 150L * 1024 * 1024,
+            MaxPdfBytes: cu.MaxPdfBytes > 0 ? cu.MaxPdfBytes : 25L * 1024 * 1024,
+            MaxImageBytes: cu.MaxImageBytes > 0 ? cu.MaxImageBytes : 5L * 1024 * 1024,
+            MaxZipBytes: cu.MaxZipBytes > 0 ? cu.MaxZipBytes : 500L * 1024 * 1024,
+            MaxZipEntries: cu.MaxZipEntries > 0 ? cu.MaxZipEntries : 5000,
+            MaxZipEntryBytes: cu.MaxZipEntryBytes > 0 ? cu.MaxZipEntryBytes : 150L * 1024 * 1024,
+            MaxZipUncompressedBytes: cu.MaxZipUncompressedBytes > 0 ? cu.MaxZipUncompressedBytes : 2L * 1024 * 1024 * 1024,
+            MaxZipCompressionRatio: cu.MaxZipCompressionRatio > 0 ? cu.MaxZipCompressionRatio : 100.0,
+            ChunkSizeBytes: cu.ChunkSizeBytes > 0 ? cu.ChunkSizeBytes : 8L * 1024 * 1024,
+            StagingTtlHours: cu.StagingTtlHours > 0 ? cu.StagingTtlHours : 24);
+    }
+
+    private static PdfExtractionSettings MapPdfExtraction(PdfExtractionOptions o)
+        => new(
+            Provider: string.IsNullOrWhiteSpace(o.Provider) ? "auto" : o.Provider,
+            AzureEndpoint: o.AzureEndpoint ?? string.Empty,
+            AzureApiKey: string.IsNullOrWhiteSpace(o.AzureApiKey) ? null : o.AzureApiKey,
+            MinTextLengthForSuccess: o.MinTextLengthForSuccess > 0 ? o.MinTextLengthForSuccess : 50);
+
+    private static PronunciationSettings MapPronunciation(PronunciationOptions o)
+        => new(
+            Provider: string.IsNullOrWhiteSpace(o.Provider) ? "auto" : o.Provider,
+            AzureSpeechRegion: o.AzureSpeechRegion ?? string.Empty,
+            AzureLocale: string.IsNullOrWhiteSpace(o.AzureLocale) ? "en-GB" : o.AzureLocale,
+            WhisperBaseUrl: o.WhisperBaseUrl ?? string.Empty,
+            WhisperModel: string.IsNullOrWhiteSpace(o.WhisperModel) ? "whisper-1" : o.WhisperModel,
+            GeminiBaseUrl: string.IsNullOrWhiteSpace(o.GeminiBaseUrl) ? "https://generativelanguage.googleapis.com/v1beta" : o.GeminiBaseUrl,
+            GeminiModel: string.IsNullOrWhiteSpace(o.GeminiModel) ? "gemini-3.5-flash" : o.GeminiModel,
+            MaxAudioBytes: o.MaxAudioBytes > 0 ? o.MaxAudioBytes : 15L * 1024 * 1024,
+            AudioRetentionDays: o.AudioRetentionDays > 0 ? o.AudioRetentionDays : 45,
+            FreeTierWeeklyAttemptLimit: o.FreeTierWeeklyAttemptLimit,
+            FreeTierWindowDays: o.FreeTierWindowDays > 0 ? o.FreeTierWindowDays : 7);
+
+    private static AuthTokenSettings MapAuthTokens(AuthTokenOptions o)
+        => new(
+            AccessTokenLifetime: o.AccessTokenLifetime > TimeSpan.Zero ? o.AccessTokenLifetime : TimeSpan.FromHours(1),
+            RefreshTokenLifetime: o.RefreshTokenLifetime > TimeSpan.Zero ? o.RefreshTokenLifetime : TimeSpan.FromDays(30),
+            OtpLifetime: o.OtpLifetime > TimeSpan.Zero ? o.OtpLifetime : TimeSpan.FromMinutes(5),
+            AuthenticatorIssuer: o.AuthenticatorIssuer);
 
     public Task<EffectiveSettings> GetAsync(CancellationToken ct = default) => Task.FromResult(settings);
 

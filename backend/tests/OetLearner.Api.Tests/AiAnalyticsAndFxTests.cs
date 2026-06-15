@@ -233,7 +233,7 @@ public class AiAnalyticsAndFxTests
             ApiKey = null,
         });
         using var http = new HttpClient();
-        var svc = new FxRateService(db, http, opts, NullLogger<FxRateService>.Instance);
+        var svc = new FxRateService(db, http, opts, TestRuntimeSettingsProvider.FromFxOptions(opts.Value), NullLogger<FxRateService>.Instance);
 
         await svc.RefreshRatesAsync(CancellationToken.None);
 
@@ -248,7 +248,7 @@ public class AiAnalyticsAndFxTests
         await using var db = NewContext(nameof(FxRateService_SameCurrencyReturnsOne));
         var opts = Microsoft.Extensions.Options.Options.Create(new OetLearner.Api.Configuration.FxOptions());
         using var http = new HttpClient();
-        var svc = new FxRateService(db, http, opts, NullLogger<FxRateService>.Instance);
+        var svc = new FxRateService(db, http, opts, TestRuntimeSettingsProvider.FromFxOptions(opts.Value), NullLogger<FxRateService>.Instance);
         var rate = await svc.GetRateAsync("USD", "USD", CancellationToken.None);
         Assert.Equal(1m, rate);
     }
@@ -271,7 +271,7 @@ public class AiAnalyticsAndFxTests
 
         var opts = Microsoft.Extensions.Options.Options.Create(new OetLearner.Api.Configuration.FxOptions());
         using var http = new HttpClient();
-        var fx = new FxRateService(db, http, opts, NullLogger<FxRateService>.Instance);
+        var fx = new FxRateService(db, http, opts, TestRuntimeSettingsProvider.FromFxOptions(opts.Value), NullLogger<FxRateService>.Instance);
         var svc = new PricingExperimentService(db, fx, NullLogger<PricingExperimentService>.Instance);
 
         var r1 = await svc.ResolveAsync("user_f", "plan", "premium", "ROW", CancellationToken.None);
@@ -299,7 +299,7 @@ public class AiAnalyticsAndFxTests
 
         var opts = Microsoft.Extensions.Options.Options.Create(new OetLearner.Api.Configuration.FxOptions());
         using var http = new HttpClient();
-        var fx = new FxRateService(db, http, opts, NullLogger<FxRateService>.Instance);
+        var fx = new FxRateService(db, http, opts, TestRuntimeSettingsProvider.FromFxOptions(opts.Value), NullLogger<FxRateService>.Instance);
         var svc = new PricingExperimentService(db, fx, NullLogger<PricingExperimentService>.Instance);
 
         var basePrice = Money.FromMajor(100m, "USD");
@@ -326,7 +326,7 @@ public class AiAnalyticsAndFxTests
 
         var opts = Microsoft.Extensions.Options.Options.Create(new OetLearner.Api.Configuration.FxOptions());
         using var http = new HttpClient();
-        var fx = new FxRateService(db, http, opts, NullLogger<FxRateService>.Instance);
+        var fx = new FxRateService(db, http, opts, TestRuntimeSettingsProvider.FromFxOptions(opts.Value), NullLogger<FxRateService>.Instance);
         var svc = new PricingExperimentService(db, fx, NullLogger<PricingExperimentService>.Instance);
 
         var r = await svc.ResolveAsync("user_h", "plan", "premium", "ROW", CancellationToken.None);
