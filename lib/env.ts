@@ -1,3 +1,5 @@
+import { getRuntimeConfig } from './runtime-config';
+
 const PROXY_PATH = '/api/backend';
 const DEFAULT_PROXY_TARGET = 'http://127.0.0.1:5198';
 
@@ -31,5 +33,24 @@ export function resolveApiBaseUrl(envSource: NodeJS.ProcessEnv = process.env): s
 
 export const env = {
   apiBaseUrl: resolveApiBaseUrl(),
+  // Build-time NEXT_PUBLIC_* fallback. Wave 5: the browser now prefers the
+  // DB-driven public VAPID key from the runtime-config endpoint (see
+  // lib/runtime-config.ts + resolveWebPushPublicKey()); this stays as the
+  // first-paint / offline fallback so boot never breaks.
   webPushPublicKey: process.env.NEXT_PUBLIC_WEB_PUSH_PUBLIC_KEY?.trim() || '',
 } as const;
+
+/**
+ * Wave 5 — resolve the public web-push VAPID key preferring the runtime config
+ * (admin/DB-driven, secret-free) and falling back to the build-time
+ * NEXT_PUBLIC_WEB_PUSH_PUBLIC_KEY. Lazily imports the runtime-config singleton
+ * to avoid a hard module cycle and to keep this usable outside React.
+ */
+export function resolveWebPushPublicKey(): string {
+  if (typeof window !== 'undefined') {
+    // Synchronous getter — returns the last-fetched config or NEXT_PUBLIC fallback.
+    const runtimeKey = getRuntimeConfig().webPush.vapidPublicKey;
+    if (runtimeKey) return runtimeKey;
+  }
+  return env.webPushPublicKey;
+}

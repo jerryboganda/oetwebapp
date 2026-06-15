@@ -12,6 +12,7 @@ import { Toaster } from '@/components/admin/ui/toaster';
 import { TooltipProvider } from '@/components/admin/ui/tooltip';
 import { TourProvider } from '@/components/onboarding/tour-provider';
 import { LearnerPasteGuard } from '@/components/system/LearnerPasteGuard';
+import { RuntimeConfigProvider } from './providers/RuntimeConfigProvider';
 
 function isWritingMessageKey(key: string) {
   return key === 'writing' || key.startsWith('writing.');
@@ -63,6 +64,12 @@ export function AppProviders({
       }}
       getMessageFallback={getMessageFallback}
     >
+      {/*
+        RuntimeConfigProvider sits high in the tree so every client consumer
+        (auth, notifications/web-push, realtime) can read DB-driven boot values
+        via useRuntimeConfig(), with NEXT_PUBLIC_* fallbacks for first paint.
+      */}
+      <RuntimeConfigProvider>
       <ThemeProvider nonce={nonce}>
         {/*
           TooltipProvider must wrap every admin (and learner) consumer of the
@@ -95,6 +102,7 @@ export function AppProviders({
           </QueryProvider>
         </TooltipProvider>
       </ThemeProvider>
+      </RuntimeConfigProvider>
     </NextIntlClientProvider>
   );
 }

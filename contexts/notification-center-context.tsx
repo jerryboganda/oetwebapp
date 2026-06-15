@@ -23,6 +23,7 @@ import type {
 } from '@/lib/types/notifications';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useAuth } from './auth-context';
+import { useRuntimeConfig } from '@/app/providers/RuntimeConfigProvider';
 
 type ToastVariant = 'info' | 'success' | 'warning' | 'error';
 type NotificationConnectionStatus = 'connecting' | 'connected' | 'reconnecting' | 'disconnected';
@@ -216,6 +217,10 @@ function toPushPayload(subscription: PushSubscription): PushSubscriptionPayload 
 
 export function NotificationCenterProvider({ children }: { children: ReactNode }) {
   const { isAuthenticated, loading } = useAuth();
+  const runtimeConfig = useRuntimeConfig();
+  // Prefer the DB-driven public VAPID key (runtime-config) and fall back to the
+  // build-time NEXT_PUBLIC_* value so first paint / offline never breaks.
+  const fallbackWebPushPublicKey = runtimeConfig.webPush.vapidPublicKey ?? env.webPushPublicKey;
   const [notifications, setNotifications] = useState<NotificationFeedItem[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [totalCount, setTotalCount] = useState(0);
@@ -230,7 +235,7 @@ export function NotificationCenterProvider({ children }: { children: ReactNode }
   const [isUpdatingPreferences, setIsUpdatingPreferences] = useState(false);
   const [pushPermission, setPushPermission] = useState<PushPermissionState>(getPushPermission());
   const [pushEnabled, setPushEnabled] = useState(false);
-  const [webPushPublicKey, setWebPushPublicKey] = useState(env.webPushPublicKey);
+  const [webPushPublicKey, setWebPushPublicKey] = useState(fallbackWebPushPublicKey);
   const [isUpdatingPush, setIsUpdatingPush] = useState(false);
   const [toastState, setToastState] = useState<{ message: string; variant: ToastVariant } | null>(null);
   const hubConnectionRef = useRef<HubConnection | null>(null);
@@ -244,7 +249,9 @@ export function NotificationCenterProvider({ children }: { children: ReactNode }
 
   useEffect(() => {
     if (!isAuthenticated) {
-      setWebPushPublicKey(env.webPushPublicKey);
+      // Unauthenticated: use the public runtime-config VAPID key (DB-driven)
+      // with the NEXT_PUBLIC_* build-time value as the final fallback.
+      setWebPushPublicKey(fallbackWebPushPublicKey);
       return;
     }
 
@@ -258,14 +265,14 @@ export function NotificationCenterProvider({ children }: { children: ReactNode }
       .catch((error) => {
         console.warn('Unable to load runtime browser push configuration.', error);
         if (active) {
-          setWebPushPublicKey(env.webPushPublicKey);
+          setWebPushPublicKey(fallbackWebPushPublicKey);
         }
       });
 
     return () => {
       active = false;
     };
-  }, [isAuthenticated]);
+  }, [isAuthenticated, fallbackWebPushPublicKey]);
 
   const refreshFeed = useCallback(async (options?: { reset?: boolean; silent?: boolean }) => {
     if (!isAuthenticated) {

@@ -23,6 +23,10 @@ public static class LearnerEndpoints
         // Public endpoints (no auth required)
         var publicV1 = app.MapGroup("/v1/public");
         publicV1.MapGet("/plans", async (LearnerService service, CancellationToken ct) => Results.Ok(await service.GetBillingPlansAsync(string.Empty, ct)));
+        // Wave 5 — secret-free public runtime config so the browser can read boot
+        // values (Sentry DSN, Soketi public key, VAPID public key, platform URLs)
+        // from the DB at runtime instead of build-time NEXT_PUBLIC_* bundle values.
+        publicV1.MapPublicRuntimeConfig();
         app.MapGet("/v1/billing/ai-packages", async (LearnerService service) => Results.Ok(await service.GetAiPackagesAsync()));
         app.MapGet("/v1/billing/content", async (LearnerService service, CancellationToken ct) => Results.Ok(await service.GetBillingContentAsync(ct)));
 
