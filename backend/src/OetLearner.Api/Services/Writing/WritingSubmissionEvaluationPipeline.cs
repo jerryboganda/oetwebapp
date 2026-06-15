@@ -2,11 +2,10 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Options;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services.Rulebook;
-using OetLearner.Api.Services.Writing.Configuration;
+using OetLearner.Api.Services.Settings;
 using OetLearner.Api.Services.Writing.Events;
 
 namespace OetLearner.Api.Services.Writing;
@@ -56,7 +55,7 @@ public sealed class WritingSubmissionEvaluationPipeline(
     IWritingMistakeService mistakeService,
     IWritingEventBus events,
     TimeProvider clock,
-    IOptions<WritingV2Options> options,
+    IRuntimeSettingsProvider settingsProvider,
     ILogger<WritingSubmissionEvaluationPipeline> logger) : IWritingSubmissionEvaluationPipeline
 {
     public async Task<Guid> CreateSubmissionAsync(WritingSubmissionGradeContext context, CancellationToken ct)
@@ -199,7 +198,7 @@ public sealed class WritingSubmissionEvaluationPipeline(
 
     private async Task<WritingSubmissionGradeOutcome?> TryReuseExistingGradeAsync(WritingSubmission submission, CancellationToken ct)
     {
-        var ttl = TimeSpan.FromHours(options.Value.GradeIdempotencyTtlHours);
+        var ttl = TimeSpan.FromHours((await settingsProvider.GetAsync(ct)).Writing.GradeIdempotencyTtlHours);
         var cutoff = clock.GetUtcNow() - ttl;
         var existing = await db.WritingGrades.AsNoTracking()
             .Join(db.WritingSubmissions.AsNoTracking(), g => g.SubmissionId, s => s.Id, (g, s) => new { g, s })

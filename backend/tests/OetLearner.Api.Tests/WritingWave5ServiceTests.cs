@@ -218,7 +218,7 @@ public class WritingWave5ServiceTests
             new WritingTutorReviewService(
                 db,
                 clock,
-                Microsoft.Extensions.Options.Options.Create(new OetLearner.Api.Services.Writing.Configuration.WritingV2Options()),
+                TestRuntimeSettingsProvider.FromWritingOptions(new OetLearner.Api.Services.Writing.Configuration.WritingV2Options()),
                 moderation: null!,
                 NullLogger<WritingTutorReviewService>.Instance),
             NullLogger<WritingMockService>.Instance);

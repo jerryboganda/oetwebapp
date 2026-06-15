@@ -76,5 +76,49 @@ ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""PasswordPolicyRequire
 ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""PasswordPolicyBreachCheckEnabled"" boolean;
 ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""PasswordPolicyBreachApiBaseUrl"" character varying(512);
 ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""PasswordPolicyBreachApiTimeoutSeconds"" integer;
+
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""AiAssistantGlobalEnabled"" boolean;
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""AiAssistantRequireApprovalAlways"" boolean;
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""AiAssistantMaxIterations"" integer;
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""AiAssistantMaxContextMessages"" integer;
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""AiAssistantBackupRetentionDays"" integer;
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""AiAssistantMaxWriteFileSizeBytes"" bigint;
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""AiAssistantCommandTimeoutSeconds"" integer;
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""AiAssistantCircuitBreakerMaxFailures"" integer;
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""AiAssistantCircuitBreakerFailureWindowSeconds"" integer;
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""AiAssistantCircuitBreakerMaxWrites"" integer;
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""AiAssistantCircuitBreakerWriteWindowSeconds"" integer;
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""AiAssistantEmbeddingModel"" text;
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""AiAssistantMaxChunkTokens"" integer;
+
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""AiProviderProviderId"" character varying(64);
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""AiProviderBaseUrl"" character varying(512);
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""AiProviderDefaultModel"" character varying(128);
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""AiProviderReasoningEffort"" character varying(16);
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""AiProviderDefaultMaxTokens"" integer;
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""AiProviderDefaultTemperature"" double precision;
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""AiToolMaxToolCallsPerCompletion"" integer;
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""AiToolFeatureGrantCacheSeconds"" integer;
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""AiToolAllowedExternalHostsCsv"" character varying(1024);
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""AiToolExternalNetworkPerUserDailyCalls"" integer;
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""AiToolExternalNetworkTimeoutMilliseconds"" integer;
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""AiToolExternalNetworkMaxResponseBytes"" integer;
+
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""WritingCronsEnabled"" boolean;
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""WritingCoachEnabled"" boolean;
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""WritingCoachDailyCostCapPerLearnerUsd"" numeric(10,2);
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""WritingCoachMaxHintsPerSession"" integer;
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""WritingCoachMinSecondsBetweenHints"" integer;
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""WritingGcvApiKeyEncrypted"" text;
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""WritingOcrEnabled"" boolean;
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""WritingAppealsEnabled"" boolean;
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""WritingTutorReviewQueueMaxDepth"" integer;
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""WritingTutorReviewMaxWaitHours"" integer;
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""WritingMaxDailyPlanRegenerationsPerDay"" integer;
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""WritingGradeIdempotencyTtlHours"" integer;
+
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""PublicApiBaseUrl"" character varying(1024);
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""PublicWebBaseUrl"" character varying(1024);
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""FallbackEmailDomain"" character varying(256);
 ";
 }

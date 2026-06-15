@@ -9,7 +9,10 @@ using Microsoft.Extensions.Options;
 using OetLearner.Api.Configuration;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services.AiAssistant;
+using OetLearner.Api.Services.AiTools;
 using OetLearner.Api.Services.Settings;
+using OetLearner.Api.Services.Writing.Configuration;
 
 namespace OetLearner.Api.Tests;
 
@@ -114,6 +117,11 @@ public sealed class RuntimeSettingsProviderWave1Tests
             Options.Create(dataRetention),
             Options.Create(expert),
             Options.Create(password),
+            Options.Create(new AiAssistantOptions()),
+            Options.Create(new AiProviderOptions()),
+            Options.Create(new AiToolOptions()),
+            Options.Create(new WritingV2Options()),
+            Options.Create(new PlatformOptions()),
             new StaticOptionsMonitor<SmtpOptions>(new SmtpOptions()),
             new ConfigurationBuilder().Build(),
             new TestHostEnvironment("Development"));

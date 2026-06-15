@@ -67,6 +67,10 @@ public sealed record EffectiveSettings(
     DataRetentionSettings DataRetention,
     ExpertAutoAssignmentSettings ExpertAutoAssignment,
     PasswordPolicySettings PasswordPolicy,
+    AiAssistantSettings AiAssistant,
+    AiGatewaySettings AiGateway,
+    WritingSettings Writing,
+    PlatformSettings Platform,
     string? UpdatedByUserId,
     string? UpdatedByUserName,
     DateTimeOffset? UpdatedAt);
@@ -322,3 +326,72 @@ public sealed record PasswordPolicySettings(
     bool BreachCheckEnabled,
     string BreachApiBaseUrl,
     TimeSpan BreachApiTimeout);
+
+/// <summary>
+/// AI Assistant orchestration tunables (DB-over-env merged). Covers the ReAct
+/// loop, circuit breaker, command/backup limits, and embedding/indexing knobs.
+/// AI provider CREDENTIALS are NOT here — those live in AiProviderRegistry.
+/// </summary>
+public sealed record AiAssistantSettings(
+    bool GlobalEnabled,
+    bool RequireApprovalAlways,
+    int MaxIterations,
+    int MaxContextMessages,
+    int BackupRetentionDays,
+    long MaxWriteFileSizeBytes,
+    int CommandTimeoutSeconds,
+    int CircuitBreakerMaxFailures,
+    int CircuitBreakerFailureWindowSeconds,
+    int CircuitBreakerMaxWrites,
+    int CircuitBreakerWriteWindowSeconds,
+    string EmbeddingModel,
+    int MaxChunkTokens);
+
+/// <summary>
+/// AI gateway / tooling non-credential knobs (DB-over-env merged). Merges the
+/// legacy <c>AI:*</c> (AiProviderOptions) and <c>AiTool:*</c> (AiToolOptions)
+/// env settings. The provider API key is excluded (handled by AiProviderRegistry).
+/// <see cref="AllowedExternalHosts"/> is parsed from the stored CSV.
+/// </summary>
+public sealed record AiGatewaySettings(
+    string ProviderId,
+    string BaseUrl,
+    string DefaultModel,
+    string ReasoningEffort,
+    int DefaultMaxTokens,
+    double DefaultTemperature,
+    int MaxToolCallsPerCompletion,
+    int FeatureGrantCacheSeconds,
+    string AllowedExternalHostsCsv,
+    IReadOnlyList<string> AllowedExternalHosts,
+    int ExternalNetworkPerUserDailyCalls,
+    int ExternalNetworkTimeoutMilliseconds,
+    int ExternalNetworkMaxResponseBytes);
+
+/// <summary>
+/// Writing module V2 feature flags + coach/queue/OCR tunables (DB-over-env
+/// merged). <see cref="GcvApiKey"/> is the only secret (decrypted by the
+/// provider). TessdataPath / V2Seeder stay env-only and are excluded.
+/// </summary>
+public sealed record WritingSettings(
+    bool CronsEnabled,
+    bool CoachEnabled,
+    decimal CoachDailyCostCapPerLearnerUsd,
+    int CoachMaxHintsPerSession,
+    int CoachMinSecondsBetweenHints,
+    string? GcvApiKey,
+    bool OcrEnabled,
+    bool AppealsEnabled,
+    int TutorReviewQueueMaxDepth,
+    int TutorReviewMaxWaitHours,
+    int MaxDailyPlanRegenerationsPerDay,
+    int GradeIdempotencyTtlHours);
+
+/// <summary>
+/// Platform public host identities (DB-over-env merged). Used to build absolute
+/// API/web URLs for external auth callbacks and CSRF origin validation.
+/// </summary>
+public sealed record PlatformSettings(
+    string? PublicApiBaseUrl,
+    string? PublicWebBaseUrl,
+    string FallbackEmailDomain);

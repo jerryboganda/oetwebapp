@@ -167,7 +167,7 @@ public sealed class PrivateSpeakingReminderTests
     private static PrivateSpeakingService CreateService(LearnerDbContext db)
     {
         var platformLinks = new PlatformLinkService(
-            Options.Create(new PlatformOptions()),
+            TestRuntimeSettingsProvider.FromPlatformOptions(new PlatformOptions()),
             Options.Create(new BillingOptions()));
 
         // A real calendar service is constructed, but with no calendar connection

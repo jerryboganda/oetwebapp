@@ -3,9 +3,9 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Options;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services.Settings;
 
 namespace OetLearner.Api.Services.AiTools;
 
@@ -35,7 +35,7 @@ public sealed class AiToolInvoker : IAiToolInvoker
     private readonly IAiToolRegistry _registry;
     private readonly IServiceProvider _sp;
     private readonly LearnerDbContext _db;
-    private readonly IOptionsMonitor<AiToolOptions> _options;
+    private readonly IRuntimeSettingsProvider _settingsProvider;
     private readonly ILogger<AiToolInvoker> _logger;
     private readonly IReadOnlyDictionary<string, IAiToolExecutor> _executors;
 
@@ -43,14 +43,14 @@ public sealed class AiToolInvoker : IAiToolInvoker
         IAiToolRegistry registry,
         IServiceProvider sp,
         LearnerDbContext db,
-        IOptionsMonitor<AiToolOptions> options,
+        IRuntimeSettingsProvider settingsProvider,
         ILogger<AiToolInvoker> logger,
         IEnumerable<IAiToolExecutor> executors)
     {
         _registry = registry;
         _sp = sp;
         _db = db;
-        _options = options;
+        _settingsProvider = settingsProvider;
         _logger = logger;
         _executors = executors.ToDictionary(e => e.Code, StringComparer.OrdinalIgnoreCase);
     }
@@ -112,8 +112,9 @@ public sealed class AiToolInvoker : IAiToolInvoker
         // 3. External-network budget gate.
         if (def.Category == AiToolCategory.ExternalNetwork)
         {
-            var opts = _options.CurrentValue;
-            if (opts.ExternalNetworkPerUserDailyCalls > 0 && !string.IsNullOrEmpty(ctx.UserId))
+            // DB-over-env tooling knobs (admin-configurable, 30s cache).
+            var gateway = (await _settingsProvider.GetAsync(ct)).AiGateway;
+            if (gateway.ExternalNetworkPerUserDailyCalls > 0 && !string.IsNullOrEmpty(ctx.UserId))
             {
                 var since = DateTimeOffset.UtcNow.Date;
                 var used = await _db.AiToolInvocations
@@ -121,9 +122,9 @@ public sealed class AiToolInvoker : IAiToolInvoker
                                      && i.Category == AiToolCategory.ExternalNetwork
                                      && i.Outcome == AiToolOutcome.Success
                                      && i.CreatedAt >= since, ct);
-                if (used >= opts.ExternalNetworkPerUserDailyCalls)
+                if (used >= gateway.ExternalNetworkPerUserDailyCalls)
                 {
-                    var msg = $"daily external-network budget exhausted ({opts.ExternalNetworkPerUserDailyCalls})";
+                    var msg = $"daily external-network budget exhausted ({gateway.ExternalNetworkPerUserDailyCalls})";
                     await PersistAsync(ctx, toolCode, def.Category, AiToolOutcome.BudgetExceeded,
                         argsJson, resultJson: null, errorCode: "external_budget",
                         errorMessage: msg, sw, ct);

@@ -369,7 +369,7 @@ public sealed class PrivateSpeakingRescheduleTests
     private static PrivateSpeakingService CreateService(LearnerDbContext db, IStripeService stripe)
     {
         var platformLinks = new PlatformLinkService(
-            Options.Create(new PlatformOptions()),
+            TestRuntimeSettingsProvider.FromPlatformOptions(new PlatformOptions()),
             Options.Create(new BillingOptions()));
 
         // A real calendar service is constructed, but with no calendar connection

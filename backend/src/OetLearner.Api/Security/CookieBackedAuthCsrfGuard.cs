@@ -1,13 +1,12 @@
 using System.Security.Cryptography;
 using System.Text;
-using Microsoft.Extensions.Options;
-using OetLearner.Api.Configuration;
 using OetLearner.Api.Services;
+using OetLearner.Api.Services.Settings;
 
 namespace OetLearner.Api.Security;
 
 public sealed class CookieBackedAuthCsrfGuard(
-    IOptions<PlatformOptions> platformOptions,
+    IRuntimeSettingsProvider settingsProvider,
     IConfiguration configuration,
     IWebHostEnvironment environment)
 {
@@ -108,8 +107,13 @@ public sealed class CookieBackedAuthCsrfGuard(
             $"{context.Request.Scheme}://{context.Request.Host.Value}"
         };
 
-        AddConfiguredOrigin(origins, platformOptions.Value.PublicWebBaseUrl);
-        AddConfiguredOrigin(origins, platformOptions.Value.PublicApiBaseUrl);
+        // DB-over-env platform host URLs (admin-configurable). This guard is a
+        // singleton invoked per request; the provider caches the effective view
+        // for 30s and ASP.NET Core has no sync context, so a blocking resolve
+        // here is safe.
+        var platform = settingsProvider.GetAsync(CancellationToken.None).GetAwaiter().GetResult().Platform;
+        AddConfiguredOrigin(origins, platform.PublicWebBaseUrl);
+        AddConfiguredOrigin(origins, platform.PublicApiBaseUrl);
 
         var configuredCors = configuration["Cors:AllowedOriginsCsv"];
         if (!string.IsNullOrWhiteSpace(configuredCors))

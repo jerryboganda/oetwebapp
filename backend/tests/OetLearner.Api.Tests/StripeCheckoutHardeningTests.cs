@@ -131,7 +131,7 @@ public class StripeCheckoutHardeningTests
     public void PlatformLinkService_BuildWebUrl_PreservesCheckoutSessionToken()
     {
         var platform = new PlatformLinkService(
-            Options.Create(new PlatformOptions { PublicWebBaseUrl = "https://app.example" }),
+            TestRuntimeSettingsProvider.FromPlatformOptions(new PlatformOptions { PublicWebBaseUrl = "https://app.example" }),
             Options.Create(new BillingOptions()));
 
         var url = platform.BuildWebUrl("/billing/payment-return?status=success&session={CHECKOUT_SESSION_ID}");

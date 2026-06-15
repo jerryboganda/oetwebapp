@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Options;
 using OetLearner.Api.Configuration;
+using OetLearner.Api.Services.Settings;
 
 namespace OetLearner.Api.Services.AiAssistant.Indexing;
 
@@ -22,19 +23,21 @@ public sealed class EmbeddingService : IEmbeddingService
 {
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly IOptions<AiProviderOptions> _options;
+    private readonly IRuntimeSettingsProvider _settingsProvider;
     private readonly ILogger<EmbeddingService> _logger;
 
     private const int DefaultDimension = 1536;
     private const int BatchSize = 20;
-    private const string DefaultModel = "text-embedding-3-small";
 
     public EmbeddingService(
         IHttpClientFactory httpClientFactory,
         IOptions<AiProviderOptions> options,
+        IRuntimeSettingsProvider settingsProvider,
         ILogger<EmbeddingService> logger)
     {
         _httpClientFactory = httpClientFactory ?? throw new ArgumentNullException(nameof(httpClientFactory));
         _options = options ?? throw new ArgumentNullException(nameof(options));
+        _settingsProvider = settingsProvider ?? throw new ArgumentNullException(nameof(settingsProvider));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
@@ -53,7 +56,13 @@ public sealed class EmbeddingService : IEmbeddingService
             return new List<float[]>();
 
         var opts = _options.Value;
-        if (string.IsNullOrWhiteSpace(opts.BaseUrl) || string.IsNullOrWhiteSpace(opts.ApiKey))
+        // DB-over-env: BaseUrl + embedding model come from the merged runtime
+        // view (admin-configurable). The provider API key stays env/registry-
+        // managed via AiProviderOptions — never overridden from RuntimeSettings.
+        var effective = await _settingsProvider.GetAsync(ct);
+        var baseUrl = effective.AiGateway.BaseUrl;
+        var embeddingModel = effective.AiAssistant.EmbeddingModel;
+        if (string.IsNullOrWhiteSpace(baseUrl) || string.IsNullOrWhiteSpace(opts.ApiKey))
         {
             _logger.LogWarning("No embedding provider configured — falling back to local hash-based embeddings.");
             return texts.Select(t => GenerateLocalEmbedding(t)).ToList();
@@ -68,7 +77,7 @@ public sealed class EmbeddingService : IEmbeddingService
             var batch = texts.Skip(i).Take(BatchSize).ToList();
             try
             {
-                var batchResults = await CallEmbeddingApiAsync(batch, opts, ct);
+                var batchResults = await CallEmbeddingApiAsync(batch, baseUrl, opts.ApiKey, embeddingModel, ct);
                 allEmbeddings.AddRange(batchResults);
             }
             catch (Exception ex)
@@ -82,16 +91,16 @@ public sealed class EmbeddingService : IEmbeddingService
     }
 
     private async Task<List<float[]>> CallEmbeddingApiAsync(
-        List<string> texts, AiProviderOptions opts, CancellationToken ct)
+        List<string> texts, string baseUrl, string apiKey, string model, CancellationToken ct)
     {
         var client = _httpClientFactory.CreateClient("AiEmbedding");
-        var baseUrl = opts.BaseUrl!.TrimEnd('/');
-        client.BaseAddress = new Uri(baseUrl + "/");
-        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", opts.ApiKey);
+        var normalizedBaseUrl = baseUrl.TrimEnd('/');
+        client.BaseAddress = new Uri(normalizedBaseUrl + "/");
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
 
         var payload = new
         {
-            model = DefaultModel,
+            model,
             input = texts,
             dimensions = DefaultDimension
         };

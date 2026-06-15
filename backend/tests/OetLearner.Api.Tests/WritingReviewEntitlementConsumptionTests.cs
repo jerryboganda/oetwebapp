@@ -335,7 +335,7 @@ public sealed class WritingReviewEntitlementConsumptionTests : IAsyncLifetime
     {
         var billingOptions = Options.Create(new BillingOptions { AllowSandboxFallbacks = true });
         var platformLinks = new PlatformLinkService(
-            Options.Create(new PlatformOptions { FallbackEmailDomain = "example.test" }),
+            TestRuntimeSettingsProvider.FromPlatformOptions(new PlatformOptions { FallbackEmailDomain = "example.test" }),
             billingOptions);
         var storageRoot = Path.Combine(Path.GetTempPath(), $"oet-entitlement-{Guid.NewGuid():N}");
         var storageOptions = Options.Create(new StorageOptions { LocalRootPath = storageRoot });

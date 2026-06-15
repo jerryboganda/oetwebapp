@@ -484,7 +484,7 @@ public sealed class PrivateSpeakingAdminActionsTests
         LearnerDbContext db, IStripeService stripe, IEffectiveEntitlementResolver? resolver = null)
     {
         var platformLinks = new PlatformLinkService(
-            Options.Create(new PlatformOptions()),
+            TestRuntimeSettingsProvider.FromPlatformOptions(new PlatformOptions()),
             Options.Create(new BillingOptions()));
 
         // A real calendar service is constructed, but with no calendar connection

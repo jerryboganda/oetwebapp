@@ -1657,7 +1657,7 @@ public class AuthFlowsTests
             new StubExternalIdentityProviderClient(),
             harness.ExternalAuthTicketService,
             harness.Service,
-            Options.Create(new PlatformOptions
+            TestRuntimeSettingsProvider.FromPlatformOptions(new PlatformOptions
             {
                 PublicWebBaseUrl = "http://localhost:3000",
             }),

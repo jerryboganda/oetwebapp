@@ -9,6 +9,7 @@ using OetLearner.Api.Hubs;
 using OetLearner.Api.Services.AiAssistant.SystemPrompts;
 using OetLearner.Api.Services.AiTools;
 using OetLearner.Api.Services.Rulebook;
+using OetLearner.Api.Services.Settings;
 
 namespace OetLearner.Api.Services.AiAssistant;
 
@@ -18,10 +19,9 @@ public sealed class AiAssistantOrchestrator(
     IAiToolRegistry toolRegistry,
     IAiToolInvoker toolInvoker,
     ISystemPromptProvider systemPromptProvider,
+    IRuntimeSettingsProvider settingsProvider,
     ILogger<AiAssistantOrchestrator> logger) : IAiAssistantOrchestrator
 {
-    private const int MaxReActIterations = 10;
-    private const int MaxMessagesInContext = 50;
     private static readonly ConcurrentDictionary<string, CancellationTokenSource> _activeTurns = new();
 
     public async Task<AiAssistantThreadDto> CreateThreadAsync(
@@ -56,6 +56,11 @@ public sealed class AiAssistantOrchestrator(
 
         try
         {
+            // DB-over-env orchestration tunables (admin-configurable, 30s cache).
+            var aiAssistant = (await settingsProvider.GetAsync(turnCts.Token)).AiAssistant;
+            var maxReActIterations = aiAssistant.MaxIterations;
+            var maxMessagesInContext = aiAssistant.MaxContextMessages;
+
             await using var scope = scopeFactory.CreateAsyncScope();
             var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
 
@@ -85,7 +90,7 @@ public sealed class AiAssistantOrchestrator(
             var history = await db.AiAssistantMessages
                 .Where(m => m.ThreadId == threadId)
                 .OrderByDescending(m => m.CreatedAt)
-                .Take(MaxMessagesInContext)
+                .Take(maxMessagesInContext)
                 .OrderBy(m => m.CreatedAt)
                 .ToListAsync(turnCts.Token);
 
@@ -100,7 +105,7 @@ public sealed class AiAssistantOrchestrator(
             var fullResponse = new StringBuilder();
             string? finalMessageId = null;
 
-            for (int iteration = 0; iteration < MaxReActIterations; iteration++)
+            for (int iteration = 0; iteration < maxReActIterations; iteration++)
             {
                 turnCts.Token.ThrowIfCancellationRequested();
 

@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Options;
 using OetLearner.Api.Configuration;
+using OetLearner.Api.Services.Settings;
 
 namespace OetLearner.Api.Services.Rulebook;
 
@@ -16,7 +17,8 @@ namespace OetLearner.Api.Services.Rulebook;
 /// </summary>
 public sealed class OpenAiCompatibleProvider(
     IHttpClientFactory httpClientFactory,
-    IOptions<AiProviderOptions> options) : IAiModelProvider
+    IOptions<AiProviderOptions> options,
+    IRuntimeSettingsProvider settingsProvider) : IAiModelProvider
 {
     private readonly AiProviderOptions _options = options.Value;
 
@@ -24,8 +26,13 @@ public sealed class OpenAiCompatibleProvider(
 
     public async Task<AiProviderCompletion> CompleteAsync(AiProviderRequest request, CancellationToken ct)
     {
+        // DB-over-env gateway knobs (admin-configurable). The provider API key
+        // stays env/registry-managed via AiProviderOptions — never sourced from
+        // RuntimeSettings.
+        var gateway = (await settingsProvider.GetAsync(ct)).AiGateway;
+
         var baseUrl = string.IsNullOrWhiteSpace(request.BaseUrlOverride)
-            ? _options.BaseUrl : request.BaseUrlOverride;
+            ? gateway.BaseUrl : request.BaseUrlOverride;
         var apiKey = string.IsNullOrWhiteSpace(request.ApiKeyOverride)
             ? _options.ApiKey : request.ApiKeyOverride;
 
@@ -41,14 +48,16 @@ public sealed class OpenAiCompatibleProvider(
         client.BaseAddress = new Uri(baseUrl.TrimEnd('/') + "/");
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
 
-        var model = string.IsNullOrWhiteSpace(request.Model) ? _options.DefaultModel : request.Model;
-        var maxTokens = request.MaxTokens ?? _options.DefaultMaxTokens;
+        var model = string.IsNullOrWhiteSpace(request.Model) ? gateway.DefaultModel : request.Model;
+        var maxTokens = request.MaxTokens ?? gateway.DefaultMaxTokens;
         if (request.AudioAttachments is { Count: > 0 } && IsTranscriptionModel(model))
         {
             return await TranscribeAudioAsync(client, model, request, ct);
         }
 
-        var reasoningEffort = (_options.ReasoningEffort ?? "high").Trim().ToLowerInvariant();
+        // Empty ReasoningEffort means "non-reasoning model" — honour it rather
+        // than forcing "high" so glm-5 etc. don't get an unsupported parameter.
+        var reasoningEffort = (gateway.ReasoningEffort ?? string.Empty).Trim().ToLowerInvariant();
         var sendReasoning = IsReasoningCapable(model) && !string.IsNullOrWhiteSpace(reasoningEffort);
 
         var payload = new Dictionary<string, object?>

@@ -8,6 +8,9 @@ using Microsoft.Extensions.Options;
 using OetLearner.Api.Configuration;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services.AiAssistant;
+using OetLearner.Api.Services.AiTools;
+using OetLearner.Api.Services.Writing.Configuration;
 
 namespace OetLearner.Api.Services.Settings;
 
@@ -36,6 +39,11 @@ public sealed class RuntimeSettingsProvider : IRuntimeSettingsProvider
     private readonly IOptions<DataRetentionOptions> _dataRetention;
     private readonly IOptions<ExpertAutoAssignmentOptions> _expertAutoAssignment;
     private readonly IOptions<PasswordPolicyOptions> _passwordPolicy;
+    private readonly IOptions<AiAssistantOptions> _aiAssistant;
+    private readonly IOptions<AiProviderOptions> _aiProvider;
+    private readonly IOptions<AiToolOptions> _aiTool;
+    private readonly IOptions<WritingV2Options> _writing;
+    private readonly IOptions<PlatformOptions> _platform;
     private readonly IOptionsMonitor<SmtpOptions> _smtp;
     private readonly IConfiguration _config;
     private readonly IHostEnvironment _environment;
@@ -54,6 +62,11 @@ public sealed class RuntimeSettingsProvider : IRuntimeSettingsProvider
         IOptions<DataRetentionOptions> dataRetention,
         IOptions<ExpertAutoAssignmentOptions> expertAutoAssignment,
         IOptions<PasswordPolicyOptions> passwordPolicy,
+        IOptions<AiAssistantOptions> aiAssistant,
+        IOptions<AiProviderOptions> aiProvider,
+        IOptions<AiToolOptions> aiTool,
+        IOptions<WritingV2Options> writing,
+        IOptions<PlatformOptions> platform,
         IOptionsMonitor<SmtpOptions> smtp,
         IConfiguration config,
         IHostEnvironment environment)
@@ -71,6 +84,11 @@ public sealed class RuntimeSettingsProvider : IRuntimeSettingsProvider
         _dataRetention = dataRetention;
         _expertAutoAssignment = expertAutoAssignment;
         _passwordPolicy = passwordPolicy;
+        _aiAssistant = aiAssistant;
+        _aiProvider = aiProvider;
+        _aiTool = aiTool;
+        _writing = writing;
+        _platform = platform;
         _smtp = smtp;
         _config = config;
         _environment = environment;
@@ -264,6 +282,10 @@ public sealed class RuntimeSettingsProvider : IRuntimeSettingsProvider
         var dataRetention = ResolveDataRetention(r, _dataRetention.Value);
         var expertAutoAssignment = ResolveExpertAutoAssignment(r, _expertAutoAssignment.Value);
         var passwordPolicy = ResolvePasswordPolicy(r, _passwordPolicy.Value);
+        var aiAssistant = ResolveAiAssistant(r, _aiAssistant.Value);
+        var aiGateway = ResolveAiGateway(r, _aiProvider.Value, _aiTool.Value);
+        var writing = ResolveWriting(r, _writing.Value);
+        var platform = ResolvePlatform(r, _platform.Value);
 
         return new EffectiveSettings(
             Email: email,
@@ -289,6 +311,10 @@ public sealed class RuntimeSettingsProvider : IRuntimeSettingsProvider
             DataRetention: dataRetention,
             ExpertAutoAssignment: expertAutoAssignment,
             PasswordPolicy: passwordPolicy,
+            AiAssistant: aiAssistant,
+            AiGateway: aiGateway,
+            Writing: writing,
+            Platform: platform,
             UpdatedByUserId: r.UpdatedByUserId,
             UpdatedByUserName: r.UpdatedByUserName,
             UpdatedAt: r.UpdatedAt == default ? null : r.UpdatedAt);
@@ -395,6 +421,87 @@ public sealed class RuntimeSettingsProvider : IRuntimeSettingsProvider
 
     private static int PositiveOrDefault(int? dbValue, int envValue, int hardDefault)
         => dbValue is > 0 ? dbValue.Value : (envValue > 0 ? envValue : hardDefault);
+
+    private static long PositiveLongOrDefault(long? dbValue, long envValue, long hardDefault)
+        => dbValue is > 0 ? dbValue.Value : (envValue > 0 ? envValue : hardDefault);
+
+    // ── AI Assistant / AI gateway / Writing / Platform (Wave 2) ────
+    // (DB-over-env: null DB field → env/appsettings default)
+    private static AiAssistantSettings ResolveAiAssistant(RuntimeSettingsRow r, AiAssistantOptions env)
+        => new(
+            GlobalEnabled: r.AiAssistantGlobalEnabled ?? env.GlobalEnabled,
+            RequireApprovalAlways: r.AiAssistantRequireApprovalAlways ?? env.RequireApprovalAlways,
+            MaxIterations: PositiveOrDefault(r.AiAssistantMaxIterations, env.MaxIterations, 10),
+            MaxContextMessages: PositiveOrDefault(r.AiAssistantMaxContextMessages, env.MaxContextMessages, 50),
+            BackupRetentionDays: PositiveOrDefault(r.AiAssistantBackupRetentionDays, env.BackupRetentionDays, 30),
+            MaxWriteFileSizeBytes: PositiveLongOrDefault(r.AiAssistantMaxWriteFileSizeBytes, env.MaxWriteFileSizeBytes, 1_048_576),
+            CommandTimeoutSeconds: PositiveOrDefault(r.AiAssistantCommandTimeoutSeconds, env.CommandTimeoutSeconds, 300),
+            CircuitBreakerMaxFailures: PositiveOrDefault(r.AiAssistantCircuitBreakerMaxFailures, env.CircuitBreakerMaxFailures, 3),
+            CircuitBreakerFailureWindowSeconds: PositiveOrDefault(r.AiAssistantCircuitBreakerFailureWindowSeconds, env.CircuitBreakerFailureWindowSeconds, 60),
+            CircuitBreakerMaxWrites: PositiveOrDefault(r.AiAssistantCircuitBreakerMaxWrites, env.CircuitBreakerMaxWrites, 10),
+            CircuitBreakerWriteWindowSeconds: PositiveOrDefault(r.AiAssistantCircuitBreakerWriteWindowSeconds, env.CircuitBreakerWriteWindowSeconds, 300),
+            EmbeddingModel: Coalesce(r.AiAssistantEmbeddingModel, env.EmbeddingModel, "text-embedding-3-small")!,
+            MaxChunkTokens: PositiveOrDefault(r.AiAssistantMaxChunkTokens, env.MaxChunkTokens, 512));
+
+    private static AiGatewaySettings ResolveAiGateway(RuntimeSettingsRow r, AiProviderOptions provider, AiToolOptions tool)
+    {
+        var hostsCsv = Coalesce(r.AiToolAllowedExternalHostsCsv, JoinHosts(tool.AllowedExternalHosts))
+                       ?? "api.dictionaryapi.dev";
+        var hosts = ParseCsvList(hostsCsv)
+            .Select(static h => h.ToLowerInvariant())
+            .Distinct()
+            .ToArray();
+        if (hosts.Length == 0) hosts = ["api.dictionaryapi.dev"];
+
+        // ReasoningEffort: DB-over-env, then env (which may be empty for
+        // non-reasoning models). Empty string is intentional, so do not Coalesce
+        // it away to a hard default.
+        var reasoningEffort = r.AiProviderReasoningEffort ?? provider.ReasoningEffort ?? string.Empty;
+
+        var temperature = r.AiProviderDefaultTemperature ?? provider.DefaultTemperature;
+        temperature = Math.Clamp(temperature, 0.0, 1.0);
+
+        return new AiGatewaySettings(
+            ProviderId: Coalesce(r.AiProviderProviderId, provider.ProviderId, "digitalocean-serverless")!,
+            BaseUrl: Coalesce(r.AiProviderBaseUrl, provider.BaseUrl, "https://inference.do-ai.run/v1")!,
+            DefaultModel: Coalesce(r.AiProviderDefaultModel, provider.DefaultModel, "glm-5")!,
+            ReasoningEffort: reasoningEffort,
+            DefaultMaxTokens: PositiveOrDefault(r.AiProviderDefaultMaxTokens, provider.DefaultMaxTokens, 4096),
+            DefaultTemperature: temperature,
+            MaxToolCallsPerCompletion: PositiveOrDefault(r.AiToolMaxToolCallsPerCompletion, tool.MaxToolCallsPerCompletion, 4),
+            FeatureGrantCacheSeconds: PositiveOrDefault(r.AiToolFeatureGrantCacheSeconds, tool.FeatureGrantCacheSeconds, 30),
+            AllowedExternalHostsCsv: string.Join(",", hosts),
+            AllowedExternalHosts: hosts,
+            ExternalNetworkPerUserDailyCalls: r.AiToolExternalNetworkPerUserDailyCalls is >= 0
+                ? r.AiToolExternalNetworkPerUserDailyCalls.Value
+                : (tool.ExternalNetworkPerUserDailyCalls >= 0 ? tool.ExternalNetworkPerUserDailyCalls : 200),
+            ExternalNetworkTimeoutMilliseconds: PositiveOrDefault(r.AiToolExternalNetworkTimeoutMilliseconds, tool.ExternalNetworkTimeoutMilliseconds, 4000),
+            ExternalNetworkMaxResponseBytes: PositiveOrDefault(r.AiToolExternalNetworkMaxResponseBytes, tool.ExternalNetworkMaxResponseBytes, 65536));
+    }
+
+    private WritingSettings ResolveWriting(RuntimeSettingsRow r, WritingV2Options env)
+        => new(
+            CronsEnabled: r.WritingCronsEnabled ?? env.CronsEnabled,
+            CoachEnabled: r.WritingCoachEnabled ?? env.CoachEnabled,
+            CoachDailyCostCapPerLearnerUsd: r.WritingCoachDailyCostCapPerLearnerUsd ?? env.CoachDailyCostCapPerLearnerUsd,
+            CoachMaxHintsPerSession: PositiveOrDefault(r.WritingCoachMaxHintsPerSession, env.CoachMaxHintsPerSession, 80),
+            CoachMinSecondsBetweenHints: PositiveOrDefault(r.WritingCoachMinSecondsBetweenHints, env.CoachMinSecondsBetweenHints, 30),
+            GcvApiKey: Unprotect(r.WritingGcvApiKeyEncrypted) ?? NullIfEmpty(env.GcvApiKey),
+            OcrEnabled: r.WritingOcrEnabled ?? env.OcrEnabled,
+            AppealsEnabled: r.WritingAppealsEnabled ?? env.AppealsEnabled,
+            TutorReviewQueueMaxDepth: PositiveOrDefault(r.WritingTutorReviewQueueMaxDepth, env.TutorReviewQueueMaxDepth, 50),
+            TutorReviewMaxWaitHours: PositiveOrDefault(r.WritingTutorReviewMaxWaitHours, env.TutorReviewMaxWaitHours, 36),
+            MaxDailyPlanRegenerationsPerDay: PositiveOrDefault(r.WritingMaxDailyPlanRegenerationsPerDay, env.MaxDailyPlanRegenerationsPerDay, 1),
+            GradeIdempotencyTtlHours: PositiveOrDefault(r.WritingGradeIdempotencyTtlHours, env.GradeIdempotencyTtlHours, 24));
+
+    private static PlatformSettings ResolvePlatform(RuntimeSettingsRow r, PlatformOptions env)
+        => new(
+            PublicApiBaseUrl: Coalesce(r.PublicApiBaseUrl, env.PublicApiBaseUrl),
+            PublicWebBaseUrl: Coalesce(r.PublicWebBaseUrl, env.PublicWebBaseUrl),
+            FallbackEmailDomain: Coalesce(r.FallbackEmailDomain, env.FallbackEmailDomain, "example.invalid")!);
+
+    private static string? JoinHosts(string[]? hosts)
+        => hosts is { Length: > 0 } ? string.Join(",", hosts) : null;
 
     private static LiveClassSettings ResolveLiveClassSettings(RuntimeSettingsRow r)
         => new(AiRecordingProcessingEnabled: r.LiveClassesAiRecordingProcessingEnabled ?? false);

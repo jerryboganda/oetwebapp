@@ -54,6 +54,7 @@ public sealed class AiGatewayService(
     Microsoft.Extensions.Options.IOptions<AiToolOptions>? toolOptions = null,
     Microsoft.Extensions.Hosting.IHostEnvironment? hostEnvironment = null,
     IAiCreditService? creditService = null,
+    OetLearner.Api.Services.Settings.IRuntimeSettingsProvider? settingsProvider = null,
     ILogger<AiGatewayService>? logger = null)
     : IAiGatewayService
 {
@@ -459,7 +460,13 @@ public sealed class AiGatewayService(
             catch { tools = Array.Empty<AiToolDefinition>(); }
         }
 
-        var maxTurns = Math.Max(1, toolOptions?.Value.MaxToolCallsPerCompletion ?? 4);
+        // DB-over-env tool-call cap (admin-configurable, 30s cache). Falls back
+        // to the legacy IOptions<AiToolOptions> / 4 when the provider is absent
+        // (e.g. unit tests that construct this service directly).
+        var maxToolCalls = settingsProvider is not null
+            ? (await settingsProvider.GetAsync(ct)).AiGateway.MaxToolCallsPerCompletion
+            : toolOptions?.Value.MaxToolCallsPerCompletion ?? 4;
+        var maxTurns = Math.Max(1, maxToolCalls);
         var messages = new List<AiChatMessage>(capacity: 4 + maxTurns * 2)
         {
             new() { Role = "system", Content = request.Prompt.SystemPrompt },

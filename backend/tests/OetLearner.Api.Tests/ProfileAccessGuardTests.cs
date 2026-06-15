@@ -56,7 +56,7 @@ public class ProfileAccessGuardTests
     {
         var billingOptions = Options.Create(new BillingOptions());
         var platformLinks = new PlatformLinkService(
-            Options.Create(new PlatformOptions { FallbackEmailDomain = "example.test" }),
+            TestRuntimeSettingsProvider.FromPlatformOptions(new PlatformOptions { FallbackEmailDomain = "example.test" }),
             billingOptions);
 
         var storageRoot = Path.Combine(Path.GetTempPath(), $"oet-profile-guards-{Guid.NewGuid():N}");
@@ -72,7 +72,7 @@ public class ProfileAccessGuardTests
     private static ExpertService CreateExpertService(LearnerDbContext db)
     {
         var platformLinks = new PlatformLinkService(
-            Options.Create(new PlatformOptions { FallbackEmailDomain = "example.test" }),
+            TestRuntimeSettingsProvider.FromPlatformOptions(new PlatformOptions { FallbackEmailDomain = "example.test" }),
             Options.Create(new BillingOptions()));
 
         var storageRoot = Path.Combine(Path.GetTempPath(), $"oet-profile-guards-{Guid.NewGuid():N}");

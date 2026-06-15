@@ -36,7 +36,7 @@ public class WritingWave6ServiceTests
             db,
             gateway,
             cache,
-            Options.Create(new WritingV2Options { CoachMinSecondsBetweenHints = 0 }),
+            TestRuntimeSettingsProvider.FromWritingOptions(new WritingV2Options { CoachMinSecondsBetweenHints = 0 }),
             new FixedClock(),
             NullLogger<WritingCoachServiceV2>.Instance);
 
@@ -71,6 +71,7 @@ public class WritingWave6ServiceTests
             storage,
             new FixedClock(),
             Options.Create(new WritingV2Options { OcrEnabled = false }),
+            TestRuntimeSettingsProvider.FromWritingOptions(new WritingV2Options { OcrEnabled = false }),
             new StubOcrService(),
             new StubProviderRegistry(),
             NullLogger<WritingOcrService>.Instance);
@@ -115,7 +116,7 @@ public class WritingWave6ServiceTests
         var service = new WritingTutorReviewService(
             db,
             clock,
-            Options.Create(new WritingV2Options()),
+            TestRuntimeSettingsProvider.FromWritingOptions(new WritingV2Options()),
             new WritingModerationService(db, NullLogger<WritingModerationService>.Instance),
             NullLogger<WritingTutorReviewService>.Instance);
 
@@ -166,7 +167,7 @@ public class WritingWave6ServiceTests
         var service = new WritingTutorReviewService(
             db,
             clock,
-            Options.Create(new WritingV2Options()),
+            TestRuntimeSettingsProvider.FromWritingOptions(new WritingV2Options()),
             new WritingModerationService(db, NullLogger<WritingModerationService>.Instance),
             NullLogger<WritingTutorReviewService>.Instance);
 
@@ -213,7 +214,7 @@ public class WritingWave6ServiceTests
         var service = new WritingTutorReviewService(
             db,
             clock,
-            Options.Create(new WritingV2Options()),
+            TestRuntimeSettingsProvider.FromWritingOptions(new WritingV2Options()),
             new WritingModerationService(db, NullLogger<WritingModerationService>.Instance),
             NullLogger<WritingTutorReviewService>.Instance);
 

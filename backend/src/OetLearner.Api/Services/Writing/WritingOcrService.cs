@@ -8,6 +8,7 @@ using OetLearner.Api.Domain;
 using OetLearner.Api.Services.Ai;
 using OetLearner.Api.Services.Content;
 using OetLearner.Api.Services.Rulebook;
+using OetLearner.Api.Services.Settings;
 using OetLearner.Api.Services.Writing.Configuration;
 
 namespace OetLearner.Api.Services.Writing;
@@ -56,6 +57,7 @@ public sealed class WritingOcrService(
     IFileStorage storage,
     TimeProvider clock,
     IOptions<WritingV2Options> options,
+    IRuntimeSettingsProvider settingsProvider,
     IOcrService ocrService,
     IAiProviderRegistry providerRegistry,
     ILogger<WritingOcrService> logger) : IWritingOcrService
@@ -103,7 +105,9 @@ public sealed class WritingOcrService(
         job.StartedAt = now;
         await db.SaveChangesAsync(ct);
 
-        var opts = options.Value;
+        // DB-over-env runtime knobs (OcrEnabled + decrypted GcvApiKey). The host
+        // TessdataPath stays env-only (read from IOptions below).
+        var opts = (await settingsProvider.GetAsync(ct)).Writing;
         if (!opts.OcrEnabled)
         {
             job.Status = "manual_required";

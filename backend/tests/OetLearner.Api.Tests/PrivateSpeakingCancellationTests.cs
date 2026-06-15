@@ -297,7 +297,7 @@ public sealed class PrivateSpeakingCancellationTests
             logger: NullLogger<NotificationService>.Instance);
 
         var platformLinks = new PlatformLinkService(
-            Options.Create(new PlatformOptions()),
+            TestRuntimeSettingsProvider.FromPlatformOptions(new PlatformOptions()),
             Options.Create(new BillingOptions()));
 
         return new PrivateSpeakingService(

@@ -1,9 +1,9 @@
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Options;
 using OetLearner.Api.Configuration;
 using OetLearner.Api.Contracts;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services.Settings;
 
 namespace OetLearner.Api.Services;
 
@@ -12,10 +12,10 @@ public sealed class ExternalAuthService(
     IExternalIdentityProviderClient providerClient,
     ExternalAuthTicketService ticketService,
     AuthService authService,
-    IOptions<PlatformOptions> platformOptions,
+    IRuntimeSettingsProvider settingsProvider,
     TimeProvider timeProvider)
 {
-    private readonly PlatformOptions _platformOptions = platformOptions.Value;
+    private readonly IRuntimeSettingsProvider _settingsProvider = settingsProvider;
 
     public Uri BuildAuthorizationRedirect(string provider, string? nextPath, string? platform)
     {
@@ -236,7 +236,10 @@ public sealed class ExternalAuthService(
 
     private string ResolvePublicWebBaseUrl()
     {
-        var configured = _platformOptions.PublicWebBaseUrl;
+        // DB-over-env: read the merged Platform view (admin-configurable) at call
+        // time. The provider caches the effective view for 30s; ASP.NET Core has
+        // no sync context so a blocking resolve from these sync helpers is safe.
+        var configured = _settingsProvider.GetAsync(CancellationToken.None).GetAwaiter().GetResult().Platform.PublicWebBaseUrl;
         if (string.IsNullOrWhiteSpace(configured))
         {
             throw ApiException.Validation(

@@ -1,11 +1,10 @@
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Options;
 using OetLearner.Api.Contracts;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services.Rulebook;
-using OetLearner.Api.Services.Writing.Configuration;
+using OetLearner.Api.Services.Settings;
 
 namespace OetLearner.Api.Services.Writing;
 
@@ -45,13 +44,14 @@ public sealed class WritingAppealService(
     LearnerDbContext db,
     IAiGatewayService aiGateway,
     TimeProvider clock,
-    IOptions<WritingV2Options> options,
+    IRuntimeSettingsProvider settingsProvider,
     ILogger<WritingAppealService> logger) : IWritingAppealService
 {
     public async Task<WritingAppealResult> RequestAppealAsync(string userId, Guid submissionId, WritingAppealInternalRequest request, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(request);
-        if (!options.Value.AppealsEnabled)
+        // DB-over-env appeals feature flag (admin-configurable, 30s cache).
+        if (!(await settingsProvider.GetAsync(ct)).Writing.AppealsEnabled)
         {
             throw ApiException.ServiceUnavailable("writing_appeals_disabled", "Score appeals are currently disabled.");
         }

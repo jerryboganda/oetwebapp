@@ -3,8 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Contracts;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
-using OetLearner.Api.Services.Writing.Configuration;
-using Microsoft.Extensions.Options;
+using OetLearner.Api.Services.Settings;
 
 namespace OetLearner.Api.Services.Writing;
 
@@ -44,11 +43,15 @@ public sealed class WritingDailyPlanServiceV2(
     LearnerDbContext db,
     TimeProvider clock,
     IWritingPracticeSelectionService picker,
-    IOptions<WritingV2Options> options,
+    IRuntimeSettingsProvider settingsProvider,
     ILogger<WritingDailyPlanServiceV2> logger) : IWritingDailyPlanServiceV2
 {
     private const int RegenerationsMetaKey_PayloadVersion = 1;
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+
+    // DB-over-env daily regen budget (admin-configurable, 30s cache).
+    private async Task<int> MaxDailyPlanRegenerationsPerDayAsync(CancellationToken ct)
+        => (await settingsProvider.GetAsync(ct)).Writing.MaxDailyPlanRegenerationsPerDay;
 
     public async Task<WritingDailyPlanView> GetTodayAsync(string userId, CancellationToken ct)
     {
@@ -58,7 +61,7 @@ public sealed class WritingDailyPlanServiceV2(
         {
             items = await GeneratePlanAsync(userId, date, regenerationCount: 0, ct);
         }
-        return BuildView(date, items, options.Value);
+        return BuildView(date, items, await MaxDailyPlanRegenerationsPerDayAsync(ct));
     }
 
     public async Task<WritingDailyPlanView> RegenerateAsync(string userId, CancellationToken ct)
@@ -66,7 +69,8 @@ public sealed class WritingDailyPlanServiceV2(
         var date = DateOnly.FromDateTime(clock.GetUtcNow().UtcDateTime);
         var existing = await LoadPlanAsync(userId, date, ct);
         var regenCount = existing.Sum(i => RegenerationCountFromPayload(i.PayloadJson));
-        if (regenCount >= options.Value.MaxDailyPlanRegenerationsPerDay)
+        var maxRegens = await MaxDailyPlanRegenerationsPerDayAsync(ct);
+        if (regenCount >= maxRegens)
         {
             throw ApiException.Validation(
                 "writing_today_regeneration_exhausted",
@@ -75,7 +79,7 @@ public sealed class WritingDailyPlanServiceV2(
         db.WritingDailyPlanItems.RemoveRange(existing);
         await db.SaveChangesAsync(ct);
         var fresh = await GeneratePlanAsync(userId, date, regenCount + 1, ct);
-        return BuildView(date, fresh, options.Value);
+        return BuildView(date, fresh, maxRegens);
     }
 
     public async Task<WritingDailyPlanItemView> MarkCompleteAsync(string userId, Guid itemId, CancellationToken ct)
@@ -149,9 +153,9 @@ public sealed class WritingDailyPlanServiceV2(
         return items;
     }
 
-    private WritingDailyPlanView BuildView(DateOnly date, IReadOnlyList<WritingDailyPlanItem> items, WritingV2Options opts)
+    private WritingDailyPlanView BuildView(DateOnly date, IReadOnlyList<WritingDailyPlanItem> items, int maxDailyPlanRegenerationsPerDay)
     {
-        var remaining = Math.Max(0, opts.MaxDailyPlanRegenerationsPerDay - items.Sum(i => RegenerationCountFromPayload(i.PayloadJson)));
+        var remaining = Math.Max(0, maxDailyPlanRegenerationsPerDay - items.Sum(i => RegenerationCountFromPayload(i.PayloadJson)));
         return new WritingDailyPlanView(
             date,
             items.Select(ToView).ToList(),

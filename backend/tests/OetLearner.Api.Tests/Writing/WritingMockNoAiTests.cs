@@ -75,7 +75,7 @@ public sealed class WritingMockNoAiTests : IAsyncDisposable
             mistakeService: null!,            // AI-path only — must not be reached
             events: null!,                    // AI-path only — must not be reached
             TimeProvider.System,
-            Options.Create(new WritingV2Options()),
+            TestRuntimeSettingsProvider.FromWritingOptions(new WritingV2Options()),
             NullLogger<WritingSubmissionEvaluationPipeline>.Instance);
 
         var outcome = await pipeline.EvaluateAsync(submissionId, default);

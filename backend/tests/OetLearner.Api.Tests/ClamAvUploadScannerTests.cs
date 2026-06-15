@@ -83,6 +83,10 @@ public sealed class ClamAvUploadScannerTests
             DataRetention: TestRuntimeSettingsProvider.DefaultDataRetention(),
             ExpertAutoAssignment: TestRuntimeSettingsProvider.DefaultExpertAutoAssignment(),
             PasswordPolicy: TestRuntimeSettingsProvider.DefaultPasswordPolicy(),
+            AiAssistant: TestRuntimeSettingsProvider.DefaultAiAssistant(),
+            AiGateway: TestRuntimeSettingsProvider.DefaultAiGateway(),
+            Writing: TestRuntimeSettingsProvider.DefaultWriting(),
+            Platform: TestRuntimeSettingsProvider.DefaultPlatform(),
             UpdatedByUserId: null,
             UpdatedByUserName: null,
             UpdatedAt: null));

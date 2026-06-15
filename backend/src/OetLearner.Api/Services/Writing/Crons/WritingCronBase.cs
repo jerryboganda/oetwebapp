@@ -1,23 +1,23 @@
-using Microsoft.Extensions.Options;
-using OetLearner.Api.Services.Writing.Configuration;
+using OetLearner.Api.Services.Settings;
 
 namespace OetLearner.Api.Services.Writing.Crons;
 
 /// <summary>
 /// Shared base for Writing Module V2 hosted services. Honours the
-/// <c>Writing:CronsEnabled</c> kill switch (so tests / dev runs can disable
-/// schedulers without injecting timers) and provides a deterministic
-/// daily-window helper for crons that must only fire once per day.
+/// <c>Writing:CronsEnabled</c> kill switch (now admin-DB-configurable via
+/// <see cref="IRuntimeSettingsProvider"/>, DB-over-env with a 30s cache) so
+/// tests / dev runs can disable schedulers without injecting timers, and
+/// provides a deterministic daily-window helper for crons that must only fire
+/// once per day.
 /// </summary>
 public abstract class WritingCronBase(
     IServiceScopeFactory scopeFactory,
     TimeProvider clock,
-    IOptions<WritingV2Options> options,
+    IRuntimeSettingsProvider settingsProvider,
     ILogger logger) : BackgroundService
 {
     protected IServiceScopeFactory ScopeFactory => scopeFactory;
     protected TimeProvider Clock => clock;
-    protected WritingV2Options Options => options.Value;
     protected ILogger Logger => logger;
 
     protected abstract TimeSpan Interval { get; }
@@ -36,7 +36,8 @@ public abstract class WritingCronBase(
 
         while (!stoppingToken.IsCancellationRequested)
         {
-            if (!Options.CronsEnabled)
+            var cronsEnabled = (await settingsProvider.GetAsync(stoppingToken)).Writing.CronsEnabled;
+            if (!cronsEnabled)
             {
                 try { await Task.Delay(TimeSpan.FromMinutes(5), stoppingToken); }
                 catch (OperationCanceledException) { return; }

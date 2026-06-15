@@ -1,6 +1,9 @@
 using OetLearner.Api.Configuration;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services.AiAssistant;
+using OetLearner.Api.Services.AiTools;
 using OetLearner.Api.Services.Settings;
+using OetLearner.Api.Services.Writing.Configuration;
 
 namespace OetLearner.Api.Tests;
 
@@ -38,6 +41,10 @@ internal sealed class TestRuntimeSettingsProvider(EffectiveSettings settings, Ru
             DataRetention: DefaultDataRetention(),
             ExpertAutoAssignment: DefaultExpertAutoAssignment(),
             PasswordPolicy: DefaultPasswordPolicy(),
+            AiAssistant: DefaultAiAssistant(),
+            AiGateway: DefaultAiGateway(),
+            Writing: DefaultWriting(),
+            Platform: DefaultPlatform(),
             UpdatedByUserId: null,
             UpdatedByUserName: null,
             UpdatedAt: null);
@@ -95,6 +102,19 @@ internal sealed class TestRuntimeSettingsProvider(EffectiveSettings settings, Ru
 
     public static TestRuntimeSettingsProvider FromPasswordPolicyOptions(PasswordPolicyOptions o)
         => new(Base() with { PasswordPolicy = MapPasswordPolicy(o) });
+
+    // ── Wave 2 (AiAssistant / AiGateway / Writing / Platform) ──────
+    public static TestRuntimeSettingsProvider FromAiAssistantOptions(AiAssistantOptions o)
+        => new(Base() with { AiAssistant = MapAiAssistant(o) });
+
+    public static TestRuntimeSettingsProvider FromAiGatewayOptions(AiProviderOptions provider, AiToolOptions tool)
+        => new(Base() with { AiGateway = MapAiGateway(provider, tool) });
+
+    public static TestRuntimeSettingsProvider FromWritingOptions(WritingV2Options o)
+        => new(Base() with { Writing = MapWriting(o) });
+
+    public static TestRuntimeSettingsProvider FromPlatformOptions(PlatformOptions o)
+        => new(Base() with { Platform = MapPlatform(o) });
 
     private static ZoomSettings DefaultZoomSettings()
         => new(
@@ -176,6 +196,80 @@ internal sealed class TestRuntimeSettingsProvider(EffectiveSettings settings, Ru
             o.BreachCheckEnabled,
             o.BreachApiBaseUrl,
             o.BreachApiTimeout);
+
+    // ── Wave 2 default factories + Option mappers ──────────────────
+    public static AiAssistantSettings DefaultAiAssistant()
+        => MapAiAssistant(new AiAssistantOptions());
+
+    public static AiGatewaySettings DefaultAiGateway()
+        => MapAiGateway(new AiProviderOptions(), new AiToolOptions());
+
+    public static WritingSettings DefaultWriting()
+        => MapWriting(new WritingV2Options());
+
+    public static PlatformSettings DefaultPlatform()
+        => MapPlatform(new PlatformOptions());
+
+    private static AiAssistantSettings MapAiAssistant(AiAssistantOptions o)
+        => new(
+            o.GlobalEnabled,
+            o.RequireApprovalAlways,
+            o.MaxIterations,
+            o.MaxContextMessages,
+            o.BackupRetentionDays,
+            o.MaxWriteFileSizeBytes,
+            o.CommandTimeoutSeconds,
+            o.CircuitBreakerMaxFailures,
+            o.CircuitBreakerFailureWindowSeconds,
+            o.CircuitBreakerMaxWrites,
+            o.CircuitBreakerWriteWindowSeconds,
+            o.EmbeddingModel,
+            o.MaxChunkTokens);
+
+    private static AiGatewaySettings MapAiGateway(AiProviderOptions provider, AiToolOptions tool)
+    {
+        var hosts = (tool.AllowedExternalHosts is { Length: > 0 }
+                ? tool.AllowedExternalHosts
+                : ["api.dictionaryapi.dev"])
+            .Select(static h => h.ToLowerInvariant())
+            .Distinct()
+            .ToArray();
+        return new AiGatewaySettings(
+            ProviderId: string.IsNullOrWhiteSpace(provider.ProviderId) ? "digitalocean-serverless" : provider.ProviderId,
+            BaseUrl: string.IsNullOrWhiteSpace(provider.BaseUrl) ? "https://inference.do-ai.run/v1" : provider.BaseUrl,
+            DefaultModel: string.IsNullOrWhiteSpace(provider.DefaultModel) ? "glm-5" : provider.DefaultModel,
+            ReasoningEffort: provider.ReasoningEffort ?? string.Empty,
+            DefaultMaxTokens: provider.DefaultMaxTokens > 0 ? provider.DefaultMaxTokens : 4096,
+            DefaultTemperature: Math.Clamp(provider.DefaultTemperature, 0.0, 1.0),
+            MaxToolCallsPerCompletion: tool.MaxToolCallsPerCompletion > 0 ? tool.MaxToolCallsPerCompletion : 4,
+            FeatureGrantCacheSeconds: tool.FeatureGrantCacheSeconds > 0 ? tool.FeatureGrantCacheSeconds : 30,
+            AllowedExternalHostsCsv: string.Join(",", hosts),
+            AllowedExternalHosts: hosts,
+            ExternalNetworkPerUserDailyCalls: tool.ExternalNetworkPerUserDailyCalls >= 0 ? tool.ExternalNetworkPerUserDailyCalls : 200,
+            ExternalNetworkTimeoutMilliseconds: tool.ExternalNetworkTimeoutMilliseconds > 0 ? tool.ExternalNetworkTimeoutMilliseconds : 4000,
+            ExternalNetworkMaxResponseBytes: tool.ExternalNetworkMaxResponseBytes > 0 ? tool.ExternalNetworkMaxResponseBytes : 65536);
+    }
+
+    private static WritingSettings MapWriting(WritingV2Options o)
+        => new(
+            o.CronsEnabled,
+            o.CoachEnabled,
+            o.CoachDailyCostCapPerLearnerUsd,
+            o.CoachMaxHintsPerSession > 0 ? o.CoachMaxHintsPerSession : 80,
+            o.CoachMinSecondsBetweenHints > 0 ? o.CoachMinSecondsBetweenHints : 30,
+            o.GcvApiKey,
+            o.OcrEnabled,
+            o.AppealsEnabled,
+            o.TutorReviewQueueMaxDepth > 0 ? o.TutorReviewQueueMaxDepth : 50,
+            o.TutorReviewMaxWaitHours > 0 ? o.TutorReviewMaxWaitHours : 36,
+            o.MaxDailyPlanRegenerationsPerDay > 0 ? o.MaxDailyPlanRegenerationsPerDay : 1,
+            o.GradeIdempotencyTtlHours > 0 ? o.GradeIdempotencyTtlHours : 24);
+
+    private static PlatformSettings MapPlatform(PlatformOptions o)
+        => new(
+            o.PublicApiBaseUrl,
+            o.PublicWebBaseUrl,
+            string.IsNullOrWhiteSpace(o.FallbackEmailDomain) ? "example.invalid" : o.FallbackEmailDomain);
 
     public Task<EffectiveSettings> GetAsync(CancellationToken ct = default) => Task.FromResult(settings);
 

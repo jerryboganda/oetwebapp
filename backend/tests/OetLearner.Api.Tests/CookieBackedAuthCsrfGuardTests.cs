@@ -74,7 +74,7 @@ public sealed class CookieBackedAuthCsrfGuardTests
             .Build();
 
         return new CookieBackedAuthCsrfGuard(
-            Options.Create(new PlatformOptions
+            TestRuntimeSettingsProvider.FromPlatformOptions(new PlatformOptions
             {
                 PublicApiBaseUrl = "https://api.example.test",
                 PublicWebBaseUrl = "https://app.example.test",

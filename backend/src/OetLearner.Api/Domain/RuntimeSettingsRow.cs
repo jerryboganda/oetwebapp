@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 
 namespace OetLearner.Api.Domain;
 
@@ -247,6 +248,61 @@ public class RuntimeSettingsRow
     public bool? PasswordPolicyBreachCheckEnabled { get; set; }
     [MaxLength(512)] public string? PasswordPolicyBreachApiBaseUrl { get; set; }
     public int? PasswordPolicyBreachApiTimeoutSeconds { get; set; }
+
+    // ── AI Assistant (orchestration tunables — Wave 2) ─────────────
+    // Orchestration logic knobs for the codebase AI assistant. AI provider
+    // CREDENTIALS live in AiProviderRegistry, never here. AllowedRoots /
+    // IndexExcludePatterns stay env-only (security boundary) and are excluded.
+    public bool? AiAssistantGlobalEnabled { get; set; }
+    public bool? AiAssistantRequireApprovalAlways { get; set; }
+    public int? AiAssistantMaxIterations { get; set; }
+    public int? AiAssistantMaxContextMessages { get; set; }
+    public int? AiAssistantBackupRetentionDays { get; set; }
+    public long? AiAssistantMaxWriteFileSizeBytes { get; set; }
+    public int? AiAssistantCommandTimeoutSeconds { get; set; }
+    public int? AiAssistantCircuitBreakerMaxFailures { get; set; }
+    public int? AiAssistantCircuitBreakerFailureWindowSeconds { get; set; }
+    public int? AiAssistantCircuitBreakerMaxWrites { get; set; }
+    public int? AiAssistantCircuitBreakerWriteWindowSeconds { get; set; }
+    public string? AiAssistantEmbeddingModel { get; set; }
+    public int? AiAssistantMaxChunkTokens { get; set; }
+
+    // ── AI gateway / tooling knobs (Wave 2) ────────────────────────
+    // Non-credential AiProviderOptions (AI:*) + AiToolOptions (AiTool:*).
+    // AI:ApiKey is EXCLUDED — handled by AiProviderRegistry (encrypted row).
+    [MaxLength(64)] public string? AiProviderProviderId { get; set; }
+    [MaxLength(512)] public string? AiProviderBaseUrl { get; set; }
+    [MaxLength(128)] public string? AiProviderDefaultModel { get; set; }
+    [MaxLength(16)] public string? AiProviderReasoningEffort { get; set; }
+    public int? AiProviderDefaultMaxTokens { get; set; }
+    public double? AiProviderDefaultTemperature { get; set; }
+    public int? AiToolMaxToolCallsPerCompletion { get; set; }
+    public int? AiToolFeatureGrantCacheSeconds { get; set; }
+    [MaxLength(1024)] public string? AiToolAllowedExternalHostsCsv { get; set; }
+    public int? AiToolExternalNetworkPerUserDailyCalls { get; set; }
+    public int? AiToolExternalNetworkTimeoutMilliseconds { get; set; }
+    public int? AiToolExternalNetworkMaxResponseBytes { get; set; }
+
+    // ── Writing module V2 (Wave 2) ─────────────────────────────────
+    // Feature flags + coach/queue/OCR tunables. GcvApiKey is the only secret.
+    // TessdataPath + V2Seeder.Enabled stay env-only (excluded).
+    public bool? WritingCronsEnabled { get; set; }
+    public bool? WritingCoachEnabled { get; set; }
+    [Column(TypeName = "numeric(10,2)")] public decimal? WritingCoachDailyCostCapPerLearnerUsd { get; set; }
+    public int? WritingCoachMaxHintsPerSession { get; set; }
+    public int? WritingCoachMinSecondsBetweenHints { get; set; }
+    public string? WritingGcvApiKeyEncrypted { get; set; }
+    public bool? WritingOcrEnabled { get; set; }
+    public bool? WritingAppealsEnabled { get; set; }
+    public int? WritingTutorReviewQueueMaxDepth { get; set; }
+    public int? WritingTutorReviewMaxWaitHours { get; set; }
+    public int? WritingMaxDailyPlanRegenerationsPerDay { get; set; }
+    public int? WritingGradeIdempotencyTtlHours { get; set; }
+
+    // ── Platform (public host URLs — Wave 2) ───────────────────────
+    [MaxLength(1024)] public string? PublicApiBaseUrl { get; set; }
+    [MaxLength(1024)] public string? PublicWebBaseUrl { get; set; }
+    [MaxLength(256)] public string? FallbackEmailDomain { get; set; }
 
     // ── Audit ──────────────────────────────────────────────────────
     [MaxLength(64)]

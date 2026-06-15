@@ -1,34 +1,44 @@
 using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.Extensions.Options;
 using OetLearner.Api.Configuration;
+using OetLearner.Api.Services.Settings;
 
 namespace OetLearner.Api.Services;
 
-public sealed class PlatformLinkService(IOptions<PlatformOptions> platformOptions, IOptions<BillingOptions> billingOptions)
+public sealed class PlatformLinkService(IRuntimeSettingsProvider settingsProvider, IOptions<BillingOptions> billingOptions)
 {
-    private readonly PlatformOptions _platform = platformOptions.Value;
+    private readonly IRuntimeSettingsProvider _settingsProvider = settingsProvider;
     private readonly BillingOptions _billing = billingOptions.Value;
+
+    // The public-facing Build* methods are synchronous and called from many
+    // (already-resolved) services; fetch the merged DB-over-env platform view
+    // at call time. The provider caches the effective view for 30s and runs on
+    // ASP.NET Core (no sync context), so a blocking resolve here is safe.
+    private PlatformSettings Platform()
+        => _settingsProvider.GetAsync(CancellationToken.None).GetAwaiter().GetResult().Platform;
 
     public string BuildApiUrl(string relativePath)
     {
         var normalizedPath = NormalizeRelativePath(relativePath);
-        if (string.IsNullOrWhiteSpace(_platform.PublicApiBaseUrl))
+        var apiBaseUrl = Platform().PublicApiBaseUrl;
+        if (string.IsNullOrWhiteSpace(apiBaseUrl))
         {
             return normalizedPath;
         }
 
-        return new Uri(new Uri(EnsureTrailingSlash(_platform.PublicApiBaseUrl), UriKind.Absolute), normalizedPath.TrimStart('/')).ToString();
+        return new Uri(new Uri(EnsureTrailingSlash(apiBaseUrl), UriKind.Absolute), normalizedPath.TrimStart('/')).ToString();
     }
 
     public string BuildWebUrl(string relativePath)
     {
         var normalizedPath = NormalizeRelativePath(relativePath);
-        if (string.IsNullOrWhiteSpace(_platform.PublicWebBaseUrl))
+        var webBaseUrl = Platform().PublicWebBaseUrl;
+        if (string.IsNullOrWhiteSpace(webBaseUrl))
         {
             return normalizedPath;
         }
 
-        return new Uri(new Uri(EnsureTrailingSlash(_platform.PublicWebBaseUrl), UriKind.Absolute), normalizedPath.TrimStart('/')).ToString();
+        return new Uri(new Uri(EnsureTrailingSlash(webBaseUrl), UriKind.Absolute), normalizedPath.TrimStart('/')).ToString();
     }
 
     public string BuildCheckoutUrl(
@@ -72,9 +82,10 @@ public sealed class PlatformLinkService(IOptions<PlatformOptions> platformOption
             localPart = "user";
         }
 
-        var domain = string.IsNullOrWhiteSpace(_platform.FallbackEmailDomain)
+        var fallbackDomain = Platform().FallbackEmailDomain;
+        var domain = string.IsNullOrWhiteSpace(fallbackDomain)
             ? "example.invalid"
-            : _platform.FallbackEmailDomain.Trim().TrimStart('@');
+            : fallbackDomain.Trim().TrimStart('@');
 
         return $"{localPart}@{domain}";
     }

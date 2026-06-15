@@ -40,7 +40,7 @@ public sealed class RolePlayCardBulkTests : IAsyncLifetime
 
         var billingOptions = Options.Create(new BillingOptions());
         var platformLinks = new PlatformLinkService(
-            Options.Create(new PlatformOptions { FallbackEmailDomain = "example.test" }),
+            TestRuntimeSettingsProvider.FromPlatformOptions(new PlatformOptions { FallbackEmailDomain = "example.test" }),
             billingOptions);
 
         _storageRoot = Path.Combine(Path.GetTempPath(), $"oet-rpc-bulk-tests-{Guid.NewGuid():N}");

@@ -228,6 +228,58 @@ export interface PasswordPolicySettings {
   breachApiTimeoutSeconds: number | null;
 }
 
+export interface AiAssistantSettings {
+  globalEnabled: boolean | null;
+  requireApprovalAlways: boolean | null;
+  maxIterations: number | null;
+  maxContextMessages: number | null;
+  backupRetentionDays: number | null;
+  maxWriteFileSizeBytes: number | null;
+  commandTimeoutSeconds: number | null;
+  circuitBreakerMaxFailures: number | null;
+  circuitBreakerFailureWindowSeconds: number | null;
+  circuitBreakerMaxWrites: number | null;
+  circuitBreakerWriteWindowSeconds: number | null;
+  embeddingModel: string;
+  maxChunkTokens: number | null;
+}
+
+export interface AiGatewaySettings {
+  aiProviderProviderId: string;
+  aiProviderBaseUrl: string;
+  aiProviderDefaultModel: string;
+  aiProviderReasoningEffort: string;
+  aiProviderDefaultMaxTokens: number | null;
+  aiProviderDefaultTemperature: number | null;
+  aiToolMaxToolCallsPerCompletion: number | null;
+  aiToolFeatureGrantCacheSeconds: number | null;
+  aiToolAllowedExternalHostsCsv: string;
+  aiToolExternalNetworkPerUserDailyCalls: number | null;
+  aiToolExternalNetworkTimeoutMilliseconds: number | null;
+  aiToolExternalNetworkMaxResponseBytes: number | null;
+}
+
+export interface WritingSettings {
+  cronsEnabled: boolean | null;
+  coachEnabled: boolean | null;
+  coachDailyCostCapPerLearnerUsd: number | null;
+  coachMaxHintsPerSession: number | null;
+  coachMinSecondsBetweenHints: number | null;
+  gcvApiKey: string;
+  ocrEnabled: boolean | null;
+  appealsEnabled: boolean | null;
+  tutorReviewQueueMaxDepth: number | null;
+  tutorReviewMaxWaitHours: number | null;
+  maxDailyPlanRegenerationsPerDay: number | null;
+  gradeIdempotencyTtlHours: number | null;
+}
+
+export interface PlatformSettings {
+  publicApiBaseUrl: string;
+  publicWebBaseUrl: string;
+  fallbackEmailDomain: string;
+}
+
 export interface RuntimeSettingsResponse {
   email: EmailSettings;
   billing: BillingSettings;
@@ -250,6 +302,10 @@ export interface RuntimeSettingsResponse {
   dataRetention: DataRetentionSettings;
   expertAutoAssignment: ExpertAutoAssignmentSettings;
   passwordPolicy: PasswordPolicySettings;
+  aiAssistant: AiAssistantSettings;
+  aiGateway: AiGatewaySettings;
+  writing: WritingSettings;
+  platform: PlatformSettings;
   updatedBy: string | null;
   updatedByUserId?: string | null;
   updatedAt: string | null;
@@ -262,7 +318,7 @@ export interface RuntimeSettingsIntegrationTestResponse {
   testedAt: string;
 }
 
-type SectionId = 'email' | 'billing' | 'sentry' | 'backup' | 'oauth' | 'push' | 'uploadScanner' | 'zoom' | 'speakingWhisper' | 'speakingLiveKit' | 'speakingAi' | 'speakingStorage' | 'speakingCompliance' | 'speakingFeatures' | 'checkoutCom' | 'paymob' | 'payTabs' | 'soketi' | 'dataRetention' | 'expertAutoAssignment' | 'passwordPolicy';
+type SectionId = 'email' | 'billing' | 'sentry' | 'backup' | 'oauth' | 'push' | 'uploadScanner' | 'zoom' | 'speakingWhisper' | 'speakingLiveKit' | 'speakingAi' | 'speakingStorage' | 'speakingCompliance' | 'speakingFeatures' | 'checkoutCom' | 'paymob' | 'payTabs' | 'soketi' | 'dataRetention' | 'expertAutoAssignment' | 'passwordPolicy' | 'aiAssistant' | 'aiGateway' | 'writing' | 'platform';
 
 type ToastState = { variant: 'success' | 'error'; message: string } | null;
 type TestStatusState = Partial<Record<SectionId, RuntimeSettingsIntegrationTestResponse>>;
@@ -476,6 +532,58 @@ const PASSWORD_POLICY_FIELDS: FieldDef<PasswordPolicySettings>[] = [
   { key: 'breachApiTimeoutSeconds', label: 'Breach API Timeout (seconds)', type: 'number', hint: 'Fail-open timeout for the breach check (1–60, default 3).' },
 ];
 
+const AI_ASSISTANT_FIELDS: FieldDef<AiAssistantSettings>[] = [
+  { key: 'globalEnabled', label: 'Enable AI Assistant', type: 'checkbox', hint: 'Master kill switch. When false, all AI assistant features are disabled.' },
+  { key: 'requireApprovalAlways', label: 'Require approval for all writes', type: 'checkbox', hint: 'When enabled, every write operation requires explicit user approval before being applied. Default is true for safety.' },
+  { key: 'maxIterations', label: 'Max ReAct Iterations', type: 'number', hint: 'Maximum number of ReAct loop iterations before forcing a response. Default: 10.' },
+  { key: 'maxContextMessages', label: 'Max Context Messages', type: 'number', hint: 'Maximum number of messages to include in the context window. Default: 50.' },
+  { key: 'backupRetentionDays', label: 'Backup Retention (days)', type: 'number', hint: 'Days to retain file backups before cleanup. Default: 30.' },
+  { key: 'maxWriteFileSizeBytes', label: 'Max Write File Size (bytes)', type: 'number', hint: 'Maximum file size (bytes) that can be written in a single operation. Default: 1048576 (1 MB).' },
+  { key: 'commandTimeoutSeconds', label: 'Command Timeout (seconds)', type: 'number', hint: 'Command execution timeout in seconds. Default: 300 (5 minutes).' },
+  { key: 'circuitBreakerMaxFailures', label: 'Circuit Breaker: Max Failures', type: 'number', hint: 'Maximum failures within the failure window before circuit breaker pauses requests. Default: 3.' },
+  { key: 'circuitBreakerFailureWindowSeconds', label: 'Circuit Breaker: Failure Window (seconds)', type: 'number', hint: 'Time window for failure counting in seconds. Default: 60.' },
+  { key: 'circuitBreakerMaxWrites', label: 'Circuit Breaker: Max Writes', type: 'number', hint: 'Maximum writes within the write window before circuit breaker pauses. Default: 10.' },
+  { key: 'circuitBreakerWriteWindowSeconds', label: 'Circuit Breaker: Write Window (seconds)', type: 'number', hint: 'Time window for write counting in seconds. Default: 300.' },
+  { key: 'embeddingModel', label: 'Embedding Model', type: 'text', hint: 'Embedding model to use for codebase indexing. Default: text-embedding-3-small.' },
+  { key: 'maxChunkTokens', label: 'Max Chunk Tokens', type: 'number', hint: 'Maximum chunk size in tokens for tree-sitter code splitting. Default: 512.' },
+];
+
+const AI_GATEWAY_FIELDS: FieldDef<AiGatewaySettings>[] = [
+  { key: 'aiProviderProviderId', label: 'AI Provider ID', type: 'text', hint: 'Stable code (digitalocean-serverless, openai-platform, anthropic, etc). Fallback: env AI:ProviderId.' },
+  { key: 'aiProviderBaseUrl', label: 'AI Provider Base URL', type: 'url', hint: 'OpenAI-compatible endpoint (e.g. https://inference.do-ai.run/v1). Validated for safety. Fallback: env AI:BaseUrl.' },
+  { key: 'aiProviderDefaultModel', label: 'Default Model', type: 'text', hint: 'Model ID when none specified (e.g. glm-5). Fallback: env AI:DefaultModel.' },
+  { key: 'aiProviderReasoningEffort', label: 'Reasoning Effort (for o-series models)', type: 'text', hint: 'low, medium, or high. Leave blank for non-reasoning models (glm-5). Fallback: env AI:ReasoningEffort.' },
+  { key: 'aiProviderDefaultMaxTokens', label: 'Default Max Tokens', type: 'number', hint: 'Completion token limit (e.g. 4096). Fallback: env AI:DefaultMaxTokens.' },
+  { key: 'aiProviderDefaultTemperature', label: 'Default Temperature', type: 'number', hint: 'Sampler temperature 0.0–1.0 (e.g. 0.2). Fallback: env AI:DefaultTemperature.' },
+  { key: 'aiToolMaxToolCallsPerCompletion', label: 'Max Tool Calls per Completion', type: 'number', hint: 'Agentic loop breaker. When reached, gateway returns without trying more tool calls. Fallback: env AiTool:MaxToolCallsPerCompletion (default 4).' },
+  { key: 'aiToolFeatureGrantCacheSeconds', label: 'Feature Grant Cache TTL (seconds)', type: 'number', hint: 'In-memory cache lifetime for per-feature tool grants. Fallback: env AiTool:FeatureGrantCacheSeconds (default 30).' },
+  { key: 'aiToolAllowedExternalHostsCsv', label: 'Allowed External Hosts (CSV)', type: 'text', hint: 'Comma-separated hostnames for ExternalNetwork tools (no scheme/path; exact match). Default: api.dictionaryapi.dev. Fallback: env AiTool:AllowedExternalHosts.' },
+  { key: 'aiToolExternalNetworkPerUserDailyCalls', label: 'External Network Daily Call Budget per User', type: 'number', hint: 'Max calls/user/day for ExternalNetwork tools (0 = disabled). Fallback: env AiTool:ExternalNetworkPerUserDailyCalls (default 200).' },
+  { key: 'aiToolExternalNetworkTimeoutMilliseconds', label: 'External Network HTTP Timeout (ms)', type: 'number', hint: 'Request timeout in milliseconds for external-network tool calls. Fallback: env AiTool:ExternalNetworkTimeoutMilliseconds (default 4000).' },
+  { key: 'aiToolExternalNetworkMaxResponseBytes', label: 'External Network Max Response Size (bytes)', type: 'number', hint: 'Max response body size (defends unbounded downloads). Fallback: env AiTool:ExternalNetworkMaxResponseBytes (default 65536 = 64 KB).' },
+];
+
+const WRITING_FIELDS: FieldDef<WritingSettings>[] = [
+  { key: 'cronsEnabled', label: 'Enable Writing Cron Jobs', type: 'checkbox', hint: 'Master feature flag. When off, all scheduled Writing tasks (coach queue, appeals, daily-plan regen, tutor-queue worker) are disabled. Use during deployments to pause processing.' },
+  { key: 'coachEnabled', label: 'Enable Writing Coach (AI Hints)', type: 'checkbox', hint: 'Feature flag for real Haiku coach. When off, coach endpoints return empty hints; learners cannot request coaching. Cost remains $0.' },
+  { key: 'coachDailyCostCapPerLearnerUsd', label: 'Coach Daily Cost Cap (USD)', type: 'number', hint: 'Per-learner 24h spend limit for AI hints. Example: 0.5 USD. Rolling window based on AI gateway accounting. Set to 0 to disable cost cap.' },
+  { key: 'coachMaxHintsPerSession', label: 'Coach Max Hints Per Session', type: 'number', hint: 'Hard limit on consecutive hints in one (userId, sessionId) pair. Example: 80.' },
+  { key: 'coachMinSecondsBetweenHints', label: 'Coach Min Seconds Between Hints', type: 'number', hint: 'Rate-throttle window. Example: 30 seconds. Learner must wait at least this long after the last hint.' },
+  { key: 'gcvApiKey', label: 'Google Cloud Vision API Key', secret: true, hint: 'Server-side GCV key for OCR fallback when Tesseract confidence < 95%. Stored encrypted. Leave blank to skip GCV and mark jobs manual_required.' },
+  { key: 'ocrEnabled', label: 'Enable OCR Pipeline', type: 'checkbox', hint: 'Feature flag for the OCR job system (local Tesseract + Google Cloud Vision fallback). When off, enqueue returns manual_required without attempting extraction.' },
+  { key: 'appealsEnabled', label: 'Enable Grade Appeals', type: 'checkbox', hint: 'Feature flag. When off, learners cannot submit grade appeals. Appeals already in review are unaffected.' },
+  { key: 'tutorReviewQueueMaxDepth', label: 'Tutor Queue Max Depth', type: 'number', hint: 'Hard limit on unassigned submissions in queue. When exceeded, the auto-assignment worker pauses. Example: 50.' },
+  { key: 'tutorReviewMaxWaitHours', label: 'Tutor Queue Max Wait (hours)', type: 'number', hint: 'SLA window. If a submission sits unassigned longer than this, the queue pauses and escalation alerts fire. Example: 36 hours.' },
+  { key: 'maxDailyPlanRegenerationsPerDay', label: 'Max Daily Plan Regens Per Learner', type: 'number', hint: 'Daily budget for adaptive study path regen. Example: 1. Rolling 24h window.' },
+  { key: 'gradeIdempotencyTtlHours', label: 'Grade Idempotency Cache TTL (hours)', type: 'number', hint: 'Deduplication window for concurrent grade-submission requests. Example: 24 hours. Keyed by submission id.' },
+];
+
+const PLATFORM_FIELDS: FieldDef<PlatformSettings>[] = [
+  { key: 'publicApiBaseUrl', label: 'Public API Base URL', type: 'url', hint: 'e.g. https://api.oetwithdrhesham.co.uk. Builds absolute callback URLs for external auth. Leave blank to use the env var Platform:PublicApiBaseUrl.' },
+  { key: 'publicWebBaseUrl', label: 'Public Web Base URL', type: 'url', hint: 'e.g. https://app.oetwithdrhesham.co.uk. Used for external auth redirects and cookie CSRF origin validation. Required in production when external auth is enabled.' },
+  { key: 'fallbackEmailDomain', label: 'Fallback Email Domain', type: 'text', hint: 'Domain for synthesized learner emails when no external provider email exists (default: example.invalid). Omit the @ symbol.' },
+];
+
 const SECTION_META: { id: SectionId; title: string; description: string }[] = [
   { id: 'email', title: 'Email (Brevo + SMTP)', description: 'Transactional email delivery via Brevo with SMTP fallback.' },
   { id: 'billing', title: 'Billing (Stripe)', description: 'Stripe Checkout, Customer Portal, and webhook signing.' },
@@ -498,6 +606,10 @@ const SECTION_META: { id: SectionId; title: string; description: string }[] = [
   { id: 'dataRetention', title: 'Data Retention', description: 'Retention windows for high-volume event tables (analytics, audit, payment webhooks, notification attempts) and the sweeper cadence.' },
   { id: 'expertAutoAssignment', title: 'Expert Auto-Assignment', description: 'Writing-review auto-assignment loop: enablement, SLA windows, per-expert load cap, and batch sizes.' },
   { id: 'passwordPolicy', title: 'Password Policy', description: 'Complexity requirements and the HaveIBeenPwned breach check for new/changed passwords.' },
+  { id: 'aiAssistant', title: 'AI Assistant', description: 'Codebase AI assistant orchestration: ReAct loop limits, circuit breaker, command/backup limits, and embedding/indexing knobs. Provider API keys live in AI Providers.' },
+  { id: 'aiGateway', title: 'AI Gateway & Tooling', description: 'Grounded gateway defaults (provider, model, temperature, max tokens) and AI tool knobs (tool-call cap, grant cache, external-network allowlist/budget). API key managed in AI Providers.' },
+  { id: 'writing', title: 'Writing Module', description: 'Writing V2 feature flags and tunables: cron kill switch, coach hint limits/cost cap, OCR pipeline + GCV key, appeals, tutor-review queue gates, plan regen, and grade idempotency.' },
+  { id: 'platform', title: 'Platform', description: 'Public-facing API/Web base URLs (external auth callbacks, CSRF origin validation) and the fallback email domain for synthesized learner emails.' },
 ];
 
 /* ───────────────────────── Helpers ───────────────────────── */
@@ -685,6 +797,54 @@ function emptyResponse(): RuntimeSettingsResponse {
       breachApiBaseUrl: '',
       breachApiTimeoutSeconds: null,
     },
+    aiAssistant: {
+      globalEnabled: null,
+      requireApprovalAlways: null,
+      maxIterations: null,
+      maxContextMessages: null,
+      backupRetentionDays: null,
+      maxWriteFileSizeBytes: null,
+      commandTimeoutSeconds: null,
+      circuitBreakerMaxFailures: null,
+      circuitBreakerFailureWindowSeconds: null,
+      circuitBreakerMaxWrites: null,
+      circuitBreakerWriteWindowSeconds: null,
+      embeddingModel: '',
+      maxChunkTokens: null,
+    },
+    aiGateway: {
+      aiProviderProviderId: '',
+      aiProviderBaseUrl: '',
+      aiProviderDefaultModel: '',
+      aiProviderReasoningEffort: '',
+      aiProviderDefaultMaxTokens: null,
+      aiProviderDefaultTemperature: null,
+      aiToolMaxToolCallsPerCompletion: null,
+      aiToolFeatureGrantCacheSeconds: null,
+      aiToolAllowedExternalHostsCsv: '',
+      aiToolExternalNetworkPerUserDailyCalls: null,
+      aiToolExternalNetworkTimeoutMilliseconds: null,
+      aiToolExternalNetworkMaxResponseBytes: null,
+    },
+    writing: {
+      cronsEnabled: null,
+      coachEnabled: null,
+      coachDailyCostCapPerLearnerUsd: null,
+      coachMaxHintsPerSession: null,
+      coachMinSecondsBetweenHints: null,
+      gcvApiKey: '',
+      ocrEnabled: null,
+      appealsEnabled: null,
+      tutorReviewQueueMaxDepth: null,
+      tutorReviewMaxWaitHours: null,
+      maxDailyPlanRegenerationsPerDay: null,
+      gradeIdempotencyTtlHours: null,
+    },
+    platform: {
+      publicApiBaseUrl: '',
+      publicWebBaseUrl: '',
+      fallbackEmailDomain: '',
+    },
     updatedBy: null,
     updatedByUserId: null,
     updatedAt: null,
@@ -717,6 +877,10 @@ function normalizeResponse(data: Partial<RuntimeSettingsResponse>): RuntimeSetti
     dataRetention: { ...empty.dataRetention, ...data.dataRetention },
     expertAutoAssignment: { ...empty.expertAutoAssignment, ...data.expertAutoAssignment },
     passwordPolicy: { ...empty.passwordPolicy, ...data.passwordPolicy },
+    aiAssistant: { ...empty.aiAssistant, ...data.aiAssistant },
+    aiGateway: { ...empty.aiGateway, ...data.aiGateway },
+    writing: { ...empty.writing, ...data.writing },
+    platform: { ...empty.platform, ...data.platform },
   });
 }
 
@@ -791,6 +955,10 @@ function sanitizeSecretFields(data: RuntimeSettingsResponse): RuntimeSettingsRes
     soketi: {
       ...data.soketi,
       appSecret: maskUnexpectedSecret(data.soketi.appSecret),
+    },
+    writing: {
+      ...data.writing,
+      gcvApiKey: maskUnexpectedSecret(data.writing.gcvApiKey),
     },
   };
 }
@@ -1099,6 +1267,10 @@ export function RuntimeSettingsClient() {
     dataRetention: false,
     expertAutoAssignment: false,
     passwordPolicy: false,
+    aiAssistant: false,
+    aiGateway: false,
+    writing: false,
+    platform: false,
   });
 
   const load = useCallback(async () => {
@@ -1793,6 +1965,105 @@ export function RuntimeSettingsClient() {
                     onChange={(next) =>
                       updateField(
                         'passwordPolicy',
+                        field.key,
+                        (field.type === 'number'
+                          ? parseNullableNumberInput(String(next))
+                          : field.type === 'checkbox'
+                            ? Boolean(next)
+                            : String(next)) as never,
+                      )
+                    }
+                  />
+                ))}
+
+              {section.id === 'aiAssistant' &&
+                AI_ASSISTANT_FIELDS.map((field) => (
+                  <PlainField
+                    key={field.key}
+                    label={field.label}
+                    hint={field.hint}
+                    type={field.type}
+                    value={draft.aiAssistant[field.key] as string | number | boolean | null}
+                    onChange={(next) =>
+                      updateField(
+                        'aiAssistant',
+                        field.key,
+                        (field.type === 'number'
+                          ? parseNullableNumberInput(String(next))
+                          : field.type === 'checkbox'
+                            ? Boolean(next)
+                            : String(next)) as never,
+                      )
+                    }
+                  />
+                ))}
+
+              {section.id === 'aiGateway' &&
+                AI_GATEWAY_FIELDS.map((field) => (
+                  <PlainField
+                    key={field.key}
+                    label={field.label}
+                    hint={field.hint}
+                    type={field.type}
+                    value={draft.aiGateway[field.key] as string | number | boolean | null}
+                    onChange={(next) =>
+                      updateField(
+                        'aiGateway',
+                        field.key,
+                        (field.type === 'number'
+                          ? parseNullableNumberInput(String(next))
+                          : field.type === 'checkbox'
+                            ? Boolean(next)
+                            : String(next)) as never,
+                      )
+                    }
+                  />
+                ))}
+
+              {section.id === 'writing' &&
+                WRITING_FIELDS.map((field) =>
+                  field.secret ? (
+                    <SecretField
+                      key={field.key}
+                      label={field.label}
+                      hint={field.hint}
+                      serverValue={String(server.writing[field.key] ?? '')}
+                      draftValue={String(draft.writing[field.key] ?? '')}
+                      onChange={(next) => updateField('writing', field.key, next as never)}
+                    />
+                  ) : (
+                    <PlainField
+                      key={field.key}
+                      label={field.label}
+                      hint={field.hint}
+                      type={field.type}
+                      value={draft.writing[field.key] as string | number | boolean | null}
+                      onChange={(next) =>
+                        updateField(
+                          'writing',
+                          field.key,
+                          (field.type === 'number'
+                            ? parseNullableNumberInput(String(next))
+                            : field.type === 'checkbox'
+                              ? Boolean(next)
+                              : String(next)) as never,
+                        )
+                      }
+                    />
+                  ),
+                )}
+
+              {section.id === 'platform' &&
+                PLATFORM_FIELDS.map((field) => (
+                  <PlainField
+                    key={field.key}
+                    label={field.label}
+                    hint={field.hint}
+                    type={field.type}
+                    value={draft.platform[field.key] as string | number | boolean | null}
+                    onChange={(next) =>
+                      updateField(
+                        'platform',
                         field.key,
                         (field.type === 'number'
                           ? parseNullableNumberInput(String(next))

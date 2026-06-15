@@ -1,12 +1,11 @@
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
-using Microsoft.Extensions.Options;
 using OetLearner.Api.Contracts;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services.Rulebook;
-using OetLearner.Api.Services.Writing.Configuration;
+using OetLearner.Api.Services.Settings;
 
 namespace OetLearner.Api.Services.Writing;
 
@@ -48,7 +47,7 @@ public sealed class WritingCoachServiceV2(
     LearnerDbContext db,
     IAiGatewayService aiGateway,
     IMemoryCache cache,
-    IOptions<WritingV2Options> options,
+    IRuntimeSettingsProvider settingsProvider,
     TimeProvider clock,
     ILogger<WritingCoachServiceV2> logger) : IWritingCoachServiceV2
 {
@@ -70,7 +69,9 @@ public sealed class WritingCoachServiceV2(
                 Throttled: false, DailyCapReached: true,
                 HintsRemainingInSession: 0, SecondsUntilNextHint: 0);
         }
-        var opts = options.Value;
+        // DB-over-env Writing knobs (admin-configurable, 30s cache). Field names
+        // mirror WritingV2Options so the rest of the method is unchanged.
+        var opts = (await settingsProvider.GetAsync(ct)).Writing;
         if (!opts.CoachEnabled)
         {
             return new WritingCoachResponse(request.SessionId, Array.Empty<WritingCoachHint>(),

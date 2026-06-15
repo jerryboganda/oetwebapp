@@ -1,10 +1,9 @@
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Options;
 using OetLearner.Api.Contracts;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
-using OetLearner.Api.Services.Writing.Configuration;
+using OetLearner.Api.Services.Settings;
 
 namespace OetLearner.Api.Services.Writing;
 
@@ -96,7 +95,7 @@ public interface IWritingTutorReviewService
 public sealed class WritingTutorReviewService(
     LearnerDbContext db,
     TimeProvider clock,
-    IOptions<WritingV2Options> options,
+    IRuntimeSettingsProvider settingsProvider,
     IWritingModerationService moderation,
     ILogger<WritingTutorReviewService> logger) : IWritingTutorReviewService
 {
@@ -140,7 +139,8 @@ public sealed class WritingTutorReviewService(
 
     public async Task<WritingTutorQueueStatus> GetQueueStatusAsync(CancellationToken ct)
     {
-        var opts = options.Value;
+        // DB-over-env queue gates (admin-configurable, 30s cache).
+        var opts = (await settingsProvider.GetAsync(ct)).Writing;
         var pendingCount = await db.WritingTutorReviewAssignments.AsNoTracking().CountAsync(a => a.Status == "pending" || a.Status == "claimed", ct);
         var oldest = await db.WritingTutorReviewAssignments.AsNoTracking()
             .Where(a => a.Status == "pending" || a.Status == "claimed")

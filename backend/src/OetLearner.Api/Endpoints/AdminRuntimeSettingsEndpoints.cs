@@ -98,6 +98,10 @@ public static class AdminRuntimeSettingsEndpoints
                     ApplyDataRetention(row, request.DataRetention, changedKeys);
                     ApplyExpertAutoAssignment(row, request.ExpertAutoAssignment, changedKeys);
                     ApplyPasswordPolicy(row, request.PasswordPolicy, changedKeys);
+                    ApplyAiAssistant(row, request.AiAssistant, changedKeys);
+                    ApplyAiGateway(row, request.AiGateway, changedKeys);
+                    ApplyWriting(row, request.Writing, provider, changedKeys);
+                    ApplyPlatform(row, request.Platform, changedKeys);
                 }
                 catch (RuntimeSettingsValidationException ex)
                 {
@@ -401,6 +405,58 @@ public static class AdminRuntimeSettingsEndpoints
                 breachCheckEnabled = settings.PasswordPolicy.BreachCheckEnabled,
                 breachApiBaseUrl = settings.PasswordPolicy.BreachApiBaseUrl,
                 breachApiTimeoutSeconds = (int)Math.Round(settings.PasswordPolicy.BreachApiTimeout.TotalSeconds),
+            },
+            aiAssistant = new
+            {
+                globalEnabled = settings.AiAssistant.GlobalEnabled,
+                requireApprovalAlways = settings.AiAssistant.RequireApprovalAlways,
+                maxIterations = settings.AiAssistant.MaxIterations,
+                maxContextMessages = settings.AiAssistant.MaxContextMessages,
+                backupRetentionDays = settings.AiAssistant.BackupRetentionDays,
+                maxWriteFileSizeBytes = settings.AiAssistant.MaxWriteFileSizeBytes,
+                commandTimeoutSeconds = settings.AiAssistant.CommandTimeoutSeconds,
+                circuitBreakerMaxFailures = settings.AiAssistant.CircuitBreakerMaxFailures,
+                circuitBreakerFailureWindowSeconds = settings.AiAssistant.CircuitBreakerFailureWindowSeconds,
+                circuitBreakerMaxWrites = settings.AiAssistant.CircuitBreakerMaxWrites,
+                circuitBreakerWriteWindowSeconds = settings.AiAssistant.CircuitBreakerWriteWindowSeconds,
+                embeddingModel = settings.AiAssistant.EmbeddingModel,
+                maxChunkTokens = settings.AiAssistant.MaxChunkTokens,
+            },
+            aiGateway = new
+            {
+                aiProviderProviderId = settings.AiGateway.ProviderId,
+                aiProviderBaseUrl = settings.AiGateway.BaseUrl,
+                aiProviderDefaultModel = settings.AiGateway.DefaultModel,
+                aiProviderReasoningEffort = settings.AiGateway.ReasoningEffort,
+                aiProviderDefaultMaxTokens = settings.AiGateway.DefaultMaxTokens,
+                aiProviderDefaultTemperature = settings.AiGateway.DefaultTemperature,
+                aiToolMaxToolCallsPerCompletion = settings.AiGateway.MaxToolCallsPerCompletion,
+                aiToolFeatureGrantCacheSeconds = settings.AiGateway.FeatureGrantCacheSeconds,
+                aiToolAllowedExternalHostsCsv = settings.AiGateway.AllowedExternalHostsCsv,
+                aiToolExternalNetworkPerUserDailyCalls = settings.AiGateway.ExternalNetworkPerUserDailyCalls,
+                aiToolExternalNetworkTimeoutMilliseconds = settings.AiGateway.ExternalNetworkTimeoutMilliseconds,
+                aiToolExternalNetworkMaxResponseBytes = settings.AiGateway.ExternalNetworkMaxResponseBytes,
+            },
+            writing = new
+            {
+                cronsEnabled = settings.Writing.CronsEnabled,
+                coachEnabled = settings.Writing.CoachEnabled,
+                coachDailyCostCapPerLearnerUsd = settings.Writing.CoachDailyCostCapPerLearnerUsd,
+                coachMaxHintsPerSession = settings.Writing.CoachMaxHintsPerSession,
+                coachMinSecondsBetweenHints = settings.Writing.CoachMinSecondsBetweenHints,
+                gcvApiKey = MaskPlainSecret(settings.Writing.GcvApiKey),
+                ocrEnabled = settings.Writing.OcrEnabled,
+                appealsEnabled = settings.Writing.AppealsEnabled,
+                tutorReviewQueueMaxDepth = settings.Writing.TutorReviewQueueMaxDepth,
+                tutorReviewMaxWaitHours = settings.Writing.TutorReviewMaxWaitHours,
+                maxDailyPlanRegenerationsPerDay = settings.Writing.MaxDailyPlanRegenerationsPerDay,
+                gradeIdempotencyTtlHours = settings.Writing.GradeIdempotencyTtlHours,
+            },
+            platform = new
+            {
+                publicApiBaseUrl = settings.Platform.PublicApiBaseUrl,
+                publicWebBaseUrl = settings.Platform.PublicWebBaseUrl,
+                fallbackEmailDomain = settings.Platform.FallbackEmailDomain,
             },
             updatedBy = settings.UpdatedByUserName,
             updatedByUserId = settings.UpdatedByUserId,
@@ -914,6 +970,83 @@ public static class AdminRuntimeSettingsEndpoints
         if (TrySetNullableInt(d.BreachApiTimeoutSeconds, v => row.PasswordPolicyBreachApiTimeoutSeconds = v, "passwordPolicy.breachApiTimeoutSeconds", changed, min: 1, max: 60)) { }
     }
 
+    private static void ApplyAiAssistant(RuntimeSettingsRow row, RuntimeSettingsAiAssistantUpdate? d, List<string> changed)
+    {
+        if (d is null) return;
+        if (TrySetNullableBool(d.GlobalEnabled, v => row.AiAssistantGlobalEnabled = v, "aiAssistant.globalEnabled", changed)) { }
+        if (TrySetNullableBool(d.RequireApprovalAlways, v => row.AiAssistantRequireApprovalAlways = v, "aiAssistant.requireApprovalAlways", changed)) { }
+        if (TrySetNullableInt(d.MaxIterations, v => row.AiAssistantMaxIterations = v, "aiAssistant.maxIterations", changed, min: 1, max: 1000)) { }
+        if (TrySetNullableInt(d.MaxContextMessages, v => row.AiAssistantMaxContextMessages = v, "aiAssistant.maxContextMessages", changed, min: 1, max: 10000)) { }
+        if (TrySetNullableInt(d.BackupRetentionDays, v => row.AiAssistantBackupRetentionDays = v, "aiAssistant.backupRetentionDays", changed, min: 0, max: 36500)) { }
+        if (TrySetNullableLong(d.MaxWriteFileSizeBytes, v => row.AiAssistantMaxWriteFileSizeBytes = v, "aiAssistant.maxWriteFileSizeBytes", changed, min: 1, max: 1_073_741_824)) { }
+        if (TrySetNullableInt(d.CommandTimeoutSeconds, v => row.AiAssistantCommandTimeoutSeconds = v, "aiAssistant.commandTimeoutSeconds", changed, min: 1, max: 86400)) { }
+        if (TrySetNullableInt(d.CircuitBreakerMaxFailures, v => row.AiAssistantCircuitBreakerMaxFailures = v, "aiAssistant.circuitBreakerMaxFailures", changed, min: 1, max: 10000)) { }
+        if (TrySetNullableInt(d.CircuitBreakerFailureWindowSeconds, v => row.AiAssistantCircuitBreakerFailureWindowSeconds = v, "aiAssistant.circuitBreakerFailureWindowSeconds", changed, min: 1, max: 86400)) { }
+        if (TrySetNullableInt(d.CircuitBreakerMaxWrites, v => row.AiAssistantCircuitBreakerMaxWrites = v, "aiAssistant.circuitBreakerMaxWrites", changed, min: 1, max: 100000)) { }
+        if (TrySetNullableInt(d.CircuitBreakerWriteWindowSeconds, v => row.AiAssistantCircuitBreakerWriteWindowSeconds = v, "aiAssistant.circuitBreakerWriteWindowSeconds", changed, min: 1, max: 86400)) { }
+        if (TrySetPlain(d.EmbeddingModel, v => row.AiAssistantEmbeddingModel = v, "aiAssistant.embeddingModel", changed)) { }
+        if (TrySetNullableInt(d.MaxChunkTokens, v => row.AiAssistantMaxChunkTokens = v, "aiAssistant.maxChunkTokens", changed, min: 1, max: 100000)) { }
+    }
+
+    private static void ApplyAiGateway(RuntimeSettingsRow row, RuntimeSettingsAiGatewayUpdate? d, List<string> changed)
+    {
+        if (d is null) return;
+        if (TrySetPlain(d.AiProviderProviderId, v => row.AiProviderProviderId = v, "aiGateway.aiProviderProviderId", changed)) { }
+        if (TrySetPlain(d.AiProviderBaseUrl, v => row.AiProviderBaseUrl = v, "aiGateway.aiProviderBaseUrl", changed)) { }
+        if (TrySetPlain(d.AiProviderDefaultModel, v => row.AiProviderDefaultModel = v, "aiGateway.aiProviderDefaultModel", changed)) { }
+        // ReasoningEffort allows the empty string as a real value (non-reasoning
+        // models). Empty input therefore clears the override back to the env value.
+        if (TrySetPlain(d.AiProviderReasoningEffort, v => row.AiProviderReasoningEffort = v, "aiGateway.aiProviderReasoningEffort", changed)) { }
+        if (TrySetNullableInt(d.AiProviderDefaultMaxTokens, v => row.AiProviderDefaultMaxTokens = v, "aiGateway.aiProviderDefaultMaxTokens", changed, min: 1, max: 1_000_000)) { }
+        if (TrySetNullableDouble(d.AiProviderDefaultTemperature, v => row.AiProviderDefaultTemperature = v, "aiGateway.aiProviderDefaultTemperature", changed, min: 0, max: 1)) { }
+        if (TrySetNullableInt(d.AiToolMaxToolCallsPerCompletion, v => row.AiToolMaxToolCallsPerCompletion = v, "aiGateway.aiToolMaxToolCallsPerCompletion", changed, min: 1, max: 1000)) { }
+        if (TrySetNullableInt(d.AiToolFeatureGrantCacheSeconds, v => row.AiToolFeatureGrantCacheSeconds = v, "aiGateway.aiToolFeatureGrantCacheSeconds", changed, min: 1, max: 86400)) { }
+        if (TrySetPlain(d.AiToolAllowedExternalHostsCsv, v => row.AiToolAllowedExternalHostsCsv = v, "aiGateway.aiToolAllowedExternalHostsCsv", changed)) { }
+        if (TrySetNullableInt(d.AiToolExternalNetworkPerUserDailyCalls, v => row.AiToolExternalNetworkPerUserDailyCalls = v, "aiGateway.aiToolExternalNetworkPerUserDailyCalls", changed, min: 0, max: 1_000_000)) { }
+        if (TrySetNullableInt(d.AiToolExternalNetworkTimeoutMilliseconds, v => row.AiToolExternalNetworkTimeoutMilliseconds = v, "aiGateway.aiToolExternalNetworkTimeoutMilliseconds", changed, min: 1, max: 60000)) { }
+        if (TrySetNullableInt(d.AiToolExternalNetworkMaxResponseBytes, v => row.AiToolExternalNetworkMaxResponseBytes = v, "aiGateway.aiToolExternalNetworkMaxResponseBytes", changed, min: 1, max: 10_485_760)) { }
+    }
+
+    private static void ApplyWriting(RuntimeSettingsRow row, RuntimeSettingsWritingUpdate? d,
+        IRuntimeSettingsProvider p, List<string> changed)
+    {
+        if (d is null) return;
+        if (TrySetNullableBool(d.CronsEnabled, v => row.WritingCronsEnabled = v, "writing.cronsEnabled", changed)) { }
+        if (TrySetNullableBool(d.CoachEnabled, v => row.WritingCoachEnabled = v, "writing.coachEnabled", changed)) { }
+        if (TrySetNullableDecimal(d.CoachDailyCostCapPerLearnerUsd, v => row.WritingCoachDailyCostCapPerLearnerUsd = v, "writing.coachDailyCostCapPerLearnerUsd", changed, min: 0, max: 100000)) { }
+        if (TrySetNullableInt(d.CoachMaxHintsPerSession, v => row.WritingCoachMaxHintsPerSession = v, "writing.coachMaxHintsPerSession", changed, min: 1, max: 100000)) { }
+        if (TrySetNullableInt(d.CoachMinSecondsBetweenHints, v => row.WritingCoachMinSecondsBetweenHints = v, "writing.coachMinSecondsBetweenHints", changed, min: 0, max: 86400)) { }
+        if (TrySetSecret(d.GcvApiKey, p, v => row.WritingGcvApiKeyEncrypted = v, "writing.gcvApiKey", changed)) { }
+        if (TrySetNullableBool(d.OcrEnabled, v => row.WritingOcrEnabled = v, "writing.ocrEnabled", changed)) { }
+        if (TrySetNullableBool(d.AppealsEnabled, v => row.WritingAppealsEnabled = v, "writing.appealsEnabled", changed)) { }
+        if (TrySetNullableInt(d.TutorReviewQueueMaxDepth, v => row.WritingTutorReviewQueueMaxDepth = v, "writing.tutorReviewQueueMaxDepth", changed, min: 1, max: 1_000_000)) { }
+        if (TrySetNullableInt(d.TutorReviewMaxWaitHours, v => row.WritingTutorReviewMaxWaitHours = v, "writing.tutorReviewMaxWaitHours", changed, min: 1, max: 8760)) { }
+        if (TrySetNullableInt(d.MaxDailyPlanRegenerationsPerDay, v => row.WritingMaxDailyPlanRegenerationsPerDay = v, "writing.maxDailyPlanRegenerationsPerDay", changed, min: 0, max: 100000)) { }
+        if (TrySetNullableInt(d.GradeIdempotencyTtlHours, v => row.WritingGradeIdempotencyTtlHours = v, "writing.gradeIdempotencyTtlHours", changed, min: 1, max: 8760)) { }
+    }
+
+    private static void ApplyPlatform(RuntimeSettingsRow row, RuntimeSettingsPlatformUpdate? d, List<string> changed)
+    {
+        if (d is null) return;
+        ValidatePlatformUrl(d.PublicApiBaseUrl, "platform.publicApiBaseUrl");
+        ValidatePlatformUrl(d.PublicWebBaseUrl, "platform.publicWebBaseUrl");
+        if (TrySetPlain(d.PublicApiBaseUrl, v => row.PublicApiBaseUrl = v, "platform.publicApiBaseUrl", changed)) { }
+        if (TrySetPlain(d.PublicWebBaseUrl, v => row.PublicWebBaseUrl = v, "platform.publicWebBaseUrl", changed)) { }
+        if (TrySetPlain(d.FallbackEmailDomain, v => row.FallbackEmailDomain = v, "platform.fallbackEmailDomain", changed)) { }
+    }
+
+    private static void ValidatePlatformUrl(string? value, string key)
+    {
+        if (value is null || value == SecretMask) return;
+        var trimmed = value.Trim();
+        if (trimmed.Length == 0) return; // empty clears the override
+        if (!Uri.TryCreate(trimmed, UriKind.Absolute, out var uri)
+            || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+        {
+            throw new RuntimeSettingsValidationException($"{key} must be an http(s):// URL.");
+        }
+    }
+
     private static void ApplyZoom(RuntimeSettingsRow row, RuntimeSettingsZoomUpdate? d,
         IRuntimeSettingsProvider p, IWebHostEnvironment env, List<string> changed)
     {
@@ -1017,6 +1150,40 @@ public static class AdminRuntimeSettingsEndpoints
         return true;
     }
 
+    private static bool TrySetNullableLong(JsonElement? input, Action<long?> setter, string key, List<string> changed, long? min = null, long? max = null)
+    {
+        if (!TryReadNullableNumber(input, key, element => element.GetInt64(), out var value))
+            return false;
+
+        if (value is not null)
+        {
+            if (min is not null && value < min)
+                throw new RuntimeSettingsValidationException($"{key} must be greater than or equal to {min}.");
+            if (max is not null && value > max)
+                throw new RuntimeSettingsValidationException($"{key} must be less than or equal to {max}.");
+        }
+        setter(value);
+        changed.Add(key);
+        return true;
+    }
+
+    private static bool TrySetNullableDecimal(JsonElement? input, Action<decimal?> setter, string key, List<string> changed, decimal? min = null, decimal? max = null)
+    {
+        if (!TryReadNullableNumber(input, key, element => element.GetDecimal(), out var value))
+            return false;
+
+        if (value is not null)
+        {
+            if (min is not null && value < min)
+                throw new RuntimeSettingsValidationException($"{key} must be greater than or equal to {min}.");
+            if (max is not null && value > max)
+                throw new RuntimeSettingsValidationException($"{key} must be less than or equal to {max}.");
+        }
+        setter(value);
+        changed.Add(key);
+        return true;
+    }
+
     private static bool TrySetNullableBool(JsonElement? input, Action<bool?> setter, string key, List<string> changed)
     {
         if (input is null) return false;
@@ -1089,7 +1256,7 @@ public static class AdminRuntimeSettingsEndpoints
     private static string? NormalizeSectionId(string? sectionId)
     {
         var normalized = sectionId?.Trim().ToLowerInvariant();
-        return normalized is "email" or "billing" or "sentry" or "backup" or "oauth" or "push" or "uploadscanner" or "zoom" or "stripe" or "speakinglivekit" or "speakingai" or "speakingstorage" or "speakingcompliance" or "speakingfeatures" or "speakingwhisper" or "checkoutcom" or "paymob" or "paytabs" or "soketi" or "dataretention" or "expertautoassignment" or "passwordpolicy"
+        return normalized is "email" or "billing" or "sentry" or "backup" or "oauth" or "push" or "uploadscanner" or "zoom" or "stripe" or "speakinglivekit" or "speakingai" or "speakingstorage" or "speakingcompliance" or "speakingfeatures" or "speakingwhisper" or "checkoutcom" or "paymob" or "paytabs" or "soketi" or "dataretention" or "expertautoassignment" or "passwordpolicy" or "aiassistant" or "aigateway" or "writing" or "platform"
             ? normalized
             : normalized == "upload-scanner" ? "uploadscanner" : null;
     }
@@ -1164,6 +1331,18 @@ public static class AdminRuntimeSettingsEndpoints
             "passwordpolicy" => Uri.TryCreate(settings.PasswordPolicy.BreachApiBaseUrl, UriKind.Absolute, out var hibpUri) && hibpUri.Scheme == Uri.UriSchemeHttps
                 ? Ok(sectionId, $"Policy: min {settings.PasswordPolicy.MinimumLength} chars; breach check {(settings.PasswordPolicy.BreachCheckEnabled ? "on" : "off")}. Breach API URL is valid https.", testedAt)
                 : Failed(sectionId, "Breach API base URL must be a valid https:// URL.", testedAt),
+            "aiassistant" => settings.AiAssistant.GlobalEnabled
+                ? Ok(sectionId, $"AI Assistant enabled. Max {settings.AiAssistant.MaxIterations} iterations, {settings.AiAssistant.MaxContextMessages} context messages; approval-always {(settings.AiAssistant.RequireApprovalAlways ? "on" : "off")}.", testedAt)
+                : Ok(sectionId, "AI Assistant is disabled (master kill switch off).", testedAt),
+            "aigateway" => Uri.TryCreate(settings.AiGateway.BaseUrl, UriKind.Absolute, out var aiUri) && (aiUri.Scheme == Uri.UriSchemeHttps || aiUri.Scheme == Uri.UriSchemeHttp)
+                ? Ok(sectionId, $"Gateway base URL is valid. Provider {settings.AiGateway.ProviderId}, model {settings.AiGateway.DefaultModel}, max {settings.AiGateway.MaxToolCallsPerCompletion} tool calls/completion. Provider API key is managed in Admin → AI Providers.", testedAt)
+                : Failed(sectionId, "AI gateway base URL must be a valid http(s):// URL.", testedAt),
+            "writing" => Ok(sectionId, $"Writing: crons {(settings.Writing.CronsEnabled ? "on" : "off")}, coach {(settings.Writing.CoachEnabled ? "on" : "off")}, OCR {(settings.Writing.OcrEnabled ? "on" : "off")}, appeals {(settings.Writing.AppealsEnabled ? "on" : "off")}. GCV OCR fallback {(string.IsNullOrWhiteSpace(settings.Writing.GcvApiKey) ? "not configured (jobs mark manual_required)" : "configured")}.", testedAt),
+            "platform" => string.IsNullOrWhiteSpace(settings.Platform.PublicWebBaseUrl) || string.IsNullOrWhiteSpace(settings.Platform.PublicApiBaseUrl)
+                ? Failed(sectionId, "Configure both Public API Base URL and Public Web Base URL for external auth callbacks.", testedAt)
+                : Uri.TryCreate(settings.Platform.PublicApiBaseUrl, UriKind.Absolute, out _) && Uri.TryCreate(settings.Platform.PublicWebBaseUrl, UriKind.Absolute, out _)
+                    ? Ok(sectionId, $"Public host URLs are valid. Fallback email domain: {settings.Platform.FallbackEmailDomain}.", testedAt)
+                    : Failed(sectionId, "Public API/Web base URLs must be valid absolute URLs.", testedAt),
             _ => Failed(sectionId, "Unknown integration section.", testedAt),
         };
     }
@@ -1359,6 +1538,71 @@ public sealed class RuntimeSettingsUpdateRequest
     public RuntimeSettingsDataRetentionUpdate? DataRetention { get; set; }
     public RuntimeSettingsExpertAutoAssignmentUpdate? ExpertAutoAssignment { get; set; }
     public RuntimeSettingsPasswordPolicyUpdate? PasswordPolicy { get; set; }
+    public RuntimeSettingsAiAssistantUpdate? AiAssistant { get; set; }
+    public RuntimeSettingsAiGatewayUpdate? AiGateway { get; set; }
+    public RuntimeSettingsWritingUpdate? Writing { get; set; }
+    public RuntimeSettingsPlatformUpdate? Platform { get; set; }
+}
+
+/// <summary>AI Assistant orchestration tunables (Wave 2).</summary>
+public sealed class RuntimeSettingsAiAssistantUpdate
+{
+    public JsonElement? GlobalEnabled { get; set; }
+    public JsonElement? RequireApprovalAlways { get; set; }
+    public JsonElement? MaxIterations { get; set; }
+    public JsonElement? MaxContextMessages { get; set; }
+    public JsonElement? BackupRetentionDays { get; set; }
+    public JsonElement? MaxWriteFileSizeBytes { get; set; }
+    public JsonElement? CommandTimeoutSeconds { get; set; }
+    public JsonElement? CircuitBreakerMaxFailures { get; set; }
+    public JsonElement? CircuitBreakerFailureWindowSeconds { get; set; }
+    public JsonElement? CircuitBreakerMaxWrites { get; set; }
+    public JsonElement? CircuitBreakerWriteWindowSeconds { get; set; }
+    public string? EmbeddingModel { get; set; }
+    public JsonElement? MaxChunkTokens { get; set; }
+}
+
+/// <summary>AI gateway / tooling non-credential knobs (Wave 2). API key excluded.</summary>
+public sealed class RuntimeSettingsAiGatewayUpdate
+{
+    public string? AiProviderProviderId { get; set; }
+    public string? AiProviderBaseUrl { get; set; }
+    public string? AiProviderDefaultModel { get; set; }
+    public string? AiProviderReasoningEffort { get; set; }
+    public JsonElement? AiProviderDefaultMaxTokens { get; set; }
+    public JsonElement? AiProviderDefaultTemperature { get; set; }
+    public JsonElement? AiToolMaxToolCallsPerCompletion { get; set; }
+    public JsonElement? AiToolFeatureGrantCacheSeconds { get; set; }
+    public string? AiToolAllowedExternalHostsCsv { get; set; }
+    public JsonElement? AiToolExternalNetworkPerUserDailyCalls { get; set; }
+    public JsonElement? AiToolExternalNetworkTimeoutMilliseconds { get; set; }
+    public JsonElement? AiToolExternalNetworkMaxResponseBytes { get; set; }
+}
+
+/// <summary>Writing module V2 feature flags + coach/queue/OCR tunables (Wave 2).</summary>
+public sealed class RuntimeSettingsWritingUpdate
+{
+    public JsonElement? CronsEnabled { get; set; }
+    public JsonElement? CoachEnabled { get; set; }
+    public JsonElement? CoachDailyCostCapPerLearnerUsd { get; set; }
+    public JsonElement? CoachMaxHintsPerSession { get; set; }
+    public JsonElement? CoachMinSecondsBetweenHints { get; set; }
+    /// <summary>Google Cloud Vision API key (plaintext on input; stored encrypted). "********" leaves unchanged; "" clears.</summary>
+    public string? GcvApiKey { get; set; }
+    public JsonElement? OcrEnabled { get; set; }
+    public JsonElement? AppealsEnabled { get; set; }
+    public JsonElement? TutorReviewQueueMaxDepth { get; set; }
+    public JsonElement? TutorReviewMaxWaitHours { get; set; }
+    public JsonElement? MaxDailyPlanRegenerationsPerDay { get; set; }
+    public JsonElement? GradeIdempotencyTtlHours { get; set; }
+}
+
+/// <summary>Platform public host URLs (Wave 2).</summary>
+public sealed class RuntimeSettingsPlatformUpdate
+{
+    public string? PublicApiBaseUrl { get; set; }
+    public string? PublicWebBaseUrl { get; set; }
+    public string? FallbackEmailDomain { get; set; }
 }
 
 /// <summary>Data-retention sweeper windows (days / hours / batch size).</summary>

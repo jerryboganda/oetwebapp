@@ -1,8 +1,7 @@
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Options;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
-using OetLearner.Api.Services.Writing.Configuration;
+using OetLearner.Api.Services.Settings;
 
 namespace OetLearner.Api.Services.Writing.Crons;
 
@@ -11,8 +10,8 @@ namespace OetLearner.Api.Services.Writing.Crons;
 public sealed class WritingDailyPlanCron(
     IServiceScopeFactory scopeFactory,
     TimeProvider clock,
-    IOptions<WritingV2Options> options,
-    ILogger<WritingDailyPlanCron> logger) : WritingCronBase(scopeFactory, clock, options, logger)
+    IRuntimeSettingsProvider settingsProvider,
+    ILogger<WritingDailyPlanCron> logger) : WritingCronBase(scopeFactory, clock, settingsProvider, logger)
 {
     protected override TimeSpan Interval => TimeSpan.FromHours(1);
 
@@ -40,8 +39,8 @@ public sealed class WritingDailyPlanCron(
 public sealed class WritingReadinessCron(
     IServiceScopeFactory scopeFactory,
     TimeProvider clock,
-    IOptions<WritingV2Options> options,
-    ILogger<WritingReadinessCron> logger) : WritingCronBase(scopeFactory, clock, options, logger)
+    IRuntimeSettingsProvider settingsProvider,
+    ILogger<WritingReadinessCron> logger) : WritingCronBase(scopeFactory, clock, settingsProvider, logger)
 {
     protected override TimeSpan Interval => TimeSpan.FromHours(1);
 
@@ -71,8 +70,8 @@ public sealed class WritingReadinessCron(
 public sealed class WritingBatchGradingCron(
     IServiceScopeFactory scopeFactory,
     TimeProvider clock,
-    IOptions<WritingV2Options> options,
-    ILogger<WritingBatchGradingCron> logger) : WritingCronBase(scopeFactory, clock, options, logger)
+    IRuntimeSettingsProvider settingsProvider,
+    ILogger<WritingBatchGradingCron> logger) : WritingCronBase(scopeFactory, clock, settingsProvider, logger)
 {
     protected override TimeSpan Interval => TimeSpan.FromMinutes(5);
 
@@ -101,8 +100,8 @@ public sealed class WritingBatchGradingCron(
 public sealed class WritingAnalyticsAggregationCron(
     IServiceScopeFactory scopeFactory,
     TimeProvider clock,
-    IOptions<WritingV2Options> options,
-    ILogger<WritingAnalyticsAggregationCron> logger) : WritingCronBase(scopeFactory, clock, options, logger)
+    IRuntimeSettingsProvider settingsProvider,
+    ILogger<WritingAnalyticsAggregationCron> logger) : WritingCronBase(scopeFactory, clock, settingsProvider, logger)
 {
     protected override TimeSpan Interval => TimeSpan.FromHours(1);
 
@@ -133,8 +132,8 @@ public sealed class WritingAnalyticsAggregationCron(
 public sealed class WritingTutorQueueAlertCron(
     IServiceScopeFactory scopeFactory,
     TimeProvider clock,
-    IOptions<WritingV2Options> options,
-    ILogger<WritingTutorQueueAlertCron> logger) : WritingCronBase(scopeFactory, clock, options, logger)
+    IRuntimeSettingsProvider settingsProvider,
+    ILogger<WritingTutorQueueAlertCron> logger) : WritingCronBase(scopeFactory, clock, settingsProvider, logger)
 {
     protected override TimeSpan Interval => TimeSpan.FromHours(1);
 
@@ -157,8 +156,8 @@ public sealed class WritingTutorQueueAlertCron(
 public sealed class WritingDraftCleanupCron(
     IServiceScopeFactory scopeFactory,
     TimeProvider clock,
-    IOptions<WritingV2Options> options,
-    ILogger<WritingDraftCleanupCron> logger) : WritingCronBase(scopeFactory, clock, options, logger)
+    IRuntimeSettingsProvider settingsProvider,
+    ILogger<WritingDraftCleanupCron> logger) : WritingCronBase(scopeFactory, clock, settingsProvider, logger)
 {
     protected override TimeSpan Interval => TimeSpan.FromHours(1);
 
@@ -196,8 +195,8 @@ public sealed class WritingDraftCleanupCron(
 public sealed class WritingContentAuditCron(
     IServiceScopeFactory scopeFactory,
     TimeProvider clock,
-    IOptions<WritingV2Options> options,
-    ILogger<WritingContentAuditCron> logger) : WritingCronBase(scopeFactory, clock, options, logger)
+    IRuntimeSettingsProvider settingsProvider,
+    ILogger<WritingContentAuditCron> logger) : WritingCronBase(scopeFactory, clock, settingsProvider, logger)
 {
     protected override TimeSpan Interval => TimeSpan.FromHours(1);
 
