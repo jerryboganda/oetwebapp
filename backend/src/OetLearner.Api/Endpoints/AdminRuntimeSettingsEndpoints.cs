@@ -1521,7 +1521,7 @@ public static class AdminRuntimeSettingsEndpoints
     private static string? NormalizeSectionId(string? sectionId)
     {
         var normalized = sectionId?.Trim().ToLowerInvariant();
-        return normalized is "email" or "billing" or "sentry" or "backup" or "oauth" or "push" or "uploadscanner" or "zoom" or "stripe" or "speakinglivekit" or "speakingai" or "speakingstorage" or "speakingcompliance" or "speakingfeatures" or "speakingwhisper" or "checkoutcom" or "paymob" or "paytabs" or "soketi" or "dataretention" or "expertautoassignment" or "passwordpolicy" or "aiassistant" or "aigateway" or "writing" or "platform" or "messaging" or "fx" or "billingcore" or "storage" or "pdfextraction" or "pronunciation" or "authtokens" or "webpush"
+        return normalized is "email" or "billing" or "paypal" or "sentry" or "backup" or "oauth" or "push" or "uploadscanner" or "zoom" or "stripe" or "speakinglivekit" or "speakingai" or "speakingstorage" or "speakingcompliance" or "speakingfeatures" or "speakingwhisper" or "checkoutcom" or "paymob" or "paytabs" or "soketi" or "dataretention" or "expertautoassignment" or "passwordpolicy" or "aiassistant" or "aigateway" or "writing" or "platform" or "messaging" or "fx" or "billingcore" or "storage" or "pdfextraction" or "pronunciation" or "authtokens" or "webpush"
             ? normalized
             : normalized == "upload-scanner" ? "uploadscanner" : null;
     }
@@ -1545,6 +1545,9 @@ public static class AdminRuntimeSettingsEndpoints
             "billing" => HasAll(settings.Billing.StripeSecretKey, settings.Billing.StripePublishableKey, settings.Billing.StripeWebhookSecret)
                 ? Ok(sectionId, "Stripe keys and webhook secret are configured. No live charge was created.", testedAt)
                 : Failed(sectionId, "Configure Stripe secret, publishable key, and webhook secret.", testedAt),
+            "paypal" => HasAll(settings.Billing.PayPalClientId, settings.Billing.PayPalClientSecret)
+                ? Ok(sectionId, $"PayPal Client ID and Secret are configured (embedded card fields {(settings.Billing.PayPalAdvancedCardsEnabled ? "enabled" : "disabled")}). Learners will be offered PayPal at checkout. No live order was created.", testedAt)
+                : Failed(sectionId, "Configure PayPal Client ID and Secret (and the Webhook ID) to enable PayPal checkout.", testedAt),
             "sentry" => Uri.TryCreate(settings.Sentry.Dsn, UriKind.Absolute, out var sentryUri)
                         && sentryUri.Scheme == Uri.UriSchemeHttps
                 ? Ok(sectionId, "Sentry DSN format is valid. No event was sent.", testedAt)
